@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/loudness">
+    <file>LoudnessPanel.qml</file>
+    <file>LoudnessTheme.qml</file>
+    <file>LoudnessMeter.qml</file>
+    <file>LoudnessHistory.qml</file>
+  </qresource>
+</RCC>

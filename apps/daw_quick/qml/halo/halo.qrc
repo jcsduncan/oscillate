@@ -1,0 +1,9 @@
+<RCC>
+  <qresource prefix="/halo">
+    <file>HaloPanel.qml</file>
+    <file>HaloTheme.qml</file>
+    <file>HaloFilterView.qml</file>
+    <file>HaloAlgorithmView.qml</file>
+    <file>HaloOperatorCard.qml</file>
+  </qresource>
+</RCC>
