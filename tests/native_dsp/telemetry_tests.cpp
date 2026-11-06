@@ -97,7 +97,13 @@ void frames_are_never_torn_and_never_allocate() {
   });
   counting_allocations = true;
   counted_allocations = 0;
-  for (std::uint64_t block = 1; block < 20'000; ++block) {
+  // The writer keeps publishing until the reader has seen a frame (bounded,
+  // so a telemetry failure fails rather than hangs), so a late-starting
+  // reader still overlaps the callback.
+  constexpr std::uint64_t min_blocks = 20'000;
+  constexpr std::uint64_t max_blocks = 20'000'000;
+  for (std::uint64_t block = 1; block < max_blocks && (block < min_blocks || reads.load() == 0);
+       ++block) {
     (void)runtime->process(buffer, {}, block * 64, 1, {}, {});
   }
   const std::size_t made = counted_allocations;

@@ -283,7 +283,10 @@ void impulses_land_on_their_period() {
 
 void outputs_route_exactly() {
   const auto input = noise(0.25, 2 * 48'000 + 4'800);
-  const auto base = with({{"signal.frequency", 440.0}, {"signal.level", -12.0}});
+  // Not a whole number of cycles a second, so the tone is not at a zero
+  // crossing on the routing switch at frame 48,000.
+  constexpr double off_grid_hz = 440.25;
+  const auto base = with({{"signal.frequency", off_grid_hz}, {"signal.level", -12.0}});
   const auto tone = run(base, quiet(input.size()));
   const auto route = [&](double output, double mode) {
     auto values = base;
