@@ -1,6 +1,7 @@
 #include "oscillate/media/prefetch.hpp"
 #include "oscillate/test/allocation_counter.hpp"
 #include "oscillate/test/check.hpp"
+#include "oscillate/test/temp_dir.hpp"
 
 #include <array>
 #include <atomic>
@@ -23,6 +24,10 @@
 using oscillate::test::process_allocations;
 
 namespace {
+
+// Frames the concurrent handoff producer publishes; the window it waits for ends
+// on the last one.
+constexpr std::uint64_t kHandoffProducerFrames = 200;
 
 using oscillate::test::require;
 template <typename T>
@@ -79,11 +84,12 @@ std::vector<unsigned char> make_wav(std::uint16_t format, std::uint16_t channels
   return bytes;
 }
 
+// Each fixture owns a unique directory, so concurrent runs never share files and
+// the .old, .link and .fifo siblings some tests create are removed with it.
 struct Fixture {
-  std::filesystem::path path = std::filesystem::temp_directory_path() /
-                               ("oscillate-media-" + std::to_string(std::rand()) + ".wav");
+  oscillate::test::TempDir directory{"oscillate-media"};
+  std::filesystem::path path = directory / "source.wav";
   explicit Fixture(const std::vector<unsigned char>& bytes) { write(bytes); }
-  ~Fixture() { std::filesystem::remove(path); }
   void write(const std::vector<unsigned char>& bytes) const {
     std::ofstream file(path, std::ios::binary | std::ios::trunc);
     file.write(reinterpret_cast<const char*>(bytes.data()),
@@ -734,10 +740,13 @@ void test_concurrent_handoff_window_and_wraparound() {
   std::atomic<bool> cancel{false};
   std::atomic<bool> published_all{false};
   std::jthread producer([&] {
-    for (std::uint64_t frame = 0; frame < 200 && !cancel.load(std::memory_order_acquire); ++frame) {
+    for (std::uint64_t frame = 0; frame < kHandoffProducerFrames; ++frame) {
       const TaggedFrame tagged{clip(8), 2, frame, {static_cast<float>(frame), 0.0F}};
-      while (!ring.try_push(tagged) && !cancel.load(std::memory_order_acquire))
+      while (!ring.try_push(tagged)) {
+        if (cancel.load(std::memory_order_acquire))
+          return;
         std::this_thread::yield();
+      }
     }
     published_all.store(true, std::memory_order_release);
   });
