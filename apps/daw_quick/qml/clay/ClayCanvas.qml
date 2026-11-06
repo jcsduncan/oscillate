@@ -665,6 +665,13 @@ Item {
             }
             reset()
         }
+        // A lost grab (another item took the mouse, the window lost focus)
+        // cancels a drag in progress rather than leaving it half applied.
+        onCanceled: {
+            if (begun)
+                canvas.clay.cancel_edit()
+            reset()
+        }
         onDoubleClicked: function(mouse) {
             const note = canvas.noteAt(mouse.x, mouse.y)
             if (!note)

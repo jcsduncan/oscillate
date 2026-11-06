@@ -101,8 +101,9 @@ Item {
                                 + " percent of the clip. Enter adds a marker, brackets select markers, "
                                 + "Alt arrows move the selected marker, Delete removes it, "
                                 + "D dismisses the nearest suggestion"
-        Keys.onLeftPressed: (event) => { if (event.modifiers & Qt.AltModifier) lane.nudge(-1); else lane.stepCursor(-1) }
-        Keys.onRightPressed: (event) => { if (event.modifiers & Qt.AltModifier) lane.nudge(1); else lane.stepCursor(1) }
+        // Alt-arrow nudges move a marker, so they need an editable clip.
+        Keys.onLeftPressed: (event) => { if (event.modifiers & Qt.AltModifier) { if (lane.editable) lane.nudge(-1) } else lane.stepCursor(-1) }
+        Keys.onRightPressed: (event) => { if (event.modifiers & Qt.AltModifier) { if (lane.editable) lane.nudge(1) } else lane.stepCursor(1) }
         Keys.onReturnPressed: if (lane.editable) lane.controller.add_marker(lane.cursorFraction)
         Keys.onPressed: (event) => {
             if (event.key === Qt.Key_Insert && lane.editable) { lane.controller.add_marker(lane.cursorFraction); event.accepted = true }
