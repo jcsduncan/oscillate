@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/flyby">
+    <file>FlybyPanel.qml</file>
+    <file>FlybyTheme.qml</file>
+    <file>FlybyMap.qml</file>
+    <file>FlybyPaths.js</file>
+  </qresource>
+</RCC>

@@ -1,0 +1,10 @@
+<RCC>
+  <qresource prefix="/dust">
+    <file>DustPanel.qml</file>
+    <file>DustTheme.qml</file>
+    <file>DustRecord.qml</file>
+    <file>DustBedMeter.qml</file>
+    <file>DustLayerCard.qml</file>
+    <file>DustGlyph.qml</file>
+  </qresource>
+</RCC>

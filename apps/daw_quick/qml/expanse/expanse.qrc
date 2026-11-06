@@ -1,0 +1,9 @@
+<RCC>
+  <qresource prefix="/expanse">
+    <file>ExpansePanel.qml</file>
+    <file>ExpanseTheme.qml</file>
+    <file>ExpanseToggle.qml</file>
+    <file>ExpanseLandscape.qml</file>
+    <file>ExpanseMeter.qml</file>
+  </qresource>
+</RCC>

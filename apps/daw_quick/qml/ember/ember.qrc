@@ -1,0 +1,12 @@
+<RCC>
+  <qresource prefix="/ember">
+    <file>EmberPanel.qml</file>
+    <file>EmberTheme.qml</file>
+    <file>EmberSection.qml</file>
+    <file>EmberButtons.qml</file>
+    <file>EmberWheel.qml</file>
+    <file>EmberWood.qml</file>
+    <file>EmberLfoView.qml</file>
+    <file>EmberCircuitView.qml</file>
+  </qresource>
+</RCC>

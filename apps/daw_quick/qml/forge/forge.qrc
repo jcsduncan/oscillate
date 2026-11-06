@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/forge">
+    <file>ForgePanel.qml</file>
+    <file>ForgeTheme.qml</file>
+    <file>ForgeCurveView.qml</file>
+    <file>ForgeMeter.qml</file>
+  </qresource>
+</RCC>
