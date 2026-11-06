@@ -1,0 +1,10 @@
+<RCC>
+  <qresource prefix="/drift">
+    <file>DriftPanel.qml</file>
+    <file>DriftTheme.qml</file>
+    <file>DriftToggle.qml</file>
+    <file>DriftCloudView.qml</file>
+    <file>DriftSpectrumView.qml</file>
+    <file>DriftDecayView.qml</file>
+  </qresource>
+</RCC>
