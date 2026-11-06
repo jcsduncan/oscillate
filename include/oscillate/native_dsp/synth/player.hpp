@@ -149,10 +149,19 @@ private:
     std::atomic<std::uint32_t> read{0};
     std::array<std::uint64_t, 128> sounding{};
     std::uint64_t serial = 0;
+    // A block's merge, held until the block renders: a failed block leaves
+    // the queue and the sounding notes as they were, so a retry loses none.
+    std::array<std::uint64_t, 128> staged_sounding{};
+    std::uint64_t staged_serial = 0;
+    std::uint32_t staged_read = 0;
+    bool staged = false;
   };
   std::unique_ptr<LiveNotes> live_ = std::make_unique<LiveNotes>();
-  // Merges queued live notes at offset 0 after the plan's `count` events.
+  // Merges queued live notes at offset 0 after the plan's `count` events,
+  // staging their effect on the queue until commit_live_notes().
   [[nodiscard]] std::size_t merge_live_notes(std::size_t count) noexcept;
+  // After a rendered block: the staged merge takes effect.
+  void commit_live_notes() noexcept;
   // The track's note effects (ADR-0059), when it has any: their events
   // run through note_scratch_ before the synth sees them.
   std::shared_ptr<note_effects::NoteEffectChain> note_effects_;
