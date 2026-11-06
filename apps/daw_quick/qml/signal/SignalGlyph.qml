@@ -75,4 +75,5 @@ Canvas {
     onWaveChanged: requestPaint()
     onToneChanged: requestPaint()
     onInvertedChanged: requestPaint()
+    onLineWidthChanged: requestPaint()
 }

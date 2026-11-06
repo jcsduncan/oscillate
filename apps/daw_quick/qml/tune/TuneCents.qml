@@ -52,6 +52,9 @@ Item {
             const t = meter.theme
             const cx = width / 2
             const r = Math.min((cx - meter.sideRoom) / Math.sin(meter.sweep), (height - meter.verticalRoom) / (1 - Math.cos(meter.sweep)))
+            // Too small to hold the arc (or not laid out yet): draw nothing.
+            if (!(r > 0))
+                return
             const cy = meter.arcTop + r
             // The in-tune window.
             ctx.lineCap = "butt"
