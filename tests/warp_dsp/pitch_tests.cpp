@@ -130,6 +130,22 @@ void marks_a_run_voiced_from_the_source_start() {
   }
 }
 
+// A voiced frequency whose period the mark arithmetic cannot hold is refused;
+// unvoiced frames stay accepted.
+void marks_refuse_unrepresentable_periods() {
+  constexpr std::uint32_t rate = oscillate::test::sample_rate_48k;
+  constexpr float vanishing_hz = 1e-30F;
+  const auto tone = harmonic_tone(rate, 110.0, 0.1);
+  warp::MemorySourceView view(tone.left, tone.right);
+  const std::vector<analysis::PitchFrame> unvoiced{{0, 0.0F, 0.0F}};
+  REQUIRE_OK(analysis::place_pitch_marks(view, unvoiced, rate), "an unvoiced frame was refused");
+  const std::vector<analysis::PitchFrame> vanishing{{0, vanishing_hz, 1.0F}};
+  const auto refused = analysis::place_pitch_marks(view, vanishing, rate);
+  REQUIRE_TRUE(!refused, "an unrepresentable pitch period was accepted");
+  REQUIRE_EQ(refused.error().code, oscillate::foundation::ErrorCode::invalid_argument,
+             "an unrepresentable pitch period was accepted");
+}
+
 } // namespace
 
 int main() {
@@ -138,6 +154,7 @@ int main() {
     rejects_noise_and_silence();
     marks_follow_the_period();
     marks_a_run_voiced_from_the_source_start();
+    marks_refuse_unrepresentable_periods();
     return 0;
   } catch (const std::exception& error) {
     std::fprintf(stderr, "%s\n", error.what());

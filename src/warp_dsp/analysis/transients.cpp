@@ -22,6 +22,8 @@ constexpr double lowest_band_hz = 40.0;
 constexpr double highest_band_hz = 16'000.0;
 constexpr double percussive_split_hz = 2'000.0;
 constexpr std::uint64_t max_seconds = 3'600;
+// Analysis frames between cancellation polls.
+constexpr std::size_t cancel_poll_frames = 256;
 constexpr float absolute_flux_floor = 2.5F;
 constexpr float relative_flux_offset = 0.08F;
 
@@ -209,7 +211,8 @@ foundation::Result<std::vector<Transient>> detect_transients(SourceView& source,
     std::vector<float> high_flux(analysis_frames, 0.0F);
     detail::SourceWindow audio(fft_size * 64);
     for (std::size_t frame = 0; frame < analysis_frames; ++frame) {
-      if (cancelled != nullptr && frame % 256 == 0 && cancelled->load(std::memory_order_relaxed))
+      if (cancelled != nullptr && frame % cancel_poll_frames == 0 &&
+          cancelled->load(std::memory_order_relaxed))
         return Result::failure({ErrorCode::cancelled, "Transient analysis cancelled"});
       // Frames are centred on frame * hop.
       const auto first =
@@ -281,6 +284,9 @@ foundation::Result<std::vector<Transient>> detect_transients(SourceView& source,
     std::vector<float> region(prediction_context + fft_size / 2 + hop * 2);
     std::vector<float> region_right(region.size());
     for (std::size_t frame = lag; frame < analysis_frames; ++frame) {
+      if (cancelled != nullptr && frame % cancel_poll_frames == 0 &&
+          cancelled->load(std::memory_order_relaxed))
+        return Result::failure({ErrorCode::cancelled, "Transient analysis cancelled"});
       const float value = flux[frame];
       if (value <= 0.0F)
         continue;

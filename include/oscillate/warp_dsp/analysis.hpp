@@ -30,8 +30,10 @@ struct TransientOptions {
 };
 
 // Offline, worker-side detection over the whole view. Bounded by the source
-// length (at most one hour) and max_transients; polls `cancelled` between
-// analysis frames. Results are sorted, unique and inside the source.
+// length (at most one hour) and max_transients: a source with more onsets
+// keeps its first max_transients rather than failing, so a long dense mix
+// still warps. Polls `cancelled` between analysis frames and while picking
+// peaks. Results are sorted, unique and inside the source.
 [[nodiscard]] foundation::Result<std::vector<Transient>>
 detect_transients(SourceView& source, const TransientOptions& options,
                   const std::atomic<bool>* cancelled = nullptr);

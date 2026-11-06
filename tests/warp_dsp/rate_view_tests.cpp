@@ -1,5 +1,6 @@
 #include "fixtures.hpp"
 #include "oscillate/test/allocation_counter.hpp"
+#include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/warp_dsp/rate_view.hpp"
 #include "oscillate/warp_dsp/stream.hpp"
@@ -17,6 +18,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 using oscillate::test::counting_process_allocations;
@@ -212,6 +214,73 @@ void bank_matches_double_reference() {
   }
 }
 
+// The converter against an oracle written here from the published design
+// (cutoff, zero crossings, Kaiser beta) with the standard library's Bessel
+// function, sharing no code with the bank's design. Noise drives every band,
+// the transition band included; the pairs cover downsampling with a
+// non-integer half span and upsampling.
+double independent_sample(const std::vector<float>& source, std::uint32_t source_rate,
+                          std::uint32_t project_rate, std::int64_t output_frame) {
+  using View = warp::RateConvertedSourceView;
+  // Output frames outside the converted length read as silence.
+  const auto frames = warp::project_rate_frames(source.size(), source_rate, project_rate);
+  if (!frames || output_frame < 0 || static_cast<std::uint64_t>(output_frame) >= frames.value())
+    return 0.0;
+  const double lower = std::min(1.0, static_cast<double>(project_rate) / source_rate);
+  const double cutoff = View::cutoff * lower;
+  const double half_span = View::zero_crossings / lower;
+  const double position =
+      static_cast<double>(output_frame) * source_rate / static_cast<double>(project_rate);
+  const auto first = static_cast<std::int64_t>(std::floor(position - half_span));
+  const auto last = static_cast<std::int64_t>(std::ceil(position + half_span));
+  const double window_scale = std::cyl_bessel_i(0.0, View::kaiser_beta);
+  double sum = 0.0;
+  double weight_sum = 0.0;
+  for (auto frame = first; frame <= last; ++frame) {
+    const double distance = static_cast<double>(frame) - position;
+    if (std::fabs(distance) >= half_span)
+      continue;
+    const double ratio = distance / half_span;
+    const double argument = std::numbers::pi * cutoff * distance;
+    const double sinc = distance == 0.0 ? 1.0 : std::sin(argument) / argument;
+    const double weight =
+        cutoff * sinc * std::cyl_bessel_i(0.0, View::kaiser_beta * std::sqrt(1.0 - ratio * ratio)) /
+        window_scale;
+    weight_sum += weight;
+    if (frame >= 0 && static_cast<std::size_t>(frame) < source.size())
+      sum += weight * source[static_cast<std::size_t>(frame)];
+  }
+  return sum / weight_sum;
+}
+
+void bank_matches_independent_design() {
+  constexpr double bank_tolerance = 2e-6;
+  constexpr std::int64_t edge_frames = 5;
+  constexpr std::array<std::pair<std::uint32_t, std::uint32_t>, 3> pairs{
+      {{oscillate::test::sample_rate_48k, oscillate::test::sample_rate_44k},
+       {oscillate::test::sample_rate_96k, oscillate::test::sample_rate_44k},
+       {oscillate::test::sample_rate_44k, oscillate::test::sample_rate_48k}}};
+  const auto source = noise(9'001, 7);
+  warp::MemorySourceView memory(source.left, source.right);
+  for (const auto& [source_rate, project_rate] : pairs) {
+    auto view = make_view(memory, source_rate, project_rate);
+    const auto out =
+        read_all(*view, -edge_frames, static_cast<std::size_t>(view->frames() + 2 * edge_frames));
+    double worst = 0.0;
+    for (std::size_t index = 0; index < out.left.size(); ++index) {
+      const auto frame = static_cast<std::int64_t>(index) - edge_frames;
+      worst = std::max({worst,
+                        std::fabs(out.left[index] - independent_sample(source.left, source_rate,
+                                                                       project_rate, frame)),
+                        std::fabs(out.right[index] - independent_sample(source.right, source_rate,
+                                                                        project_rate, frame))});
+    }
+    REQUIRE_LT(worst, bank_tolerance,
+               "bank differs from the independent design for " +
+                   pair_name(source_rate, project_rate) + ": " + std::to_string(worst));
+  }
+}
+
 // Seek and partition: any start frame and any split reproduce one continuous
 // read bit for bit, including reads straddling both ends and block edges.
 void reads_are_seek_and_partition_exact() {
@@ -311,6 +380,17 @@ void rejects_unsupported_rates_and_reports_failures() {
                "wrapped read failure was not reported as silence and false");
   std::vector<float> short_right(4'999);
   require(!view->read(0, left, short_right), "mismatched channel spans accepted");
+  // A same-rate view passes reads straight through, failures included.
+  auto bypass = make_view(failing, 48'000, 48'000);
+  REQUIRE_TRUE(bypass->bypass(), "a same-rate view was not a bypass");
+  std::ranges::fill(left, 1.0F);
+  std::ranges::fill(right, 1.0F);
+  REQUIRE_TRUE(!bypass->read(0, left, right),
+               "bypass read failure was not reported as silence and false");
+  REQUIRE_TRUE(std::ranges::all_of(left, [](float value) { return value == 0.0F; }),
+               "bypass read failure was not reported as silence and false");
+  REQUIRE_TRUE(std::ranges::all_of(right, [](float value) { return value == 0.0F; }),
+               "bypass read failure was not reported as silence and false");
 }
 
 void reads_do_not_allocate() {
@@ -367,6 +447,7 @@ int main() {
     passband_matches_analytic_sines();
     stopband_rejects_aliases();
     bank_matches_double_reference();
+    bank_matches_independent_design();
     reads_are_seek_and_partition_exact();
     trimmed_interior_reads_use_neighbouring_source();
     rejects_unsupported_rates_and_reports_failures();

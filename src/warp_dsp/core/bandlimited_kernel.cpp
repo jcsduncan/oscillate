@@ -3,6 +3,7 @@
 #include <array>
 #include <cmath>
 #include <numbers>
+#include <stdexcept>
 
 namespace oscillate::warp_dsp {
 namespace {
@@ -43,6 +44,8 @@ double reference_kernel(double x, const KernelDesign& design) {
 BandlimitedKernel::BandlimitedKernel(const KernelDesign& design)
     : design_(design), zero_crossings_(design.zero_crossings) {
   const auto zero_crossings = design.zero_crossings;
+  if (zero_crossings == 0)
+    throw std::invalid_argument("A band-limited kernel needs at least one zero crossing");
   const auto size = static_cast<std::size_t>(zero_crossings) * table_resolution + 1;
   values_.resize(size + 1, 0.0F);
   deltas_.resize(size, 0.0F);
@@ -76,6 +79,8 @@ std::shared_ptr<const BandlimitedKernel> BandlimitedKernel::for_tier(QualityTier
       built[index] = std::make_shared<const BandlimitedKernel>(tier_designs[index]);
     return built;
   }();
+  if (!valid_quality_tier(tier))
+    return nullptr;
   return kernels[static_cast<std::size_t>(tier)];
 }
 

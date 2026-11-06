@@ -179,8 +179,12 @@ bool RateConvertedSourceView::read(std::int64_t first, std::span<float> left,
     silence(left, right);
     return false;
   }
-  if (bypass())
-    return source_.read(first, left, right);
+  if (bypass()) {
+    if (source_.read(first, left, right))
+      return true;
+    silence(left, right);
+    return false;
+  }
   for (std::size_t done = 0; done < left.size();) {
     const auto count = std::min(block_frames, left.size() - done);
     if (!convert(first + static_cast<std::int64_t>(done), left.subspan(done, count),

@@ -148,7 +148,7 @@ void unity_map_reproduces_source() {
 double rms(const std::vector<float>& signal, std::uint64_t begin, std::uint64_t end) {
   double energy = 0.0;
   for (auto index = begin; index < end; ++index)
-    energy += signal[index] * signal[index];
+    energy += static_cast<double>(signal[index]) * signal[index];
   return std::sqrt(energy / static_cast<double>(end - begin));
 }
 

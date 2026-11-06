@@ -57,8 +57,47 @@ std::unique_ptr<warp::WarpStream> stream(warp::QualityTier tier = warp::QualityT
 }
 
 void invalid_tier_is_rejected() {
-  require(!warp::create_repitch_stream({48'000, 8'192}, static_cast<warp::QualityTier>(255)),
+  constexpr auto invalid_tier = static_cast<warp::QualityTier>(255);
+  require(!warp::create_repitch_stream({48'000, 8'192}, invalid_tier),
           "invalid Re-Pitch quality tier accepted");
+  require(!warp::detail::BandlimitedKernel::for_tier(invalid_tier),
+          "invalid kernel quality tier returned a kernel");
+}
+
+Signal noise(std::size_t frames);
+
+// Custom designs whose taps are not whole lane blocks still read every tap;
+// a design with no zero crossings is refused.
+void custom_kernel_lengths_read_every_tap() {
+  constexpr std::size_t frames = 4'096;
+  constexpr std::uint64_t centre = std::uint64_t{frames / 2} << 16;
+  constexpr std::uint64_t half_frame = std::uint64_t{1} << 15;
+  constexpr double kaiser_beta = 6.0;
+  constexpr double unity_speed = 1.0;
+  constexpr float read_tolerance = 2e-6F;
+  const auto source = noise(frames);
+  warp::MemorySourceView view(source.left, source.right);
+  warp::detail::SourceWindow window(frames);
+  require(window.ensure(view, 0, frames), "custom kernel window fill failed");
+  for (const std::uint32_t crossings : {1U, 3U, 5U, 6U}) {
+    const warp::detail::BandlimitedKernel kernel({crossings, kaiser_beta});
+    const auto fast =
+        warp::detail::bandlimited_read(window, kernel, {centre + half_frame, unity_speed});
+    const auto slow = warp::detail::reference_bandlimited_read(window, kernel,
+                                                               {centre + half_frame, unity_speed});
+    REQUIRE_LT(std::fabs(fast.left - slow.left), read_tolerance,
+               "a custom kernel length dropped taps");
+    REQUIRE_LT(std::fabs(fast.right - slow.right), read_tolerance,
+               "a custom kernel length dropped taps");
+    REQUIRE_GT(std::fabs(fast.left), 0.0F, "a custom kernel length dropped taps");
+  }
+  bool refused = false;
+  try {
+    const warp::detail::BandlimitedKernel empty({0, kaiser_beta});
+  } catch (const std::invalid_argument&) {
+    refused = true;
+  }
+  require(refused, "a kernel with no zero crossings was built");
 }
 
 // Renders [first, map end) in blocks of `block` frames (0 means random sizes).
@@ -236,7 +275,7 @@ void fast_reads_do_not_alias() {
   const auto out = render(*engine, map, view, 0, 128);
   double energy = 0.0;
   for (std::size_t index = 1'024; index < frames - 1'024; ++index)
-    energy += out.left[index] * out.left[index];
+    energy += static_cast<double>(out.left[index]) * out.left[index];
   const double rms = std::sqrt(energy / static_cast<double>(frames - 2'048));
   REQUIRE_LT(20.0 * std::log10(rms / (0.5 / std::numbers::sqrt2)), -70.0,
              "aliased tone not suppressed by 70 dB");
@@ -362,6 +401,7 @@ void steady_state_does_not_allocate() {
 int main() {
   try {
     invalid_tier_is_rejected();
+    custom_kernel_lengths_read_every_tap();
     identity_is_bit_exact();
     optimised_read_matches_reference();
     fixed_rate_reader_matches_reference();

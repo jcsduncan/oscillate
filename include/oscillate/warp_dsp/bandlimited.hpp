@@ -33,6 +33,7 @@ public:
   // Q48.16 fraction bits below the table index.
   static constexpr std::uint32_t interpolation_bits = 16 - 9;
 
+  // Throws std::invalid_argument for a design with no zero crossings.
   explicit BandlimitedKernel(const KernelDesign& design);
 
   [[nodiscard]] const KernelDesign& design() const noexcept { return design_; }
@@ -56,7 +57,8 @@ public:
     return static_cast<std::uint32_t>(values_.size()) - 1;
   }
 
-  // Shared immutable kernel for a quality tier; built on first use (control side).
+  // Shared immutable kernel for a quality tier; built on first use (control
+  // side). Null for a tier that valid_quality_tier rejects.
   [[nodiscard]] static std::shared_ptr<const BandlimitedKernel> for_tier(QualityTier tier);
 
 private:
@@ -146,6 +148,15 @@ template <typename Source>
       left_sum[lane] += weight * at_frame.l(tap);
       right_sum[lane] += weight * at_frame.r(tap);
     }
+  }
+  // A custom design whose taps are not a whole number of lane blocks puts
+  // its remaining taps in the leading lanes, keeping the order fixed.
+  const std::size_t tail = blocks * lanes;
+  for (std::size_t index = tail; index < kernel.taps(); ++index) {
+    const float weight = row[index] + blend * delta[index];
+    const auto tap = first + static_cast<std::int64_t>(index);
+    left_sum[index - tail] += weight * at_frame.l(tap);
+    right_sum[index - tail] += weight * at_frame.r(tap);
   }
   return {reduce(left_sum), reduce(right_sum)};
 }

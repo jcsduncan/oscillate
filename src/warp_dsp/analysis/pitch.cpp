@@ -12,6 +12,8 @@ namespace {
 
 using foundation::ErrorCode;
 constexpr std::uint64_t max_seconds = 3'600;
+// The lowest pitch tracked or marked; its period always fits the mark arithmetic.
+constexpr float lowest_pitch_hz = 20.0F;
 
 [[nodiscard]] std::size_t power_of_two_at_least(std::size_t value) {
   std::size_t size = 32;
@@ -27,7 +29,7 @@ track_pitch(SourceView& source, const PitchOptions& options, const std::atomic<b
   using Result = foundation::Result<std::vector<PitchFrame>>;
   const auto rate = options.sample_rate;
   if (rate < 8'000 || rate > 384'000 || !std::isfinite(options.minimum_hz) ||
-      !std::isfinite(options.maximum_hz) || options.minimum_hz < 20.0F ||
+      !std::isfinite(options.maximum_hz) || options.minimum_hz < lowest_pitch_hz ||
       options.maximum_hz <= options.minimum_hz ||
       static_cast<double>(options.maximum_hz) > 0.25 * rate || !std::isfinite(options.threshold) ||
       options.threshold <= 0.0F || options.threshold >= 1.0F)
@@ -141,6 +143,13 @@ foundation::Result<std::vector<PitchMark>> place_pitch_marks(SourceView& source,
   using Result = foundation::Result<std::vector<PitchMark>>;
   if (sample_rate < 8'000 || sample_rate > 384'000)
     return Result::failure({ErrorCode::invalid_argument, "Invalid pitch mark sample rate"});
+  // Unvoiced frames (zero or below) stay allowed; a voiced frequency must
+  // give a period the integer mark arithmetic can represent.
+  if (std::ranges::any_of(track, [](const PitchFrame& frame) {
+        return !std::isfinite(frame.frequency) ||
+               (frame.frequency > 0.0F && frame.frequency < lowest_pitch_hz);
+      }))
+    return Result::failure({ErrorCode::invalid_argument, "Invalid pitch mark frequency"});
   try {
     std::vector<PitchMark> marks;
     const auto frames = source.frames();
