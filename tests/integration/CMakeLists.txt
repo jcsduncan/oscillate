@@ -5,4 +5,3 @@ oscillate_add_test_executable(oscillate_m2_slice_tests SOURCES m2_slice_tests.cp
 oscillate_add_test_executable(oscillate_m2_prefetch_device_tests SOURCES m2_prefetch_device_tests.cpp
   LIBS oscillate::application oscillate::audio_io
   TEST m2_prefetch_device)
-
