@@ -29,6 +29,7 @@ public:
     end_ = end_hz;
     excess_ = std::max(0.0, start_hz - end_hz);
     initial_excess_ = excess_;
+    progress_ = 1.0;
     sweep_ = std::exp(-1.0 / std::max(1.0, sweep_seconds * rate_));
   }
   // Moves a sounding body to a new tuning without restarting it: the phase
@@ -36,7 +37,9 @@ public:
   void retune(double start_hz, double end_hz) noexcept {
     if (end_hz == end_ && std::max(0.0, start_hz - end_hz) == initial_excess_)
       return;
-    const double left = initial_excess_ > 0.0 ? excess_ / initial_excess_ : 0.0;
+    // The share of the sweep left, kept apart from the excess so a body
+    // that started flat (Tone at zero) still sweeps when Tone rises.
+    const double left = initial_excess_ > 0.0 ? excess_ / initial_excess_ : progress_;
     end_ = end_hz;
     initial_excess_ = std::max(0.0, start_hz - end_hz);
     excess_ = initial_excess_ * left;
@@ -47,6 +50,7 @@ public:
     phase_ += (end_ + excess_) / rate_;
     phase_ -= fast_floor(phase_);
     excess_ *= sweep_;
+    progress_ *= sweep_;
     return value;
   }
 
@@ -56,6 +60,7 @@ private:
   double end_ = 50.0;
   double excess_ = 0.0;
   double initial_excess_ = 0.0;
+  double progress_ = 1.0;
   double sweep_ = 0.999;
 };
 

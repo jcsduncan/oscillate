@@ -399,7 +399,11 @@ public:
       Pending main;
       main.frame = clock_ + grace_frames;
       main.note = start;
-      main.note.decision.tongue = breath::Tongue::slur;
+      // Mono slurs from the grace; Poly 4 never slurs, so the note keeps its
+      // tongued attack, as the panel's preview shows.
+      if (!poly_) {
+        main.note.decision.tongue = breath::Tongue::slur;
+      }
       main.note.length_frames =
           std::max(0.0, start.length_frames - static_cast<double>(grace_frames));
       (void)enqueue(main);

@@ -197,12 +197,13 @@ public:
       lfo_value_ = lfo_.next(rate / control_rate_);
     }
     read_pattern();
-    reconcile_sequencer(v[p::seq_on] != 0.0);
+    // A note triggered by the switch has had this tick's control update.
+    const bool triggered = reconcile_sequencer(v[p::seq_on] != 0.0);
     const double steps_per_beat =
         torque_table::seq_steps_per_beat[static_cast<std::size_t>(v[p::seq_rate])];
     sequencer_.set_timing(1.0 / (beats_per_frame_ * steps_per_beat), v[p::seq_swing],
                           v[p::seq_gate]);
-    if (active_) {
+    if (active_ && !triggered) {
       control_voice(false);
     }
     // Effects follow the panel smoothly.
@@ -227,7 +228,8 @@ public:
   // Brings the voice in line with the sequencer switch while notes are held:
   // switched on, the pattern starts rooted on the newest held note; switched
   // off, the pattern stops and the newest held note plays on its own.
-  void reconcile_sequencer(bool on) noexcept {
+  // True when it triggered a note (which ran its own control update).
+  bool reconcile_sequencer(bool on) noexcept {
     if (on && !sequencer_.running() && stack_size_ > 0) {
       root_ = stack_[stack_size_ - 1].key;
       release();
@@ -238,10 +240,11 @@ public:
         const auto& newest = stack_[stack_size_ - 1];
         trigger(newest.key, newest.velocity >= values_[p::accent_threshold]);
         sounding_ = newest;
-      } else {
-        release();
+        return true;
       }
+      release();
     }
+    return false;
   }
 
   void note_on(const NoteEvent& event) noexcept override {
