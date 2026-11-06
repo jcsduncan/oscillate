@@ -64,7 +64,10 @@ def read_table():
 def configured_tiers(test_dir):
     listing = subprocess.run(
         ["ctest", "--test-dir", str(test_dir), "--show-only=json-v1"],
-        check=True, capture_output=True, text=True).stdout
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
     tiers = {}
     for test in json.loads(listing)["tests"]:
         labels = []
@@ -102,8 +105,13 @@ def measured(report):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--test-dir", action="append", type=pathlib.Path, required=True,
-                        help="configured build tree; repeat for each feature set")
+    parser.add_argument(
+        "--test-dir",
+        action="append",
+        type=pathlib.Path,
+        required=True,
+        help="configured build tree; repeat for each feature set",
+    )
     parser.add_argument("reports", nargs="*", type=pathlib.Path)
     arguments = parser.parse_args()
     defaults = tier_defaults()
@@ -140,17 +148,19 @@ def main():
         if tier != "fast" and name not in kept:
             unmeasured.append(name)
 
-    lines = [HEADER] + [
-        f"set(OSCILLATE_TEST_BUDGET_{name} {kept[name]})" for name in sorted(kept)
-    ]
+    lines = [HEADER] + [f"set(OSCILLATE_TEST_BUDGET_{name} {kept[name]})" for name in sorted(kept)]
     TABLE.write_text("\n".join(lines) + "\n")
     print(f"{len(slowest)} budgets measured, {len(kept)} in {TABLE.relative_to(ROOT)}")
     if dropped:
-        print(f"dropped {len(dropped)} entries for tests that no longer exist: "
-              + ", ".join(sorted(dropped)))
+        print(
+            f"dropped {len(dropped)} entries for tests that no longer exist: "
+            + ", ".join(sorted(dropped))
+        )
     if unmeasured:
-        raise SystemExit("slow or live tests without a budget (run them and pass the report): "
-                         + ", ".join(sorted(unmeasured)))
+        raise SystemExit(
+            "slow or live tests without a budget (run them and pass the report): "
+            + ", ".join(sorted(unmeasured))
+        )
 
 
 if __name__ == "__main__":

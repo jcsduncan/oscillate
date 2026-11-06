@@ -26,6 +26,8 @@ mapfile -d '' files < <(git diff -z --name-only --diff-filter=ACMR "${range[@]}"
   'tests/*.cpp' 'tests/*.hpp' 'tests/*.h' 'tests/*.c' \
   'bench/*.cpp' 'bench/*.hpp' 'bench/*.h' 'bench/*.c' \
   'tools/*.cpp' 'tools/*.hpp' 'tools/*.h' 'tools/*.c')
+# mapfile succeeds even when git diff fails (a bad BASE); fail with git diff.
+wait "$!"
 if ((${#files[@]} == 0)); then
   echo "No C/C++ files changed against $base."
   exit 0
