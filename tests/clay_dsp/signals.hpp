@@ -107,9 +107,18 @@ struct SungNote {
 
 // A harmonic tone with partials 1/h, optionally stretched by
 // inharmonicity B: f_h = h f0 sqrt(1 + B h^2).
-inline void add_tone(std::vector<float>& out, double hz, double start, double end,
-                     double inharmonicity = 0.0, int max_harmonics = 40, double level = 0.08,
-                     double attack = 0.01, double release = 0.05) {
+struct Tone {
+  double hz = 0.0;
+  double start = 0.0;
+  double end = 0.0;
+  double inharmonicity = 0.0;
+  int max_harmonics = 40;
+  double level = 0.08;
+  double attack = 0.01;
+  double release = 0.05;
+};
+inline void add_tone(std::vector<float>& out, const Tone& tone) {
+  const auto [hz, start, end, inharmonicity, max_harmonics, level, attack, release] = tone;
   for (int h = 1; h <= max_harmonics; ++h) {
     const double f = h * hz * std::sqrt(1.0 + inharmonicity * h * h);
     if (f >= ceiling * rate)
@@ -124,8 +133,15 @@ inline void add_tone(std::vector<float>& out, double hz, double start, double en
 }
 
 // A struck hit: a click of seeded noise then a decaying sine.
-inline void add_hit(std::vector<float>& out, double at, double hz, double decay_seconds,
-                    std::uint32_t seed, double level = 0.4) {
+struct Hit {
+  double at = 0.0;
+  double hz = 0.0;
+  double decay_seconds = 0.0;
+  std::uint32_t seed = 1;
+  double level = 0.4;
+};
+inline void add_hit(std::vector<float>& out, const Hit& hit) {
+  const auto [at, hz, decay_seconds, seed, level] = hit;
   std::uint32_t state = seed;
   const auto noise = [&] {
     state = state * 1'664'525U + 1'013'904'223U;

@@ -137,7 +137,9 @@ constexpr std::array<double, 4> chord_cents{4'500.0, 5'500.0, 6'000.0, 7'100.0};
 [[nodiscard]] std::vector<float> chord(double inharmonicity) {
   std::vector<float> out(sig::frames(1.5), 0.0F);
   for (const double cents : chord_cents)
-    sig::add_tone(out, sig::cents_to_hz(cents), 0.1, 1.3, inharmonicity);
+    sig::add_tone(
+        out,
+        {.hz = sig::cents_to_hz(cents), .start = 0.1, .end = 1.3, .inharmonicity = inharmonicity});
   return out;
 }
 
@@ -473,7 +475,10 @@ void percussive_hits_become_notes() {
   const std::array<double, 4> times{0.1, 0.4, 0.7, 1.0};
   const std::array<double, 4> pitches{200.0, 300.0, 400.0, 500.0};
   for (std::size_t i = 0; i < times.size(); ++i)
-    sig::add_hit(audio, times[i], pitches[i], 0.04, static_cast<std::uint32_t>(i + 1));
+    sig::add_hit(audio, {.at = times[i],
+                         .hz = pitches[i],
+                         .decay_seconds = 0.04,
+                         .seed = static_cast<std::uint32_t>(i + 1)});
   const auto take = analyse_or_throw(audio, Mode::percussive);
   REQUIRE_EQ(take.notes.size(), times.size(),
              "four hits, found " + std::to_string(take.notes.size()));
