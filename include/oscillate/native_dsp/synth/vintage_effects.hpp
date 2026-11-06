@@ -91,6 +91,8 @@ public:
   [[nodiscard]] StereoOut process(double left, double right) noexcept;
   // A conservative tail bound for these settings: the time for repeats to
   // fall 80 dB, capped at a minute.
+  // Seconds then feedback, as set() takes them.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   [[nodiscard]] static double tail_seconds(double seconds, double feedback) noexcept;
 
 private:
