@@ -24,6 +24,7 @@ inline constexpr double silence_floor = 1e-30;
 
 // `frames` samples of amplitude * sin(2 pi f n / rate + phase).
 template <typename Sample = double>
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): frequency then rate, as in the formula.
 [[nodiscard]] std::vector<Sample> sine(double frequency, double rate, std::size_t frames,
                                        double amplitude = 1.0, double phase = 0.0) {
   std::vector<Sample> out(frames);
@@ -37,6 +38,7 @@ template <typename Sample = double>
 
 // Uniform white noise in [-amplitude, amplitude) from SplitMix64.
 template <typename Sample = double>
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): frames, seed, amplitude.
 [[nodiscard]] std::vector<Sample> white_noise(std::size_t frames, std::uint64_t seed,
                                               double amplitude = 1.0) {
   foundation::SplitMix64 random(seed);

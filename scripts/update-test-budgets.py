@@ -116,7 +116,10 @@ def main():
         for name, seconds in measured(report):
             slowest[name] = max(seconds, slowest.get(name, 0.0))
     for name, seconds in slowest.items():
-        floor = defaults[tiers.get(name, "fast")]
+        # A test no --test-dir configures has no known tier: keep its old entry.
+        if name not in tiers:
+            continue
+        floor = defaults[tiers[name]]
         budgets[name] = max(floor, math.ceil(seconds * FACTOR))
 
     words = cmake_words()

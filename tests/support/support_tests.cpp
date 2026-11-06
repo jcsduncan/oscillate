@@ -7,6 +7,7 @@
 #include "oscillate/test/wait.hpp"
 #include "oscillate/test/wav.hpp"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -124,6 +125,19 @@ void wav_fixtures_round_trip() {
   test::write_wav_pcm16(pcm_path, test::sample_rate_44k, test::stereo_channels, pcm);
   const auto bytes = test::read_bytes(pcm_path);
   REQUIRE_EQ(bytes.size(), test::wav_header_bytes + pcm.size() * sizeof(std::int16_t));
+  // An independent oracle: the canonical header for 44.1 kHz stereo PCM16
+  // with 8 data bytes, written out byte by byte (little-endian fields).
+  constexpr std::array<std::uint8_t, test::wav_header_bytes> expected_header{
+      'R',  'I',  'F',  'F', 44,  0,   0,   0,                // RIFF size: 36 + 8 data bytes
+      'W',  'A',  'V',  'E', 'f', 'm', 't', ' ', 16, 0, 0, 0, // fmt chunk size
+      1,    0,                                                // PCM
+      2,    0,                                                // two channels
+      0x44, 0xAC, 0,    0,                                    // 44100 Hz
+      0x10, 0xB1, 0x02, 0,                                    // byte rate 176400
+      4,    0,                                                // block align
+      16,   0,                                                // bits per sample
+      'd',  'a',  't',  'a', 8,   0,   0,   0};               // data size
+  REQUIRE_TRUE(std::equal(expected_header.begin(), expected_header.end(), bytes.begin()));
   REQUIRE_EQ(test::read_le32(bytes, test::wav_rate_offset), test::sample_rate_44k);
   const auto parsed = test::read_wav(pcm_path);
   REQUIRE_EQ(parsed.layout.channels, test::stereo_channels);

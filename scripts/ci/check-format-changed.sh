@@ -12,7 +12,14 @@ if ! command -v clang-format >/dev/null 2>&1; then
   exit 1
 fi
 
-mapfile -d '' files < <(git diff -z --name-only --diff-filter=ACMR "$base" HEAD -- \
+# Compare from the merge base, so files changed only on BASE are not checked;
+# without a merge base, compare the two commits directly.
+if git merge-base "$base" HEAD >/dev/null 2>&1; then
+  range=("$base...HEAD")
+else
+  range=("$base" HEAD)
+fi
+mapfile -d '' files < <(git diff -z --name-only --diff-filter=ACMR "${range[@]}" -- \
   'apps/*.cpp' 'apps/*.hpp' 'apps/*.h' 'apps/*.c' \
   'include/*.cpp' 'include/*.hpp' 'include/*.h' 'include/*.c' \
   'src/*.cpp' 'src/*.hpp' 'src/*.h' 'src/*.c' \

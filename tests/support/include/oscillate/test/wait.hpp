@@ -25,10 +25,12 @@ inline constexpr std::chrono::milliseconds wait_poll_interval{1};
 
 // Returns once `ready()` is true; fails with `what` at the deadline.
 template <typename Ready>
-void wait_until(Ready&& ready, std::string_view what,
-                std::chrono::steady_clock::duration deadline = default_wait_deadline,
-                std::chrono::steady_clock::duration poll = wait_poll_interval,
-                std::source_location where = std::source_location::current()) {
+void wait_until(
+    Ready&& ready, std::string_view what,
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): deadline, then poll interval.
+    std::chrono::steady_clock::duration deadline = default_wait_deadline,
+    std::chrono::steady_clock::duration poll = wait_poll_interval,
+    std::source_location where = std::source_location::current()) {
   const auto give_up = std::chrono::steady_clock::now() + deadline;
   while (!ready()) {
     if (std::chrono::steady_clock::now() >= give_up) {

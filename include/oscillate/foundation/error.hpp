@@ -47,7 +47,8 @@ public:
   // Call only after checking has_value(). A wrong alternative throws std::bad_variant_access.
   [[nodiscard]] T& value() & { return std::get<0>(state_); }
   [[nodiscard]] const T& value() const& { return std::get<0>(state_); }
-  [[nodiscard]] T&& value() && { return std::get<0>(std::move(state_)); }
+  // An rvalue Result hands its payload out by value, so nothing refers into a dead Result.
+  [[nodiscard]] T value() && { return std::get<0>(std::move(state_)); }
   [[nodiscard]] Error& error() & { return std::get<1>(state_); }
   [[nodiscard]] const Error& error() const& { return std::get<1>(state_); }
 

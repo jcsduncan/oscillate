@@ -23,7 +23,8 @@
 
 namespace oscillate::test {
 
-enum class WavEncoding : std::uint16_t { pcm = 1, ieee_float = 3 };
+// The WAV format tag is a 16-bit field, so the enum keeps its width.
+enum class WavEncoding : std::uint16_t { pcm = 1, ieee_float = 3 }; // NOLINT(performance-enum-size)
 
 struct WavLayout {
   std::uint32_t sample_rate;
@@ -185,6 +186,7 @@ struct WavFile {
       constexpr std::size_t channels_at = 2;
       constexpr std::size_t rate_at = 4;
       constexpr std::size_t bits_at = 14;
+      require(size >= wav_fmt_chunk_bytes, "WAV fmt chunk too short");
       file.layout = {read_le32(bytes, body + rate_at), read_le16(bytes, body + channels_at),
                      read_le16(bytes, body + bits_at),
                      static_cast<WavEncoding>(read_le16(bytes, body))};

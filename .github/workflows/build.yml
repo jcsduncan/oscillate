@@ -17,7 +17,7 @@ jobs:
   build-test:
     name: Build and fast tests (Ubuntu 26.04, Qt Quick)
     runs-on: ubuntu-latest
-    container: ubuntu:26.04
+    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
     timeout-minutes: 180
     env:
       CCACHE_MAXSIZE: 2G

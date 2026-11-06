@@ -115,6 +115,8 @@ template <typename T> [[nodiscard]] std::string describe(const T& value) {
   return out.str();
 }
 
+// `what` is the failed check, `message` the caller's note.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 [[noreturn]] inline void fail(std::string_view what, std::string_view message,
                               const std::source_location& where) {
   std::string text = std::string(where.file_name()) + ':' + std::to_string(where.line()) + ": " +
