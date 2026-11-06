@@ -1,0 +1,191 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 28, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "dev",
+      "displayName": "Development",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/dev",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_TESTING": "ON",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "quick",
+      "displayName": "Qt Quick desktop",
+      "inherits": "dev",
+      "binaryDir": "${sourceDir}/build/quick",
+      "cacheVariables": {
+        "OSCILLATE_BUILD_QUICK_UI": "ON",
+        "OSCILLATE_BUILD_TEST_TARGETS_BY_DEFAULT": "OFF"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release Qt Quick application (static project libraries)",
+      "inherits": "quick",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "OSCILLATE_SHARED_LIBS": "OFF",
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "ubuntu-package-prototype",
+      "displayName": "Ubuntu Qt Quick package input (local prototype)",
+      "inherits": "release",
+      "binaryDir": "${sourceDir}/build/ubuntu-package-prototype",
+      "cacheVariables": {
+        "BUILD_TESTING": "OFF",
+        "CMAKE_SKIP_BUILD_RPATH": "ON",
+        "OSCILLATE_REQUIRE_JACK": "ON",
+        "OSCILLATE_BUILD_QUICK_UI": "ON",
+        "OSCILLATE_BUILD_VST3_SCANNER": "ON",
+        "OSCILLATE_BUILD_CODEC_ADAPTER": "ON",
+        "OSCILLATE_BUILD_EXPORT_RESAMPLER": "ON",
+        "OSCILLATE_BUILD_SOURCE_RESAMPLER": "ON",
+        "OSCILLATE_BUILD_CONVOLUTION_DSP": "OFF"
+      }
+    },
+    {
+      "name": "vst3",
+      "displayName": "VST3 scanner with pinned SDK",
+      "inherits": "dev",
+      "binaryDir": "${sourceDir}/build/vst3",
+      "cacheVariables": {
+        "OSCILLATE_BUILD_VST3_SCANNER": "ON"
+      }
+    },
+    {
+      "name": "codec",
+      "displayName": "Encoded audio adapter with libsndfile",
+      "inherits": "dev",
+      "binaryDir": "${sourceDir}/build/codec",
+      "cacheVariables": {
+        "OSCILLATE_BUILD_CODEC_ADAPTER": "ON"
+      }
+    },
+    {
+      "name": "coverage",
+      "displayName": "GCC core coverage with Quick integration",
+      "inherits": "dev",
+      "binaryDir": "${sourceDir}/build/coverage",
+      "cacheVariables": {
+        "OSCILLATE_TEST_TIMEOUT_SCALE": "2",
+        "OSCILLATE_ENABLE_COVERAGE": "ON",
+        "OSCILLATE_WARNINGS_AS_ERRORS": "ON",
+        "OSCILLATE_BUILD_QUICK_UI": "ON"
+      }
+    },
+    {
+      "name": "coverage-full",
+      "displayName": "Full optional C++ coverage report",
+      "inherits": "coverage",
+      "binaryDir": "${sourceDir}/build/coverage-full",
+      "cacheVariables": {
+        "OSCILLATE_BUILD_QUICK_UI": "ON",
+        "OSCILLATE_BUILD_VST3_SCANNER": "ON",
+        "OSCILLATE_BUILD_CODEC_ADAPTER": "ON",
+        "OSCILLATE_BUILD_CONVOLUTION_DSP": "ON",
+        "OSCILLATE_BUILD_EXPORT_RESAMPLER": "ON",
+        "OSCILLATE_BUILD_SOURCE_RESAMPLER": "ON"
+      }
+    },
+    {
+      "name": "sanitize",
+      "displayName": "Address and undefined behavior sanitizers",
+      "inherits": "dev",
+      "binaryDir": "${sourceDir}/build/sanitize",
+      "cacheVariables": {
+        "OSCILLATE_TEST_TIMEOUT_SCALE": "4",
+        "OSCILLATE_ENABLE_SANITIZERS": "ON",
+        "OSCILLATE_WARNINGS_AS_ERRORS": "ON"
+      }
+    },
+    {
+      "name": "tsan",
+      "displayName": "ThreadSanitizer",
+      "inherits": "dev",
+      "binaryDir": "${sourceDir}/build/tsan",
+      "cacheVariables": {
+        "OSCILLATE_TEST_TIMEOUT_SCALE": "10",
+        "OSCILLATE_ENABLE_THREAD_SANITIZER": "ON",
+        "OSCILLATE_WARNINGS_AS_ERRORS": "ON"
+      }
+    },
+    {
+      "name": "clang",
+      "displayName": "Clang C++20",
+      "inherits": "dev",
+      "binaryDir": "${sourceDir}/build/clang",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "OSCILLATE_WARNINGS_AS_ERRORS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "dev", "configurePreset": "dev" },
+    { "name": "release", "configurePreset": "release" },
+    { "name": "quick", "configurePreset": "quick" },
+    { "name": "ubuntu-package-prototype", "configurePreset": "ubuntu-package-prototype" },
+    { "name": "vst3", "configurePreset": "vst3" },
+    { "name": "codec", "configurePreset": "codec" },
+    { "name": "coverage", "configurePreset": "coverage" },
+    { "name": "coverage-full", "configurePreset": "coverage-full" },
+    { "name": "sanitize", "configurePreset": "sanitize" },
+    { "name": "tsan", "configurePreset": "tsan" },
+    { "name": "clang", "configurePreset": "clang" }
+  ],
+  "testPresets": [
+    { "name": "dev", "configurePreset": "dev", "output": { "outputOnFailure": true } },
+    {
+      "name": "dev-fast",
+      "displayName": "dev: fast tier",
+      "configurePreset": "dev",
+      "output": { "outputOnFailure": true },
+      "filter": { "include": { "label": "^fast$" } }
+    },
+    { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true } },
+    { "name": "quick", "configurePreset": "quick", "output": { "outputOnFailure": true } },
+    {
+      "name": "quick-fast",
+      "displayName": "Quick: fast tier (pre-commit loop)",
+      "configurePreset": "quick",
+      "output": { "outputOnFailure": true },
+      "filter": { "include": { "label": "^fast$" } }
+    },
+    {
+      "name": "quick-slow",
+      "displayName": "Quick: slow tier (DSP oracles, parity, long renders)",
+      "configurePreset": "quick",
+      "output": { "outputOnFailure": true },
+      "filter": { "include": { "label": "^slow$" } }
+    },
+    { "name": "vst3", "configurePreset": "vst3", "output": { "outputOnFailure": true } },
+    { "name": "codec", "configurePreset": "codec", "output": { "outputOnFailure": true } },
+    { "name": "coverage", "configurePreset": "coverage", "output": { "outputOnFailure": true } },
+    { "name": "coverage-full", "configurePreset": "coverage-full", "output": { "outputOnFailure": true } },
+    { "name": "sanitize", "configurePreset": "sanitize", "output": { "outputOnFailure": true } },
+    {
+      "name": "sanitize-fast",
+      "displayName": "sanitize: fast tier",
+      "configurePreset": "sanitize",
+      "output": { "outputOnFailure": true },
+      "filter": { "include": { "label": "^fast$" } }
+    },
+    { "name": "tsan", "configurePreset": "tsan", "output": { "outputOnFailure": true } },
+    {
+      "name": "tsan-fast",
+      "displayName": "tsan: fast tier",
+      "configurePreset": "tsan",
+      "output": { "outputOnFailure": true },
+      "filter": { "include": { "label": "^fast$" } }
+    },
+    { "name": "clang", "configurePreset": "clang", "output": { "outputOnFailure": true } }
+  ]
+}
