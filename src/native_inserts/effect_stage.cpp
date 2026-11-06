@@ -176,9 +176,15 @@ void NativeEffectStage::render(std::span<engine::StereoFrame> stereo,
   const auto frames = stereo.size();
   auto* plan = automation_mailbox_->current();
   std::span<const native_dsp::synth::ParameterLane> lanes;
-  // Beyond the plan's safe range the panel values play on unautomated.
-  if (plan && !plan->evaluators.empty() && first <= plan->last_safe_sample &&
-      frames - 1 <= plan->last_safe_sample - first) {
+  // Beyond the plan's safe range the panel values play on unautomated (an
+  // insert passes audio rather than going silent), counted as a rejection so
+  // the guard reports the block that missed its automation.
+  const bool automated = plan && !plan->evaluators.empty();
+  const bool safe =
+      automated && first <= plan->last_safe_sample && frames - 1 <= plan->last_safe_sample - first;
+  if (automated && !safe)
+    rejected_.fetch_add(1, std::memory_order_relaxed);
+  if (safe) {
     bool evaluated = true;
     for (std::size_t lane = 0; lane < plan->evaluators.size() && evaluated; ++lane) {
       const auto values = std::span(plan->values[lane]).first(frames);

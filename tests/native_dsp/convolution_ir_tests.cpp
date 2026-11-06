@@ -1,6 +1,7 @@
 #include "oscillate/native_dsp/convolution_ir.hpp"
 #include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/check.hpp"
+#include "oscillate/test/temp_dir.hpp"
 
 #include <openssl/evp.h>
 
@@ -70,12 +71,10 @@ std::string sha256(std::span<const unsigned char> bytes) {
   return result;
 }
 
+// The IR file lives in a private directory (mkdtemp), which is removed with
+// everything in it even when construction throws part-way.
 struct Fixture {
   explicit Fixture(std::span<const unsigned char> bytes) {
-    static std::uint32_t serial = 0;
-    path = std::filesystem::temp_directory_path() /
-           ("oscillate-convolution-ir-" + std::to_string(::getpid()) + "-" +
-            std::to_string(serial++) + ".wav");
     std::ofstream output(path, std::ios::binary | std::ios::trunc);
     require(static_cast<bool>(output), "cannot create IR fixture");
     output.write(reinterpret_cast<const char*>(bytes.data()),
@@ -84,14 +83,11 @@ struct Fixture {
     fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
     REQUIRE_GE(fd, 0, "cannot open IR fixture");
   }
-  ~Fixture() {
-    ::close(fd);
-    std::error_code ignored;
-    std::filesystem::remove(path, ignored);
-  }
+  ~Fixture() { ::close(fd); }
   Fixture(const Fixture&) = delete;
   Fixture& operator=(const Fixture&) = delete;
-  std::filesystem::path path;
+  oscillate::test::TempDir directory{"oscillate-convolution-ir"};
+  std::filesystem::path path = directory / "ir.wav";
   int fd = -1;
 };
 

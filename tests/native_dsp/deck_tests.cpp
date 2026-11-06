@@ -28,7 +28,6 @@ const EngineDescriptor& table() { return *deck::engine().descriptor; }
 std::size_t at(std::string_view id) { return index(table(), id); }
 std::vector<double> flat() { return preset(table(), "Flat"); }
 
-constexpr double rate = oscillate::test::sample_rate_48k_hz;
 constexpr std::size_t frames = 48'000;
 
 // A tone's gain through Deck, measured once its filters have settled.

@@ -335,6 +335,7 @@ void sequencer_steps_land_on_exact_frames() {
 
   // Swing 0.5 delays odd steps by a quarter step.
   const auto swung = run(plain, 24'000, 64, 6'000.0, 0.5, 0.5);
+  REQUIRE_EQ(swung.size(), expected.size(), "swing keeps every event");
   REQUIRE_EQ(swung[2].frame, 7'500, "swing delays odd steps by swing / 2 of a step");
   REQUIRE_EQ(swung[6].frame, 19'500, "swing delays odd steps by swing / 2 of a step");
   REQUIRE_EQ(swung[4].frame, 12'000, "swing delays odd steps by swing / 2 of a step");
@@ -362,13 +363,17 @@ void sequencer_steps_land_on_exact_frames() {
   // A tempo change rebases: at frame 9000 (step 1.5) the step halves, so
   // step 2 lands at 9000 + 0.5 * 3000.
   const auto faster = run(plain, 16'000, 128, 6'000.0, 0.0, 0.5, 9'000, 3'000.0);
-  REQUIRE_EQ(faster[4].frame, 10'500, "tempo change rebases");
-  REQUIRE_EQ(faster[4].kind, K::note_on, "tempo change rebases");
+  constexpr std::size_t rebased_onset = 4;
+  REQUIRE_GT(faster.size(), rebased_onset, "tempo change rebases");
+  REQUIRE_EQ(faster[rebased_onset].frame, 10'500, "tempo change rebases");
+  REQUIRE_EQ(faster[rebased_onset].kind, K::note_on, "tempo change rebases");
 
   // A pattern shorter than 16 wraps.
   const auto wrapped = run(std::span(plain).first(3), 24'000, 128, 6'000.0, 0.0, 0.5);
-  REQUIRE_EQ(wrapped[6].frame, 18'000, "length 3 wraps to step 0");
-  REQUIRE_EQ(wrapped[6].semitones, 0, "length 3 wraps to step 0");
+  constexpr std::size_t wrapped_onset = 6;
+  REQUIRE_GT(wrapped.size(), wrapped_onset, "length 3 wraps to step 0");
+  REQUIRE_EQ(wrapped[wrapped_onset].frame, 18'000, "length 3 wraps to step 0");
+  REQUIRE_EQ(wrapped[wrapped_onset].semitones, 0, "length 3 wraps to step 0");
 }
 
 void processing_does_not_allocate() {

@@ -7,6 +7,7 @@
 #include "oscillate/test/cases.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/signal.hpp"
+#include "oscillate/test/temp_dir.hpp"
 #include "oscillate/test/tolerances.hpp"
 #include "synth_test_support.hpp"
 
@@ -102,8 +103,9 @@ double peak_hz(const std::vector<double>& x, std::size_t from, std::size_t lengt
 // Without the library Concert loads nothing, says why, and plays silence.
 // Runs first: nothing in this process has loaded a library yet.
 void a_missing_library_is_silent() {
-  const auto nowhere = std::filesystem::temp_directory_path() / "concert-no-library-here";
-  std::filesystem::remove_all(nowhere);
+  // A test-owned directory; the override names a child that never exists.
+  const oscillate::test::TempDir owned("oscillate-concert-test");
+  const auto nowhere = owned / "no-library-here";
   ::setenv(std::string(library::directory_variable).c_str(), nowhere.c_str(), 1);
   REQUIRE_EQ(library::default_directory(), nowhere, "the directory follows the override");
   const auto status = library::status();

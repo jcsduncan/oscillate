@@ -91,13 +91,15 @@ inline Stereo process(effects::NativeEffectRuntime& runtime, const Stereo& input
   while (position < input.size()) {
     std::size_t size = std::min(input.size() - position,
                                 options.block == 0 ? irregular[cycle++ % 6] : options.block);
+    // Every hook at this frame fires, then the block stops short of the next.
+    while (next_hook < options.at.size() && options.at[next_hook] - start == position)
+      options.before(options.at[next_hook++]);
     if (next_hook < options.at.size()) {
-      const auto hook = options.at[next_hook] - start;
-      if (hook == position) {
-        options.before(options.at[next_hook++]);
-      } else if (hook > position && hook < position + size) {
-        size = hook - position;
-      }
+      const auto hook = options.at[next_hook];
+      oscillate::test::require(hook >= start + position,
+                               "render hooks ascend and none falls before the start");
+      if (hook - start < position + size)
+        size = hook - start - position;
     }
     buffer.resize(size);
     side.clear();

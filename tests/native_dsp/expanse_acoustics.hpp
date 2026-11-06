@@ -161,7 +161,8 @@ inline double colouration_db(const std::vector<double>& spectrum_db, double low,
       continue;
     }
     const auto from = static_cast<std::size_t>(hz / std::pow(2.0, 1.0 / 6.0) / bin_hz);
-    const auto to = static_cast<std::size_t>(hz * std::pow(2.0, 1.0 / 6.0) / bin_hz) + 1;
+    const auto to = std::min(spectrum_db.size(),
+                             static_cast<std::size_t>(hz * std::pow(2.0, 1.0 / 6.0) / bin_hz) + 1);
     double mean = 0.0;
     for (std::size_t j = from; j < to; ++j) {
       mean += std::pow(10.0, spectrum_db[j] / 10.0);
