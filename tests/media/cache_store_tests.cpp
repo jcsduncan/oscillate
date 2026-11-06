@@ -731,6 +731,35 @@ void validated_reader_and_clear_do_not_hold_store_lock() {
                "concurrent clear invalidated the pinned reader");
 }
 
+// Each hit refreshes the entry's access time while other hits are still
+// hashing it; none of them may read that as a content change.
+void overlapping_validated_opens_all_hit() {
+  constexpr std::size_t payload_bytes = std::size_t{16} * 1024U * 1024U;
+  constexpr std::size_t readers = 4;
+  constexpr std::size_t opens_per_reader = 4;
+  Directory temporary;
+  auto project_store =
+      take(persistence::ProjectStore::open_writer(temporary.path() / "project", true));
+  auto cache =
+      take(media::CacheStore::adopt_directory_fd(take(project_store.open_cache_directory())));
+  const auto entry_key = key(112);
+  take(cache.put(entry_key, std::vector<std::byte>(payload_bytes, std::byte{0x5a})));
+  std::atomic<std::size_t> misses{0};
+  std::vector<std::thread> threads;
+  for (std::size_t reader = 0; reader < readers; ++reader) {
+    threads.emplace_back([&] {
+      for (std::size_t open = 0; open < opens_per_reader; ++open) {
+        const auto opened = cache.open_validated(entry_key);
+        if (!opened || !opened.value())
+          misses.fetch_add(1);
+      }
+    });
+  }
+  for (auto& thread : threads)
+    thread.join();
+  REQUIRE_EQ(misses.load(), 0, "an overlapping validated open turned a valid entry into a miss");
+}
+
 void streaming_failures_keep_prior_entry_and_remove_temporary() {
   Directory temporary;
   const auto root = temporary.path() / "project";
@@ -1022,6 +1051,7 @@ int main() {
     validated_reader_seeks_and_survives_eviction_and_replacement();
     validated_reader_rejects_corruption_and_oversize_before_exposure();
     validated_reader_and_clear_do_not_hold_store_lock();
+    overlapping_validated_opens_all_hit();
     streaming_failures_keep_prior_entry_and_remove_temporary();
     streaming_consumer_failure_and_fault_stage();
     streaming_producer_does_not_block_clear_or_lose_its_temporary();
