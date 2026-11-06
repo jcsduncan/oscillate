@@ -97,6 +97,10 @@ project_node_controls(const project::Snapshot& snapshot, const ProjectRoutePlan&
 // Existing edge order and IDs, replacing only the saved gain on mapped sends.
 [[nodiscard]] foundation::Result<std::vector<engine::RoutedEdgeControl>>
 project_edge_controls(const project::Snapshot& snapshot, const ProjectRoutePlan& plan);
+// A sidechain key is live only while the effect it keys is in the chain and
+// switched on; a switched-off effect keeps its key saved for when it returns.
+[[nodiscard]] bool live_sidechain(const project::Snapshot& snapshot,
+                                  const project::SendRoute& send);
 // Validated snapshots have at most one compressor target per destination.
 [[nodiscard]] std::optional<project::InsertSlotId>
 sidechain_target(const project::Snapshot& snapshot, project::TrackId destination);

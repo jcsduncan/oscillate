@@ -112,28 +112,35 @@ std::vector<bool> silent_track_nodes(const project::Snapshot& snapshot,
   }
   for (std::size_t index = 0; index < silent.size(); ++index)
     silent[index] = silent[index] && !keys[index];
-  // A track feeding only silent tracks is silent too. Each pass silences at
+  // A track feeding only silent tracks is silent too.
+  const auto silence_if_unheard = [&](std::size_t index) -> bool {
+    if (silent[index] || keys[index])
+      return false;
+    bool feeds = false;
+    bool heard = false;
+    for (const auto& edge : plan.edges) {
+      if (edge.kind == engine::RoutingEdgeKind::sidechain ||
+          edge.source != plan.track_nodes[index].node)
+        continue;
+      feeds = true;
+      const auto found = index_by_node.find(edge.destination);
+      heard = heard || found == index_by_node.end() || !silent[found->second];
+    }
+    silent[index] = feeds && !heard;
+    return silent[index];
+  };
+  // Destinations before sources settles every track in one pass.
+  for (auto node = plan.latency.topological_order.rbegin();
+       node != plan.latency.topological_order.rend(); ++node) {
+    if (const auto found = index_by_node.find(*node); found != index_by_node.end())
+      silence_if_unheard(found->second);
+  }
+  // A plan without a full order still settles: each further pass silences at
   // least one more track or stops, so this ends within track_nodes.size().
   for (bool changed = true; changed;) {
     changed = false;
-    for (std::size_t index = 0; index < silent.size(); ++index) {
-      if (silent[index] || keys[index])
-        continue;
-      bool feeds = false;
-      bool heard = false;
-      for (const auto& edge : plan.edges) {
-        if (edge.kind == engine::RoutingEdgeKind::sidechain ||
-            edge.source != plan.track_nodes[index].node)
-          continue;
-        feeds = true;
-        const auto found = index_by_node.find(edge.destination);
-        heard = heard || found == index_by_node.end() || !silent[found->second];
-      }
-      if (feeds && !heard) {
-        silent[index] = true;
-        changed = true;
-      }
-    }
+    for (std::size_t index = 0; index < silent.size(); ++index)
+      changed = silence_if_unheard(index) || changed;
   }
   return silent;
 }
@@ -203,11 +210,7 @@ project_edge_controls(const project::Snapshot& snapshot, const ProjectRoutePlan&
   return foundation::Result<Controls>::success(std::move(result));
 }
 
-namespace {
-// A key is live only while the effect it keys is in the chain and switched
-// on; a switched-off effect keeps its key saved for when it returns.
-[[nodiscard]] bool live_sidechain(const project::Snapshot& snapshot,
-                                  const project::SendRoute& send) {
+bool live_sidechain(const project::Snapshot& snapshot, const project::SendRoute& send) {
   if (send.purpose != project::SendPurpose::sidechain || !send.target_insert)
     return false;
   const auto destination =
@@ -218,7 +221,6 @@ namespace {
       std::ranges::find(destination->effects, *send.target_insert, &project::EffectInsert::id);
   return effect != destination->effects.end() && effect->enabled;
 }
-} // namespace
 
 std::optional<project::InsertSlotId> sidechain_target(const project::Snapshot& snapshot,
                                                       project::TrackId destination) {

@@ -75,8 +75,11 @@ struct ConsumeResult {
   std::size_t copied = 0;
   std::size_t silent = 0;
   std::size_t stale_dropped = 0;
-  // Producer continuity gives at most a leading and trailing gap per block.
+  // The first gaps of the block. A skip_forward jump can leave more; every
+  // gap still reaches the diagnostic queue, and the ones without a slot here
+  // are counted in unlisted_underruns.
   std::array<std::optional<UnderrunEvent>, 2> underruns{};
+  std::size_t unlisted_underruns = 0;
 };
 
 enum class HandoffWindowStatus : std::uint8_t { ready, waiting, missed, invalid };

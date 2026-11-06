@@ -91,8 +91,11 @@ struct SourceRateReader::Backend {
   };
   std::unique_ptr<SRC_STATE, ConverterDeleter> converter;
   static constexpr std::size_t capacity = 16'384;
-  static constexpr std::uint64_t preroll = 256;
-  static constexpr std::uint64_t postroll = 256;
+  // SRC_SINC_MEDIUM_QUALITY reaches about 46 input frames each side at unity
+  // ratio; downsampling widens that by source/project. The margins cover it
+  // with a guard so a window boundary never truncates the filter.
+  static constexpr std::uint64_t sinc_half_span = 48;
+  static constexpr std::uint64_t margin_guard = 16;
   std::array<StereoFrame, capacity> decoded{};
   std::array<float, capacity * 2> input{};
   std::array<float, capacity * 2> converted{};
@@ -158,20 +161,25 @@ Result<std::size_t> SourceRateReader::read_at(std::uint64_t project_frame,
   const auto divisor = std::max(1U, std::gcd(source_rate, backend_->project_rate));
   const auto source_period = std::max(1U, source_rate / divisor);
   const auto project_period = backend_->project_rate / divisor;
+  // Input frames per side the filter reads: its span, widened when the
+  // source rate is above the project rate.
+  const auto margin = (Backend::sinc_half_span * std::max(source_rate, backend_->project_rate) +
+                       backend_->project_rate - 1) /
+                          backend_->project_rate +
+                      Backend::margin_guard;
   const auto nominal_source = source_floor(project_frame, source_rate, backend_->project_rate);
-  const auto anchor = nominal_source > Backend::preroll
-                          ? ((nominal_source - Backend::preroll) / source_period) * source_period
-                          : 0;
+  const auto anchor =
+      nominal_source > margin ? ((nominal_source - margin) / source_period) * source_period : 0;
   const auto base_project = (anchor / source_period) * project_period;
   const auto offset = project_frame - base_project;
   const auto source_last =
       source_floor(project_frame + wanted, source_rate, backend_->project_rate);
-  if (source_last > std::numeric_limits<std::uint64_t>::max() - Backend::postroll ||
-      source_last + Backend::postroll < anchor) {
+  if (source_last > std::numeric_limits<std::uint64_t>::max() - margin ||
+      source_last + margin < anchor) {
     return Result<std::size_t>::failure(
         {ErrorCode::resource_exhausted, "Source-rate read range overflow"});
   }
-  const auto input_frames = source_last + Backend::postroll - anchor;
+  const auto input_frames = source_last + margin - anchor;
   if (input_frames > Backend::capacity || offset > Backend::capacity ||
       wanted > Backend::capacity - offset) {
     return Result<std::size_t>::failure(

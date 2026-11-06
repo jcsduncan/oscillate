@@ -26,6 +26,7 @@ namespace timeline = oscillate::timeline;
 using oscillate::test::require;
 using oscillate::test::take;
 template <typename T> T id(std::uint64_t low) { return take(T::from_bits({0, low})); }
+constexpr auto max_block_frames = routing::PreparedRouteGainBlocks::max_block_frames;
 
 project::Snapshot snapshot_with_send(std::size_t sends = 1) {
   auto tempo = take(timeline::TempoMap::create({{{0}, 120.0, timeline::TempoShape::step}}, 1));
@@ -126,7 +127,8 @@ void memory_budget() {
   routing::ProjectRouteIdRegistry ids;
   auto route = take(ids.compile(snapshot, 64));
   auto lanes = take(automation_project::prepare_project_automation(snapshot, 1));
-  auto oversized = routing::PreparedRouteGainBlocks::prepare(snapshot, route, lanes, 8192);
+  auto oversized =
+      routing::PreparedRouteGainBlocks::prepare(snapshot, route, lanes, max_block_frames);
   REQUIRE_TRUE(!oversized, "send gain scratch exceeded its explicit memory budget");
   REQUIRE_EQ(oversized.error().code, foundation::ErrorCode::resource_exhausted,
              "send gain scratch exceeded its explicit memory budget");
@@ -145,10 +147,41 @@ void memory_budget() {
   }
   route = take(ids.compile(snapshot, 64));
   lanes = take(automation_project::prepare_project_automation(snapshot, 1));
-  oversized = routing::PreparedRouteGainBlocks::prepare(snapshot, route, lanes, 8192);
+  oversized = routing::PreparedRouteGainBlocks::prepare(snapshot, route, lanes, max_block_frames);
   REQUIRE_TRUE(!oversized, "combined send and channel scratch exceeded its memory budget");
   REQUIRE_EQ(oversized.error().code, foundation::ErrorCode::resource_exhausted,
              "combined send and channel scratch exceeded its memory budget");
+}
+
+void dormant_sidechain_automation_stays_saved() {
+  auto snapshot = snapshot_with_send();
+  auto& bus = snapshot.tracks.back();
+  const auto slot = id<project::InsertSlotId>(4'000);
+  bus.effects.push_back({slot, false, project::NativeEffectPatch{"press", 1, {}, 1}});
+  auto& send = snapshot.tracks.front().sends.front();
+  send.purpose = project::SendPurpose::sidechain;
+  send.target_insert = slot;
+  routing::ProjectRouteIdRegistry ids;
+  auto route = take(ids.compile(snapshot, 64));
+  REQUIRE_TRUE(route.sends.empty(), "a switched-off sidechain target compiled a live key");
+  auto lanes = take(automation_project::prepare_project_automation(snapshot, 1));
+  auto adapter = take(routing::PreparedRouteGainBlocks::prepare(snapshot, route, lanes, 4));
+  engine::RoutedGainSpans block;
+  REQUIRE_TRUE(adapter->fill_block({0, 1}, 4, block),
+               "a dormant sidechain send's automation blocked the project");
+  REQUIRE_TRUE(
+      std::ranges::none_of(block.edges,
+                           [](const engine::EdgeGainSpan& edge) { return !edge.values.empty(); }),
+      "a dormant sidechain send's automation drove a live edge");
+
+  // A plain send that lost its route is still an error.
+  send.purpose = project::SendPurpose::audible;
+  send.target_insert.reset();
+  auto unrouted = route;
+  unrouted.sends.clear();
+  lanes = take(automation_project::prepare_project_automation(snapshot, 1));
+  require(!routing::PreparedRouteGainBlocks::prepare(snapshot, unrouted, lanes, 4),
+          "an unrouted live send's automation was silently dropped");
 }
 
 void channel_level_binding_preserves_stereo_balance() {
@@ -225,6 +258,7 @@ int main() {
   try {
     binding_and_bounds();
     memory_budget();
+    dormant_sidechain_automation_stays_saved();
     channel_level_binding_preserves_stereo_balance();
   } catch (const std::exception& error) {
     std::fprintf(stderr, "%s\n", error.what());

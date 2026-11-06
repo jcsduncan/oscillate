@@ -36,7 +36,24 @@ constexpr std::uint64_t max_stream_payload_bytes = std::uint64_t{1} << 30U;
 constexpr std::size_t stream_chunk_bytes = std::size_t{256} * 1024U;
 constexpr std::size_t max_scanned_entries = 262144;
 constexpr std::size_t max_global_stores = 257; // 256 registered projects plus shared analysis.
-constexpr std::size_t header_bytes = 8U + 4U + 64U + 8U + 32U;
+// Header: magic, format version, key hex, payload length, payload digest.
+constexpr std::size_t version_offset = 8;
+constexpr std::size_t key_offset = version_offset + sizeof(std::uint32_t);
+constexpr std::size_t key_hex_chars = 64;
+constexpr std::size_t length_offset = key_offset + key_hex_chars;
+constexpr std::size_t digest_offset = length_offset + sizeof(std::uint64_t);
+constexpr std::size_t digest_bytes = 32;
+constexpr std::size_t header_bytes = digest_offset + digest_bytes;
+static_assert(version_offset == magic.size());
+// Managed names: "<key hex>.cache" entries and "<key hex>.tmp.<random hex>"
+// temporaries.
+constexpr std::string_view entry_suffix = ".cache";
+constexpr std::string_view temporary_infix = ".tmp.";
+constexpr std::size_t temporary_random_bytes = 8;
+constexpr std::size_t hex_chars_per_byte = 2;
+constexpr std::size_t entry_name_chars = key_hex_chars + entry_suffix.size();
+constexpr std::size_t temporary_name_chars =
+    key_hex_chars + temporary_infix.size() + hex_chars_per_byte * temporary_random_bytes;
 
 using Fd = foundation::UniqueFd;
 using foundation::io_error;
@@ -137,16 +154,17 @@ Result<bool> pread_all(int fd, std::uint64_t offset, std::span<std::uint8_t> byt
   return Result<bool>::success(true);
 }
 
+// A content write moves size or mtime. ctime is left out: a concurrent hit on
+// the same inode refreshes its access time, which moves ctime and would turn
+// a valid entry into a false miss.
 bool same_contents_metadata(const struct stat& before, const struct stat& after) noexcept {
   return before.st_dev == after.st_dev && before.st_ino == after.st_ino &&
          before.st_size == after.st_size && before.st_mtim.tv_sec == after.st_mtim.tv_sec &&
-         before.st_mtim.tv_nsec == after.st_mtim.tv_nsec &&
-         before.st_ctim.tv_sec == after.st_ctim.tv_sec &&
-         before.st_ctim.tv_nsec == after.st_ctim.tv_nsec;
+         before.st_mtim.tv_nsec == after.st_mtim.tv_nsec;
 }
 
 Result<std::string> temporary_name(const std::string& key_hex) {
-  std::array<std::uint8_t, 8> random{};
+  std::array<std::uint8_t, temporary_random_bytes> random{};
   std::size_t filled = 0;
   while (filled < random.size()) {
     const auto count = ::getrandom(random.data() + filled, random.size() - filled, 0);
@@ -156,26 +174,27 @@ Result<std::string> temporary_name(const std::string& key_hex) {
       return Result<std::string>::failure(io_error("name cache temporary file"));
     }
   }
-  return Result<std::string>::success(key_hex + ".tmp." + foundation::to_hex(std::span(random)));
+  return Result<std::string>::success(std::string(key_hex).append(temporary_infix) +
+                                      foundation::to_hex(std::span(random)));
 }
 
 bool managed_name(std::string_view name) noexcept {
-  if (name.size() != 70 && name.size() != 85) {
+  if (name.size() != entry_name_chars && name.size() != temporary_name_chars) {
     return false;
   }
-  for (std::size_t index = 0; index < 64; ++index) {
+  for (std::size_t index = 0; index < key_hex_chars; ++index) {
     const char character = name[index];
     if (!((character >= '0' && character <= '9') || (character >= 'a' && character <= 'f'))) {
       return false;
     }
   }
-  if (name.size() == 70) {
-    return name.substr(64) == ".cache";
+  if (name.size() == entry_name_chars) {
+    return name.substr(key_hex_chars) == entry_suffix;
   }
-  if (name.substr(64, 5) != ".tmp.") {
+  if (name.substr(key_hex_chars, temporary_infix.size()) != temporary_infix) {
     return false;
   }
-  for (const char character : name.substr(69)) {
+  for (const char character : name.substr(key_hex_chars + temporary_infix.size())) {
     if (!((character >= '0' && character <= '9') || (character >= 'a' && character <= 'f'))) {
       return false;
     }
@@ -275,7 +294,7 @@ Result<std::vector<ScannedEntry>> scan_entries(int directory_fd) {
               {ErrorCode::resource_exhausted, "cache entry scan limit exceeded"});
         }
         entries.push_back({std::string(name), static_cast<std::uint64_t>(status.st_size),
-                           status.st_atim, name.size() == 85});
+                           status.st_atim, name.size() == temporary_name_chars});
       }
     }
     errno = 0;
@@ -423,7 +442,7 @@ Result<void> CacheStore::put(const CacheKey& key, std::span<const std::byte> pay
   if (!name) {
     return Result<void>::failure(name.error());
   }
-  const std::string final_name = key_hex + ".cache";
+  const std::string final_name = std::string(key_hex).append(entry_suffix);
   Fd file(::openat(directory_fd_, name.value().c_str(),
                    O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600));
   if (file.get() < 0) {
@@ -444,10 +463,10 @@ Result<void> CacheStore::put(const CacheKey& key, std::span<const std::byte> pay
   }
   std::array<std::uint8_t, header_bytes> header{};
   std::ranges::copy(magic, header.begin());
-  put32(header.data() + 8, format_version);
-  std::ranges::copy(key_hex, header.begin() + 12);
-  put64(header.data() + 76, payload.size());
-  std::ranges::copy(hash.value(), header.begin() + 84);
+  put32(header.data() + version_offset, format_version);
+  std::ranges::copy(key_hex, header.begin() + key_offset);
+  put64(header.data() + length_offset, payload.size());
+  std::ranges::copy(hash.value(), header.begin() + digest_offset);
   auto written = write_all(file.get(), header);
   if (!written) {
     return written;
@@ -503,9 +522,13 @@ Result<void> CacheStore::put_stream(const CacheKey& key, std::uint64_t payload_b
   if (!name) {
     return Result<void>::failure(name.error());
   }
-  const std::string final_name = key_hex + ".cache";
+  const std::string final_name = std::string(key_hex).append(entry_suffix);
   Fd file;
+  // Unlinks an unpublished temporary under the same locks a publish takes:
+  // the directory flock is shared by every operation on this store, so
+  // mutex_ keeps another operation's unlock from releasing it mid-check.
   struct Cleanup {
+    std::mutex* mutex;
     int directory;
     int directory_lock;
     Fd* file;
@@ -514,8 +537,10 @@ Result<void> CacheStore::put_stream(const CacheKey& key, std::uint64_t payload_b
     bool published = false;
     ~Cleanup() {
       if (armed && !published) {
+        std::lock_guard guard(*mutex);
         DirectoryLock lock(directory_lock);
-        (void)lock.acquire();
+        if (!lock.acquire())
+          return;
         struct stat opened{};
         struct stat named{};
         if (::fstat(file->get(), &opened) == 0 &&
@@ -525,7 +550,7 @@ Result<void> CacheStore::put_stream(const CacheKey& key, std::uint64_t payload_b
         }
       }
     }
-  } cleanup{directory_fd_, directory_lock_fd_, &file, name.value().c_str()};
+  } cleanup{&mutex_, directory_fd_, directory_lock_fd_, &file, name.value().c_str()};
   std::optional<EntryIdentity> original_identity;
   {
     std::lock_guard lock(mutex_);
@@ -553,9 +578,9 @@ Result<void> CacheStore::put_stream(const CacheKey& key, std::uint64_t payload_b
   }
   std::array<std::uint8_t, header_bytes> header{};
   std::ranges::copy(magic, header.begin());
-  put32(header.data() + 8, format_version);
-  std::ranges::copy(key_hex, header.begin() + 12);
-  put64(header.data() + 76, payload_bytes);
+  put32(header.data() + version_offset, format_version);
+  std::ranges::copy(key_hex, header.begin() + key_offset);
+  put64(header.data() + length_offset, payload_bytes);
   auto written = write_all(file.get(), header);
   if (!written) {
     return written;
@@ -604,7 +629,7 @@ Result<void> CacheStore::put_stream(const CacheKey& key, std::uint64_t payload_b
   if (!hash) {
     return Result<void>::failure(hash.error());
   }
-  std::ranges::copy(hash.value(), header.begin() + 84);
+  std::ranges::copy(hash.value(), header.begin() + digest_offset);
   if (::lseek(file.get(), 0, SEEK_SET) != 0) {
     return Result<void>::failure(io_error("seek cache header"));
   }
@@ -665,7 +690,7 @@ Result<std::optional<std::vector<std::byte>>> CacheStore::get(const CacheKey& ke
     return Result<std::optional<std::vector<std::byte>>>::failure(acquired.error());
   }
   const auto key_hex = key.hex();
-  const auto name = key_hex + ".cache";
+  const auto name = std::string(key_hex).append(entry_suffix);
   Fd file(::openat(directory_fd_, name.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
   if (file.get() < 0) {
     if (errno == ENOENT || errno == ELOOP) {
@@ -687,12 +712,13 @@ Result<std::optional<std::vector<std::byte>>> CacheStore::get(const CacheKey& ke
     return Result<std::optional<std::vector<std::byte>>>::failure(header_read.error());
   }
   if (!header_read.value() || !std::ranges::equal(magic, std::span(header).first(magic.size())) ||
-      read32(header.data() + 8) != format_version ||
-      !std::ranges::equal(key_hex, std::span(header).subspan(12, 64)) ||
-      read64(header.data() + 76) != static_cast<std::uint64_t>(status.st_size) - header_bytes) {
+      read32(header.data() + version_offset) != format_version ||
+      !std::ranges::equal(key_hex, std::span(header).subspan(key_offset, key_hex_chars)) ||
+      read64(header.data() + length_offset) !=
+          static_cast<std::uint64_t>(status.st_size) - header_bytes) {
     return Result<std::optional<std::vector<std::byte>>>::success(std::nullopt);
   }
-  const auto length = static_cast<std::size_t>(read64(header.data() + 76));
+  const auto length = static_cast<std::size_t>(read64(header.data() + length_offset));
   std::vector<std::byte> payload(length);
   auto payload_read =
       read_all(file.get(), {reinterpret_cast<std::uint8_t*>(payload.data()), payload.size()});
@@ -719,7 +745,7 @@ Result<std::optional<std::vector<std::byte>>> CacheStore::get(const CacheKey& ke
   if (!hash) {
     return Result<std::optional<std::vector<std::byte>>>::failure(hash.error());
   }
-  if (!std::ranges::equal(hash.value(), std::span(header).subspan(84, 32))) {
+  if (!std::ranges::equal(hash.value(), std::span(header).subspan(digest_offset, digest_bytes))) {
     return Result<std::optional<std::vector<std::byte>>>::success(std::nullopt);
   }
   const timespec access_times[2]{{0, UTIME_NOW}, {0, UTIME_OMIT}};
@@ -746,7 +772,7 @@ CacheStore::get_stream(const CacheKey& key, const CacheChunkConsumer& consumer) 
       return Result<std::optional<std::uint64_t>>::failure(acquired.error());
     }
     const auto key_hex = key.hex();
-    const auto name = key_hex + ".cache";
+    const auto name = std::string(key_hex).append(entry_suffix);
     file.reset(::openat(directory_fd_, name.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
     if (file.get() < 0) {
       if (errno == ENOENT || errno == ELOOP) {
@@ -767,12 +793,13 @@ CacheStore::get_stream(const CacheKey& key, const CacheChunkConsumer& consumer) 
       return Result<std::optional<std::uint64_t>>::failure(header_read.error());
     }
     if (!header_read.value() || !std::ranges::equal(magic, std::span(header).first(magic.size())) ||
-        read32(header.data() + 8) != format_version ||
-        !std::ranges::equal(key_hex, std::span(header).subspan(12, 64)) ||
-        read64(header.data() + 76) != static_cast<std::uint64_t>(status.st_size) - header_bytes) {
+        read32(header.data() + version_offset) != format_version ||
+        !std::ranges::equal(key_hex, std::span(header).subspan(key_offset, key_hex_chars)) ||
+        read64(header.data() + length_offset) !=
+            static_cast<std::uint64_t>(status.st_size) - header_bytes) {
       return Result<std::optional<std::uint64_t>>::success(std::nullopt);
     }
-    payload_bytes = read64(header.data() + 76);
+    payload_bytes = read64(header.data() + length_offset);
   }
   // The opened inode is pinned. Managed writers replace by rename and
   // eviction unlinks, so neither can change bytes during validation or replay.
@@ -811,7 +838,7 @@ CacheStore::get_stream(const CacheKey& key, const CacheChunkConsumer& consumer) 
   if (!hash) {
     return Result<std::optional<std::uint64_t>>::failure(hash.error());
   }
-  if (!std::ranges::equal(hash.value(), std::span(header).subspan(84, 32))) {
+  if (!std::ranges::equal(hash.value(), std::span(header).subspan(digest_offset, digest_bytes))) {
     return Result<std::optional<std::uint64_t>>::success(std::nullopt);
   }
   const timespec access_times[2]{{0, UTIME_NOW}, {0, UTIME_OMIT}};
@@ -851,7 +878,7 @@ Result<std::optional<ValidatedCacheReader>> CacheStore::open_validated(const Cac
     if (auto acquired = directory_lock.acquire(); !acquired) {
       return Result<std::optional<ValidatedCacheReader>>::failure(acquired.error());
     }
-    const auto name = key.hex() + ".cache";
+    const auto name = key.hex().append(entry_suffix);
     file.reset(::openat(directory_fd_, name.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
     if (file.get() < 0) {
       if (errno == ENOENT || errno == ELOOP) {
@@ -877,12 +904,13 @@ Result<std::optional<ValidatedCacheReader>> CacheStore::open_validated(const Cac
   }
   const auto key_hex = key.hex();
   if (!header_read.value() || !std::ranges::equal(magic, std::span(header).first(magic.size())) ||
-      read32(header.data() + 8) != format_version ||
-      !std::ranges::equal(key_hex, std::span(header).subspan(12, 64)) ||
-      read64(header.data() + 76) != static_cast<std::uint64_t>(before.st_size) - header_bytes) {
+      read32(header.data() + version_offset) != format_version ||
+      !std::ranges::equal(key_hex, std::span(header).subspan(key_offset, key_hex_chars)) ||
+      read64(header.data() + length_offset) !=
+          static_cast<std::uint64_t>(before.st_size) - header_bytes) {
     return Result<std::optional<ValidatedCacheReader>>::success(std::nullopt);
   }
-  const auto payload_bytes = read64(header.data() + 76);
+  const auto payload_bytes = read64(header.data() + length_offset);
   auto context = foundation::Sha256::create();
   if (!context) {
     return Result<std::optional<ValidatedCacheReader>>::failure(context.error());
@@ -916,7 +944,7 @@ Result<std::optional<ValidatedCacheReader>> CacheStore::open_validated(const Cac
   if (!hash) {
     return Result<std::optional<ValidatedCacheReader>>::failure(hash.error());
   }
-  if (!std::ranges::equal(hash.value(), std::span(header).subspan(84, 32))) {
+  if (!std::ranges::equal(hash.value(), std::span(header).subspan(digest_offset, digest_bytes))) {
     return Result<std::optional<ValidatedCacheReader>>::success(std::nullopt);
   }
   const timespec access_times[2]{{0, UTIME_NOW}, {0, UTIME_OMIT}};
@@ -951,8 +979,9 @@ Result<void> CacheStore::clear() {
       struct stat status{};
       if (::fstatat(directory_fd_, entry->d_name, &status, AT_SYMLINK_NOFOLLOW) == 0 &&
           !S_ISDIR(status.st_mode)) {
-        const auto removal = remove_disposable_entry(directory_fd_, std::string(name),
-                                                     name.size() == 85 && S_ISREG(status.st_mode));
+        const auto removal =
+            remove_disposable_entry(directory_fd_, std::string(name),
+                                    name.size() == temporary_name_chars && S_ISREG(status.st_mode));
         if (!removal) {
           const auto& error = removal.error();
           (void)::closedir(directory);

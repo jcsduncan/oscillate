@@ -14,12 +14,33 @@ using Result = foundation::Result<std::shared_ptr<PreparedRouteGainBlocks>>;
 [[nodiscard]] Result fail(ErrorCode code, const char* message) {
   return Result::failure({code, message});
 }
+
+// Per-frame scratch for the given bindings: a node holds its stereo samples
+// and a value buffer for each of its three channel controls; an edge holds its
+// curve values and gain samples. Both admission checks use this one cost.
+[[nodiscard]] std::size_t storage_per_frame(std::size_t nodes, std::size_t edges) noexcept {
+  constexpr std::size_t channel_controls = 3;
+  return nodes * (channel_controls * sizeof(double) + sizeof(engine::StereoFrame)) +
+         edges * (sizeof(double) + sizeof(float));
+}
+
+// A saved sidechain send whose target effect is switched off compiles to no
+// edge; its gain lane stays saved for when the key returns.
+[[nodiscard]] bool dormant_send(const project::Snapshot& snapshot, project::TrackId track,
+                                project::SendId send) {
+  const auto owner = std::ranges::find(snapshot.tracks, track, &project::Track::id);
+  if (owner == snapshot.tracks.end())
+    return false;
+  const auto saved = std::ranges::find(owner->sends, send, &project::SendRoute::id);
+  return saved != owner->sends.end() && saved->purpose == project::SendPurpose::sidechain &&
+         !live_sidechain(snapshot, *saved);
+}
 } // namespace
 
 Result PreparedRouteGainBlocks::prepare(
     const project::Snapshot& snapshot, const ProjectRoutePlan& route,
     std::span<const automation_project::PreparedTargetAutomation> targets, std::size_t max_frames) {
-  if (max_frames == 0 || max_frames > 8192 || snapshot.revision == 0)
+  if (max_frames == 0 || max_frames > max_block_frames || snapshot.revision == 0)
     return fail(ErrorCode::invalid_argument, "invalid route gain block size or revision");
   try {
     auto result = std::make_shared<PreparedRouteGainBlocks>();
@@ -58,11 +79,9 @@ Result PreparedRouteGainBlocks::prepare(
             std::ranges::find(result->node_bindings_, node_index, &NodeBinding::node_index);
         if (binding == result->node_bindings_.end()) {
           const auto count = result->node_bindings_.size() + 1;
-          const auto storage_per_frame =
-              count * (3 * sizeof(double) + sizeof(engine::StereoFrame)) +
-              result->edge_bindings_.size() * (sizeof(double) + sizeof(float));
           if (count > project::max_automation_lanes_per_project ||
-              storage_per_frame > (16ULL * 1024 * 1024) / max_frames)
+              storage_per_frame(count, result->edge_bindings_.size()) >
+                  storage_budget_bytes / max_frames)
             return fail(ErrorCode::resource_exhausted, "route gain block storage exceeds budget");
           NodeBinding added;
           added.node_index = node_index;
@@ -90,6 +109,8 @@ Result PreparedRouteGainBlocks::prepare(
       const auto mapped = std::ranges::find_if(route.sends, [&](const ProjectRouteSend& item) {
         return item.track == target.track() && item.send == send->send;
       });
+      if (mapped == route.sends.end() && dormant_send(snapshot, target.track(), send->send))
+        continue;
       if (mapped == route.sends.end())
         return fail(ErrorCode::unavailable, "send gain has no routed edge");
       const auto edge =
@@ -104,11 +125,9 @@ Result PreparedRouteGainBlocks::prepare(
           }))
         return fail(ErrorCode::conflict, "two automation targets bind the same send edge");
       const auto count = result->edge_bindings_.size() + 1;
-      const auto storage_per_frame =
-          count * (sizeof(double) + sizeof(float)) +
-          result->node_bindings_.size() * (sizeof(double) + sizeof(engine::StereoFrame));
       if (count > project::max_sends_per_project ||
-          storage_per_frame > (16ULL * 1024 * 1024) / max_frames)
+          storage_per_frame(result->node_bindings_.size(), count) >
+              storage_budget_bytes / max_frames)
         return fail(ErrorCode::resource_exhausted, "route gain block storage exceeds budget");
       result->edge_bindings_.push_back(
           {index, edge_index, std::vector<double>(max_frames), std::vector<float>(max_frames)});

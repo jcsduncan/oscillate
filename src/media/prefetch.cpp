@@ -350,11 +350,12 @@ ConsumeResult PrefetchRing::consume(std::uint64_t generation, std::uint64_t sour
   const auto add_gap = [&](std::size_t start, std::size_t count) noexcept {
     result.silent += count;
     if (steady && count != 0) {
-      if (event_index < result.underruns.size()) {
-        auto event = UnderrunEvent{clip_, generation, source_frame + start, count};
+      const auto event = UnderrunEvent{clip_, generation, source_frame + start, count};
+      push_underrun(event);
+      if (event_index < result.underruns.size())
         result.underruns[event_index++] = event;
-        push_underrun(event);
-      }
+      else
+        ++result.unlisted_underruns;
       const auto previous = underrun_count_.load(std::memory_order_relaxed);
       if (previous != std::numeric_limits<std::uint64_t>::max()) {
         underrun_count_.store(previous + 1, std::memory_order_relaxed);

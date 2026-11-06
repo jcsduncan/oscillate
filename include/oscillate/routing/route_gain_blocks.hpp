@@ -4,6 +4,7 @@
 #include "oscillate/engine/routed_publisher.hpp"
 #include "oscillate/routing/project_route_plan.hpp"
 
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <span>
@@ -16,6 +17,11 @@ namespace oscillate::routing {
 // block storage shared by live playback and offline export.
 class PreparedRouteGainBlocks final : public engine::RoutedGainSource {
 public:
+  // The largest block the adapter evaluates (the engine's hard adapter cap).
+  static constexpr std::size_t max_block_frames = 8192;
+  // Bytes of per-block scratch all bindings may hold together.
+  static constexpr std::size_t storage_budget_bytes = std::size_t{16} * 1024 * 1024;
+
   [[nodiscard]] static foundation::Result<std::shared_ptr<PreparedRouteGainBlocks>>
   prepare(const project::Snapshot& snapshot, const ProjectRoutePlan& route,
           std::span<const automation_project::PreparedTargetAutomation> targets,
