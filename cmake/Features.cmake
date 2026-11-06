@@ -42,6 +42,8 @@ if(OSCILLATE_BUILD_CODEC_ADAPTER)
   # MP3 import needs the libsndfile 1.1 API (SF_FORMAT_MPEG).
   include(CheckCXXSourceCompiles)
   set(CMAKE_REQUIRED_INCLUDES "${OSCILLATE_SNDFILE_INCLUDE_DIR}")
+  # Re-check each configure, so a corrected include directory is seen.
+  unset(OSCILLATE_SNDFILE_HAS_MPEG CACHE)
   check_cxx_source_compiles("#include <sndfile.h>
 int main() { return SF_FORMAT_MPEG == 0; }" OSCILLATE_SNDFILE_HAS_MPEG)
   unset(CMAKE_REQUIRED_INCLUDES)

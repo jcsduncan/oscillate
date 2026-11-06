@@ -11,6 +11,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 namespace oscillate::automation_project {
@@ -323,8 +324,9 @@ void add_lane_key(SemanticKey& key, const project::AutomationLane& lane) noexcep
 [[nodiscard]] double mapped_value(const MacroValueMapping& mapping, double value) noexcept {
   auto mapped = automation::blend(mapping.warp, mapping.minimum, mapping.maximum,
                                   std::clamp(value, 0.0, 1.0));
-  if (mapping.steps != 0) {
-    const auto span = mapping.domain_maximum - mapping.domain_minimum;
+  const auto span = mapping.domain_maximum - mapping.domain_minimum;
+  // Steps need a finite, positive span (bounds near the double range overflow it).
+  if (mapping.steps != 0 && std::isfinite(span) && span > 0.0) {
     mapped =
         mapping.domain_minimum +
         std::round((mapped - mapping.domain_minimum) / span * mapping.steps) * span / mapping.steps;
@@ -591,6 +593,29 @@ prepare_project_automation(const project::Snapshot& snapshot, std::uint64_t expe
         auto destination =
             std::visit([](const auto& item) -> project::AutomationTarget { return item; },
                        mapping.destination);
+        // A destination is on this track: its instrument, or one of its
+        // built-in effects or note effects.
+        const bool owned = std::visit(
+            [&](const auto& item) {
+              using Destination = std::decay_t<decltype(item)>;
+              if constexpr (std::is_same_v<Destination, project::NativeParameterTarget>) {
+                return item.track == track.id;
+              } else {
+                return std::ranges::any_of(track.effects,
+                                           [&](const project::EffectInsert& slot) {
+                                             return slot.id == item.slot;
+                                           }) ||
+                       std::ranges::any_of(track.note_effects,
+                                           [&](const project::NoteEffectInsert& slot) {
+                                             return slot.id == item.slot;
+                                           });
+              }
+            },
+            mapping.destination);
+        if (!owned) {
+          return Result<std::vector<PreparedTargetAutomation>>::failure(
+              invalid("macro mapping names no parameter on its track"));
+        }
         if (groups.contains(destination) || !macro_driven.insert(destination).second) {
           return Result<std::vector<PreparedTargetAutomation>>::failure(
               {ErrorCode::conflict, "a macro-mapped parameter has another automation source"});

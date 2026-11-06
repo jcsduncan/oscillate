@@ -626,6 +626,11 @@ void macro_values_blend_round_and_clamp() {
   // A macro value outside 0..1 is clamped before blending.
   near(prep::macro_parameter_value(mapping(100.0, 300.0, 0.0, 1'000.0, 0), 2.0), 300.0,
        "macro value clamped to 0..1");
+  // A span past the double range is not stepped, so the result stays finite.
+  const double huge = std::numeric_limits<double>::max();
+  REQUIRE_TRUE(
+      std::isfinite(prep::macro_parameter_value(mapping(-huge, huge, -huge, huge, 2), 0.25)),
+      "an overflowing discrete span maps to a finite value");
 }
 
 } // namespace
