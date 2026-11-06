@@ -73,5 +73,7 @@ oscillate_add_executable(oscillate_vst3_instrument_tail_probe EXCLUDE_FROM_ALL S
 if(OSCILLATE_ENABLE_SANITIZERS)
   # The crash fixture needs to remain a real SIGSEGV so the supervisor can
   # distinguish it from a helper that exits with a normal error code.
-  set_tests_properties(plugins_vst3_scan PROPERTIES ENVIRONMENT "ASAN_OPTIONS=handle_segv=0")
+  # Appended, so a caller's own ASAN_OPTIONS (detect_leaks=0, ...) still apply.
+  set_tests_properties(plugins_vst3_scan PROPERTIES
+    ENVIRONMENT_MODIFICATION "ASAN_OPTIONS=string_append::handle_segv=0")
 endif()

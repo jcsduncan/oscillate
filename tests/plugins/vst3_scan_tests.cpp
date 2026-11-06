@@ -133,8 +133,11 @@ void run_tests() {
   const auto descendant_pid_file = root.parent_path() / "scan-descendant.pid";
   fs::remove(descendant_pid_file);
   REQUIRE_EQ(setenv("OSCILLATE_SCAN_DESCENDANT_PID_FILE", descendant_pid_file.c_str(), 1), 0);
+  // Long enough for a slow scheduler to start the helper and its descendant
+  // and write the PID file before the timeout kills the group.
+  constexpr std::chrono::milliseconds descendant_timeout{1'000};
   Vst3Scanner descendant_scanner(VST3_DESCENDANT_HELPER_PATH,
-                                 ScanLimits{.timeout = std::chrono::milliseconds(100),
+                                 ScanLimits{.timeout = descendant_timeout,
                                             .max_response_bytes = 64UL * 1024UL,
                                             .quarantine_after_failures = 2});
   REQUIRE_EQ(descendant_scanner.scan(valid).status, ScanStatus::timed_out);

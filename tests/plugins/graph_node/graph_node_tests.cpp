@@ -1288,7 +1288,8 @@ void expect_lane_points(const FixtureLog& log, std::size_t prior_calls, std::uin
   for (std::uint32_t lane = 0; lane < lanes; ++lane) {
     const auto parameter = 2 + lane;
     for (std::uint32_t frame = 0; frame < frames; ++frame) {
-      const auto& point = log.points[manual_count + lane * frames + frame];
+      const auto& point =
+          log.points[manual_count + static_cast<std::size_t>(lane) * frames + frame];
       const double expected = lane_start(parameter) + 0.5 * static_cast<double>(position + frame) /
                                                           static_cast<double>(lane_span);
       REQUIRE_EQ(point.id, parameter,
