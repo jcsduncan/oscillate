@@ -58,7 +58,10 @@ void AudioWorkerPool::start_owned_threads(std::size_t count) {
   count = std::min(count, max_workers - before);
   for (std::size_t index = 0; index < count; ++index)
     owned_.emplace_back([this] { run_worker(); });
-  while (attached_.load(std::memory_order_acquire) < std::min(before + count, max_workers))
+  // A stop during startup sends workers home: stop waiting for them then;
+  // stop_owned_threads() still joins them.
+  while (attached_.load(std::memory_order_acquire) < std::min(before + count, max_workers) &&
+         !stop_.load(std::memory_order_acquire))
     std::this_thread::yield();
 }
 
