@@ -244,7 +244,7 @@ struct LabOptions {
   MoodPoint mood;
   Shape shape = Shape::loop;
   Colour colour = Colour::natural;
-  std::int64_t chord_ticks = 4 * timeline::ticks_per_quarter; // Pace.
+  std::int64_t chord_ticks = 4 * timeline::ticks_per_quarter; // Pace; at least a 16th.
   DeviceSet devices = 0;
   std::uint64_t seed = 0; // "More" is the next seed.
 };
@@ -258,7 +258,9 @@ struct Suggestion {
 [[nodiscard]] std::array<Suggestion, variant_count> suggest(const LabOptions& options);
 
 // Repeats `progression` (from tick 0) from `start` up to `end`, cutting the
-// last region at `end`.
+// last region at `end`. Empty when that would take more than
+// max_tiled_regions regions (each becomes at least one note in a clip).
+inline constexpr std::size_t max_tiled_regions = project::max_midi_notes_per_clip;
 [[nodiscard]] std::vector<ChordRegion> tile(std::span<const ChordRegion> progression,
                                             timeline::TickPosition start,
                                             timeline::TickPosition end);

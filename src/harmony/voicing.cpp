@@ -1,4 +1,5 @@
 #include "detail.hpp"
+#include "oscillate/foundation/midi.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -695,9 +696,14 @@ Voicing voice(const ChordSymbol& chord, std::optional<std::uint8_t> top,
   }
   if (best.count == 0) {
     // Nothing qualified (a range too narrow): the close root position
-    // nearest the centre.
+    // nearest the centre, in the octave nearest it that keeps every note a
+    // MIDI key (the range is not met, but the notes stay valid).
     const auto s = structure_of(chord, VoicingStyle::close);
-    best = stack(s, 0, static_cast<int>(centre) / octave - 1, VoicingStyle::close);
+    const auto lowest_stack = stack(s, 0, 0, VoicingStyle::close);
+    const int highest_octave =
+        (foundation::max_midi_key - lowest_stack.notes[lowest_stack.count - 1]) / octave;
+    const int nearest = std::clamp(static_cast<int>(centre) / octave - 1, 0, highest_octave);
+    best = stack(s, 0, nearest, VoicingStyle::close);
   }
   return best;
 }

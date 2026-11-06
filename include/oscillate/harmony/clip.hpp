@@ -73,11 +73,13 @@ inline constexpr std::uint8_t written_velocity = 96;
 // voicing; a slash chord also sounds its root) by their rank in the region's
 // fullest group, top to top, and voicing notes between two neighbouring mapped
 // voices join at the group's onset and length. A region with no notes gets
-// the chord written as held notes. Notes outside every region are kept
-// untouched. Kept and re-pitched notes keep their ids; created notes and the
-// later pieces of cut notes carry unassigned_note_id(). The result is sorted
-// by start then key, has no two notes on one start and key, and lies inside
-// [0, length).
+// the chord written as held notes. Notes outside every region keep their
+// pitch, timing and id, except that, like every note, they are cropped to
+// [0, length) (dropped when nothing is left) and of notes sharing a start and
+// key only the first is kept. Kept and re-pitched notes keep their ids;
+// created notes and the later pieces of cut notes carry unassigned_note_id().
+// The result is sorted by start then key, has no two notes on one start and
+// key, and lies inside [0, length).
 [[nodiscard]] std::vector<project::MidiNote>
 rewrite(std::span<const project::MidiNote> notes, std::span<const ChordRegion> lane,
         timeline::TickPosition length, const VoicingOptions& options,

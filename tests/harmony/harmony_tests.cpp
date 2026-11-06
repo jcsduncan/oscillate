@@ -1,3 +1,4 @@
+#include "oscillate/foundation/midi.hpp"
 #include "oscillate/harmony/harmony.hpp"
 #include "oscillate/test/cases.hpp"
 #include "oscillate/test/check.hpp"
@@ -167,6 +168,21 @@ void tension_orders_by_pull() {
 void voicing_moves_least_and_stays_in_range() {
   VoicingOptions close;
   close.style = VoicingStyle::close;
+  // A range nothing fits falls back to a root position that is still MIDI:
+  // C major pinned to C3 (48) with the register far below.
+  constexpr std::uint8_t pinned = 48;
+  constexpr int far_below = -53;
+  VoicingOptions unsatisfiable = close;
+  unsatisfiable.lowest = pinned;
+  unsatisfiable.highest = pinned;
+  unsatisfiable.register_offset = far_below;
+  const auto fallback = voice(chord(C, major), std::nullopt, unsatisfiable, nullptr);
+  REQUIRE_GT(fallback.count, 0, "an unsatisfiable range still voices the chord");
+  for (std::uint8_t i = 0; i < fallback.count; ++i)
+    REQUIRE_LE(fallback.notes[i], oscillate::foundation::max_midi_key,
+               "the fallback voicing stays in the MIDI range");
+  for (std::uint8_t i = 1; i < fallback.count; ++i)
+    REQUIRE_GT(fallback.notes[i], fallback.notes[i - 1], "the fallback voicing ascends");
   const auto am7 = voice(chord(A, minor_seventh), std::nullopt, close, nullptr);
   const auto cmaj7 = voice(chord(C, major_seventh), std::nullopt, close, &am7);
   // Am7 -> Cmaj7 shares C, E and G: only A moves, a whole tone up to B.
@@ -578,6 +594,10 @@ void tile_and_replace_cut_at_the_edges() {
   REQUIRE_EQ(tiled.back().length_ticks, 2 * beat, "the last is cut at the end");
   check_valid(tiled, "tile");
   require(tile(prog, {bar}, {bar}).empty(), "an empty range");
+  // A range needing more than max_tiled_regions regions gives nothing, not a
+  // partial tile.
+  const auto too_far = static_cast<std::int64_t>(max_tiled_regions) * 2 * bar;
+  require(tile(prog, {0}, {too_far}).empty(), "an oversized range is refused whole");
 
   const auto lane = lane_of({chord(A, minor), chord(D, minor), chord(E, minor)});
   const auto fill = lane_of({chord(C, major)}, 2 * bar);

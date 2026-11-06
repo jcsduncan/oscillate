@@ -1,4 +1,5 @@
 #include "detail.hpp"
+#include "oscillate/harmony/clip.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -556,6 +557,8 @@ ChordSymbol scale_chord(const LabOptions& o, std::size_t mode, std::uint8_t degr
 }
 
 Suggestion generate(const LabOptions& o, Variant variant) {
+  // A chord lasts at least one recognition step (a 16th).
+  const auto pace = std::max(o.chord_ticks, recognition_step_ticks);
   const auto mi = static_cast<std::size_t>(mode_at(o.mood.brightness, o.key_mode));
   const auto& shape = shape_rows[static_cast<std::size_t>(o.shape)];
   std::vector<std::uint8_t> degrees(shape.degrees.begin(), shape.degrees.begin() + shape.count);
@@ -588,7 +591,7 @@ Suggestion generate(const LabOptions& o, Variant variant) {
       mode = neighbour_mode(mi);
     }
     modes.push_back(mode);
-    ch.push_back(region(scale_chord(o, mode, degrees[i]), o.chord_ticks));
+    ch.push_back(region(scale_chord(o, mode, degrees[i]), pace));
   }
   // Still's colour is its own: the chord, then the chord recoloured.
   if (o.colour == Colour::natural && o.shape != Shape::still)
@@ -690,6 +693,12 @@ std::vector<ChordRegion> tile(std::span<const ChordRegion> progression,
   }
   const auto total = detail::end_of(progression.back());
   if (total <= 0) {
+    return out;
+  }
+  // Nothing rather than a partial tile when the range needs too many regions.
+  const auto passes = (end.value - start.value + total - 1) / total;
+  if (static_cast<std::uint64_t>(passes) >
+      max_tiled_regions / std::max<std::size_t>(progression.size(), 1)) {
     return out;
   }
   for (auto base = start.value; base < end.value; base += total) {

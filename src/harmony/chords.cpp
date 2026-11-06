@@ -185,8 +185,6 @@ bool simpler(ChordQuality in, ChordQuality& out) noexcept {
     out = minor;
     return true;
   case major_seventh:
-    out = major;
-    return true;
   case add9:
     out = major;
     return true;
@@ -253,8 +251,12 @@ bool flipped(ChordQuality in, ChordQuality& out) noexcept {
 
 ChordQuality suspended(ChordQuality in) noexcept {
   using enum ChordQuality;
-  // A triad suspends to its fourth; a seventh chord to a 7sus4.
-  if (in == major || in == minor || in == add9 || in == minor_add9 || in == sus2)
+  // A triad (diminished too) suspends to its fourth; a richer chord of the
+  // dominant or minor family to a 7sus4. Major sevenths and ninths, the major
+  // sixth, power and sus4 take sus2: there is no maj7sus4, and a 7sus4 would
+  // add a flat seventh from outside the mode.
+  if (in == major || in == minor || in == diminished || in == add9 || in == minor_add9 ||
+      in == sus2)
     return sus4;
   return is_dominant(in) || is_minor(in) ? seventh_sus4 : sus2;
 }

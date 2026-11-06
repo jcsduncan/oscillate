@@ -764,6 +764,18 @@ std::vector<project::MidiNote> rewrite(std::span<const project::MidiNote> notes,
   const auto first =
       std::find_if(readings.begin(), readings.end(), [](const auto& r) { return r.has_value(); });
   std::optional<Reading> inherited = first != readings.end() ? *first : std::nullopt;
+  // Bass-role notes by start (input is sorted by start), with the latest end
+  // so far: a region overlaps a bass note when one starting before its end
+  // ends after its start. One pass here, a binary search per region.
+  std::vector<std::int64_t> bass_starts;
+  std::vector<std::int64_t> bass_latest_end;
+  for (const auto& n : input) {
+    if (n.key >= o.lowest)
+      continue;
+    bass_starts.push_back(n.start.value);
+    bass_latest_end.push_back(
+        std::max(n.end.value, bass_latest_end.empty() ? n.end.value : bass_latest_end.back()));
+  }
   std::vector<bool> rewritten(regions.size());
   std::vector<std::int64_t> cuts;
   for (std::size_t i = 0; i < regions.size(); ++i) {
@@ -773,10 +785,10 @@ std::vector<project::MidiNote> rewrite(std::span<const project::MidiNote> notes,
     const bool same =
         inherited && inherited->chord == r.chord && inherited->top == drone_of(r.chord, r.top);
     // A region whose bass the switch turned on or off is rewritten too.
-    const bool has_bass = std::ranges::any_of(input, [&](const project::MidiNote& n) {
-      return n.key < o.lowest && n.start.value < detail::end_of(r) &&
-             n.end.value > r.position.value;
-    });
+    const auto before_end = static_cast<std::size_t>(
+        std::lower_bound(bass_starts.begin(), bass_starts.end(), detail::end_of(r)) -
+        bass_starts.begin());
+    const bool has_bass = before_end != 0 && bass_latest_end[before_end - 1] > r.position.value;
     rewritten[i] = !same || (revoice && *revoice == lane_index[i]) || has_bass != o.bass;
     if (rewritten[i]) {
       cuts.push_back(r.position.value);
@@ -884,7 +896,8 @@ std::vector<project::MidiNote> push_and_land(std::span<const ChordRegion> lane,
                                touch_sixteenths) *
                       step_ticks;
     const auto at = change - std::min(lead, lane[i - 1].length_ticks - step_ticks);
-    if (at <= lane[i - 1].position.value)
+    // No room (a chord before shorter than a 16th puts `at` past the change).
+    if (at <= lane[i - 1].position.value || at >= change)
       continue;
     // The chord before stops for the touch.
     for (auto& n : notes)
