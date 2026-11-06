@@ -22,6 +22,7 @@ one. Bootstrap it with a temporary cache entry, run it, regenerate, then drop
 the temporary entry:
 
     cmake --preset quick -DOSCILLATE_TEST_BUDGET_<test>=600
+    scripts/build.sh build/quick --target oscillate_tests
     ctest --preset quick -R '^<test>$' --output-junit junit.xml
     scripts/update-test-budgets.py --test-dir build/quick build/quick/junit.xml
     cmake --preset quick -UOSCILLATE_TEST_BUDGET_<test>
