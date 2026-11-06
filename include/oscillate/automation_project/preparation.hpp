@@ -12,6 +12,18 @@
 
 namespace oscillate::automation_project {
 
+// How a macro's 0..1 maps into one parameter's units: blended from minimum to
+// maximum along the warp, rounded to one of `steps` steps across the domain
+// (none when zero) and clamped to the domain.
+struct MacroValueMapping {
+  automation::Warp warp;
+  double minimum;
+  double maximum;
+  double domain_minimum;
+  double domain_maximum;
+  std::uint32_t steps; // Zero for a continuous parameter.
+};
+
 // Immutable control-thread result. It is not a processor binding: the graph
 // must publish it with the matching snapshot and apply its values to the target.
 // Clip-local ticks/samples are anchored to the rendered clip start. A move
@@ -36,14 +48,7 @@ public:
 private:
   // A macro lane (ADR-0059) prepared for one mapped parameter: the lane is
   // evaluated in the macro's 0..1, then mapped into the parameter's units.
-  struct MacroMapping {
-    automation::Warp warp;
-    double minimum;
-    double maximum;
-    double domain_minimum;
-    double domain_maximum;
-    std::uint32_t steps; // Zero for a continuous parameter.
-  };
+  using MacroMapping = MacroValueMapping;
   void map_macro(std::span<double> output) const noexcept;
 
   struct ClipRegion {
@@ -58,7 +63,7 @@ private:
                            automation::PreparedAutomation baseline, std::vector<ClipRegion> clips,
                            std::uint64_t semantics_key,
                            std::optional<MacroMapping> macro = std::nullopt)
-      : track_(track), target_(target), revision_(snapshot.revision),
+      : track_(track), target_(std::move(target)), revision_(snapshot.revision),
         tempo_revision_(snapshot.tempo.revision()), baseline_(std::move(baseline)),
         clips_(std::move(clips)), semantics_key_(semantics_key), macro_(macro) {}
 

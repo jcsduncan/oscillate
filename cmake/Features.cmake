@@ -39,6 +39,16 @@ endif()
 if(OSCILLATE_BUILD_CODEC_ADAPTER)
   find_path(OSCILLATE_SNDFILE_INCLUDE_DIR NAMES sndfile.h REQUIRED)
   find_library(OSCILLATE_SNDFILE_LIBRARY NAMES sndfile REQUIRED)
+  # MP3 import needs the libsndfile 1.1 API (SF_FORMAT_MPEG).
+  include(CheckCXXSourceCompiles)
+  set(CMAKE_REQUIRED_INCLUDES "${OSCILLATE_SNDFILE_INCLUDE_DIR}")
+  check_cxx_source_compiles("#include <sndfile.h>
+int main() { return SF_FORMAT_MPEG == 0; }" OSCILLATE_SNDFILE_HAS_MPEG)
+  unset(CMAKE_REQUIRED_INCLUDES)
+  if(NOT OSCILLATE_SNDFILE_HAS_MPEG)
+    message(FATAL_ERROR "The codec adapter needs libsndfile 1.1 or later (SF_FORMAT_MPEG); "
+                        "found headers in ${OSCILLATE_SNDFILE_INCLUDE_DIR}")
+  endif()
 endif()
 
 if(OSCILLATE_BUILD_EXPORT_RESAMPLER OR OSCILLATE_BUILD_SOURCE_RESAMPLER)

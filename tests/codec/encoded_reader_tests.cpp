@@ -146,13 +146,24 @@ void pinned_descriptor_and_invalid_inputs() {
   REQUIRE_EQ(reader.read_at(12, audio).value(), 16,
              "decoder did not retain its own pinned descriptor");
   require(!EncodedReader::open_fd(-1), "invalid descriptor accepted");
-  require(!EncodedReader::open_fd(STDOUT_FILENO), "non-readable descriptor accepted");
   require(!EncodedReader::open(std::filesystem::temp_directory_path()),
           "directory accepted as audio");
 
   const auto root =
       std::filesystem::temp_directory_path() / ("oscillate-codec-" + std::to_string(::getpid()));
   std::filesystem::create_directories(root);
+  // A write-only regular file and a pipe are both refused.
+  const auto write_only_path = root / "write-only.flac";
+  std::filesystem::copy_file(path, write_only_path);
+  const int write_only = ::open(write_only_path.c_str(), O_WRONLY | O_CLOEXEC);
+  REQUIRE_GE(write_only, 0, "could not open a write-only descriptor");
+  require(!EncodedReader::open_fd(write_only), "write-only descriptor accepted");
+  ::close(write_only);
+  std::array<int, 2> pipe_ends{};
+  REQUIRE_EQ(::pipe2(pipe_ends.data(), O_CLOEXEC), 0, "could not create a pipe");
+  require(!EncodedReader::open_fd(pipe_ends[0]), "pipe accepted as audio");
+  ::close(pipe_ends[0]);
+  ::close(pipe_ends[1]);
   const auto link = root / "linked.flac";
   std::filesystem::create_symlink(path, link);
   require(!EncodedReader::open(link), "symlink path followed");

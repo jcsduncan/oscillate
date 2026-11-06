@@ -101,15 +101,69 @@ struct Counters {
   std::size_t order = 0;
 };
 
+// The width of a well-formed UTF-8 sequence at `at`, or zero.
+std::size_t utf8_width(std::span<const std::uint8_t> text, std::size_t at) {
+  const unsigned first = text[at];
+  const std::size_t width = first >= 0xC2U && first <= 0xDFU   ? 2
+                            : first >= 0xE0U && first <= 0xEFU ? 3
+                            : first >= 0xF0U && first <= 0xF4U ? 4
+                                                               : 0;
+  if (width == 0 || at + width > text.size()) {
+    return 0;
+  }
+  const unsigned second = text[at + 1];
+  constexpr unsigned continuation_mask = 0xC0U;
+  constexpr unsigned continuation = 0x80U;
+  if ((second & continuation_mask) != continuation || (first == 0xE0U && second < 0xA0U) ||
+      (first == 0xEDU && second > 0x9FU) || (first == 0xF0U && second < 0x90U) ||
+      (first == 0xF4U && second > 0x8FU)) {
+    return 0;
+  }
+  for (std::size_t j = 2; j < width; ++j) {
+    if ((text[at + j] & continuation_mask) != continuation) {
+      return 0;
+    }
+  }
+  return width;
+}
+
+// Track names are free bytes in a MIDI file. The name kept is valid UTF-8
+// of at most max_track_name_bytes: well-formed UTF-8 is kept, any other byte
+// is read as Latin-1, and control characters (C0, DEL, C1) are dropped.
 std::string printable_name(std::span<const std::uint8_t> text) {
+  constexpr unsigned first_printable = 0x20U;
+  constexpr unsigned del = 0x7FU;
+  constexpr unsigned first_latin1_printable = 0xA0U;
+  constexpr unsigned latin1_lead = 0xC0U;
+  constexpr unsigned latin1_shift = 6U;
+  constexpr unsigned latin1_low_bits = 0x3FU;
+  constexpr unsigned continuation = 0x80U;
   std::string name;
-  const auto length = std::min(text.size(), max_track_name_bytes);
-  name.reserve(length);
-  for (std::size_t i = 0; i < length; ++i) {
-    const auto c = static_cast<unsigned char>(text[i]);
-    // Keep UTF-8 continuation and printable bytes; drop control characters.
-    if (c >= 0x20U && c != 0x7FU)
-      name.push_back(static_cast<char>(c));
+  for (std::size_t i = 0; i < text.size();) {
+    const unsigned c = text[i];
+    if (c < continuation) {
+      if (c >= first_printable && c != del) {
+        if (name.size() + 1 > max_track_name_bytes)
+          break;
+        name.push_back(static_cast<char>(c));
+      }
+      ++i;
+      continue;
+    }
+    if (const auto width = utf8_width(text, i); width != 0) {
+      if (name.size() + width > max_track_name_bytes)
+        break;
+      name.append(reinterpret_cast<const char*>(text.data() + i), width);
+      i += width;
+      continue;
+    }
+    if (c >= first_latin1_printable) {
+      if (name.size() + 2 > max_track_name_bytes)
+        break;
+      name.push_back(static_cast<char>(latin1_lead | (c >> latin1_shift)));
+      name.push_back(static_cast<char>(continuation | (c & latin1_low_bits)));
+    }
+    ++i;
   }
   return name;
 }
@@ -120,7 +174,7 @@ Track read_track(std::span<const std::uint8_t> chunk, Counters& counters,
   Reader in(chunk);
   Track track;
   // FIFO per channel and key: 16 channels x 128 keys.
-  std::vector<std::deque<Pending>> open(16U * 128U);
+  std::vector<std::deque<Pending>> open(std::size_t{16} * 128U);
   std::uint64_t tick = 0;
   std::uint8_t running = 0;
   bool ended = false;

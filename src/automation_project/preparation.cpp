@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -319,15 +320,16 @@ void add_lane_key(SemanticKey& key, const project::AutomationLane& lane) noexcep
                                                           : automation::Warp::linear;
 }
 
-[[nodiscard]] double mapped_value(automation::Warp warp, double minimum, double maximum,
-                                  double domain_minimum, double domain_maximum, std::uint32_t steps,
-                                  double value) noexcept {
-  auto mapped = automation::blend(warp, minimum, maximum, std::clamp(value, 0.0, 1.0));
-  if (steps != 0) {
-    const auto span = domain_maximum - domain_minimum;
-    mapped = domain_minimum + std::round((mapped - domain_minimum) / span * steps) * span / steps;
+[[nodiscard]] double mapped_value(const MacroValueMapping& mapping, double value) noexcept {
+  auto mapped = automation::blend(mapping.warp, mapping.minimum, mapping.maximum,
+                                  std::clamp(value, 0.0, 1.0));
+  if (mapping.steps != 0) {
+    const auto span = mapping.domain_maximum - mapping.domain_minimum;
+    mapped =
+        mapping.domain_minimum +
+        std::round((mapped - mapping.domain_minimum) / span * mapping.steps) * span / mapping.steps;
   }
-  return std::clamp(mapped, domain_minimum, domain_maximum);
+  return std::clamp(mapped, mapping.domain_minimum, mapping.domain_maximum);
 }
 
 } // namespace
@@ -348,6 +350,8 @@ prepare_project_automation(const project::Snapshot& snapshot, std::uint64_t expe
     // One ordered index replaces a scan of every lane and clip for each target.
     // Preparation is O(lanes log targets), outside the callback.
     std::map<project::AutomationTarget, LaneGroup, TargetLess> groups;
+    // Parameters a macro drives; each has one driver and no lane of its own.
+    std::set<project::AutomationTarget, TargetLess> macro_driven;
     for (const auto& lane : track.automation) {
       auto& group = groups[lane.target];
       if (group.track_lane) {
@@ -381,6 +385,15 @@ prepare_project_automation(const project::Snapshot& snapshot, std::uint64_t expe
       auto binding = validate_target(track, *domain_lane);
       if (!binding) {
         return Result<std::vector<PreparedTargetAutomation>>::failure(binding.error());
+      }
+      // Every other lane on the target is checked as the domain lane is.
+      for (const auto& clip : group.clips) {
+        if (clip.lane == domain_lane) {
+          continue;
+        }
+        if (auto checked = validate_target(track, *clip.lane); !checked) {
+          return Result<std::vector<PreparedTargetAutomation>>::failure(checked.error());
+        }
       }
       // Discrete domains evaluate as held steps.
       // Segments blend in the space the lane is drawn in.
@@ -568,13 +581,20 @@ prepare_project_automation(const project::Snapshot& snapshot, std::uint64_t expe
       // once in the result.
       for (const auto& mapping : track.macros[macro->index].mappings) {
         const auto& domain = mapping.domain;
-        const PreparedTargetAutomation::MacroMapping mapped{
-            warp_of(domain.scale), mapping.minimum, mapping.maximum,
-            domain.minimum,        domain.maximum,  domain.discrete ? domain.step_count : 0U};
+        const MacroValueMapping mapped{.warp = warp_of(domain.scale),
+                                       .minimum = mapping.minimum,
+                                       .maximum = mapping.maximum,
+                                       .domain_minimum = domain.minimum,
+                                       .domain_maximum = domain.maximum,
+                                       .steps = domain.discrete ? domain.step_count : 0U};
         auto mapping_key = key;
         auto destination =
             std::visit([](const auto& item) -> project::AutomationTarget { return item; },
                        mapping.destination);
+        if (groups.contains(destination) || !macro_driven.insert(destination).second) {
+          return Result<std::vector<PreparedTargetAutomation>>::failure(
+              {ErrorCode::conflict, "a macro-mapped parameter has another automation source"});
+        }
         mapping_key.add(destination.index());
         if (const auto* native = std::get_if<project::NativeParameterTarget>(&destination)) {
           mapping_key.add(std::string_view(native->parameter_id));
@@ -600,8 +620,13 @@ prepare_project_automation(const project::Snapshot& snapshot, std::uint64_t expe
 
 double macro_parameter_value(const project::MacroMapping& mapping, double value) noexcept {
   const auto& domain = mapping.domain;
-  return mapped_value(warp_of(domain.scale), mapping.minimum, mapping.maximum, domain.minimum,
-                      domain.maximum, domain.discrete ? domain.step_count : 0U, value);
+  return mapped_value({.warp = warp_of(domain.scale),
+                       .minimum = mapping.minimum,
+                       .maximum = mapping.maximum,
+                       .domain_minimum = domain.minimum,
+                       .domain_maximum = domain.maximum,
+                       .steps = domain.discrete ? domain.step_count : 0U},
+                      value);
 }
 
 void PreparedTargetAutomation::map_macro(std::span<double> output) const noexcept {
@@ -609,8 +634,7 @@ void PreparedTargetAutomation::map_macro(std::span<double> output) const noexcep
     return;
   const auto& macro = *macro_;
   for (auto& value : output)
-    value = mapped_value(macro.warp, macro.minimum, macro.maximum, macro.domain_minimum,
-                         macro.domain_maximum, macro.steps, value);
+    value = mapped_value(macro, value);
 }
 
 bool PreparedTargetAutomation::evaluate_block(timeline::SamplePosition first,

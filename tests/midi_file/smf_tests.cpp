@@ -62,6 +62,7 @@ struct TrackBytes {
     append(body, event);
     return *this;
   }
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): delta first, as in the file.
   TrackBytes& meta(std::uint32_t delta, std::uint8_t type, const Bytes& data) {
     vlq(body, delta);
     append(body, {0xFF, type});
@@ -217,6 +218,32 @@ void sysex_and_meta_cancel_running_status() {
   auto bytes = header(0, 1, 480);
   chunk(bytes, "MTrk", track.body);
   refused(bytes, ErrorCode::corrupt_data, "running status after SysEx");
+  // A meta event other than End of Track cancels it too.
+  TrackBytes after_meta;
+  after_meta.at(0, {0x90, 60, 100}).meta(0, 0x01, {'x'}).at(10, {60, 0}).end();
+  auto meta_bytes = header(0, 1, 480);
+  chunk(meta_bytes, "MTrk", after_meta.body);
+  refused(meta_bytes, ErrorCode::corrupt_data, "running status after a meta event");
+}
+
+// Track names come out as valid UTF-8: UTF-8 is kept, other bytes are read as
+// Latin-1, controls are dropped and the length limit never splits a character.
+void track_names_are_utf8() {
+  const auto name_of = [](const Bytes& text) {
+    TrackBytes track;
+    track.meta(0, 0x03, text).end();
+    auto bytes = header(0, 1, 480);
+    chunk(bytes, "MTrk", track.body);
+    return parsed(bytes).tracks[0].name;
+  };
+  REQUIRE_EQ(name_of({'C', 0xC3, 0xA9, 'l'}), "C\xC3\xA9l", "UTF-8 names are kept");
+  REQUIRE_EQ(name_of({'C', 0xE9, 'l', 0x85}), "C\xC3\xA9l", "Latin-1 names are transcoded");
+  Bytes long_name(smf::max_track_name_bytes - 1, 'a');
+  long_name.push_back(0xC3);
+  long_name.push_back(0xA9);
+  const auto cut = name_of(long_name);
+  REQUIRE_EQ(cut, std::string(smf::max_track_name_bytes - 1, 'a'),
+             "the length limit does not split a character");
 }
 
 void malformed_input_fails_cleanly() {
@@ -387,6 +414,7 @@ int main() {
     overlapping_notes_pair_first_in_first_out();
     smpte_and_missing_end_of_track();
     sysex_and_meta_cancel_running_status();
+    track_names_are_utf8();
     malformed_input_fails_cleanly();
     mutations_never_misbehave();
   } catch (const std::exception& error) {

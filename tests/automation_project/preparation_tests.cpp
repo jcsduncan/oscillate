@@ -227,7 +227,14 @@ void tempo_ramp_remaps_clip_local_musical_curve() {
   const auto anchor = take(state.tempo.sample_to_tick({10'000}, state.sample_rate));
   const auto midpoint =
       take(state.tempo.tick_to_sample({anchor.value + quarter / 2}, state.sample_rate));
-  REQUIRE_LT(std::abs(at(after.front(), midpoint.value) - 0.5), tolerance::near_silence,
+  // The midpoint is rounded to a whole sample, so the curve may be off by up to
+  // one sample of its slope: the 0..1 rise spread over the quarter's samples.
+  const auto quarter_end =
+      take(state.tempo.tick_to_sample({anchor.value + quarter}, state.sample_rate));
+  const auto quarter_start = take(state.tempo.tick_to_sample(anchor, state.sample_rate));
+  const double one_sample_of_slope =
+      1.0 / static_cast<double>(quarter_end.value - quarter_start.value);
+  REQUIRE_LT(std::abs(at(after.front(), midpoint.value) - 0.5), one_sample_of_slope,
              "musical local midpoint follows authoritative ramp map");
   REQUIRE_EQ(after.front().tempo_revision(), 18, "new tempo revision prepared");
 }
@@ -266,7 +273,8 @@ void tempo_steps_and_clip_precedence_are_block_size_independent() {
   near(reference[127], 0.9, "clip owns its last sample at second tempo step");
   near(reference[128], 0.8, "track resumes on clip's exclusive end sample");
 
-  for (const auto block_size : {std::size_t{64}, std::size_t{128}}) {
+  // 50-sample blocks start inside the clip and the tempo steps (at 64 and 128).
+  for (const auto block_size : {std::size_t{50}, std::size_t{64}, std::size_t{128}}) {
     std::array<double, 192> direct{};
     std::array<double, 192> shared{};
     std::array<timeline::TickPosition, 128> ticks{};
@@ -594,6 +602,32 @@ void native_parameter_baseline_precedence_and_binding() {
           "a saved value outside the lane domain is rejected");
 }
 
+// Hand-worked macro mappings: a linear blend, an inverted one, rounding to a
+// discrete domain's steps (across the domain range) and clamping into it.
+void macro_values_blend_round_and_clamp() {
+  const auto mapping = [](double minimum, double maximum, double domain_minimum,
+                          double domain_maximum, std::uint32_t steps) {
+    return project::MacroMapping{project::NativeParameterTarget{snapshot().tracks.front().id, "p"},
+                                 {project::AutomationRepresentation::physical, "p", "",
+                                  domain_minimum, domain_maximum, domain_minimum, steps != 0,
+                                  steps},
+                                 minimum,
+                                 maximum};
+  };
+  // 0.25 of the way from 100 to 300.
+  near(prep::macro_parameter_value(mapping(100.0, 300.0, 0.0, 1'000.0, 0), 0.25), 150.0,
+       "linear macro blend");
+  // Inverted: 0.25 of the way from 300 down to 100.
+  near(prep::macro_parameter_value(mapping(300.0, 100.0, 0.0, 1'000.0, 0), 0.25), 250.0,
+       "inverted macro blend");
+  // Domain 1..16 in 15 steps: 0.5 of 1..16 is 8.5, which rounds to the step 9.
+  near(prep::macro_parameter_value(mapping(1.0, 16.0, 1.0, 16.0, 15), 0.5), 9.0,
+       "discrete macro rounds to a domain step");
+  // A macro value outside 0..1 is clamped before blending.
+  near(prep::macro_parameter_value(mapping(100.0, 300.0, 0.0, 1'000.0, 0), 2.0), 300.0,
+       "macro value clamped to 0..1");
+}
+
 } // namespace
 
 int main() {
@@ -610,6 +644,7 @@ int main() {
     resolves_distinct_targets_and_rejects_audio_clip_binding();
     vst3_effect_clip_precedence_and_saved_baseline();
     native_parameter_baseline_precedence_and_binding();
+    macro_values_blend_round_and_clamp();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return 1;

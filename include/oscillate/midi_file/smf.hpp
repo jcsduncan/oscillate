@@ -14,7 +14,7 @@
 // (independent sequences) is refused. Control thread only.
 namespace oscillate::midi_file {
 
-inline constexpr std::size_t max_file_bytes = 32U * 1024U * 1024U;
+inline constexpr std::size_t max_file_bytes = std::size_t{32} * 1024U * 1024U;
 inline constexpr std::size_t max_tracks = 512;
 inline constexpr std::size_t max_events = 2'000'000;
 inline constexpr std::size_t max_track_name_bytes = 256;
@@ -67,6 +67,8 @@ struct TimeSignature {
 };
 
 struct Track {
+  // Valid UTF-8 without control characters; bytes that are not UTF-8 are read
+  // as Latin-1.
   std::string name;
   std::vector<Note> notes;             // Sorted by start, then key.
   std::vector<Controller> controllers; // In file order (ticks ascending).
