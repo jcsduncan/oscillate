@@ -1,0 +1,3 @@
+oscillate_add_test_executable(oscillate_automation_project_tests SOURCES preparation_tests.cpp
+  LIBS oscillate::automation_project
+  TEST automation_project_preparation)
