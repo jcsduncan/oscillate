@@ -845,7 +845,7 @@ void RoutedMixer::mix_node(std::size_t index, const NodeBlock& block,
       // unmute fade still runs on top of them, and the ramp advances.
       const bool fading_in = !muted_[index] && ramp.from.left == 0.0F && ramp.from.right == 0.0F;
       for (std::size_t frame = 0; frame < frames.size(); ++frame) {
-        float envelope = 1.0F;
+        float envelope = muted_[index] ? 0.0F : 1.0F; // Silent once a mute fade ends.
         if (ramp.elapsed < ramp.total) {
           const auto fraction = static_cast<float>(++ramp.elapsed) / static_cast<float>(ramp.total);
           envelope = muted_[index] ? 1.0F - fraction : fading_in ? fraction : 1.0F;
