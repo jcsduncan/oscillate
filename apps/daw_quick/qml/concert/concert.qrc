@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/concert">
+    <file>ConcertPanel.qml</file>
+    <file>ConcertTheme.qml</file>
+    <file>ConcertStringsView.qml</file>
+  </qresource>
+</RCC>
