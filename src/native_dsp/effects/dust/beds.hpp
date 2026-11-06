@@ -225,10 +225,22 @@ public:
     Pair out;
     double motor = 1.0;
     if (type_ == t::fridge) {
-      // The compressor's cycle, from the song position.
+      // The compressor's cycle: placed from the song position on start or
+      // seek, then advanced frame by frame so a Speed change bends the
+      // period without jumping the phase.
       const double period = period_s_ * rate_;
-      const double cycle = std::fmod(static_cast<double>(time) / period + cycle_offset_, 1.0);
-      const int running = (cycle < 0.0 ? cycle + 1.0 : cycle) < fridge_duty ? 1 : 0;
+      if (cycle_tracking_ && time == cycle_time_ + 1) {
+        cycle_ += 1.0 / period;
+        cycle_ -= std::floor(cycle_);
+      } else {
+        cycle_ = std::fmod(static_cast<double>(time) / period + cycle_offset_, 1.0);
+        if (cycle_ < 0.0) {
+          cycle_ += 1.0;
+        }
+      }
+      cycle_time_ = time;
+      cycle_tracking_ = true;
+      const int running = cycle_ < fridge_duty ? 1 : 0;
       if (running_ >= 0 && running != running_) {
         click_level_ = click_gain_;
         thump_level_ = click_gain_;
@@ -320,6 +332,9 @@ private:
   double blade_hz_ = fan_low_hz;
   double period_s_ = fridge_period_max_s;
   double cycle_offset_ = 0.0;
+  double cycle_ = 0.0;
+  std::int64_t cycle_time_ = 0;
+  bool cycle_tracking_ = false;
   double whine_hz_ = server_whine_hz;
   double tone_gain_ = 0.0;
   double air_gain_ = 0.0;

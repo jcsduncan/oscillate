@@ -174,6 +174,7 @@ void Machine::reset() noexcept {
   thump_level_ = 0.0;
   motor_ = -1.0;
   running_ = -1;
+  cycle_tracking_ = false;
 }
 
 void Machine::set(std::span<const double> v, double tone, double width) noexcept {

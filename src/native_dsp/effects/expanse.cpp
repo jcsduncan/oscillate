@@ -752,6 +752,7 @@ public:
     input_power_ = 0.0;
     early_power_ = 0.0;
     late_power_ = 0.0;
+    primed_ = false; // The next block jumps to its settings, as a new kernel does.
   }
 
   [[nodiscard]] std::size_t telemetry(std::span<float> out) const noexcept override {

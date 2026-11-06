@@ -70,7 +70,7 @@ inline constexpr auto rolling_16ths = pattern(std::array<V, 0>{}, [](std::size_t
 // A minimal-techno chop: the second sixteenth of each beat a coin toss,
 // a triplet ratchet at the end of each half bar.
 inline constexpr auto minimal_stutter = pattern(std::array<V, 0>{}, [](std::size_t i) {
-  constexpr std::array<double, 4> levels{1.0, 0.0, 0.8, 0.6};
+  constexpr std::array<double, 4> levels{1.0, 0.7, 0.8, 0.6};
   constexpr double length = 0.5, ratchets = 3.0, coin = 0.5;
   return Step{levels[i % 4], length, i % 8 == 7 ? ratchets : 1.0, 0.0, i % 4 == 1 ? coin : 1.0};
 });
