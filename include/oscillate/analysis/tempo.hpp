@@ -11,6 +11,9 @@
 
 namespace oscillate::analysis {
 
+// The highest source rate tempo analysis sizes its window for.
+inline constexpr std::uint32_t max_tempo_sample_rate = 384'000;
+
 struct TempoIdentity {
   std::string source_key;
   std::uint64_t generation = 0;

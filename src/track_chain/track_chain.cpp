@@ -5,6 +5,7 @@
 #include <functional>
 #include <limits>
 #include <new>
+#include <stdexcept>
 #include <utility>
 
 namespace oscillate::track_chain {
@@ -87,6 +88,12 @@ ChainRuntime::ChainRuntime(std::vector<std::shared_ptr<engine::ProcessorRuntime>
                            std::optional<std::size_t> detector)
     : stages_(std::move(stages)), latencies_(std::move(latencies)),
       replayable_(std::move(replayable)), detector_(detector), boundaries_(stages_.size() + 1) {
+  if (latencies_.size() != stages_.size() || replayable_.size() != stages_.size())
+    throw std::invalid_argument("A chain needs one latency and one replay mark per stage");
+  if (detector_ &&
+      (*detector_ >= stages_.size() ||
+       dynamic_cast<engine::SidechainProcessorRuntime*>(stages_[*detector_].get()) == nullptr))
+    throw std::invalid_argument("A chain's detector must name a stage that takes a sidechain");
   for (auto& boundary : boundaries_)
     boundary.frames.resize(boundary_history_frames);
 }
@@ -183,7 +190,12 @@ std::size_t ChainRuntime::continue_latency_of(engine::ProcessorRuntime* prior,
     std::size_t source = 0;
     if (first != 0)
       source = *kept_at(first - 1) + 1;
-    prime(first, index, old->boundaries_[source], boundary);
+    // A stage that cannot take earlier positions is not primed: it starts
+    // from the live input, and only replayable runs get history.
+    if (std::all_of(replayable_.begin() + static_cast<std::ptrdiff_t>(first),
+                    replayable_.begin() + static_cast<std::ptrdiff_t>(index),
+                    [](bool replays) { return replays; }))
+      prime(first, index, old->boundaries_[source], boundary);
   }
   // A removed lookahead stage still held its last `latency` inputs: they
   // continue through the stages after it, as the frames the path emits first.

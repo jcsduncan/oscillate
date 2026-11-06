@@ -320,6 +320,11 @@ Result<TempoEstimate> analyze_tempo(media::AudioReader& reader, TempoIdentity id
     return Result<TempoEstimate>::failure(
         {ErrorCode::unsupported, "Tempo reader requires mono or stereo audio"});
   }
+  // The analysis window grows with the rate; bound it as key analysis does.
+  if (sample_rate > max_tempo_sample_rate) {
+    return Result<TempoEstimate>::failure(
+        {ErrorCode::unsupported, "Tempo analysis does not support this sample rate"});
+  }
   const auto frames = reader.frame_count();
   TempoEstimate result{.identity = std::move(identity),
                        .sample_rate = sample_rate,
@@ -562,7 +567,8 @@ Result<TempoEstimate> analyze_tempo(media::AudioReader& reader, TempoIdentity id
       left_value = exact(left);
     }
   }
-  double bpm = 0.5 * (low + high);
+  // The exact search may step a bin past the requested range near its ends.
+  double bpm = std::clamp(0.5 * (low + high), options.minimum_bpm, options.maximum_bpm);
   const auto whole = std::round(bpm);
   if (std::abs(bpm - whole) < 0.05 && whole >= options.minimum_bpm &&
       whole <= options.maximum_bpm && exact(whole) >= 0.97 * exact(bpm))
@@ -702,7 +708,9 @@ Result<TempoEstimate> analyze_tempo(media::AudioReader& reader, TempoIdentity id
     const auto position = first + static_cast<double>(index) * period;
     if (position >= static_cast<double>(frames))
       break;
-    result.suggested_beat_frames.push_back(static_cast<std::uint64_t>(std::llround(position)));
+    // Rounding must not land on `frames`, one past the source.
+    result.suggested_beat_frames.push_back(
+        std::min(static_cast<std::uint64_t>(std::llround(position)), frames - 1));
   }
   result.suggestions_truncated =
       first + static_cast<double>(options.max_suggestions) * period < static_cast<double>(frames);

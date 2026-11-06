@@ -1,12 +1,14 @@
 #include "oscillate/test/check.hpp"
 #include "oscillate/track_chain/track_chain.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
 #include <deque>
 #include <exception>
 #include <memory>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -256,9 +258,44 @@ void added_lookahead_continues_its_predecessor() {
     require(output[frame].left == source.left * 0.5F && output[frame].right == source.right * 0.5F,
             "the primed lookahead lost time at frame " + std::to_string(frame));
   }
-  // A VST3 stage cannot be replayed, so it never continues its predecessor.
-  track_chain::ChainRuntime opaque({gain, delay}, {0, 24}, {true, false}, std::nullopt);
+  // A VST3 stage cannot be replayed, so it never continues its predecessor,
+  // and a handover asked of it anyway sends it no history.
+  auto unprimed = std::make_shared<Delay>(24);
+  track_chain::ChainRuntime opaque({gain, unprimed}, {0, 24}, {true, false}, std::nullopt);
   require(!opaque.continues_latency_of(&before), "a non-replayable stage claimed to continue");
+  (void)opaque.continue_latency_of(&before, {}, {}, {640, 1}, flushed);
+  std::vector<StereoFrame> fresh;
+  render(opaque, 640, 1, fresh);
+  require(std::ranges::all_of(
+              std::span(fresh).first(24),
+              [](const StereoFrame& frame) { return frame.left == 0.0F && frame.right == 0.0F; }),
+          "a non-replayable stage was primed with history");
+}
+
+// The runtime refuses arguments that would read past its stages or downcast a
+// stage that takes no sidechain.
+void chain_runtime_checks_its_arguments() {
+  auto gain = std::make_shared<Gain>(1.0F);
+  auto delay = std::make_shared<Delay>(4);
+  const auto refused = [](auto make) {
+    try {
+      make();
+    } catch (const std::invalid_argument&) {
+      return true;
+    }
+    return false;
+  };
+  require(
+      refused([&] { track_chain::ChainRuntime({gain, delay}, {0}, {true, true}, std::nullopt); }),
+      "a short latency list was accepted");
+  require(refused([&] { track_chain::ChainRuntime({gain, delay}, {0, 4}, {true}, std::nullopt); }),
+          "a short replay list was accepted");
+  require(refused([&] { track_chain::ChainRuntime({gain, delay}, {0, 4}, {true, true}, 1); }),
+          "a detector on a stage without a sidechain was accepted");
+  require(refused([&] { track_chain::ChainRuntime({gain}, {0}, {true}, 3); }),
+          "an out-of-range detector was accepted");
+  require(!refused([&] { track_chain::ChainRuntime({gain, delay}, {0, 4}, {true, true}, 0); }),
+          "a valid detector was refused");
 }
 
 void removed_lookahead_hands_on_its_samples() {
@@ -293,6 +330,7 @@ int main() {
     switch_retires_by_ring_out();
     detector_keys_its_stage();
     added_lookahead_continues_its_predecessor();
+    chain_runtime_checks_its_arguments();
     removed_lookahead_hands_on_its_samples();
   } catch (const std::exception& error) {
     std::fprintf(stderr, "track chain test: %s\n", error.what());

@@ -48,6 +48,8 @@ constexpr double silent_lufs = -70.0;
   return rate > high_rate ? points * 2 : points;
 }
 
+// Cutoff, Q, then rate: the RBJ cookbook's order.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 [[nodiscard]] native_dsp::dsp::BiquadCoefficients low_pass(double hz, double q,
                                                            double rate) noexcept {
   const double w = 2.0 * std::numbers::pi * hz / rate;
@@ -480,8 +482,11 @@ struct ProfileBuilder::State {
       const double weight = hop_power[k];
       if (!(weight > 0.0))
         continue;
-      const double offset =
-          refine(power_db(hop_power[k - 1]), power_db(hop_power[k]), power_db(hop_power[k + 1]));
+      // A peak on the spectrum's edge has no neighbour to refine against.
+      const double offset = k == 0 || k + 1 >= hop_power.size()
+                                ? 0.0
+                                : refine(power_db(hop_power[k - 1]), power_db(hop_power[k]),
+                                         power_db(hop_power[k + 1]));
       weighted_hz += weight * (static_cast<double>(k) + offset) * bin_hz;
       weighted_harmonics += weight * static_cast<double>(h);
     }

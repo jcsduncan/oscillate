@@ -68,7 +68,9 @@ public:
 
   // `replayable` marks the stages that accept earlier positions (built-in
   // ones, and plugins that have not run yet), which a handover replays;
-  // `detector` indexes the stage a sidechain keys, if any.
+  // `detector` indexes the stage a sidechain keys, if any. Throws
+  // std::invalid_argument unless there is one latency and one replay mark
+  // per stage and the detector names a stage that takes a sidechain.
   ChainRuntime(std::vector<std::shared_ptr<engine::ProcessorRuntime>> stages,
                std::vector<std::uint32_t> latencies, std::vector<bool> replayable,
                std::optional<std::size_t> detector);
