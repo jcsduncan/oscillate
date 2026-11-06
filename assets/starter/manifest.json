@@ -1,0 +1,89 @@
+{
+  "creation": "Original procedural synthesis from this repository's code; no external recordings, sample packs or sound libraries were used.",
+  "generator": "scripts/generate-starter-sounds.py",
+  "generator_revision": 1,
+  "generator_sha256": "e02b81d60742b82e99f15605240eb59553779e798d7cd92221b7d0418fb65803",
+  "schema": 1,
+  "sounds": [
+    {
+      "bytes": 43244,
+      "decoded_peak": 0.649994,
+      "decoded_rms": 0.153696,
+      "file": "kick.wav",
+      "format": {
+        "channels": 1,
+        "container": "RIFF/WAVE",
+        "encoding": "PCM16",
+        "frames": 21600,
+        "sample_rate": 48000
+      },
+      "name": "kick",
+      "parameters": {
+        "duration_ms": 450,
+        "seed": 4177,
+        "target_peak": 0.65
+      },
+      "sha256": "1cac13ef5f2ca7f06de54adf5fa665285c5416bd7c90ac25540a4f1bcd25bbf1"
+    },
+    {
+      "bytes": 26924,
+      "decoded_peak": 0.579987,
+      "decoded_rms": 0.078292,
+      "file": "snare.wav",
+      "format": {
+        "channels": 1,
+        "container": "RIFF/WAVE",
+        "encoding": "PCM16",
+        "frames": 13440,
+        "sample_rate": 48000
+      },
+      "name": "snare",
+      "parameters": {
+        "duration_ms": 280,
+        "seed": 8274,
+        "target_peak": 0.58
+      },
+      "sha256": "56925840742693dcc6234e53a53481d960b59a0534d4e33a0c05189ac753e0d2"
+    },
+    {
+      "bytes": 13484,
+      "decoded_peak": 0.419983,
+      "decoded_rms": 0.059568,
+      "file": "hat.wav",
+      "format": {
+        "channels": 1,
+        "container": "RIFF/WAVE",
+        "encoding": "PCM16",
+        "frames": 6720,
+        "sample_rate": 48000
+      },
+      "name": "hat",
+      "parameters": {
+        "duration_ms": 140,
+        "seed": 12371,
+        "target_peak": 0.42
+      },
+      "sha256": "1061c96e588a25512bf3ab2cc64be255f12eb44bb45b170eff6c949040c8e54c"
+    },
+    {
+      "bytes": 67244,
+      "decoded_peak": 0.619995,
+      "decoded_rms": 0.11097,
+      "file": "pluck.wav",
+      "format": {
+        "channels": 1,
+        "container": "RIFF/WAVE",
+        "encoding": "PCM16",
+        "frames": 33600,
+        "sample_rate": 48000
+      },
+      "name": "pluck",
+      "parameters": {
+        "duration_ms": 700,
+        "seed": 16468,
+        "target_peak": 0.62
+      },
+      "sha256": "d232cdf57f25ea617ebc010cc2bd19e0ffa6df9fcdc8e1c236f69fab838b0c59"
+    }
+  ]
+}
