@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/strata">
+    <file>StrataPanel.qml</file>
+    <file>StrataTheme.qml</file>
+    <file>StrataSpectrum.qml</file>
+    <file>StrataTransfer.qml</file>
+  </qresource>
+</RCC>

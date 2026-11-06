@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/trim">
+    <file>TrimPanel.qml</file>
+    <file>TrimTheme.qml</file>
+    <file>TrimMeter.qml</file>
+    <file>TrimStage.qml</file>
+  </qresource>
+</RCC>

@@ -1,0 +1,9 @@
+<RCC>
+  <qresource prefix="/temper">
+    <file>TemperPanel.qml</file>
+    <file>TemperTheme.qml</file>
+    <file>TemperDisplay.qml</file>
+    <file>TemperHeatmap.qml</file>
+    <file>TemperCurves.js</file>
+  </qresource>
+</RCC>

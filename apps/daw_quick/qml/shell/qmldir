@@ -1,0 +1,6 @@
+singleton Motion 1.0 Motion.qml
+singleton Tips 1.0 Tips.qml
+Tip 1.0 Tip.qml
+TipLayer 1.0 TipLayer.qml
+Reveal 1.0 Reveal.qml
+singleton Theme 1.0 Theme.qml
