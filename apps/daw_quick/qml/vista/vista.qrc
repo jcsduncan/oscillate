@@ -1,0 +1,10 @@
+<RCC>
+  <qresource prefix="/vista">
+    <file>VistaPanel.qml</file>
+    <file>VistaTheme.qml</file>
+    <file>VistaScope.qml</file>
+    <file>VistaCorrelation.qml</file>
+    <file>VistaBands.qml</file>
+    <file>VistaStage.qml</file>
+  </qresource>
+</RCC>
