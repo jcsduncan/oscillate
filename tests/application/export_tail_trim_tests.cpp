@@ -77,10 +77,13 @@ std::vector<float> read_float_wav(const fs::path& path) {
     std::uint32_t size = 0;
     std::memcpy(&size, bytes.data() + position + 4, 4);
     if (std::memcmp(bytes.data() + position, "fact", 4) == 0) {
+      REQUIRE_LE(position + 12, bytes.size(), "truncated fact chunk");
       std::uint32_t frames = 0;
       std::memcpy(&frames, bytes.data() + position + 8, 4);
-      REQUIRE_LE(position + 12, bytes.size(), "truncated fact chunk");
-      REQUIRE_GE(bytes.size(), frames * 8, "fact frames fit the file");
+      constexpr std::uint64_t stereo_float_bytes = 2 * sizeof(float);
+      REQUIRE_GE(static_cast<std::uint64_t>(bytes.size()),
+                 static_cast<std::uint64_t>(frames) * stereo_float_bytes,
+                 "fact frames fit the file");
     }
     if (std::memcmp(bytes.data() + position, "data", 4) == 0) {
       REQUIRE_EQ(position + 8 + size, bytes.size(), "the data chunk ends the file");

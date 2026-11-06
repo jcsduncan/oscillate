@@ -424,6 +424,14 @@ int main(int argc, char** argv) {
       {"voices", macros_map_to_voices},         {"warp", warp_plays_the_render},
   };
   const std::vector<std::string_view> wanted(argv + 1, argv + argc);
+  // A misspelt or renamed case fails rather than silently running nothing.
+  for (const auto name : wanted) {
+    if (std::ranges::find(cases, name, &std::pair<std::string_view, void (*)()>::first) ==
+        cases.end()) {
+      std::cerr << "FAILED: unknown case " << name << '\n';
+      return 1;
+    }
+  }
   try {
     for (const auto& [name, run] : cases)
       if (wanted.empty() || std::ranges::find(wanted, name) != wanted.end())
