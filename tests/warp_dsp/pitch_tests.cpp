@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <numbers>
 #include <stdexcept>
 #include <string>
@@ -139,11 +140,18 @@ void marks_refuse_unrepresentable_periods() {
   warp::MemorySourceView view(tone.left, tone.right);
   const std::vector<analysis::PitchFrame> unvoiced{{0, 0.0F, 0.0F}};
   REQUIRE_OK(analysis::place_pitch_marks(view, unvoiced, rate), "an unvoiced frame was refused");
-  const std::vector<analysis::PitchFrame> vanishing{{0, vanishing_hz, 1.0F}};
-  const auto refused = analysis::place_pitch_marks(view, vanishing, rate);
-  REQUIRE_TRUE(!refused, "an unrepresentable pitch period was accepted");
-  REQUIRE_EQ(refused.error().code, oscillate::foundation::ErrorCode::invalid_argument,
-             "an unrepresentable pitch period was accepted");
+  constexpr float lowest_pitch_hz = analysis::lowest_pitch_hz;
+  for (const float frequency :
+       {vanishing_hz, std::nextafter(lowest_pitch_hz, 0.0F),
+        std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity()}) {
+    const std::vector<analysis::PitchFrame> invalid{{0, frequency, 1.0F}};
+    const auto refused = analysis::place_pitch_marks(view, invalid, rate);
+    REQUIRE_TRUE(!refused, "an unrepresentable pitch period was accepted");
+    REQUIRE_EQ(refused.error().code, oscillate::foundation::ErrorCode::invalid_argument,
+               "an unrepresentable pitch period was accepted");
+  }
+  const std::vector<analysis::PitchFrame> lowest{{0, lowest_pitch_hz, 1.0F}};
+  REQUIRE_OK(analysis::place_pitch_marks(view, lowest, rate), "the lowest pitch was refused");
 }
 
 } // namespace

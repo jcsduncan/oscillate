@@ -12,8 +12,6 @@ namespace {
 
 using foundation::ErrorCode;
 constexpr std::uint64_t max_seconds = 3'600;
-// The lowest pitch tracked or marked; its period always fits the mark arithmetic.
-constexpr float lowest_pitch_hz = 20.0F;
 
 [[nodiscard]] std::size_t power_of_two_at_least(std::size_t value) {
   std::size_t size = 32;

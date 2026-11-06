@@ -11,6 +11,8 @@
 namespace oscillate::warp_dsp::analysis {
 
 inline constexpr std::size_t max_transients = 20'000;
+// The lowest pitch tracked or marked; its period always fits the mark arithmetic.
+inline constexpr float lowest_pitch_hz = 20.0F;
 
 struct Transient {
   // First sample of the attack, not its peak.
