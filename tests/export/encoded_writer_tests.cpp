@@ -7,6 +7,7 @@
 #include <cmath>
 #include <csignal>
 #include <cstdint>
+#include <fcntl.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -184,9 +185,24 @@ void test_format(EncodedMasterFormat format, std::string_view extension) {
 
     fs::permissions(directory.path(), fs::perms::owner_read | fs::perms::owner_exec,
                     fs::perm_options::replace);
-    const auto cannot_create = EncodedWriter::begin(options, 48'000, samples.size() / 2);
-    fs::permissions(directory.path(), fs::perms::owner_all, fs::perm_options::replace);
-    REQUIRE_TRUE(!cannot_create, "unwritable directory changed encoded output");
+    {
+      // Restores the directory however this block leaves.
+      struct Restore {
+        fs::path path;
+        ~Restore() { fs::permissions(path, fs::perms::owner_all, fs::perm_options::replace); }
+      } restore{directory.path()};
+      // A process that bypasses permissions (root, CAP_DAC_OVERRIDE) can still
+      // write here; the case only means something when the probe is refused.
+      const auto probe = directory.path() / "permission-probe";
+      const int probe_fd = ::open(probe.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+      if (probe_fd >= 0) {
+        ::close(probe_fd);
+        fs::remove(probe);
+      } else {
+        const auto cannot_create = EncodedWriter::begin(options, 48'000, samples.size() / 2);
+        REQUIRE_TRUE(!cannot_create, "unwritable directory changed encoded output");
+      }
+    }
     REQUIRE_EQ(bytes(target), original, "unwritable directory changed encoded output");
 
     const auto child = ::fork();

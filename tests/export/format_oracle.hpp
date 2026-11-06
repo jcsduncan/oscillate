@@ -49,6 +49,12 @@ inline std::uint32_t le(const std::vector<std::uint8_t>& bytes, std::size_t offs
 // Accepts the 56-byte float32 (fmt+fact) and 44-byte PCM16/24 layouts.
 inline Decoded decode_wav(const std::filesystem::path& path) {
   const auto bytes = file_bytes(path);
+  // The canonical layouts this oracle reads: RIFF/WAVE, then fmt.
+  constexpr std::size_t riff_header_bytes = 12;
+  if (bytes.size() < riff_header_bytes || std::memcmp(bytes.data(), "RIFF", 4) != 0 ||
+      std::memcmp(bytes.data() + 8, "WAVE", 4) != 0 || bytes.size() < riff_header_bytes + 4 ||
+      std::memcmp(bytes.data() + riff_header_bytes, "fmt ", 4) != 0)
+    throw std::runtime_error("export WAV header is not canonical");
   Decoded decoded;
   decoded.format_tag = static_cast<std::uint16_t>(le(bytes, 20, 2));
   if (le(bytes, 22, 2) != 2)
@@ -58,7 +64,8 @@ inline Decoded decode_wav(const std::filesystem::path& path) {
   const bool floating = decoded.format_tag == 3;
   const std::size_t data = floating ? 56 : 44;
   const std::size_t sample_bytes = decoded.bits / 8U;
-  if (sample_bytes == 0 || std::memcmp(bytes.data() + data - 8, "data", 4) != 0)
+  if (sample_bytes == 0 || bytes.size() < data ||
+      std::memcmp(bytes.data() + data - 8, "data", 4) != 0)
     throw std::runtime_error("export WAV data chunk is not canonical");
   const auto data_bytes = le(bytes, data - 4, 4);
   if (bytes.size() != data + data_bytes || data_bytes % (sample_bytes * 2) != 0)
