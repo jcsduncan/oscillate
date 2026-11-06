@@ -237,8 +237,12 @@ Result<std::unique_ptr<NativeSynthPlayer::AutomationPlan>> NativeSynthPlayer::ma
     if (native == nullptr)
       return true;
     const auto domain = native_automation_domain(runtime_->engine(), native->parameter_id);
+    // The lane's range must sit inside the parameter's, so no value it
+    // evaluates is out of range when a block is rendered.
     return domain && domain.value().discrete == lane.domain.discrete &&
-           domain.value().step_count == lane.domain.step_count;
+           domain.value().step_count == lane.domain.step_count &&
+           lane.domain.minimum >= domain.value().minimum &&
+           lane.domain.maximum <= domain.value().maximum;
   };
   for (const auto& lane : track.automation) {
     if (!matches_engine(lane))
@@ -505,10 +509,21 @@ bool NativeSynthPlayer::render(std::span<engine::StereoFrame> output, std::uint6
                         transport_generation, transport, plan->lanes);
   if (report.status != SynthProcessStatus::rendered)
     return false;
+  commit_live_notes();
   rendered_ = true;
   rendered_generation_ = transport_generation;
   automation_mailbox_->applied(plan->revision);
   return true;
+}
+
+void NativeSynthPlayer::commit_live_notes() noexcept {
+  auto& live = *live_;
+  if (!live.staged)
+    return;
+  live.sounding = live.staged_sounding;
+  live.serial = live.staged_serial;
+  live.read.store(live.staged_read, std::memory_order_release);
+  live.staged = false;
 }
 
 bool NativeSynthPlayer::same_note_effects(
@@ -530,10 +545,13 @@ bool NativeSynthPlayer::queue_live_note(std::uint8_t key, std::uint8_t velocity,
 
 std::size_t NativeSynthPlayer::merge_live_notes(std::size_t count) noexcept {
   auto& live = *live_;
+  live.staged = false;
   auto next = live.read.load(std::memory_order_relaxed);
   const auto end = live.write.load(std::memory_order_acquire);
   if (next == end)
     return count;
+  live.staged_sounding = live.sounding;
+  live.staged_serial = live.serial;
   // Live notes sound under their own clip id, so they never pair with the
   // project's notes.
   constexpr foundation::IdBits live_clip{0x4c495645, 1};
@@ -551,17 +569,18 @@ std::size_t NativeSynthPlayer::merge_live_notes(std::size_t count) noexcept {
   };
   for (; next != end && count + 2 <= limit; ++next) {
     const auto note = live.ring[next % LiveNotes::capacity];
-    auto& sounding = live.sounding[note.key];
+    auto& sounding = live.staged_sounding[note.key];
     if (sounding != 0) {
       emit(note.key, sounding, false, 0);
       sounding = 0;
     }
     if (note.on) {
-      sounding = ++live.serial;
+      sounding = ++live.staged_serial;
       emit(note.key, sounding, true, note.velocity);
     }
   }
-  live.read.store(next, std::memory_order_release);
+  live.staged_read = next;
+  live.staged = true;
   if (count != first)
     std::ranges::sort(std::span(block_events_).first(count),
                       [](const engine::BlockMidiEvent& a, const engine::BlockMidiEvent& b) {

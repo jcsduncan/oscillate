@@ -189,6 +189,8 @@ struct LfoState {
   Lfo lfo;
   double value = 0.0;
   double fade_age = 0.0; // Seconds since the fade began.
+  // A poly LFO's rate scale from the matrix, as its own voice set it last tick.
+  double rate_mod = 1.0;
 };
 
 // The structure-dependent part of the oscillator section: unison counts, the
@@ -519,6 +521,8 @@ private:
         }
         voice.lfo[i].fade_age = 0.0;
         voice.lfo[i].value = 0.0;
+        if (!continuing)
+          voice.lfo[i].rate_mod = 1.0;
       }
       if (!others_held) {
         for (std::size_t i = 0; i < 2; ++i) {
@@ -676,7 +680,7 @@ private:
       const bool poly = i == 0 ? t.lfo1_poly : t.lfo2_poly;
       if (poly) {
         state.lfo.set_shape(static_cast<LfoShape>(as_int(v[p::lfo1_shape + i * p::lfo_stride])));
-        state.value = state.lfo.next(lfo_increment(i, rate_mod_[i]));
+        state.value = state.lfo.next(lfo_increment(i, state.rate_mod));
         state.fade_age += 1.0 / control_rate_;
         source[src_lfo1 + i] = faded(state, i);
       } else {
@@ -700,8 +704,8 @@ private:
         mod[to] += v[base + 2] * source[from];
       }
     }
-    rate_mod_[0] = std::exp2(4.0 * mod[dst_lfo1_rate]);
-    rate_mod_[1] = std::exp2(4.0 * mod[dst_lfo2_rate]);
+    voice.lfo[0].rate_mod = std::exp2(4.0 * mod[dst_lfo1_rate]);
+    voice.lfo[1].rate_mod = std::exp2(4.0 * mod[dst_lfo2_rate]);
 
     // Pitch.
     const double bend_st = v[p::bend] * (v[p::bend] >= 0.0 ? v[p::bend_up] : v[p::bend_down]);
@@ -1062,7 +1066,6 @@ private:
   SynthTransport transport_{};
   bool tempo_known_ = false;
   std::array<LfoState, 2> global_lfo_{};
-  std::array<double, 2> rate_mod_{1.0, 1.0};
   NoiseSource phase_random_{};
   bool mono_active_ = false;
   std::array<NoteEvent, 16> mono_stack_{};

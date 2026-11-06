@@ -6,14 +6,36 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <span>
+#include <vector>
 
 namespace oscillate::native_dsp::synth {
 
+namespace {
+
+// The initial values sized to the descriptor (and the mailbox): extra values
+// are dropped and missing ones take their defaults, so every later read
+// stays inside both.
+std::vector<double> initial_values(const EngineDescriptor& descriptor,
+                                   std::span<const double> values) {
+  const std::size_t count = std::min(descriptor.parameters.size(), max_engine_parameters);
+  std::vector<double> out(count);
+  for (std::size_t i = 0; i < count; ++i)
+    out[i] = i < values.size() ? values[i] : descriptor.parameters[i].default_value;
+  return out;
+}
+
+} // namespace
+
 ParameterControl::ParameterControl(const EngineDescriptor& descriptor,
                                    std::span<const double> values, double sample_rate)
-    : descriptor_(&descriptor), count_(values.size()), sample_rate_(sample_rate),
-      target_(values.begin(), values.end()), current_(values.begin(), values.end()),
-      glide_step_(values.size(), 0.0), effective_(values.begin(), values.end()) {}
+    : descriptor_(&descriptor), count_(0), sample_rate_(sample_rate),
+      target_(initial_values(descriptor, values)) {
+  count_ = target_.size();
+  current_ = target_;
+  glide_step_.assign(count_, 0.0);
+  effective_ = target_;
+}
 
 bool ParameterControl::valid_values(const EngineDescriptor& descriptor,
                                     std::span<const double> values) noexcept {

@@ -151,7 +151,7 @@ Result<void> validate_engine(const EngineDescriptor& engine) {
     }
     if (parameter.scale == ParameterScale::choice &&
         (parameter.minimum != 0.0 ||
-         parameter.choices.size() != static_cast<std::size_t>(parameter.maximum) + 1)) {
+         static_cast<double>(parameter.choices.size()) != parameter.maximum + 1.0)) {
       return Result<void>::failure(invalid(where + "choices do not match its range"));
     }
   }
