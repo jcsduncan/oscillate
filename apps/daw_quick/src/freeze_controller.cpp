@@ -126,8 +126,10 @@ void FreezeController::bounce_range(const QString& track_id, double start_tick, 
 
 void FreezeController::bounce_clip(const QString& clip_id) {
   auto* session = editable_session();
+  if (session == nullptr)
+    return; // editable_session() has said why.
   const auto clip = project::ClipId::parse(clip_id.toStdString());
-  if (session == nullptr || !clip) {
+  if (!clip) {
     report_(QStringLiteral("Select a MIDI clip to bounce"));
     return;
   }

@@ -110,7 +110,14 @@ void ImportController::import_midi_with(const QUrl& source,
                      .arg(midi_file::max_file_bytes / bytes_per_mebibyte));
     return;
   }
-  const auto bytes = input.readAll();
+  // Read at most one byte past the limit, so a file that grew since the size
+  // check is still refused rather than read whole.
+  const auto bytes = input.read(static_cast<qint64>(midi_file::max_file_bytes) + 1);
+  if (bytes.size() > static_cast<qsizetype>(midi_file::max_file_bytes)) {
+    host_.status(QStringLiteral("MIDI import: the file is larger than %1 MiB")
+                     .arg(midi_file::max_file_bytes / bytes_per_mebibyte));
+    return;
+  }
   const auto& tracks = host_.session()->snapshot().tracks;
   options.import_tempo_and_meter = std::ranges::all_of(
       tracks, [](const auto& track) { return track.clips.empty() && track.midi_clips.empty(); });

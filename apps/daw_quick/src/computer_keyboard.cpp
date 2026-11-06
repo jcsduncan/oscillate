@@ -135,6 +135,16 @@ bool ComputerKeyboard::eventFilter(QObject* watched, QEvent* event) {
   if (watched != QGuiApplication::focusObject() && QGuiApplication::focusObject() != nullptr)
     return QObject::eventFilter(watched, event);
   auto* key_event = static_cast<QKeyEvent*>(event);
+  // A held key's release always ends its note, even once a modifier is down
+  // or a text field has focus, so no note is left sounding.
+  if (type == QEvent::KeyRelease && !key_event->isAutoRepeat()) {
+    const int released = slot(key_event->key());
+    if (released >= 0 && held_[static_cast<std::size_t>(released)] >= 0) {
+      release_(held_[static_cast<std::size_t>(released)]);
+      held_[static_cast<std::size_t>(released)] = -1;
+      return true;
+    }
+  }
   if (key_event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier) ||
       typing_text())
     return QObject::eventFilter(watched, event);
