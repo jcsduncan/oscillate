@@ -92,11 +92,11 @@ void ClipPrefetchWorker::run(media::AudioReader reader, std::uint32_t project_ra
       }
     }
   } catch (const std::exception&) {
-    error_ = {ErrorCode::internal, "clip prefetch worker failed unexpectedly"};
+    error_ = std::move(unexpected_);
     readiness_->set_steady(false);
     state_.store(ClipPrefetchState::failed, std::memory_order_release);
   } catch (...) {
-    error_ = {ErrorCode::internal, "clip prefetch worker failed unexpectedly"};
+    error_ = std::move(unexpected_);
     readiness_->set_steady(false);
     state_.store(ClipPrefetchState::failed, std::memory_order_release);
   }

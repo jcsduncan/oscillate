@@ -75,6 +75,10 @@ private:
   std::atomic<bool> finished_{false};
   std::atomic<ClipPrefetchState> state_{ClipPrefetchState::filling};
   foundation::Error error_{foundation::ErrorCode::internal, ""}; // Published by failed state.
+  // Built before the worker starts, so reporting an unexpected failure (even
+  // out of memory) moves it into error_ without allocating.
+  foundation::Error unexpected_{foundation::ErrorCode::internal,
+                                "clip prefetch worker failed unexpectedly"};
 };
 
 } // namespace oscillate::application

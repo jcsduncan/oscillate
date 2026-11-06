@@ -185,7 +185,12 @@ CacheControl::open(const std::filesystem::path& profile_directory) {
           !document.at("projects").is_array() || document.at("projects").size() > max_projects) {
         throw std::runtime_error("invalid cache registry schema");
       }
-      budget = document.at("budget_bytes").get<std::uint64_t>();
+      // A whole, non-negative number: a stored -1 or 1.5 is corrupt, not a budget.
+      const auto& stored_budget = document.at("budget_bytes");
+      if (!stored_budget.is_number_unsigned()) {
+        throw std::runtime_error("invalid cache registry budget");
+      }
+      budget = stored_budget.get<std::uint64_t>();
       for (const auto& item : document.at("projects")) {
         Entry entry{item.at("root").get<std::string>(), item.at("root_device").get<std::uint64_t>(),
                     item.at("root_inode").get<std::uint64_t>(),
@@ -276,10 +281,20 @@ Result<void> CacheControl::register_project(const std::filesystem::path& root) {
               static_cast<std::uint64_t>(cache_status.st_ino)};
   std::lock_guard lock(mutex_);
   auto updated = entries_;
-  auto found = std::ranges::find_if(updated, [&entry](const Entry& existing) {
+  const auto matches = [&entry](const Entry& existing) {
     return existing.root == entry.root ||
            (existing.root_device == entry.root_device && existing.root_inode == entry.root_inode);
-  });
+  };
+  auto found = std::ranges::find_if(updated, matches);
+  if (found != updated.end()) {
+    // A project moved onto another's former path matches two entries (one
+    // by identity, one by path): keep the first, drop the rest.
+    const auto keep = static_cast<std::size_t>(found - updated.begin());
+    std::size_t index = 0;
+    std::erase_if(updated,
+                  [&](const Entry& existing) { return index++ > keep && matches(existing); });
+    found = updated.begin() + static_cast<std::ptrdiff_t>(keep);
+  }
   if (found == updated.end()) {
     if (updated.size() == max_projects) {
       return Result<void>::failure({ErrorCode::resource_exhausted, "cache project limit"});

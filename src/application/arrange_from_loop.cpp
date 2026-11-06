@@ -208,9 +208,12 @@ role_from_notes(const std::vector<project::MidiNote>& notes) {
                                           std::int64_t length) {
   if (sections.empty())
     return Result<void>::failure({ErrorCode::invalid_argument, "No sections"});
+  if (length > max_length_bars)
+    return Result<void>::failure({ErrorCode::invalid_argument, "The arrangement is too long"});
   std::int64_t at = 0;
   for (const auto& section : sections) {
-    if (section.start_bar != at || section.bars < phrase_bars || section.bars % phrase_bars != 0)
+    if (section.start_bar != at || section.bars < phrase_bars || section.bars % phrase_bars != 0 ||
+        section.bars > max_length_bars - at)
       return Result<void>::failure(
           {ErrorCode::invalid_argument, "Sections must follow each other on the 8-bar grid"});
     at += section.bars;
@@ -784,7 +787,7 @@ Result<Plan> plan(const project::Snapshot& snapshot, Options options) {
       result.transitions.push_back(
           {TransitionKind::riser, drop->start_bar - riser_bars, riser_bars, "Rises into the drop"});
     const auto* groove = find_section(result.sections, SectionKind::groove);
-    if (groove != nullptr && build != nullptr &&
+    if (groove != nullptr && build != nullptr && groove->start_bar >= riser_bars &&
         (options.style == Template::peak_time || build->bars >= 2 * min_groove_bars))
       result.transitions.push_back({TransitionKind::riser, groove->start_bar - riser_bars,
                                     riser_bars, "Rises out of the build"});

@@ -204,11 +204,16 @@ std::vector<clay_dsp::TargetNote> follow_targets(const project::Snapshot& snapsh
     // A looping clip repeats its pattern to its end.
     for (auto origin = clip_start; origin < clip_end;
          origin += clip.loop ? clip.pattern_length.value : clip_end - clip_start) {
+      // As playback hears them: notes past the pattern are silent, and a
+      // note crossing its end is cut there.
+      const auto pattern_end = std::min(origin + clip.pattern_length.value, clip_end);
       for (const auto& note : clip.notes) {
-        const auto note_start = origin + note.start.value;
-        if (note_start >= clip_end)
+        if (note.start.value >= clip.pattern_length.value)
           continue;
-        const auto note_end = std::min(origin + note.end.value, clip_end);
+        const auto note_start = origin + note.start.value;
+        if (note_start >= pattern_end)
+          continue;
+        const auto note_end = std::min(origin + note.end.value, pattern_end);
         auto start = source_at_tick(note_start);
         auto stop = source_at_tick(note_end);
         if (!start || !stop || *stop <= first || *start >= end)
