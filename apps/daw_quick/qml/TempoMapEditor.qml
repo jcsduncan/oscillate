@@ -178,7 +178,7 @@ Item {
             color: panel.textMain
             font.pixelSize: Theme.typeBody
             selectByMouse: true
-            validator: DoubleValidator { bottom: 0.001; top: 1000; decimals: 3 }
+            validator: DoubleValidator { bottom: 0.001; top: 1000; decimals: 3; locale: "C" }
             Accessible.name: "Tempo event BPM"
         }
     }
