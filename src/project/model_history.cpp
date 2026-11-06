@@ -199,8 +199,10 @@ void add_all_ids(const Snapshot& state, ChangeSet& changes) {
   changes.master_effects = from.master_effects != to.master_effects;
   changes.routing = from.master_level != to.master_level ||
                     !std::ranges::equal(from.tracks, to.tracks, [](const Track& a, const Track& b) {
+                      // As for the forward edits: mixer controls and freezing are routing.
                       return a.id == b.id && a.kind == b.kind && a.main_output == b.main_output &&
-                             a.sends == b.sends;
+                             a.sends == b.sends && a.muted == b.muted && a.soloed == b.soloed &&
+                             a.level == b.level && a.pan == b.pan && a.frozen == b.frozen;
                     });
   // Undo, redo and restore may change any name, colour or marker.
   changes.presentation = true;

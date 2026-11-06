@@ -104,6 +104,15 @@ namespace {
   return true;
 }
 
+// A discrete domain's values sit on one of step_count + 1 evenly spaced steps
+// from minimum to maximum.
+constexpr double discrete_step_tolerance = 1e-9;
+[[nodiscard]] bool on_discrete_step(const AutomationDomain& domain, double value) {
+  const double steps =
+      (value - domain.minimum) / (domain.maximum - domain.minimum) * domain.step_count;
+  return std::abs(steps - std::round(steps)) <= discrete_step_tolerance;
+}
+
 [[nodiscard]] Result<void> validate_automation_lanes(const Track& track,
                                                      const std::vector<AutomationLane>& lanes,
                                                      std::size_t owner_limit, bool clip_owned,
@@ -131,9 +140,7 @@ namespace {
         !std::isfinite(domain.default_value) || domain.minimum >= domain.maximum ||
         domain.default_value < domain.minimum || domain.default_value > domain.maximum ||
         domain.step_count > 16'384 || domain.discrete != (domain.step_count != 0) ||
-        (domain.discrete &&
-         std::abs(domain.default_value * domain.step_count -
-                  std::round(domain.default_value * domain.step_count)) > 1e-9) ||
+        (domain.discrete && !on_discrete_step(domain, domain.default_value)) ||
         static_cast<unsigned>(domain.scale) > static_cast<unsigned>(AutomationScale::decibel) ||
         (domain.scale != AutomationScale::linear && domain.discrete) ||
         (domain.scale == AutomationScale::logarithmic && !(domain.minimum > 0.0)) ||
@@ -208,9 +215,8 @@ namespace {
           point.value < domain.minimum || point.value > domain.maximum || !std::isfinite(h.x1) ||
           !std::isfinite(h.y1) || !std::isfinite(h.x2) || !std::isfinite(h.y2) || h.x1 < 0.0 ||
           h.x1 > h.x2 || h.x2 > 1.0 || h.y1 < 0.0 || h.y1 > 1.0 || h.y2 < 0.0 || h.y2 > 1.0 ||
-          (domain.discrete && (point.to_next != AutomationShape::hold ||
-                               std::abs(point.value * domain.step_count -
-                                        std::round(point.value * domain.step_count)) > 1e-9))) {
+          (domain.discrete &&
+           (point.to_next != AutomationShape::hold || !on_discrete_step(domain, point.value)))) {
         return Result<void>::failure(invalid("invalid automation point"));
       }
       previous = point.coordinate;
@@ -561,7 +567,16 @@ struct RenderedInterval {
           return point.position < clip.pattern_length;
         }));
   }
-  if (clip.notes.empty() && pedal_points == 0) {
+  // Notes kept past the pattern's end are silent: collect the audible ones once
+  // rather than skipping the silent ones in every repeat.
+  std::vector<const MidiNote*> audible;
+  audible.reserve(clip.notes.size());
+  for (const auto& note : clip.notes) {
+    if (note.start < clip.pattern_length) {
+      audible.push_back(&note);
+    }
+  }
+  if (audible.empty() && pedal_points == 0) {
     return Result<void>::success();
   }
   std::int64_t iterations = 1;
@@ -603,10 +618,8 @@ struct RenderedInterval {
     if (iteration_start.value() >= rendered.end) {
       break;
     }
-    for (const auto& note : clip.notes) {
-      if (note.start >= clip.pattern_length) {
-        continue; // Kept past the pattern's end, silent.
-      }
+    for (const auto* audible_note : audible) {
+      const auto& note = *audible_note;
       // A note crossing the pattern's end is cut there, as by the clip end.
       const bool cut = note.end > clip.pattern_length;
       auto start_tick = checked_add(base, note.start.value);

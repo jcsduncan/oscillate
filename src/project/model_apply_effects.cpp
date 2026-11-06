@@ -136,36 +136,53 @@ template <typename T> Result<void> apply_effect_slot_edit(ApplyContext& context,
 template <typename T> Result<void> apply_vst3_plugin_edit(ApplyContext& context, const T& command) {
   auto& candidate = context.candidate;
   auto& changes = context.changes;
+  // The plugin is a track's instrument or effect, or a master effect (no owner).
   Track* owner = nullptr;
   Vst3PluginInstance* plugin = nullptr;
+  std::vector<EffectInsert>* effects = nullptr;
   std::optional<std::size_t> effect_index;
+  const auto find_effect = [&](std::vector<EffectInsert>& slots) {
+    for (std::size_t index = 0; index < slots.size(); ++index) {
+      if (auto* effect = std::get_if<Vst3PluginInstance>(&slots[index].processor);
+          effect && effect->id == command.id) {
+        plugin = effect;
+        effects = &slots;
+        effect_index = index;
+        return;
+      }
+    }
+  };
   for (auto& track : candidate.tracks) {
     if (auto* found = find_plugin(track, command.id)) {
       owner = &track;
       plugin = found;
-      for (std::size_t index = 0; index < track.effects.size(); ++index) {
-        if (const auto* effect = std::get_if<Vst3PluginInstance>(&track.effects[index].processor);
-            effect && effect->id == command.id) {
-          effect_index = index;
-          break;
-        }
-      }
+      find_effect(track.effects);
       break;
     }
+  }
+  if (plugin == nullptr) {
+    find_effect(candidate.master_effects);
   }
   if (plugin == nullptr) {
     return Result<void>::failure({ErrorCode::not_found, "VST3 plugin instance not found"});
   }
   if constexpr (std::is_same_v<T, RemoveVst3Plugin>) {
-    remove_plugin_automation(*owner, command.id, changes);
+    if (owner != nullptr) {
+      remove_plugin_automation(*owner, command.id, changes);
+    }
     if (effect_index) {
-      owner->effects.erase(owner->effects.begin() + static_cast<std::ptrdiff_t>(*effect_index));
+      // A sidechain key into the removed effect leaves with it.
+      const InsertSlotId slot = (*effects)[*effect_index].id;
+      remove_sends(
+          candidate, [&](const SendRoute& send) { return send.target_insert == slot; }, changes);
+      effects->erase(effects->begin() + static_cast<std::ptrdiff_t>(*effect_index));
     } else {
       // find_plugin found it outside the effects, so it is the instrument.
       owner->instrument_source = std::monostate{};
     }
   } else if constexpr (std::is_same_v<T, MoveVst3Plugin>) {
-    if (!effect_index || owner->id != command.track || command.index >= owner->effects.size()) {
+    if (owner == nullptr || !effect_index || owner->id != command.track ||
+        command.index >= owner->effects.size()) {
       return Result<void>::failure(invalid("invalid VST3 effect move position or track"));
     }
     auto slot = std::move(owner->effects[*effect_index]);
@@ -199,7 +216,11 @@ template <typename T> Result<void> apply_vst3_plugin_edit(ApplyContext& context,
     if (auto valid = validate_plugin(*plugin); !valid)
       return valid;
   }
-  add_unique(changes.tracks, owner->id);
+  if (owner != nullptr) {
+    add_unique(changes.tracks, owner->id);
+  } else {
+    changes.master_effects = true;
+  }
   add_unique(changes.plugins, command.id);
   return Result<void>::success();
 }

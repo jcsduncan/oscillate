@@ -150,6 +150,12 @@ void track_move_preserves_identity_and_is_undoable() {
              "moving a track upward did not restore the expected order");
   REQUIRE_EQ(moved_back.snapshot->tracks[2].id, third,
              "moving a track upward did not restore the expected order");
+  // Undo and redo of a mixer control are routing changes, as the edits are.
+  REQUIRE_OK(project.apply({SetTrackLevelPan{second, 0.5, 0.25}}));
+  REQUIRE_TRUE(take(project.undo()).changes.routing, "undoing a level change skipped routing");
+  REQUIRE_TRUE(take(project.redo()).changes.routing, "redoing a level change skipped routing");
+  REQUIRE_OK(project.apply({SetTrackMuted{second, true}}));
+  REQUIRE_TRUE(take(project.undo()).changes.routing, "undoing a mute skipped routing");
 }
 
 void revisions_and_atomic_compounds() {
@@ -1247,6 +1253,23 @@ void sidechain_send_targets_one_built_in_effect() {
                "removing a keyed effect left its key's send or gain automation behind");
   REQUIRE_EQ(take(state.undo()).snapshot->tracks[0].sends.front(), sidechain,
              "undo did not restore the key with its effect");
+  // Removing a keyed VST3 effect takes its key with it too.
+  const auto keyer = id<TrackId>(80);
+  const auto plugin_host = id<TrackId>(81);
+  const auto keyed_plugin = plugin(78);
+  REQUIRE_OK(state.apply({AddTrack{keyer}, AddTrack{plugin_host}}));
+  const auto with_plugin = take(state.apply({InsertVst3Plugin{plugin_host, 0, keyed_plugin}}));
+  const auto plugin_slot = with_plugin.snapshot->tracks[3].effects.back().id;
+  const SendRoute plugin_key{id<SendId>(79), plugin_host, 1.0, SendPurpose::sidechain, plugin_slot};
+  REQUIRE_OK(state.apply({AddSendRoute{keyer, plugin_key}}));
+  const auto unplugged = take(state.apply({RemoveVst3Plugin{keyed_plugin.id}}));
+  REQUIRE_TRUE(unplugged.snapshot->tracks[2].sends.empty(),
+               "removing a keyed VST3 effect left its key's send behind");
+  REQUIRE_EQ(unplugged.snapshot->tracks[0].sends, std::vector{sidechain},
+             "removing a keyed VST3 effect took another effect's key");
+  for (int step = 0; step < 4; ++step) {
+    REQUIRE_OK(state.undo());
+  }
   // Deleting the keyed track (a synth ducked by a kick) takes the key too.
   const auto deleted = take(state.apply({RemoveTrack{destination}}));
   REQUIRE_EQ(deleted.snapshot->tracks.size(), 1,
@@ -1904,6 +1927,16 @@ void native_insert_commands_cover_all_signal_paths_and_history() {
              "master VST3 slot removal did not retain its undo identity");
   REQUIRE_EQ(take(master_project.undo()).snapshot->master_effects, with_master_vst3.master_effects,
              "master VST3 slot removal did not retain its undo identity");
+  // The plugin commands reach a master effect too.
+  const std::vector<std::uint8_t> master_state{7, 6};
+  auto saved = take(master_project.apply({SetVst3ComponentState{master_plugin.id, master_state}}));
+  REQUIRE_TRUE(saved.changes.master_effects, "master VST3 state edit was not a master change");
+  REQUIRE_EQ(
+      std::get<Vst3PluginInstance>(saved.snapshot->master_effects.back().processor).component_state,
+      master_state, "master VST3 state edit was lost");
+  auto plugin_removed = take(master_project.apply({RemoveVst3Plugin{master_plugin.id}}));
+  REQUIRE_EQ(plugin_removed.snapshot->master_effects, stable->master_effects,
+             "removing a master VST3 plugin left its slot");
 }
 
 void native_insert_settings_preserve_slot_and_history() {
