@@ -1,0 +1,10 @@
+<RCC>
+  <qresource prefix="/knock">
+    <file>KnockPanel.qml</file>
+    <file>KnockTheme.qml</file>
+    <file>KnockPad.qml</file>
+    <file>KnockModes.qml</file>
+    <file>KnockStereo.qml</file>
+    <file>KnockPatterns.qml</file>
+  </qresource>
+</RCC>

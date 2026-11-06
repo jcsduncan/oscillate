@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/lens">
+    <file>LensPanel.qml</file>
+    <file>LensTheme.qml</file>
+    <file>LensSpectrum.qml</file>
+    <file>LensSpectrogram.qml</file>
+  </qresource>
+</RCC>

@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/fret">
+    <file>FretPanel.qml</file>
+    <file>FretTheme.qml</file>
+    <file>FretGroove.qml</file>
+  </qresource>
+</RCC>
