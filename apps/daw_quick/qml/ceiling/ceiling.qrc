@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/ceiling">
+    <file>CeilingPanel.qml</file>
+    <file>CeilingTheme.qml</file>
+    <file>CeilingHistory.qml</file>
+  </qresource>
+</RCC>
