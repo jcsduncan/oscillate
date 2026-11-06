@@ -1,0 +1,479 @@
+#pragma once
+
+#include "oscillate/application/revision_status.hpp"
+#include "oscillate/engine/routed_publisher.hpp"
+#include "oscillate/native_dsp/convolution_ir.hpp"
+#include "oscillate/native_dsp/synth/runtime.hpp"
+#include "oscillate/native_inserts/effect_stage.hpp"
+#include "oscillate/plugins/vst3_graph_node.hpp"
+#include "oscillate/project/model.hpp"
+#include "oscillate/routing/project_route_plan.hpp"
+#include "oscillate/track_chain/track_chain.hpp"
+
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <span>
+#include <string_view>
+#include <utility>
+#include <variant>
+#include <vector>
+
+namespace oscillate::native_dsp {
+class ConvolutionRuntime;
+} // namespace oscillate::native_dsp
+namespace oscillate::native_dsp::synth {
+class NativeSynthPlayer;
+}
+namespace oscillate::persistence {
+class ProjectStore;
+}
+namespace oscillate::audio_io {
+class TransportCursor;
+}
+
+namespace oscillate::application {
+class RoutedAudioSource;
+
+// Supplied only after the device/whole graph has measured free callback time.
+// The store and budget remain control-side; neither is read by render_block.
+struct LiveConvolutionAdmission {
+  const persistence::ProjectStore* store = nullptr;
+  native_dsp::ConvolutionIrBudget budget;
+};
+
+// A verified, activated, single-use plugin binding prepared off the callback.
+// Its owner is retained for topology edits; process_failed is polled only by
+// control/UI code and must be safe while the callback runs. The source kind
+// must match the saved track before publication.
+struct PreparedTrackInsert {
+  std::shared_ptr<engine::ProcessorRuntime> processor{};
+  std::uint32_t latency_frames = 0;
+  std::function<bool()> process_failed{};
+  bool instrument_source = false;
+  // The provider owns the VST3 implementation. This read-only control-side
+  // probe avoids making the application library depend on VST3 runtime code.
+  std::shared_ptr<plugins::Vst3ManualEventSlot> manual_events{};
+  std::function<plugins::Vst3ActiveGraphIdentity()> active_manual_graph{};
+  std::optional<std::uint32_t> finite_tail_frames = std::nullopt;
+  // A finite plugin declaration alone does not prove that its bound stays
+  // fixed while exporting. Only an independently qualified provider sets this.
+  bool fixed_tail_qualified = false;
+  bool fixed_latency_qualified = false;
+  // Control-side query of this exact prepared instrument runtime's MIDI cut.
+  // An absent or different end frame rejects real-time export before JACK.
+  std::function<std::optional<std::uint64_t>()> prepared_export_end{};
+  // Set only from a loaded effect host whose exact stereo auxiliary input was
+  // activated. Saved sends and scan metadata cannot assert this capability.
+  bool routed_sidechain = false;
+};
+
+struct ActiveVst3EffectManualEvents {
+  std::shared_ptr<plugins::Vst3ManualEventSlot> slot;
+  plugins::Vst3ActiveGraphIdentity identity;
+};
+
+struct ActiveVst3InstrumentManualEvents {
+  std::shared_ptr<plugins::Vst3ManualEventSlot> slot;
+  plugins::Vst3ActiveGraphIdentity identity;
+};
+
+struct PendingVst3ManualPreviewEvents {
+  std::shared_ptr<plugins::Vst3ManualEventSlot> slot;
+  plugins::Vst3ActiveGraphIdentity identity;
+};
+
+// A copy of the exact, privately prepared initial graph, either before its
+// first callback or after that same revision becomes active. Later graph
+// revisions require a newly prepared control instance.
+// The export module may map NodeTail to its own RealtimeNodeTail without an
+// application -> export target dependency. All fields refer to one revision.
+struct PreparedRouteTailReceipt {
+  struct NodeTail {
+    engine::RoutingNodeId node;
+    std::optional<std::uint64_t> frames;
+  };
+  engine::RoutingLatencyPlan route;
+  engine::RoutingNodeId master;
+  std::uint64_t revision;
+  std::vector<NodeTail> nodes;
+};
+
+// The largest block a VST3 host processes at once. A graph with larger
+// blocks feeds its VST3 stages in chunks of this size.
+inline constexpr std::uint32_t vst3_host_block_frames = 128;
+
+class TrackInsertProvider {
+public:
+  virtual ~TrackInsertProvider() = default;
+  // Prepares one instance of `saved`, a VST3 instrument or effect in
+  // `snapshot`, bound to that snapshot's tempo, automation and sidechains.
+  // Every call yields a new, independent instance.
+  [[nodiscard]] virtual foundation::Result<PreparedTrackInsert>
+  prepare(const project::Snapshot& snapshot, const project::Vst3PluginInstance& saved,
+          std::uint32_t max_frames) = 0;
+};
+
+// Immutable control-side capture for preparing a source-owned edit on
+// a worker. It owns the accepted project snapshot and copies the active source
+// layout/order so preparation need not read mutable control state.
+struct RoutedSourcePreparationCapture {
+  std::shared_ptr<const project::Snapshot> snapshot;
+  std::vector<routing::ProjectRouteSource> source_layout;
+  std::vector<engine::RoutingNodeId> topological_order;
+  std::size_t max_frames = 0;
+  std::uint64_t active_graph_revision = 0;
+  bool native_synth_switch = false;
+  bool source_overlay_eligible = false;
+};
+
+// Headless live-routing seam. The caller renders one source span per prepared
+// topological node; source_layout() identifies external source slots. A bound
+// MIDI instrument generates its own frames on its instrument-track node.
+// The caller also owns a cursor that MUST remain at held_boundary() while a
+// hold is active. Device adapters do not implement that cursor contract yet.
+// All control calls are serialized off the callback; render_block is callback-only.
+// Bounds the last callback sample for the shared musical-time evaluator, for
+// every live automation plan (synths, effects). Compute off the callback so
+// extreme tempo maps fail before publication.
+[[nodiscard]] foundation::Result<std::uint64_t>
+automation_sample_limit(const project::Snapshot& snapshot, std::size_t max_frames);
+
+class RoutedPlaybackControl final {
+public:
+  // The optional provider must outlive this control while a fresh binding or
+  // retry can be requested. The prepared runtime is owned by this control and
+  // the published graphs, independently of the provider after preparation.
+  RoutedPlaybackControl(project::ProjectModel& model, engine::RoutedMixerLimits limits,
+                        TrackInsertProvider* inserts = nullptr,
+                        LiveConvolutionAdmission convolution = {});
+  RoutedPlaybackControl(const RoutedPlaybackControl&) = delete;
+  RoutedPlaybackControl& operator=(const RoutedPlaybackControl&) = delete;
+
+  // Initial publication. A newer edit calls begin_edit followed by
+  // publish_held after the callback acknowledges the hold.
+  [[nodiscard]] foundation::Result<void> submit_current();
+  // Bind the source bank after initial preparation and before starting audio.
+  // It remains owned by the playback run until this control is destroyed.
+  void bind_live_source(RoutedAudioSource& source) noexcept;
+  // Call after the callback has joined and before the source bank is retired.
+  void unbind_live_source() noexcept;
+  // Callback and graph publisher must be quiescent. Resetting a long IR in the
+  // callback would cause an unbounded deadline spike.
+  [[nodiscard]] foundation::Result<void> reset_convolution_after_quiesce(std::uint64_t generation);
+  // Device owner first joins the callback. This advances the cursor and resets
+  // the active IR to the same new processor generation before output resumes.
+  // A pure pause or planned loop wrap must not call this method.
+  [[nodiscard]] foundation::Result<void>
+  seek_convolution_after_quiesce(audio_io::TransportCursor& cursor, std::uint64_t first_sample);
+  [[nodiscard]] foundation::Result<void> begin_edit(const project::AppliedRevision& applied,
+                                                    std::string_view command_label);
+  // Accepts the saved revision as failed for `error`, found before any graph
+  // work (a plugin that could not be scanned). The old graph keeps playing.
+  [[nodiscard]] foundation::Result<void> reject_edit(const project::AppliedRevision& applied,
+                                                     std::string_view command_label,
+                                                     foundation::Error error);
+  // Capture accepts the saved revision but does not request a callback hold.
+  // Only unchanged graphs with audio clip edits (placement, trim, fades,
+  // saved warp/pitch processing) or one exact native-synth engine switch are
+  // eligible. Sources and track layout stay fixed. Preparation runs off the UI/audio threads,
+  // then verifies exact held-sample readiness before requesting a hold.
+  [[nodiscard]] foundation::Result<RoutedSourcePreparationCapture>
+  capture_source_edit(const project::AppliedRevision& applied, std::string_view command_label);
+  [[nodiscard]] foundation::Result<void>
+  request_captured_source_hold(const RoutedSourcePreparationCapture& capture);
+  // Source-only, no-hold publication for one managed dry WAV clip move/trim.
+  // Caller stages a separately prepared exact candidate before offering it.
+  [[nodiscard]] foundation::Result<void>
+  publish_captured_source_overlay(const RoutedSourcePreparationCapture& capture);
+  [[nodiscard]] foundation::Result<void>
+  fail_captured_source_edit(const RoutedSourcePreparationCapture& capture, foundation::Error error);
+  [[nodiscard]] bool can_capture_source_edit(const project::Snapshot& candidate) const;
+  [[nodiscard]] foundation::Result<void> publish_held();
+  // Caller has staged a revision-matched, exact-boundary-ready source bank.
+  [[nodiscard]] foundation::Result<void> publish_held_with_source();
+  [[nodiscard]] foundation::Result<void> cancel_captured_source_hold(foundation::Error error);
+  [[nodiscard]] foundation::Result<void> retry();
+  void observe();
+
+  [[nodiscard]] RevisionStatus status() const { return revisions_.snapshot(); }
+  // Control thread only. Accepts the initial, never-rendered pending graph so
+  // dedicated JACK export can preflight before opening a device. Refuses a
+  // stale model, graph transition, live edit, unbounded source or processor.
+  [[nodiscard]] foundation::Result<PreparedRouteTailReceipt>
+  prepared_route_tail_receipt(std::uint64_t expected_revision,
+                              std::optional<std::uint64_t> export_end = std::nullopt) const;
+  // Runtime fault is separate from graph-build application status: the graph
+  // remains active, while the plugin adapter mutes its own failed route.
+  [[nodiscard]] std::optional<foundation::Error> processor_fault() const;
+  [[nodiscard]] std::optional<foundation::Error> processor_fault(project::TrackId track) const;
+  [[nodiscard]] std::span<const routing::ProjectRouteSource> source_layout() const noexcept {
+    return sources_;
+  }
+  // First track whose instrument source was prepared, if any.
+  // Use the exact track predicate when a project has multiple sources.
+  [[nodiscard]] std::optional<project::TrackId> bound_instrument_track() const noexcept;
+  // Control side only: this exact saved source owns a prepared graph path.
+  [[nodiscard]] bool has_bound_instrument_track(project::TrackId track) const noexcept;
+  // Control-thread lookup for the exact saved effect in the callback-accepted
+  // graph. A pending/failed model edit, held graph, retired slot, instrument
+  // source, or mismatched owner/slot/plugin/revision has no binding.
+  [[nodiscard]] std::optional<ActiveVst3EffectManualEvents>
+  active_vst3_effect_manual_events(project::TrackId track, project::InsertSlotId insert,
+                                   project::PluginInstanceId plugin,
+                                   std::uint64_t graph_revision) const;
+  // The saved instrument source must still match the callback-accepted graph.
+  // A provider exposes this binding only after independent fixed-latency
+  // qualification; an unqualified, held or retired slot has no binding.
+  [[nodiscard]] std::optional<ActiveVst3InstrumentManualEvents>
+  active_vst3_instrument_manual_events(project::TrackId track, project::PluginInstanceId plugin,
+                                       std::uint64_t graph_revision) const;
+  // Preview-only access while one exact manual revision awaits its callback
+  // receipt. A later gesture may be heard after that commit, but cannot save
+  // or claim a live revision until the first receipt is settled.
+  [[nodiscard]] std::optional<PendingVst3ManualPreviewEvents>
+  pending_vst3_manual_preview_events(project::TrackId track,
+                                     std::optional<project::InsertSlotId> insert,
+                                     project::PluginInstanceId plugin) const;
+  // Adopts one saved manual VST3 parameter revision for an active, qualified
+  // effect or instrument source without rebuilding topology. The candidate must
+  // be the model's current snapshot, the audible state must match the previous
+  // saved revision, and the only change must be that plugin's opaque component
+  // state and parameter references. The expected identity must be the plugin's
+  // slot in the active topology. Call before submitting the event. The same
+  // runtime, slot, DSP history and latency stay active; status stays pending
+  // and later edits are refused until settle_vst3_manual_edit.
+  // The same audible-state and identity checks, before the project is saved.
+  [[nodiscard]] foundation::Result<void>
+  preflight_vst3_manual_edit(project::PluginInstanceId plugin,
+                             plugins::Vst3ActiveGraphIdentity expected) const;
+  [[nodiscard]] foundation::Result<void>
+  begin_vst3_manual_edit(const project::AppliedRevision& applied, std::string_view command_label,
+                         project::PluginInstanceId plugin,
+                         plugins::Vst3ActiveGraphIdentity expected);
+  // Reports the slot's terminal receipt for the pending manual revision. An
+  // applied receipt advances the audible revision and the active saved plugin.
+  // A failed receipt keeps the prior audible revision and runtime, marks the
+  // saved revision failed and leaves the plugin without a manual binding until
+  // a fresh preparation, because audible and saved parameters now differ.
+  [[nodiscard]] foundation::Result<void>
+  settle_vst3_manual_edit(plugins::Vst3ManualEventReceipt receipt);
+  [[nodiscard]] bool vst3_manual_edit_pending() const noexcept {
+    return pending_manual_.has_value();
+  }
+  // Callback-accepted topology revision. It identifies retained runtimes and
+  // manual slots; audible saved state (status()) may be newer after live
+  // parameter adoption.
+  [[nodiscard]] std::uint64_t active_topology_revision() const noexcept {
+    return publisher_.active_revision();
+  }
+  // Control-side read of the newest telemetry frame of the built-in effect
+  // running for `insert` on `track`'s chain (or the master's). The stage is
+  // found by its slot identity, so a live value edit keeps it readable.
+  // False when no prepared stage holds that slot.
+  [[nodiscard]] bool active_effect_telemetry(std::optional<project::TrackId> track,
+                                             project::InsertSlotId insert,
+                                             std::vector<float>& frame);
+  // Control side, live monitoring of a built-in effect's sidechain key: hear
+  // it in place of the effect's output, and read its held peak. False or
+  // empty when no prepared stage holds that slot.
+  [[nodiscard]] bool set_active_effect_key_listen(project::TrackId track,
+                                                  project::InsertSlotId insert,
+                                                  bool listen) noexcept;
+  [[nodiscard]] std::optional<float>
+  active_effect_key_peak(project::TrackId track, project::InsertSlotId insert) const noexcept;
+  // Control-side post-fader meter of the track's node in the callback-accepted
+  // graph. A track absent from that graph, or before its first complete
+  // window, has no reading. Node IDs are stable per track for this control.
+  [[nodiscard]] std::optional<engine::RoutedNodeMeterReading>
+  active_track_meter(project::TrackId track) const noexcept;
+  // A channel's level and pan (the master's when `track` is empty), or a
+  // send's gain, mid-gesture: heard from the next block, without a saved
+  // revision. The gesture's release saves the value as an ordinary edit,
+  // which then changes nothing audible. False when the channel or send is
+  // not in the playing graph or the mailbox is full.
+  [[nodiscard]] bool set_live_channel(std::optional<project::TrackId> track, double level,
+                                      double pan) noexcept;
+  [[nodiscard]] bool set_live_send(project::TrackId track, project::SendId send,
+                                   double gain) noexcept;
+  // A built-in synth's or effect's panel values mid-drag, in its engine's
+  // table order: offered to the running instance with no saved revision,
+  // gliding as panel jumps do. False when no running instance of that
+  // engine plays the track or slot, the mailbox is full, or (for an effect)
+  // the values would change its latency, which needs the saved edit.
+  [[nodiscard]] bool set_live_synth_values(project::TrackId track,
+                                           const native_dsp::synth::EngineDescriptor& engine,
+                                           std::span<const double> values) noexcept;
+  // A note played live on a track's built-in synth, heard through the
+  // track's chain, sends and the master. False when no synth plays the
+  // track or its inbox is full.
+  [[nodiscard]] bool live_note(project::TrackId track, std::uint8_t key, std::uint8_t velocity,
+                               bool on) noexcept;
+  [[nodiscard]] bool set_live_effect_values(std::optional<project::TrackId> track,
+                                            project::InsertSlotId slot,
+                                            const native_dsp::synth::EngineDescriptor& engine,
+                                            std::span<const double> values) noexcept;
+  [[nodiscard]] std::span<const engine::RoutingNodeId> topological_order() const noexcept {
+    return topological_order_;
+  }
+  [[nodiscard]] std::size_t max_frames() const noexcept { return limits_.max_frames; }
+  // Prepared total route and terminal master latency. The engine stream emits project sample
+  // N at stream frame N + this many frames, before additional device latency.
+  // This is not an edge PDC budget. Stop owners must account for its tail.
+  [[nodiscard]] std::uint32_t master_output_latency_frames() const noexcept {
+    return master_output_latency_frames_;
+  }
+  // Stop drains this exact prepared graph offset when it contains a built-in
+  // lookahead stage (a limiter). A failed saved removal cannot change the
+  // runtime Stop contract.
+  [[nodiscard]] std::optional<std::uint32_t> prepared_limiter_drain_frames() const noexcept {
+    if (!prepared_limiter_)
+      return std::nullopt;
+    return master_output_latency_frames_;
+  }
+  // Control-side preparation may use only this exact accepted snapshot.
+  [[nodiscard]] std::shared_ptr<const project::Snapshot> current_snapshot() const noexcept {
+    return model_.snapshot();
+  }
+  [[nodiscard]] std::optional<engine::BlockContext> held_boundary() const noexcept {
+    return publisher_.held_boundary();
+  }
+  // Control sequencer only. A transport restart cannot cross a graph hold or
+  // pending publication because its boundary belongs to the old generation.
+  [[nodiscard]] bool graph_handoff_in_progress() const noexcept {
+    return awaiting_ != nullptr || publisher_.has_pending() ||
+           publisher_.held_boundary().has_value() || pending_manual_.has_value();
+  }
+  // Control side. Off, every structural edit takes the held path (a silent
+  // block while the new graph is prepared), as before live switching.
+  void set_live_switching(bool enabled) noexcept { live_switching_ = enabled; }
+  [[nodiscard]] engine::RoutedRenderStatus
+  render_block(std::span<const std::span<const engine::StereoFrame>> sources,
+               std::span<engine::StereoFrame> output, engine::BlockContext context) noexcept {
+    return publisher_.render_block(sources, output, context);
+  }
+  [[nodiscard]] engine::RoutedRenderStatus
+  render_block(std::span<const std::span<const engine::StereoFrame>> sources,
+               std::span<engine::StereoFrame> output, engine::BlockContext context,
+               engine::RoutedSourceFill source_fill,
+               engine::AudioWorkerPool* workers = nullptr) noexcept {
+    return publisher_.render_block(sources, output, context, source_fill, workers);
+  }
+
+private:
+  // Set while build_and_publish() prepares a live (unheld) switch.
+  bool publish_live_ = false;
+  bool live_switching_ = true;
+  [[nodiscard]] native_inserts::NativeEffectStage*
+  active_effect_stage(std::optional<project::TrackId> track,
+                      project::InsertSlotId insert) const noexcept;
+  // A running VST3 stage's host record (ADR-0050).
+  struct Vst3Stage {
+    // Absent on the master.
+    std::optional<project::TrackId> track;
+    // Absent for the track's instrument.
+    std::optional<project::InsertSlotId> slot;
+    project::Vst3PluginInstance saved;
+    PreparedTrackInsert prepared;
+  };
+  // A track's running chain or, with no track, the master's (ADR-0050).
+  struct ActiveChain {
+    std::optional<project::TrackId> track;
+    std::optional<project::InsertSlotId> sidechain_target;
+    track_chain::PreparedChain chain;
+  };
+  [[nodiscard]] const ActiveChain* active_chain(std::optional<project::TrackId> track) const;
+  [[nodiscard]] ActiveChain* active_chain(std::optional<project::TrackId> track);
+  // The running stage for `insert` on `track`'s chain (or the master's).
+  [[nodiscard]] track_chain::Stage* active_stage(std::optional<project::TrackId> track,
+                                                 project::InsertSlotId insert);
+  // A linked effect group's edit: one revision offered to a stage on each
+  // of several chains (ADR-0058).
+  struct PendingGroupStage {
+    project::TrackId track;
+    project::InsertSlotId slot;
+    native_inserts::NativeEffectStage* stage = nullptr;
+  };
+  struct PendingNativeRevision {
+    std::variant<native_dsp::synth::NativeSynthRuntime*, native_dsp::synth::NativeSynthPlayer*,
+                 native_inserts::NativeEffectStage*>
+        runtime;
+    std::optional<project::TrackId> track;
+    std::vector<project::EffectInsert> effects;
+    std::shared_ptr<const project::Snapshot> snapshot;
+    // Non-empty for a group edit: every stage offered, acknowledged when
+    // all have applied the revision (runtime and track are the first).
+    std::vector<PendingGroupStage> group;
+  };
+  struct PendingManualRevision {
+    std::shared_ptr<const project::Snapshot> snapshot;
+    project::PluginInstanceId plugin;
+    plugins::Vst3ActiveGraphIdentity identity;
+  };
+  // The VST3 stage ready for a manual edit, when audible state equals the
+  // tracker's saved revision and the slot identity matches.
+  [[nodiscard]] foundation::Result<const Vst3Stage*>
+  manual_slot_ready(project::PluginInstanceId plugin,
+                    plugins::Vst3ActiveGraphIdentity expected) const;
+  [[nodiscard]] bool published_snapshot_audible() const;
+  [[nodiscard]] foundation::Result<void> begin_current();
+  [[nodiscard]] foundation::Result<bool>
+  try_queue_live_native(std::shared_ptr<const project::Snapshot> snapshot);
+  [[nodiscard]] foundation::Result<bool>
+  try_queue_live_effect_group(std::shared_ptr<const project::Snapshot> snapshot);
+  [[nodiscard]] foundation::Result<bool>
+  try_queue_live_master_native(std::shared_ptr<const project::Snapshot> snapshot);
+  [[nodiscard]] foundation::Result<bool>
+  try_queue_live_synth(std::shared_ptr<const project::Snapshot> snapshot);
+  [[nodiscard]] foundation::Result<bool>
+  try_queue_live_synth_automation(std::shared_ptr<const project::Snapshot> snapshot);
+  [[nodiscard]] foundation::Result<bool>
+  try_queue_live_note_effects(std::shared_ptr<const project::Snapshot> snapshot);
+  // An isolated lane edit on one built-in effect slot, offered to its running
+  // stage without a rebuild (ADR-0043).
+  [[nodiscard]] foundation::Result<bool>
+  try_queue_live_effect_automation(std::shared_ptr<const project::Snapshot> snapshot);
+  [[nodiscard]] foundation::Result<void>
+  build_and_publish(std::shared_ptr<const project::Snapshot> prepared_snapshot);
+  // Kick & Bass Lock (ADR-0072): every live synth re-reads the notes it
+  // follows from the published snapshot, so a bass edit or the other
+  // track's Lock switch reaches a kept player; and hears its key. Control
+  // only.
+  void refresh_synth_locks();
+  [[nodiscard]] foundation::Result<void> fail(std::uint64_t revision, foundation::Error error);
+
+  project::ProjectModel& model_;
+  engine::RoutedMixerLimits limits_;
+  routing::ProjectRouteIdRegistry registry_;
+  TrackInsertProvider* inserts_;
+  LiveConvolutionAdmission convolution_;
+  std::shared_ptr<native_dsp::ConvolutionRuntime> live_convolution_;
+  // Every running track chain and the master's. A chain edit switches only
+  // the chains it changes, keeping each unchanged running stage; a built-in
+  // effect's value edit reaches its running stage through a block mailbox.
+  std::vector<ActiveChain> active_chains_;
+  std::vector<Vst3Stage> vst3_stages_;
+  std::vector<std::pair<project::Vst3ParameterTarget, std::uint64_t>> active_vst3_automation_;
+  engine::RoutedMixerPublisher publisher_;
+  RevisionTracker revisions_;
+  std::shared_ptr<const project::Snapshot> source_snapshot_;
+  std::shared_ptr<const project::Snapshot> published_snapshot_;
+  std::optional<PendingNativeRevision> pending_native_revision_;
+  std::optional<PendingManualRevision> pending_manual_;
+  RoutedAudioSource* live_source_ = nullptr;
+  bool retry_live_after_ack_ = false;
+  std::uint32_t master_output_latency_frames_ = 0;
+  bool prepared_limiter_ = false;
+  std::shared_ptr<const project::Snapshot> awaiting_;
+  std::shared_ptr<const project::Snapshot> preparing_source_;
+  bool awaiting_source_replacement_ = false;
+  std::vector<routing::ProjectRouteSource> sources_;
+  std::vector<engine::RoutingNodeId> topological_order_;
+  std::optional<routing::ProjectRoutePlan> initial_route_plan_;
+  std::optional<routing::ProjectRoutePlan> published_route_plan_;
+  std::uint64_t initial_route_revision_ = 0;
+};
+
+} // namespace oscillate::application
