@@ -1242,7 +1242,14 @@ Rectangle {
         dimTextColor: roll.dimTextColor
         accentColor: roll.accentColor
         amberColor: roll.amberColor
-        onNoteSelected: noteId => roll.selectedNoteId = noteId
+        // An unselected stem's note becomes the selection; a stem already in
+        // the selection keeps it and just becomes the focused note.
+        onNoteSelected: noteId => {
+            if (roll.isSelected(noteId))
+                roll.selectedNoteId = noteId
+            else
+                roll.selectOnly(noteId)
+        }
     }
     PianoRollTools {
         id: toolsPanel

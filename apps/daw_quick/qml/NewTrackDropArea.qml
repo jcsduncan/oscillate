@@ -18,13 +18,18 @@ DropArea {
     property var instrumentTargetAt: null
     signal instrumentDropped(int entryIndex, string classId)
     readonly property string instrumentFormat: "application/x-oscillate-vst3-instrument"
+    readonly property string browserCardFormat: "application/x-oscillate-device"
 
     onEntered: function(drag) {
-        drag.accepted = drag.hasUrls && drag.urls.length > 0
-            || drag.formats.indexOf(instrumentFormat) !== -1
+        // A browser card (even one that also carries a VST3 instrument) is
+        // left to the device targets below.
+        drag.accepted = drag.formats.indexOf(browserCardFormat) === -1
+            && (drag.hasUrls && drag.urls.length > 0 || drag.formats.indexOf(instrumentFormat) !== -1)
     }
     onDropped: function(drop) {
-        if (drop.formats.indexOf(instrumentFormat) !== -1) {
+        if (drop.formats.indexOf(browserCardFormat) !== -1) {
+            drop.accepted = false
+        } else if (drop.formats.indexOf(instrumentFormat) !== -1) {
             try {
                 const choice = JSON.parse(drop.getDataAsString(instrumentFormat))
                 if (Number.isInteger(choice.index) && typeof choice.classId === "string") {
@@ -37,15 +42,17 @@ DropArea {
                 drop.accepted = false
             }
         } else if (drop.hasUrls && drop.urls.length > 0) {
-            const source = drop.urls[0]
-            const midi = /\.(mid|midi|smf)$/i.test(String(source))
-            const target = midi && instrumentTargetAt ? instrumentTargetAt(area, drop.x, drop.y) : null
-            if (target)
-                midiDroppedOnTrack(source, target.trackId, target.bar)
-            else if (midi)
-                midiDropped(source)
-            else
-                audioDropped(source)
+            // Every file in the drop, each as its own track or clip.
+            for (const source of drop.urls) {
+                const midi = /\.(mid|midi|smf)$/i.test(String(source))
+                const target = midi && instrumentTargetAt ? instrumentTargetAt(area, drop.x, drop.y) : null
+                if (target)
+                    midiDroppedOnTrack(source, target.trackId, target.bar)
+                else if (midi)
+                    midiDropped(source)
+                else
+                    audioDropped(source)
+            }
             drop.acceptProposedAction()
         }
     }

@@ -83,7 +83,11 @@ Rectangle {
     // Selected elsewhere (a clip, the mixer): that track alone again.
     onSelectedTrackChanged: {
         const id = trackIdAt(selectedTrack)
-        if (id !== "" && !selectedTrackIds.includes(id)) {
+        if (id === "") {
+            // No track selected (master or none): no rows stay highlighted.
+            selectedTrackIds = []
+            selectionAnchor = -1
+        } else if (!selectedTrackIds.includes(id)) {
             selectedTrackIds = [id]
             selectionAnchor = selectedTrack
         }
@@ -1474,10 +1478,11 @@ Rectangle {
         Accessible.name: track ? track.name + " track actions" : "Track actions"
         onVisibleChanged: current = 0
         Keys.onEscapePressed: visible = false
-        Keys.onUpPressed: current = (current + entries.length - 1) % entries.length
-        Keys.onDownPressed: current = (current + 1) % entries.length
-        Keys.onReturnPressed: activate(entries[current].action)
-        Keys.onSpacePressed: activate(entries[current].action)
+        // An empty menu (every chosen track a bus) has nothing to move to or run.
+        Keys.onUpPressed: if (entries.length > 0) current = (current + entries.length - 1) % entries.length
+        Keys.onDownPressed: if (entries.length > 0) current = (current + 1) % entries.length
+        Keys.onReturnPressed: if (entries.length > 0) activate(entries[current].action)
+        Keys.onSpacePressed: if (entries.length > 0) activate(entries[current].action)
         onActiveFocusChanged: if (!activeFocus) visible = false
         Text {
             x: Theme.spaceLg

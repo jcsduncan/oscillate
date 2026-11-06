@@ -200,7 +200,7 @@ Item {
             text: "0.50"
             color: routing.textMain
             font.pixelSize: Theme.typeSmall
-            validator: DoubleValidator { bottom: 0; top: 4; decimals: 2 }
+            validator: DoubleValidator { bottom: 0; top: 4; decimals: 2; locale: "C" }
             activeFocusOnTab: true
             Accessible.name: "New send gain, 0 to 4"
         }
@@ -278,7 +278,7 @@ Item {
                     text: Number(sendRow.modelData.gain).toFixed(2)
                     color: routing.textMain
                     font.pixelSize: Theme.typeSmall
-                    validator: DoubleValidator { bottom: 0; top: 4; decimals: 2 }
+                    validator: DoubleValidator { bottom: 0; top: 4; decimals: 2; locale: "C" }
                     activeFocusOnTab: true
                     Accessible.name: "Gain to " + sendRow.modelData.destinationName
                     onEditingFinished: {
