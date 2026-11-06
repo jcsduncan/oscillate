@@ -145,16 +145,16 @@ void check_chord(const Take& take) {
   std::vector<double> levels;
   std::vector<bool> real(take.notes.size(), false);
   for (const double cents : chord_cents) {
-    bool found = false;
+    std::size_t found = 0;
     for (std::size_t i = 0; i < take.notes.size(); ++i) {
       const auto& n = take.notes[i];
       if (std::abs(n.centre - cents) <= chord_tolerance_cents && seconds(n.end - n.start) > 0.8) {
-        found = true;
+        ++found;
         real[i] = true;
         levels.push_back(n.mean_amplitude());
       }
     }
-    require(found, "chord note " + std::to_string(cents) + " not found");
+    REQUIRE_EQ(found, 1, "chord note " + std::to_string(cents) + " not found exactly once");
   }
   std::ranges::sort(levels);
   const double reference = levels[levels.size() / 2];
@@ -738,7 +738,7 @@ void join_keeps_a_nested_notes_tail() {
   const std::array<double, 1> centres{6'000.0};
   const std::array<double, 1> levels{0.1};
   auto take = toy_take(centres, levels);
-  const auto& outer = take.notes.front();
+  const Note outer = take.notes.front();
   REQUIRE_GT(outer.hops(), nested_from + nested_hops + 1, "nested fixture too short");
   Note inner = outer;
   inner.id = take.next_id++;

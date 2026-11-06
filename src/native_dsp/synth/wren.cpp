@@ -352,14 +352,23 @@ public:
     last_velocity_ = decision.velocity;
     last_tongue_ = static_cast<int>(decision.tongue);
     last_staccato_ = decision.staccato;
-    last_vibrato_ = decision.vibrato > 0.0;
+    last_vibrato_ = play.vibrato > 0.0;
     last_grace_ = false;
     ++notes_;
 
+    // A grace queues up to a staccato stop, its own stop and the note.
+    constexpr std::size_t grace_queue_entries = 3;
+    const bool graced = decision.grace && pending_count_ + grace_queue_entries <= max_pending;
+    const auto grace_frames =
+        graced ? static_cast<std::uint64_t>(std::llround(decision.grace_ms * rate_ / ms_per_second))
+               : std::uint64_t{0};
     if (forced_staccato()) {
-      // Every note short: held a third of a beat at most.
-      const auto hold = static_cast<std::uint64_t>(
-          std::llround(breath::staccato_beats / std::max(per_frame, min_beats_per_frame)));
+      // Every note short: held a third of a beat at most, and stopped only
+      // after a grace hands over, so the main note always gets its stop.
+      const auto hold = std::max<std::uint64_t>(
+          static_cast<std::uint64_t>(
+              std::llround(breath::staccato_beats / std::max(per_frame, min_beats_per_frame))),
+          graced ? grace_frames + 1 : 0);
       if (event.frames == 0 || event.frames > hold) {
         start.length_frames = static_cast<double>(hold);
         Pending stop;
@@ -370,16 +379,23 @@ public:
       }
     }
     const int grace_key = event.key + decision.grace_step;
-    if (decision.grace && pending_count_ < max_pending) {
+    if (graced) {
       // The grace on the beat, then the note slurred from it.
-      const auto grace_frames =
-          static_cast<std::uint64_t>(std::llround(decision.grace_ms * rate_ / ms_per_second));
       Start grace = start;
       grace.key = grace_key;
       grace.decision.vibrato = 0.0;
       grace.decision.swell_db = 0.0;
       grace.length_frames = static_cast<double>(grace_frames);
       begin(grace);
+      if (poly_) {
+        // Poly 4 does not slur, so the grace ends where the note begins
+        // (queued first, it stops before the note starts on that frame).
+        Pending grace_stop;
+        grace_stop.frame = clock_ + grace_frames;
+        grace_stop.start = false;
+        grace_stop.note = grace;
+        (void)enqueue(grace_stop);
+      }
       Pending main;
       main.frame = clock_ + grace_frames;
       main.note = start;

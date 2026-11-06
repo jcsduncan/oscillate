@@ -244,7 +244,42 @@ private:
     declick_.capture(voice.last_left, voice.last_right);
   }
 
-  // Envelope rates and filters from the current panel values.
+  // A pad's body pitches from the current Tune and Tone: the sweep's start
+  // and end, and the snare's second body. Pads without a body read zero.
+  struct BodyTuning {
+    double start = 0.0;
+    double end = 0.0;
+    double second = 0.0;
+  };
+  [[nodiscard]] BodyTuning body_tuning(std::size_t pad) const noexcept {
+    const double scale = tune_scale(pad);
+    const double tone = value(pad, p::tone);
+    switch (pad) {
+    case kick: {
+      const double end = 50.0 * scale;
+      return {end * (1.0 + 6.0 * tone), end, 0.0};
+    }
+    case kick2: {
+      const double end = 55.0 * scale;
+      return {end * (1.0 + 10.0 * tone), end, 0.0};
+    }
+    case snare:
+      return {185.0 * scale * 1.3, 185.0 * scale, 330.0 * scale};
+    case rim:
+      return {1'650.0 * scale, 1'650.0 * scale, 0.0};
+    case tom_low:
+    case tom_mid:
+    case tom_high: {
+      const double base = pad == tom_low ? 90.0 : (pad == tom_mid ? 135.0 : 200.0);
+      return {base * scale * (1.0 + 0.8 * tone), base * scale, 0.0};
+    }
+    default:
+      return {};
+    }
+  }
+
+  // Envelope rates and filters from the current panel values; on a ringing
+  // pad its body follows Tune and Tone and a clap's tail follows Decay.
   void update_pad(std::size_t pad, Voice& voice) noexcept {
     const double decay = value(pad, p::decay);
     const double tone = value(pad, p::tone);
@@ -253,6 +288,13 @@ private:
     const double bright = 1.0 + 0.4 * value(pad, p::velocity) * (voice.velocity - 0.7);
     if (!voice.choked) {
       voice.amp_coefficient = decay_coefficient(decay, rate_);
+      if (pad == clap)
+        voice.burst.set_tail(decay);
+    }
+    if (const auto tuning = body_tuning(pad); tuning.end > 0.0) {
+      voice.body.retune(tuning.start, tuning.end);
+      if (pad == snare)
+        voice.body2.retune(tuning.second, tuning.second);
     }
     switch (pad) {
     case snare:
@@ -323,25 +365,20 @@ private:
     // Noise is seeded by pad and hit since the last reset: deterministic.
     voice.noise.reset(static_cast<std::uint32_t>(pad * 7'919U + voice.hits * 104'729U + 1U));
     ++voice.hits;
-    const double scale = tune_scale(pad);
-    const double tone = value(pad, p::tone);
+    const auto tuning = body_tuning(pad);
     switch (pad) {
-    case kick: {
-      const double end = 50.0 * scale;
-      voice.body.trigger(end * (1.0 + 6.0 * tone), end, 0.03);
+    case kick:
+      voice.body.trigger(tuning.start, tuning.end, 0.03);
       break;
-    }
-    case kick2: {
-      const double end = 55.0 * scale;
-      voice.body.trigger(end * (1.0 + 10.0 * tone), end, 0.012);
+    case kick2:
+      voice.body.trigger(tuning.start, tuning.end, 0.012);
       break;
-    }
     case snare:
-      voice.body.trigger(185.0 * scale * 1.3, 185.0 * scale, 0.01);
-      voice.body2.trigger(330.0 * scale, 330.0 * scale, 0.01);
+      voice.body.trigger(tuning.start, tuning.end, 0.01);
+      voice.body2.trigger(tuning.second, tuning.second, 0.01);
       break;
     case rim:
-      voice.body.trigger(1'650.0 * scale, 1'650.0 * scale, 0.01);
+      voice.body.trigger(tuning.start, tuning.end, 0.01);
       break;
     case clap:
       // Bursts 5-11 ms apart (8 ms at the default character), as on the
@@ -350,11 +387,9 @@ private:
       break;
     case tom_low:
     case tom_mid:
-    case tom_high: {
-      const double base = pad == tom_low ? 90.0 : (pad == tom_mid ? 135.0 : 200.0);
-      voice.body.trigger(base * scale * (1.0 + 0.8 * tone), base * scale, 0.06);
+    case tom_high:
+      voice.body.trigger(tuning.start, tuning.end, 0.06);
       break;
-    }
     case cowbell:
       voice.bell[0].reset(0.0, Waveform::pulse, 0.5);
       voice.bell[1].reset(0.0, Waveform::pulse, 0.5);

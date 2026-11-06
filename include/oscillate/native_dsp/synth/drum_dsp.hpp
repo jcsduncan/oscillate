@@ -28,7 +28,18 @@ public:
     phase_ = 0.0;
     end_ = end_hz;
     excess_ = std::max(0.0, start_hz - end_hz);
+    initial_excess_ = excess_;
     sweep_ = std::exp(-1.0 / std::max(1.0, sweep_seconds * rate_));
+  }
+  // Moves a sounding body to a new tuning without restarting it: the phase
+  // runs on and the sweep keeps the share of its excess it has left.
+  void retune(double start_hz, double end_hz) noexcept {
+    if (end_hz == end_ && std::max(0.0, start_hz - end_hz) == initial_excess_)
+      return;
+    const double left = initial_excess_ > 0.0 ? excess_ / initial_excess_ : 0.0;
+    end_ = end_hz;
+    initial_excess_ = std::max(0.0, start_hz - end_hz);
+    excess_ = initial_excess_ * left;
   }
   [[nodiscard]] double frequency() const noexcept { return end_ + excess_; }
   [[nodiscard]] double next() noexcept {
@@ -44,6 +55,7 @@ private:
   double phase_ = 0.0;
   double end_ = 50.0;
   double excess_ = 0.0;
+  double initial_excess_ = 0.0;
   double sweep_ = 0.999;
 };
 
@@ -128,6 +140,8 @@ public:
     return level;
   }
   [[nodiscard]] bool active() const noexcept { return active_; }
+  // A new tail decay for a sounding clap; the bursts keep their timing.
+  void set_tail(double tail_seconds) noexcept { tail_ = decay_coefficient(tail_seconds, rate_); }
 
 private:
   double rate_ = 48'000.0;

@@ -23,6 +23,9 @@ set(OSCILLATE_CLAY_DSP_CASES
   macros_to_midi
   macros_harmonise_and_fit_to_key
   macros_follow_notes
+  macros_stay_within_edit_bounds
+  macros_to_midi_routes_bends_by_voice
+  join_keeps_a_nested_notes_tail
 )
 foreach(case IN LISTS OSCILLATE_CLAY_DSP_CASES)
   oscillate_add_test(NAME clay_dsp.${case} COMMAND oscillate_clay_dsp_tests ${case})

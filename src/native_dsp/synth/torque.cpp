@@ -197,10 +197,7 @@ public:
       lfo_value_ = lfo_.next(rate / control_rate_);
     }
     read_pattern();
-    if (v[p::seq_on] == 0.0 && sequencer_.running()) {
-      sequencer_.stop();
-      release();
-    }
+    reconcile_sequencer(v[p::seq_on] != 0.0);
     const double steps_per_beat =
         torque_table::seq_steps_per_beat[static_cast<std::size_t>(v[p::seq_rate])];
     sequencer_.set_timing(1.0 / (beats_per_frame_ * steps_per_beat), v[p::seq_swing],
@@ -225,6 +222,26 @@ public:
     const double level = v[p::out_level] <= -59.9 ? 0.0 : std::pow(10.0, v[p::out_level] / 20.0);
     out_gain_.to(level, ramp, !primed_);
     primed_ = true;
+  }
+
+  // Brings the voice in line with the sequencer switch while notes are held:
+  // switched on, the pattern starts rooted on the newest held note; switched
+  // off, the pattern stops and the newest held note plays on its own.
+  void reconcile_sequencer(bool on) noexcept {
+    if (on && !sequencer_.running() && stack_size_ > 0) {
+      root_ = stack_[stack_size_ - 1].key;
+      release();
+      sequencer_.start();
+    } else if (!on && sequencer_.running()) {
+      sequencer_.stop();
+      if (stack_size_ > 0) {
+        const auto& newest = stack_[stack_size_ - 1];
+        trigger(newest.key, newest.velocity >= values_[p::accent_threshold]);
+        sounding_ = newest;
+      } else {
+        release();
+      }
+    }
   }
 
   void note_on(const NoteEvent& event) noexcept override {

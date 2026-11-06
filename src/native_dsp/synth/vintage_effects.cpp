@@ -5,15 +5,8 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <numbers>
 
 namespace oscillate::native_dsp::synth {
-namespace {
-
-constexpr double two_pi = 2.0 * std::numbers::pi;
-
-} // namespace
-
 void DelayLine::prepare(std::size_t max_frames) {
   std::size_t size = 8;
   while (size < max_frames + 8) {
@@ -150,19 +143,23 @@ void BbdDelay::reset() noexcept {
 void BbdDelay::set(double seconds, double feedback, double mix, bool ping_pong,
                    std::uint32_t ramp_frames) noexcept {
   seconds = std::clamp(seconds, 0.001, max_seconds);
+  const double routing = ping_pong ? 1.0 : 0.0;
+  if (!primed_) {
+    // The first setting applies at once: no glide from the prepared default.
+    time_.reset(seconds * rate_);
+    feedback_.reset(std::clamp(feedback, 0.0, 0.95));
+    mix_.reset(std::clamp(mix, 0.0, 1.0));
+    ping_pong_.reset(routing);
+    primed_ = true;
+    return;
+  }
   // Time glides over at least 50 ms so a change bends pitch rather than clicks.
   time_.set_target(seconds * rate_,
                    std::max(ramp_frames, static_cast<std::uint32_t>(0.05 * rate_)));
   feedback_.set_target(std::clamp(feedback, 0.0, 0.95), ramp_frames);
   mix_.set_target(std::clamp(mix, 0.0, 1.0), ramp_frames);
-  const double routing = ping_pong ? 1.0 : 0.0;
-  if (!primed_) {
-    ping_pong_.reset(routing);
-    primed_ = true;
-  } else {
-    ping_pong_.set_target(
-        routing, std::max(ramp_frames, static_cast<std::uint32_t>(ping_pong_seconds * rate_)));
-  }
+  ping_pong_.set_target(
+      routing, std::max(ramp_frames, static_cast<std::uint32_t>(ping_pong_seconds * rate_)));
 }
 
 StereoOut BbdDelay::process(double left, double right) noexcept {
@@ -199,6 +196,7 @@ StereoOut BbdDelay::process(double left, double right) noexcept {
   return {left + mix * tone_left_, right + mix * tone_right_};
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 double BbdDelay::tail_seconds(double seconds, double feedback) noexcept {
   feedback = std::clamp(feedback, 0.0, 0.95);
   if (feedback < 1e-6) {

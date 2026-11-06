@@ -64,7 +64,8 @@ void StereoTruePeakMeter::consume(engine::StereoFrame frame) noexcept {
 }
 
 bool StereoTruePeakMeter::process(std::span<const engine::StereoFrame> frames) noexcept {
-  if (sample_rate_ == 0 || finished_ || frames.size() > max_block_frames ||
+  // A moved-from meter keeps its rate but not its interpolators.
+  if (sample_rate_ == 0 || !interpolators_ || finished_ || frames.size() > max_block_frames ||
       frames.size() > std::numeric_limits<std::uint64_t>::max() - reading_.frames) {
     return false;
   }
@@ -86,7 +87,7 @@ bool StereoTruePeakMeter::process(std::span<const engine::StereoFrame> frames) n
 }
 
 bool StereoTruePeakMeter::finish() noexcept {
-  if (sample_rate_ == 0) {
+  if (sample_rate_ == 0 || !interpolators_) {
     return false;
   }
   if (!finished_) {

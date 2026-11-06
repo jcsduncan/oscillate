@@ -198,6 +198,20 @@ void audio_passes_untouched_and_integrate_restarts() {
              0.1F, "the history ends on the latest short-term reading");
 }
 
+// A moved-from meter refuses work until it is prepared again.
+void moved_from_true_peak_meter_refuses_work() {
+  constexpr std::uint32_t rate = oscillate::test::sample_rate_48k;
+  oscillate::native_dsp::StereoTruePeakMeter source;
+  require(source.prepare(rate), "the moved meter prepares");
+  const std::vector<engine::StereoFrame> block(1, {0.5F, 0.5F});
+  oscillate::native_dsp::StereoTruePeakMeter moved(std::move(source));
+  require(moved.process(block), "the moved-to meter works");
+  // NOLINTNEXTLINE(bugprone-use-after-move,clang-analyzer-cplusplus.Move): the point of the test
+  require(!source.process(block), "a moved-from meter processed audio");
+  require(!source.finish(), "a moved-from meter finished");
+  require(source.prepare(rate) && source.process(block), "a re-prepared meter works again");
+}
+
 } // namespace
 
 int main() {
@@ -205,6 +219,7 @@ int main() {
     tech_3341_cases();
     tech_3342_cases();
     true_peak_matches_the_project_meter();
+    moved_from_true_peak_meter_refuses_work();
     audio_passes_untouched_and_integrate_restarts();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

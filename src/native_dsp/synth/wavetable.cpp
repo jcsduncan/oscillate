@@ -207,8 +207,8 @@ void noise_spectra(double t, Spectrum& s, std::vector<double>&) {
     double phase[2];
     for (std::uint32_t k = 0; k < 2; ++k) {
       NoiseSource noise;
-      noise.reset(
-          static_cast<std::uint32_t>(h * noise_harmonic_prime + (from + k) * noise_set_prime + 1U));
+      noise.reset(static_cast<std::uint32_t>(h) * noise_harmonic_prime +
+                  (from + k) * noise_set_prime + 1U);
       amplitude[k] = (0.5 + 0.5 * noise.white()) / std::pow(static_cast<double>(h), noise_tilt);
       phase[k] = pi * noise.white();
     }
