@@ -151,7 +151,7 @@ private:
     for (std::size_t i = 0; i < frames; ++i) {
       increment += slope;
       phase += increment;
-      if (phase >= 1.0) {
+      if (phase >= 1.0 || phase < 0.0) { // Negative increments wrap too, as in next().
         phase -= fast_floor(phase);
       }
       const double frame_position = std::clamp(position[i], 0.0, 1.0) * (wavetable_frames - 1);

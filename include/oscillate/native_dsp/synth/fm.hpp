@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 
@@ -37,8 +38,18 @@ public:
   [[nodiscard]] static std::uint32_t to_fixed(double cycles) noexcept {
     return wrap(cycles * fixed_scale);
   }
-  // Already in fixed units (2^-32 cycles), any sign or size.
+  // Magnitude below which a double converts to std::int64_t without overflow.
+  static constexpr double int64_safe_units = 4611686018427387904.0; // 2^62
+  // Already in fixed units (2^-32 cycles), any sign or size. Larger finite
+  // values are reduced modulo one cycle first (exact, so the phase matches the
+  // direct conversion); NaN and infinities read as phase zero.
   [[nodiscard]] static std::uint32_t wrap(double units) noexcept {
+    if (!(std::abs(units) < int64_safe_units)) {
+      if (!std::isfinite(units)) {
+        return 0;
+      }
+      units = std::fmod(units, fixed_scale);
+    }
     return static_cast<std::uint32_t>(static_cast<std::int64_t>(units));
   }
 
