@@ -53,6 +53,10 @@ constexpr double align_search_seconds = 0.006;
 constexpr std::size_t align_points = 64;
 constexpr double align_stride_frames = 4.0;
 constexpr double align_energy_floor = 1e-9;
+// Most offsets one alignment scores at frame steps. A wider search (a fast
+// read) scores a coarse grid of this many, then every frame around the best,
+// so a grain restart costs about the same at any speed.
+constexpr std::int64_t align_max_candidates = 1024;
 // The AHDSR's decay and release land exactly on their ends with this
 // exponential overshoot ratio (modulation.hpp's Adsr at curve 0.5).
 constexpr double envelope_overshoot = 0.1;
@@ -848,9 +852,20 @@ private:
     return static_cast<double>(*s.left_at(frame)) + static_cast<double>(*s.right_at(frame));
   }
 
+  // A position folded into a looping chop's region; others pass through.
+  [[nodiscard]] static double looped(const Voice& voice, double position) noexcept {
+    const double span = voice.hi - voice.lo;
+    if (voice.mode != ChopMode::loop || span <= 0.0)
+      return position;
+    if (position >= voice.lo && position < voice.hi)
+      return position;
+    const double folded = std::fmod(position - voice.lo, span);
+    return voice.lo + (folded < 0.0 ? folded + span : folded);
+  }
+
   // Where a new grain best continues `other` near `target` (WSOLA): the
   // offset whose next few milliseconds correlate best with what `other` is
-  // about to play. Stays inside the chop unless it loops.
+  // about to play. Stays inside the chop; a loop's reads wrap round it.
   [[nodiscard]] double align(const Voice& voice, const Grain& other, double target,
                              double speed) const noexcept {
     if (!other.live)
@@ -859,7 +874,7 @@ private:
     std::array<double, align_points> shape{};
     double shape_energy = 0.0;
     for (std::size_t j = 0; j < align_points; ++j) {
-      shape[j] = mono_at(other.position + static_cast<double>(j) * stride);
+      shape[j] = mono_at(looped(voice, other.position + static_cast<double>(j) * stride));
       shape_energy += shape[j] * shape[j];
     }
     if (shape_energy <= align_energy_floor)
@@ -868,14 +883,15 @@ private:
     double best = target;
     double best_score = 0.0;
     bool found = false;
-    for (std::int64_t k = -radius; k <= radius; ++k) {
-      const double candidate = target + static_cast<double>(k);
+    // Scores one offset; true when it is the best so far.
+    const auto score_at = [&](std::int64_t k) {
+      const double candidate = looped(voice, target + static_cast<double>(k));
       if (voice.mode != ChopMode::loop && (candidate < voice.lo || candidate >= voice.hi))
-        continue;
+        return false;
       double dot = 0.0;
       double energy = 0.0;
       for (std::size_t j = 0; j < align_points; ++j) {
-        const double value = mono_at(candidate + static_cast<double>(j) * stride);
+        const double value = mono_at(looped(voice, candidate + static_cast<double>(j) * stride));
         dot += shape[j] * value;
         energy += value * value;
       }
@@ -884,6 +900,25 @@ private:
         found = true;
         best_score = score;
         best = candidate;
+        return true;
+      }
+      return false;
+    };
+    // Frame steps up to the candidate budget; beyond it a coarse grid, then
+    // every frame within one coarse step of its best.
+    const std::int64_t step =
+        std::max<std::int64_t>(1, (2 * radius + align_max_candidates) / align_max_candidates);
+    std::int64_t best_k = 0;
+    for (std::int64_t k = -radius; k <= radius; k += step) {
+      if (score_at(k))
+        best_k = k;
+    }
+    if (step > 1 && found) {
+      const std::int64_t centre = best_k;
+      for (std::int64_t k = std::max(-radius, centre - step + 1);
+           k <= std::min(radius, centre + step - 1); ++k) {
+        if (k != centre)
+          score_at(k);
       }
     }
     return best;
@@ -906,7 +941,7 @@ private:
         auto& grain = voice.grains[i];
         if (!grain.live)
           continue;
-        grain.position += step;
+        grain.position = looped(voice, grain.position + step);
         if (++grain.age >= grain_frames_) {
           grain.age = 0;
           grain.live = !voice.analysis_done;
