@@ -1,0 +1,13 @@
+<RCC>
+  <qresource prefix="/crate">
+    <file>CrateContract.js</file>
+    <file>CrateEnvelopeView.qml</file>
+    <file>CrateFilterView.qml</file>
+    <file>CrateKnob.qml</file>
+    <file>CratePad.qml</file>
+    <file>CratePanel.qml</file>
+    <file>CrateSegs.qml</file>
+    <file>CrateTheme.qml</file>
+    <file>CrateWaveform.qml</file>
+  </qresource>
+</RCC>

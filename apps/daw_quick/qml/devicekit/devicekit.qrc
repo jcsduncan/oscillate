@@ -1,0 +1,41 @@
+<RCC>
+  <qresource prefix="/devicekit">
+    <file>Card.qml</file>
+    <file>CurveEditor.qml</file>
+    <file>Dropdown.qml</file>
+    <file>EnvelopeView.qml</file>
+    <file>FilterScope.qml</file>
+    <file>FilterView.qml</file>
+    <file>KitTheme.qml</file>
+    <file>Fader.qml</file>
+    <file>Knob.qml</file>
+    <file>MacroMenu.qml</file>
+    <file>MacroPalette.js</file>
+    <file>HoverTip.qml</file>
+    <file>Menu.qml</file>
+    <file>PeakMeter.qml</file>
+    <file>PresetArrow.qml</file>
+    <file>Segment.qml</file>
+    <file>ShellTheme.qml</file>
+    <file>StatusBadge.qml</file>
+    <file>Stepper.qml</file>
+    <file>Switch.qml</file>
+    <file>Tip.qml</file>
+    <file>Toggle.qml</file>
+    <file>Button.qml</file>
+    <file>ChoiceTiles.qml</file>
+    <file>SegmentedControl.qml</file>
+    <file>Slider.qml</file>
+  </qresource>
+  <!-- The shell's motion switch and tooltips (ADR-0059), so panels loaded
+       without the app (panel tests) resolve the kit's "../shell" import. -->
+  <qresource prefix="/shell">
+    <file alias="qmldir">../shell/qmldir</file>
+    <file alias="Motion.qml">../shell/Motion.qml</file>
+    <file alias="Tips.qml">../shell/Tips.qml</file>
+    <file alias="Tip.qml">../shell/Tip.qml</file>
+    <file alias="TipLayer.qml">../shell/TipLayer.qml</file>
+    <file alias="Reveal.qml">../shell/Reveal.qml</file>
+    <file alias="Theme.qml">../shell/Theme.qml</file>
+  </qresource>
+</RCC>

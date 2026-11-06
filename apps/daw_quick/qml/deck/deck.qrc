@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/deck">
+    <file>DeckPanel.qml</file>
+    <file>DeckTheme.qml</file>
+    <file>DeckResponse.qml</file>
+  </qresource>
+</RCC>
