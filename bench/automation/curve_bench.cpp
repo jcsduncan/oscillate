@@ -8,6 +8,14 @@
 #include <memory>
 #include <vector>
 
+namespace {
+// The largest block measured, the sample stride between spans and how many
+// distinct spans the timed loops cycle through.
+constexpr std::size_t max_block_frames = 128;
+constexpr std::int64_t block_stride = 128;
+constexpr int span_count = 512;
+} // namespace
+
 int main() {
   try {
     using namespace oscillate;
@@ -31,17 +39,17 @@ int main() {
       return 1;
     }
 
-    std::array<double, 128> output{};
-    std::array<timeline::TickPosition, 128> ticks{};
+    std::array<double, max_block_frames> output{};
+    std::array<timeline::TickPosition, max_block_frames> ticks{};
     double checksum = 0.0;
     for (std::size_t frames : {64U, 128U}) {
       constexpr int iterations = 20'000;
       for (int warmup = 0; warmup < 100; ++warmup) {
         if (!prepared.value().fill_musical_ticks(
-                timeline::SamplePosition{static_cast<std::int64_t>(warmup) * 128},
+                timeline::SamplePosition{static_cast<std::int64_t>(warmup) * block_stride},
                 {ticks.data(), frames}) ||
             !prepared.value().evaluate_block(
-                timeline::SamplePosition{static_cast<std::int64_t>(warmup) * 128},
+                timeline::SamplePosition{static_cast<std::int64_t>(warmup) * block_stride},
                 {ticks.data(), frames}, {output.data(), frames})) {
           return 1;
         }
@@ -50,7 +58,8 @@ int main() {
       for (int iteration = 0; iteration < iterations; ++iteration) {
         // Repeat the same span to measure evaluator cost, without transport-end effects.
         if (!prepared.value().fill_musical_ticks(
-                timeline::SamplePosition{static_cast<std::int64_t>(iteration % 512) * 128},
+                timeline::SamplePosition{static_cast<std::int64_t>(iteration % span_count) *
+                                         block_stride},
                 {ticks.data(), frames})) {
           return 1;
         }
@@ -59,11 +68,22 @@ int main() {
       const auto elapsed =
           std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - start)
               .count();
+      // Each span's own ticks, filled outside the timed loop, so the curve is
+      // evaluated over the whole range rather than the last span's ticks.
+      std::vector<std::array<timeline::TickPosition, max_block_frames>> span_ticks(span_count);
+      for (std::size_t span = 0; span < span_ticks.size(); ++span) {
+        if (!prepared.value().fill_musical_ticks(
+                timeline::SamplePosition{static_cast<std::int64_t>(span) * block_stride},
+                {span_ticks[span].data(), frames})) {
+          return 1;
+        }
+      }
       const auto evaluate_start = std::chrono::steady_clock::now();
       for (int iteration = 0; iteration < iterations; ++iteration) {
+        const auto span = static_cast<std::size_t>(iteration % span_count);
         if (!prepared.value().evaluate_block(
-                timeline::SamplePosition{static_cast<std::int64_t>(iteration % 512) * 128},
-                {ticks.data(), frames}, {output.data(), frames})) {
+                timeline::SamplePosition{static_cast<std::int64_t>(span) * block_stride},
+                {span_ticks[span].data(), frames}, {output.data(), frames})) {
           return 1;
         }
         checksum += output[static_cast<std::size_t>(iteration) % frames];
