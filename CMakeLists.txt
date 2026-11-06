@@ -51,6 +51,7 @@ endif()
 
 if(BUILD_TESTING)
   if(OSCILLATE_BUILD_FUZZ)
+    add_subdirectory(tests/fuzz)
   endif()
   add_subdirectory(tests/support)
   add_subdirectory(tests/foundation)
