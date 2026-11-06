@@ -360,7 +360,8 @@ struct ProfileBuilder::State {
       short_next += result.short_hop;
     }
     // Drop history no frame still needs, in large steps.
-    const auto keep_from = std::min(fine_next, short_next);
+    // Never past the input's end: a flush can step the hops beyond it.
+    const auto keep_from = std::min<std::uint64_t>({fine_next, short_next, end});
     if (keep_from > history_start && keep_from - history_start >= fine_size) {
       const auto drop = static_cast<std::size_t>(keep_from - history_start);
       history_left.erase(history_left.begin(), history_left.begin() + static_cast<long>(drop));

@@ -204,7 +204,11 @@ std::size_t ChainRuntime::continue_latency_of(engine::ProcessorRuntime* prior,
     return 0;
   const auto index = change->index;
   const auto& held = old->boundaries_[index];
-  const auto count = std::min<std::size_t>({old->latencies_[index], held.recorded, flushed.size()});
+  // After a loop wrap to a low position, history cannot reach before frame 0.
+  const auto count = std::min<std::size_t>(
+      {old->latencies_[index], held.recorded, flushed.size(),
+       static_cast<std::size_t>(std::min<std::uint64_t>(boundary.project_sample_position,
+                                                        std::numeric_limits<std::size_t>::max()))});
   held.copy_newest(flushed.first(count));
   for (std::size_t first = 0; first < count; first += chunk_frames) {
     auto chunk = flushed.subspan(first, std::min(chunk_frames, count - first));
@@ -240,7 +244,10 @@ std::size_t ChainRuntime::prime_frames(std::size_t first, std::size_t last) cons
 void ChainRuntime::replay(std::span<const engine::StereoFrame> older,
                           std::span<const engine::StereoFrame> newer,
                           engine::BlockContext boundary) noexcept {
-  const auto total = std::min(older.size() + newer.size(), prime_frames(0, stages_.size()));
+  const auto total =
+      std::min({older.size() + newer.size(), prime_frames(0, stages_.size()),
+                static_cast<std::size_t>(std::min<std::uint64_t>(
+                    boundary.project_sample_position, std::numeric_limits<std::size_t>::max()))});
   const auto skip = older.size() + newer.size() - total;
   std::array<engine::StereoFrame, chunk_frames> chunk{};
   for (std::size_t done = 0; done < total; done += chunk_frames) {
@@ -259,8 +266,10 @@ void ChainRuntime::prime(std::size_t first, std::size_t last, const Boundary& in
                          engine::BlockContext boundary) noexcept {
   std::array<engine::StereoFrame, chunk_frames> chunk{};
   const auto size = input.frames.size();
-  const auto count = std::min(input.recorded, prime_frames(first, last));
   const auto end = boundary.project_sample_position;
+  const auto count = std::min({input.recorded, prime_frames(first, last),
+                               static_cast<std::size_t>(std::min<std::uint64_t>(
+                                   end, std::numeric_limits<std::size_t>::max()))});
   for (std::size_t done = 0; done < count; done += chunk_frames) {
     const auto length = std::min(chunk_frames, count - done);
     for (std::size_t frame = 0; frame < length; ++frame)
