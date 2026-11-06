@@ -16,6 +16,15 @@ their current entry, so a partial run (one label, one test) updates only those.
 An entry is dropped when its test is neither configured in any --test-dir nor
 named in any CMakeLists.txt, so pass every build tree whose feature set adds
 tests (fuzz, live, VST3, codec) when pruning.
+
+A new slow or live test has no entry yet, so configuring fails until it has
+one. Bootstrap it with a temporary cache entry, run it, regenerate, then drop
+the temporary entry:
+
+    cmake --preset quick -DOSCILLATE_TEST_BUDGET_<test>=600
+    ctest --preset quick -R '^<test>$' --output-junit junit.xml
+    scripts/update-test-budgets.py --test-dir build/quick build/quick/junit.xml
+    cmake --preset quick -UOSCILLATE_TEST_BUDGET_<test>
 """
 
 import argparse
@@ -68,8 +77,12 @@ def configured_tiers(test_dir):
         capture_output=True,
         text=True,
     ).stdout
+    tests = json.loads(listing)["tests"]
+    if not tests:
+        # An unconfigured or empty tree would make every entry look stale.
+        raise SystemExit(f"{test_dir} has no configured tests; configure it first")
     tiers = {}
-    for test in json.loads(listing)["tests"]:
+    for test in tests:
         labels = []
         for prop in test.get("properties", []):
             if prop["name"] == "LABELS":
