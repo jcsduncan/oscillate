@@ -127,7 +127,11 @@ bool JackRealtimeWavExport::freeze_cursor(void* context) noexcept {
 
 bool JackRealtimeWavExport::permitted(const void* context) noexcept {
   const auto& self = *static_cast<const JackRealtimeWavExport*>(context);
-  return !self.drain_failed_.load(std::memory_order_acquire) && !self.interval_captured();
+  return !self.capture_failed() && !self.interval_captured();
+}
+
+bool JackRealtimeWavExport::capture_failed() const noexcept {
+  return drain_failed_.load(std::memory_order_acquire) || capture_->failed();
 }
 
 void JackRealtimeWavExport::drain_loop(std::stop_token token) noexcept {

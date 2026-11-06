@@ -50,6 +50,11 @@ public:
   [[nodiscard]] std::uint64_t frames_captured() const noexcept {
     return captured_.load(std::memory_order_acquire);
   }
+  // True once the capture has failed (render, discontinuity, overflow or
+  // xrun): it can no longer complete. Lock-free; any thread.
+  [[nodiscard]] bool failed() const noexcept {
+    return failure_.load(std::memory_order_acquire) != Failure::none;
+  }
 
 private:
   RealtimeWavCapture(WavWriter writer, WavSpec spec, std::uint64_t first_sample,

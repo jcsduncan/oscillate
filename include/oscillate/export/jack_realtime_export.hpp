@@ -62,6 +62,10 @@ public:
   ~JackRealtimeWavExport();
 
   [[nodiscard]] bool interval_captured() const noexcept;
+  // True once the capture or its drain has failed: the interval can never be
+  // captured, so a caller waiting for it should stop and call finish().
+  // Playback is no longer permitted from then on. Lock-free.
+  [[nodiscard]] bool capture_failed() const noexcept;
   [[nodiscard]] std::uint64_t frames_captured() const noexcept;
   [[nodiscard]] audio_io::JackOutputStatus device_status() const noexcept;
 
