@@ -462,22 +462,11 @@ Result<void> apply_ops(clay_dsp::Take& take, std::span<const project::ClayStruct
   return Result<void>::success();
 }
 
-Result<DecodedSource> decode_source(const persistence::ProjectStore& store,
-                                    const project::SourceRecord& source,
-                                    const std::stop_token& stop) {
-  if (source.channels != 1 && source.channels != 2)
-    return Result<DecodedSource>::failure(invalid("Clay edits mono or stereo audio"));
-  if (source.sample_rate < clay_dsp::min_sample_rate ||
-      source.sample_rate > clay_dsp::max_sample_rate ||
-      static_cast<double>(source.frames) >
-          clay_dsp::max_take_seconds * static_cast<double>(source.sample_rate))
-    return Result<DecodedSource>::failure(
-        {ErrorCode::unsupported, "Clay cannot edit audio at this rate or length"});
-  auto descriptor = store.open_verified_source(source, stop);
-  if (!descriptor)
-    return Result<DecodedSource>::failure(descriptor.error());
-  Fd pinned(descriptor.value());
-  auto reader = media::AudioReader::open_fd(pinned.get(), source);
+namespace {
+// Decodes a source already verified and pinned at `verified`.
+Result<DecodedSource> decode_verified(int verified, const project::SourceRecord& source,
+                                      const std::stop_token& stop) {
+  auto reader = media::AudioReader::open_fd(verified, source);
   if (!reader)
     return Result<DecodedSource>::failure(reader.error());
   if (reader.value().frame_count() != source.frames ||
@@ -516,6 +505,32 @@ Result<DecodedSource> decode_source(const persistence::ProjectStore& store,
     at += read.value();
   }
   return Result<DecodedSource>::success(std::move(decoded));
+}
+
+// The shape Clay accepts, checked before any source is opened.
+Result<void> clay_shape(const project::SourceRecord& source) {
+  if (source.channels != 1 && source.channels != 2)
+    return Result<void>::failure(invalid("Clay edits mono or stereo audio"));
+  if (source.sample_rate < clay_dsp::min_sample_rate ||
+      source.sample_rate > clay_dsp::max_sample_rate ||
+      static_cast<double>(source.frames) >
+          clay_dsp::max_take_seconds * static_cast<double>(source.sample_rate))
+    return Result<void>::failure(
+        {ErrorCode::unsupported, "Clay cannot edit audio at this rate or length"});
+  return Result<void>::success();
+}
+} // namespace
+
+Result<DecodedSource> decode_source(const persistence::ProjectStore& store,
+                                    const project::SourceRecord& source,
+                                    const std::stop_token& stop) {
+  if (auto shape = clay_shape(source); !shape)
+    return Result<DecodedSource>::failure(shape.error());
+  auto descriptor = store.open_verified_source(source, stop);
+  if (!descriptor)
+    return Result<DecodedSource>::failure(descriptor.error());
+  const Fd pinned(descriptor.value());
+  return decode_verified(pinned.get(), source, stop);
 }
 
 Result<clay_dsp::Take> analysed_take(media::CacheStore* cache, const project::SourceRecord& source,
@@ -623,16 +638,17 @@ Result<RenderedAudio> open_rendered(const persistence::ProjectStore& store,
   if (!directory)
     return Result<RenderedAudio>::failure(directory.error());
   // The source is verified even on a hit, so a missing or changed source is
-  // never masked by derived data.
-  {
-    auto verified = store.open_verified_source(source, stop);
-    if (!verified)
-      return Result<RenderedAudio>::failure(verified.error());
-    const Fd pinned(verified.value());
-  }
+  // never masked by derived data; a miss decodes that same verified file
+  // rather than hashing it again.
+  if (auto shape = clay_shape(source); !shape)
+    return Result<RenderedAudio>::failure(shape.error());
+  auto verified = store.open_verified_source(source, stop);
+  if (!verified)
+    return Result<RenderedAudio>::failure(verified.error());
+  const Fd pinned(verified.value());
   if (auto hit = open_published(directory.value().get(), record.value()))
     return Result<RenderedAudio>::success(RenderedAudio{hit->release(), record.value()});
-  auto audio = decode_source(store, source, stop);
+  auto audio = decode_verified(pinned.get(), source, stop);
   if (!audio)
     return Result<RenderedAudio>::failure(audio.error());
   auto cache = cache_of(store);

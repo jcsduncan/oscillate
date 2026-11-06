@@ -19,17 +19,18 @@ load_synth_media(const persistence::ProjectStore& store, const project::Snapshot
     const auto* reference = std::get_if<project::ManagedAudioReference>(&slot.media);
     if (reference == nullptr)
       continue;
+    // Every slot names a source of its own, even when its audio is shared.
+    const auto record =
+        std::ranges::find(snapshot.sources, reference->source, &project::SourceRecord::id);
+    if (record == snapshot.sources.end() || record->sha256 != reference->sha256)
+      return R::failure({foundation::ErrorCode::unavailable,
+                         "Synth media slot '" + slot.id + "' has no matching source"});
     const auto shared =
         std::ranges::find(media, reference->sha256, &engine::SynthMediaEntry::sha256);
     if (shared != media.end()) {
       media.push_back({slot.id, reference->sha256, shared->asset});
       continue;
     }
-    const auto record =
-        std::ranges::find(snapshot.sources, reference->source, &project::SourceRecord::id);
-    if (record == snapshot.sources.end() || record->sha256 != reference->sha256)
-      return R::failure({foundation::ErrorCode::unavailable,
-                         "Synth media slot '" + slot.id + "' has no matching source"});
     auto decoded = load_managed_audio(store, *record, project::max_native_synth_media_frames, stop);
     if (!decoded)
       return R::failure(decoded.error());

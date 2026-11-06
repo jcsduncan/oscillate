@@ -53,8 +53,10 @@ WarpLiveReader::open(const std::filesystem::path& project_root, media::CacheStor
     return Opened::failure({ErrorCode::cancelled, "Live warp preparation cancelled"});
   // The managed source is verified even when a cache render exists, so a
   // missing or changed source is never masked by derived cache data. The
-  // view's own reads must not be tied to the preparation stop token.
-  auto view = open_request_view(project_root, request);
+  // view's own reads must not be tied to the preparation stop token, but a
+  // Clay take's render is preparation: it stops with the token.
+  auto view = request.clay ? open_request_view(project_root, request, stop)
+                           : open_request_view(project_root, request);
   if (!view)
     return Opened::failure(view.error());
   if (stop.stop_requested())
