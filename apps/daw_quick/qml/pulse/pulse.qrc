@@ -1,0 +1,10 @@
+<RCC>
+  <qresource prefix="/pulse">
+    <file>PulsePanel.qml</file>
+    <file>PulseTheme.qml</file>
+    <file>PulsePad.qml</file>
+    <file>PulseEnvelopeView.qml</file>
+    <file>PulseShapeView.qml</file>
+    <file>PulseGlueMeter.qml</file>
+  </qresource>
+</RCC>

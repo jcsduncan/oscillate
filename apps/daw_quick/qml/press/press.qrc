@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/press">
+    <file>PressPanel.qml</file>
+    <file>PressTheme.qml</file>
+    <file>PressTransfer.qml</file>
+    <file>PressReduction.qml</file>
+  </qresource>
+</RCC>
