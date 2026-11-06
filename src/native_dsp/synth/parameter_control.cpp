@@ -65,7 +65,8 @@ bool ParameterControl::offer_live(std::span<const double> values) noexcept {
 }
 
 bool ParameterControl::push(std::span<const double> values, std::uint64_t revision) noexcept {
-  if (!valid_values(*descriptor_, values))
+  // count_ is the descriptor's size capped at the mailbox entry's.
+  if (values.size() != count_ || !valid_values(*descriptor_, values))
     return false;
   const auto write = mailbox_->write.load(std::memory_order_relaxed);
   if (write - mailbox_->read.load(std::memory_order_acquire) >= Mailbox::capacity) {
