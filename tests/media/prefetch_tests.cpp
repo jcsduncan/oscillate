@@ -681,6 +681,32 @@ void test_forward_skip_and_consumer_position() {
   REQUIRE_EQ(position.next_frame, 11, "consumer position does not record the last requested end");
 }
 
+// Two forward jumps leave three gaps in one block: the result lists the
+// first two, counts the third, and the diagnostic queue gets all three.
+void test_every_gap_reaches_the_diagnostic_queue() {
+  using namespace oscillate::media;
+  constexpr std::size_t gaps = 3;
+  constexpr std::uint64_t gap_frames = 2;
+  PrefetchRing ring(clip(7), 64);
+  require(ring.try_push({clip(7), 1, 0, {1, 1}}), "multi-gap fixture fill");
+  require(ring.try_push({clip(7), 1, 1, {1, 1}}), "multi-gap fixture fill");
+  require(ring.skip_forward(1, 4), "multi-gap fixture skip");
+  require(ring.try_push({clip(7), 1, 4, {1, 1}}), "multi-gap fixture fill");
+  require(ring.skip_forward(1, 7), "multi-gap fixture skip");
+  require(ring.try_push({clip(7), 1, 7, {1, 1}}), "multi-gap fixture fill");
+  std::array<StereoFrame, 10> output{};
+  const auto result = ring.consume(1, 0, output, true);
+  REQUIRE_EQ(result.silent, gaps * gap_frames, "multi-gap block lost silent frames");
+  REQUIRE_TRUE(result.underruns[0] && result.underruns[1], "multi-gap block lost listed gaps");
+  REQUIRE_EQ(result.unlisted_underruns, gaps - result.underruns.size(),
+             "a gap beyond the listed slots was not counted");
+  REQUIRE_EQ(ring.underrun_count(), gaps, "multi-gap block miscounted underruns");
+  std::size_t queued = 0;
+  while (ring.pop_underrun())
+    ++queued;
+  REQUIRE_EQ(queued, gaps, "a gap beyond the listed slots never reached the diagnostic queue");
+}
+
 void test_exact_handoff_window() {
   using namespace oscillate::media;
   PrefetchRing ring(clip(6), 128);
@@ -794,6 +820,7 @@ int main() {
     test_spsc_order();
     test_stale_scan_budget();
     test_forward_skip_and_consumer_position();
+    test_every_gap_reaches_the_diagnostic_queue();
     test_exact_handoff_window();
     test_concurrent_handoff_window_and_wraparound();
   } catch (const std::exception& error) {
