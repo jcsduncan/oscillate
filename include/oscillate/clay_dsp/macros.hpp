@@ -3,13 +3,16 @@
 #include "oscillate/clay_dsp/take.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <span>
 #include <vector>
 
 // Pure functions over a take's notes and their edits. Each returns the full
 // edit list to use next (one entry per edited note, duplicates after),
-// leaving notes it was not asked to touch as they were.
+// leaving notes it was not asked to touch as they were. A change that would
+// leave an edit outside validate()'s bounds (a shift past max_edit_cents, a
+// stretch past max_time_scale) is not made, so the result always renders.
 namespace oscillate::clay_dsp {
 
 inline constexpr int pitch_classes = 12;
@@ -47,7 +50,8 @@ using Selection = std::span<const std::uint32_t>;
                                                   const Scale& scale, Selection selection = {});
 
 // A timing grid: steps of `step_frames` from `origin`, each step pushed by
-// offsets[step % size] steps (a groove; empty means straight).
+// offsets[step % size] steps (a groove; empty means straight). A grid with a
+// non-positive or non-finite step or a non-finite offset moves nothing.
 struct TimeGrid {
   std::int64_t origin = 0;
   double step_frames = 0.0;
@@ -74,6 +78,9 @@ struct MidiNoteOut {
 struct BendPoint {
   std::int64_t frame = 0;
   double semitones = 0.0; // relative to the sounding key
+  // The voice the bend belongs to: an index into MidiOut::notes, so
+  // overlapping voices can route their bends separately.
+  std::size_t note = 0;
 };
 struct MidiOut {
   std::vector<MidiNoteOut> notes;
@@ -81,7 +88,8 @@ struct MidiOut {
   double bend_range = 0.0; // semitones the bends need
 };
 // Notes as edited, with velocities from their levels and pitch bends that
-// follow their drift and vibrato every `bend_step_seconds`.
+// follow their drift and vibrato every `bend_step_seconds`. A voice whose
+// placement validate() would refuse is left out.
 inline constexpr double bend_step_seconds = 0.01;
 [[nodiscard]] MidiOut to_midi(const Take& take, std::span<const NoteEdit> edits);
 

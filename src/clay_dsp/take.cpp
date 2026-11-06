@@ -142,6 +142,8 @@ foundation::Result<void> validate(const Take& take, std::span<const NoteEdit> ed
     if (edit.start) {
       if (*edit.start < 0 || *edit.end <= *edit.start)
         return Result<void>::failure(invalid("A placement is empty or before the clip"));
+      if (*edit.end > max_placement_frame)
+        return Result<void>::failure(invalid("A placement ends too far out to render"));
       const double scale = static_cast<double>(*edit.end - *edit.start) /
                            static_cast<double>(std::max<std::int64_t>(1, note->end - note->start));
       if (scale > max_time_scale || scale < 1.0 / max_time_scale)
@@ -155,7 +157,7 @@ void measure_pitch(Note& note, std::int64_t hop, std::uint32_t sample_rate) {
   const auto hops = note.hops();
   note.drift.assign(hops, 0.0F);
   note.modulation.assign(hops, 0.0F);
-  if (hops == 0)
+  if (hops == 0 || hop <= 0)
     return;
   std::vector<std::pair<double, double>> weighted;
   weighted.reserve(hops);
@@ -205,6 +207,8 @@ void measure_pitch(Note& note, std::int64_t hop, std::uint32_t sample_rate) {
 
 foundation::Result<std::uint32_t> split_note(Take& take, std::uint32_t id, std::int64_t frame) {
   using R = Result<std::uint32_t>;
+  if (take.hop <= 0)
+    return R::failure(invalid("The take has no hop"));
   auto* note = find_mutable(take, id);
   if (note == nullptr)
     return R::failure({ErrorCode::not_found, "No such note"});
@@ -233,6 +237,8 @@ foundation::Result<std::uint32_t> split_note(Take& take, std::uint32_t id, std::
 
 foundation::Result<void> join_notes(Take& take, std::uint32_t first_id, std::uint32_t second_id) {
   using R = Result<void>;
+  if (take.hop <= 0)
+    return R::failure(invalid("The take has no hop"));
   auto* a = find_mutable(take, first_id);
   auto* b = find_mutable(take, second_id);
   if (a == nullptr || b == nullptr || a == b)
@@ -251,10 +257,14 @@ foundation::Result<void> join_notes(Take& take, std::uint32_t first_id, std::uin
   joined.amplitude.assign(hops, 0.0F);
   joined.partials.assign(hops * joined.partial_count, PartialFrame{});
   joined.envelope.assign(envelope_rows(hops) * envelope_bands, 0.0F);
+  const auto a_end = a->first_hop + static_cast<std::int64_t>(a->hops());
+  const auto b_end = b->first_hop + static_cast<std::int64_t>(b->hops());
   const auto source = [&](std::int64_t hop) -> std::pair<const Note*, std::size_t> {
-    // From the second note's first hop on, the second note plays; before it,
-    // the first (holding its last hop across any gap).
-    if (hop >= b->first_hop) {
+    // Over the second note's hops the second note plays; before them the
+    // first (holding its last hop across any gap), and after them the first
+    // again while it lasts, so a second note nested inside keeps the first's
+    // tail.
+    if (hop >= b->first_hop && (hop < b_end || hop >= a_end)) {
       const auto index =
           std::min<std::int64_t>(hop - b->first_hop, static_cast<std::int64_t>(b->hops()) - 1);
       return {b, static_cast<std::size_t>(index)};

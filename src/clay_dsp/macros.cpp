@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numeric>
 
 namespace oscillate::clay_dsp {
 namespace {
@@ -40,6 +41,25 @@ constexpr double tiny = 1e-12;
 [[nodiscard]] std::int64_t placed_end(const Note& note, const NoteEdit& edit) {
   return edit.end.value_or(note.end);
 }
+
+// Whether a pitch shift stays inside validate()'s bound.
+[[nodiscard]] bool shift_in_range(double cents) noexcept {
+  return std::isfinite(cents) && std::abs(cents) <= max_edit_cents;
+}
+
+// Whether a placement of `note` is one validate() accepts: inside the clip,
+// non-empty and stretched no further than max_time_scale.
+[[nodiscard]] bool placement_valid(const Note& note, std::int64_t start, std::int64_t end) {
+  if (start < 0 || end <= start)
+    return false;
+  const double scale = static_cast<double>(end - start) /
+                       static_cast<double>(std::max<std::int64_t>(1, note.end - note.start));
+  return scale <= max_time_scale && scale >= 1.0 / max_time_scale;
+}
+
+// The largest magnitude a double holds as an exact integer: grid steps and
+// frames beyond it cannot round to a representable frame.
+constexpr double exact_integer_limit = 9'007'199'254'740'992.0;
 
 // The scale's pitches (in semitones) around `semitone`, ascending.
 [[nodiscard]] std::vector<int> pitches_around(int semitone, const Scale& scale, int reach) {
@@ -148,8 +168,10 @@ std::vector<NoteEdit> correct_pitch(const Take& take, std::span<const NoteEdit> 
       continue;
     auto e = edit_of(out, note.id);
     const double current = edited_centre(note, e);
-    e.pitch_cents +=
-        (nearest_in_scale(current, scale) - current) * std::clamp(centre_amount, 0.0, 1.0);
+    const double shifted = e.pitch_cents + (nearest_in_scale(current, scale) - current) *
+                                               std::clamp(centre_amount, 0.0, 1.0);
+    if (shift_in_range(shifted))
+      e.pitch_cents = shifted;
     e.drift *= 1.0 - std::clamp(drift_amount, 0.0, 1.0);
     put_edit(out, e);
   }
@@ -159,7 +181,8 @@ std::vector<NoteEdit> correct_pitch(const Take& take, std::span<const NoteEdit> 
 std::vector<NoteEdit> quantize_time(const Take& take, std::span<const NoteEdit> edits,
                                     const TimeGrid& grid, double amount, Selection selection) {
   auto out = copied(edits);
-  if (!(grid.step_frames > 0.0))
+  if (!(grid.step_frames > 0.0) || !std::isfinite(grid.step_frames) ||
+      !std::ranges::all_of(grid.offsets, [](double offset) { return std::isfinite(offset); }))
     return out;
   const auto position = [&](std::int64_t step) {
     double offset = 0.0;
@@ -176,18 +199,23 @@ std::vector<NoteEdit> quantize_time(const Take& take, std::span<const NoteEdit> 
     auto e = edit_of(out, note.id);
     const auto start = placed_start(note, e);
     const auto length = placed_end(note, e) - start;
-    const auto guess = static_cast<std::int64_t>(
-        std::llround(static_cast<double>(start - grid.origin) / grid.step_frames));
+    const double steps =
+        (static_cast<double>(start) - static_cast<double>(grid.origin)) / grid.step_frames;
+    if (!(std::abs(steps) < exact_integer_limit))
+      continue;
+    const auto guess = static_cast<std::int64_t>(std::llround(steps));
     double target = position(guess);
     for (const auto step : {guess - 1, guess + 1}) {
       if (std::abs(position(step) - static_cast<double>(start)) <
           std::abs(target - static_cast<double>(start)))
         target = position(step);
     }
-    const auto moved = std::max<std::int64_t>(
-        0, std::llround(static_cast<double>(start) +
-                        (target - static_cast<double>(start)) * std::clamp(amount, 0.0, 1.0)));
-    if (moved == start)
+    const double placed = static_cast<double>(start) +
+                          (target - static_cast<double>(start)) * std::clamp(amount, 0.0, 1.0);
+    if (!(std::abs(placed) < exact_integer_limit))
+      continue;
+    const auto moved = std::max<std::int64_t>(0, std::llround(placed));
+    if (moved == start || !placement_valid(note, moved, moved + length))
       continue;
     e.start = moved;
     e.end = moved + length;
@@ -240,11 +268,15 @@ MidiOut to_midi(const Take& take, std::span<const NoteEdit> edits) {
     loudest = std::max(loudest, level_db(*v.note, v.edit));
   const auto step = std::max<std::int64_t>(
       1, std::llround(bend_step_seconds * static_cast<double>(take.sample_rate)));
+  std::erase_if(voices, [](const Voice& v) {
+    return !placement_valid(*v.note, placed_start(*v.note, v.edit), placed_end(*v.note, v.edit));
+  });
   for (const auto& v : voices) {
     const auto& note = *v.note;
     const auto start = placed_start(note, v.edit);
     const auto end = placed_end(note, v.edit);
     const double centre = edited_centre(note, v.edit);
+    const auto voice = out.notes.size();
     const int key = static_cast<int>(std::lround(centre / cents_per_semitone));
     const double below = level_db(note, v.edit) - loudest;
     const int velocity =
@@ -256,7 +288,9 @@ MidiOut to_midi(const Take& take, std::span<const NoteEdit> edits) {
       continue;
     const double scale = static_cast<double>(note.end - note.start) /
                          static_cast<double>(std::max<std::int64_t>(1, end - start));
-    for (auto frame = start; frame < end; frame += step) {
+    // Advances only while the next step stays before the end, so a
+    // placement near the frame limit cannot overflow.
+    for (auto frame = start;; frame += step) {
       const double source =
           static_cast<double>(note.start) + static_cast<double>(frame - start) * scale;
       const double tau = std::clamp((source - static_cast<double>(note.first_hop * take.hop)) /
@@ -266,12 +300,27 @@ MidiOut to_midi(const Take& take, std::span<const NoteEdit> edits) {
       const double cents =
           centre + note.drift[k] * v.edit.drift + note.modulation[k] * v.edit.modulation;
       const double bend = (cents - key * cents_per_semitone) / cents_per_semitone;
-      out.bends.push_back({frame, bend});
+      out.bends.push_back({frame, bend, voice});
       out.bend_range = std::max(out.bend_range, std::ceil(std::abs(bend)));
+      if (end - frame <= step)
+        break;
     }
   }
-  std::ranges::sort(out.notes, {}, &MidiNoteOut::start);
-  std::ranges::sort(out.bends, {}, &BendPoint::frame);
+  // Sort the voices by start, then point each bend at its voice's new place.
+  std::vector<std::size_t> order(out.notes.size());
+  std::iota(order.begin(), order.end(), std::size_t{0});
+  std::ranges::stable_sort(order, {}, [&](std::size_t index) { return out.notes[index].start; });
+  std::vector<std::size_t> place(order.size());
+  std::vector<MidiNoteOut> sorted;
+  sorted.reserve(order.size());
+  for (const auto index : order) {
+    place[index] = sorted.size();
+    sorted.push_back(out.notes[index]);
+  }
+  out.notes = std::move(sorted);
+  for (auto& bend : out.bends)
+    bend.note = place[bend.note];
+  std::ranges::stable_sort(out.bends, {}, &BendPoint::frame);
   return out;
 }
 
@@ -299,7 +348,8 @@ std::vector<NoteEdit> harmonise(const Take& take, std::span<const NoteEdit> edit
     auto voice = base;
     voice.duplicate = true;
     voice.pitch_cents += pitches[static_cast<std::size_t>(index)] * cents_per_semitone - current;
-    out.push_back(voice);
+    if (shift_in_range(voice.pitch_cents))
+      out.push_back(voice);
   }
   return out;
 }
@@ -310,7 +360,9 @@ std::vector<NoteEdit> fit_to_key(const Take& take, std::span<const NoteEdit> edi
   auto out = copied(edits);
   const auto from_degrees = from.degrees();
   const auto to_degrees = to.degrees();
-  const bool map_degrees = follow_quality && from_degrees.size() == to_degrees.size();
+  // Empty scales have no degrees to map; such a fit is a plain transposition.
+  const bool map_degrees =
+      follow_quality && !from_degrees.empty() && from_degrees.size() == to_degrees.size();
   int transpose = wrap(to.root - from.root, pitch_classes);
   if (transpose > pitch_classes / 2)
     transpose -= pitch_classes;
@@ -332,7 +384,7 @@ std::vector<NoteEdit> fit_to_key(const Take& take, std::span<const NoteEdit> edi
       target = to_degrees[degree] + (relative - from_degrees[degree]);
     }
     const int shift = transpose + (target - relative);
-    if (shift == 0)
+    if (shift == 0 || !shift_in_range(e.pitch_cents + shift * cents_per_semitone))
       continue;
     e.pitch_cents += shift * cents_per_semitone;
     put_edit(out, e);
@@ -362,14 +414,16 @@ std::vector<NoteEdit> follow_notes(const Take& take, std::span<const NoteEdit> e
     }
     if (best == nullptr)
       continue;
-    e.pitch_cents += best->key * cents_per_semitone - edited_centre(note, e);
+    const double shifted = e.pitch_cents + best->key * cents_per_semitone - edited_centre(note, e);
+    if (shift_in_range(shifted))
+      e.pitch_cents = shifted;
     if (amount > 0.0) {
       const auto new_start = std::max<std::int64_t>(
           0, std::llround(static_cast<double>(start) +
                           static_cast<double>(best->start - start) * amount));
       const auto new_end =
           std::llround(static_cast<double>(end) + static_cast<double>(best->end - end) * amount);
-      if (new_end > new_start && (new_start != start || new_end != end)) {
+      if ((new_start != start || new_end != end) && placement_valid(note, new_start, new_end)) {
         e.start = new_start;
         e.end = new_end;
       }
@@ -388,7 +442,8 @@ std::vector<NoteEdit> variation(const Take& take, std::span<const NoteEdit> edit
     if (!selected(selection, note.id))
       continue;
     auto e = edit_of(out, note.id);
-    e.pitch_cents += unit(seed, note.id, pitch) * variation_cents * a;
+    e.pitch_cents = std::clamp(e.pitch_cents + unit(seed, note.id, pitch) * variation_cents * a,
+                               -max_edit_cents, max_edit_cents);
     e.gain_db = std::clamp(e.gain_db + unit(seed, note.id, level) * variation_db * a,
                            min_edit_gain_db, max_edit_gain_db);
     const auto offset =

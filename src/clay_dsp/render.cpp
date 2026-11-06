@@ -110,7 +110,10 @@ struct SegmentVoice {
     const double original = pitch > 0.0 ? hz_to_cents(pitch) : note.centre;
     const double target = note.centre + edit.pitch_cents + read(note.drift, tau) * edit.drift +
                           read(note.modulation, tau) * edit.modulation;
-    const double ratio = pitch > 0.0 ? std::exp2((target - original) / cents_per_octave) : 1.0;
+    // A locked edit keeps the measured pitch exactly: rounding drift and
+    // vibrato separately must not nudge a gain-only edit's partials.
+    const double ratio =
+        !locked && pitch > 0.0 ? std::exp2((target - original) / cents_per_octave) : 1.0;
     for (std::size_t h = 0; h < track.partials; ++h) {
       const auto& p0 = note.partials[k0 * note.partial_count + h];
       const auto& p1 = note.partials[k1 * note.partial_count + h];
@@ -174,6 +177,16 @@ foundation::Result<Renderer> Renderer::create(const Take& take, std::span<const 
     return R::failure({ErrorCode::invalid_argument, "The audio is not the analysed audio"});
   if (auto valid = validate(take, edits); !valid)
     return R::failure(valid.error());
+  // Every sinusoidal note is synthesised (as a residual or an edit): its
+  // tracks must cover all its hops.
+  for (const auto& note : take.notes) {
+    if (note.kind != NoteKind::sinusoidal)
+      continue;
+    const auto hops = note.hops();
+    if (note.amplitude.size() < hops || note.drift.size() < hops || note.modulation.size() < hops ||
+        (note.partial_count != 0 && note.partials.size() / note.partial_count < hops))
+      return R::failure({ErrorCode::invalid_argument, "A note's tracks are shorter than its hops"});
+  }
   auto state = std::make_unique<State>();
   state->rate = take.sample_rate;
   state->frames = take.frames;

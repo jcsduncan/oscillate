@@ -121,7 +121,7 @@ foundation::Result<Take> analyse(const Audio& audio, const AnalysisOptions& opti
   }
   if (!finished)
     return R::failure({ErrorCode::cancelled, "Analysis was cancelled"});
-  std::ranges::sort(take.notes, {}, &Note::start);
+  std::ranges::stable_sort(take.notes, {}, &Note::start);
   const double fade = note_fade_seconds * audio.sample_rate;
   std::vector<float> residual = mono;
   for (auto& note : take.notes) {

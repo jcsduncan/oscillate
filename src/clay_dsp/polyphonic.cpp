@@ -714,7 +714,7 @@ bool detect_polyphonic(const Context& context, std::int64_t hop, std::vector<Not
   }
   for (auto& note : notes)
     envelope_from_partials(note);
-  std::ranges::sort(notes, {}, &Note::start);
+  std::ranges::stable_sort(notes, {}, &Note::start);
   return true;
 }
 

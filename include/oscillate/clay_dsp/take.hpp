@@ -6,6 +6,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 #include <vector>
@@ -105,12 +106,16 @@ struct NoteEdit {
   bool operator==(const NoteEdit&) const = default;
 };
 
-// Bounds edits and placements are checked against: limits.hpp.
+// Bounds edits and placements are checked against: limits.hpp. A placement
+// may run past the clip but must end by max_placement_frame, which leaves the
+// renderer room for its fades and grains.
+inline constexpr std::int64_t max_placement_frame = std::numeric_limits<std::int64_t>::max() / 2;
 
 [[nodiscard]] foundation::Result<void> validate(const Take& take, std::span<const NoteEdit> edits);
 
 // Splits a note at `frame` (strictly inside it) into two notes; the second
-// gets a new id. Returns that id.
+// gets a new id. Returns that id. Both editing functions refuse a take
+// whose hop is not positive.
 [[nodiscard]] foundation::Result<std::uint32_t> split_note(Take& take, std::uint32_t id,
                                                            std::int64_t frame);
 // Joins two notes that touch or overlap (`second` starts within a hop of
@@ -118,7 +123,9 @@ struct NoteEdit {
 [[nodiscard]] foundation::Result<void> join_notes(Take& take, std::uint32_t first,
                                                   std::uint32_t second);
 
-// Recomputes centre, drift and modulation from the pitch curve.
+// Recomputes centre, drift and modulation from the pitch curve. With a
+// non-positive hop the drift window is undefined: drift and modulation are
+// left at zero.
 void measure_pitch(Note& note, std::int64_t hop, std::uint32_t sample_rate);
 
 } // namespace oscillate::clay_dsp
