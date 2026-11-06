@@ -1,0 +1,84 @@
+# Every optional feature and third-party dependency, declared and looked up
+# once. Components test OSCILLATE_BUILD_* (or JACK_FOUND) and link the
+# imported targets found here; none calls find_package itself.
+#
+# Locally built dependencies are found the usual way: CMAKE_PREFIX_PATH or
+# <Package>_DIR for CMake packages, PKG_CONFIG_PATH and PKG_CONFIG_SYSROOT_DIR
+# for pkg-config ones (docs/dependencies/local-development.md).
+
+option(OSCILLATE_BUILD_QUICK_UI "Build the Qt Quick DAW application" OFF)
+option(OSCILLATE_BUILD_VST3_SCANNER "Build the pinned-SDK VST3 host, scanner helper and contract tests" OFF)
+set(OSCILLATE_VST3_SDK_ROOT "" CACHE PATH "Path to pinned VST3 SDK v3.8.1_build_84 checkout")
+option(OSCILLATE_BUILD_CODEC_ADAPTER "Build the worker-only libsndfile codec adapter" OFF)
+option(OSCILLATE_BUILD_EXPORT_RESAMPLER "Enable high-quality offline export rate conversion (libsamplerate)" OFF)
+option(OSCILLATE_BUILD_SOURCE_RESAMPLER "Build worker-only source-rate conversion (libsamplerate)" OFF)
+option(OSCILLATE_BUILD_CONVOLUTION_DSP "Build the pinned PFFFT convolution core" OFF)
+option(OSCILLATE_CONVOLUTION_SIMD "Enable PFFFT x86 SIMD" ON)
+option(OSCILLATE_REQUIRE_JACK "Fail configuration when the JACK backend is unavailable" OFF)
+option(OSCILLATE_BUILD_FUZZ "Build opt-in malformed-input parser fuzz targets" OFF)
+option(OSCILLATE_BUILD_BENCHES "Build manual benchmarks (bench/) and listening tools (tools/listening/)" OFF)
+option(OSCILLATE_AUDIO_IO_LIVE_TESTS "Run local PipeWire (and JACK) server qualification smoke tests" OFF)
+
+# Always required.
+find_package(Threads REQUIRED)
+find_package(OpenSSL 3 REQUIRED COMPONENTS Crypto)
+find_package(nlohmann_json 3.11.3 REQUIRED CONFIG)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PIPEWIRE REQUIRED IMPORTED_TARGET GLOBAL libpipewire-0.3)
+
+# JACK is optional unless OSCILLATE_REQUIRE_JACK; JACK_FOUND selects the
+# JACK output and real-time export adapters.
+pkg_check_modules(JACK QUIET IMPORTED_TARGET GLOBAL jack)
+if(NOT JACK_FOUND)
+  if(OSCILLATE_REQUIRE_JACK)
+    message(FATAL_ERROR "OSCILLATE_REQUIRE_JACK is set but the JACK development package (jack.pc) was not found")
+  endif()
+  message(STATUS "JACK development package not found; JACK adapter is unavailable")
+endif()
+
+if(OSCILLATE_BUILD_CODEC_ADAPTER)
+  find_path(OSCILLATE_SNDFILE_INCLUDE_DIR NAMES sndfile.h REQUIRED)
+  find_library(OSCILLATE_SNDFILE_LIBRARY NAMES sndfile REQUIRED)
+endif()
+
+if(OSCILLATE_BUILD_EXPORT_RESAMPLER OR OSCILLATE_BUILD_SOURCE_RESAMPLER)
+  find_path(OSCILLATE_SAMPLERATE_INCLUDE_DIR NAMES samplerate.h REQUIRED)
+  find_library(OSCILLATE_SAMPLERATE_LIBRARY NAMES samplerate REQUIRED)
+endif()
+
+if(OSCILLATE_BUILD_QUICK_UI)
+  set(oscillate_qt_components Core Gui Qml Quick Widgets)
+  if(BUILD_TESTING)
+    list(APPEND oscillate_qt_components Test)
+  endif()
+  find_package(Qt6 6.10 REQUIRED COMPONENTS ${oscillate_qt_components})
+endif()
+
+if(OSCILLATE_BUILD_VST3_SCANNER)
+  if(NOT OSCILLATE_VST3_SDK_ROOT)
+    message(FATAL_ERROR "Set OSCILLATE_VST3_SDK_ROOT to the pinned VST3 SDK checkout")
+  endif()
+  # The editor attachment embeds plug-in views in X11 windows.
+  if(OSCILLATE_BUILD_QUICK_UI)
+    find_package(X11 REQUIRED)
+  endif()
+endif()
+
+if(BUILD_TESTING)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+endif()
+
+# The libFuzzer build instruments the parsers and all project libraries, not
+# just the fuzzer entry points. Only Clang has libFuzzer; with another
+# compiler the corpus replay tests still build and run.
+if(OSCILLATE_BUILD_FUZZ AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  if(OSCILLATE_ENABLE_COVERAGE OR OSCILLATE_ENABLE_SANITIZERS OR
+     OSCILLATE_ENABLE_THREAD_SANITIZER)
+    message(FATAL_ERROR "The libFuzzer build needs its own instrumentation build tree")
+  endif()
+  set(oscillate_fuzz_flags -fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer)
+  add_compile_options(
+    "$<$<COMPILE_LANG_AND_ID:CXX,Clang>:${oscillate_fuzz_flags}>"
+    "$<$<COMPILE_LANG_AND_ID:C,Clang>:${oscillate_fuzz_flags}>")
+  add_link_options(-fsanitize=address,undefined)
+endif()

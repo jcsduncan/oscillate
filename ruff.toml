@@ -1,0 +1,24 @@
+# Ruff settings for the repository's Python tooling (scripts/, tools/,
+# tests/, bench/). Oscillate is not a Python package; these scripts run with
+# the system python3 on Ubuntu 26.04 (`python3 -I ...`).
+target-version = "py312"
+line-length = 100
+extend-exclude = ["third_party", "build", "cmake-build-*", "site"]
+
+[lint]
+select = [
+  "E",    # pycodestyle errors
+  "W",    # pycodestyle warnings
+  "F",    # pyflakes
+  "I",    # import order
+  "B",    # bugbear
+  "UP",   # pyupgrade
+  "SIM",  # simplify
+  "PLC",  # pylint conventions (includes import-outside-toplevel)
+  "PLE",  # pylint errors
+  "PLW",  # pylint warnings
+]
+ignore = [
+  "PLW2901", # rebinding a loop variable is idiomatic for line cleanup
+  "PLW3301", # max(max(a), -min(a)) reads better than the flattened form
+]
