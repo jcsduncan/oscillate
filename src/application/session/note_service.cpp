@@ -80,6 +80,12 @@ foundation::Result<void> NoteService::add_note_with_duration(project::ClipId cli
     return foundation::Result<void>::failure(
         {foundation::ErrorCode::invalid_argument, "Note is outside the MIDI clip"});
   }
+  // One note per start and key: a duplicate would block later edits.
+  if (std::ranges::any_of(found->notes, [&](const project::MidiNote& existing) {
+        return existing.start == start && existing.key == key;
+      }))
+    return foundation::Result<void>::failure(
+        {foundation::ErrorCode::conflict, "A note already starts there"});
   auto id = numbered_id<project::NoteId>(next_note_number());
   if (!id) {
     return foundation::Result<void>::failure(id.error());

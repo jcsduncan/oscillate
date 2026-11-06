@@ -94,6 +94,8 @@ load_cached_source_analysis(const SourceAnalysisRequest& request, Value Output::
       output.cache_warning = cached.error().message;
     }
   }
+  if (stopped())
+    return cancelled();
   auto analyzed = analyze(reader.value(), identity);
   if (!analyzed)
     return Result::failure(analyzed.error());

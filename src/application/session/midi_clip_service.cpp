@@ -549,6 +549,23 @@ MidiClipService::move_midi_clip_to_track(project::ClipId clip, project::TrackId 
       return foundation::Result<void>::failure(placement.error());
     auto moved = *found;
     moved.placement = std::move(placement).value();
+    // Clip-owned lanes must target the track that holds the clip. Channel
+    // lanes follow the clip; instrument lanes follow it onto another native
+    // instrument. Anything else would be lost, so the move is refused.
+    const bool native_destination =
+        std::holds_alternative<project::NativeInstrumentPatch>(target->instrument_source);
+    for (auto& lane : moved.automation) {
+      if (auto* control = std::get_if<project::TrackControlTarget>(&lane.target)) {
+        control->track = destination;
+      } else if (auto* native = std::get_if<project::NativeParameterTarget>(&lane.target);
+                 native != nullptr && native_destination) {
+        native->track = destination;
+      } else {
+        return foundation::Result<void>::failure(
+            {foundation::ErrorCode::invalid_argument,
+             "The clip's automation cannot move to that track"});
+      }
+    }
     auto applied = model().apply(
         {project::RemoveClip{clip}, project::AddMidiClip{destination, std::move(moved)}});
     return applied ? foundation::Result<void>::success()

@@ -451,8 +451,10 @@ FeatureCache FeatureCache::load(const std::filesystem::path& file) {
   std::ostringstream text;
   text << in.rdbuf();
   const auto document = Json::parse(text.str(), nullptr, false);
-  if (document.is_discarded() || !document.is_object() ||
-      document.value("version", 0U) != analysis_version || !document.contains("sounds") ||
+  // The version must be an unsigned number; anything else is a stale cache.
+  if (document.is_discarded() || !document.is_object() || !document.contains("version") ||
+      !document.at("version").is_number_unsigned() ||
+      document.at("version").get<unsigned>() != analysis_version || !document.contains("sounds") ||
       !document.at("sounds").is_object())
     return cache;
   try {
