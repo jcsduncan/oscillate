@@ -164,9 +164,15 @@ void the_ears_hear_the_head() {
   const double shadow = db(rms(tone.right, 4'800, 24'000) / rms(tone.left, 4'800, 24'000));
   REQUIRE_GT(shadow, 10.0,
              "the head shadows the far ear at 8 kHz (" + std::to_string(shadow) + " dB)");
-  const auto speakers = render(parked(5.0, 0.0, 1.0), impulse(4'800));
-  REQUIRE_GT(std::fabs(out.left[peak_at(out.left)]), 0.0,
-             "on speakers both channels arrive together (a pan, no ear timing)");
+  // Off to the right but not hard right, so the pan leaves both channels sounding.
+  constexpr double speaker_x = 2.0;
+  constexpr double speaker_y = 5.0;
+  constexpr double speakers_listen = 1.0;
+  const auto speakers = render(parked(speaker_x, speaker_y, speakers_listen), impulse(4'800));
+  REQUIRE_GT(std::fabs(speakers.left[peak_at(speakers.left)]), 0.0,
+             "on speakers both channels sound (a pan, no ear timing)");
+  REQUIRE_GT(std::fabs(speakers.right[peak_at(speakers.right)]), 0.0,
+             "on speakers both channels sound (a pan, no ear timing)");
   REQUIRE_EQ(peak_at(speakers.left), peak_at(speakers.right),
              "on speakers both channels arrive together (a pan, no ear timing)");
 }

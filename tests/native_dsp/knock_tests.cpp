@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <iterator>
 #include <memory>
 #include <new>
 #include <optional>
@@ -65,12 +66,9 @@ std::vector<double> plain(std::string_view material = "Wood", double pitch = 400
                           double tone = 1.0, double decay = 0.2) {
   auto v = preset(table(), "Minimal");
   const auto& materials = table().parameters[pad_at(0, "res.material")].choices;
-  double material_index = 0.0;
-  for (std::size_t i = 0; i < materials.size(); ++i) {
-    if (materials[i] == material) {
-      material_index = static_cast<double>(i);
-    }
-  }
+  const auto found = std::ranges::find(materials, material);
+  require(found != materials.end(), "material exists: " + std::string(material));
+  const auto material_index = static_cast<double>(std::distance(materials.begin(), found));
   v[pad_at(0, "striker.type")] = 1.0; // Stick.
   v[pad_at(0, "striker.hardness")] = 0.5;
   v[pad_at(0, "striker.position")] = 0.3;
@@ -188,7 +186,9 @@ double strongest_hz(const std::vector<double>& x, std::size_t from, std::size_t 
                     double hi) {
   double best = lo;
   double best_magnitude = -1.0;
-  for (double hz = lo; hz <= hi; hz += strongest_hz_step) {
+  const auto points = static_cast<std::size_t>(std::floor((hi - lo) / strongest_hz_step));
+  for (std::size_t point = 0; point <= points; ++point) {
+    const double hz = lo + static_cast<double>(point) * strongest_hz_step;
     const double m = magnitude(x, from, length, hz);
     if (m > best_magnitude) {
       best_magnitude = m;
@@ -336,9 +336,11 @@ void reset_is_deterministic() {
   const auto first = pass(1);
   const auto second = pass(2);
   REQUIRE_EQ(first, second, "the same hits after a reset play the same samples");
+  // Interleaved stereo frames: one hit period apart.
+  constexpr std::size_t hit_period_samples = std::size_t{2} * 3'200;
   bool varied = false;
-  for (std::size_t i = 0; i + 2 * 3'200 < first.size() && !varied; ++i) {
-    varied = first[i] != first[i + 2 * 3'200];
+  for (std::size_t i = 0; i + hit_period_samples < first.size() && !varied; ++i) {
+    varied = first[i] != first[i + hit_period_samples];
   }
   require(varied, "the hand varies repeated hits");
 }

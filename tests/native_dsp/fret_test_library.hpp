@@ -9,6 +9,7 @@
 // robins in a small level step, and releases are short noise bursts.
 
 #include "oscillate/native_dsp/synth/fret.hpp"
+#include "oscillate/test/check.hpp"
 
 #include <algorithm>
 #include <array>
@@ -145,6 +146,7 @@ inline void write_library(const std::filesystem::path& directory, double note_se
     }
   }
   pack.close();
+  oscillate::test::require(!pack.fail(), "the test library's pack is written");
   std::ofstream manifest(directory / fret::library::manifest_file);
   manifest << fret::library::format_line << "\nname Fret test tones\n"
            << "attribution Synthetic tones for oscillate's tests\n"
@@ -153,6 +155,8 @@ inline void write_library(const std::filesystem::path& directory, double note_se
   for (const auto& line : lines) {
     manifest << line << '\n';
   }
+  manifest.close();
+  oscillate::test::require(!manifest.fail(), "the test library's manifest is written");
 }
 
 // A per-process directory in the build's scratch (TMPDIR), removed at exit.

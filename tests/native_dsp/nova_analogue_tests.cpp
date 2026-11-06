@@ -24,6 +24,8 @@
 // round-robin, re-roll moves each note repeatably, flutter stays within its
 // maximum for any block split and the noise level follows an oscillator.
 namespace {
+// The smallest seeded offset the seed searches accept as audible, in cents.
+constexpr double audible_cents = 2.0;
 using namespace synth_test;
 namespace nova = oscillate::native_dsp::synth::nova;
 
@@ -187,11 +189,13 @@ void a_voice_is_tuned_by_its_seeded_offset() {
   set(patch, "nova.analogue.pitch", 0.5);
   // A seed whose first voice is audibly off.
   double expected = 0.0;
-  for (double seed = 1.0; std::fabs(expected) < 2.0; ++seed) {
-    set(patch, "nova.analogue.seed", seed);
+  const auto last_seed = static_cast<int>(nova::analogue_seed_max);
+  for (int seed = 1; seed <= last_seed && std::fabs(expected) < audible_cents; ++seed) {
+    set(patch, "nova.analogue.seed", static_cast<double>(seed));
     expected = lane_value(patch, nova::AnalogueKind::notes, nova::AnalogueLane::pitch) *
                nova::analogue_pitch_cents;
   }
+  REQUIRE_GE(std::fabs(expected), audible_cents, "some seed puts the first voice audibly off");
   REQUIRE_LE(std::fabs(expected), nova::analogue_pitch_cents, "within the part's maximum");
   REQUIRE_LT(std::fabs(measured_cents(patch) - expected), 0.2,
              "the note sounds at its seeded offset within 0.2 cent");
@@ -374,13 +378,15 @@ void the_seventh_note_reuses_the_first_card() {
   set(patch, "nova.analogue.cards", 6.0);
   // A seed whose first two cards are audibly apart.
   double first = 0.0, second = 0.0;
-  for (double seed = 1.0; std::fabs(first - second) < 2.0; ++seed) {
-    set(patch, "nova.analogue.seed", seed);
+  const auto last_seed = static_cast<int>(nova::analogue_seed_max);
+  for (int seed = 1; seed <= last_seed && std::fabs(first - second) < audible_cents; ++seed) {
+    set(patch, "nova.analogue.seed", static_cast<double>(seed));
     first = lane_value(patch, nova::AnalogueKind::notes, nova::AnalogueLane::pitch, 0) *
             nova::analogue_pitch_cents;
     second = lane_value(patch, nova::AnalogueKind::notes, nova::AnalogueLane::pitch, 1) *
              nova::analogue_pitch_cents;
   }
+  REQUIRE_GE(std::fabs(first - second), audible_cents, "some seed sets two cards audibly apart");
   constexpr std::size_t notes = 7;
   const auto out =
       play(patch, repeated_a4(notes, repeat_length, repeat_spacing), notes * repeat_spacing);
