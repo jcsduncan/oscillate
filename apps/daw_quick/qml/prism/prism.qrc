@@ -1,0 +1,15 @@
+<RCC>
+  <qresource prefix="/prism">
+    <file>PrismPanel.qml</file>
+    <file>PrismTheme.qml</file>
+    <file>PrismSection.qml</file>
+    <file>PrismIcon.qml</file>
+    <file>PrismSegmented.qml</file>
+    <file>PrismWaveView.qml</file>
+    <file>PrismFilterView.qml</file>
+    <file>PrismEnvelopeView.qml</file>
+    <file>PrismLfoView.qml</file>
+    <file>PrismWheel.qml</file>
+    <file>PrismAmountBar.qml</file>
+  </qresource>
+</RCC>

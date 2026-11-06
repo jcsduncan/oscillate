@@ -1,0 +1,9 @@
+<RCC>
+  <qresource prefix="/relay">
+    <file>RelayPanel.qml</file>
+    <file>RelayTheme.qml</file>
+    <file>RelayEchoView.qml</file>
+    <file>RelayCharacterBay.qml</file>
+    <file>RelayVuMeter.qml</file>
+  </qresource>
+</RCC>

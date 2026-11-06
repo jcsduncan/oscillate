@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/pump">
+    <file>PumpPanel.qml</file>
+    <file>PumpTheme.qml</file>
+    <file>PumpCurve.qml</file>
+    <file>PumpShapes.js</file>
+  </qresource>
+</RCC>
