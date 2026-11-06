@@ -63,6 +63,10 @@ Item {
         bpmField.text = "120";
     }
     function activateForm() {
+        // Only whole, in-range fields reach the bridge.
+        if (!bpmField.acceptableInput || (selectedTick.length === 0
+                && (!barField.acceptableInput || !beatField.acceptableInput)))
+            return;
         const bpm = Number(bpmField.text);
         if (selectedTick.length > 0)
             bridge.update_tempo_event(selectedTick, bpm, shapeIndex);

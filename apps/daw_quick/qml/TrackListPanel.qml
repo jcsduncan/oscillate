@@ -331,7 +331,10 @@ Rectangle {
             onReleased: {
                 const position = knob.dragPosition
                 knob.dragPosition = -1
-                knob.commit(position)
+                // A click that did not move writes nothing (a gain above the
+                // knob's range stays as it is).
+                if (position !== pressPosition)
+                    knob.commit(position)
             }
             onCanceled: knob.dragPosition = -1
             onDoubleClicked: {
