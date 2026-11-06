@@ -7,6 +7,7 @@
 #include "oscillate/application/tempo_cache.hpp"
 #include "oscillate/foundation/midi.hpp"
 #include "oscillate/midi_file/smf.hpp"
+#include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/project/lookup.hpp"
 #include "session_state.hpp"
 
@@ -552,13 +553,26 @@ MidiClipService::move_midi_clip_to_track(project::ClipId clip, project::TrackId 
     // Clip-owned lanes must target the track that holds the clip. Channel
     // lanes follow the clip; instrument lanes follow it onto another native
     // instrument. Anything else would be lost, so the move is refused.
-    const bool native_destination =
-        std::holds_alternative<project::NativeInstrumentPatch>(target->instrument_source);
+    const auto* destination_patch =
+        std::get_if<project::NativeInstrumentPatch>(&target->instrument_source);
+    // An instrument lane moves only onto an engine with the same parameter
+    // and domain, so synth preparation accepts it.
+    const auto fits_destination = [&](const project::AutomationLane& lane,
+                                      const project::NativeParameterTarget& native) {
+      if (destination_patch == nullptr)
+        return false;
+      auto resolved = native_dsp::synth::resolve_native_instrument(*destination_patch);
+      if (!resolved)
+        return false;
+      auto domain = native_dsp::synth::native_automation_domain(*resolved.value().engine,
+                                                                native.parameter_id);
+      return domain && domain.value() == lane.domain;
+    };
     for (auto& lane : moved.automation) {
       if (auto* control = std::get_if<project::TrackControlTarget>(&lane.target)) {
         control->track = destination;
       } else if (auto* native = std::get_if<project::NativeParameterTarget>(&lane.target);
-                 native != nullptr && native_destination) {
+                 native != nullptr && fits_destination(lane, *native)) {
         native->track = destination;
       } else {
         return foundation::Result<void>::failure(
