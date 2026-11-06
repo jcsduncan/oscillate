@@ -1,0 +1,7 @@
+Checks: '-*,bugprone-*,clang-analyzer-*,performance-*,modernize-use-override,modernize-use-nullptr,modernize-use-ranges,readability-identifier-naming'
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*/(apps|include|src|tests)/.*'
+FormatStyle: file
+CheckOptions:
+  - key: readability-identifier-naming.NamespaceCase
+    value: lower_case
