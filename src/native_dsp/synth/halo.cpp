@@ -355,6 +355,10 @@ public:
     }
     const auto mode = static_cast<VoiceMode>(as_int(values_[p::voice_mode]));
     if (mode == VoiceMode::poly) {
+      // A switch from mono hands its sounding voice to the poly pool: it is
+      // released by its own note-off like any other.
+      mono_active_ = false;
+      stack_size_ = 0;
       start(allocate(), event, true);
       last_pitch_ = event.key;
       return;
@@ -370,9 +374,10 @@ public:
   }
 
   void note_off(const NoteEvent& event) noexcept override {
+    // Mono's stack and voice first, then any voice still holding the note:
+    // one started in poly before the mode changed.
     if (mono_active_) {
       mono_off(event);
-      return;
     }
     for (auto& voice : *voices_) {
       if (voice.active && voice.held && voice.note.clip == event.clip &&

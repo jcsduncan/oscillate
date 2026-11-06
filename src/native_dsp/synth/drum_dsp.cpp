@@ -33,12 +33,14 @@ void GlueCompressor::set(double amount, double release_seconds) noexcept {
 }
 
 StereoOut GlueCompressor::process(double left, double right) noexcept {
+  // The envelope tracks even while off, so turning the glue back up starts
+  // from the signal as it is now, not from before.
+  const double level = std::max(std::fabs(left), std::fabs(right));
+  envelope_ += (level - envelope_) * (level > envelope_ ? attack_ : release_);
   if (amount_ <= 0.0) {
     reduction_db_ = 0.0;
     return {left, right};
   }
-  const double level = std::max(std::fabs(left), std::fabs(right));
-  envelope_ += (level - envelope_) * (level > envelope_ ? attack_ : release_);
   const double over = gain_db(envelope_) - threshold_db_;
   constexpr double knee = 6.0;
   double reduction = 0.0;

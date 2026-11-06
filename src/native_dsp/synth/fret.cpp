@@ -406,9 +406,12 @@ private:
     const double slide_ms = values_[p::slide];
     if (slide_ms > 0.0) {
       for (auto& v : notes_v_) {
+        // The new target counts from where the last slide was heading (its
+        // key), and stays within the octave the rising filter is sized for.
+        const double target = v.target + static_cast<double>(n.key - v.key);
         if (v.active && v.held && v.key != n.key &&
-            std::abs(v.key - n.key) <= max_slide_semitones) {
-          v.target = v.semitones + static_cast<double>(n.key - v.key);
+            std::fabs(target) <= static_cast<double>(max_slide_semitones)) {
+          v.target = target;
           v.glide = (v.target - v.semitones) / std::max(1.0, slide_ms * rate_ / ms_per_second);
           v.key = n.key;
           v.clip = n.clip;

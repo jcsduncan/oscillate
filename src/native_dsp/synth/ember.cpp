@@ -531,7 +531,9 @@ private:
       voice.amp.gate_on();
       voice.seconds = 0.0;
     }
-    control_voice(voice, !continuing);
+    // Sets the voice's control state for the frames left in this tick; the
+    // tick itself advances glide and the LFO delay, once.
+    control_voice(voice, !continuing, false);
   }
 
   [[nodiscard]] Waveform vco_wave() const noexcept {
@@ -608,7 +610,9 @@ private:
 
   // ---- Control rate ----------------------------------------------------------
 
-  void control_voice(Voice& voice, bool jump) noexcept {
+  // `tick` advances the voice's glide and LFO-delay clock by one control
+  // interval; a note start only sets its state.
+  void control_voice(Voice& voice, bool jump, bool tick = true) noexcept {
     const auto v = values_;
     const std::uint32_t frames = frames_;
     const auto type = filter_type();
@@ -623,7 +627,7 @@ private:
       }
       voice.filter_fade.start();
     }
-    if (voice.glide_rate > 0.0) {
+    if (tick && voice.glide_rate > 0.0) {
       const double distance = voice.glide_target - voice.pitch;
       if (std::fabs(distance) <= voice.glide_rate) {
         voice.pitch = voice.glide_target;
@@ -632,7 +636,9 @@ private:
         voice.pitch += distance > 0.0 ? voice.glide_rate : -voice.glide_rate;
       }
     }
-    voice.seconds += 1.0 / control_rate_;
+    if (tick) {
+      voice.seconds += 1.0 / control_rate_;
+    }
     const double delay = v[p::lfo_delay];
     const double lfo = lfo_value_ * (delay <= 0.0 ? 1.0 : std::min(1.0, voice.seconds / delay));
     const double env = voice.env.value();
