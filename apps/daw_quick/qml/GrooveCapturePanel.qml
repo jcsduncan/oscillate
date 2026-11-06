@@ -341,7 +341,7 @@ Rectangle {
                                     font.pixelSize: panel.style.typeBody
                                     font.family: panel.style.monoFamily
                                     text: panel.gc.bpm > 0 ? String(panel.gc.bpm) : ""
-                                    validator: DoubleValidator { bottom: 0; top: 400; decimals: 2 }
+                                    validator: DoubleValidator { bottom: 0; top: 400; decimals: 2; locale: "C" }
                                     onEditingFinished: panel.gc.bpm = text.length > 0 ? Number(text) : 0
                                     Text {
                                         visible: bpmInput.text.length === 0

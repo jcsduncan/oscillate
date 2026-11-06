@@ -508,6 +508,7 @@ KeyReviewPanel {
                         bottom: 0
                         top: 4
                         decimals: 2
+                        locale: "C"
                     }
                     activeFocusOnTab: true
                     Accessible.name: "Send automation gain, 0 to 4"
@@ -587,6 +588,7 @@ KeyReviewPanel {
                                 bottom: 0
                                 top: 4
                                 decimals: 2
+                                locale: "C"
                             }
                             activeFocusOnTab: true
                             Accessible.name: "Send gain at " + sendPointRow.modelData.position
