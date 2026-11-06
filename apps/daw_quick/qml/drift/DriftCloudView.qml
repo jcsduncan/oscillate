@@ -370,4 +370,5 @@ Rectangle {
     onFrozenChanged: canvas.requestPaint()
     onSyncedChanged: canvas.requestPaint()
     onLagChanged: canvas.requestPaint()
+    onSprayChanged: canvas.requestPaint()
 }

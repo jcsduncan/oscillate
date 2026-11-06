@@ -592,8 +592,17 @@ Rectangle {
                             selected: padCell.chopIndex === panel.selected
                             sounding: chop !== null && panel.slotPlayhead(chop.slot) >= 0
                             last: chop !== null && panel.lastSlot === chop.slot
-                            onPressedPad: panel.pressPad(padCell.chopIndex)
-                            onReleasedPad: panel.releasePad(padCell.chopIndex)
+                            // The release goes to the chop the press started,
+                            // even if the pads re-ordered under the pointer.
+                            property int pressedChop: -1
+                            onPressedPad: {
+                                pressedChop = padCell.chopIndex
+                                panel.pressPad(pressedChop)
+                            }
+                            onReleasedPad: {
+                                panel.releasePad(pressedChop >= 0 ? pressedChop : padCell.chopIndex)
+                                pressedChop = -1
+                            }
                         }
                     }
                 }

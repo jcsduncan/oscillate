@@ -21,7 +21,7 @@ Rectangle {
     readonly property int revision: controller !== null ? controller.revision : 0
 
     // The shape.
-    property var points: prefix !== "" && revision >= 0 ? travelPoints() : []
+    property var points: controller !== null && prefix !== "" && revision >= 0 ? travelPoints() : []
     property var levels: []
     // Dashed markers, all in one stroke: { x, from, to } with from and to
     // as levels; left out, a marker runs the plot's full height.
