@@ -43,6 +43,8 @@ Rectangle {
     property real pressBar: 0
     property real pressValue: 0
     property var origins: ({})
+    // The point the pointer grabbed: the group's snap follows it.
+    property string anchorId: ""
     property var stroke: []
     property real bandX: 0
     property real bandWidth: 0
@@ -346,6 +348,7 @@ Rectangle {
                 } else if (lane.selection.indexOf(near) < 0) {
                     lane.selection = [near]
                 }
+                lane.anchorId = near
                 lane.mode = "point"
             } else if ((mouse.modifiers & Qt.ShiftModifier) !== 0) {
                 lane.mode = "band"
@@ -363,6 +366,7 @@ Rectangle {
                     if (added.length === 0)
                         return
                     lane.selection = [added]
+                    lane.anchorId = added
                     lane.mode = "added"
                     return
                 }
@@ -410,7 +414,7 @@ Rectangle {
                 const ids = Object.keys(lane.origins)
                 if (ids.length === 0)
                     return
-                const lead = lane.origins[ids[0]]
+                const lead = lane.origins[lane.anchorId] || lane.origins[ids[0]]
                 const deltaBar = lane.mode === "segment" ? 0
                     : lane.snapped(lead.bar + bar - lane.pressBar, free) - lead.bar
                 const deltaValue = value - lane.pressValue

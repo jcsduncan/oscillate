@@ -220,7 +220,7 @@ Item {
                 font.pixelSize: Theme.typeEmphasis
                 font.family: editor.monoFamily
                 selectByMouse: true
-                validator: DoubleValidator { bottom: 20; top: 999; decimals: 3 }
+                validator: DoubleValidator { bottom: 20; top: 999; decimals: 3; locale: "C" }
                 Accessible.role: Accessible.EditableText
                 Accessible.name: "Track tempo in BPM"
                 onAccepted: {

@@ -89,7 +89,7 @@ Item {
             text: Number(editor.track.level ?? 1).toFixed(2)
             color: editor.textMain
             font.pixelSize: Theme.typeSmall
-            validator: DoubleValidator { bottom: 0; top: 4; decimals: 3 }
+            validator: DoubleValidator { bottom: 0; top: 4; decimals: 3; locale: "C" }
             activeFocusOnTab: true
             Accessible.name: "Channel automation linear level, 0 to 4"
         }
@@ -199,7 +199,7 @@ Item {
                     text: Number(pointRow.modelData.value).toFixed(2)
                     color: editor.textMain
                     font.pixelSize: Theme.typeSmall
-                    validator: DoubleValidator { bottom: 0; top: 4; decimals: 3 }
+                    validator: DoubleValidator { bottom: 0; top: 4; decimals: 3; locale: "C" }
                     activeFocusOnTab: true
                     Accessible.name: "Channel level at " + pointRow.modelData.position
                     onEditingFinished: {
