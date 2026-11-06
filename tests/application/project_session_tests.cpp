@@ -5505,7 +5505,7 @@ void encoded_import_is_explicitly_unavailable_without_codec() {
   REQUIRE_OK(session, "codec-off project setup failed");
   const auto source = make_wav(directory.path());
   FileDescriptor input(source);
-  auto unavailable = session.value()->begin_encoded_audio_import(input.get());
+  auto unavailable = session.value()->imports().begin_encoded_audio_import(input.get());
   REQUIRE_TRUE(!unavailable, "codec-off encoded import did not report unsupported");
   REQUIRE_EQ(unavailable.error().code, foundation::ErrorCode::unsupported,
              "codec-off encoded import did not report unsupported");
