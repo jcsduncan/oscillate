@@ -1,0 +1,86 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit review settings. The rules mirror AGENTS.md; keep them in step.
+language: en-GB
+early_access: false
+
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches: [main]
+  path_filters:
+    - "!third_party/**"
+    - "!docs/dependencies/notices/**"
+    - "!assets/starter/**/*.wav"
+    - "!CHANGELOG.md"
+  path_instructions:
+    - path: "{src,include}/**/*.{cpp,hpp,h}"
+      instructions: |
+        C++20 only: no C++23 features, compiler extensions, JUCE or new
+        runtime dependencies. Real-time rules (AGENTS.md): code reachable from
+        the audio callback must not allocate or free memory, take or wait on
+        a mutex, block, perform file or network I/O, format logs, call UI
+        code, discover plugins or read mutable project state. Graph and
+        buffer construction and reclamation happen off the callback; flag
+        std::vector growth, std::string building, std::function captures,
+        shared_ptr releases and exceptions on those paths. Timing and
+        automation maths must come from the shared timeline module, not be
+        duplicated. Project commands validate before mutating and publish one
+        atomic revision. Treat project files, media, manifests and plugin
+        state as untrusted input with bounded sizes and validated paths.
+        No magic numbers: shared values (sample rates, block sizes,
+        tolerances, notes, gains) get one named constexpr. Qt types stay in
+        apps/daw_quick and src/app/plugin_ui. No migrations or legacy paths
+        for development schemas.
+    - path: "tests/**/*.{cpp,hpp,h}"
+      instructions: |
+        Tests use independent or hand-calculated oracles, not restatements of
+        the implementation. Name tolerances, notes, sample rates and block
+        sizes once as constexpr. No sleeps as oracles. Every test is
+        registered with oscillate_add_test (tier fast, slow or live) and has a
+        budget in cmake/TestBudgets.cmake; never loosen a tolerance or drop a
+        case for speed.
+    - path: "apps/daw_quick/**/*.{cpp,hpp,h}"
+      instructions: |
+        Keep the app entry point to startup and composition. Add workflows to
+        feature-owned adapters, not the central Quick facade. Update QML
+        through live controls and keyed list models rather than full
+        refreshes. No blocking work on the GUI thread.
+    - path: "apps/daw_quick/**/*.qml"
+      instructions: |
+        Use the panel's theme tokens (the *Theme.qml / *Style.qml singletons
+        and devicekit KitTheme) for colours, sizes, spacing and fonts; flag
+        literal colours, pixel sizes and durations. Keep logic in C++
+        adapters, not in QML.
+    - path: "**/CMakeLists.txt"
+      instructions: |
+        One CMake target per component, dependencies through
+        target_link_libraries, oscillate_target_defaults applied. Tests use
+        oscillate_add_test; a raw add_test is an error.
+    - path: "{scripts,tools,tests,bench}/**/*.py"
+      instructions: |
+        Imports at the top of the file, never inside functions. Do not use
+        hasattr to avoid knowing an API. Scripts are run with python3 -I.
+    - path: ".github/workflows/**"
+      instructions: |
+        Pin third-party actions by full commit SHA with a version comment and
+        keep permissions least-privilege per workflow and job.
+
+  tools:
+    ruff:
+      enabled: true
+    shellcheck:
+      enabled: true
+    actionlint:
+      enabled: true
+    markdownlint:
+      enabled: false
+
+chat:
+  auto_reply: true
