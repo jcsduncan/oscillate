@@ -174,11 +174,11 @@ public:
         l += (rotations_[0] - l) * w;
         r += (rotations_[1] - r) * w;
       }
+      // The block applies to the signal as it now stands.
+      const double bl = dc_stage(0, l);
+      const double br = dc_stage(1, r);
       if (!dc_.off()) {
-        // The block applies to the signal as it now stands.
         const double w = dc_.next();
-        const double bl = dc_stage(0, l);
-        const double br = dc_stage(1, r);
         l += (bl - l) * w;
         r += (br - r) * w;
       }

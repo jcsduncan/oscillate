@@ -45,13 +45,17 @@ struct Shape {
 // callers that know the future read the shape that much early.
 class GainSmoother {
 public:
+  // The two-pole cascade's 10-90 % rise, in time constants.
+  static constexpr double rise_time_constants = 3.357;
+  // Its delay, in time constants.
+  static constexpr double delay_time_constants = 2.0;
   void prepare(double sample_rate) noexcept { rate_ = sample_rate; }
   void set(double rise_seconds) noexcept {
-    tau_ = std::max(rise_seconds / 3.357, 1.0 / rate_);
+    tau_ = std::max(rise_seconds / rise_time_constants, 1.0 / rate_);
     coefficient_ = 1.0 - std::exp(-1.0 / (tau_ * rate_));
   }
   // The gain's delay through the smoother, in seconds.
-  [[nodiscard]] double delay_seconds() const noexcept { return 2.0 * tau_; }
+  [[nodiscard]] double delay_seconds() const noexcept { return delay_time_constants * tau_; }
   [[nodiscard]] double tau_seconds() const noexcept { return tau_; }
   void reset(double gain) noexcept { a_ = b_ = gain; }
   [[nodiscard]] double next(double target) noexcept {
@@ -73,9 +77,17 @@ private:
 // slow one by 6 dB, then holding off for 60 ms so a kick fires once.
 class KickDetector {
 public:
-  void prepare(double sample_rate, double hold_seconds = 0.060) noexcept {
-    fast_release_ = std::exp(-1.0 / (0.005 * sample_rate));
-    slow_ = std::exp(-1.0 / (0.120 * sample_rate));
+  static constexpr double default_hold_seconds = 0.060;
+  static constexpr double fast_release_seconds = 0.005;
+  static constexpr double slow_seconds = 0.120;
+  // The fast follower must exceed the slow one by this ratio (6 dB) ...
+  static constexpr double onset_ratio = 2.0;
+  // ... plus this floor, so silence never fires.
+  static constexpr double onset_floor = 1e-6;
+
+  void prepare(double sample_rate, double hold_seconds = default_hold_seconds) noexcept {
+    fast_release_ = std::exp(-1.0 / (fast_release_seconds * sample_rate));
+    slow_ = std::exp(-1.0 / (slow_seconds * sample_rate));
     hold_frames_ = static_cast<std::uint32_t>(hold_seconds * sample_rate);
   }
   void set_threshold_db(double db) noexcept {
@@ -94,7 +106,7 @@ public:
       --hold_;
       return false;
     }
-    if (fast_ >= threshold_ && fast_ > 2.0 * slow_level_ + 1e-6) {
+    if (fast_ >= threshold_ && fast_ > onset_ratio * slow_level_ + onset_floor) {
       hold_ = hold_frames_;
       return true;
     }

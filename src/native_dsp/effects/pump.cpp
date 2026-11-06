@@ -207,6 +207,8 @@ public:
         band_steps_(band_fade_seconds * sample_rate) {
     for (auto& line : delay_)
       line.prepare(lookahead_ + 1);
+    for (auto& line : listen_delay_)
+      line.prepare(lookahead_ + 1);
     for (auto& smoother : smoothers_) {
       smoother.prepare(sample_rate);
       smoother.set(values[p::anticlick] * 1e-3);
@@ -337,6 +339,12 @@ public:
       delay_[1].write(in.right);
       const double left = delay_[0].sample(lookahead_);
       const double right = delay_[1].sample(lookahead_);
+      // Listen hears the key on the output's clock; the detector, below,
+      // still hears it now. The line runs whether or not Listen is on.
+      listen_delay_[0].write(band_key.left);
+      listen_delay_[1].write(band_key.right);
+      const double listen_l = listen_delay_[0].sample(lookahead_);
+      const double listen_r = listen_delay_[1].sample(lookahead_);
 
       // Where the shape is read for the output frame, read early by the
       // smoothers' delay so the smoothed gain lands where it was drawn.
@@ -483,8 +491,8 @@ public:
       // Listen: what the detector hears, in place of the output.
       const double listen = listen_.next();
       if (listen > 0.0) {
-        l += listen * (band_key.left - l);
-        r += listen * (band_key.right - r);
+        l += listen * (listen_l - l);
+        r += listen * (listen_r - r);
       }
       const double out = output_.next();
       audio[i] = {static_cast<float>(l * out), static_cast<float>(r * out)};
@@ -497,6 +505,8 @@ public:
 
   void reset() noexcept override {
     for (auto& line : delay_)
+      line.reset();
+    for (auto& line : listen_delay_)
       line.reset();
     crossover_.reset();
     high_split_.reset();
@@ -677,6 +687,7 @@ private:
   double band_steps_;
   const PumpState* state_ = &default_state();
   std::array<dsp::Delay, 2> delay_;
+  std::array<dsp::Delay, 2> listen_delay_;
   std::array<GainSmoother, shape_bands> smoothers_;
   KickDetector detector_;
   KickDetector onset_detector_;

@@ -85,7 +85,12 @@ public:
     channel_ = as_int(v[p::channel]);
     overlay_ = v[p::overlay] != 0.0;
     align_ = v[p::align] != 0.0;
-    low_band_ = as_int(v[p::align_band]) == 1;
+    const bool low_band = as_int(v[p::align_band]) == 1;
+    if (low_band != low_band_) {
+      // A new band starts a fresh window: no samples or averages from the old.
+      clear_alignment();
+      low_band_ = low_band;
+    }
   }
 
   void process(std::span<engine::StereoFrame> audio,
@@ -134,12 +139,7 @@ public:
   }
 
   void reset() noexcept override {
-    for (auto& ring : rings_) {
-      std::fill(ring.begin(), ring.end(), 0.0);
-    }
-    band_[0].reset();
-    band_[1].reset();
-    write_ = 0;
+    clear_alignment();
     for (auto& set : minimum_) {
       set.fill(0.0F);
     }
@@ -153,10 +153,6 @@ public:
     delay_ms_ = 0.0;
     polarity_ = 1.0;
     correlation_ = 0.0;
-    std::fill(average_.begin(), average_.end(), 0.0);
-    energy_a_ = 0.0;
-    energy_b_ = 0.0;
-    averaged_ = false;
   }
 
   [[nodiscard]] std::size_t telemetry(std::span<float> out) const noexcept override {
@@ -178,6 +174,20 @@ public:
   }
 
 private:
+  // The alignment history: rings, band filters, the window count and the
+  // averaged correlation and energies.
+  void clear_alignment() noexcept {
+    for (auto& ring : rings_) {
+      std::fill(ring.begin(), ring.end(), 0.0);
+    }
+    band_[0].reset();
+    band_[1].reset();
+    write_ = 0;
+    std::fill(average_.begin(), average_.end(), 0.0);
+    energy_a_ = 0.0;
+    energy_b_ = 0.0;
+    averaged_ = false;
+  }
   void commit_column() noexcept {
     for (std::size_t s = 0; s < 2; ++s) {
       if (low_[s] <= high_[s]) {
