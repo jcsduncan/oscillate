@@ -73,11 +73,14 @@ Rectangle {
             objectName: "keyMatchDismiss"
             anchors.verticalCenter: parent.verticalCenter
             text: "×"
-            color: dismissArea.containsMouse ? Theme.textMain : Theme.textFaint
+            color: dismissArea.containsMouse || activeFocus ? Theme.textMain : Theme.textFaint
             Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.hover } }
             font.pixelSize: Theme.typeHeading
+            activeFocusOnTab: hint.shown
             Accessible.role: Accessible.Button
             Accessible.name: "Keep the clip's key"
+            Keys.onReturnPressed: hint.controller.dismiss()
+            Keys.onSpacePressed: hint.controller.dismiss()
             MouseArea {
                 Tip {}
                 id: dismissArea
