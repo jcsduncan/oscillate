@@ -1,0 +1,211 @@
+#pragma once
+
+#include "oscillate/engine/graph.hpp"
+#include "oscillate/foundation/error.hpp"
+#include "oscillate/native_dsp/synth/parameter_control.hpp"
+#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/synth/runtime.hpp"
+#include "oscillate/project/model.hpp"
+
+#include <atomic>
+#include <compare>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <span>
+#include <string_view>
+#include <vector>
+
+// The native effect platform (ADR-0040): every effect is a versioned
+// parameter table plus a DSP kernel, run by one generic runtime that shares
+// the synths' parameter control, stepped lanes and telemetry.
+namespace oscillate::native_dsp::effects {
+
+using synth::control_interval_frames;
+using synth::EngineDescriptor;
+using synth::ParameterLane;
+using synth::SynthTransport;
+// An effect's compiled document (ADR-0058), as for synths: immutable, built
+// on control, read by its kernel on the callback.
+using DocumentState = synth::SynthDocumentState;
+
+// A note-on of a track keying an effect (EffectEngine::key_notes), at its
+// project frame.
+struct KeyNote {
+  std::int64_t frame = 0;
+  std::uint8_t key = 0;
+  std::uint8_t velocity = 0;
+  auto operator<=>(const KeyNote&) const = default;
+};
+
+// Engine-specific DSP. Created and destroyed on control; every other member
+// runs only on the one callback that owns the runtime.
+class EffectKernel {
+public:
+  virtual ~EffectKernel() = default;
+  // At each control tick: effective plain values in table order, frames to
+  // the next tick, and the musical position at the tick.
+  virtual void control(std::span<const double> values, std::uint32_t frames_to_next_tick,
+                       const SynthTransport& transport) noexcept = 0;
+  // In place. frames never span a control tick. sidechain is empty unless
+  // the engine takes one and the route supplies it.
+  virtual void process(std::span<engine::StereoFrame> audio,
+                       std::span<const engine::StereoFrame> sidechain) noexcept = 0;
+  // Seek or loop: clear history (delay lines, filters) without a click; the
+  // kernel declicks its own last output.
+  virtual void reset() noexcept = 0;
+  // Callback only, after each block: the engine's telemetry layout.
+  [[nodiscard]] virtual std::size_t telemetry(std::span<float> out) const noexcept {
+    (void)out;
+    return 0;
+  }
+  // At a block start (and once on control before the first block): the
+  // engine's compiled document, valid until the next adoption. Effects
+  // without a document never see this.
+  virtual void adopt_document(const DocumentState& state) noexcept { (void)state; }
+  // Engines with EffectEngine::key_notes, at a block start: the note-ons
+  // of the tracks keying this effect (sorted by frame, then key; unique),
+  // valid until the next adoption, so the kernel sees them ahead.
+  virtual void adopt_key_notes(std::span<const KeyNote> notes) noexcept { (void)notes; }
+  // Before each process call: the project frame of its first frame.
+  virtual void locate(std::uint64_t project_frame) noexcept { (void)project_frame; }
+};
+
+struct EffectEngine {
+  const EngineDescriptor* descriptor = nullptr;
+  // Control only. Allocates everything the kernel needs for these initial
+  // values at this rate (they fix the latency); null when they cannot run.
+  std::unique_ptr<EffectKernel> (*create_kernel)(std::span<const double> values,
+                                                 double sample_rate) = nullptr;
+  // Control only: frames the effect keeps sounding after its input stops.
+  std::uint64_t (*tail_frames)(std::span<const double> values, double sample_rate) = nullptr;
+  // Control only: constant processing delay for these values. A change of
+  // latency needs a route rebuild; every other edit is live.
+  std::uint32_t (*latency_frames)(std::span<const double> values, double sample_rate) = nullptr;
+  // True when the effect reads a sidechain input.
+  bool sidechain = false;
+  // True when the effect sounds with no input (a test generator). Hosts
+  // keep it processing while it is in the chain; its tail is only the fade
+  // after it is switched off, and silence in is not silence out.
+  bool generator = false;
+  // Structured state (ADR-0058): drawn curves. Null for effects whose state
+  // is only their parameter table: they accept only an empty document.
+  // Control only: is this document's meaning valid for the engine?
+  foundation::Result<void> (*validate_document)(const project::NativeSynthDocument& document) =
+      nullptr;
+  // Control only, for a validated document: compile it. The kernel reads
+  // the result without allocating; `previous` is the state last compiled
+  // for the same runtime (null for the first) and may still be in use.
+  foundation::Result<std::shared_ptr<const DocumentState>> (*prepare_document)(
+      const project::NativeSynthDocument& document, double sample_rate,
+      const DocumentState* previous) = nullptr;
+  // The document a factory preset, or the defaults (nullopt), start with;
+  // empty when null.
+  project::NativeSynthDocument (*preset_document)(std::optional<std::size_t> preset) = nullptr;
+  // True when the kernel reads its keying tracks' notes (adopt_key_notes):
+  // stages compile them from the project and refresh them on every edit.
+  bool key_notes = false;
+};
+
+[[nodiscard]] std::span<const EffectEngine* const> engines() noexcept;
+[[nodiscard]] const EffectEngine* find_engine(std::string_view id) noexcept;
+
+enum class EffectProcessStatus : std::uint8_t {
+  rendered,
+  invalid_block,
+  invalid_sidechain,
+  invalid_lanes
+};
+
+// One serialized control producer, one audio callback consumer: create on
+// control, process on exactly one callback.
+class NativeEffectRuntime {
+public:
+  [[nodiscard]] static foundation::Result<std::unique_ptr<NativeEffectRuntime>>
+  create(const EffectEngine& engine, std::span<const double> values, double sample_rate);
+  // With a document the engine validated.
+  [[nodiscard]] static foundation::Result<std::unique_ptr<NativeEffectRuntime>>
+  create(const EffectEngine& engine, std::span<const double> values,
+         const project::NativeSynthDocument& document, double sample_rate);
+
+  // Callback only. In place. A transport-generation change resets the
+  // kernel. Lanes name live, automatable parameters with one value per
+  // frame. A rejected block leaves audio and state unchanged.
+  [[nodiscard]] EffectProcessStatus
+  process(std::span<engine::StereoFrame> audio, std::span<const engine::StereoFrame> sidechain,
+          std::uint64_t project_frame, std::uint64_t transport_generation,
+          const SynthTransport& transport, std::span<const ParameterLane> lanes) noexcept;
+
+  // Control only (ADR-0027 semantics): adopted at the next block, panel
+  // jumps glide over each parameter's glide time.
+  [[nodiscard]] bool offer_values(std::span<const double> values, std::uint64_t revision) noexcept {
+    return control_.offer(values, revision);
+  }
+  // Control only: a panel control mid-drag, with no saved revision.
+  [[nodiscard]] bool offer_live_values(std::span<const double> values) noexcept {
+    return control_.offer_live(values);
+  }
+  [[nodiscard]] std::uint64_t applied_revision() const noexcept {
+    return control_.applied_revision();
+  }
+  // Control only: compile a validated document and offer it, before
+  // offer_values with the same revision; the callback adopts both at one
+  // block start. Revisions must not decrease (a retry may repeat one).
+  [[nodiscard]] foundation::Result<void>
+  offer_document(const project::NativeSynthDocument& document, std::uint64_t revision);
+  // Control only: the keying tracks' note-ons, sorted and unique, adopted
+  // at the next block start. False when they are the ones offered last
+  // (nothing to do).
+  bool offer_key_notes(std::vector<KeyNote> notes);
+  // Control only: the document last offered (or created with).
+  [[nodiscard]] const project::NativeSynthDocument& document() const noexcept { return document_; }
+  [[nodiscard]] bool read_telemetry(std::vector<float>& out) { return telemetry_->read(out); }
+  [[nodiscard]] const EffectEngine& engine() const noexcept { return engine_; }
+  // Fixed at creation (see EffectEngine::latency_frames).
+  [[nodiscard]] std::uint32_t latency_frames() const noexcept { return latency_; }
+  // This instance's number in performance traces (its engine-named spans);
+  // label it with foundation::trace::label(engine().descriptor->name.data(), ...).
+  [[nodiscard]] std::uint64_t trace_instance() const noexcept { return trace_instance_; }
+
+private:
+  NativeEffectRuntime(const EffectEngine& engine, std::unique_ptr<EffectKernel> kernel,
+                      std::span<const double> values, double sample_rate);
+  void adopt_document() noexcept;
+  void adopt_key_notes() noexcept;
+
+  // Compiled documents in offer order. Control owns them and retires those
+  // older than the callback's adopted revision; the callback reads the one
+  // it adopted until the next adoption.
+  struct DocumentOffer {
+    std::uint64_t revision = 0;
+    std::shared_ptr<const DocumentState> state;
+  };
+  struct DocumentMailbox {
+    std::atomic<const DocumentOffer*> offered{nullptr};
+    std::atomic<std::uint64_t> applied{0};
+  };
+
+  EffectEngine engine_;
+  std::unique_ptr<EffectKernel> kernel_;
+  synth::ParameterControl control_;
+  std::unique_ptr<synth::TelemetryBuffer> telemetry_ = std::make_unique<synth::TelemetryBuffer>();
+  project::NativeSynthDocument document_;                 // Control only.
+  std::vector<std::unique_ptr<DocumentOffer>> documents_; // Control only.
+  std::unique_ptr<DocumentMailbox> document_mailbox_ = std::make_unique<DocumentMailbox>();
+  // Key notes in offer order (control owns them): the callback reads the
+  // one it adopted until it adopts the newest.
+  struct KeyNotesMailbox {
+    std::atomic<const std::vector<KeyNote>*> offered{nullptr};
+    std::atomic<const std::vector<KeyNote>*> applied{nullptr};
+  };
+  std::vector<std::unique_ptr<const std::vector<KeyNote>>> key_notes_; // Control only.
+  std::unique_ptr<KeyNotesMailbox> key_notes_mailbox_ = std::make_unique<KeyNotesMailbox>();
+  double sample_rate_ = 48'000.0;
+  std::uint32_t latency_ = 0;
+  std::uint64_t generation_ = 0;
+  std::uint64_t trace_instance_ = 0;
+  bool started_ = false;
+};
+
+} // namespace oscillate::native_dsp::effects
