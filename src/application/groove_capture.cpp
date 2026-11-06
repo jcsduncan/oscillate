@@ -181,6 +181,16 @@ foundation::Error invalid(std::string message) {
   return {ErrorCode::invalid_argument, std::move(message)};
 }
 
+// A tempo a groove can be measured or auditioned at.
+constexpr double min_request_bpm = 20.0;
+constexpr double max_request_bpm = 999.0;
+// The latest start a capture accepts: a day into the record.
+constexpr double max_start_seconds = 24.0 * 60.0 * 60.0;
+
+bool valid_tempo(double bpm) {
+  return std::isfinite(bpm) && bpm >= min_request_bpm && bpm <= max_request_bpm;
+}
+
 Result<void> validate(const Request& request) {
   if (request.bars < min_bars || request.bars > max_bars)
     return Result<void>::failure(invalid("Measure between 4 and 32 bars"));
@@ -189,8 +199,11 @@ Result<void> validate(const Request& request) {
   if (request.steps_per_quarter != 2 && request.steps_per_quarter != 4 &&
       request.steps_per_quarter != 8)
     return Result<void>::failure(invalid("Choose an 8th, 16th or 32nd grid"));
-  if (request.bpm && (!std::isfinite(*request.bpm) || *request.bpm <= 0.0))
-    return Result<void>::failure(invalid("The tempo must be above zero"));
+  if (request.bpm && !valid_tempo(*request.bpm))
+    return Result<void>::failure(invalid("The tempo must be between 20 and 999 BPM"));
+  if (!std::isfinite(request.start_seconds) || request.start_seconds < 0.0 ||
+      request.start_seconds > max_start_seconds)
+    return Result<void>::failure(invalid("The capture must start within the record"));
   return Result<void>::success();
 }
 
@@ -571,10 +584,11 @@ Result<Capture> capture_audio(std::span<const float> mono, std::uint32_t rate,
     return R::failure(valid.error());
   if (rate == 0 || mono.empty())
     return R::failure(invalid("The record is empty"));
-  auto kicks = detect_onsets(mono, rate, Band::kick);
-  if (kicks.size() < min_grid_hits)
-    kicks = detect_onsets(mono, rate, Band::all);
-  auto grid = fit_grid(kicks, rate, request.bpm, request.start_seconds * rate);
+  const auto kicks = detect_onsets(mono, rate, Band::kick);
+  // Too few kicks to fit a grid: the grid (only) falls back to every hit.
+  const auto grid_hits =
+      kicks.size() < min_grid_hits ? detect_onsets(mono, rate, Band::all) : kicks;
+  auto grid = fit_grid(grid_hits, rate, request.bpm, request.start_seconds * rate);
   if (!grid)
     return R::failure(grid.error());
   const auto onsets = request.band == Band::kick ? kicks : detect_onsets(mono, rate, request.band);
@@ -789,7 +803,8 @@ Result<Capture> capture_clip(const persistence::ProjectStore& store,
 
 std::vector<float> audition(const persistence::GrooveTemplate& groove, double bpm,
                             std::uint32_t rate, std::size_t bars, bool grooved) {
-  if (rate == 0 || bpm <= 0.0 || groove.steps.empty() || groove.steps_per_quarter == 0)
+  if (rate == 0 || !valid_tempo(bpm) || bars > max_bars || groove.steps.empty() ||
+      groove.steps_per_quarter == 0)
     return {};
   const double quarter = period_frames(bpm, rate);
   const double step = quarter / groove.steps_per_quarter;

@@ -42,7 +42,22 @@ public:
                 std::uint32_t sample_rate, TickPosition origin)
       : division_(division), tempo_(tempo), sample_rate_(sample_rate), origin_(origin) {}
 
+  // Every converted tick leaves room for its successor (tick + 1), which
+  // note lengths and pedal ends rely on.
   [[nodiscard]] Result<std::int64_t> operator()(std::uint64_t file_tick) const {
+    auto tick = convert(file_tick);
+    if (tick && tick.value() == std::numeric_limits<std::int64_t>::max())
+      return too_long();
+    return tick;
+  }
+
+private:
+  [[nodiscard]] Result<std::int64_t> convert(std::uint64_t file_tick) const {
+    // A File built directly (not parsed) may carry a zero division.
+    if (division_.smpte ? division_.frames_per_second == 0 || division_.ticks_per_frame == 0
+                        : division_.ticks_per_quarter == 0)
+      return Result<std::int64_t>::failure(
+          {ErrorCode::invalid_argument, "The MIDI file's time division is invalid"});
     if (!division_.smpte) {
       const auto numerator = static_cast<Wide>(file_tick) * tpq;
       auto quotient = numerator / division_.ticks_per_quarter;
@@ -74,7 +89,6 @@ public:
     return Result<std::int64_t>::success(tick.value().value);
   }
 
-private:
   static Result<std::int64_t> too_long() {
     return Result<std::int64_t>::failure(
         {ErrorCode::resource_exhausted, "The MIDI file is too long for the project timeline"});

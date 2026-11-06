@@ -237,7 +237,13 @@ std::vector<project::MidiNote> strum_notes(std::span<const project::MidiNote> no
     for (std::size_t index = 1; index < tones.size(); ++index) {
       const auto& tone = *tones[index];
       const auto last = std::min(tone.end.value, pattern_length) - 1;
-      const auto moved = std::min(start + step_ticks * static_cast<std::int64_t>(index), last);
+      // Saturate: a strum offset past `last` lands on it, without overflow.
+      const auto room = last - start;
+      const auto index_ticks = static_cast<std::int64_t>(index);
+      const auto offset = step_ticks > 0 && index_ticks > room / step_ticks
+                              ? room
+                              : std::min(room, step_ticks * index_ticks);
+      const auto moved = start + offset;
       if (moved <= tone.start.value)
         continue;
       auto strummed = tone;

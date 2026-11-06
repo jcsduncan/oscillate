@@ -54,6 +54,20 @@ Result<void> collect_and_save_copy(const std::filesystem::path& source_root,
     return Result<void>::failure(
         {ErrorCode::invalid_argument, "Collection needs a distinct absolute destination"});
   }
+  {
+    // Not inside the source either: staging there would sit in the project's
+    // own state and fail its final consistency check.
+    std::error_code error;
+    const auto source = std::filesystem::weakly_canonical(source_root, error);
+    const auto destination = error ? std::filesystem::path{}
+                                   : std::filesystem::weakly_canonical(destination_root, error);
+    if (error)
+      return Result<void>::failure({ErrorCode::io_failure, "Cannot resolve the collection paths"});
+    const auto [inside, rest] = std::ranges::mismatch(source, destination);
+    if (inside == source.end())
+      return Result<void>::failure(
+          {ErrorCode::invalid_argument, "Collection destination is inside the source project"});
+  }
   if (stop.stop_requested())
     return cancelled();
 
@@ -240,10 +254,12 @@ Result<void> collect_and_save_copy(const std::filesystem::path& source_root,
     return Result<void>::failure({ErrorCode::conflict, "Saved project changed during collection"});
 
   const auto staged_name = temporary.path.filename().string();
-  if (!foundation::rename_in(parent_fd.get(), staged_name, name,
-                             foundation::PublishMode::no_replace,
-                             "Cannot publish collected project at destination")) {
-    return Result<void>::failure({errno == EEXIST ? ErrorCode::conflict : ErrorCode::io_failure,
+  const auto published =
+      foundation::rename_in(parent_fd.get(), staged_name, name, foundation::PublishMode::no_replace,
+                            "Cannot publish collected project at destination");
+  if (!published) {
+    const int failure = errno; // Read while the failed result still holds it.
+    return Result<void>::failure({failure == EEXIST ? ErrorCode::conflict : ErrorCode::io_failure,
                                   "Cannot publish collected project at destination"});
   }
   temporary.published = true;

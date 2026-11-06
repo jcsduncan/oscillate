@@ -50,6 +50,8 @@ constexpr std::array<CompPattern, 10> pattern_table{{
 
 // Blocks of the offline render: any size gives the same notes.
 constexpr std::uint32_t render_block = 1'024;
+// The longest range Comp renders in one apply (with its tail): an hour.
+constexpr std::uint64_t max_render_seconds = 3'600;
 constexpr IdBits render_clip{0x434f'4d50, 1};       // "COMP": what Comp plays.
 constexpr IdBits render_input_clip{0x434f'4d50, 2}; // The held notes it plays over.
 // The offline render is one transport run.
@@ -114,8 +116,9 @@ render_notes(std::span<const project::NativeInstrumentParameter> parameters,
   auto first_tick = start.value;
   for (std::size_t index = 0; index < held.size(); ++index) {
     const auto& note = held[index];
-    if (note.start.value < 0 || note.end <= note.start || !foundation::valid_midi_key(note.key) ||
-        !foundation::valid_note_velocity(note.velocity))
+    if (note.start.value < 0 || note.end <= note.start ||
+        note.end.value > std::numeric_limits<std::int64_t>::max() - clip_start.value ||
+        !foundation::valid_midi_key(note.key) || !foundation::valid_note_velocity(note.velocity))
       return R::failure({ErrorCode::invalid_argument, "A held note is not a valid note"});
     auto note_id = project::NoteId::from_bits({0, index + 1});
     if (!note_id)
@@ -168,6 +171,8 @@ render_notes(std::span<const project::NativeInstrumentParameter> parameters,
   std::vector<Made> made;
   const auto first_frame = static_cast<std::uint64_t>(first.value().value);
   const auto last_frame = static_cast<std::uint64_t>(last.value().value);
+  if (last_frame - first_frame > max_render_seconds * sample_rate)
+    return R::failure({ErrorCode::resource_exhausted, "The range is too long to play Comp over"});
   for (auto frame = first_frame; frame <= last_frame; frame += render_block) {
     const fx::NoteClock clock(tempo, sample_rate, frame, render_block);
     if (!clock.valid())

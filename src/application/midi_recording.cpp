@@ -5,6 +5,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 namespace oscillate::application {
 
@@ -72,6 +73,8 @@ std::optional<CountIn> count_in_at(const project::Snapshot& snapshot, std::uint6
     return std::nullopt;
   const auto beats = (next.value().value - first.value().value) / beat_ticks;
   // The beat's length in frames at the tempo where the take starts.
+  if (tick.value().value > std::numeric_limits<std::int64_t>::max() - beat_ticks)
+    return std::nullopt;
   const auto from = snapshot.tempo.tick_to_sample(tick.value(), snapshot.sample_rate);
   const auto to =
       snapshot.tempo.tick_to_sample({tick.value().value + beat_ticks}, snapshot.sample_rate);

@@ -579,7 +579,9 @@ Result<ClipWarpProposal> propose_auto_warp(const project::Snapshot& snapshot, pr
                                                 : std::numeric_limits<std::int64_t>::max();
     const bool crowded = (next < manual.size() && near(beat, manual[next].source_frame.value)) ||
                          (next > 0 && near(beat, manual[next - 1].source_frame.value));
-    if (crowded || target <= previous_target || target >= following) {
+    // Every manual marker stays, so beat markers fill only the capacity left.
+    const bool full = markers.size() + (manual.size() - next) >= project::max_clip_warp_markers;
+    if (crowded || full || target <= previous_target || target >= following) {
       ++proposal.skipped_beats;
       continue;
     }
@@ -824,6 +826,9 @@ Result<ClipWarpProposal> propose_follow(const project::Snapshot& snapshot, proje
 
 Result<std::uint64_t> source_frame_at_fraction(const project::Snapshot& snapshot,
                                                project::ClipId id, double fraction) {
+  if (!std::isfinite(fraction))
+    return Result<std::uint64_t>::failure(
+        {ErrorCode::invalid_argument, "A clip fraction must be finite"});
   auto opened = ExtendedClipMap::open(snapshot, id);
   if (!opened)
     return Result<std::uint64_t>::failure(opened.error());
