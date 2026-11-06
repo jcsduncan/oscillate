@@ -220,11 +220,18 @@ std::optional<Vst3ParameterEvent> Vst3ManualEventSlot::claim_preview() noexcept 
   if (preview_version_.load(std::memory_order_acquire) != before || active == 0 ||
       revision < first || revision > active || !available(phase_.load(std::memory_order_acquire)))
     return std::nullopt;
+  released_preview_version_ = consumed_preview_version_;
+  released_manual_revision_ = consumed_manual_revision_;
   consumed_preview_version_ = before;
   consumed_manual_revision_ = manual_revision;
   constexpr auto scale = static_cast<double>(std::numeric_limits<std::uint32_t>::max());
   return Vst3ParameterEvent{static_cast<std::uint32_t>(word >> 32U), 0,
                             static_cast<double>(static_cast<std::uint32_t>(word)) / scale};
+}
+
+void Vst3ManualEventSlot::release_preview() noexcept {
+  consumed_preview_version_ = released_preview_version_;
+  consumed_manual_revision_ = released_manual_revision_;
 }
 
 bool Vst3ManualEventSlot::qualified_for_block(std::uint32_t parameter_id,
@@ -466,8 +473,12 @@ private:
       if ((next - 1)->sample == position)
         bpm = (next - 1)->bpm;
       auto selected = rendered == 0 ? (manual ? manual : transient) : std::nullopt;
-      if (selected && !manual_events_->qualified_for_block(selected->id, count))
+      if (selected && !manual_events_->qualified_for_block(selected->id, count)) {
+        // An unqualified preview stays available for a later block.
+        if (!manual)
+          manual_events_->release_preview();
         selected.reset();
+      }
       if (selected && manual)
         manual_applied = true;
       if (!render_segment(rendered, count, static_cast<std::int64_t>(position), bpm, selected)) {

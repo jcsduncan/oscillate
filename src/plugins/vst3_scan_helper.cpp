@@ -152,7 +152,14 @@ ScanResult inspect(const std::filesystem::path& bundle) {
 int main(int argc, char** argv) {
   if (argc != 2)
     return 2;
+  // The response goes to a private copy of stdout; the real stdout points at
+  // stderr while the plugin loads, so nothing it prints can corrupt the reply.
+  std::fflush(stdout);
+  const int response = dup(STDOUT_FILENO);
+  if (response < 0 || dup2(STDERR_FILENO, STDOUT_FILENO) < 0)
+    return 3;
   const auto result = inspect(argv[1]);
+  std::fflush(stdout);
   auto encoded = oscillate::plugins::detail::encode_scan_result(result);
   if (!encoded)
     encoded = oscillate::plugins::detail::encode_scan_result(
@@ -162,7 +169,7 @@ int main(int argc, char** argv) {
   const auto& bytes = *encoded;
   std::size_t offset = 0;
   while (offset < bytes.size()) {
-    const auto count = write(STDOUT_FILENO, bytes.data() + offset, bytes.size() - offset);
+    const auto count = write(response, bytes.data() + offset, bytes.size() - offset);
     if (count <= 0)
       return 3;
     offset += static_cast<std::size_t>(count);

@@ -81,7 +81,9 @@ Vst3Catalogue::refresh(std::span<const std::filesystem::path> explicit_paths) {
   std::size_t visited = 0;
   std::size_t searched = 0;
 
-  const auto discover = [&](const std::filesystem::path& search) {
+  // Explicit paths are the user's choice, so a missing one is reported;
+  // missing standard roots are normal and stay silent.
+  const auto discover = [&](const std::filesystem::path& search, bool chosen) {
     const auto root = canonical_path(search);
     if (!root) {
       next.truncated = true;
@@ -108,8 +110,11 @@ Vst3Catalogue::refresh(std::span<const std::filesystem::path> explicit_paths) {
       keep_smallest(local, *root, limits_.max_bundles, next.truncated);
     } else {
       std::error_code error;
-      if (!std::filesystem::is_directory(search, error))
+      if (!std::filesystem::is_directory(search, error)) {
+        if (chosen)
+          next.issues.push_back({search, "Plugin search path is not a directory"});
         return;
+      }
       std::filesystem::recursive_directory_iterator it(
           search, std::filesystem::directory_options::skip_permission_denied, error);
       const std::filesystem::recursive_directory_iterator end;
@@ -145,9 +150,9 @@ Vst3Catalogue::refresh(std::span<const std::filesystem::path> explicit_paths) {
   };
 
   for (const auto& path : explicit_paths)
-    discover(path);
+    discover(path, true);
   for (const auto& root : roots_)
-    discover(root);
+    discover(root, false);
   for (auto& entry : next.entries)
     entry.scan = scan_(entry.canonical_bundle);
   snapshot_ = std::move(next);

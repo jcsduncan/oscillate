@@ -1171,8 +1171,12 @@ bool Vst3EffectHost::restore_state_pair(const Vst3StatePair& state, std::string&
     error = "Saved VST3 controller state has no matching controller";
     return false;
   }
-  if (!state.component_state.empty() && !restore_component_state(state.component_state, error))
+  // A rejected component state may have changed the plugin part-way, so the
+  // pair's contract faults the host on any failure.
+  if (!state.component_state.empty() && !restore_component_state(state.component_state, error)) {
+    host.faulted = true;
     return false;
+  }
   if (!state.controller_state)
     return true;
   BoundedStream stream(*state.controller_state, host.config.max_state_bytes);

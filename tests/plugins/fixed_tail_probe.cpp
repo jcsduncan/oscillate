@@ -434,9 +434,16 @@ int main(int argc, char** argv) {
     verify_expected_identity(selected, state, options);
     const auto report = probe(selected, state, options.parameter_id);
     if (!options.output.empty()) {
-      std::ofstream output(options.output, std::ios::binary | std::ios::trunc);
+      // Written beside the target and renamed over it once closed, so a
+      // failed write never leaves partial evidence or destroys earlier evidence.
+      const auto partial = fs::path(options.output).concat(".partial");
+      std::ofstream output(partial, std::ios::binary | std::ios::trunc);
       if (!output || !(output << report.dump(2) << '\n'))
         throw std::runtime_error("evidence output write failed");
+      output.close();
+      if (output.fail())
+        throw std::runtime_error("evidence output close failed");
+      fs::rename(partial, options.output);
     } else {
       std::cout << report.dump(2) << '\n';
     }

@@ -81,6 +81,9 @@ public:
   [[nodiscard]] std::optional<Vst3ManualEventReceipt> collect() noexcept;
   [[nodiscard]] std::optional<Vst3ParameterEvent> claim() noexcept;
   [[nodiscard]] std::optional<Vst3ParameterEvent> claim_preview() noexcept;
+  // Audio thread only: hands back the last claimed preview, unapplied (a
+  // block it did not qualify for), so a later block can claim it again.
+  void release_preview() noexcept;
   // Audio consumer only: one bounded, read-only lookup before a parameter is
   // passed to the host. nullopt evidence is reserved for explicit fixtures.
   [[nodiscard]] bool qualified_for_block(std::uint32_t parameter_id,
@@ -123,6 +126,8 @@ private:
   std::uint64_t next_preview_version_{0};     // Serialized control producer only.
   std::uint64_t consumed_preview_version_{0}; // Audio consumer only.
   std::uint64_t consumed_manual_revision_{0}; // Audio consumer only.
+  std::uint64_t released_preview_version_{0}; // Audio consumer only.
+  std::uint64_t released_manual_revision_{0}; // Audio consumer only.
   std::uint32_t preview_parameter_id_{0};     // Serialized control producer only.
   std::atomic<std::uint64_t> preview_gesture_sequence_{0};
   std::uint64_t last_submitted_gesture_sequence_{0}; // Serialized control producer only.
