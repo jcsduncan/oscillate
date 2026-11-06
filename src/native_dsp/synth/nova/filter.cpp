@@ -203,7 +203,7 @@ VoiceFilter::Impl::Complex VoiceFilter::Impl::response(FilterModel model, const 
 struct FilterResponseProbe {
   [[nodiscard]] static double db(const FilterSettings& settings, double frequency_hz,
                                  double sample_rate) {
-    const double rate = sample_rate > 0.0 ? sample_rate : default_rate;
+    const double rate = supported_rate(sample_rate);
     const Params p{clamped(settings.cutoff_hz, min_cutoff_hz, max_cutoff_hz, Params{}.cutoff_hz),
                    clamped(settings.resonance, 0.0, 1.0, 0.0),
                    clamped(settings.drive_db, 0.0, max_drive_db, 0.0),
@@ -225,7 +225,7 @@ double filter_response_db(const FilterSettings& settings, double frequency_hz, d
 // ---- VoiceFilter ----------------------------------------------------------------------
 
 void VoiceFilter::prepare(double sample_rate) {
-  sample_rate_ = sample_rate > 0.0 && std::isfinite(sample_rate) ? sample_rate : default_rate;
+  sample_rate_ = supported_rate(sample_rate);
   // Coefficients follow the ramps at no less than ~44 kHz: every frame at
   // base rates, every second or fourth when the voice oversamples.
   interval_ = static_cast<std::uint32_t>(

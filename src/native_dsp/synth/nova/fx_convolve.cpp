@@ -152,15 +152,23 @@ private:
     if (!asset_ || asset_->frames.empty() || asset_->source_rate == 0) {
       return;
     }
+    const auto limit = static_cast<std::size_t>(max_ir_seconds * base_);
+    // Only the source frames the limited output reads: its span at the
+    // source rate plus the resampler's (widened) kernel half-width.
+    const double from = asset_->source_rate;
+    const double half = sinc_half_width / std::min(1.0, base_ / from);
+    const auto needed =
+        static_cast<std::size_t>(std::ceil(static_cast<double>(limit) * from / base_ + half)) + 1;
+    const std::size_t used = std::min(asset_->frames.size(), needed);
     std::array<std::vector<double>, 2> raw;
     for (auto& channel : raw) {
-      channel.reserve(asset_->frames.size());
+      channel.reserve(used);
     }
-    for (const auto& frame : asset_->frames) {
+    for (std::size_t i = 0; i < used; ++i) {
+      const auto& frame = asset_->frames[i];
       raw[0].push_back(std::isfinite(frame.left) ? frame.left : 0.0);
       raw[1].push_back(std::isfinite(frame.right) ? frame.right : 0.0);
     }
-    const auto limit = static_cast<std::size_t>(max_ir_seconds * base_);
     std::array<std::vector<double>, 2> ir{resample(raw[0], asset_->source_rate, base_, limit),
                                           resample(raw[1], asset_->source_rate, base_, limit)};
     double energy = 0.0;

@@ -56,6 +56,17 @@ inline constexpr double butterworth_q2 = 1.3065630;       // Second stage's flat
 inline constexpr double bell_db_per_decade = 40.0;
 // The rate when none (or nonsense) is given.
 inline constexpr double default_rate = 48'000.0;
+// The internal rates a filter supports: an 8 kHz host at base rate up to a
+// 192 kHz host oversampled four times. Others (and non-finite ones) are
+// brought into this range, so comb clamps keep their order and delay lines
+// stay bounded.
+inline constexpr double min_internal_rate = 8'000.0;
+inline constexpr double max_internal_rate = 4.0 * 192'000.0;
+[[nodiscard]] inline double supported_rate(double rate) noexcept {
+  if (!(rate > 0.0) || !std::isfinite(rate))
+    return default_rate;
+  return std::clamp(rate, min_internal_rate, max_internal_rate);
+}
 // Responses are read up to this share of the rate (tan() stays finite).
 inline constexpr double response_top = 0.4999;
 

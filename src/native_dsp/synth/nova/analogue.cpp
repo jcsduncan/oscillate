@@ -260,6 +260,8 @@ bool set_analogue_lane_value(project::NativeSynthDocument& document, AnalogueKin
 
 bool clear_analogue_lane(project::NativeSynthDocument& document, AnalogueKind kind, std::size_t osc,
                          AnalogueLane lane) {
+  if (osc >= analogue_oscillators || !analogue_lane_applies(kind, lane))
+    return false;
   const auto id = analogue_lane_document_id(kind, osc, lane);
   return std::erase_if(document.voice_lanes,
                        [&](const project::NativeVoiceLane& entry) { return entry.id == id; }) > 0;
