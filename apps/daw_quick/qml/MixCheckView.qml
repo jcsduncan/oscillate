@@ -865,7 +865,7 @@ Rectangle {
                             ["2 MEASURE", "Six checks", "Sub rumble, mono safety, resonances, kick/bass cancellation, band balance, level and crest."],
                             ["3 BLAME", "Which track", "A problem in the mix is traced to the track renders that contain it."],
                             ["4 FIX", "One rule, one device", "Rumble → Contour high-pass. Width → Vista band. Ringing → Temper cuts. Clash → Lock."],
-                            ["5 RE-CHECK", "Proof", "Renders again: the target moved, nothing else did by more than 0.1 dB."]
+                            ["5 RE-CHECK", "Proof", "Renders again and compares: did the target move, and did anything else move by more than 0.1 dB?"]
                         ]
                         delegate: Rectangle {
                             id: step
