@@ -1,0 +1,9 @@
+<RCC>
+  <qresource prefix="/chop">
+    <file>ChopPanel.qml</file>
+    <file>ChopTheme.qml</file>
+    <file>ChopHero.qml</file>
+    <file>ChopLane.qml</file>
+    <file>ChopGate.js</file>
+  </qresource>
+</RCC>

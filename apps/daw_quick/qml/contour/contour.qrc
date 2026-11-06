@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/contour">
+    <file>ContourPanel.qml</file>
+    <file>ContourTheme.qml</file>
+    <file>ContourResponseView.qml</file>
+    <file>ContourLfoView.qml</file>
+  </qresource>
+</RCC>
