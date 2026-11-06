@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/torque">
+    <file>TorquePanel.qml</file>
+    <file>TorqueTheme.qml</file>
+    <file>TorqueScopeView.qml</file>
+    <file>TorqueStepCell.qml</file>
+  </qresource>
+</RCC>

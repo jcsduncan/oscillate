@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/signal">
+    <file>SignalPanel.qml</file>
+    <file>SignalTheme.qml</file>
+    <file>SignalGlyph.qml</file>
+    <file>SignalAxis.qml</file>
+  </qresource>
+</RCC>

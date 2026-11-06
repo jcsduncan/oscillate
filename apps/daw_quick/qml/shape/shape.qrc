@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/shape">
+    <file>ShapePanel.qml</file>
+    <file>ShapeTheme.qml</file>
+    <file>ShapeCurve.qml</file>
+  </qresource>
+</RCC>
