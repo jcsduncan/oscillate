@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <stop_token>
 #include <string>
@@ -193,6 +194,48 @@ void test_rate_matrix_and_reset_edges() {
   }
 }
 
+// Overlapping windows at the extreme supported ratios must agree on every
+// shared frame: a margin shorter than the filter span changes the frames near
+// a window's edge with where the read starts.
+void test_window_margins_cover_the_filter() {
+  constexpr std::size_t read_frames = media::SourceRateReader::max_read_frames;
+  constexpr std::size_t shift = read_frames / 2;
+  constexpr float tolerance = 3e-5F;
+  constexpr std::uint32_t lcg_multiplier = 1'664'525U;
+  constexpr std::uint32_t lcg_increment = 1'013'904'223U;
+  constexpr float noise_peak = 0.25F;
+  constexpr float noise_scale =
+      2.0F * noise_peak / static_cast<float>(std::numeric_limits<std::uint32_t>::max());
+  constexpr std::uint32_t lowest_source_rate = 8'000;
+  constexpr std::uint32_t highest_source_rate = 384'000;
+  constexpr std::array<std::pair<std::uint32_t, std::uint32_t>, 2> ratios{
+      {{highest_source_rate, oscillate::test::sample_rate_44k},
+       {lowest_source_rate, oscillate::test::sample_rate_96k}}};
+  for (const auto& [source_rate, project_rate] : ratios) {
+    std::vector<media::StereoFrame> source(source_rate);
+    std::uint32_t state = 1;
+    for (auto& frame : source) {
+      state = state * lcg_multiplier + lcg_increment;
+      const auto value = static_cast<float>(state) * noise_scale - noise_peak;
+      frame = {value, -value};
+    }
+    Fixture fixture(source_rate, 2, source);
+    auto reader = open(fixture, project_rate);
+    const std::uint64_t start = reader.frame_count() / 2;
+    std::array<media::StereoFrame, read_frames> first{};
+    std::array<media::StereoFrame, read_frames> second{};
+    REQUIRE_EQ(take(reader.read_at(start, first)), read_frames, "margin fixture read short");
+    REQUIRE_EQ(take(reader.read_at(start + shift, second)), read_frames,
+               "margin fixture read short");
+    for (std::size_t index = 0; index + shift < read_frames; ++index) {
+      REQUIRE_LT(std::abs(first[index + shift].left - second[index].left), tolerance,
+                 "a window boundary truncated the conversion filter");
+      REQUIRE_LT(std::abs(first[index + shift].right - second[index].right), tolerance,
+                 "a window boundary truncated the conversion filter");
+    }
+  }
+}
+
 void test_short_source_endpoint_context() {
   for (const std::size_t source_frames : {1U, 3U, 17U}) {
     std::vector<media::StereoFrame> source(source_frames);
@@ -251,6 +294,7 @@ int run_tests() {
   test_sine_chunk_seek_and_duration();
   test_impulse_mono_and_cancel();
   test_rate_matrix_and_reset_edges();
+  test_window_margins_cover_the_filter();
   test_short_source_endpoint_context();
   test_validation_and_source_failure();
   return 0;
