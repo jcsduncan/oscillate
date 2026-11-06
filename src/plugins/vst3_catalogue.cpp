@@ -112,7 +112,9 @@ Vst3Catalogue::refresh(std::span<const std::filesystem::path> explicit_paths) {
       std::error_code error;
       if (!std::filesystem::is_directory(search, error)) {
         if (chosen)
-          next.issues.push_back({search, "Plugin search path is not a directory"});
+          next.issues.push_back({search, error
+                                             ? "Cannot read plugin search path: " + error.message()
+                                             : "Plugin search path is not a directory"});
         return;
       }
       std::filesystem::recursive_directory_iterator it(

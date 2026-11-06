@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstring>
 #include <dlfcn.h>
+#include <fcntl.h>
 #include <filesystem>
 #include <optional>
 #include <span>
@@ -155,7 +156,8 @@ int main(int argc, char** argv) {
   // The response goes to a private copy of stdout; the real stdout points at
   // stderr while the plugin loads, so nothing it prints can corrupt the reply.
   std::fflush(stdout);
-  const int response = dup(STDOUT_FILENO);
+  // Close-on-exec: a process the plugin starts must not hold the reply open.
+  const int response = fcntl(STDOUT_FILENO, F_DUPFD_CLOEXEC, 0);
   if (response < 0 || dup2(STDERR_FILENO, STDOUT_FILENO) < 0)
     return 3;
   const auto result = inspect(argv[1]);
