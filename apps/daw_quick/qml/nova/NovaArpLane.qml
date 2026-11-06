@@ -155,7 +155,11 @@ Item {
             }
             WheelHandler {
                 enabled: lane.controller.editable
-                onWheel: event => lane.setLength(lane.length + (event.angleDelta.y > 0 ? 1 : -1))
+                // A zero (horizontal or scroll-phase) delta leaves the length alone.
+                onWheel: event => {
+                    if (event.angleDelta.y !== 0)
+                        lane.setLength(lane.length + (event.angleDelta.y > 0 ? 1 : -1))
+                }
             }
         }
     }

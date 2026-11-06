@@ -173,6 +173,8 @@ NovaCard {
             function onSequenceChanged() { canvas.requestPaint() }
             function onLowKeyChanged() { canvas.requestPaint() }
             function onLengthChanged() { canvas.requestPaint() }
+            // The playhead leaves (or reaches) this clip.
+            function onPlayingChanged() { canvas.requestPaint() }
         }
         Connections {
             target: card.panel
