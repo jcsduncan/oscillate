@@ -981,6 +981,28 @@ void per_sample_node_gain_is_bounded_and_preallocated() {
                "a mute under dynamic gain did not stay silent");
   require(std::ranges::all_of(output, [](StereoFrame frame) { return frame.left == 0.0F; }),
           "a mute under dynamic gain did not stay silent");
+
+  // A fade that ends inside a block leaves the rest of the block silent.
+  constexpr std::size_t half_block = 32;
+  const std::array<RoutedNodeControl, 2> unmute{
+      {{1, false, {0.5F, 0.5F}}, {3, false, {1.0F, 1.0F}}}};
+  mixer->apply_node_controls(unmute);
+  REQUIRE_TRUE(mixer->mix_block(sources, output, {256, 1}, {}, node_gains),
+               "an unmute under dynamic gain did not render");
+  mixer->apply_node_controls(mute);
+  const std::array<std::span<const StereoFrame>, 2> half_sources{
+      std::span<const StereoFrame>(input).first(half_block), {}};
+  const std::array<NodeGainSpan, 2> half_gains{
+      {{1, std::span<const StereoFrame>(dynamic).first(half_block)}, {3, {}}}};
+  REQUIRE_TRUE(
+      mixer->mix_block(half_sources, std::span(output).first(half_block), {320, 1}, {}, half_gains),
+      "a mute fade that ends mid-block did not render");
+  REQUIRE_TRUE(mixer->mix_block(sources, output, {352, 1}, {}, node_gains),
+               "a mute fade that ends mid-block did not render");
+  REQUIRE_GT(output[0].left, 0.0F, "a mute fade that ends mid-block did not keep fading");
+  require(std::ranges::all_of(std::span(output).subspan(half_block),
+                              [](StereoFrame frame) { return frame.left == 0.0F; }),
+          "a mute fade that ends mid-block left the rest of the block audible");
 }
 
 void sidechain_is_separate_aligned_and_allocation_free() {
