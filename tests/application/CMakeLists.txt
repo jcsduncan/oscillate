@@ -1,0 +1,434 @@
+oscillate_add_test_executable(oscillate_application_project_collection_tests SOURCES project_collection_tests.cpp
+  LIBS oscillate::application
+  DEFINITIONS OSCILLATE_STARTER_PLUCK="${PROJECT_SOURCE_DIR}/assets/starter/pluck.wav"
+  TEST application_project_collection)
+
+if(OSCILLATE_BUILD_VST3_SCANNER)
+  add_subdirectory(vst3)
+endif()
+
+oscillate_add_test_executable(oscillate_cache_control_tests SOURCES cache_control_tests.cpp
+  LIBS oscillate::cache_control oscillate::application
+  TEST application_cache_control)
+
+oscillate_add_test_executable(oscillate_application_clip_tests SOURCES clip_playback_tests.cpp
+  LIBS oscillate::application
+  TEST application_clip_playback)
+
+oscillate_add_test_executable(oscillate_application_revision_tests SOURCES revision_status_tests.cpp
+  LIBS oscillate::application
+  TEST application_revision_status)
+
+oscillate_add_test_executable(oscillate_application_device_tests SOURCES device_control_tests.cpp
+  LIBS oscillate::application
+  TEST application_device_control)
+
+oscillate_add_test_executable(oscillate_application_graph_tests SOURCES graph_control_tests.cpp
+  LIBS oscillate::application
+  TEST application_graph_control)
+
+oscillate_add_test_executable(oscillate_application_prefetch_tests SOURCES prefetch_control_tests.cpp
+  LIBS oscillate::application
+  TEST application_prefetch_control)
+
+oscillate_add_test_executable(oscillate_application_clip_prefetch_worker_tests SOURCES clip_prefetch_worker_tests.cpp
+  LIBS oscillate::application
+  TEST application_clip_prefetch_worker)
+
+if(OSCILLATE_BUILD_CODEC_ADAPTER)
+  oscillate_add_test_executable(oscillate_application_encoded_playback_tests SOURCES encoded_playback_tests.cpp
+    LIBS oscillate::application oscillate::persistence
+    DEFINITIONS OSCILLATE_CODEC_FIXTURE_DIR="${PROJECT_SOURCE_DIR}/tests/codec/assets"
+    TEST application_encoded_playback)
+endif()
+
+oscillate_add_test_executable(oscillate_application_waveform_cache_tests SOURCES waveform_cache_tests.cpp
+  LIBS oscillate::application
+  DEFINITIONS OSCILLATE_STARTER_PLUCK="${PROJECT_SOURCE_DIR}/assets/starter/pluck.wav"
+  TEST application_waveform_cache)
+
+oscillate_add_test_executable(oscillate_application_tempo_cache_tests SOURCES tempo_cache_tests.cpp
+  LIBS oscillate::application
+  DEFINITIONS OSCILLATE_STARTER_PLUCK="${PROJECT_SOURCE_DIR}/assets/starter/pluck.wav"
+  TEST application_tempo_cache)
+
+oscillate_add_test_executable(oscillate_application_tempo_review_tests SOURCES tempo_review_tests.cpp
+  LIBS oscillate::application nlohmann_json::nlohmann_json
+  TEST application_tempo_review)
+
+oscillate_add_test_executable(oscillate_application_project_session_tests SOURCES project_session_tests.cpp
+  LIBS oscillate::application
+  DEFINITIONS OSCILLATE_STARTER_PLUCK="${PROJECT_SOURCE_DIR}/assets/starter/pluck.wav"
+    OSCILLATE_HAVE_CODEC=$<BOOL:${OSCILLATE_BUILD_CODEC_ADAPTER}>
+    OSCILLATE_CODEC_FIXTURE_DIR="${PROJECT_SOURCE_DIR}/tests/codec/assets")
+# One CTest entry per case (oscillate/test/cases.hpp), each with its own budget.
+set(project_session_cases
+  midi_note_sets_move_and_delete_in_one_step
+  midi_note_copies_land_at_the_drop
+  routing_commands_reopen_and_undo_atomically
+  track_automation_points_are_stable_and_undoable
+  send_automation_points_are_stable_undoable_and_durable
+  channel_automation_edits_are_undoable_and_durable
+  channel_automation_point_move_keeps_identity_and_timebase
+  automation_segment_curve_command_is_atomic_and_durable
+  clip_automation_segment_curve_uses_stable_lane_identity
+  vst3_parameter_automation_edits_are_undoable_and_durable
+  vst3_instrument_parameter_automation_keeps_source_identity
+  two_bare_vst3_instrument_tracks_reopen_and_refuse_a_third
+  paired_vst3_instrument_effect_tracks_can_be_created_in_order
+  channel_gestures_coalesce_revisions_into_one_undo_step
+  audio_clip_channel_envelope_is_local_undoable_and_durable
+  tempo_events_are_atomic_undoable_and_durable
+  track_automation_bar_placement_preserves_elapsed_lane
+  clip_automation_timebase_switch_keeps_local_anchor
+  session_commands_and_reopen
+  session_redo_restores_undone_edit_and_rejects_stale_history
+  native_synth_media_import_is_atomic_and_undoable
+  native_synth_media_import_runs_on_a_worker
+  crate_sample_import_sets_state_in_one_step
+  accepted_media_import_survives_save_failure
+  midi_clip_notes_replace_in_one_undo_step
+  native_instrument_state_is_one_undo_step
+  midi_clip_with_notes_is_one_undo_step
+  wav_import_is_one_undoable_revision_and_reopens
+  wav_import_rejects_rate_mismatch_without_model_edit
+  wav_import_converts_source_duration_and_reopens
+  audio_move_preserves_elapsed_duration_and_reopens
+  move_before_zero_adds_a_bar_before_bar_one
+  audio_clip_moves_to_another_track
+  audio_duplicate_is_atomic_and_preserves_source
+  adjacent_audio_copy_and_delete_are_reversible
+  audio_copy_reidentifies_clip_automation
+  midi_copy_retains_pattern_and_uses_fresh_note_ids
+  midi_split_divides_notes_pedals_and_undoes_in_one_step
+  native_instrument_track_arrives_with_its_sound_in_one_undo_step
+  project_key_is_set_cleared_and_undone
+  presentation_edits_keep_playback_current
+  project_key_suggestion_follows_most_of_the_audio
+  midi_copy_preserves_elapsed_anchor
+  midi_timebase_switch_preserves_events_and_roundtrips_samples
+  midi_note_removal_is_undoable_and_durable
+  midi_note_move_keeps_identity_duration_and_one_undo_step
+  midi_resize_sets_length_and_keeps_notes_past_the_end
+  midi_loop_switch_repeats_or_stops_in_one_undo_step
+  elapsed_midi_resize_uses_tempo_map_without_moving_anchor
+  midi_timebase_switch_preserves_tempo_ramp_events
+  audio_split_preserves_source_fades_and_one_step_undo
+  audio_split_preserves_clip_level_automation
+  audio_split_subdivides_exact_curves_and_rejects_exponential
+  elapsed_audio_split_preserves_musical_curve_under_tempo_ramp
+  musical_audio_split_uses_exact_tempo_map_boundaries
+  audio_slip_moves_only_the_source_window
+  clip_processing_intent_is_durable_without_unsafe_edit_reinterpretation
+  rate_converted_split_and_slip_preserve_renderable_duration
+  audio_timebase_toggle_preserves_current_sample_placement
+  audio_trim_preserves_source_speed_and_reveals_both_edges
+  audio_trim_converted_source_uses_project_sample_boundaries
+  audio_trim_rejects_neighbor_overlap_and_stretched_placement
+  audio_trim_does_not_reveal_unverified_missing_source
+  accepted_wav_import_survives_save_failure
+  midi_move_is_one_atomic_undo_step
+  elapsed_midi_move_keeps_sample_duration_and_one_undo_step
+  stopped_starter_master_export_survives_session_close
+  encoded_master_export_keeps_stopped_lease_and_survives_session_close
+  stem_export_keeps_stopped_lease_and_survives_session_close
+  playback_and_stopped_export_exclude_each_other
+  prepared_playback_rejects_a_changed_project_and_live_export_lease
+  audio_playback_preparation_pins_managed_source_and_rejects_stale_revision
+  instrument_only_start_passes_requested_buffer
+  playback_controller_renders_and_retires_with_fake_output
+  playback_controller_rejects_absent_output_without_retaining_transport
+  live_audio_trim_restarts_at_completed_boundary
+  live_trim_past_playhead_requires_no_source_worker
+  live_audio_reprime_failure_preserves_edit_and_reports_divergence
+  live_reprime_device_failure_remains_visible_after_stop
+  playback_controller_prepares_and_renders_two_managed_clips
+  failed_second_clip_worker_releases_first_worker_and_transport
+  playback_preparation_rejects_unbounded_clip_count_before_media_io
+  playback_preparation_rejects_saved_processing_it_cannot_render
+  asynchronous_wav_import_rejects_stale_result_without_publishing
+  asynchronous_wav_import_commits_one_undo_step_and_reopens
+  asynchronous_wav_import_can_insert_above_existing_track
+  asynchronous_wav_import_cancellation_and_rejection_leave_no_asset
+  asynchronous_wav_import_rejects_foreign_writer_and_swapped_directory
+  asynchronous_wav_import_retains_receipt_after_failed_save
+  asynchronous_duplicate_import_restores_missing_managed_asset
+  named_revision_restore_is_saved_undoable_and_never_repoints_name
+  named_revision_rejects_bad_media_and_keeps_failed_save_undoable
+  named_revision_rejects_rate_change_without_changing_current
+  managed_media_repair_preserves_identity_and_reopens
+  managed_media_repair_cancel_joins_before_writer_close
+  managed_media_repair_rejects_replaced_current_after_worker_completion
+  external_relink_worker_preserves_identity_and_rejects_stale_completion
+  external_relink_proof_rechecks_candidate_and_retains_failed_edit)
+if(OSCILLATE_BUILD_CODEC_ADAPTER)
+  list(APPEND project_session_cases
+    encoded_import_reopens_and_deduplicates
+    encoded_import_rejects_cancel_stale_and_malformed
+    encoded_import_retains_accepted_edit_after_save_failure)
+else()
+  list(APPEND project_session_cases encoded_import_is_explicitly_unavailable_without_codec)
+endif()
+oscillate_add_case_tests(application_project_session oscillate_application_project_session_tests
+  CASES ${project_session_cases})
+
+oscillate_add_test_executable(oscillate_application_piano_roll_tests SOURCES piano_roll_quantize_tests.cpp
+  LIBS oscillate::application
+  TEST application_piano_roll_contract)
+
+oscillate_add_test_executable(oscillate_application_browser_preview_tests SOURCES browser_preview_tests.cpp
+  LIBS oscillate::application
+  TEST application_browser_preview)
+
+oscillate_add_test_executable(oscillate_application_autosave_session_tests SOURCES autosave_session_tests.cpp
+  LIBS oscillate::application
+  TEST application_autosave_session)
+
+oscillate_add_test_executable(oscillate_application_control_transport_tests SOURCES control_transport_gate_tests.cpp
+  LIBS oscillate::application
+  TEST application_control_transport)
+
+oscillate_add_test_executable(oscillate_application_routed_playback_tests SOURCES routed_playback_control_tests.cpp
+  LIBS oscillate::application)
+oscillate_add_case_tests(application_routed_playback oscillate_application_routed_playback_tests
+  CASES
+  live_channel_automation_uses_sample_values_before_routing
+  master_level_uses_routed_output_after_graph_publication
+  live_mute_solo_and_inaudible_solo_revision_do_not_hold
+  live_route_gain_edit_and_failed_model_divergence
+  live_send_gain_uses_existing_route_without_hold
+  automated_send_gain_refuses_live_overlay
+  live_send_automation_survives_graph_handoff
+  initial_master_chain_keeps_history_through_route_edit
+  source_layout_change_is_rejected_without_misrouting
+  verified_track_insert_and_parallel_pdc
+  failed_two_effect_publication_keeps_owners_uncommitted
+  live_insert_without_vst3_host_keeps_prior_graph
+  mixed_instrument_and_effect_preserves_both_nodes
+  instrument_two_serial_effects_keep_order_and_history
+  two_instrument_effect_paths_keep_independent_state
+  synth_track_native_effect_processes_source_without_allocations
+  two_verified_effects_align_and_survive_revisions
+  serial_effects_preserve_order_state_and_failed_graph
+  separate_native_track_chains_preserve_independent_history
+  native_group_eq_processes_routed_sum_and_retains_state
+  native_return_eq_processes_send_after_gain
+  mixed_native_vst3_keeps_order_and_state
+  live_earlier_stage_removal_keeps_later_stage
+  native_eq_compressor_chain_keeps_order_and_history
+  native_sidechain_send_matches_the_independent_compressor
+  vst3_sidechain_uses_verified_detector_and_keeps_prior_graph
+  saved_bypassed_vst3_effect_is_dry_and_enables_live
+  live_vst3_effect_addition_keeps_source_without_silence
+  live_vst3_effect_removal_drains_old_instance
+  failed_live_vst3_preparation_keeps_old_graph
+  latent_vst3_addition_realigns_parallel_pdc
+  live_vst3_state_edit_prepares_new_instance
+  live_vst3_bypass_switches_to_dry_path
+  live_vst3_edit_spanning_two_tracks_switches_live
+  missing_insert_provider_does_not_publish
+  pending_supersession_and_hold_validation
+  changed_model_during_hold_is_reported
+  constrained_publication_preserves_failed_revision
+  terminal_limiter_alignment_and_tail
+  terminal_output_latency_is_separate_from_edge_compensation
+  captured_audio_edit_keeps_old_graph_until_explicit_hold
+  exact_split_is_source_only_but_arbitrary_add_is_not
+  captured_audio_edit_failure_and_supersession_do_not_hold
+  captured_audio_edit_rejects_synth_graph_before_hold)
+
+oscillate_add_test_executable(oscillate_application_prepared_tail_tests SOURCES prepared_route_tail_tests.cpp
+  LIBS oscillate::application oscillate::export
+  TEST application_prepared_route_tail)
+
+if(OSCILLATE_BUILD_CONVOLUTION_DSP)
+  oscillate_add_test_executable(oscillate_application_routed_live_convolution_tests SOURCES routed_live_convolution_tests.cpp
+    LIBS oscillate::application oscillate::persistence
+    TEST application_routed_live_convolution)
+endif()
+
+oscillate_add_test_executable(oscillate_application_routed_device_tests SOURCES routed_audio_source_tests.cpp
+  LIBS oscillate::application
+  TEST application_routed_device)
+
+oscillate_add_test_executable(oscillate_application_clip_warp_edit_tests SOURCES clip_warp_edit_tests.cpp
+  LIBS oscillate::application
+  DEFINITIONS OSCILLATE_HAVE_SOURCE_RESAMPLER=$<BOOL:${OSCILLATE_BUILD_SOURCE_RESAMPLER}>
+    OSCILLATE_TEST_SKIP_RETURN_CODE=${OSCILLATE_TEST_SKIP_RETURN_CODE}
+  TEST application_clip_warp_edit)
+oscillate_add_test(NAME application_clip_warp_edit_rate_conversion
+  COMMAND oscillate_application_clip_warp_edit_tests rate-conversion
+  SKIP_RETURN_CODE ${OSCILLATE_TEST_SKIP_RETURN_CODE})
+
+oscillate_add_test_executable(oscillate_application_routed_warp_playback_tests SOURCES routed_warp_playback_tests.cpp
+  LIBS oscillate::application oscillate::export oscillate::persistence
+  TEST application_routed_warp_playback TIER slow)
+
+oscillate_add_test_executable(oscillate_application_routed_source_selection_tests SOURCES routed_source_selection_tests.cpp
+  LIBS oscillate::application
+  TEST application_routed_source_selection)
+
+oscillate_add_test_executable(oscillate_application_spectrum_tap_tests SOURCES spectrum_tap_tests.cpp
+  LIBS oscillate::application
+  TEST application_spectrum_tap)
+
+oscillate_add_test_executable(oscillate_application_spectrum_monitor_tests SOURCES spectrum_monitor_tests.cpp
+  LIBS oscillate::application
+  TEST application_spectrum_monitor)
+
+oscillate_add_test_executable(oscillate_application_key_cache_tests SOURCES key_cache_tests.cpp
+  LIBS oscillate::application
+  DEFINITIONS OSCILLATE_STARTER_PLUCK="${PROJECT_SOURCE_DIR}/assets/starter/pluck.wav"
+  TEST application_key_cache)
+
+oscillate_add_test_executable(oscillate_application_shared_source_analysis_cache_tests SOURCES shared_source_analysis_cache_tests.cpp
+  LIBS oscillate::application
+  DEFINITIONS OSCILLATE_STARTER_PLUCK="${PROJECT_SOURCE_DIR}/assets/starter/pluck.wav"
+  TEST application_shared_source_analysis_cache)
+
+oscillate_add_test_executable(oscillate_application_key_review_session_tests SOURCES key_review_session_tests.cpp
+  LIBS oscillate::application
+  DEFINITIONS OSCILLATE_STARTER_PLUCK="${PROJECT_SOURCE_DIR}/assets/starter/pluck.wav"
+  TEST application_key_review_session)
+
+oscillate_add_test_executable(oscillate_application_native_instrument_session_tests SOURCES native_instrument_session_tests.cpp
+  LIBS oscillate::application
+  TEST application_native_instrument_session)
+
+oscillate_add_test_executable(oscillate_application_routed_synth_tests SOURCES routed_synth_tests.cpp
+  LIBS oscillate::application
+  TEST application_routed_synth)
+
+oscillate_add_test_executable(oscillate_application_export_tail_trim_tests SOURCES export_tail_trim_tests.cpp
+  LIBS oscillate::application
+  TEST application_export_tail_trim TIER slow)
+
+oscillate_add_test_executable(oscillate_application_kick_bass_lock_tests SOURCES kick_bass_lock_tests.cpp
+  LIBS oscillate::application
+  TEST application_kick_bass_lock TIER slow)
+
+oscillate_add_test_executable(oscillate_application_synth_export_parity_tests SOURCES synth_export_parity_tests.cpp
+  LIBS oscillate::application
+  TEST application_synth_export_parity TIER slow)
+
+oscillate_add_test_executable(oscillate_application_pedal_edit_tests SOURCES midi_pedal_edit_tests.cpp
+  LIBS oscillate::application
+  TEST application_pedal_edit_contract)
+
+oscillate_add_test_executable(oscillate_application_midi_import_tests SOURCES midi_import_tests.cpp
+  LIBS oscillate::application oscillate::synth_engines
+  TEST application_midi_import)
+
+oscillate_add_test_executable(oscillate_application_velocity_edit_tests SOURCES midi_velocity_edit_tests.cpp
+  LIBS oscillate::application
+  TEST application_velocity_edit_contract)
+
+# Send to bus: selected tracks to a new or existing group bus, one undo step.
+oscillate_add_test_executable(oscillate_application_bus_routing_tests SOURCES bus_routing_tests.cpp
+  LIBS oscillate::application
+  TEST application_bus_routing_contract)
+
+# MIDI recording (ADR-0086): heard positions, clicks and takes.
+oscillate_add_test_executable(oscillate_application_midi_recording_tests SOURCES midi_recording_tests.cpp
+  LIBS oscillate::application
+  TEST application_midi_recording)
+
+oscillate_add_test_executable(oscillate_application_note_tools_tests SOURCES midi_note_tools_tests.cpp
+  LIBS oscillate::application
+  TEST application_note_tools_contract)
+
+# Groove from a record (ADR-0079): synthetic records with a known feel.
+oscillate_add_test_executable(oscillate_application_groove_capture_tests SOURCES groove_capture_tests.cpp
+  LIBS oscillate::application
+  TEST application_groove_capture_contract)
+
+oscillate_add_test_executable(oscillate_application_crate_chops_tests SOURCES crate_chops_tests.cpp
+  LIBS oscillate::application
+  TEST application_crate_chops_contract)
+
+# Knock's patterns (ADR-0068): generator, library, locks, Evolve and notes.
+oscillate_add_test_executable(oscillate_application_knock_patterns_tests SOURCES knock_patterns_tests.cpp
+  LIBS oscillate::application
+  TEST application_knock_patterns_contract)
+
+# Convert to sampler (ADR-0063): an audio clip on Crate with its chops as MIDI.
+oscillate_add_test_executable(oscillate_application_sampler_conversion_tests SOURCES sampler_conversion_tests.cpp
+  LIBS oscillate::application
+  TEST application_sampler_conversion)
+
+oscillate_add_test_executable(oscillate_application_effect_export_parity_tests SOURCES effect_export_parity_tests.cpp
+  LIBS oscillate::application oscillate::native_effects
+  TEST application_effect_export_parity TIER slow)
+
+oscillate_add_test_executable(oscillate_application_history_labels_tests SOURCES history_labels_tests.cpp
+  LIBS oscillate::application
+  TEST application_history_labels)
+
+oscillate_add_test_executable(oscillate_application_native_effect_session_tests SOURCES native_effect_session_tests.cpp
+  LIBS oscillate::application oscillate::native_effects
+  TEST application_native_effect_session)
+
+oscillate_add_test_executable(oscillate_application_track_rack_tests SOURCES track_rack_tests.cpp
+  LIBS oscillate::application oscillate::native_effects
+  TEST application_track_racks)
+
+oscillate_add_test_executable(oscillate_application_arrangement_basics_tests SOURCES arrangement_basics_tests.cpp
+  LIBS oscillate::application
+  TEST application_arrangement_basics)
+
+oscillate_add_test_executable(oscillate_application_routed_effect_live_tests SOURCES routed_effect_live_tests.cpp
+  LIBS oscillate::application oscillate::native_effects
+  TEST application_routed_effect_live)
+
+oscillate_add_test_executable(oscillate_application_channel_automation_tests SOURCES channel_automation_tests.cpp
+  LIBS oscillate::application
+  TEST application_channel_automation)
+
+# ADR-0059: track renders, freeze export parity, bounce, flatten, consolidate.
+oscillate_add_test_executable(oscillate_application_track_freeze_tests SOURCES track_freeze_tests.cpp
+  LIBS oscillate::application
+  TEST application_track_freeze TIER slow)
+
+# Mix Check (ADR-0074): planted problems found, fixed in one step, re-checked.
+oscillate_add_test_executable(oscillate_application_mix_check_tests SOURCES mix_check_tests.cpp
+  LIBS oscillate::application oscillate::persistence)
+foreach(mix_check_case sub click mono ringing nova_sub true_peak history)
+  oscillate_add_test(NAME application_mix_check_${mix_check_case}
+    COMMAND oscillate_application_mix_check_tests ${mix_check_case} TIER slow)
+endforeach()
+
+# Arrange from a loop (ADR-0080): roles, determinism, the rules, Keep and undo.
+oscillate_add_test_executable(oscillate_application_arrange_from_loop_tests SOURCES arrange_from_loop_tests.cpp
+  LIBS oscillate::application)
+foreach(arrange_case roles determinism rules keep transitions)
+  oscillate_add_test(NAME application_arrange_from_loop_${arrange_case}
+    COMMAND oscillate_application_arrange_from_loop_tests ${arrange_case})
+endforeach()
+
+# The Constellation (ADR-0077): sound measurements, morph, mutate and cache.
+oscillate_add_test_executable(oscillate_application_sound_map_tests SOURCES sound_map_tests.cpp
+  LIBS oscillate::application oscillate::persistence)
+foreach(sound_map_case features morph mutate cache)
+  oscillate_add_test(NAME application_sound_map_${sound_map_case}
+    COMMAND oscillate_application_sound_map_tests ${sound_map_case})
+endforeach()
+oscillate_add_test(NAME application_sound_map_render
+  COMMAND oscillate_application_sound_map_tests render TIER slow)
+
+# Clay in the project (ADR-0081 phase 2): take persistence, undo, rendering
+# and export, To MIDI.
+oscillate_add_test_executable(oscillate_application_clay_session_tests SOURCES clay_session_tests.cpp
+  LIBS oscillate::application oscillate::export oscillate::persistence oscillate::clay_source)
+foreach(clay_case saves undo refused unedited export to_midi voices warp)
+  oscillate_add_test(NAME application_clay_session_${clay_case}
+    COMMAND oscillate_application_clay_session_tests ${clay_case})
+endforeach()
+
+# Comp in the project (ADR-0083): patterns, Render to clip.
+oscillate_add_test_executable(oscillate_application_comp_session_tests SOURCES comp_session_tests.cpp
+  LIBS oscillate::application)
+foreach(comp_case a_pattern_keeps_the_musicians_settings applied_rhythm_plays_what_comp_played
+                  apply_comp_rhythm_is_one_undo_step a_gesture_coalesces_note_rewrites)
+  oscillate_add_test(NAME application_comp_session_${comp_case}
+    COMMAND oscillate_application_comp_session_tests ${comp_case})
+endforeach()
