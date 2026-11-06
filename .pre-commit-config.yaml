@@ -1,0 +1,37 @@
+# Install once with `pre-commit install`; see CONTRIBUTING.md.
+# Hooks run on staged files only, so files that predate the formatter are
+# left alone until someone edits them. CI runs the same hooks on the files a
+# pull request changes. Revs are frozen to commits (update with
+# `pre-commit autoupdate --freeze`).
+minimum_pre_commit_version: "4.0.0"
+default_install_hook_types: [pre-commit]
+exclude: ^(third_party/|docs/dependencies/notices/|assets/starter/.*\.wav$)
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-merge-conflict
+
+  # Same clang-format release as scripts/qa-requirements.txt.
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: 98ad4ddb9c057de2f5b9e93e44e6db959807d68c # frozen: v23.1.3
+    hooks:
+      - id: clang-format
+        types_or: [c, c++]
+        files: ^(apps|include|src|tests|bench|tools)/
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: c0f278f1254ccc8fb09676bcdb8d847e7db493e5 # frozen: v0.17.4
+    hooks:
+      - id: ruff-check
+      - id: ruff-format
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: 914e7df21a07ef503a81201c76d2b11c789d3fca # frozen: v1.7.12
+    hooks:
+      - id: actionlint

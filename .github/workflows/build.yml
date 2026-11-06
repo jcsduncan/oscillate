@@ -1,0 +1,49 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: build-test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Build and fast tests (Ubuntu 26.04, Qt Quick)
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04
+    timeout-minutes: 180
+    env:
+      CCACHE_MAXSIZE: 2G
+      OSCILLATE_BUILD_JOBS: 4
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install dependencies (README list + ccache)
+        run: |
+          scripts/ci/install-deps.sh ccache
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-quick-${{ github.sha }}
+          restore-keys: ccache-quick-
+      # Hosted runners are slower than a desktop, so test budgets get headroom.
+      # GCC 15 warnings fail the build.
+      - name: Configure
+        run: cmake --preset quick -DOSCILLATE_TEST_TIMEOUT_SCALE=3 -DOSCILLATE_WARNINGS_AS_ERRORS=ON
+      - name: Build everything and the tests
+        run: scripts/build.sh build/quick --target all oscillate_tests
+      - name: Fast tests (no live devices)
+        run: ctest --preset quick-fast -LE live -j4
+      - name: ccache stats
+        if: always()
+        run: ccache --show-stats || true

@@ -1,0 +1,69 @@
+cmake_minimum_required(VERSION 3.28)
+
+project(oscillate VERSION 0.1.0 LANGUAGES CXX) # x-release-please-version
+
+# This project uses headers; avoid C++20 module scanning in compile_commands.json.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+option(BUILD_TESTING "Build the test programs and register them with CTest" ON)
+if(BUILD_TESTING)
+  enable_testing()
+endif()
+include(cmake/ProjectOptions.cmake)
+include(cmake/Features.cmake)
+
+add_subdirectory(third_party/pffft)
+add_subdirectory(src/foundation)
+if(OSCILLATE_BUILD_CODEC_ADAPTER)
+endif()
+if(OSCILLATE_BUILD_VST3_SCANNER)
+endif()
+if(OSCILLATE_BUILD_QUICK_UI AND OSCILLATE_BUILD_VST3_SCANNER)
+endif()
+if(OSCILLATE_BUILD_BENCHES)
+endif()
+if(OSCILLATE_BUILD_QUICK_UI)
+endif()
+
+if(BUILD_TESTING)
+  if(OSCILLATE_BUILD_FUZZ)
+  endif()
+  add_subdirectory(tests/support)
+  add_subdirectory(tests/foundation)
+  if(OSCILLATE_BUILD_CODEC_ADAPTER)
+  endif()
+  if(OSCILLATE_BUILD_VST3_SCANNER)
+  endif()
+  if(OSCILLATE_BUILD_QUICK_UI AND OSCILLATE_BUILD_VST3_SCANNER)
+  endif()
+  oscillate_verify_test_labels("${PROJECT_SOURCE_DIR}")
+  # Explicit full-test build for configurations that omit test binaries from
+  # the ordinary application build. Individual test binaries remain directly
+  # buildable for the focused feature loop.
+  get_property(oscillate_test_build_targets GLOBAL PROPERTY OSCILLATE_TEST_BUILD_TARGETS)
+  if(oscillate_test_build_targets)
+    if(TARGET oscillate)
+      list(APPEND oscillate_test_build_targets oscillate)
+    endif()
+    list(REMOVE_DUPLICATES oscillate_test_build_targets)
+    add_custom_target(oscillate_tests DEPENDS ${oscillate_test_build_targets})
+  endif()
+endif()
+
+# Install the application, its VST3 scan helper (which it expects beside
+# it) and the licence; install from a Release (static) build. A shared
+# development build also installs the project libraries into the library
+# directory, without an RPATH. Packaging is not part of the build.
+if(TARGET oscillate)
+  install(TARGETS oscillate RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  if(TARGET oscillate_vst3_scan_helper)
+    install(TARGETS oscillate_vst3_scan_helper RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  endif()
+  get_property(oscillate_install_libraries GLOBAL PROPERTY OSCILLATE_INSTALL_LIBRARIES)
+  if(oscillate_install_libraries)
+    install(TARGETS ${oscillate_install_libraries}
+      LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+  endif()
+  install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR})
+endif()
