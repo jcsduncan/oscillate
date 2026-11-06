@@ -3,6 +3,7 @@
 #include "oscillate/test/allocation_counter.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/tolerances.hpp"
+#include "oscillate/test/wait.hpp"
 
 #include <algorithm>
 #include <array>
@@ -1250,19 +1251,28 @@ void concurrent_handoff() {
       }
     }
   });
-  for (unsigned spin = 0; spin < 100'000 && renders.load() < 8; ++spin)
-    std::this_thread::yield();
-  REQUIRE_GE(renders.load(), 8, "callback fixture made no progress");
+  // Each milestone waits on the callback's progress, up to the test deadline,
+  // rather than a fixed number of yields.
+  constexpr std::uint64_t warm_up_renders = 8;
+  oscillate::test::wait_until([&] { return renders.load() >= warm_up_renders; },
+                              "callback fixture made no progress");
   require(publisher.request_hold(), "concurrent hold request failed");
-  for (unsigned spin = 0; spin < 100'000 && !publisher.held_boundary(); ++spin)
-    std::this_thread::yield();
-  REQUIRE_OK(publisher.held_boundary(), "callback did not acknowledge hold");
+  oscillate::test::wait_until([&] { return static_cast<bool>(publisher.held_boundary()); },
+                              "callback did not acknowledge hold");
   REQUIRE_OK(publisher.prepare_and_publish(2, nodes, {}, limits(1, 0, 0)),
              "concurrent transition did not prepare");
-  for (unsigned spin = 0; spin < 100'000 && publisher.active_revision() != 2; ++spin)
-    std::this_thread::yield();
-  REQUIRE_EQ(publisher.active_revision(), 2, "concurrent transition did not activate or reclaim");
-  REQUIRE_EQ(publisher.collect_retired(), 1, "concurrent transition did not activate or reclaim");
+  oscillate::test::wait_until([&] { return publisher.active_revision() == 2; },
+                              "concurrent transition did not activate");
+  // The retired plan reaches the control side once the callback has finished
+  // the switch, which can be just after the new revision shows as active.
+  std::size_t retired = 0;
+  oscillate::test::wait_until(
+      [&] {
+        retired += publisher.collect_retired();
+        return retired != 0;
+      },
+      "concurrent transition did not reclaim the old plan");
+  REQUIRE_EQ(retired, 1, "concurrent transition reclaimed more than the old plan");
   callback.request_stop();
   callback.join();
 }
