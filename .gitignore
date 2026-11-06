@@ -1,0 +1,49 @@
+# CMake and compiler output
+/build/
+/out/
+/cmake-build-*/
+/CMakeFiles/
+/CMakeCache.txt
+/compile_commands.json
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+
+# Editor and local configuration
+/.idea/
+/.vscode/
+/.cache/
+/.venv/
+/CMakeUserPresets.json
+*.swp
+*.swo
+*~
+
+# Test and profiling output
+/Testing/
+*.profraw
+*.profdata
+*.gcda
+*.gcno
+__pycache__/
+*.py[cod]
+coverage.xml
+coverage.html
+*.core
+
+# Packaging and generated assets
+/dist/
+/packages/
+/generated/
+
+# Local projects and assistant state
+/examples/afterglow-circuit/
+/.claude/
+
+# MkDocs output
+/site/
