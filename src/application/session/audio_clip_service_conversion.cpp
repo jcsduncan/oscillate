@@ -162,6 +162,8 @@ Result<project::ClipId> AudioClipService::add_clay_midi_clip(std::optional<proje
     const double effective = std::max(current, wanted);
     if (!(effective > 0.0))
       return R::failure({ErrorCode::unavailable, "The synth's bend range is zero"});
+    if (midi.bends.size() > std::numeric_limits<decltype(point_number)>::max() - point_number)
+      return R::failure({ErrorCode::resource_exhausted, "No automation point ids are left"});
     for (std::size_t point = 0; point < midi.bends.size(); ++point) {
       auto point_id = numbered_id<project::AutomationPointId>(point_number + point);
       if (!point_id)
@@ -184,6 +186,10 @@ Result<project::ClipId> AudioClipService::add_clay_midi_clip(std::optional<proje
       operations.emplace_back(project::SetNativeInstrumentPatch{target, std::move(raised)});
     }
   }
+  if (midi.start.value < 0 || midi.length.value < 0 ||
+      midi.length.value > std::numeric_limits<std::int64_t>::max() - midi.start.value)
+    return R::failure(
+        {ErrorCode::resource_exhausted, "The converted clip does not fit the timeline"});
   project::MidiClip clip{
       clip_id.value(),
       project::MusicalInterval{midi.start, {midi.start.value + midi.length.value}},

@@ -522,7 +522,7 @@ constexpr std::int64_t quarters_per_whole_note = 4;
                                                     std::uint32_t bars,
                                                     std::span<const project::ClipId> placed,
                                                     std::vector<project::Operation>& operations) {
-  if (bars == 0 || state.lead_bars + bars > project::max_lead_bars)
+  if (bars == 0 || bars > project::max_lead_bars || state.lead_bars > project::max_lead_bars - bars)
     return Result<LeadShift>::failure({ErrorCode::invalid_argument, "Too many bars before bar 1"});
   LeadShift shift;
   shift.ticks = static_cast<std::int64_t>(bars) * opening_bar_ticks(state);

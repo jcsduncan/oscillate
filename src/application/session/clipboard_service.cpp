@@ -145,8 +145,12 @@ ClipboardService::paste_clips(project::TrackId track, timeline::TickPosition pos
       return Result::failure(
           {foundation::ErrorCode::invalid_argument, "Not enough tracks below to paste onto"});
     const auto& destination = state.tracks[row];
-    const timeline::TickPosition start{position.value +
-                                       (entry.start.value - clipboard_.clips_origin.value)};
+    // Checked: a negative or near-maximum position must not wrap the start.
+    const auto offset = entry.start.value - clipboard_.clips_origin.value;
+    if (position.value < 0 || offset > std::numeric_limits<std::int64_t>::max() - position.value)
+      return Result::failure(
+          {foundation::ErrorCode::invalid_argument, "Cannot paste clips at that position"});
+    const timeline::TickPosition start{position.value + offset};
     auto clip_id = numbered_id<project::ClipId>(next_clip);
     if (!clip_id)
       return Result::failure(clip_id.error());

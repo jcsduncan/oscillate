@@ -146,6 +146,14 @@ AudioClipService::move_audio_clip_to_track(project::ClipId clip, project::TrackI
       return foundation::Result<void>::failure(placement.error());
     auto moved = *found;
     moved.placement = std::move(placement).value();
+    // Clip-owned lanes must target the track that holds the clip: channel
+    // lanes follow it; lanes bound to the old track's own sends, plugins,
+    // effects, macros or instrument cannot, and are dropped.
+    std::erase_if(moved.automation, [](const project::AutomationLane& lane) {
+      return !std::holds_alternative<project::TrackControlTarget>(lane.target);
+    });
+    for (auto& lane : moved.automation)
+      std::get<project::TrackControlTarget>(lane.target).track = destination;
     auto applied =
         model().apply({project::RemoveClip{clip}, project::AddClip{destination, std::move(moved)}});
     if (!applied)
@@ -861,7 +869,16 @@ Result<void> AudioClipService::move_audio_clip_before_zero(project::ClipId clip,
     return Result<void>::failure(
         {ErrorCode::not_found, "Audio clip not found: " + clip.to_string()});
   const auto bar = opening_bar_ticks(state);
-  const auto bars = static_cast<std::uint32_t>((-start.value + bar - 1) / bar);
+  if (start.value >= 0 || bar <= 0)
+    return Result<void>::failure({ErrorCode::invalid_argument, "The clip must start before bar 1"});
+  // The distance before bar 1, without negating INT64_MIN, checked as a wide
+  // count before it narrows.
+  const auto ahead = static_cast<std::uint64_t>(-(start.value + 1)) + 1;
+  const auto wide_bars = ahead / static_cast<std::uint64_t>(bar) +
+                         (ahead % static_cast<std::uint64_t>(bar) != 0 ? 1 : 0);
+  if (wide_bars > project::max_lead_bars)
+    return Result<void>::failure({ErrorCode::invalid_argument, "Too many bars before bar 1"});
+  const auto bars = static_cast<std::uint32_t>(wide_bars);
   std::vector<project::Operation> operations;
   const std::array placed{clip};
   auto shift = lead_bar_operations(state, bars, placed, operations);

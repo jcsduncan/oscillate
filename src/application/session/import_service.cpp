@@ -39,9 +39,19 @@ using foundation::Result;
 // anything else goes to the codec stage (unsupported in codec-off builds).
 [[nodiscard]] bool wav_header(int input_fd) {
   std::array<char, 12> header{};
-  const auto read = ::pread(input_fd, header.data(), header.size(), 0);
-  return read == static_cast<ssize_t>(header.size()) &&
-         std::string_view(header.data(), 4) == "RIFF" &&
+  // pread may return short or be interrupted; keep reading until the header
+  // is whole or the file ends.
+  std::size_t have = 0;
+  while (have < header.size()) {
+    const auto read =
+        ::pread(input_fd, header.data() + have, header.size() - have, static_cast<off_t>(have));
+    if (read < 0 && errno == EINTR)
+      continue;
+    if (read <= 0)
+      break;
+    have += static_cast<std::size_t>(read);
+  }
+  return have == header.size() && std::string_view(header.data(), 4) == "RIFF" &&
          std::string_view(header.data() + 8, 4) == "WAVE";
 }
 
