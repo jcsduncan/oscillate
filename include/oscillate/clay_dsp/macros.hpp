@@ -89,7 +89,8 @@ struct MidiOut {
 };
 // Notes as edited, with velocities from their levels and pitch bends that
 // follow their drift and vibrato every `bend_step_seconds`. A voice whose
-// placement validate() would refuse is left out.
+// placement validate() would refuse, or whose key falls outside the MIDI
+// range, is left out; velocities compare only the voices kept.
 inline constexpr double bend_step_seconds = 0.01;
 [[nodiscard]] MidiOut to_midi(const Take& take, std::span<const NoteEdit> edits);
 

@@ -263,21 +263,27 @@ MidiOut to_midi(const Take& take, std::span<const NoteEdit> edits) {
         voices.push_back({note, e});
     }
   }
+  const auto key_of = [](const Voice& v) {
+    return static_cast<int>(std::lround(edited_centre(*v.note, v.edit) / cents_per_semitone));
+  };
+  // Voices that cannot be MIDI notes (a placement validate() refuses, or a
+  // key outside the MIDI range) are left out before levels are compared.
+  std::erase_if(voices, [&](const Voice& v) {
+    return !placement_valid(*v.note, placed_start(*v.note, v.edit), placed_end(*v.note, v.edit)) ||
+           !foundation::valid_midi_key(key_of(v));
+  });
   double loudest = -std::numeric_limits<double>::infinity();
   for (const auto& v : voices)
     loudest = std::max(loudest, level_db(*v.note, v.edit));
   const auto step = std::max<std::int64_t>(
       1, std::llround(bend_step_seconds * static_cast<double>(take.sample_rate)));
-  std::erase_if(voices, [](const Voice& v) {
-    return !placement_valid(*v.note, placed_start(*v.note, v.edit), placed_end(*v.note, v.edit));
-  });
   for (const auto& v : voices) {
     const auto& note = *v.note;
     const auto start = placed_start(note, v.edit);
     const auto end = placed_end(note, v.edit);
     const double centre = edited_centre(note, v.edit);
     const auto voice = out.notes.size();
-    const int key = static_cast<int>(std::lround(centre / cents_per_semitone));
+    const int key = key_of(v);
     const double below = level_db(note, v.edit) - loudest;
     const int velocity =
         std::clamp(static_cast<int>(std::lround(foundation::max_note_velocity *

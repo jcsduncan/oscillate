@@ -245,6 +245,12 @@ foundation::Result<void> join_notes(Take& take, std::uint32_t first_id, std::uin
     return R::failure({ErrorCode::not_found, "No such notes"});
   if (a->kind != b->kind || a->hops() == 0 || b->hops() == 0)
     return R::failure(invalid("Only notes of one kind join"));
+  const auto covered = [](const Note& note) {
+    return note.amplitude.size() >= note.hops() &&
+           (note.partial_count == 0 || note.partials.size() / note.partial_count >= note.hops());
+  };
+  if (!covered(*a) || !covered(*b))
+    return R::failure(invalid("A note's tracks are shorter than its hops"));
   if (b->start < a->start || b->start - a->end > take.hop || b->first_hop < a->first_hop)
     return R::failure(invalid("Only touching notes join"));
   const auto first_hop = a->first_hop;
