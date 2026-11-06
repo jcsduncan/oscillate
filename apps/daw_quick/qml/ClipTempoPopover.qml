@@ -94,7 +94,8 @@ Item {
                         font.pixelSize: Theme.typeSubtitle
                         font.family: popover.monoFamily
                         selectByMouse: true
-                        validator: DoubleValidator { bottom: 20; top: 999; decimals: 3 }
+                        // The C locale, matching Number() and toFixed() below.
+                        validator: DoubleValidator { bottom: 20; top: 999; decimals: 3; locale: "C" }
                         Accessible.role: Accessible.EditableText
                         Accessible.name: "Track tempo in BPM"
                         onAccepted: {
@@ -103,6 +104,13 @@ Item {
                                 popover.controller.set_bpm(popover.clipId, bpm)
                         }
                         Keys.onEscapePressed: popover.close()
+                        // Unaccepted typing is dropped on focus loss; the
+                        // binding to the clip's tempo comes back.
+                        onActiveFocusChanged: {
+                            if (!activeFocus)
+                                text = Qt.binding(() => popover.tempo && popover.tempo.bpm > 0
+                                                         ? popover.tempo.bpm.toFixed(2) : "")
+                        }
                     }
                 }
                 Text {

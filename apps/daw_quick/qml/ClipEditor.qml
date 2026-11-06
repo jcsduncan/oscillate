@@ -23,6 +23,8 @@ Item {
     readonly property var controller: bridge.clipTempo
     readonly property var warp: bridge.clipWarp.state
     readonly property var tempo: controller.clips[clipId]
+    // One wheel notch's angle delta.
+    readonly property real wheelNotch: 120
     readonly property color gold: Theme.clipEditorMarker
     readonly property color late: Theme.clipEditorLate
     readonly property int beatsPerBar: 4
@@ -45,7 +47,10 @@ Item {
         overview.requestPaint()
         detail.requestPaint()
     }
-    function resetView() {
+    // Takes the clip record to reset from, so a clipId change never reads the
+    // previous clip's tempo before the binding updates.
+    function resetView(record) {
+        const tempo = record === undefined ? editor.tempo : record
         if (!tempo || !(tempo.beat > 0)) {
             viewFrom = 0
             viewTo = 1
@@ -108,7 +113,7 @@ Item {
 
     onClipIdChanged: {
         viewSet = false
-        resetView()
+        resetView(controller.clips[clipId])
         refreshCheck()
     }
     onTempoChanged: {
@@ -318,8 +323,18 @@ Item {
                 acceptedButtons: Qt.LeftButton
                 onClicked: mouse => editor.bridge.clipWarp.set_transpose(
                     pitchButton.semitones + (mouse.x < width / 2 ? -1 : 1), Number(editor.warp.cents || 0))
-                onWheel: wheel => editor.bridge.clipWarp.set_transpose(
-                    pitchButton.semitones + (wheel.angleDelta.y > 0 ? 1 : -1), Number(editor.warp.cents || 0))
+                // Whole notches only: fine-resolution deltas accumulate, and a
+                // zero (horizontal or scroll-phase) delta does nothing.
+                property real wheelRemainder: 0
+                onWheel: wheel => {
+                    wheelRemainder += wheel.angleDelta.y
+                    const steps = Math.trunc(wheelRemainder / editor.wheelNotch)
+                    if (steps === 0)
+                        return
+                    wheelRemainder -= steps * editor.wheelNotch
+                    editor.bridge.clipWarp.set_transpose(pitchButton.semitones + steps,
+                                                         Number(editor.warp.cents || 0))
+                }
             }
         }
     }
@@ -522,9 +537,9 @@ Item {
         }
 
         MouseArea {
-            // One wheel notch (an angle delta of 120) zooms by wheelZoomStep
-            // or scrolls by wheelScrollShare of the view.
-            readonly property real wheelNotch: 120
+            // One wheel notch (editor.wheelNotch) zooms by wheelZoomStep or
+            // scrolls by wheelScrollShare of the view.
+            readonly property real wheelNotch: editor.wheelNotch
             readonly property real wheelZoomStep: 0.8
             readonly property real wheelScrollShare: 0.1
             id: detailArea
@@ -554,6 +569,8 @@ Item {
                     return
                 }
                 if (!editor.editable) return
+                // A release outside the waveform is not a click.
+                if (mouse.x < 0 || mouse.x > width || mouse.y < 0 || mouse.y > height) return
                 editor.selectFrom = -1
                 editor.selectTo = -1
                 editor.bridge.clipWarp.add_marker(editor.snapped(mouse.x, (mouse.modifiers & Qt.AltModifier) !== 0))

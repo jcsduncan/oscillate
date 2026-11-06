@@ -387,7 +387,9 @@ Item {
             }
             Text {
                 visible: list.count === 0
-                anchors.centerIn: parent
+                // The ListView's own box: its content item is empty here.
+                parent: list
+                anchors.centerIn: list
                 text: "Nothing matches “" + query.text + "”"
                 color: palette.host.textDim
                 font.pixelSize: Theme.typeLabel
