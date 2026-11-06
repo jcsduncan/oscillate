@@ -2,6 +2,7 @@
 #include "oscillate/foundation/midi.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <limits>
 #include <string>
@@ -130,8 +131,29 @@ struct ClipInterval {
                                          const ClipInterval& interval,
                                          std::vector<ScheduledPedalEvent>& pedals) {
   for (const auto& lane : clip.pedals) {
+    // The model validates lanes; a snapshot built elsewhere must not index
+    // past the pedal tables or hide points behind unsorted ones.
+    if (static_cast<std::size_t>(lane.pedal) >= project::midi_pedal_count ||
+        lane.points.size() > project::max_midi_pedal_points_per_lane) {
+      return Result<void>::failure(invalid("invalid MIDI pedal lane"));
+    }
+    std::int64_t previous = -1;
+    for (const auto& point : lane.points) {
+      if (point.position.value <= previous || !std::isfinite(point.value) || point.value < 0.0 ||
+          point.value > 1.0) {
+        return Result<void>::failure(invalid("invalid MIDI pedal point"));
+      }
+      previous = point.position.value;
+    }
+    // A lane with no point inside the pattern is silent in every repeat.
+    if (lane.points.empty() || lane.points.front().position >= clip.pattern_length) {
+      continue;
+    }
     double last = 0.0;
     for (std::int64_t iteration = 0; iteration < iterations; ++iteration) {
+      if (iteration > std::numeric_limits<std::int64_t>::max() / clip.pattern_length.value) {
+        return Result<void>::failure(exhausted("MIDI loop tick overflow"));
+      }
       const auto base = iteration * clip.pattern_length.value;
       bool past_end = false;
       for (const auto& point : lane.points) {
@@ -432,7 +454,9 @@ Result<CompiledMidiPlan> compile_midi_events(const project::Snapshot& snapshot) 
       return Result<CompiledMidiPlan>::failure(exhausted("project MIDI event count exceeded"));
     }
     total_events += events.size() + pedals.size();
-    std::ranges::sort(pedals, pedal_event_less);
+    // Stable: distinct ticks can land on one sample, and their points must
+    // keep the lane's order (a down then an up stays up).
+    std::ranges::stable_sort(pedals, pedal_event_less);
     for (std::size_t i = max_pedal_events_per_block; i < pedals.size(); ++i) {
       if (pedals[i].sample.value - pedals[i - max_pedal_events_per_block].sample.value <
           max_midi_block_frames) {
@@ -462,7 +486,8 @@ BlockMidiResult HeldNotes::copy_block(const InstrumentEvents& events,
   if (!started_ || generation != generation_)
     count_ = 0;
   std::size_t released = 0;
-  if (started_ && generation == generation_ && start.value != next_sample_) {
+  const bool jumped = started_ && generation == generation_ && start.value != next_sample_;
+  if (jumped) {
     for (std::size_t i = 0; i < count_; ++i) {
       auto off = held_[i];
       off.offset = 0;
@@ -471,12 +496,14 @@ BlockMidiResult HeldNotes::copy_block(const InstrumentEvents& events,
       off.boundary_crop = true;
       output[released++] = off;
     }
-    count_ = 0;
   }
   auto copied =
       events.copy_block(start, frames, output.subspan(released, max_midi_events_per_block));
+  // A failed block keeps the held notes, so a retry still releases them.
   if (copied.status != BlockMidiStatus::ready)
     return copied;
+  if (jumped)
+    count_ = 0;
   // Track the plan's own notes before the releases are merged in.
   for (const auto& event : output.subspan(released, copied.count)) {
     if (event.kind == MidiEventKind::note_on) {

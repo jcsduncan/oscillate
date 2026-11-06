@@ -965,6 +965,22 @@ void per_sample_node_gain_is_bounded_and_preallocated() {
   REQUIRE_TRUE(mixer->mix_block(sources, output, {64, 1}, {}, node_gains),
                "invalid dynamic gain advanced mixer state");
   REQUIRE_EQ(output[63].right, 0.75F, "invalid dynamic gain advanced mixer state");
+
+  // Muting under dynamic gain fades out over the ramp and then stays silent.
+  constexpr float dynamic_level = 0.75F;
+  constexpr std::size_t mute_ramp_frames = 64;
+  dynamic.fill({dynamic_level, dynamic_level});
+  const std::array<RoutedNodeControl, 2> mute{{{1, true, {0.5F, 0.5F}}, {3, false, {1.0F, 1.0F}}}};
+  mixer->apply_node_controls(mute);
+  REQUIRE_TRUE(mixer->mix_block(sources, output, {128, 1}, {}, node_gains),
+               "a mute under dynamic gain did not fade out");
+  REQUIRE_LT(std::abs(output[0].left - dynamic_level * (1.0F - 1.0F / mute_ramp_frames)),
+             tolerance::float_round_trip_f, "a mute under dynamic gain did not fade out");
+  REQUIRE_EQ(output[63].left, 0.0F, "a mute under dynamic gain did not fade out");
+  REQUIRE_TRUE(mixer->mix_block(sources, output, {192, 1}, {}, node_gains),
+               "a mute under dynamic gain did not stay silent");
+  require(std::ranges::all_of(output, [](StereoFrame frame) { return frame.left == 0.0F; }),
+          "a mute under dynamic gain did not stay silent");
 }
 
 void sidechain_is_separate_aligned_and_allocation_free() {

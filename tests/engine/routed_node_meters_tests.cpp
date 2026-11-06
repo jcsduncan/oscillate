@@ -133,9 +133,18 @@ void seek_discards_the_window_and_loop_wrap_continues_it() {
   REQUIRE_TRUE(near(wrapped->left_peak, 0.9F), "planned loop wrap discarded the continuous window");
 }
 
+// The metered mixer's largest block, its edge delay bound, and how many node
+// buffers and edges it budgets for.
+constexpr std::size_t metered_block_frames = 128;
+constexpr std::uint32_t metered_max_delay = 32;
+constexpr std::size_t metered_buffers = 4;
+constexpr std::size_t metered_edges = 2;
+
 RoutedMixerLimits metered_limits(bool node_meters) {
-  RoutedMixerLimits limits{
-      {3, 32}, 128, 4 * 128 * sizeof(StereoFrame), 2 * 33 * sizeof(StereoFrame)};
+  RoutedMixerLimits limits{{3, metered_max_delay},
+                           metered_block_frames,
+                           metered_buffers * metered_block_frames * sizeof(StereoFrame),
+                           metered_edges * (metered_max_delay + 1) * sizeof(StereoFrame)};
   limits.node_meters = node_meters;
   return limits;
 }
@@ -150,14 +159,14 @@ void publisher_reports_post_fader_node_levels() {
   REQUIRE_OK(publisher.prepare_and_publish(1, nodes, edges, metered_limits(true)),
              "metered graph did not publish");
   require(!publisher.active_node_meter(1), "meter read before the graph became active");
-  std::array<StereoFrame, 128> source{};
+  std::array<StereoFrame, metered_block_frames> source{};
   source.fill({0.8F, -0.8F});
-  std::array<StereoFrame, 128> output{};
+  std::array<StereoFrame, metered_block_frames> output{};
   const std::array<std::span<const StereoFrame>, 3> inputs{source, source, {}};
   counted_allocations = 0;
   counting_allocations = true;
   for (std::uint64_t block = 0; block < 8; ++block)
-    REQUIRE_EQ(publisher.render_block(inputs, output, {block * 128, 1}),
+    REQUIRE_EQ(publisher.render_block(inputs, output, {block * metered_block_frames, 1}),
                RoutedRenderStatus::rendered, "metered graph did not render");
   counting_allocations = false;
   REQUIRE_EQ(counted_allocations, 0, "metered routed render allocated");

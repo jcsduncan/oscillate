@@ -72,6 +72,24 @@ void every_task_runs_once(std::size_t workers) {
   REQUIRE_EQ(pool.attached_workers(), 0, "workers stayed attached after stop");
 }
 
+// No more than max_workers attach, whoever starts them, so lanes stay below
+// max_lanes: a surplus worker returns at once and owned threads stop at the cap.
+void attached_workers_are_capped() {
+  AudioWorkerPool pool(AudioWorkerPool::max_workers);
+  pool.start_owned_threads(AudioWorkerPool::max_workers + 1);
+  REQUIRE_EQ(pool.attached_workers(), AudioWorkerPool::max_workers,
+             "owned workers went past the cap");
+  std::thread surplus([&pool] { pool.run_worker(); });
+  surplus.join(); // Returns at once: no place is free.
+  REQUIRE_EQ(pool.attached_workers(), AudioWorkerPool::max_workers,
+             "a surplus worker attached past the cap");
+  pool.start_owned_threads(1);
+  REQUIRE_EQ(pool.attached_workers(), AudioWorkerPool::max_workers,
+             "owned workers went past the cap");
+  pool.stop_owned_threads();
+  REQUIRE_EQ(pool.attached_workers(), 0, "workers stayed attached after stop");
+}
+
 void runs_inline_without_workers() {
   AudioWorkerPool pool(4);
   std::vector<std::size_t> order;
@@ -319,6 +337,7 @@ int main() {
     every_task_runs_once(3);
     every_task_runs_once(7);
     restarts_after_stop();
+    attached_workers_are_capped();
     nested_runs_inline_without_workers();
     nested_batches_run_every_task_once(1);
     nested_batches_run_every_task_once(5);

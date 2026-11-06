@@ -841,9 +841,18 @@ void RoutedMixer::mix_node(std::size_t index, const NodeBlock& block,
     const auto dynamic =
         block.node_gains.empty() ? std::span<const StereoFrame>{} : block.node_gains[index].values;
     if (!dynamic.empty()) {
-      for (std::size_t frame = 0; frame < frames.size(); ++frame)
-        frames[frame] = finite(
-            {frames[frame].left * dynamic[frame].left, frames[frame].right * dynamic[frame].right});
+      // Dynamic gains replace the static output gain, not a mute: a mute or
+      // unmute fade still runs on top of them, and the ramp advances.
+      const bool fading_in = !muted_[index] && ramp.from.left == 0.0F && ramp.from.right == 0.0F;
+      for (std::size_t frame = 0; frame < frames.size(); ++frame) {
+        float envelope = 1.0F;
+        if (ramp.elapsed < ramp.total) {
+          const auto fraction = static_cast<float>(++ramp.elapsed) / static_cast<float>(ramp.total);
+          envelope = muted_[index] ? 1.0F - fraction : fading_in ? fraction : 1.0F;
+        }
+        frames[frame] = finite({frames[frame].left * dynamic[frame].left * envelope,
+                                frames[frame].right * dynamic[frame].right * envelope});
+      }
     } else if (ramp.elapsed < ramp.total) {
       for (auto& frame : frames) {
         if (ramp.elapsed < ramp.total) {
@@ -1018,10 +1027,15 @@ bool RoutedMixer::adopt_live_state(const RoutedMixer& prior, BlockContext contex
         const auto& before = prior.edges_[old];
         if (plan_.edges[index].compensation_frames != 0)
           edge.delay->adopt(*before.delay);
-        if (edge.gain == before.gain) {
+        // Continue the prior edge's gain and any glide in progress; with
+        // ramps on, glide from where it is to this graph's gain (as nodes do).
+        const auto target = edge.gain;
+        if (target == before.gain || limits_.gain_ramp_frames != 0) {
+          edge.gain = before.gain;
           edge.ramp_from = before.ramp_from;
           edge.ramp_elapsed = before.ramp_elapsed;
           edge.ramp_total = before.ramp_total;
+          ramp_edge(index, target);
         }
       } else if (plan_.edges[index].compensation_frames != 0) {
         // A new compensated route starts from its source's recent output.

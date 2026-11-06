@@ -65,7 +65,8 @@ public:
   }
 
   // Worker thread entry. Serves batches until request_stop(); a task already
-  // claimed finishes first. Returns at once while a stop is pending.
+  // claimed finishes first. Returns at once while a stop is pending, or when
+  // max_workers threads are already attached.
   void run_worker() noexcept;
   // Control side. Wakes and releases every worker; the caller then joins
   // them. run() keeps working inline. Call reset_after_join() before reuse.

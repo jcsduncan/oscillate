@@ -53,11 +53,12 @@ void AudioWorkerPool::request_stop() noexcept {
 void AudioWorkerPool::reset_after_join() noexcept { stop_.store(false, std::memory_order_release); }
 
 void AudioWorkerPool::start_owned_threads(std::size_t count) {
-  count = std::min(count, max_workers);
-  const auto before = attached_.load(std::memory_order_acquire);
+  // Only free worker places: a thread beyond max_workers would return at once.
+  const auto before = std::min(attached_.load(std::memory_order_acquire), max_workers);
+  count = std::min(count, max_workers - before);
   for (std::size_t index = 0; index < count; ++index)
     owned_.emplace_back([this] { run_worker(); });
-  while (attached_.load(std::memory_order_acquire) < before + count)
+  while (attached_.load(std::memory_order_acquire) < std::min(before + count, max_workers))
     std::this_thread::yield();
 }
 
@@ -118,10 +119,17 @@ void AudioWorkerPool::work_nested() noexcept {
 }
 
 void AudioWorkerPool::run_worker() noexcept {
+  // At most max_workers attach, whoever started them, so a batch's lanes stay
+  // below max_lanes; a surplus thread returns at once.
+  auto attached = attached_.load(std::memory_order_acquire);
+  do {
+    if (attached >= max_workers)
+      return;
+  } while (!attached_.compare_exchange_weak(attached, attached + 1, std::memory_order_acq_rel,
+                                            std::memory_order_acquire));
   foundation::trace::name_thread("audio worker");
   const foundation::RealtimeThreadScope realtime; // Logging from here asserts in debug.
   const DenormalsFlushed flushed;                 // For the worker's life.
-  attached_.fetch_add(1, std::memory_order_acq_rel);
   auto seen = wake_.load(std::memory_order_acquire);
   while (!stop_.load(std::memory_order_acquire)) {
     work_any();

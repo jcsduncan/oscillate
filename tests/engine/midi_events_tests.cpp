@@ -184,6 +184,21 @@ void density_and_checked_boundaries() {
   REQUIRE_TRUE(!too_many, "extreme loop count overflowed before rejection");
   REQUIRE_EQ(too_many.error().code, ErrorCode::resource_exhausted,
              "extreme loop count overflowed before rejection");
+
+  // A huge pattern repeats three times, and its third start is past the tick
+  // range: pedal lanes, silent or not, are refused cleanly, not overflowed.
+  constexpr std::int64_t huge_pattern = (std::int64_t{1} << 62) + 1;
+  auto huge = snapshot(
+      tempo(),
+      {clip(5, MusicalInterval{{0}, {std::numeric_limits<std::int64_t>::max()}}, true, {})});
+  huge.tracks[0].midi_clips[0].pattern_length = {huge_pattern};
+  for (const auto position : {std::int64_t{0}, huge_pattern}) {
+    huge.tracks[0].midi_clips[0].pedals = {{MidiPedal::sustain, {{{position}, 1.0}}}};
+    auto refused = compile_midi_events(huge);
+    REQUIRE_TRUE(!refused, "a pedal lane on a huge pattern overflowed before rejection");
+    REQUIRE_EQ(refused.error().code, ErrorCode::resource_exhausted,
+               "a pedal lane on a huge pattern overflowed before rejection");
+  }
 }
 
 void empty_and_malformed_input() {
@@ -328,6 +343,22 @@ void pedal_clip_boundaries_and_density() {
   REQUIRE_TRUE(!refused, "more than 256 pedal events in a block window are refused");
   REQUIRE_EQ(refused.error().code, ErrorCode::resource_exhausted,
              "more than 256 pedal events in a block window are refused");
+
+  // Two ticks on one sample keep the lane's order: down, then up, stays up.
+  auto same_sample = clip(9, MusicalInterval{{0}, {quarter}}, false, {note(10)});
+  same_sample.pedals = {{MidiPedal::sustain, {{{0}, 1.0}, {{1}, 0.0}}}};
+  const auto ordered = take(compile_midi_events(snapshot(tempo(), {same_sample})));
+  REQUIRE_EQ(ordered.instruments()[0].pedal_state_at({1})[0], 0.0,
+             "pedal points on one sample keep their lane order");
+
+  // Out-of-range pedals and unsorted points are refused, not scheduled.
+  auto unsorted = same_sample;
+  unsorted.pedals = {{MidiPedal::sustain, {{{1}, 1.0}, {{0}, 0.0}}}};
+  REQUIRE_TRUE(!compile_midi_events(snapshot(tempo(), {unsorted})),
+               "unsorted pedal points are refused");
+  auto unknown = same_sample;
+  unknown.pedals = {{static_cast<MidiPedal>(midi_pedal_count), {{{0}, 1.0}}}};
+  REQUIRE_TRUE(!compile_midi_events(snapshot(tempo(), {unknown})), "an unknown pedal is refused");
 }
 
 // Only the pattern plays (PI-06c): notes and pedal points kept after its
@@ -410,6 +441,13 @@ void held_notes_release_at_a_loop_wrap() {
   }
   REQUIRE_EQ(ons, 3, "each wrap releases the note the last pass started");
   REQUIRE_EQ(offs, 2, "each wrap releases the note the last pass started");
+  // A failed jump keeps the held note, so the retried block still releases it.
+  require(held.copy_block(events, {0}, 0, 1, block).status != BlockMidiStatus::ready,
+          "an empty block is refused");
+  const auto retried = held.copy_block(events, {0}, 1'000, 1, block);
+  REQUIRE_EQ(retried.count, 1, "a retried jump releases the note the failed one kept");
+  REQUIRE_EQ(block[0].kind, MidiEventKind::note_off,
+             "a retried jump releases the note the failed one kept");
   // A new generation (a seek) resets the instrument, so nothing is sent.
   const auto seek = held.copy_block(events, {0}, 1'000, 2, block);
   REQUIRE_EQ(seek.status, BlockMidiStatus::ready,
