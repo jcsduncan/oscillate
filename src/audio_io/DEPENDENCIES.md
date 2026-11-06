@@ -39,13 +39,13 @@ two clock reads and fixed-size atomic bookkeeping on the callback, with no
 allocation or lock; a snapshot may be temporarily unavailable during a
 concurrent update. These bins measure process-callback wall time, including
 adapter work, and cannot establish backend xruns or device underruns. JACK's
-xrun notifications remain a separate status field. The common playback status
-exposes `client_xrun_notifications` only for JACK, resetting to zero on each
-output start. PipeWire leaves it unknown. These JACK callbacks report a
-server/client notification;
-they do not identify the affected output port or prove a DAW render underrun.
-The separate `xruns` field remains unknown for both backends until a reliable
-per-output measurement exists.
+xrun notifications are a separate count. For JACK, `DeviceTelemetry::snapshot()`
+reports that count as both `xruns` and `client_xrun_notifications`, and
+`JackOutput::status()` as `xrun_notifications`; each starts from a known zero
+and resets on each output start. PipeWire leaves both snapshot fields unknown;
+its graph recoveries are `graph_xrun_recovery_events`. These JACK callbacks
+report a server/client notification; they do not identify the affected output
+port or prove a DAW render underrun.
 
 `start` requests PipeWire node latency through `node.latency` in frames/rate;
 this is a hint, not a guarantee of callback quantum. A local 48 kHz smoke run

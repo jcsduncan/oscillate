@@ -56,6 +56,7 @@ public:
   // Before the next block the transport waits `beats` clicks `beat_frames`
   // apart (the first accented), rendering only the clicks: a count-in. It
   // sounds whether or not the click is enabled.
+  // Control thread only: requests are not serialised against each other.
   void request_count_in(std::uint32_t beats, std::uint64_t beat_frames) noexcept;
   void cancel_count_in() noexcept;
   // True from a request until the callback has rendered its last frame.
@@ -71,6 +72,8 @@ public:
   void add_clicks(std::uint64_t first_sample, std::span<float> output) noexcept;
 
 private:
+  // Callback side: marks the adopted request done unless a newer one replaced it.
+  void finish_count_in() noexcept;
   struct Schedule {
     std::vector<ClickBeat> beats;
     std::size_t count = 0;
@@ -85,7 +88,10 @@ private:
   std::atomic<std::uint64_t> count_in_sequence_{0};
   std::atomic<std::uint32_t> count_in_beats_{0};
   std::atomic<std::uint64_t> count_in_beat_frames_{0};
-  std::atomic<bool> counting_in_{false};
+  // The sequence of the request still sounding (0: none). The callback
+  // clears it only while it still names the request the callback finished,
+  // so a newer request is never marked done by an older one's end.
+  std::atomic<std::uint64_t> sounding_sequence_{0};
   std::uint64_t adopted_sequence_ = 0;  // callback-owned
   std::uint64_t count_in_position_ = 0; // callback-owned
   std::uint64_t count_in_total_ = 0;    // callback-owned

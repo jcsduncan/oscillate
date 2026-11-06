@@ -396,6 +396,8 @@ void telemetry_load_and_diagnostics() {
   telemetry.graph_xrun_recovery(false);
   telemetry.graph_xrun_recovery(true);
   REQUIRE_FALSE(telemetry.snapshot().xruns.has_value(), "PipeWire has no server xrun count");
+  REQUIRE_FALSE(telemetry.snapshot().client_xrun_notifications.has_value(),
+                "PipeWire has no client xrun notifications");
   REQUIRE_TRUE(ring.try_take(record));
   REQUIRE_EQ(record.kind, foundation::DiagnosticKind::block_silenced);
   REQUIRE_EQ(record.detail, frames);
@@ -410,13 +412,19 @@ void telemetry_load_and_diagnostics() {
   telemetry.reports_server_xruns();
   REQUIRE_EQ(telemetry.snapshot().xruns, std::optional<std::uint64_t>{0},
              "a backend that reports xruns starts from a known zero");
+  REQUIRE_EQ(telemetry.snapshot().client_xrun_notifications, std::optional<std::uint64_t>{0},
+             "client xrun notifications start from a known zero");
   telemetry.server_xrun();
   REQUIRE_EQ(telemetry.snapshot().xruns, std::optional<std::uint64_t>{1});
+  REQUIRE_EQ(telemetry.snapshot().client_xrun_notifications, std::optional<std::uint64_t>{1},
+             "a server xrun callback counts as a client notification");
   REQUIRE_TRUE(ring.try_take(record));
   REQUIRE_EQ(record.kind, foundation::DiagnosticKind::xrun);
 
   telemetry.start(rate);
   REQUIRE_FALSE(telemetry.snapshot().xruns.has_value(), "a restart forgets the xrun count");
+  REQUIRE_FALSE(telemetry.snapshot().client_xrun_notifications.has_value(),
+                "a restart forgets the client notification count");
   REQUIRE_FALSE(telemetry.snapshot().callback_load.has_value(), "and the load");
 }
 

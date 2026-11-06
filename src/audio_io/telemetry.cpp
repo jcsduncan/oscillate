@@ -313,8 +313,12 @@ OutputStatus DeviceTelemetry::snapshot() const noexcept {
         .average = std::bit_cast<double>(load_average_bits_.load(std::memory_order_relaxed)),
         .peak = std::bit_cast<double>(load_peak_bits_.load(std::memory_order_relaxed))};
   }
-  if (server_xruns_observed_.load(std::memory_order_acquire))
+  // The server's xrun notifications are this client's notifications: one
+  // count, exposed under both names so neither field is left unknown.
+  if (server_xruns_observed_.load(std::memory_order_acquire)) {
     result.xruns = server_xruns_.load(std::memory_order_relaxed);
+    result.client_xrun_notifications = result.xruns;
+  }
   return result;
 }
 } // namespace oscillate::audio_io

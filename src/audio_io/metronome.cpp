@@ -46,14 +46,23 @@ void Metronome::publish(std::span<const ClickBeat> beats, std::uint32_t sample_r
 void Metronome::request_count_in(std::uint32_t beats, std::uint64_t beat_frames) noexcept {
   count_in_beats_.store(beats, std::memory_order_relaxed);
   count_in_beat_frames_.store(beat_frames, std::memory_order_relaxed);
-  counting_in_.store(beats > 0 && beat_frames > 0, std::memory_order_relaxed);
-  count_in_sequence_.fetch_add(1, std::memory_order_release);
+  const auto sequence = count_in_sequence_.load(std::memory_order_relaxed) + 1;
+  // Published before the sequence, so the callback that adopts this request
+  // finds it sounding when it finishes.
+  sounding_sequence_.store(beats > 0 && beat_frames > 0 ? sequence : 0, std::memory_order_release);
+  count_in_sequence_.store(sequence, std::memory_order_release);
 }
 
 void Metronome::cancel_count_in() noexcept { request_count_in(0, 0); }
 
 bool Metronome::counting_in() const noexcept {
-  return counting_in_.load(std::memory_order_acquire);
+  return sounding_sequence_.load(std::memory_order_acquire) != 0;
+}
+
+void Metronome::finish_count_in() noexcept {
+  auto expected = adopted_sequence_;
+  (void)sounding_sequence_.compare_exchange_strong(expected, 0, std::memory_order_acq_rel,
+                                                   std::memory_order_acquire);
 }
 
 std::size_t Metronome::render_count_in(std::span<float> output) noexcept {
@@ -64,8 +73,10 @@ std::size_t Metronome::render_count_in(std::span<float> output) noexcept {
     count_in_total_ = count_in_beats_.load(std::memory_order_relaxed) * count_in_beat_;
     count_in_position_ = 0;
   }
-  if (count_in_position_ >= count_in_total_)
+  if (count_in_position_ >= count_in_total_) {
+    finish_count_in();
     return 0;
+  }
   const auto rate = schedules_[active_.load(std::memory_order_acquire)].sample_rate;
   const auto frames = static_cast<std::size_t>(
       std::min<std::uint64_t>(output.size() / stereo, count_in_total_ - count_in_position_));
@@ -77,9 +88,8 @@ std::size_t Metronome::render_count_in(std::span<float> output) noexcept {
     output[frame * stereo + 1] = value;
   }
   count_in_position_ += frames;
-  if (count_in_position_ >= count_in_total_ &&
-      count_in_sequence_.load(std::memory_order_acquire) == adopted_sequence_)
-    counting_in_.store(false, std::memory_order_release);
+  if (count_in_position_ >= count_in_total_)
+    finish_count_in();
   return frames;
 }
 
