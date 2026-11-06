@@ -804,22 +804,14 @@ private:
         if (voice.mode != ChopMode::loop)
           weight *= edge_gain(voice, grain.position, fade);
         if (weight > 0.0)
-          sum = sum + weight * read(grain.position, kind, plan);
+          sum = sum + weight * (voice.mode == ChopMode::loop
+                                    ? loop_read(voice, grain.position, speed, kind, plan)
+                                    : read(grain.position, kind, plan));
       }
       return sum;
     }
-    if (voice.mode == ChopMode::loop) {
-      const auto join = loop_join(voice, speed);
-      const double into = voice.reverse ? voice.lo + join.cross - voice.position
-                                        : voice.position - (voice.hi - join.cross);
-      if (join.cross >= 1.0 && into > 0.0) {
-        // Equal gain from this pass into the next, which the join reaches.
-        const double t = std::min(1.0, into / join.cross);
-        const double partner = voice.position - voice.direction * join.jump;
-        return (1.0 - t) * read(voice.position, kind, plan) + t * read(partner, kind, plan);
-      }
-      return read(voice.position, kind, plan);
-    }
+    if (voice.mode == ChopMode::loop)
+      return loop_read(voice, voice.position, speed, kind, plan);
     const double gain = edge_gain(voice, voice.position, fade);
     if (gain <= 0.0)
       return {};
@@ -841,6 +833,36 @@ private:
     const bool room = voice.reverse ? voice.hi + cross <= static_cast<double>(sample_->frames)
                                     : voice.lo - cross >= 0.0;
     return {cross, room || cross < 1.0 ? span : span - cross};
+  }
+
+  // A looping read at `position`: across the join it crossfades this pass
+  // into the next, which the join reaches. Plain reads and grains share it.
+  [[nodiscard]] StereoSample loop_read(const Voice& voice, double position, double speed,
+                                       ReadKind kind,
+                                       const warp_dsp::BandlimitedReadPlan& plan) const noexcept {
+    const auto join = loop_join(voice, speed);
+    const double into =
+        voice.reverse ? voice.lo + join.cross - position : position - (voice.hi - join.cross);
+    if (join.cross >= 1.0 && into > 0.0) {
+      // Equal gain from this pass into the next.
+      const double t = std::min(1.0, into / join.cross);
+      const double partner = position - voice.direction * join.jump;
+      return (1.0 - t) * read(position, kind, plan) + t * read(partner, kind, plan);
+    }
+    return read(position, kind, plan);
+  }
+
+  // A looping grain's position after a step: past the loop's end it jumps
+  // back as the plain loop does, landing where the crossfade left off.
+  [[nodiscard]] double loop_step(const Voice& voice, double position, double speed) const noexcept {
+    if (voice.mode != ChopMode::loop)
+      return position;
+    const double jump = loop_join(voice, speed).jump;
+    if (!voice.reverse && position >= voice.hi)
+      return position - jump;
+    if (voice.reverse && position < voice.lo)
+      return position + jump;
+    return position;
   }
 
   // Both channels summed at the frame below a position; 0 outside the sample.
@@ -941,7 +963,7 @@ private:
         auto& grain = voice.grains[i];
         if (!grain.live)
           continue;
-        grain.position = looped(voice, grain.position + step);
+        grain.position = loop_step(voice, grain.position + step, speed);
         if (++grain.age >= grain_frames_) {
           grain.age = 0;
           grain.live = !voice.analysis_done;
