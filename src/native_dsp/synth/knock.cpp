@@ -276,6 +276,9 @@ constexpr std::array major_steps{0, 2, 4, 5, 7, 9, 11};
 constexpr std::array minor_steps{0, 2, 3, 5, 7, 8, 10};
 // Every note lies within this many semitones of its key's scale.
 constexpr int key_search_semitones = 2;
+// Two candidates closer than this (in semitones) are a tie, which the lower
+// wins: a midpoint pitch's log2 round trip must not tip it upward.
+constexpr double key_tie_semitones = 1e-9;
 constexpr std::uint32_t hand_pad_seed = 7'919U;
 constexpr std::uint32_t hand_hit_seed = 104'729U;
 // A pad's grit, click and air noise are the same every hit, as a sampled
@@ -1708,7 +1711,7 @@ double in_key(double hz, std::optional<project::MusicalKey> key) noexcept {
     if (std::ranges::find(steps, degree) == steps.end()) {
       continue;
     }
-    if (const double d = std::abs(note - candidate); d < distance) {
+    if (const double d = std::abs(note - candidate); d < distance - key_tie_semitones) {
       distance = d;
       nearest = candidate;
     }
