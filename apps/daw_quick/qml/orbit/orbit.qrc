@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/orbit">
+    <file>OrbitPanel.qml</file>
+    <file>OrbitTheme.qml</file>
+    <file>OrbitOrrery.qml</file>
+    <file>OrbitSweep.qml</file>
+  </qresource>
+</RCC>

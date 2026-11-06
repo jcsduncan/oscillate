@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/pocket">
+    <file>PocketPanel.qml</file>
+    <file>PocketTheme.qml</file>
+    <file>PocketMap.qml</file>
+    <file>PocketWaves.qml</file>
+  </qresource>
+</RCC>
