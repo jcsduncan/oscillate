@@ -213,7 +213,9 @@ std::vector<clay_dsp::TargetNote> follow_targets(const project::Snapshot& snapsh
         const auto note_start = origin + note.start.value;
         if (note_start >= pattern_end)
           continue;
-        const auto note_end = std::min(origin + note.end.value, pattern_end);
+        // Cut at the pattern end before adding the origin, so a long note
+        // cannot overflow.
+        const auto note_end = origin + std::min(note.end.value, pattern_end - origin);
         auto start = source_at_tick(note_start);
         auto stop = source_at_tick(note_end);
         if (!start || !stop || *stop <= first || *start >= end)

@@ -290,9 +290,8 @@ Result<void> CacheControl::register_project(const std::filesystem::path& root) {
     // A project moved onto another's former path matches two entries (one
     // by identity, one by path): keep the first, drop the rest.
     const auto keep = static_cast<std::size_t>(found - updated.begin());
-    std::size_t index = 0;
-    std::erase_if(updated,
-                  [&](const Entry& existing) { return index++ > keep && matches(existing); });
+    const auto tail = std::remove_if(found + 1, updated.end(), matches);
+    updated.erase(tail, updated.end());
     found = updated.begin() + static_cast<std::ptrdiff_t>(keep);
   }
   if (found == updated.end()) {
