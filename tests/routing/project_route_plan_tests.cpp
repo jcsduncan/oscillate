@@ -1804,6 +1804,16 @@ void silent_tracks_are_muted_or_feed_only_muted_tracks_and_never_keys() {
   const auto silent = [&](project::TrackId track, std::span<const routing::BoundStage> bound = {}) {
     const auto plan = take(registry.compile(state, 64, bound));
     const auto mask = routing::silent_track_nodes(state, plan);
+    // Without a usable order the fallback passes must settle the same mask:
+    // no order at all, and sources before destinations (the worst order).
+    auto unordered = plan;
+    unordered.latency.topological_order.clear();
+    REQUIRE_TRUE(routing::silent_track_nodes(state, unordered) == mask,
+                 "the fallback passes settled a different silence mask");
+    auto backwards = plan;
+    std::ranges::reverse(backwards.latency.topological_order);
+    REQUIRE_TRUE(routing::silent_track_nodes(state, backwards) == mask,
+                 "the fallback passes settled a different silence mask");
     const auto found =
         std::ranges::find(plan.track_nodes, track, &routing::ProjectRouteTrackNode::track);
     REQUIRE_NE(found, plan.track_nodes.end(), "silent fixture track missing");
