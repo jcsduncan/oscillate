@@ -106,6 +106,36 @@ void kick_pitch_and_decay_are_exact() {
              "kick decays at -60 dB per decay time");
 }
 
+// Tune follows a ringing kick without restarting it: the body moves to the
+// new pitch and keeps sounding.
+void kick_retunes_while_it_rings() {
+  constexpr double rate = 48'000.0;
+  constexpr std::size_t block = 128;
+  constexpr std::uint64_t change_at = 4'864;
+  constexpr std::uint64_t total = 48'000;
+  constexpr double octave_up = 12.0;
+  constexpr double kick_hz = 50.0;
+  constexpr double pitch_tolerance_cents = 17.0;
+  auto values = dry_kit();
+  values[at("pulse.kick.decay")] = 2.0;
+  auto runtime = make_runtime(pulse_engine(), values);
+  (void)render(*runtime, note(0, 100, kick_key, 1), change_at);
+  auto raised = values;
+  raised[at("pulse.kick.tune")] = octave_up;
+  require(runtime->offer_values(raised, 1), "tune change offered");
+  std::vector<double> out;
+  std::vector<engine::StereoFrame> buffer(block);
+  for (std::uint64_t frame = change_at; frame < total; frame += block) {
+    buffer.assign(block, {0.0F, 0.0F});
+    (void)runtime->process(buffer, {}, frame, 1, {}, {});
+    for (const auto& sample : buffer)
+      out.push_back(sample.left);
+  }
+  const double expected = kick_hz * std::exp2(octave_up / 12.0);
+  REQUIRE_LT(std::fabs(cents(measured_hz(out, 4'800, out.size(), rate), expected)),
+             pitch_tolerance_cents, "a ringing kick did not follow its Tune");
+}
+
 void hats_have_no_low_end_and_the_closed_hat_chokes() {
   auto runtime = make_runtime(pulse_engine(), dry_kit());
   const auto out = render(*runtime, note(0, 100, open_hat_key, 1), 16'384);
@@ -293,6 +323,7 @@ int main() {
     descriptor_registry_and_kits();
     pads_map_from_c1_and_other_keys_are_silent();
     kick_pitch_and_decay_are_exact();
+    kick_retunes_while_it_rings();
     hats_have_no_low_end_and_the_closed_hat_chokes();
     retriggers_never_click();
     block_splits_and_tails();
