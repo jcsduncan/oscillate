@@ -34,8 +34,9 @@ opening a public issue.
    the next start. A diagnostics bundle includes the newest one.
 3. For a performance problem, a performance trace: run **Start a
    performance trace** in the command palette, reproduce the problem, then
-   **Stop and save the performance trace**, and save diagnostics with the
-   latest performance trace.
+   **Stop and save the performance trace**, then save diagnostics with the
+   latest performance trace (it becomes available once the trace has
+   saved).
 4. When you can, a small project that shows the problem. Do not attach media
    you are not allowed to share.
 

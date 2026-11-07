@@ -8,7 +8,7 @@ to attach it to an issue.
 
 - In the app: open the command palette (Ctrl+K) and run **Save diagnostics**,
   or **Save diagnostics with the latest performance trace** when you have
-  saved a trace. Oscillate writes the bundle in the background and then opens
+  saved a trace (it is unavailable while a trace is recording or saving). Oscillate writes the bundle in the background and then opens
   its folder.
 - From a terminal, without starting the window:
 
@@ -44,21 +44,20 @@ Exactly these files, uncompressed:
 | `crash-report/` | The newest [crash report](crash-reports.md), if Oscillate has written one. |
 | `trace/` | A performance trace, only when you asked for one: the newest `trace-<time>.json` in `$XDG_DATA_HOME/oscillate/traces/`. A trace over 512 MiB is left out. |
 
-Your home folder's path is replaced with `~` in every file, the trace
-included.
+Your home folder's path (from `HOME`, or your account's entry when `HOME` is
+unset) is replaced with `~` in every file, the trace included.
 
 ## What a bundle never contains
 
 - Audio of any kind: no source media, recordings, project audio, renders,
   exports, caches or sample libraries.
 - Project files, presets, grooves, racks or plugin state.
-- Plug-in paths, vendors or scan diagnostics: only the names, versions and
-  status listed above.
 - A memory dump.
 
 ## Read it before you share it
 
 The logs and the crash report record what the application did, so they name
 projects, tracks, clips, files and plugins, and file paths outside your home
-folder. Open the bundle, read the files and remove anything you do not want
-to share before attaching it.
+folder. The logs also record VST3 scan failures with the plug-in's path and
+its error output. Open the bundle, read the files and remove anything you do
+not want to share before attaching it.

@@ -20,6 +20,9 @@
 #include <string_view>
 #include <utility>
 
+#include <pwd.h>
+#include <unistd.h>
+
 // OSCILLATE_VERSION is defined for this file only (apps/daw_quick/CMakeLists.txt),
 // so a version bump recompiles nothing else.
 #ifndef OSCILLATE_VERSION
@@ -33,6 +36,8 @@ namespace bundle = foundation::diagnostics_bundle;
 namespace crash = foundation::crash_report;
 
 constexpr int poll_interval_ms = 50;
+// getpwuid_r's buffer when the system gives no size.
+constexpr std::size_t passwd_buffer_bytes = 16384;
 constexpr std::string_view no_plugins_note =
     "No VST3 plug-ins are listed: none were found, or the VST3 browser has not scanned in "
     "this session.";
@@ -49,6 +54,21 @@ std::string yes_no(bool value) { return value ? "yes" : "no"; }
 std::string environment(const char* name) {
   const char* value = std::getenv(name);
   return value != nullptr ? std::string(value) : std::string{};
+}
+
+// HOME, else the account's home directory, so the bundle is redacted even
+// when HOME is unset.
+std::string home_directory() {
+  if (auto home = environment("HOME"); !home.empty())
+    return home;
+  const auto size = ::sysconf(_SC_GETPW_R_SIZE_MAX);
+  std::vector<char> buffer(size > 0 ? static_cast<std::size_t>(size) : passwd_buffer_bytes);
+  passwd entry{};
+  passwd* found = nullptr;
+  if (::getpwuid_r(::getuid(), &entry, buffer.data(), buffer.size(), &found) != 0 ||
+      found == nullptr || found->pw_dir == nullptr)
+    return {};
+  return found->pw_dir;
 }
 
 } // namespace
@@ -94,7 +114,7 @@ DiagnosticsPlugins diagnostics_plugins(const plugins::Vst3CatalogueSnapshot& sna
 #endif
 
 bundle::Options diagnostics_options(DiagnosticsPlugins plugins, bool include_trace) {
-  const auto home = environment("HOME");
+  const auto home = home_directory();
   const auto state_home = environment("XDG_STATE_HOME");
   const char* home_text = home.empty() ? nullptr : home.c_str();
   const char* state_text = state_home.empty() ? nullptr : state_home.c_str();
@@ -143,9 +163,11 @@ DiagnosticsController::DiagnosticsController(Host host, QObject* parent)
   if (!host_.write)
     host_.write = [](const bundle::Options& options) { return bundle::write(options); };
   if (!host_.reveal)
-    host_.reveal = [](const std::filesystem::path& path) {
-      QDesktopServices::openUrl(
-          QUrl::fromLocalFile(QString::fromStdString(path.parent_path().string())));
+    host_.reveal = [this](const std::filesystem::path& path) {
+      const auto folder = QString::fromStdString(path.parent_path().string());
+      if (!QDesktopServices::openUrl(QUrl::fromLocalFile(folder)) && host_.status)
+        host_.status(QStringLiteral("Could not open the folder; diagnostics saved to %1")
+                         .arg(QString::fromStdString(path.string())));
     };
   timer_.setInterval(poll_interval_ms);
   connect(&timer_, &QTimer::timeout, this, &DiagnosticsController::poll);

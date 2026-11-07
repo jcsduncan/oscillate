@@ -148,6 +148,7 @@ Item {
             { id: "diagnostics-trace", title: "Save diagnostics with the latest performance trace",
               keywords: "support bug report issue logs crash zip profile",
               enabled: Boolean(bridge.diagnostics) && !bridge.diagnostics.saving
+                       && !bridge.performanceTrace.recording && !bridge.performanceTrace.saving
                        && bridge.diagnostics.trace_available(),
               run: () => bridge.diagnostics.save(true) },
             { id: "zoom-in", title: "Zoom in", shortcut: "+", enabled: open, run: () => shell.zoomIn() },

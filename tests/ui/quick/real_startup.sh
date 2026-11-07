@@ -80,3 +80,22 @@ crash_reports=("$reports"/oscillate-crash-*.txt)
 [[ ${#crash_reports[@]} -eq 1 ]]
 grep -q 'SIGILL' "${crash_reports[0]}"
 grep -q '^application: Oscillate ' "${crash_reports[0]}"
+
+# --save-diagnostics writes a bundle holding that crash report and touches
+# nothing a running session owns; a malformed one starts nothing at all.
+diagnostics="$XDG_STATE_HOME/oscillate/diagnostics"
+cp "$reports/session.txt" "$fixture/session.backup"
+rm -f -- "$log"
+if "$app" --save-diagnostics --bogus >"$fixture/error" 2>&1; then
+  echo 'Invalid diagnostics option was accepted' >&2
+  exit 1
+fi
+[[ $(<"$fixture/error") == *'Usage:'* ]]
+[[ ! -e $log ]]
+bundle=$("$app" --save-diagnostics 2>/dev/null)
+[[ -f $bundle && $bundle == "$diagnostics"/oscillate-diagnostics-*.zip ]]
+[[ ! -e $log ]]
+cmp -s "$reports/session.txt" "$fixture/session.backup"
+python3 -I -c 'import sys, zipfile
+names = zipfile.ZipFile(sys.argv[1]).namelist()
+assert any(n.startswith("crash-report/oscillate-crash-") for n in names), names' "$bundle"
