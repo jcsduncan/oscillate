@@ -469,8 +469,7 @@ void rapid_drag_over_pending_receipt(const plugins::ScanResult& scanned, Kind ki
                "pending preview did not retain the exact active plugin identity");
   const auto preview = [&](std::uint32_t parameter, double value,
                            plugins::Vst3ActiveGraphIdentity graph) {
-    return pending->slot->preview(graph.graph_revision, graph.instance_id, graph.compatibility_key,
-                                  {parameter, 0, value});
+    return pending->slot->preview(graph, {parameter, 0, value});
   };
   REQUIRE_EQ(preview(rig.parameter, 0.7, identity), plugins::Vst3ManualEventStatus::accepted,
              "pending preview failed latest-value or parameter qualification");
@@ -529,9 +528,7 @@ void rapid_drag_over_pending_receipt(const plugins::ScanResult& scanned, Kind ki
   const auto failed_pending =
       failed.control->pending_vst3_manual_preview_events(failed.track, insert, failed.plugin);
   REQUIRE_TRUE(failed_pending, "failed preview fixture did not stage a later drag");
-  REQUIRE_EQ(failed_pending->slot->preview(
-                 failed_pending->identity.graph_revision, failed_pending->identity.instance_id,
-                 failed_pending->identity.compatibility_key, {failed.parameter, 0, 0.8}),
+  REQUIRE_EQ(failed_pending->slot->preview(failed_pending->identity, {failed.parameter, 0, 0.8}),
              plugins::Vst3ManualEventStatus::accepted,
              "failed preview fixture did not stage a later drag");
   REQUIRE_OK(failed_binding->first->claim(), "failed pending event was not claimable");

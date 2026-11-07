@@ -1147,25 +1147,27 @@ void manual_instrument_event(const plugins::ScanResult& scanned, std::uint32_t f
                "instrument lookup accepted an unbound owner, plugin, or graph revision");
   REQUIRE_TRUE(!control.active_vst3_instrument_manual_events(track, plugin, first_revision + 1),
                "instrument lookup accepted an unbound owner, plugin, or graph revision");
-  REQUIRE_EQ(slot->submit(identity.graph_revision, identity.instance_id + 1,
-                          identity.compatibility_key, 2, {1, 0, 0.75}),
-             Vst3ManualEventStatus::stale_instance,
-             "instrument manual admission failed identity or bounded capacity checks");
-  REQUIRE_EQ(slot->submit(identity.graph_revision, identity.instance_id,
-                          identity.compatibility_key + 1, 2, {1, 0, 0.75}),
-             Vst3ManualEventStatus::stale_instance,
-             "instrument manual admission failed identity or bounded capacity checks");
-  REQUIRE_EQ(slot->submit(identity.graph_revision + 1, identity.instance_id,
-                          identity.compatibility_key, 2, {1, 0, 0.75}),
-             Vst3ManualEventStatus::stale_instance,
-             "instrument manual admission failed identity or bounded capacity checks");
-  REQUIRE_EQ(slot->submit(identity.graph_revision, identity.instance_id, identity.compatibility_key,
+  REQUIRE_EQ(slot->submit({.graph_revision = identity.graph_revision,
+                           .instance_id = identity.instance_id + 1,
+                           .compatibility_key = identity.compatibility_key},
                           2, {1, 0, 0.75}),
-             Vst3ManualEventStatus::accepted,
+             Vst3ManualEventStatus::stale_instance,
              "instrument manual admission failed identity or bounded capacity checks");
-  REQUIRE_EQ(slot->submit(identity.graph_revision, identity.instance_id, identity.compatibility_key,
-                          3, {1, 0, 0.8}),
-             Vst3ManualEventStatus::busy,
+  REQUIRE_EQ(slot->submit({.graph_revision = identity.graph_revision,
+                           .instance_id = identity.instance_id,
+                           .compatibility_key = identity.compatibility_key + 1},
+                          2, {1, 0, 0.75}),
+             Vst3ManualEventStatus::stale_instance,
+             "instrument manual admission failed identity or bounded capacity checks");
+  REQUIRE_EQ(slot->submit({.graph_revision = identity.graph_revision + 1,
+                           .instance_id = identity.instance_id,
+                           .compatibility_key = identity.compatibility_key},
+                          2, {1, 0, 0.75}),
+             Vst3ManualEventStatus::stale_instance,
+             "instrument manual admission failed identity or bounded capacity checks");
+  REQUIRE_EQ(slot->submit(identity, 2, {1, 0, 0.75}), Vst3ManualEventStatus::accepted,
+             "instrument manual admission failed identity or bounded capacity checks");
+  REQUIRE_EQ(slot->submit(identity, 3, {1, 0, 0.8}), Vst3ManualEventStatus::busy,
              "instrument manual admission failed identity or bounded capacity checks");
   counted_allocations = 0;
   counting_allocations = true;
@@ -1184,9 +1186,7 @@ void manual_instrument_event(const plugins::ScanResult& scanned, std::uint32_t f
              "instrument manual event lacked first-block sample/revision receipt");
   REQUIRE_EQ(receipt->project_sample, frames,
              "instrument manual event lacked first-block sample/revision receipt");
-  REQUIRE_EQ(slot->submit(identity.graph_revision, identity.instance_id, identity.compatibility_key,
-                          2, {1, 0, 0.5}),
-             Vst3ManualEventStatus::invalid_revision,
+  REQUIRE_EQ(slot->submit(identity, 2, {1, 0, 0.5}), Vst3ManualEventStatus::invalid_revision,
              "instrument manual slot reused an acknowledged revision");
   auto revised = take(state.apply({project::AddSendRoute{
       id<project::TrackId>(2), {id<project::SendId>(7), id<project::TrackId>(3), 0.5}}}));
@@ -1197,9 +1197,7 @@ void manual_instrument_event(const plugins::ScanResult& scanned, std::uint32_t f
           !control.active_vst3_instrument_manual_events(track, plugin, first_revision) &&
           !control.active_vst3_instrument_manual_events(track, plugin, revised.snapshot->revision),
       "instrument topology edit did not publish");
-  REQUIRE_EQ(slot->submit(identity.graph_revision, identity.instance_id, identity.compatibility_key,
-                          3, {1, 0, 0.5}),
-             Vst3ManualEventStatus::accepted,
+  REQUIRE_EQ(slot->submit(identity, 3, {1, 0, 0.5}), Vst3ManualEventStatus::accepted,
              "old graph stopped admitting before accepted callback switch");
   REQUIRE_EQ(control.render_block(inputs, output, {2 * frames, 1}),
              engine::RoutedRenderStatus::rendered,
@@ -1222,9 +1220,7 @@ void manual_instrument_event(const plugins::ScanResult& scanned, std::uint32_t f
              "instrument accepted a pending event from its retired graph revision");
   REQUIRE_EQ(failed->revision, 3,
              "instrument accepted a pending event from its retired graph revision");
-  REQUIRE_EQ(slot->submit(identity.graph_revision, identity.instance_id, identity.compatibility_key,
-                          4, {1, 0, 0.5}),
-             Vst3ManualEventStatus::stale_instance,
+  REQUIRE_EQ(slot->submit(identity, 4, {1, 0, 0.5}), Vst3ManualEventStatus::stale_instance,
              "instrument accepted a pending event from its retired graph revision");
   auto changed = take(state.apply({project::SetVst3ComponentState{plugin, {1, 2, 3}}}));
   REQUIRE_GT(changed.snapshot->revision, revised.snapshot->revision,
@@ -1291,12 +1287,16 @@ void instrument_control_overlay_rebinds_manual_slot(const plugins::ScanResult& s
              "instrument overlay reset the host, silenced a block or missed its identity switch");
   REQUIRE_EQ(publisher.collect_retired(), 1,
              "instrument overlay reset the host, silenced a block or missed its identity switch");
-  REQUIRE_EQ(source.manual_events->submit(1, identity.instance_id, identity.compatibility_key, 3,
-                                          {1, 0, 0.75}),
+  REQUIRE_EQ(source.manual_events->submit({.graph_revision = 1,
+                                           .instance_id = identity.instance_id,
+                                           .compatibility_key = identity.compatibility_key},
+                                          3, {1, 0, 0.75}),
              plugins::Vst3ManualEventStatus::stale_instance,
              "instrument overlay retained old manual authority or refused the new revision");
-  REQUIRE_EQ(source.manual_events->submit(2, identity.instance_id, identity.compatibility_key, 3,
-                                          {1, 0, 0.75}),
+  REQUIRE_EQ(source.manual_events->submit({.graph_revision = 2,
+                                           .instance_id = identity.instance_id,
+                                           .compatibility_key = identity.compatibility_key},
+                                          3, {1, 0, 0.75}),
              plugins::Vst3ManualEventStatus::accepted,
              "instrument overlay retained old manual authority or refused the new revision");
   counted_allocations = 0;
@@ -1330,8 +1330,7 @@ void preview_instrument_event(const plugins::ScanResult& scanned, std::uint32_t 
   source.processor->graph_activated(1);
   const auto identity = slot->active_graph();
   auto preview = [&](std::uint32_t id, double value) {
-    return slot->preview(identity.graph_revision, identity.instance_id, identity.compatibility_key,
-                         {id, 0, value});
+    return slot->preview(identity, {id, 0, value});
   };
   REQUIRE_EQ(preview(2, 0.8), plugins::Vst3ManualEventStatus::unavailable,
              "instrument drag preview did not validate and coalesce");
@@ -1353,9 +1352,7 @@ void preview_instrument_event(const plugins::ScanResult& scanned, std::uint32_t 
   near(output[5], 0.65F);
   REQUIRE_EQ(preview(1, 0.9), plugins::Vst3ManualEventStatus::accepted,
              "instrument final gesture did not supersede pending preview");
-  REQUIRE_EQ(slot->submit(identity.graph_revision, identity.instance_id, identity.compatibility_key,
-                          2, {1, 0, 0.75}),
-             plugins::Vst3ManualEventStatus::accepted,
+  REQUIRE_EQ(slot->submit(identity, 2, {1, 0, 0.75}), plugins::Vst3ManualEventStatus::accepted,
              "instrument final gesture did not supersede pending preview");
   source.processor->process(output, {frames, 1});
   near(output.front(), 0.75F);
@@ -1377,7 +1374,10 @@ void preview_instrument_event(const plugins::ScanResult& scanned, std::uint32_t 
   source.processor->process(output, {3 * frames, 1});
   REQUIRE_TRUE(!source.process_failed(), "instrument stale preview replayed after graph switch");
   REQUIRE_TRUE(!slot->claim_preview(), "instrument stale preview replayed after graph switch");
-  REQUIRE_EQ(slot->preview(1, identity.instance_id, identity.compatibility_key, {1, 0, 0.4}),
+  REQUIRE_EQ(slot->preview({.graph_revision = 1,
+                            .instance_id = identity.instance_id,
+                            .compatibility_key = identity.compatibility_key},
+                           {1, 0, 0.4}),
              plugins::Vst3ManualEventStatus::stale_instance,
              "old instrument graph accepted a preview after switch");
   require(provider.stop_after_join(), "preview instrument did not stop");
@@ -1399,9 +1399,7 @@ void size_scoped_instrument_event(const plugins::ScanResult& scanned) {
   REQUIRE_TRUE(source.processor, "size-scoped instrument failed preparation");
   source.processor->graph_activated(1);
   const auto identity = slot->active_graph();
-  REQUIRE_EQ(slot->preview(identity.graph_revision, identity.instance_id,
-                           identity.compatibility_key, {1, 0, 0.65}),
-             plugins::Vst3ManualEventStatus::accepted,
+  REQUIRE_EQ(slot->preview(identity, {1, 0, 0.65}), plugins::Vst3ManualEventStatus::accepted,
              "size-scoped instrument preview failed preflight");
   std::array<engine::StereoFrame, 128> output{};
   counted_allocations = 0;
@@ -1415,9 +1413,7 @@ void size_scoped_instrument_event(const plugins::ScanResult& scanned) {
                "128-frame instrument callback applied 64-only preview or allocated");
   REQUIRE_EQ(slot->receipt().phase, plugins::Vst3ManualEventPhase::empty,
              "128-frame instrument callback applied 64-only preview or allocated");
-  REQUIRE_EQ(slot->submit(identity.graph_revision, identity.instance_id, identity.compatibility_key,
-                          2, {1, 0, 0.75}),
-             plugins::Vst3ManualEventStatus::accepted,
+  REQUIRE_EQ(slot->submit(identity, 2, {1, 0, 0.75}), plugins::Vst3ManualEventStatus::accepted,
              "size-scoped instrument commit failed preflight");
   counted_allocations = 0;
   counting_allocations = true;
@@ -1434,9 +1430,8 @@ void size_scoped_instrument_event(const plugins::ScanResult& scanned) {
              "128-frame instrument callback applied 64-only commit or lost failed receipt");
   REQUIRE_OK(slot->collect(),
              "128-frame instrument callback applied 64-only commit or lost failed receipt");
-  REQUIRE_EQ(slot->submit(identity.graph_revision, identity.instance_id, identity.compatibility_key,
-                          3, {1, 0, 0.75}),
-             plugins::Vst3ManualEventStatus::accepted, "64-frame retry failed preflight");
+  REQUIRE_EQ(slot->submit(identity, 3, {1, 0, 0.75}), plugins::Vst3ManualEventStatus::accepted,
+             "64-frame retry failed preflight");
   source.processor->process(std::span(output).first(64), {256, 1});
   REQUIRE_TRUE(!source.process_failed(),
                "64-frame instrument retry did not reach qualified host call");
@@ -1457,7 +1452,9 @@ void manual_instrument_gates(const plugins::ScanResult& scanned) {
   REQUIRE_OK(control.submit_current(), "latency-gated instrument did not prepare");
   auto slot = provider.manual_events();
   REQUIRE_TRUE(slot, "unpublished source accepted a manual event");
-  REQUIRE_EQ(slot->submit(1, 1, 1, 2, {1, 0, 0.75}), plugins::Vst3ManualEventStatus::stale_instance,
+  REQUIRE_EQ(slot->submit({.graph_revision = 1, .instance_id = 1, .compatibility_key = 1}, 2,
+                          {1, 0, 0.75}),
+             plugins::Vst3ManualEventStatus::stale_instance,
              "unpublished source accepted a manual event");
   std::vector<std::span<const engine::StereoFrame>> inputs(control.topological_order().size());
   std::array<engine::StereoFrame, 64> output{};
@@ -1467,8 +1464,7 @@ void manual_instrument_gates(const plugins::ScanResult& scanned) {
   require(!control.active_vst3_instrument_manual_events(
               id<project::TrackId>(2), id<project::PluginInstanceId>(5), identity.graph_revision),
           "unqualified instrument exposed a routed manual binding");
-  REQUIRE_EQ(slot->submit(identity.graph_revision, identity.instance_id, identity.compatibility_key,
-                          2, {1, 0, 0.75}),
+  REQUIRE_EQ(slot->submit(identity, 2, {1, 0, 0.75}),
              plugins::Vst3ManualEventStatus::latency_unverified,
              "generic instrument admitted a manual value without fixed latency evidence");
 
@@ -1478,9 +1474,7 @@ void manual_instrument_gates(const plugins::ScanResult& scanned) {
       scoped.prepare(*state.snapshot(), saved_instrument(state.snapshot()->tracks.front()), 64));
   scoped_source.processor->graph_activated(1);
   const auto scoped_identity = scoped.manual_events()->active_graph();
-  REQUIRE_EQ(scoped.manual_events()->admission(scoped_identity.graph_revision,
-                                               scoped_identity.instance_id,
-                                               scoped_identity.compatibility_key, 2, {1, 0, 0.75}),
+  REQUIRE_EQ(scoped.manual_events()->admission(scoped_identity, 2, {1, 0, 0.75}),
              plugins::Vst3ManualEventStatus::unavailable,
              "parameter-scoped qualification admitted an unqualified control");
   plugins::Vst3InstrumentTrackProvider exact(plugins::Vst3ProcessingMode::realtime, true, {1});
@@ -1489,9 +1483,7 @@ void manual_instrument_gates(const plugins::ScanResult& scanned) {
       exact.prepare(*state.snapshot(), saved_instrument(state.snapshot()->tracks.front()), 64));
   exact_source.processor->graph_activated(1);
   const auto exact_identity = exact.manual_events()->active_graph();
-  REQUIRE_EQ(exact.manual_events()->admission(exact_identity.graph_revision,
-                                              exact_identity.instance_id,
-                                              exact_identity.compatibility_key, 2, {1, 0, 0.75}),
+  REQUIRE_EQ(exact.manual_events()->admission(exact_identity, 2, {1, 0, 0.75}),
              plugins::Vst3ManualEventStatus::accepted,
              "qualified continuous instrument control was refused");
 
@@ -1526,9 +1518,7 @@ void manual_instrument_gates(const plugins::ScanResult& scanned) {
       take(automated_provider.prepare(*snapshot, saved_instrument(snapshot->tracks.front()), 64));
   prepared.processor->graph_activated(1);
   const auto automated_identity = automated_provider.manual_events()->active_graph();
-  REQUIRE_EQ(automated_provider.manual_events()->submit(
-                 automated_identity.graph_revision, automated_identity.instance_id,
-                 automated_identity.compatibility_key, 2, {1, 0, 0.75}),
+  REQUIRE_EQ(automated_provider.manual_events()->submit(automated_identity, 2, {1, 0, 0.75}),
              plugins::Vst3ManualEventStatus::automated,
              "instrument manual value overrode an automated parameter");
 }
@@ -1679,9 +1669,10 @@ void manual_edit_meets_pedal_at_one_offset(const plugins::ScanResult& scanned,
   const auto graph_revision = state.snapshot()->revision;
   source.processor->graph_activated(graph_revision);
   const auto identity = source.manual_events->active_graph();
-  REQUIRE_EQ(source.manual_events->submit(graph_revision, identity.instance_id,
-                                          identity.compatibility_key, manual_revision,
-                                          {level_parameter, 0, manual_value}),
+  REQUIRE_EQ(source.manual_events->submit({.graph_revision = graph_revision,
+                                           .instance_id = identity.instance_id,
+                                           .compatibility_key = identity.compatibility_key},
+                                          manual_revision, {level_parameter, 0, manual_value}),
              plugins::Vst3ManualEventStatus::accepted, "the manual edit is admitted");
   std::vector<engine::StereoFrame> output(frames);
   counting_allocations = true;
@@ -1734,9 +1725,7 @@ void lane_capacity(const plugins::ScanResult& scanned, std::uint32_t frames, std
   auto slot = provider.manual_events();
   const auto identity = slot->active_graph();
   const plugins::Vst3ParameterEvent manual{1, 0, 0.75};
-  REQUIRE_EQ(slot->submit(identity.graph_revision, identity.instance_id, identity.compatibility_key,
-                          2, manual),
-             Vst3ManualEventStatus::accepted,
+  REQUIRE_EQ(slot->submit(identity, 2, manual), Vst3ManualEventStatus::accepted,
              "fully automated instrument refused an eligible manual event");
   std::vector<engine::StereoFrame> output(frames);
   counted_allocations = 0;

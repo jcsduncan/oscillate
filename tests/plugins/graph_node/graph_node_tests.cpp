@@ -457,10 +457,16 @@ void automated_connected_effect(const plugins::ScanResult& scan) {
   require(graph.render_block(frames, {0, 1}), "connected automation graph did not render");
   counting_allocations = false;
   REQUIRE_TRUE(node.manual_events, "manual event or preview took precedence over saved automation");
-  REQUIRE_EQ(node.manual_events->submit(1, 2, node.request.compatibility_key, 2, {101, 0, 0.75}),
+  REQUIRE_EQ(node.manual_events->submit({.graph_revision = 1,
+                                         .instance_id = 2,
+                                         .compatibility_key = node.request.compatibility_key},
+                                        2, {101, 0, 0.75}),
              plugins::Vst3ManualEventStatus::automated,
              "manual event or preview took precedence over saved automation");
-  REQUIRE_EQ(node.manual_events->preview(1, 2, node.request.compatibility_key, {101, 0, 0.75}),
+  REQUIRE_EQ(node.manual_events->preview({.graph_revision = 1,
+                                          .instance_id = 2,
+                                          .compatibility_key = node.request.compatibility_key},
+                                         {101, 0, 0.75}),
              plugins::Vst3ManualEventStatus::automated,
              "manual event or preview took precedence over saved automation");
   REQUIRE_EQ(counted_allocations, 0,
@@ -509,13 +515,14 @@ void preview_connected_effect(const plugins::ScanResult& scan, std::uint32_t fra
   const auto identity = node.manual_events->active_graph();
   auto& slot = *node.manual_events;
   const auto preview = [&](std::uint32_t id, double value) {
-    return slot.preview(identity.graph_revision, identity.instance_id, identity.compatibility_key,
-                        {id, 0, value});
+    return slot.preview(identity, {id, 0, value});
   };
   REQUIRE_EQ(preview(999, 0.5), plugins::Vst3ManualEventStatus::unavailable,
              "effect preview did not validate and coalesce drag values");
-  REQUIRE_EQ(slot.preview(identity.graph_revision, identity.instance_id + 1,
-                          identity.compatibility_key, {101, 0, 0.5}),
+  REQUIRE_EQ(slot.preview({.graph_revision = identity.graph_revision,
+                           .instance_id = identity.instance_id + 1,
+                           .compatibility_key = identity.compatibility_key},
+                          {101, 0, 0.5}),
              plugins::Vst3ManualEventStatus::stale_instance,
              "effect preview did not validate and coalesce drag values");
   REQUIRE_EQ(preview(101, 0.25), plugins::Vst3ManualEventStatus::accepted,
@@ -537,9 +544,7 @@ void preview_connected_effect(const plugins::ScanResult& scan, std::uint32_t fra
              "effect drag preview was not audible without a saved receipt or allocated");
   REQUIRE_EQ(preview(101, 0.9), plugins::Vst3ManualEventStatus::accepted,
              "effect final gesture did not supersede pending preview");
-  REQUIRE_EQ(slot.submit(identity.graph_revision, identity.instance_id, identity.compatibility_key,
-                         2, {101, 0, 0.75}),
-             plugins::Vst3ManualEventStatus::accepted,
+  REQUIRE_EQ(slot.submit(identity, 2, {101, 0, 0.75}), plugins::Vst3ManualEventStatus::accepted,
              "effect final gesture did not supersede pending preview");
   output.assign(frames_per_block, {1.0F, 1.0F});
   REQUIRE_TRUE(graph.render_block(output, {2 * frames_per_block, 1}),
@@ -591,12 +596,10 @@ void queued_native_gesture_preserves_newer_preview(const plugins::ScanResult& sc
   auto& slot = *node.manual_events;
   const auto identity = slot.active_graph();
   const auto submit = [&](std::uint64_t revision, double value, std::uint64_t sequence) {
-    return slot.submit(identity.graph_revision, identity.instance_id, identity.compatibility_key,
-                       revision, {101, 0, value}, sequence);
+    return slot.submit(identity, revision, {101, 0, value}, sequence);
   };
   const auto preview = [&](double value, std::uint64_t sequence) {
-    return slot.preview(identity.graph_revision, identity.instance_id, identity.compatibility_key,
-                        {101, 0, value}, sequence);
+    return slot.preview(identity, {101, 0, value}, sequence);
   };
   REQUIRE_EQ(submit(2, 0.75, 1), plugins::Vst3ManualEventStatus::accepted,
              "new drag could not stage while older completion awaited a callback");
@@ -660,11 +663,15 @@ void queued_native_gesture_preserves_newer_preview(const plugins::ScanResult& sc
 }
 
 void preview_survives_exact_overlay_and_failed_older_receipt() {
-  plugins::Vst3ManualEventSlot slot(2, 7, {101}, {}, true);
+  plugins::Vst3ManualEventSlot slot({.instance_id = 2, .compatibility_key = 7}, {101}, {}, true);
   slot.activate(1);
-  REQUIRE_EQ(slot.submit(1, 2, 7, 2, {101, 0, 0.75}, 1), plugins::Vst3ManualEventStatus::accepted,
+  REQUIRE_EQ(slot.submit({.graph_revision = 1, .instance_id = 2, .compatibility_key = 7}, 2,
+                         {101, 0, 0.75}, 1),
+             plugins::Vst3ManualEventStatus::accepted,
              "failed-receipt preview fixture did not stage");
-  REQUIRE_EQ(slot.preview(1, 2, 7, {101, 0, 0.25}, 2), plugins::Vst3ManualEventStatus::accepted,
+  REQUIRE_EQ(slot.preview({.graph_revision = 1, .instance_id = 2, .compatibility_key = 7},
+                          {101, 0, 0.25}, 2),
+             plugins::Vst3ManualEventStatus::accepted,
              "failed-receipt preview fixture did not stage");
   REQUIRE_OK(slot.claim(), "failed-receipt preview fixture did not stage");
   slot.finish(false, -1);
@@ -672,29 +679,35 @@ void preview_survives_exact_overlay_and_failed_older_receipt() {
              "failed older receipt discarded a newer drag on the same live instance");
   REQUIRE_OK(slot.claim_preview(),
              "failed older receipt discarded a newer drag on the same live instance");
-  REQUIRE_EQ(slot.preview(1, 2, 7, {101, 0, 0.4}, 3), plugins::Vst3ManualEventStatus::accepted,
-             "overlay preview fixture did not stage");
+  REQUIRE_EQ(slot.preview({.graph_revision = 1, .instance_id = 2, .compatibility_key = 7},
+                          {101, 0, 0.4}, 3),
+             plugins::Vst3ManualEventStatus::accepted, "overlay preview fixture did not stage");
   slot.control_overlay_rebound(1, 2);
   const auto carried = slot.claim_preview();
   REQUIRE_TRUE(carried, "exact-host control overlay discarded a newer tagged preview");
   REQUIRE_EQ(carried->id, 101, "exact-host control overlay discarded a newer tagged preview");
   REQUIRE_LT(std::fabs(carried->normalized_value - 0.4), 0.00001,
              "exact-host control overlay discarded a newer tagged preview");
-  REQUIRE_EQ(slot.preview(2, 2, 7, {101, 0, 0.6}), plugins::Vst3ManualEventStatus::accepted,
-             "untagged preview fixture did not stage");
+  REQUIRE_EQ(
+      slot.preview({.graph_revision = 2, .instance_id = 2, .compatibility_key = 7}, {101, 0, 0.6}),
+      plugins::Vst3ManualEventStatus::accepted, "untagged preview fixture did not stage");
   slot.control_overlay_rebound(2, 3);
   require(!slot.claim_preview(), "untagged preview crossed a graph overlay");
-  REQUIRE_EQ(slot.preview(3, 2, 7, {101, 0, 0.8}, 4), plugins::Vst3ManualEventStatus::accepted,
-             "retirement preview fixture did not stage");
+  REQUIRE_EQ(slot.preview({.graph_revision = 3, .instance_id = 2, .compatibility_key = 7},
+                          {101, 0, 0.8}, 4),
+             plugins::Vst3ManualEventStatus::accepted, "retirement preview fixture did not stage");
   slot.deactivate();
   require(!slot.claim_preview(), "retired plugin instance replayed a preview");
 
-  plugins::Vst3ManualEventSlot interleaved(3, 8, {101, 202}, {}, true);
+  plugins::Vst3ManualEventSlot interleaved({.instance_id = 3, .compatibility_key = 8}, {101, 202},
+                                           {}, true);
   interleaved.activate(1);
-  REQUIRE_EQ(interleaved.preview(1, 3, 8, {202, 0, 0.3}, 1),
+  REQUIRE_EQ(interleaved.preview({.graph_revision = 1, .instance_id = 3, .compatibility_key = 8},
+                                 {202, 0, 0.3}, 1),
              plugins::Vst3ManualEventStatus::accepted,
              "interleaved parameter fixture did not stage");
-  REQUIRE_EQ(interleaved.submit(1, 3, 8, 2, {101, 0, 0.8}, 2),
+  REQUIRE_EQ(interleaved.submit({.graph_revision = 1, .instance_id = 3, .compatibility_key = 8}, 2,
+                                {101, 0, 0.8}, 2),
              plugins::Vst3ManualEventStatus::accepted,
              "interleaved parameter fixture did not stage");
   REQUIRE_OK(interleaved.claim(), "interleaved parameter fixture did not stage");
@@ -722,9 +735,7 @@ void size_scoped_manual_effect(const plugins::ScanResult& scan, std::uint32_t qu
   auto& slot = *node.manual_events;
   const auto identity = slot.active_graph();
   std::vector<engine::StereoFrame> output(actual_frames, {1.0F, 1.0F});
-  REQUIRE_EQ(slot.preview(identity.graph_revision, identity.instance_id, identity.compatibility_key,
-                          {101, 0, 0.5}),
-             plugins::Vst3ManualEventStatus::accepted,
+  REQUIRE_EQ(slot.preview(identity, {101, 0, 0.5}), plugins::Vst3ManualEventStatus::accepted,
              "size-scoped preview failed control-side preflight");
   counted_allocations = 0;
   counting_allocations = true;
@@ -737,9 +748,7 @@ void size_scoped_manual_effect(const plugins::ScanResult& scan, std::uint32_t qu
              "size-scoped preview applied at an unqualified actual process size or allocated");
   REQUIRE_EQ(slot.receipt().phase, plugins::Vst3ManualEventPhase::empty,
              "size-scoped preview applied at an unqualified actual process size or allocated");
-  REQUIRE_EQ(slot.submit(identity.graph_revision, identity.instance_id, identity.compatibility_key,
-                         2, {101, 0, 0.75}),
-             plugins::Vst3ManualEventStatus::accepted,
+  REQUIRE_EQ(slot.submit(identity, 2, {101, 0, 0.75}), plugins::Vst3ManualEventStatus::accepted,
              "size-scoped commit failed control-side preflight");
   output.assign(actual_frames, {1.0F, 1.0F});
   counted_allocations = 0;
@@ -779,9 +788,8 @@ void tempo_split_denies_unqualified_effect_segment(const plugins::ScanResult& sc
   runtime->graph_activated(1);
   auto& slot = *node.manual_events;
   const auto identity = slot.active_graph();
-  REQUIRE_EQ(slot.submit(identity.graph_revision, identity.instance_id, identity.compatibility_key,
-                         2, {101, 0, 0.75}),
-             plugins::Vst3ManualEventStatus::accepted, "size-scoped tempo commit failed preflight");
+  REQUIRE_EQ(slot.submit(identity, 2, {101, 0, 0.75}), plugins::Vst3ManualEventStatus::accepted,
+             "size-scoped tempo commit failed preflight");
   std::array<engine::StereoFrame, 128> output{};
   output.fill({1.0F, 1.0F});
   counted_allocations = 0;
@@ -816,11 +824,16 @@ void manual_connected_effect(const plugins::ScanResult& scan) {
   require(denied_graph.render_block(frames, {0, 1}), "generic VST3 graph did not render");
   REQUIRE_EQ(denied.runtime_status->load(), plugins::Vst3GraphRuntimeStatus::ready,
              "generic VST3 manual event or preview admitted without fixed-latency evidence");
-  REQUIRE_EQ(
-      denied.manual_events->submit(1, 2, denied.request.compatibility_key, 2, {101, 0, 0.75}),
-      plugins::Vst3ManualEventStatus::latency_unverified,
-      "generic VST3 manual event or preview admitted without fixed-latency evidence");
-  REQUIRE_EQ(denied.manual_events->preview(1, 2, denied.request.compatibility_key, {101, 0, 0.75}),
+  REQUIRE_EQ(denied.manual_events->submit({.graph_revision = 1,
+                                           .instance_id = 2,
+                                           .compatibility_key = denied.request.compatibility_key},
+                                          2, {101, 0, 0.75}),
+             plugins::Vst3ManualEventStatus::latency_unverified,
+             "generic VST3 manual event or preview admitted without fixed-latency evidence");
+  REQUIRE_EQ(denied.manual_events->preview({.graph_revision = 1,
+                                            .instance_id = 2,
+                                            .compatibility_key = denied.request.compatibility_key},
+                                           {101, 0, 0.75}),
              plugins::Vst3ManualEventStatus::latency_unverified,
              "generic VST3 manual event or preview admitted without fixed-latency evidence");
   auto node = plugins::prepare_vst3_graph_node(
@@ -829,7 +842,10 @@ void manual_connected_effect(const plugins::ScanResult& scan) {
   require(node.ready() && node.latency_samples == 7 && node.manual_events,
           "fixed-latency connected fixture failed to prepare");
   auto& mailbox = *node.manual_events;
-  REQUIRE_EQ(mailbox.submit(1, 2, node.request.compatibility_key, 2, {101, 0, 0.75}),
+  REQUIRE_EQ(mailbox.submit({.graph_revision = 1,
+                             .instance_id = 2,
+                             .compatibility_key = node.request.compatibility_key},
+                            2, {101, 0, 0.75}),
              plugins::Vst3ManualEventStatus::stale_instance,
              "unpublished runtime admitted an event");
   engine::GraphPublisher graph;
@@ -837,7 +853,10 @@ void manual_connected_effect(const plugins::ScanResult& scan) {
              "manual event graph did not publish");
   REQUIRE_EQ(mailbox.active_graph().graph_revision, 0,
              "prepared but unpublished graph admitted an event");
-  REQUIRE_EQ(mailbox.submit(1, 2, node.request.compatibility_key, 2, {101, 0, 0.75}),
+  REQUIRE_EQ(mailbox.submit({.graph_revision = 1,
+                             .instance_id = 2,
+                             .compatibility_key = node.request.compatibility_key},
+                            2, {101, 0, 0.75}),
              plugins::Vst3ManualEventStatus::stale_instance,
              "prepared but unpublished graph admitted an event");
   frames.fill({1.0F, 1.0F});
@@ -853,22 +872,40 @@ void manual_connected_effect(const plugins::ScanResult& scan) {
              "published runtime did not expose exact graph and processor identity");
   REQUIRE_EQ(node.runtime_status->load(), plugins::Vst3GraphRuntimeStatus::ready,
              "manual event fixture failed baseline render");
-  REQUIRE_EQ(mailbox.submit(1, 3, node.request.compatibility_key, 2, {101, 0, 0.75}),
+  REQUIRE_EQ(mailbox.submit({.graph_revision = 1,
+                             .instance_id = 3,
+                             .compatibility_key = node.request.compatibility_key},
+                            2, {101, 0, 0.75}),
              plugins::Vst3ManualEventStatus::stale_instance,
              "manual event admission did not enforce instance, metadata and capacity");
-  REQUIRE_EQ(mailbox.submit(1, 2, node.request.compatibility_key + 1, 2, {101, 0, 0.75}),
+  REQUIRE_EQ(mailbox.submit({.graph_revision = 1,
+                             .instance_id = 2,
+                             .compatibility_key = node.request.compatibility_key + 1},
+                            2, {101, 0, 0.75}),
              plugins::Vst3ManualEventStatus::stale_instance,
              "manual event admission did not enforce instance, metadata and capacity");
-  REQUIRE_EQ(mailbox.submit(2, 2, node.request.compatibility_key, 2, {101, 0, 0.75}),
+  REQUIRE_EQ(mailbox.submit({.graph_revision = 2,
+                             .instance_id = 2,
+                             .compatibility_key = node.request.compatibility_key},
+                            2, {101, 0, 0.75}),
              plugins::Vst3ManualEventStatus::stale_instance,
              "manual event admission did not enforce instance, metadata and capacity");
-  REQUIRE_EQ(mailbox.submit(1, 2, node.request.compatibility_key, 2, {999, 0, 0.75}),
+  REQUIRE_EQ(mailbox.submit({.graph_revision = 1,
+                             .instance_id = 2,
+                             .compatibility_key = node.request.compatibility_key},
+                            2, {999, 0, 0.75}),
              plugins::Vst3ManualEventStatus::unavailable,
              "manual event admission did not enforce instance, metadata and capacity");
-  REQUIRE_EQ(mailbox.submit(1, 2, node.request.compatibility_key, 2, {101, 0, 0.75}),
+  REQUIRE_EQ(mailbox.submit({.graph_revision = 1,
+                             .instance_id = 2,
+                             .compatibility_key = node.request.compatibility_key},
+                            2, {101, 0, 0.75}),
              plugins::Vst3ManualEventStatus::accepted,
              "manual event admission did not enforce instance, metadata and capacity");
-  REQUIRE_EQ(mailbox.submit(1, 2, node.request.compatibility_key, 3, {101, 0, 0.5}),
+  REQUIRE_EQ(mailbox.submit({.graph_revision = 1,
+                             .instance_id = 2,
+                             .compatibility_key = node.request.compatibility_key},
+                            3, {101, 0, 0.5}),
              plugins::Vst3ManualEventStatus::busy,
              "manual event admission did not enforce instance, metadata and capacity");
   frames.fill({1.0F, 1.0F});
@@ -893,13 +930,22 @@ void manual_connected_effect(const plugins::ScanResult& scan) {
   REQUIRE_EQ(receipt->revision, 2, "manual receipt did not release the bounded slot");
   REQUIRE_EQ(mailbox.receipt().phase, plugins::Vst3ManualEventPhase::empty,
              "manual receipt did not release the bounded slot");
-  REQUIRE_EQ(mailbox.submit(1, 2, node.request.compatibility_key, 2, {101, 0, 0.5}),
+  REQUIRE_EQ(mailbox.submit({.graph_revision = 1,
+                             .instance_id = 2,
+                             .compatibility_key = node.request.compatibility_key},
+                            2, {101, 0, 0.5}),
              plugins::Vst3ManualEventStatus::invalid_revision,
              "collected slot accepted an older saved revision");
-  REQUIRE_EQ(mailbox.submit(1, 2, node.request.compatibility_key, 1, {101, 0, 0.5}),
+  REQUIRE_EQ(mailbox.submit({.graph_revision = 1,
+                             .instance_id = 2,
+                             .compatibility_key = node.request.compatibility_key},
+                            1, {101, 0, 0.5}),
              plugins::Vst3ManualEventStatus::invalid_revision,
              "collected slot accepted an older saved revision");
-  REQUIRE_EQ(mailbox.submit(1, 2, node.request.compatibility_key, 3, {101, 0, 0.5}),
+  REQUIRE_EQ(mailbox.submit({.graph_revision = 1,
+                             .instance_id = 2,
+                             .compatibility_key = node.request.compatibility_key},
+                            3, {101, 0, 0.5}),
              plugins::Vst3ManualEventStatus::accepted,
              "second manual revision was not admitted after receipt collection");
   std::array<engine::StereoFrame, 128> larger{};
@@ -918,13 +964,19 @@ void manual_connected_effect(const plugins::ScanResult& scan) {
   REQUIRE_LT(std::fabs(larger[0].left - 2.0F), 0.00001F,
              "128-frame manual event missed the boundary or allocated");
   REQUIRE_OK(mailbox.collect(), "second manual receipt was unavailable");
-  REQUIRE_EQ(mailbox.submit(2, 2, node.request.compatibility_key, 4, {101, 0, 0.5}),
+  REQUIRE_EQ(mailbox.submit({.graph_revision = 2,
+                             .instance_id = 2,
+                             .compatibility_key = node.request.compatibility_key},
+                            4, {101, 0, 0.5}),
              plugins::Vst3ManualEventStatus::stale_instance,
              "wrong graph revision admitted a manual event");
 
   // A held plan has no authority before the callback publishes it. A reused
   // runtime changes graph identity at the switch and drops an old-plan event.
-  REQUIRE_EQ(mailbox.submit(1, 2, node.request.compatibility_key, 4, {101, 0, 0.6}),
+  REQUIRE_EQ(mailbox.submit({.graph_revision = 1,
+                             .instance_id = 2,
+                             .compatibility_key = node.request.compatibility_key},
+                            4, {101, 0, 0.6}),
              plugins::Vst3ManualEventStatus::accepted,
              "held-switch fixture could not queue old graph event");
   auto reused = plan(2, node, graph.active_plan());
@@ -935,7 +987,10 @@ void manual_connected_effect(const plugins::ScanResult& scan) {
   REQUIRE_EQ(mailbox.active_graph().graph_revision, 1,
              "held graph admitted a future-revision event");
   REQUIRE_EQ(graph.active_revision(), 1, "held graph admitted a future-revision event");
-  REQUIRE_EQ(mailbox.submit(2, 2, node.request.compatibility_key, 5, {101, 0, 0.5}),
+  REQUIRE_EQ(mailbox.submit({.graph_revision = 2,
+                             .instance_id = 2,
+                             .compatibility_key = node.request.compatibility_key},
+                            5, {101, 0, 0.5}),
              plugins::Vst3ManualEventStatus::stale_instance,
              "held graph admitted a future-revision event");
   frames.fill({1.0F, 1.0F});
@@ -957,10 +1012,16 @@ void manual_connected_effect(const plugins::ScanResult& scan) {
   REQUIRE_OK(mailbox.collect(), "stale held-switch event or retired graph was not collected");
   REQUIRE_EQ(graph.collect_retired().reclaimed, 1,
              "stale held-switch event or retired graph was not collected");
-  REQUIRE_EQ(mailbox.submit(1, 2, node.request.compatibility_key, 5, {101, 0, 0.5}),
+  REQUIRE_EQ(mailbox.submit({.graph_revision = 1,
+                             .instance_id = 2,
+                             .compatibility_key = node.request.compatibility_key},
+                            5, {101, 0, 0.5}),
              plugins::Vst3ManualEventStatus::stale_instance,
              "reused runtime did not admit only its new active graph revision");
-  REQUIRE_EQ(mailbox.submit(2, 2, node.request.compatibility_key, 5, {101, 0, 0.5}),
+  REQUIRE_EQ(mailbox.submit({.graph_revision = 2,
+                             .instance_id = 2,
+                             .compatibility_key = node.request.compatibility_key},
+                            5, {101, 0, 0.5}),
              plugins::Vst3ManualEventStatus::accepted,
              "reused runtime did not admit only its new active graph revision");
   frames.fill({1.0F, 1.0F});
@@ -990,7 +1051,10 @@ void manual_connected_effect(const plugins::ScanResult& scan) {
              "superseded runtime remained an admission authority while awaiting reclamation");
   REQUIRE_EQ(replacement.manual_events->active_graph().graph_revision, 3,
              "superseded runtime remained an admission authority while awaiting reclamation");
-  REQUIRE_EQ(mailbox.submit(2, 2, node.request.compatibility_key, 6, {101, 0, 0.8}),
+  REQUIRE_EQ(mailbox.submit({.graph_revision = 2,
+                             .instance_id = 2,
+                             .compatibility_key = node.request.compatibility_key},
+                            6, {101, 0, 0.8}),
              plugins::Vst3ManualEventStatus::stale_instance,
              "superseded runtime remained an admission authority while awaiting reclamation");
   REQUIRE_EQ(graph.collect_retired().reclaimed, 1,
@@ -1033,7 +1097,10 @@ void routed_manual_graph_identity(const plugins::ScanResult& scan) {
              "held routed graph admitted an unpublished revision");
   REQUIRE_EQ(node.manual_events->active_graph().graph_revision, 1,
              "held routed graph admitted an unpublished revision");
-  REQUIRE_EQ(node.manual_events->submit(2, 2, node.request.compatibility_key, 2, {101, 0, 0.5}),
+  REQUIRE_EQ(node.manual_events->submit({.graph_revision = 2,
+                                         .instance_id = 2,
+                                         .compatibility_key = node.request.compatibility_key},
+                                        2, {101, 0, 0.5}),
              plugins::Vst3ManualEventStatus::stale_instance,
              "held routed graph admitted an unpublished revision");
   counted_allocations = 0;
@@ -1049,7 +1116,10 @@ void routed_manual_graph_identity(const plugins::ScanResult& scan) {
   REQUIRE_EQ(node.manual_events->active_graph().graph_revision, 2,
              "routed graph switch did not update the reused VST3 slot without allocation");
   REQUIRE_EQ(publisher.collect_retired(), 1, "routed old graph did not retire");
-  REQUIRE_EQ(node.manual_events->submit(2, 2, node.request.compatibility_key, 2, {101, 0, 0.5}),
+  REQUIRE_EQ(node.manual_events->submit({.graph_revision = 2,
+                                         .instance_id = 2,
+                                         .compatibility_key = node.request.compatibility_key},
+                                        2, {101, 0, 0.5}),
              plugins::Vst3ManualEventStatus::accepted,
              "active routed VST3 runtime refused a verified event");
   counted_allocations = 0;
@@ -1094,7 +1164,10 @@ void routed_manual_graph_identity(const plugins::ScanResult& scan) {
              "routed retired VST3 runtime admitted an event while its tail drained");
   REQUIRE_EQ(replacement.manual_events->active_graph().graph_revision, 3,
              "routed retired VST3 runtime admitted an event while its tail drained");
-  REQUIRE_EQ(node.manual_events->submit(2, 2, node.request.compatibility_key, 3, {101, 0, 0.5}),
+  REQUIRE_EQ(node.manual_events->submit({.graph_revision = 2,
+                                         .instance_id = 2,
+                                         .compatibility_key = node.request.compatibility_key},
+                                        3, {101, 0, 0.5}),
              plugins::Vst3ManualEventStatus::stale_instance,
              "routed retired VST3 runtime admitted an event while its tail drained");
   REQUIRE_EQ(publisher.collect_retired(), 1,
@@ -1133,7 +1206,10 @@ void routed_control_overlay_rebinds_manual_slot(const plugins::ScanResult& scan,
              "overlay VST3 baseline did not activate its manual slot");
   const std::array<engine::RoutedNodeControl, 2> controls{
       {{1, false, {1.0F, 1.0F}}, {2, false, {1.0F, 1.0F}}}};
-  REQUIRE_EQ(node.manual_events->submit(1, 2, node.request.compatibility_key, 2, {101, 0, 0.5}),
+  REQUIRE_EQ(node.manual_events->submit({.graph_revision = 1,
+                                         .instance_id = 2,
+                                         .compatibility_key = node.request.compatibility_key},
+                                        2, {101, 0, 0.5}),
              plugins::Vst3ManualEventStatus::accepted,
              "control overlay crossed an unacknowledged VST3 manual event");
   REQUIRE_TRUE(!publisher.prepare_control_overlay(2, controls),
@@ -1148,7 +1224,10 @@ void routed_control_overlay_rebinds_manual_slot(const plugins::ScanResult& scan,
   REQUIRE_TRUE(!publisher.prepare_control_overlay(2, controls),
                "control overlay admitted an uncollected VST3 receipt");
   REQUIRE_OK(node.manual_events->collect(), "control overlay admitted an uncollected VST3 receipt");
-  REQUIRE_EQ(node.manual_events->preview(1, 2, node.request.compatibility_key, {101, 0, 0.9}),
+  REQUIRE_EQ(node.manual_events->preview({.graph_revision = 1,
+                                          .instance_id = 2,
+                                          .compatibility_key = node.request.compatibility_key},
+                                         {101, 0, 0.9}),
              plugins::Vst3ManualEventStatus::accepted,
              "quiescent VST3 manual slot could not stage a revision-only overlay");
   REQUIRE_OK(publisher.prepare_control_overlay(2, controls),
@@ -1171,10 +1250,16 @@ void routed_control_overlay_rebinds_manual_slot(const plugins::ScanResult& scan,
              "VST3 control overlay lost host state, applied stale preview or silenced a block");
   REQUIRE_EQ(publisher.collect_retired(), 1,
              "VST3 control overlay lost host state, applied stale preview or silenced a block");
-  REQUIRE_EQ(node.manual_events->submit(1, 2, node.request.compatibility_key, 3, {101, 0, 0.75}),
+  REQUIRE_EQ(node.manual_events->submit({.graph_revision = 1,
+                                         .instance_id = 2,
+                                         .compatibility_key = node.request.compatibility_key},
+                                        3, {101, 0, 0.75}),
              plugins::Vst3ManualEventStatus::stale_instance,
              "VST3 overlay kept old manual authority or refused the new revision");
-  REQUIRE_EQ(node.manual_events->submit(2, 2, node.request.compatibility_key, 3, {101, 0, 0.75}),
+  REQUIRE_EQ(node.manual_events->submit({.graph_revision = 2,
+                                         .instance_id = 2,
+                                         .compatibility_key = node.request.compatibility_key},
+                                        3, {101, 0, 0.75}),
              plugins::Vst3ManualEventStatus::accepted,
              "VST3 overlay kept old manual authority or refused the new revision");
   counted_allocations = 0;
@@ -1337,13 +1422,10 @@ void lane_effect_capacity(const plugins::ScanResult& scan, std::uint32_t frames,
 
   auto& mailbox = *node.manual_events;
   const auto identity = mailbox.active_graph();
-  REQUIRE_EQ(mailbox.submit(identity.graph_revision, identity.instance_id,
-                            identity.compatibility_key, 2, {2, 0, 0.75}),
-             Vst3ManualEventStatus::automated, "manual effect event overrode an automated lane");
+  REQUIRE_EQ(mailbox.submit(identity, 2, {2, 0, 0.75}), Vst3ManualEventStatus::automated,
+             "manual effect event overrode an automated lane");
   const plugins::Vst3ParameterEvent manual{1, 0, 0.75};
-  REQUIRE_EQ(mailbox.submit(identity.graph_revision, identity.instance_id,
-                            identity.compatibility_key, 2, manual),
-             Vst3ManualEventStatus::accepted,
+  REQUIRE_EQ(mailbox.submit(identity, 2, manual), Vst3ManualEventStatus::accepted,
              "fully automated effect refused an eligible manual event");
   const auto before_second = fixture_log(scan).process_calls;
   counted_allocations = 0;

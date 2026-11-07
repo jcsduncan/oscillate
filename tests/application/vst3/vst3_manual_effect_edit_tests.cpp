@@ -59,7 +59,8 @@ struct Fixture {
 void receipt_and_reopen() {
   Fixture fixture;
   auto slot = std::make_shared<plugins::Vst3ManualEventSlot>(
-      101, 202, std::vector<std::uint32_t>{7}, std::vector<std::uint32_t>{}, true);
+      plugins::Vst3InstanceKey{.instance_id = 101, .compatibility_key = 202},
+      std::vector<std::uint32_t>{7}, std::vector<std::uint32_t>{}, true);
   slot->activate(303);
   application::Vst3ManualEffectEdit edit(*fixture.session, slot);
   const auto prior = fixture.session->snapshot().revision;
@@ -118,7 +119,8 @@ public:
 void applied_receipt_requires_playback_adoption() {
   Fixture fixture;
   auto slot = std::make_shared<plugins::Vst3ManualEventSlot>(
-      101, 202, std::vector<std::uint32_t>{7}, std::vector<std::uint32_t>{}, true);
+      plugins::Vst3InstanceKey{.instance_id = 101, .compatibility_key = 202},
+      std::vector<std::uint32_t>{7}, std::vector<std::uint32_t>{}, true);
   slot->activate(303);
   RefusingAdoption adoption;
   application::Vst3ManualEffectEdit edit(*fixture.session, slot, &adoption);
@@ -148,7 +150,8 @@ void applied_receipt_requires_playback_adoption() {
 void rejection_and_failed_receipt() {
   Fixture fixture;
   auto unverified = std::make_shared<plugins::Vst3ManualEventSlot>(
-      101, 202, std::vector<std::uint32_t>{7}, std::vector<std::uint32_t>{}, false);
+      plugins::Vst3InstanceKey{.instance_id = 101, .compatibility_key = 202},
+      std::vector<std::uint32_t>{7}, std::vector<std::uint32_t>{}, false);
   unverified->activate(303);
   application::Vst3ManualEffectEdit closed(*fixture.session, unverified);
   const auto prior = fixture.session->snapshot().revision;
@@ -160,7 +163,8 @@ void rejection_and_failed_receipt() {
   REQUIRE_EQ(fixture.session->snapshot().revision, prior,
              "unverified latency committed a live edit");
   auto slot = std::make_shared<plugins::Vst3ManualEventSlot>(
-      101, 202, std::vector<std::uint32_t>{7}, std::vector<std::uint32_t>{}, true);
+      plugins::Vst3InstanceKey{.instance_id = 101, .compatibility_key = 202},
+      std::vector<std::uint32_t>{7}, std::vector<std::uint32_t>{}, true);
   slot->activate(303);
   application::Vst3ManualEffectEdit edit(*fixture.session, slot);
   REQUIRE_TRUE(!edit.commit(prior, fixture.track, fixture.insert, fixture.original, {1}, {{7, 0.6}},
@@ -200,7 +204,8 @@ void automation_takes_precedence() {
               .has_value(),
           "automation lane create failed");
   auto slot = std::make_shared<plugins::Vst3ManualEventSlot>(
-      101, 202, std::vector<std::uint32_t>{7}, std::vector<std::uint32_t>{}, true);
+      plugins::Vst3InstanceKey{.instance_id = 101, .compatibility_key = 202},
+      std::vector<std::uint32_t>{7}, std::vector<std::uint32_t>{}, true);
   slot->activate(303);
   application::Vst3ManualEffectEdit edit(*fixture.session, slot);
   const auto prior = fixture.session->snapshot().revision;
@@ -250,7 +255,8 @@ struct InstrumentFixture {
 void instrument_receipt_and_reopen() {
   InstrumentFixture fixture;
   auto slot = std::make_shared<plugins::Vst3ManualEventSlot>(
-      401, 402, std::vector<std::uint32_t>{9}, std::vector<std::uint32_t>{}, true);
+      plugins::Vst3InstanceKey{.instance_id = 401, .compatibility_key = 402},
+      std::vector<std::uint32_t>{9}, std::vector<std::uint32_t>{}, true);
   slot->activate(403);
   application::Vst3ManualInstrumentEdit edit(*fixture.session, slot);
   const auto prior = fixture.session->snapshot().revision;
@@ -293,7 +299,8 @@ void instrument_rejections_and_failed_receipt() {
   InstrumentFixture fixture;
   const auto prior = fixture.session->snapshot().revision;
   auto unverified = std::make_shared<plugins::Vst3ManualEventSlot>(
-      401, 402, std::vector<std::uint32_t>{9}, std::vector<std::uint32_t>{}, false);
+      plugins::Vst3InstanceKey{.instance_id = 401, .compatibility_key = 402},
+      std::vector<std::uint32_t>{9}, std::vector<std::uint32_t>{}, false);
   unverified->activate(403);
   application::Vst3ManualInstrumentEdit closed(*fixture.session, unverified);
   REQUIRE_TRUE(!closed.commit(prior, fixture.track, fixture.original, {4}, {{9, 0.7}}, {9, 0, 0.7},
@@ -302,7 +309,8 @@ void instrument_rejections_and_failed_receipt() {
   REQUIRE_EQ(fixture.session->snapshot().revision, prior,
              "unverified instrument latency committed a change");
   auto slot = std::make_shared<plugins::Vst3ManualEventSlot>(
-      401, 402, std::vector<std::uint32_t>{9}, std::vector<std::uint32_t>{}, true);
+      plugins::Vst3InstanceKey{.instance_id = 401, .compatibility_key = 402},
+      std::vector<std::uint32_t>{9}, std::vector<std::uint32_t>{}, true);
   slot->activate(403);
   application::Vst3ManualInstrumentEdit edit(*fixture.session, slot);
   REQUIRE_TRUE(!edit.commit(prior, fixture.track, fixture.original, {4}, {{9, 0.8}}, {9, 0, 0.7},
@@ -342,7 +350,8 @@ void instrument_rejections_and_failed_receipt() {
 void instrument_source_identity_is_rechecked() {
   InstrumentFixture fixture;
   auto slot = std::make_shared<plugins::Vst3ManualEventSlot>(
-      401, 402, std::vector<std::uint32_t>{9}, std::vector<std::uint32_t>{}, true);
+      plugins::Vst3InstanceKey{.instance_id = 401, .compatibility_key = 402},
+      std::vector<std::uint32_t>{9}, std::vector<std::uint32_t>{}, true);
   slot->activate(403);
   application::Vst3ManualInstrumentEdit edit(*fixture.session, slot);
   require(fixture.session->instruments()
@@ -449,7 +458,8 @@ void controller_chunks_commit_atomically_and_reopen() {
 void qualified_edit_can_publish_current_on_a_worker() {
   Fixture fixture;
   auto slot = std::make_shared<plugins::Vst3ManualEventSlot>(
-      101, 202, std::vector<std::uint32_t>{7}, std::vector<std::uint32_t>{}, true);
+      plugins::Vst3InstanceKey{.instance_id = 101, .compatibility_key = 202},
+      std::vector<std::uint32_t>{7}, std::vector<std::uint32_t>{}, true);
   slot->activate(303);
   application::Vst3ManualEffectEdit edit(*fixture.session, slot);
   const auto accepted = edit.commit(fixture.session->snapshot().revision, fixture.track,

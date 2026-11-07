@@ -1125,8 +1125,7 @@ RoutedPlayback::preflight_vst3_manual_edit(std::uint64_t saved_revision, project
   if (model_->snapshot()->revision != saved_revision)
     return refuse(foundation::ErrorCode::conflict,
                   "the audible graph is not the saved project revision");
-  const auto admission = slot->admission(identity.graph_revision, identity.instance_id,
-                                         identity.compatibility_key, saved_revision + 1, parameter);
+  const auto admission = slot->admission(identity, saved_revision + 1, parameter);
   if (admission != plugins::Vst3ManualEventStatus::accepted)
     return refuse(foundation::ErrorCode::unsupported, vst3_manual_refusal(admission));
   return manual_adoption_->preflight(plugin, identity);

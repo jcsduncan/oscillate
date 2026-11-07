@@ -33,6 +33,12 @@ struct Vst3ManualEventReceipt {
   Vst3ManualEventPhase phase{Vst3ManualEventPhase::empty};
   std::int64_t project_sample{-1};
 };
+// The loaded instance a manual event slot serves.
+struct Vst3InstanceKey {
+  std::uint64_t instance_id{0};
+  std::uint64_t compatibility_key{0};
+};
+
 struct Vst3ActiveGraphIdentity {
   std::uint64_t graph_revision{0};
   std::uint64_t instance_id{0};
@@ -52,20 +58,16 @@ struct Vst3QualifiedManualBlock {
 class Vst3ManualEventSlot final {
 public:
   Vst3ManualEventSlot(
-      std::uint64_t instance_id, std::uint64_t compatibility_key,
-      std::vector<std::uint32_t> eligible_ids, std::vector<std::uint32_t> automated_ids,
-      bool fixed_latency_verified,
+      Vst3InstanceKey instance, std::vector<std::uint32_t> eligible_ids,
+      std::vector<std::uint32_t> automated_ids, bool fixed_latency_verified,
       std::optional<std::vector<Vst3QualifiedManualBlock>> qualified_blocks = std::nullopt);
   [[nodiscard]] Vst3ActiveGraphIdentity active_graph() const noexcept;
   // Control-side preflight; submit repeats every check after the project commit.
-  [[nodiscard]] Vst3ManualEventStatus admission(std::uint64_t graph_revision,
-                                                std::uint64_t instance_id,
-                                                std::uint64_t compatibility_key,
+  // `target` names the graph and instance the producer expects to reach.
+  [[nodiscard]] Vst3ManualEventStatus admission(const Vst3ActiveGraphIdentity& target,
                                                 std::uint64_t revision,
                                                 Vst3ParameterEvent event) const noexcept;
-  [[nodiscard]] Vst3ManualEventStatus submit(std::uint64_t graph_revision,
-                                             std::uint64_t instance_id,
-                                             std::uint64_t compatibility_key,
+  [[nodiscard]] Vst3ManualEventStatus submit(const Vst3ActiveGraphIdentity& target,
                                              std::uint64_t revision, Vst3ParameterEvent event,
                                              std::uint64_t gesture_sequence = 0) noexcept;
   // A transient native-editor drag value. Latest value wins within each audio
@@ -74,9 +76,9 @@ public:
   // native gestures an instance-wide nonzero sequence; an older completion
   // renders first and cannot erase a later held drag. Zero stages an
   // untagged preview. A retired instance always discards previews.
-  [[nodiscard]] Vst3ManualEventStatus
-  preview(std::uint64_t graph_revision, std::uint64_t instance_id, std::uint64_t compatibility_key,
-          Vst3ParameterEvent event, std::uint64_t gesture_sequence = 0) noexcept;
+  [[nodiscard]] Vst3ManualEventStatus preview(const Vst3ActiveGraphIdentity& target,
+                                              Vst3ParameterEvent event,
+                                              std::uint64_t gesture_sequence = 0) noexcept;
   [[nodiscard]] Vst3ManualEventReceipt receipt() const noexcept;
   [[nodiscard]] std::optional<Vst3ManualEventReceipt> collect() noexcept;
   [[nodiscard]] std::optional<Vst3ParameterEvent> claim() noexcept;
