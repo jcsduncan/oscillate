@@ -65,8 +65,8 @@ need git.
 | Fret | Karoryfer Black and Blue Basses (darkblack) | CC0 1.0 | `python3 -I tools/fret/install_black_and_blue.py` | `OSCILLATE_FRET_LIBRARY` |
 | Wren | University of Iowa Musical Instrument Samples, flute | free use, no formal licence | `python3 -I tools/wren/install_iowa_flute.py` | `OSCILLATE_WREN_LIBRARY` |
 
-Default location: `~/.local/share/oscillate/instruments/` (or
-`$XDG_DATA_HOME`). An override must be set for both the installer and the
+Default location: `$XDG_DATA_HOME/oscillate/instruments/`
+(`~/.local/share/oscillate/instruments/` when `XDG_DATA_HOME` is unset). An override must be set for both the installer and the
 application. An instrument without its library loads and reports the library
 as missing. Environment variables: [docs/environment.md](docs/environment.md).
 
@@ -85,6 +85,7 @@ TMPDIR="$PWD/build/quick/scratch" QT_QPA_PLATFORM=offscreen \
 All tiers except live devices:
 
 ~~~sh
+scripts/build.sh build/quick --target oscillate_tests
 TMPDIR="$PWD/build/quick/scratch" QT_QPA_PLATFORM=offscreen \
   ctest --test-dir build/quick -LE live --output-on-failure -j4
 ~~~
