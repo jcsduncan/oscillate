@@ -1,5 +1,6 @@
 """Unit tests for tidy_changed.py's choice of translation units."""
 
+import json
 import unittest
 
 import tidy_changed
@@ -51,6 +52,18 @@ class TranslationUnitTests(unittest.TestCase):
                 ["src/foundation/log.cpp", "include/oscillate/foundation/log.hpp"], CONFIGURED
             ),
             ["src/foundation/log.cpp"],
+        )
+
+
+class LineFilterTests(unittest.TestCase):
+    def test_filter_names_only_changed_cpp_files(self):
+        self.assertEqual(
+            json.loads(
+                tidy_changed.line_filter(
+                    ["src/engine/graph.cpp", "include/oscillate/engine/graph.hpp", "docs/HLD.md"]
+                )
+            ),
+            [{"name": "src/engine/graph.cpp"}, {"name": "include/oscillate/engine/graph.hpp"}],
         )
 
 
