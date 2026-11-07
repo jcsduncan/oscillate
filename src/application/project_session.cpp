@@ -3,6 +3,8 @@
 #include "session/session_state.hpp"
 
 #include <algorithm>
+#include <atomic>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -11,6 +13,9 @@
 #include <utility>
 
 namespace oscillate::application {
+namespace {
+std::atomic<std::uint64_t> next_session_generation{1};
+} // namespace
 
 ProjectSession::ProjectSession(std::filesystem::path root, persistence::ProjectStore store)
     : state_(std::make_unique<SessionState>(std::move(root), std::move(store))), saving_(*state_),
@@ -19,7 +24,8 @@ ProjectSession::ProjectSession(std::filesystem::path root, persistence::ProjectS
       source_analysis_(*state_), effects_(*state_, saving_), instruments_(*state_, saving_),
       track_devices_(*state_), midi_clips_(*state_), notes_(*state_), pedals_(*state_),
       audio_clips_(*state_), warp_(*state_), clipboard_(*state_), imports_(*state_, saving_),
-      exports_(*state_), freeze_(*state_, saving_) {}
+      exports_(*state_), freeze_(*state_, saving_),
+      session_generation_(next_session_generation.fetch_add(1, std::memory_order_relaxed)) {}
 
 ProjectSession::~ProjectSession() = default;
 

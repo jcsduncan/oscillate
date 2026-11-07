@@ -134,6 +134,8 @@ private:
     std::int64_t checked_at = 0;
     // Set for the re-check after a fix: the finding applied.
     std::optional<application::mix_check::Finding> applied;
+    // The session the run started in; a report for another is dropped.
+    std::uint64_t session = 0;
   };
   struct ReferenceJob {
     std::atomic<bool> cancel{false};

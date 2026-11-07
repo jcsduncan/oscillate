@@ -5,6 +5,7 @@
 #include <QString>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -125,12 +126,53 @@ void the_menu_freezes_bounces_and_consolidates() {
           "the source is gone");
 }
 
+// A render that finishes after its session was replaced, here by a copy of
+// the same project with the same track IDs and revision, is dropped: the
+// copy is left as it was.
+void a_render_for_a_replaced_session_is_dropped() {
+  constexpr int render_wait_ms = 60'000;
+  constexpr std::uint8_t note_key = 48;
+  Directory directory;
+  const auto root = directory.path() / "song";
+  const auto copy_root = directory.path() / "copy";
+  auto created = application::ProjectSession::create(root);
+  require(created.has_value(), "project creation failed");
+  auto original = std::move(created.value());
+  const auto track = original->instruments().add_synth_track().value();
+  require(original->midi_clips().add_midi_clip(track, {0}).has_value(), "clip");
+  const auto clip = find(original->snapshot(), track).midi_clips.front().id;
+  require(original->notes().add_note_with_duration(clip, {0}, {bar}, note_key).has_value(), "note");
+  require(original->saving().save().has_value(), "save");
+  fs::copy(root, copy_root, fs::copy_options::recursive);
+  auto reopened = application::ProjectSession::open(copy_root);
+  require(reopened.has_value(), "the copy did not open");
+  auto copy = std::move(reopened.value());
+  require(copy->snapshot().revision == original->snapshot().revision,
+          "the copy does not share the original's revision");
+
+  application::ProjectSession* current = original.get();
+  QString status;
+  int commits = 0;
+  quick::FreezeController freeze([&] { return current; }, [] { return true; },
+                                 [&](QString message) { status = std::move(message); },
+                                 [&] { ++commits; });
+  freeze.freeze(QString::fromStdString(track.to_string()));
+  require(freeze.busy(), "the freeze did not start");
+  current = copy.get();
+  const auto revision = copy->snapshot().revision;
+  require(freeze.wait(render_wait_ms), "the freeze did not end");
+  require(commits == 0 && copy->snapshot().revision == revision &&
+              !find(copy->snapshot(), track).frozen && status.contains("dropped"),
+          "a render was applied to the session that replaced its own: " + status.toStdString());
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
   QCoreApplication app(argc, argv);
   try {
     the_menu_freezes_bounces_and_consolidates();
+    a_render_for_a_replaced_session_is_dropped();
   } catch (const std::exception& error) {
     std::fprintf(stderr, "FAILED: %s\n", error.what());
     return 1;

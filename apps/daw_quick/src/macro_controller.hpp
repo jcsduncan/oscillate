@@ -10,6 +10,7 @@
 #include <QVariantList>
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <span>
@@ -109,6 +110,9 @@ private:
     int index = -1;
     double value = 0.0;
     std::vector<TurnDevice> devices;
+    // The session the turn began in. Its saved values and devices belong to
+    // that session: a turn outliving it offers, commits and restores nothing.
+    std::uint64_t session = 0;
   };
   [[nodiscard]] const project::Track* track() const;
   [[nodiscard]] std::optional<project::TrackId> track_key() const;
@@ -118,7 +122,12 @@ private:
   void hand_back(const Turn& turn);
   // The saved values go back to the running devices.
   void restore(const Turn& turn);
+  // The turn began in a session that has since been replaced.
+  [[nodiscard]] bool turn_outlived_session() const;
+  // Ends a turn that outlived its session, without touching any device.
+  void drop_turn();
   bool commit_value(int index, double value);
+
   void accepted();
 
   Hooks hooks_;

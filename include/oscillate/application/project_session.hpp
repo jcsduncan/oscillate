@@ -85,6 +85,10 @@ public:
                  persistence::SaveKind kind, bool expected_pointed);
 
   [[nodiscard]] const project::Snapshot& snapshot() const noexcept;
+  // Unique among the sessions this process opens, never reused. A job
+  // started in one session captures it and drops its result when the session
+  // it finishes in has another one, even a copy of the same project.
+  [[nodiscard]] std::uint64_t session_generation() const noexcept { return session_generation_; }
   // Reserve playback before starting the device. The caller must stop and
   // join its callback before finishing the returned token.
   [[nodiscard]] foundation::Result<ControlTransportGate::PlaybackToken> reserve_playback_start();
@@ -167,6 +171,7 @@ private:
   ImportService imports_;
   ExportService exports_;
   FreezeService freeze_;
+  std::uint64_t session_generation_;
 };
 
 } // namespace oscillate::application

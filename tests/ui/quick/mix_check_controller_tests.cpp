@@ -207,12 +207,48 @@ void the_screen_checks_fixes_and_listens() {
   require(check.target() == QStringLiteral("stream"), "the target changes");
 }
 
+// A run that finishes after its session was replaced, here by a copy of
+// the same project with the same tracks, is dropped: its findings name
+// tracks the copy shares and must not be offered there.
+void a_run_for_a_replaced_session_is_dropped() {
+  Directory directory;
+  const auto root = directory.path() / "song";
+  auto session = application::ProjectSession::create(root).value();
+  const auto wav = rumbling_bass(directory.path() / "bass.wav");
+  const int fd = ::open(wav.c_str(), O_RDONLY | O_CLOEXEC);
+  require(fd >= 0, "fixture open");
+  (void)session->imports().import_wav_audio(fd).value();
+  (void)::close(fd);
+  require(session->saving().save().has_value(), "save");
+  const auto copy_root = directory.path() / "copy";
+  fs::copy(root, copy_root, fs::copy_options::recursive);
+  auto copy = application::ProjectSession::open(copy_root).value();
+  application::ProjectSession* current = session.get();
+  quick::MixCheckController check({.session = [&] { return current; },
+                                   .blocked = [] { return QString(); },
+                                   .can_edit = [] { return true; },
+                                   .commit = [] {},
+                                   .project_name = [] { return QStringLiteral("Song"); },
+                                   .set_solo = [](project::TrackId, bool) {},
+                                   .play_from = [](std::uint64_t) {},
+                                   .stop = [] {}});
+  check.run();
+  require(check.running(), "the check did not start");
+  current = copy.get();
+  require(check.wait(wait_ms), "the check did not finish");
+  require(!check.has_result() && check.findings().isEmpty() &&
+              check.status().contains(QStringLiteral("dropped")),
+          "a report was shown for the session that replaced its own: " +
+              check.status().toStdString());
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
   QCoreApplication app(argc, argv);
   try {
     the_screen_checks_fixes_and_listens();
+    a_run_for_a_replaced_session_is_dropped();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';
     return 1;

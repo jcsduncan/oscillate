@@ -215,8 +215,12 @@ void MacroController::begin_turn(int index) {
   if (owner == nullptr || index < 0 || index >= macro_count ||
       (hooks_.can_edit && !hooks_.can_edit()))
     return;
+  auto* session = hooks_.session ? hooks_.session() : nullptr;
+  if (session == nullptr)
+    return;
   Turn turn;
   turn.index = index;
+  turn.session = session->session_generation();
   if (static_cast<std::size_t>(index) < owner->macros.size()) {
     const auto& macro = owner->macros[static_cast<std::size_t>(index)];
     turn.value = macro.value;
@@ -296,9 +300,24 @@ void MacroController::hand_back(const Turn& turn) {
     hooks_.show(*key, device.slot, nullptr);
 }
 
+bool MacroController::turn_outlived_session() const {
+  auto* session = hooks_.session ? hooks_.session() : nullptr;
+  return turn_ && (session == nullptr || session->session_generation() != turn_->session);
+}
+
+void MacroController::drop_turn() {
+  auto turn = std::move(*turn_);
+  turn_.reset();
+  hand_back(turn);
+  rebuild();
+  emit changed();
+}
+
 void MacroController::turn(int index, double value) {
   if (!turn_ || turn_->index != index || !std::isfinite(value))
     return;
+  if (turn_outlived_session())
+    return drop_turn();
   value = std::clamp(value, 0.0, 1.0);
   if (value == turn_->value)
     return;
@@ -311,6 +330,8 @@ void MacroController::turn(int index, double value) {
 void MacroController::end_turn(int index) {
   if (!turn_ || turn_->index != index)
     return;
+  if (turn_outlived_session())
+    return drop_turn();
   auto turn = std::move(*turn_);
   turn_.reset();
   hand_back(turn);
@@ -338,6 +359,8 @@ void MacroController::restore(const Turn& turn) {
 void MacroController::cancel_turn(int index) {
   if (!turn_ || turn_->index != index)
     return;
+  if (turn_outlived_session())
+    return drop_turn();
   auto turn = std::move(*turn_);
   turn_.reset();
   restore(turn);

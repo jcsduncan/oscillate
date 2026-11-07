@@ -245,7 +245,7 @@ void FreezeController::start(Kind kind, const QString& track_id,
     fail(QStringLiteral("Render"), task.error());
     return;
   }
-  auto job = std::make_shared<Job>(kind, *track);
+  auto job = std::make_shared<Job>(kind, *track, session->session_generation());
   try {
     worker_ = std::jthread([job, task = std::move(task).value()]() mutable {
       try {
@@ -269,6 +269,11 @@ void FreezeController::start(Kind kind, const QString& track_id,
   timer_.start();
   report_(QStringLiteral("%1 the track…").arg(action()));
   emit changed();
+}
+
+application::ProjectSession* FreezeController::job_session(const Job& job) {
+  auto* session = session_();
+  return session != nullptr && session->session_generation() == job.session ? session : nullptr;
 }
 
 void FreezeController::cancel() {
@@ -309,9 +314,9 @@ void FreezeController::finish() {
     if (!rendered)
       return stop(QStringLiteral("%1 failed: %2")
                       .arg(action(), QString::fromStdString(rendered.error().message)));
-    auto* session = session_();
+    auto* session = job_session(*job);
     if (session == nullptr)
-      return stop(std::nullopt);
+      return stop(QStringLiteral("%1 dropped: the project changed").arg(action()));
     job->render.emplace(std::move(rendered).value());
     auto stage = session->freeze().begin_track_render_stage(*job->render);
     if (!stage)
@@ -342,9 +347,9 @@ void FreezeController::finish() {
   if (!staged)
     return stop(QStringLiteral("%1 failed: %2")
                     .arg(action(), QString::fromStdString(staged.error().message)));
-  auto* session = session_();
+  auto* session = job_session(*job);
   if (session == nullptr)
-    return stop(std::nullopt);
+    return stop(QStringLiteral("%1 dropped: the project changed").arg(action()));
   const auto origin = job->render->origin_revision();
   const auto first = job->render->first_frame();
   QString message;

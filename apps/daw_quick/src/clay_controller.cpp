@@ -298,6 +298,7 @@ void ClayController::start_detect(project::ClayMode mode, bool save) {
   }
   auto job = std::make_shared<Job>();
   job->stage = "Reading the audio";
+  job->session = session->session_generation();
   const auto source = *found.value().source;
   try {
     worker_ = std::jthread([job, source, mode, pinned = std::move(pinned).value()] {
@@ -404,6 +405,11 @@ void ClayController::finish_detect() {
   emit detectingChanged();
   if (job->cancel.load(std::memory_order_acquire))
     return;
+  if (auto* session = session_ ? session_() : nullptr;
+      session == nullptr || session->session_generation() != job->session) {
+    set_status(QStringLiteral("Detection dropped: the project changed"));
+    return;
+  }
   auto& result = *job->result;
   if (!result) {
     set_status(QStringLiteral("No notes: %1").arg(text(result.error().message)));

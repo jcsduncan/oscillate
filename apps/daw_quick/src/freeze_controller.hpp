@@ -70,9 +70,12 @@ private:
   enum class Kind : std::uint8_t { freeze, bounce, flatten };
   enum class Phase : std::uint8_t { render, stage };
   struct Job {
-    Job(Kind job_kind, project::TrackId job_track) : kind(job_kind), track(job_track) {}
+    Job(Kind job_kind, project::TrackId job_track, std::uint64_t job_session)
+        : kind(job_kind), track(job_track), session(job_session) {}
     Kind kind;
     project::TrackId track;
+    // The session the job started in; a result for another is dropped.
+    std::uint64_t session;
     Phase phase = Phase::render;
     std::atomic<bool> cancel{false};
     std::atomic<bool> done{false};
@@ -88,6 +91,8 @@ private:
   void finish();
   void fail(const QString& context, const foundation::Error& error);
   [[nodiscard]] application::ProjectSession* editable_session();
+  // The session the job started in, or null when it has been replaced.
+  [[nodiscard]] application::ProjectSession* job_session(const Job& job);
   [[nodiscard]] std::optional<std::pair<double, double>> bar_ticks(int start_bar, int end_bar);
 
   Session session_;
