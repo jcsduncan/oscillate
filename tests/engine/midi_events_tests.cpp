@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <iostream>
 #include <limits>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -461,9 +462,68 @@ void held_notes_release_at_a_loop_wrap() {
   REQUIRE_EQ(total, 2, "continuous playback adds nothing");
 }
 
+// The compiler refuses a plan with more notes sounding at once than
+// HeldNotes tracks, even when no 8192-sample window is too dense.
+void concurrent_notes_are_bounded() {
+  constexpr std::int64_t pattern = 2 * quarter;
+  constexpr std::int64_t late_start = quarter / 2;
+  std::vector<MidiNote> notes;
+  for (std::uint64_t number = 1; number <= max_concurrent_midi_notes; ++number)
+    notes.push_back(note(number, 0, quarter));
+  auto state = snapshot(tempo(), {clip(3, MusicalInterval{{0}, {pattern}}, false, notes)});
+  state.tracks[0].midi_clips[0].pattern_length = {pattern};
+  require(static_cast<bool>(compile_midi_events(state)),
+          "the most concurrent notes an instrument allows were refused");
+  state.tracks[0].midi_clips[0].notes.push_back(
+      note(max_concurrent_midi_notes + 1, late_start, pattern));
+  const auto refused = compile_midi_events(state);
+  REQUIRE_TRUE(!refused, "one note past the concurrent-note bound compiled");
+  REQUIRE_EQ(refused.error().code, ErrorCode::resource_exhausted,
+             "one note past the concurrent-note bound compiled");
+}
+
+// Every note the plan allows to sound at once is released at a loop wrap,
+// well past the 256 an earlier table held.
+void every_held_note_releases_at_a_wrap() {
+  constexpr std::int64_t loop_end = 48'000;
+  constexpr std::int64_t note_on = 36'000;
+  constexpr std::int64_t note_off = 72'000;
+  constexpr std::uint32_t block_frames = 1'000;
+  constexpr std::uint8_t key = 36;
+  constexpr std::uint8_t velocity = 100;
+  const auto clip_id = id<ClipId>(3);
+  std::vector<ScheduledMidiEvent> scheduled;
+  for (std::uint64_t number = 1; number <= max_concurrent_midi_notes; ++number)
+    scheduled.push_back(
+        {{note_on}, clip_id, id<NoteId>(number), MidiEventKind::note_on, key, velocity, false});
+  for (std::uint64_t number = 1; number <= max_concurrent_midi_notes; ++number)
+    scheduled.push_back(
+        {{note_off}, clip_id, id<NoteId>(number), MidiEventKind::note_off, key, 0, false});
+  const InstrumentEvents events(id<TrackId>(2), std::move(scheduled));
+  HeldNotes held;
+  std::vector<BlockMidiEvent> block(HeldNotes::block_capacity);
+  for (std::int64_t sample = 0; sample < loop_end; sample += block_frames)
+    REQUIRE_EQ(held.copy_block(events, {sample}, block_frames, 1, block).status,
+               BlockMidiStatus::ready, "the first pass copies");
+  const auto wrapped = held.copy_block(events, {0}, block_frames, 1, block);
+  REQUIRE_EQ(wrapped.status, BlockMidiStatus::ready, "the wrap copies");
+  REQUIRE_EQ(wrapped.count, max_concurrent_midi_notes, "every held note is released at the wrap");
+  std::vector<foundation::IdBits> released;
+  for (const auto& event : std::span(block).first(wrapped.count)) {
+    require(event.kind == MidiEventKind::note_off && event.offset == 0,
+            "the wrap sends only releases at offset 0");
+    released.push_back(event.note_id_bits);
+  }
+  std::ranges::sort(released);
+  require(std::ranges::adjacent_find(released) == released.end(),
+          "each held note is released once");
+}
+
 int main() {
   try {
     held_notes_release_at_a_loop_wrap();
+    concurrent_notes_are_bounded();
+    every_held_note_releases_at_a_wrap();
     looping_order_and_half_open_blocks();
     crop_and_elapsed_anchor();
     ramp_and_same_sample_order();

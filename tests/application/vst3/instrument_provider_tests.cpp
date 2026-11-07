@@ -802,25 +802,42 @@ void export_end_event_capacity(const plugins::ScanResult& scanned) {
   clip.placement = project::MusicalInterval{{0}, {4 * timeline::ticks_per_quarter}};
   clip.pattern_length = {4 * timeline::ticks_per_quarter};
   clip.notes.clear();
-  for (std::uint64_t index = 0; index <= engine::max_midi_events_per_block; ++index) {
-    const auto start = static_cast<std::int64_t>(5 + index * 16) * 40'000;
-    const auto end = static_cast<std::int64_t>(32'000 + index * 16) * 40'000;
+  // One fewer than the most notes that may sound at once are held at the
+  // cut; a short note ending, then another starting and ending, within one
+  // block before it add three events, so the cut's block holds 1026.
+  constexpr std::int64_t ticks_per_sample = 40'000;
+  constexpr std::int64_t cut_sample = 20'000;
+  constexpr std::int64_t first_short_start = 19'800;
+  constexpr std::int64_t first_short_end = 19'900;
+  constexpr std::int64_t second_short_start = 19'950;
+  constexpr std::int64_t second_short_end = 19'990;
+  std::uint64_t index = 0;
+  for (; index + 1 < engine::max_concurrent_midi_notes; ++index) {
+    const auto start = static_cast<std::int64_t>(5 + index * 16) * ticks_per_sample;
+    const auto end = static_cast<std::int64_t>(32'000 + index * 16) * ticks_per_sample;
     clip.notes.push_back({id<project::NoteId>(1'000 + index), {start}, {end}, 60, 127});
   }
+  for (const auto& [start, end] : {std::pair{first_short_start, first_short_end},
+                                   std::pair{second_short_start, second_short_end}})
+    clip.notes.push_back({id<project::NoteId>(1'000 + index++),
+                          {start * ticks_per_sample},
+                          {end * ticks_per_sample},
+                          60,
+                          127});
   const auto& plugin = saved_instrument(snapshot->tracks[0]);
   plugins::Vst3InstrumentTrackProvider provider;
   provider.set_scan_receipt(plugin.id, scanned);
   provider.set_tail_qualification(plugin.id, tail_evidence(scanned, plugin));
   auto prepared = take(provider.prepare(*snapshot, plugin, 128));
-  const auto rejected = provider.prepare_export_end(20'000);
+  const auto rejected = provider.prepare_export_end(cut_sample);
   REQUIRE_TRUE(prepared.fixed_tail_qualified,
-               "cutoff did not reject more than 1024 simultaneous note-offs transactionally");
+               "cutoff did not reject more than 1024 events in its block transactionally");
   REQUIRE_TRUE(!rejected,
-               "cutoff did not reject more than 1024 simultaneous note-offs transactionally");
+               "cutoff did not reject more than 1024 events in its block transactionally");
   REQUIRE_EQ(rejected.error().code, foundation::ErrorCode::resource_exhausted,
-             "cutoff did not reject more than 1024 simultaneous note-offs transactionally");
+             "cutoff did not reject more than 1024 events in its block transactionally");
   REQUIRE_TRUE(!provider.prepared_export_end(),
-               "cutoff did not reject more than 1024 simultaneous note-offs transactionally");
+               "cutoff did not reject more than 1024 events in its block transactionally");
   REQUIRE_EQ(take(provider.prepare_export_end(1'000)), 1'000,
              "failed cutoff changed the private MIDI schedule or consumed the fresh runtime");
   REQUIRE_EQ(provider.prepared_export_end(), 1'000,
