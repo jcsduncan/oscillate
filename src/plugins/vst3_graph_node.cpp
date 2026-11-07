@@ -688,6 +688,7 @@ prepare_vst3_graph_node(const project::Vst3PluginInstance& saved, const ScanResu
     });
   }
   std::vector<std::uint32_t> automated;
+  automated.reserve(automation.size());
   for (const auto& lane : automation)
     automated.push_back(std::get<project::Vst3ParameterTarget>(lane.target()).parameter_id);
   result.manual_events = std::make_shared<Vst3ManualEventSlot>(
