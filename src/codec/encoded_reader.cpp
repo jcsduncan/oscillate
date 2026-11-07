@@ -227,9 +227,9 @@ Result<EncodedReader> EncodedReader::open_fd(int fd) {
   }
   const auto frames =
       format.value() == EncodedFormat::mp3
-          ? decodable_frames(reader.handle_, raw_info.frames,
-                             std::span(reader.scratch_).first(static_cast<std::size_t>(
-                                 raw_info.channels)))
+          ? decodable_frames(
+                reader.handle_, raw_info.frames,
+                std::span(reader.scratch_).first(static_cast<std::size_t>(raw_info.channels)))
           : raw_info.frames;
   if (frames <= 0) {
     return Result<EncodedReader>::failure(
