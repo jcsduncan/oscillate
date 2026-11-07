@@ -23,6 +23,9 @@ constexpr double bend_exponent_per_tension = 4.0;
 constexpr double midpoint_margin = 0.03;
 constexpr double midpoint_t = 0.5;
 constexpr double max_tension = 1.0;
+// The most steps sample_curve draws: far more than any panel's pixel width,
+// so a bad count from QML cannot allocate without bound.
+constexpr int max_curve_samples = 16'384;
 
 constexpr std::array<std::string_view, UiContracts::octave_semitones> sharp_names{
     "C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"};
@@ -109,6 +112,7 @@ QVariantList UiContracts::sample_curve(const QVariantList& points, int count, do
   QVariantList values;
   if (count <= 0)
     return values;
+  count = std::min(count, max_curve_samples);
   values.reserve(count + 1);
   for (int i = 0; i <= count; ++i)
     values.append(curve_value(parsed, static_cast<double>(i) / count, empty_value));
