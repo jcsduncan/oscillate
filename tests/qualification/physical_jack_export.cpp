@@ -104,17 +104,17 @@ int create_fixture(const fs::path& root) {
   const int fd = ::open(source.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
   if (fd < 0)
     throw std::runtime_error("cannot reopen qualification WAV");
-  auto imported = session->import_wav_audio(fd);
+  auto imported = session->imports().import_wav_audio(fd);
   (void)::close(fd);
   (void)take(std::move(imported));
-  const auto synth = take(session->add_synth_track());
-  take(session->select_native_instrument(synth, "prism", 2));
-  take(session->add_midi_clip(synth, {0}));
+  const auto synth = take(session->instruments().add_synth_track());
+  take(session->instruments().select_native_instrument(synth, "prism", 2));
+  take(session->midi_clips().add_midi_clip(synth, {0}));
   const auto clip = session->snapshot().tracks.back().midi_clips.front().id;
-  take(session->add_note(clip, {oscillate::timeline::ticks_per_quarter}, 48));
+  take(session->notes().add_note(clip, {oscillate::timeline::ticks_per_quarter}, 48));
   const project::SignalPathId master = project::MasterSignalPath{};
-  (void)take(session->add_effect_engine(master, 0, "expanse"));
-  take(session->save());
+  (void)take(session->effects().add_effect_engine(master, 0, "expanse"));
+  take(session->saving().save());
   std::cout << "fixture_ready sample_rate=oscillate::test::sample_rate_48k end_bar=1 tracks="
             << session->snapshot().tracks.size() << '\n';
   return 0;

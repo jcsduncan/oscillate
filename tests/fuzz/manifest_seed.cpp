@@ -8,7 +8,7 @@
 #include <string>
 #include <utility>
 
-int main() {
+int main() try {
   using namespace oscillate;
   const auto id = project::ProjectId::from_bits({0, 1});
   const auto tempo = timeline::TempoMap::create({{{0}, 120.0, timeline::TempoShape::step}}, 1);
@@ -22,4 +22,8 @@ int main() {
   if (!persistence::detail::decode_manifest(text))
     throw std::runtime_error("generated manifest seed was not accepted");
   std::cout << text;
+  return 0;
+} catch (const std::exception& error) {
+  std::cerr << error.what() << '\n';
+  return 1;
 }

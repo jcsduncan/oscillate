@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import platform
@@ -15,7 +16,16 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from qualify_live_common import objects, required_tool, stop_process
+# Loaded by path, so the runner also works under python3 -I.
+_COMMON_PATH = Path(__file__).with_name("qualify_live_common.py")
+_common_spec = importlib.util.spec_from_file_location("qualify_live_common", _COMMON_PATH)
+assert _common_spec is not None and _common_spec.loader is not None
+_common = importlib.util.module_from_spec(_common_spec)
+_common_spec.loader.exec_module(_common)
+objects = _common.objects
+required_tool = _common.required_tool
+stop_process = _common.stop_process
+
 
 REPO = Path(__file__).resolve().parents[2]
 RESULT = re.compile(r"^live_result (.+)$", re.MULTILINE)

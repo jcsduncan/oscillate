@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import math
 import re
 import struct
@@ -12,18 +13,22 @@ import sys
 import tempfile
 from pathlib import Path
 
-from qualify_live_common import (
-    CHANNELS,
-    REPO,
-    active_links,
-    create_sink,
-    find_sink,
-    poll_until,
-    required_tool,
-    start_recorder,
-    stop_process,
-    wave_data,
-)
+# Loaded by path, so the runner also works under python3 -I.
+_COMMON_PATH = Path(__file__).with_name("qualify_live_common.py")
+_common_spec = importlib.util.spec_from_file_location("qualify_live_common", _COMMON_PATH)
+assert _common_spec is not None and _common_spec.loader is not None
+_common = importlib.util.module_from_spec(_common_spec)
+_common_spec.loader.exec_module(_common)
+CHANNELS = _common.CHANNELS
+REPO = _common.REPO
+active_links = _common.active_links
+create_sink = _common.create_sink
+find_sink = _common.find_sink
+poll_until = _common.poll_until
+required_tool = _common.required_tool
+start_recorder = _common.start_recorder
+stop_process = _common.stop_process
+wave_data = _common.wave_data
 
 
 def monitor_evidence(path: Path, minimum_frames: int) -> tuple[int, float, int]:

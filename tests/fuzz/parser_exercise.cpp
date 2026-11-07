@@ -17,7 +17,7 @@
 namespace oscillate::fuzz {
 namespace {
 
-constexpr std::size_t max_input_bytes = 1024U * 1024U;
+constexpr std::size_t max_input_bytes = std::size_t{1024} * 1024U;
 
 void write_all(int fd, const std::uint8_t* bytes, std::size_t size) {
   std::size_t written = 0;
@@ -53,6 +53,13 @@ void manifest(const std::uint8_t* bytes, std::size_t size) {
     return;
   const auto text = std::string_view(reinterpret_cast<const char*>(bytes), size);
   (void)persistence::detail::decode_manifest(text);
+}
+
+bool manifest_decodes(const std::uint8_t* bytes, std::size_t size) {
+  if (size > max_input_bytes)
+    return false;
+  const auto text = std::string_view(reinterpret_cast<const char*>(bytes), size);
+  return persistence::detail::decode_manifest(text).has_value();
 }
 
 void wav(const std::uint8_t* bytes, std::size_t size) {

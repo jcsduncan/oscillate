@@ -8,7 +8,12 @@
 #include <iterator>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
+
+namespace {
+constexpr std::string_view current_manifest_seed = "current.json";
+} // namespace
 
 int main(int argc, char** argv) {
   if (argc != 3 || (std::string(argv[1]) != "manifest" && std::string(argv[1]) != "wav" &&
@@ -27,6 +32,12 @@ int main(int argc, char** argv) {
         throw std::runtime_error("cannot open corpus file");
       const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(input),
                                             std::istreambuf_iterator<char>()};
+      // The current-schema seed must stay valid, or the corpus stops
+      // reaching the decoder's accepting paths; malformed seeds may fail.
+      if (parser == "manifest" && entry.path().filename() == current_manifest_seed &&
+          !oscillate::fuzz::manifest_decodes(bytes.data(), bytes.size()))
+        throw std::runtime_error("the current manifest seed no longer decodes; regenerate it "
+                                 "with oscillate_fuzz_manifest_seed");
       if (parser == "manifest")
         oscillate::fuzz::manifest(bytes.data(), bytes.size());
       else if (parser == "wav")

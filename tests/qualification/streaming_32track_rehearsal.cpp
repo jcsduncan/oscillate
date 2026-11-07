@@ -358,20 +358,22 @@ prepare_project(const fs::path& directory, const Vst3Evidence& vst3, std::size_t
   }
 #if defined(OSCILLATE_QUALIFICATION_VST3)
   if (vst3.instrument) {
-    const auto instrument =
-        take(session->create_vst3_instrument_track(identity_from(vst3.instrument_scan)));
-    take(session->set_main_output(instrument, group_a));
-    (void)take(session->add_send(instrument, return_a, 0.125));
+    const auto instrument = take(
+        session->instruments().create_vst3_instrument_track(identity_from(vst3.instrument_scan)));
+    take(session->routing().set_main_output(instrument, group_a));
+    (void)take(session->routing().add_send(instrument, return_a, 0.125));
     for (std::int64_t bar = 0; bar < static_cast<std::int64_t>((source_seconds + 1) / 2); ++bar) {
-      take(session->add_midi_clip(instrument, {bar * 4 * timeline::ticks_per_quarter}));
+      take(
+          session->midi_clips().add_midi_clip(instrument, {bar * 4 * timeline::ticks_per_quarter}));
       const auto& clip = session->snapshot().tracks.back().midi_clips.back();
-      take(session->add_note(clip.id, {0}, 60));
+      take(session->notes().add_note(clip.id, {0}, 60));
     }
   }
   if (vst3.effect) {
     if (!first_audio_track)
       throw std::runtime_error("VST3 fixture has no imported audio track");
-    (void)take(session->insert_vst3_plugin(*first_audio_track, 0, identity_from(vst3.effect_scan)));
+    (void)take(session->effects().insert_vst3_plugin(*first_audio_track, 0,
+                                                     identity_from(vst3.effect_scan)));
   }
 #else
   (void)vst3;
