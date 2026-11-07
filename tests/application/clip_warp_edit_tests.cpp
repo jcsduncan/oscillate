@@ -130,7 +130,8 @@ void markers_add_move_and_remove_as_single_undo_steps() {
 
   // Moving the first marker stretches only its neighbouring segments and
   // keeps the second marker exactly where it was.
-  song.apply(take(app::move_warp_marker(song.session->snapshot(), song.clip, 0, 18'000)));
+  song.apply(take(app::move_warp_marker(song.session->snapshot(), song.clip,
+                                        {.index = 0, .output_frame = 18'000})));
   layout = song.layout();
   REQUIRE_EQ(layout.markers.size(), 2, "moving a marker changed its source frame or a neighbour");
   REQUIRE_EQ(layout.markers[0].output_frame, 18'000,
@@ -141,13 +142,17 @@ void markers_add_move_and_remove_as_single_undo_steps() {
              "moving a marker changed its source frame or a neighbour");
   REQUIRE_EQ(layout.markers[1].source_frame, 30'000,
              "moving a marker changed its source frame or a neighbour");
-  REQUIRE_TRUE(!app::move_warp_marker(song.session->snapshot(), song.clip, 0, 30'000),
+  REQUIRE_TRUE(!app::move_warp_marker(song.session->snapshot(), song.clip,
+                                      {.index = 0, .output_frame = 30'000}),
                "a marker move past a neighbour, the clip end or a missing index was accepted");
-  REQUIRE_TRUE(!app::move_warp_marker(song.session->snapshot(), song.clip, 1, 17'000),
+  REQUIRE_TRUE(!app::move_warp_marker(song.session->snapshot(), song.clip,
+                                      {.index = 1, .output_frame = 17'000}),
                "a marker move past a neighbour, the clip end or a missing index was accepted");
-  REQUIRE_TRUE(!app::move_warp_marker(song.session->snapshot(), song.clip, 1, 48'000),
+  REQUIRE_TRUE(!app::move_warp_marker(song.session->snapshot(), song.clip,
+                                      {.index = 1, .output_frame = 48'000}),
                "a marker move past a neighbour, the clip end or a missing index was accepted");
-  REQUIRE_TRUE(!app::move_warp_marker(song.session->snapshot(), song.clip, 5, 20'000),
+  REQUIRE_TRUE(!app::move_warp_marker(song.session->snapshot(), song.clip,
+                                      {.index = 5, .output_frame = 20'000}),
                "a marker move past a neighbour, the clip end or a missing index was accepted");
 
   // One undo reverts exactly the move.
@@ -243,7 +248,8 @@ void musical_markers_use_ticks_and_round_trip() {
               edited.reviewed_warp_markers.front().target_offset),
           "a musical clip marker was not stored in ticks");
   (void)take(model.apply({project::SetClipProcessing{song.clip, edited}}));
-  auto moved = take(app::move_warp_marker(*model.snapshot(), song.clip, 0, 24'000));
+  auto moved = take(
+      app::move_warp_marker(*model.snapshot(), song.clip, {.index = 0, .output_frame = 24'000}));
   (void)take(model.apply({project::SetClipProcessing{song.clip, moved}}));
   const auto after = take(app::clip_warp_layout(*model.snapshot(), song.clip));
   const auto delta = after.markers.front().output_frame > 24'000
@@ -293,7 +299,8 @@ void require_same_audio(const project::Snapshot& before, const project::Snapshot
 void add_two_markers(Song& song) {
   song.apply(take(app::add_warp_marker(song.session->snapshot(), song.clip, 12'000)));
   song.apply(take(app::add_warp_marker(song.session->snapshot(), song.clip, 30'000)));
-  song.apply(take(app::move_warp_marker(song.session->snapshot(), song.clip, 0, 18'000)));
+  song.apply(take(app::move_warp_marker(song.session->snapshot(), song.clip,
+                                        {.index = 0, .output_frame = 18'000})));
 }
 
 std::vector<project::Clip> clips(const app::ProjectSession& session) {
@@ -433,7 +440,8 @@ void slip_moves_audio_with_its_markers() {
              "slip fixture trim failed");
   // Marker at project 16,000 (output 8,000), moved to project 17,000.
   song.apply(take(app::add_warp_marker(song.session->snapshot(), song.clip, 8'000)));
-  song.apply(take(app::move_warp_marker(song.session->snapshot(), song.clip, 0, 9'000)));
+  song.apply(take(app::move_warp_marker(song.session->snapshot(), song.clip,
+                                        {.index = 0, .output_frame = 9'000})));
   const auto before = song.session->snapshot();
   const auto original = clips(*song.session).front();
   REQUIRE_OK(song.session->audio_clips().slip_audio_clip(song.clip, 2'000), "slip was rejected");
@@ -480,7 +488,8 @@ void musical_split_and_trim_rebase_ticks() {
   auto model = take(project::ProjectModel::open(state, gate));
   auto marked = take(app::add_warp_marker(*model.snapshot(), song.clip, 24'000));
   (void)take(model.apply({project::SetClipProcessing{song.clip, marked}}));
-  auto moved = take(app::move_warp_marker(*model.snapshot(), song.clip, 0, 30'000));
+  auto moved = take(
+      app::move_warp_marker(*model.snapshot(), song.clip, {.index = 0, .output_frame = 30'000}));
   (void)take(model.apply({project::SetClipProcessing{song.clip, moved}}));
   const auto before = *model.snapshot();
   const auto marker_tick =

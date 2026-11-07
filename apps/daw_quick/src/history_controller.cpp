@@ -37,7 +37,7 @@ void HistoryController::refresh() {
       session ? session->history().redo_steps() : std::vector<project::ProjectModel::HistoryStep>{};
   std::map<Key, Described> kept;
   QVariantList next;
-  next.reserve(static_cast<qsizetype>(undo.size() + redo.size()));
+  next.reserve(static_cast<qsizetype>(undo.size()) + static_cast<qsizetype>(redo.size()));
   const auto add = [&](const project::ProjectModel::HistoryStep& step, bool undone) {
     const Key key{step.before.get(), step.after.get()};
     auto found = labels_.find(key);

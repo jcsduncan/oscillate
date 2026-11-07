@@ -23,9 +23,14 @@ struct TrackFreezeStage {
 // descriptor the result owns. Stage it with begin_track_render_stage.
 class TrackRender {
 public:
-  TrackRender(int fd, std::uint64_t first_frame, std::uint64_t origin_revision,
-              project::TrackId track) noexcept
-      : fd_(fd), first_frame_(first_frame), origin_revision_(origin_revision), track_(track) {}
+  // Where a render sits on the timeline, and the project revision it came from.
+  struct Stamp {
+    std::uint64_t first_frame = 0;
+    std::uint64_t origin_revision = 0;
+  };
+  TrackRender(int fd, Stamp stamp, project::TrackId track) noexcept
+      : fd_(fd), first_frame_(stamp.first_frame), origin_revision_(stamp.origin_revision),
+        track_(track) {}
   TrackRender(TrackRender&& other) noexcept;
   TrackRender& operator=(TrackRender&& other) noexcept;
   TrackRender(const TrackRender&) = delete;

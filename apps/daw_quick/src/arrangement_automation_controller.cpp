@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <variant>
@@ -22,7 +23,13 @@ using Key = project::TrackControlTarget::Key;
 
 // How a target's values sit on a lane's 0..1 height and read as text.
 struct Feel {
-  enum class Kind { gain, balance, mute, parameter, normalised } kind = Kind::normalised;
+  enum class Kind : std::uint8_t {
+    gain,
+    balance,
+    mute,
+    parameter,
+    normalised
+  } kind = Kind::normalised;
   const native_dsp::synth::ParameterDescriptor* parameter = nullptr;
   QString name;
   QString group;
@@ -463,8 +470,10 @@ void ArrangementAutomationController::accepted(const QString& action) {
   report_(action);
 }
 
+// NOLINTBEGIN(bugprone-easily-swappable-parameters): QML calls this positionally.
 QString ArrangementAutomationController::add_point(const QString& track_id, const QString& key,
                                                    double bar, double value) {
+  // NOLINTEND(bugprone-easily-swappable-parameters)
   auto* session = editable_session();
   if (!session)
     return {};
@@ -551,6 +560,7 @@ void ArrangementAutomationController::remove_points(const QString& lane_id,
                               : QStringLiteral("%1 automation points removed").arg(points.size()));
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): QML calls this positionally.
 void ArrangementAutomationController::draw(const QString& track_id, const QString& key,
                                            double from_bar, double to_bar,
                                            const QVariantList& points) {
@@ -590,6 +600,7 @@ void ArrangementAutomationController::draw(const QString& track_id, const QStrin
   accepted(QStringLiteral("%1 drawn").arg(feel->name));
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): QML calls this positionally.
 void ArrangementAutomationController::set_curve(const QString& lane_id, const QString& point_id,
                                                 const QString& shape) {
   auto* session = editable_session();
@@ -631,6 +642,7 @@ void ArrangementAutomationController::bend(const QString& lane_id, const QString
   accepted(straight ? QStringLiteral("Curve straightened") : QStringLiteral("Curve bent"));
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): QML calls this positionally.
 QString ArrangementAutomationController::value_text(const QString& track_id, const QString& key,
                                                     double value) const {
   const auto* session = session_();
@@ -646,6 +658,7 @@ QString ArrangementAutomationController::value_text(const QString& track_id, con
   return feel ? text_of(*feel, from_lane(*feel, value)) : QString();
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): QML calls this positionally.
 double ArrangementAutomationController::current_value(const QString& track_id,
                                                       const QString& key) const {
   const auto* session = session_();

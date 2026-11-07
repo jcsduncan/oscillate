@@ -100,12 +100,18 @@ public:
 private:
   // Processed clip edits (see split_audio_clip_at_sample).
   [[nodiscard]] foundation::Result<bool> audio_clip_is_processed(project::ClipId clip) const;
+  // Each side of a split: its fades and its automation.
+  struct SplitHalf {
+    project::ClipFades fades;
+    std::vector<project::AutomationLane> automation;
+  };
+  struct SplitHalves {
+    SplitHalf left;
+    SplitHalf right;
+  };
   [[nodiscard]] foundation::Result<project::ClipId>
-  split_processed_audio_clip(project::ClipId clip, std::int64_t offset,
-                             project::ClipFades left_fades, project::ClipFades right_fades,
-                             project::ClipId right_id,
-                             std::vector<project::AutomationLane> left_automation,
-                             std::vector<project::AutomationLane> right_automation);
+  split_processed_audio_clip(project::ClipId clip, std::int64_t offset, project::ClipId right_id,
+                             SplitHalves halves);
   [[nodiscard]] foundation::Result<void> slip_processed_audio_clip(project::ClipId clip,
                                                                    std::int64_t source_frame_delta);
   [[nodiscard]] foundation::Result<void>

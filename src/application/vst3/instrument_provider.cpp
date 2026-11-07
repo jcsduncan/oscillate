@@ -654,7 +654,7 @@ Vst3InstrumentTrackProvider::prepare(const project::Snapshot& snapshot,
     prepared.finite_tail_frames = finite_tail;
     prepared.fixed_tail_qualified = tail_qualified;
     if (fixed_latency_verified) {
-      prepared.manual_events = manual_events;
+      prepared.manual_events = std::move(manual_events);
       prepared.active_manual_graph = [slot = prepared.manual_events]() noexcept {
         return slot->active_graph();
       };

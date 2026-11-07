@@ -199,7 +199,7 @@ Result<project::ClipId> AudioClipService::add_clay_midi_clip(std::optional<proje
       1,
       std::move(lanes)};
   operations.emplace_back(project::AddMidiClip{target, std::move(clip)});
-  auto applied = model().apply(std::move(operations));
+  auto applied = model().apply(operations);
   if (!applied)
     return R::failure(applied.error());
   return R::success(clip_id.value());

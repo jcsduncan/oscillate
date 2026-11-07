@@ -68,7 +68,14 @@ private:
     bool complete = false;
   };
 
-  void begin_epoch(std::uint64_t generation, std::uint64_t sample, bool complete) noexcept;
+  // A producer epoch: its transport generation, the project sample it
+  // expects next, and whether its blocks are all present.
+  struct Epoch {
+    std::uint64_t generation = 0;
+    std::uint64_t sample = 0;
+    bool complete = false;
+  };
+  void begin_epoch(Epoch epoch) noexcept;
   void run(const std::stop_token& stop) noexcept;
 
   std::array<Block, queue_capacity> queue_{};
