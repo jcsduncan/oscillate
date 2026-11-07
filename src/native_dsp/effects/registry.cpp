@@ -28,6 +28,7 @@
 namespace oscillate::native_dsp::effects {
 namespace {
 // The classic processors' engines (ADR-0047) come last.
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): engines are built from constant tables.
 const std::array<const EffectEngine*, 23> registry{
     &contour::engine(),  &forge::engine(),  &orbit::engine(),  &relay::engine(), &expanse::engine(),
     &vista::engine(),    &deck::engine(),   &pocket::engine(), &pump::engine(),  &chop::engine(),

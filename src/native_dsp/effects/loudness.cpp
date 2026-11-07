@@ -55,8 +55,8 @@ struct Histogram {
   double energy = 0.0;
 
   void clear() noexcept {
-    std::fill(counts.begin(), counts.end(), 0.0);
-    std::fill(energies.begin(), energies.end(), 0.0);
+    std::ranges::fill(counts, 0.0);
+    std::ranges::fill(energies, 0.0);
     count = 0.0;
     energy = 0.0;
   }

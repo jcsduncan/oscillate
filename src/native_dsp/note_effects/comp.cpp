@@ -69,7 +69,7 @@ constexpr double humanise_velocity = 0.25;
 // A push lands at this share of the step's "On" velocity when its lanes are empty there.
 constexpr double push_velocity = 0.9;
 // Distinct hash streams per voice, so the three lanes don't move together.
-enum Stream : std::uint64_t {
+enum Stream : std::uint8_t {
   low_stream = 1,
   mid_stream,
   top_stream,
@@ -99,7 +99,7 @@ constexpr double full_turn = 2.0 * std::numbers::pi;
 // A phrase's last bar takes one of these, chosen per phrase: a ghost 16th
 // tucked in before the next bar; beat 3 left silent and the tuck-in; or the
 // next phrase's first chord arriving early (pushed for certain).
-enum class Turn : std::uint64_t { tuck_in, gap, anticipate, count };
+enum class Turn : std::uint8_t { tuck_in, gap, anticipate, count };
 // Beat 3, which the gap leaves silent: its four 16ths.
 constexpr int gap_first = 8;
 constexpr int gap_last = 11;
@@ -385,10 +385,9 @@ private:
                                                   static_cast<std::uint64_t>(lane_step))));
         if (lane_step != first_hit && value != table::off) {
           const bool between_eighths = lane_step % 2 != 0;
-          if (between_eighths && pattern_roll < (density_neutral - dense) / density_neutral)
-            value = table::off;
-          else if (value == table::ghost &&
-                   pattern_roll < (density_ghosts_below - dense) / density_ghosts_below)
+          if ((between_eighths && pattern_roll < (density_neutral - dense) / density_neutral) ||
+              (value == table::ghost &&
+               pattern_roll < (density_ghosts_below - dense) / density_ghosts_below))
             value = table::off;
         } else if (value == table::off && dense > density_neutral &&
                    lane_value(modulo(lane_step - 1, lane_steps)) != table::off &&

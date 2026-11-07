@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Tune v1: a tuner (ADR-0042). It passes audio untouched. Ids are
@@ -15,7 +16,7 @@ using T = synth::ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array modes{"Instrument"sv, "Bass"sv, "Kick"sv};
-enum Mode : int { instrument, bass, kick };
+enum Mode : std::uint8_t { instrument, bass, kick };
 inline constexpr std::array notations{"Sharps"sv, "Flats"sv};
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }

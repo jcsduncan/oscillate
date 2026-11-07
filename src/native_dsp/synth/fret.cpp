@@ -113,7 +113,8 @@ using native_dsp::dsp::db_to_gain;
   return std::min(layer, layers - 1);
 }
 [[nodiscard]] double layer_top(std::uint32_t layer, std::uint32_t layers) noexcept {
-  return static_cast<double>((layer + 1) * velocity_steps / layers - 1);
+  const auto top = (layer + 1) * velocity_steps / layers - 1; // A whole velocity.
+  return static_cast<double>(top);
 }
 
 // RBJ second-order section, direct form I.

@@ -655,9 +655,10 @@ private:
       render_voice(left, right, frames);
     }
     for (std::size_t i = 0; i < frames; ++i) {
-      double l = left[i];
-      double r = right[i];
-      declick_.add(l, r);
+      StereoSample frame{left[i], right[i]};
+      declick_.add(frame);
+      double l = frame.left;
+      double r = frame.right;
       const auto chorused = chorus_.process(l, r);
       const auto delayed = delay_.process(chorused.left, chorused.right);
       const double gain = out_gain_.next();

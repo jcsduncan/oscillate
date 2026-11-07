@@ -73,12 +73,14 @@ void contact_law_is_stulov() {
 
 void rigid_contact_round_trips() {
   for (const double p : {1.0, 1.5, 2.5, 3.0}) {
-    const double k = modal::rigid_contact_stiffness(0.01, p, 1.5, 0.001);
-    REQUIRE_LT(std::fabs(modal::rigid_contact_seconds(0.01, k, p, 1.5) / 0.001 - 1.0),
+    const modal::RigidStrike strike{.mass = 0.01, .exponent = p, .speed = 1.5};
+    const double k = modal::rigid_contact_stiffness(strike, 0.001);
+    REQUIRE_LT(std::fabs(modal::rigid_contact_seconds(strike, k) / 0.001 - 1.0),
                tolerance::double_accumulation, "stiffness and contact time are inverses");
   }
   // A linear spring holds for half a period.
-  const double k = modal::rigid_contact_stiffness(0.02, 1.0, 2.0, 0.004);
+  const double k =
+      modal::rigid_contact_stiffness({.mass = 0.02, .exponent = 1.0, .speed = 2.0}, 0.004);
   REQUIRE_LT(std::fabs(pi * std::sqrt(0.02 / k) / 0.004 - 1.0), tolerance::double_accumulation,
              "p = 1 is half a period");
 }
@@ -186,7 +188,8 @@ void a_striker_bounces_off_a_heavy_bank() {
     modal::Striker striker;
     striker.mass = 0.01;
     striker.law.p = 2.0;
-    striker.law.k = modal::rigid_contact_stiffness(striker.mass, 2.0, 1.5, seconds);
+    striker.law.k = modal::rigid_contact_stiffness(
+        {.mass = striker.mass, .exponent = 2.0, .speed = 1.5}, seconds);
     striker.launch(0.0, 1.5);
     int frames = 0;
     while (striker.active && frames < 4'800) {

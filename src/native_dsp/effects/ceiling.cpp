@@ -44,6 +44,7 @@ public:
   // adopts an offer outright at its next block (so before the first block it
   // is as if created with it). The lookahead stays the instance's (its
   // latency): the classic runtime refuses any other.
+  // NOLINTNEXTLINE(bugprone-exception-escape): only bad_alloc can escape preparing; fatal here.
   void control(std::span<const double> v, std::uint32_t, const SynthTransport&) noexcept override {
     gain_ = dsp::db_to_gain(v[p::gain]);
     LimiterSettings wanted = settings_for(v);

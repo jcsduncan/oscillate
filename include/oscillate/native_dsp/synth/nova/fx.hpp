@@ -118,7 +118,7 @@ public:
   // 08a §6 offset 792: module-specific detail (Multiband's band gain
   // changes in dB); zeros for the rest.
   virtual void detail(std::span<float, fx_detail_values> out) const noexcept {
-    std::fill(out.begin(), out.end(), 0.0F);
+    std::ranges::fill(out, 0.0F);
   }
   // Frames the module can keep sounding after silence, at its rate.
   [[nodiscard]] virtual std::uint64_t tail_frames() const noexcept { return 0; }

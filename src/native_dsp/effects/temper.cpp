@@ -191,7 +191,7 @@ public:
         trim_step_(1.0 - std::exp(-1.0 / (trim_seconds * rate))), analysis_(frames_.window),
         design_(frames_.filter * 2),
         block_(phase_ == t::Phase::low_latency ? 1 : frames_.filter * 2) {
-    std::copy(values.begin(), values.end(), values_.begin());
+    std::ranges::copy(values, values_.begin());
     const std::size_t w = frames_.window;
     const std::size_t d = design_.size();
     // Input history: the analysis window, the lookahead and the block, plus
@@ -254,7 +254,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t, const SynthTransport&) noexcept override {
-    std::copy(v.begin(), v.end(), values_.begin());
+    std::ranges::copy(v, values_.begin());
   }
 
   void process(std::span<engine::StereoFrame> audio,
@@ -407,12 +407,12 @@ private:
 
   void reset_state() noexcept {
     for (auto& ring : ring_) {
-      std::fill(ring.begin(), ring.end(), 0.0);
+      std::ranges::fill(ring, 0.0);
     }
-    std::fill(key_ring_.begin(), key_ring_.end(), 0.0);
-    std::fill(accumulator_.begin(), accumulator_.end(), 0.0);
-    std::fill(accumulator_b_.begin(), accumulator_b_.end(), 0.0);
-    std::fill(out_.begin(), out_.end(), std::pair<double, double>{});
+    std::ranges::fill(key_ring_, 0.0);
+    std::ranges::fill(accumulator_, 0.0);
+    std::ranges::fill(accumulator_b_, 0.0);
+    std::ranges::fill(out_, std::pair<double, double>{});
     for (std::size_t c = 0; c < 2; ++c) {
       std::fill(cut_[c].begin(), cut_[c].end(), 0.0);
       std::fill(slow_[c].begin(), slow_[c].end(), silence_db);
@@ -504,7 +504,7 @@ private:
       const std::size_t base = t::sensitivity_base + n * t::per_node;
       out[n] = {values_[base + t::node_freq], values_[base + t::node_gain]};
     }
-    std::sort(out.begin(), out.end());
+    std::ranges::sort(out);
     return out;
   }
 
