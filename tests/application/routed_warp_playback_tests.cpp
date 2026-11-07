@@ -1155,6 +1155,7 @@ void draining_a_full_ring_steps_down_at_the_next_read() {
   constexpr std::uint64_t length = 60'000;
   constexpr std::size_t block = 128;
   constexpr std::size_t ring = 16'384;
+  // RoutedAudioSource::manage_quality steps down below a quarter of the ring.
   constexpr std::size_t low_lead = ring / 4;
   constexpr std::uint64_t checked = 4'096;
   const auto snapshot = placed(song, 0, length, with_mode(project::WarpMode::repitch, -1.0));
@@ -1172,8 +1173,11 @@ void draining_a_full_ring_steps_down_at_the_next_read() {
   const auto buffered = [&] {
     return live.source->processed_clip_status().front().buffered_frames;
   };
-  while (buffered() >= low_lead)
+  // Each rendered block takes `block` frames from the paused ring.
+  for (std::size_t drained = 0; buffered() >= low_lead; ++drained) {
+    REQUIRE_LT(drained, ring / block, "draining the queued lead did not converge");
     require(player.step(), "draining the queued lead held");
+  }
   const auto position = player.transport().completed_snapshot().next_sample;
   const auto restart = position + buffered();
   REQUIRE_EQ(live.source->status().quality_step_downs, 0,
