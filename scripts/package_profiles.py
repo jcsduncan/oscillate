@@ -9,7 +9,7 @@ docs/dependencies/release-packages.md.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 SOURCE_ROOT = Path(__file__).resolve().parent.parent
@@ -53,12 +53,156 @@ CODEC_REASON = (
 )
 
 
+# Ubuntu 26.04 packages each package needs at run time, checked against the
+# built package by scripts/package_dependencies.py. A package name stands for
+# the package on amd64; a Depends alternative is written "a | b".
+@dataclass(frozen=True)
+class RuntimeDependencies:
+    # Installed on the host: the .deb's Depends field (versions left out), or
+    # what the AppImage leaves to the host.
+    system: tuple[str, ...]
+    # Copied into the package: the packages owning every library and Qt plugin
+    # the AppImage bundles. The .deb bundles none.
+    bundled: tuple[str, ...]
+    # Host packages loaded at run time rather than linked, so no sidecar
+    # records them and verify cannot check them: package -> when it is needed.
+    conditional: dict[str, str] = field(default_factory=dict)
+
+
+DEB_DEPENDS = (
+    "libc6",
+    "libgcc-s1",
+    "libjack-jackd2-0 | libjack-0.125",
+    "libpipewire-0.3-0t64",
+    "libqt6core6t64",
+    "libqt6gui6",
+    "libqt6qml6",
+    "libqt6quick6",
+    "libqt6widgets6",
+    "libsamplerate0",
+    "libsndfile1",
+    "libssl3t64",
+    "libstdc++6",
+    "libx11-6",
+    "qml6-module-qtquick",
+)
+
+# glibc's base ABI and libproxy (on every Ubuntu desktop through
+# glib-networking) stay on the host; stage-appdir.py copies everything else
+# the app and its Qt plugins load.
+APPIMAGE_HOST = ("libc6", "libproxy1v5")
+# The .deb gets these through its PipeWire library's own Depends.
+APPIMAGE_CONDITIONAL = {
+    "libspa-0.2-modules": "PipeWire output: the bundled PipeWire client loads its SPA "
+    "support plugins from the host's PipeWire installation",
+}
+APPIMAGE_BUNDLED = (
+    "libatomic1",
+    "libb2-1",
+    "libblkid1",
+    "libbrotli1",
+    "libbz2-1.0",
+    "libcom-err2",
+    "libcurl3t64-gnutls",
+    "libdb5.3t64",
+    "libdbus-1-3",
+    "libdouble-conversion3",
+    "libduktape207",
+    "libegl1",
+    "libexpat1",
+    "libffi8",
+    "libfontconfig1",
+    "libfreetype6",
+    "libgcc-s1",
+    "libglib2.0-0t64",
+    "libglvnd0",
+    "libglx0",
+    "libgmp10",
+    "libgnutls30t64",
+    "libgomp1",
+    "libgraphite2-3",
+    "libgssapi-krb5-2",
+    "libharfbuzz0b",
+    "libhogweed6t64",
+    "libice6",
+    "libicu78",
+    "libidn2-0",
+    "libjack-jackd2-0",
+    "libk5crypto3",
+    "libkeyutils1",
+    "libkrb5-3",
+    "libkrb5support0",
+    "libldap2",
+    "libmd4c0",
+    "libmount1",
+    "libnettle8t64",
+    "libnghttp2-14",
+    "libopengl0",
+    "libp11-kit0",
+    "libpcre2-16-0",
+    "libpcre2-8-0",
+    "libpipewire-0.3-0t64",
+    "libpng16-16t64",
+    "libpsl5t64",
+    "libqt6core6t64",
+    "libqt6dbus6",
+    "libqt6gui6",
+    "libqt6network6",
+    "libqt6opengl6",
+    "libqt6qml6",
+    "libqt6qmlmeta6",
+    "libqt6qmlmodels6",
+    "libqt6qmlworkerscript6",
+    "libqt6quick6",
+    "libqt6waylandclient6",
+    "libqt6widgets6",
+    "librtmp1",
+    "libsamplerate0",
+    "libsasl2-2",
+    "libselinux1",
+    "libsm6",
+    "libssh2-1t64",
+    "libssl3t64",
+    "libstdc++6",
+    "libsystemd0",
+    "libtasn1-6",
+    "libunistring5",
+    "libuuid1",
+    "libwayland-client0",
+    "libwayland-cursor0",
+    "libx11-6",
+    "libx11-xcb1",
+    "libxau6",
+    "libxcb-cursor0",
+    "libxcb-icccm4",
+    "libxcb-image0",
+    "libxcb-keysyms1",
+    "libxcb-randr0",
+    "libxcb-render-util0",
+    "libxcb-render0",
+    "libxcb-shape0",
+    "libxcb-shm0",
+    "libxcb-sync1",
+    "libxcb-util1",
+    "libxcb-xfixes0",
+    "libxcb-xinput0",
+    "libxcb-xkb1",
+    "libxcb1",
+    "libxdmcp6",
+    "libxkbcommon-x11-0",
+    "libxkbcommon0",
+    "libzstd1",
+    "zlib1g",
+)
+
+
 @dataclass(frozen=True)
 class Profile:
     name: str
     preset: str
     switches: dict[str, str]
     excluded: dict[str, str]
+    runtime: RuntimeDependencies
 
     def included_features(self) -> list[str]:
         return [
@@ -77,6 +221,7 @@ PROFILES = {
         preset="package-deb",
         switches=COMMON_SWITCHES | {"OSCILLATE_BUILD_CODEC_ADAPTER": "ON"},
         excluded={"OSCILLATE_BUILD_CONVOLUTION_DSP": CONVOLUTION_REASON},
+        runtime=RuntimeDependencies(system=DEB_DEPENDS, bundled=()),
     ),
     "appimage": Profile(
         name="appimage",
@@ -86,6 +231,9 @@ PROFILES = {
             "OSCILLATE_BUILD_CODEC_ADAPTER": CODEC_REASON,
             "OSCILLATE_BUILD_CONVOLUTION_DSP": CONVOLUTION_REASON,
         },
+        runtime=RuntimeDependencies(
+            system=APPIMAGE_HOST, bundled=APPIMAGE_BUNDLED, conditional=APPIMAGE_CONDITIONAL
+        ),
     ),
 }
 

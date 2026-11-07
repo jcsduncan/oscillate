@@ -24,6 +24,11 @@ class ClassifyTests(unittest.TestCase):
             {"code": True, "python": True, "docs": False, "packaging": False},
         )
 
+    def test_runtime_dependency_inventory_runs_the_python_suites(self):
+        flags = changes.classify(["docs/dependencies/runtime-dependencies.json"])
+        self.assertTrue(flags["python"])
+        self.assertTrue(flags["docs"])
+
     def test_packaging_inputs_run_the_package_build(self):
         for path in (
             "scripts/package-deb.py",

@@ -34,6 +34,8 @@ DOC_ONLY = (
 PYTHON = (
     "*.py",
     "ruff.toml",
+    # Generated from scripts/package_profiles.py; a unit test compares them.
+    "docs/dependencies/runtime-dependencies.json",
     "scripts/ci/python-tests.sh",
     ".github/workflows/python.yml",
 )

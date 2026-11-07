@@ -89,12 +89,33 @@ project is declared GPL-3.0-or-later. Third-party licences are
 `NOASSERTION`, with a pointer to the shipped notice: the SBOM records
 provenance and makes no licence conclusion, which belongs to G8.
 
+## Runtime dependencies
+
+[`runtime-dependencies.json`](runtime-dependencies.json) lists, for each
+package, the Ubuntu 26.04 packages it needs at run time:
+
+| Field | `.deb` | AppImage |
+| --- | --- | --- |
+| `system` | The `Depends` field without versions; alternatives as `a \| b`. | The host packages the app's libraries link against and the AppDir leaves out: `libc6` and `libproxy1v5`. |
+| `bundled` | Empty: the `.deb` copies no library. | The package owning each library and Qt plugin copied into `usr/`. |
+| `conditional` | Empty: `Depends` brings them. | Host packages loaded at run time, not linked, with when they are needed: `libspa-0.2-modules`, whose SPA plugins the bundled PipeWire client loads for PipeWire output. |
+
+The lists are declared in each profile in
+[`package_profiles.py`](../../scripts/package_profiles.py) and the file is
+generated from them with `python3 -I scripts/package_dependencies.py write`;
+a unit test fails when the file is out of date. The packaging workflow runs
+`package_dependencies.py verify` on each built package's sidecar and fails on
+a `system` or `bundled` package that is declared but missing, or present but
+not declared. The sidecars record linked libraries only, so `conditional`
+packages are declared but not checked.
+
 ## Checks
 
 | Stage | Check |
 | --- | --- |
 | Configure | CMake verifies the VST3 SDK manifest, interface headers and notices by digest. |
 | Package | Profile switches, source tree and version (a release tag must be `v<project version>`); x86-64 ELFs with no `RPATH` and no Qt Test; every library resolves. |
+| Runtime dependencies | [`package_dependencies.py`](../../scripts/package_dependencies.py) `verify`: the `.deb`'s `Depends`, and the AppDir's copied and host packages, match the profile. |
 | `.deb` | [`smoke_ubuntu_package.py`](../../tests/packaging/smoke_ubuntu_package.py): payload against the sidecar, notices, SBOM, QML runtime dependency, desktop entry. |
 | AppDir | [`smoke_appdir.py`](../../tests/packaging/smoke_appdir.py): payload tree, notices, SBOM, no MP3 encoder, app startup with the Qt platform plugin loaded from the AppDir and nothing loaded from the host's Qt plugin directory, scanner helper reply, loader picking bundled libraries. |
 | AppImage | [`build-appimage.py`](../../scripts/build-appimage.py): pinned appimagetool 1.9.1 and type-2 runtime 20251108 by SHA-256, runtime bytes unchanged outside appimagetool's MD5 slot, extracted payload, notices and SBOM. |
