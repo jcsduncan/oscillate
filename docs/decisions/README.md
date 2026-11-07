@@ -1,0 +1,100 @@
+# Architecture decisions
+
+Every architecture decision record (ADR). Statuses in older records are
+dated snapshots; verify current implementation against the code and
+[implementation plan](../IMPLEMENTATION_PLAN.md).
+
+Numbering: take the next free number before writing a new ADR. Numbers are
+never reused. 0070 was never assigned. The Lumen ADR was renumbered from a
+duplicate 0029 to 0044 on 20 October 2026.
+
+| ADR | Decision | Status |
+| --- | --- | --- |
+| 0001 | [Processor runtime survives topology rebuilds](0001-processor-runtime-state.md) | Accepted; implemented (reviewed 20 October 2026) |
+| 0002 | [Prepared graph publication and reclamation](0002-graph-publication.md) | Accepted; implemented (reviewed 20 October 2026) |
+| 0003 | [Plugin scanning and execution boundaries](0003-plugin-isolation.md) | Accepted; implemented for scanning (reviewed 20 October 2026) |
+| 0004 | [Generation-based atomic project saves](0004-atomic-project-save.md) | Accepted; implemented (reviewed 20 October 2026) |
+| 0005 | [Delay-compensation transitions](0005-delay-compensation-transitions.md) | Accepted; implemented for the bounded routed graph (reviewed 20 October 2026) |
+| 0006 | [Media prefetch and adaptive playback processing](0006-prefetch-processing.md) | Accepted; implemented (reviewed 20 October 2026) |
+| 0007 | [Musical timing and meter representation](0007-timing-representation.md) | Accepted; implemented (reviewed 20 October 2026) |
+| 0008 | [Atomic project commands and revision publication](0008-project-command-revisions.md) | Accepted; implemented (reviewed 20 October 2026) |
+| 0009 | [Durable source identity and stereo render context for M2](0009-m2-source-and-render-contract.md) | Accepted for the M2 implementation slice |
+| 0010 | [Derived-media identity and stale-result rejection](0010-derived-media-identity.md) | Accepted for durable cache identity and project-local eviction; shared source-analysis cache specified, budget integration pending |
+| 0011 | [Device loss and in-process reselection](0011-device-recovery.md) | Accepted for C1 control contract; live reselection proof remains open |
+| 0012 | [Qt modules for the desktop UI](0012-qt-ui-modules.md) | Superseded for the production presentation layer by ADR-0022; retained for the tested Widgets prototype and Core/Gui licensing boundary |
+| 0013 | [Maintained JSON codec for project manifests](0013-manifest-json-library.md) | Accepted; implemented |
+| 0014 | [M3 MIDI clips, event timing and sampler boundary](0014-m3-midi-event-contract.md) | Accepted; implemented |
+| 0015 | [VST3 SDK baseline for host work](0015-vst3-sdk-baseline.md) | Accepted for the SDK selection; pinned source inventory recorded, compiled-file inventory and host compatibility remain open |
+| 0016 | [Encoded audio codec boundary](0016-encoded-audio-codec-boundary.md) | Accepted for a worker-only decoder slice; export encoding and resampling remain separate measured decisions |
+| 0017 | [Live VST3 track composition](0017-live-vst3-track-composition-proposal.md) | Narrow one-insert live contract implemented; broader composition remains proposed |
+| 0018 | [Bounded routed mixer handoff](0018-routed-mixer-publication.md) | Implemented engine contract with bounded routed application use |
+| 0019 | [Persisted automation identity and preparation](0019-persisted-automation-contract.md) | Accepted; implemented |
+| 0020 | [Convolution reverb core and FFT boundary](0020-convolution-reverb.md) | Opt-in native core implemented; graph and release integration remain gated |
+| 0021 | [Stable send-gain automation binding](0021-send-gain-automation.md) | Implemented; focused live/offline qualification complete |
+| 0022 | [Custom Qt Quick UI for the DAW](0022-qt-quick-ui-direction.md) | Accepted for the production UI direction; module and packaging qualification open |
+| 0023 | [Unified insert chain and visible buses](0023-unified-insert-chain-and-bus-ui.md) | Accepted; implemented through ADR-0043 and ADR-0050 |
+| 0024 | [Live routed source handoff contract](0024-live-source-handoff-contract.md) | Implemented for audio-only clip move, trim, fade, split, duplication and deletion in Quick; wider source edits remain open |
+| 0025 | [Planned loop processor history](0025-planned-loop-processor-history.md) | Accepted for the headless planned-wrap contract |
+| 0026 | [Continuous warp stream and musical-time warp model](0026-continuous-warp-stream.md) | Accepted for the schema 1.28 production contract (points 4–8), which is implemented |
+| 0027 | [Prism: default native synth and native-synth platform](0027-prism-native-synth.md) | Accepted; implemented |
+| 0028 | [Ember: vintage analog synth (second native engine)](0028-ember-vintage-synth.md) | Accepted; implemented; circuit model in ADR-0066 |
+| 0029 | [Bounded live mixer-control overlay](0029-live-mixer-control-overlay.md) | Implemented for admitted channel controls and existing send gains |
+| 0030 | [Pulse: analog-modelled drum synth (fourth native engine)](0030-pulse-drum-synth.md) | Accepted; implemented |
+| 0031 | [Halo: six-operator FM synth (fifth native engine)](0031-halo-fm-synth.md) | Accepted; implemented |
+| 0032 | [Torque: multi-model mono bass synth (sixth native engine)](0032-torque-bass-synth.md) | Accepted; implemented |
+| 0033 | [Drift: granular texture synth (seventh native engine)](0033-drift-granular-synth.md) | Accepted; implemented |
+| 0034 | [Stepped automation for discrete and next-note synth parameters](0034-stepped-native-automation.md) | Accepted |
+| 0035 | [Pedals in MIDI clips](0035-pedals-in-midi-clips.md) | Accepted and implemented |
+| 0036 | [Concert: physically modelled grand piano (eighth native engine)](0036-concert-piano.md) | Superseded by ADR-0071; model removed |
+| 0037 | [Live synth telemetry for panels](0037-synth-telemetry.md) | Accepted |
+| 0038 | [Live structural switching in native synths](0038-live-structural-switching.md) | Accepted |
+| 0039 | [Background publication of routine editor changes](0039-background-editor-publication.md) | Accepted |
+| 0040 | [A generic native effect platform](0040-native-effect-platform.md) | Accepted; implemented (integration completed under ADR-0043) |
+| 0041 | [Pocket, a kick and bass masking resolver](0041-pocket-kick-bass.md) | Accepted; phase 1 built |
+| 0042 | [A native utility suite](0042-native-utility-suite.md) | Accepted; all six built |
+| 0043 | [One native insert path](0043-one-native-insert-path.md) | Accepted and implemented; classic kinds follow in ADR-0047 |
+| 0044 | [Lumen: wavetable synth (third native engine)](0044-lumen-wavetable-synth.md) | Superseded by ADR-0057; removed |
+| 0045 | [The development build](0045-development-build.md) | Accepted and implemented |
+| 0046 | [The workspace redesign](0046-workspace-redesign.md) | Accepted and implemented |
+| 0047 | [The classic processors become engines](0047-classic-processors-as-engines.md) | Accepted and implemented; convolution remains its own kind |
+| 0048 | [Parallel real-time rendering](0048-parallel-audio-rendering.md) | Accepted and implemented |
+| 0049 | [Live graph switching and latency handover](0049-live-graph-switching.md) | Accepted and implemented; every chain switches live (ADR-0050) |
+| 0050 | [One chain per track](0050-one-chain-per-track.md) | Accepted and implemented live; export renderers to unify |
+| 0051 | [Automation drawn on the arrangement](0051-arrangement-automation.md) | Accepted and implemented; inspector forms to retire |
+| 0052 | [Constant-tempo and key analysis](0052-constant-tempo-and-key-analysis.md) | Accepted; implemented; the downbeat rule arrived with the clip strip (ADR-0053) |
+| 0053 | [The clip strip](0053-clip-strip.md) | Accepted; strip, analysis, downbeat, zoom, bars before bar 1 and the docked clip editor built; warp markers on the arrangement and the tempo lane open |
+| 0054 | [Live controls, granular UI updates and meters on their own clock](0054-live-controls-and-granular-updates.md) | Accepted; implemented |
+| 0055 | [Deck: a DJ mixer's three-band isolator](0055-deck-dj-isolator.md) | Accepted; implemented |
+| 0056 | [Snarl: a growl and wobble synth](0056-snarl-growl-synth.md) | Superseded by ADR-0057; removed |
+| 0057 | [Nova: the flagship wavetable synth](0057-nova-flagship-synth.md) | Accepted; platform, engine core and panel built; later phases in spec 08 §13 |
+| 0058 | [Pump: a drawn volume shaper, and documents for effects](0058-pump-volume-shaper.md) | Accepted; platform, engine, MIDI trigger and panel built |
+| 0059 | [Play and sparkle: note effects, macros and freeze](0059-play-and-sparkle.md) | Accepted; implemented |
+| 0060 | [Anvil: a drawn kick synth](0060-anvil-kick-synth.md) | Accepted; engine, presets, preview and panel built |
+| 0061 | [Performance tracing](0061-performance-tracing.md) | Accepted; implemented |
+| 0062 | [Denormals flushed at every render entry](0062-denormals-flushed.md) | Accepted; callback, workers, runtimes and export |
+| 0063 | [Crate: a chop sampler (replaces the sampler)](0063-crate-chop-sampler.md) | Accepted; implemented |
+| 0064 | [Temper: a resonance suppressor with dynamic EQ bands](0064-temper-resonance-suppressor.md) | Accepted; engine, presets and panel built |
+| 0065 | [Nova FX rack: a signal-flow FX page, a parametric EQ and a shifter](0065-nova-fx-rack.md) | Accepted; implemented |
+| 0066 | [Ember's circuit model: a vintage poly that misbehaves like one](0066-ember-circuit-model.md) | Accepted; implemented |
+| 0067 | [Flyby: a sound passing the listener, properly](0067-flyby.md) | Accepted; implemented |
+| 0068 | [Knock: physically modelled percussion](0068-knock-percussion.md) | Accepted; engine, modal library, kits and panel built |
+| 0069 | [Dust: a bed of background texture, and age for what passes through](0069-dust-texture.md) | Accepted; engine, presets and panel built |
+| 0071 | [Concert becomes a sampled grand: the Salamander Grand Piano, streamed from disk](0071-concert-sampled.md) | Accepted; implemented |
+| 0072 | [Kick & Bass Lock: Anvil and Nova read each other's notes](0072-kick-bass-lock.md) | Accepted; implemented; Align deferred |
+| 0073 | [Nova Analogue: seeded voice cards, drift and Voice Lanes](0073-nova-analogue.md) | Accepted; implemented |
+| 0074 | [Mix Check: offline checks, blame and one-step fixes](0074-mix-check.md) | Accepted; implemented |
+| 0075 | [Chop: a tempo-locked gate and stutter](0075-chop.md) | Accepted; implemented |
+| 0076 | [Nova panel: resize and reflow, a signal spine, a browser that lets you play](0076-nova-panel-redesign.md) | Accepted; implemented, including revision 2 |
+| 0077 | [Nova Constellation: browse presets by sound, morph between them](0077-nova-constellation.md) | Accepted; implemented |
+| 0078 | [Nova arp patterns: lanes of their own length, sixteen modes, a library and MUTATE](0078-nova-arp-patterns.md) | Accepted; implemented |
+| 0079 | [Groove from a record: one band's feel from a record or clip, for the groove pool](0079-groove-from-a-record.md) | Accepted; implemented |
+| 0080 | [Arrange from a loop: a whole track proposed from 8 or 16 bars, kept or binned in one step](0080-arrange-from-a-loop.md) | Accepted; implemented |
+| 0081 | [Clay: note editing of audio — notes of partials plus the rest, edits rendered as original − old + new](0081-clay-note-editing.md) | Accepted; implemented |
+| 0082 | [Strata: multiband dynamics — one curve per band, up and down, Linkwitz-Riley or linear-phase bands, OTT](0082-strata-multiband.md) | Accepted; implemented |
+| 0083 | [Harmony: the Chord track, the Progression Lab and Comp](0083-harmony-chord-track-and-comp.md) | Superseded by ADR-0084: the Chord track was removed; the Progression Lab and Comp carry over to chord clips |
+| 0084 | [Chords are notes in MIDI clips: the chord strip, held-note Comp with pushes seen ahead, Rhythm Apply](0084-chord-clips.md) | Accepted; implemented |
+| 0085 | [One heavy synth's voices on the free audio helpers: nested worker batches, Nova voices rendered apart and summed in order](0085-nested-voice-rendering.md) | Accepted; implemented |
+| 0086 | [MIDI recording from the computer keyboard where it was heard; a device-only metronome and count-in](0086-midi-recording-and-click.md) | Accepted; implemented |
+| 0087 | [Nova voices on the GPU](0087-gpu-nova-voices.md) | Rejected (reverted in b3886b93) |
+| 0088 | [Fret: a sampled bass guitar with Feel, realtime auto-articulation](0088-fret-sampled-bass.md) | Accepted; implemented; the Kick & Bass Lock follower is still to come |
+| 0089 | [Wren: a sampled concert flute with Breath, realtime phrasing](0089-wren-sampled-flute.md) | Accepted; implemented |

@@ -1,0 +1,31 @@
+# ADR-0010 — Derived-media identity and stale-result rejection
+
+**Status:** Accepted for durable cache identity and project-local eviction; shared source-analysis cache specified, budget integration pending
+**Date:** 14 October 2026  
+**Requirements:** PRD §§8, 10–12, 18, 21; FS-03 PM-03/PM-04/PM-08; FS-05 PA-06/PA-07; ADR-0006/0009.
+
+## Context
+
+The M2 project identifies managed encoded source bytes with a digest and can prefetch WAV frames. Later analysis, waveform, warp and pitch workers will produce disposable results while the user continues editing. A project revision alone is an imprecise cache identity: unrelated edits would invalidate useful work, while changes to an algorithm or source bytes could otherwise install stale output. Cancellation can race with a worker completing.
+
+## Decision
+
+Each derived artifact has a versioned, canonical input descriptor. Its key includes the artifact kind, key-format version, immutable encoded source identity (digest, byte length and encoding), algorithm identity/version, quality and every setting that changes its output. Algorithm owners encode settings as bounded, versioned canonical bytes; their exact serialization is part of that algorithm's contract. The project nominal sample rate and tempo-map identity are included only when that artifact depends on them. Instance-specific output includes stable clip identity and semantic clip settings; source-only analysis does not. Source ID, project revision, path and file modification time are not cache-key inputs. A key-format or algorithm change makes old entries misses rather than interpreting them under new semantics.
+
+A job captures an immutable key and a monotone, nonwrapping request generation. Issuing a replacement cancels the previous ticket; cancellation is advisory to the worker. Before any result becomes current project state or feeds a playback ring, the serialized control side re-derives the key from current intent and claims the ticket once. A mismatch in key, generation or cancellation state rejects the result. A cancelled or superseded result may be discarded or left as an unreferenced reconstructable cache entry; it cannot be installed as current. Editing, undo, source replacement, project-rate or tempo changes invalidate only the affected generations and rings. The callback does not hash descriptors or inspect project state.
+
+Clip-instance processing caches live under the project-local `cache/` directory, separate from manifest state, managed `assets/` and user renders. Source-only waveform, tempo, key and onset analysis may instead use one per-user store at `${XDG_CACHE_HOME:-$HOME/.cache}/oscillate/source-analysis/v1`, so identical encoded media can reuse analysis across projects. Its entries contain no project ID or source path. The project manifest remains authoritative for accepted generated reviews, provenance, manual corrections and user markers; deleting either cache cannot change those choices. A worker verifies the current source bytes and decoded metadata before reading a shared hit. A missing or damaged source cannot be hidden by cached analysis. Source-dependent algorithm/version/settings remain in the key; project tempo/rate enter only when they affect an artifact.
+
+`persistence::ProjectStore` owns the pinned project root and hands a pinned, no-follow `cache/` descriptor to `media::CacheStore`. The shared store also opens each private directory component through no-follow descriptors with owner/type checks. The writer uses `<key>.tmp.<random>` and publishes `<key>.cache` with file fsync, rename and directory fsync. Entry format 1 is the `LDAWCACH` magic, a little-endian version, 64 ASCII key characters, little-endian payload length, 32-byte SHA-256 payload digest, then up to 64 MiB of payload. Missing, truncated or corrupt entries are cache misses. Clearing recognizes only these cache entry and temporary names, leaves foreign files and essential data alone, and never follows cache-file symlinks. A writer re-creates a missing project `cache/` directory when reopening a valid project. Budget accounting scans recognized regular entries and interrupted temporary files. Enforcement removes temporary files first, then final entries by oldest explicit access timestamp and filename tie-break, with directory fsync after removal. A successful read refreshes access time with `futimens`; a timestamp-update failure preserves the valid read and marks recency as degraded. `CacheStore` serializes reads, writes, clearing and eviction within an instance and uses a directory lock between instances. The shared store starts with its own bounded budget; unified budget, health and clear controls remain a separate integration item.
+
+External linked media must pass full encoded-byte and decoded-metadata verification before a shared cache lookup. Path or modification time alone is never proof of source identity.
+
+## Alternatives considered
+
+- Keying by project revision rejects work after unrelated edits and makes cache reuse depend on editing history.
+- Keying by source path or mtime can accept changed bytes and makes project moves alter cache identity.
+- Treating worker cancellation as proof of freshness permits a completion that races with cancellation to install stale output.
+
+## Consequences and evidence
+
+The descriptor must be maintained as new algorithms and settings arrive, with golden key vectors and explicit version increments. The managed-source G5 contract is exercised by an independently computed golden key, conditional rate/tempo dependencies, a real unrelated project edit, cancellation/supersession and one-shot final claim. The later derived-result consumer must prove edit/undo and stale playback-ring rejection when it attaches this gate to project commands and ring generations. The durable cache slice tests interrupted writes at each publication boundary, checksum/header corruption, reopen after cache deletion, no-follow directory and entry handling, and source-preserving clear. The project-local budget slice tests explicit access recency, deterministic ties, interrupted/corrupt entries, foreign files, source preservation and concurrent read/evict serialization. Scheduler priority, the global budget and adaptive DSP quality remain separate D1 work.
