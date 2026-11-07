@@ -130,7 +130,6 @@ const std::vector<Audition>& auditions() {
   static const std::vector<Audition> list{
       {"02 breath", "nova", "Ney Breath", "Ambient Wash", wet, held_part},
       {"03 santur", "nova", "Santur Bloom", "Shimmer Heaven", wet, santur_part},
-      {"06 flute cloud", "drift", "Ney Mist", "Endless Cloud", cloud, held_part},
       {"06b flute cloud", "wren", "Two Flutes", "Endless Cloud", cloud, held_part, flute_octaves},
       {"07 low", "nova", "Warm Sub Bed", "Dark Hall", wet, low_part},
   };

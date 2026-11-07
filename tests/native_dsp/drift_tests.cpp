@@ -45,7 +45,7 @@ void descriptor_registry_and_presets() {
   REQUIRE_OK(valid, valid.has_value() ? "" : valid.error().message);
   REQUIRE_EQ(table().id, "drift", "engine identity is drift v1");
   REQUIRE_EQ(table().version, 1, "engine identity is drift v1");
-  REQUIRE_EQ(table().presets.size(), 17, "seventeen factory presets");
+  REQUIRE_EQ(table().presets.size(), 16, "sixteen factory presets");
   REQUIRE_EQ(find_engine("drift"), &drift_engine(), "Drift registers as the seventh engine");
   REQUIRE_GE(engines().size(), 7, "Drift registers as the seventh engine");
   REQUIRE_EQ(engines()[6], &drift_engine(), "Drift registers as the seventh engine");

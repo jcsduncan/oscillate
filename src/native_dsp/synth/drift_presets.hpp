@@ -103,18 +103,6 @@ inline constexpr std::array wind_organ{
     V{"drift.lfo1.density", 0.5},
 };
 
-// A flute smeared into a cloud: the Vowel table and a lot of air, long
-// grains sprayed and blurred, some reversed and a few cents apart, so a
-// breathy, reed-like tone hangs behind a lead flute.
-inline constexpr std::array ney_mist{
-    V{"drift.wt.table", 4},          V{"drift.wt.level", 0.6},    V{"drift.partials.level", 0.25},
-    V{"drift.air.level", 0.45},      V{"drift.air.width", 0.4},   V{"drift.grain.size", 0.28},
-    V{"drift.grain.density", 26},    V{"drift.grain.spray", 0.5}, V{"drift.grain.jitter", 14},
-    V{"drift.grain.reverse", 0.3},   V{"drift.grain.scan", 0.15}, V{"drift.blur", 0.5},
-    V{"drift.filter.cutoff", 3'500}, V{"drift.amp.attack", 1.4},  V{"drift.amp.release", 4},
-    V{"drift.verb.mix", 0.15},       V{"drift.out.level", 4},
-};
-
 inline constexpr std::array init{
     V{"drift.blur", 0},
     V{"drift.grain.chaos", 0},
@@ -141,7 +129,7 @@ inline constexpr std::array init{
     V{"drift.out.level", -5},
 };
 
-inline constexpr std::array<SynthPreset, 17> presets{{
+inline constexpr std::array<SynthPreset, 16> presets{{
     {"Nebula", "Pad", {}},
     {"Glass Rain", "Texture", glass_rain},
     {"Frozen Choir", "Frozen", frozen_choir},
@@ -157,7 +145,6 @@ inline constexpr std::array<SynthPreset, 17> presets{{
     {"Pulse Grains", "Rhythmic", pulse_grains},
     {"Deep Field", "Drone", deep_field},
     {"Wind Organ", "Drone", wind_organ},
-    {"Ney Mist", "Pad", ney_mist},
     {"Init", "Init", init},
 }};
 
