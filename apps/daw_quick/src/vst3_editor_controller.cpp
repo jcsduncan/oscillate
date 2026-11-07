@@ -914,8 +914,7 @@ void Vst3EditorController::poll_native_gestures() {
           }
           active->second = ++next_sequence_;
         }
-        (void)slot->preview(identity.graph_revision, identity.instance_id,
-                            identity.compatibility_key, event, active->second);
+        (void)slot->preview(identity, event, active->second);
       }
     }
   }

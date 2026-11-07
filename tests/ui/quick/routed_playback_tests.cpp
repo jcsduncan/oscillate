@@ -2120,10 +2120,8 @@ void saved_vst3_is_not_silently_omitted() {
     require(binding && binding->slot &&
                 binding->identity.graph_revision == session->snapshot().revision &&
                 binding->identity.instance_id != 0 &&
-                binding->slot->admission(
-                    binding->identity.graph_revision, binding->identity.instance_id,
-                    binding->identity.compatibility_key, session->snapshot().revision + 1,
-                    {0, 0, 0.5}) != plugins::Vst3ManualEventStatus::accepted &&
+                binding->slot->admission(binding->identity, session->snapshot().revision + 1,
+                                         {0, 0, 0.5}) != plugins::Vst3ManualEventStatus::accepted &&
                 !run.value()->active_vst3_effect_manual_events(
                     saved_track.id, saved_track.effects.front().id,
                     project::PluginInstanceId::from_bits({9, 9}).value()),
@@ -2335,9 +2333,8 @@ void live_zero_latency_vst3_insert_uses_worker_and_keeps_source(std::uint32_t re
   const auto manual = run->active_vst3_effect_manual_events(
       track, session->snapshot().tracks.front().effects.front().id, saved_effect.id);
   require(manual && manual->slot && manual->identity.graph_revision == saved_revision &&
-              manual->slot->admission(manual->identity.graph_revision, manual->identity.instance_id,
-                                      manual->identity.compatibility_key, saved_revision + 1,
-                                      {1, 0, 0.5}) == plugins::Vst3ManualEventStatus::accepted,
+              manual->slot->admission(manual->identity, saved_revision + 1, {1, 0, 0.5}) ==
+                  plugins::Vst3ManualEventStatus::accepted,
           "newly inserted effect was absent from active manual-parameter bookkeeping");
   {
     std::lock_guard lock(stepped->mutex);
@@ -3029,16 +3026,13 @@ void saved_vst3_instrument_plays_midi_and_fails_closed() {
             "parameter-scoped instrument graph did not activate");
     const auto binding =
         qualified.value()->active_vst3_instrument_manual_events(track, inserted.value());
-    require(binding &&
-                binding->slot->admission(
-                    binding->identity.graph_revision, binding->identity.instance_id,
-                    binding->identity.compatibility_key, session->snapshot().revision + 1,
-                    {1, 0, 0.75}) == plugins::Vst3ManualEventStatus::accepted &&
-                binding->slot->admission(
-                    binding->identity.graph_revision, binding->identity.instance_id,
-                    binding->identity.compatibility_key, session->snapshot().revision + 1,
-                    {2, 0, 0.75}) == plugins::Vst3ManualEventStatus::unavailable,
-            "exact parameter evidence exposed the wrong live controls");
+    require(
+        binding &&
+            binding->slot->admission(binding->identity, session->snapshot().revision + 1,
+                                     {1, 0, 0.75}) == plugins::Vst3ManualEventStatus::accepted &&
+            binding->slot->admission(binding->identity, session->snapshot().revision + 1,
+                                     {2, 0, 0.75}) == plugins::Vst3ManualEventStatus::unavailable,
+        "exact parameter evidence exposed the wrong live controls");
     require(qualified.value()->stop_and_retire() ==
                 quick::RoutedPlayback::StopDrainOutcome::not_requested,
             "qualified instrument did not retire");
@@ -3357,14 +3351,12 @@ void two_vst3_instrument_effect_paths_render_independently() {
   const auto second_binding = mixed_run.value()->active_vst3_effect_manual_events(
       second_track, saved.tracks[1].effects.front().id, second_effect);
   require(first_binding && second_binding && first_binding->slot && second_binding->slot &&
-              first_binding->slot->admission(
-                  first_binding->identity.graph_revision, first_binding->identity.instance_id,
-                  first_binding->identity.compatibility_key, saved.revision + 1,
-                  {101, 0, 0.75}) == plugins::Vst3ManualEventStatus::accepted &&
-              second_binding->slot->admission(
-                  second_binding->identity.graph_revision, second_binding->identity.instance_id,
-                  second_binding->identity.compatibility_key, saved.revision + 1,
-                  {101, 0, 0.75}) != plugins::Vst3ManualEventStatus::accepted,
+              first_binding->slot->admission(first_binding->identity, saved.revision + 1,
+                                             {101, 0, 0.75}) ==
+                  plugins::Vst3ManualEventStatus::accepted &&
+              second_binding->slot->admission(second_binding->identity, saved.revision + 1,
+                                              {101, 0, 0.75}) !=
+                  plugins::Vst3ManualEventStatus::accepted,
           "paired effect control evidence was lost or leaked across saved instances");
   (void)mixed_run.value()->stop_and_retire();
   auto stepped = std::make_shared<SteppedEvidence>();

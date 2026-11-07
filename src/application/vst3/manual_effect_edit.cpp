@@ -77,9 +77,7 @@ foundation::Result<Vst3ManualEditStatus> commit_manual(
     return foundation::Result<Vst3ManualEditStatus>::failure(
         conflict("VST3 live slot unavailable"));
   const auto next_revision = opened_revision + 1;
-  const auto admission =
-      slot->admission(expected_graph.graph_revision, expected_graph.instance_id,
-                      expected_graph.compatibility_key, next_revision, parameter);
+  const auto admission = slot->admission(expected_graph, next_revision, parameter);
   if (admission != plugins::Vst3ManualEventStatus::accepted)
     return foundation::Result<Vst3ManualEditStatus>::failure(
         {foundation::ErrorCode::unsupported, refusal(admission)});
@@ -113,9 +111,7 @@ foundation::Result<Vst3ManualEditStatus> commit_manual(
       return foundation::Result<Vst3ManualEditStatus>::success(status);
     }
   }
-  const auto result =
-      slot->submit(expected_graph.graph_revision, expected_graph.instance_id,
-                   expected_graph.compatibility_key, next_revision, parameter, gesture_sequence);
+  const auto result = slot->submit(expected_graph, next_revision, parameter, gesture_sequence);
   status.admission = result;
   if (result == plugins::Vst3ManualEventStatus::accepted) {
     status.phase = Vst3ManualEditPhase::pending;

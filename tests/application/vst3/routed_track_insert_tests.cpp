@@ -905,8 +905,7 @@ void fixed_tail_evidence_is_exact_and_state_bound(const plugins::ScanResult& sca
                  "exact dual receipt admitted a live control or lost fixed tail");
     REQUIRE_EQ(dual.finite_tail_frames, 0,
                "exact dual receipt admitted a live control or lost fixed tail");
-    REQUIRE_EQ(dual.manual_events->admission(identity.graph_revision, identity.instance_id,
-                                             identity.compatibility_key, 2, {101, 0, 0.75}),
+    REQUIRE_EQ(dual.manual_events->admission(identity, 2, {101, 0, 0.75}),
                plugins::Vst3ManualEventStatus::unavailable,
                "exact dual receipt admitted a live control or lost fixed tail");
     provider.set_size_scoped_manual_qualification(effect.id, true, {{64, {}}});
@@ -1036,20 +1035,27 @@ void parameter_qualification_is_per_saved_effect(const plugins::ScanResult& scan
   other.manual_events->activate(1);
   const auto first_identity = qualified.manual_events->active_graph();
   const auto second_identity = other.manual_events->active_graph();
-  REQUIRE_EQ(qualified.manual_events->admission(1, first_identity.instance_id,
-                                                first_identity.compatibility_key, 2,
-                                                {101, 0, 0.75}),
-             plugins::Vst3ManualEventStatus::accepted,
-             "exact effect control was not isolated to its saved instance and verified metadata");
-  REQUIRE_EQ(qualified.manual_events->admission(1, first_identity.instance_id,
-                                                first_identity.compatibility_key, 2,
-                                                {999, 0, 0.75}),
-             plugins::Vst3ManualEventStatus::unavailable,
-             "exact effect control was not isolated to its saved instance and verified metadata");
-  REQUIRE_EQ(other.manual_events->admission(1, second_identity.instance_id,
-                                            second_identity.compatibility_key, 2, {101, 0, 0.75}),
-             plugins::Vst3ManualEventStatus::latency_unverified,
-             "exact effect control was not isolated to its saved instance and verified metadata");
+  REQUIRE_EQ(
+      qualified.manual_events->admission({.graph_revision = 1,
+                                          .instance_id = first_identity.instance_id,
+                                          .compatibility_key = first_identity.compatibility_key},
+                                         2, {101, 0, 0.75}),
+      plugins::Vst3ManualEventStatus::accepted,
+      "exact effect control was not isolated to its saved instance and verified metadata");
+  REQUIRE_EQ(
+      qualified.manual_events->admission({.graph_revision = 1,
+                                          .instance_id = first_identity.instance_id,
+                                          .compatibility_key = first_identity.compatibility_key},
+                                         2, {999, 0, 0.75}),
+      plugins::Vst3ManualEventStatus::unavailable,
+      "exact effect control was not isolated to its saved instance and verified metadata");
+  REQUIRE_EQ(
+      other.manual_events->admission({.graph_revision = 1,
+                                      .instance_id = second_identity.instance_id,
+                                      .compatibility_key = second_identity.compatibility_key},
+                                     2, {101, 0, 0.75}),
+      plugins::Vst3ManualEventStatus::latency_unverified,
+      "exact effect control was not isolated to its saved instance and verified metadata");
 
   provider.set_size_scoped_manual_qualification(first.id, true, {{64, {101, 101, 999}}});
   auto scoped = take(provider.prepare(*state.snapshot(), first, 128));
@@ -1084,14 +1090,18 @@ void parameter_qualification_is_per_saved_effect(const plugins::ScanResult& scan
   unrecorded.manual_events->activate(2);
   const auto explicit_identity = explicitly_qualified.manual_events->active_graph();
   const auto unrecorded_identity = unrecorded.manual_events->active_graph();
-  REQUIRE_EQ(explicitly_qualified.manual_events->admission(2, explicit_identity.instance_id,
-                                                           explicit_identity.compatibility_key, 3,
-                                                           {101, 0, 0.75}),
+  REQUIRE_EQ(explicitly_qualified.manual_events->admission(
+                 {.graph_revision = 2,
+                  .instance_id = explicit_identity.instance_id,
+                  .compatibility_key = explicit_identity.compatibility_key},
+                 3, {101, 0, 0.75}),
              plugins::Vst3ManualEventStatus::accepted,
              "per-effect manual event admission did not follow exact saved evidence");
-  REQUIRE_EQ(unrecorded.manual_events->admission(2, unrecorded_identity.instance_id,
-                                                 unrecorded_identity.compatibility_key, 3,
-                                                 {101, 0, 0.75}),
+  REQUIRE_EQ(unrecorded.manual_events->admission(
+                 {.graph_revision = 2,
+                  .instance_id = unrecorded_identity.instance_id,
+                  .compatibility_key = unrecorded_identity.compatibility_key},
+                 3, {101, 0, 0.75}),
              plugins::Vst3ManualEventStatus::latency_unverified,
              "per-effect manual event admission did not follow exact saved evidence");
   global_fixture.set_manual_qualification(second.id, false);

@@ -13,11 +13,10 @@
 
 namespace oscillate::plugins {
 Vst3ManualEventSlot::Vst3ManualEventSlot(
-    std::uint64_t instance_id, std::uint64_t compatibility_key,
-    std::vector<std::uint32_t> eligible_ids, std::vector<std::uint32_t> automated_ids,
-    bool fixed_latency_verified,
+    Vst3InstanceKey instance, std::vector<std::uint32_t> eligible_ids,
+    std::vector<std::uint32_t> automated_ids, bool fixed_latency_verified,
     std::optional<std::vector<Vst3QualifiedManualBlock>> qualified_blocks)
-    : instance_id_(instance_id), compatibility_key_(compatibility_key),
+    : instance_id_(instance.instance_id), compatibility_key_(instance.compatibility_key),
       eligible_ids_(std::move(eligible_ids)), automated_ids_(std::move(automated_ids)),
       fixed_latency_verified_(fixed_latency_verified),
       qualified_blocks_(std::move(qualified_blocks)) {
@@ -54,18 +53,16 @@ Vst3ActiveGraphIdentity Vst3ManualEventSlot::active_graph() const noexcept {
                        : Vst3ActiveGraphIdentity{revision, instance_id_, compatibility_key_};
 }
 
-Vst3ManualEventStatus Vst3ManualEventSlot::submit(std::uint64_t graph_revision,
-                                                  std::uint64_t instance_id,
-                                                  std::uint64_t compatibility_key,
+Vst3ManualEventStatus Vst3ManualEventSlot::submit(const Vst3ActiveGraphIdentity& target,
                                                   std::uint64_t revision, Vst3ParameterEvent event,
                                                   std::uint64_t gesture_sequence) noexcept {
-  const auto status = admission(graph_revision, instance_id, compatibility_key, revision, event);
+  const auto status = admission(target, revision, event);
   if (status != Vst3ManualEventStatus::accepted)
     return status;
   // One control producer writes payload before publishing the pending phase.
   event_ = event;
   revision_ = revision;
-  event_graph_revision_ = graph_revision;
+  event_graph_revision_ = target.graph_revision;
   last_submitted_revision_ = revision;
   last_submitted_gesture_sequence_ = gesture_sequence;
   // A queued older completion can arrive after the editor has already staged
@@ -84,7 +81,7 @@ Vst3ManualEventStatus Vst3ManualEventSlot::submit(std::uint64_t graph_revision,
   submitted_manual_revision_.store(revision, std::memory_order_release);
   // The RMW orders this check against callback deactivation: either it sees
   // the new identity, or deactivation follows publication and fails pending.
-  if (active_graph_revision_.fetch_add(0, std::memory_order_acq_rel) != graph_revision) {
+  if (active_graph_revision_.fetch_add(0, std::memory_order_acq_rel) != target.graph_revision) {
     auto expected = Vst3ManualEventPhase::pending;
     if (phase_.compare_exchange_strong(expected, Vst3ManualEventPhase::failed,
                                        std::memory_order_acq_rel) ||
@@ -94,15 +91,12 @@ Vst3ManualEventStatus Vst3ManualEventSlot::submit(std::uint64_t graph_revision,
   return Vst3ManualEventStatus::accepted;
 }
 
-Vst3ManualEventStatus Vst3ManualEventSlot::preview(std::uint64_t graph_revision,
-                                                   std::uint64_t instance_id,
-                                                   std::uint64_t compatibility_key,
+Vst3ManualEventStatus Vst3ManualEventSlot::preview(const Vst3ActiveGraphIdentity& target,
                                                    Vst3ParameterEvent event,
                                                    std::uint64_t gesture_sequence) noexcept {
   if (last_submitted_revision_ == std::numeric_limits<std::uint64_t>::max())
     return Vst3ManualEventStatus::invalid_revision;
-  const auto status = admission(graph_revision, instance_id, compatibility_key,
-                                last_submitted_revision_ + 1, event);
+  const auto status = admission(target, last_submitted_revision_ + 1, event);
   // A committed value must render first. A later drag may still stage a
   // transient value while that receipt is pending; the callback consumes it
   // only after the committed event has finished successfully.
@@ -116,7 +110,7 @@ Vst3ManualEventStatus Vst3ManualEventSlot::preview(std::uint64_t graph_revision,
     return Vst3ManualEventStatus::unavailable;
   constexpr auto scale = static_cast<double>(std::numeric_limits<std::uint32_t>::max());
   const auto normalized = static_cast<std::uint32_t>(std::llround(event.normalized_value * scale));
-  preview_graph_revision_.store(graph_revision, std::memory_order_relaxed);
+  preview_graph_revision_.store(target.graph_revision, std::memory_order_relaxed);
   preview_word_.store((static_cast<std::uint64_t>(event.id) << 32U) | normalized,
                       std::memory_order_relaxed);
   preview_parameter_id_ = event.id;
@@ -124,7 +118,7 @@ Vst3ManualEventStatus Vst3ManualEventSlot::preview(std::uint64_t graph_revision,
   preview_version_.store(++next_preview_version_, std::memory_order_release);
   const auto active = active_graph_revision_.fetch_add(0, std::memory_order_acq_rel);
   const auto first = first_reusable_graph_revision_.load(std::memory_order_acquire);
-  if (active == 0 || graph_revision < first || graph_revision > active) {
+  if (active == 0 || target.graph_revision < first || target.graph_revision > active) {
     preview_version_.store(0, std::memory_order_release);
     return Vst3ManualEventStatus::stale_instance;
   }
@@ -137,15 +131,13 @@ Vst3ManualEventStatus Vst3ManualEventSlot::preview(std::uint64_t graph_revision,
   return Vst3ManualEventStatus::accepted;
 }
 
-Vst3ManualEventStatus Vst3ManualEventSlot::admission(std::uint64_t graph_revision,
-                                                     std::uint64_t instance_id,
-                                                     std::uint64_t compatibility_key,
+Vst3ManualEventStatus Vst3ManualEventSlot::admission(const Vst3ActiveGraphIdentity& target,
                                                      std::uint64_t revision,
                                                      Vst3ParameterEvent event) const noexcept {
-  if (instance_id != instance_id_ || compatibility_key != compatibility_key_)
+  if (target.instance_id != instance_id_ || target.compatibility_key != compatibility_key_)
     return Vst3ManualEventStatus::stale_instance;
-  if (graph_revision == 0 ||
-      active_graph_revision_.load(std::memory_order_acquire) != graph_revision)
+  if (target.graph_revision == 0 ||
+      active_graph_revision_.load(std::memory_order_acquire) != target.graph_revision)
     return Vst3ManualEventStatus::stale_instance;
   if (revision == 0 || revision <= last_submitted_revision_)
     return Vst3ManualEventStatus::invalid_revision;
@@ -699,7 +691,8 @@ prepare_vst3_graph_node(const project::Vst3PluginInstance& saved, const ScanResu
   for (const auto& lane : automation)
     automated.push_back(std::get<project::Vst3ParameterTarget>(lane.target()).parameter_id);
   result.manual_events = std::make_shared<Vst3ManualEventSlot>(
-      engine_instance_id, key, std::move(eligible), std::move(automated), fixed_latency_verified,
+      Vst3InstanceKey{.instance_id = engine_instance_id, .compatibility_key = key},
+      std::move(eligible), std::move(automated), fixed_latency_verified,
       std::move(qualified_blocks));
   auto factory = std::make_shared<FactoryState>(
       FactoryState{std::move(binding.effect), result.runtime_status, max_block_frames, tempo,
