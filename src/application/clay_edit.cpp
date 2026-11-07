@@ -19,6 +19,9 @@ constexpr double seconds_per_minute = 60.0;
 // Playback schedules at most this many notes in a project: an on and an off
 // each.
 constexpr std::size_t max_followed_notes = project::max_midi_events_per_project / 2;
+// The most pattern repeats' notes one follow walks, under the clip or near
+// it, so the walk ends however short the pattern.
+constexpr std::size_t max_walked_notes = project::max_midi_events_per_project;
 // Division names and their steps per quarter note.
 constexpr std::array<std::pair<std::string_view, int>, 4> divisions{
     {{"1/4", 1}, {"1/8", 2}, {"1/16", 4}, {"1/32", 8}}};
@@ -204,12 +207,12 @@ std::vector<clay_dsp::TargetNote> follow_targets(const project::Snapshot& snapsh
       return std::nullopt;
     return time.source_frame(static_cast<double>(sample.value().value));
   };
-  std::size_t followed = 0;
+  std::size_t walked = 0;
   for (const auto& clip : track->midi_clips) {
     const auto* musical = std::get_if<project::MusicalInterval>(&clip.placement);
     const auto pattern = clip.pattern_length.value;
     // A pattern whose notes all lie past its end is silent; every other
-    // repeat follows at least one note, so the budget below bounds the walk.
+    // repeat walks at least one note, so the walk budget below bounds it.
     if (musical == nullptr || pattern <= 0 ||
         std::ranges::none_of(clip.notes,
                              [pattern](const auto& note) { return note.start.value < pattern; }))
@@ -233,8 +236,9 @@ std::vector<clay_dsp::TargetNote> follow_targets(const project::Snapshot& snapsh
         const auto note_start = origin + note.start.value;
         if (note_start >= pattern_end)
           continue;
-        // Playback schedules no more notes than this, so neither does Clay.
-        if (++followed > max_followed_notes) {
+        // The walk is bounded on its own, so notes outside the clip cannot
+        // use up the targets.
+        if (++walked > max_walked_notes) {
           std::ranges::sort(targets, {}, &clay_dsp::TargetNote::start);
           return targets;
         }
@@ -247,6 +251,11 @@ std::vector<clay_dsp::TargetNote> follow_targets(const project::Snapshot& snapsh
           continue;
         targets.push_back({static_cast<std::int64_t>(std::llround(*start)),
                            static_cast<std::int64_t>(std::llround(*stop)), note.key});
+        // Playback schedules no more notes than this, so neither does Clay.
+        if (targets.size() == max_followed_notes) {
+          std::ranges::sort(targets, {}, &clay_dsp::TargetNote::start);
+          return targets;
+        }
       }
       if (!clip.loop)
         break;

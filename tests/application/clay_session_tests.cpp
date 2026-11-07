@@ -450,12 +450,10 @@ void follow_targets_are_bounded() {
   const auto tiny = looping(one_tick, one_tick);
   REQUIRE_TRUE(!tiny.empty(), "a one-tick pattern is followed");
   REQUIRE_LE(tiny.size(), playback_notes, "a one-tick pattern is bounded by playback's notes");
-  const auto start_tick = take(time.tick(static_cast<double>(time.first_source_frame()))).value;
-  const auto end_tick = take(time.tick(static_cast<double>(time.end_source_frame()))).value;
-  std::size_t repeats = 0;
-  for (std::int64_t origin = 0; origin < end_tick; origin += quarter)
-    if (origin + quarter / 2 > start_tick)
-      ++repeats;
+  // The sung clip lasts 3 x (0.4 + 0.15) + 0.15 = 1.8 s from the song's
+  // start; at the project's 120 BPM a quarter is 0.5 s, so repeats start at
+  // 0, 0.5, 1.0 and 1.5 s.
+  constexpr std::size_t repeats = 4;
   REQUIRE_EQ(looping(quarter, quarter / 2).size(), repeats,
              "a quarter-note loop yields one target per repeat under the clip");
 }
