@@ -541,6 +541,53 @@ void mono_returns_to_held_note() {
 
 // ---- Presets and real-time ---------------------------------------------------
 
+// The index of a choice parameter's option, by its label.
+double choice(std::string_view id, std::string_view label) {
+  const auto& choices = table().parameters[index(id)].choices;
+  const auto found = std::ranges::find(choices, label);
+  require(found != choices.end(), "choice exists");
+  return static_cast<double>(found - choices.begin());
+}
+
+// A mono LFO follows its rate routes from sources every voice shares: the
+// mod wheel doubling LFO 1's rate renders exactly as the doubled rate set
+// directly, and unlike the undoubled one.
+void mono_lfo_follows_rate_modulation() {
+  constexpr double slow_hz = 0.5;
+  constexpr double doubled_hz = 1.0;
+  // A quarter of the four-octave range: one octave, so double the rate.
+  constexpr double one_octave = 0.25;
+  constexpr double full_wheel = 1.0;
+  constexpr double vibrato_cents = 100.0;
+  constexpr std::size_t frames = 48'000;
+  constexpr std::uint8_t key = 69;
+  const auto patch = [&](double hz, bool routed) {
+    auto values = sine_patch();
+    values[index("prism.lfo1.mode")] = choice("prism.lfo1.mode", "Mono");
+    values[index("prism.lfo1.rate")] = hz;
+    values[index("prism.lfo1.vibrato")] = vibrato_cents;
+    values[index("prism.perf.wheel")] = full_wheel;
+    if (routed) {
+      values[index("prism.mod1.source")] = choice("prism.mod1.source", "Mod Wheel");
+      values[index("prism.mod1.target")] = choice("prism.mod1.target", "LFO 1 Rate");
+      values[index("prism.mod1.amount")] = one_octave;
+    }
+    auto runtime = make_runtime(values);
+    return render(*runtime, note(0, frames, key, 1), frames).left;
+  };
+  const auto routed = patch(slow_hz, true);
+  const auto direct = patch(doubled_hz, false);
+  const auto unrouted = patch(slow_hz, false);
+  double routed_error = 0.0;
+  double unrouted_change = 0.0;
+  for (std::size_t i = 0; i < frames; ++i) {
+    routed_error = std::max(routed_error, std::fabs(routed[i] - direct[i]));
+    unrouted_change = std::max(unrouted_change, std::fabs(unrouted[i] - direct[i]));
+  }
+  REQUIRE_LT(routed_error, tolerance::float_processing, "the wheel doubles the mono LFO's rate");
+  REQUIRE_GT(unrouted_change, tolerance::coarse, "the rate changes the vibrato");
+}
+
 void every_preset_renders_sane_audio() {
   for (const auto& p : table().presets) {
     const auto values = preset(p.name);
@@ -735,6 +782,7 @@ int main() {
     automation_lanes_are_validated_and_applied();
     legato_glides_on_one_voice();
     mono_returns_to_held_note();
+    mono_lfo_follows_rate_modulation();
     every_preset_renders_sane_audio();
     full_load_process_does_not_allocate();
     factory_presets_match_their_golden_fingerprints();

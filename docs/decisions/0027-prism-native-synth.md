@@ -25,7 +25,7 @@ Every MIDI track in a new project should sound great immediately. Prism is a cle
 | Filter | ZDF multimode: SVF LP, BP, HP and notch at 12 or 24 dB, plus a resonant ladder LP24. Cutoff 20 Hz–20 kHz on a log scale. Resonance 0–1, self-oscillating near 1. Pre-filter drive 0–24 dB, keytrack 0–100 %, envelope amount ±100 %, velocity→cutoff. |
 | Envelopes | Amp ADSR and filter/mod ADSR. A, D and R each run 0.5 ms–20 s. Curve shape from linear to exponential, and velocity sensitivity. |
 | LFO ×2 | Sine, triangle, saw, square or S&H. Free rate of 0.01–40 Hz, or tempo-synced from 1/32 to 8 bars with dotted and triplet options. Retrigger or free-running, fade-in, mono or per-voice. |
-| Mod matrix | 4 slots with a bipolar amount. Sources: env 2, LFO 1/2, velocity, mod wheel, aftertouch, keytrack, pitch bend. Destinations: pitch (all, osc 1, osc 2), PW, oscillator mix, FM depth, cutoff, resonance, drive, level, pan, LFO rate. |
+| Mod matrix | 4 slots with a bipolar amount. Sources: env 2, LFO 1/2, velocity, mod wheel, aftertouch, keytrack, pitch bend. Destinations: pitch (all, osc 1, osc 2), PW, oscillator mix, FM depth, cutoff, resonance, drive, level, pan, LFO rate. A mono LFO's rate follows only the sources every voice shares: mod wheel, aftertouch, pitch bend and a mono LFO. |
 | Hard-wired | Env 2→cutoff; LFO 1→pitch (vibrato, scaled by the mod wheel); LFO 2→cutoff/PW knobs. |
 | In-synth FX | Post drive (soft clip, 2× oversampled). Stereo Juno-style chorus with modes I, II and I+II, and a mix control. |
 | Output | Level −inf to +6 dB, DC blocker, safety soft limiter. |

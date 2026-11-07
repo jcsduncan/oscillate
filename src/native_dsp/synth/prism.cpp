@@ -147,6 +147,10 @@ enum Target : std::size_t {
 static_assert(source_count == prism_table::mod_sources.size());
 static_assert(target_count == prism_table::mod_targets.size());
 
+constexpr std::size_t mod_slot_count = 4;
+// A full-scale route to an LFO's rate moves it this many octaves.
+constexpr double lfo_rate_octaves = 4.0;
+
 constexpr double max_cutoff_hz = 20'000.0;
 constexpr double min_cutoff_hz = 20.0;
 constexpr double voice_gain = 0.4; // Headroom for stacked voices; the output knee catches the rest.
@@ -634,7 +638,46 @@ private:
     return hz * rate_scale / control_rate_;
   }
 
+  // A mono LFO's rate scale from the matrix. One LFO serves every voice, so
+  // only sources that are the same for every voice move it: the mod wheel,
+  // pressure, pitch bend and a mono LFO (itself or the other one, as it was
+  // last tick). Per-voice sources have no single value to follow.
+  [[nodiscard]] double global_rate_mod(std::size_t lfo) const noexcept {
+    const auto target = lfo == 0 ? dst_lfo1_rate : dst_lfo2_rate;
+    double mod = 0.0;
+    for (std::size_t slot = 0; slot < mod_slot_count; ++slot) {
+      const std::size_t base = p::mod1_source + slot * p::mod_stride;
+      if (static_cast<std::size_t>(values_[base + 1]) != target)
+        continue;
+      double source = 0.0;
+      switch (static_cast<std::size_t>(values_[base])) {
+      case src_wheel:
+        source = values_[p::wheel];
+        break;
+      case src_pressure:
+        source = values_[p::pressure];
+        break;
+      case src_bend:
+        source = values_[p::bend];
+        break;
+      case src_lfo1:
+        source = topology_.lfo1_poly ? 0.0 : faded(global_lfo_[0], 0);
+        break;
+      case src_lfo2:
+        source = topology_.lfo2_poly ? 0.0 : faded(global_lfo_[1], 1);
+        break;
+      default:
+        break;
+      }
+      mod += values_[base + 2] * source;
+    }
+    return std::exp2(lfo_rate_octaves * mod);
+  }
+
   void advance_global_lfos() noexcept {
+    // Both rates come from last tick's values, so neither LFO sees the other
+    // already advanced.
+    const std::array rate_mod{global_rate_mod(0), global_rate_mod(1)};
     for (std::size_t i = 0; i < 2; ++i) {
       auto& state = global_lfo_[i];
       state.lfo.set_shape(
@@ -646,7 +689,7 @@ private:
         const auto division = static_cast<std::size_t>(values_[p::lfo1_division + base]);
         state.value = state.lfo.next_at(sync_cycles(division, transport_));
       } else {
-        state.value = state.lfo.next(lfo_increment(i, 1.0));
+        state.value = state.lfo.next(lfo_increment(i, rate_mod[i]));
       }
       state.fade_age += 1.0 / control_rate_;
     }
@@ -696,7 +739,7 @@ private:
     source[src_amp] = voice.amp.value();
 
     std::array<double, target_count> mod{};
-    for (std::size_t slot = 0; slot < 4; ++slot) {
+    for (std::size_t slot = 0; slot < mod_slot_count; ++slot) {
       const std::size_t base = p::mod1_source + slot * p::mod_stride;
       const auto from = static_cast<std::size_t>(v[base]);
       const auto to = static_cast<std::size_t>(v[base + 1]);
@@ -704,8 +747,8 @@ private:
         mod[to] += v[base + 2] * source[from];
       }
     }
-    voice.lfo[0].rate_mod = std::exp2(4.0 * mod[dst_lfo1_rate]);
-    voice.lfo[1].rate_mod = std::exp2(4.0 * mod[dst_lfo2_rate]);
+    voice.lfo[0].rate_mod = std::exp2(lfo_rate_octaves * mod[dst_lfo1_rate]);
+    voice.lfo[1].rate_mod = std::exp2(lfo_rate_octaves * mod[dst_lfo2_rate]);
 
     // Pitch.
     const double bend_st = v[p::bend] * (v[p::bend] >= 0.0 ? v[p::bend_up] : v[p::bend_down]);
