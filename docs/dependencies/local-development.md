@@ -4,7 +4,7 @@ This repository runs its quality gates locally. The former CI workflow was remov
 
 ## Distribution packages
 
-On Ubuntu 26.04 x86-64, install the core packages listed in the [README](../../README.md#build-and-run). They provide CMake, Ninja, GCC, `pkgconf`, [PipeWire development files](https://packages.ubuntu.com/resolute/libpipewire-0.3-dev), OpenSSL 3 and [nlohmann/json development files](https://packages.ubuntu.com/resolute/nlohmann-json3-dev). `cmake --preset dev` checks their CMake and pkg-config identities before compilation.
+On Ubuntu 26.04 x86-64, install the core packages listed in the [README](../../README.md#build). They provide CMake, Ninja, GCC, `pkgconf`, [PipeWire development files](https://packages.ubuntu.com/resolute/libpipewire-0.3-dev), OpenSSL 3 and [nlohmann/json development files](https://packages.ubuntu.com/resolute/nlohmann-json3-dev). `cmake --preset dev` checks their CMake and pkg-config identities before compilation.
 
 For `quick`, install [qt6-base-dev](https://packages.ubuntu.com/resolute/qt6-base-dev) and [qt6-declarative-dev](https://packages.ubuntu.com/resolute/qt6-declarative-dev). The latter supplies Qt Quick and QML development files; CMake requires Qt 6.10 or newer. For optional encoded audio, source/export resampling, or JACK support, install `libsndfile1-dev`, `libsamplerate0-dev`, or `libjack-jackd2-dev` respectively. `BUILD_TESTING=ON` uses Python 3 for starter-sound fixtures.
 

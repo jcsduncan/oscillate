@@ -1,7 +1,7 @@
 # Codecov settings. CI uploads the core `coverage` preset report (src/ and
 # include/, see scripts/ci/coverage.sh) with OIDC; there is no upload token.
 # The hard floor is enforced in CI by scripts/check-coverage.sh
-# (--fail-under-line 90; 90.81% measured, docs/quality/full-coverage-baseline.md).
+# (--fail-under-line 90).
 # Keep `target` below in step with that floor.
 codecov:
   require_ci_to_pass: true

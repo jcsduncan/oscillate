@@ -1,16 +1,16 @@
 # Documentation map
 
-Start with the current product and engineering contracts. Dated measurement
-pages are evidence for individual decisions; they are not a feature list.
+Product and engineering contracts. Measurement pages are evidence cited by
+ADRs and specs.
 
 | Need | Read |
 | --- | --- |
 | Product scope and release acceptance | [PRD](PRD.md) |
 | Module boundaries and real-time contracts | [HLD](HLD.md) |
 | Observable behaviour and acceptance tests | [Functional specs](specs/README.md) |
-| What is built and what is open | [Implementation status](IMPLEMENTATION_PLAN.md) |
+| Open work | [Project board](https://github.com/users/jcsduncan/projects/3) |
 | Cross-component decisions | [ADR index](decisions/README.md) |
-| Build, test and contribution rules | [README](../README.md#build-and-run), [AGENTS.md](../AGENTS.md), [CONTRIBUTING.md](../CONTRIBUTING.md) |
+| Build, test and contribution rules | [README](../README.md#build), [AGENTS.md](../AGENTS.md), [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Environment variables and user files | [Environment](environment.md) |
 
 ## Evidence and reference
@@ -19,8 +19,7 @@ pages are evidence for individual decisions; they are not a feature list.
   measurements that ADRs and specs cite. Each page names its build, hardware
   and workload; the numbers describe the code at that time.
 - [Qualification](qualification/) describes the fuzz and process-kill
-  procedures; [quality](quality/) holds the coverage baseline and the
-  [code-health](quality/code-health.md) backlog.
+  procedures.
 - [Dependencies](dependencies/) and [third-party notices](../third_party/notices/)
   record licensing and package investigations. Distribution approval is
   separate from a successful local build.

@@ -52,5 +52,5 @@ when there is no Music folder).
 
 CMake options (`OSCILLATE_BUILD_*`, `OSCILLATE_VST3_SDK_ROOT` and so on) are
 configure-time settings, not environment variables. They are described in the
-README's [build section](../README.md#build-and-run) and
+README's [build section](../README.md#build) and
 [local dependency setup](dependencies/local-development.md).

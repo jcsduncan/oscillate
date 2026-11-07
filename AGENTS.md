@@ -2,9 +2,8 @@
 
 These rules apply to the whole repository, for human contributors and coding
 assistants alike. Read the [PRD](docs/PRD.md), [HLD](docs/HLD.md),
-[spec index](docs/specs/README.md) and
-[implementation status](docs/IMPLEMENTATION_PLAN.md) before changing a
-component. [CONTRIBUTING.md](CONTRIBUTING.md) covers bug reports and proposals.
+and [spec index](docs/specs/README.md) before changing a component.
+Open work is tracked on the [project board](https://github.com/users/jcsduncan/projects/3). [CONTRIBUTING.md](CONTRIBUTING.md) covers bug reports and proposals.
 
 ## Source of truth and scope
 
@@ -43,7 +42,7 @@ component. [CONTRIBUTING.md](CONTRIBUTING.md) covers bug reports and proposals.
 ## Commands
 
 Install dependencies and build the application as described in the README's
-[Build and run](README.md#build-and-run) section; optional dependencies are in
+[Build](README.md#build) section; optional dependencies are in
 [local dependency setup](docs/dependencies/local-development.md). Use
 `CMakeUserPresets.json` (ignored by Git) for machine-specific paths.
 
