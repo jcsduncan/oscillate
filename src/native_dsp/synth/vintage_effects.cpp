@@ -18,7 +18,7 @@ void DelayLine::prepare(std::size_t max_frames) {
 }
 
 void DelayLine::reset() noexcept {
-  std::fill(buffer_.begin(), buffer_.end(), 0.0F);
+  std::ranges::fill(buffer_, 0.0F);
   write_ = 0;
 }
 

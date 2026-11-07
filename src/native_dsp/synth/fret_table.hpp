@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Data tables keep one entry per row; clang-format would split them.
@@ -24,11 +25,11 @@ using namespace std::string_view_literals;
 // In fret::feel::Style order.
 inline constexpr std::array styles{"As drawn"sv, "Funk"sv, "Driving"sv, "Laid back"sv};
 inline constexpr std::array ghost_modes{"Off"sv, "Auto"sv};
-enum GhostMode : int { ghosts_off, ghosts_auto };
+enum GhostMode : std::uint8_t { ghosts_off, ghosts_auto };
 // Auto lets Feel choose; the rest force one articulation on every note.
 inline constexpr std::array articulations{"Auto"sv, "Pluck"sv, "Staccato"sv, "Ghost"sv,
                                           "Behind the bridge"sv};
-enum ArticulationMode : int { auto_articulation, pluck, staccato, ghost, bridge };
+enum ArticulationMode : std::uint8_t { auto_articulation, pluck, staccato, ghost, bridge };
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
 inline constexpr double g = 0.05;

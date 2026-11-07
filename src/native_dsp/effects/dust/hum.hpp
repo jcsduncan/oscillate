@@ -59,10 +59,10 @@ struct HumTables {
 
 class Hum {
 public:
-  void prepare(double rate, double reference);
+  void prepare(LayerFormat format);
   void reseed(std::uint64_t key) noexcept { rng_.seed(key); }
   void reset() noexcept;
-  void set(std::span<const double> v, double tone, double width) noexcept;
+  void set(std::span<const double> v, LayerShape shape) noexcept;
   [[nodiscard]] Pair next(std::uint64_t frame) noexcept {
     // Phase from the frame: exact however long it plays.
     const double phase = std::fmod(static_cast<double>(frame) * hz_, rate_) / rate_;

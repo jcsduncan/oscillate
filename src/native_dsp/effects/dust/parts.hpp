@@ -21,6 +21,25 @@
 // age (age.hpp), the duck (duck.hpp) and the kernel (dust.cpp) build on them.
 namespace oscillate::native_dsp::effects::dust::detail {
 
+// What a layer is built for: the sample rate, and the level its noise is
+// calibrated to.
+struct LayerFormat {
+  double rate = 0.0;
+  double reference = 0.0;
+};
+
+// A layer's two shared controls.
+struct LayerShape {
+  double tone = 0.0;
+  double width = 0.0;
+};
+
+// How a layer's change glides: over `steps` frames, at the song's beat.
+struct LayerTiming {
+  double steps = 0.0;
+  double seconds_per_beat = 0.0;
+};
+
 namespace t = dust_table;
 using t::index_of;
 

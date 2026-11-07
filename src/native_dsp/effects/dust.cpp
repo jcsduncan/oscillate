@@ -112,14 +112,15 @@ class DustKernel final : public EffectKernel {
 public:
   DustKernel(std::span<const double> values, double rate)
       : rate_(rate), latency_(latency_of(rate)), reference_(gain_of(layer_reference_dbfs)) {
-    vinyl_.prepare(rate, reference_);
-    tape_.prepare(rate, reference_);
-    hum_.prepare(rate, reference_);
-    radio_.prepare(rate, reference_);
-    rain_.prepare(rate, reference_);
-    wind_.prepare(rate, reference_);
-    room_.prepare(rate, reference_);
-    machine_.prepare(rate, reference_);
+    const LayerFormat format{.rate = rate, .reference = reference_};
+    vinyl_.prepare(format);
+    tape_.prepare(format);
+    hum_.prepare(format);
+    radio_.prepare(format);
+    rain_.prepare(format);
+    wind_.prepare(format);
+    room_.prepare(format);
+    machine_.prepare(format);
     age_.prepare(rate, latency_);
     duck_.prepare(rate);
     fade_frames_ = layer_fade_seconds * rate;
@@ -227,14 +228,11 @@ private:
     double held = 0.0;
     std::uint32_t left = 0;
     void add(double peak, std::uint32_t frames, std::uint32_t hold) noexcept {
-      if (peak >= held) {
+      if (peak >= held || left <= frames) {
         held = peak;
         left = hold;
-      } else if (left > frames) {
-        left -= frames;
       } else {
-        held = peak;
-        left = hold;
+        left -= frames;
       }
     }
   };
@@ -264,33 +262,32 @@ private:
       }
       layer.active = sounding;
       if (sounding) {
-        const double tone = v[on + t::tone_offset];
-        const double width = v[on + t::width_offset];
+        const LayerShape shape{.tone = v[on + t::tone_offset], .width = v[on + t::width_offset]};
         switch (static_cast<Layer>(l)) {
         case Layer::vinyl:
-          vinyl_.set(v, tone, width);
+          vinyl_.set(v, shape);
           frames_per_rev_ = vinyl_.frames_per_revolution(v);
           break;
         case Layer::tape:
-          tape_.set(v, tone, width);
+          tape_.set(v, shape);
           break;
         case Layer::hum:
-          hum_.set(v, tone, width);
+          hum_.set(v, shape);
           break;
         case Layer::radio:
-          radio_.set(v, tone, width, steps, seconds_per_beat);
+          radio_.set(v, shape, {.steps = steps, .seconds_per_beat = seconds_per_beat});
           break;
         case Layer::rain:
-          rain_.set(v, tone, width);
+          rain_.set(v, shape);
           break;
         case Layer::wind:
-          wind_.set(v, tone, width, steps, jump);
+          wind_.set(v, shape, steps, jump);
           break;
         case Layer::room:
-          room_.set(v, tone, width);
+          room_.set(v, shape);
           break;
         case Layer::machine:
-          machine_.set(v, tone, width);
+          machine_.set(v, shape);
           break;
         }
       }
@@ -584,7 +581,7 @@ std::unique_ptr<EffectKernel> create_kernel(std::span<const double> values, doub
 std::uint64_t tail_frames(std::span<const double> values, double sample_rate) {
   std::uint64_t frames =
       static_cast<std::uint64_t>(std::ceil((layer_fade_seconds + declick_seconds) * sample_rate)) +
-      2U * latency_of(sample_rate);
+      std::uint64_t{2} * latency_of(sample_rate);
   if (values[t::layer_on[static_cast<std::size_t>(Layer::rain)]] != 0.0) {
     frames += expanse::engine().tail_frames(room_values(), sample_rate);
   }

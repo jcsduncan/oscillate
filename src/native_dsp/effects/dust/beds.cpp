@@ -17,7 +17,9 @@ constexpr std::uint64_t machine_salt = 0x3AC41E5ULL;
 
 } // namespace
 
-void Wind::prepare(double rate, double reference) {
+void Wind::prepare(LayerFormat format) {
+  const double rate = format.rate;
+  const double reference = format.reference;
   rate_ = rate;
   reference_ = reference;
   for (auto& f : buffet_) {
@@ -41,8 +43,9 @@ void Wind::reset() noexcept {
   jump_next_ = true;
 }
 
-void Wind::set(std::span<const double> v, double tone, double width, double steps,
-               bool jump) noexcept {
+void Wind::set(std::span<const double> v, LayerShape shape, double steps, bool jump) noexcept {
+  const double tone = shape.tone;
+  const double width = shape.width;
   const double strength = v[p::wind_strength];
   const double gusts = v[p::wind_gusts];
   gust_seconds_ = wind_gust_min_seconds + wind_gust_span_seconds * (1.0 - gusts);
@@ -75,7 +78,9 @@ void Wind::set(std::span<const double> v, double tone, double width, double step
   width_.set(width);
 }
 
-void Room::prepare(double rate, double reference) {
+void Room::prepare(LayerFormat format) {
+  const double rate = format.rate;
+  const double reference = format.reference;
   rate_ = rate;
   reference_ = reference;
   for (std::size_t c = 0; c < channels; ++c) {
@@ -105,7 +110,9 @@ void Room::reset() noexcept {
   waver_.reset();
 }
 
-void Room::set(std::span<const double> v, double tone, double width) noexcept {
+void Room::set(std::span<const double> v, LayerShape shape) noexcept {
+  const double tone = shape.tone;
+  const double width = shape.width;
   const double size = v[p::room_size];
   if (size != size_ || tone != tone_) {
     size_ = size;
@@ -130,7 +137,9 @@ void Room::set(std::span<const double> v, double tone, double width) noexcept {
   width_.set(width);
 }
 
-void Machine::prepare(double rate, double reference) {
+void Machine::prepare(LayerFormat format) {
+  const double rate = format.rate;
+  const double reference = format.reference;
   rate_ = rate;
   reference_ = reference;
   for (auto& f : gurgle_) {
@@ -177,7 +186,9 @@ void Machine::reset() noexcept {
   cycle_tracking_ = false;
 }
 
-void Machine::set(std::span<const double> v, double tone, double width) noexcept {
+void Machine::set(std::span<const double> v, LayerShape shape) noexcept {
+  const double tone = shape.tone;
+  const double width = shape.width;
   const auto type = std::min(static_cast<int>(v[p::machine_type]), static_cast<int>(t::servers));
   const double speed = v[p::machine_speed];
   const auto mains = choice_of(v[p::hum_mains], mains_hz.size());

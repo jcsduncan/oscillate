@@ -201,6 +201,7 @@ public:
     meter(input_, audio);
     input_spectrum_.push(audio);
     // The classic runtime reads only the state generation from its context.
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access): eq_ is engaged from construction.
     eq_->process(audio, engine::BlockContext{0, generation_});
     meter(output_, audio);
     output_spectrum_.push(audio);
@@ -272,6 +273,7 @@ private:
 
   // A fresh classic runtime for the wanted stages in band order, with no
   // history.
+  // NOLINTNEXTLINE(bugprone-exception-escape): only bad_alloc can escape preparing; fatal here.
   void rebuild() noexcept {
     const Cascade fresh = canonical(wanted_);
     auto prepared = prepare(fresh, rate_);
@@ -288,6 +290,7 @@ private:
   // to it (a cascade of biquads is order-free), and otherwise the
   // coefficients glide. A refused offer (the previous change still
   // transitioning) is retried at the next tick.
+  // NOLINTNEXTLINE(bugprone-exception-escape): only bad_alloc can escape preparing; fatal here.
   void advance() noexcept {
     std::optional<std::size_t> removed; // a cascade position
     for (std::size_t i = 0; i < cascade_.size && !removed; ++i) {
@@ -337,8 +340,10 @@ private:
       return;
     }
     const std::uint64_t revision = revision_ + 1;
+    // NOLINTBEGIN(bugprone-unchecked-optional-access): eq_ is engaged from construction.
     const bool offered = changed ? eq_->offer_band_change(prepared.value(), *changed, revision)
                                  : eq_->offer_prepared(prepared.value(), revision);
+    // NOLINTEND(bugprone-unchecked-optional-access)
     if (!offered) {
       return;
     }

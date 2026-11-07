@@ -73,7 +73,7 @@ bool ParameterControl::push(std::span<const double> values, std::uint64_t revisi
     return false;
   }
   auto& entry = mailbox_->entries[write % Mailbox::capacity];
-  std::copy(values.begin(), values.end(), entry.values.begin());
+  std::ranges::copy(values, entry.values.begin());
   entry.revision = revision;
   mailbox_->write.store(write + 1, std::memory_order_release);
   return true;

@@ -140,10 +140,10 @@ struct DropVoice {
 
 class Rain {
 public:
-  void prepare(double rate, double reference);
+  void prepare(LayerFormat format);
   void reseed(std::uint64_t key) noexcept { rng_.seed(key); }
   void reset() noexcept;
-  void set(std::span<const double> v, double tone, double width) noexcept;
+  void set(std::span<const double> v, LayerShape shape) noexcept;
   [[nodiscard]] Pair next() noexcept {
     const auto& shape = rain_surfaces[surface_];
     if (rng_.unit() < drop_chance_) {

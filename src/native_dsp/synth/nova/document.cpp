@@ -147,10 +147,13 @@ prepare_document(const project::NativeSynthDocument& document, const SynthMedia&
   for (const auto& route : document.routes) {
     CompiledRoute compiled;
     compiled.slot = static_cast<std::uint16_t>(route.slot);
+    // validate_document above found every route's destination and sources.
+    // NOLINTBEGIN(bugprone-unchecked-optional-access)
     compiled.destination = static_cast<std::uint16_t>(*find_parameter(table, route.destination));
     compiled.source = static_cast<std::uint8_t>(*source_from_id(route.source));
     compiled.aux =
         route.aux.empty() ? aux_none : static_cast<std::uint8_t>(*source_from_id(route.aux));
+    // NOLINTEND(bugprone-unchecked-optional-access)
     compiled.bipolar = route.bipolar;
     compiled.targets_amount = route.destination.starts_with("nova.mod.");
     compiled.tension = static_cast<float>(route.tension);

@@ -234,7 +234,8 @@ public:
     voice.filter_type = as_int(values_[p::filter_type]);
     // Every random choice is seeded by the slot and the note's age, so live
     // playback and export scatter identically.
-    voice.cloud.reset(static_cast<std::uint32_t>(voice.slot * 7'919U + voice.age * 104'729U + 1U));
+    voice.cloud.reset(static_cast<std::uint32_t>(static_cast<std::uint64_t>(voice.slot * 7'919U) +
+                                                 voice.age * 104'729U + 1U));
     voice.noise.reset(static_cast<std::uint32_t>(voice.age * 2'654'435'761U + voice.slot + 1U));
     voice.buffer.reset();
     voice.wavetable.reset(0.0);
@@ -272,9 +273,10 @@ public:
       }
     }
     for (std::size_t i = 0; i < frames; ++i) {
-      double l = left[i];
-      double r = right[i];
-      declick_.add(l, r);
+      StereoSample frame{left[i], right[i]};
+      declick_.add(frame);
+      double l = frame.left;
+      double r = frame.right;
       const auto chorused = chorus_.process(l, r);
       const auto delayed = delay_.process(chorused.left, chorused.right);
       const auto wet = reverb_.process(delayed.left, delayed.right);
@@ -307,16 +309,16 @@ public:
       }
       const double head =
           static_cast<double>(voice.frozen ? voice.frozen_count : voice.buffer.count());
-      voice.cloud.for_each_grain([&](double position, double rate, bool reverse, double phase) {
+      voice.cloud.for_each_grain([&](const auto& grain) {
         if (grains == capacity) {
           return;
         }
         float* record = &out[telemetry::first_grain + grains * telemetry::stride];
         record[telemetry::key] = static_cast<float>(voice.key);
-        record[telemetry::behind] = static_cast<float>((head - position) / rate_);
-        record[telemetry::semitones] = static_cast<float>(12.0 * std::log2(rate));
-        record[telemetry::reverse] = reverse ? 1.0F : 0.0F;
-        record[telemetry::phase] = static_cast<float>(phase);
+        record[telemetry::behind] = static_cast<float>((head - grain.position) / rate_);
+        record[telemetry::semitones] = static_cast<float>(12.0 * std::log2(grain.rate));
+        record[telemetry::reverse] = grain.reverse ? 1.0F : 0.0F;
+        record[telemetry::phase] = static_cast<float>(grain.phase);
         record[telemetry::frozen] = voice.frozen ? 1.0F : 0.0F;
         ++grains;
       });

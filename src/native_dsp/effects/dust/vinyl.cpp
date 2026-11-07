@@ -37,7 +37,9 @@ PopShape draw_pop(Rng& rng, double alpha, double tone, double rate) noexcept {
   return pop_of_size(amplitude, tone, rate, rng);
 }
 
-void Vinyl::prepare(double rate, double reference) {
+void Vinyl::prepare(LayerFormat format) {
+  const double rate = format.rate;
+  const double reference = format.reference;
   rate_ = rate;
   reference_ = reference;
   for (auto& f : floor_hp_) {
@@ -82,7 +84,9 @@ void Vinyl::reset() noexcept {
   last_rotation_ = -1.0;
 }
 
-void Vinyl::set(std::span<const double> v, double tone, double width) noexcept {
+void Vinyl::set(std::span<const double> v, LayerShape shape) noexcept {
+  const double tone = shape.tone;
+  const double width = shape.width;
   const double crackle = v[p::vinyl_crackle];
   const double wear = v[p::vinyl_wear];
   const double rumble = v[p::vinyl_rumble];
