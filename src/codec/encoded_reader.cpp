@@ -8,6 +8,7 @@
 #include <cmath>
 #include <fcntl.h>
 #include <limits>
+#include <span>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <utility>
@@ -102,6 +103,36 @@ namespace {
   return static_cast<EncodedReader::IoState*>(opaque)->cursor;
 }
 
+// Whether `frame` exists in the decoded stream. libsndfile accepts a seek
+// past the real end, and a read there returns nothing.
+[[nodiscard]] bool decodes_frame(SNDFILE* handle, sf_count_t frame, std::span<float> one_frame) {
+  return sf_seek(handle, frame, SEEK_SET) == frame &&
+         sf_readf_float(handle, one_frame.data(), 1) == 1;
+}
+
+// libsndfile takes an MP3's length from its Xing/Info header. Without one it
+// estimates the length from the byte count and bitrate, counting ID3 tags and
+// the encoder's padding as audio, so the estimate can run past the last
+// decodable frame. The true length is the first frame that does not decode.
+[[nodiscard]] sf_count_t decodable_frames(SNDFILE* handle, sf_count_t reported,
+                                          std::span<float> one_frame) {
+  if (decodes_frame(handle, reported - 1, one_frame))
+    return reported;
+  if (!decodes_frame(handle, 0, one_frame))
+    return 0;
+  // Frame `low` decodes and frame `high` does not.
+  sf_count_t low = 0;
+  sf_count_t high = reported - 1;
+  while (high - low > 1) {
+    const auto middle = low + (high - low) / 2;
+    if (decodes_frame(handle, middle, one_frame))
+      low = middle;
+    else
+      high = middle;
+  }
+  return high;
+}
+
 [[nodiscard]] Result<EncodedFormat> classify_format(int format) {
   switch (format & SF_FORMAT_TYPEMASK) {
   case SF_FORMAT_WAV:
@@ -194,8 +225,18 @@ Result<EncodedReader> EncodedReader::open_fd(int fd) {
     return Result<EncodedReader>::failure(
         {ErrorCode::unsupported, "Unsupported encoded audio rate, channel count or length"});
   }
+  const auto frames =
+      format.value() == EncodedFormat::mp3
+          ? decodable_frames(reader.handle_, raw_info.frames,
+                             std::span(reader.scratch_).first(static_cast<std::size_t>(
+                                 raw_info.channels)))
+          : raw_info.frames;
+  if (frames <= 0) {
+    return Result<EncodedReader>::failure(
+        {ErrorCode::corrupt_data, "Encoded audio source has no decodable frames"});
+  }
   reader.info_ = {format.value(), static_cast<std::uint64_t>(metadata.st_size),
-                  static_cast<std::uint64_t>(raw_info.frames),
+                  static_cast<std::uint64_t>(frames),
                   static_cast<std::uint32_t>(raw_info.samplerate),
                   static_cast<std::uint32_t>(raw_info.channels)};
   return Result<EncodedReader>::success(std::move(reader));

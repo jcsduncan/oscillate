@@ -286,6 +286,38 @@ void key_match_drops_a_replaced_sessions_result() {
           "a replaced session's key analysis landed on the copy that replaced it");
   require(analyses.load() == 1, "a clip queued in the replaced session was analysed in the copy");
 }
+// A dropped clip whose analysis finds no key is offered nothing and is not
+// analysed again: re-queueing it stored the same result in a new revision
+// every poll, for as long as the clip existed.
+void key_match_stops_after_a_keyless_result() {
+  Fixture fixture;
+  require(fixture.session->song().set_project_key(song_key).has_value(), "song key");
+  const auto clip = fixture.session->snapshot().tracks.front().clips.front().id;
+  const auto before = fixture.session->snapshot().revision;
+  std::atomic<int> analyses{0};
+  int commits = 0;
+  quick::KeyMatchController match(
+      [&] { return fixture.session.get(); }, [&] { return fixture.root; }, [] { return true; },
+      [](const QString&) {}, [&] { ++commits; },
+      [&](const auto&, const project::SourceRecord& source, std::uint64_t generation, const auto&) {
+        analyses.fetch_add(1);
+        auto keyless = suggestion(source, generation, false);
+        keyless.estimate.key.reset();
+        keyless.estimate.confidence = 0.0;
+        keyless.estimate.compatible_keys.clear();
+        return foundation::Result<application::KeyCacheResult>::success(std::move(keyless));
+      });
+  match.dropped(clip);
+  require(match.busy(), "the drop did not start key analysis");
+  QElapsedTimer waited;
+  waited.start();
+  while (match.busy() && waited.elapsed() < worker_wait_ms)
+    QTest::qWait(wait_step_ms);
+  require(!match.busy(), "a keyless clip was analysed again and again");
+  require(analyses.load() == 1 && commits == 1 &&
+              fixture.session->snapshot().revision == before + 1 && match.hint().isEmpty(),
+          "a keyless clip's analysis was not stored exactly once");
+}
 } // namespace
 
 int main(int argc, char** argv) {
@@ -295,6 +327,7 @@ int main(int argc, char** argv) {
     deselection_cancels_late_result();
     project_revision_cancels_late_result();
     key_match_drops_a_replaced_sessions_result();
+    key_match_stops_after_a_keyless_result();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return 1;
