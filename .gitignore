@@ -43,7 +43,6 @@ coverage.html
 
 # Local projects and assistant state
 /examples/afterglow-circuit/
-/.claude/
 
 # MkDocs output
 /site/
