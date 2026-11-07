@@ -447,13 +447,12 @@ void every_segmented_choice_fills_its_selection() {
       require(control != nullptr, name + ": " + control_name + " exists");
       std::vector<QQuickItem*> cells;
       cells_in(control, cells);
-      const auto chosen = std::count_if(cells.begin(), cells.end(), [](QQuickItem* cell) {
-        return cell->property("on").toBool();
-      });
+      const auto chosen = std::ranges::count_if(
+          cells, [](QQuickItem* cell) { return cell->property("on").toBool(); });
       require(cells.size() >= 2 && chosen == 1,
               name + ": " + control_name + " has one chosen cell among several");
-      const auto on = *std::find_if(cells.begin(), cells.end(),
-                                    [](QQuickItem* cell) { return cell->property("on").toBool(); });
+      const auto on = *std::ranges::find_if(
+          cells, [](QQuickItem* cell) { return cell->property("on").toBool(); });
       const auto on_fill = on->property("selectionFill").value<QColor>();
       const auto on_ink = on->property("selectionInk").value<QColor>();
       require(on_fill.alpha() == opaque_alpha,
