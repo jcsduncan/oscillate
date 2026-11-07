@@ -39,9 +39,10 @@ saved VST3 effect on one audio track and preserves it across compatible held
 route edits, with initial latency fed to route PDC. The serial graph remains a
 separate processing path. Multiple inserts, runtime replacement, dynamic
 latency, automation events, UI attachment and offline VST3 export remain
-separate composition work. Saved parameter
-reference values are validated and reported by binding but are not yet applied
-to the controller. The synthetic gain fixture proves verified binding, stateful
+separate composition work. Saved parameter references follow the binding's two
+paths: with no component state they are staged on the controller and flushed
+to the processor before the first block; with component state they are
+validated and reported but not layered over it. The synthetic gain fixture proves verified binding, stateful
 sample history across a graph publication, explicit replacement fade, missing
 scan fallback, process-failure muting and callback allocation freedom. It is
 not evidence of broad third-party compatibility or the 32-track release gate.
