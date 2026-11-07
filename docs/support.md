@@ -36,9 +36,11 @@ opening a public issue.
    performance trace** in the command palette, reproduce the problem, then
    **Stop and save the performance trace**, then save diagnostics with the
    latest performance trace (it becomes available once the trace has
-   saved; reopen the palette if it was open during the save). With
-   `OSCILLATE_TRACE` set, the trace is saved to that path instead and is not
-   in the bundle: attach that file separately.
+   saved; reopen the palette if it was open during the save).
+   With `OSCILLATE_TRACE` set, recording starts at launch and saves to that
+   path: reproduce the problem, stop the recording, save diagnostics without
+   a trace, and attach the trace file separately. That file is not redacted:
+   it can contain your home path and project, track and file names.
 4. When you can, a small project that shows the problem. Do not attach media
    you are not allowed to share.
 
