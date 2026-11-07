@@ -15,7 +15,7 @@ PFFFT is vendored in `third_party/pffft` and needs no setup; see the [PFFFT inve
 
 ## Local quality tools
 
-The repository's formatting baseline is clang-format 23.1.3; the current static-analysis and coverage tools are clang-tidy 22.1.8 and gcovr 8.6. A project-local virtual environment reproduces those tool versions without changing system LLVM packages:
+`scripts/qa-requirements.txt` pins clang-format, clang-tidy and gcovr. A project-local virtual environment installs those versions without changing system LLVM packages:
 
 ```sh
 python3 -m venv .venv
