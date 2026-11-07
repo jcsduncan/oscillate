@@ -337,6 +337,16 @@ void hashed_binding(const plugins::ScanResult& receipt, const RuntimePaths& path
                                                           hashed_block);
   REQUIRE_EQ(touched.status, plugins::Vst3BindingStatus::load_failed,
              "a binary modified after hashing was loaded");
+
+  // A rewrite that restores the modification time still changes the
+  // status change time; a permission write alone stands in for it here.
+  const auto rehashed_again = plugins::hash_vst3_binary(bundle);
+  REQUIRE_TRUE(rehashed_again.has_value(), "touched binary did not hash");
+  fs::permissions(binary, fs::status(binary).permissions());
+  auto status_changed = plugins::bind_hashed_vst3_project_effect(instance, fresh, *rehashed_again,
+                                                                 hashed_rate, hashed_block);
+  REQUIRE_EQ(status_changed.status, plugins::Vst3BindingStatus::load_failed,
+             "a binary whose status changed after hashing was loaded");
   REQUIRE_EQ(std::ranges::count(log_events(paths.log_path), "module-entry"), entries,
              "a refused binary reached module entry");
 }

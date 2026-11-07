@@ -25,6 +25,10 @@ struct Vst3BinaryStamp {
   std::uint64_t byte_size{0};
   std::int64_t modified_seconds{0};
   std::int64_t modified_nanoseconds{0};
+  // Status change time: any write or metadata change sets it, and it cannot
+  // be set back.
+  std::int64_t changed_seconds{0};
+  std::int64_t changed_nanoseconds{0};
   friend bool operator==(const Vst3BinaryStamp&, const Vst3BinaryStamp&) = default;
 };
 

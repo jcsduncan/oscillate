@@ -52,7 +52,9 @@ std::optional<ResolvedVst3Binary> resolve_vst3_binary(const std::filesystem::pat
                       .inode = static_cast<std::uint64_t>(status.st_ino),
                       .byte_size = static_cast<std::uint64_t>(status.st_size),
                       .modified_seconds = static_cast<std::int64_t>(status.st_mtim.tv_sec),
-                      .modified_nanoseconds = static_cast<std::int64_t>(status.st_mtim.tv_nsec)}};
+                      .modified_nanoseconds = static_cast<std::int64_t>(status.st_mtim.tv_nsec),
+                      .changed_seconds = static_cast<std::int64_t>(status.st_ctim.tv_sec),
+                      .changed_nanoseconds = static_cast<std::int64_t>(status.st_ctim.tv_nsec)}};
 }
 
 std::optional<Vst3HashedBinary> hash_resolved_vst3_binary(const std::filesystem::path& bundle) {

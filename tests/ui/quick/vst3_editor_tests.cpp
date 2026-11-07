@@ -10,6 +10,7 @@
 #include <QQmlContext>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QSignalSpy>
 #include <QTest>
 #include <QTimer>
 
@@ -910,8 +911,6 @@ struct HashGate {
 constexpr auto hash_gate_limit = std::chrono::seconds(30);
 // A catalogue scan of the copied fixture.
 constexpr int catalogue_scan_timeout_ms = 15'000;
-// Editor polls a dropped result would need to reach the editor.
-constexpr int dropped_result_wait_ms = 200;
 
 void editor_hashes_binary_off_the_gui_thread() {
   Directory directory;
@@ -1053,10 +1052,12 @@ void editor_hashes_binary_off_the_gui_thread() {
   require(replacement_session.has_value(), "replacement project did not create");
   bridge.set_project(std::move(replacement_session.value()), other_root);
   require(editor().isEmpty(), "session replacement kept the pending editor");
+  QSignalSpy editor_changes(bridge.vst3_editor(), &quick::Vst3EditorController::editorChanged);
   hold(false);
   await_count(gate->finished, 4, "held hash did not finish");
-  QTest::qWait(dropped_result_wait_ms);
-  require(editor().isEmpty(), "a replaced session's hash result opened an editor");
+  QCoreApplication::processEvents();
+  require(editor().isEmpty() && editor_changes.isEmpty(),
+          "a replaced session's hash result reached the editor");
 }
 
 void relink_bridge_contract() {
