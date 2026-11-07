@@ -1,0 +1,33 @@
+name: Performance problem
+description: Dropouts, clicks, high CPU or a slow interface.
+labels: [performance]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you heard or saw, and when (playing, editing, exporting).
+    validations:
+      required: true
+  - type: textarea
+    id: project
+    attributes:
+      label: Project load
+      description: Track count, instruments, effects and VST3 plugins in use.
+    validations:
+      required: true
+  - type: textarea
+    id: trace
+    attributes:
+      label: Trace
+      description: >-
+        Record a trace with `OSCILLATE_TRACE` or the command palette, summarise it with
+        `python3 -I tools/trace_report/trace_report.py <trace>` (see tools/trace_report/README.md),
+        and paste the summary or attach the file.
+  - type: textarea
+    id: system
+    attributes:
+      label: System
+      description: Commit, CPU, RAM, audio backend, buffer size and sample rate.
+    validations:
+      required: true

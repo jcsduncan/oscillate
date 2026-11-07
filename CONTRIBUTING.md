@@ -4,6 +4,8 @@ Thank you for your interest in Oscillate. The project is pre-release, so the
 most useful contributions are clear bug reports, plugin compatibility
 results and focused fixes.
 
+Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md).
+
 ## Reporting a bug
 
 Open a GitHub issue with:
