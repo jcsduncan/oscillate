@@ -162,7 +162,7 @@ std::vector<float> export_nulls_against_live(const effects::EffectEngine& effect
                                                 {stems, exporting::WavFormat::float32})),
                exporting::PublishOutcome::durable, "stems published");
     stem = read_float_wav(stems / ("track-" + saved.tracks.front().id.to_string() + ".wav"));
-    REQUIRE_GT(stem.size(), 0U, "the stem has audio");
+    REQUIRE_EQ(stem.size(), exported.size(), "the one-source stem is as long as the master");
   }
   double peak = 0.0;
   for (const float sample : exported)
@@ -205,7 +205,7 @@ std::vector<float> export_nulls_against_live(const effects::EffectEngine& effect
               << "; ";
     REQUIRE_LT(largest, null_tolerance, "offline export nulls against live playback");
     double stem_largest = 0.0;
-    for (std::size_t i = 0; i < std::min(stem.size(), exported.size()); ++i)
+    for (std::size_t i = 0; i < stem.size(); ++i)
       stem_largest =
           std::max(stem_largest, std::fabs(static_cast<double>(stem[i]) - live[offset + i]));
     REQUIRE_LT(stem_largest, null_tolerance, "the stem export nulls against live playback");
