@@ -7,7 +7,7 @@ ADR-0069 follow-up. Measured 29 October 2026 on an Intel Core i7-10700K, GCC 15.
 The bench (`bench/native_dsp/dust_bench.cpp`) is built only with `-DOSCILLATE_BUILD_BENCHES=ON`, and it is not a CTest gate. Build and run it in an uninstrumented Release build, one core pinned, with nothing else building:
 
 ```sh
-cmake -DOSCILLATE_BUILD_BENCHES=ON build/release
+cmake --preset release -DOSCILLATE_BUILD_BENCHES=ON
 scripts/build.sh build/release --target oscillate_dust_bench
 build/release/bench/native_dsp/oscillate_dust_bench
 ```

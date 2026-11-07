@@ -5,7 +5,7 @@ ADR-0068 follow-up. Measured 29 October 2026 on an Intel Core i7-10700K (3.8 GHz
 **How to run**
 
 ```sh
-cmake -DOSCILLATE_BUILD_BENCHES=ON build/release
+cmake --preset release -DOSCILLATE_BUILD_BENCHES=ON
 scripts/build.sh build/release --target oscillate_knock_bench
 build/release/bench/native_dsp/oscillate_knock_bench
 ```

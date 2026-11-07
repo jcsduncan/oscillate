@@ -7,7 +7,7 @@
 - a five-note chord (held 4 s, then released) on every Pad preset, against Supersaw Lead and Pluck: the `chord5` scenes.
 
 ```sh
-cmake -DOSCILLATE_BUILD_BENCHES=ON build/release
+cmake --preset release -DOSCILLATE_BUILD_BENCHES=ON
 scripts/build.sh build/release --target oscillate_nova_bench
 build/release/bench/native_dsp/oscillate_nova_bench                    # timing, 128 and 512 frames
 build/release/bench/native_dsp/oscillate_nova_bench --timing chord5     # only the scenes named chord5...

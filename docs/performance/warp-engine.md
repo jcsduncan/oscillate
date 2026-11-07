@@ -366,7 +366,7 @@ The reader checks every header field, then that every sample is finite, before i
 - Transient and pitch analysis is recomputed for each render. A shared source-analysis cache (PA-07) would remove that cost.
 - Grid-based Beats preserve points are not implemented; Beats slices at transients.
 - Texture uses the fixed seed `texture_render_seed`.
-- Playback (P3) and export (P4) use these renders.
+- Playback (P3) can use these cached renders; export (P4) renders its own stream and does not read the cache.
 
 ## P3 — Live processed-clip playback
 
