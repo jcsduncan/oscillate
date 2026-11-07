@@ -82,7 +82,7 @@ struct NativeSynthAudition::Stream {
   // frame 0) before ons, each by note id. An off only ever ends a note held
   // before the block, so there are at most `capacity`; ons come from at most
   // a queue of commands and a list of phrase notes.
-  static constexpr std::size_t max_block_ons = capacity * 2;
+  static constexpr std::size_t max_block_ons = std::size_t{capacity} * 2;
   static constexpr std::size_t max_block_offs = capacity;
   static_assert(max_block_offs + max_block_ons <= engine::HeldNotes::instrument_capacity);
   std::array<engine::BlockMidiEvent, max_block_offs> offs{}; // Callback only.
@@ -94,19 +94,27 @@ struct NativeSynthAudition::Stream {
   // Notes with this serial or later started in the current block.
   std::uint64_t block_first_serial = 1; // Callback only.
 
+  // A note-off at frame 0 for a held note; a note-on also sets its frame
+  // and velocity.
   [[nodiscard]] static engine::BlockMidiEvent note_event(engine::MidiEventKind kind,
-                                                         std::uint8_t key, std::uint64_t serial,
-                                                         std::uint32_t offset,
-                                                         std::uint8_t velocity) noexcept {
+                                                         const HeldNote& note) noexcept {
     engine::BlockMidiEvent event;
-    event.offset = offset;
+    event.offset = 0;
     event.clip_id_bits = {1, 1};
-    event.note_id_bits = {0, serial};
+    event.note_id_bits = {0, note.serial};
     event.kind = kind;
-    event.key = key;
-    event.velocity = velocity;
+    event.key = note.key;
+    event.velocity = 0;
     return event;
   }
+  // A note to start: its key and velocity, its frame in the block and the
+  // project frame it releases at.
+  struct NoteStart {
+    std::uint8_t key = 0;
+    std::uint8_t velocity = 0;
+    std::uint32_t offset = 0;
+    std::uint64_t release_frame = 0;
+  };
 
   // Ends held note `index`. A note that started in this block never reaches
   // the instrument: its note-on is withdrawn, because the runtime takes a
@@ -115,7 +123,7 @@ struct NativeSynthAudition::Stream {
     const auto note = held[index];
     held[index] = held[--held_count];
     if (note.serial < block_first_serial) {
-      offs[off_count++] = note_event(engine::MidiEventKind::note_off, note.key, note.serial, 0, 0);
+      offs[off_count++] = note_event(engine::MidiEventKind::note_off, note);
       return;
     }
     const auto first = ons.begin();
@@ -132,17 +140,19 @@ struct NativeSynthAudition::Stream {
   // Starts a note. With every held slot taken, the oldest held note is
   // released first, as a synth steals its oldest voice: the newest key always
   // sounds and every note-on keeps a matching note-off.
-  void start(std::uint8_t key, std::uint8_t velocity, std::uint32_t offset,
-             std::uint64_t release_frame) noexcept {
+  void start(const NoteStart& note) noexcept {
     if (held_count == capacity) {
       const auto oldest = std::ranges::min_element(
           held.begin(), held.begin() + static_cast<std::ptrdiff_t>(held_count), {},
           &HeldNote::serial);
       release(static_cast<std::size_t>(oldest - held.begin()));
     }
-    const auto serial = ++note_serial;
-    ons[on_count++] = note_event(engine::MidiEventKind::note_on, key, serial, offset, velocity);
-    held[held_count++] = {key, serial, release_frame};
+    const HeldNote started{note.key, ++note_serial, note.release_frame};
+    auto& on = ons[on_count++];
+    on = note_event(engine::MidiEventKind::note_on, started);
+    on.offset = note.offset;
+    on.velocity = note.velocity;
+    held[held_count++] = started;
   }
 
   static bool render(void* opaque, std::span<engine::StereoFrame> frames,
@@ -192,7 +202,10 @@ struct NativeSynthAudition::Stream {
         }
         continue;
       }
-      stream.start(command.key, command.velocity, 0, release_after(block.project_sample_position));
+      stream.start({.key = command.key,
+                    .velocity = command.velocity,
+                    .offset = 0,
+                    .release_frame = release_after(block.project_sample_position)});
     }
     stream.read.store(next, std::memory_order_release);
     // Scheduled phrase notes due in this block start at their own frame.
@@ -200,11 +213,13 @@ struct NativeSynthAudition::Stream {
     std::size_t due = 0;
     while (due < stream.scheduled_count && stream.scheduled[due].on_frame < block_end) {
       const auto& waiting = stream.scheduled[due++];
-      stream.start(waiting.key, waiting.velocity,
-                   static_cast<std::uint32_t>(waiting.on_frame > block.project_sample_position
-                                                  ? waiting.on_frame - block.project_sample_position
-                                                  : 0),
-                   waiting.release_frame);
+      stream.start({.key = waiting.key,
+                    .velocity = waiting.velocity,
+                    .offset = static_cast<std::uint32_t>(
+                        waiting.on_frame > block.project_sample_position
+                            ? waiting.on_frame - block.project_sample_position
+                            : 0),
+                    .release_frame = waiting.release_frame});
     }
     if (due > 0) {
       std::copy(stream.scheduled.begin() + static_cast<std::ptrdiff_t>(due),

@@ -277,7 +277,7 @@ void more_held_keys_than_slots_all_release() {
   };
   quick::NativeSynthAudition audition;
   std::array<engine::StereoFrame, block_frames> scratch{};
-  std::array<float, block_frames * 2> output{};
+  std::array<float, std::size_t{block_frames} * 2> output{};
   const auto render = [&] {
     require(audio::render_transport_block(probe->source, *probe->cursor, true, scratch, output) ==
                 audio::BlockResult::rendered,
