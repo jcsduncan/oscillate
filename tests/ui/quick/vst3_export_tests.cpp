@@ -439,6 +439,7 @@ void two_instrument_source_export_checks() {
           "unknown source selection replaced a valid stem");
   bridge.exports()->set_export_target(QString::fromStdString(master_path.string()));
   const auto second_binary = second_bundle / "Contents" / "x86_64-linux" / "TimedInstrument.so";
+  const auto intact_binary = bytes(second_binary);
   std::ofstream changed(second_binary, std::ios::binary | std::ios::app);
   changed.put('\0');
   changed.close();
@@ -453,6 +454,13 @@ void two_instrument_source_export_checks() {
   require(bridge.exports()->export_status().contains(QStringLiteral("binary differs")) &&
               bytes(second_stem_path) == second_stem && bytes(master_path) == master,
           "changed second source binary replaced a valid selected stem");
+  {
+    // The saved binary again, so every plugin verifies.
+    std::ofstream restored(second_binary, std::ios::binary | std::ios::trunc);
+    restored.write(reinterpret_cast<const char*>(intact_binary.data()),
+                   static_cast<std::streamsize>(intact_binary.size()));
+    require(restored.good(), "the second instrument binary could not be restored");
+  }
   // Any chain exports (ADR-0050): an effect on a source keeps the selected
   // stem available, and its stem exports at the master's extent.
   bridge.add_effect_engine(QString::fromStdString(first_track.to_string()), 0,
