@@ -10,7 +10,7 @@ KitTheme {
     menuFill: raised
     menuEdge: line
     menuHighlightAlpha: 0.18
-    menuHeaderInk: faint
+    menuHeaderInk: dim
     menuInk: cream
     knobDialPad: 10
     knobWidthPad: 16

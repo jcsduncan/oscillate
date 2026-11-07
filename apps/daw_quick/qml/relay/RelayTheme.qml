@@ -72,7 +72,7 @@ KitTheme {
     inkFaint: "#6a634d"
     inkGround: body
     property color label: "#efe6cc"
-    property color labelDim: "#d6d0b8"
+    property color labelDim: "#eae4cc"
     // Brass.
     property color brassHi: "#f0d58b"
     property color brass: "#c49a45"
