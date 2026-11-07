@@ -8,6 +8,7 @@
 
 #include <cstring>
 #include <dlfcn.h>
+#include <filesystem>
 #include <optional>
 #include <string_view>
 #include <utility>
@@ -139,27 +140,59 @@ Vst3EffectHost& LoadedVst3Effect::host() noexcept { return *host_; }
 const Vst3EffectHost& LoadedVst3Effect::host() const noexcept { return *host_; }
 
 namespace {
-std::unique_ptr<LoadedVst3Effect>
-load_verified(const VerifiedVst3Effect& verified, double sample_rate,
-              std::uint32_t max_block_frames, Vst3HostKind kind, std::string& error,
-              Vst3ProcessingMode mode, std::uint32_t max_parameter_events, bool routed_sidechain) {
-  error.clear();
+// The binary to dlopen once its file is confirmed unchanged, or nothing (with
+// `error` set). A hashed stamp replaces a second full read with a stat.
+std::optional<std::filesystem::path> unchanged_binary(const VerifiedVst3Effect& verified,
+                                                      const Vst3BinaryStamp* hashed_stamp,
+                                                      std::string& error) {
+  if (hashed_stamp) {
+    const auto now = detail::resolve_vst3_binary(verified.binary.canonical_bundle);
+    if (!now || now->canonical_bundle != verified.binary.canonical_bundle ||
+        now->canonical_binary != verified.binary.canonical_binary || now->stamp != *hashed_stamp) {
+      error = "VST3 bundle binary is missing or changed since it was verified";
+      return std::nullopt;
+    }
+    return now->canonical_binary;
+  }
   const auto now = detail::fingerprint_vst3_binary(verified.binary.canonical_bundle);
   if (!now || now->canonical_bundle != verified.binary.canonical_bundle ||
       now->canonical_binary != verified.binary.canonical_binary ||
       now->byte_size != verified.binary.byte_size || now->sha256 != verified.binary.sha256) {
     error = "VST3 bundle binary is missing or changed since scan";
-    return nullptr;
+    return std::nullopt;
   }
+  return now->canonical_binary;
+}
+
+// After dlopen: the loaded file is still the one verified.
+bool loaded_binary_unchanged(const VerifiedVst3Effect& verified,
+                             const Vst3BinaryStamp* hashed_stamp) {
+  if (hashed_stamp) {
+    const auto loaded = detail::resolve_vst3_binary(verified.binary.canonical_bundle);
+    return loaded && loaded->canonical_binary == verified.binary.canonical_binary &&
+           loaded->stamp == *hashed_stamp;
+  }
+  const auto loaded = detail::fingerprint_vst3_binary(verified.binary.canonical_bundle);
+  return loaded && loaded->canonical_binary == verified.binary.canonical_binary &&
+         loaded->byte_size == verified.binary.byte_size && loaded->sha256 == verified.binary.sha256;
+}
+
+std::unique_ptr<LoadedVst3Effect>
+load_verified(const VerifiedVst3Effect& verified, const Vst3BinaryStamp* hashed_stamp,
+              double sample_rate, std::uint32_t max_block_frames, Vst3HostKind kind,
+              std::string& error, Vst3ProcessingMode mode, std::uint32_t max_parameter_events,
+              bool routed_sidechain) {
+  error.clear();
+  const auto binary = unchanged_binary(verified, hashed_stamp, error);
+  if (!binary)
+    return nullptr;
   ModuleGuard module;
-  module.module = dlopen(now->canonical_binary.c_str(), RTLD_NOW | RTLD_LOCAL);
+  module.module = dlopen(binary->c_str(), RTLD_NOW | RTLD_LOCAL);
   if (!module.module) {
     error = "Verified VST3 bundle could not be loaded";
     return nullptr;
   }
-  const auto loaded_file = detail::fingerprint_vst3_binary(verified.binary.canonical_bundle);
-  if (!loaded_file || loaded_file->canonical_binary != now->canonical_binary ||
-      loaded_file->byte_size != now->byte_size || loaded_file->sha256 != now->sha256) {
+  if (!loaded_binary_unchanged(verified, hashed_stamp)) {
     error = "VST3 bundle binary changed during load";
     return nullptr;
   }
@@ -208,21 +241,42 @@ load_verified(const VerifiedVst3Effect& verified, double sample_rate,
 }
 } // namespace
 
+std::optional<Vst3HashedBinary> hash_vst3_binary(const std::filesystem::path& bundle) {
+  return detail::hash_resolved_vst3_binary(bundle);
+}
+
 std::unique_ptr<LoadedVst3Effect>
 load_verified_vst3_effect(const VerifiedVst3Effect& verified, double sample_rate,
                           std::uint32_t max_block_frames, std::string& error,
                           Vst3ProcessingMode mode, std::uint32_t max_parameter_events,
                           bool routed_sidechain) {
-  return load_verified(verified, sample_rate, max_block_frames, Vst3HostKind::effect, error, mode,
-                       max_parameter_events, routed_sidechain);
+  return load_verified(verified, nullptr, sample_rate, max_block_frames, Vst3HostKind::effect,
+                       error, mode, max_parameter_events, routed_sidechain);
 }
 
 std::unique_ptr<LoadedVst3Effect>
 load_verified_vst3_instrument(const VerifiedVst3Effect& verified, double sample_rate,
                               std::uint32_t max_block_frames, std::string& error,
                               Vst3ProcessingMode mode, std::uint32_t max_parameter_events) {
-  return load_verified(verified, sample_rate, max_block_frames, Vst3HostKind::instrument, error,
-                       mode, max_parameter_events, false);
+  return load_verified(verified, nullptr, sample_rate, max_block_frames, Vst3HostKind::instrument,
+                       error, mode, max_parameter_events, false);
+}
+
+std::unique_ptr<LoadedVst3Effect>
+load_hashed_vst3_effect(const Vst3Class& identity, const Vst3HashedBinary& hashed,
+                        double sample_rate, std::uint32_t max_block_frames, std::string& error,
+                        Vst3ProcessingMode mode, std::uint32_t max_parameter_events,
+                        bool routed_sidechain) {
+  return load_verified({identity, hashed.identity}, &hashed.stamp, sample_rate, max_block_frames,
+                       Vst3HostKind::effect, error, mode, max_parameter_events, routed_sidechain);
+}
+
+std::unique_ptr<LoadedVst3Effect>
+load_hashed_vst3_instrument(const Vst3Class& identity, const Vst3HashedBinary& hashed,
+                            double sample_rate, std::uint32_t max_block_frames, std::string& error,
+                            Vst3ProcessingMode mode, std::uint32_t max_parameter_events) {
+  return load_verified({identity, hashed.identity}, &hashed.stamp, sample_rate, max_block_frames,
+                       Vst3HostKind::instrument, error, mode, max_parameter_events, false);
 }
 
 } // namespace oscillate::plugins

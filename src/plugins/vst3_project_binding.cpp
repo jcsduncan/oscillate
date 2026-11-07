@@ -44,11 +44,18 @@ namespace {
           .diagnostic = std::move(diagnostic)};
 }
 
+[[nodiscard]] bool same_binary(const Vst3BinaryIdentity& left,
+                               const Vst3BinaryIdentity& right) noexcept {
+  return left.canonical_bundle == right.canonical_bundle &&
+         left.canonical_binary == right.canonical_binary && left.byte_size == right.byte_size &&
+         left.sha256 == right.sha256;
+}
+
 Vst3ProjectBindingResult bind_saved(const project::Vst3PluginInstance& saved,
-                                    const ScanResult& scanned, double sample_rate,
-                                    std::uint32_t max_block_frames, Vst3ProcessingMode mode,
-                                    Vst3HostKind kind, std::uint32_t max_parameter_events,
-                                    bool routed_sidechain) {
+                                    const ScanResult& scanned, const Vst3HashedBinary* hashed,
+                                    double sample_rate, std::uint32_t max_block_frames,
+                                    Vst3ProcessingMode mode, Vst3HostKind kind,
+                                    std::uint32_t max_parameter_events, bool routed_sidechain) {
   if (!scanned.ok())
     return failure(Vst3BindingStatus::scan_unavailable,
                    "VST3 scan is unavailable: " + scanned.diagnostic);
@@ -62,15 +69,26 @@ Vst3ProjectBindingResult bind_saved(const project::Vst3PluginInstance& saved,
   if (!klass)
     return failure(Vst3BindingStatus::identity_mismatch,
                    "Saved VST3 class identity differs from scan");
+  if (hashed && !same_binary(hashed->identity, scanned.binary))
+    return failure(Vst3BindingStatus::identity_mismatch,
+                   "VST3 bundle binary changed since scan; scan it again");
 
   std::string error;
   const auto capacity = std::max(max_parameter_events, default_vst3_parameter_events);
-  auto effect =
-      kind == Vst3HostKind::instrument
-          ? load_verified_vst3_instrument({*klass, scanned.binary}, sample_rate, max_block_frames,
-                                          error, mode, capacity)
-          : load_verified_vst3_effect({*klass, scanned.binary}, sample_rate, max_block_frames,
-                                      error, mode, capacity, routed_sidechain);
+  std::unique_ptr<LoadedVst3Effect> effect;
+  if (hashed)
+    effect = kind == Vst3HostKind::instrument
+                 ? load_hashed_vst3_instrument(*klass, *hashed, sample_rate, max_block_frames,
+                                               error, mode, capacity)
+                 : load_hashed_vst3_effect(*klass, *hashed, sample_rate, max_block_frames, error,
+                                           mode, capacity, routed_sidechain);
+  else
+    effect =
+        kind == Vst3HostKind::instrument
+            ? load_verified_vst3_instrument({*klass, scanned.binary}, sample_rate, max_block_frames,
+                                            error, mode, capacity)
+            : load_verified_vst3_effect({*klass, scanned.binary}, sample_rate, max_block_frames,
+                                        error, mode, capacity, routed_sidechain);
   if (!effect)
     return failure(Vst3BindingStatus::load_failed, std::move(error));
 
@@ -139,8 +157,8 @@ Vst3ProjectBindingResult bind_vst3_project_effect(const project::Vst3PluginInsta
                                                   Vst3ProcessingMode mode,
                                                   std::uint32_t max_parameter_events,
                                                   bool routed_sidechain) {
-  return bind_saved(saved, scanned, sample_rate, max_block_frames, mode, Vst3HostKind::effect,
-                    max_parameter_events, routed_sidechain);
+  return bind_saved(saved, scanned, nullptr, sample_rate, max_block_frames, mode,
+                    Vst3HostKind::effect, max_parameter_events, routed_sidechain);
 }
 
 Vst3ProjectBindingResult bind_vst3_project_instrument(const project::Vst3PluginInstance& saved,
@@ -148,8 +166,27 @@ Vst3ProjectBindingResult bind_vst3_project_instrument(const project::Vst3PluginI
                                                       std::uint32_t max_block_frames,
                                                       Vst3ProcessingMode mode,
                                                       std::uint32_t max_parameter_events) {
-  return bind_saved(saved, scanned, sample_rate, max_block_frames, mode, Vst3HostKind::instrument,
-                    max_parameter_events, false);
+  return bind_saved(saved, scanned, nullptr, sample_rate, max_block_frames, mode,
+                    Vst3HostKind::instrument, max_parameter_events, false);
+}
+
+Vst3ProjectBindingResult bind_hashed_vst3_project_effect(const project::Vst3PluginInstance& saved,
+                                                         const ScanResult& scanned,
+                                                         const Vst3HashedBinary& hashed,
+                                                         double sample_rate,
+                                                         std::uint32_t max_block_frames) {
+  return bind_saved(saved, scanned, &hashed, sample_rate, max_block_frames,
+                    Vst3ProcessingMode::realtime, Vst3HostKind::effect,
+                    default_vst3_parameter_events, false);
+}
+
+Vst3ProjectBindingResult
+bind_hashed_vst3_project_instrument(const project::Vst3PluginInstance& saved,
+                                    const ScanResult& scanned, const Vst3HashedBinary& hashed,
+                                    double sample_rate, std::uint32_t max_block_frames) {
+  return bind_saved(saved, scanned, &hashed, sample_rate, max_block_frames,
+                    Vst3ProcessingMode::realtime, Vst3HostKind::instrument,
+                    default_vst3_parameter_events, false);
 }
 
 } // namespace oscillate::plugins

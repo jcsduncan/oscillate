@@ -54,4 +54,18 @@ bind_vst3_project_instrument(const project::Vst3PluginInstance& saved, const Sca
                              Vst3ProcessingMode mode = Vst3ProcessingMode::realtime,
                              std::uint32_t max_parameter_events = default_vst3_parameter_events);
 
+// The same contracts from a binary hashed on a worker (hash_vst3_binary): the
+// digest must match the scan and the saved instance, and loading compares the
+// file's stamp instead of hashing it again. Load, plugin creation and state
+// restore run on the calling thread (the GUI thread for an editor).
+[[nodiscard]] Vst3ProjectBindingResult
+bind_hashed_vst3_project_effect(const project::Vst3PluginInstance& saved, const ScanResult& scanned,
+                                const Vst3HashedBinary& hashed, double sample_rate,
+                                std::uint32_t max_block_frames);
+
+[[nodiscard]] Vst3ProjectBindingResult
+bind_hashed_vst3_project_instrument(const project::Vst3PluginInstance& saved,
+                                    const ScanResult& scanned, const Vst3HashedBinary& hashed,
+                                    double sample_rate, std::uint32_t max_block_frames);
+
 } // namespace oscillate::plugins

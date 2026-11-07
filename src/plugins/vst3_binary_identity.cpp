@@ -3,7 +3,10 @@
 #include "oscillate/foundation/hex.hpp"
 #include "oscillate/foundation/sha256.hpp"
 
+#include <sys/stat.h>
+
 #include <array>
+#include <cstdint>
 #include <fstream>
 #include <span>
 
@@ -26,7 +29,7 @@ constexpr std::uint64_t max_binary_bytes = 512ULL * 1024ULL * 1024ULL;
 
 } // namespace
 
-std::optional<Vst3BinaryIdentity> fingerprint_vst3_binary(const std::filesystem::path& bundle) {
+std::optional<ResolvedVst3Binary> resolve_vst3_binary(const std::filesystem::path& bundle) {
   std::error_code error;
   if (bundle.extension() != ".vst3")
     return std::nullopt;
@@ -37,16 +40,28 @@ std::optional<Vst3BinaryIdentity> fingerprint_vst3_binary(const std::filesystem:
   const auto nominal =
       canonical_bundle / "Contents" / "x86_64-linux" / (canonical_bundle.stem().string() + ".so");
   const auto canonical_binary = std::filesystem::canonical(nominal, error);
-  if (error || !is_within(canonical_binary, canonical_bundle) ||
-      !std::filesystem::is_regular_file(canonical_binary, error) || error)
+  if (error || !is_within(canonical_binary, canonical_bundle))
     return std::nullopt;
-  const auto size = std::filesystem::file_size(canonical_binary, error);
-  if (error || size == 0 || size > max_binary_bytes)
+  struct stat status{};
+  if (::stat(canonical_binary.c_str(), &status) != 0 || !S_ISREG(status.st_mode) ||
+      status.st_size <= 0 || static_cast<std::uint64_t>(status.st_size) > max_binary_bytes)
     return std::nullopt;
-  const auto modified_before = std::filesystem::last_write_time(canonical_binary, error);
-  if (error)
+  return ResolvedVst3Binary{
+      canonical_bundle, canonical_binary,
+      Vst3BinaryStamp{.device = static_cast<std::uint64_t>(status.st_dev),
+                      .inode = static_cast<std::uint64_t>(status.st_ino),
+                      .byte_size = static_cast<std::uint64_t>(status.st_size),
+                      .modified_seconds = static_cast<std::int64_t>(status.st_mtim.tv_sec),
+                      .modified_nanoseconds = static_cast<std::int64_t>(status.st_mtim.tv_nsec),
+                      .changed_seconds = static_cast<std::int64_t>(status.st_ctim.tv_sec),
+                      .changed_nanoseconds = static_cast<std::int64_t>(status.st_ctim.tv_nsec)}};
+}
+
+std::optional<Vst3HashedBinary> hash_resolved_vst3_binary(const std::filesystem::path& bundle) {
+  const auto before = resolve_vst3_binary(bundle);
+  if (!before)
     return std::nullopt;
-  std::ifstream input(canonical_binary, std::ios::binary);
+  std::ifstream input(before->canonical_binary, std::ios::binary);
   if (!input)
     return std::nullopt;
   auto hasher = foundation::Sha256::create();
@@ -66,13 +81,25 @@ std::optional<Vst3BinaryIdentity> fingerprint_vst3_binary(const std::filesystem:
                   .has_value();
     }
   }
-  valid = valid && input.eof() && total == size;
+  valid = valid && input.eof() && total == before->stamp.byte_size;
   auto digest = hasher.value().finish();
-  const auto modified_after = std::filesystem::last_write_time(canonical_binary, error);
-  if (!valid || !digest || error || modified_before != modified_after)
+  // The digest belongs to the stamp only when nothing replaced or rewrote
+  // the file while it was read.
+  const auto after = resolve_vst3_binary(bundle);
+  if (!valid || !digest || !after || after->canonical_bundle != before->canonical_bundle ||
+      after->canonical_binary != before->canonical_binary || after->stamp != before->stamp)
     return std::nullopt;
   auto hex = foundation::to_hex(std::span(digest.value()));
-  return Vst3BinaryIdentity{canonical_bundle, canonical_binary, size, std::move(hex)};
+  return Vst3HashedBinary{
+      {before->canonical_bundle, before->canonical_binary, before->stamp.byte_size, std::move(hex)},
+      before->stamp};
+}
+
+std::optional<Vst3BinaryIdentity> fingerprint_vst3_binary(const std::filesystem::path& bundle) {
+  auto hashed = hash_resolved_vst3_binary(bundle);
+  if (!hashed)
+    return std::nullopt;
+  return std::move(hashed->identity);
 }
 
 } // namespace oscillate::plugins::detail

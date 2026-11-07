@@ -10,13 +10,16 @@
 #include <QQmlContext>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QSignalSpy>
 #include <QTest>
+#include <QTimer>
 
 #include <fcntl.h>
 #include <unistd.h>
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstring>
 #include <filesystem>
@@ -37,6 +40,17 @@ namespace project = oscillate::project;
 namespace quick = oscillate::quick;
 
 using oscillate::test::require;
+
+// Opening an editor hashes the plugin binary on a worker before it loads.
+constexpr int editor_verify_timeout_ms = 10'000;
+
+void await_editor(quick::ProjectBridge& bridge) {
+  require(
+      QTest::qWaitFor(
+          [&] { return !bridge.vst3_editor()->editor().value(QStringLiteral("pending")).toBool(); },
+          editor_verify_timeout_ms),
+      "VST3 editor did not finish verifying its plugin binary");
+}
 
 class Directory {
 public:
@@ -171,6 +185,7 @@ void run_checks() {
   const auto revision = bridge.revision();
   bridge.vst3_editor()->open_vst3_insert_editor(QString::fromStdString(track.to_string()),
                                                 QString::fromStdString(slot.to_string()));
+  await_editor(bridge);
   const auto editor = bridge.vst3_editor()->editor();
   require(editor.value(QStringLiteral("open")).toBool() &&
               !editor.value(QStringLiteral("native")).toBool() &&
@@ -183,6 +198,7 @@ void run_checks() {
           "discard changed project or retained editor state");
   bridge.vst3_editor()->open_vst3_insert_editor(QString::fromStdString(track.to_string()),
                                                 QString::fromStdString(slot.to_string()));
+  await_editor(bridge);
   const auto other_root = directory.root() / "other-song";
   auto replacement = app::ProjectSession::create(other_root);
   require(replacement.has_value(), "replacement project did not create");
@@ -423,6 +439,7 @@ void qualified_live_parameter_contract() {
     bridge.vst3_editor()->open_vst3_insert_editor(
         QString::fromStdString(imported.value().to_string()),
         QString::fromStdString(slot.to_string()));
+    await_editor(bridge);
     const auto scanning_editor = bridge.vst3_editor()->editor();
     require(scanning_editor.value(QStringLiteral("open")).toBool() &&
                 !scanning_editor.value(QStringLiteral("editable")).toBool() &&
@@ -435,6 +452,7 @@ void qualified_live_parameter_contract() {
     bridge.vst3_editor()->open_vst3_insert_editor(
         QString::fromStdString(imported.value().to_string()),
         QString::fromStdString(slot.to_string()));
+    await_editor(bridge);
     require(bridge.vst3_editor()->editor().value(QStringLiteral("editable")).toBool(),
             "qualified fixture did not open its generic editor");
     const auto live_status = [&] {
@@ -457,6 +475,7 @@ void qualified_live_parameter_contract() {
       bridge.vst3_editor()->open_vst3_insert_editor(
           QString::fromStdString(imported.value().to_string()),
           QString::fromStdString(slot.to_string()));
+      await_editor(bridge);
       require(bridge.vst3_editor()->editor().value(QStringLiteral("editable")).toBool(),
               "VST3 editor could not reopen during playback");
       for (unsigned gesture = 1; gesture <= 2; ++gesture) {
@@ -561,6 +580,7 @@ void generic_parameter_editor_contract() {
     bridge.vst3_editor()->open_vst3_insert_editor(
         QString::fromStdString(imported.value().to_string()),
         QString::fromStdString(slot.to_string()));
+    await_editor(bridge);
     const auto editor = bridge.vst3_editor()->editor();
     require(editor.value(QStringLiteral("open")).toBool() &&
                 editor.value(QStringLiteral("editable")).toBool() &&
@@ -686,6 +706,7 @@ void generic_instrument_editor_saves_while_playing() {
             "instrument catalogue did not finish scanning");
     bridge.vst3_editor()->open_vst3_instrument_editor(
         QString::fromStdString(track.value().to_string()));
+    await_editor(bridge);
     require(bridge.vst3_editor()->editor().value(QStringLiteral("editable")).toBool(),
             "instrument generic editor is unavailable");
     const auto running = bridge.revision();
@@ -786,6 +807,7 @@ void controller_state_quick_contract() {
       bridge.vst3_editor()->open_vst3_insert_editor(
           QString::fromStdString(track.value().to_string()),
           QString::fromStdString(slot.to_string()));
+      await_editor(bridge);
       require(bridge.vst3_editor()->editor().value(QStringLiteral("editable")).toBool(),
               "controller-state generic editor did not open");
     };
@@ -873,6 +895,169 @@ void controller_state_quick_contract() {
               *saved.controller_state == std::vector<std::uint8_t>{0x7b} &&
               saved.parameters == std::vector<project::Vst3ParameterReference>{{101, 0.5}},
           "controller-only bytes, component and parameter were not saved atomically");
+}
+
+// Holds the editor's worker hash until the test opens it, after the binary
+// was read, and records the thread the hash ran on.
+struct HashGate {
+  std::mutex mutex;
+  std::condition_variable changed;
+  bool open = true;
+  int started = 0;
+  int finished = 0;
+  std::thread::id worker;
+};
+// Longest a held hash waits before it lets go, so a broken test cannot hang.
+constexpr auto hash_gate_limit = std::chrono::seconds(30);
+// A catalogue scan of the copied fixture.
+constexpr int catalogue_scan_timeout_ms = 15'000;
+
+void editor_hashes_binary_off_the_gui_thread() {
+  Directory directory;
+  const auto bundle = directory.root() / "plugins" / fs::path(VST3_CONNECTED_BUNDLE).filename();
+  fs::create_directories(bundle.parent_path());
+  fs::copy(VST3_CONNECTED_BUNDLE, bundle, fs::copy_options::recursive);
+  oscillate::plugins::Vst3Scanner scanner(VST3_HELPER_PATH);
+  const auto scanned = scanner.scan(bundle);
+  require(scanned.ok(), "copied connected fixture did not scan");
+  const auto klass = std::ranges::find_if(scanned.metadata.classes, [](const auto& candidate) {
+    return candidate.name == "Connected Gain" && candidate.category == "Audio Module Class";
+  });
+  require(klass != scanned.metadata.classes.end(), "connected effect class missing");
+  const auto root = directory.root() / "held-hash-song";
+  auto session = std::move(app::ProjectSession::create(root)).value();
+  const auto wav = directory.root() / "source.wav";
+  write_wav(wav);
+  const int descriptor = ::open(wav.c_str(), O_RDONLY | O_CLOEXEC);
+  require(descriptor >= 0, "held hash WAV open failed");
+  const auto imported = session->imports().import_wav_audio(descriptor);
+  ::close(descriptor);
+  require(imported.has_value(), "held hash WAV import failed");
+  const app::Vst3InsertIdentity identity{klass->id,
+                                         klass->vendor,
+                                         klass->name,
+                                         klass->version,
+                                         scanned.binary.canonical_bundle.string(),
+                                         scanned.binary.sha256};
+  for (std::size_t index = 0; index < 2; ++index)
+    require(session->effects().insert_vst3_plugin(imported.value(), index, identity).has_value(),
+            "connected effect insertion failed");
+  const auto track_id = QString::fromStdString(imported.value().to_string());
+  const auto& effects = session->snapshot().tracks.front().effects;
+  const auto kept_slot = QString::fromStdString(effects.front().id.to_string());
+  const auto removed_slot = QString::fromStdString(effects.back().id.to_string());
+
+  auto gate = std::make_shared<HashGate>();
+  quick::ProjectBridge::Dependencies dependencies;
+  dependencies.vst3_binary_hasher = [gate](const fs::path& path) {
+    auto hashed = oscillate::plugins::hash_vst3_binary(path);
+    std::unique_lock lock(gate->mutex);
+    gate->worker = std::this_thread::get_id();
+    ++gate->started;
+    gate->changed.notify_all();
+    gate->changed.wait_for(lock, hash_gate_limit, [&] { return gate->open; });
+    ++gate->finished;
+    return hashed;
+  };
+  const auto hold = [&](bool held) {
+    {
+      std::lock_guard lock(gate->mutex);
+      gate->open = !held;
+    }
+    gate->changed.notify_all();
+  };
+  const auto await_count = [&](const int& counter, int count, const std::string& what) {
+    require(QTest::qWaitFor(
+                [&] {
+                  std::lock_guard lock(gate->mutex);
+                  return counter >= count;
+                },
+                editor_verify_timeout_ms),
+            what);
+  };
+  quick::ProjectBridge bridge(directory.root(), nullptr, {}, {}, {}, {}, std::move(dependencies));
+  bridge.set_project(std::move(session), root);
+  bridge.vst3_browser()->add_vst3_search_path(QString::fromStdString(bundle.string()));
+  require(
+      QTest::qWaitFor([&] { return !bridge.vst3_browser()->busy(); }, catalogue_scan_timeout_ms),
+      "copied connected catalogue did not finish scanning");
+  const auto editor = [&] { return bridge.vst3_editor()->editor(); };
+
+  // The open returns at once with a pending editor; the hash runs on a
+  // worker while the GUI thread keeps handling events.
+  hold(true);
+  bridge.vst3_editor()->open_vst3_insert_editor(track_id, kept_slot);
+  require(editor().value(QStringLiteral("open")).toBool() &&
+              editor().value(QStringLiteral("pending")).toBool() &&
+              !editor().value(QStringLiteral("editable")).toBool() &&
+              editor()
+                  .value(QStringLiteral("message"))
+                  .toString()
+                  .contains(QStringLiteral("Verifying")),
+          "editor did not show a pending state while its binary was hashed");
+  await_count(gate->started, 1, "editor hash did not start");
+  {
+    std::lock_guard lock(gate->mutex);
+    require(gate->worker != std::this_thread::get_id(), "editor hashed on the GUI thread");
+  }
+  bool ticked = false;
+  QTimer::singleShot(0, [&ticked] { ticked = true; });
+  require(QTest::qWaitFor([&] { return ticked; }, editor_verify_timeout_ms) &&
+              editor().value(QStringLiteral("pending")).toBool(),
+          "GUI event loop stalled while the editor hash was held");
+  hold(false);
+  await_editor(bridge);
+  require(editor().value(QStringLiteral("editable")).toBool(),
+          "verified editor did not load the plugin: " +
+              editor().value(QStringLiteral("message")).toString().toStdString());
+  bridge.vst3_editor()->discard_vst3_insert_editor();
+
+  // Same bytes under a new inode after the hash: the load is refused.
+  hold(true);
+  bridge.vst3_editor()->open_vst3_insert_editor(track_id, kept_slot);
+  await_count(gate->started, 2, "second editor hash did not start");
+  const auto binary = scanned.binary.canonical_binary;
+  const auto replacement = binary.parent_path() / "replacement.so";
+  fs::copy_file(binary, replacement);
+  fs::rename(replacement, binary);
+  hold(false);
+  await_editor(bridge);
+  require(editor().value(QStringLiteral("open")).toBool() &&
+              !editor().value(QStringLiteral("editable")).toBool() &&
+              editor()
+                  .value(QStringLiteral("message"))
+                  .toString()
+                  .contains(QStringLiteral("changed since it was verified")),
+          "binary replaced after hashing was not refused: " +
+              editor().value(QStringLiteral("message")).toString().toStdString());
+  bridge.vst3_editor()->discard_vst3_insert_editor();
+
+  // An effect removed while its binary was hashed closes the editor.
+  hold(true);
+  bridge.vst3_editor()->open_vst3_insert_editor(track_id, removed_slot);
+  await_count(gate->started, 3, "third editor hash did not start");
+  const auto before_removal = bridge.revision();
+  bridge.remove_effect_insert(track_id, removed_slot);
+  require(bridge.revision() == before_removal + 1, "pending editor blocked effect removal");
+  hold(false);
+  require(QTest::qWaitFor([&] { return editor().isEmpty(); }, editor_verify_timeout_ms),
+          "editor stayed open for a removed effect");
+
+  // A replaced session drops the pending result.
+  hold(true);
+  bridge.vst3_editor()->open_vst3_insert_editor(track_id, kept_slot);
+  await_count(gate->started, 4, "fourth editor hash did not start");
+  const auto other_root = directory.root() / "replacement-song";
+  auto replacement_session = app::ProjectSession::create(other_root);
+  require(replacement_session.has_value(), "replacement project did not create");
+  bridge.set_project(std::move(replacement_session.value()), other_root);
+  require(editor().isEmpty(), "session replacement kept the pending editor");
+  QSignalSpy editor_changes(bridge.vst3_editor(), &quick::Vst3EditorController::editorChanged);
+  hold(false);
+  await_count(gate->finished, 4, "held hash did not finish");
+  QCoreApplication::processEvents();
+  require(editor().isEmpty() && editor_changes.isEmpty(),
+          "a replaced session's hash result reached the editor");
 }
 
 void relink_bridge_contract() {
@@ -1041,6 +1226,7 @@ int main(int argc, char** argv) {
   QApplication application(argc, argv);
   try {
     run_checks();
+    editor_hashes_binary_off_the_gui_thread();
     generic_parameter_editor_contract();
     generic_instrument_editor_saves_while_playing();
     controller_state_quick_contract();

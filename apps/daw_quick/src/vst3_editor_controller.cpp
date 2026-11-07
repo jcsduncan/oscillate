@@ -24,6 +24,8 @@ namespace {
 constexpr int native_gesture_poll_ms = 16;
 // The editor's offline host renders nothing; it binds at this block size.
 constexpr std::uint32_t editor_block_frames = 128;
+// How often a pending binary verification is checked for its result.
+constexpr int verification_poll_ms = 20;
 // Parameter values as the list shows them.
 constexpr int parameter_decimals = 3;
 
@@ -147,6 +149,10 @@ Vst3EditorController::Vst3EditorController(Host host, PluginAutomationController
     : QObject(parent), host_(std::move(host)), plugin_automation_(plugin_automation), timer_(this) {
   timer_.setInterval(native_gesture_poll_ms);
   connect(&timer_, &QTimer::timeout, this, &Vst3EditorController::poll_native_gestures);
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+  verify_timer_.setInterval(verification_poll_ms);
+  connect(&verify_timer_, &QTimer::timeout, this, &Vst3EditorController::poll_verification);
+#endif
 }
 
 Vst3EditorController::~Vst3EditorController() = default;
@@ -197,7 +203,6 @@ void Vst3EditorController::open_vst3_insert_editor(const QString& track_id,
   slot_ = slot.value();
   revision_ = snapshot.revision;
   QString message = QStringLiteral("Native editor unavailable; saved parameters are read-only");
-  bool native = false;
   const auto receipt = std::ranges::find_if(host_.catalogue().entries, [&saved](const auto& entry) {
     return entry.scan.ok() && entry.scan.binary.sha256 == saved.binary_sha256 &&
            entry.canonical_bundle == std::filesystem::path(saved.bundle_path);
@@ -209,39 +214,14 @@ void Vst3EditorController::open_vst3_insert_editor(const QString& track_id,
                  candidate.vendor == saved.vendor && candidate.version == saved.version;
         });
     if (klass != receipt->scan.metadata.classes.end()) {
-      auto binding = plugins::bind_vst3_project_effect(saved, receipt->scan, snapshot.sample_rate,
-                                                       editor_block_frames);
-      if (!binding.ready() || !binding.unresolved_parameter_ids.empty()) {
-        message = QStringLiteral("Plugin values unavailable; saved parameters are read-only: %1")
-                      .arg(QString::fromStdString(binding.diagnostic));
-      } else {
-        plugin_ = std::move(binding.effect);
-        plugin_->host().suspend();
-        if (!plugin_->host().static_parameter_values_ready()) {
-          plugin_.reset();
-          message = QStringLiteral("Plugin could not suspend safely; parameters are read-only");
-        } else {
-          // Saved-state restoration may request a parameter refresh. Only
-          // requests made after opening the editor belong to this gesture.
-          (void)plugin_->host().take_restart_requests();
-          attachment_ = std::make_shared<plugin_ui::Vst3EditorAttachment>();
-          const auto status = attachment_->open(plugin_->host());
-          native = status == plugin_ui::EditorOpenStatus::attached;
-          message = editor_failure(status);
-          if (!binding.diagnostic.empty())
-            message += QStringLiteral("; %1").arg(QString::fromStdString(binding.diagnostic));
-          if (native) {
-            plugin_->host().begin_editor_parameter_capture();
-            if (host_.playback_busy())
-              message = QStringLiteral("Continuous gestures save automatically; qualified "
-                                       "controls change live audio. Closing saves remaining "
-                                       "editor state");
-            attachment_->window_shell()->setWindowTitle(QString::fromStdString(saved.name));
-            (void)attachment_->window_shell()->winId();
-            native_window_ = attachment_->window_shell()->windowHandle();
-          }
-        }
-      }
+      begin_verification({.saved = saved,
+                          .track = track.value(),
+                          .slot = slot.value(),
+                          .track_id = track_id,
+                          .slot_id = slot_id,
+                          .scan = receipt->scan,
+                          .session = session()->session_generation()});
+      return;
     }
   } else if (saved.missing) {
     message = QStringLiteral("Plugin missing; saved parameters are read-only");
@@ -251,29 +231,7 @@ void Vst3EditorController::open_vst3_insert_editor(const QString& track_id,
                                    "completes. Reopen this editor then")
                   : QStringLiteral("Scan this plugin in the browser to open its native editor");
   }
-  editor_ =
-      QVariantMap{{"open", true},
-                  {"native", native},
-                  {"editable", !native && plugin_ != nullptr},
-                  {"name", QString::fromStdString(saved.name)},
-                  {"role", QStringLiteral("effect")},
-                  {"trackId", track_id},
-                  {"slotId", slot_id},
-                  {"nativeWidth", native ? attachment_->window_shell()->width() : 0},
-                  {"nativeHeight", native ? attachment_->window_shell()->height() : 0},
-                  {"message", message},
-                  {"parameters", parameter_view(saved, plugin_ ? &plugin_->host() : nullptr)}};
-  if (plugin_)
-    plugin_automation_.publish_verified_parameters(saved.id, verified_parameters(plugin_->host()));
-  plugin_automation_.select_plugin(track.value(), saved.id);
-  emit editorChanged();
-  if (native_window_) {
-    emit nativeWindowChanged();
-    auto* shell = attachment_->window_shell();
-    auto attachment = attachment_;
-    QTimer::singleShot(0, shell, [attachment] { attachment->show(); });
-    timer_.start();
-  }
+  publish_insert_editor(saved, track_id, slot_id, message, false);
 #else
   (void)track_id;
   (void)slot_id;
@@ -304,11 +262,6 @@ void Vst3EditorController::open_vst3_instrument_editor(const QString& track_id) 
     return;
   }
   QString message = QStringLiteral("Scan this instrument to inspect its parameters");
-  QVariantList parameters = saved_parameter_view(*source);
-  bool editable = false;
-  bool native = false;
-  int native_width = 0;
-  int native_height = 0;
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
   if (host_.transfers_busy()) {
     message = QStringLiteral("Finish active tasks to edit instrument values");
@@ -319,51 +272,16 @@ void Vst3EditorController::open_vst3_instrument_editor(const QString& track_id) 
                  entry.canonical_bundle == std::filesystem::path(source->bundle_path);
         });
     if (receipt != host_.catalogue().entries.end()) {
-      auto binding = plugins::bind_vst3_project_instrument(
-          *source, receipt->scan, snapshot.sample_rate, editor_block_frames);
-      if (binding.ready() && binding.unresolved_parameter_ids.empty()) {
-        plugin_ = std::move(binding.effect);
-        plugin_->host().suspend();
-        if (plugin_->host().static_parameter_values_ready()) {
-          (void)plugin_->host().take_restart_requests();
-          original_ = *source;
-          track_ = track.value();
-          revision_ = snapshot.revision;
-          attachment_ = std::make_shared<plugin_ui::Vst3EditorAttachment>();
-          const auto status = attachment_->open(plugin_->host());
-          native = status == plugin_ui::EditorOpenStatus::attached;
-          message =
-              native ? editor_failure(status)
-                     : QStringLiteral("%1; verified continuous instrument parameters can be saved "
-                                      "while playing")
-                           .arg(editor_failure(status));
-          if (!binding.diagnostic.empty())
-            message += QStringLiteral("; %1").arg(QString::fromStdString(binding.diagnostic));
-          if (native) {
-            plugin_->host().begin_editor_parameter_capture();
-            if (host_.playback_busy())
-              message = QStringLiteral("Continuous gestures save automatically; qualified "
-                                       "controls change live audio. Closing saves remaining "
-                                       "editor state");
-            attachment_->window_shell()->setWindowTitle(QString::fromStdString(source->name));
-            native_width = attachment_->window_shell()->width();
-            native_height = attachment_->window_shell()->height();
-            (void)attachment_->window_shell()->winId();
-            native_window_ = attachment_->window_shell()->windowHandle();
-          }
-          parameters = parameter_view(*source, &plugin_->host());
-          editable = !native;
-          plugin_automation_.publish_verified_parameters(source->id,
-                                                         verified_parameters(plugin_->host()));
-        } else {
-          plugin_.reset();
-          message = QStringLiteral("Instrument could not suspend safely; values are read-only");
-        }
-      } else {
-        message = QStringLiteral("Instrument values unavailable: %1")
-                      .arg(QString::fromStdString(binding.diagnostic));
-      }
-    } else if (source->missing) {
+      begin_verification({.saved = *source,
+                          .track = track.value(),
+                          .slot = std::nullopt,
+                          .track_id = track_id,
+                          .slot_id = {},
+                          .scan = receipt->scan,
+                          .session = session()->session_generation()});
+      return;
+    }
+    if (source->missing) {
       message = QStringLiteral("Instrument missing; saved parameters are read-only");
     } else if (host_.browser_busy()) {
       message = QStringLiteral("Scanning saved instrument; parameters are read-only until scan "
@@ -371,27 +289,260 @@ void Vst3EditorController::open_vst3_instrument_editor(const QString& track_id) 
     }
   }
 #endif
+  publish_instrument_editor(*source, track.value(), message, saved_parameter_view(*source), false,
+                            false);
+}
+
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+void Vst3EditorController::publish_insert_editor(const project::Vst3PluginInstance& saved,
+                                                 const QString& track_id, const QString& slot_id,
+                                                 const QString& message, bool native) {
+  const auto* host = plugin_ ? &plugin_->host() : nullptr;
+  const int native_width = native ? attachment_->window_shell()->width() : 0;
+  const int native_height = native ? attachment_->window_shell()->height() : 0;
+  editor_ = QVariantMap{{"open", true},
+                        {"native", native},
+                        {"editable", !native && host != nullptr},
+                        {"name", QString::fromStdString(saved.name)},
+                        {"role", QStringLiteral("effect")},
+                        {"trackId", track_id},
+                        {"slotId", slot_id},
+                        {"nativeWidth", native_width},
+                        {"nativeHeight", native_height},
+                        {"message", message},
+                        {"parameters", parameter_view(saved, host)}};
+  if (host)
+    plugin_automation_.publish_verified_parameters(saved.id, verified_parameters(*host));
+  if (track_)
+    plugin_automation_.select_plugin(*track_, saved.id);
+  emit editorChanged();
+  show_native_window();
+}
+#endif
+
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+void Vst3EditorController::publish_instrument_editor(const project::Vst3PluginInstance& source,
+                                                     const project::TrackId& track,
+                                                     const QString& message,
+                                                     QVariantList parameters, bool editable,
+                                                     bool native) {
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+  const int native_width = native ? attachment_->window_shell()->width() : 0;
+  const int native_height = native ? attachment_->window_shell()->height() : 0;
+#else
+  const int native_width = 0;
+  const int native_height = 0;
+#endif
   editor_ = QVariantMap{{"open", true},
                         {"native", native},
                         {"editable", editable},
-                        {"name", QString::fromStdString(source->name)},
+                        {"name", QString::fromStdString(source.name)},
                         {"role", QStringLiteral("source")},
                         {"nativeWidth", native_width},
                         {"nativeHeight", native_height},
                         {"message", message},
-                        {"parameters", parameters}};
-  plugin_automation_.select_plugin(track.value(), source->id);
+                        {"parameters", std::move(parameters)}};
+  plugin_automation_.select_plugin(track, source.id);
   emit editorChanged();
+  show_native_window();
+}
+
+void Vst3EditorController::show_native_window() {
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
-  if (native_window_) {
-    emit nativeWindowChanged();
-    auto* shell = attachment_->window_shell();
-    auto attachment = attachment_;
-    QTimer::singleShot(0, shell, [attachment] { attachment->show(); });
-    timer_.start();
-  }
+  if (!native_window_)
+    return;
+  emit nativeWindowChanged();
+  auto* shell = attachment_->window_shell();
+  auto attachment = attachment_;
+  QTimer::singleShot(0, shell, [attachment] { attachment->show(); });
+  timer_.start();
 #endif
 }
+
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+void Vst3EditorController::begin_verification(PendingVerification pending) {
+  auto hash = host_.hash_binary ? host_.hash_binary : Vst3BinaryHasher{plugins::hash_vst3_binary};
+  auto bundle = pending.scan.binary.canonical_bundle;
+  const auto failed = hash_.start(
+      pending.session,
+      [hash = std::move(hash), bundle = std::move(bundle)] { return hash(bundle); },
+      [](const std::string&) { return std::optional<plugins::Vst3HashedBinary>{}; });
+  if (failed) {
+    host_.status(QStringLiteral("VST3 editor: %1").arg(QString::fromStdString(*failed)));
+    return;
+  }
+  const bool instrument = !pending.slot;
+  editor_ = QVariantMap{{"open", true},
+                        {"pending", true},
+                        {"native", false},
+                        {"editable", false},
+                        {"name", QString::fromStdString(pending.saved.name)},
+                        {"role", instrument ? QStringLiteral("source") : QStringLiteral("effect")},
+                        {"nativeWidth", 0},
+                        {"nativeHeight", 0},
+                        {"message", QStringLiteral("Verifying the plugin binary; saved parameters "
+                                                   "are read-only until it loads")},
+                        {"parameters", saved_parameter_view(pending.saved)}};
+  if (!instrument) {
+    editor_[QStringLiteral("trackId")] = pending.track_id;
+    editor_[QStringLiteral("slotId")] = pending.slot_id;
+  }
+  plugin_automation_.select_plugin(pending.track, pending.saved.id);
+  verifying_ = std::move(pending);
+  verify_timer_.start();
+  emit editorChanged();
+}
+
+void Vst3EditorController::poll_verification() {
+  if (!hash_.finished())
+    return;
+  verify_timer_.stop();
+  auto finished = hash_.take();
+  if (!verifying_)
+    return;
+  auto pending = std::move(*verifying_);
+  verifying_.reset();
+  auto* current = session();
+  // A result for a replaced project never loads into the new one.
+  if (current == nullptr || current->session_generation() != pending.session) {
+    discard_vst3_insert_editor();
+    return;
+  }
+  const bool instrument = !pending.slot;
+  const auto& snapshot = current->snapshot();
+  const bool unchanged =
+      instrument
+          ? can_commit_vst3_instrument_state(snapshot, pending.track, pending.saved)
+          : can_commit_vst3_editor_state(snapshot, pending.track, *pending.slot, pending.saved);
+  if (!unchanged) {
+    discard_vst3_insert_editor();
+    host_.status(QStringLiteral("The VST3 plugin changed or was removed while it was verified; "
+                                "open its editor again"));
+    return;
+  }
+  if (instrument ? host_.control_busy() : host_.jobs_busy()) {
+    discard_vst3_insert_editor();
+    host_.status(QStringLiteral("Finish active tasks before opening a VST3 editor"));
+    return;
+  }
+  if (instrument && host_.transfers_busy()) {
+    publish_instrument_editor(pending.saved, pending.track,
+                              QStringLiteral("Finish active tasks to edit instrument values"),
+                              saved_parameter_view(pending.saved), false, false);
+    return;
+  }
+  plugins::Vst3ProjectBindingResult binding;
+  if (!finished || !finished->result) {
+    binding.status = plugins::Vst3BindingStatus::load_failed;
+    binding.diagnostic = "VST3 bundle binary could not be read, or changed while it was verified";
+  } else {
+    // Load, plugin creation and state restore stay on the GUI thread, as
+    // VST3 threading requires; only the hash ran on the worker.
+    binding =
+        instrument
+            ? plugins::bind_hashed_vst3_project_instrument(pending.saved, pending.scan,
+                                                           *finished->result, snapshot.sample_rate,
+                                                           editor_block_frames)
+            : plugins::bind_hashed_vst3_project_effect(pending.saved, pending.scan,
+                                                       *finished->result, snapshot.sample_rate,
+                                                       editor_block_frames);
+  }
+  if (instrument)
+    finish_instrument_open(pending, std::move(binding));
+  else
+    finish_insert_open(pending, std::move(binding));
+}
+
+void Vst3EditorController::finish_insert_open(const PendingVerification& pending,
+                                              plugins::Vst3ProjectBindingResult binding) {
+  const auto& saved = pending.saved;
+  revision_ = session()->snapshot().revision;
+  QString message;
+  bool native = false;
+  if (!binding.ready() || !binding.unresolved_parameter_ids.empty()) {
+    message = QStringLiteral("Plugin values unavailable; saved parameters are read-only: %1")
+                  .arg(QString::fromStdString(binding.diagnostic));
+  } else {
+    plugin_ = std::move(binding.effect);
+    plugin_->host().suspend();
+    if (!plugin_->host().static_parameter_values_ready()) {
+      plugin_.reset();
+      message = QStringLiteral("Plugin could not suspend safely; parameters are read-only");
+    } else {
+      // Saved-state restoration may request a parameter refresh. Only
+      // requests made after opening the editor belong to this gesture.
+      (void)plugin_->host().take_restart_requests();
+      attachment_ = std::make_shared<plugin_ui::Vst3EditorAttachment>();
+      const auto status = attachment_->open(plugin_->host());
+      native = status == plugin_ui::EditorOpenStatus::attached;
+      message = editor_failure(status);
+      if (!binding.diagnostic.empty())
+        message += QStringLiteral("; %1").arg(QString::fromStdString(binding.diagnostic));
+      if (native) {
+        plugin_->host().begin_editor_parameter_capture();
+        if (host_.playback_busy())
+          message = QStringLiteral("Continuous gestures save automatically; qualified "
+                                   "controls change live audio. Closing saves remaining "
+                                   "editor state");
+        attachment_->window_shell()->setWindowTitle(QString::fromStdString(saved.name));
+        (void)attachment_->window_shell()->winId();
+        native_window_ = attachment_->window_shell()->windowHandle();
+      }
+    }
+  }
+  publish_insert_editor(saved, pending.track_id, pending.slot_id, message, native);
+}
+
+void Vst3EditorController::finish_instrument_open(const PendingVerification& pending,
+                                                  plugins::Vst3ProjectBindingResult binding) {
+  const auto& source = pending.saved;
+  QString message;
+  QVariantList parameters = saved_parameter_view(source);
+  bool editable = false;
+  bool native = false;
+  if (binding.ready() && binding.unresolved_parameter_ids.empty()) {
+    plugin_ = std::move(binding.effect);
+    plugin_->host().suspend();
+    if (plugin_->host().static_parameter_values_ready()) {
+      (void)plugin_->host().take_restart_requests();
+      original_ = source;
+      track_ = pending.track;
+      revision_ = session()->snapshot().revision;
+      attachment_ = std::make_shared<plugin_ui::Vst3EditorAttachment>();
+      const auto status = attachment_->open(plugin_->host());
+      native = status == plugin_ui::EditorOpenStatus::attached;
+      message = native ? editor_failure(status)
+                       : QStringLiteral("%1; verified continuous instrument parameters can be "
+                                        "saved while playing")
+                             .arg(editor_failure(status));
+      if (!binding.diagnostic.empty())
+        message += QStringLiteral("; %1").arg(QString::fromStdString(binding.diagnostic));
+      if (native) {
+        plugin_->host().begin_editor_parameter_capture();
+        if (host_.playback_busy())
+          message = QStringLiteral("Continuous gestures save automatically; qualified "
+                                   "controls change live audio. Closing saves remaining "
+                                   "editor state");
+        attachment_->window_shell()->setWindowTitle(QString::fromStdString(source.name));
+        (void)attachment_->window_shell()->winId();
+        native_window_ = attachment_->window_shell()->windowHandle();
+      }
+      parameters = parameter_view(source, &plugin_->host());
+      editable = !native;
+      plugin_automation_.publish_verified_parameters(source.id,
+                                                     verified_parameters(plugin_->host()));
+    } else {
+      plugin_.reset();
+      message = QStringLiteral("Instrument could not suspend safely; values are read-only");
+    }
+  } else {
+    message = QStringLiteral("Instrument values unavailable: %1")
+                  .arg(QString::fromStdString(binding.diagnostic));
+  }
+  publish_instrument_editor(source, pending.track, message, std::move(parameters), editable,
+                            native);
+}
+#endif
 
 void Vst3EditorController::apply_vst3_insert_editor() {
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
@@ -866,6 +1017,10 @@ void Vst3EditorController::refresh_live_status() {
 void Vst3EditorController::discard_vst3_insert_editor() {
   timer_.stop();
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+  // A pending hash is given up, not waited for: its result is dropped.
+  verify_timer_.stop();
+  hash_.abandon();
+  verifying_.reset();
   if (native_window_) {
     native_window_.clear();
     emit nativeWindowChanged();
