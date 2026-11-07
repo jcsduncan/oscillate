@@ -96,7 +96,7 @@ provenance and makes no licence conclusion, which belongs to G8.
 | Configure | CMake verifies the VST3 SDK manifest, interface headers and notices by digest. |
 | Package | Profile switches, source tree and version (a release tag must be `v<project version>`); x86-64 ELFs with no `RPATH` and no Qt Test; every library resolves. |
 | `.deb` | [`smoke_ubuntu_package.py`](../../tests/packaging/smoke_ubuntu_package.py): payload against the sidecar, notices, SBOM, QML runtime dependency, desktop entry. |
-| AppDir | [`smoke_appdir.py`](../../tests/packaging/smoke_appdir.py): payload tree, notices, SBOM, no MP3 encoder, app startup with the Qt platform plugin loaded from the AppDir and no host Qt plugin, scanner helper reply, loader picking bundled libraries. |
+| AppDir | [`smoke_appdir.py`](../../tests/packaging/smoke_appdir.py): payload tree, notices, SBOM, no MP3 encoder, app startup with the Qt platform plugin loaded from the AppDir and nothing loaded from the host's Qt plugin directory, scanner helper reply, loader picking bundled libraries. |
 | AppImage | [`build-appimage.py`](../../scripts/build-appimage.py): pinned appimagetool 1.9.1 and type-2 runtime 20251108 by SHA-256, runtime bytes unchanged outside appimagetool's MD5 slot, extracted payload, notices and SBOM. |
 | Clean container | [`install-smoke.sh`](../../tests/packaging/install-smoke.sh) in a fresh `ubuntu:26.04`: install (`apt-get install` for the `.deb`; for the AppImage, only `libproxy1v5` is added to the base image), launch with `--check-startup` to create and reopen a project offscreen, uninstall, and check that nothing is left behind. |
 

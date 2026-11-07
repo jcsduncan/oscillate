@@ -121,7 +121,7 @@ def smoke(appdir: Path, inventory_path: Path) -> None:
         require((project / "state/CURRENT").is_file(), "project was not created")
         for trace in traces:
             loaded = [
-                line.split("file=", 1)[1].split()[0]
+                line.split("file=", 1)[1].split(" [", 1)[0]
                 for line in trace.splitlines()
                 if "file=" in line and "dynamically loaded" in line
             ]
