@@ -13,6 +13,8 @@ namespace {
 
 // Analysis that ran across another edit is retried this many times.
 constexpr int max_retries = 2;
+// How often a running analysis is checked for its result.
+constexpr int poll_interval_ms = 50;
 
 [[nodiscard]] const project::Clip* find_clip(const project::Snapshot& snapshot,
                                              project::ClipId id) {
@@ -50,7 +52,7 @@ KeyMatchController::KeyMatchController(Session session, Root root, CanEdit can_e
         return load_source_key(root, source, generation, cancelled, cache_degraded, stop);
       }),
       timer_(this) {
-  timer_.setInterval(50);
+  timer_.setInterval(poll_interval_ms);
   connect(&timer_, &QTimer::timeout, this, &KeyMatchController::poll);
 }
 
@@ -72,9 +74,14 @@ void KeyMatchController::consider(project::ClipId clip_id) {
   if (clip == nullptr || !snapshot.key)
     return;
   const auto* review = find_review(snapshot, clip->source);
+  const auto generation = session->session_generation();
   if (review == nullptr || (!review->detected && !review->correction)) {
-    if (analysing_ != clip_id && std::ranges::find(waiting_, clip_id) == waiting_.end())
-      waiting_.push_back(clip_id);
+    const auto queued = std::ranges::any_of(waiting_, [&](const Waiting& waiting) {
+      return waiting.clip == clip_id && waiting.session == generation;
+    });
+    const auto running = analysing_ == clip_id && origin_session_ == generation;
+    if (!running && !queued)
+      waiting_.push_back({clip_id, generation});
     start_next();
     return;
   }
@@ -82,7 +89,7 @@ void KeyMatchController::consider(project::ClipId clip_id) {
       application::key_match(*review, clip->processing.pitch_semitones, *snapshot.key);
   if (!match)
     return;
-  offer_ = Offer{clip->id, clip->settings_generation, *snapshot.key, match->semitones};
+  offer_ = Offer{clip->id, generation, clip->settings_generation, *snapshot.key, match->semitones};
   QString name = QString::fromStdString(clip->name);
   if (name.isEmpty())
     name = QStringLiteral("The clip");
@@ -107,8 +114,10 @@ void KeyMatchController::start_next() {
     return;
   }
   while (!waiting_.empty()) {
-    const auto clip_id = waiting_.front();
+    const auto [clip_id, generation] = waiting_.front();
     waiting_.pop_front();
+    if (generation != session->session_generation())
+      continue; // Dropped into a session that has since been replaced.
     const auto& snapshot = session->snapshot();
     const auto* clip = find_clip(snapshot, clip_id);
     if (clip == nullptr)
@@ -120,6 +129,7 @@ void KeyMatchController::start_next() {
     analysing_ = clip_id;
     source_ = *source;
     origin_revision_ = snapshot.revision;
+    origin_session_ = generation;
     worker_.submit(root_(), source_, ++generation_);
     timer_.start();
     return;
@@ -133,7 +143,9 @@ void KeyMatchController::poll() {
   timer_.stop();
   const auto clip = *std::exchange(analysing_, std::nullopt);
   auto* session = session_();
-  if (session == nullptr || !outcome->result) {
+  if (session == nullptr || session->session_generation() != origin_session_ || !outcome->result) {
+    // A replaced session's result must not land on the one open now, even
+    // a copy of the same project with the same source and clip IDs.
     retries_ = 0;
     start_next();
     return;
@@ -142,7 +154,7 @@ void KeyMatchController::poll() {
     // Edited meanwhile: the result cannot be stored for the old revision.
     // The cache makes the retry quick.
     if (retries_++ < max_retries)
-      waiting_.push_front(clip);
+      waiting_.push_front({clip, origin_session_});
     else
       retries_ = 0;
     start_next();
@@ -169,8 +181,9 @@ void KeyMatchController::refresh() {
   }
   const auto& snapshot = session->snapshot();
   const auto* clip = find_clip(snapshot, offer_->clip);
-  if (clip == nullptr || clip->settings_generation != offer_->settings_generation ||
-      !snapshot.key || *snapshot.key != offer_->song)
+  if (session->session_generation() != offer_->session || clip == nullptr ||
+      clip->settings_generation != offer_->settings_generation || !snapshot.key ||
+      *snapshot.key != offer_->song)
     clear_hint();
 }
 
@@ -185,7 +198,8 @@ void KeyMatchController::apply() {
   }
   const auto offer = *offer_;
   const auto* clip = find_clip(session->snapshot(), offer.clip);
-  if (clip == nullptr || clip->settings_generation != offer.settings_generation) {
+  if (session->session_generation() != offer.session || clip == nullptr ||
+      clip->settings_generation != offer.settings_generation) {
     clear_hint();
     return;
   }

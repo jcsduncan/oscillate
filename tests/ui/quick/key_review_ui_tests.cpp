@@ -1,7 +1,9 @@
+#include "../../../apps/daw_quick/src/key_match_controller.hpp"
 #include "../../../apps/daw_quick/src/key_review_controller.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QColor>
+#include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QQmlComponent>
 #include <QQmlEngine>
@@ -30,6 +32,12 @@ using namespace oscillate;
 namespace fs = std::filesystem;
 
 using oscillate::test::require;
+// How long a key-analysis worker may take to report back.
+constexpr int worker_wait_ms = 3000;
+// The step a test waits in while a worker runs.
+constexpr int wait_step_ms = 1;
+// The song key smart drops are offered: D major.
+constexpr project::MusicalKey song_key{2, project::KeyMode::major};
 template <typename T> T take(foundation::Result<T> result) {
   if (!result) {
     throw std::runtime_error(result.error().message);
@@ -97,7 +105,7 @@ application::KeyCacheResult suggestion(const project::SourceRecord& source,
 
 void wait_for_commit(QSignalSpy& spy) {
   if (spy.isEmpty()) {
-    require(spy.wait(3000), "key-analysis worker did not commit within 3 seconds");
+    require(spy.wait(worker_wait_ms), "key-analysis worker did not commit within 3 seconds");
   }
 }
 
@@ -226,6 +234,49 @@ void project_revision_cancels_late_result() {
               review.preview().value("state").toString() == QStringLiteral("stale"),
           "stale worker result replaced a newer manual correction");
 }
+// A clip's key analysis that finishes after its session was replaced, here
+// by an on-disk copy of the same project with the same source and clip
+// IDs, is dropped: neither stored in the copy nor offered there.
+void key_match_drops_a_replaced_sessions_result() {
+  Fixture fixture;
+  require(fixture.session->song().set_project_key(song_key).has_value(), "song key");
+  require(fixture.session->saving().save().has_value(), "save");
+  const auto copy_root = fixture.directory.path() / "copy";
+  fs::copy(fixture.root, copy_root, fs::copy_options::recursive);
+  auto copy = take(application::ProjectSession::open(copy_root));
+  const auto copy_revision = copy->snapshot().revision;
+  application::ProjectSession* current = fixture.session.get();
+  fs::path current_root = fixture.root;
+  std::binary_semaphore entered{0};
+  std::binary_semaphore release{0};
+  std::atomic<bool> first{true};
+  int commits = 0;
+  quick::KeyMatchController match(
+      [&] { return current; }, [&] { return current_root; }, [] { return true; }, [](QString) {},
+      [&] { ++commits; },
+      [&](const auto&, const project::SourceRecord& source, std::uint64_t generation, const auto&) {
+        if (first.exchange(false)) {
+          entered.release();
+          release.acquire();
+        }
+        return foundation::Result<application::KeyCacheResult>::success(
+            suggestion(source, generation, false));
+      });
+  match.dropped(fixture.session->snapshot().tracks.front().clips.front().id);
+  require(match.busy(), "the drop did not start key analysis");
+  entered.acquire();
+  current = copy.get();
+  current_root = copy_root;
+  release.release();
+  QElapsedTimer waited;
+  waited.start();
+  while (match.busy() && waited.elapsed() < worker_wait_ms)
+    QTest::qWait(wait_step_ms);
+  require(!match.busy(), "key analysis did not finish");
+  require(commits == 0 && copy->snapshot().revision == copy_revision &&
+              copy->snapshot().source_key_reviews.empty() && match.hint().isEmpty(),
+          "a replaced session's key analysis landed on the copy that replaced it");
+}
 } // namespace
 
 int main(int argc, char** argv) {
@@ -234,6 +285,7 @@ int main(int argc, char** argv) {
     review_panel_and_reopen();
     deselection_cancels_late_result();
     project_revision_cancels_late_result();
+    key_match_drops_a_replaced_sessions_result();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return 1;
