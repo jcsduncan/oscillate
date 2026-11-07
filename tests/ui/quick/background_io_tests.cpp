@@ -149,8 +149,8 @@ void abandoned_work_is_never_waited_for() {
   constexpr int first_result = 1;
   constexpr int second_result = 2;
   const auto failure = [](const std::string&) { return 0; };
+  SlowIo io; // Before the job: the job's destructor joins work that uses it.
   quick::BackgroundJob<int> job;
-  SlowIo io;
   require(!job.start(
               0,
               [&] {

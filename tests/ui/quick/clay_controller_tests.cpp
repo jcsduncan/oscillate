@@ -271,13 +271,14 @@ void cancelling_a_detection_never_waits_for_the_disk() {
   (void)::close(fd);
   require(static_cast<bool>(session->saving().save()), "the project saves");
   const auto clip = session->snapshot().tracks.front().clips.front().id;
+  // Before the controller: its destructor joins the decoder that uses them.
+  std::binary_semaphore entered{0};
+  std::binary_semaphore release{0};
+  std::atomic<bool> told_to_stop{false};
   quick::ClayController controller(
       [&] { return session.get(); }, [] { return true; }, [](const QString&) {}, [] {},
       [](const QString&) { return std::optional<oscillate::persistence::GrooveTemplate>{}; }, [] {},
       [] {});
-  std::binary_semaphore entered{0};
-  std::binary_semaphore release{0};
-  std::atomic<bool> told_to_stop{false};
   controller.set_decoder([&](const auto&, const auto&, const std::stop_token& stop) {
     entered.release();
     (void)release.try_acquire_for(release_timeout);

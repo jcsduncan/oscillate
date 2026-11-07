@@ -233,6 +233,7 @@ void ClayController::open_clip(const QString& clip_id) {
     return;
   }
   cancel_detect();
+  audition_.abandon(); // An audition of the previous clip is never published.
   clip_ = parsed.value();
   loaded_.reset();
   edited_.reset();
@@ -252,6 +253,7 @@ void ClayController::open_clip(const QString& clip_id) {
 
 void ClayController::close() {
   cancel_detect();
+  audition_.abandon();
   clip_.reset();
   take_.reset();
   preview_.reset();
@@ -728,6 +730,8 @@ void ClayController::warm_render() {
     warm_stop_->request_stop();
   warm_.abandon();
   warm_stop_.reset();
+  // The abandoned render never reaches poll(), so settle the state as poll() would.
+  set_render_state(take_ ? QStringLiteral("ready") : QStringLiteral("none"));
   auto found = song_clay::find_clip(session->snapshot(), *clip_);
   auto pinned = session->exports().pin_snapshot();
   if (!found || !pinned)
