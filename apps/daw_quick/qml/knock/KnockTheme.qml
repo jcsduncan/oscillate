@@ -47,7 +47,7 @@ KitTheme {
     glacier: "#fff3ea"
     ink: "#eee8df"
     inkDim: "#a69e92"
-    inkFaint: "#6c655c"
+    inkFaint: "#90887d"
 
     knobTop: "#2c2823"
     knobBottom: "#151310"

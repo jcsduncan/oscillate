@@ -57,7 +57,7 @@ KitTheme {
     property color gridMajor: "#1a3631"
     ink: "#e4ebe9"
     inkDim: "#8b9794"
-    inkFaint: "#57625f"
+    inkFaint: "#7a8985"
 
     accent: "#3df5d3"
     property color accentDim: "#1b7f6e"
@@ -208,7 +208,7 @@ KitTheme {
     envelopeBaselineSnap: true
     envelopeBandFill: Qt.rgba(1, 1, 1, 0.04)
     envelopeLabelInk: inkFaint
-    envelopeLabelSize: 7
+    envelopeLabelSize: typeMicro
     envelopeLabelSpacing: 1
     envelopeLabelInset: 6
     envelopeLabelLift: 13

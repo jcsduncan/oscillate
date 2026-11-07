@@ -576,7 +576,7 @@ Rectangle {
         id: lookaheadPlate
         theme: panel.theme
         title: "LOOKAHEAD"
-        note: "LATENCY · NOT AUTOMATABLE"
+        note: "NOT AUTOMATABLE"
         x: ceilingPlate.x + ceilingPlate.width + panel.gap
         y: panel.rowBY
         width: panel.theme.lookaheadPlateWidth

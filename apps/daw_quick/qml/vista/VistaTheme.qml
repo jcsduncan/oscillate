@@ -36,7 +36,7 @@ KitTheme {
 
     ink: "#e9f1f8"
     inkDim: "#8ea3b8"
-    inkFaint: "#55697f"
+    inkFaint: "#7288a0"
 
     knobTop: "#2a3a4c"
     knobBottom: "#0d151d"

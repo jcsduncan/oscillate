@@ -458,13 +458,15 @@ Rectangle {
             }
             Cell { parameterId: "relay.diffusion" }
         }
+        // A helper sentence, set in sentence case.
         Caption {
+            objectName: "relayFeedbackNote"
             x: panel.theme.platePad
             y: feedbackPlate.height - panel.theme.plateNoteBottom
             width: feedbackPlate.width - 2 * panel.theme.platePad
-            text: panel.character === 0 ? "DIGITAL STAYS CLEAN BELOW 0 dBFS — DRIVE IS FOR TAPE AND ANALOG"
-                : panel.character === 1 ? "EVERY PASS: CUTS, TAPE HF LOSS, TANH SATURATION"
-                : "EVERY PASS: CUTS, BBD CLOCK FILTER, SOFT CLIP"
+            text: panel.character === 0 ? "Digital stays clean below 0 dBFS; drive is for Tape and Analog."
+                : panel.character === 1 ? "Every pass: the cuts, tape HF loss and tanh saturation."
+                : "Every pass: the cuts, the BBD clock filter and a soft clip."
             elide: Text.ElideRight
             font.letterSpacing: panel.theme.noteSpacing
         }

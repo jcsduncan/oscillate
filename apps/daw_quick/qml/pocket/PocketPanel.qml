@@ -759,7 +759,7 @@ Rectangle {
         theme: panel.theme
         id: focusPlate
         title: "FOCUS"
-        note: "OR DRAG ON THE MAP"
+        note: "OR THE MAP"
         x: duck.x + duck.width + panel.gap
         y: panel.rowCY
         width: panel.theme.focusWidth

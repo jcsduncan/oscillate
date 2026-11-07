@@ -70,7 +70,11 @@ KitTheme {
     property color engraving: "#0f0e0c"
     property color text: "#efe6d2"
     property color dim: "#b3a891"
-    property color faint: "#7c7362"
+    property color faint: "#948a77"
+    ink: text
+    inkDim: dim
+    inkFaint: faint
+    inkGround: panel
     warning: "#f0b45a"
     live: "#9fd58a"
 

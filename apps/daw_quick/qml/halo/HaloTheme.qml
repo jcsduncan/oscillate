@@ -69,7 +69,7 @@ KitTheme {
     plateHi: "#33271f"
     ink: "#ecdfc8"
     inkDim: "#a8957c"
-    inkFaint: "#6f604f"
+    inkFaint: "#95816a"
 
     property color teal: "#36c9b8"
     property color tealDim: "#1d5f58"
@@ -216,7 +216,7 @@ KitTheme {
     envelopeMarkersOver: false
     envelopeLabelInk: lcdDim
     envelopeLabelFont: mono
-    envelopeLabelSize: 8
+    envelopeLabelSize: typeMicro
     envelopeLabelInset: 5
     envelopeLabelTop: 3
 

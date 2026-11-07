@@ -50,7 +50,7 @@ KitTheme {
     grid: "#1c1e21"
     ink: "#e9ebee"
     inkDim: "#8b9097"
-    inkFaint: "#555a61"
+    inkFaint: "#7b828b"
 
     readonly property var modelColors: ["#a6ff3d", "#ffb02e", "#a97bff", "#ff3d55"]
     readonly property var modelNames: ["ACID", "MOOG", "REESE", "SUB"]

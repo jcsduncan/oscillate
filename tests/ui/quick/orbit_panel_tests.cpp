@@ -178,6 +178,18 @@ void panel_covers_every_parameter() {
   }
 }
 
+// Helper sentences are set in sentence case, never in capitals.
+void helper_sentences_are_in_sentence_case() {
+  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  NativeSynthDeviceController controller(table(), adapter);
+  auto panel = load_panel(controller);
+  for (const char* name : {"orbitToneNote", "orbitVoiceNote"}) {
+    const QString text = text_of(*panel, QString::fromLatin1(name));
+    require(!text.isEmpty() && text != text.toUpper(),
+            std::string(name) + " is in sentence case: " + text.toStdString());
+  }
+}
+
 // Each mode shows only what it uses: time for the delay modes, feedback for
 // chorus, flanger and phaser, voices for chorus, stages and centre for the
 // phaser; ensemble and tremolo explain themselves instead.
@@ -346,6 +358,7 @@ int main(int argc, char** argv) {
   try {
     controller_decodes_orbit_telemetry();
     panel_covers_every_parameter();
+    helper_sentences_are_in_sentence_case();
     each_mode_shows_its_own_controls();
     controls_edit_through_the_controller();
     presets_and_status();

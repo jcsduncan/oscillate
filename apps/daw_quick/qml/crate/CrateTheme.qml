@@ -42,7 +42,7 @@ KitTheme {
     gridStrong: line2
     ink: "#e8e4da"
     inkDim: "#8d93a0"
-    inkFaint: "#5d636e"
+    inkFaint: "#767d8b"
     glacier: "#f4f1ea"
     button: buttonFill
     buttonHi: "#1f232b"

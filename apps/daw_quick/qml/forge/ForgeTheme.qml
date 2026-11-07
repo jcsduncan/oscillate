@@ -70,7 +70,7 @@ KitTheme {
 
     ink: "#ece4d6"
     inkDim: "#a0978a"
-    inkFaint: "#625c55"
+    inkFaint: "#847c72"
 
     knobTop: "#2e3035"
     knobBottom: "#0b0c0e"
@@ -226,7 +226,7 @@ KitTheme {
     property real meterScaleGap: 3
     // The scale's numbers sit this far above their marks.
     property real meterScaleLift: 5
-    property int scaleTextSize: 7
+    property int scaleTextSize: typeMicro
     property real meterValueY: 15
 
     // The forge screen: forge-light rising from below (each tint scales the
