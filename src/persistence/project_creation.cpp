@@ -55,15 +55,18 @@ struct DirectoryCloser {
 };
 using DirectoryStream = std::unique_ptr<DIR, DirectoryCloser>;
 
-// The stage name keeps as much of the project name as NAME_MAX allows, so a
-// leftover stage is still recognisable to a person browsing the folder.
-std::string stage_name_for(const std::string& final_name, const std::string& random) {
+// A fresh stage name. It keeps as much of the project name as NAME_MAX
+// allows, so a leftover stage is still recognisable in a file browser.
+Result<std::string> stage_name_for(const std::string& final_name) {
+  auto random = detail::random_name();
+  if (!random)
+    return Result<std::string>::failure(random.error());
   const auto room = NAME_MAX - stage_prefix.size() - stage_suffix_length;
   std::string name(stage_prefix);
   name += final_name.substr(0, room);
   name += stage_marker;
-  name += random;
-  return name;
+  name += random.value();
+  return Result<std::string>::success(std::move(name));
 }
 
 void remove_stage(const std::filesystem::path& parent, int parent_fd, const std::string& name) {
@@ -97,11 +100,10 @@ bool abandoned_stage(int parent_fd, const char* name, UniqueFd& lock) {
 } // namespace
 
 ProjectCreation::ProjectCreation(std::filesystem::path parent, UniqueFd parent_fd,
-                                 std::string stage_name, std::string final_name,
-                                 foundation::PublishMode mode, FaultHook fault)
+                                 std::string final_name, foundation::PublishMode mode,
+                                 FaultHook fault)
     : parent_(std::move(parent)), parent_fd_(std::move(parent_fd)),
-      stage_name_(std::move(stage_name)), final_name_(std::move(final_name)), mode_(mode),
-      fault_(std::move(fault)) {}
+      final_name_(std::move(final_name)), mode_(mode), fault_(std::move(fault)) {}
 
 ProjectCreation::ProjectCreation(ProjectCreation&& other) noexcept
     : parent_(std::move(other.parent_)), parent_fd_(std::move(other.parent_fd_)),
@@ -130,9 +132,8 @@ Result<StartedCreation> ProjectCreation::begin(const std::filesystem::path& root
   UniqueFd parent_fd(::open(parent.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW));
   if (!parent_fd)
     return Result<StartedCreation>::failure(io_error("open project parent"));
-  auto cleaned = clean_abandoned(parent);
-  if (!cleaned)
-    return Result<StartedCreation>::failure(cleaned.error());
+  // Best effort: a stage that cannot be removed must not block creation.
+  (void)clean_abandoned(parent);
 
   // An existing empty folder is replaced by the rename; anything else blocks.
   auto mode = foundation::PublishMode::no_replace;
@@ -155,14 +156,14 @@ Result<StartedCreation> ProjectCreation::begin(const std::filesystem::path& root
     return Result<StartedCreation>::failure(
         {ErrorCode::io_failure, "injected project-creation interruption"});
 
-  auto random = detail::random_name();
-  if (!random)
-    return Result<StartedCreation>::failure(random.error());
-  auto stage_name = stage_name_for(final_name, random.value());
-  ProjectCreation creation(parent, std::move(parent_fd), stage_name, final_name, mode, fault);
+  auto stage_name = stage_name_for(final_name);
+  if (!stage_name)
+    return Result<StartedCreation>::failure(stage_name.error());
+  ProjectCreation creation(parent, std::move(parent_fd), final_name, mode, fault);
+  creation.stage_name_ = stage_name.value();
   // open_writer makes the stage, flushes its entry in the parent and lays out
   // the project folders; a failure leaves the stage for the destructor.
-  auto writer = ProjectStore::open_writer(parent / stage_name, true, std::move(fault));
+  auto writer = ProjectStore::open_writer(parent / creation.stage_name_, true, std::move(fault));
   if (!writer)
     return Result<StartedCreation>::failure(writer.error());
   return Result<StartedCreation>::success(
@@ -232,12 +233,11 @@ Result<std::size_t> ProjectCreation::clean_abandoned(const std::filesystem::path
     UniqueFd lock;
     if (!abandoned_stage(parent_fd.get(), entry->d_name, lock))
       continue;
+    // A stage that cannot be removed is skipped; it never blocks the rest.
     std::error_code error;
     std::filesystem::remove_all(parent / entry->d_name, error);
-    if (error)
-      return Result<std::size_t>::failure(
-          {ErrorCode::io_failure, "Cannot remove an abandoned project stage"});
-    ++removed;
+    if (!error)
+      ++removed;
   }
   if (removed > 0) {
     if (auto flushed = foundation::sync(parent_fd.get(), "flush project parent"); !flushed)

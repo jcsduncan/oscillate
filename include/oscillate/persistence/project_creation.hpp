@@ -28,8 +28,9 @@ public:
   // Removes the stage unless publish() renamed it into place.
   ~ProjectCreation();
 
-  // Refuses a `root` that exists and is not an empty directory, removes
-  // abandoned stages beside it, then opens the sole writer on a fresh stage.
+  // Refuses a `root` that exists and is not an empty directory, removes what
+  // it can of the abandoned stages beside it, then opens the sole writer on a
+  // fresh stage.
   // The fault hook also reaches the writer's saves.
   [[nodiscard]] static foundation::Result<StartedCreation> begin(const std::filesystem::path& root,
                                                                  FaultHook fault = {});
@@ -41,7 +42,9 @@ public:
 
   // Removes stages in `parent` that a process older than this one abandoned:
   // only directories matching the stage pattern, holding no CURRENT and whose
-  // writer lock is free. Returns how many were removed.
+  // writer lock is free. Best effort and bounded: a stage that cannot be
+  // removed is skipped, and a scan stops after a fixed number of entries.
+  // Returns how many were removed; fails only if `parent` cannot be scanned.
   [[nodiscard]] static foundation::Result<std::size_t>
   clean_abandoned(const std::filesystem::path& parent);
 
@@ -50,8 +53,7 @@ public:
 
 private:
   ProjectCreation(std::filesystem::path parent, foundation::UniqueFd parent_fd,
-                  std::string stage_name, std::string final_name, foundation::PublishMode mode,
-                  FaultHook fault);
+                  std::string final_name, foundation::PublishMode mode, FaultHook fault);
 
   std::filesystem::path parent_;
   foundation::UniqueFd parent_fd_;

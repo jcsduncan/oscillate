@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
@@ -151,6 +152,8 @@ constexpr std::string_view clean_mode = "--clean";
 constexpr int fresh_check_failed = 1;
 constexpr std::uint64_t created_revision = 1;
 constexpr std::uint64_t recreated_revision = 2;
+// Comfortably older than the test process, whatever the filesystem's clock.
+constexpr auto stale_stage_age = std::chrono::hours(1);
 
 void wait_for_sigkill(pid_t child, std::string_view what) {
   int status = 0;
@@ -319,6 +322,25 @@ void verify_live_stage_kept() {
   REQUIRE_TRUE(stage_names(directory.path()).empty(), "abandoned stage survived cleanup");
 }
 
+// A stage that cannot be removed is skipped: it blocks neither the cleanup
+// of other stages nor a new creation beside it.
+void verify_stuck_stage_skipped() {
+  Directory directory;
+  const auto stuck = directory.path() / ".Stuck.creating-00112233445566778899aabbccddeeff";
+  const auto loose = directory.path() / ".Loose.creating-ffeeddccbbaa99887766554433221100";
+  const auto sealed = stuck / "state" / "generations";
+  fs::create_directories(sealed / "inner");
+  fs::create_directories(loose / "state" / "generations");
+  for (const auto& stage : {stuck, loose})
+    fs::last_write_time(stage, fs::file_time_type::clock::now() - stale_stage_age);
+  fs::permissions(sealed, fs::perms::owner_read | fs::perms::owner_exec);
+  const auto created = ProjectCreation::begin(directory.path() / "project");
+  fs::permissions(sealed, fs::perms::owner_all);
+  REQUIRE_TRUE(created.has_value(), "an undeletable stage blocked a new creation");
+  REQUIRE_TRUE(fs::exists(stuck), "the undeletable stage fixture was removed");
+  REQUIRE_FALSE(fs::exists(loose), "an undeletable stage stopped the cleanup of another");
+}
+
 int fresh_main(const std::vector<std::string_view>& arguments) {
   try {
     if (arguments.size() == 4 && arguments[0] == verify_creation_mode) {
@@ -346,6 +368,7 @@ int main(int argc, char** argv) {
     for (const auto& kill : creation_kills)
       verify_killed_creation(kill);
     verify_live_stage_kept();
+    verify_stuck_stage_skipped();
     constexpr std::array stages{SaveStage::manifest_written,     SaveStage::generation_flushed,
                                 SaveStage::generation_published, SaveStage::generations_flushed,
                                 SaveStage::pointer_written,      SaveStage::pointer_published,
