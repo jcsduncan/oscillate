@@ -1,6 +1,7 @@
 #include "oscillate/foundation/value_text.hpp"
 #include "oscillate/test/check.hpp"
 
+#include <clocale>
 #include <iostream>
 #include <limits>
 #include <string>
@@ -83,6 +84,22 @@ void units() {
   REQUIRE_EQ(format_quantity(0.5, ""), "0.50", "no unit, no trailing space");
 }
 
+// A comma-decimal locale (where one is installed) changes nothing: the
+// formatter writes a full stop and still drops a rounded negative zero.
+void independent_of_the_locale() {
+  for (const char* comma_locale : {"de_DE.UTF-8", "fr_FR.UTF-8", "nl_NL.UTF-8"}) {
+    if (std::setlocale(LC_NUMERIC, comma_locale) == nullptr) {
+      continue;
+    }
+    const std::string level = format_quantity(-6.26, "dB");
+    const std::string zero = format_number(-0.004);
+    std::setlocale(LC_NUMERIC, "C");
+    REQUIRE_EQ(level, minus + "6.3 dB", "a full stop in any locale");
+    REQUIRE_EQ(zero, "0.00", "a rounded negative zero has no sign in any locale");
+    return;
+  }
+}
+
 } // namespace
 
 int main() {
@@ -90,6 +107,7 @@ int main() {
     minus_sign_and_negative_zero();
     decimals_rule();
     units();
+    independent_of_the_locale();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';
     return 1;

@@ -2,9 +2,10 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cmath>
-#include <cstdio>
-#include <cstdlib>
+#include <cstddef>
+#include <system_error>
 
 namespace oscillate::foundation {
 namespace {
@@ -42,13 +43,24 @@ std::string_view spelled(std::string_view unit) noexcept {
   return unit;
 }
 
-// Digits of a non-negative magnitude to `decimals` places.
+// Room for the digits of any finite double in fixed notation.
+constexpr std::size_t digits_room = 400;
+
+// Digits of a non-negative magnitude to `decimals` places, with a full
+// stop whatever the process's locale.
 std::string digits(double magnitude, int decimals) {
-  std::array<char, 64> text{};
-  const int written = std::snprintf(text.data(), text.size(), "%.*f", decimals, magnitude);
-  if (written <= 0 || static_cast<std::size_t>(written) >= text.size())
+  std::array<char, digits_room> text{};
+  const auto [end, error] = std::to_chars(text.data(), text.data() + text.size(), magnitude,
+                                          std::chars_format::fixed, decimals);
+  if (error != std::errc{})
     return std::string(no_value);
-  return {text.data(), static_cast<std::size_t>(written)};
+  return {text.data(), end};
+}
+
+double parsed(const std::string& text) {
+  double value = 0.0;
+  std::from_chars(text.data(), text.data() + text.size(), value);
+  return value;
 }
 
 bool reads_as_zero(std::string_view text) noexcept {
@@ -79,7 +91,7 @@ std::string format_number(double value, int decimals, ValueSign sign) {
     // rounded reading decides its own decimals.
     const int first = display_decimals(magnitude);
     text = digits(magnitude, first);
-    const int settled = display_decimals(std::strtod(text.c_str(), nullptr));
+    const int settled = display_decimals(parsed(text));
     if (settled != first)
       text = digits(magnitude, settled);
   } else {

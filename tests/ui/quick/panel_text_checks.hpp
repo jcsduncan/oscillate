@@ -53,9 +53,11 @@ inline const std::vector<std::pair<QRegularExpression, const char*>>& value_rule
   static const std::vector<std::pair<QRegularExpression, const char*>> rules{
       {QRegularExpression(QStringLiteral("(^|[^\\w\\-])-(\\d|\\x{221E}|inf)")),
        "a hyphen-minus where a minus sign (U+2212) belongs"},
+      {QRegularExpression(QStringLiteral("\\b[A-G][\\x{266F}\\x{266D}#]?-\\d")),
+       "a hyphen-minus in a negative octave (C\u22121)"},
       {QRegularExpression(QStringLiteral("[\\x{2212}\\-]0(\\.0+)?(?![\\d.])")), "a negative zero"},
-      {QRegularExpression(QStringLiteral("\\b(KHZ|HZ|DB|DBFS|MS)\\b")),
-       "a unit set in capitals (kHz, Hz, dB, ms keep their case)"},
+      {QRegularExpression(QStringLiteral("\\b(KHZ|khz|HZ|DB|DBFS|MS)\\b")),
+       "a unit in the wrong case (kHz, Hz, dB, ms keep their case)"},
       {QRegularExpression(QStringLiteral("\\d S\\b")), "seconds set in capitals (s)"},
       {QRegularExpression(QStringLiteral("\\bdeg\\b"), QRegularExpression::CaseInsensitiveOption),
        "degrees as \"deg\" (°)"},
@@ -63,6 +65,7 @@ inline const std::vector<std::pair<QRegularExpression, const char*>>& value_rule
       {QRegularExpression(QStringLiteral("\\d\\s*(\\x{00A2}|cents?\\b)"),
                           QRegularExpression::CaseInsensitiveOption),
        "cents not written ct"},
+      {QRegularExpression(QStringLiteral("\\d\\s?c\\b")), "cents written c (ct)"},
       {QRegularExpression(QStringLiteral("\\d%")), "a percent sign not set apart from its number"},
   };
   return rules;
@@ -81,14 +84,15 @@ inline const char* broken_value_rule(const QString& text) {
 // The rules catch each mistake #166 found in the panels, and pass the
 // formatter's own spelling of the same values.
 inline void rules_catch_known_mistakes() {
-  for (const char* wrong : {"-0.0 dB", "\u22120.0 dB", "LATE -16 DB", "48 KHZ", "2.00 MS LATENCY",
-                            "3 S", "90 deg", "C#3", "12 cents", "+5 \u00A2", "75%"}) {
+  for (const char* wrong :
+       {"-16 dB", "-0.0 dB", "\u22120.0 dB", "LATE -16 DB", "48 KHZ", "48 khz", "2.00 MS LATENCY",
+        "3 S", "90 deg", "C#3", "C-1", "12 cents", "+5 \u00A2", "12c", "75%"}) {
     require(broken_value_rule(QString::fromUtf8(wrong)) != nullptr,
             std::string("the text rules catch \"") + wrong + "\"");
   }
   for (const char* right :
        {"0.0 dB", "LATE \u221216 dB", "48 kHz", "2.00 ms LATENCY", "HELD 1 s", "90\u00B0",
-        "C\u266F3", "+12 ct", "75 %", "KICK-AWARE LOW", "M / S", "\u22120.05"}) {
+        "C\u266F3", "C\u22121", "+12 ct", "75 %", "KICK-AWARE LOW", "M / S", "\u22120.05"}) {
     require(broken_value_rule(QString::fromUtf8(right)) == nullptr,
             std::string("the text rules pass \"") + right + "\"");
   }
