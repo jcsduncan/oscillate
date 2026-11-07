@@ -96,16 +96,18 @@ reviews:
       - name: Architecture docs current
         mode: error
         instructions: |
-          Pass if this PR changes no module boundary or dependency, persisted
-          format or schema, real-time or threading contract, public API in
-          include/oscillate, telemetry layout, or documented behaviour.
-          Otherwise pass only if the same PR updates every affected document:
-          docs/HLD.md (including the §3 dependency table and
-          cmake/module_dependencies.json together), the relevant spec in
-          docs/specs/, and the relevant ADR in docs/decisions/. A change that
-          contradicts an accepted ADR must add a new ADR that supersedes it,
-          with the old ADR's status set to "Superseded by ADR-NNNN". Fail and
-          name each stale document otherwise.
+          Fail only if this PR leaves a document inaccurate. If it changes a
+          module boundary or dependency, persisted format or schema,
+          real-time or threading contract, public API in include/oscillate,
+          telemetry layout, or documented behaviour, check that docs/HLD.md
+          (including the §3 dependency table, kept in step with
+          cmake/module_dependencies.json), the relevant spec in docs/specs/
+          and the relevant ADR in docs/decisions/ still describe the code
+          after this PR. A document that is already accurate needs no edit.
+          If the change contradicts an accepted ADR, a new ADR must supersede
+          it, with the old ADR's status set to "Superseded by ADR-NNNN"; an
+          accepted ADR is otherwise left as written. Name each inaccurate
+          document.
 
   tools:
     ruff:
