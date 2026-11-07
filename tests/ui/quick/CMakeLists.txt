@@ -375,8 +375,7 @@ add_executable(oscillate_quick_routed_playback_tests
 )
 target_link_libraries(oscillate_quick_routed_playback_tests PRIVATE oscillate::application)
 target_compile_definitions(oscillate_quick_routed_playback_tests PRIVATE
-  OSCILLATE_HAVE_VST3=$<BOOL:${OSCILLATE_BUILD_VST3_SCANNER}>
-  OSCILLATE_ROUTED_OVERLAY_TEST_INPUT=1)
+  OSCILLATE_HAVE_VST3=$<BOOL:${OSCILLATE_BUILD_VST3_SCANNER}>)
 if(OSCILLATE_BUILD_VST3_SCANNER)
   target_link_libraries(oscillate_quick_routed_playback_tests PRIVATE
     oscillate::vst3_track_insert oscillate::vst3_instrument_provider
