@@ -550,12 +550,10 @@ void NoteToolsController::start_file_work() {
     return;
   auto work = std::move(waiting_.front());
   waiting_.pop_front();
-  const auto failed =
-      files_.start(0, std::move(work), [](const std::string& error) {
-        return FileOutcome{.kind = FileOutcome::Kind::failed,
-                           .ok = false,
-                           .name = QString::fromStdString(error)};
-      });
+  const auto failed = files_.start(0, std::move(work), [](const std::string& error) {
+    return FileOutcome{
+        .kind = FileOutcome::Kind::failed, .ok = false, .name = QString::fromStdString(error)};
+  });
   if (failed) {
     report_(QStringLiteral("Groove files: %1").arg(QString::fromStdString(*failed)));
     start_file_work();
