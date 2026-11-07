@@ -485,6 +485,13 @@ void screenshots_if_requested() {
   if (directory == nullptr || *directory == '\0') {
     return;
   }
+  // FRET_PANEL_SCREENSHOT_LIBRARY names a real library to show.
+  if (const char* real = std::getenv("FRET_PANEL_SCREENSHOT_LIBRARY");
+      real != nullptr && *real != '\0') {
+    const auto status = fret::library::load(real);
+    require(status.state == fret::library::State::ready,
+            "the screenshot library loads: " + status.message);
+  }
   QDir().mkpath(QString::fromLocal8Bit(directory));
   InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);

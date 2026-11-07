@@ -5,6 +5,19 @@ behaviour is specified in the [functional specs](../../docs/specs/README.md);
 the [HLD](../../docs/HLD.md) defines the boundaries with the engine and project
 model. This file describes where to make a UI change.
 
+![The shell: browser, arrangement and device chain](../../docs/images/app/arrangement.png)
+
+*The shell: the browser on the left, the arrangement, and the selected track's
+device chain in the dock below.*
+
+![The piano roll in the dock's Notes tab](../../docs/images/app/piano-roll.png)
+
+*The dock's Notes tab: the piano roll, with velocity and pedal lanes.*
+
+![The mixer view](../../docs/images/app/mixer.png)
+
+*The mixer view.*
+
 ## Structure
 
 | Path | Responsibility |

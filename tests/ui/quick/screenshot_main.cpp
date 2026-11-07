@@ -40,7 +40,8 @@ int run(int argc, char** argv) {
   app.installEventFilter(bridge.computer_keyboard());
   constexpr std::string_view usage =
       "Usage: oscillate_quick_screenshot PNG [--view arrange|mixer] [--settle MS]\n"
-      "                                  [--select-first-clip] [--visible-bars N]\n"
+      "                                  [--select-track N] [--select-first-clip]\n"
+      "                                  [--visible-bars N]\n"
       "                                  [--first-bar N] [--dock-tab 0|1|2]\n"
       "                                  [--create FOLDER | --open FOLDER]\n";
   if (argc < 2) {
@@ -49,11 +50,13 @@ int run(int argc, char** argv) {
   }
   // --view picks the workspace view to render, --settle how long to wait
   // first (background analysis included), --select-first-clip selects the
-  // first clip and --dock-tab the device dock's tab: 0 chain, 1 clip, 2 notes.
+  // first clip (of the selected track, with --select-track N) and
+  // --dock-tab the device dock's tab: 0 chain, 1 clip, 2 notes.
   const QString screenshot = QString::fromLocal8Bit(argv[1]);
   std::optional<QString> view;
   int settle_ms = default_settle_ms;
   bool select_first_clip = false;
+  std::optional<int> select_track;
   std::optional<int> dock_tab;
   std::optional<double> visible_bars;
   std::optional<double> first_bar;
@@ -66,6 +69,8 @@ int run(int argc, char** argv) {
       view = QString::fromLocal8Bit(argv[++index]);
     } else if (option == "--settle" && has_value) {
       settle_ms = std::max(0, std::stoi(argv[++index]));
+    } else if (option == "--select-track" && has_value && std::stoi(argv[index + 1]) >= 0) {
+      select_track = std::stoi(argv[++index]);
     } else if (option == "--select-first-clip") {
       select_first_clip = true;
     } else if (option == "--dock-tab" && has_value) {
@@ -111,10 +116,23 @@ int run(int argc, char** argv) {
   if (first_bar)
     window->setProperty("viewStartBar", *first_bar);
   window->resize(design_width, design_height);
+  if (select_track) {
+    if (*select_track >= bridge.tracks().size()) {
+      std::cerr << "--select-track " << *select_track << ": the project has "
+                << bridge.tracks().size() << " tracks\n";
+      return 1;
+    }
+    window->setProperty("selectedTrack", *select_track);
+  }
   if (select_first_clip) {
-    QTimer::singleShot(select_clip_delay_ms, &app, [&bridge, window] {
-      for (const auto& track : bridge.tracks()) {
-        const auto clips = track.toMap().value(QStringLiteral("clips")).toList();
+    QTimer::singleShot(select_clip_delay_ms, &app, [&bridge, window, select_track] {
+      // The selected track's first clip; without --select-track, the first clip anywhere.
+      const auto tracks = bridge.tracks();
+      const qsizetype first = select_track.value_or(0);
+      const qsizetype last =
+          select_track ? std::min<qsizetype>(first + 1, tracks.size()) : tracks.size();
+      for (qsizetype index = first; index < last; ++index) {
+        const auto clips = tracks.at(index).toMap().value(QStringLiteral("clips")).toList();
         if (!clips.isEmpty()) {
           window->setProperty("selectedClipId",
                               clips.front().toMap().value(QStringLiteral("id")).toString());

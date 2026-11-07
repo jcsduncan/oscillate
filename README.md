@@ -7,6 +7,10 @@ pipeline and VST3 host; Qt Quick user interface.
 - **Status:** pre-release; not yet release-qualified
 - **Licence:** GPL-3.0-or-later
 
+![Arrangement with the device chain of the selected track](docs/images/app/arrangement.png)
+
+*The arrangement, with the selected track's device chain below.*
+
 ## Features
 
 | Area | Contents |
@@ -23,6 +27,23 @@ pipeline and VST3 host; Qt Quick user interface.
 
 Not included: Session View, audio recording, hardware MIDI input.
 Scope: [PRD](docs/PRD.md). Open work: [issues](https://github.com/jcsduncan/oscillate/issues).
+
+## Screenshots
+
+![Mixer](docs/images/app/mixer.png)
+
+*The mixer: one strip per track with its inserts, and the master meters.*
+
+![Nova panel](docs/images/instruments/nova.png)
+
+*Nova, the flagship wavetable synth ([spec 08](docs/specs/08-nova-synth.md)).*
+
+![Piano roll](docs/images/app/piano-roll.png)
+
+*The piano roll, with velocity and pedal lanes.*
+
+Every instrument and effect panel: [instruments](src/native_dsp/synth/README.md),
+[effects](src/native_dsp/effects/README.md).
 
 ## Build
 

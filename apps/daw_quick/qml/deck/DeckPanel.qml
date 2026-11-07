@@ -21,10 +21,12 @@ Rectangle {
     readonly property real gap: theme.plateGap
     readonly property int revision: controller.revision
     readonly property real floorDb: -60
-    readonly property bool playing: live.live === true
-    readonly property var frame: playing && live.frame ? live.frame : []
-    function bandRms(band) { return frame.length >= 5 ? frame[band] : -200 }
-    function outputPeak(side) { return frame.length >= 5 ? frame[3 + side] : -200 }
+    // The telemetry layout's length (deck.hpp); a full frame means it plays.
+    readonly property int frameSize: 5
+    readonly property bool playing: live.frame !== undefined && live.frame.length >= frameSize
+    readonly property var frame: playing ? live.frame : []
+    function bandRms(band) { return playing ? frame[band] : -200 }
+    function outputPeak(side) { return playing ? frame[3 + side] : -200 }
 
     objectName: "deckPanel"
     implicitWidth: theme.panelWidth
@@ -406,10 +408,10 @@ Rectangle {
                             color: bandRow.tone
                         }
                     }
+                    // Under the level bar, clear of it.
                     Kit.Toggle {
-                        anchors.right: parent.right
-                        anchors.rightMargin: panel.theme.killMargin
-                        anchors.verticalCenter: parent.verticalCenter
+                        x: panel.theme.bandTextX
+                        y: panel.theme.bandKillY
                         controller: panel.controller
                         theme: panel.theme
                         parameterId: "deck." + bandRow.name + "_kill"
