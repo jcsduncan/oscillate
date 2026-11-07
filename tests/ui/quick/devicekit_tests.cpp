@@ -352,6 +352,9 @@ void every_theme_reads_at_body_text_contrast() {
 // ChoiceTiles (joined buttons and name-only tiles) each name the colours
 // they draw a cell with as selectionFill and selectionInk.
 constexpr double minimum_selection_contrast = 3.0;
+// The harness's SegmentedControl holds this index; the parameter controls
+// hold the pan law's default.
+constexpr int segmented_current = 1;
 const char* const selection_harness = R"(
     import QtQuick
     import "."
@@ -415,6 +418,9 @@ void cells_in(QQuickItem* root, std::vector<QQuickItem*>& cells) {
 
 void every_segmented_choice_fills_its_selection() {
   const QString root = QStringLiteral(OSCILLATE_QUICK_QML_DIR);
+  const auto law = synth::find_parameter(table(), "trim.law");
+  require(law.has_value(), "Trim has a pan law");
+  const double law_default = table().parameters[*law].default_value;
   InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   QQmlEngine engine;
@@ -453,6 +459,13 @@ void every_segmented_choice_fills_its_selection() {
               name + ": " + control_name + " has one chosen cell among several");
       const auto on = *std::ranges::find_if(
           cells, [](QQuickItem* cell) { return cell->property("on").toBool(); });
+      // The chosen cell is the one the control holds: the pan law's default
+      // or the segmented control's current index.
+      const int expected = std::string_view{control_name} == "selectionSegmented"
+                               ? segmented_current
+                               : static_cast<int>(law_default);
+      require(on->property("index").toInt() == expected,
+              name + ": " + control_name + " lights the cell it holds");
       const auto on_fill = on->property("selectionFill").value<QColor>();
       const auto on_ink = on->property("selectionInk").value<QColor>();
       require(on_fill.alpha() == opaque_alpha,
