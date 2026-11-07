@@ -7,7 +7,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <span>
 #include <vector>
@@ -90,6 +92,38 @@ struct TrackStereoGain {
 // A channel's post-fader gains for a level and pan: pan attenuates the far side.
 [[nodiscard]] TrackStereoGain channel_stereo_gain(double level, double pan) noexcept;
 [[nodiscard]] TrackStereoGain track_stereo_gain(const project::Track& track) noexcept;
+// What a graph runs on its route's nodes. Live playback and export build
+// their mixer nodes from this, so both apply mutes, channel gains and chains
+// alike.
+struct GraphNodeSources {
+  // The processor on a track's node (its prepared chain), or none.
+  std::function<std::shared_ptr<engine::ProcessorRuntime>(project::TrackId)> track_processor{};
+  // Live playback runs the master chain on the master node, with its
+  // latency and the master level as the node's gain. Otherwise the master
+  // node only sums, and the caller runs the master chain and level after it.
+  bool master_at_node = false;
+  std::shared_ptr<engine::ProcessorRuntime> master_processor{};
+  std::uint32_t master_latency_frames = 0;
+  // Mute every track nobody can hear (silent_track_nodes) at its node, so a
+  // render whose mutes cannot change skips its work.
+  bool mute_silent_tracks = false;
+};
+
+struct GraphNodes {
+  // In plan.nodes order.
+  std::vector<engine::RoutedNode> nodes;
+  // Per node, its track; empty for the master.
+  std::vector<std::optional<project::TrackId>> owners;
+  // The nodes muted only because nobody can hear them.
+  std::vector<engine::RoutingNodeId> silent;
+};
+
+// Every node of `plan` with its processor, mute and channel gain. Fails for
+// a node that is neither a track's nor the master.
+[[nodiscard]] foundation::Result<GraphNodes> graph_nodes(const project::Snapshot& snapshot,
+                                                         const ProjectRoutePlan& plan,
+                                                         const GraphNodeSources& sources);
+
 // Build a complete node-control projection for a route with unchanged topology.
 // The engine separately admits the resulting values against the active mixer.
 [[nodiscard]] foundation::Result<std::vector<engine::RoutedNodeControl>>

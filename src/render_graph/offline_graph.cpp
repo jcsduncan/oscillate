@@ -132,35 +132,21 @@ prepare_offline_routing(const project::Snapshot& snapshot, const OfflineGraphReq
   if (tail == path_tails.end())
     return foundation::Result<OfflineRoute>::failure(
         {foundation::ErrorCode::corrupt_data, "Native route has no master tail path"});
-  std::vector<engine::RoutedNode> nodes;
-  nodes.reserve(plan.value().nodes.size());
-  const auto track_mutes = routing::effective_track_mutes(snapshot, plan.value());
-  // A track nobody can hear is muted at its node, which then skips its work.
-  const auto silent_tracks = routing::silent_track_nodes(snapshot, plan.value());
-  std::set<engine::RoutingNodeId> silent_nodes;
-  for (const auto node : plan.value().nodes) {
-    std::shared_ptr<engine::ProcessorRuntime> processor;
-    bool muted = false;
-    engine::StereoFrame output_gain{1.0F, 1.0F};
-    if (const auto owner = std::ranges::find(plan.value().track_nodes, node.id,
-                                             &routing::ProjectRouteTrackNode::node);
-        owner != plan.value().track_nodes.end()) {
-      if (const auto native =
-              std::ranges::find(native_runtimes, owner->track, &NativeRouteRuntime::track);
-          native != native_runtimes.end())
-        processor = native->chain.runtime;
-      const auto track_index = static_cast<std::size_t>(owner - plan.value().track_nodes.begin());
-      muted = track_mutes[track_index] || silent_tracks[track_index];
-      if (silent_tracks[track_index])
-        silent_nodes.insert(node.id);
-      if (const auto track = std::ranges::find(snapshot.tracks, owner->track, &project::Track::id);
-          track != snapshot.tracks.end()) {
-        const auto gain = routing::track_stereo_gain(*track);
-        output_gain = {gain.left, gain.right};
-      }
-    }
-    nodes.push_back({node, std::move(processor), {}, muted, output_gain});
-  }
+  // The same nodes live playback builds, except that the master chain runs
+  // after the mix and a track nobody can hear is muted at its node, which
+  // then skips its work.
+  auto graph_nodes = routing::graph_nodes(
+      snapshot, plan.value(),
+      {.track_processor = [&](project::TrackId track) -> std::shared_ptr<engine::ProcessorRuntime> {
+         const auto native = std::ranges::find(native_runtimes, track, &NativeRouteRuntime::track);
+         return native == native_runtimes.end() ? nullptr : native->chain.runtime;
+       },
+       .mute_silent_tracks = true});
+  if (!graph_nodes)
+    return foundation::Result<OfflineRoute>::failure(graph_nodes.error());
+  const auto& nodes = graph_nodes.value().nodes;
+  const std::set<engine::RoutingNodeId> silent_nodes(graph_nodes.value().silent.begin(),
+                                                     graph_nodes.value().silent.end());
   // A keyed node has a detector buffer; a key's source keeps its pre-fader block.
   std::set<engine::RoutingNodeId> sidechain_destinations;
   std::set<engine::RoutingNodeId> sidechain_sources;
