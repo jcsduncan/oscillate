@@ -1,0 +1,7 @@
+# Generated starter sounds
+
+The bundled `kick`, `snare`, `hat` and `pluck` are original procedural one-shots generated from [`scripts/generate-starter-sounds.py`](../../scripts/generate-starter-sounds.py). No external recordings, sample packs or sound libraries were used. The generator uses only Python's standard library and fixed seeds. Its revision, source hash, sound parameters, output format, decoded peaks and RMS levels, byte counts and SHA-256 hashes are in [`assets/starter/manifest.json`](../../assets/starter/manifest.json).
+
+Each file is a 48 kHz, 16-bit mono PCM WAV. They total 150,896 bytes and are short enough for the native sampler's prepared-source limit. Peak levels are 0.42–0.65 full scale, leaving headroom for layered notes. Endpoints fade to zero. Import may preserve the encoded files as managed project assets; source-rate conversion is unnecessary in a 48 kHz project.
+
+To regenerate the committed files, run `python3 scripts/generate-starter-sounds.py`. To validate exact regeneration, inventory, hashes, RIFF/PCM metadata, finite decoded audio, audibility, peak headroom and silent tails, run `python3 scripts/generate-starter-sounds.py --check`. The same check is registered as `starter_sounds` in local CTest. Regeneration updates the manifest whenever generator source or parameters change. Review the generated audio by listening before a release bundle is assembled. The separate third-party candidate audit does not approve those candidates for distribution.
