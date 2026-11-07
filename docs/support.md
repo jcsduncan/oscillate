@@ -36,7 +36,9 @@ opening a public issue.
    performance trace** in the command palette, reproduce the problem, then
    **Stop and save the performance trace**, then save diagnostics with the
    latest performance trace (it becomes available once the trace has
-   saved).
+   saved; reopen the palette if it was open during the save). With
+   `OSCILLATE_TRACE` set, the trace is saved to that path instead and is not
+   in the bundle: attach that file separately.
 4. When you can, a small project that shows the problem. Do not attach media
    you are not allowed to share.
 

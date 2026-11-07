@@ -122,6 +122,9 @@ bundle::Options diagnostics_options(DiagnosticsPlugins plugins, bool include_tra
   options.directory = bundle::default_directory(state_text, home_text);
   options.crash_directory = crash::default_directory(state_text, home_text);
   options.log_directory = foundation::log::options_from_environment().directory;
+  // Same account-home fallback as the bundle and crash-report directories.
+  if (options.log_directory.empty())
+    options.log_directory = foundation::log::default_directory(state_text, home_text);
   options.home = home;
   options.application = {{"application", std::format("Oscillate {}", OSCILLATE_VERSION)},
                          {"qt", qVersion()}};
