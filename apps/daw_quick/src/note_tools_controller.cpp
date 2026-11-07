@@ -28,6 +28,8 @@ namespace {
 // MIDI velocities; a project without a stored choice draws at the default.
 constexpr int min_velocity = 1;
 constexpr int max_velocity = 127;
+// Full humanise timing moves a note up to a 32nd note.
+constexpr double humanise_steps_per_quarter = 8.0;
 constexpr int default_new_note_velocity = 100;
 // A groove's name, which is also its file's name.
 constexpr int max_groove_name_length = 64;
@@ -186,7 +188,7 @@ int NoteToolsController::moved_key_in_scale(int key, int from_key, int to_key) c
   if (!scale)
     return std::clamp(key + to_key - from_key, 0, 127);
   return application::transpose_in_scale(
-      key, application::scale_degrees_between(from_key, to_key, *scale), *scale);
+      key, *scale, application::scale_degrees_between(from_key, to_key, *scale));
 }
 
 QVariantList NoteToolsController::chord_preview(int root, const QString& shape,
@@ -240,29 +242,32 @@ std::optional<NoteToolsController::Target> NoteToolsController::target(const QSt
 
 bool NoteToolsController::commit(application::ProjectSession& session, project::ClipId clip,
                                  std::span<const project::MidiNote> changed,
-                                 std::span<const project::MidiNote> added, const QString& action,
-                                 const QString& done, std::vector<project::NoteId>* created) {
+                                 std::span<const project::MidiNote> added, const CommitText& text,
+                                 std::vector<project::NoteId>* created) {
   if (changed.empty() && added.empty()) {
-    report_(QStringLiteral("%1: nothing to change").arg(action));
+    report_(QStringLiteral("%1: nothing to change").arg(text.action));
     return false;
   }
   const auto before = session.snapshot().revision;
-  auto result = session.notes().apply_note_edit(clip, changed, added);
+  auto result = session.notes().apply_note_edit(clip, {.changed = changed, .added = added});
   if (!result) {
-    report_(QStringLiteral("%1: %2").arg(action, QString::fromStdString(result.error().message)));
+    report_(
+        QStringLiteral("%1: %2").arg(text.action, QString::fromStdString(result.error().message)));
     return false;
   }
   if (created != nullptr)
     *created = std::move(result).value();
   if (session.snapshot().revision != before)
     commit_();
-  report_(done);
+  report_(text.done);
   return true;
 }
 
+// NOLINTBEGIN(bugprone-easily-swappable-parameters): QML calls this positionally.
 QStringList NoteToolsController::stamp_chord(const QString& clip_id, int step, int root,
                                              int steps_per_bar, const QString& shape, int inversion,
                                              int length_steps) {
+  // NOLINTEND(bugprone-easily-swappable-parameters)
   const auto parsed = parse_shape(shape);
   auto found = target(clip_id, {}, QStringLiteral("drawing a chord"));
   if (!found || !parsed || !application::supported_midi_grid(steps_per_bar) || step < 0 ||
@@ -287,8 +292,10 @@ QStringList NoteToolsController::stamp_chord(const QString& clip_id, int step, i
         {placeholder, {start}, {end}, key, found->session->notes().new_note_velocity()});
   }
   std::vector<project::NoteId> created;
-  if (!commit(*found->session, found->clip->id, {}, added, QStringLiteral("Chord"),
-              QStringLiteral("%1 chord drawn · one undo step").arg(shape), &created))
+  if (!commit(*found->session, found->clip->id, {}, added,
+              {.action = QStringLiteral("Chord"),
+               .done = QStringLiteral("%1 chord drawn · one undo step").arg(shape)},
+              &created))
     return {};
   QStringList ids;
   for (const auto& id : created)
@@ -296,9 +303,11 @@ QStringList NoteToolsController::stamp_chord(const QString& clip_id, int step, i
   return ids;
 }
 
+// NOLINTBEGIN(bugprone-easily-swappable-parameters): QML calls this positionally.
 void NoteToolsController::move_notes_in_scale(const QString& clip_id, const QStringList& note_ids,
                                               int step_delta, int from_key, int to_key,
                                               int steps_per_bar) {
+  // NOLINTEND(bugprone-easily-swappable-parameters)
   auto found = target(clip_id, note_ids, QStringLiteral("moving notes"));
   const auto scale = song_key();
   if (!found || !application::supported_midi_grid(steps_per_bar) || note_ids.isEmpty())
@@ -320,12 +329,12 @@ void NoteToolsController::move_notes_in_scale(const QString& clip_id, const QStr
       report_(QStringLiteral("MIDI notes not moved: they would leave the clip"));
       return;
     }
-    moved.key = scale ? application::transpose_in_scale(note.key, degrees, *scale)
+    moved.key = scale ? application::transpose_in_scale(note.key, *scale, degrees)
                       : static_cast<std::uint8_t>(std::clamp(note.key + to_key - from_key, 0, 127));
     changed.push_back(moved);
   }
-  (void)commit(*found->session, found->clip->id, changed, {}, QStringLiteral("Move"),
-               QStringLiteral("Moved in key"));
+  (void)commit(*found->session, found->clip->id, changed, {},
+               {.action = QStringLiteral("Move"), .done = QStringLiteral("Moved in key")});
 }
 
 void NoteToolsController::strum(const QString& clip_id, const QStringList& note_ids, int amount,
@@ -341,9 +350,10 @@ void NoteToolsController::strum(const QString& clip_id, const QStringList& note_
     report_(QStringLiteral("Strum needs notes that start together"));
     return;
   }
-  (void)commit(*found->session, found->clip->id, changed, {}, QStringLiteral("Strum"),
-               upward ? QStringLiteral("Strummed up · one undo step")
-                      : QStringLiteral("Strummed down · one undo step"));
+  (void)commit(*found->session, found->clip->id, changed, {},
+               {.action = QStringLiteral("Strum"),
+                .done = upward ? QStringLiteral("Strummed up · one undo step")
+                               : QStringLiteral("Strummed down · one undo step")});
 }
 
 void NoteToolsController::humanize(const QString& clip_id, const QStringList& note_ids,
@@ -353,7 +363,8 @@ void NoteToolsController::humanize(const QString& clip_id, const QStringList& no
     return;
   const auto seed = ++seed_;
   const auto max_ticks = static_cast<std::int64_t>(
-      std::clamp(timing, 0.0, 1.0) * static_cast<double>(timeline::ticks_per_quarter / 8));
+      std::clamp(timing, 0.0, 1.0) *
+      (static_cast<double>(timeline::ticks_per_quarter) / humanise_steps_per_quarter));
   auto changed = application::humanize_timing(found->clip->notes, found->scope, max_ticks, seed,
                                               found->clip->pattern_length.value);
   if (velocity > 0.0) {
@@ -370,8 +381,9 @@ void NoteToolsController::humanize(const QString& clip_id, const QStringList& no
       changed.push_back(edited);
     }
   }
-  (void)commit(*found->session, found->clip->id, changed, {}, QStringLiteral("Humanise"),
-               QStringLiteral("Humanised · click again for another variation"));
+  (void)commit(*found->session, found->clip->id, changed, {},
+               {.action = QStringLiteral("Humanise"),
+                .done = QStringLiteral("Humanised · click again for another variation")});
 }
 
 void NoteToolsController::quantize(const QString& clip_id, const QStringList& note_ids,
@@ -381,9 +393,10 @@ void NoteToolsController::quantize(const QString& clip_id, const QStringList& no
     return;
   const application::QuantizeSettings settings{application::midi_grid_ticks(steps_per_bar),
                                                strength, swing, ends};
-  auto changed = application::quantize_notes(found->clip->notes, found->scope, settings,
-                                             application::midi_clip_start_tick(*found->clip),
-                                             found->clip->pattern_length.value);
+  auto changed =
+      application::quantize_notes(found->clip->notes, found->scope, settings,
+                                  {.clip_start = application::midi_clip_start_tick(*found->clip),
+                                   .pattern_length = found->clip->pattern_length.value});
   if (!changed) {
     report_(QStringLiteral("Quantise: %1").arg(QString::fromStdString(changed.error().message)));
     return;
@@ -392,10 +405,11 @@ void NoteToolsController::quantize(const QString& clip_id, const QStringList& no
     report_(QStringLiteral("Already on the grid"));
     return;
   }
-  (void)commit(*found->session, found->clip->id, changed.value(), {}, QStringLiteral("Quantise"),
-               QStringLiteral("Quantised to 1/%1 at %2% · one undo step")
-                   .arg(steps_per_bar)
-                   .arg(std::lround(std::clamp(strength, 0.0, 1.0) * 100.0)));
+  (void)commit(*found->session, found->clip->id, changed.value(), {},
+               {.action = QStringLiteral("Quantise"),
+                .done = QStringLiteral("Quantised to 1/%1 at %2% · one undo step")
+                            .arg(steps_per_bar)
+                            .arg(std::lround(std::clamp(strength, 0.0, 1.0) * 100.0))});
 }
 
 QString NoteToolsController::groove_directory() const {
@@ -441,7 +455,8 @@ void NoteToolsController::apply_groove(const QString& clip_id, const QStringList
   }
   auto changed = application::apply_groove(
       found->clip->notes, found->scope, *groove, {quantize, timing, velocity},
-      application::midi_clip_start_tick(*found->clip), found->clip->pattern_length.value);
+      {.clip_start = application::midi_clip_start_tick(*found->clip),
+       .pattern_length = found->clip->pattern_length.value});
   if (!changed) {
     report_(QStringLiteral("Groove: %1").arg(QString::fromStdString(changed.error().message)));
     return;
@@ -450,8 +465,9 @@ void NoteToolsController::apply_groove(const QString& clip_id, const QStringList
     report_(QStringLiteral("The notes already sit in this groove"));
     return;
   }
-  (void)commit(*found->session, found->clip->id, changed.value(), {}, QStringLiteral("Groove"),
-               QStringLiteral("%1 applied · one undo step").arg(name));
+  (void)commit(*found->session, found->clip->id, changed.value(), {},
+               {.action = QStringLiteral("Groove"),
+                .done = QStringLiteral("%1 applied · one undo step").arg(name)});
 }
 
 void NoteToolsController::apply_current_groove(const QString& clip_id,
@@ -522,6 +538,7 @@ bool NoteToolsController::import_groove(const QString& path) {
   return true;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): QML calls this positionally.
 bool NoteToolsController::export_groove(const QString& name, const QString& path) {
   auto groove = find_groove(name);
   if (!groove)
@@ -630,14 +647,13 @@ bool NoteToolsController::wait_for_groove_files(int timeout_ms) {
   return !groove_files_busy();
 }
 
-bool NoteToolsController::apply_pedal_edit(const QString& clip_id, const QString& pedal_name,
-                                           const PedalEdit& edit) {
+bool NoteToolsController::apply_pedal_edit(const PedalTarget& where, const PedalEdit& edit) {
   if (session_() == nullptr || !can_edit_()) {
     report_(QStringLiteral("Finish the current project operation before editing pedals"));
     return false;
   }
-  const auto clip = project::ClipId::parse(clip_id.toStdString());
-  const auto pedal = parse_pedal(pedal_name);
+  const auto clip = project::ClipId::parse(where.clip_id.toStdString());
+  const auto pedal = parse_pedal(where.pedal);
   if (!clip || !pedal) {
     report_(QStringLiteral("Select a MIDI clip and a pedal"));
     return false;
@@ -663,10 +679,11 @@ void NoteToolsController::paint_pedal_grid(const QString& clip_id, const QString
     return;
   }
   const auto step = application::midi_grid_ticks(steps_per_bar);
-  if (apply_pedal_edit(clip_id, pedal, [&](project::ClipId clip, project::MidiPedal which) {
-        return session_()->pedals().paint_pedal_span(clip, which, {from_step * step},
-                                                     {to_step * step}, depth);
-      }))
+  if (apply_pedal_edit({.clip_id = clip_id, .pedal = pedal},
+                       [&](project::ClipId clip, project::MidiPedal which) {
+                         return session_()->pedals().paint_pedal_span(
+                             clip, which, {from_step * step}, {to_step * step}, depth);
+                       }))
     report_(QStringLiteral("Pedal pressed · Undo to remove"));
 }
 
@@ -676,7 +693,8 @@ void NoteToolsController::move_pedal_span(const QString& clip_id, const QString&
     report_(QStringLiteral("Select a pedal span"));
     return;
   }
-  (void)apply_pedal_edit(clip_id, pedal, [&](project::ClipId clip, project::MidiPedal which) {
+  (void)apply_pedal_edit({.clip_id = clip_id, .pedal = pedal}, [&](project::ClipId clip,
+                                                                   project::MidiPedal which) {
     return session_()->pedals().move_pedal_span(clip, which, {static_cast<std::int64_t>(at_ticks)},
                                                 {static_cast<std::int64_t>(start_ticks)},
                                                 {static_cast<std::int64_t>(end_ticks)});
@@ -689,7 +707,8 @@ void NoteToolsController::set_pedal_depth(const QString& clip_id, const QString&
     report_(QStringLiteral("Select a pedal span and a depth"));
     return;
   }
-  (void)apply_pedal_edit(clip_id, pedal, [&](project::ClipId clip, project::MidiPedal which) {
+  (void)apply_pedal_edit({.clip_id = clip_id, .pedal = pedal}, [&](project::ClipId clip,
+                                                                   project::MidiPedal which) {
     const auto at = static_cast<std::int64_t>(at_ticks);
     for (const auto& track : session_()->snapshot().tracks) {
       const auto found = std::ranges::find(track.midi_clips, clip, &project::MidiClip::id);
@@ -716,15 +735,16 @@ void NoteToolsController::remove_pedal_at(const QString& clip_id, const QString&
     report_(QStringLiteral("Select a pedal span"));
     return;
   }
-  if (apply_pedal_edit(clip_id, pedal, [&](project::ClipId clip, project::MidiPedal which) {
-        return session_()->pedals().remove_pedal_span(clip, which,
-                                                      {static_cast<std::int64_t>(at_ticks)});
-      }))
+  if (apply_pedal_edit({.clip_id = clip_id, .pedal = pedal},
+                       [&](project::ClipId clip, project::MidiPedal which) {
+                         return session_()->pedals().remove_pedal_span(
+                             clip, which, {static_cast<std::int64_t>(at_ticks)});
+                       }))
     report_(QStringLiteral("Pedal lifted · Undo to restore"));
 }
 
 void NoteToolsController::pedal_per_chord(const QString& clip_id) {
-  if (apply_pedal_edit(clip_id, QStringLiteral("sustain"),
+  if (apply_pedal_edit({.clip_id = clip_id, .pedal = QStringLiteral("sustain")},
                        [&](project::ClipId clip, project::MidiPedal) {
                          return session_()->pedals().pedal_per_chord(clip);
                        }))
@@ -732,7 +752,7 @@ void NoteToolsController::pedal_per_chord(const QString& clip_id) {
 }
 
 void NoteToolsController::clear_pedals(const QString& clip_id) {
-  if (apply_pedal_edit(clip_id, QStringLiteral("sustain"),
+  if (apply_pedal_edit({.clip_id = clip_id, .pedal = QStringLiteral("sustain")},
                        [&](project::ClipId clip, project::MidiPedal) {
                          return session_()->pedals().clear_midi_pedals(clip);
                        }))

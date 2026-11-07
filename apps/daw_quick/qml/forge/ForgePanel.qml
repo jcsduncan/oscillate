@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Forge device panel: blackened, brushed steel lit from below by the
@@ -459,7 +460,7 @@ Rectangle {
             x: panel.theme.spaceXl
             y: panel.theme.makeupY
             width: levels.width - 2 * panel.theme.spaceXl
-            text: panel.autoGain ? (panel.makeupDb >= 0 ? "+" : "−") + Math.abs(panel.makeupDb).toFixed(1) + " dB"
+            text: panel.autoGain ? Format.signed_decibels(panel.makeupDb)
                                  : "OFF"
             color: panel.autoGain ? panel.theme.molten : panel.theme.inkFaint
             font.family: panel.theme.mono

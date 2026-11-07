@@ -283,13 +283,15 @@ void chance_is_seeded() {
 }
 
 void evolve_keeps_moving() {
+  constexpr std::size_t evolve_bars = 16;
+  constexpr std::uint32_t evolve_seed = 21;
   patterns::GeneratorSettings settings;
   settings.seed = 9;
   const auto loop = patterns::generate(settings, mixed_roles); // Two bars.
   patterns::Locks locked{};
   locked[0] = true;
   const auto evolved =
-      patterns::evolve(loop, 16, patterns::evolve_every_bars, patterns::evolve_amount, 21, locked);
+      patterns::evolve(loop, {.total_bars = evolve_bars, .seed = evolve_seed}, locked);
   REQUIRE_EQ(evolved.bars.size(), 16, "Evolve writes the bars asked for");
   for (std::size_t bar = 0; bar < patterns::evolve_every_bars; ++bar)
     REQUIRE_EQ(evolved.bars[bar], loop.bars[bar % loop.bars.size()],
@@ -305,11 +307,11 @@ void evolve_keeps_moving() {
   for (std::size_t bar = 0; bar < evolved.bars.size(); ++bar)
     REQUIRE_EQ(evolved.bars[bar][0], loop.bars[bar % loop.bars.size()][0],
                "a locked lane never evolves");
-  REQUIRE_EQ(
-      evolved,
-      patterns::evolve(loop, 16, patterns::evolve_every_bars, patterns::evolve_amount, 21, locked),
-      "Evolve is seeded");
-  REQUIRE_EQ(patterns::to_notes(evolved, 1).value().length.value, 16 * patterns::bar_ticks.value,
+  REQUIRE_EQ(evolved,
+             patterns::evolve(loop, {.total_bars = evolve_bars, .seed = evolve_seed}, locked),
+             "Evolve is seeded");
+  REQUIRE_EQ(patterns::to_notes(evolved, 1).value().length.value,
+             static_cast<std::int64_t>(evolve_bars) * patterns::bar_ticks.value,
              "an evolved clip is its bars long");
 }
 

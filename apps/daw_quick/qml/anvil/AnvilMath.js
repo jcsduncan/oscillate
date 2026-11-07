@@ -1,5 +1,6 @@
 .pragma library
 .import Oscillate.Contracts 1.0 as Law
+.import Oscillate.Format 1.0 as Fmt
 
 // Anvil's document curves (anvil.hpp): `pitch`, `amp` and `drive`, each
 // x 0..1 of the kick's length. Pitch is stored 0..1 on a logarithmic scale
@@ -22,7 +23,7 @@ function noteOf(hz) {
              cents: Math.round((m - r) * 100) }
 }
 function hzText(hz) {
-    return hz >= 1000 ? (hz / 1000).toFixed(1) + " kHz" : hz >= 100 ? Math.round(hz) + " Hz" : hz.toFixed(1) + " Hz"
+    return Fmt.Format.hertz(hz)
 }
 function inScale(midi, scale) {
     return scale.length > 0 && scale.indexOf(((midi % 12) + 12) % 12) >= 0

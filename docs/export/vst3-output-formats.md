@@ -3,10 +3,12 @@
 **Status:** Experimental vertical slice, 18 October 2026. Requirement: AM-06
 (partial), AM-07 failure preservation.
 
-The stopped VST3 effect, VST3 instrument and mixed instrument-plus-audio
-exporters no longer write their own project-rate float32 WAV. After the routed
-plugin graph has produced its aligned, tail-inclusive project-rate stream, they
-hand it to the same master output stage as the native offline master
+VST3 export writes no project-rate float32 WAV of its own. A project with
+VST3 effects renders through the native offline master itself
+([VST3 offline export](vst3-offline-export.md)). The stopped VST3 instrument
+and mixed instrument-plus-audio exporters render their routed plugin graph to
+an aligned, tail-inclusive project-rate stream and hand it to the same master
+output stage as the native offline master
 (`include/oscillate/export/master_output.hpp`, `src/export/master_output.cpp`). That stage:
 
 - writes WAV float32, PCM24 or PCM16, with seeded TPDF dither for integer WAV;
@@ -21,11 +23,11 @@ hand it to the same master output stage as the native offline master
 The native master uses this stage too, keeping its loudness tap as an
 observer on the emitted output samples.
 
-New APIs take `MasterOutputOptions`, a variant of `MasterRenderOptions` and
-`EncodedMasterOptions`: `render_vst3_effect_master`,
-`render_vst3_instrument_master` and `render_vst3_mixed_master`. The existing
-`*_wav_master` and `*_wav_stem` functions accept every WAV format and output
-rate. The Qt Quick Export Master action passes the selected format and output
+`render_vst3_master`, `render_vst3_instrument_master` and
+`render_vst3_mixed_master` take `MasterOutputOptions`, a variant of
+`MasterRenderOptions` and `EncodedMasterOptions`. `render_vst3_stem` and the
+instrument `*_wav_master` and `*_wav_stem` functions accept every WAV format
+and output rate. The Qt Quick Export Master action passes the selected format and output
 rate to these paths; its existing rate validation still rejects MP3 above
 48 kHz and conversion in a build without libsamplerate before dispatch.
 
@@ -35,8 +37,9 @@ rate to these paths; its existing rate validation still rejects MP3 above
   conversion is applied after the full master, including plugin latency
   removal and reported tails. The synthetic fixtures reject any other
   processing rate, so the tests also prove that the plugin rate is unchanged.
-- VST3 paths do not produce loudness reports; requesting one fails before
-  output is opened. Report support remains the native float32 WAV slice.
+- A project with VST3 effects gets the native master's loudness report and
+  tail trimming. The VST3 instrument exporters produce no loudness report;
+  requesting one fails before output is opened.
 - VST3 stems are single-file WAV APIs (any WAV format/rate); there is no VST3
   stem-directory bundle or encoded stem, and Quick exports the VST3 instrument source stem but no VST3 effect stems.
 - The JACK real-time master remains project-rate float32 WAV.
@@ -50,13 +53,14 @@ rate to these paths; its existing rate validation still rejects MP3 above
 
 `tests/application/vst3/vst3_effect_export_tests.cpp` (`output_format_export_checks`)
 uses a unity-gain, seven-frame-latency effect whose PDC-aligned master must
-equal the independent native master. It checks PCM24/PCM16 headers, frame count
+equal the native master without it. It checks PCM24/PCM16 headers, frame count
 and ±2 LSB samples against the float reference, seeded-dither repeat bytes,
 44.1/88.2/96 kHz durations and native-conversion parity, converted PCM24, an
 eight-frame plugin tail retained at each converted rate, decoded FLAC16/24
 (±2 LSB) and MP3 (RMS) at 48, 44.1 and 96 kHz, deterministic encoded repeats,
 96 kHz MP3 rejection, and old FLAC/PCM16 preservation after a plugin process
 fault or an unsupported 22.05 kHz request with no leftover temporary files.
+`export_checks` checks a loudness report on a VST3 effect master.
 
 `tests/application/vst3/vst3_instrument_export_tests.cpp` checks the VST3 instrument's
 265-frame tail-inclusive master as PCM24/PCM16, its sustained 0.75 level and

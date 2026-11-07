@@ -1,6 +1,6 @@
 # ADR-0050 — One chain per track
 
-**Status:** Accepted and implemented for live playback, routing and authoring. Export has two VST3 offline renderers with their own limits (`src/application/vst3/effect_export.cpp`, `instrument_export.cpp`). **Date:** 21 October 2026.
+**Status:** Accepted and implemented for live playback, routing, authoring and the export of VST3 effects. The VST3 instrument offline renderer keeps its own limits (`src/application/vst3/instrument_export.cpp`). **Date:** 21 October 2026.
 
 ## Context
 
@@ -44,7 +44,7 @@ Built-in instruments and the sampler render in the source bank, as before, and a
 - **Unknown tails.** A VST3 stage that cannot bound its tail rings out for a fixed time and fades out over its last `drain_fade_frames`, instead of stopping.
 - **`receipts(track, chain)`** gives routing one `BoundStage` per prepared stage. Routing checks that the receipts match the saved chain exactly, sums each node's latency from them, and lets a sidechain key any stage that reads a detector.
 
-Live track chains, the live master and offline native export use this builder; the VST3 offline renderers drive the same live control, so export and playback cannot drift apart.
+Live track chains, the live master and offline export use this builder, offline export with VST3 stages from the plugin host's preparer ([ADR-0090](0090-render-graph-builder.md)). The VST3 instrument offline renderer drives the same live control, so export and playback cannot drift apart.
 
 ### Plugins
 `TrackInsertProvider::prepare` takes the snapshot it binds to, its tempo, automation and sidechains included. Every preparation is a new instance with its own graph ID, so a changed plugin's new instance runs beside the old one while the old one rings out.
@@ -73,4 +73,4 @@ A VST3 stage is prepared for blocks of at most `vst3_host_block_frames` (128). I
   - **Step 2 of the seamless programme:** VST3 instrument replacement, source and MIDI changes, and adding or removing tracks. These will switch at a block primed in advance, with voice continuity.
   - **VST3 automation lane edits:** these need an automation mailbox in the VST3 runtime.
   - **Convolution changes.**
-- **Export.** The two VST3 offline renderers still keep single-path admission gates. They are to collapse into one generic renderer.
+- **Export.** VST3 effects export through the one offline renderer. The VST3 instrument offline renderer still keeps single-path admission gates; it is to join it.

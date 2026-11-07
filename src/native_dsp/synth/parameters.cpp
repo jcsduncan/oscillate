@@ -1,8 +1,10 @@
 #include "oscillate/native_dsp/synth/parameters.hpp"
 
+#include "oscillate/foundation/value_text.hpp"
+
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
+#include <limits>
 #include <set>
 #include <string>
 #include <utility>
@@ -13,6 +15,12 @@ namespace {
 using foundation::Error;
 using foundation::ErrorCode;
 using foundation::Result;
+
+// A table's "%" values are fractions of one.
+constexpr double percent_per_unit = 100.0;
+// A level parameter whose range starts here or lower reads its minimum as
+// silence.
+constexpr double silence_floor_db = -60.0;
 
 Error invalid(std::string message) { return {ErrorCode::invalid_argument, std::move(message)}; }
 
@@ -101,25 +109,20 @@ std::string format_value(const ParameterDescriptor& parameter, double value) {
     const auto index = static_cast<std::size_t>(value);
     return index < parameter.choices.size() ? std::string(parameter.choices[index]) : "?";
   }
-  const std::string unit(parameter.unit);
-  char text[48];
-  if (unit == "Hz" && value >= 1'000.0) {
-    std::snprintf(text, sizeof text, "%.2f kHz", value / 1'000.0);
-  } else if (unit == "s" && value < 1.0) {
-    std::snprintf(text, sizeof text, value < 0.01 ? "%.1f ms" : "%.0f ms", value * 1'000.0);
-  } else if (unit == "%") {
-    std::snprintf(text, sizeof text, "%.0f %%", value * 100.0);
-  } else if (unit == "dB" && value <= parameter.minimum && parameter.minimum <= -60.0) {
-    std::snprintf(text, sizeof text, "-inf dB");
-  } else if (parameter.scale == ParameterScale::stepped) {
-    std::snprintf(text, sizeof text, "%+.0f%s%s", value, unit.empty() ? "" : " ", unit.c_str());
-  } else {
-    const double magnitude = std::fabs(value);
-    const char* format =
-        magnitude >= 100.0 ? "%.0f%s%s" : (magnitude >= 10.0 ? "%.1f%s%s" : "%.2f%s%s");
-    std::snprintf(text, sizeof text, format, value, unit.empty() ? "" : " ", unit.c_str());
+  // A table's percentages are fractions; its levels at a floor of
+  // silence_floor_db or lower read as silence.
+  if (parameter.unit == foundation::percent_unit) {
+    return foundation::format_quantity(value * percent_per_unit, parameter.unit);
   }
-  return text;
+  if (parameter.unit == foundation::decibels_unit && value <= parameter.minimum &&
+      parameter.minimum <= silence_floor_db) {
+    return foundation::format_quantity(-std::numeric_limits<double>::infinity(), parameter.unit);
+  }
+  if (parameter.scale == ParameterScale::stepped) {
+    return foundation::format_quantity(value, parameter.unit, foundation::ValueSign::explicit_plus,
+                                       0);
+  }
+  return foundation::format_quantity(value, parameter.unit);
 }
 
 Result<void> validate_engine(const EngineDescriptor& engine) {

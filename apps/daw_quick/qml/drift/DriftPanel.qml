@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import "../devicekit" as Kit
+import Oscillate.Format
 
 // The Drift device panel, "Nebula": a deep-space faceplate lit by soft
 // aurora. The grain cloud preview leads, beside the grain controls with the
@@ -643,7 +644,7 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.rightMargin: panel.theme.envelopeLabelInset
                 y: panel.theme.envelopeLabelTop
-                text: ampEnvelope.sketch.seconds !== undefined ? ampEnvelope.sketch.seconds.toFixed(2) + " s" : ""
+                text: ampEnvelope.sketch.seconds !== undefined ? Format.seconds(ampEnvelope.sketch.seconds) : ""
                 color: panel.theme.envelopeLabelInk
                 font.family: panel.theme.envelopeLabelFont
                 font.pixelSize: panel.theme.envelopeLabelSize

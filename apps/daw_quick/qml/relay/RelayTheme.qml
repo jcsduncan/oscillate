@@ -37,16 +37,9 @@ KitTheme {
     segmentRadius: 2
     segmentRadiusVertical: 2
     segmentFillAcross: false
-    segmentRule: "none"
-    segmentLed: true
-    segmentLedX: 5
     segmentFocusFill: Qt.rgba(0, 0, 0, 0.22)
-    segmentLedSize: 6
-    segmentLedOff: "#8f8568"
-    segmentLedRim: true
     segmentPressDepth: 1
     segmentUpper: true
-    segmentTextOffset: 4
     segmentLetterSpacing: 0.8
     dropdownEdge: brassLo
     dropdownTextSize: 12
@@ -444,9 +437,7 @@ KitTheme {
 
     // Segment keys: cream piano-key switches.
     function segmentFill(tile, stop) {
-        if (stop === 0)
-            return tile.on ? "#d9cda9" : bodyTop
-        return tile.on ? "#c6b88f" : bodyBottom
+        return stop === 0 ? bodyTop : bodyBottom
     }
     function segmentEdge(tile) {
         return Qt.rgba(0, 0, 0, 0.45)

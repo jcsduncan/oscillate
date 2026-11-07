@@ -11,8 +11,9 @@ import "../shell" as Shell
 // and a segment named `<namePrefix>:<id>` has `activate()`. `icons` with an
 // `icon` component draw an icon per choice in place of its label: the
 // component's item has `kind` (the icon name) and `ink` properties, bound to
-// the cell's. The theme's segmented tokens and its segmentedFill/Edge/Ink
-// functions give it its look.
+// the cell's. The chosen cell is filled with the accent and its text set in
+// accentInk; the theme's segmented tokens and its segmentedFill/Edge/Ink
+// functions style the frame and the other cells.
 Rectangle {
     id: control
     required property KitTheme theme
@@ -109,7 +110,9 @@ Rectangle {
                 readonly property string tip: control.keyed && control.options[index].tip ? String(control.options[index].tip) : ""
                 readonly property string optionId: control.keyed ? String(control.options[index].id) : String(index)
                 readonly property bool iconShown: control.icons.length > 0 && control.icon !== null
-                readonly property bool ledShown: control.theme.segmentedLeds
+                // The chosen cell's fill and text; the theme styles the others.
+                readonly property color selectionFill: on ? accent : control.theme.segmentedFill(cell, 0)
+                readonly property color selectionInk: on ? accentInk : control.theme.segmentedInk(cell)
                 function activate() {
                     control.choose(cell.index)
                 }
@@ -121,7 +124,7 @@ Rectangle {
                 height: row.height
                 radius: control.theme.segmentedCellRadius
                 gradient: control.theme.segmentedGradient ? cellGradient : undefined
-                color: control.theme.segmentedFill(cell, 0)
+                color: selectionFill
                 Behavior on color {
                     enabled: control.theme.segmentedFade && Shell.Motion.enabled
                     ColorAnimation { duration: Shell.Motion.fast }
@@ -134,8 +137,8 @@ Rectangle {
                 Keys.onReturnPressed: activate()
                 Keys.onSpacePressed: activate()
                 property Gradient cellGradient: Gradient {
-                    GradientStop { position: 0; color: control.theme.segmentedFill(cell, 0) }
-                    GradientStop { position: 1; color: control.theme.segmentedFill(cell, 1) }
+                    GradientStop { position: 0; color: cell.selectionFill }
+                    GradientStop { position: 1; color: cell.on ? cell.accent : control.theme.segmentedFill(cell, 1) }
                 }
                 HoverTip {
                     theme: control.theme
@@ -150,35 +153,22 @@ Rectangle {
                     height: parent.height - 2 * control.theme.segmentedDividerInset
                     color: control.theme.segmentedDivider
                 }
-                // A latching key's LED.
-                Rectangle {
-                    id: led
-                    visible: cell.ledShown
-                    x: control.theme.segmentedLedX
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: control.theme.segmentedLedSize
-                    height: width
-                    radius: width / 2
-                    color: control.theme.segmentedLedInk(cell)
-                    border.color: control.theme.segmentedLedEdge(cell)
-                }
                 Text {
                     id: cellText
                     visible: !cell.iconShown
-                    // Centred on the segment, or between a key's LED and its edge.
-                    x: cell.ledShown ? led.x + led.width + control.theme.segmentedLedGap : 0
-                    width: cell.ledShown ? parent.width - x - control.theme.segmentedLedTextInset : implicitWidth
-                    anchors.centerIn: cell.ledShown ? undefined : parent
-                    anchors.verticalCenter: cell.ledShown ? parent.verticalCenter : undefined
+                    anchors.centerIn: parent
+                    // Equal cells can be narrower than a long label: it
+                    // stays inside its cell, elided.
+                    width: Math.min(implicitWidth, parent.width - control.theme.segmentedIconInset)
                     horizontalAlignment: Text.AlignHCenter
                     text: cell.label
-                    color: control.theme.segmentedInk(cell)
+                    color: cell.selectionInk
                     font: control.theme.segmentedFont(cell)
-                    elide: cell.ledShown ? Text.ElideRight : Text.ElideNone
+                    elide: Text.ElideRight
                 }
                 Loader {
                     readonly property string kind: control.icons.length > cell.index ? control.icons[cell.index] : ""
-                    readonly property color ink: control.theme.segmentedInk(cell)
+                    readonly property color ink: cell.selectionInk
                     active: cell.iconShown
                     anchors.centerIn: parent
                     width: Math.min(control.theme.segmentedIconWidth, cell.width - control.theme.segmentedIconInset)

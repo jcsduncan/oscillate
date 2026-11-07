@@ -53,8 +53,8 @@ constexpr double absorb_share = 0.8;
 
 } // namespace
 
-NoteSets::NoteSets(std::uint32_t rate, double minimum_hz, double maximum_hz)
-    : rate_(rate), minimum_hz_(minimum_hz), maximum_hz_(maximum_hz) {}
+NoteSets::NoteSets(std::uint32_t rate, const AnalysisOptions& options)
+    : rate_(rate), minimum_hz_(options.minimum_hz), maximum_hz_(options.maximum_hz) {}
 
 void NoteSets::evaluate(double f0, Candidate& out) const {
   const double ceiling = partial_ceiling * rate_;
@@ -211,8 +211,10 @@ double NoteSets::fresh(std::span<const SpectralPeak> peaks, double f0,
   return added / std::max(energy_, 1e-30);
 }
 
-void NoteSets::choose(std::span<const SpectralPeak> peaks, std::span<const double> seeds,
-                      std::span<const double> previous, std::vector<NoteChoice>& out) {
+void NoteSets::choose(std::span<const SpectralPeak> peaks, Hints hints,
+                      std::vector<NoteChoice>& out) {
+  const auto seeds = hints.seeds;
+  const auto previous = hints.previous;
   out.clear();
   if (!load(peaks))
     return;
@@ -244,6 +246,7 @@ void NoteSets::choose(std::span<const SpectralPeak> peaks, std::span<const doubl
       add(candidates_[i].f0 / d);
   // Local search from the picks.
   std::vector<std::size_t> set;
+  set.reserve(picks);
   for (std::size_t i = 0; i < picks; ++i)
     set.push_back(i);
   double current = score(set);

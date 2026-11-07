@@ -321,7 +321,7 @@ function(oscillate_add_quick_core target codec export_resampler vst3)
     target_link_libraries(${target} PUBLIC
       oscillate::vst3_track_insert oscillate::vst3_instrument_provider
       oscillate::vst3_manual_effect_edit oscillate::vst3_insert_service oscillate::vst3_instrument_export
-      oscillate::vst3_effect_export oscillate::plugin_ui)
+      oscillate::vst3_offline_export oscillate::plugin_ui)
   endif()
   oscillate_target_defaults(${target})
 endfunction()
@@ -368,6 +368,8 @@ add_library(oscillate_quick_native_synth
   src/native_effect_visuals.cpp src/native_effect_visuals.hpp
   # Engine contracts the panels and the shell draw with (Oscillate.Contracts).
   src/ui_contracts.cpp src/ui_contracts.hpp
+  # The display formatter for QML (Oscillate.Format).
+  src/value_format.cpp src/value_format.hpp
   # Each built-in device's panel file, design size and host inputs.
   src/device_panels.cpp src/device_panels.hpp
   # The keyed list model lives here so synth panels can use it; the Quick

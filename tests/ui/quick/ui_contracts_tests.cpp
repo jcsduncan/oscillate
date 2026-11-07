@@ -86,6 +86,9 @@ void note_names() {
   require(UiContracts::note_name(b_minus_two, UiContracts::ascii(),
                                  UiContracts::scientific_middle_c()) == QStringLiteral("B-2"),
           "keys below 0 count octaves down");
+  require(UiContracts::note_name(c_minus_one, UiContracts::sharp(),
+                                 UiContracts::scientific_middle_c()) == QStringLiteral("C−1"),
+          "a displayed octave below 0 takes the minus sign");
   require(UiContracts::pitch_class_name(1, UiContracts::sharp()) == QStringLiteral("C♯") &&
               UiContracts::pitch_class_name(1, UiContracts::ascii()) == QStringLiteral("C#") &&
               UiContracts::pitch_class_name(1, UiContracts::key()) == QStringLiteral("C♯") &&

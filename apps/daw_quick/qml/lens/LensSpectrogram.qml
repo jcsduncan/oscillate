@@ -1,4 +1,5 @@
 import QtQuick
+import Oscillate.Format
 
 // A scrolling spectrogram under the spectrum, on the same frequency axis:
 // one row per new analysis, newest at the top, levels coloured from night
@@ -17,6 +18,7 @@ Item {
     property int rows: 0
     readonly property int rowHeight: 1
     readonly property int visibleRows: Math.max(1, Math.floor(height / rowHeight))
+    readonly property real pollsPerSecond: 30
     readonly property int columns: Math.max(1, Math.round(plotWidth / theme.spectrogramColumnWidth))
     // Newest first, as raw dB points.
     property var history: []
@@ -128,8 +130,8 @@ Item {
     Text {
         x: gram.plotX - width - gram.theme.spaceSm
         y: gram.height - height - gram.theme.hairline
-        // One row per 33 ms poll.
-        text: "−" + (gram.visibleRows / 30).toFixed(1) + "s"
+        // One row per poll, pollsPerSecond a second.
+        text: Format.seconds(-gram.visibleRows / gram.pollsPerSecond)
         color: gram.theme.gridText
         font.family: gram.theme.mono
         font.pixelSize: gram.theme.typeMicro

@@ -46,6 +46,14 @@ using oscillate::test::require;
 
 const synth::EngineDescriptor& table() { return *strata::engine().descriptor; }
 
+std::size_t index(std::string_view id) {
+  const auto found = synth::find_parameter(table(), id);
+  if (!found) {
+    throw std::runtime_error("unknown parameter " + std::string(id));
+  }
+  return *found;
+}
+
 std::vector<double> preset(std::string_view name) {
   for (const auto& entry : table().presets) {
     if (entry.name == name) {
@@ -140,7 +148,7 @@ bool shown(Panel& panel, const QString& id) {
 
 void panel_covers_every_parameter() {
   auto values = preset("Init");
-  values[*synth::find_parameter(table(), "strata.bands")] = 5.0; // six bands
+  values[index("strata.bands")] = 5.0; // six bands
   InMemoryNativeSynthAdapter adapter(values);
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
@@ -250,7 +258,7 @@ std::vector<float> frame_with(float learn_progress) {
 
 void telemetry_and_learn() {
   auto values = preset("Init");
-  values[*synth::find_parameter(table(), "strata.learn")] = 1.0;
+  values[index("strata.learn")] = 1.0;
   InMemoryNativeSynthAdapter adapter(values);
   NativeSynthDeviceController controller(table(), adapter);
   adapter.set_telemetry(frame_with(0.5F));
@@ -265,7 +273,7 @@ void telemetry_and_learn() {
               [&] {
                 return item(*panel, QStringLiteral("strataLearnProgress"))
                            ->property("text")
-                           .toString() == QStringLiteral("LISTENING 50%");
+                           .toString() == QStringLiteral("LISTENING 50 %");
               },
               1'000),
           "Learn's progress shows");

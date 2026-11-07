@@ -290,9 +290,10 @@ void ClayController::start_detect(project::ClayMode mode, bool save) {
   auto* session = session_ ? session_() : nullptr;
   if (session == nullptr || !clip_)
     return;
+  const auto clip = *clip_;
   if (job_)
     cancel_detect();
-  auto found = song_clay::find_clip(session->snapshot(), *clip_);
+  auto found = song_clay::find_clip(session->snapshot(), clip);
   if (!found) {
     set_status(text(found.error().message));
     return;
@@ -610,8 +611,8 @@ void ClayController::rebuild_notes() {
       row(*note, edit);
   }
   std::ranges::stable_sort(rows, {}, &std::pair<double, QVariantMap>::first);
-  for (auto& [start, map] : rows)
-    notes_.push_back(std::move(map));
+  for (const auto& entry : rows)
+    notes_.push_back(entry.second);
   if (low <= high) {
     low_cents_ = low - view_margin_cents;
     high_cents_ = std::max(high + view_margin_cents, low_cents_ + min_view_cents);
@@ -735,16 +736,17 @@ void ClayController::warm_render() {
   auto* session = session_ ? session_() : nullptr;
   if (session == nullptr || !clip_ || !take_)
     return;
+  const auto clip = *clip_;
+  const auto take = *take_;
   stop_warm();
   // The abandoned render never reaches poll(), so settle the state as poll() would.
   set_render_state(take_ ? QStringLiteral("ready") : QStringLiteral("none"));
-  auto found = song_clay::find_clip(session->snapshot(), *clip_);
+  auto found = song_clay::find_clip(session->snapshot(), clip);
   auto pinned = session->exports().pin_snapshot();
   if (!found || !pinned)
     return;
   std::stop_source stop;
   const auto source = *found.value().source;
-  const auto take = *take_;
   const auto failed = warm_.start(
       0,
       [stop = stop.get_token(), source, take, pinned = std::move(pinned).value()] {
@@ -807,8 +809,10 @@ void ClayController::clear_selection() {
   rebuild_notes();
 }
 
+// NOLINTBEGIN(bugprone-easily-swappable-parameters): QML calls this positionally.
 void ClayController::select_box(double from_seconds, double to_seconds, double low_cents,
                                 double high_cents, bool additive) {
+  // NOLINTEND(bugprone-easily-swappable-parameters)
   if (!additive)
     selected_.clear();
   const auto t0 = std::min(from_seconds, to_seconds);
@@ -840,6 +844,7 @@ bool ClayController::begin_edit(const QString& tool) {
   return true;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): QML calls this positionally.
 void ClayController::update_edit(double seconds, double cents, double amount) {
   if (!base_ || !preview_ || !edited_ || !time_)
     return;
@@ -1125,7 +1130,7 @@ void ClayController::set_chromatic() {
 
 void ClayController::to_midi(const QString& track_id) {
   auto* session = editable(QStringLiteral("send the notes to MIDI"));
-  if (session == nullptr)
+  if (session == nullptr || !take_ || !edited_ || !time_)
     return;
   std::optional<project::TrackId> track;
   if (!track_id.isEmpty()) {
@@ -1163,8 +1168,9 @@ void ClayController::to_midi(const QString& track_id) {
   set_status(QStringLiteral("%1 notes sent to MIDI").arg(out.value().notes.size()));
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): QML calls this positionally.
 void ClayController::harmonise(int degrees, double formant_cents, double gain_db) {
-  if (editable(QStringLiteral("harmonise")) == nullptr || degrees == 0)
+  if (editable(QStringLiteral("harmonise")) == nullptr || !take_ || degrees == 0)
     return;
   std::map<std::uint32_t, std::uint32_t> voices_before;
   for (const auto& edit : take_->edits)
@@ -1192,7 +1198,7 @@ void ClayController::harmonise(int degrees, double formant_cents, double gain_db
 }
 
 void ClayController::fit_to_key(int tonic, bool minor, bool follow_quality) {
-  if (editable(QStringLiteral("fit to the key")) == nullptr || tonic < 0 ||
+  if (editable(QStringLiteral("fit to the key")) == nullptr || !take_ || tonic < 0 ||
       tonic >= static_cast<int>(tonics.size()))
     return;
   const project::MusicalKey to{static_cast<std::uint8_t>(tonic),
@@ -1210,7 +1216,7 @@ void ClayController::fit_to_key(int tonic, bool minor, bool follow_quality) {
 
 void ClayController::follow_notes(const QString& track_id, double time_amount, bool stay_in_key) {
   auto* session = editable(QStringLiteral("follow the notes"));
-  if (session == nullptr)
+  if (session == nullptr || !take_ || !time_)
     return;
   const auto parsed = project::TrackId::parse(track_id.toStdString());
   if (!parsed) {
@@ -1255,8 +1261,9 @@ void ClayController::audition_note(const QString& key) {
   if (note == nullptr)
     return;
   const auto edit = edit_for(*take_, *parsed);
-  audition_span(static_cast<double>(ab_original_ ? note->start : edit.start.value_or(note->start)),
-                static_cast<double>(ab_original_ ? note->end : edit.end.value_or(note->end)));
+  audition_span(
+      {.from = static_cast<double>(ab_original_ ? note->start : edit.start.value_or(note->start)),
+       .to = static_cast<double>(ab_original_ ? note->end : edit.end.value_or(note->end))});
 }
 
 void ClayController::audition_selection() {
@@ -1272,10 +1279,10 @@ void ClayController::audition_selection() {
     to = std::max(to, map.value(QStringLiteral("sourceEnd")).toDouble());
   }
   if (from < to)
-    audition_span(from, to);
+    audition_span({.from = from, .to = to});
 }
 
-void ClayController::audition_span(double from_frame, double to_frame) {
+void ClayController::audition_span(FrameSpan frames) {
   auto* session = session_ ? session_() : nullptr;
   if (session == nullptr || !loaded_ || !take_ || audition_.running())
     return;
@@ -1291,8 +1298,8 @@ void ClayController::audition_span(double from_frame, double to_frame) {
   const auto path = QStringLiteral("%1/audition-%2.wav").arg(folder).arg(serial);
   const auto pad = audition_pad_seconds * loaded_->audio.sample_rate;
   const auto total = static_cast<double>(loaded_->audio.left.size());
-  const auto first = static_cast<std::size_t>(std::clamp(from_frame - pad, 0.0, total));
-  const auto last = static_cast<std::size_t>(std::clamp(to_frame + pad, 0.0, total));
+  const auto first = static_cast<std::size_t>(std::clamp(frames.from - pad, 0.0, total));
+  const auto last = static_cast<std::size_t>(std::clamp(frames.to + pad, 0.0, total));
   if (last <= first)
     return;
   const auto failed = audition_.start(

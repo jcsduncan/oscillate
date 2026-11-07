@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import "../devicekit" as Kit
+import Oscillate.Format
 
 // The Prism device panel. Everything here reads and writes through
 // `controller` (NativeSynthDeviceController for the Prism engine); no project or audio state lives in QML.
@@ -504,7 +505,7 @@ Rectangle {
             theme: panel.theme
             parameterId: "prism.sub.octave"
             accent: mixer.accent
-            labels: ["-1", "-2"]
+            labels: [Format.number(-1, 0), Format.number(-2, 0)]
         }
         Caption {
             y: mixer.noiseY

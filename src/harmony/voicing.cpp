@@ -236,15 +236,15 @@ Voicing stack(const Structure& s, std::uint8_t k, int o, VoicingStyle style) noe
 // replaces a top voice a semitone or tone below it when that voice is only
 // the root or fifth (never the third or seventh), or it is added above.
 // False when it cannot sit cleanly within reach.
-bool add_drone(Voicing& v, std::uint8_t drone, std::uint8_t highest,
-               const ChordSymbol& chord) noexcept {
+bool add_drone(Voicing& v, std::uint8_t drone, const ChordSymbol& chord,
+               const VoicingOptions& options) noexcept {
   const int top = v.notes[v.count - 1];
   if (pc(top) == drone)
     return true;
   int m = top + 1;
   while (pc(m) != drone)
     ++m;
-  if (m > highest + drone_headroom)
+  if (m > options.highest + drone_headroom)
     return false;
   constexpr int tone = 2;
   constexpr int fifth = 7;
@@ -406,8 +406,8 @@ struct OpenSearch {
   std::uint8_t usual = open_usual;
   bool strict = true; // Every colour tone sounds.
   // Candidate notes, ascending, and which tone each sounds.
-  std::array<std::uint8_t, 2 * octave * 2> notes{};
-  std::array<std::uint8_t, 2 * octave * 2> tone_of{};
+  std::array<std::uint8_t, std::size_t{2} * octave * 2> notes{};
+  std::array<std::uint8_t, std::size_t{2} * octave * 2> tone_of{};
   std::uint8_t note_count = 0;
   [[nodiscard]] std::uint8_t uses_in(const Voicing& v, std::uint8_t t) const noexcept {
     std::uint8_t n = 0;
@@ -647,7 +647,7 @@ Voicing voice(const ChordSymbol& chord, std::optional<std::uint8_t> top,
         if (top) {
           if (drone_in_chord && pc(v.notes[v.count - 1]) != pc(*top))
             cost += drone_not_on_top;
-          if (!add_drone(v, pc(*top), options.highest, chord))
+          if (!add_drone(v, pc(*top), chord, options))
             continue;
           sort_notes(v);
         }

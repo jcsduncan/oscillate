@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The decay landscape: the reverb's energy over time (across) and frequency
 // (up), drawn as aurora curtains under the night sky. It is computed from
@@ -165,6 +166,7 @@ Item {
         return Math.max(0.03, last * 1.12 + 0.004)
     }
     readonly property real minHz: 20
+    readonly property int semitonesPerOctave: 12
     readonly property real maxHz: 20000
     function xAt(seconds) { return padLeft + plotWidth * Math.max(0, Math.min(1, seconds / span)) }
     function yAt(hz) {
@@ -175,7 +177,7 @@ Item {
     function secondsText(s) {
         if (!isFinite(s))
             return "∞"
-        return s < 1 ? Math.round(s * 1000) + " ms" : s < 10 ? s.toFixed(2) + " s" : s.toFixed(1) + " s"
+        return Format.seconds(s)
     }
 
     // The aurora's colour at a height: green at its base, violet at its crown.
@@ -463,7 +465,7 @@ Item {
             ctx.font = t.typeMicro + "px '" + t.sans + "'"
             ctx.textAlign = "right"
             ctx.textBaseline = "top"
-            ctx.fillText(Math.round(stripSpan * 1000) + " ms", x0 + w - t.spaceXs, sy + t.stripTextY)
+            ctx.fillText(Format.seconds(stripSpan), x0 + w - t.spaceXs, sy + t.stripTextY)
             if (taps.length === 0) {
                 ctx.textAlign = "left"
                 ctx.fillText("NO EARLY REFLECTIONS · A PLATE ANSWERS AT ONCE", xpre + t.spaceMd, sy + t.stripNoteY)
@@ -537,8 +539,7 @@ Item {
         Readout {
             visible: view.shimmer > 0.001
             band: "SHIMMER"
-            value: (view.shimmerRatio >= 1 ? "+" : "−")
-                + Math.round(Math.abs(12 * Math.log2(view.shimmerRatio))) + " st"
+            value: Format.semitones(view.semitonesPerOctave * Math.log2(view.shimmerRatio), 0)
             tone: view.theme.auroraMagenta
         }
     }
@@ -548,7 +549,7 @@ Item {
         anchors.rightMargin: view.padRight
         y: view.theme.spaceSm
         text: view.frozen ? "FROZEN · HOLDING"
-            : view.live ? "LIVE · LATE " + Math.round(view.lateDb) + " dB"
+            : view.live ? "LIVE · LATE " + Format.decibels(view.lateDb)
             : "FROM SETTINGS"
         color: view.frozen ? view.theme.ice : view.live ? view.theme.aurora : view.theme.inkFaint
         font.pixelSize: view.theme.typeMicro

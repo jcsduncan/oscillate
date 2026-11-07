@@ -310,18 +310,14 @@ KitTheme {
     segmentedFrame: well
     segmentedFrameEdge: line
     segmentedDisabledOpacity: 0.55
-    // The chosen cell's wash and edge, as alphas of its accent.
-    readonly property real segmentedWashAlpha: 0.2
-    readonly property real segmentedRimAlpha: 0.55
     function segmentedFill(cell, stop) {
-        return cell.on ? Qt.rgba(cell.accent.r, cell.accent.g, cell.accent.b, segmentedWashAlpha)
-            : cell.hovered ? raised : "transparent"
+        return cell.hovered ? raised : "transparent"
     }
     function segmentedEdge(cell) {
-        return cell.on ? Qt.rgba(cell.accent.r, cell.accent.g, cell.accent.b, segmentedRimAlpha) : "transparent"
+        return "transparent"
     }
     function segmentedInk(cell) {
-        return cell.on ? cell.accent : dim
+        return dim
     }
     function segmentedFont(cell) {
         return Qt.font({ pixelSize: typeSmall, bold: cell.on })
