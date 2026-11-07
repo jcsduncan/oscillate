@@ -324,6 +324,7 @@ void MixCheckController::start(std::optional<check::Finding> applied) {
   job->stage = "Rendering and measuring the song";
   job->target = target_;
   job->applied = std::move(applied);
+  job->session = session->session_generation();
   try {
     worker_ = std::jthread([job, pinned = std::move(pinned).value()]() mutable {
       try {
@@ -390,6 +391,11 @@ void MixCheckController::finish() {
   auto& result = *job->result;
   if (job->cancel.load(std::memory_order_acquire)) {
     set_status(QStringLiteral("Mix Check cancelled"));
+    return;
+  }
+  if (auto* session = hooks_.session ? hooks_.session() : nullptr;
+      session == nullptr || session->session_generation() != job->session) {
+    set_status(QStringLiteral("Mix Check dropped: the project changed"));
     return;
   }
   if (!result) {

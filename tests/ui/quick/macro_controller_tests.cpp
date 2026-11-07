@@ -214,6 +214,42 @@ void turning_is_heard_then_saved_once() {
           "the panel shows the saved value again");
 }
 
+// A turn that outlives its session, here replaced by a copy of the same
+// project with the same track and revision, commits and offers nothing.
+void a_turn_outliving_its_session_touches_nothing() {
+  constexpr double halfway = 0.5;
+  constexpr double top = 1.0;
+  Fixture f;
+  require(f.synth_panel->map_to_macro(QStringLiteral("prism.sub.level"), 0), "mapping failed");
+  require(f.session->saving().save().has_value(), "save failed");
+  const auto copy_root = f.directory.path() / "copy";
+  fs::copy(f.directory.path() / "song", copy_root, fs::copy_options::recursive);
+  auto copy = take(application::ProjectSession::open(copy_root));
+  require(copy->snapshot().revision == f.session->snapshot().revision,
+          "the copy does not share the original's revision");
+
+  // Released after the session changed: nothing is saved in the copy.
+  f.macros->begin_turn(0);
+  f.macros->turn(0, halfway);
+  require(f.live_synth.size() == 1, "the turn was not heard");
+  auto other = std::exchange(f.session, std::move(copy));
+  const auto revision = f.session->snapshot().revision;
+  const auto edits = f.edits;
+  f.macros->end_turn(0);
+  require(f.macros->turning() == -1 && f.session->snapshot().revision == revision &&
+              f.edits == edits && f.saved().macros.at(0).value == 0.0,
+          "a turn outliving its session committed to the session that replaced it");
+
+  // Moved after the session changed: nothing more is offered.
+  f.macros->begin_turn(0);
+  f.macros->turn(0, halfway);
+  const auto offered = f.live_synth.size();
+  f.session.swap(other);
+  f.macros->turn(0, top);
+  require(f.live_synth.size() == offered && f.macros->turning() == -1,
+          "a turn outliving its session was offered to the devices");
+}
+
 void strip_lists_ranges_and_names() {
   Fixture f;
   require(f.effect_panel->map_to_macro(QStringLiteral("contour.cutoff"), 1), "mapping failed");
@@ -311,6 +347,7 @@ int main(int argc, char** argv) {
   try {
     knobs_map_to_macros();
     turning_is_heard_then_saved_once();
+    a_turn_outliving_its_session_touches_nothing();
     strip_lists_ranges_and_names();
     racks_save_load_and_refuse();
   } catch (const std::exception& error) {

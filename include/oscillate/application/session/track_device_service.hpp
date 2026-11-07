@@ -36,6 +36,12 @@ public:
   set_note_effect_parameters(project::TrackId track, project::InsertSlotId slot,
                              std::vector<project::NativeInstrumentParameter> parameters,
                              std::optional<std::uint64_t> gesture = {});
+  // The same, also switching the effect on: one undo step, and nothing
+  // changes when either half is refused.
+  [[nodiscard]] foundation::Result<void>
+  enable_note_effect_with_parameters(project::TrackId track, project::InsertSlotId slot,
+                                     std::vector<project::NativeInstrumentParameter> parameters,
+                                     std::optional<std::uint64_t> gesture = {});
   // ADR-0083: Comp pattern `index`
   // (comp::patterns()) on Comp `slot`, keeping its other settings: one undo
   // step.
@@ -74,6 +80,12 @@ public:
   // slot ids are allocated and the macros retargeted to them.
   [[nodiscard]] foundation::Result<void> load_track_rack(project::TrackId track,
                                                          const persistence::TrackRack& rack);
+
+private:
+  [[nodiscard]] foundation::Result<void>
+  apply_note_effect_settings(project::TrackId track, project::InsertSlotId slot,
+                             std::vector<project::NativeInstrumentParameter> parameters,
+                             bool enable, std::optional<std::uint64_t> gesture);
 };
 
 } // namespace oscillate::application

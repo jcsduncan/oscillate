@@ -117,6 +117,8 @@ Rectangle {
                 if (event.key === Qt.Key_Left || event.key === Qt.Key_Right)
                     amount.released()
             }
+            // Focus moving away mid-key-drag ends it too.
+            onActiveFocusChanged: if (!activeFocus) amount.released()
             Rectangle {
                 width: Math.max(height, parent.width * amount.value)
                 height: parent.height
@@ -126,6 +128,8 @@ Rectangle {
             MouseArea {
                 anchors.fill: parent
                 onReleased: amount.released()
+                // A drag the view takes over still ends.
+                onCanceled: amount.released()
                 function pick(x) {
                     amount.moved(Math.max(0, Math.min(1, Math.round(x / width / amount.step) * amount.step)))
                 }
@@ -767,6 +771,7 @@ Rectangle {
                 help: "Push chance: how often a chord arrives early"
                 value: panel.hc ? panel.hc.pushChance : 0
                 onMoved: amount => panel.hc.set_push_chance(amount)
+                onReleased: panel.hc.finish_rhythm_drag()
             }
             Flow {
                 width: parent.width
@@ -817,6 +822,7 @@ Rectangle {
                 help: "Articulation: every hit shortened towards staccato, or played as written"
                 value: panel.hc ? panel.hc.articulation : 1
                 onMoved: amount => panel.hc.set_articulation(amount)
+                onReleased: panel.hc.finish_rhythm_drag()
             }
             Label { text: "MOTION · KEEPS THE LOOP MOVING" }
             Amount {
@@ -825,6 +831,7 @@ Rectangle {
                 help: "Complexity: from the pattern thinned to the 8ths and played the same every bar, up to ghost fills, variations, pushes and a polymeter on top. It sets the controls below"
                 value: panel.hc ? panel.hc.rhythmComplexity : 0
                 onMoved: amount => panel.hc.set_rhythm_complexity(amount)
+                onReleased: panel.hc.finish_rhythm_drag()
             }
             Amount {
                 objectName: "chordDensity"
@@ -832,6 +839,7 @@ Rectangle {
                 help: "Density: below the middle the pattern thins to the 8ths, above it ghost 16ths fill after hits"
                 value: panel.hc ? panel.hc.density : 0
                 onMoved: amount => panel.hc.set_density(amount)
+                onReleased: panel.hc.finish_rhythm_drag()
             }
             Amount {
                 objectName: "chordVariation"
@@ -839,6 +847,7 @@ Rectangle {
                 help: "Variation: how often a bar changes a little, a hit dropped or a ghost 16th added"
                 value: panel.hc ? panel.hc.variation : 0
                 onMoved: amount => panel.hc.set_variation(amount)
+                onReleased: panel.hc.finish_rhythm_drag()
             }
             Amount {
                 objectName: "chordSwell"
@@ -846,6 +855,7 @@ Rectangle {
                 help: "Swell: the velocity rises through each phrase and dips at its turn"
                 value: panel.hc ? panel.hc.swell : 0
                 onMoved: amount => panel.hc.set_swell(amount)
+                onReleased: panel.hc.finish_rhythm_drag()
             }
             Flow {
                 width: parent.width

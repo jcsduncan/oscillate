@@ -231,6 +231,10 @@ public:
   // each; a drag is one undo step, ended by finish_harmony_complexity.
   Q_INVOKABLE void set_harmony_complexity(double amount);
   Q_INVOKABLE void finish_harmony_complexity();
+  // A drag of a rhythm slider (push chance, articulation, complexity,
+  // density, variation, swell) changes a live Comp in one undo step, ended
+  // by finish_rhythm_drag.
+  Q_INVOKABLE void finish_rhythm_drag();
 
   [[nodiscard]] QString clip_id() const { return clip_id_; }
   void set_clip_id(const QString& clip_id);
@@ -347,8 +351,12 @@ private:
   rhythm_parameters(std::span<const project::NativeInstrumentParameter> current) const;
   // The Comp on the clip's track, if any: its slot and whether it plays.
   [[nodiscard]] std::optional<std::pair<project::InsertSlotId, bool>> track_comp() const;
-  // A live Comp takes the rhythm chosen now.
-  void update_live_rhythm();
+  // A live Comp takes the rhythm chosen now; within a slider drag, its
+  // changes share one gesture.
+  void update_live_rhythm(std::optional<std::uint64_t> gesture = {});
+  // The open rhythm drag's gesture, opened by the first move.
+  [[nodiscard]] std::uint64_t rhythm_drag();
+  void apply_live_rhythm(bool live, std::optional<std::uint64_t> gesture);
   void set_status(QString status);
 
   Hooks hooks_;
@@ -368,6 +376,8 @@ private:
   int mood_bucket_ = -1;
   // One mood-pad drag is one undo step: its writes share a gesture.
   std::optional<std::uint64_t> mood_gesture_;
+  // One rhythm-slider drag is one undo step on a live Comp.
+  std::optional<std::uint64_t> rhythm_gesture_;
   std::uint64_t next_gesture_ = 0x4841'0000'0000'0001ULL;
   int selected_ = 0;
   bool insert_next_ = false;

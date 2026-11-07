@@ -216,6 +216,41 @@ void the_notes_tab_edits_a_clip() {
   (void)track;
 }
 
+// A detection that finishes after its session was replaced, here by a copy
+// of the same project with the same clip and revision, is dropped: the copy
+// gains no take.
+void a_detection_for_a_replaced_session_is_dropped() {
+  Directory directory;
+  const auto root = directory.path() / "song";
+  const auto copy_root = directory.path() / "copy";
+  auto session = take(application::ProjectSession::create(root));
+  const auto wav = write_sung(directory.path() / "vocal.wav");
+  const int fd = ::open(wav.c_str(), O_RDONLY | O_CLOEXEC);
+  require(fd >= 0, "fixture open failed");
+  (void)take(session->imports().import_wav_audio(fd));
+  (void)::close(fd);
+  require(static_cast<bool>(session->saving().save()), "the project saves");
+  fs::copy(root, copy_root, fs::copy_options::recursive);
+  auto copy = take(application::ProjectSession::open(copy_root));
+  const auto clip = session->snapshot().tracks.front().clips.front().id;
+  application::ProjectSession* current = session.get();
+  int commits = 0;
+  quick::ClayController controller(
+      [&] { return current; }, [] { return true; }, [](const QString&) {}, [&] { ++commits; },
+      [](const QString&) { return std::optional<oscillate::persistence::GrooveTemplate>{}; }, [] {},
+      [] {});
+  controller.open_clip(QString::fromStdString(clip.to_string()));
+  controller.detect(QStringLiteral("melodic"));
+  require(controller.detecting(), "detection did not start");
+  current = copy.get();
+  const auto revision = copy->snapshot().revision;
+  require(controller.wait_for_detect(wait_ms), "detection did not finish");
+  require(commits == 0 && copy->snapshot().revision == revision && !controller.has_take() &&
+              controller.status().contains(QStringLiteral("dropped")),
+          "a detection was saved in the session that replaced its own: " +
+              controller.status().toStdString());
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -223,6 +258,7 @@ int main(int argc, char** argv) {
   QCoreApplication app(argc, argv);
   try {
     the_notes_tab_edits_a_clip();
+    a_detection_for_a_replaced_session_is_dropped();
   } catch (const std::exception& error) {
     std::cerr << "clay controller: " << error.what() << '\n';
     return EXIT_FAILURE;

@@ -252,6 +252,8 @@ std::optional<HarmonyController::ClipView> HarmonyController::clip_view() const 
 void HarmonyController::set_clip_id(const QString& clip_id) {
   if (clip_id == clip_id_)
     return;
+  // A drag on another clip's Comp is not this one's undo step.
+  rhythm_gesture_.reset();
   clip_id_ = clip_id;
   const auto parsed = project::ClipId::parse(clip_id.toStdString());
   clip_ = parsed ? std::optional{parsed.value()} : std::nullopt;
@@ -950,7 +952,7 @@ void HarmonyController::set_push_chance(double chance) {
     return;
   push_chance_ = clamped;
   emit rhythmChanged();
-  update_live_rhythm();
+  update_live_rhythm(rhythm_drag());
 }
 
 void HarmonyController::set_push_by(int choice) {
@@ -1096,7 +1098,9 @@ std::optional<std::pair<project::InsertSlotId, bool>> HarmonyController::track_c
   return std::nullopt;
 }
 
-void HarmonyController::set_live_rhythm(bool live) {
+void HarmonyController::set_live_rhythm(bool live) { apply_live_rhythm(live, std::nullopt); }
+
+void HarmonyController::apply_live_rhythm(bool live, std::optional<std::uint64_t> gesture) {
   auto* current = session();
   const auto view = clip_view();
   if (current == nullptr || !view || (hooks_.can_edit && !hooks_.can_edit()))
@@ -1122,10 +1126,9 @@ void HarmonyController::set_live_rhythm(bool live) {
     if (!parameters)
       return;
     if (comp) {
-      applied = current->track_devices().set_note_effect_parameters(view->track, comp->first,
-                                                                    std::move(*parameters));
-      if (applied && !comp->second)
-        applied = current->track_devices().set_note_effect_enabled(view->track, comp->first, true);
+      // Switched on with its settings in one undo step.
+      applied = current->track_devices().enable_note_effect_with_parameters(
+          view->track, comp->first, std::move(*parameters), gesture);
     } else {
       // First in the chain, so it plays what the clip holds.
       const auto added = current->track_devices().add_note_effect(
@@ -1169,7 +1172,7 @@ void HarmonyController::set_variation(double amount) {
     return;
   variation_ = clamped;
   emit rhythmChanged();
-  update_live_rhythm();
+  update_live_rhythm(rhythm_drag());
 }
 
 void HarmonyController::set_phrase(int choice) {
@@ -1202,7 +1205,7 @@ void HarmonyController::set_swell(double amount) {
     return;
   swell_ = clamped;
   emit rhythmChanged();
-  update_live_rhythm();
+  update_live_rhythm(rhythm_drag());
 }
 
 void HarmonyController::set_top_cycle(int choice) {
@@ -1219,7 +1222,7 @@ void HarmonyController::set_density(double amount) {
     return;
   density_ = clamped;
   emit rhythmChanged();
-  update_live_rhythm();
+  update_live_rhythm(rhythm_drag());
 }
 
 void HarmonyController::set_rhythm_complexity(double amount) {
@@ -1235,7 +1238,7 @@ void HarmonyController::set_rhythm_complexity(double amount) {
   push_chance_ =
       std::min(1.0, pattern_push_ + std::max(0.0, c - push_from) / (1.0 - push_from) * push_most);
   emit rhythmChanged();
-  update_live_rhythm();
+  update_live_rhythm(rhythm_drag());
 }
 
 void HarmonyController::set_harmony_complexity(double amount) {
@@ -1272,7 +1275,7 @@ void HarmonyController::set_articulation(double amount) {
     return;
   articulation_ = clamped;
   emit rhythmChanged();
-  update_live_rhythm();
+  update_live_rhythm(rhythm_drag());
 }
 
 void HarmonyController::set_tonic_pulse(int choice) {
@@ -1418,9 +1421,17 @@ QVariantList HarmonyController::voicing_styles() const {
   return out;
 }
 
-void HarmonyController::update_live_rhythm() {
+void HarmonyController::update_live_rhythm(std::optional<std::uint64_t> gesture) {
   if (live_rhythm_)
-    set_live_rhythm(true);
+    apply_live_rhythm(true, gesture);
 }
+
+std::uint64_t HarmonyController::rhythm_drag() {
+  if (!rhythm_gesture_)
+    rhythm_gesture_ = next_gesture_++;
+  return *rhythm_gesture_;
+}
+
+void HarmonyController::finish_rhythm_drag() { rhythm_gesture_.reset(); }
 
 } // namespace oscillate::quick

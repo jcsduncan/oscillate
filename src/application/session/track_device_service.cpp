@@ -426,6 +426,20 @@ Result<void> TrackDeviceService::set_note_effect_parameters(
     project::TrackId track, project::InsertSlotId slot,
     std::vector<project::NativeInstrumentParameter> parameters,
     std::optional<std::uint64_t> gesture) {
+  return apply_note_effect_settings(track, slot, std::move(parameters), false, gesture);
+}
+
+Result<void> TrackDeviceService::enable_note_effect_with_parameters(
+    project::TrackId track, project::InsertSlotId slot,
+    std::vector<project::NativeInstrumentParameter> parameters,
+    std::optional<std::uint64_t> gesture) {
+  return apply_note_effect_settings(track, slot, std::move(parameters), true, gesture);
+}
+
+Result<void> TrackDeviceService::apply_note_effect_settings(
+    project::TrackId track, project::InsertSlotId slot,
+    std::vector<project::NativeInstrumentParameter> parameters, bool enable,
+    std::optional<std::uint64_t> gesture) {
   if (gesture && *gesture == 0)
     return Result<void>::failure(
         {ErrorCode::invalid_argument, "Note effect gesture ID must be nonzero"});
@@ -439,10 +453,14 @@ Result<void> TrackDeviceService::set_note_effect_parameters(
     return Result<void>::failure(resolved.error());
   parameters = native_dsp::note_effects::sparse_note_effect_parameters(*resolved.value().engine,
                                                                        resolved.value().values);
-  if (effect->parameters == parameters)
+  std::vector<project::Operation> operations;
+  if (effect->parameters != parameters)
+    operations.emplace_back(project::SetNoteEffectSettings{track, slot, std::move(parameters)});
+  if (enable && !effect->enabled)
+    operations.emplace_back(project::SetNoteEffectEnabled{track, slot, true});
+  if (operations.empty())
     return Result<void>::success();
-  return done(
-      model().apply({project::SetNoteEffectSettings{track, slot, std::move(parameters)}}, gesture));
+  return done(model().apply(operations, gesture));
 }
 
 Result<void> TrackDeviceService::set_macro_value(project::TrackId track, std::uint32_t index,

@@ -268,6 +268,8 @@ private:
     mutable std::mutex mutex;
     std::string stage;
     std::optional<foundation::Result<std::shared_ptr<const Loaded>>> result;
+    // The session the detection started in; a result for another is dropped.
+    std::uint64_t session = 0;
   };
   struct Warm {
     std::stop_source stop;

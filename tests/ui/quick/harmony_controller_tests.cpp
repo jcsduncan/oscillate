@@ -537,6 +537,41 @@ void rhythm_as_notes_and_live() {
           "Motion reaches the live Comp");
   controller.set_live_rhythm(false);
   require(!controller.live_rhythm(), "and play live turns it off");
+
+  // Back on with a rhythm chosen meanwhile: its settings and the switch are
+  // one undo step.
+  constexpr int other_groove = 1;
+  controller.set_groove(other_groove);
+  const auto off_steps = f.steps();
+  controller.set_live_rhythm(true);
+  require(controller.live_rhythm() && f.steps() == off_steps + 1,
+          "turning the live Comp back on took more than one undo step");
+
+  // One slider drag over a live Comp is one undo step; the next drag is another.
+  constexpr double first_variation = 0.2;
+  constexpr double second_variation = 0.3;
+  constexpr double dragged_swell = 0.4;
+  constexpr double later_variation = 0.5;
+  const auto before_drag = f.steps();
+  controller.set_variation(first_variation);
+  controller.set_variation(second_variation);
+  controller.set_swell(dragged_swell);
+  controller.finish_rhythm_drag();
+  require(f.steps() == before_drag + 1 && value_of("comp.variation") == second_variation,
+          "a rhythm drag over the live Comp was not one undo step");
+  controller.set_variation(later_variation);
+  controller.finish_rhythm_drag();
+  require(f.steps() == before_drag + 2, "the next rhythm drag joined the previous one");
+
+  // A drag left open when the clip changes does not join the next clip's.
+  constexpr double reopened_variation = 0.7;
+  constexpr double interrupted_variation = 0.8;
+  const auto clip_id = controller.clip_id();
+  controller.set_variation(interrupted_variation);
+  controller.set_clip_id(QString());
+  controller.set_clip_id(clip_id);
+  controller.set_variation(reopened_variation);
+  require(f.steps() == before_drag + 4, "a drag outlived the clip it was made on");
 }
 
 } // namespace
