@@ -36,6 +36,9 @@ PACKAGE_FEATURES = {
     "OSCILLATE_BUILD_CONVOLUTION_DSP": "OFF",
 }
 QML_RUNTIME_PACKAGES = {"QtQuick": "qml6-module-qtquick"}
+# Modules the app registers itself (qmlRegister* in apps/daw_quick/src): they
+# live in the binary, so no runtime package provides them.
+APP_QML_MODULES = frozenset({"Oscillate.Contracts"})
 
 
 def run(*args: str, cwd: Path | None = None) -> str:
@@ -113,6 +116,7 @@ def bundled_qml_imports(source_root: Path) -> tuple[list[Path], list[str]]:
             for line in qml.read_text().splitlines()
             if (match := re.match(r"^\s*import\s+([A-Za-z][A-Za-z0-9.]*)\b", line))
         }
+        - APP_QML_MODULES
     )
     if not imports:
         raise SystemExit("Quick package has no discoverable QML module imports")
