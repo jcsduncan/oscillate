@@ -96,7 +96,7 @@ QVariantMap scope(std::span<const float> frame) {
   const bool keyed = std::ranges::any_of(key_values, [](float v) { return v != 0.0F; });
   const auto reduce = [&](std::size_t first) {
     QVariantList out;
-    out.reserve(static_cast<qsizetype>(2 * columns));
+    out.reserve(2 * static_cast<qsizetype>(columns));
     for (std::size_t column = 0; column < columns; ++column) {
       float low = frame[first + 2 * column * per];
       float high = frame[first + 2 * column * per + 1];
@@ -170,6 +170,8 @@ void DeviceStripView::clear() noexcept {
   filled_ = 0;
 }
 
+// The two telemetry offsets are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 QVariantMap DeviceStripView::reduction(std::span<const float> frame, std::size_t reduction_at,
                                        std::size_t bands_at, double range_db) {
   const double now = std::max(0.0, static_cast<double>(frame[reduction_at]));

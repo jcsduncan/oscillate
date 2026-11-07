@@ -170,9 +170,10 @@ QString key_name(int key) {
   if (key < 0) {
     return {};
   }
+  // A whole octave number; the formatter gives a negative one its minus sign.
+  const int octave = key / semitones_per_octave + octave_of_key_zero;
   return text(pitch_names[static_cast<std::size_t>(key % semitones_per_octave)]) +
-         QString::fromStdString(
-             foundation::format_number(key / semitones_per_octave + octave_of_key_zero, 0));
+         QString::fromStdString(foundation::format_number(octave, 0));
 }
 
 QVariantMap concert_library_map(const native_dsp::synth::concert::library::Status& status) {

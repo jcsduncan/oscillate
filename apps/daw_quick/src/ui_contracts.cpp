@@ -80,6 +80,8 @@ double curve_bend(double t, double tension) noexcept {
   return t;
 }
 
+// x and the empty curve's value are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 double curve_value(std::span<const project::NativeCurvePoint> points, double x,
                    double empty_value) noexcept {
   if (points.empty())
@@ -123,6 +125,8 @@ QVariantList UiContracts::sample_curve(const QVariantList& points, int count, do
   return values;
 }
 
+// QML passes the spelling as one of the named constants.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 QString UiContracts::pitch_class_name(int pitch_class, int spelling) {
   const auto index = static_cast<std::size_t>(wrap_pitch_class(pitch_class));
   const auto& names = spelling == ascii_spelling  ? ascii_names
@@ -143,6 +147,8 @@ double UiContracts::midi_of_hz(double hz) noexcept {
   return concert_a_key + octave_semitones * std::log2(hz / concert_a_hz);
 }
 
+// QML passes the spelling and octave numbering as named constants.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 QString UiContracts::note_name(int key, int spelling, int middle_c_octave) {
   const int below = key < 0 ? octave_semitones - 1 : 0;
   const int octave = (key - below) / octave_semitones + scientific_octave_of_key_zero +

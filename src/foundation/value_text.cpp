@@ -28,7 +28,7 @@ constexpr std::string_view no_value = "\xE2\x80\x93";
 constexpr std::array<std::string_view, 5> level_units{"dB", "dBFS", "dBTP", "LU", "LUFS"};
 
 bool is_level(std::string_view unit) noexcept {
-  return std::find(level_units.begin(), level_units.end(), unit) != level_units.end();
+  return std::ranges::find(level_units, unit) != level_units.end();
 }
 
 // The unit's one spelling.
