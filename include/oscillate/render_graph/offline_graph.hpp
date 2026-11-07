@@ -7,10 +7,12 @@
 #include "oscillate/engine/routed_mixer.hpp"
 #include "oscillate/foundation/error.hpp"
 #include "oscillate/project/model.hpp"
+#include "oscillate/render_graph/vst3_stage.hpp"
 #include "oscillate/routing/route_gain_blocks.hpp"
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -72,6 +74,19 @@ struct OfflineGraphRequest {
   // Route the render even when nothing on its tracks needs it (taps).
   bool always_routed = false;
   std::size_t max_frames = 0;
+  // Prepares the snapshot's VST3 stages. Without it a saved VST3 effect or
+  // instrument fails preflight (see preflight_inserts).
+  Vst3StagePreparer vst3{};
+};
+
+// One prepared stage of an offline render.
+struct OfflineStage {
+  std::shared_ptr<engine::ProcessorRuntime> runtime;
+  // A VST3 stage's probe for a failed block (track_chain::Stage::failed).
+  std::function<bool()> failed{};
+  // True when the stage failed a block or held its output after a
+  // non-finite frame.
+  [[nodiscard]] bool faulted() const noexcept;
 };
 
 // Every processor an offline render runs, besides its sources. Tails and
@@ -79,20 +94,21 @@ struct OfflineGraphRequest {
 struct OfflineGraph {
   // Empty when the snapshot mixes plainly, with no routing or track chains.
   std::optional<OfflineRoute> route;
-  // Each stage of every track chain, for the non-finite guard.
-  std::vector<std::shared_ptr<engine::ProcessorRuntime>> chain_stages;
+  // Each stage of every track chain, for the fault check.
+  std::vector<OfflineStage> chain_stages;
   // The master chain in saved order: it runs after the mix.
-  std::vector<std::shared_ptr<engine::ProcessorRuntime>> master_stages;
+  std::vector<OfflineStage> master_stages;
   std::uint64_t master_tail_frames = 0;
   std::uint64_t master_latency_frames = 0;
-  // True when a track chain's stage held its output after a non-finite frame.
+  // True when a track chain's stage faulted.
   [[nodiscard]] bool chain_faulted() const noexcept;
 };
 
 // Control or worker side. Prepares the snapshot's track chains, routing and
 // master chain for blocks of at most request.max_frames. Built-in effects
-// run; a saved VST3 effect or instrument fails (see preflight_inserts). The
-// store opens saved convolution impulse responses.
+// run, and VST3 effects through request.vst3; without it a saved VST3 effect
+// or instrument fails (see preflight_inserts). The store opens saved
+// convolution impulse responses.
 [[nodiscard]] foundation::Result<OfflineGraph>
 prepare_offline_graph(const project::Snapshot& snapshot, const persistence::ProjectStore& store,
                       const OfflineGraphRequest& request);

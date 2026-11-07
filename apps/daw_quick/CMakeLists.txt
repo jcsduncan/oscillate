@@ -321,7 +321,7 @@ function(oscillate_add_quick_core target codec export_resampler vst3)
     target_link_libraries(${target} PUBLIC
       oscillate::vst3_track_insert oscillate::vst3_instrument_provider
       oscillate::vst3_manual_effect_edit oscillate::vst3_insert_service oscillate::vst3_instrument_export
-      oscillate::vst3_effect_export oscillate::plugin_ui)
+      oscillate::vst3_offline_export oscillate::plugin_ui)
   endif()
   oscillate_target_defaults(${target})
 endfunction()

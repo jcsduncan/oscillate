@@ -16,7 +16,9 @@
 namespace oscillate::render_graph {
 
 // `native`: the offline master renders built-in instruments and effects only.
-enum class ExportSource : std::uint8_t { native, vst3_instrument };
+// `vst3`: a VST3 host prepares the VST3 stages too, so every saved chain
+// renders: VST3 instruments and effects on any track or bus and on the master.
+enum class ExportSource : std::uint8_t { native, vst3_instrument, vst3 };
 
 // Non-owning view of validated schema-1.13 intent. The caller retains the
 // Snapshot until preparation completes. Unsupported processors fail before
@@ -53,6 +55,7 @@ preflight_inserts(const project::Snapshot& snapshot, ExportSource source,
          "Saved convolution insert is not available for export yet"});
   std::size_t active_convolutions = 0;
   std::array<bool, std::variant_size_v<project::EffectProcessor>> active_kinds{};
+  const bool any_chain = source == ExportSource::vst3;
   for (const auto& slot : snapshot.master_effects) {
     // A bypassed slot remains saved, but does not enter the rendered chain.
     // In particular, no plugin binary is needed to render past a bypassed
@@ -60,10 +63,11 @@ preflight_inserts(const project::Snapshot& snapshot, ExportSource source,
     if (!slot.enabled)
       continue;
     const auto kind = slot.processor.index();
-    if (std::holds_alternative<project::Vst3PluginInstance>(slot.processor))
+    if (std::holds_alternative<project::Vst3PluginInstance>(slot.processor) && !any_chain)
       return foundation::Result<ExportInserts>::failure(
           {foundation::ErrorCode::unsupported, "Export cannot render a VST3 master insert"});
-    const bool built_in = std::holds_alternative<project::NativeEffectPatch>(slot.processor);
+    const bool built_in = std::holds_alternative<project::NativeEffectPatch>(slot.processor) ||
+                          std::holds_alternative<project::Vst3PluginInstance>(slot.processor);
     if (!built_in && active_kinds[kind])
       return foundation::Result<ExportInserts>::failure(
           {foundation::ErrorCode::unsupported,
@@ -78,6 +82,27 @@ preflight_inserts(const project::Snapshot& snapshot, ExportSource source,
   }
 
   for (const auto& track : snapshot.tracks) {
+    if (any_chain) {
+      // The track's chain: its VST3 instrument, if any, then each enabled
+      // effect (ADR-0050). A track of only bypassed VST3 slots has none.
+      const bool vst3_instrument =
+          std::holds_alternative<project::Vst3PluginInstance>(track.instrument_source);
+      const bool chain =
+          vst3_instrument || std::ranges::any_of(track.effects, [](const auto& slot) {
+            return slot.enabled ||
+                   !std::holds_alternative<project::Vst3PluginInstance>(slot.processor);
+          });
+      if (!chain)
+        continue;
+      ExportInserts::NativeTrackChain owned{track.id, {}};
+      for (const auto& slot : track.effects) {
+        owned.effects.push_back(&slot);
+        if (slot.enabled && std::holds_alternative<project::NativeConvolution>(slot.processor))
+          ++active_convolutions;
+      }
+      plan.native_track_chains.push_back(std::move(owned));
+      continue;
+    }
     if (!track.effects.empty()) {
       const auto native_slot = [](const project::EffectInsert& slot) {
         return std::holds_alternative<project::NativeConvolution>(slot.processor) ||

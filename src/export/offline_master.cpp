@@ -135,6 +135,7 @@ private:
 // the music's loudest stretch, fading out over tail_fade_seconds.
 class TailTrim {
 public:
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the rate, then a frame count.
   TailTrim(std::uint32_t rate, std::uint64_t music_frames)
       : music_frames_(music_frames),
         window_(std::max<std::uint64_t>(1, static_cast<std::uint64_t>(rate * tail_window_seconds))),
@@ -365,7 +366,8 @@ using WriterOptions = MasterOutputOptions;
     std::optional<project::TrackId> solo_track = std::nullopt,
     std::uint64_t source_extent_floor = 0, const engine::CompiledMidiPlan* compiled_midi = nullptr,
     const std::vector<automation_project::PreparedTargetAutomation>* prepared_automation = nullptr,
-    std::span<const project::TrackId> detector_buses = {}, RenderControls* controls = nullptr) {
+    std::span<const project::TrackId> detector_buses = {}, RenderControls* controls = nullptr,
+    const render_graph::Vst3StagePreparer& vst3 = {}) {
   // The render computes as the device callback does (engine/denormals.hpp).
   const engine::DenormalsFlushed flushed;
   // Frozen tracks play their renders (ADR-0059). Prepared plans come from
@@ -376,7 +378,8 @@ using WriterOptions = MasterOutputOptions;
           {foundation::ErrorCode::corrupt_data, "A prepared render plan names a frozen track"});
     const auto view = project::audible_snapshot(snapshot);
     return render_master_impl(view, store, options, after_writer_begin, solo_track,
-                              source_extent_floor, nullptr, nullptr, detector_buses, controls);
+                              source_extent_floor, nullptr, nullptr, detector_buses, controls,
+                              vst3);
   }
 #if !OSCILLATE_HAVE_CONVOLUTION
   if (project::has_convolution_insert(snapshot))
@@ -411,7 +414,8 @@ using WriterOptions = MasterOutputOptions;
                                                              .solo_track = solo_track,
                                                              .detector_buses = detector_buses,
                                                              .always_routed = tapping,
-                                                             .max_frames = block_frames});
+                                                             .max_frames = block_frames,
+                                                             .vst3 = vst3});
   if (!prepared_graph)
     return foundation::Result<PublishOutcome>::failure(prepared_graph.error());
   auto& graph = prepared_graph.value();
@@ -930,7 +934,7 @@ using WriterOptions = MasterOutputOptions;
       if (graph.chain_faulted())
         return foundation::Result<PublishOutcome>::failure(
             {foundation::ErrorCode::corrupt_data,
-             "Native route chain encountered a non-finite frame"});
+             "Track chain stage failed or held a non-finite frame"});
       for (std::size_t index = 0; index < count; ++index) {
         output[index * 2] = master_frames[index].left;
         output[index * 2 + 1] = master_frames[index].right;
@@ -1005,7 +1009,7 @@ using WriterOptions = MasterOutputOptions;
         if (graph.chain_faulted())
           return foundation::Result<PublishOutcome>::failure(
               {foundation::ErrorCode::corrupt_data,
-               "Native route chain encountered a non-finite frame"});
+               "Track chain stage failed or held a non-finite frame"});
         for (std::size_t index = 0; index < count; ++index) {
           output[index * 2] = master_frames[index].left;
           output[index * 2 + 1] = master_frames[index].right;
@@ -1030,11 +1034,11 @@ using WriterOptions = MasterOutputOptions;
         master_frames[index] = {output[index * 2], output[index * 2 + 1]};
       }
       for (const auto& stage : master_stages) {
-        stage->process(std::span(master_frames).first(count), {block_first, 1});
-        if (render_graph::held_non_finite(*stage))
+        stage.runtime->process(std::span(master_frames).first(count), {block_first, 1});
+        if (stage.faulted())
           return foundation::Result<PublishOutcome>::failure(
               {foundation::ErrorCode::corrupt_data,
-               "Master effect encountered a non-finite frame"});
+               "Master effect failed or held a non-finite frame"});
       }
       for (std::size_t index = 0; index < count; ++index) {
         output[index * 2] = master_frames[index].left;
@@ -1221,44 +1225,86 @@ stem_detector_buses(const project::Snapshot& snapshot) {
   return foundation::Result<std::vector<project::TrackId>>::success(std::move(buses));
 }
 
-[[nodiscard]] foundation::Result<PublishOutcome>
-render_stems_impl(const project::Snapshot& snapshot, const persistence::ProjectStore& store,
-                  const StemRenderOptions& options,
-                  const std::function<foundation::Result<void>(std::size_t)>& after_stem) {
-  // A frozen track's stem is its render through its channel (ADR-0059).
-  if (project::has_frozen_track(snapshot))
-    return render_stems_impl(project::audible_snapshot(snapshot), store, options, after_stem);
+// What every stem of one snapshot shares: the keys' buses, the automation,
+// the MIDI and the common length every stem is padded to.
+struct StemPlan {
+  std::vector<project::TrackId> detector_buses;
+  std::vector<automation_project::PreparedTargetAutomation> automation;
+  engine::CompiledMidiPlan midi;
+  std::uint64_t extent = 0;
+};
+
+[[nodiscard]] foundation::Result<StemPlan> prepare_stems(const project::Snapshot& snapshot) {
+  using R = foundation::Result<StemPlan>;
 #if !OSCILLATE_HAVE_CONVOLUTION
   if (project::has_convolution_insert(snapshot))
-    return foundation::Result<PublishOutcome>::failure(
-        {foundation::ErrorCode::unsupported,
-         "Saved convolution insert is not available for stem export yet"});
+    return R::failure({foundation::ErrorCode::unsupported,
+                       "Saved convolution insert is not available for stem export yet"});
 #endif
   auto detector_buses = stem_detector_buses(snapshot);
   if (!detector_buses)
-    return foundation::Result<PublishOutcome>::failure(detector_buses.error());
+    return R::failure(detector_buses.error());
+  auto automation = render_graph::prepare_offline_automation(snapshot);
+  if (!automation)
+    return R::failure(automation.error());
+  auto midi = engine::compile_midi_events(snapshot);
+  if (!midi)
+    return R::failure(midi.error());
+  auto extent = stem_source_extent(snapshot, midi.value());
+  if (!extent)
+    return R::failure(extent.error());
+  return R::success({std::move(detector_buses).value(), std::move(automation).value(),
+                     std::move(midi).value(), extent.value()});
+}
+
+// One source track's stem, as render_wav_stems writes it into its bundle.
+[[nodiscard]] foundation::Result<PublishOutcome>
+render_stem(const project::Snapshot& snapshot, const persistence::ProjectStore& store,
+            const StemPlan& plan, project::TrackId track, const MasterRenderOptions& options,
+            const render_graph::Vst3StagePreparer& vst3) {
+  return render_master_impl(snapshot, store, options, {}, track, plan.extent, &plan.midi,
+                            &plan.automation, plan.detector_buses, nullptr, vst3);
+}
+
+[[nodiscard]] foundation::Result<PublishOutcome>
+render_one_stem_impl(const project::Snapshot& snapshot, const persistence::ProjectStore& store,
+                     project::TrackId track, const MasterRenderOptions& options,
+                     const render_graph::Vst3StagePreparer& vst3) {
+  // A frozen track's stem is its render through its channel (ADR-0059).
+  if (project::has_frozen_track(snapshot))
+    return render_one_stem_impl(project::audible_snapshot(snapshot), store, track, options, vst3);
+  const auto source = std::ranges::find(snapshot.tracks, track, &project::Track::id);
+  if (source == snapshot.tracks.end() ||
+      (source->kind != project::TrackKind::audio && source->kind != project::TrackKind::instrument))
+    return foundation::Result<PublishOutcome>::failure(
+        {foundation::ErrorCode::invalid_argument, "Stem track is not a source track"});
+  auto plan = prepare_stems(snapshot);
+  if (!plan)
+    return foundation::Result<PublishOutcome>::failure(plan.error());
+  return render_stem(snapshot, store, plan.value(), track, options, vst3);
+}
+
+[[nodiscard]] foundation::Result<PublishOutcome>
+render_stems_impl(const project::Snapshot& snapshot, const persistence::ProjectStore& store,
+                  const StemRenderOptions& options,
+                  const std::function<foundation::Result<void>(std::size_t)>& after_stem,
+                  const render_graph::Vst3StagePreparer& vst3 = {}) {
+  // A frozen track's stem is its render through its channel (ADR-0059).
+  if (project::has_frozen_track(snapshot))
+    return render_stems_impl(project::audible_snapshot(snapshot), store, options, after_stem, vst3);
   if (options.loudness_reports != nullptr && options.format != WavFormat::float32) {
     return foundation::Result<PublishOutcome>::failure(
         {foundation::ErrorCode::unsupported,
          "Integrated loudness report requires float32 WAV stems"});
-  }
-  auto prepared_automation = render_graph::prepare_offline_automation(snapshot);
-  if (!prepared_automation) {
-    return foundation::Result<PublishOutcome>::failure(prepared_automation.error());
   }
   const auto target_name = options.target_directory.filename().string();
   if (target_name.empty() || target_name == "." || target_name == ".." || snapshot.tracks.empty()) {
     return foundation::Result<PublishOutcome>::failure(
         {foundation::ErrorCode::invalid_argument, "Stem target and tracks are required"});
   }
-  auto compiled_midi = engine::compile_midi_events(snapshot);
-  if (!compiled_midi) {
-    return foundation::Result<PublishOutcome>::failure(compiled_midi.error());
-  }
-  auto extent = stem_source_extent(snapshot, compiled_midi.value());
-  if (!extent) {
-    return foundation::Result<PublishOutcome>::failure(extent.error());
-  }
+  auto plan = prepare_stems(snapshot);
+  if (!plan)
+    return foundation::Result<PublishOutcome>::failure(plan.error());
   const auto parent_path = options.target_directory.parent_path().empty()
                                ? std::filesystem::path{"."}
                                : options.target_directory.parent_path();
@@ -1304,12 +1350,11 @@ render_stems_impl(const project::Snapshot& snapshot, const persistence::ProjectS
     const auto target =
         std::filesystem::path{"/proc/self/fd"} / std::to_string(stage.stage_fd.get()) / file_name;
     RenderLoudnessReport measurement;
-    auto rendered = render_master_impl(
-        snapshot, store,
+    auto rendered = render_stem(
+        snapshot, store, plan.value(), track.id,
         MasterRenderOptions{target, options.format, options.dither_seed, options.sample_rate,
                             options.loudness_reports != nullptr ? &measurement : nullptr},
-        {}, track.id, extent.value(), &compiled_midi.value(), &prepared_automation.value(),
-        detector_buses.value());
+        vst3);
     if (!rendered) {
       return rendered;
     }
@@ -1388,9 +1433,14 @@ foundation::Result<PublishOutcome> render_wav_master(const project::Snapshot& sn
 foundation::Result<PublishOutcome> render_wav_master(const project::Snapshot& snapshot,
                                                      const persistence::ProjectStore& store,
                                                      StoppedExportAuthority authority,
-                                                     const MasterRenderOptions& options) {
-  return detail::render_wav_master_with_start_hook(snapshot, store, std::move(authority), options,
-                                                   {});
+                                                     const MasterRenderOptions& options,
+                                                     const render_graph::Vst3StagePreparer& vst3) {
+  if (!authority.matches(snapshot)) {
+    return foundation::Result<PublishOutcome>::failure(
+        {foundation::ErrorCode::conflict, "Master export rejected: stopped authority is stale"});
+  }
+  return render_master_impl(snapshot, store, options, {}, std::nullopt, 0, nullptr, nullptr, {},
+                            nullptr, vst3);
 }
 
 foundation::Result<PublishOutcome> detail::render_wav_stems_with_after_stem_hook(
@@ -1416,12 +1466,24 @@ foundation::Result<PublishOutcome> render_wav_stems(const project::Snapshot& sna
 foundation::Result<PublishOutcome> render_wav_stems(const project::Snapshot& snapshot,
                                                     const persistence::ProjectStore& store,
                                                     StoppedExportAuthority authority,
-                                                    const StemRenderOptions& options) {
+                                                    const StemRenderOptions& options,
+                                                    const render_graph::Vst3StagePreparer& vst3) {
   if (!authority.matches(snapshot)) {
     return foundation::Result<PublishOutcome>::failure(
         {foundation::ErrorCode::conflict, "Stem export rejected: stopped authority is stale"});
   }
-  return render_stems_impl(snapshot, store, options, {});
+  return render_stems_impl(snapshot, store, options, {}, vst3);
+}
+
+foundation::Result<PublishOutcome>
+render_wav_stem(const project::Snapshot& snapshot, const persistence::ProjectStore& store,
+                StoppedExportAuthority authority, project::TrackId track,
+                const MasterRenderOptions& options, const render_graph::Vst3StagePreparer& vst3) {
+  if (!authority.matches(snapshot)) {
+    return foundation::Result<PublishOutcome>::failure(
+        {foundation::ErrorCode::conflict, "Stem export rejected: stopped authority is stale"});
+  }
+  return render_one_stem_impl(snapshot, store, track, options, vst3);
 }
 
 foundation::Result<PublishOutcome> render_encoded_master(const project::Snapshot& snapshot,
@@ -1444,10 +1506,10 @@ foundation::Result<PublishOutcome> render_encoded_master(const project::Snapshot
 #endif
 }
 
-foundation::Result<PublishOutcome> render_encoded_master(const project::Snapshot& snapshot,
-                                                         const persistence::ProjectStore& store,
-                                                         StoppedExportAuthority authority,
-                                                         const EncodedMasterOptions& options) {
+foundation::Result<PublishOutcome>
+render_encoded_master(const project::Snapshot& snapshot, const persistence::ProjectStore& store,
+                      StoppedExportAuthority authority, const EncodedMasterOptions& options,
+                      const render_graph::Vst3StagePreparer& vst3) {
   if (!authority.matches(snapshot)) {
     return foundation::Result<PublishOutcome>::failure(
         {foundation::ErrorCode::conflict, "Master export rejected: stopped authority is stale"});
@@ -1455,10 +1517,12 @@ foundation::Result<PublishOutcome> render_encoded_master(const project::Snapshot
 #if !OSCILLATE_HAVE_CODEC
   (void)store;
   (void)options;
+  (void)vst3;
   return foundation::Result<PublishOutcome>::failure(
       {foundation::ErrorCode::unsupported, "Encoded export requires codec adapter build"});
 #else
-  return render_master_impl(snapshot, store, options, {});
+  return render_master_impl(snapshot, store, options, {}, std::nullopt, 0, nullptr, nullptr, {},
+                            nullptr, vst3);
 #endif
 }
 

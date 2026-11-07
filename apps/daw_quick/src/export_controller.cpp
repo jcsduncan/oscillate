@@ -3,8 +3,8 @@
 #include "vst3_helper_path.hpp"
 
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
-#include "oscillate/application/vst3/effect_export.hpp"
 #include "oscillate/application/vst3/instrument_export.hpp"
+#include "oscillate/application/vst3/offline_export.hpp"
 #include "oscillate/plugins/vst3_scan.hpp"
 #endif
 
@@ -476,11 +476,12 @@ void ExportController::export_master() {
   const auto vst3_output =
       export_format_index_ < wav_formats_end
           ? exporting::MasterOutputOptions{exporting::MasterRenderOptions{
-                path, wav_formats[static_cast<std::size_t>(export_format_index_)], 0, output_rate}}
+                path, wav_formats[static_cast<std::size_t>(export_format_index_)], 0, output_rate,
+                nullptr, export_trim_tail_}}
           : exporting::MasterOutputOptions{exporting::EncodedMasterOptions{
                 path,
                 encoded_formats[static_cast<std::size_t>(export_format_index_ - wav_formats_end)],
-                0, 0.5, output_rate}};
+                0, 0.5, output_rate, export_trim_tail_}};
 #endif
   const project::Vst3PluginInstance* instrument_insert = nullptr;
   for (const auto& track : session()->snapshot().tracks) {
@@ -510,18 +511,14 @@ void ExportController::export_master() {
 #endif
     return;
   }
-  const project::Vst3PluginInstance* effect_insert = nullptr;
-  for (const auto& track : session()->snapshot().tracks) {
-    for (const auto& effect : track.effects) {
-      if (const auto* plugin = std::get_if<project::Vst3PluginInstance>(&effect.processor)) {
-        effect_insert = plugin;
-        break;
-      }
-    }
-    if (effect_insert)
-      break;
-  }
-  if (effect_insert) {
+  const auto vst3_effect = [](const project::EffectInsert& effect) {
+    return std::holds_alternative<project::Vst3PluginInstance>(effect.processor);
+  };
+  const auto& saved = session()->snapshot();
+  if (std::ranges::any_of(saved.master_effects, vst3_effect) ||
+      std::ranges::any_of(saved.tracks, [&](const project::Track& track) {
+        return std::ranges::any_of(track.effects, vst3_effect);
+      })) {
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
     auto prepared = session()->exports().prepare_stopped_snapshot_export();
     if (!prepared) {
@@ -530,8 +527,7 @@ void ExportController::export_master() {
       emit changed();
       return;
     }
-    start_vst3_effect_export_task(std::move(prepared.value()), effect_insert->bundle_path,
-                                  vst3_output);
+    start_vst3_effect_export_task(std::move(prepared.value()), vst3_output);
 #else
     export_status_ = QStringLiteral("VST3 effect export requires a scanner-enabled build");
     emit changed();
@@ -809,8 +805,11 @@ void ExportController::export_realtime_jack() {
 #endif
 }
 
+// The failure prefix, then the running status.
+// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 void ExportController::start(std::shared_ptr<Completion> completion, Job job,
                              const QString& failure_prefix, const QString& running) {
+  // NOLINTEND(bugprone-easily-swappable-parameters)
   try {
     worker_ = std::jthread([job = std::move(job), completion]() mutable {
       using Result = foundation::Result<exporting::PublishOutcome>;
@@ -855,7 +854,6 @@ void ExportController::start_export_task(application::MasterExportTask task,
 
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
 void ExportController::start_vst3_effect_export_task(application::StoppedSnapshotExportTask task,
-                                                     std::filesystem::path bundle,
                                                      exporting::MasterOutputOptions options) {
   auto completion = std::make_shared<Completion>();
   completion->revision = task.snapshot().revision;
@@ -864,14 +862,13 @@ void ExportController::start_vst3_effect_export_task(application::StoppedSnapsho
   completion->target = QString::fromStdString(output_target(options).string());
   start(std::move(completion),
         [task = std::make_shared<application::StoppedSnapshotExportTask>(std::move(task)),
-         bundle = std::move(bundle), options = std::move(options),
-         helper = detail::vst3_helper_path()] {
+         options = std::move(options), helper = detail::vst3_helper_path()] {
           plugins::Vst3Scanner scanner(helper);
           const auto& snapshot = task->snapshot();
           const auto& reader = task->reader();
           auto authority = std::move(*task).take_authority();
-          return exporting::render_vst3_effect_master(snapshot, reader, std::move(authority),
-                                                      scanner, bundle, options);
+          return exporting::render_vst3_master(snapshot, reader, std::move(authority), scanner,
+                                               options);
         },
         QStringLiteral("Cannot start VST3 effect export"), {});
 }
