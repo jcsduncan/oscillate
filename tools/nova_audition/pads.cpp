@@ -208,8 +208,9 @@ void render_set(const fs::path& output, const fs::path& lead_midi) {
   fs::create_directories(output);
   const auto midi = read_file(lead_midi);
   const auto work = output / ".projects";
-  fs::remove_all(work);
-  fs::create_directories(work);
+  // Never clear a directory the tool did not make.
+  if (!fs::create_directory(work))
+    fail("scratch directory already exists: " + work.string());
   for (const auto& item : auditions()) {
     const std::string label = std::string(item.name) + " - " + std::string(item.preset);
     std::cout << label << '\n';
