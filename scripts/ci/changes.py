@@ -6,7 +6,8 @@ when that variable is unset. With no BASE_SHA (a push to main or a manual
 run) every class is true.
 
 Anything not known to be documentation counts as code, so an unfamiliar
-path always builds.
+path always builds. Renames are listed as a deletion and an addition, so
+moving a source file into a documentation path still counts as code.
 """
 
 import fnmatch
@@ -47,7 +48,7 @@ def matches(path, patterns):
 
 def changed_files(base, head):
     result = subprocess.run(
-        ["git", "diff", "--name-only", f"{base}...{head}"],
+        ["git", "diff", "--name-only", "--no-renames", f"{base}...{head}"],
         check=True,
         capture_output=True,
         text=True,

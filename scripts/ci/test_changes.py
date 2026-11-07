@@ -1,12 +1,8 @@
 """Unit tests for changes.py's path classification."""
 
-import pathlib
-import sys
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-
-import changes  # noqa: E402
+import changes
 
 
 class ClassifyTests(unittest.TestCase):
@@ -30,6 +26,10 @@ class ClassifyTests(unittest.TestCase):
 
     def test_unknown_path_counts_as_code(self):
         self.assertTrue(changes.classify(["somewhere/new.file"])["code"])
+
+    def test_moved_source_still_counts_as_code(self):
+        # --no-renames lists a move as the old and the new path.
+        self.assertTrue(changes.classify(["src/engine/graph.cpp", "docs/graph.cpp"])["code"])
 
     def test_no_files_runs_nothing(self):
         self.assertEqual(changes.classify([]), dict.fromkeys(changes.CLASSES, False))
