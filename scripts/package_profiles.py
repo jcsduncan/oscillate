@@ -9,7 +9,7 @@ docs/dependencies/release-packages.md.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 SOURCE_ROOT = Path(__file__).resolve().parent.parent
@@ -64,6 +64,9 @@ class RuntimeDependencies:
     # Copied into the package: the packages owning every library and Qt plugin
     # the AppImage bundles. The .deb bundles none.
     bundled: tuple[str, ...]
+    # Host packages loaded at run time rather than linked, so no sidecar
+    # records them and verify cannot check them: package -> when it is needed.
+    conditional: dict[str, str] = field(default_factory=dict)
 
 
 DEB_DEPENDS = (
@@ -88,6 +91,11 @@ DEB_DEPENDS = (
 # glib-networking) stay on the host; stage-appdir.py copies everything else
 # the app and its Qt plugins load.
 APPIMAGE_HOST = ("libc6", "libproxy1v5")
+# The .deb gets these through its PipeWire library's own Depends.
+APPIMAGE_CONDITIONAL = {
+    "libspa-0.2-modules": "PipeWire output: the bundled PipeWire client loads its SPA "
+    "support plugins from the host's PipeWire installation",
+}
 APPIMAGE_BUNDLED = (
     "libatomic1",
     "libb2-1",
@@ -223,7 +231,9 @@ PROFILES = {
             "OSCILLATE_BUILD_CODEC_ADAPTER": CODEC_REASON,
             "OSCILLATE_BUILD_CONVOLUTION_DSP": CONVOLUTION_REASON,
         },
-        runtime=RuntimeDependencies(system=APPIMAGE_HOST, bundled=APPIMAGE_BUNDLED),
+        runtime=RuntimeDependencies(
+            system=APPIMAGE_HOST, bundled=APPIMAGE_BUNDLED, conditional=APPIMAGE_CONDITIONAL
+        ),
     ),
 }
 

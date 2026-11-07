@@ -51,6 +51,7 @@ def inventory() -> dict:
                 "preset": profile.preset,
                 "system": sorted(profile.runtime.system),
                 "bundled": sorted(profile.runtime.bundled),
+                "conditional": dict(sorted(profile.runtime.conditional.items())),
             }
             for name, profile in sorted(PROFILES.items())
         },
@@ -58,10 +59,12 @@ def inventory() -> dict:
 
 
 def encoded_inventory() -> str:
+    """The inventory file's exact text."""
     return json.dumps(inventory(), indent=2, sort_keys=True) + "\n"
 
 
 def package_name(text: str) -> str:
+    """A package name without its version constraint or architecture."""
     return ARCHITECTURE.sub("", VERSION_CONSTRAINT.sub("", text).strip())
 
 
@@ -93,6 +96,7 @@ def observed(profile: Profile, sidecar: dict) -> tuple[list[str], list[str]]:
 
 
 def differences(label: str, declared: tuple[str, ...], found: list[str]) -> list[str]:
+    """Packages declared but not found, and found but not declared."""
     problems = []
     missing = sorted(set(declared) - set(found))
     unexpected = sorted(set(found) - set(declared))
@@ -112,6 +116,7 @@ def verify(profile: Profile, sidecar: dict) -> list[str]:
 
 
 def main() -> None:
+    """Command line: write, check or verify."""
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )

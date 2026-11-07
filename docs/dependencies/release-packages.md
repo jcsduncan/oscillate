@@ -96,15 +96,18 @@ package, the Ubuntu 26.04 packages it needs at run time:
 
 | Field | `.deb` | AppImage |
 | --- | --- | --- |
-| `system` | The `Depends` field without versions; alternatives as `a \| b`. | Packages left to the host: `libc6` and `libproxy1v5`. |
+| `system` | The `Depends` field without versions; alternatives as `a \| b`. | The host packages the app's libraries link against and the AppDir leaves out: `libc6` and `libproxy1v5`. |
 | `bundled` | Empty: the `.deb` copies no library. | The package owning each library and Qt plugin copied into `usr/`. |
+| `conditional` | Empty: `Depends` brings them. | Host packages loaded at run time, not linked, with when they are needed: `libspa-0.2-modules`, whose SPA plugins the bundled PipeWire client loads for PipeWire output. |
 
 The lists are declared in each profile in
 [`package_profiles.py`](../../scripts/package_profiles.py) and the file is
 generated from them with `python3 -I scripts/package_dependencies.py write`;
 a unit test fails when the file is out of date. The packaging workflow runs
 `package_dependencies.py verify` on each built package's sidecar and fails on
-a package that is declared but missing, or present but not declared.
+a `system` or `bundled` package that is declared but missing, or present but
+not declared. The sidecars record linked libraries only, so `conditional`
+packages are declared but not checked.
 
 ## Checks
 

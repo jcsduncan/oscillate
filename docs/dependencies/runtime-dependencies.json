@@ -101,6 +101,9 @@
         "libzstd1",
         "zlib1g"
       ],
+      "conditional": {
+        "libspa-0.2-modules": "PipeWire output: the bundled PipeWire client loads its SPA support plugins from the host's PipeWire installation"
+      },
       "preset": "package-appimage",
       "system": [
         "libc6",
@@ -109,6 +112,7 @@
     },
     "deb": {
       "bundled": [],
+      "conditional": {},
       "preset": "package-deb",
       "system": [
         "libc6",

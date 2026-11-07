@@ -53,6 +53,8 @@ class InventoryFileTests(unittest.TestCase):
         self.assertEqual(set(profiles), set(PROFILES))
         self.assertEqual(profiles["deb"]["bundled"], [])
         self.assertIn("libc6", profiles["appimage"]["system"])
+        self.assertIn("libspa-0.2-modules", profiles["appimage"]["conditional"])
+        self.assertEqual(profiles["deb"]["conditional"], {})
 
 
 class DependsParsingTests(unittest.TestCase):
