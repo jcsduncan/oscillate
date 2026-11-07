@@ -351,10 +351,12 @@ QtObject {
         return fader.activeFocus || fader.pressed ? fader.accent : plateHi
     }
 
-    // Segment: tiles for a short choice list. The default is a row of pills
-    // (a column of tiles when vertical) lit in the accent, with a rule down
-    // the chosen tile; segmentLed gives latching keys with an LED instead.
+    // Segment: tiles for a short choice list, a row of pills (a column of
+    // tiles when vertical). The chosen tile is filled with segmentAccent
+    // and its text set in segmentOnInk; segmentFill, segmentLabelInk and
+    // segmentCaptionInk style the others.
     property color segmentAccent: accent
+    property color segmentOnInk: accentInk
     property int segmentWidth: 140
     property int segmentHeight: 26
     property int segmentSpacing: 4
@@ -367,21 +369,12 @@ QtObject {
     property real segmentRadiusVertical: 5
     // The fill gradient runs across the tile (or top to bottom).
     property bool segmentFillAcross: true
-    // How far the chosen key sinks.
+    // How far the chosen tile sinks.
     property real segmentPressDepth: 0
-    // "rule" down the chosen tile in vertical form, "bar" along it, or "none".
-    property string segmentRule: "rule"
-    property bool segmentWash: false
-    property bool segmentLed: false
-    property real segmentLedX: 5
-    property int segmentLedSize: 4
-    property color segmentLedOff: ledOff
-    property bool segmentLedRim: false
-    // Glyphs: "lead" before a key's label, "column" beside a vertical
+    // Glyphs: "lead" before a tile's label, "column" beside a vertical
     // tile's text, or "fill" in place of the label.
     property string segmentGlyphMode: "lead"
     property color segmentGlyphIdleInk: inkDim
-    property real segmentTextOffset: 3
     property bool segmentUpper: false
     property string segmentFont: sans
     property int segmentSizeVertical: 12
@@ -398,18 +391,6 @@ QtObject {
     // beside a glyph column.
     property real segmentTextInset: 4
     property real segmentTextXVerticalGlyph: 48
-    // The rule down a chosen vertical tile: its inset and width (inset from
-    // the top and bottom alike).
-    property real segmentRuleX: 4
-    property real segmentRuleY: 5
-    property real segmentRuleWidth: 3
-    // The bar along a chosen tile: inset from the tile's ends, its width
-    // (vertical) or height (horizontal), and its corners.
-    property real segmentBarInset: 3
-    property real segmentBarWidth: 3
-    property real segmentBarHeight: 2
-    property real segmentBarRadius: 1
-    property color segmentLedRimInk: Qt.rgba(0, 0, 0, 0.4)
     // Glyph boxes. "fill": inset (top and bottom alike) and the width it
     // gives up; "column": fixed width and at most this tall, giving up
     // segmentGlyphColumnPad of the tile's height; "lead": before the label.
@@ -423,34 +404,27 @@ QtObject {
     property real segmentGlyphLeadX: 11
     property real segmentGlyphLeadWidth: 16
     property real segmentGlyphLeadPad: 9
-    // A key's label: shifted past a leading glyph and narrowed by
-    // segmentKeyGlyphPad, else narrowed by segmentKeyTextPad more.
-    property real segmentKeyGlyphOffset: 9
-    property real segmentKeyGlyphPad: 30
-    property real segmentKeyTextPad: 6
-    property int segmentKeySize: typeCaption
+    // A horizontal tile's label after a leading glyph.
+    property real segmentGlyphLeadTextX: 30
 
+    // An unchosen tile's fill (top or leading stop 0, the other 1), its
+    // label and its caption; the chosen tile's are fixed above.
     function segmentFill(tile, stop) {
         if (stop === 0)
-            return tile.on ? Qt.rgba(tile.accent.r, tile.accent.g, tile.accent.b, 0.16)
-                           : tile.pressed ? kit.button : kit.buttonHi
-        return tile.on ? Qt.rgba(kit.steel.r, kit.steel.g, kit.steel.b, 0.10) : kit.button
+            return tile.pressed ? kit.button : kit.buttonHi
+        return kit.button
     }
     function segmentEdge(tile) {
-        return tile.on ? Qt.rgba(tile.accent.r, tile.accent.g, tile.accent.b, 0.55)
-                       : tile.hovered ? kit.wellEdge : kit.seam
-    }
-    function segmentWashColor(tile, stop) {
-        return "transparent"
+        return tile.on ? tile.accent : tile.hovered ? kit.wellEdge : kit.seam
     }
     function segmentLabelInk(tile) {
-        return tile.on ? kit.ink : kit.inkDim
+        return kit.inkDim
     }
     function segmentBold(tile) {
         return tile.on && !tile.vertical
     }
     function segmentCaptionInk(tile) {
-        return tile.on ? tile.accent : kit.inkFaint
+        return kit.inkFaint
     }
 
     // PeakMeter: a channel's held peak, safe to -12 dBFS, hot to -3 and
@@ -855,10 +829,9 @@ QtObject {
     property real choiceEdgeWidth: hairline
     property color choiceTile: button
     property color choiceTileHover: buttonHi
-    // A chosen tile's tint, unless a choice sets its own, and a chosen
-    // segment button.
+    // A chosen tile's tint behind its hint, unless a choice sets its own.
+    // A chosen button or name-only tile is filled with the accent instead.
     property color choiceTileOn: accentSoft
-    property color choiceSegmentOn: buttonHi
     property color choiceTileEdge: wellEdge
     // The focus ring outside the tiles; its ink unset: the accent.
     property real choiceFocusMargin: 3
@@ -886,7 +859,7 @@ QtObject {
     property real choiceDisabledOpacity: 0.5
     function choiceTileFill(tile) {
         if (tile.on)
-            return tile.segment ? choiceSegmentOn : tile.tint
+            return tile.tint
         return tile.hovered ? choiceTileHover : tile.segment ? "transparent" : choiceTile
     }
     function choiceNameInk(tile) {
@@ -967,13 +940,6 @@ QtObject {
     property real segmentedDividerInset: 0
     // Cells filled top to bottom from segmentedFill(cell, 0) to (cell, 1).
     property bool segmentedGradient: false
-    // A key's LED, and its text between the LED and the key's edge.
-    property bool segmentedLeds: false
-    property real segmentedLedX: 4
-    property int segmentedLedSize: 5
-    property real segmentedLedGap: 2
-    property real segmentedLedTextInset: 3
-    property real segmentedLedLift: 1.3
     // An icon in place of the label: at most this wide, inset from the
     // cell's sides, and this tall.
     property real segmentedIconWidth: 22
@@ -993,20 +959,16 @@ QtObject {
     property bool segmentedPointer: false
     property bool segmentedFade: false
     property real segmentedDisabledOpacity: 0.5
+    // An unchosen cell's fill (top stop 0, bottom 1), edge and text; the
+    // chosen cell is filled with its accent and set in its accentInk.
     function segmentedFill(cell, stop) {
-        return cell.on ? cell.accent : cell.hovered ? segmentedHover : "transparent"
+        return cell.hovered ? segmentedHover : "transparent"
     }
     function segmentedEdge(cell) {
         return cell.activeFocus ? segmentedFocusEdge : "transparent"
     }
     function segmentedInk(cell) {
-        return cell.on ? cell.accentInk : cell.hovered ? segmentedHoverInk : segmentedIdleInk
-    }
-    function segmentedLedInk(cell) {
-        return cell.on ? cell.accent : well
-    }
-    function segmentedLedEdge(cell) {
-        return cell.on ? Qt.lighter(cell.accent, segmentedLedLift) : wellEdge
+        return cell.hovered ? segmentedHoverInk : segmentedIdleInk
     }
     function segmentedFont(cell) {
         return Qt.font({ family: segmentedFontFamily, pixelSize: segmentedTextSize, weight: segmentedWeight })

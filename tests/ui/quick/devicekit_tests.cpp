@@ -345,6 +345,143 @@ void every_theme_reads_at_body_text_contrast() {
   require(saw_kit, "the kit's own theme is among those checked");
 }
 
+// Every segmented choice in every theme shows its chosen option as a fill
+// and an ink of its own: the chosen cell is filled with the accent and set
+// in the inverse ink, so no theme leaves selection to an LED dot or a
+// tinted wash. Segment (horizontal and vertical), SegmentedControl and
+// ChoiceTiles (joined buttons and name-only tiles) each name the colours
+// they draw a cell with as selectionFill and selectionInk.
+constexpr double minimum_selection_contrast = 3.0;
+const char* const selection_harness = R"(
+    import QtQuick
+    import "."
+    Item {
+        id: root
+        required property var controller
+        required property KitTheme theme
+        width: 720
+        height: 520
+        Column {
+            spacing: 12
+            Segment {
+                objectName: "selectionSegment"
+                width: 360
+                controller: root.controller
+                theme: root.theme
+                parameterId: "trim.law"
+            }
+            Segment {
+                objectName: "selectionSegmentVertical"
+                width: 200
+                height: 120
+                vertical: true
+                controller: root.controller
+                theme: root.theme
+                parameterId: "trim.law"
+            }
+            SegmentedControl {
+                objectName: "selectionSegmented"
+                theme: root.theme
+                labels: ["One", "Two", "Three"]
+                currentIndex: 1
+            }
+            ChoiceTiles {
+                objectName: "selectionChoiceSegment"
+                width: 360
+                segment: true
+                controller: root.controller
+                theme: root.theme
+                parameterId: "trim.law"
+            }
+            ChoiceTiles {
+                objectName: "selectionChoiceTiles"
+                width: 360
+                controller: root.controller
+                theme: root.theme
+                parameterId: "trim.law"
+            }
+        }
+    }
+)";
+
+void cells_in(QQuickItem* root, std::vector<QQuickItem*>& cells) {
+  if (root->property("selectionFill").isValid()) {
+    cells.push_back(root);
+  }
+  for (QQuickItem* child : root->childItems()) {
+    cells_in(child, cells);
+  }
+}
+
+void every_segmented_choice_fills_its_selection() {
+  const QString root = QStringLiteral(OSCILLATE_QUICK_QML_DIR);
+  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  NativeSynthDeviceController controller(table(), adapter);
+  QQmlEngine engine;
+  QQmlComponent harness(&engine);
+  harness.setData(selection_harness, QUrl::fromLocalFile(root + "/devicekit/SelectionHarness.qml"));
+  require(harness.isReady(), "selection harness loads: " + harness.errorString().toStdString());
+  int themes_checked = 0;
+  QDirIterator themes(root, {QStringLiteral("*Theme.qml")}, QDir::Files,
+                      QDirIterator::Subdirectories);
+  while (themes.hasNext()) {
+    const QString path = themes.next();
+    if (is_singleton(path)) {
+      continue;
+    }
+    const std::string name = QDir(root).relativeFilePath(path).toStdString();
+    QQmlComponent component(&engine, QUrl::fromLocalFile(path));
+    std::unique_ptr<QObject> theme(component.create());
+    require(theme != nullptr, name + " loads: " + component.errorString().toStdString());
+    std::unique_ptr<QObject> object(harness.createWithInitialProperties(
+        {{QStringLiteral("controller"), QVariant::fromValue<QObject*>(&controller)},
+         {QStringLiteral("theme"), QVariant::fromValue<QObject*>(theme.get())}}));
+    require(object != nullptr, name + ": the harness is created: " + harness.errorString().toStdString());
+    auto* item = qobject_cast<QQuickItem*>(object.get());
+    QCoreApplication::processEvents();
+    for (const char* control_name :
+         {"selectionSegment", "selectionSegmentVertical", "selectionSegmented",
+          "selectionChoiceSegment", "selectionChoiceTiles"}) {
+      auto* control = find_item(item, QString::fromLatin1(control_name));
+      require(control != nullptr, name + ": " + control_name + " exists");
+      std::vector<QQuickItem*> cells;
+      cells_in(control, cells);
+      const auto chosen = std::count_if(cells.begin(), cells.end(), [](QQuickItem* cell) {
+        return cell->property("on").toBool();
+      });
+      require(cells.size() >= 2 && chosen == 1,
+              name + ": " + control_name + " has one chosen cell among several");
+      const auto on = *std::find_if(cells.begin(), cells.end(), [](QQuickItem* cell) {
+        return cell->property("on").toBool();
+      });
+      const auto on_fill = on->property("selectionFill").value<QColor>();
+      const auto on_ink = on->property("selectionInk").value<QColor>();
+      require(on_fill.alpha() == opaque_alpha,
+              name + ": " + control_name + "'s chosen cell is filled, not washed");
+      const double ratio = contrast(on_ink, on_fill);
+      require(ratio >= minimum_selection_contrast,
+              name + ": " + control_name + "'s chosen text " + on_ink.name().toStdString() +
+                  " on " + on_fill.name().toStdString() + " reads at " + std::to_string(ratio) +
+                  ":1");
+      for (QQuickItem* cell : cells) {
+        if (cell == on) {
+          continue;
+        }
+        const auto fill = cell->property("selectionFill").value<QColor>();
+        const auto ink = cell->property("selectionInk").value<QColor>();
+        require(fill.rgba() != on_fill.rgba(), name + ": " + control_name +
+                                                   " fills its chosen cell unlike the others (" +
+                                                   fill.name(QColor::HexArgb).toStdString() + ")");
+        require(ink.rgba() != on_ink.rgba(), name + ": " + control_name +
+                                                 " sets its chosen text unlike the others (" +
+                                                 ink.name(QColor::HexArgb).toStdString() + ")");
+      }
+    }
+    ++themes_checked;
+  }
+  require(themes_checked > 1, "the themes under the QML tree are checked");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -353,6 +490,7 @@ int main(int argc, char** argv) {
     each_action_is_one_undo_step();
     read_only_panels_edit_nothing();
     every_theme_reads_at_body_text_contrast();
+    every_segmented_choice_fills_its_selection();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';
     return 1;

@@ -26,7 +26,6 @@ KitTheme {
     property color tileEdge: "#263034"
     property color tileOn: "#1c292b"
     property color tileOnLilac: "#211f2e"
-    property color segmentOn: "#1f2a2d"
     property color focusRing: "#c8f1ee"
     cardRadius: 16
 
@@ -137,7 +136,6 @@ KitTheme {
     choiceTile: tile
     choiceTileHover: buttonHi
     choiceTileOn: tileOn
-    choiceSegmentOn: segmentOn
     choiceTileEdge: tileEdge
     choiceFocusMargin: focusBorder + idleBorder
     choiceFocusRadius: tileRadius + focusBorder

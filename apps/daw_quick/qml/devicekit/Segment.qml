@@ -3,16 +3,18 @@ import QtQuick
 import "MacroPalette.js" as MacroPalette
 
 // A row (or column) of tiles for a short choice list; the chosen tile is
-// lit. Arrow keys step, Delete resets; every pick is one undo step. The
-// theme's segment tokens give the tiles their look: lit tiles or latching
-// keys with an LED, a rule or bar on the chosen one, and an optional glyph
-// per choice drawn by `glyph(ctx, index, width, height, colour)`.
+// filled with the accent and its text set in the inverse ink. Arrow keys
+// step, Delete resets; every pick is one undo step. The theme's segment
+// tokens style the other tiles, and an optional glyph per choice is drawn
+// by `glyph(ctx, index, width, height, colour)`.
 Item {
     id: segment
     required property var controller
     required property KitTheme theme
     required property string parameterId
     property color accent: theme.segmentAccent
+    // The chosen tile's text, on the accent fill.
+    property color onInk: theme.segmentOnInk
     property bool vertical: false
     property int spacing: vertical ? theme.segmentSpacingVertical : theme.segmentSpacing
     // Optional shorter labels, and a caption under each in vertical form.
@@ -81,6 +83,11 @@ Item {
                                                                               : segment.choices[index]
                 readonly property bool glyphShown: segment.glyph !== null
                     && (segment.theme.segmentGlyphMode !== "column" || segment.vertical)
+                readonly property bool leadGlyph: glyphShown && segment.theme.segmentGlyphMode === "lead"
+                // The chosen tile is filled with the accent and its text set
+                // in the inverse ink; the theme styles the others.
+                readonly property color selectionFill: on ? accent : segment.theme.segmentFill(tile, 0)
+                readonly property color selectionInk: on ? segment.onInk : segment.theme.segmentLabelInk(tile)
                 width: slot.width
                 height: slot.height
                 y: on ? segment.theme.segmentPressDepth : 0
@@ -88,61 +95,14 @@ Item {
                     : segment.theme.segmentRadius < 0 ? height / 2 : segment.theme.segmentRadius
                 gradient: Gradient {
                     orientation: segment.theme.segmentFillAcross ? Gradient.Horizontal : Gradient.Vertical
-                    GradientStop { position: 0; color: segment.theme.segmentFill(tile, 0) }
-                    GradientStop { position: 1; color: segment.theme.segmentFill(tile, 1) }
+                    GradientStop { position: 0; color: tile.selectionFill }
+                    GradientStop { position: 1; color: tile.on ? tile.accent : segment.theme.segmentFill(tile, 1) }
                 }
                 border.color: segment.theme.segmentEdge(tile)
                 Accessible.role: Accessible.RadioButton
                 Accessible.name: segment.choices[tile.index]
                 Accessible.checked: tile.on
 
-                // A wash over the chosen tile.
-                Rectangle {
-                    visible: tile.on && segment.theme.segmentWash
-                    anchors.fill: parent
-                    radius: tile.radius
-                    gradient: Gradient {
-                        orientation: segment.vertical ? Gradient.Horizontal : Gradient.Vertical
-                        GradientStop { position: 0; color: segment.theme.segmentWashColor(tile, 0) }
-                        GradientStop { position: 1; color: segment.theme.segmentWashColor(tile, 1) }
-                    }
-                }
-                // The rule down the chosen tile's leading edge (vertical form).
-                Rectangle {
-                    visible: tile.on && segment.vertical && segment.theme.segmentRule === "rule"
-                    x: segment.theme.segmentRuleX
-                    y: segment.theme.segmentRuleY
-                    width: segment.theme.segmentRuleWidth
-                    height: parent.height - 2 * segment.theme.segmentRuleY
-                    radius: width / 2
-                    gradient: Gradient {
-                        GradientStop { position: 0; color: segment.theme.steel }
-                        GradientStop { position: 1; color: segment.accent }
-                    }
-                }
-                // A bar under (or beside) the chosen tile.
-                Rectangle {
-                    visible: tile.on && segment.theme.segmentRule === "bar"
-                    x: segment.vertical ? 0 : segment.theme.segmentBarInset
-                    y: segment.vertical ? segment.theme.segmentBarInset : parent.height - segment.theme.segmentBarInset
-                    width: segment.vertical ? segment.theme.segmentBarWidth : parent.width - 2 * segment.theme.segmentBarInset
-                    height: segment.vertical ? parent.height - 2 * segment.theme.segmentBarInset
-                                             : segment.theme.segmentBarHeight
-                    radius: segment.theme.segmentBarRadius
-                    color: segment.accent
-                }
-                // The key's LED.
-                Rectangle {
-                    visible: segment.theme.segmentLed
-                    x: segment.theme.segmentLedX
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: segment.theme.segmentLedSize
-                    height: segment.theme.segmentLedSize
-                    radius: width / 2
-                    color: tile.on ? segment.accent : segment.theme.segmentLedOff
-                    border.width: segment.theme.segmentLedRim ? segment.theme.hairline : 0
-                    border.color: segment.theme.segmentLedRimInk
-                }
                 Canvas {
                     id: glyphCanvas
                     readonly property string mode: segment.theme.segmentGlyphMode
@@ -163,7 +123,7 @@ Item {
                         const draw = segment.glyph
                         if (draw)
                             draw(ctx, tile.index, width, height,
-                                 tile.on ? segment.accent : segment.theme.segmentGlyphIdleInk)
+                                 tile.on ? segment.onInk : segment.theme.segmentGlyphIdleInk)
                     }
                     Connections {
                         target: tile
@@ -174,38 +134,23 @@ Item {
                         function onGlyphChanged() { glyphCanvas.requestPaint() }
                     }
                 }
-                // Keys: one centred label.
-                Text {
-                    visible: segment.theme.segmentLed
-                        && !(tile.glyphShown && segment.theme.segmentGlyphMode === "fill")
-                    anchors.centerIn: parent
-                    anchors.horizontalCenterOffset: tile.glyphShown ? segment.theme.segmentKeyGlyphOffset
-                                                                    : segment.theme.segmentTextOffset
-                    width: parent.width - (tile.glyphShown ? segment.theme.segmentKeyGlyphPad
-                                                           : 2 * segment.theme.segmentTextOffset + segment.theme.segmentKeyTextPad)
-                    horizontalAlignment: Text.AlignHCenter
-                    text: segment.theme.segmentUpper ? tile.label.toUpperCase() : tile.label
-                    color: segment.theme.segmentLabelInk(tile)
-                    font.pixelSize: segment.theme.segmentKeySize
-                    font.bold: true
-                    font.letterSpacing: segment.theme.segmentLetterSpacing
-                    elide: Text.ElideRight
-                }
-                // Tiles: a label and, in vertical form, a caption.
+                // A label (unless a glyph fills the tile) and, in vertical
+                // form, a caption.
                 Column {
-                    visible: !segment.theme.segmentLed
+                    visible: !(tile.glyphShown && segment.theme.segmentGlyphMode === "fill")
                     anchors.verticalCenter: parent.verticalCenter
                     x: segment.vertical ? (tile.glyphShown ? segment.theme.segmentTextXVerticalGlyph
                                                            : segment.theme.segmentTextXVertical)
-                                        : segment.theme.segmentTextInset
+                                        : tile.leadGlyph ? segment.theme.segmentGlyphLeadTextX
+                                                         : segment.theme.segmentTextInset
                     width: parent.width - x - (segment.vertical ? segment.theme.segmentTextRightVertical
                                                                 : segment.theme.segmentTextInset)
                     spacing: segment.theme.segmentCaptionGap
                     Text {
                         width: parent.width
                         horizontalAlignment: segment.vertical ? Text.AlignLeft : Text.AlignHCenter
-                        text: tile.label
-                        color: segment.theme.segmentLabelInk(tile)
+                        text: segment.theme.segmentUpper ? tile.label.toUpperCase() : tile.label
+                        color: tile.selectionInk
                         font.family: segment.theme.segmentFont
                         font.pixelSize: segment.vertical ? segment.theme.segmentSizeVertical : segment.theme.segmentSize
                         font.letterSpacing: segment.vertical ? segment.theme.segmentLetterSpacingVertical
@@ -217,7 +162,7 @@ Item {
                         visible: segment.vertical && segment.captions.length > tile.index
                         width: parent.width
                         text: segment.captions.length > tile.index ? segment.captions[tile.index] : ""
-                        color: segment.theme.segmentCaptionInk(tile)
+                        color: tile.on ? segment.onInk : segment.theme.segmentCaptionInk(tile)
                         font.pixelSize: segment.theme.segmentCaptionSize
                         font.letterSpacing: segment.theme.segmentCaptionSpacing
                         elide: Text.ElideRight

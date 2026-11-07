@@ -101,7 +101,7 @@ KitTheme {
     choiceSpanLast: false
     choiceLongName: "group"
     function choiceNameInk(tile) {
-        return tile.on ? tile.accent : inkDim
+        return inkDim
     }
     function choiceNameWeight(tile) {
         return Font.Bold
