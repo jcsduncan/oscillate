@@ -13,21 +13,16 @@ updates:
       actions:
         patterns: ["*"]
 
-  # scripts/qa-requirements.txt: clang-format, clang-tidy and gcovr pins.
+  # Every requirements file under scripts/: qa-requirements.txt (clang-format,
+  # clang-tidy, gcovr) and ci/{docs,lint}-requirements.txt. One entry, because
+  # Dependabot scans subdirectories and a second entry for scripts/ci opens
+  # duplicate pull requests.
   - package-ecosystem: pip
     directory: /scripts
     schedule:
       interval: weekly
     commit-message:
       prefix: build
-
-  # scripts/ci/docs-requirements.txt and lint-requirements.txt.
-  - package-ecosystem: pip
-    directory: /scripts/ci
-    schedule:
-      interval: weekly
-    commit-message:
-      prefix: ci
     groups:
-      ci-python:
+      python-tools:
         patterns: ["*"]
