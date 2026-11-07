@@ -286,6 +286,8 @@ public:
   // output_peak_db}.
   // live is false when nothing plays. Any non-empty frame also passes
   // through raw as {frame}, for panels that decode their layout themselves.
+  // Engines with an output spectrum (Shape, Strata, Temper) also give
+  // {spectrum}: dBFS per log-spaced band, low to high.
   // Panels poll it while visible.
   Q_INVOKABLE QVariantMap telemetry();
 

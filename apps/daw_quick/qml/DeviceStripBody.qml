@@ -88,7 +88,9 @@ Item {
         running: body.controller !== null && body.playing && body.visible && body.active
         onTriggered: {
             const telemetry = body.controller.telemetry()
-            body.liveFrame = telemetry.live && telemetry.frame ? telemetry.frame : []
+            // Only an engine's output spectrum is drawn live; its raw frame is a
+            // packed record (peaks, flags, band data, several spectra).
+            body.liveFrame = telemetry.spectrum ? telemetry.spectrum : []
             viz.requestPaint()
         }
         onRunningChanged: if (!running) { body.liveFrame = []; viz.requestPaint() }
@@ -113,8 +115,8 @@ Item {
         well: body.well
     }
 
-    // The mini-view: live telemetry while playing, the filter response when
-    // the engine has one, else a quiet baseline.
+    // The mini-view: the output spectrum while playing (engines that have one),
+    // the filter response when the engine has one, else a quiet baseline.
     Rectangle {
         id: vizWell
         objectName: "deviceStripViz"
@@ -127,12 +129,15 @@ Item {
             id: viz
             anchors.fill: parent
             anchors.margins: Theme.spaceXs
-            // A baseline when there is nothing to draw; else the curve in a
-            // window of its own range (live) or a fixed dB window (response).
+            // A baseline when there is nothing to draw; else the curve in a fixed
+            // dB window: dBFS for the live spectrum (as the full panels draw it),
+            // gain for the response.
             readonly property real baselineRatio: 0.62
             readonly property int maxPoints: 256
             readonly property real responseFloorDb: -30
             readonly property real responseCeilingDb: 12
+            readonly property real spectrumFloorDb: -90
+            readonly property real spectrumCeilingDb: 0
             readonly property real edgeInset: 2
             onPaint: {
                 const ctx = getContext("2d")
@@ -151,21 +156,10 @@ Item {
                     return
                 }
                 const count = Math.min(values.length, maxPoints)
-                let low = Infinity
-                let high = -Infinity
-                for (let i = 0; i < count; ++i) {
-                    const v = Number(values[i])
-                    if (isFinite(v)) {
-                        low = Math.min(low, v)
-                        high = Math.max(high, v)
-                    }
-                }
-                if (body.liveFrame.length <= body.liveFrameMinPoints) {
-                    // A filter response in dB: a fixed window reads honestly.
-                    low = responseFloorDb
-                    high = responseCeilingDb
-                }
-                const span = Math.max(1e-9, high - low)
+                const live = body.liveFrame.length > body.liveFrameMinPoints
+                const low = live ? spectrumFloorDb : responseFloorDb
+                const high = live ? spectrumCeilingDb : responseCeilingDb
+                const span = high - low
                 const point = i => {
                     const v = Number(values[i])
                     const y = isFinite(v) ? (v - low) / span : 0

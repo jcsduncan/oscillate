@@ -1023,6 +1023,31 @@ double NativeSynthDeviceController::fraction_of(double hz) const {
   return std::clamp(std::log(std::max(hz, min_hz) / min_hz) / std::log(max_hz / min_hz), 0.0, 1.0);
 }
 
+namespace {
+
+// Where an engine's output spectrum sits in its telemetry frame.
+struct SpectrumSpan {
+  std::size_t first;
+  std::size_t count;
+  [[nodiscard]] std::size_t end() const noexcept { return first + count; }
+};
+
+std::optional<SpectrumSpan> output_spectrum_span(std::string_view engine) {
+  namespace fx = native_dsp::effects;
+  if (engine == "shape") {
+    return SpectrumSpan{fx::shape::telemetry::output_spectrum, fx::shape::spectrum_bands};
+  }
+  if (engine == "strata") {
+    return SpectrumSpan{fx::strata::telemetry::output_spectrum, fx::strata::display_bands};
+  }
+  if (engine == "temper") {
+    return SpectrumSpan{fx::temper::telemetry::output_spectrum, fx::temper::display_bands};
+  }
+  return std::nullopt;
+}
+
+} // namespace
+
 QVariantMap NativeSynthDeviceController::telemetry() {
   namespace synth = native_dsp::synth;
   QVariantMap out;
@@ -1040,6 +1065,17 @@ QVariantMap NativeSynthDeviceController::telemetry() {
     raw.push_back(static_cast<double>(value));
   }
   out[QStringLiteral("frame")] = raw;
+  // The output spectrum (dBFS, log-spaced bands from low to high), for the
+  // device-chain strip's live view. Engines without one leave it out, and the
+  // strip shows its response or a baseline instead.
+  if (const auto span = output_spectrum_span(engine_.id); span && frame.size() >= span->end()) {
+    QVariantList spectrum;
+    spectrum.reserve(static_cast<qsizetype>(span->count));
+    for (std::size_t band = span->first; band < span->end(); ++band) {
+      spectrum.push_back(static_cast<double>(frame[band]));
+    }
+    out[QStringLiteral("spectrum")] = spectrum;
+  }
   const std::string_view id = engine_.id;
   const auto at = [&](std::size_t i) {
     return i < frame.size() ? static_cast<double>(frame[i]) : 0.0;
