@@ -1055,6 +1055,7 @@ QVariantMap NativeSynthDeviceController::telemetry() {
   const bool live = adapter_.telemetry(frame);
   out[QStringLiteral("live")] = false;
   if (!live) {
+    strip_view_.clear();
     return out;
   }
   // The raw frame too, for panels that decode their engine's documented
@@ -1075,6 +1076,15 @@ QVariantMap NativeSynthDeviceController::telemetry() {
       spectrum.push_back(static_cast<double>(frame[band]));
     }
     out[QStringLiteral("spectrum")] = spectrum;
+  }
+  if (auto strip =
+          strip_view_.decode(engine_.id, frame,
+                             [this](std::string_view parameter) {
+                               return value(QString::fromUtf8(
+                                   parameter.data(), static_cast<qsizetype>(parameter.size())));
+                             });
+      !strip.isEmpty()) {
+    out[QStringLiteral("strip")] = strip;
   }
   const std::string_view id = engine_.id;
   const auto at = [&](std::size_t i) {

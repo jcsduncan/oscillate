@@ -1,3 +1,4 @@
+#include "device_strip_view.hpp"
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
 
@@ -648,6 +649,37 @@ void screenshots_if_requested() {
   }
 }
 
+// The device-chain strip (device_strip_view.hpp): Lens's first curve at
+// every second point (the louder of each pair) in its default dB window, and
+// the strongest resonance.
+void telemetry_gives_the_strip_the_curve() {
+  namespace t = lens::telemetry;
+  namespace strip_view = oscillate::quick::strip_view;
+  constexpr float hops = 10.0F;
+  InMemoryNativeSynthAdapter adapter(preset("Mix"));
+  NativeSynthDeviceController controller(table(), adapter);
+  const auto frame = test_frame(hops);
+  adapter.set_telemetry(frame);
+  const auto strip = controller.telemetry().value(QStringLiteral("strip")).toMap();
+  require(strip.value(QStringLiteral("kind")).toString() == QStringLiteral("curve"),
+          "Lens's strip is a curve");
+  const auto values = strip.value(QStringLiteral("values")).toList();
+  constexpr std::size_t per = strip_view::lens_points_per_point;
+  require(values.size() == static_cast<qsizetype>(lens::points / per), "every second point");
+  for (std::size_t i = 0; i < lens::points / per; ++i) {
+    const float louder = std::max(frame[t::curve_a + per * i], frame[t::curve_a + per * i + 1]);
+    require(values.at(static_cast<qsizetype>(i)).toDouble() == static_cast<double>(louder),
+            "point " + std::to_string(i) + " is the louder of its pair");
+  }
+  require(strip.value(QStringLiteral("floor_db")).toDouble() == strip_view::spectrum_floor_db &&
+              strip.value(QStringLiteral("ceiling_db")).toDouble() ==
+                  strip_view::spectrum_ceiling_db,
+          "in the Lens panel's default window");
+  require(strip.value(QStringLiteral("text")).toString() == QStringLiteral("peak 55 Hz"),
+          "the strongest resonance: " +
+              strip.value(QStringLiteral("text")).toString().toStdString());
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -659,6 +691,7 @@ int main(int argc, char** argv) {
     the_difference_is_mix_minus_reference();
     the_spectrogram_grows_per_analysis_and_freeze_holds();
     presets_range_and_status();
+    telemetry_gives_the_strip_the_curve();
     screenshots_if_requested();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';

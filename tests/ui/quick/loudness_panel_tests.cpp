@@ -1,3 +1,4 @@
+#include "device_strip_view.hpp"
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
 
@@ -686,6 +687,48 @@ void screenshots_if_requested() {
   }
 }
 
+// The device-chain strip (device_strip_view.hpp): Loudness's short-term
+// history against the Target parameter on the R128 view, the readings, and
+// the true peak flagged over the Ceiling parameter.
+void telemetry_gives_the_strip_the_history_and_target() {
+  namespace t = loudness::telemetry;
+  namespace strip_view = oscillate::quick::strip_view;
+  constexpr float over_ceiling_db = -0.5F;
+  InMemoryNativeSynthAdapter adapter(preset("Streaming (Spotify, YouTube)"));
+  NativeSynthDeviceController controller(table(), adapter);
+  const auto frame = frame_of(typical(), loudness::history);
+  adapter.set_telemetry(frame);
+  auto strip = controller.telemetry().value(QStringLiteral("strip")).toMap();
+  require(strip.value(QStringLiteral("kind")).toString() == QStringLiteral("loudness"),
+          "Loudness's strip is a history");
+  const auto history = strip.value(QStringLiteral("history")).toList();
+  require(history.size() == static_cast<qsizetype>(loudness::history), "the whole history");
+  for (std::size_t i = 0; i < loudness::history; ++i)
+    require(history.at(static_cast<qsizetype>(i)).toDouble() ==
+                static_cast<double>(frame[t::short_term_history + i]),
+            "the short-term history, oldest first");
+  require(strip.value(QStringLiteral("target")).toDouble() ==
+                  controller.value(QStringLiteral("loudness.target")) &&
+              strip.value(QStringLiteral("below_lu")).toDouble() == strip_view::loudness_below_lu &&
+              strip.value(QStringLiteral("above_lu")).toDouble() == strip_view::loudness_above_lu,
+          "around the Target parameter on the R128 view");
+  require(strip.value(QStringLiteral("text")).toString() ==
+                  QStringLiteral("S −14.2 · I −14.6 LUFS") &&
+              strip.value(QStringLiteral("peak_text")).toString() == QStringLiteral("TP −1.6") &&
+              !strip.value(QStringLiteral("over")).toBool(),
+          "the readings: " + strip.value(QStringLiteral("text")).toString().toStdString());
+  auto hot = typical();
+  hot.true_peak = over_ceiling_db;
+  adapter.set_telemetry(frame_of(hot, loudness::history));
+  strip = controller.telemetry().value(QStringLiteral("strip")).toMap();
+  require(strip.value(QStringLiteral("over")).toBool(), "a true peak over the Ceiling is flagged");
+  adapter.set_telemetry(frame_of(Reading{}));
+  strip = controller.telemetry().value(QStringLiteral("strip")).toMap();
+  require(strip.value(QStringLiteral("text")).toString() == QStringLiteral("S — · I — LUFS") &&
+              !strip.value(QStringLiteral("over")).toBool(),
+          "silence reads as dashes");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -697,6 +740,7 @@ int main(int argc, char** argv) {
     scale_switches_between_ebu_views();
     history_is_kept_beyond_the_meter();
     presets_controls_and_status();
+    telemetry_gives_the_strip_the_history_and_target();
     screenshots_if_requested();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';

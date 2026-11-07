@@ -1074,6 +1074,14 @@ KitTheme {
     readonly property int stripKnobDiameter: 34
     readonly property int stripKnobMinWidth: 58
     readonly property int stripKnobWidthPad: 18
+    // A strip knob's slot: an equal share of the strip, at most this wide.
+    readonly property int stripKnobMaxWidth: 96
+    // The mini-view: its reduction band bars (share of the view),
+    // the gap between bars, the meters' label column and dimmed marks.
+    readonly property real stripBandShare: 0.3
+    readonly property int stripBarGap: 2
+    readonly property int stripMeterLabelRoom: 24
+    readonly property real stripDimAlpha: 0.45
     readonly property real stripBaselineAlpha: 0.35
     readonly property real stripFillAlpha: 0.16
     readonly property real stripCurveWidth: 1.5

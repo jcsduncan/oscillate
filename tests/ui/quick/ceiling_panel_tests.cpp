@@ -1,3 +1,4 @@
+#include "device_strip_view.hpp"
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
 
@@ -18,6 +19,7 @@
 #include <QTest>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -402,6 +404,62 @@ void screenshots_if_requested() {
   }
 }
 
+// The device-chain strip (device_strip_view.hpp): Ceiling's reduction per
+// poll as a history on the panel's range, now and its largest as text, and
+// the band that leads the detector, until playback stops.
+void telemetry_gives_the_strip_the_reduction_and_its_band() {
+  namespace t = ceiling::telemetry;
+  namespace strip_view = oscillate::quick::strip_view;
+  constexpr float peak_db = -6.0F;
+  constexpr std::array<float, 3> polls{1.0F, 4.1F, 2.3F};
+  // A kick: band 1 leads; the others sit under least_leading_share.
+  constexpr std::size_t kick_band = 1;
+  constexpr float kick_share = 0.6F;
+  constexpr float other_share = 0.04F;
+  InMemoryNativeSynthAdapter adapter(preset("Default"));
+  NativeSynthDeviceController controller(table(), adapter);
+  const auto with_reduction = [&](float db) {
+    auto frame = frame_of(peak_db, peak_db, peak_db, peak_db, db);
+    for (std::size_t band = 0; band < effects::reduction_bands::count; ++band)
+      frame[t::reduction_bands + band] = band == kick_band ? kick_share : other_share;
+    return frame;
+  };
+  const auto poll = [&] { return controller.telemetry().value(QStringLiteral("strip")).toMap(); };
+  QVariantMap strip;
+  for (const float db : polls) {
+    adapter.set_telemetry(with_reduction(db));
+    strip = poll();
+  }
+  require(strip.value(QStringLiteral("kind")).toString() == QStringLiteral("reduction"),
+          "Ceiling's strip is a reduction view");
+  const auto history = strip.value(QStringLiteral("history")).toList();
+  require(history.size() == static_cast<qsizetype>(polls.size()), "one history point per poll");
+  for (std::size_t i = 0; i < polls.size(); ++i)
+    require(history.at(static_cast<qsizetype>(i)).toDouble() == static_cast<double>(polls[i]),
+            "the history is the reduction per poll, oldest first");
+  require(strip.value(QStringLiteral("range_db")).toDouble() == strip_view::ceiling_range_db,
+          "on the Ceiling panel's range");
+  require(strip.value(QStringLiteral("text")).toString() == QStringLiteral("−2.3 dB · max −4.1"),
+          "now and the largest: " + strip.value(QStringLiteral("text")).toString().toStdString());
+  require(strip.value(QStringLiteral("lead")).toInt() == static_cast<int>(kick_band) &&
+              strip.value(QStringLiteral("lead_text")).toString() == QStringLiteral("47–112 Hz"),
+          "the kick's band leads: " +
+              strip.value(QStringLiteral("lead_text")).toString().toStdString());
+  require(strip.value(QStringLiteral("bands")).toList().size() ==
+              static_cast<qsizetype>(effects::reduction_bands::count),
+          "every band's share");
+  for (std::size_t i = 0; i < strip_view::history_points; ++i)
+    strip = poll();
+  require(strip.value(QStringLiteral("history")).toList().size() ==
+              static_cast<qsizetype>(strip_view::history_points),
+          "the history keeps its last few seconds");
+  adapter.set_telemetry({});
+  require(!controller.telemetry().contains(QStringLiteral("strip")), "nothing plays, no strip");
+  adapter.set_telemetry(with_reduction(polls.front()));
+  require(poll().value(QStringLiteral("history")).toList().size() == 1,
+          "a new run starts a new history");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -413,6 +471,7 @@ int main(int argc, char** argv) {
     the_real_ceiling_holds_the_output();
     gain_drives_the_mix_into_the_ceiling();
     presets_and_status();
+    telemetry_gives_the_strip_the_reduction_and_its_band();
     screenshots_if_requested();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';
