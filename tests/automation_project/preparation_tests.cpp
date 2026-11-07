@@ -802,6 +802,8 @@ void macro_lane_rejects_missing_macro_and_conflicts() {
 void native_effect_parameter_baseline_and_binding() {
   constexpr double saved_cutoff = 800.0;
   constexpr double clip_cutoff = 2'000.0;
+  // Distinct from the cutoff's default, so each lane's own domain is used.
+  constexpr double resonance_default = 1'200.0;
   constexpr std::int64_t clip_start = 101;
   constexpr std::int64_t clip_end = 103;
   auto state = snapshot();
@@ -812,23 +814,25 @@ void native_effect_parameter_baseline_and_binding() {
   track.effects.push_back(
       {slot, true,
        project::NativeEffectPatch{"filter", 1, {{"prism.filter.cutoff", saved_cutoff}}}});
-  const auto effect_lane = [&](std::uint64_t lane_id, std::string parameter) {
+  const auto effect_lane = [&](std::uint64_t lane_id, std::string parameter,
+                               double domain_default) {
     auto domain = cutoff_domain();
     domain.semantic_key = parameter;
+    domain.default_value = domain_default;
     return project::AutomationLane{id<project::AutomationLaneId>(lane_id),
-                                   project::NativeEffectParameterTarget{slot, parameter},
+                                   project::NativeEffectParameterTarget{slot, std::move(parameter)},
                                    std::move(domain),
                                    project::AutomationTimebase::elapsed,
                                    {point(lane_id + 1, 0, clip_cutoff)},
                                    1};
   };
-  track.clips.push_back(
-      {id<project::ClipId>(131),
-       id<project::SourceId>(132),
-       {{0}, {clip_end - clip_start}},
-       project::ElapsedInterval{{clip_start}, {clip_end}},
-       1,
-       {effect_lane(133, "prism.filter.cutoff"), effect_lane(135, "prism.filter.resonance")}});
+  track.clips.push_back({id<project::ClipId>(131),
+                         id<project::SourceId>(132),
+                         {{0}, {clip_end - clip_start}},
+                         project::ElapsedInterval{{clip_start}, {clip_end}},
+                         1,
+                         {effect_lane(133, "prism.filter.cutoff", cutoff_default),
+                          effect_lane(135, "prism.filter.resonance", resonance_default)}});
   auto prepared = take(prep::prepare_project_automation(state, state.revision));
   REQUIRE_EQ(prepared.size(), 2, "each effect parameter is its own target");
   const project::AutomationTarget cutoff_target =
@@ -840,7 +844,7 @@ void native_effect_parameter_baseline_and_binding() {
   near(at(cutoff, clip_start - 1), saved_cutoff, "saved effect value is the baseline");
   near(at(cutoff, clip_start), clip_cutoff, "the clip envelope takes precedence");
   near(at(cutoff, clip_end), saved_cutoff, "the saved value resumes after the clip");
-  near(at(resonance, clip_start - 1), cutoff_default,
+  near(at(resonance, clip_start - 1), resonance_default,
        "an id the sparse patch omits uses the domain default");
 
   const auto rejects = [&](auto change, foundation::ErrorCode code, std::string_view message) {
