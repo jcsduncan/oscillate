@@ -134,16 +134,22 @@ These run on `main` every night; none is required for merging.
   pool among it) and the routed playback cases. A failed run uploads the
   sanitizer reports as an artifact.
 
-Run them on any branch from the command line, then follow the run:
+The **Test sweep** (`test-sweep.yml`) runs only on demand: every tier but
+`live` on the Quick preset with the VST3 host and the optional adapters.
+Its optional `tests` input narrows it with a `ctest -R` regex.
+
+Run any of them on a branch from the command line, then follow the run:
 
 ```sh
 gh workflow run sanitizers.yml --ref my-branch
-gh run watch "$(gh run list --workflow sanitizers.yml --branch my-branch --limit 1 --json databaseId --jq '.[0].databaseId')"
+gh workflow run test-sweep.yml --ref my-branch
+gh workflow run test-sweep.yml --ref my-branch -f tests='^native_nova'
+gh run watch "$(gh run list --workflow test-sweep.yml --branch my-branch --limit 1 --json databaseId --jq '.[0].databaseId')"
 ```
 
 `--ref` runs the workflow as that branch defines it. For a branch older than
 the workflow, start it from `main` and pass the branch as the `ref` input:
-`gh workflow run sanitizers.yml -f ref=my-branch` (the run is then listed
+`gh workflow run test-sweep.yml -f ref=my-branch` (the run is then listed
 under `main`).
 
 Before a release, run the broad sweep:
