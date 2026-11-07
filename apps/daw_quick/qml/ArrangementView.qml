@@ -933,9 +933,11 @@ Rectangle {
                         activeFocusOnTab: modelData.kind === "midi" || (modelData.kind === "audio" && arrangement.bridge.audioEditEnabled)
                         Accessible.role: Accessible.ListItem
                         Accessible.name: modelData.kind === "audio" ? "Audio clip. Drag to move, Shift-click to add to the selection, Shift+Alt-drag to slip source audio, drag edges to trim. Arrow keys move one beat." + (modelData.waveformCacheDegraded ? " Waveform cache unavailable; preview remains usable." : "") : modelData.loop ? "Looping MIDI clip. Drag to move on the grid (Alt for free) or drag the right edge to repeat its pattern; turn Loop off to set its length instead." : "MIDI clip. Drag to move on the grid (Alt for free) or drag the right edge to lengthen or shorten it; notes after the end are kept. Turn Loop on to repeat it."
-                        // A clip of the selected group moves the whole group.
+                        // With other clips selected (a group, or a clip this
+                        // one is not), the arrow keys move the selection.
                         function nudge(direction) {
-                            if (arrangement.groupSelected && arrangement.clipIsSelected(modelData.id))
+                            const picked = arrangement.bridge.selectedClipIds
+                            if (picked.length > 1 || (picked.length === 1 && !arrangement.clipIsSelected(modelData.id)))
                                 arrangement.nudgeSelection(direction);
                             else if (modelData.kind === "audio")
                                 arrangement.bridge.nudge_audio_clip(modelData.id, direction);

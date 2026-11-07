@@ -145,6 +145,8 @@ Rectangle {
                 pianoRoll.forceActiveFocus()
         }
     }
+    // Clips selected in the arrangement let go of the piano roll's notes.
+    function clearNoteSelection() { pianoRoll.clearSelection() }
     function openChords() {
         if (selectedClip?.kind === "midi") {
             openNotes()

@@ -289,6 +289,22 @@ void clips_select_and_move_together() {
   shell.key(Qt::Key_A, Qt::ControlModifier);
   require(bridge.selected_clip_ids().size() == clip_count,
           "Ctrl+A in the arrangement did not select every clip with the roll open");
+  require(bridge.selected_note_ids().isEmpty(),
+          "Ctrl+A in the arrangement kept the roll's notes, so Delete would take them");
+
+  // A Ctrl-click lets the focused clip go from the selection: the arrow
+  // keys then move the selected clips, not the focused one.
+  shell.click(shell.lane_point(1, inside_first_bar), Qt::ControlModifier);
+  require(bridge.selected_clip_ids().size() == clip_count - 1,
+          "a Ctrl-click did not take the clip out of the selection");
+  const auto unselected = clip_starts(session);
+  shell.key(Qt::Key_Right);
+  const auto nudged = clip_starts(session);
+  for (const auto& [id, placed] : unselected) {
+    const auto expected = id == upper_clip.to_string() ? placed.second : placed.second + beat;
+    require(nudged.at(id).second == expected,
+            "Right moved the focused clip rather than the selection");
+  }
 }
 
 } // namespace

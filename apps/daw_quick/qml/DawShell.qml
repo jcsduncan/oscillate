@@ -403,7 +403,11 @@ Window {
         sequences: [StandardKey.SelectAll]
         enabled: shell.bareKeysAllowed && shell.currentView === "arrange"
                  && !deviceDock.notesHaveKeyboard
-        onActivated: workspace.selectAllClips()
+        onActivated: {
+            // The notes let go first, so Delete then removes the clips.
+            deviceDock.clearNoteSelection()
+            workspace.selectAllClips()
+        }
     }
     Shortcut {
         sequences: [StandardKey.Copy]

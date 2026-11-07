@@ -302,6 +302,7 @@ void every_clip_moves_together() {
   constexpr std::size_t clip_count = 4;
   REQUIRE_EQ(before.size(), clip_count, "one audio and three MIDI clips");
   std::vector<project::ClipId> all;
+  all.reserve(before.size());
   for (const auto& entry : before)
     all.push_back(entry.first);
   const auto tracks_before = session->snapshot().tracks;
