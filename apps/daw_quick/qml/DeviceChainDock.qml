@@ -23,6 +23,11 @@ Rectangle {
     readonly property int clipActionHeight: 32
     readonly property int unfreezeWidth: 110
     readonly property int unfreezeHeight: 26
+    // The piano roll has the keyboard (Ctrl+A selects its notes), and the
+    // roll itself rather than one of its controls holds it (the shell's
+    // bare keys, Space and Delete among them, still apply).
+    readonly property bool notesHaveKeyboard: pianoRoll.keyboardInside
+    readonly property bool notesRollFocused: pianoRoll.activeFocus
     // The chain takes edits when stopped, and while playing when it holds only
     // built-in effects; re-read whenever playback or the chains change.
     readonly property bool chainEditable: {
@@ -135,6 +140,9 @@ Rectangle {
         if (selectedClip?.kind === "midi" || selectedClip?.kind === "audio") {
             handledClipId = selectedClipId
             activeTab = 2
+            // Opened notes take the keyboard, so Ctrl+A selects them.
+            if (pianoRoll.visible)
+                pianoRoll.forceActiveFocus()
         }
     }
     function openChords() {

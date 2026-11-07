@@ -243,6 +243,23 @@ Rectangle {
         const to = rowLayout[row + rows]
         return rows !== 0 && from && to ? to.top - from.top : 0
     }
+    // Ctrl+A: every audio and MIDI clip on every track. The arrangement
+    // takes the keyboard, so the arrow keys then move the selection.
+    function selectAllClips() {
+        const ids = []
+        for (const track of bridge.tracks)
+            for (const clip of track.clips)
+                ids.push(clip.id)
+        clipsSelected(ids)
+        forceActiveFocus()
+    }
+    // Arrow keys: the selection moves one beat, as one undo step.
+    function nudgeSelection(direction) {
+        if (bridge.selectedClipIds.length > 0)
+            bridge.nudge_selected_clips(direction)
+    }
+    Keys.onLeftPressed: nudgeSelection(-1)
+    Keys.onRightPressed: nudgeSelection(1)
     // The selection box drawn on empty lane space, in viewport content
     // coordinates (y includes the track scroll).
     property bool bandActive: false
@@ -758,6 +775,8 @@ Rectangle {
                     // A drag this far (x plus y) starts a selection box.
                     readonly property real bandThreshold: 6
                     onPressed: mouse => {
+                        // The keyboard leaves the piano roll for the arrangement.
+                        arrangement.forceActiveFocus()
                         const at = mapToItem(arrangementTrackViewport, mouse.x, mouse.y)
                         arrangement.bandX0 = at.x
                         arrangement.bandY0 = at.y + arrangement.trackScrollY
@@ -914,18 +933,17 @@ Rectangle {
                         activeFocusOnTab: modelData.kind === "midi" || (modelData.kind === "audio" && arrangement.bridge.audioEditEnabled)
                         Accessible.role: Accessible.ListItem
                         Accessible.name: modelData.kind === "audio" ? "Audio clip. Drag to move, Shift-click to add to the selection, Shift+Alt-drag to slip source audio, drag edges to trim. Arrow keys move one beat." + (modelData.waveformCacheDegraded ? " Waveform cache unavailable; preview remains usable." : "") : modelData.loop ? "Looping MIDI clip. Drag to move on the grid (Alt for free) or drag the right edge to repeat its pattern; turn Loop off to set its length instead." : "MIDI clip. Drag to move on the grid (Alt for free) or drag the right edge to lengthen or shorten it; notes after the end are kept. Turn Loop on to repeat it."
-                        Keys.onLeftPressed: {
-                            if (modelData.kind === "audio")
-                                arrangement.bridge.nudge_audio_clip(modelData.id, -1);
+                        // A clip of the selected group moves the whole group.
+                        function nudge(direction) {
+                            if (arrangement.groupSelected && arrangement.clipIsSelected(modelData.id))
+                                arrangement.nudgeSelection(direction);
+                            else if (modelData.kind === "audio")
+                                arrangement.bridge.nudge_audio_clip(modelData.id, direction);
                             else
-                                arrangement.bridge.nudge_midi_clip(modelData.id, -1);
+                                arrangement.bridge.nudge_midi_clip(modelData.id, direction);
                         }
-                        Keys.onRightPressed: {
-                            if (modelData.kind === "audio")
-                                arrangement.bridge.nudge_audio_clip(modelData.id, 1);
-                            else
-                                arrangement.bridge.nudge_midi_clip(modelData.id, 1);
-                        }
+                        Keys.onLeftPressed: nudge(-1)
+                        Keys.onRightPressed: nudge(1)
                         // A selected clip following the group being dragged.
                         readonly property bool following: arrangement.groupDragging && !gestureActive
                             && arrangement.clipIsSelected(modelData.id)

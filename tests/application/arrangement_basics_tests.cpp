@@ -1,12 +1,16 @@
 #include "oscillate/application/project_session.hpp"
+#include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/temp_dir.hpp"
+#include "oscillate/test/wav.hpp"
 
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
+#include <fcntl.h>
 #include <filesystem>
 #include <iostream>
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -252,6 +256,75 @@ void clips_move_merge_and_delete_together() {
   REQUIRE_EQ(track(*session, lower).midi_clips.size(), 1, "a group delete is one undo step");
 }
 
+// The clip starts on every track, by clip id, in ticks.
+std::map<project::ClipId, std::int64_t> clip_starts(const application::ProjectSession& session) {
+  const auto& snapshot = session.snapshot();
+  const auto tick_of = [&](const project::Placement& placement) {
+    if (const auto* musical = std::get_if<project::MusicalInterval>(&placement))
+      return musical->start.value;
+    return take(snapshot.tempo.sample_to_tick(std::get<project::ElapsedInterval>(placement).start,
+                                              snapshot.sample_rate))
+        .value;
+  };
+  std::map<project::ClipId, std::int64_t> starts;
+  for (const auto& owner : snapshot.tracks) {
+    for (const auto& clip : owner.clips)
+      starts[clip.id] = tick_of(clip.placement);
+    for (const auto& clip : owner.midi_clips)
+      starts[clip.id] = tick_of(clip.placement);
+  }
+  return starts;
+}
+
+// Select all (UQ-14): every audio and MIDI clip on every track moves by one
+// bar as one undo step; a move one clip cannot make moves none.
+void every_clip_moves_together() {
+  Directory directory;
+  auto session = take(application::ProjectSession::create(directory.path() / "song"));
+  constexpr std::size_t source_frames = oscillate::test::sample_rate_48k;
+  constexpr std::int16_t source_level = 4096;
+  const auto wav = directory.path() / "source.wav";
+  oscillate::test::write_wav_pcm16(wav, oscillate::test::sample_rate_48k,
+                                   oscillate::test::mono_channels,
+                                   std::vector<std::int16_t>(source_frames, source_level));
+  const int descriptor = ::open(wav.c_str(), O_RDONLY | O_CLOEXEC);
+  REQUIRE_GE(descriptor, 0, "WAV fixture opens");
+  auto imported = session->imports().import_wav_audio(descriptor);
+  (void)::close(descriptor);
+  REQUIRE_OK(imported, "the audio clip is imported");
+  const auto upper = take(session->instruments().add_synth_track());
+  const auto lower = take(session->instruments().add_synth_track());
+  accepted(session->midi_clips().add_midi_clip(upper, {bar}));
+  accepted(session->midi_clips().add_midi_clip(upper, {3 * bar}));
+  accepted(session->midi_clips().add_midi_clip(lower, {0}));
+
+  const auto before = clip_starts(*session);
+  constexpr std::size_t clip_count = 4;
+  REQUIRE_EQ(before.size(), clip_count, "one audio and three MIDI clips");
+  std::vector<project::ClipId> all;
+  for (const auto& entry : before)
+    all.push_back(entry.first);
+  const auto tracks_before = session->snapshot().tracks;
+
+  accepted(session->clipboard().move_clips(all, bar, 0));
+  for (const auto& [id, start] : clip_starts(*session))
+    REQUIRE_EQ(start, before.at(id) + bar, "every clip moves exactly one bar");
+  for (std::size_t row = 0; row < tracks_before.size(); ++row) {
+    const auto& now = session->snapshot().tracks[row];
+    REQUIRE_EQ(now.clips.size(), tracks_before[row].clips.size(), "each clip keeps its track");
+    REQUIRE_EQ(now.midi_clips.size(), tracks_before[row].midi_clips.size(),
+               "each clip keeps its track");
+  }
+  accepted(session->history().undo());
+  REQUIRE_TRUE(clip_starts(*session) == before, "one undo restores every clip");
+
+  // The lower clip starts at bar 1, so a bar earlier is refused for all.
+  const auto revision = session->snapshot().revision;
+  require(!session->clipboard().move_clips(all, -bar, 0), "a move before bar 1 is refused");
+  REQUIRE_EQ(session->snapshot().revision, revision, "a refused group move makes no edit");
+  REQUIRE_TRUE(clip_starts(*session) == before, "a refused group move moves no clip");
+}
+
 void notes_copy_paste() {
   Directory directory;
   auto session = take(application::ProjectSession::create(directory.path() / "song"));
@@ -376,6 +449,7 @@ int main() {
     names_colours_and_markers();
     clips_copy_paste_and_duplicate();
     clips_move_merge_and_delete_together();
+    every_clip_moves_together();
     notes_copy_paste();
     tracks_duplicate_below_themselves();
   } catch (const std::exception& error) {
