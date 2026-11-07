@@ -1,4 +1,4 @@
-"""Stage evidenced notices and an honest local package inventory.
+"""Stage third-party notices and their machine-checkable inventory.
 
 The inventory records provenance, not a per-binary licence conclusion or a
 source/replacement offer. Packaging fails if evidence for a copied ELF is absent.
@@ -12,6 +12,12 @@ import re
 import shutil
 from pathlib import Path
 
+INVENTORY_STATUS = "third-party notice inventory; not a licence conclusion"
+# Notices for third-party code compiled into the project's own executables.
+COMPILED_IN_NOTICES = {
+    "nlohmann-json3-dev": Path("third_party/notices/nlohmann-json3-dev/copyright"),
+    "pffft": Path("third_party/pffft/LICENSE.txt"),
+}
 RUNTIME_NOTICE_SHA256 = "aa154fc9070614bbe7921f89db11efd1dba7a1f3a41685958110e2230f9c0ca1"
 # Full upstream notice files for the runtime's named static libraries and
 # observed mimalloc code. The Alpine package revisions in the released runtime
@@ -77,7 +83,7 @@ def stage_notices(
     """
     doc_root = stage_root / "usr/share/doc/oscillate/third-party"
     project_sources = {
-        "nlohmann-json3-dev": source_root / "third_party/notices/nlohmann-json3-dev/copyright",
+        name: source_root / relative for name, relative in COMPILED_IN_NOTICES.items()
     }
     if scanner_enabled:
         project_sources.update(
@@ -165,14 +171,14 @@ def stage_notices(
 
     inventory: dict[str, object] = {
         "schema": 1,
-        "status": "local notice evidence; not distribution approval",
+        "status": INVENTORY_STATUS,
         "project_notices": project_notices,
         "runtime_static_notices": runtime_static_notices,
         "copied_elfs": copied_files,
         "copied_library_packages": dict(sorted(packages.items())),
         "system_dependencies": system_dependencies,
         "open_gates": [
-            "Product code and starter-sound grants are unset",
+            "Starter-sound content grant is unset",
             "Per-binary licence/SPDX and matching source/offer review is incomplete",
             "LGPL library replacement and clean-host testing are incomplete",
         ]
@@ -200,9 +206,7 @@ def verify_notices(
 ) -> dict[str, object]:
     inventory_path = stage_root / "usr/share/doc/oscillate/third-party/inventory.json"
     inventory = json.loads(inventory_path.read_text())
-    if inventory.get("schema") != 1 or not str(inventory.get("status", "")).startswith(
-        "local notice evidence"
-    ):
+    if inventory.get("schema") != 1 or inventory.get("status") != INVENTORY_STATUS:
         raise ValueError("invalid third-party notice inventory")
     copied_elfs = inventory["copied_elfs"]
     if (
@@ -210,7 +214,7 @@ def verify_notices(
         or {item["path"] for item in copied_elfs} != expected_copied_elfs
     ):
         raise ValueError("copied ELF notice mapping is incomplete")
-    expected_components = {"nlohmann-json3-dev"}
+    expected_components = set(COMPILED_IN_NOTICES)
     if scanner_enabled:
         expected_components.update({"vst3sdk", "vst3-pluginterfaces"})
     if runtime_enabled:

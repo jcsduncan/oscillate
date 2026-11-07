@@ -103,7 +103,7 @@ def copyright_clues(text: str) -> dict[str, object]:
 
 def validate_inventory(inventory: dict[str, object], appdir: Path) -> list[dict[str, object]]:
     require(
-        inventory.get("status", "").startswith("local AppDir prototype"),
+        inventory.get("status") == "oscillate AppDir inventory",
         "wrong inventory kind",
     )
     payload = inventory["payload"]

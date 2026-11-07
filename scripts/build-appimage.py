@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Build and inspect a local, pinned type-2 AppImage from a reviewed AppDir.
+"""Build and verify the type-2 AppImage from an AppDir staged by stage-appdir.py.
 
-This experiment does not prepare notices or approve redistribution.
+appimagetool and the runtime are pinned by SHA-256. The image is extracted
+again and its payload, notices and SBOM are checked against the AppDir
+inventory before the image is published.
 """
 
 from __future__ import annotations
@@ -13,20 +15,29 @@ import os
 import platform
 import shutil
 import subprocess
+import sys
 import tempfile
+import urllib.request
 from pathlib import Path
 
-from codec_source_gate import (
-    verify_codec_gate,
-    verify_lame_fft_fingerprint,
-    verify_staged_ledger,
-)
+# Run as `python3 -I`, which leaves the script's directory off the path.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from package_notices import verify_notices
+from package_profiles import APPIMAGETOOL, SOURCE_ROOT, TYPE2_RUNTIME
+from package_sbom import verify_sbom
 
-TOOL_SHA256 = "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
-RUNTIME_SHA256 = "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d"
-TOOL_RELEASE = "https://github.com/AppImage/appimagetool/releases/tag/1.9.1"
-RUNTIME_RELEASE = "https://github.com/AppImage/type2-runtime/releases/tag/20251108"
+APPDIR_STATUS = "oscillate AppDir inventory"
+RECORD_STATUS = "oscillate AppImage inventory"
+ICON = Path("oscillate.svg")
+READ_CHUNK_BYTES = 1 << 20
+IMAGE_HEADER_BYTES = 16
+TYPE2_MARKER = slice(8, 11)
+TYPE2_MAGIC = b"AI\x02"
+# appimagetool 1.9.1 writes the image MD5 into this 16-byte runtime slot.
+RUNTIME_MD5_SLOT = (932096, 932112)
+EXECUTABLE_MODE = 0o755
+DOWNLOAD_TIMEOUT_SECONDS = 120
+INPUTS_DIR = SOURCE_ROOT / "build/appimage-inputs"
 
 
 def require(condition: bool, message: str) -> None:
@@ -37,7 +48,7 @@ def require(condition: bool, message: str) -> None:
 def digest(path: Path) -> str:
     sha = hashlib.sha256()
     with path.open("rb") as source:
-        for block in iter(lambda: source.read(1024 * 1024), b""):
+        for block in iter(lambda: source.read(READ_CHUNK_BYTES), b""):
             sha.update(block)
     return sha.hexdigest()
 
@@ -48,7 +59,7 @@ def payload_files(root: Path, *, extracted: bool = False) -> list[dict[str, obje
     for path in sorted(root.rglob("*")):
         if path.is_symlink():
             require(
-                extracted and path == icon and path.readlink() == Path("oscillate-prototype.svg"),
+                extracted and path == icon and path.readlink() == ICON,
                 f"unexpected symlink: {path}",
             )
             continue
@@ -75,6 +86,31 @@ def verify_tree(root: Path, inventory: dict[str, object], *, extracted: bool = F
     require(hashlib.sha256(encoded).hexdigest() == inventory["tree_sha256"], "bad tree hash")
 
 
+def fetch_input(pinned: dict[str, str], destination: Path) -> Path:
+    """Download one pinned build input unless a verified copy is already there."""
+    if not destination.is_file() or digest(destination) != pinned["sha256"]:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        partial = destination.with_name(f"{destination.name}.part")
+        try:
+            with (
+                urllib.request.urlopen(pinned["url"], timeout=DOWNLOAD_TIMEOUT_SECONDS) as response,
+                partial.open("wb") as target,
+            ):
+                shutil.copyfileobj(response, target)
+            require(
+                digest(partial) == pinned["sha256"], f"download SHA-256 mismatch: {pinned['url']}"
+            )
+            os.replace(partial, destination)
+        finally:
+            partial.unlink(missing_ok=True)
+    destination.chmod(EXECUTABLE_MODE)
+    return destination
+
+
+def image_name(version: str) -> str:
+    return f"Oscillate-{version}-x86_64.AppImage"
+
+
 def run(
     command: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[bytes]:
@@ -82,22 +118,21 @@ def run(
 
 
 def build(
-    appdir: Path, inventory_path: Path, tool: Path, runtime: Path, output: Path
-) -> dict[str, object]:
-    source_root = Path(__file__).resolve().parent.parent
-    build_root = source_root / "build"
+    appdir: Path, inventory_path: Path, tool: Path, runtime: Path, output_dir: Path
+) -> tuple[Path, dict[str, object]]:
+    build_root = SOURCE_ROOT / "build"
+    inventory = json.loads(inventory_path.read_text())
+    require(inventory["status"] == APPDIR_STATUS, "wrong inventory kind")
+    output = output_dir / image_name(inventory["version"])
     require(platform.machine() == "x86_64", "x86-64 host required")
     require(
         'VERSION_ID="26.04"' in Path("/etc/os-release").read_text(),
         "Ubuntu 26.04 host required",
     )
     require(output.is_relative_to(build_root), "output must be in this checkout's ignored build/")
-    require(output.suffix == ".AppImage", "output must end in .AppImage")
     require(not output.exists(), "refusing to overwrite an AppImage")
-    require(digest(tool) == TOOL_SHA256, "appimagetool SHA-256 mismatch")
-    require(digest(runtime) == RUNTIME_SHA256, "type-2 runtime SHA-256 mismatch")
-    inventory = json.loads(inventory_path.read_text())
-    require(inventory["status"].startswith("local AppDir prototype"), "wrong inventory kind")
+    require(digest(tool) == APPIMAGETOOL["sha256"], "appimagetool SHA-256 mismatch")
+    require(digest(runtime) == TYPE2_RUNTIME["sha256"], "type-2 runtime SHA-256 mismatch")
     verify_tree(appdir, inventory)
     env = os.environ.copy()
     env.update({"APPIMAGE_EXTRACT_AND_RUN": "1", "ARCH": "x86_64", "SOURCE_DATE_EPOCH": "0"})
@@ -117,7 +152,10 @@ def build(
             f"appimagetool produced no image: {result.stderr.decode(errors='replace')}",
         )
         with candidate.open("rb") as image:
-            require(image.read(16)[8:11] == b"AI\x02", "missing type-2 AppImage marker")
+            require(
+                image.read(IMAGE_HEADER_BYTES)[TYPE2_MARKER] == TYPE2_MAGIC,
+                "missing type-2 AppImage marker",
+            )
         offset = int(run([str(candidate), "--appimage-offset"]).stdout.strip())
         require(offset == runtime.stat().st_size, "embedded runtime length differs")
         with candidate.open("rb") as image, runtime.open("rb") as source:
@@ -128,15 +166,15 @@ def build(
             for index, (left, right) in enumerate(zip(embedded, pinned, strict=False))
             if left != right
         ]
-        # appimagetool 1.9.1 writes the image MD5 into this 16-byte runtime slot.
+        slot_start, slot_end = RUNTIME_MD5_SLOT
         require(
-            changes and all(932096 <= index < 932112 for index in changes),
+            changes and all(slot_start <= index < slot_end for index in changes),
             "embedded runtime differs outside MD5 slot",
         )
         run([str(candidate), "--appimage-extract"], cwd=temporary_root)
         extracted = temporary_root / "squashfs-root"
         verify_tree(extracted, inventory, extracted=True)
-        notice_inventory = verify_notices(
+        verify_notices(
             extracted,
             expected_copied_elfs={
                 str(item["path"]) for item in inventory["elf_files"] if item["kind"] != "project"
@@ -144,55 +182,62 @@ def build(
             scanner_enabled=True,
             runtime_enabled=True,
         )
-        codec_ledger = verify_staged_ledger(extracted, source_root)
-        verify_codec_gate(inventory, notice_inventory, codec_ledger)
-        verify_lame_fft_fingerprint(extracted, codec_ledger)
+        verify_sbom(extracted)
         image_sha = digest(candidate)
         output.parent.mkdir(parents=True, exist_ok=True)
         os.replace(candidate, output)
     record = {
-        "status": "local AppImage prototype; not for distribution",
+        "status": RECORD_STATUS,
+        "version": inventory["version"],
+        "image": output.name,
         "appimage_sha256": image_sha,
         "appimage_bytes": output.stat().st_size,
         "appdir_tree_sha256": inventory["tree_sha256"],
         "appdir_project_commit": inventory["project_commit"],
-        "appimagetool": {"release": TOOL_RELEASE, "sha256": TOOL_SHA256},
+        "features": inventory["features"],
+        "excluded_features": inventory["excluded_features"],
+        "appimagetool": {"release": APPIMAGETOOL["release"], "sha256": APPIMAGETOOL["sha256"]},
         "type2_runtime": {
-            "release": RUNTIME_RELEASE,
-            "sha256": RUNTIME_SHA256,
+            "release": TYPE2_RUNTIME["release"],
+            "sha256": TYPE2_RUNTIME["sha256"],
             "bytes": offset,
-            "appimagetool_md5_slot": [932096, 932112],
+            "appimagetool_md5_slot": list(RUNTIME_MD5_SLOT),
         },
         "source_date_epoch": 0,
-        "limits": [
-            "Offscreen host smoke only; X11, Wayland, clean machine and physical audio unqualified",
-            "Bundled licences, notices, source and LGPL replacement route not approved",
-        ],
     }
-    record_path = output.with_suffix(".AppImage.inventory.json")
+    record_path = output.with_name(f"{output.name}.inventory.json")
     record_path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
-    return record
+    return output, record
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--appdir", type=Path, required=True)
     parser.add_argument("--inventory", type=Path, required=True)
-    parser.add_argument("--appimagetool", type=Path, required=True)
-    parser.add_argument("--runtime", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--appimagetool", type=Path, help="pinned appimagetool; downloaded when omitted"
+    )
+    parser.add_argument(
+        "--runtime", type=Path, help="pinned type-2 runtime; downloaded when omitted"
+    )
+    parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
     try:
-        record = build(
+        tool = args.appimagetool or fetch_input(APPIMAGETOOL, INPUTS_DIR / "appimagetool")
+        runtime = args.runtime or fetch_input(TYPE2_RUNTIME, INPUTS_DIR / "runtime")
+        output, record = build(
             args.appdir.resolve(strict=True),
             args.inventory.resolve(strict=True),
-            args.appimagetool.resolve(strict=True),
-            args.runtime.resolve(strict=True),
-            args.output.resolve(),
+            tool.resolve(strict=True),
+            runtime.resolve(strict=True),
+            args.output_dir.resolve(),
         )
-    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+    except subprocess.CalledProcessError as error:
+        output_text = (error.stdout or b"") + (error.stderr or b"")
+        parser.exit(1, f"{error}\n{output_text.decode(errors='replace')}\n")
+    except (ValueError, OSError) as error:
         parser.exit(1, f"{error}\n")
-    print(args.output, record["appimage_sha256"])
+    print(output, record["appimage_sha256"])
 
 
 if __name__ == "__main__":

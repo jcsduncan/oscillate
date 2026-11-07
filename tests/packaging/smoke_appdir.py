@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise one already-staged local Quick AppDir and its scanner helper."""
+"""Exercise a staged AppDir: payload, notices, SBOM, app startup and scanner helper."""
 
 from __future__ import annotations
 
@@ -13,12 +13,27 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-from codec_source_gate import (
-    verify_codec_gate,
-    verify_lame_fft_fingerprint,
-    verify_staged_ledger,
-)
 from package_notices import verify_notices
+from package_sbom import verify_sbom
+
+INVENTORY_STATUS = "oscillate AppDir inventory"
+STARTUP_TIMEOUT_SECONDS = 60
+HELPER_TIMEOUT_SECONDS = 30
+# Scanner reply header: magic, protocol version, then a status byte.
+SCAN_REPLY_PREFIX = b"LDV3\x01"
+SCAN_STATUS_OFFSET = len(SCAN_REPLY_PREFIX)
+SCAN_STATUS_OK = 0
+# Libraries the loader must take from the AppDir rather than the host.
+BUNDLED_SONAMES = (
+    "libQt6Quick.so.6",
+    "libpipewire-0.3.so.0",
+    "libjack.so.0",
+    "libsamplerate.so.0",
+    "libcrypto.so.3",
+)
+# The platform plugin an offscreen launch must load from the AppDir.
+OFFSCREEN_PLUGIN = "platforms/libqoffscreen.so"
+HOST_QT_PLUGINS = "/qt6/plugins/"
 
 
 def require(condition: bool, message: str) -> None:
@@ -30,28 +45,24 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def run(args: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[bytes]:
-    result = subprocess.run(args, env=env, capture_output=True, check=True)
-    return result
-
-
-def launch_window(args: list[str], env: dict[str, str]) -> bytes:
-    """The production app stays open; bound its offscreen launch for smoke."""
-    try:
-        completed = subprocess.run(args, env=env, capture_output=True, timeout=3, check=False)
-    except subprocess.TimeoutExpired as error:
-        return error.stderr or b""
-    raise RuntimeError(
-        f"production Quick app exited during launch: {completed.returncode}: "
-        f"{completed.stderr.decode(errors='replace')}"
+def check_startup(args: list[str], env: dict[str, str], expected: str) -> str:
+    """Run the app's own startup check, which quits once the window is up."""
+    completed = subprocess.run(
+        args, env=env, capture_output=True, timeout=STARTUP_TIMEOUT_SECONDS, check=False
     )
+    stdout = completed.stdout.decode(errors="replace")
+    stderr = completed.stderr.decode(errors="replace")
+    require(
+        completed.returncode == 0 and expected in stdout,
+        f"startup check failed ({completed.returncode}): {stdout}{stderr}",
+    )
+    return stderr
 
 
-def smoke(appdir: Path, inventory_path: Path, fixture: Path) -> None:
+def smoke(appdir: Path, inventory_path: Path) -> None:
     appdir = appdir.resolve(strict=True)
-    fixture = fixture.resolve(strict=True)
     inventory = json.loads(inventory_path.read_text())
-    require(inventory["status"].startswith("local AppDir prototype"), "wrong inventory kind")
+    require(inventory["status"] == INVENTORY_STATUS, "wrong inventory kind")
     payload = inventory["payload"]
     require(
         {item["path"] for item in payload}
@@ -65,7 +76,7 @@ def smoke(appdir: Path, inventory_path: Path, fixture: Path) -> None:
         require(oct(staged.stat().st_mode & 0o777) == item["mode"], "payload mode mismatch")
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     require(hashlib.sha256(encoded).hexdigest() == inventory["tree_sha256"], "tree hash mismatch")
-    notices = verify_notices(
+    verify_notices(
         appdir,
         expected_copied_elfs={
             str(item["path"]) for item in inventory["elf_files"] if item["kind"] != "project"
@@ -73,13 +84,16 @@ def smoke(appdir: Path, inventory_path: Path, fixture: Path) -> None:
         scanner_enabled=True,
         runtime_enabled=True,
     )
-    codec_ledger = verify_staged_ledger(appdir, Path(__file__).resolve().parents[2])
-    verify_codec_gate(inventory, notices, codec_ledger)
-    verify_lame_fft_fingerprint(appdir, codec_ledger)
+    verify_sbom(appdir)
     require(
         all(not item["runtime_paths"] for item in inventory["elf_files"]),
         "staged ELF has RPATH/RUNPATH",
     )
+    require(
+        not any(Path(item["path"]).name == "libmp3lame.so.0" for item in inventory["elf_files"]),
+        "AppDir bundles the MP3 encoder",
+    )
+    subprocess.run(["desktop-file-validate", str(appdir / "oscillate.desktop")], check=True)
 
     with tempfile.TemporaryDirectory(prefix="oscillate-appdir-smoke-") as temporary:
         project = Path(temporary) / "project"
@@ -89,37 +103,59 @@ def smoke(appdir: Path, inventory_path: Path, fixture: Path) -> None:
             {
                 "QT_QPA_PLATFORM": "offscreen",
                 "QT_QUICK_BACKEND": "software",
-                "QT_DEBUG_PLUGINS": "1",
-                "QML_IMPORT_TRACE": "1",
+                # The dynamic loader reports every file it opens on stderr.
+                "LD_DEBUG": "files",
+                "HOME": str(Path(temporary) / "home"),
                 "XDG_CONFIG_HOME": str(Path(temporary) / "config"),
             }
         )
         launch = str(appdir / "AppRun")
-        created_trace = launch_window([launch, "--create", str(project)], env)
+        traces = [
+            check_startup(
+                [launch, "--check-startup", "--create", str(project)], env, "Project ready"
+            ),
+            check_startup(
+                [launch, "--check-startup", "--open", str(project)], env, "Project ready"
+            ),
+        ]
         require((project / "state/CURRENT").is_file(), "project was not created")
-        reopened_trace = launch_window([launch, "--open", str(project)], env)
-        for data in (created_trace, reopened_trace):
-            trace = data.decode(errors="replace")
-            for plugin in (
-                "platforms/libqoffscreen.so",
-                "platforminputcontexts/libibusplatforminputcontextplugin.so",
-            ):
-                require(
-                    f'{appdir}/usr/plugins/{plugin}" loaded library' in trace,
-                    f"Qt loaded {plugin} from outside the AppDir",
-                )
-            require(":/qt-project.org/imports/QtQuick/qmldir" in trace, "QtQuick import missing")
+        for trace in traces:
+            loaded = [
+                line.split("file=", 1)[1].split(" [", 1)[0]
+                for line in trace.splitlines()
+                if "file=" in line and "dynamically loaded" in line
+            ]
+            require(
+                f"{appdir}/usr/plugins/{OFFSCREEN_PLUGIN}" in loaded,
+                f"offscreen plugin not loaded from the AppDir: {loaded}",
+            )
+            outside = [path for path in loaded if HOST_QT_PLUGINS in path]
+            require(not outside, f"Qt loaded host plugins: {outside}")
         ld_env = env | {"LD_LIBRARY_PATH": str(appdir / "usr/lib")}
-        helper = run([str(appdir / "usr/bin/oscillate_vst3_scan_helper"), str(fixture)], ld_env)
-        require(helper.stdout.startswith(b"LDV3\x01\x00"), "scanner did not accept fixture")
-        dynamic = run(["ldd", str(appdir / "usr/bin/oscillate")], ld_env).stdout.decode()
-        for soname in (
-            "libQt6Quick.so.6",
-            "libpipewire-0.3.so.0",
-            "libsndfile.so.1",
-            "libsamplerate.so.0",
-            "libcrypto.so.3",
-        ):
+        helper = subprocess.run(
+            [
+                str(appdir / "usr/bin/oscillate_vst3_scan_helper"),
+                str(Path(temporary) / "None.vst3"),
+            ],
+            env=ld_env,
+            capture_output=True,
+            timeout=HELPER_TIMEOUT_SECONDS,
+            check=True,
+        )
+        require(
+            len(helper.stdout) > SCAN_STATUS_OFFSET
+            and helper.stdout.startswith(SCAN_REPLY_PREFIX)
+            and helper.stdout[SCAN_STATUS_OFFSET] != SCAN_STATUS_OK,
+            "scanner helper did not report the missing bundle",
+        )
+        dynamic = subprocess.run(
+            ["ldd", str(appdir / "usr/bin/oscillate")],
+            env=ld_env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        for soname in BUNDLED_SONAMES:
             require(
                 f"{soname} => {appdir}/usr/lib/{soname}" in dynamic,
                 f"staged {soname} was not selected by the loader",
@@ -130,10 +166,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--appdir", type=Path, required=True)
     parser.add_argument("--inventory", type=Path, required=True)
-    parser.add_argument("--fixture", type=Path, required=True)
     args = parser.parse_args()
-    smoke(args.appdir, args.inventory, args.fixture)
-    print("AppDir payload, Qt load, create/reopen and VST3 helper smoke passed")
+    smoke(args.appdir, args.inventory)
+    print("AppDir payload, notices, SBOM, startup and VST3 helper smoke passed")
 
 
 if __name__ == "__main__":

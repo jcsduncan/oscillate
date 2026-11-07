@@ -10,11 +10,10 @@ The current copied AppDir MP3 path is
 libsndfile MP3 format; it does not contain a separate MP3 encoder. The
 [machine-readable component ledger](mp3-ubuntu-codec-ledger.json) records
 the three copied libraries, binary package/source names, exact versions,
-ELF SHA-256, notice SHA-256 and the LAME source evidence. The AppDir and
-extracted-AppImage packaging checks now reject a different codec binary,
-package version, notice or dependency edge until that ledger is reviewed.
-The native `.deb` continues to use Ubuntu system libraries, so this byte
-lock does not describe every future installation of that package.
+ELF SHA-256, notice SHA-256 and the LAME source evidence. The
+[release AppImage](release-packages.md) is built without the codec adapter,
+and AppDir staging refuses `libmp3lame.so.0` until G8 decides. The native
+`.deb` copies no codec; it depends on Ubuntu's system libraries.
 
 The staged `libmp3lame.so.0` SHA-256
 `e0676e6702b0095212724f2d298685d189dc3b54845c90cb1db1bd2970c29ed2`
@@ -66,7 +65,7 @@ Possible closure routes, without selecting one for the product:
    MP3 export, so the package must retain that workflow or return to product
    review before scope changes.
 
-**Status:** Local Ubuntu 26.04 package and codec-source evidence, 15 October 2026. **No distribution sign-off.** Applies to the [local `.deb` prototype](ubuntu-package-prototype.md) with `OSCILLATE_BUILD_CODEC_ADAPTER=ON` and the proposed AppImage. The product uses libsndfile for FLAC/MP3 import and encoded master export; audio recording is outside v1 scope.
+**Status:** Local Ubuntu 26.04 package and codec-source evidence, 15 October 2026. **No distribution sign-off.** Applies to the [`.deb`](release-packages.md) with `OSCILLATE_BUILD_CODEC_ADAPTER=ON` and the proposed AppImage. The product uses libsndfile for FLAC/MP3 import and encoded master export; audio recording is outside v1 scope.
 
 ## Artifact and functional observation
 
