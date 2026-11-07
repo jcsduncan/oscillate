@@ -1,0 +1,241 @@
+#include "../../../apps/daw_quick/src/key_review_controller.hpp"
+#include "oscillate/test/check.hpp"
+
+#include <QColor>
+#include <QGuiApplication>
+#include <QQmlComponent>
+#include <QQmlEngine>
+#include <QQuickItem>
+#include <QSignalSpy>
+#include <QTest>
+
+#include <atomic>
+#include <cstdint>
+#include <fcntl.h>
+#include <filesystem>
+#include <iostream>
+#include <memory>
+#include <optional>
+#include <semaphore>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <unistd.h>
+#include <utility>
+#include <vector>
+
+namespace {
+using namespace oscillate;
+namespace fs = std::filesystem;
+
+using oscillate::test::require;
+template <typename T> T take(foundation::Result<T> result) {
+  if (!result) {
+    throw std::runtime_error(result.error().message);
+  }
+  return std::move(result).value();
+}
+
+class Directory {
+public:
+  Directory() {
+    auto pattern = (fs::temp_directory_path() / "oscillate-key-quick-XXXXXX").string();
+    require(::mkdtemp(pattern.data()) != nullptr, "temporary project directory failed");
+    path_ = pattern;
+  }
+  ~Directory() {
+    std::error_code ignored;
+    fs::remove_all(path_, ignored);
+  }
+  const fs::path& path() const { return path_; }
+
+private:
+  fs::path path_;
+};
+
+struct Fixture {
+  Directory directory;
+  fs::path root = directory.path() / "project";
+  std::unique_ptr<application::ProjectSession> session;
+  project::SourceRecord source;
+  QString clip_id;
+
+  static project::SourceRecord import_source(application::ProjectSession& session) {
+    const int fd = ::open(OSCILLATE_STARTER_PLUCK, O_RDONLY | O_CLOEXEC);
+    require(fd >= 0, "starter source could not be opened");
+    const auto imported = session.imports().import_wav_audio(fd);
+    ::close(fd);
+    require(imported.has_value(), "managed starter import failed");
+    return session.snapshot().sources.front();
+  }
+  Fixture()
+      : session(take(application::ProjectSession::create(root))), source(import_source(*session)) {
+    clip_id =
+        QString::fromStdString(session->snapshot().tracks.front().clips.front().id.to_string());
+  }
+};
+
+application::KeyCacheResult suggestion(const project::SourceRecord& source,
+                                       std::uint64_t generation, bool second) {
+  const auto key = take(application::key_cache_key(source));
+  application::KeyCacheResult result;
+  result.estimate.identity = {key.hex(), generation};
+  result.estimate.sample_rate = source.sample_rate;
+  result.estimate.frames = source.frames;
+  result.estimate.key = second ? analysis::MusicalKey{9, analysis::KeyMode::minor}
+                               : analysis::MusicalKey{0, analysis::KeyMode::major};
+  result.estimate.confidence = 0.72;
+  result.estimate.compatible_keys =
+      second ? std::vector<analysis::CompatibleKey>{{{0, analysis::KeyMode::major},
+                                                     analysis::KeyRelation::relative}}
+             : std::vector<analysis::CompatibleKey>{
+                   {{9, analysis::KeyMode::minor}, analysis::KeyRelation::relative},
+                   {{7, analysis::KeyMode::major}, analysis::KeyRelation::dominant}};
+  return result;
+}
+
+void wait_for_commit(QSignalSpy& spy) {
+  if (spy.isEmpty()) {
+    require(spy.wait(3000), "key-analysis worker did not commit within 3 seconds");
+  }
+}
+
+void review_panel_and_reopen() {
+  Fixture fixture;
+  std::atomic<int> calls{0};
+  quick::KeyReviewController review(
+      [&](const auto&, const project::SourceRecord& source, std::uint64_t generation, const auto&) {
+        const bool second = calls.fetch_add(1) != 0;
+        return foundation::Result<application::KeyCacheResult>::success(
+            suggestion(source, generation, second));
+      });
+  review.set_project(fixture.session.get(), fixture.root);
+  QSignalSpy commits(&review, &quick::KeyReviewController::projectRevisionChanged);
+  review.select_clip(fixture.clip_id, fixture.source);
+  wait_for_commit(commits);
+  require(review.preview().value("detected").toString() == QStringLiteral("C major") &&
+              review.preview().value("compatible").toList().size() == 2 &&
+              review.preview().value("confidence").toDouble() == 0.72,
+          "generated key projection lost label, relation or confidence");
+
+  QQmlEngine engine;
+  QQmlComponent component(&engine, QUrl(QStringLiteral("qrc:/KeyReviewPanel.qml")));
+  if (!component.isReady()) {
+    throw std::runtime_error("key panel QML did not load: " +
+                             component.errorString().toStdString());
+  }
+  std::unique_ptr<QObject> panel(component.createWithInitialProperties(
+      {{"review", QVariant::fromValue(static_cast<QObject*>(&review))},
+       {"textMain", QColor("#ffffff")},
+       {"textDim", QColor("#aaaaaa")},
+       {"accent", QColor("#72e3c0")},
+       {"amber", QColor("#ecbc76")},
+       {"lineColor", QColor("#2a313d")}}));
+  require(panel != nullptr, "key panel creation failed");
+  auto* generated = panel->findChild<QObject*>(QStringLiteral("keyGeneratedValue"));
+  auto* correction = panel->findChild<QObject*>(QStringLiteral("keyCorrectionValue"));
+  auto* compatible = panel->findChild<QObject*>(QStringLiteral("keyCompatibleValues"));
+  require(generated && correction && compatible &&
+              generated->property("text").toString().contains(QStringLiteral("C major")) &&
+              compatible->property("text").toString().contains(QStringLiteral("Relative: A minor")),
+          "offscreen key review panel did not show generated suggestion");
+
+  review.set_correction(2, 1);
+  require(review.preview().value("corrected").toString() == QStringLiteral("D minor") &&
+              correction->property("text").toString().contains(QStringLiteral("D minor")),
+          "manual correction did not reach QML");
+  require(fixture.session->saving().save().has_value(), "key correction save failed");
+  review.set_project(nullptr, {});
+  fixture.session.reset();
+  fixture.session = take(application::ProjectSession::open(fixture.root));
+  const auto reopened_revision = fixture.session->snapshot().revision;
+  review.set_project(fixture.session.get(), fixture.root);
+  review.select_clip(fixture.clip_id, fixture.source);
+  require(calls.load() == 1 && fixture.session->snapshot().revision == reopened_revision &&
+              review.preview().value("corrected").toString() == QStringLiteral("D minor"),
+          "selecting a reviewed clip reanalyzed or lost the saved correction");
+  commits.clear();
+  review.reanalyze();
+  wait_for_commit(commits);
+  require(review.preview().value("detected").toString() == QStringLiteral("A minor") &&
+              review.preview().value("corrected").toString() == QStringLiteral("D minor"),
+          "explicit reanalysis overwrote manual correction");
+}
+
+void deselection_cancels_late_result() {
+  Fixture fixture;
+  std::binary_semaphore entered{0};
+  std::binary_semaphore release{0};
+  std::binary_semaphore exited{0};
+  std::atomic<bool> cancelled{false};
+  quick::KeyReviewController review([&](const auto&, const project::SourceRecord& source,
+                                        std::uint64_t generation, const auto& stop) {
+    entered.release();
+    release.acquire();
+    cancelled.store(stop(), std::memory_order_release);
+    exited.release();
+    return foundation::Result<application::KeyCacheResult>::success(
+        suggestion(source, generation, false));
+  });
+  review.set_project(fixture.session.get(), fixture.root);
+  const auto revision = fixture.session->snapshot().revision;
+  review.select_clip(fixture.clip_id, fixture.source);
+  entered.acquire();
+  review.select_clip({}, std::nullopt);
+  release.release();
+  exited.acquire();
+  QCoreApplication::processEvents();
+  require(cancelled.load(std::memory_order_acquire) &&
+              fixture.session->snapshot().revision == revision &&
+              fixture.session->snapshot().source_key_reviews.empty() &&
+              review.preview().value("state").toString() == QStringLiteral("idle"),
+          "deselected worker result changed project or review panel");
+}
+
+void project_revision_cancels_late_result() {
+  Fixture fixture;
+  std::binary_semaphore entered{0};
+  std::binary_semaphore release{0};
+  std::binary_semaphore exited{0};
+  quick::KeyReviewController review(
+      [&](const auto&, const project::SourceRecord& source, std::uint64_t generation, const auto&) {
+        entered.release();
+        release.acquire();
+        exited.release();
+        return foundation::Result<application::KeyCacheResult>::success(
+            suggestion(source, generation, false));
+      });
+  review.set_project(fixture.session.get(), fixture.root);
+  review.select_clip(fixture.clip_id, fixture.source);
+  entered.acquire();
+  require(fixture.session->source_analysis()
+              .set_source_key_correction(fixture.source.id,
+                                         project::MusicalKey{2, project::KeyMode::minor})
+              .has_value(),
+          "manual correction during key analysis failed");
+  const auto revised = fixture.session->snapshot().revision;
+  review.refresh_snapshot();
+  release.release();
+  exited.acquire();
+  QCoreApplication::processEvents();
+  const auto& reviews = fixture.session->snapshot().source_key_reviews;
+  require(fixture.session->snapshot().revision == revised && reviews.size() == 1 &&
+              !reviews.front().detected &&
+              reviews.front().correction == project::MusicalKey{2, project::KeyMode::minor} &&
+              review.preview().value("state").toString() == QStringLiteral("stale"),
+          "stale worker result replaced a newer manual correction");
+}
+} // namespace
+
+int main(int argc, char** argv) {
+  QGuiApplication app(argc, argv);
+  try {
+    review_panel_and_reopen();
+    deselection_cancels_late_result();
+    project_revision_cancels_late_result();
+  } catch (const std::exception& error) {
+    std::cerr << error.what() << '\n';
+    return 1;
+  }
+}
