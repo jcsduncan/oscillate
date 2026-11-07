@@ -160,7 +160,8 @@ private:
   [[nodiscard]] std::optional<project::MusicalKey> song_key() const;
   // One piece of groove file work and what it left.
   struct FileOutcome {
-    enum class Kind { scan, saved, removed, imported, exported };
+    // failed: the worker threw; name holds the reason.
+    enum class Kind : std::uint8_t { scan, saved, removed, imported, exported, failed };
     Kind kind = Kind::scan;
     bool ok = false;
     QString name = {};

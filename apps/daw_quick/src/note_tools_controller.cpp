@@ -551,7 +551,11 @@ void NoteToolsController::start_file_work() {
   auto work = std::move(waiting_.front());
   waiting_.pop_front();
   const auto failed =
-      files_.start(0, std::move(work), [](const std::string&) { return FileOutcome{}; });
+      files_.start(0, std::move(work), [](const std::string& error) {
+        return FileOutcome{.kind = FileOutcome::Kind::failed,
+                           .ok = false,
+                           .name = QString::fromStdString(error)};
+      });
   if (failed) {
     report_(QStringLiteral("Groove files: %1").arg(QString::fromStdString(*failed)));
     start_file_work();
@@ -582,12 +586,18 @@ void NoteToolsController::finish(FileOutcome outcome) {
     });
   };
   switch (outcome.kind) {
+  case Kind::failed:
+    // A worker that threw never changes the cached grooves.
+    report_(QStringLiteral("Groove files: %1").arg(outcome.name));
+    return;
   case Kind::scan:
+    if (!outcome.ok)
+      return;
     user_grooves_ = std::move(outcome.grooves);
     break;
   case Kind::saved:
   case Kind::imported:
-    if (!outcome.ok) {
+    if (!outcome.ok || outcome.grooves.empty()) {
       report_(outcome.kind == Kind::saved
                   ? QStringLiteral("Groove: could not save %1").arg(outcome.name)
                   : QStringLiteral("Not a groove file"));
