@@ -48,6 +48,7 @@ endif()
 if(OSCILLATE_BUILD_BENCHES)
 endif()
 if(OSCILLATE_BUILD_QUICK_UI)
+  add_subdirectory(apps/daw_quick)
 endif()
 
 if(BUILD_TESTING)
