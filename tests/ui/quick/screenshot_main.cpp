@@ -69,7 +69,7 @@ int run(int argc, char** argv) {
       view = QString::fromLocal8Bit(argv[++index]);
     } else if (option == "--settle" && has_value) {
       settle_ms = std::max(0, std::stoi(argv[++index]));
-    } else if (option == "--select-track" && has_value) {
+    } else if (option == "--select-track" && has_value && std::stoi(argv[index + 1]) >= 0) {
       select_track = std::stoi(argv[++index]);
     } else if (option == "--select-first-clip") {
       select_first_clip = true;
@@ -120,8 +120,12 @@ int run(int argc, char** argv) {
     window->setProperty("selectedTrack", *select_track);
   if (select_first_clip) {
     QTimer::singleShot(select_clip_delay_ms, &app, [&bridge, window, select_track] {
+      // The selected track's first clip; without --select-track, the first clip anywhere.
       const auto tracks = bridge.tracks();
-      for (qsizetype index = select_track.value_or(0); index < tracks.size(); ++index) {
+      const qsizetype first = select_track.value_or(0);
+      const qsizetype last =
+          select_track ? std::min<qsizetype>(first + 1, tracks.size()) : tracks.size();
+      for (qsizetype index = first; index < last; ++index) {
         const auto clips = tracks.at(index).toMap().value(QStringLiteral("clips")).toList();
         if (!clips.isEmpty()) {
           window->setProperty("selectedClipId",
