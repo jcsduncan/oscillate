@@ -235,7 +235,7 @@ void telemetry_decodes_into_the_sweep_and_meter() {
   require(wait_for_text(*panel, QStringLiteral("scopeDelay"), QStringLiteral("+1.60")),
           "the delay decodes: " + text_of(*panel, QStringLiteral("scopeDelay")).toStdString());
   require(text_of(*panel, QStringLiteral("scopeDelaySamples")) ==
-              QStringLiteral("+76.8 SAMPLES @ 48 KHZ"),
+              QStringLiteral("+76.8 samples @ 48.0 kHz"),
           "and in samples: " + text_of(*panel, QStringLiteral("scopeDelaySamples")).toStdString());
   require(text_of(*panel, QStringLiteral("scopeCorrelation")) == QStringLiteral("0.90"),
           "the correlation");
@@ -299,18 +299,18 @@ void the_hint_says_which_way_and_how_far() {
   };
   for (const Case& c : {
            Case{with(1.6F, 1.0F, 0.9F),
-                "The track is 1.6 ms late against the sidechain: nudge it earlier.", "off"},
+                "The track is 1.60 ms late against the sidechain: nudge it earlier.", "off"},
            Case{with(-0.8F, 1.0F, 0.9F),
-                "The track is 0.8 ms early against the sidechain: nudge it later.", "near"},
+                "The track is 0.80 ms early against the sidechain: nudge it later.", "near"},
            Case{with(0.04F, 1.0F, 0.9F), "The track is aligned with the sidechain.", "aligned"},
            Case{with(0.02F, -1.0F, 0.9F), "Polarity is inverted: flip the track's polarity.",
                 "off"},
            Case{with(2.5F, -1.0F, 0.9F),
-                "Polarity is inverted, and the track is 2.5 ms late: flip it, then nudge it "
+                "Polarity is inverted, and the track is 2.50 ms late: flip it, then nudge it "
                 "earlier.",
                 "off"},
            Case{with(-19.8F, 1.0F, 0.8F),
-                "The track is 20 ms early against the sidechain: nudge it later (at the edge of "
+                "The track is 19.8 ms early against the sidechain: nudge it later (at the edge of "
                 "the ±20 ms search).",
                 "off"},
            Case{with(3.0F, 1.0F, 0.12F),
@@ -345,7 +345,7 @@ void the_hint_says_which_way_and_how_far() {
   panel->root->setProperty("keyName", QStringLiteral("the kick"));
   adapter.set_telemetry(frame_of(with(1.6F, 1.0F, 0.9F)));
   require(wait_for_text(*panel, hint,
-                        QStringLiteral("Bass is 1.6 ms late against the kick: nudge it earlier.")),
+                        QStringLiteral("Bass is 1.60 ms late against the kick: nudge it earlier.")),
           "named: " + text_of(*panel, hint).toStdString());
   // Align off.
   controller.set_choice(QStringLiteral("scope.align"), 0);

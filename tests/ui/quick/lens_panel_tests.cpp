@@ -236,11 +236,11 @@ void telemetry_reaches_the_spectrum_and_table() {
           "the first resonance decodes");
   const QString first =
       item(*panel, QStringLiteral("lensResonance:0"))->property("text").toString();
-  require(first == QStringLiteral("A1 ±0c 55.0 Hz −8.1 dB"),
+  require(first == QStringLiteral("A1 0 ct 55.0 Hz −8.1 dB"),
           "the table names the resonance: " + first.toStdString());
   const QString second =
       item(*panel, QStringLiteral("lensResonance:1"))->property("text").toString();
-  require(second == QStringLiteral("A♯4 ±0c 466 Hz −20.0 dB"),
+  require(second == QStringLiteral("A♯4 0 ct 466 Hz −20.0 dB"),
           "and the second: " + second.toStdString());
   require(item(*panel, QStringLiteral("lensResonance:2"))->property("text").toString().isEmpty(),
           "absent resonances leave their rows empty");
@@ -278,7 +278,7 @@ void notes_and_the_cursor_read_true() {
                 n[QStringLiteral("cents")].toInt() == c.cents,
             std::to_string(c.hz) + " Hz reads " +
                 n[QStringLiteral("name")].toString().toStdString() + " " +
-                std::to_string(n[QStringLiteral("cents")].toInt()) + "c");
+                std::to_string(n[QStringLiteral("cents")].toInt()) + " ct");
   }
   // Hovering 440 Hz on live data reads its note, frequency and level.
   adapter.set_telemetry(test_frame(1.0F));
@@ -675,7 +675,7 @@ void telemetry_gives_the_strip_the_curve() {
               strip.value(QStringLiteral("ceiling_db")).toDouble() ==
                   strip_view::spectrum_ceiling_db,
           "in the Lens panel's default window");
-  require(strip.value(QStringLiteral("text")).toString() == QStringLiteral("peak 55 Hz"),
+  require(strip.value(QStringLiteral("text")).toString() == QStringLiteral("peak 55.0 Hz"),
           "the strongest resonance: " +
               strip.value(QStringLiteral("text")).toString().toStdString());
 }

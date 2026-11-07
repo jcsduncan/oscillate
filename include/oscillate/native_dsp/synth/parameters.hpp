@@ -110,7 +110,8 @@ struct SynthPreset {
                                                         std::string_view id) noexcept;
 [[nodiscard]] std::vector<double> default_values(const EngineDescriptor& engine);
 
-// Human readable value, e.g. "1.20 kHz", "-6.0 dB", "Saw".
+// Human readable value through the display formatter
+// (foundation/value_text.hpp), e.g. "1.20 kHz", "−6.0 dB", "Saw".
 [[nodiscard]] std::string format_value(const ParameterDescriptor& parameter, double value);
 
 // Validates a descriptor table: unique ids, finite ordered ranges, defaults in

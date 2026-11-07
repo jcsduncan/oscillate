@@ -257,8 +257,8 @@ void telemetry_reaches_the_map_meters_and_waves() {
   require(text_of(*panel, QStringLiteral("pocketCleared")) == QStringLiteral("6.0"),
           "space cleared is overlap in minus out: " +
               text_of(*panel, QStringLiteral("pocketCleared")).toStdString());
-  require(text_of(*panel, QStringLiteral("pocketOverlapBefore")) == QStringLiteral("-20.0 dB") &&
-              text_of(*panel, QStringLiteral("pocketOverlapAfter")) == QStringLiteral("-26.0 dB"),
+  require(text_of(*panel, QStringLiteral("pocketOverlapBefore")) == QStringLiteral("−20.0 dB") &&
+              text_of(*panel, QStringLiteral("pocketOverlapAfter")) == QStringLiteral("−26.0 dB"),
           "the overlap bars read out");
   require(text_of(*panel, QStringLiteral("pocketDeepestCut"))
               .startsWith(QStringLiteral("−6.5 dB @ 62")),

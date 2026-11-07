@@ -264,11 +264,12 @@ void the_note_maths() {
     const char* label;
   };
   for (const Case c :
-       {Case{69.25, false, "A4 +25c"}, Case{69.25, true, "A4 +25c"}, Case{69.6, true, "B♭4 −40c"},
-        Case{69.6, false, "A♯4 −40c"}, Case{70.6, true, "B4 −40c"}, Case{70.4, true, "B♭4 +40c"},
-        Case{60.0, false, "C4 0c"}, Case{59.51, false, "C4 −49c"}, Case{59.49, false, "B3 +49c"},
-        Case{29.0 - 0.12, true, "F1 −12c"}, Case{22.0, true, "B♭0 0c"},
-        Case{11.9, false, "C0 −10c"}, Case{106.0, false, "A♯7 0c"}}) {
+       {Case{69.25, false, "A4 +25 ct"}, Case{69.25, true, "A4 +25 ct"},
+        Case{69.6, true, "B♭4 −40 ct"}, Case{69.6, false, "A♯4 −40 ct"},
+        Case{70.6, true, "B4 −40 ct"}, Case{70.4, true, "B♭4 +40 ct"}, Case{60.0, false, "C4 0 ct"},
+        Case{59.51, false, "C4 −49 ct"}, Case{59.49, false, "B3 +49 ct"},
+        Case{29.0 - 0.12, true, "F1 −12 ct"}, Case{22.0, true, "B♭0 0 ct"},
+        Case{11.9, false, "C0 −10 ct"}, Case{106.0, false, "A♯7 0 ct"}}) {
     const QString label = label_of(*panel, c.note, c.flats);
     require(label == QString::fromUtf8(c.label), "note " + std::to_string(c.note) + " in " +
                                                      (c.flats ? "flats" : "sharps") + " reads " +
@@ -302,7 +303,7 @@ void readings_decode_and_hold() {
               text_of(*panel, QStringLiteral("tuneLevel")) == QStringLiteral("−12.0 dBFS"),
           "clarity and level");
   require(text_of(*panel, QStringLiteral("tuneHint")) ==
-              QStringLiteral("A4 is 25 cents sharp: tune down."),
+              QStringLiteral("A4 is 25 ct sharp: tune down."),
           "the hint: " + text_of(*panel, QStringLiteral("tuneHint")).toStdString());
   auto* strobe = item(*panel, QStringLiteral("tuneStrobe"));
   require(strobe->property("live").toBool() &&
@@ -327,7 +328,7 @@ void readings_decode_and_hold() {
   gap.clarity = 0.2F;
   adapter.set_telemetry(frame_of(gap));
   require(wait_for_text(*panel, QStringLiteral("tuneHint"),
-                        QStringLiteral("Held: A4 +25c. Play the next note.")),
+                        QStringLiteral("Held: A4 +25 ct. Play the next note.")),
           "held: " + text_of(*panel, QStringLiteral("tuneHint")).toStdString());
   require(text_of(*panel, QStringLiteral("tuneNoteName")) == QStringLiteral("A") &&
               panel->root->property("held").toBool(),
@@ -341,7 +342,7 @@ void readings_decode_and_hold() {
   controller.set_choice(QStringLiteral("tune.notation"), 1);
   adapter.set_telemetry(frame_of(pitch(69.6)));
   require(wait_for_text(*panel, QStringLiteral("tuneHint"),
-                        QStringLiteral("B♭4 is 40 cents flat: tune up.")),
+                        QStringLiteral("B♭4 is 40 ct flat: tune up.")),
           "flat, in flats: " + text_of(*panel, QStringLiteral("tuneHint")).toStdString());
   require(text_of(*panel, QStringLiteral("tuneNoteName")) == QStringLiteral("B") &&
               text_of(*panel, QStringLiteral("tuneNoteAccidental")) == QStringLiteral("♭") &&
@@ -378,9 +379,10 @@ void kick_mode_reads_the_settled_pitch() {
   r.clarity = 0.0F;
   r.level_db = -9.0F;
   adapter.set_telemetry(frame_of(r, 60));
-  require(wait_for_text(*panel, QStringLiteral("tuneHint"),
-                        QStringLiteral("Kick settles at F1 −12c: tune it +0.12 st to land on F1.")),
-          "the kick hint: " + text_of(*panel, QStringLiteral("tuneHint")).toStdString());
+  require(
+      wait_for_text(*panel, QStringLiteral("tuneHint"),
+                    QStringLiteral("Kick settles at F1 −12 ct: tune it +0.12 st to land on F1.")),
+      "the kick hint: " + text_of(*panel, QStringLiteral("tuneHint")).toStdString());
   require(text_of(*panel, QStringLiteral("tuneSettledName")) == QStringLiteral("F") &&
               text_of(*panel, QStringLiteral("tuneSettledOctave")) == QStringLiteral("1") &&
               text_of(*panel, QStringLiteral("tuneSettledCents")) == QStringLiteral("−12.0") &&
@@ -402,7 +404,7 @@ void kick_mode_reads_the_settled_pitch() {
   r.settled_hz = static_cast<float>(hz_of(r.settled_note));
   adapter.set_telemetry(frame_of(r, 60));
   require(wait_for_text(*panel, QStringLiteral("tuneHint"),
-                        QStringLiteral("Kick settles at F1 +2c: in tune on F1.")),
+                        QStringLiteral("Kick settles at F1 +2 ct: in tune on F1.")),
           "an in-tune kick: " + text_of(*panel, QStringLiteral("tuneHint")).toStdString());
   r.settled_note = 34.3F;
   r.settled_cents = 30.0F;
@@ -410,7 +412,7 @@ void kick_mode_reads_the_settled_pitch() {
   adapter.set_telemetry(frame_of(r, 60));
   require(
       wait_for_text(*panel, QStringLiteral("tuneHint"),
-                    QStringLiteral("Kick settles at B♭1 +30c: tune it −0.30 st to land on B♭1.")),
+                    QStringLiteral("Kick settles at B♭1 +30 ct: tune it −0.30 st to land on B♭1.")),
       "a sharp kick, in flats: " + text_of(*panel, QStringLiteral("tuneHint")).toStdString());
 }
 

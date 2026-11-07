@@ -8,6 +8,7 @@
 #include "ui_contracts.hpp"
 
 #include "oscillate/foundation/trace.hpp"
+#include "oscillate/foundation/value_text.hpp"
 #include "oscillate/native_dsp/effects/ceiling.hpp"
 #include "oscillate/native_dsp/effects/chop.hpp"
 #include "oscillate/native_dsp/effects/contour.hpp"
@@ -170,7 +171,8 @@ QString key_name(int key) {
     return {};
   }
   return text(pitch_names[static_cast<std::size_t>(key % semitones_per_octave)]) +
-         QString::number(key / semitones_per_octave + octave_of_key_zero);
+         QString::fromStdString(
+             foundation::format_number(key / semitones_per_octave + octave_of_key_zero, 0));
 }
 
 QVariantMap concert_library_map(const native_dsp::synth::concert::library::Status& status) {

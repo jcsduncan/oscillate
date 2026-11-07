@@ -243,7 +243,7 @@ void landscape_follows_the_absorption_design() {
           "the low readout: " + text_of(*panel, QStringLiteral("expanseRt:low")).toStdString());
   require(text_of(*panel, QStringLiteral("expanseRt:mid")).startsWith(QStringLiteral("2.0")),
           "the mid readout");
-  require(text_of(*panel, QStringLiteral("expanseRt:pre")) == QStringLiteral("0 ms"),
+  require(text_of(*panel, QStringLiteral("expanseRt:pre")) == QStringLiteral("0.00 ms"),
           "the pre-delay readout");
   // A slower decay widens the view; reflections follow the space.
   const double before = view->property("span").toDouble();
@@ -373,7 +373,7 @@ void the_sky_lights_with_the_reverb() {
   require(QTest::qWaitFor([&] { return view->property("live").toBool(); }, 1000),
           "live levels arrive");
   require(text_of(*panel, QStringLiteral("expanseLandscapeCaption")) ==
-              QStringLiteral("LIVE · LATE -20 dB"),
+              QStringLiteral("LIVE · LATE −20.0 dB"),
           "the late level reads out: " +
               text_of(*panel, QStringLiteral("expanseLandscapeCaption")).toStdString());
   require(std::fabs(item(*panel, QStringLiteral("expanseMeter:early"))->property("db").toDouble() +

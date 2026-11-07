@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The alignment needle: a meter arc from 20 ms early to 20 ms late with
 // zero at the top. The scale opens out around zero (asinh), so a tenth of
@@ -74,7 +75,7 @@ Item {
                     ctx.stroke()
                     if (major && ticks[i] !== 0.25) {
                         ctx.fillStyle = ticks[i] === 0 ? t.ink : t.inkDim
-                        const label = ticks[i] === 0 ? "0" : (s < 0 ? "−" : "+") + ticks[i]
+                        const label = ticks[i] === 0 ? "0" : (s < 0 ? Format.minus : "+") + ticks[i]
                         ctx.fillText(label, cx + Math.cos(a) * (r + t.tickLabelRadius),
                                      cy + Math.sin(a) * (r + t.tickLabelRadius) + t.tickLabelDrop)
                     }

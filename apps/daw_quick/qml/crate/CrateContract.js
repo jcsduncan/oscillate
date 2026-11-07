@@ -1,5 +1,6 @@
 .pragma library
 .import Oscillate.Contracts 1.0 as Law
+.import Oscillate.Format 1.0 as Fmt
 
 // The Crate panel <-> engine contract (docs/specs/09-crate-sampler.md §2,
 // §5.1; include/oscillate/native_dsp/synth/crate.hpp) as data the panel
@@ -53,7 +54,7 @@ function chopNumber(index) {
 function noteName(key) {
     if (key < 0)
         return ""
-    return Law.Contracts.note_name(key, Law.Contracts.ascii, Law.Contracts.daw_middle_c)
+    return Law.Contracts.note_name(key, Law.Contracts.sharp, Law.Contracts.daw_middle_c)
 }
 function padKey(index) {
     return firstPadKey + index
@@ -93,7 +94,7 @@ function modeIndex(id) {
     return 0
 }
 function percent(value) {
-    return Math.round(value * 100) + "%"
+    return Fmt.Format.fraction(value)
 }
 function modeHint(crate) {
     if (!crate)
@@ -144,25 +145,28 @@ function isAudio(url) {
 // The header's info line: "2 bars · 96 BPM · F minor · 44.1 kHz" style.
 // Bars are shown to the nearest quarter bar.
 var barSteps = 4
+// A part bar shows its quarters; a tempo shows one decimal.
+var quarterBarDecimals = 2, bpmDecimals = 1
 function infoLine(crate) {
     if (!crate || !crate.has_sample)
         return ""
     var parts = []
     if (crate.bpm > 0) {
         var rounded = Math.round(crate.sample_bars * barSteps) / barSteps
-        parts.push((rounded === Math.round(rounded) ? rounded : rounded.toFixed(2)) + (rounded === 1 ? " bar" : " bars"))
-        parts.push((Math.round(crate.bpm * 10) / 10) + " BPM")
+        parts.push(Fmt.Format.number(rounded, Number.isInteger(rounded) ? 0 : quarterBarDecimals)
+                   + (rounded === 1 ? " bar" : " bars"))
+        parts.push(Fmt.Format.number(crate.bpm, bpmDecimals) + " BPM")
     } else {
-        parts.push(crate.sample_seconds.toFixed(2) + " s")
+        parts.push(Fmt.Format.seconds(crate.sample_seconds))
     }
     if (crate.key_name !== "")
         parts.push("root " + crate.key_name)
     if (crate.sample_rate > 0)
-        parts.push((crate.sample_rate / 1000).toFixed(1) + " kHz")
+        parts.push(Fmt.Format.hertz(crate.sample_rate))
     return parts.join(" · ")
 }
 function milliseconds(seconds) {
-    return Math.round(seconds * 1000) + " ms"
+    return Fmt.Format.seconds(seconds)
 }
 
 // Knob value text where the engine's generic format reads poorly.

@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import "NovaContract.js" as Contract
+import Oscillate.Format
 
 // The MATRIX page (NOVA-UI-12): one row per route, including those made by
 // dragging. Source, aux source (a multiplier), amount (bipolar bar, the
@@ -298,7 +299,7 @@ NovaCard {
             Text {
                 x: amountBar.x + amountBar.width + matrix.panel.theme.spaceMd
                 anchors.verticalCenter: parent.verticalCenter
-                text: (row.amount < 0 ? "−" : "") + Math.abs(Math.round(row.amount * 100)) + "%"
+                text: Format.fraction(row.amount)
                 color: matrix.panel.theme.vi
                 font.family: matrix.panel.theme.mono
                 font.pixelSize: matrix.panel.theme.typeSmall
@@ -429,7 +430,7 @@ NovaCard {
             Text {
                 x: scaleBar.x + scaleBar.width + matrix.panel.theme.spaceMd
                 anchors.verticalCenter: parent.verticalCenter
-                text: Math.round(row.modelData.scale * 100) + "%"
+                text: Format.fraction(row.modelData.scale)
                 color: matrix.panel.theme.dim
                 font.family: matrix.panel.theme.mono
                 font.pixelSize: matrix.panel.theme.typeSmall

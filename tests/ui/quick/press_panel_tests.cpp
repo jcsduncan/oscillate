@@ -449,10 +449,10 @@ void telemetry_gives_the_strip_the_reduction_and_its_band() {
           "Press's strip is a reduction view on its panel's range");
   require(strip.value(QStringLiteral("text")).toString() == QStringLiteral("−9.0 dB · max −9.0"),
           "now and the largest: " + strip.value(QStringLiteral("text")).toString().toStdString());
-  require(strip.value(QStringLiteral("lead")).toInt() == static_cast<int>(top_band) &&
-              strip.value(QStringLiteral("lead_text")).toString() == QStringLiteral("8.4–20 kHz"),
-          "the top band leads: " +
-              strip.value(QStringLiteral("lead_text")).toString().toStdString());
+  require(
+      strip.value(QStringLiteral("lead")).toInt() == static_cast<int>(top_band) &&
+          strip.value(QStringLiteral("lead_text")).toString() == QStringLiteral("8.43–20.0 kHz"),
+      "the top band leads: " + strip.value(QStringLiteral("lead_text")).toString().toStdString());
 }
 
 } // namespace

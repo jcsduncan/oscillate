@@ -178,7 +178,7 @@ void panel_covers_every_parameter() {
           "the ceiling reads in large");
   require(text_of(*panel, QStringLiteral("ceilingLatency")) ==
               QStringLiteral("LOOKAHEAD LIMITER · ") +
-                  controller.display(QStringLiteral("ceiling.lookahead")).toUpper() +
+                  controller.display(QStringLiteral("ceiling.lookahead")) +
                   QStringLiteral(" LATENCY"),
           "the header names the latency");
 }
@@ -442,7 +442,7 @@ void telemetry_gives_the_strip_the_reduction_and_its_band() {
   require(strip.value(QStringLiteral("text")).toString() == QStringLiteral("−2.3 dB · max −4.1"),
           "now and the largest: " + strip.value(QStringLiteral("text")).toString().toStdString());
   require(strip.value(QStringLiteral("lead")).toInt() == static_cast<int>(kick_band) &&
-              strip.value(QStringLiteral("lead_text")).toString() == QStringLiteral("47–112 Hz"),
+              strip.value(QStringLiteral("lead_text")).toString() == QStringLiteral("47.4–112 Hz"),
           "the kick's band leads: " +
               strip.value(QStringLiteral("lead_text")).toString().toStdString());
   require(strip.value(QStringLiteral("bands")).toList().size() ==

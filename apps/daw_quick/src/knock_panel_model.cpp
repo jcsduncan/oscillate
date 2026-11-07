@@ -1,6 +1,7 @@
 #include "knock_panel_model.hpp"
 #include "knock_patterns_model.hpp"
 
+#include "oscillate/foundation/value_text.hpp"
 #include "oscillate/native_dsp/synth/knock.hpp"
 
 #include <QVariantMap>
@@ -91,7 +92,8 @@ QString knock_key_name(int key) {
   if (key < 0)
     return {};
   return text(note_names[static_cast<std::size_t>(key % semitones_per_octave)]) +
-         QString::number(key / semitones_per_octave + octave_of_key_zero);
+         QString::fromStdString(
+             foundation::format_number(key / semitones_per_octave + octave_of_key_zero, 0));
 }
 
 KnockPanelModel::KnockPanelModel(NativeSynthDeviceController& controller, std::uint32_t sample_rate,

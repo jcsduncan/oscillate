@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Contour device panel: a precision lab instrument in graphite and
@@ -645,7 +646,7 @@ Rectangle {
             Caption {
                 anchors.right: parent.right
                 y: panel.theme.meterCaptionY
-                text: meter.level > 0 ? Math.round(meter.level * meter.rangeDb - meter.rangeDb) + " dB" : "−∞"
+                text: Format.decibels(meter.level > 0 ? meter.level * meter.rangeDb - meter.rangeDb : -Infinity)
                 color: meter.level > 0 ? panel.theme.envelope : panel.theme.inkFaint
                 font.family: panel.theme.mono
             }
@@ -756,7 +757,7 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.rightMargin: panel.theme.envelopeLabelInset
                 y: response.height - panel.theme.envelopeLabelLift
-                text: "RELEASE · " + Math.round(response.spanMs) + " ms"
+                text: "RELEASE · " + Format.milliseconds(response.spanMs)
                 color: panel.theme.envelopeLabelInk
                 font.pixelSize: panel.theme.envelopeLabelSize
                 font.bold: true

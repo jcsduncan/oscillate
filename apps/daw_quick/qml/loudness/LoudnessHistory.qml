@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The loudness history: short-term as a filled teal trace and momentary as
 // a fine pale line over the last `seconds` (10 values a second, newest on
@@ -72,7 +73,7 @@ Item {
             width: history.px - history.theme.spaceSm
             y: history.yOf(history.target + label.lu) - history.theme.scaleLabelLift
             horizontalAlignment: Text.AlignRight
-            text: Math.round(history.target + label.lu)
+            text: Format.number(history.target + label.lu, 0)
             color: label.lu === 0 ? history.theme.accent : history.theme.inkFaint
             font.family: history.theme.mono
             font.pixelSize: history.theme.typeCaption
@@ -88,7 +89,7 @@ Item {
             readonly property real age: history.seconds * (when.last - when.index) / when.last
             x: history.px + history.pw * when.index / when.last - (when.index === when.last ? width : when.index === 0 ? 0 : width / 2)
             y: history.py + history.ph + history.theme.timeLabelGap
-            text: when.age === 0 ? "NOW" : "−" + Math.round(when.age) + " s"
+            text: when.age === 0 ? "NOW" : Format.quantity(-when.age, "s", 0)
             color: history.theme.inkFaint
             font.family: history.theme.mono
             font.pixelSize: history.theme.typeCaption

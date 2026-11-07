@@ -182,7 +182,7 @@ void the_display_reads_each_wave() {
   require(text_of(*panel, QStringLiteral("signalBig")) == QStringLiteral("1.000") &&
               text_of(*panel, QStringLiteral("signalBigUnit")) == QStringLiteral("kHz"),
           "1 kHz: " + text_of(*panel, QStringLiteral("signalBig")).toStdString());
-  require(text_of(*panel, QStringLiteral("signalSub")) == QStringLiteral("B5 +21¢"),
+  require(text_of(*panel, QStringLiteral("signalSub")) == QStringLiteral("B5 +21 ct"),
           "1 kHz is B5 +21 cents: " + text_of(*panel, QStringLiteral("signalSub")).toStdString());
   require(text_of(*panel, QStringLiteral("signalLevel")) == QStringLiteral("−18.0") &&
               text_of(*panel, QStringLiteral("signalLevelKind")) == QStringLiteral("dBFS PEAK"),
@@ -196,7 +196,7 @@ void the_display_reads_each_wave() {
   controller.set_value(QStringLiteral("signal.frequency"), 40.0);
   QCoreApplication::processEvents();
   require(text_of(*panel, QStringLiteral("signalBig")) == QStringLiteral("40.00") &&
-              text_of(*panel, QStringLiteral("signalSub")) == QStringLiteral("D♯1 +49¢"),
+              text_of(*panel, QStringLiteral("signalSub")) == QStringLiteral("D♯1 +49 ct"),
           "40 Hz: " + text_of(*panel, QStringLiteral("signalSub")).toStdString());
 
   // Noise: its colour, and the level as RMS.
@@ -249,7 +249,7 @@ void the_sweep_follows_the_telemetry() {
   require(wait_for_text(*panel, QStringLiteral("signalBig"), QStringLiteral("1.234")),
           "the live frequency: " + text_of(*panel, QStringLiteral("signalBig")).toStdString());
   require(text_of(*panel, QStringLiteral("signalSub")) ==
-              QStringLiteral("D♯6 −15¢  ·  25% OF 10.0 s"),
+              QStringLiteral("D♯6 −15 ct  ·  25 % OF 10.0 s"),
           "its note and progress: " + text_of(*panel, QStringLiteral("signalSub")).toStdString());
   auto* bar = item(*panel, QStringLiteral("signalProgress"));
   require(std::fabs(bar->width() - (bar->parentItem()->width() - 2) * 0.25) < 1e-3,

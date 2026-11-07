@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The transfer screen: output level against a steady input level, from
 // -60 to 0 dBFS in and -60 to +12 dB out at one scale, through the
@@ -173,7 +174,7 @@ Rectangle {
             required property int modelData
             x: Math.min(view.xOf(modelData) - implicitWidth / 2, view.plotX + view.plotW - implicitWidth)
             y: view.plotY + view.plotH + view.theme.scaleGap
-            text: modelData === 0 ? "0" : "−" + (-modelData)
+            text: Format.number(modelData, 0)
             color: modelData === 0 ? view.theme.inkDim : view.theme.inkFaint
             font.family: view.theme.mono
             font.pixelSize: view.theme.typeCaption
@@ -185,7 +186,7 @@ Rectangle {
             required property int modelData
             x: view.plotX - implicitWidth - view.theme.scaleSideGap
             y: view.yOf(modelData) - implicitHeight / 2
-            text: modelData > 0 ? "+" + modelData : modelData === 0 ? "0" : "−" + (-modelData)
+            text: Format.signed_number(modelData, 0)
             color: modelData === 0 ? view.theme.inkDim : view.theme.inkFaint
             font.family: view.theme.mono
             font.pixelSize: view.theme.typeCaption

@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Oscillate.Contracts
+import Oscillate.Format
 
 // Lens's hero: the spectrum on a log frequency axis (20 Hz to 20 kHz,
 // labelled decades) and a dB axis whose range and ceiling the panel sets.
@@ -95,21 +96,19 @@ Item {
                  cents: cents, midi: nearest }
     }
     function centsText(cents) {
-        return (cents > 0 ? "+" : cents < 0 ? "−" : "±") + Math.abs(cents) + "c"
+        return Format.cents(cents)
     }
     function noteText(hz) {
         const n = note(hz)
         return n.name === "" ? "" : n.name + " " + centsText(n.cents)
     }
     function hzText(hz) {
-        if (hz >= 10000)
-            return (hz / 1000).toFixed(1) + " kHz"
-        if (hz >= 1000)
-            return (hz / 1000).toFixed(2) + " kHz"
-        return hz >= 100 ? Math.round(hz) + " Hz" : hz.toFixed(1) + " Hz"
+        return Format.hertz(hz)
     }
+    // Levels at or below silentDb read as silence.
+    readonly property real silentDb: -199
     function dbText(db) {
-        return db <= -199 ? "−∞" : (db > 0.05 ? "+" : db < -0.05 ? "−" : "") + Math.abs(db).toFixed(1) + " dB"
+        return Format.signed_decibels(db <= silentDb ? -Infinity : db)
     }
     function readoutAt(j, hz) {
         let text = hzText(hz) + "   " + noteText(hz)
@@ -213,7 +212,7 @@ Item {
                 ctx.lineTo(right, y)
                 ctx.stroke()
                 ctx.fillStyle = db === 0 ? t.inkDim : t.gridText
-                ctx.fillText(String(db), left - t.spaceSm, y)
+                ctx.fillText(Format.number(db, 0), left - t.spaceSm, y)
             }
 
             // The overlay first, so the live curve reads over it.
@@ -327,7 +326,7 @@ Item {
                 ctx.font = t.typeCaption + "px '" + t.mono + "'"
                 const range = spectrum.differenceRange
                 for (const d of [range, range / 2, 0, -range / 2, -range]) {
-                    ctx.fillText((d > 0 ? "+" : d < 0 ? "−" : "") + Math.abs(d), right + t.spaceSm, spectrum.yOfDifference(d))
+                    ctx.fillText(Format.signed_number(d, 0), right + t.spaceSm, spectrum.yOfDifference(d))
                 }
                 ctx.fillText("Δ dB", right + t.spaceSm, top + t.spaceXs)
             }

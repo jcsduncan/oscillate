@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Oscillate.Contracts
+import Oscillate.Format
 import "../devicekit" as Kit
 import "../shell" as Shell
 import "AnvilMath.js" as AnvilMath
@@ -203,7 +204,7 @@ Rectangle {
         if (gestureName !== "")
             return gestureName + " · " + gestureValue
         return curve.hoverText !== "" ? curve.hoverText
-            : "Kick " + Math.round(kickSeconds * 1000) + " ms"
+            : "Kick " + Format.seconds(kickSeconds)
     }
 
     function tuneToKey() {
@@ -229,7 +230,7 @@ Rectangle {
     }
     readonly property var transientMedia: doc.media_revision >= 0 ? doc.media("click") : ({})
     readonly property string transientName: transientMedia.kind === "managed"
-        ? "Your sound · " + Math.round((transientMedia.frames || 0) / Math.max(1, transientMedia.sample_rate || fallbackSampleRate) * 1000) + " ms"
+        ? "Your sound · " + Format.seconds((transientMedia.frames || 0) / Math.max(1, transientMedia.sample_rate || fallbackSampleRate))
         : "None yet: drop a WAV here, or type its path"
 
     readonly property var layers: [
@@ -428,7 +429,7 @@ Rectangle {
                 x: panel.tailDetailX
                 y: panel.tailKeyY
                 width: noteCard.width - x - panel.tailDetailRight
-                text: (panel.tail.cents >= 0 ? "+" : "") + panel.tail.cents + " ct"
+                text: Format.cents(panel.tail.cents)
                     + (panel.songScale.length === 0 ? " · no song key" : panel.tailInKey ? " · in key" : " · off key")
                 color: panel.tailTuned ? panel.theme.inKey : panel.theme.inkDim
                 font.family: panel.theme.mono
@@ -475,8 +476,8 @@ Rectangle {
                 Label { text: "PEAK" }
                 Text {
                     objectName: "anvilPeak"
-                    text: (panel.frame.length > 3 ? panel.livePeakDb
-                           : panel.anvil !== null ? panel.anvil.peak_db : panel.silentDb).toFixed(1) + " dB"
+                    text: Format.decibels(panel.frame.length > 3 ? panel.livePeakDb
+                           : panel.anvil !== null ? panel.anvil.peak_db : panel.silentDb)
                     color: panel.theme.ink
                     font.family: panel.theme.mono
                     font.pixelSize: panel.theme.typeLabel
@@ -683,7 +684,7 @@ Rectangle {
         Label {
             id: beatLabel
             y: curve.y + curve.height + panel.theme.spaceLg
-            text: "ONE BEAT AT " + Math.round(panel.tempo) + " BPM"
+            text: "ONE BEAT AT " + Format.number(panel.tempo, 0) + " BPM"
         }
         Text {
             x: beatLabel.implicitWidth + panel.theme.spaceLg

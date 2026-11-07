@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Press device panel: a studio bus compressor in warm graphite and
@@ -26,6 +27,8 @@ Rectangle {
     readonly property int revision: controller.revision
     // Under this a meter reads silence.
     readonly property real floorDb: -60
+    // Bare level readouts (no unit beside them) and the ratio: one decimal.
+    readonly property int levelDecimals: 1
 
     readonly property bool playing: live.live === true
     readonly property var inPeak: playing ? live.input_peak : [-200, -200]
@@ -51,13 +54,9 @@ Rectangle {
 
     // ---- Formatting ------------------------------------------------------------------
 
-    function signed(value, digits) {
-        const text = Math.abs(value).toFixed(digits)
-        const tiny = 0.5 * Math.pow(10, -digits)
-        return value < -tiny ? "−" + text : value > tiny ? "+" + text : text
-    }
+    // A bare level, −∞ at the floor.
     function dbText(db) {
-        return db <= floorDb ? "−∞" : signed(db, 1)
+        return Format.signed_number(db <= floorDb ? -Infinity : db, levelDecimals)
     }
     function louder(pair) {
         return Math.max(pair[0], pair[1])
@@ -77,8 +76,8 @@ Rectangle {
     function summary() {
         if (ratio <= 1.0001)
             return "1:1 · NO COMPRESSION"
-        return ratio.toFixed(1) + ":1 ABOVE " + signed(threshold, 1) + " DB"
-            + (knee > 0 ? " · " + knee.toFixed(1) + " DB KNEE" : " · HARD KNEE")
+        return Format.number(ratio, levelDecimals) + ":1 ABOVE " + Format.signed_decibels(threshold)
+            + (knee > 0 ? " · " + Format.decibels(knee) + " KNEE" : " · HARD KNEE")
     }
 
     component Caption: Text {
@@ -319,7 +318,7 @@ Rectangle {
         id: reductionPlate
         theme: panel.theme
         title: "REDUCTION"
-        note: panel.playing ? "HELD 1 S" : ""
+        note: panel.playing ? "HELD 1 s" : ""
         noteColor: panel.theme.live
         x: transferPlate.x + transferPlate.width + panel.gap
         y: panel.rowAY
@@ -337,7 +336,7 @@ Rectangle {
             objectName: "pressReduction"
             anchors.horizontalCenter: parent.horizontalCenter
             y: panel.theme.reductionValueY
-            text: panel.playing ? (panel.reductionDb < 0.05 ? "0.0" : "−" + panel.reductionDb.toFixed(1)) : "—"
+            text: panel.playing ? Format.number(-panel.reductionDb, panel.levelDecimals) : "—"
             color: !panel.playing ? panel.theme.inkFaint
                 : panel.reductionDb < 0.05 ? panel.theme.inkDim : panel.theme.reduction
             font.family: panel.theme.sans
@@ -347,7 +346,7 @@ Rectangle {
         Caption {
             anchors.horizontalCenter: parent.horizontalCenter
             y: panel.theme.reductionCaptionY
-            text: "DB GAIN REDUCTION"
+            text: "dB GAIN REDUCTION"
         }
     }
 

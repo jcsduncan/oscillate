@@ -294,8 +294,8 @@ void the_forge_goes_live() {
           "the input's peak rides the curve");
   require(text_of(*panel, QStringLiteral("forgeCurveCaption")).startsWith(QStringLiteral("LIVE")),
           "the caption says live");
-  require(text_of(*panel, QStringLiteral("forgeMeterValue:in")) == QStringLiteral("-12.0") &&
-              text_of(*panel, QStringLiteral("forgeMeterValue:out")) == QStringLiteral("-14.0"),
+  require(text_of(*panel, QStringLiteral("forgeMeterValue:in")) == QStringLiteral("−12.0") &&
+              text_of(*panel, QStringLiteral("forgeMeterValue:out")) == QStringLiteral("−14.0"),
           "the meters read in dBFS");
   require(text_of(*panel, QStringLiteral("forgeMakeup")) == QStringLiteral("−6.5 dB"),
           "the running makeup shows");

@@ -286,7 +286,7 @@ void readings_decode_and_silence_shows_as_dashes() {
           "momentary and its maximum");
   require(text_of(*panel, QStringLiteral("loudnessRange")) == QStringLiteral("5.3"), "the range");
   require(text_of(*panel, QStringLiteral("loudnessTruePeak")) == QStringLiteral("−1.6") &&
-              text_of(*panel, QStringLiteral("loudnessTruePeakSub")) == QStringLiteral("3 S −2.0"),
+              text_of(*panel, QStringLiteral("loudnessTruePeakSub")) == QStringLiteral("3 s −2.0"),
           "true peak, overall and recent");
   require(text_of(*panel, QStringLiteral("loudnessPsr")) == QStringLiteral("12.2") &&
               text_of(*panel, QStringLiteral("loudnessPlr")) == QStringLiteral("13.0"),

@@ -1,5 +1,6 @@
 #include "device_strip_view.hpp"
 
+#include "oscillate/foundation/value_text.hpp"
 #include "oscillate/native_dsp/effects/ceiling.hpp"
 #include "oscillate/native_dsp/effects/lens.hpp"
 #include "oscillate/native_dsp/effects/loudness.hpp"
@@ -20,33 +21,32 @@ namespace {
 
 namespace fx = native_dsp::effects;
 
-constexpr QChar minus{0x2212};
+namespace text = foundation;
+
 constexpr QChar en_dash{0x2013};
 constexpr QChar em_dash{0x2014};
 constexpr int one_decimal = 1;
 constexpr int two_decimals = 2;
 constexpr double kilo = 1'000.0;
-// Kilohertz under this keep a decimal ("3.6 kHz"), over it none ("20 kHz").
-constexpr double whole_kilohertz_from = 10'000.0;
 
 // Between two readings: " · ".
 QString separator() { return QStringLiteral(" \u00b7 "); }
 
-// Callers pass the named decimal constants.
+// Numbers through the display formatter. Callers pass the named decimal
+// constants.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 QString number(double value, int decimals) {
-  return QString::number(value, 'f', decimals).replace(QLatin1Char('-'), minus);
+  return QString::fromStdString(text::format_number(value, decimals));
 }
 
+// A frequency's number in the unit hz_text gives it, for the low end of a
+// range that shares the high end's unit.
 QString hz_part(double hz) {
-  if (hz < kilo)
-    return QString::number(std::lround(hz));
-  return hz < whole_kilohertz_from ? QString::number(hz / kilo, 'f', one_decimal)
-                                   : QString::number(std::lround(hz / kilo));
+  return QString::fromStdString(text::format_number(hz < kilo ? hz : hz / kilo));
 }
 
 QString hz_text(double hz) {
-  return hz_part(hz) + (hz < kilo ? QStringLiteral(" Hz") : QStringLiteral(" kHz"));
+  return QString::fromStdString(text::format_quantity(hz, text::hertz_unit));
 }
 
 QVariantList pair(std::span<const float> frame, std::size_t at) {
@@ -153,7 +153,8 @@ QVariantMap loudness(std::span<const float> frame, double target, double ceiling
 QString DeviceStripView::signed_db(double db) {
   if (std::fabs(db) < strip_view::unchanged_db)
     return number(0.0, one_decimal);
-  return (db > 0.0 ? QStringLiteral("+") : QString()) + number(db, one_decimal);
+  return QString::fromStdString(
+      text::format_number(db, one_decimal, text::ValueSign::explicit_plus));
 }
 
 QString DeviceStripView::band_text(std::size_t band) {

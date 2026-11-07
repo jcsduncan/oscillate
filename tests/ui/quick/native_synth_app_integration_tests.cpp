@@ -1,5 +1,6 @@
 #include "native_synth_automation_controller.hpp"
 #include "native_synth_device_controller.hpp"
+#include "panel_text_checks.hpp"
 #include "project_bridge.hpp"
 
 #include "../../native_dsp/concert_test_library.hpp"
@@ -519,10 +520,12 @@ void all_registered_panels_open_in_the_daw() {
     bridge.select_native_instrument(track_id, id);
     QCoreApplication::processEvents();
     const auto panel_name = id + QStringLiteral("Panel");
-    const auto* panel = window->findChild<QObject*>(panel_name);
+    auto* panel = qobject_cast<QQuickItem*>(window->findChild<QObject*>(panel_name));
     require(panel != nullptr && panel->property("visible").toBool() &&
                 bridge.native_synth_controller() != nullptr,
             ("registered synth panel did not open in the DAW: " + id.toStdString()).c_str());
+    // Every value the panel shows follows the display formatter.
+    oscillate::test::panel_text::require_formatted_values(panel, id.toStdString());
   }
 }
 
@@ -931,6 +934,7 @@ void live_notes_monitor_through_the_graph_while_stopped() {
 int main(int argc, char** argv) {
   QGuiApplication application(argc, argv);
   try {
+    oscillate::test::panel_text::rules_catch_known_mistakes();
     // Concert plays the synthetic library unless a manual run points at an
     // existing project, which plays the installed one.
     if (!qEnvironmentVariableIsSet("OSCILLATE_CONCERT_PROJECT")) {

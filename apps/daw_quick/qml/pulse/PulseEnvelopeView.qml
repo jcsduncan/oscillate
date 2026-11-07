@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import "../devicekit" as Kit
+import Oscillate.Format
 
 // The selected pad's amplitude over time, from the Pulse kernel's envelope
 // laws (controller.pad_envelope), drawn on the display strip's LCD with the
@@ -28,7 +29,7 @@ Kit.EnvelopeView {
     Accessible.description: "Falls 60 dB in " + controller.display(decayId)
 
     function timeText(s) {
-        return s < 1 ? Math.round(s * 1000) + " ms" : s.toFixed(2) + " s"
+        return Format.seconds(s)
     }
 
     Text {

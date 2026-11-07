@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The glue compressor's gain-reduction meter. While the synth is running the
 // segments light down from the top with the live reduction (ADR-0037), 2 dB
@@ -27,8 +28,8 @@ Item {
     implicitHeight: theme.glueMeterHeight
     Accessible.role: Accessible.Indicator
     Accessible.name: "Glue gain reduction"
-    Accessible.description: "Threshold " + threshold.toFixed(1) + " dB, reducing "
-        + reduction.toFixed(1) + " dB"
+    Accessible.description: "Threshold " + Format.decibels(threshold) + ", reducing "
+        + Format.decibels(reduction)
 
     Text {
         anchors.horizontalCenter: parent.horizontalCenter

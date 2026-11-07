@@ -543,7 +543,7 @@ void telemetry_reaches_the_editor() {
   require(QTest::qWaitFor(
               [&] {
                 return text_of(*panel, QStringLiteral("pumpGainReadout")) ==
-                       QStringLiteral("−0.0 dB");
+                       QStringLiteral("0.0 dB");
               },
               1500),
           "no telemetry: the readout rests");

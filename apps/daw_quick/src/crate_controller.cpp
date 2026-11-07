@@ -1,6 +1,7 @@
 #include "crate_controller.hpp"
 
 #include "oscillate/application/crate_chops.hpp"
+#include "oscillate/foundation/value_text.hpp"
 #include "oscillate/native_dsp/synth/crate.hpp"
 
 #include <QApplication>
@@ -104,7 +105,8 @@ QString note_name(int key) {
   if (key < 0)
     return {};
   return text(note_names[static_cast<std::size_t>(key % semitones_per_octave)]) +
-         QString::number(key / semitones_per_octave - octave_offset);
+         QString::fromStdString(
+             foundation::format_number(key / semitones_per_octave - octave_offset, 0));
 }
 
 } // namespace

@@ -41,7 +41,7 @@ The process contains the UI, model, engine, and default plugin host. Plugin scan
 
 | Module | Owns | May depend on |
 | --- | --- | --- |
-| `foundation` | IDs, errors, bounded value types, diagnostics interfaces, the performance tracer | C++ standard library |
+| `foundation` | IDs, errors, bounded value types, display value text (the one number formatter every panel uses), diagnostics interfaces, the performance tracer | C++ standard library |
 | `timeline` | Beat/sample time, tempo and meter maps, conversions | `foundation` |
 | `automation` | Automation curve evaluation | `timeline` |
 | `project` | Tracks, clips, routing intent, commands, undo, versioned state | `foundation`, `timeline` |

@@ -1,4 +1,5 @@
 #include "native_synth_device_controller.hpp"
+#include "panel_text_checks.hpp"
 #include "project_bridge.hpp"
 
 #include "oscillate/application/project_session.hpp"
@@ -295,6 +296,7 @@ void effect_is_inserted_opened_edited_and_live(const effects::EffectEngine& effe
                 2'000),
             "the strip has a knob for " + parameter.toString().toStdString());
   }
+  oscillate::test::panel_text::require_formatted_values(card, id + " strip");
   // Each knob's label and value keep to the knob's own slot, elided and
   // clipped there, so no caption runs into its neighbour's.
   constexpr double layout_slack_px = 0.5;
@@ -414,6 +416,9 @@ void effect_is_inserted_opened_edited_and_live(const effects::EffectEngine& effe
           "the panel received no live telemetry");
   require(pump->peak > 0.0F || effect.generator || id == "trim",
           "the track is audible through the effect");
+  // Every value the playing panel shows follows the display formatter.
+  oscillate::test::panel_text::require_formatted_values(
+      find_item(window->contentItem(), panel_name), id);
 
   if (const auto shots = qEnvironmentVariable("EFFECT_APP_SCREENSHOT_DIR"); !shots.isEmpty()) {
     QDir().mkpath(shots);
@@ -432,6 +437,7 @@ void effect_is_inserted_opened_edited_and_live(const effects::EffectEngine& effe
 int main(int argc, char** argv) {
   QGuiApplication application(argc, argv);
   try {
+    oscillate::test::panel_text::rules_catch_known_mistakes();
     catalogue_lists_every_engine();
     const auto only = qEnvironmentVariable("EFFECT_APP_ONLY");
     for (const auto* effect : effects::engines()) {

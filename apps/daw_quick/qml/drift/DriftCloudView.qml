@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The grain cloud: buffer position across (the write head is "now" at the
 // right, four seconds ago at the left) and grain pitch up. While the synth
@@ -344,15 +345,15 @@ Rectangle {
             x: view.theme.axisLabelX
             y: canvas.y + canvas.height - (semitones - view.range[0]) / (view.range[1] - view.range[0]) * canvas.height
                 - view.theme.axisLabelLift
-            text: (semitones > 0 ? "+" : "") + semitones
+            text: Format.signed_number(semitones, 0)
             color: view.theme.inkFaint
             font.family: view.theme.mono
             font.pixelSize: view.theme.captionSize
         }
     }
     Repeater {
-        model: [{ s: view.bufferSeconds, text: view.bufferSeconds + " s AGO" },
-                { s: view.bufferSeconds / 2, text: view.bufferSeconds / 2 + " s" }, { s: 0, text: "NOW" }]
+        model: [{ s: view.bufferSeconds, text: Format.seconds(view.bufferSeconds) + " AGO" },
+                { s: view.bufferSeconds / 2, text: Format.seconds(view.bufferSeconds / 2) }, { s: 0, text: "NOW" }]
         delegate: Text {
             required property var modelData
             x: canvas.x + canvas.width - modelData.s / view.bufferSeconds * canvas.width

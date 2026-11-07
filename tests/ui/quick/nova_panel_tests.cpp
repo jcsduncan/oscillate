@@ -1329,7 +1329,7 @@ void drag_to_modulate_and_edit_the_route() {
   require(std::fabs(controller.value(QStringLiteral("nova.mod.0.amount")) - 0.3) < 1e-9,
           "the route's amount is 30 %");
   require(item(*panel, QStringLiteral("novaReadout"))->property("text").toString() ==
-              QStringLiteral("LFO 1 → CUTOFF 30%"),
+              QStringLiteral("LFO 1 → CUTOFF 30 %"),
           "the readout confirms the route");
   require(js_length(knob->property("routes")) == 1, "the knob shows its route");
 

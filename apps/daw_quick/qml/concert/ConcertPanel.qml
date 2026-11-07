@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import "../devicekit" as Kit
+import Oscillate.Format
 
 // The Concert device panel, "Concert black": a gloss-black lacquer case
 // with brass hardware and gold-leaf lettering, for the sampled grand
@@ -414,8 +415,8 @@ Rectangle {
                 visible: panel.ready
                 text: panel.ready
                     ? "Sixteen velocity layers, sampled every minor third, with key-release, "
-                      + "string-release and pedal recordings. " + panel.library.resident_mb.toFixed(0)
-                      + " MB stay in memory; the rest streams from disk."
+                      + "string-release and pedal recordings. " + Format.quantity(panel.library.resident_mb, "MB", 0)
+                      + " stay in memory; the rest streams from disk."
                     : ""
                 color: panel.theme.inkDim
                 font.pixelSize: panel.theme.typeSmall

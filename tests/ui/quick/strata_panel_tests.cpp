@@ -265,7 +265,7 @@ void telemetry_and_learn() {
               [&] {
                 return item(*panel, QStringLiteral("strataLearnProgress"))
                            ->property("text")
-                           .toString() == QStringLiteral("LISTENING 50%");
+                           .toString() == QStringLiteral("LISTENING 50 %");
               },
               1'000),
           "Learn's progress shows");

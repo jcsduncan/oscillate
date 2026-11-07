@@ -89,7 +89,7 @@ void edits_round_trip_through_the_adapter() {
   require(std::fabs(controller.value(cutoff) - expected) < 1e-6, "log knob midpoint");
   require(std::fabs(controller.normalised(cutoff) - 0.5) < 1e-9, "normalised round trip");
   require(controller.display(cutoff) == QStringLiteral("632 Hz"), "value is formatted");
-  require(controller.display_at(cutoff, 1.0) == QStringLiteral("20.00 kHz"),
+  require(controller.display_at(cutoff, 1.0) == QStringLiteral("20.0 kHz"),
           "previews format any position");
   require(controller.revision() > revision, "revision advances");
   require(adapter.submissions().size() == 1 &&

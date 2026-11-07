@@ -346,9 +346,8 @@ void counts_have_no_sign() {
   require(text_of(*panel, QStringLiteral("novaKnobValue:nova.osc.a.unison.voices")) ==
               QStringLiteral("1"),
           "unison voices are a count");
-  require(text_of(*panel, QStringLiteral("novaKnobValue:nova.osc.a.octave")) ==
-              QStringLiteral("+0"),
-          "an octave offset keeps its sign");
+  require(text_of(*panel, QStringLiteral("novaKnobValue:nova.osc.a.octave")) == QStringLiteral("0"),
+          "an octave offset at zero has no sign");
   panel->root->setProperty("page", 4);
   settle();
   require(text_of(*panel, QStringLiteral("novaKnobValue:nova.global.polyphony")) ==

@@ -346,7 +346,7 @@ void the_summary_says_what_trim_does() {
   controller.set_choice(QStringLiteral("trim.invert"), 2);
   controller.set_choice(QStringLiteral("trim.rotate"), 1);
   QCoreApplication::processEvents();
-  require(summary_of(*panel) == QStringLiteral("−4.5 DB · PAN R 30 · WIDTH 125% · Ø R · ROTATED"),
+  require(summary_of(*panel) == QStringLiteral("−4.5 dB · PAN R 30 · WIDTH 125 % · Ø R · ROTATED"),
           "moves are listed: " + summary_of(*panel).toStdString());
 }
 
