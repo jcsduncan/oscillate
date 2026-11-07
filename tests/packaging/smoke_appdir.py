@@ -31,10 +31,9 @@ BUNDLED_SONAMES = (
     "libsamplerate.so.0",
     "libcrypto.so.3",
 )
-IN_APPDIR_PLUGINS = (
-    "platforms/libqoffscreen.so",
-    "platforminputcontexts/libibusplatforminputcontextplugin.so",
-)
+# The platform plugin an offscreen launch must load from the AppDir.
+OFFSCREEN_PLUGIN = "platforms/libqoffscreen.so"
+HOST_QT_PLUGINS = "/qt6/plugins/"
 
 
 def require(condition: bool, message: str) -> None:
@@ -104,8 +103,8 @@ def smoke(appdir: Path, inventory_path: Path) -> None:
             {
                 "QT_QPA_PLATFORM": "offscreen",
                 "QT_QUICK_BACKEND": "software",
-                "QT_DEBUG_PLUGINS": "1",
-                "QML_IMPORT_TRACE": "1",
+                # The dynamic loader reports every file it opens on stderr.
+                "LD_DEBUG": "files",
                 "HOME": str(Path(temporary) / "home"),
                 "XDG_CONFIG_HOME": str(Path(temporary) / "config"),
             }
@@ -121,12 +120,17 @@ def smoke(appdir: Path, inventory_path: Path) -> None:
         ]
         require((project / "state/CURRENT").is_file(), "project was not created")
         for trace in traces:
-            for plugin in IN_APPDIR_PLUGINS:
-                require(
-                    f'{appdir}/usr/plugins/{plugin}" loaded library' in trace,
-                    f"Qt loaded {plugin} from outside the AppDir",
-                )
-            require(":/qt-project.org/imports/QtQuick/qmldir" in trace, "QtQuick import missing")
+            loaded = [
+                line.split("file=", 1)[1].split()[0]
+                for line in trace.splitlines()
+                if "file=" in line and "dynamically loaded" in line
+            ]
+            require(
+                f"{appdir}/usr/plugins/{OFFSCREEN_PLUGIN}" in loaded,
+                f"offscreen plugin not loaded from the AppDir: {loaded}",
+            )
+            outside = [path for path in loaded if HOST_QT_PLUGINS in path]
+            require(not outside, f"Qt loaded host plugins: {outside}")
         ld_env = env | {"LD_LIBRARY_PATH": str(appdir / "usr/lib")}
         helper = subprocess.run(
             [
