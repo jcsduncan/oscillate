@@ -106,9 +106,16 @@ A pull request to `main` runs these checks; they must pass before merging.
 `scripts/ci/changes.py` skips the build, Python and documentation jobs when
 a pull request changes none of their inputs; a skipped job counts as passed.
 
-- **Build and fast tests**: the Quick preset on Ubuntu 26.04, the fast
-  test tier without live devices, and the live/export parity gate
-  (`ctest --preset quick-parity`, [tests/README.md](tests/README.md#liveexport-parity-gate)).
+- **Build and fast tests** (the required check's name; it runs every tier
+  but `live`): the Quick preset on Ubuntu 26.04 is built once, then four
+  parallel jobs run the fast and slow tiers, split by the measured times in
+  `cmake/TestBudgets.cmake` (`scripts/ci/ctest_shards.py`), and a fifth runs
+  the live/export parity gate (`ctest --preset quick-parity`,
+  [tests/README.md](tests/README.md#liveexport-parity-gate)). The check's
+  summary lists the failing tests with their last output; each shard's
+  artifact holds the JUnit report and full logs. Tests listed in
+  `scripts/ci/quarantine.txt`, each with the open issue tracking its CI
+  failure, are left out until fixed.
 - **Core line coverage**: the `coverage` preset and
   `scripts/check-coverage.sh`, which fails below 90% line coverage of
   `src/` and `include/`; the report is uploaded to Codecov.
