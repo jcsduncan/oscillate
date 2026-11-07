@@ -3,6 +3,7 @@
 #include <QSettings>
 
 #include <algorithm>
+#include <cmath>
 
 namespace oscillate::quick {
 namespace {
@@ -27,8 +28,10 @@ WorkspaceLayoutController::WorkspaceLayoutController(QObject* parent) : QObject(
   context_panel_open_ = settings.value(context_open_key, false).toBool();
   instrument_window_width_ = window_size(settings.value(instrument_width_key, 0).toInt());
   instrument_window_height_ = window_size(settings.value(instrument_height_key, 0).toInt());
+  // A corrupt (non-finite) stored zoom falls back to 1.
+  const double stored_zoom = settings.value(nova_zoom_key, 1.0).toDouble();
   nova_zoom_ =
-      std::clamp(settings.value(nova_zoom_key, 1.0).toDouble(), smallest_zoom, largest_zoom);
+      std::clamp(std::isfinite(stored_zoom) ? stored_zoom : 1.0, smallest_zoom, largest_zoom);
 }
 
 void WorkspaceLayoutController::set_device_dock_height(int height) {
@@ -67,6 +70,8 @@ void WorkspaceLayoutController::set_instrument_window_height(int height) {
 }
 
 void WorkspaceLayoutController::set_nova_zoom(double zoom) {
+  if (!std::isfinite(zoom))
+    return;
   const auto bounded = std::clamp(zoom, smallest_zoom, largest_zoom);
   if (bounded == nova_zoom_)
     return;

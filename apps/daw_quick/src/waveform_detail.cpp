@@ -18,6 +18,9 @@ namespace {
 
 constexpr std::size_t maximum_columns = 4096;
 constexpr std::size_t read_frames = 16'384;
+// Open readers the worker keeps (each holds a descriptor and decode state);
+// past this the cache starts again, so a long session cannot exhaust them.
+constexpr std::size_t max_open_readers = 32;
 
 } // namespace
 
@@ -81,6 +84,8 @@ WaveformDetailWorker::WaveformDetailWorker() {
       }
       auto reader = readers.find(id);
       if (reader == readers.end()) {
+        if (readers.size() >= max_open_readers)
+          readers.clear();
         auto descriptor = store->open_verified_source(wanted.source, stopped);
         if (!descriptor) {
           unreadable();
