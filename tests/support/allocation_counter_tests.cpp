@@ -66,14 +66,14 @@ void nothrow_forms_are_counted_and_report_failure_as_null() {
   REQUIRE_TRUE(array == nullptr);
 }
 
-// std::stable_sort takes its buffer with the nothrow form and releases it with
+// std::ranges::stable_sort takes its buffer with the nothrow form and releases it with
 // the sized delete: the pairing the native DSP tests rely on.
 void stable_sort_buffer_is_counted() {
   std::vector<std::size_t> values(sort_values);
   for (std::size_t index = 0; index < values.size(); ++index)
     values[index] = values.size() - index;
-  REQUIRE_TRUE(allocations_of([&] { std::stable_sort(values.begin(), values.end()); }) > 0);
-  REQUIRE_TRUE(std::is_sorted(values.begin(), values.end()));
+  REQUIRE_TRUE(allocations_of([&] { std::ranges::stable_sort(values); }) > 0);
+  REQUIRE_TRUE(std::ranges::is_sorted(values));
 }
 
 } // namespace
