@@ -107,8 +107,10 @@ TrackRenderTask::run(std::function<bool(std::uint64_t, std::uint64_t)> progress)
   const int fd = ::open(target.value().c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
   if (fd < 0)
     return Result<TrackRender>::failure({ErrorCode::io_failure, "Cannot open the track render"});
-  return Result<TrackRender>::success(
-      TrackRender{fd, rendered.value().first_frame, snapshot_->revision, track_});
+  return Result<TrackRender>::success(TrackRender{
+      fd,
+      {.first_frame = rendered.value().first_frame, .origin_revision = snapshot_->revision},
+      track_});
 }
 
 Result<TrackRenderTask>
@@ -221,7 +223,7 @@ Result<project::TrackId> FreezeService::finish_track_bounce(persistence::StagedW
     sends.emplace(send.id, send_id.value());
     auto route = send;
     route.id = send_id.value();
-    operations.emplace_back(project::AddSendRoute{audio, std::move(route)});
+    operations.emplace_back(project::AddSendRoute{audio, route});
   }
 
   // Channel and send lanes follow the audio; device lanes stay with the

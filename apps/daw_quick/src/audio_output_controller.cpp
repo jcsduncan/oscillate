@@ -16,12 +16,21 @@ constexpr int poll_interval_ms = 50;
 constexpr double fallback_sample_rate = 48'000.0;
 constexpr double milliseconds_per_second = 1'000.0;
 
-const QString pipewire_backend = QStringLiteral("pipewire");
-const QString jack_backend = QStringLiteral("jack");
-const QString default_device = QStringLiteral("default");
+const QString& pipewire_backend() {
+  static const QString value = QStringLiteral("pipewire");
+  return value;
+}
+const QString& jack_backend() {
+  static const QString value = QStringLiteral("jack");
+  return value;
+}
+const QString& default_device() {
+  static const QString value = QStringLiteral("default");
+  return value;
+}
 
 [[nodiscard]] QVariantMap default_device_entry() {
-  return QVariantMap{{"serial", default_device}, {"name", QStringLiteral("System default")}};
+  return QVariantMap{{"serial", default_device()}, {"name", QStringLiteral("System default")}};
 }
 
 [[nodiscard]] bool lists_serial(const QVariantList& devices, const QString& serial) {
@@ -40,7 +49,7 @@ AudioOutputController::AudioOutputController(Host host,
       jack_factory_(std::move(jack_factory)), jack_server_probe_(std::move(jack_server_probe)),
       discovery_(discovery ? std::move(discovery)
                            : Discovery{[] { return audio_io::list_pipewire_sinks(); }}),
-      timer_(this), backend_(pipewire_backend),
+      timer_(this), backend_(pipewire_backend()),
       audio_device_status_(QStringLiteral("Discovering audio outputs")) {
   timer_.setInterval(poll_interval_ms);
   connect(&timer_, &QTimer::timeout, this, &AudioOutputController::poll);
@@ -54,15 +63,16 @@ AudioOutputController::AudioOutputController(Host host,
           ? saved_buffer
           : static_cast<int>(application::default_playback_buffer_frames);
   if (jack_playback_available() &&
-      settings.value(QStringLiteral("audioBackend"), pipewire_backend).toString() == jack_backend &&
+      settings.value(QStringLiteral("audioBackend"), pipewire_backend()).toString() ==
+          jack_backend() &&
       jack_server_probe_())
-    backend_ = jack_backend;
+    backend_ = jack_backend();
   selected_audio_device_ =
-      settings.value(QStringLiteral("audioOutputSerial"), default_device).toString();
-  if (selected_audio_device_ != default_device) {
+      settings.value(QStringLiteral("audioOutputSerial"), default_device()).toString();
+  if (selected_audio_device_ != default_device()) {
     bool valid = false;
     if (selected_audio_device_.toULongLong(&valid) == 0 || !valid)
-      selected_audio_device_ = default_device;
+      selected_audio_device_ = default_device();
   }
   audio_devices_.append(default_device_entry());
   refresh_audio_devices();
@@ -77,7 +87,7 @@ QVariantList AudioOutputController::buffer_frame_choices() {
   return choices;
 }
 
-bool AudioOutputController::jack() const { return backend_ == jack_backend; }
+bool AudioOutputController::jack() const { return backend_ == jack_backend(); }
 
 const application::PlaybackOutputFactory& AudioOutputController::factory() const {
   return jack() ? jack_factory_ : pipewire_factory_;
@@ -86,7 +96,7 @@ const application::PlaybackOutputFactory& AudioOutputController::factory() const
 std::optional<std::uint64_t> AudioOutputController::target_serial() const {
   bool valid_serial = false;
   const auto parsed_serial = selected_audio_device_.toULongLong(&valid_serial);
-  if (jack() || selected_audio_device_ == default_device || !valid_serial)
+  if (jack() || selected_audio_device_ == default_device() || !valid_serial)
     return std::nullopt;
   return static_cast<std::uint64_t>(parsed_serial);
 }
@@ -224,11 +234,11 @@ void AudioOutputController::select_audio_backend(const QString& backend) {
     report(QStringLiteral("Stop playback before changing audio backend"));
     return;
   }
-  if (backend != pipewire_backend && (backend != jack_backend || !jack_playback_available())) {
+  if (backend != pipewire_backend() && (backend != jack_backend() || !jack_playback_available())) {
     report(QStringLiteral("Audio backend is unavailable in this build"));
     return;
   }
-  if (backend == jack_backend && !jack_server_probe_()) {
+  if (backend == jack_backend() && !jack_server_probe_()) {
     report(QStringLiteral("No JACK server is running. Use PipeWire, or start "
                           "JACK before selecting it."));
     return;
@@ -238,13 +248,13 @@ void AudioOutputController::select_audio_backend(const QString& backend) {
   backend_ = backend;
   QSettings{}.setValue(QStringLiteral("audioBackend"), backend);
   host_.backend_changed();
-  report(backend == jack_backend
+  report(backend == jack_backend()
              ? QStringLiteral("JACK selected. Press Play; physical playback ports "
                               "connect automatically when available.")
              : QStringLiteral("PipeWire selected. Press Play to use %1.")
                    .arg(selected_audio_device_name()));
   host_.settings_changed();
-  if (backend == pipewire_backend)
+  if (backend == pipewire_backend())
     refresh_audio_devices();
 }
 

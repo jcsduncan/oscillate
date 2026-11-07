@@ -141,6 +141,8 @@ Item {
     signal addGroupRequested()
     signal addReturnRequested()
 
+    // Ctrl+A in the arrangement: every clip on every track.
+    function selectAllClips() { arrangement.selectAllClips() }
     function previewTrackHeight(trackId, height) {
         const next = Object.assign({}, trackResizePreview)
         next[trackId] = Math.max(Theme.trackRowMinHeight, Math.min(Theme.trackRowMaxHeight, Math.round(height)))

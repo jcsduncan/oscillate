@@ -32,7 +32,7 @@ namespace {
 
 [[nodiscard]] bool whole_tick(double value) {
   return std::isfinite(value) && value >= 0.0 &&
-         value <= static_cast<double>(std::numeric_limits<std::int64_t>::max() / 2) &&
+         value <= static_cast<double>(std::numeric_limits<std::int64_t>::max()) / 2.0 &&
          std::floor(value) == value;
 }
 
@@ -307,7 +307,10 @@ void FreezeController::finish() {
     emit changed();
   };
   const bool cancelled = job->cancel.load(std::memory_order_acquire);
+  // The worker sets the phase's result before it reports done.
   if (job->phase == Phase::render) {
+    if (!job->rendered)
+      return stop(QStringLiteral("%1 failed").arg(action()));
     auto& rendered = *job->rendered;
     if (cancelled)
       return stop(QStringLiteral("%1 cancelled").arg(action()));
@@ -325,8 +328,8 @@ void FreezeController::finish() {
     job->phase = Phase::stage;
     job->done.store(false, std::memory_order_release);
     try {
-      worker_ =
-          std::jthread([job, task = std::move(stage.value().task)](std::stop_token token) mutable {
+      worker_ = std::jthread(
+          [job, task = std::move(stage.value().task)](const std::stop_token& token) mutable {
             try {
               job->staged.emplace(std::move(task).run(token));
             } catch (const std::exception& error) {
@@ -341,6 +344,8 @@ void FreezeController::finish() {
     emit changed();
     return;
   }
+  if (!job->staged || !job->render)
+    return stop(QStringLiteral("%1 failed").arg(action()));
   auto& staged = *job->staged;
   if (cancelled)
     return stop(QStringLiteral("%1 cancelled").arg(action()));

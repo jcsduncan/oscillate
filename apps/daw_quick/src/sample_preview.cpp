@@ -197,7 +197,8 @@ struct SamplePreview::Stream {
 };
 
 SamplePreview::SamplePreview(ErrorSink error_sink)
-    : error_sink_(std::move(error_sink)), worker_([this](std::stop_token token) { run(token); }) {}
+    : error_sink_(std::move(error_sink)),
+      worker_([this](const std::stop_token& token) { run(token); }) {}
 
 SamplePreview::~SamplePreview() {
   worker_.request_stop();
@@ -236,11 +237,12 @@ void SamplePreview::report(std::string message) const {
     return;
   try {
     error_sink_(std::move(message));
-  } catch (const std::exception&) {
+    // A failing error sink has no one left to tell.
+  } catch (const std::exception&) { // NOLINT(bugprone-empty-catch)
   }
 }
 
-void SamplePreview::run(std::stop_token stop_token) noexcept {
+void SamplePreview::run(const std::stop_token& stop_token) noexcept {
   std::unique_ptr<Stream> stream;
   const auto halt = [&] {
     if (stream && stream->output)

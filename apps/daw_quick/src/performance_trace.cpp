@@ -65,6 +65,8 @@ PerformanceTrace::PerformanceTrace(QObject* parent, Writer writer)
   }
 }
 
+// finish() reports a failed save itself; only allocation can throw here.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 PerformanceTrace::~PerformanceTrace() {
   if (recording_ && !launch_path_.empty())
     finish(launch_path_);
@@ -162,7 +164,7 @@ void PerformanceTrace::finish(const std::filesystem::path& path) {
   recording_ = false;
   const auto failed = save_.start(
       0, [writer = writer_, path] { return writer(path); },
-      [](std::string what) {
+      [](const std::string& what) {
         return foundation::Result<std::size_t>::failure(
             {foundation::ErrorCode::internal, "Trace not saved: " + what});
       });
@@ -185,9 +187,11 @@ void PerformanceTrace::poll() {
     return;
   timer_.stop();
   auto finished = save_.take();
-  report(saving_path_, finished ? std::move(finished->result)
-                                : foundation::Result<std::size_t>::failure(
-                                      {foundation::ErrorCode::internal, "Trace not saved"}));
+  if (finished)
+    report(saving_path_, finished->result);
+  else
+    report(saving_path_, foundation::Result<std::size_t>::failure(
+                             {foundation::ErrorCode::internal, "Trace not saved"}));
 }
 
 void PerformanceTrace::wait_for_save() {

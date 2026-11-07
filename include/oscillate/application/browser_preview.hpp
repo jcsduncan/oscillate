@@ -32,8 +32,12 @@ enum class PreviewStyle : std::uint8_t { drums, percussion, bass, line, chord, t
 // short line for leads, plucks and mallets, a voiced chord for pads, keys
 // and pianos, and a long chord for textures. Category and preset name are
 // the preset's own words; matching ignores case.
-[[nodiscard]] PreviewStyle preview_style(std::string_view engine, std::string_view category,
-                                         std::string_view preset_name) noexcept;
+struct PresetWords {
+  std::string_view engine;
+  std::string_view category;
+  std::string_view preset_name;
+};
+[[nodiscard]] PreviewStyle preview_style(const PresetWords& sound) noexcept;
 
 // The phrase in time at `bpm` (clamped to 60..180, a preview's useful range),
 // at most two bars long. Notes are sorted by start; every key is in 0..127.

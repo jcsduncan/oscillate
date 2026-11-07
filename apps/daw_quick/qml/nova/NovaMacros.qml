@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import "../shell" as Shell
 
 // The macros (NOVA-UI-10), on the MACROS overview card: eight knobs named
 // by the preset in two rows, each with a ✥ handle to drag onto any knob.
@@ -58,13 +59,24 @@ Item {
                         objectName: "novaMacroName:" + (macro.index + 1)
                         visible: !nameEdit.visible
                         anchors.horizontalCenter: parent.horizontalCenter
-                        width: Math.min(implicitWidth, parent.width - card.panel.theme.macroNameRoom)
+                        width: parent.width - card.panel.theme.macroNameRoom
+                        height: parent.height
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                         text: macro.name
                         color: card.panel.theme.text
                         font.family: card.panel.theme.sans
                         font.pixelSize: card.nameSize
                         font.weight: Font.DemiBold
+                        // A long name steps down to the smallest type size to
+                        // show whole; a name longer still (the user's own) is
+                        // elided, its tooltip showing it whole.
+                        fontSizeMode: Text.HorizontalFit
+                        minimumPixelSize: card.panel.theme.typeMicro
                         elide: Text.ElideRight
+                        readonly property bool tipShowsWhole: true
+                        Accessible.name: macro.name
+                        Shell.Tip {}
                         MouseArea {
                             anchors.fill: parent
                             anchors.margins: -card.panel.theme.macroNameHit

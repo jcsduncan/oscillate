@@ -241,7 +241,7 @@ std::unique_ptr<native_inserts::NativeEffectStage> pump_stage(const KeyedPump& p
   const auto bass = std::ranges::find(snapshot.tracks, pump.bass, &project::Track::id);
   return take(native_inserts::NativeEffectStage::create(
       snapshot, pump.slot, std::get<project::NativeEffectPatch>(bass->effects.front().processor),
-      {}, pump_block_frames, std::numeric_limits<std::uint64_t>::max()));
+      {}, {.max_frames = pump_block_frames}));
 }
 
 // Unit input through the stage from the start, past the kick note.

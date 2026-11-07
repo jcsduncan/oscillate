@@ -254,6 +254,8 @@ void ProjectLifecycleController::present_recovery(
   host_.status(QStringLiteral("Choose a validated project state to open"));
 }
 
+// ProjectBridge forwards QML's positional call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void ProjectLifecycleController::choose_recovery(const QString& generation, const QString& kind) {
   if (recovery_choice_.isEmpty())
     return;
@@ -331,6 +333,8 @@ void ProjectLifecycleController::forget_project(const QString& path) {
   refresh_available_projects();
 }
 
+// ProjectBridge forwards QML's positional call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void ProjectLifecycleController::rename_project(const QString& path, const QString& new_name) {
   const auto entry = listed(path);
   if (!entry || !entry->value(QStringLiteral("inLibrary")).toBool()) {
@@ -410,11 +414,10 @@ void ProjectLifecycleController::save() {
   if (!result) {
     host_.status(
         QStringLiteral("Save failed: %1").arg(QString::fromStdString(result.error().message)));
-  } else if (session->saving().save_maintenance_warning()) {
-    host_.status(
-        QStringLiteral("Saved · revision %1 · Storage cleanup needs attention: %2")
-            .arg(host_.revision())
-            .arg(QString::fromStdString(session->saving().save_maintenance_warning()->message)));
+  } else if (const auto& warning = session->saving().save_maintenance_warning()) {
+    host_.status(QStringLiteral("Saved · revision %1 · Storage cleanup needs attention: %2")
+                     .arg(host_.revision())
+                     .arg(QString::fromStdString(warning->message)));
   } else {
     host_.status(QStringLiteral("Saved · revision %1").arg(host_.revision()));
   }

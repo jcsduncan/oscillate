@@ -19,8 +19,20 @@ Rectangle {
     readonly property bool nextNote: info.next_note === true
     readonly property bool hovered: area.containsMouse
 
+    // The width that shows the longest choice whole beside the chevron:
+    // what a dropdown is sized from.
+    readonly property real fitWidth: choices.reduce((widest, choice) =>
+        Math.max(widest, choiceMetrics.advanceWidth(String(choice))), 0)
+        + theme.dropdownTextX + theme.dropdownTextRight
+    FontMetrics {
+        id: choiceMetrics
+        font.family: dropdown.theme.dropdownFont
+        font.pixelSize: dropdown.fontSize
+        font.bold: dropdown.theme.dropdownBold
+    }
+
     objectName: theme.prefix + "Dropdown:" + parameterId
-    implicitWidth: theme.dropdownWidth
+    implicitWidth: Math.max(theme.dropdownWidth, Math.ceil(fitWidth))
     implicitHeight: theme.dropdownHeight
     radius: theme.dropdownRadius
     color: theme.dropdownFill(dropdown)

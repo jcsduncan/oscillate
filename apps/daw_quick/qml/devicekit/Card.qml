@@ -12,6 +12,19 @@ Rectangle {
     // as the title sits from the left.
     readonly property bool noteFits: note === ""
         || cardNote.x + cardNote.implicitWidth <= width - theme.cardTitleX
+    // The longest note the card shows (it may change while playing): the
+    // card's width is at least fitWidth, so that note ends inside it.
+    property string longestNote: note
+    readonly property real fitWidth: cardTitle.x + cardTitle.implicitWidth
+        + (longestNote === "" ? 0 : theme.cardNoteGap + noteMetrics.advanceWidth
+                                    + theme.cardNoteSpacing * longestNote.length)
+        + theme.cardTitleX
+    TextMetrics {
+        id: noteMetrics
+        text: card.longestNote
+        font.pixelSize: card.theme.cardNoteSize
+        font.bold: card.theme.cardNoteBold
+    }
     radius: theme.cardRadius
     color: theme.plate
     border.color: theme.plateEdge

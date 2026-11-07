@@ -59,9 +59,9 @@ foundation::Result<void> PedalService::remove_pedal_span(project::ClipId clip,
   if (!found)
     return foundation::Result<void>::failure(
         {foundation::ErrorCode::not_found, "MIDI clip not found: " + clip.to_string()});
-  return set_midi_pedal_lane(clip, pedal,
-                             application::remove_pedal_span(lane_points(*found, pedal), at.value,
-                                                            found->pattern_length.value));
+  return set_midi_pedal_lane(
+      clip, pedal,
+      application::remove_pedal_span(lane_points(*found, pedal), at, found->pattern_length.value));
 }
 
 foundation::Result<void> PedalService::move_pedal_span(project::ClipId clip,
@@ -80,7 +80,7 @@ foundation::Result<void> PedalService::move_pedal_span(project::ClipId clip,
   const auto length = found->pattern_length.value;
   for (const auto& span : pedal_spans(points, length)) {
     if (at.value >= span.start && at.value < span.end) {
-      const auto lifted = application::remove_pedal_span(points, at.value, length);
+      const auto lifted = application::remove_pedal_span(points, at, length);
       return set_midi_pedal_lane(clip, pedal,
                                  paint_pedal(lifted, start.value, end.value, span.depth, length));
     }
@@ -96,7 +96,8 @@ foundation::Result<void> PedalService::pedal_per_chord(project::ClipId clip) {
         {foundation::ErrorCode::not_found, "MIDI clip not found: " + clip.to_string()});
   // Re-press a thirty-second note after each chord lands.
   constexpr std::int64_t repress = timeline::ticks_per_quarter / 8;
-  auto points = application::pedal_per_chord(found->notes, found->pattern_length.value, repress);
+  auto points =
+      application::pedal_per_chord(found->notes, found->pattern_length.value, {.repress = repress});
   // Points kept after the pattern's end stay with it.
   for (const auto& point : lane_points(*found, project::MidiPedal::sustain)) {
     if (point.position >= found->pattern_length)

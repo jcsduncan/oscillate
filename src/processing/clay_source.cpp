@@ -4,6 +4,7 @@
 #include "oscillate/clay_dsp/limits.hpp"
 #include "oscillate/clay_dsp/render.hpp"
 #include "oscillate/foundation/file_io.hpp"
+#include "oscillate/foundation/stereo_span.hpp"
 #include "oscillate/media/audio_reader.hpp"
 #include "oscillate/media/cache_identity.hpp"
 
@@ -302,7 +303,9 @@ void put_le32(std::array<unsigned char, wav_header_bytes>& header, std::size_t a
 // Writes the render to a private temporary name and publishes it atomically,
 // so a reader only ever sees a complete file.
 [[nodiscard]] Result<void> write_render(int directory, const project::SourceRecord& rendered,
-                                        std::span<const float> left, std::span<const float> right) {
+                                        foundation::StereoSpan<const float> audio) {
+  const auto left = audio.left;
+  const auto right = audio.right;
   static std::atomic<std::uint64_t> serial{0};
   const auto temporary = ".tmp-" + std::to_string(::getpid()) + "-" +
                          std::to_string(serial.fetch_add(1, std::memory_order_relaxed)) + ".wav";
@@ -541,9 +544,11 @@ Result<clay_dsp::Take> analysed_take(media::CacheStore* cache, const project::So
     return Result<clay_dsp::Take>::failure(key.error());
   if (cache != nullptr) {
     // A cache error only means analysing again.
-    if (auto hit = cache->get(key.value()); hit && hit.value()) {
-      if (auto take = decode_take(*hit.value()))
-        return Result<clay_dsp::Take>::success(std::move(*take));
+    if (auto hit = cache->get(key.value())) {
+      if (const auto& bytes = hit.value()) {
+        if (auto take = decode_take(*bytes))
+          return Result<clay_dsp::Take>::success(std::move(*take));
+      }
     }
   }
   const Cancel cancel(stop);
@@ -665,7 +670,9 @@ Result<RenderedAudio> open_rendered(const persistence::ProjectStore& store,
           render_take(cache ? &*cache : nullptr, source, take, audio.value(), left, right, stop);
       !rendered)
     return Result<RenderedAudio>::failure(rendered.error());
-  if (auto written = write_render(directory.value().get(), record.value(), left, right); !written)
+  if (auto written =
+          write_render(directory.value().get(), record.value(), {.left = left, .right = right});
+      !written)
     return Result<RenderedAudio>::failure(written.error());
   auto published = open_published(directory.value().get(), record.value());
   if (!published)

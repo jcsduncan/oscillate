@@ -1,5 +1,6 @@
 #include "native_synth_automation_controller.hpp"
 #include "native_synth_device_controller.hpp"
+#include "panel_fit_checks.hpp"
 #include "panel_text_checks.hpp"
 #include "project_bridge.hpp"
 
@@ -536,6 +537,9 @@ void all_registered_panels_open_in_the_daw() {
             ("registered synth panel did not open in the DAW: " + id.toStdString()).c_str());
     // Every value the panel shows follows the display formatter.
     oscillate::test::panel_text::require_formatted_values(panel, id.toStdString());
+    // As the effects' app contract checks: every label shows whole, and no
+    // text is drawn over other text or clipped.
+    oscillate::test::panel_fit::require_text_fits(panel, id.toStdString());
   }
 }
 

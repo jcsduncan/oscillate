@@ -149,9 +149,9 @@ Rectangle {
     readonly property real velocityX: 780
     readonly property real lockRuleX: 940
     readonly property real lockX: 960
-    readonly property real lockWidth: 170
+    // Wide enough for the Lock choice's longest label on each of its tiles.
+    readonly property real lockWidth: Math.max(theme.lockMinWidth, lockChoice.fitWidth)
     readonly property real lastHitRight: 18
-    readonly property real lastHitWidth: 240
 
     // A curve gesture's readout, until a control is touched again.
     property string gestureName: ""
@@ -1053,6 +1053,7 @@ Rectangle {
             spacing: panel.theme.spaceXs
             Label { text: "LOCK" }
             Seg {
+                id: lockChoice
                 parameterId: "anvil.lock"
                 width: parent.width
                 labels: ["OFF", "BASS NOTE", "KEEP TONE"]
@@ -1067,10 +1068,10 @@ Rectangle {
             }
         }
         Column {
-            anchors.right: parent.right
-            anchors.rightMargin: panel.lastHitRight
+            // The last hit takes the row's room after Lock.
+            x: panel.lockX + panel.lockWidth + panel.theme.lastHitGap
             y: panel.masterCaptionY
-            width: panel.lastHitWidth
+            width: parent.width - panel.lastHitRight - x
             spacing: panel.theme.spaceSm
             Label { text: "LAST HIT" }
             Text {

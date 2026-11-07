@@ -233,7 +233,7 @@ constexpr int confirmed_sub_octaves = 2;
 // The semitones each sounding source of the track's built-in instrument
 // moves the played key by ({0} for an engine that sounds at the key).
 [[nodiscard]] std::vector<double> source_offsets(const project::Track& track) {
-  const std::vector<double> at_key{0.0};
+  std::vector<double> at_key{0.0};
   const auto* patch = std::get_if<project::NativeInstrumentPatch>(&track.instrument_source);
   if (patch == nullptr)
     return at_key;
@@ -539,7 +539,10 @@ std::vector<BarEnergy> bar_energy(const project::Snapshot& snapshot, const mix::
 
 } // namespace
 
-double lowered_ceiling_db(std::optional<double> current, double target, double true_peak) noexcept {
+double lowered_ceiling_db(const CeilingReading& reading) noexcept {
+  const auto& current = reading.current;
+  const double target = reading.target;
+  const double true_peak = reading.true_peak;
   if (!current)
     return target - ceiling_true_peak_margin_db;
   // What the master measured over the limiter's ceiling (peaks between
@@ -738,6 +741,7 @@ Result<Measurements> measure(const PinnedSnapshot& pinned, const Progress& progr
   // The profiles' last frames and decays, each on its own thread.
   {
     std::vector<std::future<void>> jobs;
+    jobs.reserve(lanes.size());
     for (auto& lane : lanes)
       jobs.push_back(std::async(std::launch::async | std::launch::deferred, [&own = *lane] {
         own.measure.profile = std::move(own.builder).finish();
@@ -864,10 +868,16 @@ struct Builder {
         found == nullptr ? std::nullopt : native_dsp::synth::find_parameter(*found->descriptor, id);
     return index && *index < values.size() ? values[*index] : 0.0;
   }
-  [[nodiscard]] static double parameter_minimum(std::string_view engine, std::string_view id) {
-    const auto* found = native_dsp::effects::find_engine(engine);
-    const auto index =
-        found == nullptr ? std::nullopt : native_dsp::synth::find_parameter(*found->descriptor, id);
+  // One parameter of a built-in effect engine.
+  struct EngineParameter {
+    std::string_view engine;
+    std::string_view id;
+  };
+  [[nodiscard]] static double parameter_minimum(EngineParameter parameter) {
+    const auto* found = native_dsp::effects::find_engine(parameter.engine);
+    const auto index = found == nullptr
+                           ? std::nullopt
+                           : native_dsp::synth::find_parameter(*found->descriptor, parameter.id);
     return index ? found->descriptor->parameters[*index].minimum : mix::silence_db;
   }
   [[nodiscard]] static std::vector<double> default_values(std::string_view engine) {
@@ -1280,6 +1290,9 @@ struct Builder {
                            fixed(deepest->deepest_db, 1) + " dB).");
       return;
     }
+    // A flagged dip has a deepest pair.
+    if (!pair)
+      return;
     const auto [kick, bass] = *pair;
     Finding f;
     f.kind = Kind::kick_bass;
@@ -1385,8 +1398,10 @@ struct Builder {
       if (existing)
         if (const auto values = effect_values(snapshot.master_effects, *existing))
           current = value_of("ceiling", *values, "ceiling.ceiling");
-      const double ceiling = std::max(lowered_ceiling_db(current, goal.true_peak, l.true_peak_db),
-                                      parameter_minimum("ceiling", "ceiling.ceiling"));
+      const double ceiling =
+          std::max(lowered_ceiling_db(
+                       {.current = current, .target = goal.true_peak, .true_peak = l.true_peak_db}),
+                   parameter_minimum({.engine = "ceiling", .id = "ceiling.ceiling"}));
       if (current && l.true_peak_db > *current) {
         const double over = l.true_peak_db - *current;
         const double fader_db = 20.0 * std::log10(snapshot.master_level);
@@ -1519,6 +1534,7 @@ struct Builder {
   void energy() {
     out.energy = m.bars;
     std::vector<double> lufs;
+    lufs.reserve(m.bars.size());
     for (const auto& bar : m.bars)
       lufs.push_back(bar.lufs);
     std::vector<mix::Section> sections;
@@ -1893,6 +1909,7 @@ std::vector<double> evidence_now(const Finding& finding, const Measurements& now
   case Kind::mono_lows: {
     const auto losses = mix::band_mono_loss(now.master);
     std::vector<double> y;
+    y.reserve(e.x.size());
     for (const double hz : e.x)
       y.push_back(-losses[mix::band_of(hz)]);
     return y;
@@ -1907,9 +1924,8 @@ std::vector<double> evidence_now(const Finding& finding, const Measurements& now
     }
     return y;
   }
+  // A fixed edge no longer clicks; its samples are not kept.
   case Kind::click:
-    // A fixed edge no longer clicks; its samples are not kept.
-    return {};
   case Kind::kick_bass:
   case Kind::masking:
   case Kind::clipping:

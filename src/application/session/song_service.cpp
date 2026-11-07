@@ -158,10 +158,16 @@ effect_patch(std::string_view engine_id, std::optional<std::string_view> preset,
   return native_inserts::make_native_effect_patch(*engine, dense, base.value().document);
 }
 
+// One parameter of a built-in effect engine.
+struct EffectParameter {
+  std::string_view engine_id;
+  std::string_view parameter;
+};
+
 // The index of a choice parameter's label.
-[[nodiscard]] Result<double> choice_index(std::string_view engine_id, std::string_view parameter,
-                                          std::string_view label) {
-  const auto* engine = native_dsp::effects::find_engine(engine_id);
+[[nodiscard]] Result<double> choice_index(EffectParameter effect, std::string_view label) {
+  const auto parameter = effect.parameter;
+  const auto* engine = native_dsp::effects::find_engine(effect.engine_id);
   if (engine == nullptr)
     return Result<double>::failure({ErrorCode::not_found, "Built-in effect not found"});
   const auto at = native_dsp::synth::find_parameter(*engine->descriptor, parameter);
@@ -175,13 +181,12 @@ effect_patch(std::string_view engine_id, std::optional<std::string_view> preset,
   return Result<double>::success(static_cast<double>(found - choices.begin()));
 }
 
-[[nodiscard]] Result<project::AutomationDomain> effect_domain(std::string_view engine_id,
-                                                              std::string_view parameter) {
-  const auto* engine = native_dsp::effects::find_engine(engine_id);
+[[nodiscard]] Result<project::AutomationDomain> effect_domain(EffectParameter effect) {
+  const auto* engine = native_dsp::effects::find_engine(effect.engine_id);
   if (engine == nullptr)
     return Result<project::AutomationDomain>::failure(
         {ErrorCode::not_found, "Built-in effect not found"});
-  return native_inserts::native_effect_automation_domain(*engine, parameter);
+  return native_inserts::native_effect_automation_domain(*engine, effect.parameter);
 }
 
 struct LanePoint {
@@ -523,8 +528,8 @@ Result<void> SongService::apply_arrangement(const arrange::Plan& plan) {
       if (sweep.high_pass == high_pass)
         by_track[sweep.track].push_back(&sweep);
     for (const auto& [track_id, sweeps] : by_track) {
-      auto model =
-          choice_index(sweep_engine, sweep_model, high_pass ? high_pass_model : low_pass_model);
+      auto model = choice_index({.engine_id = sweep_engine, .parameter = sweep_model},
+                                high_pass ? high_pass_model : low_pass_model);
       if (!model)
         return R::failure(model.error());
       auto patch = effect_patch(sweep_engine, std::nullopt,
@@ -536,8 +541,8 @@ Result<void> SongService::apply_arrangement(const arrange::Plan& plan) {
       auto slot = add_effect(track_id, std::move(patch).value());
       if (!slot)
         return R::failure(slot.error());
-      auto mix_domain = effect_domain(sweep_engine, sweep_mix);
-      auto cutoff_domain = effect_domain(sweep_engine, sweep_cutoff);
+      auto mix_domain = effect_domain({.engine_id = sweep_engine, .parameter = sweep_mix});
+      auto cutoff_domain = effect_domain({.engine_id = sweep_engine, .parameter = sweep_cutoff});
       if (!mix_domain || !cutoff_domain)
         return R::failure(!mix_domain ? mix_domain.error() : cutoff_domain.error());
       std::vector<LanePoint> mix{{origin, device_off, project::AutomationShape::hold}};
@@ -574,7 +579,7 @@ Result<void> SongService::apply_arrangement(const arrange::Plan& plan) {
     auto slot = add_effect(track_id, std::move(patch).value());
     if (!slot)
       return R::failure(slot.error());
-    auto domain = effect_domain(fill_engine, fill_mix);
+    auto domain = effect_domain({.engine_id = fill_engine, .parameter = fill_mix});
     if (!domain)
       return R::failure(domain.error());
     std::vector<LanePoint> mix{{origin, device_off, project::AutomationShape::hold}};
@@ -672,7 +677,7 @@ Result<void> SongService::apply_arrangement(const arrange::Plan& plan) {
         project::Marker{id.value(), {tick}, std::string(arrange::section_name(section.kind))}});
   }
 
-  auto applied = model().apply(std::move(operations));
+  auto applied = model().apply(operations);
   return applied ? R::success() : R::failure(applied.error());
 }
 

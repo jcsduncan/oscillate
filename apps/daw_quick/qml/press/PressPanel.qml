@@ -318,11 +318,13 @@ Rectangle {
         id: reductionPlate
         theme: panel.theme
         title: "REDUCTION"
-        note: panel.playing ? "HELD 1 s" : ""
+        note: panel.playing ? heldNote : ""
+        longestNote: heldNote
+        readonly property string heldNote: "HELD 1 s"
         noteColor: panel.theme.live
         x: transferPlate.x + transferPlate.width + panel.gap
         y: panel.rowAY
-        width: panel.theme.reductionWidth
+        width: Math.max(panel.theme.reductionWidth, Math.ceil(fitWidth))
         height: panel.rowAHeight
         PressReduction {
             x: panel.theme.reductionBarX

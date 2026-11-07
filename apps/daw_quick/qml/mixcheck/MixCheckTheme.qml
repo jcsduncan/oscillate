@@ -230,10 +230,10 @@ Kit.ShellTheme {
     // How much a hovered cell lightens.
     readonly property real segmentHoverLift: 1.2
     function segmentedFill(cell, stop) {
-        return cell.on ? line : cell.hovered ? Qt.lighter(panelRaised, segmentHoverLift) : "transparent"
+        return cell.hovered ? Qt.lighter(panelRaised, segmentHoverLift) : "transparent"
     }
     function segmentedInk(cell) {
-        return cell.on ? textMain : textDim
+        return textDim
     }
 
     // A finding's colour: teal once applied, else by severity.

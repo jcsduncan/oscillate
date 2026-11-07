@@ -388,6 +388,11 @@ void MixCheckController::poll() {
 void MixCheckController::finish() {
   auto job = std::move(job_);
   job_.reset();
+  // The worker fills the result, and with a measurement the report, before it reports done.
+  if (!job->result) {
+    set_status(QStringLiteral("Mix Check failed"));
+    return;
+  }
   auto& result = *job->result;
   if (job->cancel.load(std::memory_order_acquire)) {
     set_status(QStringLiteral("Mix Check cancelled"));
@@ -402,30 +407,34 @@ void MixCheckController::finish() {
     set_status(QStringLiteral("Mix Check failed: %1").arg(text(result.error().message)));
     return;
   }
+  if (!job->report) {
+    set_status(QStringLiteral("Mix Check failed"));
+    return;
+  }
   const auto before = report_;
   measured_ = std::make_shared<const check::Measurements>(std::move(result).value());
-  report_ = std::move(job->report);
+  const auto& report = report_.emplace(std::move(*job->report));
   if (job->previous)
     previous_history_ = std::move(job->previous);
   else
     previous_history_.reset();
-  current_history_ = check::summarise(*report_, job->checked_at);
+  current_history_ = check::summarise(report, job->checked_at);
   checked_time_ = QDateTime::fromSecsSinceEpoch(job->checked_at);
   clock_.start();
   QString fixed;
-  if (job->applied && before) {
-    auto finding = std::move(*job->applied);
-    check::judge(finding, *before, *report_, *measured_);
+  if (auto& applied = job->applied; applied && before) {
+    auto finding = std::move(*applied);
+    check::judge(finding, *before, report, *measured_);
     fixed = text(finding.result);
     applied_[finding.id] = std::move(finding);
     after_ = true;
   } else {
-    baseline_spectrum_ = report_->spectrum;
+    baseline_spectrum_ = report.spectrum;
   }
   rebuild();
   stale_ = false;
   const auto open =
-      std::ranges::count_if(report_->findings, [](const check::Finding& f) { return !f.applied; });
+      std::ranges::count_if(report.findings, [](const check::Finding& f) { return !f.applied; });
   status_.set(!fixed.isEmpty() ? QStringLiteral("Re-checked: %1").arg(fixed)
                                : QStringLiteral("%1 to look at \u00b7 %2 tracks measured")
                                      .arg(open)
@@ -615,6 +624,10 @@ void MixCheckController::setReference(const QString& path) {
 void MixCheckController::finish_reference() {
   auto job = std::move(reference_job_);
   reference_job_.reset();
+  if (!job->result) {
+    set_status(QStringLiteral("Reference: no result"));
+    return;
+  }
   auto& result = *job->result;
   if (!result) {
     set_status(QStringLiteral("Reference: %1").arg(text(result.error().message)));

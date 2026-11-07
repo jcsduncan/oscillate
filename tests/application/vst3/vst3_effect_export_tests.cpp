@@ -1,6 +1,6 @@
 #include "format_oracle.hpp"
 #include "insert_fixtures.hpp"
-#include "oscillate/application/vst3/effect_export.hpp"
+#include "oscillate/application/vst3/offline_export.hpp"
 #include "oscillate/export/offline_master.hpp"
 #include "oscillate/native_dsp/compressor.hpp"
 #include "oscillate/native_dsp/eq.hpp"
@@ -34,6 +34,10 @@
 namespace {
 using namespace oscillate;
 namespace fs = std::filesystem;
+
+// TailGain's declared tail in its "overlong-tail" mode: eleven seconds at
+// 48 kHz.
+constexpr std::size_t overlong_tail_frames = std::size_t{48'000} * 11U;
 
 using oscillate::test::require;
 using oscillate::test::take;
@@ -204,10 +208,10 @@ void serial_export_checks() {
                     std::optional<project::TrackId> stem = std::nullopt) {
     auto authority = take(exporting::StoppedExportAuthority::acquire(snapshot, gate));
     if (stem)
-      return exporting::render_vst3_effect_wav_stem(snapshot, saved.store, std::move(authority),
-                                                    scanner, VST3_GAIN_BUNDLE, *stem, {target});
-    return exporting::render_vst3_effect_wav_master(snapshot, saved.store, std::move(authority),
-                                                    scanner, VST3_GAIN_BUNDLE, {target});
+      return exporting::render_vst3_stem(snapshot, saved.store, std::move(authority), scanner,
+                                         *stem, {target});
+    return exporting::render_vst3_master(snapshot, saved.store, std::move(authority), scanner,
+                                         exporting::MasterRenderOptions{target});
   };
   const auto master_path = directory.path / "serial-master.wav";
   REQUIRE_EQ(take(render(saved.snapshot, master_path)), exporting::PublishOutcome::durable,
@@ -352,14 +356,13 @@ void sidechain_export_checks() {
   saved.snapshot.tracks.back().sends.push_back(
       {id<project::SendId>(30), wet_id, 0.5, project::SendPurpose::sidechain, effect.id});
   auto render = [&](const project::Snapshot& candidate, const fs::path& path,
-                    std::optional<project::TrackId> stem = std::nullopt,
-                    const fs::path& bundle = VST3_SIDECHAIN_TAIL_BUNDLE) {
+                    std::optional<project::TrackId> stem = std::nullopt) {
     auto authority = take(exporting::StoppedExportAuthority::acquire(candidate, gate));
     if (stem)
-      return exporting::render_vst3_effect_wav_stem(candidate, saved.store, std::move(authority),
-                                                    scanner, bundle, *stem, {path});
-    return exporting::render_vst3_effect_wav_master(candidate, saved.store, std::move(authority),
-                                                    scanner, bundle, {path});
+      return exporting::render_vst3_stem(candidate, saved.store, std::move(authority), scanner,
+                                         *stem, {path});
+    return exporting::render_vst3_master(candidate, saved.store, std::move(authority), scanner,
+                                         exporting::MasterRenderOptions{path});
   };
   const auto master_path = directory.path / "sidechain-master.wav";
   const auto wet_path = directory.path / "sidechain-wet.wav";
@@ -410,7 +413,7 @@ void sidechain_export_checks() {
   incompatible_plugin.version = gain_class.version;
   incompatible_plugin.bundle_path = gain_scan.binary.canonical_bundle.string();
   incompatible_plugin.binary_sha256 = gain_scan.binary.sha256;
-  const auto refused = render(incompatible, master_path, std::nullopt, VST3_GAIN_BUNDLE);
+  const auto refused = render(incompatible, master_path);
   REQUIRE_TRUE(!refused, "effect without activated auxiliary bus replaced the valid master");
   REQUIRE_NE(refused.error().message.find("exactly one stereo auxiliary input"), std::string::npos,
              "effect without activated auxiliary bus replaced the valid master");
@@ -441,10 +444,10 @@ void three_serial_effect_export_checks() {
                     std::optional<project::TrackId> stem = std::nullopt) {
     auto authority = take(exporting::StoppedExportAuthority::acquire(candidate, gate));
     if (stem)
-      return exporting::render_vst3_effect_wav_stem(candidate, saved.store, std::move(authority),
-                                                    scanner, VST3_GAIN_BUNDLE, *stem, {target});
-    return exporting::render_vst3_effect_wav_master(candidate, saved.store, std::move(authority),
-                                                    scanner, VST3_GAIN_BUNDLE, {target});
+      return exporting::render_vst3_stem(candidate, saved.store, std::move(authority), scanner,
+                                         *stem, {target});
+    return exporting::render_vst3_master(candidate, saved.store, std::move(authority), scanner,
+                                         exporting::MasterRenderOptions{target});
   };
   const auto master_path = directory.path / "three-master.wav";
   const auto wet_path = directory.path / "three-wet.wav";
@@ -518,10 +521,10 @@ void mixed_eq_vst3_export_checks() {
                     std::optional<project::TrackId> stem = std::nullopt) {
     auto authority = take(exporting::StoppedExportAuthority::acquire(snapshot, gate));
     if (stem)
-      return exporting::render_vst3_effect_wav_stem(snapshot, saved.store, std::move(authority),
-                                                    scanner, VST3_GAIN_BUNDLE, *stem, {target});
-    return exporting::render_vst3_effect_wav_master(snapshot, saved.store, std::move(authority),
-                                                    scanner, VST3_GAIN_BUNDLE, {target});
+      return exporting::render_vst3_stem(snapshot, saved.store, std::move(authority), scanner,
+                                         *stem, {target});
+    return exporting::render_vst3_master(snapshot, saved.store, std::move(authority), scanner,
+                                         exporting::MasterRenderOptions{target});
   };
   const auto master_path = directory.path / "mixed-master.wav";
   REQUIRE_EQ(take(render(mixed, master_path)), exporting::PublishOutcome::durable,
@@ -645,9 +648,8 @@ void mixed_eq_vst3_export_checks() {
   last_clip.placement = project::ElapsedInterval{{134}, {135}};
   const auto tail_path = directory.path / "vst3-tail-before-eq.wav";
   auto tail_authority = take(exporting::StoppedExportAuthority::acquire(tail_after, gate));
-  REQUIRE_EQ(take(exporting::render_vst3_effect_wav_stem(
-                 tail_after, saved.store, std::move(tail_authority), scanner, VST3_TAIL_BUNDLE,
-                 id<project::TrackId>(2), {tail_path})),
+  REQUIRE_EQ(take(exporting::render_vst3_stem(tail_after, saved.store, std::move(tail_authority),
+                                              scanner, id<project::TrackId>(2), {tail_path})),
              exporting::PublishOutcome::durable, "VST3-then-EQ tail stem did not publish");
   const auto tail_wav = read_file(tail_path);
   REQUIRE_EQ(tail_wav.size(), after_wav.size() + std::size_t{8} * 8,
@@ -694,10 +696,10 @@ void mixed_compressor_vst3_export_checks() {
                     std::optional<project::TrackId> stem = std::nullopt) {
     auto authority = take(exporting::StoppedExportAuthority::acquire(snapshot, gate));
     if (stem)
-      return exporting::render_vst3_effect_wav_stem(snapshot, saved.store, std::move(authority),
-                                                    scanner, VST3_GAIN_BUNDLE, *stem, {target});
-    return exporting::render_vst3_effect_wav_master(snapshot, saved.store, std::move(authority),
-                                                    scanner, VST3_GAIN_BUNDLE, {target});
+      return exporting::render_vst3_stem(snapshot, saved.store, std::move(authority), scanner,
+                                         *stem, {target});
+    return exporting::render_vst3_master(snapshot, saved.store, std::move(authority), scanner,
+                                         exporting::MasterRenderOptions{target});
   };
   auto reversed = mixed;
   std::ranges::swap(reversed.tracks.front().effects[0], reversed.tracks.front().effects[1]);
@@ -781,9 +783,8 @@ void mixed_compressor_vst3_export_checks() {
   last_clip.placement = project::ElapsedInterval{{134}, {135}};
   const auto tail_path = directory.path / "vst3-tail-before-compressor.wav";
   auto authority = take(exporting::StoppedExportAuthority::acquire(tail, gate));
-  REQUIRE_EQ(take(exporting::render_vst3_effect_wav_stem(tail, saved.store, std::move(authority),
-                                                         scanner, VST3_TAIL_BUNDLE,
-                                                         id<project::TrackId>(2), {tail_path})),
+  REQUIRE_EQ(take(exporting::render_vst3_stem(tail, saved.store, std::move(authority), scanner,
+                                              id<project::TrackId>(2), {tail_path})),
              exporting::PublishOutcome::durable, "VST3 tail into compressor did not publish");
   const auto tail_wav = read_file(tail_path);
   REQUIRE_EQ(tail_wav.size(), 56 + 143 * 8, "VST3 tail into downstream compressor was truncated");
@@ -830,10 +831,10 @@ void mixed_limiter_vst3_export_checks() {
                     std::optional<project::TrackId> stem = std::nullopt) {
     auto authority = take(exporting::StoppedExportAuthority::acquire(snapshot, gate));
     if (stem)
-      return exporting::render_vst3_effect_wav_stem(snapshot, saved.store, std::move(authority),
-                                                    scanner, VST3_GAIN_BUNDLE, *stem, {target});
-    return exporting::render_vst3_effect_wav_master(snapshot, saved.store, std::move(authority),
-                                                    scanner, VST3_GAIN_BUNDLE, {target});
+      return exporting::render_vst3_stem(snapshot, saved.store, std::move(authority), scanner,
+                                         *stem, {target});
+    return exporting::render_vst3_master(snapshot, saved.store, std::move(authority), scanner,
+                                         exporting::MasterRenderOptions{target});
   };
   auto reversed = mixed;
   std::ranges::swap(reversed.tracks.front().effects[0], reversed.tracks.front().effects[1]);
@@ -917,9 +918,8 @@ void mixed_limiter_vst3_export_checks() {
     const auto tail_path = directory.path / (native_first ? "limiter-before-vst3-tail.wav"
                                                           : "vst3-before-limiter-tail.wav");
     auto authority = take(exporting::StoppedExportAuthority::acquire(tail, gate));
-    REQUIRE_EQ(take(exporting::render_vst3_effect_wav_stem(tail, saved.store, std::move(authority),
-                                                           scanner, VST3_TAIL_BUNDLE,
-                                                           id<project::TrackId>(2), {tail_path})),
+    REQUIRE_EQ(take(exporting::render_vst3_stem(tail, saved.store, std::move(authority), scanner,
+                                                id<project::TrackId>(2), {tail_path})),
                exporting::PublishOutcome::durable, "limiter/VST3 plugin-tail stem did not publish");
     const auto tail_wav = read_file(tail_path);
     REQUIRE_EQ(tail_wav.size(), 56 + 143 * 8,
@@ -976,24 +976,21 @@ void pure_bus_vst3_export_checks() {
     const auto prefix = kind == project::TrackKind::group_bus ? "group" : "return";
     const auto master_path = directory.path / (std::string(prefix) + "-effect-master.wav");
     auto authority = take(exporting::StoppedExportAuthority::acquire(state, gate));
-    REQUIRE_EQ(
-        take(exporting::render_vst3_effect_wav_master(state, saved.store, std::move(authority),
-                                                      scanner, VST3_GAIN_BUNDLE, {master_path})),
-        exporting::PublishOutcome::durable, "bus effect master did not publish");
+    REQUIRE_EQ(take(exporting::render_vst3_master(state, saved.store, std::move(authority), scanner,
+                                                  exporting::MasterRenderOptions{master_path})),
+               exporting::PublishOutcome::durable, "bus effect master did not publish");
     const auto master = read_file(master_path);
     REQUIRE_EQ(master.size(), 56 + 135 * 8, "bus effect output extent changed");
     near(sample(master, 63), 0.75F);
     near(sample(master, 64), 0.375F);
     const auto wet_path = directory.path / (std::string(prefix) + "-effect-source.wav");
     authority = take(exporting::StoppedExportAuthority::acquire(state, gate));
-    (void)take(exporting::render_vst3_effect_wav_stem(state, saved.store, std::move(authority),
-                                                      scanner, VST3_GAIN_BUNDLE,
-                                                      id<project::TrackId>(2), {wet_path}));
+    (void)take(exporting::render_vst3_stem(state, saved.store, std::move(authority), scanner,
+                                           id<project::TrackId>(2), {wet_path}));
     const auto dry_path = directory.path / (std::string(prefix) + "-effect-dry.wav");
     authority = take(exporting::StoppedExportAuthority::acquire(state, gate));
-    (void)take(exporting::render_vst3_effect_wav_stem(state, saved.store, std::move(authority),
-                                                      scanner, VST3_GAIN_BUNDLE,
-                                                      id<project::TrackId>(9), {dry_path}));
+    (void)take(exporting::render_vst3_stem(state, saved.store, std::move(authority), scanner,
+                                           id<project::TrackId>(9), {dry_path}));
     const auto wet = read_file(wet_path);
     const auto dry = read_file(dry_path);
     for (std::size_t frame = 0; frame < 135; ++frame)
@@ -1015,10 +1012,10 @@ void mixed_bus_vst3_export_checks() {
                     std::optional<project::TrackId> stem = std::nullopt) {
     auto authority = take(exporting::StoppedExportAuthority::acquire(snapshot, gate));
     if (stem)
-      return exporting::render_vst3_effect_wav_stem(snapshot, saved.store, std::move(authority),
-                                                    scanner, VST3_GAIN_BUNDLE, *stem, {target});
-    return exporting::render_vst3_effect_wav_master(snapshot, saved.store, std::move(authority),
-                                                    scanner, VST3_GAIN_BUNDLE, {target});
+      return exporting::render_vst3_stem(snapshot, saved.store, std::move(authority), scanner,
+                                         *stem, {target});
+    return exporting::render_vst3_master(snapshot, saved.store, std::move(authority), scanner,
+                                         exporting::MasterRenderOptions{target});
   };
   const auto prepared = take(native_dsp::prepare_limiter(settings, 48'000));
   REQUIRE_EQ(prepared.latency_frames(), 12, "mixed bus lookahead fixture changed");
@@ -1136,8 +1133,8 @@ void mixed_bus_vst3_export_checks() {
       const auto tail_path = directory.path / "mixed-bus-tail.wav";
       auto authority = take(exporting::StoppedExportAuthority::acquire(tail, gate));
       REQUIRE_EQ(
-          take(exporting::render_vst3_effect_wav_master(tail, saved.store, std::move(authority),
-                                                        scanner, VST3_TAIL_BUNDLE, {tail_path})),
+          take(exporting::render_vst3_master(tail, saved.store, std::move(authority), scanner,
+                                             exporting::MasterRenderOptions{tail_path})),
           exporting::PublishOutcome::durable, "mixed bus master plugin tail did not publish");
       const auto tail_bytes = read_file(tail_path);
       REQUIRE_EQ(tail_bytes.size(), 56 + 143 * 8,
@@ -1146,9 +1143,8 @@ void mixed_bus_vst3_export_checks() {
                  "mixed bus plugin tail was truncated or lookahead was double-counted");
       const auto tail_stem_path = directory.path / "mixed-bus-tail-stem.wav";
       authority = take(exporting::StoppedExportAuthority::acquire(tail, gate));
-      REQUIRE_EQ(take(exporting::render_vst3_effect_wav_stem(
-                     tail, saved.store, std::move(authority), scanner, VST3_TAIL_BUNDLE,
-                     id<project::TrackId>(2), {tail_stem_path})),
+      REQUIRE_EQ(take(exporting::render_vst3_stem(tail, saved.store, std::move(authority), scanner,
+                                                  id<project::TrackId>(2), {tail_stem_path})),
                  exporting::PublishOutcome::durable, "mixed bus processed stem lost plugin tail");
       REQUIRE_GT(std::fabs(sample(read_file(tail_stem_path), 142)), 0.00001F,
                  "mixed bus processed stem lost plugin tail");
@@ -1165,13 +1161,10 @@ void export_checks() {
   auto saved = make_project(directory, gate, scanned);
   auto render = [&](const project::Snapshot& snapshot, const fs::path& target, bool stem) {
     auto authority = take(exporting::StoppedExportAuthority::acquire(snapshot, gate));
-    return stem
-               ? exporting::render_vst3_effect_wav_stem(snapshot, saved.store, std::move(authority),
-                                                        scanner, VST3_GAIN_BUNDLE,
-                                                        id<project::TrackId>(2), {target})
-               : exporting::render_vst3_effect_wav_master(snapshot, saved.store,
-                                                          std::move(authority), scanner,
-                                                          VST3_GAIN_BUNDLE, {target});
+    return stem ? exporting::render_vst3_stem(snapshot, saved.store, std::move(authority), scanner,
+                                              id<project::TrackId>(2), {target})
+                : exporting::render_vst3_master(snapshot, saved.store, std::move(authority),
+                                                scanner, exporting::MasterRenderOptions{target});
   };
   const auto master_path = directory.path / "master.wav";
   REQUIRE_EQ(take(render(saved.snapshot, master_path, false)), exporting::PublishOutcome::durable,
@@ -1247,9 +1240,8 @@ void export_checks() {
   const auto wet = read_file(stem_path);
   const auto dry_path = directory.path / "dry.wav";
   auto dry_authority = take(exporting::StoppedExportAuthority::acquire(saved.snapshot, gate));
-  REQUIRE_EQ(take(exporting::render_vst3_effect_wav_stem(
-                 saved.snapshot, saved.store, std::move(dry_authority), scanner, VST3_GAIN_BUNDLE,
-                 id<project::TrackId>(9), {dry_path})),
+  REQUIRE_EQ(take(exporting::render_vst3_stem(saved.snapshot, saved.store, std::move(dry_authority),
+                                              scanner, id<project::TrackId>(9), {dry_path})),
              exporting::PublishOutcome::durable, "processed dry stem did not publish");
   const auto dry = read_file(dry_path);
   REQUIRE_EQ(wet.size(), master.size(), "processed stems lost common output alignment");
@@ -1329,10 +1321,10 @@ void export_checks() {
   tail_plugin.binary_sha256 = tail_scan.binary.sha256;
   const auto tail_path = directory.path / "tail.wav";
   auto tail_authority = take(exporting::StoppedExportAuthority::acquire(tail_snapshot, gate));
-  REQUIRE_EQ(take(exporting::render_vst3_effect_wav_master(tail_snapshot, saved.store,
-                                                           std::move(tail_authority), scanner,
-                                                           VST3_TAIL_BUNDLE, {tail_path})),
-             exporting::PublishOutcome::durable, "positive-tail effect master did not publish");
+  REQUIRE_EQ(
+      take(exporting::render_vst3_master(tail_snapshot, saved.store, std::move(tail_authority),
+                                         scanner, exporting::MasterRenderOptions{tail_path})),
+      exporting::PublishOutcome::durable, "positive-tail effect master did not publish");
   const auto tail_wav = read_file(tail_path);
   REQUIRE_EQ(tail_wav.size(), 56 + 136 * 8, "positive effect tail was truncated");
   near(sample(tail_wav, 127), 0.0F);
@@ -1340,9 +1332,8 @@ void export_checks() {
   near(sample(tail_wav, 135), 0.1875F);
   const auto tail_stem_path = directory.path / "tail-stem.wav";
   tail_authority = take(exporting::StoppedExportAuthority::acquire(tail_snapshot, gate));
-  REQUIRE_EQ(take(exporting::render_vst3_effect_wav_stem(
-                 tail_snapshot, saved.store, std::move(tail_authority), scanner, VST3_TAIL_BUNDLE,
-                 id<project::TrackId>(2), {tail_stem_path})),
+  REQUIRE_EQ(take(exporting::render_vst3_stem(tail_snapshot, saved.store, std::move(tail_authority),
+                                              scanner, id<project::TrackId>(2), {tail_stem_path})),
              exporting::PublishOutcome::durable, "processed positive-tail stem was truncated");
   REQUIRE_EQ(sample(read_file(tail_stem_path), 135), 0.1875F,
              "processed positive-tail stem was truncated");
@@ -1396,9 +1387,12 @@ void export_checks() {
              "gradual tempo changed effect master or processed-stem audio alignment");
   REQUIRE_EQ(read_file(gradual_stem), wet,
              "gradual tempo changed effect master or processed-stem audio alignment");
-  wrong = saved.snapshot;
-  wrong.tracks.front().effects.clear();
-  reject(wrong);
+  // Without its plugin the project renders as the native master does: one
+  // renderer serves both (ADR-0090).
+  REQUIRE_EQ(take(render(unprocessed, rejected, false)), exporting::PublishOutcome::durable,
+             "a project without VST3 stages did not export");
+  REQUIRE_EQ(read_file(rejected), native, "a project without VST3 stages differs from native");
+  fs::remove(rejected);
   wrong = saved.snapshot;
   // A built-in effect in the plugin's place is an ordinary chain (ADR-0050).
   wrong.tracks.front().effects.front().id = id<project::InsertSlotId>(99);
@@ -1410,17 +1404,23 @@ void export_checks() {
   std::get<project::Vst3PluginInstance>(wrong.tracks.front().effects.front().processor)
       .binary_sha256.assign(64, '0');
   reject(wrong);
+  // Any chain exports beside the plugin (ADR-0050): a master reverb, whose
+  // tail lengthens the master, and built-in effects on the dry track and on
+  // the return bus.
   wrong = saved.snapshot;
   test_insert::set_master(wrong, test_insert::expanse(0.2, 0.5));
-  reject(wrong);
-  wrong = saved.snapshot;
-  wrong.tracks.back().effects.push_back(
-      {id<project::InsertSlotId>(99), true, test_insert::flat_shape()});
-  reject(wrong);
-  wrong = saved.snapshot;
-  wrong.tracks[1].effects.push_back(
-      {id<project::InsertSlotId>(99), true, test_insert::flat_shape()});
-  reject(wrong);
+  REQUIRE_EQ(take(render(wrong, rejected, false)), exporting::PublishOutcome::durable,
+             "a master reverb beside a VST3 effect did not export");
+  REQUIRE_GT(read_file(rejected).size(), master.size(), "the master reverb's tail was cut");
+  fs::remove(rejected);
+  for (const std::size_t track : {std::size_t{1}, std::size_t{2}}) {
+    wrong = saved.snapshot;
+    wrong.tracks[track].effects.push_back(
+        {id<project::InsertSlotId>(99), true, test_insert::flat_shape()});
+    REQUIRE_EQ(take(render(wrong, rejected, false)), exporting::PublishOutcome::durable,
+               "a built-in effect on another path did not export");
+    fs::remove(rejected);
+  }
   wrong = saved.snapshot;
   const float failing_gain = 999.0F;
   auto& failing_plugin =
@@ -1428,19 +1428,24 @@ void export_checks() {
   std::memcpy(failing_plugin.component_state.data(), &failing_gain, sizeof(failing_gain));
   reject(wrong);
   auto bad_authority = take(exporting::StoppedExportAuthority::acquire(saved.snapshot, gate));
-  REQUIRE_TRUE(!exporting::render_vst3_effect_wav_stem(
-                   saved.snapshot, saved.store, std::move(bad_authority), scanner, VST3_GAIN_BUNDLE,
-                   id<project::TrackId>(99), {rejected}),
+  REQUIRE_TRUE(!exporting::render_vst3_stem(saved.snapshot, saved.store, std::move(bad_authority),
+                                            scanner, id<project::TrackId>(99), {rejected}),
                "unknown effect stem source published output");
   REQUIRE_TRUE(!fs::exists(rejected), "unknown effect stem source published output");
 
   const auto rejected_risk = directory.path / "rejected-risk.wav";
-  auto reject_diagnostic = [&](const project::Snapshot& candidate, const fs::path& bundle,
+  auto render_options = [&](const project::Snapshot& candidate,
+                            const exporting::MasterRenderOptions& options) {
+    auto authority = take(exporting::StoppedExportAuthority::acquire(candidate, gate));
+    return exporting::render_vst3_master(candidate, saved.store, std::move(authority), scanner,
+                                         options);
+  };
+  auto reject_diagnostic = [&](const project::Snapshot& candidate,
                                const exporting::MasterRenderOptions& options,
                                std::string_view diagnostic) {
     auto authority = take(exporting::StoppedExportAuthority::acquire(candidate, gate));
-    auto result = exporting::render_vst3_effect_wav_master(
-        candidate, saved.store, std::move(authority), scanner, bundle, options);
+    auto result = exporting::render_vst3_master(candidate, saved.store, std::move(authority),
+                                                scanner, options);
     require(!result && result.error().message.find(diagnostic) != std::string::npos &&
                 !fs::exists(options.target),
             "effect export expected '" + std::string(diagnostic) + "', got '" +
@@ -1449,78 +1454,93 @@ void export_checks() {
   auto stale = take(exporting::StoppedExportAuthority::acquire(saved.snapshot, gate));
   wrong = saved.snapshot;
   ++wrong.revision;
-  auto stale_result = exporting::render_vst3_effect_wav_master(
-      wrong, saved.store, std::move(stale), scanner, VST3_GAIN_BUNDLE, {rejected_risk});
+  auto stale_result = exporting::render_vst3_master(wrong, saved.store, std::move(stale), scanner,
+                                                    exporting::MasterRenderOptions{rejected_risk});
   REQUIRE_TRUE(!stale_result, "stale stopped authority opened an output");
   REQUIRE_NE(stale_result.error().message.find("stale"), std::string::npos,
              "stale stopped authority opened an output");
   REQUIRE_TRUE(!fs::exists(rejected_risk), "stale stopped authority opened an output");
-  reject_diagnostic(saved.snapshot, VST3_GAIN_BUNDLE,
-                    {rejected_risk, exporting::WavFormat::pcm16, 0, 22'050}, "output rates");
-  exporting::RenderLoudnessReport unavailable_report;
-  reject_diagnostic(saved.snapshot, VST3_GAIN_BUNDLE,
-                    {rejected_risk, exporting::WavFormat::float32, 0, 0, &unavailable_report},
-                    "loudness report");
+  reject_diagnostic(saved.snapshot, {rejected_risk, exporting::WavFormat::pcm16, 0, 22'050},
+                    "sample rate is unsupported");
+  // The shared renderer measures a VST3 master as it measures any other.
+  exporting::RenderLoudnessReport measured;
+  REQUIRE_EQ(take(render_options(saved.snapshot,
+                                 {rejected_risk, exporting::WavFormat::float32, 0, 0, &measured})),
+             exporting::PublishOutcome::durable, "a VST3 master with a loudness report failed");
+  REQUIRE_EQ(measured.frames, (read_file(rejected_risk).size() - 56) / 8,
+             "the loudness report measured the published master");
+  fs::remove(rejected_risk);
+  // Shapes the former effect exporter refused are ordinary projects now
+  // (ADR-0050): a track without clips, a third audio track, an empty
+  // instrument track and a built-in effect on another path.
+  const auto exports = [&](const project::Snapshot& candidate, std::string_view what) {
+    REQUIRE_EQ(take(render_options(candidate, {rejected_risk})), exporting::PublishOutcome::durable,
+               std::string(what) + " did not export");
+    fs::remove(rejected_risk);
+  };
   wrong = saved.snapshot;
   wrong.tracks.back().clips.clear();
-  reject_diagnostic(wrong, VST3_GAIN_BUNDLE, {rejected_risk}, "1..32 audio clips");
+  exports(wrong, "a track without clips");
+  wrong = saved.snapshot;
+  wrong.tracks.emplace_back(id<project::TrackId>(31));
+  exports(wrong, "a third audio track");
+  wrong = saved.snapshot;
+  wrong.tracks.emplace_back(id<project::TrackId>(32), std::vector<project::Clip>{},
+                            project::TrackKind::instrument);
+  exports(wrong, "an empty instrument track");
+  wrong = saved.snapshot;
+  wrong.tracks[1].effects.push_back(
+      {test_insert::next_slot(wrong), true,
+       test_insert::shape({native_dsp::EqBandKind::peaking, 1'000.0, 0.707, 3.0})});
+  exports(wrong, "a second processed path");
   wrong = saved.snapshot;
   wrong.sources.front().encoding = project::SourceEncoding::flac;
-  reject_diagnostic(wrong, VST3_GAIN_BUNDLE, {rejected_risk}, "bounded managed WAV");
+  reject_diagnostic(wrong, {rejected_risk}, "managed source missing");
   wrong = saved.snapshot;
   wrong.tracks.front().clips.front().placement = project::ElapsedInterval{{63}, {70}};
   {
     // A stretched clip now renders through the shared warp path.
     const auto stretched = directory.path / "stretched-effect.wav";
     auto lease = take(exporting::StoppedExportAuthority::acquire(wrong, gate));
-    REQUIRE_EQ(take(exporting::render_vst3_effect_wav_master(
-                   wrong, saved.store, std::move(lease), scanner, VST3_GAIN_BUNDLE, {stretched})),
+    REQUIRE_EQ(take(exporting::render_vst3_master(wrong, saved.store, std::move(lease), scanner,
+                                                  exporting::MasterRenderOptions{stretched})),
                exporting::PublishOutcome::durable,
                "stretched clip did not render through the VST3 effect warp path");
     REQUIRE_TRUE(!fs::exists(rejected_risk),
                  "stretched clip did not render through the VST3 effect warp path");
   }
-  reject_diagnostic(saved.snapshot, directory.path / "absent.vst3", {rejected_risk},
-                    "fresh scan failed");
+  wrong = saved.snapshot;
+  std::get<project::Vst3PluginInstance>(wrong.tracks.front().effects.front().processor)
+      .bundle_path = (directory.path / "absent.vst3").string();
+  reject_diagnostic(wrong, {rejected_risk}, "fresh scan failed");
   wrong = saved.snapshot;
   auto& wrong_plugin =
       std::get<project::Vst3PluginInstance>(wrong.tracks.front().effects.front().processor);
   wrong_plugin.name = "Unexpected saved class";
-  reject_diagnostic(wrong, VST3_GAIN_BUNDLE, {rejected_risk}, "class differs");
+  reject_diagnostic(wrong, {rejected_risk}, "class differs");
   wrong = saved.snapshot;
   auto& malformed_state =
       std::get<project::Vst3PluginInstance>(wrong.tracks.front().effects.front().processor);
   malformed_state.component_state = {1};
-  reject_diagnostic(wrong, VST3_GAIN_BUNDLE, {rejected_risk}, "rejected saved state");
+  reject_diagnostic(wrong, {rejected_risk}, "state restore failed");
+  // Beside a saved state, a reference to a parameter the plugin lacks is
+  // only a reference: the state carries the plugin's values, so the export
+  // plays the state, as live playback does. (Static values for an unknown
+  // parameter still fail; see static_parameter_export_checks.)
   wrong = saved.snapshot;
   std::get<project::Vst3PluginInstance>(wrong.tracks.front().effects.front().processor)
       .parameters.push_back({1, 0.5});
-  reject_diagnostic(wrong, VST3_GAIN_BUNDLE, {rejected_risk}, "parameter references");
-  wrong = saved.snapshot;
-  wrong.tracks.front().clips.back().placement =
-      project::ElapsedInterval{{172'800'000}, {172'800'008}};
-  reject_diagnostic(wrong, VST3_GAIN_BUNDLE, {rejected_risk}, "one-hour output limit");
-  reject_diagnostic(saved.snapshot, VST3_GAIN_BUNDLE, {directory.path / "absent" / "master.wav"},
-                    "open");
-
-  wrong = saved.snapshot;
-  wrong.tracks.emplace_back(id<project::TrackId>(31));
-  reject_diagnostic(wrong, VST3_GAIN_BUNDLE, {rejected_risk}, "at most two audio tracks");
-  wrong = saved.snapshot;
-  wrong.tracks.emplace_back(id<project::TrackId>(32), std::vector<project::Clip>{},
-                            project::TrackKind::instrument);
-  reject_diagnostic(wrong, VST3_GAIN_BUNDLE, {rejected_risk}, "plain audio track");
+  REQUIRE_EQ(take(render_options(wrong, {rejected_risk})), exporting::PublishOutcome::durable,
+             "an unknown saved parameter reference failed the export");
+  REQUIRE_EQ(read_file(rejected_risk), master, "an unknown parameter reference changed the export");
+  fs::remove(rejected_risk);
+  reject_diagnostic(saved.snapshot, {directory.path / "absent" / "master.wav"}, "open");
   wrong = saved.snapshot;
   wrong.tracks.front().clips.front().source = id<project::SourceId>(99);
-  reject_diagnostic(wrong, VST3_GAIN_BUNDLE, {rejected_risk}, "source identity is ambiguous");
-  wrong = saved.snapshot;
-  wrong.tracks[1].effects.push_back(
-      {test_insert::next_slot(wrong), true,
-       test_insert::shape({native_dsp::EqBandKind::peaking, 1'000.0, 0.707, 3.0})});
-  reject_diagnostic(wrong, VST3_GAIN_BUNDLE, {rejected_risk}, "one affected path");
+  reject_diagnostic(wrong, {rejected_risk}, "source record is missing");
   wrong = saved.snapshot;
   wrong.sources.front().sha256.assign(64, '0');
-  reject_diagnostic(wrong, VST3_GAIN_BUNDLE, {rejected_risk}, "managed");
+  reject_diagnostic(wrong, {rejected_risk}, "managed");
   const auto managed_asset =
       directory.path / "project" / "assets" / (saved.snapshot.sources.front().sha256 + ".wav");
   const auto intact_asset = read_file(managed_asset);
@@ -1532,7 +1552,7 @@ void export_checks() {
                  static_cast<std::streamsize>(damaged_asset.size()));
     require(output.good(), "cannot write damaged managed source fixture");
   }
-  reject_diagnostic(saved.snapshot, VST3_GAIN_BUNDLE, {rejected_risk}, "hash mismatch");
+  reject_diagnostic(saved.snapshot, {rejected_risk}, "hash mismatch");
   {
     std::ofstream output(managed_asset, std::ios::binary | std::ios::trunc);
     output.write(reinterpret_cast<const char*>(intact_asset.data()),
@@ -1541,7 +1561,7 @@ void export_checks() {
   }
   wrong = saved.snapshot;
   wrong.sources.front().channels = 1;
-  reject_diagnostic(wrong, VST3_GAIN_BUNDLE, {rejected_risk}, "metadata");
+  reject_diagnostic(wrong, {rejected_risk}, "metadata");
   wrong = saved.snapshot;
   wrong.tracks.front().automation.push_back(
       {id<project::AutomationLaneId>(40),
@@ -1551,21 +1571,30 @@ void export_checks() {
        project::AutomationTimebase::elapsed,
        {{id<project::AutomationPointId>(41), 0, 0.5}},
        1});
-  reject_diagnostic(wrong, VST3_GAIN_BUNDLE, {rejected_risk}, "automation target");
+  reject_diagnostic(wrong, {rejected_risk}, "automation target");
 
   REQUIRE_EQ(::setenv("OSCILLATE_VST3_LOADER_TEST_FAIL", "no-instance", 1), 0,
              "cannot enable VST3 load failure fixture");
-  reject_diagnostic(saved.snapshot, VST3_GAIN_BUNDLE, {rejected_risk}, "tail probe could not load");
+  reject_diagnostic(saved.snapshot, {rejected_risk}, "component creation failed");
   REQUIRE_EQ(::unsetenv("OSCILLATE_VST3_LOADER_TEST_FAIL"), 0,
              "cannot clear VST3 load failure fixture");
-  for (const auto& [mode, expected] : std::array<std::pair<const char*, const char*>, 4>{
-           {{"infinite-tail", "infinite or unavailable tail"},
-            {"overlong-tail", "ten-second export limit"},
+  // A declared tail of any finite length rings out whole.
+  REQUIRE_EQ(::setenv("OSCILLATE_TEST_EXPORT_EFFECT_MODE", "overlong-tail", 1), 0,
+             "cannot enable VST3 long-tail fixture");
+  REQUIRE_EQ(take(render_options(tail_snapshot, {rejected_risk})),
+             exporting::PublishOutcome::durable, "a long declared tail did not export");
+  REQUIRE_GE((read_file(rejected_risk).size() - 56) / 8, overlong_tail_frames,
+             "a long declared tail was cut");
+  fs::remove(rejected_risk);
+  REQUIRE_EQ(::unsetenv("OSCILLATE_TEST_EXPORT_EFFECT_MODE"), 0,
+             "cannot clear VST3 long-tail fixture");
+  for (const auto& [mode, expected] : std::array<std::pair<const char*, const char*>, 3>{
+           {{"infinite-tail", "tail is unbounded"},
             {"latency-over-budget", "compensation"},
-            {"activate-fail", "failed to activate"}}}) {
+            {"activate-fail", "activation failed"}}}) {
     REQUIRE_EQ(::setenv("OSCILLATE_TEST_EXPORT_EFFECT_MODE", mode, 1), 0,
                "cannot enable VST3 tail/latency fixture");
-    reject_diagnostic(tail_snapshot, VST3_TAIL_BUNDLE, {rejected_risk}, expected);
+    reject_diagnostic(tail_snapshot, {rejected_risk}, expected);
     REQUIRE_EQ(::unsetenv("OSCILLATE_TEST_EXPORT_EFFECT_MODE"), 0,
                "cannot clear VST3 tail/latency fixture");
   }
@@ -1583,13 +1612,10 @@ void static_parameter_export_checks() {
   plugin.parameters = {{101, 0.25}};
   auto render_snapshot = [&](const project::Snapshot& snapshot, const fs::path& target, bool stem) {
     auto authority = take(exporting::StoppedExportAuthority::acquire(snapshot, gate));
-    return stem
-               ? exporting::render_vst3_effect_wav_stem(snapshot, saved.store, std::move(authority),
-                                                        scanner, VST3_CONNECTED_BUNDLE,
-                                                        id<project::TrackId>(2), {target})
-               : exporting::render_vst3_effect_wav_master(snapshot, saved.store,
-                                                          std::move(authority), scanner,
-                                                          VST3_CONNECTED_BUNDLE, {target});
+    return stem ? exporting::render_vst3_stem(snapshot, saved.store, std::move(authority), scanner,
+                                              id<project::TrackId>(2), {target})
+                : exporting::render_vst3_master(snapshot, saved.store, std::move(authority),
+                                                scanner, exporting::MasterRenderOptions{target});
   };
   auto render = [&](const fs::path& target, bool stem) {
     return render_snapshot(saved.snapshot, target, stem);
@@ -1672,11 +1698,11 @@ void output_format_export_checks() {
               &unity_gain, sizeof(unity_gain));
   auto native_snapshot = saved.snapshot;
   native_snapshot.tracks.front().effects.clear();
-  auto vst3 = [&](const project::Snapshot& snapshot, const exporting::MasterOutputOptions& options,
-                  const fs::path& bundle = VST3_GAIN_BUNDLE) {
+  auto vst3 = [&](const project::Snapshot& snapshot,
+                  const exporting::MasterOutputOptions& options) {
     auto authority = take(exporting::StoppedExportAuthority::acquire(snapshot, gate));
-    return exporting::render_vst3_effect_master(snapshot, saved.store, std::move(authority),
-                                                scanner, bundle, options);
+    return exporting::render_vst3_master(snapshot, saved.store, std::move(authority), scanner,
+                                         options);
   };
   auto native = [&](const fs::path& target, std::uint32_t rate) {
     auto authority = take(exporting::StoppedExportAuthority::acquire(native_snapshot, gate));
@@ -1740,7 +1766,7 @@ void output_format_export_checks() {
   last_clip.placement = project::ElapsedInterval{{134}, {135}};
   constexpr std::uint64_t tail_frames = 143;
   const auto tail_path = directory.path / "tail-48k.wav";
-  durable(vst3(tail, exporting::MasterRenderOptions{tail_path}, VST3_TAIL_BUNDLE), "tail master");
+  durable(vst3(tail, exporting::MasterRenderOptions{tail_path}), "tail master");
   const auto tail_reference = format_oracle::decode_wav(tail_path);
   REQUIRE_EQ(tail_reference.frames, tail_frames, "tail reference lost its final drained frame");
   REQUIRE_GT(std::fabs(tail_reference.samples[(tail_frames - 1) * 2]), 0.01F,
@@ -1764,8 +1790,7 @@ void output_format_export_checks() {
 
     const auto tail_rate = directory.path / ("tail-" + std::to_string(rate) + ".wav");
     durable(vst3(tail,
-                 exporting::MasterRenderOptions{tail_rate, exporting::WavFormat::float32, 0, rate},
-                 VST3_TAIL_BUNDLE),
+                 exporting::MasterRenderOptions{tail_rate, exporting::WavFormat::float32, 0, rate}),
             "converted tail");
     const auto converted_tail = format_oracle::decode_wav(tail_rate);
     const auto expected_tail = format_oracle::converted_frames(tail_frames, 48'000, rate);
