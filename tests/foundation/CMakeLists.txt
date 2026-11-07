@@ -15,3 +15,8 @@ oscillate_add_test_executable(oscillate_foundation_crash_report_tests SOURCES cr
 oscillate_add_test_executable(oscillate_foundation_diagnostics_tests SOURCES diagnostics_bundle_tests.cpp
   LIBS oscillate::foundation
   TEST foundation_diagnostics)
+
+# The display formatter every panel's numbers go through.
+oscillate_add_test_executable(oscillate_foundation_value_text_tests SOURCES value_text_tests.cpp
+  LIBS oscillate::foundation
+  TEST foundation_value_text)

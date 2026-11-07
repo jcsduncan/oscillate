@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 import "../shell" as Shell
 import "AnvilMath.js" as AnvilMath
@@ -74,10 +75,10 @@ Kit.CurveEditor {
             const hz = AnvilMath.hzOfY(v)
             return AnvilMath.hzText(hz) + " · " + AnvilMath.noteOf(hz).name
         }
-        return Math.round(v * 100) + " %"
+        return Format.fraction(v)
     }
     function timeText(t) {
-        return kickSeconds > 0 ? Math.round(t * kickSeconds * 1000) + " ms" : Math.round(t * 100) + " %"
+        return kickSeconds > 0 ? Format.seconds(t * kickSeconds) : Format.fraction(t)
     }
 
     // The grid, the axis and the kick behind; repainted on a new render.
@@ -88,7 +89,7 @@ Kit.CurveEditor {
         ctx.font = t.typeCaption + "px '" + t.mono + "'"
         const rows = editor.pitch
             ? editor.pitchRowsHz.map(hz => [AnvilMath.yOfHz(hz), AnvilMath.hzText(hz)])
-            : editor.levelRows.map(v => [v, Math.round(v * 100) + "%"])
+            : editor.levelRows.map(v => [v, Format.fraction(v)])
         for (const row of rows) {
             const y = Math.round(editor.py(row[0]))
             ctx.fillStyle = t.grid
@@ -105,7 +106,7 @@ Kit.CurveEditor {
                 ctx.fillStyle = t.grid
                 ctx.fillRect(x, T, t.hairline, B - T)
                 ctx.fillStyle = t.inkFaint
-                ctx.fillText(at + " ms", x + editor.timeLabelGap, editor.height - editor.timeLabelRise)
+                ctx.fillText(Format.milliseconds(at), x + editor.timeLabelGap, editor.height - editor.timeLabelRise)
             }
         }
         // The kick as peaks, symmetric about the middle.
@@ -162,7 +163,7 @@ Kit.CurveEditor {
     }
     onPointerLeft: editor.hoverText = ""
     onRingBent: (index, fraction) => {
-        editor.panel.touch("BEND", Math.round(fraction * 100) + " % at the midpoint")
+        editor.panel.touch("BEND", Format.fraction(fraction) + " at the midpoint")
     }
     onPointMoved: index => {
         const point = editor.points[index]

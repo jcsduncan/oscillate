@@ -301,7 +301,7 @@ void telemetry_moves_the_playhead() {
   require(playhead->isVisible(), "the playhead shows while a hit plays");
   require(text_of(*panel, QStringLiteral("anvilLastHit")).contains(QStringLiteral("C2")),
           "the last hit is named");
-  require(text_of(*panel, QStringLiteral("anvilPeak")).startsWith(QStringLiteral("-3.0")),
+  require(text_of(*panel, QStringLiteral("anvilPeak")).startsWith(QStringLiteral("−3.0")),
           "the live peak reads");
 }
 

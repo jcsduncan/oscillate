@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The cents needle: a meter arc from 50 cents flat to 50 sharp, ticks at
 // every five cents, a green window of three cents either side of zero and
@@ -82,7 +83,7 @@ Item {
                 ctx.stroke()
                 if (major) {
                     ctx.fillStyle = c === 0 ? t.ink : t.inkFaint
-                    const label = c === 0 ? "0" : (c < 0 ? "−" : "+") + Math.abs(c)
+                    const label = Format.signed_number(c, 0)
                     ctx.fillText(label, cx + Math.cos(a) * (r + meter.labelRadius), cy + Math.sin(a) * (r + meter.labelRadius) + meter.labelDrop)
                 }
             }

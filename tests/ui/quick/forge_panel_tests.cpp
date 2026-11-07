@@ -38,7 +38,13 @@ namespace forge = oscillate::native_dsp::effects::forge;
 using oscillate::test::require;
 
 const synth::EngineDescriptor& table() { return *forge::engine().descriptor; }
-std::size_t index(std::string_view id) { return *synth::find_parameter(table(), id); }
+std::size_t index(std::string_view id) {
+  const auto found = synth::find_parameter(table(), id);
+  if (!found) {
+    throw std::runtime_error("unknown parameter " + std::string(id));
+  }
+  return *found;
+}
 
 int preset_index(std::string_view name) {
   for (std::size_t i = 0; i < table().presets.size(); ++i) {
@@ -88,6 +94,8 @@ void the_curve_sketch_is_the_engines() {
           "only Forge has a transfer curve");
 }
 
+// The arguments are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<float> forge_frame(float input, float output, float makeup) {
   namespace t = forge::telemetry;
   std::vector<float> frame(t::size, 0.0F);
@@ -294,8 +302,8 @@ void the_forge_goes_live() {
           "the input's peak rides the curve");
   require(text_of(*panel, QStringLiteral("forgeCurveCaption")).startsWith(QStringLiteral("LIVE")),
           "the caption says live");
-  require(text_of(*panel, QStringLiteral("forgeMeterValue:in")) == QStringLiteral("-12.0") &&
-              text_of(*panel, QStringLiteral("forgeMeterValue:out")) == QStringLiteral("-14.0"),
+  require(text_of(*panel, QStringLiteral("forgeMeterValue:in")) == QStringLiteral("−12.0") &&
+              text_of(*panel, QStringLiteral("forgeMeterValue:out")) == QStringLiteral("−14.0"),
           "the meters read in dBFS");
   require(text_of(*panel, QStringLiteral("forgeMakeup")) == QStringLiteral("−6.5 dB"),
           "the running makeup shows");

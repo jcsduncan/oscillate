@@ -1,4 +1,5 @@
 import QtQuick
+import Oscillate.Format
 
 // The isolator's response, as it runs: each band's own curve, filled in its
 // colour, under the summed curve, on a log-frequency screen from 20 Hz to
@@ -11,6 +12,7 @@ Canvas {
     required property DeckTheme theme
 
     readonly property int revision: controller.revision
+    readonly property real hertzPerKilohertz: 1000
     readonly property real minDb: -40
     readonly property real maxDb: 6
     readonly property var levels: revision >= 0 ? [band("low"), band("mid"), band("high")] : [1, 1, 1]
@@ -142,7 +144,8 @@ Canvas {
             required property var modelData
             x: view.xOf(modelData) + view.theme.spaceXs
             y: view.height - view.theme.responseCaptionBottom
-            text: modelData >= 1000 ? (modelData / 1000) + "k" : String(modelData)
+            text: modelData >= view.hertzPerKilohertz ? Format.number(modelData / view.hertzPerKilohertz, 0) + "k"
+                                                      : Format.number(modelData, 0)
             color: view.theme.inkFaint
             font.pixelSize: view.theme.typeMicro
             font.family: view.theme.mono
@@ -154,7 +157,7 @@ Canvas {
             required property var modelData
             x: view.theme.spaceXs
             y: view.yOf(modelData) + view.theme.spaceXxs
-            text: (modelData > 0 ? "+" : "") + modelData
+            text: Format.signed_number(modelData, 0)
             color: view.theme.inkFaint
             font.pixelSize: view.theme.typeMicro
             font.family: view.theme.mono

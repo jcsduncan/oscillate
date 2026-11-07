@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import "../devicekit" as Kit
 import "NovaContract.js" as Contract
+import Oscillate.Format
 
 // The Nova device panel (ADR-0057, ADR-0076 revision 2, spec 08 §2,
 // contract 08a): the header with the wordmark, the preset box
@@ -266,7 +267,7 @@ Rectangle {
         if (touchedRoute !== null) {
             const amount = controller.value(touchedRoute.amount_id)
             return sourceName(touchedRoute.source) + " → " + touchedLabel + " "
-                + (amount < 0 ? "−" : "") + Math.abs(Math.round(amount * 100)) + "%"
+                + Format.fraction(amount)
         }
         if (touchedId === "")
             return "—"
@@ -309,7 +310,7 @@ Rectangle {
         for (let i = 0; i < routes.length; ++i) {
             const amount = controller.value(routes[i].amount_id)
             items.push({ label: "Remove " + sourceName(routes[i].source) + " ("
-                                + Math.round(amount * 100) + "%)", value: "remove:" + routes[i].slot })
+                                + Format.fraction(amount) + ")", value: "remove:" + routes[i].slot })
         }
         if (routes.length > 0)
             items.push({ label: "Edit in matrix", value: "matrix" })
@@ -521,7 +522,7 @@ Rectangle {
         }
         case "voices":
             return controller.choice("nova.analogue.on") === 1
-                ? "Analogue · age " + controller.normalised("nova.analogue.age").toFixed(2)
+                ? "Analogue · age " + Format.number(controller.normalised("nova.analogue.age"))
                 : Math.round(controller.value("nova.global.polyphony")) + " voices"
         default:
             return live ? Contract.db(outputDb()) : "Master " + controller.display("nova.master")
@@ -1061,7 +1062,7 @@ Rectangle {
                         Text {
                             id: zoomLabel
                             anchors.centerIn: parent
-                            text: Math.round(zoomChip.modelData * 100) + "%"
+                            text: Format.fraction(zoomChip.modelData)
                             color: zoomChip.on ? panel.theme.text : panel.theme.faint
                             font.family: panel.theme.mono
                             font.pixelSize: panel.theme.typeCaption
@@ -1379,7 +1380,7 @@ Rectangle {
             Text {
                 objectName: "novaCpu"
                 anchors.verticalCenter: parent.verticalCenter
-                text: panel.live ? Math.round(panel.at(Contract.T.cpu) * 100) + " %" : "— %"
+                text: panel.live ? Format.fraction(panel.at(Contract.T.cpu)) : "— %"
                 color: panel.live && panel.at(Contract.T.cpu) > panel.cpuWarning ? panel.theme.red : panel.theme.text
                 font.family: panel.theme.mono
                 font.pixelSize: statusLine.valueSize
@@ -1484,7 +1485,7 @@ Rectangle {
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: (popRow.amount < 0 ? "−" : "") + Math.abs(Math.round(popRow.amount * 100)) + "%"
+                        text: Format.fraction(popRow.amount)
                         color: panel.theme.text
                         font.family: panel.theme.mono
                         font.pixelSize: panel.theme.typeSmall

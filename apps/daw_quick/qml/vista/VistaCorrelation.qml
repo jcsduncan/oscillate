@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The correlation meter, -1 to +1: out of phase on the left (coral), wide
 // in the middle (ice), mono-safe on the right (sea green). A steel caret
@@ -9,6 +10,8 @@ Item {
     id: meter
     required property VistaTheme theme
     property real inValue: 1
+    // The scale's ticks fall on halves.
+    readonly property int tickDecimals: 1
     property real outValue: 1
     property bool live: false
     property bool floorOn: false
@@ -57,7 +60,7 @@ Item {
             Text {
                 x: meter.xOf(tick.modelData) - width / 2
                 y: track.y + track.height + meter.theme.correlationTickMajor
-                text: tick.modelData > 0 ? "+" + tick.modelData : String(tick.modelData).replace("-", "−")
+                text: Format.signed_number(tick.modelData, meter.tickDecimals)
                 color: meter.theme.inkFaint
                 font.family: meter.theme.mono
                 font.pixelSize: meter.theme.typeMicro

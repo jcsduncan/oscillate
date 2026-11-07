@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import "../shell" as Shell
+import Oscillate.Format
 
 // Knock's Patterns area: Loops and Generate tabs
 // (role chips over the loop library with thumbnails; the generator's
@@ -181,7 +182,7 @@ Item {
         activeFocusOnTab: area.ready
         Accessible.role: Accessible.Slider
         Accessible.name: label
-        Accessible.description: Math.round(value * 100) + "%"
+        Accessible.description: Format.fraction(value)
         function set(fraction) {
             if (area.ready)
                 area.patterns[key] = Math.max(0, Math.min(1, fraction))
@@ -241,7 +242,7 @@ Item {
         Text {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            text: Math.round(setting.value * 100) + "%"
+            text: Format.fraction(setting.value)
             color: area.theme.ink
             font.family: area.theme.mono
             font.pixelSize: area.theme.typeBody

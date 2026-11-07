@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The bed meter: each layer's level (telemetry, held) as a bar in its tint,
 // dimmed while the layer is off, and the duck's gain reduction as a teal
@@ -23,8 +24,8 @@ Item {
     readonly property real tickStepDb: 12
     readonly property real labelHeight: 30
     readonly property real duckWidth: 34
-    // Below this the duck's one-decimal reading rounds to nothing.
-    readonly property real zeroReadingDb: 0.05
+    // The duck's bare reading: one decimal.
+    readonly property int levelDecimals: 1
 
     objectName: "dustBedMeter"
     implicitWidth: theme.bedMeterWidth
@@ -55,7 +56,7 @@ Item {
             Text {
                 x: parent.width - implicitWidth
                 y: -implicitHeight - 1
-                text: tick.db === 0 ? "0" : "−" + Math.abs(tick.db)
+                text: Format.number(-Math.abs(tick.db), 0)
                 color: meter.theme.inkFaint
                 font.family: meter.theme.mono
                 font.pixelSize: meter.theme.meterLabelSize
@@ -166,7 +167,7 @@ Item {
             objectName: "dustDuckValue"
             anchors.horizontalCenter: parent.horizontalCenter
             y: meter.barArea + meter.theme.duckValueTop
-            text: !meter.playing ? "—" : meter.duckDb < meter.zeroReadingDb ? "0.0" : "−" + meter.duckDb.toFixed(1)
+            text: !meter.playing ? "—" : Format.number(-meter.duckDb, meter.levelDecimals)
             color: meter.theme.ink
             font.family: meter.theme.mono
             font.pixelSize: meter.theme.typeCaption

@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // What sets the selected pad's sound, from the Pulse kernel's laws: the swept
 // body's pitch drop for kicks and toms (controller.pad_pitch), otherwise the
@@ -39,12 +40,9 @@ Rectangle {
     border.color: theme.stripLine
     Accessible.role: Accessible.Graphic
     Accessible.name: pitched ? "Pitch drop" : "Noise band"
-    Accessible.description: pitched ? hz(pitch[0]) + " falling to " + hz(pitch[pitch.length - 1])
+    Accessible.description: pitched ? Format.hertz(pitch[0]) + " falling to " + Format.hertz(pitch[pitch.length - 1])
                                     : "Filter shape of the pad's noise"
 
-    function hz(value) {
-        return value >= 1000 ? (value / 1000).toFixed(2) + " kHz" : Math.round(value) + " Hz"
-    }
     function pitchY(value, top, h) {
         const f = Math.log(Math.max(value, lowHz) / lowHz) / Math.log(highHz / lowHz)
         return top + h * (1 - Math.min(1, f))
@@ -138,7 +136,7 @@ Rectangle {
         anchors.rightMargin: view.theme.envelopeLabelInset
         y: view.theme.envelopeLabelTop
         visible: view.pitched
-        text: view.pitched ? view.hz(view.pitch[0]) + " → " + view.hz(view.pitch[view.pitch.length - 1]) : ""
+        text: view.pitched ? Format.hertz(view.pitch[0]) + " → " + Format.hertz(view.pitch[view.pitch.length - 1]) : ""
         color: view.accent
         font.pixelSize: view.theme.envelopeLabelSize
         font.bold: true

@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 import "FlybyPaths.js" as Paths
 
@@ -56,25 +57,23 @@ Rectangle {
 
     // ---- Formatting ------------------------------------------------------------------
 
-    function signed(value, digits) {
-        const text = Math.abs(value).toFixed(digits)
-        const tiny = 0.5 * Math.pow(10, -digits)
-        return value < -tiny ? "−" + text : value > tiny ? "+" + text : text
-    }
+    // Live speed and timing readings move every frame: whole numbers.
+    readonly property int wholeDecimals: 0
     function reading(key) {
         if (!playing)
             return "—"
         const v = Number(live[key])
         switch (key) {
-        case "distance": return v.toFixed(1) + " m"
-        case "speed": return Math.round(v * kmhPerMetrePerSecond) + " km/h"
-        case "pitch_cents": return signed(v, 0) + " ct"
-        case "itd_us": return speakers ? "pan only" : (v >= 0 ? "R " : "L ") + Math.abs(v).toFixed(0) + " µs"
+        case "distance": return Format.quantity(v, "m")
+        case "speed": return Format.quantity(v * kmhPerMetrePerSecond, "km/h", wholeDecimals)
+        case "pitch_cents": return Format.cents(v)
+        case "itd_us": return speakers ? "pan only"
+                                       : (v >= 0 ? "R " : "L ") + Format.quantity(Math.abs(v), "µs", wholeDecimals)
         case "level": {
             const db = (Number(live.level_left_db) + Number(live.level_right_db)) / 2
-            return db <= floorDb ? "−∞" : signed(db, 1) + " dB"
+            return Format.signed_decibels(db <= floorDb ? -Infinity : db)
         }
-        case "room": return Math.round(v * 100) + "%"
+        case "room": return Format.fraction(v)
         }
         return ""
     }
@@ -451,7 +450,7 @@ Rectangle {
             id: physicsCard
             theme: panel.theme
             title: "PHYSICS"
-            note: "100% IS THE REAL WORLD"
+            note: "100 % IS THE REAL WORLD"
             width: parent.width
             height: panel.theme.physicsCardHeight
             Row {

@@ -1,4 +1,5 @@
 import QtQuick
+import Oscillate.Format
 
 // The hero: the signal as a glowing core with the two channels' LFOs as
 // bodies orbiting it. The orbit grows with depth; the bodies sit `stereo`
@@ -224,7 +225,7 @@ Canvas {
             const mid = point(angleLeft + span / 2, captionRing)
             ctx.fillStyle = rgba(b, t.stereoCaptionAlpha)
             ctx.font = "bold " + t.typeSmall + "px sans-serif"
-            const text = "Δ " + Math.round(stereoDegrees) + "°"
+            const text = "Δ " + Format.degrees(stereoDegrees)
             ctx.fillText(text, mid.x - ctx.measureText(text).width / 2, mid.y + t.stereoCaptionDrop)
         }
     }

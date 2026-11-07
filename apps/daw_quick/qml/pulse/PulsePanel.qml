@@ -36,8 +36,8 @@ Rectangle {
     // What each pad's Character control does.
     readonly property var characterNames: ["Click", "Attack", "Snappy", "Click", "Spread", "Noise",
         "Noise", "Noise", "Body", "Noise", "Noise", "Noise"]
-    readonly property var keyNames: ["C1", "C#1", "D1", "D#1", "E1", "F1", "F#1", "G1", "G#1", "A1",
-        "A#1", "B1"]
+    readonly property var keyNames: ["C1", "C♯1", "D1", "D♯1", "E1", "F1", "F♯1", "G1", "G♯1", "A1",
+        "A♯1", "B1"]
 
     readonly property real margin: theme.spaceXl
     readonly property real gap: theme.sectionGap

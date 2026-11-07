@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Shape device panel: a mastering console's EQ in graphite and ice
@@ -24,6 +25,9 @@ Rectangle {
     readonly property int bandCount: 8
     // Under this a meter reads silence.
     readonly property real floorDb: -60
+    // Bare level readouts (no unit beside them): one decimal.
+    readonly property int levelDecimals: 1
+    readonly property real hertzPerKilohertz: 1000
     // A meter's peak with no signal, and the peak a readout shows hot from.
     readonly property real silentDb: -200
     readonly property real hotDb: -3
@@ -74,16 +78,13 @@ Rectangle {
 
     // ---- Formatting ------------------------------------------------------------------
 
-    function signed(value, digits) {
-        const text = Math.abs(value).toFixed(digits)
-        const tiny = 0.5 * Math.pow(10, -digits)
-        return value < -tiny ? "−" + text : value > tiny ? "+" + text : text
-    }
+    // A bare level, −∞ at the floor.
     function dbText(db) {
-        return db <= floorDb ? "−∞" : signed(db, 1)
+        return Format.signed_number(db <= floorDb ? -Infinity : db, levelDecimals)
     }
+    // A band's frequency on its tile, "1.20k" above 1 kHz.
     function hzText(hz) {
-        return hz >= 1000 ? (hz / 1000).toFixed(hz >= 10000 ? 1 : 2) + "k" : Math.round(hz).toString()
+        return hz >= hertzPerKilohertz ? Format.number(hz / hertzPerKilohertz) + "k" : Format.number(hz, 0)
     }
     function readoutName(id) {
         if (id === "")
@@ -301,7 +302,7 @@ Rectangle {
         id: meterPlate
         theme: panel.theme
         title: "LEVELS"
-        note: panel.playing ? "PEAK · HELD 1 S" : "NO SIGNAL"
+        note: panel.playing ? "PEAK · HELD 1 s" : "NO SIGNAL"
         noteColor: panel.playing ? panel.theme.live : panel.theme.inkFaint
         x: responsePlate.x + responsePlate.width + panel.gap
         y: panel.rowAY
@@ -470,7 +471,7 @@ Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
                         y: panel.theme.tileGainY
                         text: tile.kind >= 2 && panel.revision >= 0
-                            ? panel.signed(panel.controller.value(panel.bandId(tile.index, "gain")), 1) : "—"
+                            ? Format.signed_number(panel.controller.value(panel.bandId(tile.index, "gain")), panel.levelDecimals) : "—"
                         color: tile.on ? panel.theme.inkDim : panel.theme.inkFaint
                         font.family: panel.theme.mono
                         font.pixelSize: panel.theme.typeSmall
@@ -568,7 +569,7 @@ Rectangle {
                 // A pass filter's steepness: 12 dB an octave per stage.
                 Caption {
                     visible: panel.selectedKind < 2
-                    text: "SLOPE · DB / OCT"
+                    text: "SLOPE · dB / OCT"
                 }
                 Kit.Segment {
                     visible: panel.selectedKind < 2
