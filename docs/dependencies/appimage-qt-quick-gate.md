@@ -1,6 +1,6 @@
 # Qt Quick AppImage distribution gate
 
-**Status:** Earlier ELF and QML load inventory, 15 October 2026. The [release AppImage](release-packages.md) now records a combined Quick/scanner/codec payload, exact copied-library inventory, pinned runtime/tool and offscreen smoke; licensing and portability gates remain open. This earlier inventory supplements the [Qt runtime inventory](qt-quick-runtime.md), [release packages](release-packages.md) and [distribution review](distribution-sbom-review.md). The inventory below is for the older `BUILD_TESTING=OFF` Ubuntu 26.04 x86-64 Quick binary at `build/package-release2/apps/daw_quick/oscillate` (SHA-256 `4dfc383f0abc0a17a36536195d16732715b79b51bde7366b7fb7fa566ae37546`); it is not the newer AppImage payload inventory.
+**Status:** Earlier ELF and QML load inventory, 15 October 2026. The [release AppImage](release-packages.md) now records a Quick and VST3 scanner payload without the codec adapter, an exact copied-library inventory, pinned runtime/tool and offscreen smoke; licensing and portability gates remain open. This earlier inventory supplements the [Qt runtime inventory](qt-quick-runtime.md), [release packages](release-packages.md) and [distribution review](distribution-sbom-review.md). The inventory below is for the older `BUILD_TESTING=OFF` Ubuntu 26.04 x86-64 Quick binary at `build/package-release2/apps/daw_quick/oscillate` (SHA-256 `4dfc383f0abc0a17a36536195d16732715b79b51bde7366b7fb7fa566ae37546`); it is not the newer AppImage payload inventory.
 
 ## Observed Qt closure
 

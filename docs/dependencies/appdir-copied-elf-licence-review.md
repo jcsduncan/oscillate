@@ -19,7 +19,7 @@ python3 scripts/packaging/appdir_licence_ledger.py \
 python3 -m unittest discover -s scripts/packaging -p 'test_*.py' -v
 ```
 
-The tool runs on any AppDir and inventory from the [staging script](../../scripts/stage-appdir.py); see [release packages](release-packages.md). A replay depends on the same installed Ubuntu package versions and can fail intentionally after an OS package update. Do not overwrite the committed ledger to make a drift failure disappear; inspect the changed package and image first.
+The committed ledger describes the prototype AppDir, which bundled the codec chain. The release [staging script](../../scripts/stage-appdir.py) leaves the codec adapter out and refuses `libmp3lame.so.0` ([release packages](release-packages.md)), so it cannot reproduce that AppDir. To replay it, use `scripts/stage-appdir-prototype.py` from revision `a93d4eb` with `--binary` and `--scanner-helper` set to the extracted image's `usr/bin/oscillate` and `oscillate_vst3_scan_helper`. A replay depends on the same installed Ubuntu package versions and can fail intentionally after an OS package update. Do not overwrite the committed ledger to make a drift failure disappear; inspect the changed package and image first.
 
 ## Result and review queue
 

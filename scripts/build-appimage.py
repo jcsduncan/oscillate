@@ -36,6 +36,7 @@ TYPE2_MAGIC = b"AI\x02"
 # appimagetool 1.9.1 writes the image MD5 into this 16-byte runtime slot.
 RUNTIME_MD5_SLOT = (932096, 932112)
 EXECUTABLE_MODE = 0o755
+DOWNLOAD_TIMEOUT_SECONDS = 120
 INPUTS_DIR = SOURCE_ROOT / "build/appimage-inputs"
 
 
@@ -90,10 +91,18 @@ def fetch_input(pinned: dict[str, str], destination: Path) -> Path:
     if not destination.is_file() or digest(destination) != pinned["sha256"]:
         destination.parent.mkdir(parents=True, exist_ok=True)
         partial = destination.with_name(f"{destination.name}.part")
-        with urllib.request.urlopen(pinned["url"]) as response, partial.open("wb") as target:
-            shutil.copyfileobj(response, target)
-        require(digest(partial) == pinned["sha256"], f"download SHA-256 mismatch: {pinned['url']}")
-        os.replace(partial, destination)
+        try:
+            with (
+                urllib.request.urlopen(pinned["url"], timeout=DOWNLOAD_TIMEOUT_SECONDS) as response,
+                partial.open("wb") as target,
+            ):
+                shutil.copyfileobj(response, target)
+            require(
+                digest(partial) == pinned["sha256"], f"download SHA-256 mismatch: {pinned['url']}"
+            )
+            os.replace(partial, destination)
+        finally:
+            partial.unlink(missing_ok=True)
     destination.chmod(EXECUTABLE_MODE)
     return destination
 

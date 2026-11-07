@@ -7,8 +7,10 @@ Each release ships two Ubuntu 26.04 x86-64 packages, built by the
 | File | Form |
 | --- | --- |
 | `oscillate_<version>_amd64.deb` | Native package. Installs `/usr/bin/oscillate` and depends on Ubuntu's shared libraries. |
-| `Oscillate-<version>-x86_64.AppImage` | Self-contained image with Qt and every other library except glibc. |
-| `*.inventory.json` | Sidecar: package hash, features, dependencies and payload. |
+| `Oscillate-<version>-x86_64.AppImage` | Image with Qt and its other libraries; glibc and `libproxy` come from the host. |
+| `oscillate_<version>_amd64.deb.inventory.json` | `.deb` sidecar: package hash, features, `Depends` and payload. |
+| `Oscillate-<version>-x86_64.AppImage.inventory.json` | AppImage sidecar: image hash, features and pinned tool and runtime. |
+| `Oscillate.AppDir.inventory.json` | The AppImage's payload: every file with hash and mode, and each copied ELF's Ubuntu package. |
 | `SHA256SUMS` | Checksums of everything above. |
 
 Release Please dispatches the workflow with the new tag. A manual run with a
@@ -78,6 +80,7 @@ reject a missing or changed notice.
 
 **SBOM.** [`package_sbom.py`](../../scripts/package_sbom.py) writes an SPDX
 2.3 JSON document listing every file in the package with SHA-1 and SHA-256,
+except the SBOM itself and the AppImage's `.DirIcon` symlink. It also lists
 the compiled-in components, each Ubuntu package the AppImage copies from,
 each Ubuntu package the `.deb` depends on, and the AppImage runtime. The
 project is declared GPL-3.0-or-later. Third-party licences are

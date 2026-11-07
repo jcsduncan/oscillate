@@ -139,7 +139,8 @@ def smoke(appdir: Path, inventory_path: Path) -> None:
             check=True,
         )
         require(
-            helper.stdout.startswith(SCAN_REPLY_PREFIX)
+            len(helper.stdout) > SCAN_STATUS_OFFSET
+            and helper.stdout.startswith(SCAN_REPLY_PREFIX)
             and helper.stdout[SCAN_STATUS_OFFSET] != SCAN_STATUS_OK,
             "scanner helper did not report the missing bundle",
         )
