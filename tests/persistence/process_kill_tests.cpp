@@ -327,6 +327,9 @@ void verify_live_stage_kept() {
 // A stage that cannot be removed is skipped: it blocks neither the cleanup
 // of other stages nor a new creation beside it.
 void verify_stuck_stage_skipped() {
+  // Permissions cannot make a folder undeletable for root (CI containers).
+  if (::geteuid() == 0)
+    return;
   Directory directory;
   const auto stuck = directory.path() / ".Stuck.creating-00112233445566778899aabbccddeeff";
   const auto loose = directory.path() / ".Loose.creating-ffeeddccbbaa99887766554433221100";
