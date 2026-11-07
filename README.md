@@ -66,21 +66,35 @@ need git.
 | Wren | University of Iowa Musical Instrument Samples, flute | free use, no formal licence | `python3 -I tools/wren/install_iowa_flute.py` | `OSCILLATE_WREN_LIBRARY` |
 
 Default location: `~/.local/share/oscillate/instruments/` (or
-`$XDG_DATA_HOME`). An instrument without its library loads and reports the
-library as missing. Environment variables: [docs/environment.md](docs/environment.md).
+`$XDG_DATA_HOME`). An override must be set for both the installer and the
+application. An instrument without its library loads and reports the library
+as missing. Environment variables: [docs/environment.md](docs/environment.md).
 
 ## Tests
 
+Tests write temporary files under `TMPDIR`; point it at the build tree.
+
+Fast tier:
+
 ~~~sh
 scripts/build.sh build/quick --target oscillate_tests
-QT_QPA_PLATFORM=offscreen ctest --preset quick-fast -LE live -j4
+TMPDIR="$PWD/build/quick/scratch" QT_QPA_PLATFORM=offscreen \
+  ctest --preset quick-fast -LE live -j4
 ~~~
 
-Single target:
+All tiers except live devices:
+
+~~~sh
+TMPDIR="$PWD/build/quick/scratch" QT_QPA_PLATFORM=offscreen \
+  ctest --test-dir build/quick -LE live --output-on-failure -j4
+~~~
+
+Single test:
 
 ~~~sh
 scripts/build.sh build/quick --target oscillate_project_tests
-ctest --test-dir build/quick -R '^project_contract$' --output-on-failure
+TMPDIR="$PWD/build/quick/scratch" \
+  ctest --test-dir build/quick -R '^project_contract$' --output-on-failure
 ~~~
 
 Tiers: fast, slow, live. Sanitizer, coverage, format, tidy, benchmark and

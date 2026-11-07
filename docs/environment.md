@@ -22,7 +22,7 @@ for ordinary use.
 The sample-library installers in `tools/concert`, `tools/fret` and
 `tools/wren` write to the same directory the instrument reads, so set the
 variable for both or for neither. See the README's
-[optional sample libraries](../README.md#optional-sample-libraries).
+[optional sample libraries](../README.md#sample-libraries).
 
 ## Where the application keeps files
 
