@@ -18,10 +18,24 @@
 
 namespace quick_smoke {
 
+namespace {
+
+// The routing controls live in the inspector, whose open state is a saved
+// preference; a fresh profile starts with it closed.
+void open_inspector(QQuickWindow* window) {
+  if (!window)
+    return;
+  window->setProperty("contextPanelOpen", true);
+  QCoreApplication::processEvents();
+}
+
+} // namespace
+
 int run_routing(QApplication& app, oscillate::quick::ProjectBridge& bridge, QQuickWindow* window,
                 const RoutingPlaybackProbe& probe, RoutingItemLookup find_item,
                 RoutingLabeledItemLookup find_labeled_item) {
 #ifdef OSCILLATE_QUICK_TEST_INPUT
+  open_inspector(window);
   auto* group =
       window ? find_item(window->contentItem(), QStringLiteral("createGroupBus")) : nullptr;
   auto* returns =
@@ -305,6 +319,7 @@ int run_routing(QApplication& app, oscillate::quick::ProjectBridge& bridge, QQui
 
 int verify_routing(oscillate::quick::ProjectBridge& bridge, QQuickWindow* window,
                    RoutingVisibleCount visible_count) {
+  open_inspector(window);
   const auto tracks = bridge.tracks();
   const auto source = tracks.empty() ? QVariantMap{} : tracks.front().toMap();
   const auto sends = source.value(QStringLiteral("sends")).toList();
