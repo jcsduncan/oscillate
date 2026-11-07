@@ -1,8 +1,10 @@
 # Continuous warp processor decision (17 October 2026)
 
-Status: rejected for the optional worker candidate. Production playback and
-export remain gated. The current renderer uses independent `exact()` calls for
-reviewed marker intervals and reports the adjacent-sample jump at each seam.
+Status: rejected for the optional worker candidate, and superseded by
+[ADR-0026](../decisions/0026-continuous-warp-stream.md): the in-house
+`warp_dsp` engine plays and exports processed clips. The candidate renderer
+used independent `exact()` calls for reviewed marker intervals and reported
+the adjacent-sample jump at each seam.
 
 Signalsmith Stretch 1.4.0 has no public operation that both retains the
 processor's spectral history across a rate change and binds an arbitrary
@@ -15,7 +17,7 @@ short-segment probe. A smoother measured seam is insufficient when a reviewed
 marker moves.
 
 The bounded fallback is explicit rejection of any segment outside the
-candidate's 0.5–3× interval range. The streaming worker now checks *every*
+candidate's 0.5–3× interval range. The streaming worker checks *every*
 segment's structural range before its first source read or output write. A
 later unsupported interval therefore cannot expose a successful earlier
 interval to a caller's streaming sink. The whole-buffer path already renders

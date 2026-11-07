@@ -1,6 +1,6 @@
 # ADR-0017 proposal — Live VST3 track composition
 
-**Status:** Narrow one-insert live contract implemented; broader composition remains proposed.
+**Status:** Superseded by [ADR-0050](0050-one-chain-per-track.md): a track's chain holds any mix of built-in and VST3 stages.
 **Requirements:** PI-04, PI-08, ER-01, ER-02, ER-03, ER-08, ER-09, ER-10.  
 **Decision owners:** project schema, engine graph/publication, application playback, plugin host.
 

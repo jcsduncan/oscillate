@@ -100,11 +100,10 @@ nominal-period performance.
 
 ## Qualification boundary
 
-Current `RoutedPlaybackControl` accepts one bound VST3 insert provider; this
-rehearsal therefore has **one synthetic VST3 effect, not a 32-plugin or
-representative instrument/effect workload**. The fixture gain processor is
-trivial and declares seven frames of latency without physically delaying its
-audio; it does not prove compensation alignment. It has no VST3 instrument,
+This rehearsal has **one synthetic VST3 effect, not a 32-plugin or
+representative instrument/effect workload**. The fixture gain processor
+delays its audio by the seven frames it reports; this timed rehearsal does
+not check compensation alignment. It has no VST3 instrument,
 third-party GUI, parameter automation, dynamic graph edit, encoded source,
 source-rate conversion or export. Short WAVs can remain in the OS page cache.
 The null sink is not physical audio hardware, and its backend has no reliable

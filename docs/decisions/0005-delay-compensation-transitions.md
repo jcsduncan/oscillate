@@ -1,6 +1,6 @@
 # ADR-0005 — Delay-compensation transitions
 
-**Status:** Accepted; implemented for the bounded routed graph (reviewed 20 October 2026). Delay histories and transitions are in `src/engine/delay_compensation.cpp` and `routing_latency.cpp`. The numerical PDC budget remains a G7 qualification item.
+**Status:** Accepted; implemented for the bounded routed graph. Delay histories and transitions are in `src/engine/delay_compensation.cpp` and `routing_latency.cpp`. The numerical PDC budget remains a G7 qualification item.
 **Date:** 14 October 2026
 **Requirements:** PRD §§7, 15, 17; FS-02 ER-03/ER-10.
 

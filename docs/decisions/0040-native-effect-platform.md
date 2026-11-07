@@ -1,6 +1,6 @@
 # ADR-0040 — A generic native effect platform
 
-**Status:** Accepted; implemented. The platform and engines were built here; model, schema, routing and export integration was completed under ADR-0043 (schema 1.33). **Date:** 19 October 2026.
+**Status:** Accepted; implemented. Model, schema, routing and export integration follow [ADR-0043](0043-one-native-insert-path.md). **Date:** 19 October 2026.
 **Builds on:**
 - ADR-0023, the unified insert chain;
 - ADR-0027, the native synth platform;

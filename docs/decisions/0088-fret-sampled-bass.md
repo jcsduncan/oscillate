@@ -1,6 +1,6 @@
 # ADR-0088 — Fret: a sampled bass guitar with Feel, realtime auto-articulation
 
-**Status:** Accepted; implemented (engine, Feel, library installer, panel). The Kick & Bass Lock follower is still to come.
+**Status:** Accepted; implemented (engine, Feel, library installer, panel). Fret does not take part in Kick & Bass Lock, which pairs Anvil with Nova.
 **Date:** 5 November 2026.
 **Builds on:** ADR-0071 (Concert's streamed sample library), ADR-0068 (Knock's in-kernel groove), ADR-0072 (Kick & Bass Lock).
 

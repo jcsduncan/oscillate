@@ -1,6 +1,6 @@
 # Optional native convolution core: local qualification
 
-**Status:** Reusable DSP primitive only, 15 October 2026. **Requirements:**
+**Status:** Opt-in DSP core, rendered by offline export; the Quick app does not play it live. **Requirements:**
 PI-07, ER-08, PRD §§15, 17. See [ADR-0020](../decisions/0020-convolution-reverb.md).
 
 ## Build and behavior
@@ -25,9 +25,10 @@ counted. Reset/destruction require callback quiescence.
 
 Reported latency is zero frames. For an `N`-frame IR the deterministic tail
 is `N-1` frames after the final source frame. Offline callers must render
-those extra frames in blocks of at most 128. This API does not yet implement
-project IR identity/storage, graph runtime reuse, replacement tail drain or
-an effect editor. It must not be exposed as a completed v1 effect.
+those extra frames in blocks of at most 128. Projects save a convolution
+insert with its IR (`project::NativeConvolution`), and offline master and stem
+export render it in builds with `OSCILLATE_BUILD_CONVOLUTION_DSP=ON`, with at
+most one active convolution insert.
 
 ## Optional graph adapter
 
@@ -38,12 +39,10 @@ FFT history; a compatible graph revision reuses the runtime and its tail.
 The adapter reports zero latency and the exact `IR length - 1` finite tail.
 Preparation, destruction and `reset_after_quiesce(generation)` remain on the
 control side. A seek/new transport generation **silences** the adapter until
-the callback has quiesced and that reset completes. The current graph
-publication API has no callback-safe asynchronous reset handoff for this
-large FFT history, so this adapter is still opt-in and is not connected to
-live project insert chains or export.
+the callback has quiesced and that reset completes. The Quick app refuses
+live playback of a project that holds a convolution insert.
 
-The focused contract now additionally renders an 8192-frame block through
+The focused contract also renders an 8192-frame block through
 the adapter, verifies the split against known FIR taps and an across-block
 tail, counts zero callback C/C++ allocations, discards oversized input without
 walking it, checks quiescent generation reset, and publishes a second graph revision to prove a

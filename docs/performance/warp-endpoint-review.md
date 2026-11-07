@@ -1,7 +1,8 @@
 # Warp endpoint and marker review
 
-**Status:** Experimental worker candidate, 16 October 2026. Production playback
-and export remain disabled for processed clips. This review covers the pinned
+**Status:** Experimental worker candidate, superseded by
+[ADR-0026](../decisions/0026-continuous-warp-stream.md); processed clips play
+and export through `warp_dsp`. This review covers the pinned
 Signalsmith Stretch 1.4.0 `exact()` path at 48 kHz, zero pitch shift and two
 channels. It does not approve the algorithm or its redistribution terms.
 

@@ -11,7 +11,7 @@ Local preliminary GCC 15.2 runs on an Intel i7-10700K used a five-second 48 to 4
 ## Integrated contract
 
 - `source_rate_supported` checks converter availability and the bounded phase period before a staged import publishes an asset. ProjectSession retains the original source-frame range and places a new clip for `source_rate_frame_count(source.frames, source.rate, project.rate)` project frames. Rounded zero duration and overflow are rejected.
-- Routed playback and offline master/stem export convert each source-range endpoint independently with the same helper. The difference must equal the rendered clip duration. Worker reads begin at the converted absolute source-range start plus elapsed clip frames. Stretch and warp remain explicit unsupported cases; current trim commands also reject mismatched-rate clips.
+- Routed playback and offline master/stem export convert each source-range endpoint independently with the same helper. The difference must equal the rendered clip duration. Worker reads begin at the converted absolute source-range start plus elapsed clip frames. Stretched and warped clips play and export through the warp renderer.
 - The routed worker primes and refills rings in at most 1,024-frame reads. The callback consumes only tagged project-rate frames. A seek changes transport generation and re-primes on the absolute project-source grid; stale ring output is discarded. Offline master and stems use the same bounded reader.
 - The original encoded source remains the managed asset. No converted cache is persisted. Source or clip edits require a new prepared routed source and graph handoff. A codec call already in progress is not interruptible, and multi-track conversion headroom still needs qualification.
 

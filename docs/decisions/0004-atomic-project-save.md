@@ -1,6 +1,6 @@
 # ADR-0004 — Generation-based atomic project saves
 
-**Status:** Accepted; implemented (reviewed 20 October 2026). Generations, fsync/rename pointer publication, autosave and named revisions are in `src/persistence/store.cpp`. Every committed save also prunes old generations, keeping the 10 most recent valid ones plus those the pointers and named revisions reference. Amended by [ADR-0039](0039-background-editor-publication.md).
+**Status:** Accepted; implemented. Generations, fsync/rename pointer publication, autosave and named revisions are in `src/persistence/store.cpp`. Every committed save also prunes old generations, keeping the 10 most recent valid ones plus those the pointers and named revisions reference. Amended by [ADR-0039](0039-background-editor-publication.md).
 **Date:** 14 October 2026
 **Requirements:** PRD §§8, 18, 21; FS-03 PM-03–PM-08.
 

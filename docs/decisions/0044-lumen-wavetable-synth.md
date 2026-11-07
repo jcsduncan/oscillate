@@ -1,10 +1,6 @@
 # ADR-0044 — Lumen: wavetable synth (third native engine)
 
-**Superseded** by [ADR-0057](0057-nova-flagship-synth.md) on 25 October 2026: Lumen was removed and Nova replaces it.
-
-*Renumbered from a duplicate ADR-0029 on 20 October 2026; ADR-0029 is the live mixer-control overlay.*
-
-**Status:** Superseded by [ADR-0057](0057-nova-flagship-synth.md); Lumen was removed. Kept as the record of what was built. **Date:** 18 October 2026.
+**Status:** Superseded by [ADR-0057](0057-nova-flagship-synth.md); Lumen is not in the code. **Date:** 18 October 2026.
 **Builds on:** ADR-0027 (the native-synth platform) and ADR-0028 (Ember).
 
 Lumen is a morphing wavetable synth. Every table is generated in code, deterministically, so Lumen ships no assets and needs no licence review. Like Ember, it must add no project-format, session, playback or export changes.

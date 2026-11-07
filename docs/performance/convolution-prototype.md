@@ -7,8 +7,8 @@ sets the candidate and open production gates.
 ## Reproduction status
 
 This page records the 15 October isolated prototype run. The standalone
-prototype directory was removed after integration, so its original command
-line is no longer runnable from this checkout. The equivalent maintained
+prototype is not in this checkout, so its original command line cannot be
+run. The equivalent maintained
 core is the opt-in convolution target under [native DSP](../../src/native_dsp/).
 Its source pin and patch are in the
 [PFFFT inventory](../dependencies/pffft-convolution.md). The historical
@@ -19,8 +19,6 @@ The shared implementation lives in
 its public contract in [`convolution.hpp`](../../include/oscillate/native_dsp/convolution.hpp)
 and independent oracle in
 [`convolution_tests.cpp`](../../tests/native_dsp/convolution_tests.cpp).
-The standalone target compiles those same files so its measurements and the
-optional native target cannot diverge.
 
 ## Contract and oracles
 
@@ -207,8 +205,8 @@ unresolved libc and `libm` symbols but no PFFFT shared-library requirement.
 The upstream `LICENSE.txt` contains Julien Pommier, Hayati Ayguen, Dario
 Mambro and UCAR/NCAR notices, a source/binary notice obligation and a
 no-endorsement condition. Preserve that complete text in any source vendor
-and binary package materials. No upstream source is copied into this commit;
-the only new source patch adds null checks and cleanup to the setup function.
+and binary package materials. The upstream source is vendored in `third_party/pffft`;
+the only source patch adds null checks and cleanup to the setup function.
 The build-local copy retains the complete header notice, and the upstream
 `LICENSE.txt` is unchanged. A release must identify the patched variant,
 preserve the full license text and list the patch and compiled files in its
@@ -216,24 +214,12 @@ SBOM. The release SBOM must pin its checksum, build flags, exact shipped file
 list and notice location. A C++ processor ABI is **not** exported across shared
 library boundaries; PFFFT's C setup stays private to this target and version.
 
-Proposed production patch after the open gates:
-
-1. Add a narrow optional `oscillate_convolution_dsp` target in
-   `src/native_dsp/CMakeLists.txt`, using either a reviewed small vendor
-   bundle at the pinned commit or a verified source package. Keep it off by
-   default until Ubuntu package and AppImage notices are validated. Do not
-   import upstream install targets. Carry the tested pinned null-allocation
-   patch and its fault tests into any reviewed vendor/source package.
-2. Move the candidate interface to
-   `include/oscillate/native_dsp/convolution.hpp` and implementation to
-   `src/native_dsp/convolution.cpp`; make it a graph `ProcessorRuntime`,
-   retaining off-callback preparation and single-owner state. Preserve the
-   aligned PFFFT scratch and release it after callback quiescence.
-3. Carry the tested 44.1/48/88.2/96 kHz schedule into the native target,
-   then add IR asset identity, rate/channel validation, import/resample and
-   project state; add graph
-   transition/reuse, export master/stem tail and visible failure fixtures.
-   Only then bind controls in Qt Quick and advertise convolution reverb.
+The production core: the optional `oscillate::convolution_dsp` target
+(`OSCILLATE_BUILD_CONVOLUTION_DSP`, off by default) builds the vendored,
+patched PFFFT. The core is `include/oscillate/native_dsp/convolution.hpp`,
+`src/native_dsp/convolution.cpp` and the `ConvolutionRuntime` graph adapter.
+Projects save IR inserts and offline export renders them; Quick live playback
+rejects them.
 
 Listening comparison against licensed speech, percussion and sustained music
 IRs, 32-track/64-frame qualification, a reviewed packaged PFFFT patch, graph

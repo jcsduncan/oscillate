@@ -163,7 +163,7 @@ select { font: 500 12px var(--sans); color: var(--ink); background: var(--panel2
     <span class="label">How Lock works</span>
     <ol>
       <li><b>Tune.</b> Anvil's tail moves to the bass note (or the key) at each hit, so kick and bass share a pitch and can add instead of beat.</li>
-      <li><b>Align.</b> Whichever starts second starts in phase with the one already sounding: a bass note during a kick takes the kick's phase, and a kick over a held note picks its start phase so its tail lands on the bass. Both synths know each other's notes ahead from the project, so it is exact.</li>
+      <li><b>Align.</b> Not built: Nova's own effects shift the bass's phase, so a phase taken from the notes would be wrong where it matters (ADR-0072).</li>
       <li><b>Duck.</b> Nova's sub dips under the kick's exact volume curve, below the crossover only. No detector, no lookahead latency, no attack or release to set.</li>
       <li><b>Mono.</b> Below the crossover, Nova's unison and stereo spread fold to mono, so the club system sums what you heard.</li>
     </ol>

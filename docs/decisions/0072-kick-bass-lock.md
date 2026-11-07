@@ -1,6 +1,6 @@
 # ADR-0072 — Kick & Bass Lock: Anvil and Nova read each other's notes
 
-**Status:** Accepted; implemented. Align is deferred (see below). **Date:** 29 October 2026.
+**Status:** Accepted; implemented except Align, which is not built (see below). **Date:** 29 October 2026.
 **Builds on:** ADR-0057 (Nova), ADR-0058 (effects keyed by notes, read ahead), ADR-0060 (Anvil), ADR-0062 (denormals flushed).
 **Contract:** `include/oscillate/native_dsp/synth/lock.hpp` (the pair, `LockNote`, `LockState`), `SynthEngine::lock_follows` / `lock_enabled` / `lock_envelope` and `SynthKernel::locate` / `adopt_lock` in `runtime.hpp`, `NativeSynthPlayer::refresh_lock` in `player.hpp`. Parameters: `anvil.lock` (Anvil's table) and `nova.lock.on`, `nova.lock.duck`, `nova.lock.crossover`, `nova.lock.mono` (spec 08a §2.12a). Design: `docs/ui/kick-bass-lock-mockup.html`.
 

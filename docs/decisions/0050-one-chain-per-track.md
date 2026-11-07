@@ -1,6 +1,6 @@
 # ADR-0050 — One chain per track
 
-**Status:** Accepted and implemented for live playback, routing and authoring; export still keeps two VST3 renderers to unify. **Date:** 21 October 2026.
+**Status:** Accepted and implemented for live playback, routing and authoring. Export has two VST3 offline renderers with their own limits (`src/application/vst3/effect_export.cpp`, `instrument_export.cpp`). **Date:** 21 October 2026.
 
 ## Context
 

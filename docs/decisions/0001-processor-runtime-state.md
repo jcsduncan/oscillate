@@ -1,6 +1,6 @@
 # ADR-0001 — Processor runtime survives topology rebuilds
 
-**Status:** Accepted; implemented (reviewed 20 October 2026). `engine::Graph` reuses a processor runtime whose stable instance id and compatibility key match the prior plan (`TransitionKind::reused`) and replaces the rest off the callback (`src/engine/graph.cpp`).
+**Status:** Accepted; implemented. `engine::Graph` reuses a processor runtime whose stable instance id and compatibility key match the prior plan (`TransitionKind::reused`) and replaces the rest off the callback (`src/engine/graph.cpp`).
 **Date:** 14 October 2026
 **Requirements:** PRD §§7, 15–16; FS-02 ER-08/ER-10; FS-04 PI-08.
 

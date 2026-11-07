@@ -7,14 +7,14 @@
 - a five-note chord (held 4 s, then released) on every Pad preset, against Supersaw Lead and Pluck: the `chord5` scenes.
 
 ```sh
-cmake -DOSCILLATE_BUILD_BENCHES=ON build/quick-opt
-scripts/build.sh build/quick-opt --target oscillate_nova_bench
-build/quick-opt/bench/native_dsp/oscillate_nova_bench                    # timing, 128 and 512 frames
-build/quick-opt/bench/native_dsp/oscillate_nova_bench --timing chord5     # only the scenes named chord5...
-build/quick-opt/bench/native_dsp/oscillate_nova_bench --render DIR       # save renders
-build/quick-opt/bench/native_dsp/oscillate_nova_bench --compare DIR      # check against them
-NOVA_TIMELINE=1 build/quick-opt/bench/native_dsp/oscillate_nova_bench --scene "preset Wobble Growl"
-NOVA_TRACE=t.json build/quick-opt/bench/native_dsp/oscillate_nova_bench --scene "Analog Pad chords"
+cmake -DOSCILLATE_BUILD_BENCHES=ON build/release
+scripts/build.sh build/release --target oscillate_nova_bench
+build/release/bench/native_dsp/oscillate_nova_bench                    # timing, 128 and 512 frames
+build/release/bench/native_dsp/oscillate_nova_bench --timing chord5     # only the scenes named chord5...
+build/release/bench/native_dsp/oscillate_nova_bench --render DIR       # save renders
+build/release/bench/native_dsp/oscillate_nova_bench --compare DIR      # check against them
+NOVA_TIMELINE=1 build/release/bench/native_dsp/oscillate_nova_bench --scene "preset Wobble Growl"
+NOVA_TRACE=t.json build/release/bench/native_dsp/oscillate_nova_bench --scene "Analog Pad chords"
 ```
 
 ## The 26 October 2026 pass
@@ -51,11 +51,11 @@ What remains on the Analog Pad scene, roughly:
 - the FX rack (chorus and reverb, with its resampler): 23%;
 - control ticks: 11%.
 
-The next large step is spreading a track's voices across the audio workers, so one heavy Nova track no longer sets the block's critical path.
+[ADR-0085](../decisions/0085-nested-voice-rendering.md) spreads a track's voices across the audio workers, so one heavy Nova track does not set the block's critical path.
 
 ## The 1 November 2026 pass: pads as chords
 
-Pads are now held as four- to six-note chords from the Chord track, and the pad presets were the heaviest Nova tracks. perf is not permitted on this machine (`perf_event_paranoid` 4), so the profile came from a small `SIGPROF` sampler preloaded into the bench, attributing each sample (and each libm sample to its caller) to a function.
+Pads play four- to six-note chords from MIDI clips, and the pad presets were the heaviest Nova tracks. perf is not permitted on this machine (`perf_event_paranoid` 4), so the profile came from a small `SIGPROF` sampler preloaded into the bench, attributing each sample (and each libm sample to its caller) to a function.
 
 | Cause | Fix | Output |
 |---|---|---|
@@ -92,7 +92,7 @@ What remains (sampled shares of the five-note chord's cost):
 | Warm Pad | 24% | 10% | 35% | 15% | 9% | 5% |
 | Whispered Ahh | 25% | 27% | 22% | 8% | 9% | 7% |
 
-- The oscillators are now arithmetic: Classic (BLEP) unison stacks still run a voice at a time, and warped wavetables take the scalar path.
+- The oscillators are arithmetic: Classic (BLEP) unison stacks still run a voice at a time, and warped wavetables take the scalar path.
 - The ladder filters are a serial chain of saturating stages with divisions, already paired across channels.
 - Expanse's late network (16 lines, each three fractional allpass reads and two shelves a frame) is a fixed cost per instance, a fifth to a third of a pad; packing its lines into SIMD lanes is the next step there.
 - Inactive unison slots still count toward an oscillator's wavetable band-limit (`fastest` in `Oscillator::set`): with fewer voices than 16, the extrapolated outer slots ask for a duller mip level than the sounding voices need. Fixing it brightens wavetable unison slightly, so it was left for a decision rather than folded into a same-output pass.

@@ -35,7 +35,7 @@ The first working kernel measured 29.9 %. The cost was mostly latency: each samp
 
 Double-precision tables (32 KB for the sine) were tried and were slower than float tables.
 
-The 128 specialised kernels (32 algorithms × 1–4 lanes) make `halo.cpp.o` about 1.0 MB of code (Lumen is 86 KB), roughly 7.5 KB per kernel. Only the current routing's kernel runs, so the instruction-cache footprint per voice is one kernel.
+The 128 specialised kernels (32 algorithms × 1–4 lanes) make `halo.cpp.o` about 1.0 MB of code, roughly 7.5 KB per kernel. Only the current routing's kernel runs, so the instruction-cache footprint per voice is one kernel.
 
 ## Quality checks that ran alongside
 

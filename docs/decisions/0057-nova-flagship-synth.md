@@ -1,6 +1,6 @@
 # ADR-0057 — Nova: the flagship wavetable synth (replaces Lumen and Snarl)
 
-**Status:** Accepted (25 October 2026): platform, engine core and panel built; later phases in spec 08 §13. **Date:** 23 October 2026.
+**Status:** Accepted; platform, engine core, panel, FX rack, arpeggiator and clip sequencer are built. The Sample, Multisample, Granular and Spectral oscillators render silence, and the wavetable editor cannot save drawn frames; see spec 08 §13. **Date:** 23 October 2026.
 **Builds on:** ADR-0027 (native-synth platform), ADR-0038 (live switching), ADR-0054 (live controls).
 **Supersedes:** ADR-0044 (Lumen wavetables) and ADR-0056 (Snarl growl synth). Both engines are removed.
 **Functional spec:** [specs/08-nova-synth.md](../specs/08-nova-synth.md). **Panel design:** [ui/nova-panel-mockup.html](../ui/nova-panel-mockup.html).

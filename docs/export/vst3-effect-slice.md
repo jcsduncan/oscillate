@@ -59,7 +59,7 @@ ASan/UBSan, format and tidy checks passed on the isolated export branch; the
 integrated scanner-enabled Quick suite passed 82/82. These are local fixtures,
 not the reference 32-track workload or third-party plugin qualification.
 
-Saved normalized values for known VST3 effect parameters can now initialize an
+Saved normalized values for known VST3 effect parameters can initialize an
 effect without an opaque component-state blob. Binding stages them before
 activation and flushes them before the first audible block. The bounded offline
 master and stem exporters use the same binding rule during tail/latency probing

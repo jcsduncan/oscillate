@@ -262,7 +262,7 @@ pre.tmpl{margin:0;font:500 10.5px/1.5 var(--mono);color:var(--sdim);background:v
 <!-- ======================= ARP ======================= -->
 <section class="view" id="v-arp">
   <div style="display:flex;flex-direction:column;gap:14px">
-  <p class="lede">The arp page of Nova. <b>Sixteen modes</b> in six groups, <b>sixty factory patterns</b>, and <b>ten step lanes, each with its own length</b>, so a 16-step velocity lane, a 12-step gate lane and a 7-step note lane drift against each other and line up again only every 336 steps. Grooves come from the pool, including ones taken from records. Hold a chord on the keyboard or with the typing keys (<b>A W S E D F T G Y H U J K</b>, Z/X for octave). The patterns list is focused, so the keys play. Press <b>/</b> to search and <b>Esc</b> to go back.</p>
+  <p class="lede">The arp page of Nova. <b>Sixteen modes</b> in six groups, <b>sixty factory patterns</b>, and <b>eleven step lanes, each with its own length</b>, so a 16-step velocity lane, a 12-step gate lane and a 7-step note lane drift against each other and line up again only every 336 steps. Grooves come from the pool, including ones taken from records. Hold a chord on the keyboard or with the typing keys (<b>A W S E D F T G Y H U J K</b>, Z/X for octave). The patterns list is focused, so the keys play. Press <b>/</b> to search and <b>Esc</b> to go back.</p>
   <div class="stage"><span class="hint">NOVA · ARP PAGE</span>
   <div class="nova" id="nova">
     <div class="nbar">
@@ -332,12 +332,12 @@ pre.tmpl{margin:0;font:500 10.5px/1.5 var(--mono);color:var(--sdim);background:v
   </div>
   <div class="tablebox">
   <table class="map">
-    <thead><tr><th>Today's parameter</th><th>In the rebuilt arp</th><th></th></tr></thead>
+    <thead><tr><th>Arp v1 parameter</th><th>In Arp v2</th><th></th></tr></thead>
     <tbody>
       <tr><td><code>nova.arp.mode</code> (6 modes)</td><td>16 modes in six groups. Up, Down, Up/Down, Played, Random and Chord keep their values, so saved patches open unchanged.</td><td><span class="tag ext">EXTENDS</span></td></tr>
       <tr><td><code>nova.arp.step.N.on / velocity / gate / tie</code> (16 steps)</td><td>Gate, Velocity and Tie/Slide lanes of up to 32 steps, each with its own length. A gate of 0 is a rest.</td><td><span class="tag rep">REPLACES</span></td></tr>
       <tr><td><code>nova.arp.repeats</code></td><td>The Ratchet lane: 1–4 hits inside a step, set per step.</td><td><span class="tag rep">REPLACES</span></td></tr>
-      <tr><td><code>nova.arp.gate</code>, <code>nova.arp.swing</code>, <code>nova.arp.rate</code>, <code>nova.arp.octaves</code></td><td>Unchanged. Gate now scales the Gate lane, and Swing adds on top of the groove.</td><td><span class="tag keep">KEPT</span></td></tr>
+      <tr><td><code>nova.arp.gate</code>, <code>nova.arp.swing</code>, <code>nova.arp.rate</code>, <code>nova.arp.octaves</code></td><td>Unchanged. Gate scales the Gate lane, and Swing adds on top of the groove.</td><td><span class="tag keep">KEPT</span></td></tr>
       <tr><td><code>nova.arp.velocity</code> (Played / Pattern), <code>nova.arp.latch</code>, <code>nova.arp.retrigger</code></td><td>Unchanged. Pattern takes its velocity from the Velocity lane.</td><td><span class="tag keep">KEPT</span></td></tr>
       <tr><td>—</td><td>Note, Octave, Chance, Condition, Accent and Mod lanes, plus each lane's length and lock.</td><td><span class="tag new">NEW</span></td></tr>
       <tr><td>—</td><td><b>Arp Accent</b> and <b>Arp Mod</b> become sources in the mod matrix (in this preview, Accent opens the filter and Mod drives the cutoff, like a 303).</td><td><span class="tag new">NEW</span></td></tr>

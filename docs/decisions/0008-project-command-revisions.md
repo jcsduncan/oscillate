@@ -1,6 +1,6 @@
 # ADR-0008 — Atomic project commands and revision publication
 
-**Status:** Accepted; implemented (reviewed 20 October 2026). `ProjectModel` applies validated commands as atomic revisions with undo/redo (`src/project/model.cpp`).
+**Status:** Accepted; implemented. `ProjectModel` applies validated commands as atomic revisions with undo/redo (`src/project/model.cpp`).
 **Date:** 14 October 2026
 **Requirements:** PRD §§8–10, 18; FS-01 TA-01/03/04/06/07/09/10; FS-03 PM-03; HLD §4.
 

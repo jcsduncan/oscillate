@@ -1,6 +1,6 @@
 # Warp timing spike: rejected continuous processor
 
-Status: research evidence only. The continuous processor described here was reverted; the production stretch candidate still renders each warp segment separately and rejects unsupported short nonidentity segments.
+Status: research record for the Signalsmith Stretch candidate, superseded by [ADR-0026](../decisions/0026-continuous-warp-stream.md). The shipped engine is the in-house `warp_dsp`.
 
 ## Why it was tried
 
