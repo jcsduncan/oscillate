@@ -1,0 +1,75 @@
+{
+  "about": "Allowed oscillate:: links per module, the machine-readable form of docs/HLD.md section 3. Keep both in step. scripts/ci/check_module_deps.py checks every CMakeLists.txt under each module path against it. An allowed entry is a module name or, for one target of a module, oscillate::<target>. Every module may link the modules in every_module. Each exception is one known violation (HLD section 3.1) and names its issue; the check fails once an exception is no longer needed.",
+  "every_module": ["foundation"],
+  "modules": {
+    "foundation": { "path": "src/foundation", "allowed": [] },
+    "timeline": { "path": "src/timeline", "allowed": ["foundation"] },
+    "automation": { "path": "src/automation", "allowed": ["timeline"] },
+    "project": { "path": "src/project", "allowed": ["foundation", "timeline"] },
+    "automation_project": {
+      "path": "src/automation_project",
+      "allowed": ["automation", "project", "timeline"]
+    },
+    "harmony": { "path": "src/harmony", "allowed": ["project", "timeline"] },
+    "midi_file": { "path": "src/midi_file", "allowed": ["foundation"] },
+    "engine": { "path": "src/engine", "allowed": ["foundation", "project"] },
+    "routing": {
+      "path": "src/routing",
+      "allowed": ["automation_project", "engine", "project"]
+    },
+    "audio_io": { "path": "src/audio_io", "allowed": ["engine"] },
+    "codec": { "path": "src/codec", "allowed": ["foundation"] },
+    "media": { "path": "src/media", "allowed": ["foundation", "project", "codec"] },
+    "analysis": { "path": "src/analysis", "allowed": ["media", "oscillate::dsp_primitives"] },
+    "warp_dsp": { "path": "src/warp_dsp", "allowed": ["foundation"] },
+    "clay_dsp": { "path": "src/clay_dsp", "allowed": ["foundation", "warp_dsp"] },
+    "processing": {
+      "path": "src/processing",
+      "allowed": ["foundation", "media", "project", "warp_dsp", "clay_dsp", "persistence"]
+    },
+    "plugins": { "path": "src/plugins", "allowed": ["foundation", "engine"] },
+    "native_dsp": { "path": "src/native_dsp", "allowed": ["engine", "warp_dsp"] },
+    "native_inserts": {
+      "path": "src/native_inserts",
+      "allowed": ["project", "engine", "native_dsp", "automation_project", "timeline"]
+    },
+    "track_chain": {
+      "path": "src/track_chain",
+      "allowed": ["project", "engine", "routing", "native_inserts"]
+    },
+    "persistence": { "path": "src/persistence", "allowed": ["project", "media", "codec"] },
+    "source_prep": {
+      "path": "src/source_prep",
+      "allowed": ["engine", "persistence", "media", "project"]
+    },
+    "export": {
+      "path": "src/export",
+      "allowed": [
+        "engine", "routing", "project", "media", "source_prep", "persistence", "processing",
+        "audio_io"
+      ]
+    },
+    "application": {
+      "path": "src/application",
+      "allowed": [
+        "foundation", "timeline", "automation", "project", "automation_project", "harmony",
+        "midi_file", "engine", "routing", "audio_io", "codec", "media", "analysis", "warp_dsp",
+        "clay_dsp", "processing", "plugins", "native_dsp", "native_inserts", "track_chain",
+        "persistence", "source_prep", "export"
+      ]
+    },
+    "plugin_ui": { "path": "src/app/plugin_ui", "allowed": ["plugins"] }
+  },
+  "exceptions": [
+    { "module": "native_dsp", "target": "oscillate::automation_project", "issue": 129 },
+    { "module": "native_dsp", "target": "oscillate::timeline", "issue": 129 },
+    { "module": "native_dsp", "target": "oscillate::media", "issue": 131 },
+    { "module": "plugins", "target": "oscillate::automation_project", "issue": 133 },
+    { "module": "export", "target": "oscillate::convolution_ir", "issue": 131 },
+    { "module": "export", "target": "oscillate::automation_project", "issue": 134 },
+    { "module": "export", "target": "oscillate::native_dsp", "issue": 134 },
+    { "module": "export", "target": "oscillate::synth_engines", "issue": 134 },
+    { "module": "export", "target": "oscillate::native_inserts", "issue": 134 },
+    { "module": "export", "target": "oscillate::track_chain", "issue": 134 }
+  ]
+}

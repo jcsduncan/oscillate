@@ -100,7 +100,9 @@ a pull request changes none of their inputs; a skipped job counts as passed.
 - **Core line coverage**: the `coverage` preset and
   `scripts/check-coverage.sh`, which fails below 90% line coverage of
   `src/` and `include/`; the report is uploaded to Codecov.
-- **pre-commit**: the hooks above, on the files the pull request changes.
+- **pre-commit**: the module dependency check
+  (`scripts/ci/check_module_deps.py`, [HLD §3](docs/HLD.md#3-modules-and-dependency-direction)),
+  then the hooks above, on the files the pull request changes.
 - **Python unit tests**: `scripts/ci/python-tests.sh`.
 - **Documentation**: `scripts/check-doc-links.py` and a strict MkDocs build
   of the documentation site.
