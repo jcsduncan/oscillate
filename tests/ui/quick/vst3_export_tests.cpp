@@ -216,7 +216,7 @@ void export_checks() {
     wait_export(bridge);
     const auto pcm = bytes(converted);
     constexpr std::uint32_t expected_frames = (6'009U * 44'100U + 24'000U) / 48'000U;
-    require(bridge.exports()->export_status().contains(QStringLiteral("VST3 instrument WAV")) &&
+    require(bridge.exports()->export_status().contains(QStringLiteral("VST3 WAV master")) &&
                 read_le(pcm, 20, 2) == 1 && read_le(pcm, 34, 2) == 16 &&
                 read_le(pcm, 24, 4) == 44'100 && read_le(pcm, 40, 4) == expected_frames * 4 &&
                 pcm.size() == 44 + expected_frames * 4,
@@ -243,7 +243,7 @@ void export_checks() {
     bridge.exports()->export_master();
     wait_export(bridge);
     const auto encoded = bytes(flac);
-    require(bridge.exports()->export_status().contains(QStringLiteral("VST3 instrument FLAC")) &&
+    require(bridge.exports()->export_status().contains(QStringLiteral("VST3 FLAC master")) &&
                 encoded.size() > 4 && std::memcmp(encoded.data(), "fLaC", 4) == 0,
             "Quick VST3 FLAC export did not publish: " +
                 bridge.exports()->export_status().toStdString());
@@ -453,21 +453,21 @@ void two_instrument_source_export_checks() {
   require(bridge.exports()->export_status().contains(QStringLiteral("binary differs")) &&
               bytes(second_stem_path) == second_stem && bytes(master_path) == master,
           "changed second source binary replaced a valid selected stem");
+  // Any chain exports (ADR-0050): an effect on a source keeps the selected
+  // stem available, and its stem exports at the master's extent.
   bridge.add_effect_engine(QString::fromStdString(first_track.to_string()), 0,
                            QStringLiteral("shape"));
-  require(
-      !bridge.exports()->two_instrument_source_stem_available() &&
-          bridge.exports()->two_instrument_source_stem_reason().contains(QStringLiteral("bare")) &&
-          export_panel->property("twoInstrumentSources").toBool() &&
-          !export_panel->findChild<QObject*>(QStringLiteral("vst3StemExportButton"))
-               ->property("activeFocusOnTab")
-               .toBool(),
-      "non-bare source was shown as ready for two-source stem export");
+  require(bridge.exports()->two_instrument_source_stem_available() &&
+              export_panel->property("twoInstrumentSources").toBool(),
+          "a source with an effect was refused for two-source stem export");
+  const auto shaped_stem_path = directory.root() / "shaped-first-stem.wav";
+  bridge.exports()->set_export_target(QString::fromStdString(shaped_stem_path.string()));
   bridge.exports()->export_instrument_source_stem(QString::fromStdString(first_track.to_string()));
-  require(!bridge.exports()->export_busy() &&
-              bridge.exports()->export_status().contains(QStringLiteral("bare")) &&
-              bytes(second_stem_path) == second_stem && bytes(master_path) == master,
-          "non-bare source stem reached the worker or changed prior output");
+  wait_export(bridge);
+  require(bridge.exports()->export_status().contains(QStringLiteral("exported")) &&
+              bytes(shaped_stem_path).size() == master.size(),
+          "a source with an effect did not export its stem: " +
+              bridge.exports()->export_status().toStdString());
   require(::unsetenv("OSCILLATE_VST3_INSTRUMENT_TAIL") == 0, "two-source tail mode reset failed");
 }
 
@@ -537,10 +537,8 @@ void paired_instrument_effect_export_checks() {
   near(sample(master, 6007), sample(stem, 6007) * 2.0F);
   bridge.add_effect_engine(QString::fromStdString(first_track.to_string()), 1,
                            QStringLiteral("shape"));
-  require(
-      !bridge.exports()->two_instrument_source_stem_available() &&
-          bridge.exports()->two_instrument_source_stem_reason().contains(QStringLiteral("bare")),
-      "an extra stage was shown as ready for paired selected-stem export");
+  require(bridge.exports()->two_instrument_source_stem_available(),
+          "an extra stage was refused for paired selected-stem export");
   require(::unsetenv("OSCILLATE_VST3_INSTRUMENT_TAIL") == 0,
           "paired Quick export tail mode reset failed");
 }
@@ -619,22 +617,15 @@ void native_and_vst3_source_export_panel_checks() {
   require(bridge.exports()->export_status().contains(QStringLiteral("exported")) &&
               fs::exists(master_path) && bytes(master_path).size() == stem.size(),
           "mixed master did not export or align with selected stem");
-  // A master chain is not part of the mixed source stem contract.
+  // Any master or source chain keeps the selected stem available.
   bridge.add_effect_engine(QStringLiteral("master"), 0, QStringLiteral("expanse"));
-  require(
-      !bridge.exports()->two_instrument_source_stem_available() &&
-          bridge.exports()->two_instrument_source_stem_reason().contains(QStringLiteral("master")),
-      "a master effect made an unsupported mixed stem appear ready");
-  bridge.undo();
   require(bridge.exports()->two_instrument_source_stem_available(),
-          "removing the master effect did not restore the mixed stem");
+          "a master effect made the mixed stem unavailable");
   bridge.add_effect_engine(QString::fromStdString(native_track.to_string()), 0,
                            QStringLiteral("shape"));
-  require(
-      !bridge.exports()->two_instrument_source_stem_available() &&
-          bridge.exports()->two_instrument_source_stem_reason().contains(QStringLiteral("bare")) &&
-          panel->property("twoInstrumentSources").toBool(),
-      "mixed source effect made an unsupported stem appear ready");
+  require(bridge.exports()->two_instrument_source_stem_available() &&
+              panel->property("twoInstrumentSources").toBool(),
+          "a source effect made the mixed stem unavailable");
 }
 
 void native_vst3_audio_source_export_panel_checks() {
@@ -905,7 +896,7 @@ void effect_export_checks() {
   if (bridge.exports()->output_rate_conversion_available()) {
     wait_export(bridge);
     const auto pcm = bytes(converted);
-    require(bridge.exports()->export_status().contains(QStringLiteral("VST3 effect WAV")) &&
+    require(bridge.exports()->export_status().contains(QStringLiteral("VST3 WAV master")) &&
                 read_le(pcm, 20, 2) == 1 && read_le(pcm, 34, 2) == 24 &&
                 read_le(pcm, 24, 4) == 96'000 && pcm.size() == 44 + 12'000 * 6,
             "Quick VST3 effect PCM24 96 kHz export differs: " +

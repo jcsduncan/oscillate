@@ -120,11 +120,11 @@ output_target(const exporting::MasterOutputOptions& options) {
 #endif
 }
 
-// True when a saved VST3 instrument or effect makes the render need a VST3
-// host. A bypassed slot still names one, so it takes the VST3 path too.
+// True when a saved VST3 instrument or enabled VST3 effect needs a VST3 host;
+// the native render skips a bypassed VST3 slot.
 [[nodiscard]] bool has_vst3_stage(const project::Snapshot& snapshot) {
   const auto vst3_effect = [](const project::EffectInsert& effect) {
-    return std::holds_alternative<project::Vst3PluginInstance>(effect.processor);
+    return effect.enabled && std::holds_alternative<project::Vst3PluginInstance>(effect.processor);
   };
   return std::ranges::any_of(snapshot.master_effects, vst3_effect) ||
          std::ranges::any_of(snapshot.tracks, [&](const project::Track& track) {
