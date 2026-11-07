@@ -420,7 +420,7 @@ void every_segmented_choice_fills_its_selection() {
   const QString root = QStringLiteral(OSCILLATE_QUICK_QML_DIR);
   const auto law = synth::find_parameter(table(), "trim.law");
   require(law.has_value(), "Trim has a pan law");
-  const double law_default = table().parameters[*law].default_value;
+  const double law_default = table().parameters[law.value()].default_value;
   InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   QQmlEngine engine;
