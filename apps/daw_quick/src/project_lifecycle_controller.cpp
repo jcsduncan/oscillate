@@ -1,5 +1,7 @@
 #include "project_lifecycle_controller.hpp"
 
+#include "oscillate/persistence/project_creation.hpp"
+
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
@@ -37,6 +39,9 @@ ProjectLifecycleController::ProjectLifecycleController(std::filesystem::path pro
   recent_paths_ = QSettings{}.value(QStringLiteral("recentProjects")).toStringList();
   while (recent_paths_.size() > 6)
     recent_paths_.removeLast();
+  // Stages left by a creation killed in an earlier process. A failure only
+  // leaves hidden folders behind; the next creation in the library retries.
+  (void)persistence::ProjectCreation::clean_abandoned(projects_root_);
   refresh_available_projects();
 }
 
@@ -45,6 +50,9 @@ void ProjectLifecycleController::refresh_available_projects() {
   QStringList included;
   const auto open_root = host_.session() ? host_.current_root() : std::filesystem::path{};
   const auto add_project = [&](const std::filesystem::path& root) {
+    // A creation stage is not a project until it is renamed into place.
+    if (persistence::ProjectCreation::is_stage_name(root.filename().string()))
+      return;
     std::error_code error;
     if (!std::filesystem::is_regular_file(root / "state" / "CURRENT", error) &&
         !std::filesystem::is_directory(root / "state" / "generations", error)) {

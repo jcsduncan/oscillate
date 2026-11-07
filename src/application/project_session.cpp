@@ -2,6 +2,8 @@
 
 #include "session/session_state.hpp"
 
+#include "oscillate/persistence/project_creation.hpp"
+
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
@@ -40,34 +42,15 @@ ProjectSession::create(const std::filesystem::path& root) {
 
 foundation::Result<std::unique_ptr<ProjectSession>>
 ProjectSession::create(const std::filesystem::path& root, CreateOptions options) {
-  std::error_code filesystem_error;
-  const bool exists = std::filesystem::exists(root, filesystem_error);
-  if (filesystem_error) {
-    return foundation::Result<std::unique_ptr<ProjectSession>>::failure(
-        {foundation::ErrorCode::io_failure, "Cannot inspect project folder"});
+  // The project is built and first saved in a hidden stage beside `root`, then
+  // renamed into place, so a killed creation never leaves a half project there.
+  auto started = persistence::ProjectCreation::begin(root);
+  if (!started) {
+    return foundation::Result<std::unique_ptr<ProjectSession>>::failure(started.error());
   }
-  if (exists) {
-    const bool directory = std::filesystem::is_directory(root, filesystem_error);
-    if (filesystem_error) {
-      return foundation::Result<std::unique_ptr<ProjectSession>>::failure(
-          {foundation::ErrorCode::io_failure, "Cannot inspect project folder"});
-    }
-    const bool empty = directory && std::filesystem::is_empty(root, filesystem_error);
-    if (filesystem_error) {
-      return foundation::Result<std::unique_ptr<ProjectSession>>::failure(
-          {foundation::ErrorCode::io_failure, "Cannot inspect project folder"});
-    }
-    if (!empty) {
-      return foundation::Result<std::unique_ptr<ProjectSession>>::failure(
-          {foundation::ErrorCode::conflict, "New project folder must be empty"});
-    }
-  }
-  auto store = persistence::ProjectStore::open_writer(root, true);
-  if (!store) {
-    return foundation::Result<std::unique_ptr<ProjectSession>>::failure(store.error());
-  }
+  auto creation = std::move(started.value().creation);
   auto session =
-      std::unique_ptr<ProjectSession>(new ProjectSession(root, std::move(store.value())));
+      std::unique_ptr<ProjectSession>(new ProjectSession(root, std::move(started.value().writer)));
   auto tempo = timeline::TempoMap::create({{{0}, 120.0, timeline::TempoShape::step}}, 1);
   auto meter = timeline::MeterMap::create({{{0}, 4, 4}}, 1);
   auto id = project::ProjectId::from_bits({0, 1});
@@ -89,6 +72,10 @@ ProjectSession::create(const std::filesystem::path& root, CreateOptions options)
   auto saved = session->saving().save();
   if (!saved) {
     return foundation::Result<std::unique_ptr<ProjectSession>>::failure(saved.error());
+  }
+  auto published = creation.publish(session->state_->store);
+  if (!published) {
+    return foundation::Result<std::unique_ptr<ProjectSession>>::failure(published.error());
   }
   return foundation::Result<std::unique_ptr<ProjectSession>>::success(std::move(session));
 }
