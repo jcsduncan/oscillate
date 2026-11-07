@@ -22,7 +22,8 @@ body:
       label: Trace
       description: >-
         Record a trace with `OSCILLATE_TRACE` or the command palette, summarise it with
-        tools/trace_report, and paste the summary or attach the file.
+        `python3 -I tools/trace_report/trace_report.py <trace>` (see tools/trace_report/README.md),
+        and paste the summary or attach the file.
   - type: textarea
     id: system
     attributes:

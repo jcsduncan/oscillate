@@ -9,6 +9,7 @@ on:
       - README.md
       - CONTRIBUTING.md
       - SECURITY.md
+      - CODE_OF_CONDUCT.md
       - scripts/ci/docs-requirements.txt
       - scripts/ci/mkdocs_hooks.py
       - .github/workflows/pages.yml

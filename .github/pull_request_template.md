@@ -13,7 +13,7 @@
 
 ## Checklist
 
-- [ ] Title is `type(scope): summary` (see CONTRIBUTING.md)
-- [ ] Tests cover the change, and fail without it
+- [ ] Title follows CONTRIBUTING.md: `type(scope): summary`, scope required for feat, fix, perf, refactor, test and revert
+- [ ] Changed behaviour has tests that fail without the change; docs-only changes pass the doc checks
 - [ ] No allocation, locks or unbounded work on the audio thread
 - [ ] Docs describe the current behaviour
