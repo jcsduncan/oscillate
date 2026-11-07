@@ -1,5 +1,6 @@
 #pragma once
 
+#include "background_job.hpp"
 #include "oscillate/application/clay_edit.hpp"
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/clay_dsp/take.hpp"
@@ -233,6 +234,13 @@ public:
   // Test hooks: wait for detection, the render warm-up or an audition.
   bool wait_for_detect(int timeout_ms);
   bool wait_for_render(int timeout_ms);
+  // Test seam: how detection reads the clip's audio (a slow disk in tests);
+  // empty decodes the managed source.
+  using Decode = std::function<foundation::Result<processing::clay::DecodedSource>(
+      const persistence::ProjectStore&, const project::SourceRecord&, const std::stop_token&)>;
+  void set_decoder(Decode decode) { decode_ = std::move(decode); }
+  // Detections given up (cancelled) whose worker has not finished yet.
+  [[nodiscard]] std::size_t abandoned_detections() { return detect_.abandoned(); }
 
 public slots:
   // The project changed (an edit, undo or redo): the take, notes and the
@@ -261,25 +269,17 @@ private:
     processing::clay::DecodedSource audio;
     clay_dsp::Take analysed;
   };
+  // A detection's progress, shared with its worker. Cancelling it stops
+  // the worker's reading and analysis; the controller never waits for it.
   struct Job {
-    std::atomic<bool> cancel{false};
-    std::atomic<bool> done{false};
+    std::stop_source cancel;
     std::atomic<double> progress{0.0};
     mutable std::mutex mutex;
     std::string stage;
-    std::optional<foundation::Result<std::shared_ptr<const Loaded>>> result;
     // The session the detection started in; a result for another is dropped.
     std::uint64_t session = 0;
   };
-  struct Warm {
-    std::stop_source stop;
-    std::atomic<bool> done{false};
-    std::optional<foundation::Error> error;
-  };
-  struct Audition {
-    std::atomic<bool> done{false};
-    std::optional<foundation::Result<QString>> result;
-  };
+  using Detected = foundation::Result<std::shared_ptr<const Loaded>>;
   using Key = std::pair<std::uint32_t, std::uint32_t>;
 
   [[nodiscard]] application::ProjectSession* editable(const QString& action);
@@ -346,13 +346,14 @@ private:
   QString audition_path_;
   QVariantList history_;
 
+  Decode decode_;
   std::shared_ptr<Job> job_;
   bool save_on_detect_ = false;
-  std::jthread worker_;
-  std::shared_ptr<Warm> warm_;
-  std::jthread warm_worker_;
-  std::shared_ptr<Audition> audition_;
-  std::jthread audition_worker_;
+  BackgroundJob<Detected> detect_;
+  // Stops the running warm render; empty when none runs.
+  std::optional<std::stop_source> warm_stop_;
+  BackgroundJob<std::optional<foundation::Error>> warm_;
+  BackgroundJob<foundation::Result<QString>> audition_;
   QTimer timer_;
 };
 
