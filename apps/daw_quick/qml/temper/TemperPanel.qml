@@ -673,7 +673,7 @@ Rectangle {
         id: unmaskCard
         theme: panel.theme
         title: "UNMASK"
-        note: panel.keyed ? "KEY CONNECTED" : "NO KEY · ROUTE ONE BELOW"
+        note: panel.keyed ? "KEY CONNECTED" : "NO KEY"
         noteColor: panel.keyed ? panel.theme.side : panel.theme.inkFaint
         x: stereoCard.x + stereoCard.width + panel.gap
         y: panel.cardsY

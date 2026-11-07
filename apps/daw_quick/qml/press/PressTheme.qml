@@ -39,7 +39,7 @@ KitTheme {
     glacier: "#fbf6ee"
     ink: "#f1ece4"
     inkDim: "#a89f93"
-    inkFaint: "#6b645a"
+    inkFaint: "#8c8376"
 
     knobTop: "#4a443c"
     knobBottom: "#13110f"
@@ -146,7 +146,7 @@ KitTheme {
     property real scaleGap: 5
     property real scaleSideGap: 6
     property real axisTitleGap: 16
-    property int axisTitleSize: 7
+    property int axisTitleSize: typeMicro
     property real outTitleX: 10
     property real outTitleY: 9
     // The readouts across the screen's top right.

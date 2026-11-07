@@ -51,7 +51,7 @@ KitTheme {
 
     ink: "#e8f2eb"
     inkDim: "#93a69a"
-    inkFaint: "#5c6d62"
+    inkFaint: "#73897b"
 
     knobTop: "#394139"
     knobBottom: "#101411"
@@ -194,8 +194,7 @@ KitTheme {
     property real confidenceHeight: 10
     property real confidenceMarkOverhang: 3
     property real confidenceScaleY: 414
-    property int confidenceScaleSize: 7
-
+    property int confidenceScaleSize: typeMicro
     // The alignment needle's dial.
     // Room below the hub, and beside and above the arc.
     property real needleHubBottom: 24

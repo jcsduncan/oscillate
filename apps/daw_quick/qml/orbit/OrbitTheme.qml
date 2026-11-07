@@ -52,7 +52,7 @@ KitTheme {
     grid: "#221d48"
     ink: "#eeecff"
     inkDim: "#9e98d2"
-    inkFaint: "#5f5a98"
+    inkFaint: "#7d79af"
     property color sky: "#06041a"
     property color nebulaA: "#3b1d7a"
     property color nebulaB: "#123a6a"

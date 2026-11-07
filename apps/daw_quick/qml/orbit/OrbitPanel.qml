@@ -833,12 +833,16 @@ Rectangle {
                 diameter: panel.theme.outputCellDiameter
             }
         }
-        Caption {
+        // A helper sentence, set in sentence case.
+        Text {
+            objectName: "orbitToneNote"
             x: panel.theme.plateContentX
             y: panel.theme.plateLowerY
             width: parent.width - 2 * panel.theme.plateContentX
             wrapMode: Text.WordWrap
-            text: "TONE DARKENS ONLY THE WET PATH, LIKE A BUCKET-BRIGADE LINE"
+            color: panel.theme.inkFaint
+            font.pixelSize: panel.theme.typeSmall
+            text: "Tone darkens only the wet path, like a bucket-brigade line."
         }
     }
 

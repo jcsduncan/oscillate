@@ -27,7 +27,7 @@ QtObject {
     // Shared scales. Components take a size from a scale when it fits and
     // name their own token for a size with a particular job.
     // Type: from small print to display headings (pixel sizes).
-    property int typeMicro: 8
+    property int typeMicro: 9
     property int typeCaption: 9
     property int typeSmall: 10
     property int typeBody: 11
@@ -70,7 +70,10 @@ QtObject {
     property color gridStrong: "#2e3846"
     property color ink: "#e9eef5"
     property color inkDim: "#8a94a3"
-    property color inkFaint: "#566070"
+    property color inkFaint: "#7b879a"
+    // The surface ink, inkDim and inkFaint are set on (a card, by default).
+    // Each reads at 4.5:1 or more against it.
+    property color inkGround: plate
     property color glacier: "#eef4fb"
     property color knobTop: "#3a414c"
     property color knobBottom: "#15181d"
@@ -149,20 +152,20 @@ QtObject {
     property bool knobCaptionClip: false
     property bool knobLabelUpper: true
     property string knobLabelFont: sans
-    property int knobLabelSize: 8
+    property int knobLabelSize: typeSmall
     property bool knobLabelBold: false
     property real knobLabelSpacing: 1.6
     property color knobLabelInk: inkDim
     property color knobLabelActiveInk: knobLabelInk
     property string knobValueFont: mono
-    property int knobValueSize: 10
+    property int knobValueSize: typeSmall
     property bool knobValueBold: false
     // Unset: the knob's own accent.
     property var knobValueInk: undefined
     property color knobValueIdleInk: inkFaint
-    property int knobReadoutLabelSize: 9
+    property int knobReadoutLabelSize: typeCaption
     property real knobStackedValueGap: 12
-    property int knobStackedValueSize: 9
+    property int knobStackedValueSize: typeCaption
     // A small hollow diamond (or ring) on parameters that apply to new notes;
     // the spoken description says so too.
     property bool knobNextNoteMark: false
@@ -606,7 +609,7 @@ QtObject {
     // the bottom (anchored), or lifted from the bottom edge (a top offset).
     property color envelopeLabelInk: viewLabelInk
     property string envelopeLabelFont: mono
-    property int envelopeLabelSize: 9
+    property int envelopeLabelSize: typeCaption
     property real envelopeLabelSpacing: 0
     property real envelopeLabelInset: 8
     property real envelopeLabelTop: 3
@@ -620,7 +623,7 @@ QtObject {
     property real cardTitleY: 10
     property color cardTitleInk: inkDim
     property string cardTitleFont: sans
-    property int cardTitleSize: 9
+    property int cardTitleSize: typeSmall
     property real cardTitleSpacing: 3
     property real cardNoteGap: 10
     property bool cardNoteBold: false
@@ -672,7 +675,7 @@ QtObject {
     property real dropdownTextX: 8
     property real dropdownTextRight: 24
     property string dropdownFont: mono
-    property int dropdownTextSize: 11
+    property int dropdownTextSize: typeBody
     property bool dropdownBold: false
     property real dropdownChevronMargin: 7
     // Unset: the dropdown's accent.
@@ -750,7 +753,7 @@ QtObject {
     property int switchLedSize: 6
     property bool switchLedRim: true
     property real switchTextX: 15
-    property int switchTextSize: 9
+    property int switchTextSize: typeCaption
     property real switchLetterSpacing: 0
     function switchFill(toggle, stop) {
         return stop === 0 ? (toggle.pressed ? well : buttonHi) : button

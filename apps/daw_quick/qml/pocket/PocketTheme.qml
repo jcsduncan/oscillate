@@ -40,7 +40,7 @@ KitTheme {
 
     ink: "#efe9e0"
     inkDim: "#a39a8e"
-    inkFaint: "#6a645c"
+    inkFaint: "#8a8379"
 
     knobTop: "#3a3734"
     knobBottom: "#121212"
@@ -246,7 +246,7 @@ KitTheme {
     property real waveKeyGap: 3
     property real waveKeySwatch: 7
     property real waveKeyRadius: 1.5
-    property int waveKeySize: 7
+    property int waveKeySize: typeMicro
     property real waveKeySpacing: 0.8
 
     // The control last touched, read back in the display.

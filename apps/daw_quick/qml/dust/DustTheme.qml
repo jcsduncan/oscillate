@@ -11,8 +11,9 @@ KitTheme {
     knobMinWidth: 52
     knobWidthPad: 22
     knobHeightPad: 30
+    knobLabelSize: typeCaption
     knobLabelBold: true
-    knobLabelSpacing: 1.1
+    knobLabelSpacing: 0.6
     // A layer's level fader: a slim groove lit from the bottom, a cap the
     // fader's width, the value (less its "dB") under it. A press jumps to
     // the pointer; Shift at the press drags finely from where it is.
@@ -84,7 +85,7 @@ KitTheme {
     glacier: "#f4e9d8"
     ink: "#ebe0cf"
     inkDim: "#a3958a"
-    inkFaint: "#6b5f55"
+    inkFaint: "#908073"
 
     knobTop: "#3a3029"
     knobBottom: "#120e0b"
@@ -186,7 +187,7 @@ KitTheme {
     // ---- The bed meter -----------------------------------------------------------------------
     property real bedMeterWidth: 440
     property real bedMeterHeight: 200
-    property int meterLabelSize: 7
+    property int meterLabelSize: typeMicro
     property real meterLabelSpacing: 0.8
     // A layer's bar: its well's widest, and the room it leaves in its slot.
     property real bedWellWidth: 18

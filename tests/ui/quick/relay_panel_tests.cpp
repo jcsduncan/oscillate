@@ -452,6 +452,27 @@ void screenshots_if_requested() {
   std::cout << "wrote " << path.toStdString() << '\n';
 }
 
+// The feedback plate's note is a sentence in sentence case, shown whole
+// for every character.
+void feedback_note_fits_for_every_character() {
+  Fixture f(synth::default_values(table()));
+  auto* note = item(*f.panel, QStringLiteral("relayFeedbackNote"));
+  const auto descriptor = std::ranges::find(table().parameters, std::string_view("relay.character"),
+                                            &synth::ParameterDescriptor::id);
+  require(descriptor != table().parameters.end(), "Relay has a character");
+  const auto characters = static_cast<int>(descriptor->choices.size());
+  for (int character = 0; character < characters; ++character) {
+    f.controller.set_choice(QStringLiteral("relay.character"), character);
+    QCoreApplication::processEvents();
+    const QString text = note->property("text").toString();
+    const auto first = std::ranges::find_if(text, [](QChar c) { return c.isLetter(); });
+    require(first != text.end() && first->isUpper() &&
+                std::ranges::any_of(text, [](QChar c) { return c.isLower(); }),
+            "the note is in sentence case: " + text.toStdString());
+    require(!note->property("truncated").toBool(), "the note fits: " + text.toStdString());
+  }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -462,6 +483,7 @@ int main(int argc, char** argv) {
     panel_covers_every_parameter();
     sync_swaps_time_for_division();
     character_bay_and_echo_view_follow_the_values();
+    feedback_note_fits_for_every_character();
     presets_and_status();
     meters_follow_live_telemetry();
     screenshots_if_requested();

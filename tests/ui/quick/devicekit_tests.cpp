@@ -7,15 +7,23 @@
 #include "oscillate/test/check.hpp"
 
 #include <QAccessible>
+#include <QColor>
 #include <QCoreApplication>
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
 #include <QGuiApplication>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QRegularExpression>
 #include <QTest>
+#include <QUrl>
 #include <QVariant>
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <iostream>
 #include <memory>
@@ -258,6 +266,85 @@ void read_only_panels_edit_nothing() {
   require(!item(*harness, "kitMenu")->isVisible(), "no menu opens on a read-only panel");
 }
 
+// Every theme's text reads against the surface it is set on: ink, inkDim
+// and inkFaint each reach WCAG's 4.5:1 contrast for body text against the
+// theme's inkGround. Every *Theme.qml under the QML tree is checked, so a
+// new panel theme is covered as soon as it exists.
+constexpr double minimum_text_contrast = 4.5;
+// QColor's 8-bit alpha of a fully opaque colour.
+constexpr int opaque_alpha = 255;
+// WCAG 2 relative luminance: the sRGB transfer function's linear segment,
+// its curve, the channel weights and the flare term in the ratio.
+constexpr double srgb_linear_limit = 0.03928;
+constexpr double srgb_linear_slope = 12.92;
+constexpr double srgb_curve_offset = 0.055;
+constexpr double srgb_curve_scale = 1.055;
+constexpr double srgb_curve_exponent = 2.4;
+constexpr double luminance_red = 0.2126;
+constexpr double luminance_green = 0.7152;
+constexpr double luminance_blue = 0.0722;
+constexpr double contrast_flare = 0.05;
+
+double linear_channel(double value) {
+  return value <= srgb_linear_limit
+             ? value / srgb_linear_slope
+             : std::pow((value + srgb_curve_offset) / srgb_curve_scale, srgb_curve_exponent);
+}
+
+double relative_luminance(const QColor& colour) {
+  return luminance_red * linear_channel(colour.redF()) +
+         luminance_green * linear_channel(colour.greenF()) +
+         luminance_blue * linear_channel(colour.blueF());
+}
+
+double contrast(const QColor& first, const QColor& second) {
+  const double a = relative_luminance(first);
+  const double b = relative_luminance(second);
+  return (std::max(a, b) + contrast_flare) / (std::min(a, b) + contrast_flare);
+}
+
+bool is_singleton(const QString& path) {
+  QFile file(path);
+  require(file.open(QIODevice::ReadOnly), "theme opens: " + path.toStdString());
+  // The pragma at the start of a line, not a mention in a comment.
+  static const QRegularExpression pragma(QStringLiteral("^\\s*pragma\\s+Singleton\\b"),
+                                         QRegularExpression::MultilineOption);
+  return pragma.match(QString::fromUtf8(file.readAll())).hasMatch();
+}
+
+void every_theme_reads_at_body_text_contrast() {
+  const QString root = QStringLiteral(OSCILLATE_QUICK_QML_DIR);
+  QQmlEngine engine;
+  bool saw_kit = false;
+  QDirIterator themes(root, {QStringLiteral("*Theme.qml")}, QDir::Files,
+                      QDirIterator::Subdirectories);
+  while (themes.hasNext()) {
+    const QString path = themes.next();
+    // The shell's singleton is one shared ShellTheme, checked as itself.
+    if (is_singleton(path)) {
+      continue;
+    }
+    const std::string name = QDir(root).relativeFilePath(path).toStdString();
+    QQmlComponent component(&engine, QUrl::fromLocalFile(path));
+    std::unique_ptr<QObject> theme(component.create());
+    require(theme != nullptr, name + " loads: " + component.errorString().toStdString());
+    const auto ground = theme->property("inkGround").value<QColor>();
+    require(ground.isValid() && ground.alpha() == opaque_alpha,
+            name + ": inkGround is an opaque colour");
+    for (const char* token : {"ink", "inkDim", "inkFaint"}) {
+      const auto ink = theme->property(token).value<QColor>();
+      require(ink.isValid() && ink.alpha() == opaque_alpha,
+              name + ": " + token + " is an opaque colour");
+      const double ratio = contrast(ink, ground);
+      require(ratio >= minimum_text_contrast, name + ": " + token + " " + ink.name().toStdString() +
+                                                  " on " + ground.name().toStdString() +
+                                                  " reads at " + std::to_string(ratio) + ":1");
+    }
+    saw_kit = saw_kit || path.endsWith(QStringLiteral("/devicekit/KitTheme.qml"));
+  }
+  require(saw_kit, "the kit's own theme is among those checked");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -265,6 +352,7 @@ int main(int argc, char** argv) {
   try {
     each_action_is_one_undo_step();
     read_only_panels_edit_nothing();
+    every_theme_reads_at_body_text_contrast();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';
     return 1;

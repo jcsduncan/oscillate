@@ -68,10 +68,11 @@ KitTheme {
     property color screenGlow: "#f1e2b0"
     // Ink on enamel and on olive.
     ink: "#2b2a21"
-    inkDim: "#6d6650"
-    inkFaint: "#9a9175"
+    inkDim: "#514c3c"
+    inkFaint: "#6a634d"
+    inkGround: body
     property color label: "#efe6cc"
-    property color labelDim: "#c7bf9f"
+    property color labelDim: "#d6d0b8"
     // Brass.
     property color brassHi: "#f0d58b"
     property color brass: "#c49a45"
@@ -113,7 +114,7 @@ KitTheme {
     property real tagSpacing: 1.2
     property real noteSpacing: 0.8
     // Small print on the machine's badges and chips.
-    property int finePrintSize: 7
+    property int finePrintSize: typeMicro
     property real finePrintSpacing: 1
     // Ink printed on brass, and the shadow edge round brass parts.
     property color brassInk: "#2a2318"

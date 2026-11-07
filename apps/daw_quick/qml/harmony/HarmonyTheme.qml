@@ -14,7 +14,7 @@ KitTheme {
     readonly property color line: "#222a33"
     readonly property color line2: "#2f3943"
     readonly property color dim: "#97a3ae"
-    readonly property color faint: "#5d6873"
+    readonly property color faint: "#7e8a97"
     readonly property color violet: "#a98bff"
     readonly property color violetText: "#140d24"
     readonly property color amber: "#f5b14c"
@@ -110,6 +110,9 @@ KitTheme {
 
     well: "#080a0d"
     ink: "#e6ebf0"
+    inkDim: dim
+    inkFaint: faint
+    inkGround: panel3
     sans: "Inter"
     mono: "JetBrains Mono"
     cardRadius: 10

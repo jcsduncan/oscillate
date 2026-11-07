@@ -64,7 +64,7 @@ KitTheme {
 
     ink: "#f1ead9"
     inkDim: "#a49a85"
-    inkFaint: "#6b6455"
+    inkFaint: "#847b69"
 
     knobTop: "#26262c"
     knobBottom: "#08080a"
@@ -190,8 +190,7 @@ KitTheme {
     property real pedalHaloSpread: 3
     property real pedalHaloAlpha: 0.45
     property real pedalLabelY: 16
-    property int pedalLabelSize: 7
-
+    property int pedalLabelSize: typeMicro
     // The knob face.
     function paintKnob(ctx, knob, size) {
         const c = size / 2

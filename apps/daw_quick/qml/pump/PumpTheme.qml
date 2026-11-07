@@ -67,7 +67,7 @@ KitTheme {
     glacier: "#ffe1d8"
     ink: "#e6ecf5"
     inkDim: "#8d9ab0"
-    inkFaint: "#5e6b82"
+    inkFaint: "#77849c"
 
     knobTop: "#1a2742"
     knobBottom: "#0b1324"
@@ -259,7 +259,7 @@ KitTheme {
     property real reductionY: 28
     property real reductionGap: 3
     property real reductionLabelWidth: 28
-    property int reductionLabelSize: 7
+    property int reductionLabelSize: typeMicro
     property real reductionHeight: 10
     property real reductionBandHeight: 6
     property real outputKnobsY: 58
