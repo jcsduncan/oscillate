@@ -1,0 +1,423 @@
+#include "in_memory_native_synth_adapter.hpp"
+#include "native_synth_device_controller.hpp"
+
+#include "oscillate/engine/graph.hpp"
+#include "oscillate/native_dsp/effects/ceiling.hpp"
+#include "oscillate/native_dsp/effects/effect.hpp"
+#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/test/check.hpp"
+
+#include <QColor>
+#include <QCoreApplication>
+#include <QDir>
+#include <QGuiApplication>
+#include <QQmlComponent>
+#include <QQmlEngine>
+#include <QQuickItem>
+#include <QQuickWindow>
+#include <QTest>
+
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <iostream>
+#include <memory>
+#include <numbers>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+// The Ceiling panel (ADR-0047): every parameter on a table-driven control;
+// the ceiling readout and its line across the output meters; the latency
+// in the header; the telemetry decode into the reduction now, its history
+// and its largest, and the peak meters; the real Ceiling over a full-scale
+// tone holding the output at the ceiling; presets and status; and
+// screenshots on request.
+namespace {
+using oscillate::quick::InMemoryNativeSynthAdapter;
+using oscillate::quick::NativeSynthDeviceController;
+namespace synth = oscillate::native_dsp::synth;
+namespace effects = oscillate::native_dsp::effects;
+namespace ceiling = oscillate::native_dsp::effects::ceiling;
+namespace engine = oscillate::engine;
+
+using oscillate::test::require;
+
+const synth::EngineDescriptor& table() { return *ceiling::engine().descriptor; }
+int preset_index(std::string_view name) {
+  for (std::size_t i = 0; i < table().presets.size(); ++i) {
+    if (table().presets[i].name == name) {
+      return static_cast<int>(i);
+    }
+  }
+  throw std::runtime_error("missing preset");
+}
+
+std::vector<double> preset(std::string_view name) {
+  for (const auto& entry : table().presets) {
+    if (entry.name == name) {
+      return synth::preset_values(table(), entry).value();
+    }
+  }
+  throw std::runtime_error("missing preset " + std::string(name));
+}
+
+QString qs(std::string_view text) {
+  return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
+}
+
+// ---- QML ------------------------------------------------------------------------
+
+struct Panel {
+  QQmlEngine engine;
+  std::unique_ptr<QQuickWindow> window = std::make_unique<QQuickWindow>();
+  QQuickItem* root = nullptr;
+};
+
+std::unique_ptr<Panel> load_panel(NativeSynthDeviceController& controller) {
+  auto panel = std::make_unique<Panel>();
+  QQmlComponent component(&panel->engine);
+  component.setData(R"(
+      import QtQuick
+      import "qrc:/ceiling"
+      CeilingPanel {}
+    )",
+                    QUrl(QStringLiteral("qrc:/CeilingPanelTest.qml")));
+  if (!component.isReady()) {
+    throw std::runtime_error("Ceiling panel failed to load: " +
+                             component.errorString().toStdString());
+  }
+  QObject* object = component.createWithInitialProperties(
+      {{QStringLiteral("controller"), QVariant::fromValue<QObject*>(&controller)}});
+  require(object != nullptr,
+          "Ceiling panel was not created: " + component.errorString().toStdString());
+  panel->root = qobject_cast<QQuickItem*>(object);
+  require(panel->root != nullptr, "panel is a Quick item");
+  panel->root->setWidth(panel->root->implicitWidth());
+  panel->root->setHeight(panel->root->implicitHeight());
+  panel->window->resize(static_cast<int>(panel->root->width()),
+                        static_cast<int>(panel->root->height()));
+  panel->root->setParentItem(panel->window->contentItem());
+  panel->window->show();
+  require(QTest::qWaitForWindowExposed(panel->window.get()), "panel window is exposed");
+  QCoreApplication::processEvents();
+  return panel;
+}
+
+QQuickItem* find_item(QQuickItem* parent, const QString& name) {
+  if (parent->objectName() == name) {
+    return parent;
+  }
+  for (QQuickItem* child : parent->childItems()) {
+    if (QQuickItem* found = find_item(child, name)) {
+      return found;
+    }
+  }
+  return nullptr;
+}
+
+QQuickItem* item(Panel& panel, const QString& name) {
+  auto* found = find_item(panel.root, name);
+  require(found != nullptr, "missing item " + name.toStdString());
+  return found;
+}
+
+QPoint scene(QQuickItem* target, double x, double y) {
+  return target->mapToScene(QPointF(x, y)).toPoint();
+}
+
+QPoint centre(QQuickItem* target) {
+  return scene(target, target->width() / 2, target->height() / 2);
+}
+
+void click(Panel& panel, QPoint point) {
+  QTest::mouseClick(panel.window.get(), Qt::LeftButton, Qt::NoModifier, point);
+}
+
+QString text_of(Panel& panel, const QString& name) {
+  return item(panel, name)->property("text").toString();
+}
+
+bool wait_for_text(Panel& panel, const QString& name, const QString& text) {
+  return QTest::qWaitFor([&] { return text_of(panel, name) == text; }, 1000);
+}
+
+std::vector<float> frame_of(float in_l, float in_r, float out_l, float out_r, float reduction) {
+  namespace t = ceiling::telemetry;
+  std::vector<float> frame(t::size, 0.0F);
+  frame[t::input_peak] = in_l;
+  frame[t::input_peak + 1] = in_r;
+  frame[t::output_peak] = out_l;
+  frame[t::output_peak + 1] = out_r;
+  frame[t::reduction] = reduction;
+  return frame;
+}
+
+// ---- Contract -------------------------------------------------------------------
+
+void panel_covers_every_parameter() {
+  InMemoryNativeSynthAdapter adapter(preset("Default"));
+  NativeSynthDeviceController controller(table(), adapter);
+  auto panel = load_panel(controller);
+  require(panel->root->implicitWidth() >= 1200 && panel->root->implicitHeight() >= 620,
+          "panel has its designed size");
+  for (const auto& p : table().parameters) {
+    const QString id = qs(p.id);
+    require(find_item(panel->root, QStringLiteral("ceilingKnob:") + id) != nullptr,
+            "no control for " + id.toStdString());
+  }
+  require(text_of(*panel, QStringLiteral("ceilingPresetName")) == QStringLiteral("Default"),
+          "the panel names its preset");
+  require(text_of(*panel, QStringLiteral("ceilingValue")) == QStringLiteral("−1.0"),
+          "the ceiling reads in large");
+  require(text_of(*panel, QStringLiteral("ceilingLatency")) ==
+              QStringLiteral("LOOKAHEAD LIMITER · ") +
+                  controller.display(QStringLiteral("ceiling.lookahead")).toUpper() +
+                  QStringLiteral(" LATENCY"),
+          "the header names the latency");
+}
+
+void controls_edit_and_the_ceiling_line_follows() {
+  InMemoryNativeSynthAdapter adapter(preset("Default"));
+  NativeSynthDeviceController controller(table(), adapter);
+  auto panel = load_panel(controller);
+  auto* knob = item(*panel, QStringLiteral("ceilingKnob:ceiling.ceiling"));
+  knob->forceActiveFocus();
+  QTest::keyClick(panel->window.get(), Qt::Key_Down);
+  require(controller.value(QStringLiteral("ceiling.ceiling")) < -1.0, "Down lowers the ceiling");
+  require(text_of(*panel, QStringLiteral("ceilingReadout")) == QStringLiteral("LIMIT · CEILING"),
+          "the display reads back the ceiling");
+  controller.set_value(QStringLiteral("ceiling.ceiling"), -6.0);
+  QCoreApplication::processEvents();
+  require(text_of(*panel, QStringLiteral("ceilingValue")) == QStringLiteral("−6.0"), "−6.0 reads");
+  // On the -60..+6 dB meters, -6 dB stands at 54/66 of the way up.
+  auto* line = item(*panel, QStringLiteral("ceilingOutCeilingLine"));
+  auto* meter = item(*panel, QStringLiteral("ceilingOutMeterL"));
+  require(line->isVisible() && !item(*panel, QStringLiteral("ceilingInCeilingLine"))->isVisible(),
+          "the ceiling is drawn on the output only");
+  const double top = meter->mapToItem(line->parentItem(), QPointF(0, 0)).y();
+  const double expected = top + 2 + (meter->height() - 4) * (1 - 54.0 / 66.0) - 1;
+  require(std::fabs(line->y() - expected) < 0.5, "the line stands at the ceiling");
+  require(
+      !item(*panel, QStringLiteral("ceilingKnob:ceiling.lookahead"))->property("inactive").toBool(),
+      "lookahead is a live control");
+}
+
+void telemetry_decodes_into_the_history() {
+  InMemoryNativeSynthAdapter adapter(preset("Default"));
+  NativeSynthDeviceController controller(table(), adapter);
+  auto panel = load_panel(controller);
+  QTest::qWait(300);
+  require(text_of(*panel, QStringLiteral("ceilingReduction")) == QStringLiteral("—") &&
+              text_of(*panel, QStringLiteral("ceilingReductionLargest")) == QStringLiteral("—"),
+          "dashes with nothing measured");
+
+  adapter.set_telemetry(frame_of(0.0F, -2.0F, -1.0F, -3.0F, 3.5F));
+  const auto live = controller.telemetry();
+  require(live.value(QStringLiteral("live")).toBool() &&
+              live.value(QStringLiteral("reduction")).toDouble() == 3.5,
+          "the controller decodes Ceiling's frame");
+  require(wait_for_text(*panel, QStringLiteral("ceilingReduction"), QStringLiteral("−3.5")),
+          "the reduction now: " +
+              text_of(*panel, QStringLiteral("ceilingReduction")).toStdString());
+  require(
+      QTest::qWaitFor([&] { return panel->root->property("samples").toList().size() >= 3; }, 1'000),
+      "the history gathers while playing");
+  adapter.set_telemetry(frame_of(0.0F, -2.0F, -1.0F, -3.0F, 1.0F));
+  require(wait_for_text(*panel, QStringLiteral("ceilingReduction"), QStringLiteral("−1.0")),
+          "the reduction follows");
+  require(text_of(*panel, QStringLiteral("ceilingReductionLargest")) == QStringLiteral("−3.5"),
+          "the largest is kept");
+  require(text_of(*panel, QStringLiteral("ceilingOutPeakL")) == QStringLiteral("−1.0") &&
+              text_of(*panel, QStringLiteral("ceilingInPeakR")) == QStringLiteral("−2.0"),
+          "the peak meters");
+
+  adapter.set_telemetry({});
+  require(wait_for_text(*panel, QStringLiteral("ceilingReduction"), QStringLiteral("—")),
+          "no telemetry: a dash again");
+  const auto kept = panel->root->property("samples").toList().size();
+  QTest::qWait(300);
+  require(panel->root->property("samples").toList().size() == kept,
+          "the history waits while stopped");
+  click(*panel, centre(item(*panel, QStringLiteral("ceilingClearHistory"))));
+  require(panel->root->property("samples").toList().isEmpty() &&
+              text_of(*panel, QStringLiteral("ceilingReductionLargest")) == QStringLiteral("—"),
+          "clear empties it");
+}
+
+// ---- The real limiter -----------------------------------------------------------
+
+constexpr double rate = 48'000.0;
+
+std::vector<engine::StereoFrame> sine(double amplitude, std::size_t frames) {
+  std::vector<engine::StereoFrame> out(frames);
+  for (std::size_t i = 0; i < frames; ++i) {
+    const auto s = static_cast<float>(
+        amplitude * std::sin(2 * std::numbers::pi * 1'000.0 * static_cast<double>(i) / rate));
+    out[i] = {s, s};
+  }
+  return out;
+}
+
+// The real Ceiling over the input; a telemetry frame every 1600 frames.
+std::vector<std::vector<float>> real_telemetry(const std::vector<double>& values,
+                                               const std::vector<engine::StereoFrame>& input) {
+  auto created = effects::NativeEffectRuntime::create(ceiling::engine(), values, rate);
+  require(created.has_value(), "a Ceiling runtime");
+  auto runtime = std::move(created.value());
+  std::vector<std::vector<float>> frames;
+  std::vector<engine::StereoFrame> block;
+  for (std::size_t position = 0; position < input.size(); position += 160) {
+    const std::size_t size = std::min<std::size_t>(160, input.size() - position);
+    block.assign(input.begin() + static_cast<std::ptrdiff_t>(position),
+                 input.begin() + static_cast<std::ptrdiff_t>(position + size));
+    const synth::SynthTransport transport{0.0, 0.0, 0.0, 4.0};
+    require(runtime->process(block, {}, position, 1, transport, {}) ==
+                effects::EffectProcessStatus::rendered,
+            "Ceiling renders");
+    if ((position + size) % 1'600 == 0) {
+      std::vector<float> frame;
+      require(runtime->read_telemetry(frame), "Ceiling publishes telemetry");
+      frames.push_back(frame);
+    }
+  }
+  return frames;
+}
+
+// A full-scale tone under a -1 dB ceiling: about 1 dB of reduction, and
+// the output peak held at the ceiling.
+void the_real_ceiling_holds_the_output() {
+  const auto values = preset("Default");
+  const auto frames = real_telemetry(values, sine(1.0, static_cast<std::size_t>(2.0 * rate)));
+  const auto& last = frames.back();
+  namespace t = ceiling::telemetry;
+  require(std::fabs(last[t::input_peak]) < 0.05, "a full-scale input");
+  require(last[t::reduction] > 0.8F && last[t::reduction] < 1.5F,
+          "about 1 dB of reduction: " + std::to_string(last[t::reduction]));
+  require(last[t::output_peak] <= -0.95F && last[t::output_peak] > -1.5F,
+          "the output held at the ceiling: " + std::to_string(last[t::output_peak]));
+
+  InMemoryNativeSynthAdapter adapter(values);
+  NativeSynthDeviceController controller(table(), adapter);
+  auto panel = load_panel(controller);
+  adapter.set_telemetry(last);
+  const QString expected =
+      QStringLiteral("−") + QString::number(static_cast<double>(last[t::reduction]), 'f', 1);
+  require(wait_for_text(*panel, QStringLiteral("ceilingReduction"), expected),
+          "the panel reads the real reduction");
+}
+
+// Gain drives a quiet mix into the limiter: a -12 dBFS tone with 12 dB of
+// gain comes out at the ceiling, about 11 dB louder, the IN meter still
+// reading the tone before the gain.
+void gain_drives_the_mix_into_the_ceiling() {
+  auto values = preset("Default");
+  const auto gain = std::ranges::find(table().parameters, std::string_view{"ceiling.gain"},
+                                      &synth::ParameterDescriptor::id);
+  require(gain != table().parameters.end(), "Ceiling has a gain");
+  values[static_cast<std::size_t>(gain - table().parameters.begin())] = 12.0;
+  const double quiet = std::pow(10.0, -12.0 / 20.0);
+  const auto frames = real_telemetry(values, sine(quiet, static_cast<std::size_t>(2.0 * rate)));
+  const auto& last = frames.back();
+  namespace t = ceiling::telemetry;
+  require(std::fabs(last[t::input_peak] + 12.0F) < 0.1F,
+          "IN reads the mix before the gain: " + std::to_string(last[t::input_peak]));
+  require(last[t::output_peak] <= -0.95F && last[t::output_peak] > -1.5F,
+          "the gained tone is held at the ceiling: " + std::to_string(last[t::output_peak]));
+  require(last[t::reduction] > 0.8F && last[t::reduction] < 1.5F,
+          "the gain pushes about 1 dB into the limiter: " + std::to_string(last[t::reduction]));
+
+  InMemoryNativeSynthAdapter adapter(values);
+  NativeSynthDeviceController controller(table(), adapter);
+  auto panel = load_panel(controller);
+  require(text_of(*panel, QStringLiteral("gainValue")) == QStringLiteral("+12.0"),
+          "the gain reads in large");
+}
+
+void presets_and_status() {
+  InMemoryNativeSynthAdapter adapter(preset("Default"));
+  NativeSynthDeviceController controller(table(), adapter);
+  auto panel = load_panel(controller);
+  click(*panel, centre(item(*panel, QStringLiteral("ceilingPresetNext"))));
+  require(controller.preset_name() != QStringLiteral("Default"), "next steps the preset");
+  click(*panel, centre(item(*panel, QStringLiteral("ceilingPresetPrevious"))));
+  require(controller.preset_name() == QStringLiteral("Default"), "previous steps back");
+  auto* menu = item(*panel, QStringLiteral("ceilingMenu"));
+  click(*panel, centre(item(*panel, QStringLiteral("ceilingPresetDisplay"))));
+  require(menu->isVisible(), "the preset menu opens");
+  QTest::keyClick(panel->window.get(), Qt::Key_Escape);
+  require(!menu->isVisible(), "Escape closes it");
+  controller.apply_preset(preset_index("Safety"));
+  QCoreApplication::processEvents();
+  require(text_of(*panel, QStringLiteral("ceilingPresetName")) == QStringLiteral("Safety") &&
+              text_of(*panel, QStringLiteral("ceilingValue")) == QStringLiteral("−0.1"),
+          "a preset shows by name and ceiling");
+  adapter.set_status({.saved_revision = 9, .audible_revision = 9, .deferred_changes = true});
+  controller.refresh();
+  QCoreApplication::processEvents();
+  require(item(*panel, QStringLiteral("ceilingStatus"))->property("tone").value<QColor>() ==
+              QColor(QStringLiteral("#f2b25c")),
+          "deferred status is highlighted");
+}
+
+// ---- Screenshots ----------------------------------------------------------------
+
+void screenshots_if_requested() {
+  const char* directory = std::getenv("CEILING_PANEL_SCREENSHOT_DIR");
+  if (directory == nullptr || *directory == '\0') {
+    return;
+  }
+  QDir().mkpath(QString::fromLocal8Bit(directory));
+  struct Shot {
+    const char* preset;
+    const char* file;
+  };
+  // A tone that swells from -12 dBFS to +3 dBFS and back over four seconds.
+  std::vector<engine::StereoFrame> input(static_cast<std::size_t>(4.0 * rate));
+  for (std::size_t i = 0; i < input.size(); ++i) {
+    const double t = static_cast<double>(i) / rate;
+    const double db = -12.0 + 15.0 * std::sin(std::numbers::pi * t / 4.0);
+    const auto s =
+        static_cast<float>(std::pow(10.0, db / 20.0) * std::sin(2 * std::numbers::pi * 220.0 * t));
+    input[i] = {s, 0.9F * s};
+  }
+  for (const Shot& shot :
+       {Shot{"Default", "/ceiling_default.png"}, Shot{"Loud", "/ceiling_loud.png"}}) {
+    const auto values = preset(shot.preset);
+    InMemoryNativeSynthAdapter adapter(values);
+    NativeSynthDeviceController controller(table(), adapter);
+    auto panel = load_panel(controller);
+    for (const auto& frame : real_telemetry(values, input)) {
+      adapter.set_telemetry(frame);
+      QTest::qWait(33);
+    }
+    QTest::qWait(150);
+    const QString path = QString::fromLocal8Bit(directory) + QString::fromLatin1(shot.file);
+    require(panel->window->grabWindow().save(path, "PNG"), "screenshot saved");
+    std::cout << "wrote " << path.toStdString() << '\n';
+  }
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+  QGuiApplication app(argc, argv);
+  try {
+    panel_covers_every_parameter();
+    controls_edit_and_the_ceiling_line_follows();
+    telemetry_decodes_into_the_history();
+    the_real_ceiling_holds_the_output();
+    gain_drives_the_mix_into_the_ceiling();
+    presets_and_status();
+    screenshots_if_requested();
+  } catch (const std::exception& error) {
+    std::cerr << "FAILED: " << error.what() << '\n';
+    return 1;
+  }
+  std::cout << "ceiling panel contract passed\n";
+  return 0;
+}
