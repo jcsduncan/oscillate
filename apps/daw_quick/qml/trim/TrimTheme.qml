@@ -52,7 +52,7 @@ KitTheme {
 
     ink: "#e9edf3"
     inkDim: "#98a2b1"
-    inkFaint: "#5f6878"
+    inkFaint: "#7c8697"
 
     knobTop: "#454c58"
     knobBottom: "#111419"
@@ -184,7 +184,7 @@ KitTheme {
     property real stageWellRadius: 5
     property real stageNoteX: 10
     property real stageNoteY: 8
-    property int stageNoteSize: 7
+    property int stageNoteSize: typeMicro
     property real stageNoteSpacing: 1.2
     property real panRowY: 272
     property int panKnobDiameter: 50

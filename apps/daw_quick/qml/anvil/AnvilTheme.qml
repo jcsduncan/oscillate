@@ -124,7 +124,7 @@ KitTheme {
     glacier: "#fff1e6"
     ink: "#e6edf3"
     inkDim: "#93a1ae"
-    inkFaint: "#6b7884"
+    inkFaint: "#778591"
 
     knobTop: "#222b35"
     knobBottom: "#10151b"

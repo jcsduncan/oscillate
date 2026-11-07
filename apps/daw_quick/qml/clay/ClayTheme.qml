@@ -13,7 +13,7 @@ KitTheme {
     readonly property color line: "#222a33"
     readonly property color line2: "#2f3943"
     readonly property color dim: "#97a3ae"
-    readonly property color faint: "#5d6873"
+    readonly property color faint: "#7e8a97"
     readonly property color clay: "#e8875c"
     readonly property color clay2: "#f6b48e"
     readonly property color clay3: "#b9603c"
@@ -147,6 +147,9 @@ KitTheme {
 
     well: "#080a0d"
     ink: "#e6ebf0"
+    inkDim: dim
+    inkFaint: faint
+    inkGround: panel3
     sans: "Inter"
     mono: "JetBrains Mono"
     accent: clay

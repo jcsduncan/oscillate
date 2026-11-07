@@ -31,7 +31,7 @@ KitTheme {
 
     ink: "#e9eeff"
     inkDim: "#97a5cc"
-    inkFaint: "#5c6a94"
+    inkFaint: "#717ea7"
 
     knobTop: "#1b2552"
     knobBottom: "#060a1c"
@@ -244,7 +244,7 @@ KitTheme {
     property color stripPredelayShade: Qt.rgba(0, 0, 0, 0.35)
     property color stripOnset: Qt.rgba(aurora.r, aurora.g, aurora.b, 0.55)
     property real stripOnsetInset: 3
-    property int stripLabelSize: 7
+    property int stripLabelSize: typeMicro
     property real stripTextY: 3
     property real stripNoteY: 9
     property real tapBase: 4

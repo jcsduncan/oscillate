@@ -42,7 +42,7 @@ KitTheme {
 
     ink: "#eef2f3"
     inkDim: "#9aa5a9"
-    inkFaint: "#636c70"
+    inkFaint: "#7e888d"
 
     knobTop: "#3b4043"
     knobBottom: "#121415"

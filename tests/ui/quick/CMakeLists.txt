@@ -616,6 +616,9 @@ add_executable(oscillate_quick_panel_tests ${oscillate_quick_panel_sources}
   ${OSCILLATE_QUICK_SOURCE_DIR}/fonts/fonts.qrc ${OSCILLATE_QUICK_SOURCE_DIR}/src/bundled_fonts.cpp)
 target_link_libraries(oscillate_quick_panel_tests PRIVATE
   oscillate_quick_relay_panel Qt6::Gui Qt6::Quick Qt6::Test)
+# The device kit's contract checks every theme in the source tree.
+target_compile_definitions(oscillate_quick_panel_tests PRIVATE
+  OSCILLATE_QUICK_QML_DIR="${OSCILLATE_QUICK_SOURCE_DIR}/qml")
 oscillate_target_defaults(oscillate_quick_panel_tests)
 get_filename_component(oscillate_quick_prism_qml_import_dir
   "${Qt6_DIR}/../../qt6/qml" ABSOLUTE)

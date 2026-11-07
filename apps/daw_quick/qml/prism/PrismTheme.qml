@@ -16,7 +16,7 @@ KitTheme {
     menuRowRadius: 5
     menuHighlightAlpha: 0.16
     menuHeaderOffset: 2
-    menuHeaderInk: faint
+    menuHeaderInk: dim
     menuInk: text
     menuHeaderSpacing: 1.2
     knobDiameter: 40
@@ -72,7 +72,11 @@ KitTheme {
     property color line: "#2a313d"
     property color text: "#e9eef5"
     property color dim: "#8995a5"
-    property color faint: "#566070"
+    property color faint: "#788497"
+    ink: text
+    inkDim: dim
+    inkFaint: faint
+    inkGround: panel
     warning: "#e0ae75"
     live: "#72e3c0"
 

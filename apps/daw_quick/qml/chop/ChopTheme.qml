@@ -12,7 +12,7 @@ KitTheme {
     segmentLetterSpacing: 0.4
     segmentUpper: true
     knobLabelBold: true
-    knobLabelSpacing: 1.3
+    knobLabelSpacing: 1.2
     knobLabelSize: 9
 
     // The shell's graphite (ShellTheme).
@@ -50,7 +50,7 @@ KitTheme {
     glacier: "#e6ebf0"
     ink: "#e6ebf0"
     inkDim: "#97a3ae"
-    inkFaint: "#5d6873"
+    inkFaint: "#74828f"
 
     knobTop: "#1c232c"
     knobBottom: "#0b0e12"

@@ -16,6 +16,7 @@
 #include <QTest>
 #include <QWheelEvent>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
@@ -175,6 +176,21 @@ void panel_covers_every_parameter() {
       shown = shown || find_item(panel->root, QString::fromLatin1(kind) + id) != nullptr;
     }
     require(shown, "no control for " + id.toStdString());
+  }
+}
+
+// Helper sentences are set in sentence case, never in capitals.
+void helper_sentences_are_in_sentence_case() {
+  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  NativeSynthDeviceController controller(table(), adapter);
+  auto panel = load_panel(controller);
+  for (const char* name : {"orbitToneNote", "orbitVoiceNote"}) {
+    const QString text = text_of(*panel, QString::fromLatin1(name));
+    // A capital first letter and lower-case letters after it.
+    const auto first = std::ranges::find_if(text, [](QChar c) { return c.isLetter(); });
+    require(first != text.end() && first->isUpper() &&
+                std::ranges::any_of(text, [](QChar c) { return c.isLower(); }),
+            std::string(name) + " is in sentence case: " + text.toStdString());
   }
 }
 
@@ -346,6 +362,7 @@ int main(int argc, char** argv) {
   try {
     controller_decodes_orbit_telemetry();
     panel_covers_every_parameter();
+    helper_sentences_are_in_sentence_case();
     each_mode_shows_its_own_controls();
     controls_edit_through_the_controller();
     presets_and_status();

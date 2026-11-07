@@ -15,7 +15,7 @@ KitTheme {
     readonly property color lineStrong: "#2f3b48"
     readonly property color textMain: "#e7ecf2"
     readonly property color textDim: "#8d99a8"
-    readonly property color textFaint: "#6f7b89"
+    readonly property color textFaint: "#798592"
     readonly property color amber: "#f5b14c"
     readonly property color selection: "#18202a"
 

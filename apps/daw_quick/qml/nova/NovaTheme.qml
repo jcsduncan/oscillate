@@ -56,7 +56,7 @@ KitTheme {
     property color line2: "#303236"
     property color text: "#ececee"
     property color dim: "#9a9ca3"
-    property color faint: "#63656c"
+    property color faint: "#7e8189"
     property color tab: "#1e1f22"
     property color popFill: "#111214"
     // Over the overview while a card is open large: near-black at 60 %.
@@ -727,7 +727,7 @@ KitTheme {
     property real chipLetterSpacing: 0.7
     property real chipFillAlpha: 0.1
     property real chipEdgeAlpha: 0.3
-    property real chipCountSize: 7.5
+    property real chipCountSize: typeMicro
     property real chipCountOpacity: 0.8
     property real chipCountGap: 3
     // The LFO curve editor (NovaCurveEditor): the plot's padding, the room

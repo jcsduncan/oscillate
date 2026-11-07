@@ -50,7 +50,7 @@ KitTheme {
     grid: "#141b3a"
     ink: "#e9edff"
     inkDim: "#8d95bd"
-    inkFaint: "#535b85"
+    inkFaint: "#747ca8"
 
     // Aurora: teal into violet, magenta for reversed grains, ice for frost.
     accent: "#46e6cf"

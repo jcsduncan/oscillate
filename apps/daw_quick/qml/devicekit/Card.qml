@@ -8,6 +8,10 @@ Rectangle {
     required property string title
     property string note: ""
     property color noteColor: theme.inkFaint
+    // Whether the note ends inside the card, as far in from the right edge
+    // as the title sits from the left.
+    readonly property bool noteFits: note === ""
+        || cardNote.x + cardNote.implicitWidth <= width - theme.cardTitleX
     radius: theme.cardRadius
     color: theme.plate
     border.color: theme.plateEdge
@@ -31,6 +35,7 @@ Rectangle {
         font.letterSpacing: card.theme.cardTitleSpacing
     }
     Text {
+        id: cardNote
         x: cardTitle.x + cardTitle.implicitWidth + card.theme.cardNoteGap
         y: cardTitle.y + 1
         visible: card.note !== ""

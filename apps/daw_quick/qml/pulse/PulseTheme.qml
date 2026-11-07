@@ -78,8 +78,9 @@ KitTheme {
     property color bodyDark: "#bdb6a6"
     seam: "#a39b8a"
     ink: "#26231f"
-    inkDim: "#5f584d"
-    inkFaint: "#8a8274"
+    inkDim: "#464139"
+    inkFaint: "#5d574e"
+    inkGround: body
 
     property color strip: "#1d1c1a"
     property color stripLine: "#33312d"
