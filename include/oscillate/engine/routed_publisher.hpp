@@ -118,6 +118,9 @@ public:
   }
   [[nodiscard]] std::uint64_t active_revision() const noexcept;
   // A candidate awaits adoption, or a withdrawal awaits the callback.
+  // A live candidate's adoption stores it active before it stops being
+  // pending, so a control side that reads has_pending() before
+  // active_revision() can tell an adoption from a withdrawal.
   [[nodiscard]] bool has_pending() const noexcept;
   // The callback-accepted mixer's post-fader meter for this node. Retired
   // plans are destroyed only by collect_retired(), so this control-side read

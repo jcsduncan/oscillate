@@ -129,8 +129,9 @@ struct RoutedSourcePreparationCapture {
   bool source_overlay_eligible = false;
 };
 
-// Blocks the playing graph may render while a live switch's candidate waits
-// before the control withdraws it as one that can never be adopted. A
+// Callback blocks (not frames) the playing graph may render while a live
+// switch's candidate waits before the control withdraws it as one that can
+// never be adopted. A
 // candidate takes over at the first block it can, so even a few passed
 // blocks mean it cannot; the margin covers a source bank that is briefly
 // late.

@@ -444,11 +444,13 @@ RoutedRenderStatus RoutedMixerPublisher::render_block(
     } else if (candidate->mixer->accepts_context(context, output.size()) &&
                fill_sources(candidate) &&
                candidate->mixer->adopt_live_state(*active->mixer, context)) {
-      pending_.store(nullptr, std::memory_order_release);
       active->mixer->graph_deactivated(active->revision);
       active_.store(candidate, std::memory_order_release);
       candidate->mixer->graph_activated(candidate->revision);
       retired_.store(active, std::memory_order_release);
+      // Cleared last: a control side that sees no candidate pending also
+      // sees it active, so it cannot mistake an adoption for a withdrawal.
+      pending_.store(nullptr, std::memory_order_release);
       active = candidate;
     } else {
       live_passed = true;

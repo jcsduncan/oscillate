@@ -1381,12 +1381,14 @@ void RoutedPlaybackControl::follow_published_notes() {
 void RoutedPlaybackControl::settle_live_candidate() {
   if (!live_candidate_)
     return;
-  const auto active = publisher_.active_revision();
-  if (active >= live_candidate_->revision) {
+  // Pending first: the callback clears it only after storing an adopted
+  // candidate as active, so "not pending and not active" means withdrawn.
+  const bool pending = publisher_.has_pending();
+  if (publisher_.active_revision() >= live_candidate_->revision) {
     live_candidate_.reset(); // Adopted.
     return;
   }
-  if (publisher_.has_pending()) {
+  if (pending) {
     if (!live_candidate_->withdrawing &&
         publisher_.live_candidate_passed_blocks() - live_candidate_->passed_at_publication >=
             live_candidate_passed_block_limit)
