@@ -53,6 +53,10 @@ comparison with the independent native exporter, bypassed stem samples,
 repeat render, a positive eight-frame tail, rejected shapes and interrupted
 output. The serial fixture verifies two distinct saved states, serial gain,
 summed latency, processed-stem summation and failure of the second processor.
+`application_vst3_export_parity` holds the effect and instrument exports to
+live routed playback: a VST3 effect's master and both stems, its finite tail,
+a 96-frame latent plugin at 64- and 128-frame blocks, and a VST3 instrument's
+master and stem all null against the live stream with its latency trimmed.
 The Quick fixture reopens a saved VST3 audio effect and verifies the UI
 worker dispatch and project-aligned WAV duration. GCC, Clang,
 ASan/UBSan, format and tidy checks passed on the isolated export branch; the
