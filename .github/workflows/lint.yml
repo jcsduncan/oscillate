@@ -30,6 +30,9 @@ jobs:
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+      # Module links against the HLD §3 table (cmake/module_dependencies.json).
+      - name: Check module dependencies
+        run: python -I scripts/ci/check_module_deps.py
       - name: Install pre-commit
         run: python -I -m pip install --quiet -r scripts/ci/lint-requirements.txt
       # Hooks run on the files this change touches.
