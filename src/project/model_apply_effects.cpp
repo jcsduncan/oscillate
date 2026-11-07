@@ -293,6 +293,50 @@ Result<void> apply_command(ApplyContext& context, const AddNativeEffect& command
   return Result<void>::success();
 }
 
+namespace {
+using LinkGroup = std::pair<std::string, std::string>; // Engine and link.
+
+// Each linked built-in effect, with where it sits; const or not as the
+// snapshot is.
+template <typename State, typename Visit> void for_each_linked(State& snapshot, Visit visit) {
+  const auto walk = [&](const SignalPathId& path, auto& effects) {
+    for (auto& effect : effects) {
+      if (auto* patch = std::get_if<NativeEffectPatch>(&effect.processor);
+          patch != nullptr && !patch->link.empty())
+        visit(path, *patch);
+    }
+  };
+  for (auto& track : snapshot.tracks)
+    walk(track.id, track.effects);
+  walk(MasterSignalPath{}, snapshot.master_effects);
+}
+} // namespace
+
+Result<void> release_lone_links(const Snapshot& before, ApplyContext& context) {
+  std::map<LinkGroup, std::size_t> sizes_before;
+  for_each_linked(before, [&](const SignalPathId&, const NativeEffectPatch& patch) {
+    ++sizes_before[{patch.engine, patch.link}];
+  });
+  std::map<LinkGroup, std::vector<std::pair<SignalPathId, NativeEffectPatch*>>> groups;
+  for_each_linked(context.candidate, [&](const SignalPathId& path, NativeEffectPatch& patch) {
+    groups[{patch.engine, patch.link}].emplace_back(path, &patch);
+  });
+  for (auto& [group, members] : groups) {
+    const auto was = sizes_before.find(group);
+    if (members.size() != 1 || was == sizes_before.end() || was->second < 2)
+      continue;
+    // The edit left this effect alone in its group: a group of one is no
+    // group, as unlinking the last partner leaves it.
+    auto& [path, patch] = members.front();
+    if (patch->generation == std::numeric_limits<std::uint64_t>::max())
+      return Result<void>::failure(exhausted("native effect generation exhausted"));
+    patch->link.clear();
+    ++patch->generation;
+    mark_effect_path_changed(path, context.changes);
+  }
+  return Result<void>::success();
+}
+
 Result<void> apply_command(ApplyContext& context, const SetNativeEffectSettings& command) {
   auto& candidate = context.candidate;
   auto& changes = context.changes;

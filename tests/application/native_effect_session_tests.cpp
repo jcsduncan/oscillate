@@ -293,6 +293,52 @@ void linked_effects_share_their_shape() {
              "the last one left is unlinked with it");
 }
 
+// The saved link of a built-in effect, wherever it sits.
+std::string saved_link(const project::Snapshot& snapshot, project::InsertSlotId slot) {
+  for (const auto& track : snapshot.tracks)
+    for (const auto& effect : track.effects)
+      if (effect.id == slot)
+        return std::get<project::NativeEffectPatch>(effect.processor).link;
+  throw std::runtime_error("effect not found");
+}
+
+// An effect left alone in its group, by linking its partners elsewhere or
+// removing them (or their track), is unlinked in the same step; undo
+// brings the group back.
+void lone_links_are_released() {
+  Directory directory;
+  auto session = take(application::ProjectSession::create(directory.path() / "song"));
+  const auto pad = take(session->instruments().add_synth_track());
+  const auto bass = take(session->instruments().add_synth_track());
+  const auto keys = take(session->instruments().add_synth_track());
+  const auto a = take(session->effects().add_effect_engine(pad, 0, "pump"));
+  const auto b = take(session->effects().add_effect_engine(bass, 0, "pump"));
+  const auto c = take(session->effects().add_effect_engine(keys, 0, "pump"));
+  const std::vector<project::InsertSlotId> first{a, b};
+  const std::vector<project::InsertSlotId> second{b, c};
+  constexpr std::size_t pair = 2;
+
+  accepted(session->effects().link_native_effects(first));
+  accepted(session->effects().link_native_effects(second));
+  REQUIRE_TRUE(saved_link(session->snapshot(), a).empty(),
+               "relinking a partner elsewhere unlinks the one left behind");
+  REQUIRE_EQ(session->effects().native_effect_link_count(b), pair,
+             "relinking a partner elsewhere unlinks the one left behind");
+  accepted(session->history().undo());
+  REQUIRE_EQ(session->effects().native_effect_link_count(a), pair, "undo restores the group");
+
+  accepted(session->effects().remove_effect_insert(bass, b));
+  REQUIRE_TRUE(saved_link(session->snapshot(), a).empty(),
+               "removing a partner unlinks the one left behind");
+  accepted(session->history().undo());
+  REQUIRE_EQ(session->effects().native_effect_link_count(a), pair, "undo restores the group");
+
+  accepted(session->tracks().remove_track(bass));
+  REQUIRE_TRUE(saved_link(session->snapshot(), a).empty(),
+               "removing a partner's track unlinks the one left behind");
+  REQUIRE_TRUE(saved_link(session->snapshot(), c).empty(), "an unlinked effect is untouched");
+}
+
 // ADR-0059: MIDI effects sit before an instrument track's synth, in order,
 // with their own ids from the effect slots' allocator; every edit undoes.
 void note_effects_sit_before_the_synth() {
@@ -523,6 +569,7 @@ int main() {
     documents_travel_with_the_effect();
     pump_follows_its_key_tracks_notes();
     linked_effects_share_their_shape();
+    lone_links_are_released();
     note_effects_sit_before_the_synth();
     macros_drive_mapped_parameters();
     frozen_tracks_keep_their_sound();

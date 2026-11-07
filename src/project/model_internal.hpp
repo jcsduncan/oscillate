@@ -197,6 +197,9 @@ struct ApplyContext {
 [[nodiscard]] Result<void> apply_command(ApplyContext& context,
                                          const SetEffectInsertEnabled& command);
 [[nodiscard]] Result<void> apply_command(ApplyContext& context, const RemoveEffectInsert& command);
+// After an edit's operations: an effect the edit left alone in its linked
+// group (its partners removed or linked elsewhere) is unlinked.
+[[nodiscard]] Result<void> release_lone_links(const Snapshot& before, ApplyContext& context);
 [[nodiscard]] Result<void> apply_command(ApplyContext& context, const RemoveVst3Plugin& command);
 [[nodiscard]] Result<void> apply_command(ApplyContext& context, const MoveVst3Plugin& command);
 [[nodiscard]] Result<void> apply_command(ApplyContext& context,
