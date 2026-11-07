@@ -1,0 +1,112 @@
+name: Tidy sweep
+
+# The configured .clang-tidy checks over the whole tree, nightly and on demand.
+# Advisory, like the pull request Tidy job: not a required check.
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to check (empty checks the ref the run starts from)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  tidy:
+    name: clang-tidy (shard ${{ matrix.shard }} of 8)
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      # One clang-tidy process per translation unit; eight runners share the tree.
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    env:
+      SHARD_COUNT: 8
+    steps:
+      - name: Install Git for checkout and the VST3 SDK
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+            ca-certificates git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      # The optional features too, so every configured variant is checked.
+      - name: Install dependencies and the pinned clang-tidy
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          scripts/ci/install-deps.sh libjack-jackd2-dev libsamplerate0-dev libsndfile1-dev libx11-dev
+          python3 -m venv "$RUNNER_TEMP/qa"
+          "$RUNNER_TEMP/qa/bin/pip" install --quiet -r scripts/qa-requirements.txt
+          echo "$RUNNER_TEMP/qa/bin" >> "$GITHUB_PATH"
+      - name: Fetch the pinned VST3 SDK
+        run: scripts/ci/fetch-vst3-sdk.sh "$RUNNER_TEMP/vst3sdk"
+      - name: Configure
+        run: >-
+          cmake --preset quick
+          -DOSCILLATE_BUILD_VST3_SCANNER=ON
+          -DOSCILLATE_VST3_SDK_ROOT="$RUNNER_TEMP/vst3sdk"
+          -DOSCILLATE_BUILD_CODEC_ADAPTER=ON
+          -DOSCILLATE_BUILD_EXPORT_RESAMPLER=ON
+          -DOSCILLATE_BUILD_SOURCE_RESAMPLER=ON
+          -DOSCILLATE_BUILD_CONVOLUTION_DSP=ON
+      # A header's finding repeats for every source that includes it, so the
+      # shard also keeps each distinct finding once.
+      - name: clang-tidy on this shard
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          mkdir -p findings
+          python3 -I scripts/ci/tidy_shard.py quick "$SHARD" "$SHARD_COUNT" 2>&1 | tee tidy.log
+          status=${PIPESTATUS[0]}
+          grep -E ': (error|warning): ' tidy.log | sed -E "s|$GITHUB_WORKSPACE/||; :up; s|[^/]+/\\.\\./||; t up" | sort -u \
+            > "findings/shard-$SHARD.txt" || true
+          exit "$status"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: tidy-findings-${{ matrix.shard }}
+          path: findings/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  summary:
+    needs: tidy
+    if: always()
+    name: Findings across the tree
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: tidy-findings-*
+          path: findings
+          merge-multiple: true
+      - name: Distinct findings by check
+        run: |
+          sort -u findings/*.txt > tidy-findings.txt
+          {
+            echo "$(wc -l < tidy-findings.txt) distinct clang-tidy finding(s) across the tree."
+            echo
+            echo '| Findings | Check |'
+            echo '| ---: | --- |'
+            grep -oE '\[[a-z0-9.-]+(,-warnings-as-errors)?\]$' tidy-findings.txt \
+              | sed -E 's/^\[|(,-warnings-as-errors)?\]$//g' | sort | uniq -c | sort -rn \
+              | awk '{ printf "| %s | `%s` |\n", $1, $2 }'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tidy-findings
+          path: tidy-findings.txt
+          retention-days: 14
