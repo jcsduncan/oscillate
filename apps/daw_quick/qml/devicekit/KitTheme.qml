@@ -382,6 +382,8 @@ QtObject {
     property real segmentLetterSpacingVertical: 2.2
     property real segmentTextXVertical: 16
     property real segmentTextRightVertical: 6
+    // Room above and below a vertical tile's text.
+    property real segmentTextPadVertical: 3
     property real segmentCaptionGap: 2
     property real segmentCaptionSpacing: 0.8
     property int segmentSize: typeSmall

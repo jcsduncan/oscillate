@@ -225,8 +225,8 @@ KitTheme {
     property int loopCellHeight: 42
     property real loopCellGap: 5
     property real loopMetaTop: 21
-    // The loop name stops this far short of the thumbnail.
-    property real loopNameReserve: 22
+    // The thumbnail beside the meta line, under the name.
+    property real loopThumbTop: 18
     property int loopThumbWidth: 54
     property int loopThumbHeight: 16
     // A plain hit in a thumbnail; accents are drawn solid.

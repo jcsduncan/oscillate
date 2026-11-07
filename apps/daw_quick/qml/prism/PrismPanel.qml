@@ -262,7 +262,7 @@ Rectangle {
                 accent: osc.accent
             },
             Kit.Dropdown {
-                width: panel.theme.phaseDropdownWidth
+                width: Math.max(panel.theme.phaseDropdownWidth, Math.ceil(fitWidth))
                 controller: panel.controller
                 theme: panel.theme
                 menu: menu
@@ -347,6 +347,8 @@ Rectangle {
                     required property string modelData
                     width: envelope.bodyWidth / envelope.knobColumns
                     diameter: panel.theme.compactKnobDiameter
+                    // Six to a row: velocity is abbreviated, like Env Amt.
+                    label: modelData === "velocity" ? "Vel" : info.name !== undefined ? info.name : ""
                     controller: panel.controller
                     theme: panel.theme
                     parameterId: envelope.prefix + "." + modelData

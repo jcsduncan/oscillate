@@ -370,7 +370,9 @@ Item {
                     Text {
                         x: area.theme.spaceMd
                         y: area.theme.spaceXs
-                        width: parent.width - thumbnail.width - area.theme.loopNameReserve
+                        // The name has the cell's whole width; the thumbnail
+                        // sits beside the line under it.
+                        width: parent.width - 2 * area.theme.spaceMd
                         text: loopCell.modelData.name
                         color: area.theme.ink
                         font.family: area.theme.sans
@@ -392,7 +394,7 @@ Item {
                         id: thumbnail
                         anchors.right: parent.right
                         anchors.rightMargin: area.theme.spaceMd
-                        anchors.verticalCenter: parent.verticalCenter
+                        y: area.theme.loopThumbTop
                         width: area.theme.loopThumbWidth
                         height: area.theme.loopThumbHeight
                         cells: loopCell.modelData.thumb
@@ -591,7 +593,20 @@ Item {
         width: parent.width
         spacing: area.theme.laneSpacing
         readonly property real lockWidth: 16
-        readonly property real nameWidth: 62
+        // The name column is as wide as the longest lane name.
+        readonly property real nameMinWidth: 62
+        readonly property real nameWidth: {
+            let widest = nameMinWidth
+            for (let lane = 0; lane < area.lanes; ++lane)
+                widest = Math.max(widest, Math.ceil(nameMetrics.advanceWidth(area.laneName(lane)))
+                                  + area.theme.spaceXs)
+            return widest
+        }
+        FontMetrics {
+            id: nameMetrics
+            font.family: area.theme.sans
+            font.pixelSize: area.theme.typeSmall
+        }
         // Between the lane's name and its first cell.
         readonly property real nameGap: 8
         readonly property real gap: 2

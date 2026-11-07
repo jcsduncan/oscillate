@@ -385,6 +385,8 @@ Rectangle {
         property bool on: false
         property bool dim: false
         property color ink: panel.theme.shape
+        // The tooltip, when the label alone does not say enough.
+        property string tip: ""
         signal activated
         signal rightClicked
         width: pillText.implicitWidth + panel.theme.pillPad
@@ -394,8 +396,9 @@ Rectangle {
         border.color: on ? ink : panel.theme.wellEdge
         opacity: !panel.controller.editable ? panel.theme.pillDisabledOpacity : dim ? panel.theme.pillDimOpacity : 1
         Accessible.role: Accessible.Button
-        Kit.HoverTip { theme: panel.theme }
+        Kit.HoverTip { theme: panel.theme; text: pill.tip }
         Accessible.name: label
+        Accessible.description: tip
         Text {
             id: pillText
             anchors.centerIn: parent
@@ -878,7 +881,9 @@ Rectangle {
                         && (index === 0 || panel.doc.has_curve(Shapes.curveIdFor(index, 0)))
                     objectName: "pumpSlot:" + Shapes.slotNames[index]
                     width: panel.theme.slotTabWidth
-                    label: Shapes.slotNames[index] + (own ? "" : "=")
+                    // A slot with no curve of its own plays A's, shown dimmed.
+                    label: Shapes.slotNames[index]
+                    tip: own ? "" : "Slot " + Shapes.slotNames[index] + " plays A's curve until you draw it"
                     on: panel.editSlot === index
                     dim: !own
                     ink: panel.playingSlot === index ? panel.theme.time : panel.theme.shape

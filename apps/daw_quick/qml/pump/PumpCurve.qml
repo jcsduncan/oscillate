@@ -263,8 +263,14 @@ Kit.CurveEditor {
         // The dB scale on the right, time under the cycle.
         ctx.fillStyle = t.inkFaint
         ctx.font = t.typeCaption + "px '" + t.mono + "'"
-        for (const db of editor.dbMarks)
-            ctx.fillText(Format.decibels(db, editor.markDecimals), R - t.dbLabelRight, editor.py(Math.pow(10, db / 20)) - t.dbLabelLift)
+        // Each mark sits on its line; the top one (0 dB) under it, clear of
+        // the gain readout in the key row above the plot.
+        for (const db of editor.dbMarks) {
+            const y = editor.py(Math.pow(10, db / 20))
+            const top = db === editor.dbMarks[0]
+            ctx.fillText(Format.decibels(db, editor.markDecimals), R - t.dbLabelRight,
+                         top ? y + t.typeCaption + t.dbLabelLift : y - t.dbLabelLift)
+        }
         for (let b = 0; b <= Math.floor(editor.cycleBeats + 1e-6); ++b) {
             if (b < editor.cycleBeats - 1e-6 || b === 0)
                 ctx.fillText(b === 0 ? "kick" : "+" + b + " beat", editor.px(b / editor.cycleBeats) + t.beatLabelGap,

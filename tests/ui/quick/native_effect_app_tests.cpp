@@ -1,4 +1,5 @@
 #include "native_synth_device_controller.hpp"
+#include "panel_fit_checks.hpp"
 #include "panel_text_checks.hpp"
 #include "project_bridge.hpp"
 
@@ -424,6 +425,9 @@ void effect_is_inserted_opened_edited_and_live(const effects::EffectEngine& effe
   // Every value the playing panel shows follows the display formatter.
   oscillate::test::panel_text::require_formatted_values(
       find_item(window->contentItem(), panel_name), id);
+  // No text in the playing panel is cut short, drawn over other text or
+  // clipped.
+  oscillate::test::panel_fit::require_text_fits(find_item(window->contentItem(), panel_name), id);
 
   if (const auto shots = qEnvironmentVariable("EFFECT_APP_SCREENSHOT_DIR"); !shots.isEmpty()) {
     QDir().mkpath(shots);
