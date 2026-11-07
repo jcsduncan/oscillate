@@ -19,6 +19,9 @@ oscillate_add_library(vst3_instrument_export SOURCES instrument_export.cpp
          oscillate::vst3_track_insert oscillate::plugins
   PRIVATE oscillate::source_prep oscillate::render_graph)
 
-oscillate_add_library(vst3_effect_export SOURCES effect_export.cpp
-  PUBLIC oscillate::export oscillate::application oscillate::vst3_track_insert
-         oscillate::plugins)
+# Offline export with VST3 stages: verified fresh scans, then the shared
+# offline render with this host's stage preparer (ADR-0090).
+oscillate_add_library(vst3_offline_export SOURCES offline_export.cpp
+  PUBLIC oscillate::export oscillate::plugins
+  PRIVATE oscillate::application oscillate::vst3_instrument_provider oscillate::vst3_track_insert
+          oscillate::engine oscillate::project)

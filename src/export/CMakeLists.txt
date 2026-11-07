@@ -2,10 +2,11 @@ oscillate_add_library(export
   SOURCES wav_writer.cpp master_output.cpp offline_master.cpp processed_clip.cpp
           realtime_capture.cpp realtime_tail_plan.cpp
   # master_output.hpp is shared with the VST3 exporters.
+  # The graph comes from render_graph, whose VST3 stage preparer the API
+  # takes; native_dsp supplies the loudness and true-peak meters.
   PUBLIC oscillate::foundation oscillate::project oscillate::warp_render_cache oscillate::routing
-  # The graph comes from render_graph; native_dsp supplies the loudness and
-  # true-peak meters.
-  PRIVATE oscillate::render_graph oscillate::source_prep oscillate::engine oscillate::media
+         oscillate::render_graph
+  PRIVATE oscillate::source_prep oscillate::engine oscillate::media
           oscillate::native_dsp oscillate::persistence
   DEFINITIONS OSCILLATE_HAVE_CODEC=$<BOOL:${OSCILLATE_BUILD_CODEC_ADAPTER}>
               OSCILLATE_HAVE_EXPORT_RESAMPLER=$<BOOL:${OSCILLATE_BUILD_EXPORT_RESAMPLER}>
