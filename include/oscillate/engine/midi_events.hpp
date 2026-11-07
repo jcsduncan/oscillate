@@ -14,6 +14,10 @@ namespace oscillate::engine {
 
 inline constexpr std::uint32_t max_midi_block_frames = 8'192;
 inline constexpr std::size_t max_midi_events_per_block = 1'024;
+// The most notes of one instrument's plan sounding at once. The compiler
+// refuses a plan past it, so HeldNotes can track every note it sends: as many
+// as one block can start.
+inline constexpr std::size_t max_concurrent_midi_notes = max_midi_events_per_block;
 
 enum class MidiEventKind : std::uint8_t { note_off = 0, note_on = 1 };
 
@@ -116,10 +120,11 @@ private:
 // copy_block() releases every held note at offset 0 of a block that does not
 // continue the previous one, as DAWs release held notes at the loop end; a
 // new generation just forgets them, because the instrument resets anyway.
-// Callback only; fixed capacity, no allocation.
+// Callback only; fixed capacity, no allocation. A compiled plan never holds
+// more than `capacity` notes at once, so every held note is tracked.
 class HeldNotes {
 public:
-  static constexpr std::size_t capacity = 256;
+  static constexpr std::size_t capacity = max_concurrent_midi_notes;
   // Room callers give copy_block(): the plan's events plus every release.
   static constexpr std::size_t block_capacity = max_midi_events_per_block + capacity;
   // What an instrument accepts per block: that, plus notes played live

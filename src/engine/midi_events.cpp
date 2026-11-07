@@ -472,6 +472,17 @@ Result<CompiledMidiPlan> compile_midi_events(const project::Snapshot& snapshot) 
             exhausted("more than 1024 MIDI events in an 8192-sample window"));
       }
     }
+    // Offs sort before ons at a sample, so a note ending where the next
+    // starts never counts twice.
+    std::size_t sounding = 0;
+    for (const auto& event : events) {
+      if (event.kind == MidiEventKind::note_off) {
+        --sounding;
+      } else if (++sounding > max_concurrent_midi_notes) {
+        return Result<CompiledMidiPlan>::failure(
+            exhausted("more than 1024 MIDI notes sound at once on one instrument"));
+      }
+    }
     instruments.emplace_back(track.id, std::move(events), std::move(pedals));
   }
   return Result<CompiledMidiPlan>::success(CompiledMidiPlan(std::move(instruments)));
