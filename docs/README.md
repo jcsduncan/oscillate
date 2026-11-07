@@ -8,7 +8,7 @@ ADRs and specs.
 | Product scope and release acceptance | [PRD](PRD.md) |
 | Module boundaries and real-time contracts | [HLD](HLD.md) |
 | Observable behaviour and acceptance tests | [Functional specs](specs/README.md) |
-| Open work | [Project board](https://github.com/users/jcsduncan/projects/3) |
+| Open work | [Issues](https://github.com/jcsduncan/oscillate/issues) |
 | Cross-component decisions | [ADR index](decisions/README.md) |
 | Build, test and contribution rules | [README](../README.md#build), [AGENTS.md](../AGENTS.md), [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Environment variables and user files | [Environment](environment.md) |

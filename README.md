@@ -22,7 +22,7 @@ pipeline and VST3 host; Qt Quick user interface.
 | Export | Master and stems as WAV; FLAC and MP3 with the codec adapter; offline Mix Check |
 
 Not included: Session View, audio recording, hardware MIDI input.
-Scope: [PRD](docs/PRD.md). Open work: [project board](https://github.com/users/jcsduncan/projects/3).
+Scope: [PRD](docs/PRD.md). Open work: [issues](https://github.com/jcsduncan/oscillate/issues).
 
 ## Build
 

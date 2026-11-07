@@ -3,7 +3,7 @@
 These rules apply to the whole repository, for human contributors and coding
 assistants alike. Read the [PRD](docs/PRD.md), [HLD](docs/HLD.md),
 and [spec index](docs/specs/README.md) before changing a component.
-Open work is tracked on the [project board](https://github.com/users/jcsduncan/projects/3). [CONTRIBUTING.md](CONTRIBUTING.md) covers bug reports and proposals.
+Open work is tracked in [issues](https://github.com/jcsduncan/oscillate/issues). [CONTRIBUTING.md](CONTRIBUTING.md) covers bug reports and proposals.
 
 ## Source of truth and scope
 
