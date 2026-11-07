@@ -1,5 +1,7 @@
 #pragma once
 
+#include "background_job.hpp"
+
 #include "oscillate/application/midi_note_tools.hpp"
 #include "oscillate/application/midi_velocity_edit.hpp"
 #include "oscillate/application/project_session.hpp"
@@ -8,9 +10,11 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 #include <QVariantList>
 
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <optional>
 #include <span>
@@ -24,7 +28,9 @@ namespace oscillate::quick {
 // the pedal strip (ADR-0035) and velocity lane beneath the roll.
 // The maths is application::midi_note_tools; every edit is one undo step
 // through NoteService::apply_note_edit. An empty note list means the
-// whole clip. Scale lock is a view setting, not saved.
+// whole clip. Scale lock is a view setting, not saved. The user's groove
+// files are read, written and removed on a worker, one at a time and in the
+// order asked; the pool lists what the last scan and completed writes left.
 class NoteToolsController final : public QObject {
   Q_OBJECT
   Q_PROPERTY(bool scaleLock READ scale_lock WRITE set_scale_lock NOTIFY scaleLockChanged)
@@ -91,14 +97,25 @@ public:
   Q_INVOKABLE void apply_current_groove(const QString& clip_id, const QStringList& note_ids);
   // Keeps `groove` with the user's grooves under its name (cleaned for a
   // file name) and makes it the current groove. Grooves from a record
-  // (GrooveCaptureController, ADR-0079) are kept here.
+  // (GrooveCaptureController, ADR-0079) are kept here. False for an unusable
+  // name; a failed write is reported when it finishes.
   bool keep_groove(persistence::GrooveTemplate groove);
   // A groove in the pool by name (built-in or the user's).
   [[nodiscard]] std::optional<persistence::GrooveTemplate> find_groove(const QString& name) const;
+  // These start the file work and return whether it started; the pool
+  // changes, or the failure is reported, when it finishes.
   Q_INVOKABLE bool delete_groove(const QString& name);
   Q_INVOKABLE bool import_groove(const QString& path);
   Q_INVOKABLE bool export_groove(const QString& name, const QString& path);
+  // Reads the groove folder again.
+  Q_INVOKABLE void rescan_grooves();
   [[nodiscard]] QString groove_directory() const;
+  // File work is running or waiting.
+  [[nodiscard]] bool groove_files_busy() const noexcept {
+    return files_.running() || !waiting_.empty();
+  }
+  // Blocks, running the event loop, until the file work is done (tests).
+  bool wait_for_groove_files(int timeout_ms);
   void set_audition(Audition audition) { audition_ = std::move(audition); }
 
   // The pedal strip (ADR-0035). Pedals are "sustain", "sostenuto" or "soft".
@@ -141,7 +158,20 @@ private:
   [[nodiscard]] std::optional<Target> target(const QString& clip_id, const QStringList& note_ids,
                                              const QString& action);
   [[nodiscard]] std::optional<project::MusicalKey> song_key() const;
-  [[nodiscard]] std::vector<persistence::GrooveTemplate> user_grooves() const;
+  // One piece of groove file work and what it left.
+  struct FileOutcome {
+    // failed: the worker threw; name holds the reason.
+    enum class Kind : std::uint8_t { scan, saved, removed, imported, exported, failed };
+    Kind kind = Kind::scan;
+    bool ok = false;
+    QString name = {};
+    std::vector<persistence::GrooveTemplate> grooves = {};
+  };
+  using FileWork = std::function<FileOutcome()>;
+  void queue(FileWork work);
+  void start_file_work();
+  void poll_files();
+  void finish(FileOutcome outcome);
   // One pedal-strip or velocity edit with the shared guards, status and refresh.
   using PedalEdit = std::function<foundation::Result<void>(project::ClipId, project::MidiPedal)>;
   bool apply_pedal_edit(const QString& clip_id, const QString& pedal, const PedalEdit& edit);
@@ -167,6 +197,11 @@ private:
   // Advanced by every velocity humanise or randomise.
   std::uint64_t velocity_seed_ = 0x5EEDULL;
   Audition audition_;
+  // The user's grooves as the folder holds them, named by file.
+  std::vector<persistence::GrooveTemplate> user_grooves_;
+  BackgroundJob<FileOutcome> files_;
+  std::deque<FileWork> waiting_;
+  QTimer files_timer_;
 };
 
 } // namespace oscillate::quick

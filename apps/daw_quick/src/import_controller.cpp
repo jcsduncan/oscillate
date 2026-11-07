@@ -12,16 +12,46 @@
 #include <optional>
 #include <ranges>
 #include <span>
+#include <string>
 #include <utility>
 
 namespace oscillate::quick {
 namespace {
 constexpr std::uint64_t bytes_per_mebibyte = 1024U * 1024U;
+// How often a MIDI file being read is checked for its bytes.
+constexpr int midi_poll_ms = 20;
+
+[[nodiscard]] foundation::Result<QByteArray> too_large() {
+  return foundation::Result<QByteArray>::failure(
+      {foundation::ErrorCode::resource_exhausted,
+       QStringLiteral("the file is larger than %1 MiB")
+           .arg(midi_file::max_file_bytes / bytes_per_mebibyte)
+           .toStdString()});
+}
+
+// Worker: the file's bytes, refused past the size limit.
+[[nodiscard]] foundation::Result<QByteArray> read_midi_file(const QString& path) {
+  QFile input(path);
+  if (!input.open(QIODevice::ReadOnly))
+    return foundation::Result<QByteArray>::failure(
+        {foundation::ErrorCode::io_failure,
+         QStringLiteral("cannot open %1").arg(input.fileName()).toStdString()});
+  if (input.size() > static_cast<qint64>(midi_file::max_file_bytes))
+    return too_large();
+  // Read at most one byte past the limit, so a file that grew since the size
+  // check is still refused rather than read whole.
+  auto bytes = input.read(static_cast<qint64>(midi_file::max_file_bytes) + 1);
+  if (bytes.size() > static_cast<qsizetype>(midi_file::max_file_bytes))
+    return too_large();
+  return foundation::Result<QByteArray>::success(std::move(bytes));
+}
 } // namespace
 
 ImportController::ImportController(Host host, QObject* parent)
-    : QObject(parent), host_(std::move(host)), audio_(this) {
+    : QObject(parent), host_(std::move(host)), audio_(this), midi_timer_(this) {
   connect(&audio_, &AudioImportController::changed, this, &ImportController::changed);
+  midi_timer_.setInterval(midi_poll_ms);
+  connect(&midi_timer_, &QTimer::timeout, this, &ImportController::poll_midi);
 }
 
 bool ImportController::import_enabled() const {
@@ -100,22 +130,50 @@ void ImportController::import_midi_with(const QUrl& source,
     host_.status(QStringLiteral("Stop playback or finish export/import before importing"));
     return;
   }
-  QFile input(source.toLocalFile());
-  if (!input.open(QIODevice::ReadOnly)) {
-    host_.status(QStringLiteral("MIDI import: cannot open %1").arg(input.fileName()));
+  const auto path = source.toLocalFile();
+  const auto failed = midi_read_.start(
+      0, [path] { return read_midi_file(path); },
+      [](std::string what) {
+        return foundation::Result<QByteArray>::failure(
+            {foundation::ErrorCode::internal, std::move(what)});
+      });
+  if (failed) {
+    host_.status(QStringLiteral("MIDI import: %1").arg(QString::fromStdString(*failed)));
     return;
   }
-  if (input.size() > static_cast<qint64>(midi_file::max_file_bytes)) {
-    host_.status(QStringLiteral("MIDI import: the file is larger than %1 MiB")
-                     .arg(midi_file::max_file_bytes / bytes_per_mebibyte));
+  midi_ = MidiRead{path, options, host_.session()->session_generation()};
+  midi_timer_.start();
+  host_.started();
+  host_.status(QStringLiteral("Reading %1").arg(QFileInfo(path).fileName()));
+  emit changed();
+}
+
+void ImportController::poll_midi() {
+  if (!midi_read_.finished())
+    return;
+  midi_timer_.stop();
+  auto finished = midi_read_.take();
+  const auto read = *std::exchange(midi_, std::nullopt);
+  emit changed();
+  auto options = read.options;
+  if (!finished) {
+    host_.status(QStringLiteral("MIDI import: the file could not be read"));
     return;
   }
-  // Read at most one byte past the limit, so a file that grew since the size
-  // check is still refused rather than read whole.
-  const auto bytes = input.read(static_cast<qint64>(midi_file::max_file_bytes) + 1);
-  if (bytes.size() > static_cast<qsizetype>(midi_file::max_file_bytes)) {
-    host_.status(QStringLiteral("MIDI import: the file is larger than %1 MiB")
-                     .arg(midi_file::max_file_bytes / bytes_per_mebibyte));
+  const auto& bytes = finished->result;
+  if (!bytes) {
+    host_.status(
+        QStringLiteral("MIDI import: %1").arg(QString::fromStdString(bytes.error().message)));
+    return;
+  }
+  // The notes go to the session they were dropped into, and only when no
+  // other job holds the project.
+  if (!host_.session() || host_.session()->session_generation() != read.session) {
+    host_.status(QStringLiteral("MIDI import dropped: the project changed"));
+    return;
+  }
+  if (!import_enabled() || host_.control_busy()) {
+    host_.status(QStringLiteral("MIDI import: the project became busy; import the file again"));
     return;
   }
   const auto& tracks = host_.session()->snapshot().tracks;
@@ -123,8 +181,8 @@ void ImportController::import_midi_with(const QUrl& source,
       tracks, [](const auto& track) { return track.clips.empty() && track.midi_clips.empty(); });
   const bool new_tracks = options.target == application::MidiImportOptions::Target::new_tracks;
   const auto result = host_.session()->imports().import_midi_bytes(
-      std::span(reinterpret_cast<const std::uint8_t*>(bytes.constData()),
-                static_cast<std::size_t>(bytes.size())),
+      std::span(reinterpret_cast<const std::uint8_t*>(bytes.value().constData()),
+                static_cast<std::size_t>(bytes.value().size())),
       options);
   if (!result) {
     host_.status(
@@ -137,7 +195,7 @@ void ImportController::import_midi_with(const QUrl& source,
     host_.track_created(static_cast<int>(
         host_.session()->tracks().track_index(imported.tracks.front()).value_or(0)));
   host_.submit_playback_edit();
-  const auto name = QFileInfo(input.fileName()).completeBaseName();
+  const auto name = QFileInfo(read.path).completeBaseName();
   host_.status(new_tracks ? QStringLiteral("%1 imported: %2 notes on %3 tracks · revision %4")
                                 .arg(name)
                                 .arg(imported.notes)

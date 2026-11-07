@@ -4,7 +4,10 @@
 #include "oscillate/application/midi_velocity_edit.hpp"
 #include "oscillate/persistence/groove_file.hpp"
 
+#include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
+#include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
 #include <QSaveFile>
@@ -26,6 +29,10 @@ namespace {
 constexpr int min_velocity = 1;
 constexpr int max_velocity = 127;
 constexpr int default_new_note_velocity = 100;
+// A groove's name, which is also its file's name.
+constexpr int max_groove_name_length = 64;
+// How often groove file work is checked for its result.
+constexpr int groove_poll_ms = 20;
 
 [[nodiscard]] std::optional<project::MidiPedal> parse_pedal(const QString& name) noexcept {
   if (name == QStringLiteral("sustain"))
@@ -61,7 +68,7 @@ constexpr std::array<ShapeName, 5> shape_names{{{"Triad", application::ChordShap
 }
 
 [[nodiscard]] bool usable_name(const QString& name) {
-  if (name.isEmpty() || name.size() > 64 || name.startsWith(QLatin1Char('.')))
+  if (name.isEmpty() || name.size() > max_groove_name_length || name.startsWith(QLatin1Char('.')))
     return false;
   return std::ranges::none_of(name, [](QChar c) {
     return c == QLatin1Char('/') || c == QLatin1Char('\\') || !c.isPrint();
@@ -88,6 +95,22 @@ constexpr std::array<ShapeName, 5> shape_names{{{"Triad", application::ChordShap
   if (!groove)
     return std::nullopt;
   return std::move(groove).value();
+}
+
+// Worker: the user's grooves in `directory`, each named by its file.
+[[nodiscard]] std::vector<persistence::GrooveTemplate> scan_grooves(const QString& directory) {
+  std::vector<persistence::GrooveTemplate> grooves;
+  const auto files = QDir(directory).entryInfoList(
+      {QStringLiteral("*.json")}, QDir::Files | QDir::Readable, QDir::Name | QDir::IgnoreCase);
+  for (const auto& file : files) {
+    if (!usable_name(file.completeBaseName()))
+      continue;
+    if (auto groove = read_groove(file.absoluteFilePath())) {
+      groove->name = file.completeBaseName().toStdString();
+      grooves.push_back(std::move(*groove));
+    }
+  }
+  return grooves;
 }
 
 [[nodiscard]] bool write_groove(const QString& path, const persistence::GrooveTemplate& groove) {
@@ -118,7 +141,11 @@ constexpr std::array<ShapeName, 5> shape_names{{{"Triad", application::ChordShap
 NoteToolsController::NoteToolsController(Session session, CanEdit can_edit, Report report,
                                          Commit commit, QObject* parent)
     : QObject(parent), session_(std::move(session)), can_edit_(std::move(can_edit)),
-      report_(std::move(report)), commit_(std::move(commit)) {}
+      report_(std::move(report)), commit_(std::move(commit)), files_timer_(this) {
+  files_timer_.setInterval(groove_poll_ms);
+  connect(&files_timer_, &QTimer::timeout, this, &NoteToolsController::poll_files);
+  rescan_grooves();
+}
 
 void NoteToolsController::set_scale_lock(bool locked) {
   if (scale_lock_ == locked)
@@ -378,28 +405,11 @@ QString NoteToolsController::groove_directory() const {
   return data + QStringLiteral("/oscillate/grooves");
 }
 
-std::vector<persistence::GrooveTemplate> NoteToolsController::user_grooves() const {
-  std::vector<persistence::GrooveTemplate> grooves;
-  QDir directory(groove_directory());
-  auto files = directory.entryInfoList({QStringLiteral("*.json")}, QDir::Files | QDir::Readable,
-                                       QDir::Name | QDir::IgnoreCase);
-  for (const auto& file : files) {
-    if (!usable_name(file.completeBaseName()))
-      continue;
-    if (auto groove = read_groove(file.absoluteFilePath())) {
-      // The file's name is the groove's name in the pool.
-      groove->name = file.completeBaseName().toStdString();
-      grooves.push_back(std::move(*groove));
-    }
-  }
-  return grooves;
-}
-
 QVariantList NoteToolsController::grooves() const {
   QVariantList list;
   for (const auto& groove : application::builtin_grooves())
     list.append(groove_entry(groove, false));
-  for (const auto& groove : user_grooves())
+  for (const auto& groove : user_grooves_)
     list.append(groove_entry(groove, true));
   return list;
 }
@@ -407,9 +417,9 @@ QVariantList NoteToolsController::grooves() const {
 std::optional<persistence::GrooveTemplate>
 NoteToolsController::find_groove(const QString& name) const {
   const auto wanted = name.toStdString();
-  for (auto& groove : user_grooves()) {
+  for (const auto& groove : user_grooves_) {
     if (groove.name == wanted)
-      return std::move(groove);
+      return groove;
   }
   for (auto& groove : application::builtin_grooves()) {
     if (groove.name == wanted)
@@ -454,52 +464,170 @@ bool NoteToolsController::keep_groove(persistence::GrooveTemplate groove) {
   // A record's or a clip's name may carry characters a file name cannot.
   auto cleaned = QString::fromStdString(groove.name);
   cleaned.replace(QLatin1Char('/'), QLatin1Char('-')).replace(QLatin1Char('\\'), QLatin1Char('-'));
-  const auto trimmed = cleaned.trimmed().left(64);
+  const auto trimmed = cleaned.trimmed().left(max_groove_name_length);
   if (!usable_name(trimmed)) {
     report_(QStringLiteral("Give the groove a name"));
     return false;
   }
   groove.name = trimmed.toStdString();
-  if (!QDir().mkpath(groove_directory()) ||
-      !write_groove(groove_directory() + QLatin1Char('/') + trimmed + QStringLiteral(".json"),
-                    groove)) {
-    report_(QStringLiteral("Groove: could not save %1").arg(trimmed));
-    return false;
-  }
-  emit groovesChanged();
+  queue([directory = groove_directory(), trimmed, groove = std::move(groove)] {
+    FileOutcome outcome{.kind = FileOutcome::Kind::saved, .name = trimmed};
+    outcome.ok =
+        QDir().mkpath(directory) &&
+        write_groove(directory + QLatin1Char('/') + trimmed + QStringLiteral(".json"), groove);
+    if (outcome.ok)
+      outcome.grooves.push_back(groove);
+    return outcome;
+  });
   current_groove_ = trimmed;
   emit grooveSettingsChanged();
   return true;
 }
 
 bool NoteToolsController::delete_groove(const QString& name) {
-  if (!usable_name(name) ||
-      !QFile::remove(groove_directory() + QLatin1Char('/') + name + QStringLiteral(".json")))
+  const auto wanted = name.toStdString();
+  if (!usable_name(name) || std::ranges::none_of(user_grooves_, [&](const auto& groove) {
+        return groove.name == wanted;
+      }))
     return false;
-  emit groovesChanged();
+  queue([directory = groove_directory(), name] {
+    return FileOutcome{
+        .kind = FileOutcome::Kind::removed,
+        .ok = QFile::remove(directory + QLatin1Char('/') + name + QStringLiteral(".json")),
+        .name = name};
+  });
   return true;
 }
 
 bool NoteToolsController::import_groove(const QString& path) {
   const auto file = local_path(path);
-  auto groove = read_groove(file);
-  auto name = QFileInfo(file).completeBaseName().trimmed();
-  if (!groove || !usable_name(name)) {
+  const auto name = QFileInfo(file).completeBaseName().trimmed();
+  if (!usable_name(name)) {
     report_(QStringLiteral("Not a groove file"));
     return false;
   }
-  groove->name = name.toStdString();
-  if (!QDir().mkpath(groove_directory()) ||
-      !write_groove(groove_directory() + QLatin1Char('/') + name + QStringLiteral(".json"),
-                    *groove))
-    return false;
-  emit groovesChanged();
+  queue([directory = groove_directory(), file, name] {
+    FileOutcome outcome{.kind = FileOutcome::Kind::imported, .name = name};
+    auto groove = read_groove(file);
+    if (!groove)
+      return outcome;
+    groove->name = name.toStdString();
+    outcome.ok =
+        QDir().mkpath(directory) &&
+        write_groove(directory + QLatin1Char('/') + name + QStringLiteral(".json"), *groove);
+    if (outcome.ok)
+      outcome.grooves.push_back(std::move(*groove));
+    return outcome;
+  });
   return true;
 }
 
 bool NoteToolsController::export_groove(const QString& name, const QString& path) {
-  const auto groove = find_groove(name);
-  return groove && write_groove(local_path(path), *groove);
+  auto groove = find_groove(name);
+  if (!groove)
+    return false;
+  queue([path = local_path(path), name, groove = std::move(*groove)] {
+    return FileOutcome{
+        .kind = FileOutcome::Kind::exported, .ok = write_groove(path, groove), .name = name};
+  });
+  return true;
+}
+
+void NoteToolsController::rescan_grooves() {
+  queue([directory = groove_directory()] {
+    return FileOutcome{
+        .kind = FileOutcome::Kind::scan, .ok = true, .grooves = scan_grooves(directory)};
+  });
+}
+
+void NoteToolsController::queue(FileWork work) {
+  waiting_.push_back(std::move(work));
+  start_file_work();
+}
+
+void NoteToolsController::start_file_work() {
+  if (files_.running() || waiting_.empty())
+    return;
+  auto work = std::move(waiting_.front());
+  waiting_.pop_front();
+  const auto failed = files_.start(0, std::move(work), [](const std::string& error) {
+    return FileOutcome{
+        .kind = FileOutcome::Kind::failed, .ok = false, .name = QString::fromStdString(error)};
+  });
+  if (failed) {
+    report_(QStringLiteral("Groove files: %1").arg(QString::fromStdString(*failed)));
+    start_file_work();
+    return;
+  }
+  files_timer_.start();
+}
+
+void NoteToolsController::poll_files() {
+  if (!files_.finished())
+    return;
+  auto finished = files_.take();
+  if (finished)
+    finish(std::move(finished->result));
+  if (!files_.running() && waiting_.empty())
+    files_timer_.stop();
+  start_file_work();
+}
+
+void NoteToolsController::finish(FileOutcome outcome) {
+  using Kind = FileOutcome::Kind;
+  const auto replace = [&](persistence::GrooveTemplate groove) {
+    std::erase_if(user_grooves_, [&](const auto& kept) { return kept.name == groove.name; });
+    user_grooves_.push_back(std::move(groove));
+    std::ranges::sort(user_grooves_, [](const auto& a, const auto& b) {
+      return QString::fromStdString(a.name).compare(QString::fromStdString(b.name),
+                                                    Qt::CaseInsensitive) < 0;
+    });
+  };
+  switch (outcome.kind) {
+  case Kind::failed:
+    // A worker that threw never changes the cached grooves.
+    report_(QStringLiteral("Groove files: %1").arg(outcome.name));
+    return;
+  case Kind::scan:
+    if (!outcome.ok)
+      return;
+    user_grooves_ = std::move(outcome.grooves);
+    break;
+  case Kind::saved:
+  case Kind::imported:
+    if (!outcome.ok || outcome.grooves.empty()) {
+      report_(outcome.kind == Kind::saved
+                  ? QStringLiteral("Groove: could not save %1").arg(outcome.name)
+                  : QStringLiteral("Not a groove file"));
+      return;
+    }
+    replace(std::move(outcome.grooves.front()));
+    break;
+  case Kind::removed:
+    if (!outcome.ok) {
+      report_(QStringLiteral("Groove: could not delete %1").arg(outcome.name));
+      return;
+    }
+    std::erase_if(user_grooves_, [&](const auto& groove) {
+      return QString::fromStdString(groove.name) == outcome.name;
+    });
+    break;
+  case Kind::exported:
+    report_(outcome.ok ? QStringLiteral("Groove %1 exported").arg(outcome.name)
+                       : QStringLiteral("Groove: could not export %1").arg(outcome.name));
+    return;
+  }
+  emit groovesChanged();
+}
+
+bool NoteToolsController::wait_for_groove_files(int timeout_ms) {
+  QElapsedTimer waited;
+  waited.start();
+  while (groove_files_busy() && waited.elapsed() < timeout_ms) {
+    QCoreApplication::processEvents(QEventLoop::AllEvents, groove_poll_ms);
+    poll_files();
+  }
+  return !groove_files_busy();
 }
 
 bool NoteToolsController::apply_pedal_edit(const QString& clip_id, const QString& pedal_name,
