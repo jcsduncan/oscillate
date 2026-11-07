@@ -9,9 +9,11 @@
 #include <QGuiApplication>
 #include <QSettings>
 #include <QTest>
+#include <QTimer>
 #include <QUrl>
 
 #include <array>
+#include <chrono>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -539,6 +541,149 @@ void stop_during_mixer_preview_leaves_the_stopping_run_alone() {
           "a mixer preview reached the run while it was stopping");
 }
 
+// Renders blocks on its own thread at the device's pace, with the source's
+// worker pool running, as a real output does; stop() joins both.
+class PacedOutput final : public app::PlaybackOutput {
+public:
+  PacedOutput(audio::StereoRenderSource source, audio::TransportCursor& cursor)
+      : source_(source), cursor_(cursor) {}
+  PacedOutput(const PacedOutput&) = delete;
+  PacedOutput& operator=(const PacedOutput&) = delete;
+  ~PacedOutput() override { stop(); }
+
+  // PlaybackOutput fixes the adjacent rate and requested-frame argument order.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+  [[nodiscard]] foundation::Result<void> start(std::uint32_t rate, std::uint32_t requested_frames,
+                                               std::optional<std::uint64_t>) override {
+    if (!app::valid_playback_buffer_frames(requested_frames) || rate == 0)
+      return foundation::Result<void>::failure(
+          {foundation::ErrorCode::invalid_argument, "paced output needs a rate and buffer size"});
+    rate_ = rate;
+    frames_ = requested_frames;
+    if (source_.workers != nullptr)
+      source_.workers->start_owned_threads(source_.workers->wanted_workers());
+    running_.store(true, std::memory_order_release);
+    state_.store(audio::OutputState::streaming, std::memory_order_release);
+    thread_ = std::thread([this] { run(); });
+    return foundation::Result<void>::success();
+  }
+
+  void stop() noexcept override {
+    running_.store(false, std::memory_order_release);
+    if (thread_.joinable())
+      thread_.join();
+    if (source_.workers != nullptr)
+      source_.workers->stop_owned_threads();
+    state_.store(audio::OutputState::stopped, std::memory_order_release);
+  }
+
+  [[nodiscard]] audio::OutputStatus status() const noexcept override {
+    audio::OutputStatus status;
+    status.state = state_.load(std::memory_order_acquire);
+    status.requested_client_rate = rate_;
+    return status;
+  }
+
+private:
+  void run() noexcept {
+    constexpr std::uint64_t microseconds_per_second = 1'000'000;
+    const auto period = std::chrono::microseconds(microseconds_per_second * frames_ / rate_);
+    auto next = std::chrono::steady_clock::now();
+    std::array<engine::StereoFrame, app::max_playback_buffer_frames> frames{};
+    std::array<float, 2 * app::max_playback_buffer_frames> samples{};
+    while (running_.load(std::memory_order_acquire)) {
+      (void)audio::render_transport_block(
+          source_, cursor_, true, std::span(frames).first(frames_),
+          std::span(samples).first(static_cast<std::size_t>(frames_) * 2));
+      next += period;
+      std::this_thread::sleep_until(next);
+    }
+  }
+
+  audio::StereoRenderSource source_;
+  audio::TransportCursor& cursor_;
+  std::atomic<audio::OutputState> state_{audio::OutputState::stopped};
+  std::atomic<bool> running_{false};
+  std::thread thread_;
+  std::uint32_t rate_ = 0;
+  std::uint32_t frames_ = 0;
+};
+
+// Play, solo a track while playing (a live graph edit), play on, pause, then
+// keep the event loop running with the UI polling the bridge: the paused run
+// must stay paused and intact, then resume and stop cleanly.
+void pause_after_live_solo_stays_paused() {
+  constexpr int track_count = 3;
+  constexpr int wait_ms = 10'000;
+  constexpr int play_ms = 500;
+  constexpr int paused_ms = 3'000;
+  constexpr int ui_poll_ms = 16;
+  Directory directory;
+  const auto root = directory.root() / "solo-pause-song";
+  auto session = app::ProjectSession::create(root);
+  require(session.has_value(), "solo-pause project create failed");
+  const auto source = source_wav(directory.root());
+  std::vector<QString> tracks;
+  for (int index = 0; index < track_count; ++index) {
+    const int fd = ::open(source.c_str(), O_RDONLY | O_CLOEXEC);
+    require(fd >= 0, "solo-pause WAV open failed");
+    const auto imported = session.value()->imports().import_wav_audio(fd);
+    (void)::close(fd);
+    require(imported.has_value(), "solo-pause WAV import failed");
+    tracks.push_back(QString::fromStdString(imported.value().to_string()));
+  }
+  require(session.value()->saving().save().has_value(), "solo-pause project save failed");
+  app::PlaybackOutputFactory factory = [](audio::StereoRenderSource render,
+                                          audio::TransportCursor& cursor) {
+    return std::make_unique<PacedOutput>(render, cursor);
+  };
+  quick::ProjectBridge bridge(directory.root(), nullptr, std::move(factory), [] {
+    return foundation::Result<std::vector<audio::PipeWireSink>>::success({});
+  });
+  bridge.set_project(std::move(session.value()), root);
+  // What the transport bar and meters read on every frame.
+  QTimer ui;
+  QObject::connect(&ui, &QTimer::timeout, &bridge, [&bridge] {
+    (void)bridge.cpu_load();
+    (void)bridge.audio_threads();
+    (void)bridge.playback_state();
+    (void)bridge.track_meters();
+  });
+  ui.start(ui_poll_ms);
+  bridge.toggle_pause();
+  require(QTest::qWaitFor([&bridge] { return bridge.routed_graph_current(); }, wait_ms),
+          "solo-pause fixture did not start routed playback");
+  const auto before_solo = bridge.revision();
+  bridge.set_track_soloed(tracks[1], true);
+  require(bridge.revision() == before_solo + 1, "solo did not make a new revision");
+  require(QTest::qWaitFor([&bridge] { return bridge.routed_graph_current(); }, wait_ms),
+          "the solo did not become audible while playing");
+  QTest::qWait(play_ms);
+  bridge.toggle_pause();
+  require(QTest::qWaitFor(
+              [&bridge] {
+                return bridge.playback_paused() &&
+                       bridge.playback_status().startsWith(QStringLiteral("Paused"));
+              },
+              wait_ms),
+          "Pause after a live solo did not complete");
+  const auto held = bridge.playhead_sample();
+  QTest::qWait(paused_ms);
+  require(bridge.playback_paused() && bridge.playhead_sample() == held &&
+              bridge.playback_status().startsWith(QStringLiteral("Paused")),
+          "the paused run moved or left its paused state");
+  bridge.toggle_pause();
+  require(QTest::qWaitFor(
+              [&bridge, held] {
+                return !bridge.playback_paused() && bridge.playhead_sample() > held;
+              },
+              wait_ms),
+          "the paused run did not resume after the wait");
+  bridge.stop_playback();
+  require(QTest::qWaitFor([&bridge] { return !bridge.playback_active(); }, wait_ms),
+          "playback did not stop after the solo-pause sequence");
+}
+
 // A project opens at bar 1, after any bars before it, so Play does not
 // start with their silence.
 void project_opens_with_the_playhead_at_bar_one() {
@@ -832,6 +977,11 @@ int main(int argc, char** argv) {
   QCoreApplication::setOrganizationName(QStringLiteral("OscillateTest"));
   QCoreApplication::setApplicationName(QStringLiteral("QuickRoutedRevisionStatus"));
   try {
+    // The paced solo-pause sequence runs in real time, so it has its own test.
+    if (argc > 1 && std::string_view(argv[1]) == "--solo-pause") {
+      pause_after_live_solo_stays_paused();
+      return 0;
+    }
     transport_seek_policy_checks();
     transport_projection_and_command_checks();
     transport_poll_status_preserves_revision_and_error_priority();
