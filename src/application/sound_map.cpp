@@ -119,8 +119,8 @@ struct Frame {
       frame.weight += magnitude;
     }
     if (hz >= edges.front() && hz < edges.back()) {
-      const auto band = static_cast<std::size_t>(std::upper_bound(edges.begin(), edges.end(), hz) -
-                                                 edges.begin() - 1);
+      const auto band =
+          static_cast<std::size_t>(std::ranges::upper_bound(edges, hz) - edges.begin() - 1);
       frame.bands[std::min(band, movement_bands - 1)] += magnitude;
     }
   }
@@ -131,7 +131,7 @@ struct Frame {
 
 [[nodiscard]] std::string hex(std::uint64_t key) {
   std::array<char, hex_digits> digits{};
-  std::fill(digits.begin(), digits.end(), '0');
+  std::ranges::fill(digits, '0');
   std::array<char, hex_digits> raw{};
   const auto written = std::to_chars(raw.data(), raw.data() + raw.size(), key, hex_base);
   const auto length = static_cast<std::size_t>(written.ptr - raw.data());

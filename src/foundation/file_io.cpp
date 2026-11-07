@@ -13,6 +13,7 @@ namespace {
 
 constexpr mode_t private_file_mode = 0600;
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): reads as the phrase it builds.
 [[nodiscard]] std::string verb_subject(std::string_view verb, std::string_view subject) {
   std::string action(verb);
   action += ' ';

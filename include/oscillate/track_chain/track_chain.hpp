@@ -45,6 +45,9 @@ struct Stage {
   std::optional<std::uint64_t> ring_out_frames = 0;
   // The stage reads a detector input, so a sidechain may key it.
   bool detector = false;
+  // A VST3 stage's probe, true once a block failed to process. Built-in
+  // stages have none: their guard reports a held non-finite frame.
+  std::function<bool()> failed{};
 };
 
 // Prepares a VST3 stage, instrument or effect. The plugin host supplies it,

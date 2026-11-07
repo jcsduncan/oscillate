@@ -23,7 +23,7 @@ namespace {
 
 // ---- Distortion ---------------------------------------------------------------------
 
-enum Mode : std::size_t {
+enum Mode : std::uint8_t {
   tube,
   soft,
   hard,

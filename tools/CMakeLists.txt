@@ -7,11 +7,14 @@ function(oscillate_add_tool target directory)
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${directory}")
 endfunction()
 
-foreach(tool IN ITEMS demo_song lock_ab minimal_demo mix_check nova_audition)
+set(oscillate_render_tool_libs oscillate::application oscillate::persistence
+    oscillate::synth_engines oscillate::native_effects oscillate::export)
+foreach(tool IN ITEMS demo_song lock_ab minimal_demo mix_check)
   oscillate_add_tool(oscillate_${tool} ${tool} EXCLUDE_FROM_ALL SOURCES ${tool}/main.cpp
-    LIBS oscillate::application oscillate::persistence oscillate::synth_engines
-         oscillate::native_effects oscillate::export)
+    LIBS ${oscillate_render_tool_libs})
 endforeach()
+oscillate_add_tool(oscillate_nova_audition nova_audition EXCLUDE_FROM_ALL
+  SOURCES nova_audition/main.cpp nova_audition/pads.cpp LIBS ${oscillate_render_tool_libs})
 oscillate_add_tool(oscillate_anvil_loops anvil_reference EXCLUDE_FROM_ALL
   SOURCES anvil_reference/render_loops.cpp LIBS oscillate::synth_engines)
 

@@ -166,7 +166,7 @@ std::vector<LaneEdit> substitutions(std::span<const ChordRegion> lane, std::size
     l[index].chord = chord;
     return l;
   };
-  ChordQuality q{};
+  auto q = r.chord.quality;
   if (detail::richer(r.chord.quality, q)) {
     auto c = r.chord;
     c.quality = q;
@@ -310,7 +310,7 @@ std::vector<LaneEdit> hints(std::span<const ChordRegion> lane, std::size_t index
         std::move(l), index + 1);
   }
 
-  ChordQuality flip{};
+  auto flip = c.quality;
   if (detail::flipped(c.quality, flip) && role(c, key) != Role::home) {
     auto l = copy_of(lane);
     l[index].chord.quality = flip;

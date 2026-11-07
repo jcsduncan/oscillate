@@ -263,16 +263,20 @@ void GrooveCaptureController::finish() {
     set_status(QStringLiteral("Stopped listening"));
     return;
   }
+  if (!job->result) {
+    set_status(QStringLiteral("No groove"));
+    return;
+  }
   auto& result = *job->result;
   if (!result) {
     set_status(QStringLiteral("No groove: %1").arg(text(result.error().message)));
     return;
   }
   publish(result.value());
-  capture_ = std::move(result).value();
+  const auto& capture = capture_.emplace(std::move(result).value());
   write_audition();
   emit resultChanged();
-  set_status(text(groove::describe(capture_->measurement)));
+  set_status(text(groove::describe(capture.measurement)));
 }
 
 void GrooveCaptureController::publish(const groove::Capture& capture) {
@@ -345,10 +349,9 @@ void GrooveCaptureController::write_audition() {
   const auto write = [&](bool grooved) -> QString {
     const auto samples =
         groove::audition(capture_->measurement.groove, bpm, rate, audition_bars, grooved);
-    const auto path =
-        QStringLiteral("%1/%2-%3.wav")
-            .arg(folder, grooved ? QStringLiteral("grooved") : QStringLiteral("straight"))
-            .arg(serial);
+    auto path = QStringLiteral("%1/%2-%3.wav")
+                    .arg(folder, grooved ? QStringLiteral("grooved") : QStringLiteral("straight"))
+                    .arg(serial);
     auto writer = exporting::WavWriter::begin(
         path.toStdString(), {rate, exporting::WavFormat::float32, samples.size() / 2, 0});
     if (!writer || !writer.value().write_interleaved_stereo(samples) || !writer.value().finish())

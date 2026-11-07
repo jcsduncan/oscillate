@@ -25,9 +25,6 @@ KitTheme {
     segmentRadius: 3
     segmentRadiusVertical: 3
     segmentFillAcross: false
-    segmentRule: "none"
-    segmentLed: true
-    segmentLedX: 4
     dropdownHeight: 22
     dropdownTextX: 7
     dropdownTextRight: 22
@@ -260,8 +257,6 @@ KitTheme {
     property real knobGlowWidth: 7
     property real knobFocusStroke: 1.8
     property real knobPointerWidth: 2
-    // A chosen segment key's edge.
-    property real segmentEdgeAlpha: 0.7
 
     // The knob face.
     function paintKnob(ctx, knob, size) {
@@ -317,6 +312,6 @@ KitTheme {
         return stop === 0 && !tile.pressed ? buttonHi : button
     }
     function segmentEdge(tile) {
-        return tile.on ? Qt.rgba(tile.accent.r, tile.accent.g, tile.accent.b, segmentEdgeAlpha) : knobRing
+        return tile.on ? tile.accent : knobRing
     }
 }

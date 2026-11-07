@@ -85,7 +85,9 @@ const HumTables& hum_tables() {
   return tables;
 }
 
-void Hum::prepare(double rate, double reference) {
+void Hum::prepare(LayerFormat format) {
+  const double rate = format.rate;
+  const double reference = format.reference;
   rate_ = rate;
   reference_ = reference;
   tables_ = &hum_tables();
@@ -102,7 +104,9 @@ void Hum::reset() noexcept {
   waver_.reset();
 }
 
-void Hum::set(std::span<const double> v, double tone, double width) noexcept {
+void Hum::set(std::span<const double> v, LayerShape shape) noexcept {
+  const double tone = shape.tone;
+  const double width = shape.width;
   const auto mains = choice_of(v[p::hum_mains], mains_hz.size());
   hz_ = mains_hz[mains];
   const double buzz = v[p::hum_buzz];

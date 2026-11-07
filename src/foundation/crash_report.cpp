@@ -249,6 +249,7 @@ struct Marker {
 template <typename T> std::optional<T> parse_number(std::string_view text) {
   T value{};
   const auto* end = text.data() + text.size();
+  // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage): from_chars reads [data, end).
   const auto [rest, error] = std::from_chars(text.data(), end, value);
   if (error != std::errc{} || rest != end)
     return std::nullopt;
@@ -285,9 +286,7 @@ Marker parse_marker(std::string_view text) {
   return marker;
 }
 
-// The rotated log files that exist, oldest first: oscillate.<n>.log from the
-// highest n down, then oscillate.log.
-std::vector<std::filesystem::path> log_files(const std::filesystem::path& directory) {
+std::vector<std::filesystem::path> rotated_logs(const std::filesystem::path& directory) {
   std::vector<std::pair<int, std::filesystem::path>> numbered;
   std::vector<std::filesystem::path> files;
   if (directory.empty())
@@ -386,7 +385,7 @@ std::string build_report(const Marker& marker, const std::optional<std::string>&
 
   for (const auto& path : logs) {
     report += std::format("\n## Log: {}\n\n", path.filename().string());
-    const auto text = read_tail(path, max_log_bytes);
+    const auto text = read_log(path);
     report += text ? *text : std::string("unreadable\n");
     if (!report.ends_with('\n'))
       report += '\n';
@@ -507,7 +506,7 @@ Result<std::optional<std::filesystem::path>> collect(const CollectOptions& optio
   const auto marker = parse_marker(read_text(marker_file).value_or(std::string{}));
   const auto session = read_text(options.directory / session_name);
   const auto report =
-      redact(build_report(marker, session, log_files(options.log_directory)), options.home);
+      redact(build_report(marker, session, rotated_logs(options.log_directory)), options.home);
 
   const auto stamp = compact_utc_time(marker.time.value_or(now_seconds()));
   std::string name;
@@ -554,6 +553,39 @@ std::string redact(std::string_view text, std::string_view home) {
   }
   result.append(text.substr(from));
   return result;
+}
+
+std::vector<std::filesystem::path> log_files(const std::filesystem::path& log_directory) {
+  return rotated_logs(log_directory);
+}
+
+std::optional<std::string> read_log(const std::filesystem::path& path) {
+  return read_tail(path, max_log_bytes);
+}
+
+std::optional<std::filesystem::path> latest_report(const std::filesystem::path& directory) {
+  // Reports written in the same second differ only by a "-<n>" suffix, so
+  // the write time picks the newest and the name breaks a tie.
+  std::optional<std::filesystem::path> latest;
+  std::filesystem::file_time_type latest_time{};
+  std::error_code error;
+  if (directory.empty())
+    return latest;
+  for (const auto& entry : std::filesystem::directory_iterator(directory, error)) {
+    const auto name = entry.path().filename().string();
+    if (!entry.is_regular_file(error) || !name.starts_with(report_prefix) ||
+        !name.ends_with(report_extension))
+      continue;
+    const auto time = entry.last_write_time(error);
+    if (error)
+      continue;
+    if (!latest || time > latest_time ||
+        (time == latest_time && name > latest->filename().string())) {
+      latest = entry.path();
+      latest_time = time;
+    }
+  }
+  return latest;
 }
 
 } // namespace oscillate::foundation::crash_report

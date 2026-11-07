@@ -1,6 +1,7 @@
 #include "knock_panel_model.hpp"
 #include "knock_patterns_model.hpp"
 
+#include "oscillate/foundation/value_text.hpp"
 #include "oscillate/native_dsp/synth/knock.hpp"
 
 #include <QVariantMap>
@@ -90,8 +91,10 @@ std::string knock_pad_label(const synth::EngineDescriptor& engine, std::span<con
 QString knock_key_name(int key) {
   if (key < 0)
     return {};
+  // A whole octave number; the formatter gives a negative one its minus sign.
+  const int octave = key / semitones_per_octave + octave_of_key_zero;
   return text(note_names[static_cast<std::size_t>(key % semitones_per_octave)]) +
-         QString::number(key / semitones_per_octave + octave_of_key_zero);
+         QString::fromStdString(foundation::format_number(octave, 0));
 }
 
 KnockPanelModel::KnockPanelModel(NativeSynthDeviceController& controller, std::uint32_t sample_rate,

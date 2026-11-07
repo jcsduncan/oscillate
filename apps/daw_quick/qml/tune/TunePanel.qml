@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Oscillate.Contracts
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Tune device panel: a precision strobe tuner in warm amber on black.
@@ -102,17 +103,17 @@ Rectangle {
                  cents: 100 * (note - k) }
     }
     function signed(value, digits) {
-        const text = Math.abs(value).toFixed(digits)
-        const tiny = 0.5 * Math.pow(10, -digits)
-        return value < -tiny ? "−" + text : value > tiny ? "+" + text : Number(0).toFixed(digits)
+        return Format.signed_number(value, digits)
     }
-    // "A4 +25c", "B♭4 −40c".
+    // "A4 +25 ct", "B♭4 −40 ct".
     function noteLabel(note, useFlats) {
         const p = noteParts(note, useFlats)
-        return p.letter + p.accidental + p.octave + " " + signed(p.cents, 0) + "c"
+        return p.letter + p.accidental + p.octave + " " + Format.cents(p.cents)
     }
+    // A tuner reads frequency finer than the display rule: two decimals,
+    // one from 1 kHz.
     function hzText(hz) {
-        return hz >= 1000 ? hz.toFixed(1) : hz.toFixed(2)
+        return Format.number(hz, hz >= 1000 ? 1 : 2)
     }
     // In tune within theme.inTuneCents, close within theme.nearCents.
     function toneOf(cents) {
@@ -131,9 +132,9 @@ Rectangle {
         const c = Math.round(Math.abs(state.cents))
         if (Math.abs(state.cents) < theme.inTuneCents)
             return name + " is in tune."
-        return name + " is " + c + (c === 1 ? " cent " : " cents ") + (state.cents > 0 ? "sharp: tune down." : "flat: tune up.")
+        return name + " is " + Format.quantity(c, "ct") + " " + (state.cents > 0 ? "sharp: tune down." : "flat: tune up.")
     }
-    // "Kick settles at F1 −12c: tune it +0.12 st to land on F1."
+    // "Kick settles at F1 −12 ct: tune it +0.12 st to land on F1."
     function kickHint(state, useFlats) {
         if (!state.playing || state.settledHz <= 0)
             return "Play the kick: Tune follows its pitch glide and reads where it settles."
@@ -142,7 +143,7 @@ Rectangle {
         const label = noteLabel(state.settledNote, useFlats)
         if (Math.abs(p.cents) < theme.inTuneCents)
             return "Kick settles at " + label + ": in tune on " + name + "."
-        return "Kick settles at " + label + ": tune it " + signed(-p.cents / 100, 2) + " st to land on " + name + "."
+        return "Kick settles at " + label + ": tune it " + Format.semitones(-p.cents / 100, 2) + " to land on " + name + "."
     }
 
     function readoutName(id) {
@@ -479,7 +480,7 @@ Rectangle {
                     anchors.left: parent.right
                     anchors.leftMargin: panel.theme.spaceSm
                     anchors.baseline: parent.baseline
-                    text: "CENTS"
+                    text: "ct"
                     color: panel.theme.inkFaint
                     font.pixelSize: panel.theme.typeSmall
                     font.bold: true
@@ -566,7 +567,7 @@ Rectangle {
                     anchors.left: parent.right
                     anchors.leftMargin: panel.theme.spaceSm
                     anchors.baseline: parent.baseline
-                    text: "CENTS"
+                    text: "ct"
                     color: panel.theme.inkFaint
                     font.pixelSize: panel.theme.typeSmall
                     font.bold: true
@@ -735,7 +736,7 @@ Rectangle {
             Gauge {
                 name: "CLARITY"
                 // Kick mode times cycles instead: no clarity to show.
-                value: panel.playing && !panel.kick ? panel.live.clarity.toFixed(2) : "—"
+                value: panel.playing && !panel.kick ? Format.number(panel.live.clarity, 2) : "—"
                 fraction: panel.playing && !panel.kick ? panel.live.clarity : 0
                 objectId: "tuneClarity"
             }
@@ -763,7 +764,7 @@ Rectangle {
             objectName: "tuneReference"
             x: panel.theme.spaceXl
             y: signalPlate.referenceY
-            text: "A4 = " + panel.reference.toFixed(1)
+            text: "A4 = " + Format.number(panel.reference, 1)
             color: panel.theme.glacier
             font.family: panel.theme.sans
             font.pixelSize: panel.theme.referenceReadoutSize
@@ -816,7 +817,7 @@ Rectangle {
         theme: panel.theme
         id: historyPlate
         title: "HISTORY"
-        note: "LAST 4 S · GREEN WITHIN 3 CENTS, AMBER 15, RED BEYOND"
+        note: "LAST 4 s · GREEN WITHIN 3 ct, AMBER 15, RED BEYOND"
         x: panel.margin
         y: panel.rowBY
         width: panel.width - 2 * panel.margin

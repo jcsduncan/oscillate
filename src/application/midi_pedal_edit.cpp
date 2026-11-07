@@ -123,10 +123,10 @@ std::vector<Point> paint_pedal(std::span<const Point> points, std::int64_t start
   return normalised(std::move(out), pattern_length);
 }
 
-std::vector<Point> remove_pedal_span(std::span<const Point> points, std::int64_t tick,
+std::vector<Point> remove_pedal_span(std::span<const Point> points, timeline::TickPosition tick,
                                      std::int64_t pattern_length) {
   for (const auto& span : pedal_spans(points, pattern_length)) {
-    if (tick >= span.start && tick < span.end) {
+    if (tick.value >= span.start && tick.value < span.end) {
       return paint_pedal(points, span.start, span.end, 0.0, pattern_length);
     }
   }
@@ -134,8 +134,9 @@ std::vector<Point> remove_pedal_span(std::span<const Point> points, std::int64_t
 }
 
 std::vector<Point> pedal_per_chord(std::span<const project::MidiNote> notes,
-                                   std::int64_t pattern_length, std::int64_t repress,
-                                   double depth) {
+                                   std::int64_t pattern_length, ChordPedalling pedalling) {
+  const std::int64_t repress = pedalling.repress;
+  const double depth = pedalling.depth;
   std::set<std::int64_t> onsets;
   for (const auto& note : notes) {
     if (note.start.value >= 0 && note.start.value < pattern_length) {

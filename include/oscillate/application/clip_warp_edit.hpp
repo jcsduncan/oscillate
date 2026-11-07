@@ -47,9 +47,12 @@ add_warp_marker(const project::Snapshot& snapshot, project::ClipId clip,
 // Moves one marker to a new output frame, keeping its source frame and every
 // other marker; the segments on both sides stretch. Invalid order, bounds or
 // collisions are rejected by project validation when applied.
+struct WarpMarkerMove {
+  std::size_t index = 0;
+  std::uint64_t output_frame = 0;
+};
 [[nodiscard]] foundation::Result<project::ClipProcessing>
-move_warp_marker(const project::Snapshot& snapshot, project::ClipId clip, std::size_t index,
-                 std::uint64_t output_frame);
+move_warp_marker(const project::Snapshot& snapshot, project::ClipId clip, WarpMarkerMove move);
 
 [[nodiscard]] foundation::Result<project::ClipProcessing>
 remove_warp_marker(const project::Snapshot& snapshot, project::ClipId clip, std::size_t index);

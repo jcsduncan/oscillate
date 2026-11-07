@@ -128,12 +128,17 @@ private:
   return bands;
 }
 
-[[nodiscard]] double sum_bins(std::span<const double> bins, double bin_hz, double low_hz,
-                              double high_hz) noexcept {
+// Frequencies [low_hz, high_hz).
+struct HzRange {
+  double low_hz = 0.0;
+  double high_hz = 0.0;
+};
+
+[[nodiscard]] double sum_bins(std::span<const double> bins, double bin_hz, HzRange range) noexcept {
   double sum = 0.0;
   for (std::size_t k = 0; k < bins.size(); ++k) {
     const double hz = static_cast<double>(k) * bin_hz;
-    if (hz >= low_hz && hz < high_hz)
+    if (hz >= range.low_hz && hz < range.high_hz)
       sum += bins[k];
   }
   return sum;
@@ -191,6 +196,7 @@ private:
   return std::clamp(0.5 * (before - after) / denominator, -0.5, 0.5);
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): haystack, then needle, as in find.
 [[nodiscard]] bool contains_word(std::string_view text, std::string_view word) {
   std::string lower(text);
   std::ranges::transform(lower, lower.begin(),
@@ -314,10 +320,14 @@ struct ProfileBuilder::State {
     }
   }
 
-  // The frame at absolute `start`, zero-padded past the end.
-  void load(std::uint64_t start, std::size_t size) {
-    for (std::size_t i = 0; i < size; ++i) {
-      const auto at = start + i;
+  // The frame [start, start + size) in absolute frames, zero-padded past the end.
+  struct Window {
+    std::uint64_t start = 0;
+    std::size_t size = 0;
+  };
+  void load(Window window) {
+    for (std::size_t i = 0; i < window.size; ++i) {
+      const auto at = window.start + i;
       const bool inside = at >= history_start && at - history_start < history_left.size();
       frame_left[i] = inside ? history_left[static_cast<std::size_t>(at - history_start)] : 0.0;
       frame_right[i] = inside ? history_right[static_cast<std::size_t>(at - history_start)] : 0.0;
@@ -326,8 +336,9 @@ struct ProfileBuilder::State {
 
   // True when [start, start + size) holds no sound: its transform is zero,
   // so it is counted without being computed.
-  [[nodiscard]] bool silent(std::uint64_t start, std::size_t size) const {
-    const auto end = start + size;
+  [[nodiscard]] bool silent(Window window) const {
+    const auto start = window.start;
+    const auto end = window.start + window.size;
     for (auto at = std::max(start, history_start);
          at < std::min<std::uint64_t>(end, history_start + history_left.size()); ++at) {
       const auto i = static_cast<std::size_t>(at - history_start);
@@ -342,8 +353,9 @@ struct ProfileBuilder::State {
     const std::size_t fine_size = result.fine_size;
     const std::size_t short_size = result.short_size;
     while (flush ? fine_next < end : fine_next + fine_size <= end) {
-      if (!silent(fine_next, fine_size)) {
-        load(fine_next, fine_size);
+      const Window frame{.start = fine_next, .size = fine_size};
+      if (!silent(frame)) {
+        load(frame);
         fine.run(std::span(frame_left).first(fine_size), std::span(frame_right).first(fine_size));
         for (std::size_t k = 0; k < result.left.size(); ++k) {
           result.left[k] += fine.left()[k];
@@ -356,7 +368,7 @@ struct ProfileBuilder::State {
       fine_next += fine_size / 2;
     }
     while (flush ? short_next < end : short_next + short_size <= end) {
-      short_hop(silent(short_next, short_size));
+      short_hop(silent({.start = short_next, .size = short_size}));
       short_next += result.short_hop;
     }
     // Drop history no frame still needs, in large steps.
@@ -377,7 +389,7 @@ struct ProfileBuilder::State {
     if (quiet) {
       std::ranges::fill(hop_power, 0.0);
     } else {
-      load(short_next, result.short_size);
+      load({.start = short_next, .size = result.short_size});
       brief.run(std::span(frame_left).first(result.short_size),
                 std::span(frame_right).first(result.short_size));
       BandPowers bands{};
@@ -641,8 +653,9 @@ BandPowers band_right(const Profile& profile) {
 }
 
 double power_between(const Profile& profile, double low_hz, double high_hz) {
-  return sum_bins(profile.mid, profile.fine_bin_hz(), low_hz, high_hz) +
-         sum_bins(profile.side, profile.fine_bin_hz(), low_hz, high_hz);
+  const HzRange range{.low_hz = low_hz, .high_hz = high_hz};
+  return sum_bins(profile.mid, profile.fine_bin_hz(), range) +
+         sum_bins(profile.side, profile.fine_bin_hz(), range);
 }
 
 std::vector<double> log_points(double low_hz, double high_hz, std::size_t points) {
@@ -880,12 +893,12 @@ std::array<double, band_count> band_mono_loss(const Profile& profile) {
   return loss;
 }
 
-double span_mono_loss(const Profile& profile, std::size_t first_band, std::size_t last_band) {
+double span_mono_loss(const Profile& profile, const MonoLoss& span) {
   const auto mid = band_mid(profile);
   const auto side = band_side(profile);
   double kept = 0.0;
   double total = 0.0;
-  for (auto b = first_band; b <= last_band && b < band_count; ++b) {
+  for (auto b = span.first_band; b <= span.last_band && b < band_count; ++b) {
     kept += mid[b];
     total += static_cast<double>(mid[b]) + side[b];
   }
@@ -907,7 +920,7 @@ std::optional<MonoLoss> find_mono_loss(const Profile& profile) {
       ++span.last_band;
     for (auto k = span.first_band; k <= span.last_band; ++k)
       span.worst_db = std::max(span.worst_db, loss[k]);
-    span.loss_db = span_mono_loss(profile, span.first_band, span.last_band);
+    span.loss_db = span_mono_loss(profile, span);
     if (!worst || span.loss_db > worst->loss_db)
       worst = span;
     b = span.last_band + 1;
@@ -917,8 +930,9 @@ std::optional<MonoLoss> find_mono_loss(const Profile& profile) {
 
 double low_side_db(const Profile& profile) {
   const double bin_hz = profile.fine_bin_hz();
-  const double mid = sum_bins(profile.mid, bin_hz, sub_floor_hz, lock_crossover_hz);
-  const double side = sum_bins(profile.side, bin_hz, sub_floor_hz, lock_crossover_hz);
+  constexpr HzRange low{.low_hz = sub_floor_hz, .high_hz = lock_crossover_hz};
+  const double mid = sum_bins(profile.mid, bin_hz, low);
+  const double side = sum_bins(profile.side, bin_hz, low);
   if (!(mid > 0.0))
     return side > 0.0 ? total_loss_db : silence_db;
   return power_db(side) - power_db(mid);
@@ -978,11 +992,15 @@ struct Around {
   double seconds = 0.0;
   double energy = 0.0;
 };
+struct BinRange {
+  std::size_t low = 0;
+  std::size_t high = 0;
+};
 [[nodiscard]] std::optional<Around> weighted_decay(const Profile& profile, std::size_t k,
-                                                   std::size_t low, std::size_t high) {
+                                                   BinRange bins) {
   std::vector<std::pair<float, float>> weighted;
   double total = 0.0;
-  for (auto j = low; j <= high; ++j) {
+  for (auto j = bins.low; j <= bins.high; ++j) {
     const auto distance = j > k ? j - k : k - j;
     if (distance <= resonance_peak_bins || !(profile.decay_energy[j] > 0.0F))
       continue;
@@ -1016,10 +1034,10 @@ struct Around {
   const auto low = static_cast<std::size_t>(std::floor(static_cast<double>(k) / spread));
   const auto high =
       std::min(last, static_cast<std::size_t>(std::ceil(static_cast<double>(k) * spread)));
-  const auto near = weighted_decay(profile, k, low, high);
+  const auto near = weighted_decay(profile, k, {.low = low, .high = high});
   if (near && near->energy >= own * std::pow(10.0, -resonance_context_db / 10.0))
     return near->seconds;
-  const auto whole = weighted_decay(profile, k, 0, last);
+  const auto whole = weighted_decay(profile, k, {.low = 0, .high = last});
   return whole ? std::optional<double>(whole->seconds) : std::nullopt;
 }
 
@@ -1156,7 +1174,7 @@ void CancellationMeter::push(std::span<const float> kick_low, std::span<const fl
     }
     end_frame_ = frame + 1;
     if (pending_envelope_ && end_frame_ >= hits_[*pending_envelope_] + after_frames_)
-      take_envelope();
+      take_envelope(*pending_envelope_);
   }
   // Keep the steps the plot of an open or pending hit may still need.
   const auto keep_from_frame = [&] {
@@ -1199,8 +1217,8 @@ void CancellationMeter::close_hit(std::size_t hit) {
   }
 }
 
-void CancellationMeter::take_envelope() {
-  const auto hit = hits_[*pending_envelope_];
+void CancellationMeter::take_envelope(std::size_t pending) {
+  const auto hit = hits_[pending];
   pending_envelope_.reset();
   envelope_.clear();
   const auto from = hit > before_frames_ ? hit - before_frames_ : 0;
@@ -1223,7 +1241,7 @@ std::optional<Cancellation> CancellationMeter::finish() {
     ++next_hit_;
   }
   if (pending_envelope_)
-    take_envelope();
+    take_envelope(*pending_envelope_);
   if (dips_.empty() || !worst_)
     return std::nullopt;
   auto sorted = dips_;
@@ -1658,8 +1676,8 @@ std::vector<ReferenceDifference> compare_reference(const Profile& mix, double mi
   const auto width = [](const Profile& p) {
     const double nyquist = static_cast<double>(p.sample_rate) / 2.0;
     const double bin_hz = p.fine_bin_hz();
-    return power_db(sum_bins(p.side, bin_hz, display_low_hz, nyquist)) -
-           power_db(sum_bins(p.mid, bin_hz, display_low_hz, nyquist));
+    const HzRange shown{.low_hz = display_low_hz, .high_hz = nyquist};
+    return power_db(sum_bins(p.side, bin_hz, shown)) - power_db(sum_bins(p.mid, bin_hz, shown));
   };
   result.push_back({"Width", width(mix) - width(reference)});
   return result;

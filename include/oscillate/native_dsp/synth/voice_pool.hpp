@@ -30,13 +30,6 @@ public:
   void capture(double left, double right) noexcept { capture(StereoSample{left, right}); }
 
   // Adds one frame of the fade, while one is running.
-  void add(double& left, double& right) noexcept {
-    if (remaining_ > 0) {
-      const double fade = step();
-      left += held_.left * fade;
-      right += held_.right * fade;
-    }
-  }
   void add(StereoSample& sample) noexcept {
     if (remaining_ > 0) {
       sample = sample + held_ * step();
@@ -88,6 +81,7 @@ template <class Voices, class Steal>
   }
   steal(*chosen);
   chosen->active = false;
+  // NOLINTNEXTLINE(clang-analyzer-core.DivideZero): a pool always has voices.
   next_slot = (chosen->slot + 1) % count;
   return *chosen;
 }

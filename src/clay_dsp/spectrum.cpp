@@ -26,10 +26,15 @@ constexpr std::size_t min_cepstral_order = 4;
 // (resolution about 3 f0) without the ripple.
 constexpr double cepstral_periods = 3.0;
 
-[[nodiscard]] std::int64_t centred_index(std::size_t i, std::size_t size) noexcept {
-  const auto n = static_cast<std::int64_t>(i);
-  const auto half = static_cast<std::int64_t>(size / 2);
-  return n < half ? n : n - static_cast<std::int64_t>(size);
+// Bin `index` of a transform of `size` bins.
+struct Bin {
+  std::size_t index = 0;
+  std::size_t size = 0;
+};
+[[nodiscard]] std::int64_t centred_index(Bin bin) noexcept {
+  const auto n = static_cast<std::int64_t>(bin.index);
+  const auto half = static_cast<std::int64_t>(bin.size / 2);
+  return n < half ? n : n - static_cast<std::int64_t>(bin.size);
 }
 
 } // namespace
@@ -47,7 +52,7 @@ FrameAnalyser::FrameAnalyser(std::size_t size)
   const auto n_size = static_cast<double>(size);
   double sum = 0.0;
   for (std::size_t i = 0; i < size; ++i) {
-    const auto n = static_cast<double>(centred_index(i, size));
+    const auto n = static_cast<double>(centred_index({.index = i, .size = size}));
     window_[i] = static_cast<float>(0.5 + 0.5 * std::cos(two_pi * n / n_size));
     d_window_[i] = static_cast<float>(-(pi / n_size) * std::sin(two_pi * n / n_size));
     sum += window_[i];
@@ -57,7 +62,7 @@ FrameAnalyser::FrameAnalyser(std::size_t size)
     const double delta = lobe_span * static_cast<double>(p) / static_cast<double>(lobe_points);
     double value = 0.0;
     for (std::size_t i = 0; i < size; ++i) {
-      const auto n = static_cast<double>(centred_index(i, size));
+      const auto n = static_cast<double>(centred_index({.index = i, .size = size}));
       value += window_[i] * std::cos(two_pi * delta * n / n_size);
     }
     lobe_table_[p] = static_cast<float>(std::abs(value) / sum);
@@ -75,13 +80,13 @@ double FrameAnalyser::lobe(double bins) const noexcept {
 void FrameAnalyser::analyse(std::span<const float> signal, std::int64_t centre) noexcept {
   const auto length = static_cast<std::int64_t>(signal.size());
   for (std::size_t i = 0; i < size_; ++i) {
-    const auto at = centre + centred_index(i, size_);
+    const auto at = centre + centred_index({.index = i, .size = size_});
     const float value = at >= 0 && at < length ? signal[static_cast<std::size_t>(at)] : 0.0F;
     buffer_[i] = value * window_[i];
   }
   fft_.forward(buffer_.data(), spectrum_.data());
   for (std::size_t i = 0; i < size_; ++i) {
-    const auto at = centre + centred_index(i, size_);
+    const auto at = centre + centred_index({.index = i, .size = size_});
     const float value = at >= 0 && at < length ? signal[static_cast<std::size_t>(at)] : 0.0F;
     buffer_[i] = value * d_window_[i];
   }

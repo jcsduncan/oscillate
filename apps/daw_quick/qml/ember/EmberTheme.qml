@@ -202,7 +202,6 @@ KitTheme {
     segmentedFrame: "transparent"
     segmentedFrameEdge: "transparent"
     segmentedGradient: true
-    segmentedLeds: true
     // A key's face lightens toward its top.
     readonly property real keyFaceLift: 1.15
     function segmentedFill(cell, stop) {
@@ -211,11 +210,8 @@ KitTheme {
     function segmentedEdge(cell) {
         return engraving
     }
-    function segmentedLedEdge(cell) {
-        return cell.on ? Qt.lighter(cell.accent, segmentedLedLift) : engraving
-    }
     function segmentedInk(cell) {
-        return cell.on ? cream : dim
+        return dim
     }
     function segmentedFont(cell) {
         return Qt.font({ pixelSize: typeCaption, bold: true })

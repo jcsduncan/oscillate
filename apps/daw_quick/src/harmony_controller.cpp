@@ -39,7 +39,7 @@ constexpr std::string_view push_land_summary =
     "Held; the next chord touched once, short, before it lands";
 constexpr std::array<std::string_view, 5> anticipation_labels{"None", "16th", "8th", "Dotted 8th",
                                                               "Varied"};
-enum class Movement : int { pump, filter, delay };
+enum class Movement : std::uint8_t { pump, filter, delay };
 // Each movement: its effect engine, the factory preset, and the panel's words.
 struct MovementRow {
   std::string_view engine;
@@ -66,7 +66,7 @@ constexpr std::string_view lift_id = "comp.lift";
 constexpr std::string_view articulation_id = "comp.articulation";
 // Articulation's shortest setting, a tenth of each written length.
 constexpr double articulation_least = 0.1;
-enum class Layer : int { pad, pluck, tonic, bass };
+enum class Layer : std::uint8_t { pad, pluck, tonic, bass };
 constexpr std::array<std::pair<std::string_view, std::string_view>, 4> layer_names{{
     {"Pad", "The chords held, open and an octave up"},
     {"Pluck", "The chords high, played in the rhythm by a Chord Comp"},
@@ -243,7 +243,7 @@ std::optional<HarmonyController::ClipView> HarmonyController::clip_view() const 
   for (const auto& track : current->snapshot().tracks)
     for (const auto& clip : track.midi_clips)
       if (clip.id == *clip_)
-        return ClipView{track.id, clip.pattern_length, clip.notes};
+        return ClipView{clip.id, track.id, clip.pattern_length, clip.notes};
   return std::nullopt;
 }
 
@@ -442,7 +442,7 @@ bool HarmonyController::commit(std::vector<project::MidiNote> notes, std::int64_
   });
   busy_ = true;
   const auto applied = current->midi_clips().replace_midi_clip_notes(
-      *clip_, pattern, std::move(notes), mood_gesture_);
+      view->clip, pattern, std::move(notes), mood_gesture_);
   busy_ = false;
   if (!applied) {
     set_status(text(applied.error().message));
@@ -1044,7 +1044,7 @@ void HarmonyController::apply_rhythm() {
     played_held = harmony::write(harmony::tile(lane_, {0}, *grown), voicing_);
   }
   auto played =
-      current->notes().comp_rhythm_notes(*clip_, *parameters, played_held, {start}, {end});
+      current->notes().comp_rhythm_notes(view->clip, *parameters, played_held, {start}, {end});
   if (!played) {
     set_status(text(played.error().message));
     return;
@@ -1330,7 +1330,7 @@ void HarmonyController::add_layer(int kind) {
   const auto source = std::ranges::find(tracks, view->track, &project::Track::id);
   const project::MidiClip* clip = nullptr;
   for (const auto& candidate : source->midi_clips)
-    if (candidate.id == *clip_)
+    if (candidate.id == view->clip)
       clip = &candidate;
   const auto* musical =
       clip != nullptr ? std::get_if<project::MusicalInterval>(&clip->placement) : nullptr;

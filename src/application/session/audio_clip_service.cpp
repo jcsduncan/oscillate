@@ -95,8 +95,9 @@ source_frame_at_project_frame(const project::SourceRecord& source, std::uint32_t
 [[nodiscard]] std::int64_t placement_length(const project::Placement& placement) noexcept {
   if (const auto* musical = std::get_if<project::MusicalInterval>(&placement))
     return musical->end.value - musical->start.value;
-  const auto& elapsed = std::get<project::ElapsedInterval>(placement);
-  return elapsed.end.value - elapsed.start.value;
+  // A placement always holds one of the two.
+  const auto* elapsed = std::get_if<project::ElapsedInterval>(&placement);
+  return elapsed != nullptr ? elapsed->end.value - elapsed->start.value : 0;
 }
 
 void apply_window(std::vector<project::Operation>& operations, const project::Clip& clip,
@@ -375,9 +376,10 @@ AudioClipService::split_audio_clip_at_sample(project::ClipId clip,
     if (!automation)
       return foundation::Result<project::ClipId>::failure(automation.error());
     if (processed.value())
-      return split_processed_audio_clip(clip, split_offset, left_fades, right_fades, id.value(),
-                                        std::move(automation.value().left),
-                                        std::move(automation.value().right));
+      return split_processed_audio_clip(
+          clip, split_offset, id.value(),
+          {.left = {.fades = left_fades, .automation = std::move(automation.value().left)},
+           .right = {.fades = right_fades, .automation = std::move(automation.value().right)}});
     std::int64_t source_mid = 0;
     if (source != state.sources.end()) {
       if (left_frames > std::numeric_limits<std::uint64_t>::max() - source_first_project)
@@ -728,7 +730,7 @@ Result<void> AudioClipService::set_audio_clips_fades(
   std::vector<project::Operation> operations;
   for (const auto& [clip, fade] : fades)
     operations.emplace_back(project::SetClipFades{clip, fade});
-  auto applied = model().apply(std::move(operations));
+  auto applied = model().apply(operations);
   return applied ? Result<void>::success() : Result<void>::failure(applied.error());
 }
 
@@ -753,11 +755,14 @@ Result<bool> AudioClipService::audio_clip_is_processed(project::ClipId clip) con
   return Result<bool>::success(request.value().has_value());
 }
 
-Result<project::ClipId> AudioClipService::split_processed_audio_clip(
-    project::ClipId clip, std::int64_t offset, project::ClipFades left_fades,
-    project::ClipFades right_fades, project::ClipId right_id,
-    std::vector<project::AutomationLane> left_automation,
-    std::vector<project::AutomationLane> right_automation) {
+Result<project::ClipId> AudioClipService::split_processed_audio_clip(project::ClipId clip,
+                                                                     std::int64_t offset,
+                                                                     project::ClipId right_id,
+                                                                     SplitHalves halves) {
+  const auto& left_fades = halves.left.fades;
+  const auto& right_fades = halves.right.fades;
+  auto& left_automation = halves.left.automation;
+  auto& right_automation = halves.right.automation;
   const auto& state = snapshot();
   const auto* found = find_clip(state, clip);
   if (found == nullptr)

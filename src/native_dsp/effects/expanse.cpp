@@ -390,8 +390,9 @@ private:
       const double high =
           s.freeze ? 1.0 : std::pow(10.0, -3.0 * loop_seconds / (s.decay * s.high_decay));
       mid_gain_[i] = mid;
-      low_[i].set(native_dsp::dsp::rbj_shelf(false, low / mid, s.low_freq, rate_));
-      high_[i].set(native_dsp::dsp::rbj_shelf(true, high / mid, s.high_freq, rate_));
+      low_[i].set(native_dsp::dsp::rbj_shelf(false, low / mid, {.hz = s.low_freq, .rate = rate_}));
+      high_[i].set(
+          native_dsp::dsp::rbj_shelf(true, high / mid, {.hz = s.high_freq, .rate = rate_}));
       // Two incommensurate sines per line: slow, quasi-random wander.
       const double spread = 0.6 + 0.8 * dsp::wrap(0.618034 * static_cast<double>(i + 1));
       rate_a_[i] = s.mod_rate * spread / rate_;
@@ -412,7 +413,7 @@ private:
             s.freeze ? 1.0 : std::pow(10.0, -3.0 * seconds / (s.decay * s.high_decay));
         diffuser_gain_[c][k] = mid;
         diffuser_damping_[c][k].set(
-            native_dsp::dsp::rbj_shelf(true, high / mid, s.high_freq, rate_));
+            native_dsp::dsp::rbj_shelf(true, high / mid, {.hz = s.high_freq, .rate = rate_}));
       }
     }
     modulation_frames_ = profile.modulation_ms * s.mod_depth * ms;

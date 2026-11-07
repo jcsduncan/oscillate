@@ -175,7 +175,7 @@ build_fx_layout(const project::NativeSynthDocument& document, double sample_rate
   std::array<bool, fx_slot_uids + 1> used{};
   std::array<bool, fx_chain_count> seen{};
   for (const auto& chain : document.chains) {
-    const auto at = std::find(chain_ids.begin(), chain_ids.end(), chain.id);
+    const auto at = std::ranges::find(chain_ids, chain.id);
     if (at == chain_ids.end()) {
       return R::failure({ErrorCode::invalid_argument, "unknown FX chain id: " + chain.id});
     }
@@ -581,7 +581,8 @@ struct FxRack::State {
   void watch(std::uint32_t uid, std::span<const Frame> in, std::span<const Frame> out,
              std::uint32_t factor) noexcept {
     const std::size_t u = uid - 1;
-    const double fall = std::pow(peak_fall, static_cast<double>(out.size() / factor));
+    const std::size_t steps = out.size() / factor; // Whole engine-rate frames.
+    const double fall = std::pow(peak_fall, static_cast<double>(steps));
     double in_peak = 0.0;
     double out_peak = 0.0;
     for (std::size_t i = 0; i < out.size(); ++i) {
@@ -1054,7 +1055,7 @@ void FxRack::reset() noexcept {
   s.slot_in = {};
   s.slot_out = {};
   for (auto& scope : s.scopes) {
-    std::fill(scope.ring.begin(), scope.ring.end(), 0.0F);
+    std::ranges::fill(scope.ring, 0.0F);
     scope.bands.fill(floor_db);
     scope.fed = false;
   }

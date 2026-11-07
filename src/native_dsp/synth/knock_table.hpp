@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <string_view>
 
@@ -30,22 +31,22 @@ inline constexpr std::size_t parameter_count = pad_count * pad_parameters + glob
 
 inline constexpr std::array strikers{"Mallet"sv, "Stick"sv, "Finger"sv, "Brush"sv};
 inline constexpr std::array materials{"Wood"sv, "Skin"sv, "Metal"sv, "Glass"sv, "Tube"sv, "Card"sv};
-enum Striker : int { mallet, stick, finger, brush };
-enum Material : int { wood, skin, metal, glass, tube, card };
+enum Striker : std::uint8_t { mallet, stick, finger, brush };
+enum Material : std::uint8_t { wood, skin, metal, glass, tube, card };
 // Width's Motion: where each hit lands from the last (ADR-0068, Width).
 inline constexpr std::array motions{"Fixed"sv, "Ping-pong"sv, "Scatter"sv, "Orbit"sv};
-enum Motion : int { fixed, ping_pong, scatter, orbit };
+enum Motion : std::uint8_t { fixed, ping_pong, scatter, orbit };
 // Whether a pad's hits follow the kit's Swing.
 inline constexpr std::array swing_follows{"Off"sv, "On"sv};
-enum SwingFollow : int { swing_off, swing_on };
+enum SwingFollow : std::uint8_t { swing_off, swing_on };
 // Whether a pad's resonator tunes to the project's key: its Pitch moves to
 // the nearest note of the key's scale (knock::in_key).
 inline constexpr std::array key_follows{"Off"sv, "On"sv};
-enum KeyFollow : int { key_off, key_on };
+enum KeyFollow : std::uint8_t { key_off, key_on };
 // Orbit's period, in bars of the project's meter.
 inline constexpr std::array orbit_periods{"1 bar"sv, "2 bars"sv, "4 bars"sv, "8 bars"sv};
 inline constexpr std::array<double, orbit_periods.size()> orbit_bars{1.0, 2.0, 4.0, 8.0};
-enum OrbitPeriod : int { one_bar, two_bars, four_bars, eight_bars };
+enum OrbitPeriod : std::uint8_t { one_bar, two_bars, four_bars, eight_bars };
 
 // Length at its maximum means no gate; Lift at its minimum is effectively off.
 inline constexpr double length_off = 2.0;
@@ -333,7 +334,7 @@ inline constexpr double g = synth_glide_seconds;
    S::choice,                                                                                      \
    0,                                                                                              \
    last(strikers.size()),                                                                          \
-   static_cast<double>(minimal_kit.pads[N - 1].type),                                              \
+   static_cast<double>(minimal_kit.pads[(N) - 1].type),                                              \
    strikers,                                                                                       \
    T::live,                                                                                        \
    0,                                                                                              \
@@ -345,7 +346,7 @@ inline constexpr double g = synth_glide_seconds;
        S::linear,                                                                                  \
        0,                                                                                          \
        1,                                                                                          \
-       minimal_kit.pads[N - 1].hardness,                                                           \
+       minimal_kit.pads[(N) - 1].hardness,                                                           \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
@@ -356,7 +357,7 @@ inline constexpr double g = synth_glide_seconds;
        S::linear,                                                                                  \
        0.02,                                                                                       \
        0.5,                                                                                        \
-       minimal_kit.pads[N - 1].position,                                                           \
+       minimal_kit.pads[(N) - 1].position,                                                           \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
@@ -367,7 +368,7 @@ inline constexpr double g = synth_glide_seconds;
        S::linear,                                                                                  \
        0,                                                                                          \
        1,                                                                                          \
-       minimal_kit.pads[N - 1].click,                                                              \
+       minimal_kit.pads[(N) - 1].click,                                                              \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
@@ -378,7 +379,7 @@ inline constexpr double g = synth_glide_seconds;
        S::choice,                                                                                  \
        0,                                                                                          \
        last(materials.size()),                                                                     \
-       static_cast<double>(minimal_kit.pads[N - 1].material),                                      \
+       static_cast<double>(minimal_kit.pads[(N) - 1].material),                                      \
        materials,                                                                                  \
        T::live,                                                                                    \
        0,                                                                                          \
@@ -390,7 +391,7 @@ inline constexpr double g = synth_glide_seconds;
        S::logarithmic,                                                                             \
        30,                                                                                         \
        8'000,                                                                                      \
-       minimal_kit.pads[N - 1].pitch,                                                              \
+       minimal_kit.pads[(N) - 1].pitch,                                                              \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
@@ -401,7 +402,7 @@ inline constexpr double g = synth_glide_seconds;
        S::linear,                                                                                  \
        0,                                                                                          \
        1,                                                                                          \
-       minimal_kit.pads[N - 1].tone,                                                               \
+       minimal_kit.pads[(N) - 1].tone,                                                               \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
@@ -412,7 +413,7 @@ inline constexpr double g = synth_glide_seconds;
        S::logarithmic,                                                                             \
        0.01,                                                                                       \
        3,                                                                                          \
-       minimal_kit.pads[N - 1].decay,                                                              \
+       minimal_kit.pads[(N) - 1].decay,                                                              \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
@@ -423,7 +424,7 @@ inline constexpr double g = synth_glide_seconds;
        S::linear,                                                                                  \
        0,                                                                                          \
        1,                                                                                          \
-       minimal_kit.pads[N - 1].damping,                                                            \
+       minimal_kit.pads[(N) - 1].damping,                                                            \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
@@ -434,7 +435,7 @@ inline constexpr double g = synth_glide_seconds;
        S::linear,                                                                                  \
        -1,                                                                                         \
        1,                                                                                          \
-       minimal_kit.pads[N - 1].bend,                                                               \
+       minimal_kit.pads[(N) - 1].bend,                                                               \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
@@ -445,7 +446,7 @@ inline constexpr double g = synth_glide_seconds;
        S::choice,                                                                                  \
        0,                                                                                          \
        last(materials.size()),                                                                     \
-       static_cast<double>(minimal_kit.pads[N - 1].couple_material),                               \
+       static_cast<double>(minimal_kit.pads[(N) - 1].couple_material),                               \
        materials,                                                                                  \
        T::live,                                                                                    \
        0,                                                                                          \
@@ -457,7 +458,7 @@ inline constexpr double g = synth_glide_seconds;
        S::logarithmic,                                                                             \
        0.25,                                                                                       \
        4,                                                                                          \
-       minimal_kit.pads[N - 1].tuning,                                                             \
+       minimal_kit.pads[(N) - 1].tuning,                                                             \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
@@ -468,14 +469,14 @@ inline constexpr double g = synth_glide_seconds;
        S::linear,                                                                                  \
        0,                                                                                          \
        1,                                                                                          \
-       minimal_kit.pads[N - 1].amount,                                                             \
+       minimal_kit.pads[(N) - 1].amount,                                                             \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
       {"knock.pad" #N ".body.size",  "Size", "Pad " #N " Body", "%", S::linear, 0, 1,              \
-       minimal_kit.pads[N - 1].size, {},     T::live,           g},                                \
+       minimal_kit.pads[(N) - 1].size, {},     T::live,           g},                                \
       {"knock.pad" #N ".body.hollow",  "Hollow", "Pad " #N " Body", "%", S::linear, 0, 1,          \
-       minimal_kit.pads[N - 1].hollow, {},       T::live,           g},                            \
+       minimal_kit.pads[(N) - 1].hollow, {},       T::live,           g},                            \
       {"knock.pad" #N ".finish.snap",                                                              \
        "Snap",                                                                                     \
        "Pad " #N " Finish",                                                                        \
@@ -483,7 +484,7 @@ inline constexpr double g = synth_glide_seconds;
        S::linear,                                                                                  \
        0,                                                                                          \
        1,                                                                                          \
-       minimal_kit.pads[N - 1].snap,                                                               \
+       minimal_kit.pads[(N) - 1].snap,                                                               \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
@@ -494,7 +495,7 @@ inline constexpr double g = synth_glide_seconds;
        S::logarithmic,                                                                             \
        0.015,                                                                                      \
        length_off,                                                                                 \
-       minimal_kit.pads[N - 1].length,                                                             \
+       minimal_kit.pads[(N) - 1].length,                                                             \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
@@ -505,7 +506,7 @@ inline constexpr double g = synth_glide_seconds;
        S::logarithmic,                                                                             \
        lift_off,                                                                                   \
        8'000,                                                                                      \
-       minimal_kit.pads[N - 1].lift,                                                               \
+       minimal_kit.pads[(N) - 1].lift,                                                               \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
@@ -516,12 +517,12 @@ inline constexpr double g = synth_glide_seconds;
        S::linear,                                                                                  \
        0,                                                                                          \
        1,                                                                                          \
-       minimal_kit.pads[N - 1].crush,                                                              \
+       minimal_kit.pads[(N) - 1].crush,                                                              \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
       {"knock.pad" #N ".hand",       "Variation", "Pad " #N " Hand", "%", S::linear, 0, 1,         \
-       minimal_kit.pads[N - 1].hand, {},          T::live,           g},                           \
+       minimal_kit.pads[(N) - 1].hand, {},          T::live,           g},                           \
       {"knock.pad" #N ".level",                                                                    \
        "Level",                                                                                    \
        "Pad " #N " Output",                                                                        \
@@ -529,7 +530,7 @@ inline constexpr double g = synth_glide_seconds;
        S::linear,                                                                                  \
        -60,                                                                                        \
        6,                                                                                          \
-       minimal_kit.pads[N - 1].level,                                                              \
+       minimal_kit.pads[(N) - 1].level,                                                              \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
@@ -540,12 +541,12 @@ inline constexpr double g = synth_glide_seconds;
        S::linear,                                                                                  \
        -1,                                                                                         \
        1,                                                                                          \
-       minimal_kit.pads[N - 1].pan,                                                                \
+       minimal_kit.pads[(N) - 1].pan,                                                                \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
       {"knock.pad" #N ".room",       "Room", "Pad " #N " Output", "%", S::linear, 0, 1,            \
-       minimal_kit.pads[N - 1].room, {},     T::live,             g},                              \
+       minimal_kit.pads[(N) - 1].room, {},     T::live,             g},                              \
       {"knock.pad" #N ".width.spread",                                                             \
        "Spread",                                                                                   \
        "Pad " #N " Width",                                                                         \
@@ -553,7 +554,7 @@ inline constexpr double g = synth_glide_seconds;
        S::linear,                                                                                  \
        0,                                                                                          \
        1,                                                                                          \
-       pad_width(minimal_kit.pads[N - 1]).spread,                                                  \
+       pad_width(minimal_kit.pads[(N) - 1]).spread,                                                  \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
@@ -564,7 +565,7 @@ inline constexpr double g = synth_glide_seconds;
        S::choice,                                                                                  \
        0,                                                                                          \
        last(motions.size()),                                                                       \
-       static_cast<double>(pad_width(minimal_kit.pads[N - 1]).motion),                             \
+       static_cast<double>(pad_width(minimal_kit.pads[(N) - 1]).motion),                             \
        motions,                                                                                    \
        T::live,                                                                                    \
        0,                                                                                          \
@@ -576,7 +577,7 @@ inline constexpr double g = synth_glide_seconds;
        S::linear,                                                                                  \
        0,                                                                                          \
        1,                                                                                          \
-       pad_width(minimal_kit.pads[N - 1]).depth,                                                   \
+       pad_width(minimal_kit.pads[(N) - 1]).depth,                                                   \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
@@ -587,7 +588,7 @@ inline constexpr double g = synth_glide_seconds;
        S::linear,                                                                                  \
        0,                                                                                          \
        max_haas_ms,                                                                                \
-       pad_width(minimal_kit.pads[N - 1]).haas,                                                    \
+       pad_width(minimal_kit.pads[(N) - 1]).haas,                                                    \
        {},                                                                                         \
        T::live,                                                                                    \
        g},                                                                                         \
@@ -598,14 +599,14 @@ inline constexpr double g = synth_glide_seconds;
        S::choice,                                                                                  \
        0,                                                                                          \
        last(swing_follows.size()),                                                                 \
-       static_cast<double>(minimal_kit.pads[N - 1].swing_follow),                                  \
+       static_cast<double>(minimal_kit.pads[(N) - 1].swing_follow),                                  \
        swing_follows,                                                                              \
        T::live,                                                                                    \
        0,                                                                                          \
        false},                                                                                     \
   {                                                                                                \
     "knock.pad" #N ".key.follow", "Key", "Pad " #N " Resonator", "", S::choice, 0,                 \
-        last(key_follows.size()), static_cast<double>(pad_key_follow(minimal_kit.pads[N - 1])),    \
+        last(key_follows.size()), static_cast<double>(pad_key_follow(minimal_kit.pads[(N) - 1])),    \
         key_follows, T::live, 0, false                                                             \
   }
 

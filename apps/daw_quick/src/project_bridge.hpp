@@ -88,6 +88,7 @@ class MeterModel;
 class KeyedListModel;
 class HistoryController;
 class CommandPalette;
+class DiagnosticsController;
 class MasterSection;
 
 // Runs a job on a worker and returns its thread (empty when the job ran
@@ -168,6 +169,8 @@ class ProjectBridge final : public QObject {
   // section's loudness, true peak and mono check.
   Q_PROPERTY(QObject* history READ history CONSTANT)
   Q_PROPERTY(QObject* commandPalette READ command_palette CONSTANT)
+  // "Save diagnostics" (foundation/diagnostics_bundle).
+  Q_PROPERTY(QObject* diagnostics READ diagnostics CONSTANT)
   Q_PROPERTY(QObject* masterSection READ master_section CONSTANT)
   Q_PROPERTY(QObject* noteTools READ note_tools CONSTANT)
   // MIDI effects before a track's built-in synth (ADR-0059).
@@ -330,6 +333,7 @@ public:
   [[nodiscard]] QObject* track_commands() const noexcept;
   [[nodiscard]] QObject* history() const noexcept;
   [[nodiscard]] QObject* command_palette() const noexcept;
+  [[nodiscard]] QObject* diagnostics() const noexcept;
   [[nodiscard]] QObject* master_section() const noexcept;
   [[nodiscard]] QObject* note_tools() const noexcept;
   [[nodiscard]] QObject* note_effects() const noexcept;
@@ -569,6 +573,10 @@ public:
   // `from` to `to` (normalised timeline positions) and `track_delta` rows,
   // deleted, or (MIDI clips on one track) merged into one. One undo step each.
   Q_INVOKABLE void move_selected_clips(double from, double to, int track_delta);
+  // The selected clips one beat later (+1) or earlier (-1), each on its own
+  // track, as one undo step; refused as a whole when any clip would start
+  // before bar 1.
+  Q_INVOKABLE void nudge_selected_clips(int beat_direction);
   Q_INVOKABLE void delete_selected_clips();
   Q_INVOKABLE void merge_selected_clips();
   Q_INVOKABLE void add_marker_at_playhead();
@@ -697,6 +705,7 @@ private:
   void create_song_controllers();
   void create_job_controllers();
   void create_vst3_controllers();
+  void create_diagnostics();
   void create_lifecycle();
   void create_live_input();
   // A controller that recomputes on every revision and project change.
@@ -975,6 +984,7 @@ private:
   std::unique_ptr<TrackCommands> track_commands_;
   std::unique_ptr<HistoryController> history_;
   std::unique_ptr<CommandPalette> command_palette_;
+  std::unique_ptr<DiagnosticsController> diagnostics_;
   std::unique_ptr<MasterSection> master_section_;
   std::unique_ptr<NoteToolsController> note_tools_;
   std::unique_ptr<NoteEffectsController> note_effects_;

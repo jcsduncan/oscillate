@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import "../devicekit" as Kit
+import Oscillate.Format
 
 // One operator: its role in the current algorithm (carrier, modulator,
 // feedback), frequency (ratio x fine, or fixed Hz), waveform, levels and
@@ -28,9 +29,11 @@ Rectangle {
             return controller.display(prefix + "fixed")
         const choice = controller.choice(prefix + "ratio")
         const ratio = (choice === 0 ? 0.5 : choice) * (1 + controller.value(prefix + "fine"))
-        return "×" + ratio.toFixed(2)
+        return "×" + Format.number(ratio, ratioDecimals)
     }
 
+    // A frequency ratio always shows its fine tuning to two places.
+    readonly property int ratioDecimals: 2
     objectName: "haloOperator:" + op
     radius: theme.cardRadius
     gradient: Gradient {
@@ -229,7 +232,7 @@ Rectangle {
             anchors.rightMargin: card.theme.envelopeLabelInset
             y: card.theme.envelopeLabelTop
             text: envelope.sketch.seconds !== undefined
-                ? envelope.sketch.seconds.toFixed(envelope.sketch.seconds < envelope.longSeconds ? 2 : 1) + " s" : ""
+                ? Format.seconds(envelope.sketch.seconds) : ""
             color: card.theme.envelopeLabelInk
             font.family: card.theme.envelopeLabelFont
             font.pixelSize: card.theme.envelopeLabelSize

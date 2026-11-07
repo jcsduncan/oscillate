@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // An oscilloscope sketch of the current model's oscillator: two cycles of
 // the mix the kernel runs. The Sub model adds its pitch drop as an inset.
@@ -118,7 +119,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.rightMargin: scope.theme.scopeTitleX
         y: scope.theme.scopeReadoutY
-        text: "DROP +" + scope.dropStart.toFixed(1) + " st"
+        text: "DROP " + Format.semitones(scope.dropStart)
         color: scope.theme.ink
         font.family: scope.theme.mono
         font.pixelSize: scope.theme.typeCaption
@@ -130,7 +131,7 @@ Rectangle {
         y: scope.theme.scopeCanvasTop
            + (scope.height - scope.theme.scopeCanvasTop - scope.theme.spaceMd) * scope.waveShare
            + scope.theme.dropLabelDrop
-        text: "PITCH DROP · " + Math.round(scope.dropSeconds * 1000) + " ms"
+        text: "PITCH DROP · " + Format.seconds(scope.dropSeconds)
         color: scope.theme.inkFaint
         font.pixelSize: scope.theme.typeMicro
         font.bold: true

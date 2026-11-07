@@ -1,4 +1,5 @@
 .pragma library
+.import Oscillate.Format 1.0 as Fmt
 
 // Chop's pattern as the panel draws it, mirroring the engine
 // (src/native_dsp/effects/chop.cpp and chop_table.hpp, ADR-0075): the
@@ -50,7 +51,7 @@ function reseed(seed, minSeed, maxSeed) {
 }
 
 function swingText(value) {
-    return Math.round(straightPercent + swingPercent * value) + " %"
+    return Fmt.Format.percent(straightPercent + swingPercent * value)
 }
 function shapeText(value) {
     return shapeNames[Math.min(shapeNames.length - 1, Math.floor(value * shapeNames.length))]

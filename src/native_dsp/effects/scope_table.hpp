@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Scope v1: a tempo-locked oscilloscope and alignment meter (ADR-0042). It
@@ -20,7 +21,7 @@ inline constexpr std::array lengths{"1/16"sv,  "1/8"sv,    "1/4"sv,   "1/2"sv,
 inline constexpr std::array<double, 7> length_values{0.25, 0.5, 1.0, 2.0, 1.0, 2.0, 4.0};
 inline constexpr std::size_t first_bar_length = 4;
 inline constexpr std::array channels{"Mid"sv, "Side"sv, "Left"sv, "Right"sv};
-enum Channel : int { mid, side, left, right };
+enum Channel : std::uint8_t { mid, side, left, right };
 inline constexpr std::array off_on{"Off"sv, "On"sv};
 inline constexpr std::array align_bands{"Full"sv, "Low (< 200 Hz)"sv};
 

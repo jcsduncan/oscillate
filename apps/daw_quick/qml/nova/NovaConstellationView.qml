@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The Constellation (ADR-0077): every
 // preset a star placed by how it measured, brightness across and length up.
@@ -127,8 +128,8 @@ Item {
         const parts = constellation ? constellation.blend : []
         if (parts.length === 0)
             return "Click or drag anywhere. The nearest presets blend into one sound."
-        return parts.map(p => "<b><font color=\"" + colourOf(p.category) + "\">" + Math.round(p.weight * 100)
-                         + "%</font></b> " + p.name).join(" · ")
+        return parts.map(p => "<b><font color=\"" + colourOf(p.category) + "\">" + Format.fraction(p.weight)
+                         + "</font></b> " + p.name).join(" · ")
     }
 
     function paintSky(ctx) {

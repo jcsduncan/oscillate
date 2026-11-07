@@ -38,7 +38,7 @@ constexpr std::array<std::string_view, category_count> category_names{
     "engine", "device", "plugin", "media", "project", "processing", "app"};
 constexpr std::string_view device_alias = "audio";
 // A longer message is cut, so one line never forces more than one rotation.
-constexpr std::size_t max_message_bytes = 16 * 1024;
+constexpr std::size_t max_message_bytes = std::size_t{16} * 1024;
 constexpr std::string_view truncated_marker = " [truncated]";
 constexpr mode_t directory_mode = 0700;
 constexpr mode_t file_mode = 0600;
@@ -229,7 +229,7 @@ ParsedFilter parse_filter(std::string_view spec) {
     const auto category = parse_category(item.substr(0, equals));
     const auto level = parse_level(item.substr(equals + 1));
     if (category && level)
-      parsed.filter.categories[category_index(*category)] = *level;
+      parsed.filter.categories[category_index(*category)] = level;
     else
       parsed.rejected.emplace_back(item);
   }
@@ -343,7 +343,7 @@ DrainSummary drain_diagnostics() {
     std::uint64_t count = 0;
   };
   constexpr std::size_t kinds = static_cast<std::size_t>(DiagnosticKind::invalid_buffer) + 1;
-  std::array<Bucket, kinds> buckets{};
+  std::array<Bucket, kinds> buckets;
   DiagnosticEvent event{};
   // Bounded: a producer outrunning the drain cannot hold the UI thread.
   for (std::size_t taken = 0; taken < DiagnosticRing::capacity && ring.try_take(event); ++taken) {

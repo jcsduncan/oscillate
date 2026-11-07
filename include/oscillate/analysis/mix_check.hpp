@@ -263,9 +263,8 @@ struct MonoLoss {
 [[nodiscard]] std::optional<MonoLoss> find_mono_loss(const Profile& profile);
 // Side over mid below lock_crossover_hz, in dB.
 [[nodiscard]] double low_side_db(const Profile& profile);
-// Mono loss of a band span (dB).
-[[nodiscard]] double span_mono_loss(const Profile& profile, std::size_t first_band,
-                                    std::size_t last_band);
+// Mono loss of the bands span.first_band..span.last_band (dB).
+[[nodiscard]] double span_mono_loss(const Profile& profile, const MonoLoss& span);
 
 // ---- Resonances ----------------------------------------------------------------------
 
@@ -383,7 +382,7 @@ private:
     double sum = 0.0;
   };
   void close_hit(std::size_t hit);
-  void take_envelope();
+  void take_envelope(std::size_t pending);
 
   std::uint32_t sample_rate_;
   std::vector<std::uint64_t> hits_;

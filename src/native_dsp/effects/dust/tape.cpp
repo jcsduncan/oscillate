@@ -19,7 +19,9 @@ void Tape::reset() noexcept {
   envelope_ = 1.0;
 }
 
-void Tape::set(std::span<const double> v, double tone, double width) noexcept {
+void Tape::set(std::span<const double> v, LayerShape shape) noexcept {
+  const double tone = shape.tone;
+  const double width = shape.width;
   if (tone != tone_) {
     tone_ = tone;
     const double peak = tape_peak_low_hz * std::pow(tape_peak_ratio, tone);

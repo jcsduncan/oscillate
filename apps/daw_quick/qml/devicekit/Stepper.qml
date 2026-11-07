@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "MacroPalette.js" as MacroPalette
 
 // A value well with step arrows, for stepped values (tune, voices, bend,
@@ -45,7 +46,7 @@ Rectangle {
     Text {
         anchors.centerIn: parent
         text: stepper.prefix + (stepper.plain && stepper.controller.revision >= 0
-            ? String(Math.round(stepper.controller.value(stepper.parameterId))) : stepper.valueText)
+            ? Format.number(stepper.controller.value(stepper.parameterId), 0) : stepper.valueText)
         color: stepper.theme.stepperInk
         font.family: stepper.theme.mono
         font.pixelSize: stepper.theme.typeBody

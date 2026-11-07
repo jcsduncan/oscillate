@@ -72,8 +72,8 @@ class ProjectModel {
 public:
   ProjectModel(const ProjectModel&) = delete;
   ProjectModel& operator=(const ProjectModel&) = delete;
-  ProjectModel(ProjectModel&&) = default;
-  ProjectModel& operator=(ProjectModel&&) = default;
+  ProjectModel(ProjectModel&&) noexcept = default;
+  ProjectModel& operator=(ProjectModel&&) noexcept = default;
 
   [[nodiscard]] static foundation::Result<ProjectModel> create(ProjectId id, std::uint32_t rate,
                                                                timeline::TempoMap tempo,

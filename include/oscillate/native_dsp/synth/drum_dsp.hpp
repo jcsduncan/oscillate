@@ -120,7 +120,8 @@ public:
     if (age_ % spacing_ == 0 && age_ / spacing_ < max_bursts) {
       rising_ = attack_;
       // The first burst is the strongest, so the clap lands on its beat.
-      peak_ = 1.0 - 0.12 * static_cast<double>(age_ / spacing_);
+      const auto burst = age_ / spacing_; // Whole bursts so far.
+      peak_ = 1.0 - 0.12 * static_cast<double>(burst);
       // The tail starts with the first burst, as the hardware's does, and
       // the bursts ride on it: the clap's weight is on its beat.
       tail_rises_ = age_ == 0;

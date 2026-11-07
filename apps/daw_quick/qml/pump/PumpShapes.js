@@ -26,7 +26,7 @@ function curveIdFor(slot, band) {
 function noteName(note) {
     if (note < 0)
         return "—"
-    return Law.Contracts.note_name(note, Law.Contracts.ascii, Law.Contracts.daw_middle_c)
+    return Law.Contracts.note_name(note, Law.Contracts.sharp, Law.Contracts.daw_middle_c)
 }
 
 function p(x, y, tension) {

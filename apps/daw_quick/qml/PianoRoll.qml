@@ -311,6 +311,15 @@ Rectangle {
             }
         }
     }
+    // The roll has the keyboard: Ctrl+A selects its notes here rather than
+    // every clip in the arrangement.
+    readonly property bool keyboardInside: {
+        for (let item = Window.activeFocusItem; item; item = item.parent) {
+            if (item === roll)
+                return true
+        }
+        return false
+    }
     // The bridge's note selection drives copy, cut, paste and duplicate.
     onSelectedNoteIdsChanged: {
         bridge.selectedNoteClipId = selectedNoteIds.length > 0 ? selectedClipId : ""
@@ -318,7 +327,7 @@ Rectangle {
     }
     Shortcut {
         sequence: StandardKey.SelectAll
-        enabled: roll.visible && roll.notes.length > 0
+        enabled: roll.visible && roll.notes.length > 0 && roll.keyboardInside
         onActivated: roll.selectAll()
     }
     Shortcut {
@@ -706,6 +715,8 @@ Rectangle {
                                  + " grid: click a step before the clip's end"
                 // Drawing a note plays it while the button is down.
                 onPressed: mouse => {
+                    // A click on the grid gives the roll the keyboard.
+                    roll.forceActiveFocus()
                     const step = stepAt(mouse.x)
                     if (step >= roll.patternSteps) {
                         pressedStep = -1

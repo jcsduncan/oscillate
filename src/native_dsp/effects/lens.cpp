@@ -37,7 +37,7 @@ constexpr std::size_t freeze = index_of("lens.freeze");
 // scale them to the nearest power of two so the resolution in hertz holds.
 constexpr std::array<std::array<std::size_t, 3>, 3> sizes_48k{
     {{4'096, 1'024, 256}, {16'384, 4'096, 1'024}, {32'768, 8'192, 2'048}}};
-constexpr std::size_t max_size = 32'768 * 8; // 384 kHz Precise.
+constexpr std::size_t max_size = std::size_t{32'768} * 8; // 384 kHz Precise.
 // One hop is 512 frames at 48 kHz (10.7 ms).
 constexpr double hop_seconds = 512.0 / 48'000.0;
 // A 4-term Blackman-Harris spreads a sine over +-3 bins, 99.97% of it in
@@ -92,8 +92,8 @@ public:
         all.push_back(scaled_size(size, sample_rate));
       }
     }
-    std::sort(all.begin(), all.end());
-    all.erase(std::unique(all.begin(), all.end()), all.end());
+    std::ranges::sort(all);
+    all.erase(std::ranges::unique(all).begin(), all.end());
     for (const auto size : all) {
       auto& r = resolutions_.emplace_back();
       r.size = size;
@@ -180,7 +180,7 @@ public:
 
   void reset() noexcept override {
     for (auto& ring : rings_) {
-      std::fill(ring.begin(), ring.end(), 0.0);
+      std::ranges::fill(ring, 0.0);
     }
     write_ = 0;
     since_hop_ = 0;
@@ -362,6 +362,7 @@ private:
     cb[0] = 0.0;
     for (std::size_t k = 0; k <= n / 2; ++k) {
       const auto x = data[k];
+      // NOLINTNEXTLINE(clang-analyzer-core.DivideZero): every resolution has a transform size.
       const auto y = std::conj(data[(n - k) % n]);
       const auto a = 0.5 * (x + y);
       const auto b = std::complex<double>(0.0, -0.5) * (x - y);

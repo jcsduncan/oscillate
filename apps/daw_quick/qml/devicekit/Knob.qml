@@ -107,7 +107,19 @@ Item {
     // The right button on a knob whose wrapper owns the menu.
     signal menuRequested()
 
-    implicitWidth: Math.max(diameter + theme.knobWidthPad, theme.knobMinWidth)
+    // Wide enough for its dial and for its label set whole, so a row or grid
+    // of knobs is sized from its longest label.
+    readonly property real labelWidth: theme.knobCaptions ? labelMetrics.advanceWidth : 0
+    implicitWidth: Math.max(diameter + theme.knobWidthPad, theme.knobMinWidth,
+                            Math.ceil(labelWidth) - 2 * theme.knobCaptionInset)
+    TextMetrics {
+        id: labelMetrics
+        text: caption.labelText
+        font.family: caption.labelFont.family
+        font.pixelSize: caption.labelFont.pixelSize
+        font.bold: caption.labelFont.bold
+        font.letterSpacing: caption.labelFont.letterSpacing
+    }
     implicitHeight: diameter + theme.knobHeightPad + (readout ? theme.knobReadoutPad : 0)
     objectName: theme.prefix + "Knob:" + parameterId
     activeFocusOnTab: editable
@@ -388,12 +400,19 @@ Item {
         id: caption
         objectName: knob.theme.knobCaptions ? knob.theme.prefix + "KnobLabel:" + knob.parameterId : ""
         readonly property bool value: knob.valueSwapped && !knob.theme.knobStacked
+        readonly property string labelText: knob.theme.knobLabelUpper ? knob.label.toUpperCase() : knob.label
+        readonly property font labelFont: Qt.font({
+            family: knob.theme.knobLabelFont,
+            pixelSize: knob.readout ? knob.theme.knobReadoutLabelSize : knob.theme.knobLabelSize,
+            bold: knob.theme.knobLabelBold,
+            letterSpacing: knob.theme.knobLabelSpacing
+        })
         visible: knob.theme.knobCaptions
         y: dialCanvas.y + dialCanvas.height + knob.theme.knobCaptionGap
         width: parent.width + 2 * knob.theme.knobCaptionInset
         x: -knob.theme.knobCaptionInset
         horizontalAlignment: Text.AlignHCenter
-        text: value ? knob.valueText : knob.theme.knobLabelUpper ? knob.label.toUpperCase() : knob.label
+        text: value ? knob.valueText : labelText
         color: value ? knob.valueInk
             : knob.theme.knobStacked && (knob.activeFocus || area.pressed) ? knob.theme.knobLabelActiveInk
             : knob.labelInk
@@ -402,6 +421,10 @@ Item {
             : knob.readout ? knob.theme.knobReadoutLabelSize : knob.theme.knobLabelSize
         font.bold: value ? knob.theme.knobValueBold : knob.theme.knobLabelBold
         font.letterSpacing: value ? 0 : knob.theme.knobLabelSpacing
+        // A label wider than its slot steps down to the smallest type size
+        // before anything is elided.
+        fontSizeMode: Text.HorizontalFit
+        minimumPixelSize: knob.theme.typeMicro
         elide: Text.ElideRight
         clip: knob.theme.knobCaptionClip
     }

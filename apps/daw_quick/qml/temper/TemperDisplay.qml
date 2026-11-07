@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "TemperCurves.js" as Curves
 
 // The hero display, 20 Hz to 20 kHz. Behind: the live spectra (in as a
@@ -316,7 +317,7 @@ Rectangle {
             required property var modelData
             x: view.plotX - implicitWidth - view.theme.spaceSm
             y: view.yOf(modelData) - implicitHeight / 2
-            text: modelData > 0 ? "+" + modelData : modelData < 0 ? "−" + (-modelData) : "0"
+            text: Format.signed_number(modelData, 0)
             color: modelData === 0 ? view.theme.inkDim : view.theme.inkFaint
             font.family: view.theme.mono
             font.pixelSize: view.theme.typeCaption
@@ -327,7 +328,7 @@ Rectangle {
         x: view.theme.spaceLg
         y: view.theme.spaceMd
         text: view.deltaOn ? "DELTA · ONLY WHAT TEMPER REMOVES"
-            : (view.playing ? "CUT NOW " + (view.live.max_cut > 0.05 ? "−" + Number(view.live.max_cut).toFixed(1) + " DB" : "0.0 DB")
+            : (view.playing ? "CUT NOW " + Format.decibels(-Number(view.live.max_cut))
                             : "NO SIGNAL")
             + " · " + view.onCount + (view.onCount === 1 ? " BAND ON" : " BANDS ON")
         color: view.deltaOn ? view.theme.cutHot : view.playing ? view.theme.cut : view.theme.inkDim

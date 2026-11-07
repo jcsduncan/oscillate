@@ -72,7 +72,7 @@ public:
 
 private:
   struct Stream;
-  void run(std::stop_token stop_token) noexcept;
+  void run(const std::stop_token& stop_token) noexcept;
   void report(std::string message) const;
 
   ErrorSink error_sink_;

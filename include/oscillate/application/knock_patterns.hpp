@@ -133,9 +133,13 @@ inline constexpr std::size_t evolve_every_bars = 4;
 inline constexpr double evolve_amount = 0.06;
 // The lengths Evolve writes (0 is off: the loop as it is).
 inline constexpr std::array<std::size_t, 4> evolve_choices{0, 8, 16, 32};
-[[nodiscard]] Pattern evolve(const Pattern& pattern, std::size_t total_bars,
-                             std::size_t every_bars, double amount, std::uint32_t seed,
-                             const Locks& locked);
+struct Evolution {
+  std::size_t total_bars = 0;
+  std::size_t every_bars = evolve_every_bars;
+  double amount = evolve_amount;
+  std::uint32_t seed = 0;
+};
+[[nodiscard]] Pattern evolve(const Pattern& pattern, Evolution evolution, const Locks& locked);
 
 // ---- The library -------------------------------------------------------------
 

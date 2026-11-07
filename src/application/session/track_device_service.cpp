@@ -329,7 +329,7 @@ Result<void> TrackDeviceService::load_track_rack(project::TrackId track,
   const bool same_engine =
       current != nullptr && (!rack.instrument || rack.instrument->engine == current->engine);
   if (rack.instrument)
-    operations.emplace_back(project::SetNativeInstrumentPatch{track, *rack.instrument});
+    operations.emplace_back(project::SetNativeInstrumentPatch{track, rack.instrument});
   // Slots are allocated in command order from the project's high-water mark.
   auto serial = state.next_insert_slot_serial;
   std::vector<Renamed> renamed;

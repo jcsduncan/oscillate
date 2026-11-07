@@ -23,6 +23,11 @@
 
 namespace oscillate::quick {
 
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+// A scan status in the browser's words ("ready", "scan timed out"...).
+[[nodiscard]] QString vst3_scan_state(plugins::ScanStatus status);
+#endif
+
 // The VST3 browser (QML: projectBridge.vst3Browser): scans bundles in the
 // helper process, lists their classes, and verifies a chosen effect or
 // instrument (or an exact relink) on a worker before the project takes it.

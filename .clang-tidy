@@ -1,7 +1,15 @@
-Checks: '-*,bugprone-*,clang-analyzer-*,performance-*,modernize-use-override,modernize-use-nullptr,modernize-use-ranges,readability-identifier-naming'
+# bugprone-signed-bitwise is off: C++20 defines signed shifts and bitwise
+# operations as two's complement, and the fixed-point warp positions and the
+# POSIX and plugin flag words rely on them.
+Checks: '-*,bugprone-*,-bugprone-signed-bitwise,clang-analyzer-*,performance-*,modernize-use-override,modernize-use-nullptr,modernize-use-ranges,readability-identifier-naming'
 WarningsAsErrors: '*'
 HeaderFilterRegex: '(^|.*/)(apps|include|src|tests)/.*'
 FormatStyle: file
 CheckOptions:
+  # Swapping two parameters of different arithmetic types already fails the
+  # build through -Wconversion -Wsign-conversion, so this check reports only
+  # parameters of the same type.
+  - key: bugprone-easily-swappable-parameters.ModelImplicitConversions
+    value: false
   - key: readability-identifier-naming.NamespaceCase
     value: lower_case

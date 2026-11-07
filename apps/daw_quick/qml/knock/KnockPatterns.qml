@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import "../shell" as Shell
+import Oscillate.Format
 
 // Knock's Patterns area: Loops and Generate tabs
 // (role chips over the loop library with thumbnails; the generator's
@@ -181,7 +182,7 @@ Item {
         activeFocusOnTab: area.ready
         Accessible.role: Accessible.Slider
         Accessible.name: label
-        Accessible.description: Math.round(value * 100) + "%"
+        Accessible.description: Format.fraction(value)
         function set(fraction) {
             if (area.ready)
                 area.patterns[key] = Math.max(0, Math.min(1, fraction))
@@ -241,7 +242,7 @@ Item {
         Text {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            text: Math.round(setting.value * 100) + "%"
+            text: Format.fraction(setting.value)
             color: area.theme.ink
             font.family: area.theme.mono
             font.pixelSize: area.theme.typeBody
@@ -369,7 +370,9 @@ Item {
                     Text {
                         x: area.theme.spaceMd
                         y: area.theme.spaceXs
-                        width: parent.width - thumbnail.width - area.theme.loopNameReserve
+                        // The name has the cell's whole width; the thumbnail
+                        // sits beside the line under it.
+                        width: parent.width - 2 * area.theme.spaceMd
                         text: loopCell.modelData.name
                         color: area.theme.ink
                         font.family: area.theme.sans
@@ -391,7 +394,7 @@ Item {
                         id: thumbnail
                         anchors.right: parent.right
                         anchors.rightMargin: area.theme.spaceMd
-                        anchors.verticalCenter: parent.verticalCenter
+                        y: area.theme.loopThumbTop
                         width: area.theme.loopThumbWidth
                         height: area.theme.loopThumbHeight
                         cells: loopCell.modelData.thumb
@@ -590,7 +593,23 @@ Item {
         width: parent.width
         spacing: area.theme.laneSpacing
         readonly property real lockWidth: 16
-        readonly property real nameWidth: 62
+        // The name column is as wide as the longest lane name, short of
+        // squeezing the steps below laneCellMinWidth; a name longer still
+        // is elided, its tooltip showing it whole.
+        readonly property real nameRoom: area.steps > 0
+            ? width - lockWidth - nameGap - (area.theme.laneCellMinWidth + gap) * area.steps : width
+        readonly property real nameWidth: {
+            let widest = area.theme.laneNameMinWidth
+            for (let lane = 0; lane < area.lanes; ++lane)
+                widest = Math.max(widest, Math.ceil(nameMetrics.advanceWidth(area.laneName(lane)))
+                                  + area.theme.spaceXs)
+            return Math.min(widest, Math.max(area.theme.laneNameMinWidth, nameRoom))
+        }
+        FontMetrics {
+            id: nameMetrics
+            font.family: area.theme.sans
+            font.pixelSize: area.theme.typeSmall
+        }
         // Between the lane's name and its first cell.
         readonly property real nameGap: 8
         readonly property real gap: 2
@@ -662,6 +681,9 @@ Item {
                     font.family: area.theme.sans
                     font.pixelSize: area.theme.typeSmall
                     elide: Text.ElideRight
+                    readonly property bool tipShowsWhole: true
+                    Accessible.name: text
+                    Shell.Tip {}
                 }
                 Row {
                     spacing: grid.gap

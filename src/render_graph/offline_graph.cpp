@@ -263,9 +263,14 @@ prepare_offline_automation(const project::Snapshot& snapshot) {
   return automation_project::prepare_project_automation(view ? *view : snapshot, snapshot.revision);
 }
 
+bool OfflineStage::faulted() const noexcept {
+  if (failed)
+    return failed();
+  return held_non_finite(*runtime);
+}
+
 bool OfflineGraph::chain_faulted() const noexcept {
-  return std::ranges::any_of(chain_stages,
-                             [](const auto& stage) { return held_non_finite(*stage); });
+  return std::ranges::any_of(chain_stages, &OfflineStage::faulted);
 }
 
 bool held_non_finite(const engine::ProcessorRuntime& stage) noexcept {
@@ -286,12 +291,15 @@ foundation::Result<OfflineGraph> prepare_offline_graph(const project::Snapshot& 
   (void)store;
 #endif
   OfflineGraph graph;
-  const bool has_track_native = std::ranges::any_of(snapshot.tracks, [](const auto& track) {
-    return std::ranges::any_of(track.effects, [](const auto& slot) {
-      return slot.enabled || !std::holds_alternative<project::Vst3PluginInstance>(slot.processor);
-    });
+  const bool vst3 = static_cast<bool>(request.vst3);
+  const bool has_track_chain = std::ranges::any_of(snapshot.tracks, [vst3](const auto& track) {
+    return (vst3 && std::holds_alternative<project::Vst3PluginInstance>(track.instrument_source)) ||
+           std::ranges::any_of(track.effects, [](const auto& slot) {
+             return slot.enabled ||
+                    !std::holds_alternative<project::Vst3PluginInstance>(slot.processor);
+           });
   });
-  if (project::requires_routed_rendering(snapshot) && !has_track_native) {
+  if (project::requires_routed_rendering(snapshot) && !has_track_chain) {
     auto prepared = prepare_offline_routing(snapshot, request);
     if (!prepared)
       return R::failure(prepared.error());
@@ -301,8 +309,8 @@ foundation::Result<OfflineGraph> prepare_offline_graph(const project::Snapshot& 
     return R::failure(
         {foundation::ErrorCode::unsupported, "Master export sample rate is unsupported"});
   }
-  auto inserts =
-      preflight_inserts(snapshot, ExportSource::native, false, OSCILLATE_HAVE_CONVOLUTION);
+  auto inserts = preflight_inserts(snapshot, vst3 ? ExportSource::vst3 : ExportSource::native,
+                                   OSCILLATE_HAVE_CONVOLUTION);
   if (!inserts)
     return R::failure(inserts.error());
   native_inserts::StageContext stage_context{snapshot.sample_rate};
@@ -329,12 +337,16 @@ foundation::Result<OfflineGraph> prepare_offline_graph(const project::Snapshot& 
 #endif
   std::vector<NativeRouteRuntime> track_chains;
   std::vector<routing::BoundStage> receipts;
-  for (const auto& saved_chain : inserts.value().native_track_chains) {
+  for (const auto& saved_chain : inserts.value().track_chains) {
     const auto owner = std::ranges::find(snapshot.tracks, saved_chain.owner, &project::Track::id);
     if (owner == snapshot.tracks.end())
       return R::failure({foundation::ErrorCode::corrupt_data, "Offline chain has no saved track"});
     track_chain::ChainContext context{stage_context};
     context.detector_slot = routing::sidechain_target(snapshot, owner->id);
+    if (vst3)
+      context.vst3 = [&](const track_chain::SavedStage& stage) {
+        return request.vst3(snapshot, stage, request.max_frames);
+      };
     const auto saved = track_chain::saved_chain(*owner);
     auto prepared = track_chain::prepare_chain(saved, context);
     if (!prepared)
@@ -349,10 +361,10 @@ foundation::Result<OfflineGraph> prepare_offline_graph(const project::Snapshot& 
     auto stages = track_chain::receipts(owner->id, prepared.value());
     receipts.insert(receipts.end(), stages.begin(), stages.end());
     for (const auto& stage : prepared.value().stages)
-      graph.chain_stages.push_back(stage.runtime);
+      graph.chain_stages.push_back({stage.runtime, stage.failed});
     track_chains.push_back({owner->id, std::move(prepared).value()});
   }
-  if (!inserts.value().native_track_chains.empty()) {
+  if (!inserts.value().track_chains.empty()) {
     auto prepared = prepare_offline_routing(snapshot, request, receipts, track_chains);
     if (!prepared)
       return R::failure(prepared.error());
@@ -369,6 +381,22 @@ foundation::Result<OfflineGraph> prepare_offline_graph(const project::Snapshot& 
   // The master chain in saved order. Tails ring out after the mix; latency
   // drains internally and is trimmed at the writer.
   for (const auto* slot : inserts.value().master_chain) {
+    if (std::holds_alternative<project::Vst3PluginInstance>(slot->processor)) {
+      auto prepared = request.vst3(snapshot, {slot->id, slot->processor}, request.max_frames);
+      if (!prepared)
+        return R::failure(prepared.error());
+      auto& stage = prepared.value();
+      const auto tail = stage.export_tail_frames;
+      if (!tail)
+        return R::failure({foundation::ErrorCode::unsupported, "Offline effect tail is unbounded"});
+      if (*tail > std::numeric_limits<std::uint64_t>::max() - graph.master_tail_frames)
+        return R::failure(
+            {foundation::ErrorCode::resource_exhausted, "Master effect tail exceeds render range"});
+      graph.master_tail_frames += *tail;
+      graph.master_latency_frames += stage.latency_frames;
+      graph.master_stages.push_back({std::move(stage.runtime), std::move(stage.failed)});
+      continue;
+    }
     auto prepared = native_inserts::prepare_native_stage(*slot, stage_context);
     if (!prepared)
       return R::failure(prepared.error());
@@ -384,7 +412,7 @@ foundation::Result<OfflineGraph> prepare_offline_graph(const project::Snapshot& 
           {foundation::ErrorCode::resource_exhausted, "Master effect tail exceeds render range"});
     graph.master_tail_frames += *stage.export_tail_frames;
     graph.master_latency_frames += stage.latency_frames;
-    graph.master_stages.push_back(std::move(stage.runtime));
+    graph.master_stages.push_back({std::move(stage.runtime)});
   }
   return R::success(std::move(graph));
 }

@@ -191,6 +191,8 @@ void panel_covers_every_parameter() {
 // A frame with known values: A rises 0.05 dB a point from -40, B sits at
 // -50, the overlay at -45 (silent from point 300), A's hold 3 dB over A;
 // two resonances; `hops` analyses.
+// The arguments are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<float> test_frame(float hops, float a_offset = 0.0F) {
   namespace t = lens::telemetry;
   std::vector<float> frame(t::size, 0.0F);
@@ -236,11 +238,11 @@ void telemetry_reaches_the_spectrum_and_table() {
           "the first resonance decodes");
   const QString first =
       item(*panel, QStringLiteral("lensResonance:0"))->property("text").toString();
-  require(first == QStringLiteral("A1 ±0c 55.0 Hz −8.1 dB"),
+  require(first == QStringLiteral("A1 0 ct 55.0 Hz −8.1 dB"),
           "the table names the resonance: " + first.toStdString());
   const QString second =
       item(*panel, QStringLiteral("lensResonance:1"))->property("text").toString();
-  require(second == QStringLiteral("A♯4 ±0c 466 Hz −20.0 dB"),
+  require(second == QStringLiteral("A♯4 0 ct 466 Hz −20.0 dB"),
           "and the second: " + second.toStdString());
   require(item(*panel, QStringLiteral("lensResonance:2"))->property("text").toString().isEmpty(),
           "absent resonances leave their rows empty");
@@ -278,7 +280,7 @@ void notes_and_the_cursor_read_true() {
                 n[QStringLiteral("cents")].toInt() == c.cents,
             std::to_string(c.hz) + " Hz reads " +
                 n[QStringLiteral("name")].toString().toStdString() + " " +
-                std::to_string(n[QStringLiteral("cents")].toInt()) + "c");
+                std::to_string(n[QStringLiteral("cents")].toInt()) + " ct");
   }
   // Hovering 440 Hz on live data reads its note, frequency and level.
   adapter.set_telemetry(test_frame(1.0F));
@@ -425,6 +427,8 @@ struct Note {
   std::uint8_t velocity = 105;
 };
 
+// The arguments are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<engine::StereoFrame> render(const synth::SynthEngine& engine,
                                         const std::vector<double>& values,
                                         const std::vector<Note>& notes, std::size_t frames,
@@ -446,7 +450,7 @@ std::vector<engine::StereoFrame> render(const synth::SynthEngine& engine,
     events.push_back({n.frame + n.length, engine::MidiEventKind::note_off, n.key, 0, id});
     ++id;
   }
-  std::stable_sort(events.begin(), events.end(), [](const Event& a, const Event& b) {
+  std::ranges::stable_sort(events, [](const Event& a, const Event& b) {
     return a.frame != b.frame ? a.frame < b.frame : a.kind < b.kind;
   });
   std::vector<engine::StereoFrame> out(frames, {0.0F, 0.0F});
@@ -599,7 +603,7 @@ void screenshots_if_requested() {
     return;
   }
   QDir().mkpath(QString::fromLocal8Bit(directory));
-  const std::size_t frames = 48'000 * 6;
+  const std::size_t frames = std::size_t{48'000} * 6;
   const auto loop = deep_house(frames);
   const auto reference = pink_reference(frames);
   struct Shot {
@@ -675,7 +679,7 @@ void telemetry_gives_the_strip_the_curve() {
               strip.value(QStringLiteral("ceiling_db")).toDouble() ==
                   strip_view::spectrum_ceiling_db,
           "in the Lens panel's default window");
-  require(strip.value(QStringLiteral("text")).toString() == QStringLiteral("peak 55 Hz"),
+  require(strip.value(QStringLiteral("text")).toString() == QStringLiteral("peak 55.0 Hz"),
           "the strongest resonance: " +
               strip.value(QStringLiteral("text")).toString().toStdString());
 }

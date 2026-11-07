@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import "../devicekit" as Kit
+import Oscillate.Format
 
 // The Wren flute panel (ADR-0089): the header
 // with Mono or Poly 4, the preset and the output; the Breath card (style
@@ -541,7 +542,7 @@ Rectangle {
                 visible: panel.ready
                 text: panel.ready
                     ? "Free to use without restrictions. " + panel.library.samples + " notes, "
-                      + panel.library.resident_mb.toFixed(0) + " MB, all in memory."
+                      + Format.quantity(panel.library.resident_mb, "MB", 0) + ", all in memory."
                     : ""
                 color: panel.theme.inkDim
                 font.family: panel.theme.sans

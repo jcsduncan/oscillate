@@ -12,6 +12,8 @@ set(oscillate_quick_core_sources
   src/app_logging.hpp
   src/crash_report_controller.cpp
   src/crash_report_controller.hpp
+  src/diagnostics_controller.cpp
+  src/diagnostics_controller.hpp
   src/audio_import_controller.cpp
   src/audio_import_controller.hpp
   src/insert_chain_view.cpp
@@ -309,11 +311,17 @@ function(oscillate_add_quick_core target codec export_resampler vst3)
     OSCILLATE_HAVE_CODEC=$<BOOL:${codec}>
     OSCILLATE_HAVE_EXPORT_RESAMPLER=$<BOOL:${export_resampler}>
     OSCILLATE_HAVE_VST3=$<BOOL:${vst3}>)
+  # Only the diagnostics bundle reports the version and these two switches,
+  # so a version bump recompiles that one file.
+  set_source_files_properties(${here}/src/diagnostics_controller.cpp
+    TARGET_DIRECTORY ${target}
+    PROPERTIES COMPILE_DEFINITIONS
+      "OSCILLATE_VERSION=\"${PROJECT_VERSION}\";OSCILLATE_HAVE_SOURCE_RESAMPLER=$<BOOL:${OSCILLATE_BUILD_SOURCE_RESAMPLER}>;OSCILLATE_HAVE_CONVOLUTION=$<BOOL:${OSCILLATE_BUILD_CONVOLUTION_DSP}>")
   if(vst3)
     target_link_libraries(${target} PUBLIC
       oscillate::vst3_track_insert oscillate::vst3_instrument_provider
-      oscillate::vst3_manual_effect_edit oscillate::vst3_insert_service oscillate::vst3_instrument_export
-      oscillate::vst3_effect_export oscillate::plugin_ui)
+      oscillate::vst3_manual_effect_edit oscillate::vst3_insert_service oscillate::vst3_offline_export
+      oscillate::plugin_ui)
   endif()
   oscillate_target_defaults(${target})
 endfunction()
@@ -360,6 +368,8 @@ add_library(oscillate_quick_native_synth
   src/native_effect_visuals.cpp src/native_effect_visuals.hpp
   # Engine contracts the panels and the shell draw with (Oscillate.Contracts).
   src/ui_contracts.cpp src/ui_contracts.hpp
+  # The display formatter for QML (Oscillate.Format).
+  src/value_format.cpp src/value_format.hpp
   # Each built-in device's panel file, design size and host inputs.
   src/device_panels.cpp src/device_panels.hpp
   # The keyed list model lives here so synth panels can use it; the Quick

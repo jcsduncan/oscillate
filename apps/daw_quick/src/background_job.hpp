@@ -111,9 +111,9 @@ private:
   // itself throws leaves no result (taken as a failed job) rather than
   // escaping the thread and terminating the process.
   template <typename Failure>
-  static void report(State& state, Failure& failure, std::string what) noexcept {
+  static void report(State& state, Failure& failure, const std::string& what) noexcept {
     try {
-      state.result.emplace(failure(std::move(what)));
+      state.result.emplace(failure(what));
     } catch (...) {
       state.result.reset();
     }

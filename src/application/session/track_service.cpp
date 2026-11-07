@@ -347,7 +347,7 @@ foundation::Result<project::TrackId> TrackService::duplicate_track(project::Trac
     sends.emplace(send.id, send_id.value());
     auto route = send;
     route.id = send_id.value();
-    operations.emplace_back(project::AddSendRoute{copy, std::move(route)});
+    operations.emplace_back(project::AddSendRoute{copy, route});
   }
 
   const auto follow = [&](std::vector<project::AutomationLane>& lanes) -> foundation::Result<void> {
