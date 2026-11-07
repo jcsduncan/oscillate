@@ -1,0 +1,35 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  docs:
+    name: Documentation (MkDocs strict, local links)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+      - name: Install MkDocs
+        run: python -I -m pip install --quiet -r scripts/ci/docs-requirements.txt
+      - name: Check local Markdown links
+        run: python -I scripts/check-doc-links.py
+      - name: Build the site
+        env:
+          NO_MKDOCS_2_WARNING: "1"
+        run: python -I -m mkdocs build --strict

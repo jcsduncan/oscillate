@@ -1,0 +1,357 @@
+<title>Nova Analogue</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Nova Analogue: the shell's graphite with Nova's violet. Left, the Analogue card: one Age knob, tolerances per part, drift and the seed. Right, Voice Lanes: one bar per voice for the chosen lane, drawn from the seed and editable by painting. Under it, the voice cards live: each held note's offsets and its drift wandering. Edited voices are amber, seeded ones violet. */
+:root {
+  --bg: #0b0e12; --panel: #11151b; --panel2: #151b22; --well: #080a0d; --line: #222a33; --line2: #2f3943;
+  --ink: #e6ebf0; --dim: #97a3ae; --faint: #5d6873;
+  --nova: #a98bff; --nova2: #7c5cff; --teal: #5fe0bf; --amber: #f5b14c; --red: #ff5d6c;
+  --sans: "Inter", "Noto Sans", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 13px; padding-block: 22px 60px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 16px; }
+header { display: grid; gap: 8px; }
+h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -.5px; }
+h1 span { color: var(--nova); }
+header p { margin: 0; color: var(--dim); max-width: 96ch; line-height: 1.55; text-wrap: pretty; }
+header b { color: var(--ink); font-weight: 600; }
+.label { font-size: 10.5px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--faint); }
+button:focus-visible { outline: 2px solid var(--nova); outline-offset: 2px; }
+.tabs { display: flex; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px; flex-wrap: wrap; }
+.tabs span { font: 700 11px var(--sans); letter-spacing: 1.2px; color: var(--faint); padding: 7px 12px; border-radius: 7px; }
+.tabs span.on { color: var(--ink); background: var(--line); }
+.tabs span.new::after { content: "NEW"; font-size: 8.5px; color: var(--bg); background: var(--nova); border-radius: 3px; padding: 1px 4px; margin-left: 6px; vertical-align: 1px; }
+
+.grid { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 960px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 14px; min-width: 0; }
+.head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.spacer { flex: 1; }
+.btn { font: 600 12px var(--sans); color: var(--dim); background: var(--panel2); border: 1px solid var(--line); border-radius: 7px; padding: 6px 10px; cursor: pointer; }
+.btn:hover { color: var(--ink); border-color: var(--line2); }
+.btn.on { color: var(--bg); background: var(--nova); border-color: var(--nova); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; flex-wrap: wrap; }
+.seg button { font: 600 11.5px var(--sans); color: var(--dim); background: var(--panel2); border: 0; border-left: 1px solid var(--line); padding: 6px 9px; cursor: pointer; }
+.seg button:first-child { border-left: 0; }
+.seg button[aria-pressed="true"] { color: var(--ink); background: var(--line); }
+.hint { color: var(--faint); font-size: 11.5px; line-height: 1.45; }
+
+/* Age */
+.age { display: grid; grid-template-columns: 120px 1fr; gap: 14px; align-items: center; }
+.knob { width: 120px; height: 120px; position: relative; cursor: ns-resize; touch-action: none; }
+.knob canvas { width: 120px; height: 120px; display: block; }
+.knob b { position: absolute; inset: 0; display: grid; place-items: center; font: 700 22px var(--mono); }
+.knob small { position: absolute; left: 0; right: 0; bottom: 22px; text-align: center; color: var(--faint); font-size: 10px; letter-spacing: 1.4px; }
+.agetext { display: grid; gap: 6px; }
+.agetext strong { font-size: 15px; }
+.seed { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.seed code { font: 600 13px var(--mono); color: var(--nova); background: var(--well); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+
+.rows { display: grid; gap: 9px; }
+.row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 62px; gap: 10px; align-items: center; }
+.row span { color: var(--dim); font-size: 12px; }
+.row output { font: 500 11.5px var(--mono); text-align: right; color: var(--ink); }
+input[type=range] { width: 100%; accent-color: var(--nova); }
+.sub { display: grid; gap: 9px; padding-top: 10px; border-top: 1px solid var(--line); }
+.toggle { display: flex; align-items: center; gap: 9px; color: var(--dim); font-size: 12px; cursor: pointer; }
+.toggle i { width: 30px; height: 17px; border-radius: 9px; background: var(--line2); position: relative; transition: background .2s; flex: none; }
+.toggle i::after { content: ""; position: absolute; left: 2px; top: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--ink); transition: left .2s; }
+.toggle[aria-pressed="true"] i { background: var(--nova2); }
+.toggle[aria-pressed="true"] i::after { left: 15px; }
+
+/* Lanes */
+.lanewrap { background: var(--well); border: 1px solid var(--line); border-radius: 8px; position: relative; overflow: hidden; }
+#lanes { width: 100%; height: 250px; display: block; cursor: crosshair; touch-action: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--dim); font-size: 11.5px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+/* Voice cards */
+.cards { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 960px) { .cards { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.vc { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: grid; gap: 5px; min-width: 0; transition: border-color .2s; }
+.vc.playing { border-color: var(--nova); box-shadow: 0 0 0 1px rgba(169,139,255,.25); }
+.vc .top { display: flex; justify-content: space-between; align-items: baseline; }
+.vc .top b { font: 700 12px var(--mono); }
+.vc .top em { font: 600 10.5px var(--mono); color: var(--faint); font-style: normal; }
+.vc.playing .top em { color: var(--nova); }
+.vc dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 1px 6px; font: 500 10.5px var(--mono); }
+.vc dt { color: var(--faint); } .vc dd { margin: 0; text-align: right; }
+.vc canvas { width: 100%; height: 26px; display: block; }
+.keys { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.keys button { font: 700 12px var(--mono); width: 40px; height: 40px; border-radius: 7px; border: 1px solid var(--line2); background: #e9edf2; color: #1a1f26; cursor: pointer; }
+.keys button.black { background: #1d232b; color: var(--dim); }
+.keys button.down { background: var(--nova); color: var(--bg); border-color: var(--nova); }
+
+.notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 860px) { .notes { grid-template-columns: minmax(0, 1fr); } }
+.note { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: grid; gap: 4px; }
+.note b { font-size: 12.5px; } .note span { color: var(--dim); font-size: 12px; line-height: 1.5; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="label">Mockup · Nova · Analogue + Voice Lanes</div>
+    <h1>Nova <span>Analogue</span></h1>
+    <p>Real analogue synths sound alive because <b>no two voices are built alike</b>: each voice card is a little sharp or flat, brighter or darker, slower to open, and everything drifts as it warms up. Analogue gives every Nova voice (every note you play, and every unison voice) its own fixed offsets from a seed, plus slow drift. <b>Age</b> turns it all up at once; <b>Voice Lanes</b> shows what each voice got and lets you paint any of it by hand.</p>
+  </header>
+
+  <div class="tabs"><span>OSC</span><span>FILTER</span><span>MOD</span><span>FX</span><span class="on new">VOICES</span><span>GLOBAL</span></div>
+
+  <div class="grid">
+    <section class="card">
+      <div class="head"><div class="label">Analogue</div><span class="spacer"></span>
+        <button class="toggle" id="power" aria-pressed="true"><i></i>On</button></div>
+      <div class="age">
+        <div class="knob" id="knob"><canvas id="knobc"></canvas><b id="agev">35</b><small>AGE</small></div>
+        <div class="agetext">
+          <strong id="agename">Well-used</strong>
+          <span class="hint" id="agehint">Like a synth that has been gigged for a few years: you hear it in chords, not on one note.</span>
+          <div class="seed"><span class="label">Seed</span><code id="seedv">#4127</code><button class="btn" id="dice">⚄ New synth</button></div>
+        </div>
+      </div>
+      <div class="rows" id="tol"></div>
+      <div class="sub">
+        <div class="label">Drift · each voice wanders on its own</div>
+        <div class="rows" id="drift"></div>
+      </div>
+      <div class="sub">
+        <button class="toggle" id="freerun" aria-pressed="true"><i></i>Free-running oscillators: notes start mid-cycle</button>
+        <div class="head"><span class="label">Applies to</span>
+          <div class="seg" id="scope"><button aria-pressed="true">Notes + unison</button><button aria-pressed="false">Notes only</button><button aria-pressed="false">Unison only</button></div></div>
+      </div>
+    </section>
+
+    <div style="display:grid;gap:16px;min-width:0">
+      <section class="card">
+        <div class="head">
+          <div class="label">Voice lanes</div>
+          <div class="seg" id="lanetabs"></div>
+          <span class="spacer"></span>
+          <div class="seg" id="which"><button aria-pressed="true" data-w="poly">8 note voices</button><button aria-pressed="false" data-w="uni">7 unison · Osc A</button></div>
+        </div>
+        <div class="lanewrap"><canvas id="lanes" aria-label="Per-voice offsets, paint to edit"></canvas></div>
+        <div class="head">
+          <div class="legend"><span><i style="background:var(--nova)"></i>From the seed (scaled by Age)</span><span><i style="background:var(--amber)"></i>Painted by you</span><span><i style="background:var(--teal)"></i>Drift right now</span></div>
+          <span class="spacer"></span>
+          <button class="btn" data-tool="spread">Spread</button>
+          <button class="btn" data-tool="random">Randomise</button>
+          <button class="btn" data-tool="mirror">Mirror</button>
+          <button class="btn" data-tool="reset">Back to seed</button>
+        </div>
+        <div class="hint" id="lanehint"></div>
+      </section>
+
+      <section class="card">
+        <div class="head"><div class="label">Voice cards · live</div><span class="spacer"></span><span class="hint">Click keys (or hold a chord) to hear which voices take the notes</span></div>
+        <div class="keys" id="keys"></div>
+        <div class="cards" id="cards"></div>
+      </section>
+    </div>
+  </div>
+
+  <section class="card">
+    <div class="label">How it works</div>
+    <div class="notes">
+      <div class="note"><b>Fixed per voice, repeatable</b><span>Each voice's offsets come from the seed and its number, so voice 3 is always "the slightly sharp, dark one" and an export sounds exactly like playback. New synth rolls a new set.</span></div>
+      <div class="note"><b>Age scales, lanes refine</b><span>Tolerances set how far parts can differ; Age scales them together. Painting a lane overrides that voice only and survives Age changes (amber). Back to seed undoes it.</span></div>
+      <div class="note"><b>Drift moves, tolerances stay</b><span>Drift is a slow, separate wander per voice on pitch and cutoff (Rate, Amount). Free-running oscillators keep running between notes, so chords never start in phase.</span></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const C = { nova: css('--nova'), amber: css('--amber'), teal: css('--teal'), line: css('--line'), line2: css('--line2'), faint: css('--faint'), dim: css('--dim'), ink: css('--ink') };
+
+// Seeded random, so the mockup behaves like the engine will.
+function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+let seed = 4127, age = 0.35, playing = new Map();
+
+const tolerances = [
+  { id: 'pitch',  name: 'Pitch',     max: 12,  unit: 'ct', v: 0.6, fmt: x => '±' + x.toFixed(1) + ' ct' },
+  { id: 'cutoff', name: 'Cutoff',    max: 18,  unit: '%',  v: 0.5, fmt: x => '±' + x.toFixed(0) + ' %' },
+  { id: 'reso',   name: 'Resonance', max: 10,  unit: '%',  v: 0.3, fmt: x => '±' + x.toFixed(0) + ' %' },
+  { id: 'env',    name: 'Env times', max: 25,  unit: '%',  v: 0.5, fmt: x => '±' + x.toFixed(0) + ' %' },
+  { id: 'level',  name: 'Level',     max: 1.5, unit: 'dB', v: 0.4, fmt: x => '±' + x.toFixed(1) + ' dB' },
+  { id: 'pan',    name: 'Pan',       max: 40,  unit: '%',  v: 0.4, fmt: x => '±' + x.toFixed(0) + ' %' },
+  { id: 'shape',  name: 'Osc shape', max: 8,   unit: '%',  v: 0.3, fmt: x => '±' + x.toFixed(0) + ' %' },
+];
+const drift = [
+  { id: 'damt', name: 'Amount', v: 0.4, fmt: x => '±' + (x * 8).toFixed(1) + ' ct' },
+  { id: 'drate', name: 'Rate', v: 0.3, fmt: x => (0.02 + x * 0.6).toFixed(2) + ' Hz' },
+  { id: 'dcut', name: 'On cutoff', v: 0.25, fmt: x => '±' + (x * 10).toFixed(0) + ' %' },
+];
+const lanes = [
+  { id: 'pitch', name: 'Pitch' }, { id: 'cutoff', name: 'Cutoff' }, { id: 'env', name: 'Env' },
+  { id: 'level', name: 'Level' }, { id: 'pan', name: 'Pan' }, { id: 'phase', name: 'Phase' },
+  { id: 'moda', name: 'Mod A' }, { id: 'modb', name: 'Mod B' },
+];
+let lane = 'pitch', which = 'poly';
+const edits = { poly: {}, uni: {} }; // which -> lane -> {voice: value -1..1}
+const voiceCount = () => which === 'poly' ? 8 : 7;
+
+function seeded(laneId, v) {
+  const r = rng(seed * 131 + v * 977 + laneId.length * 7919 + (which === 'uni' ? 55 : 0) + laneId.charCodeAt(0));
+  r(); return r() * 2 - 1;
+}
+function tolOf(laneId) { const t = tolerances.find(t => t.id === laneId); return t ? t.v : laneId === 'phase' ? 1 : 0.5; }
+function value(laneId, v) {
+  const e = edits[which][laneId];
+  if (e && e[v] !== undefined) return { x: e[v], edited: true };
+  return { x: seeded(laneId, v) * age * tolOf(laneId) * 1.6, edited: false };
+}
+function unitOf(laneId, x) {
+  const t = tolerances.find(t => t.id === laneId);
+  if (t) return (x >= 0 ? '+' : '') + (x * t.max).toFixed(t.max < 2 ? 2 : 1) + ' ' + t.unit;
+  if (laneId === 'phase') return Math.round((x + 1) * 180) + '°';
+  return (x >= 0 ? '+' : '') + Math.round(x * 100) + ' %';
+}
+
+// Age knob
+const names = [[0, 'Factory fresh', 'Every voice matched by a technician: tight, a bit sterile.'], [0.2, 'Lightly used', 'Small differences you feel more than hear.'],
+  [0.4, 'Well-used', 'Like a synth that has been gigged for a few years: you hear it in chords, not on one note.'],
+  [0.65, 'Vintage', 'Seventies voice cards: chords bloom and beat, unison is thick without any detune.'], [0.85, 'Needs a service', 'Obviously out: great for lo-fi, wobbly, characterful parts.']];
+function drawKnob() {
+  const cv = document.getElementById('knobc'), dpr = window.devicePixelRatio || 1; cv.width = 120 * dpr; cv.height = 120 * dpr;
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, 120, 120);
+  const a0 = Math.PI * 0.75, a1 = Math.PI * 2.25;
+  g.lineWidth = 7; g.lineCap = 'round';
+  g.strokeStyle = C.line2; g.beginPath(); g.arc(60, 60, 48, a0, a1); g.stroke();
+  const grad = g.createLinearGradient(10, 110, 110, 10); grad.addColorStop(0, '#7c5cff'); grad.addColorStop(1, '#f5b14c');
+  g.strokeStyle = grad; g.beginPath(); g.arc(60, 60, 48, a0, a0 + (a1 - a0) * age); g.stroke();
+  document.getElementById('agev').textContent = Math.round(age * 100);
+  const n = names.filter(n => age >= n[0]).pop(); document.getElementById('agename').textContent = n[1]; document.getElementById('agehint').textContent = n[2];
+}
+(() => { const k = document.getElementById('knob'); let y0 = 0, a = 0;
+  k.addEventListener('pointerdown', e => { y0 = e.clientY; a = age; k.setPointerCapture(e.pointerId); });
+  k.addEventListener('pointermove', e => { if (!k.hasPointerCapture(e.pointerId)) return; age = Math.max(0, Math.min(1, a + (y0 - e.clientY) / 160)); update(); });
+  k.addEventListener('wheel', e => { e.preventDefault(); age = Math.max(0, Math.min(1, age - Math.sign(e.deltaY) * 0.03)); update(); }, { passive: false });
+})();
+
+function rows(id, list) {
+  const el = document.getElementById(id);
+  el.innerHTML = list.map(t => `<label class="row"><span>${t.name}</span><input type="range" min="0" max="1" step="0.01" value="${t.v}" data-id="${t.id}"><output>${t.fmt(t.max ? t.v * t.max * age * 1.6 : t.v)}</output></label>`).join('');
+  el.querySelectorAll('input').forEach(i => i.oninput = () => { list.find(t => t.id === i.dataset.id).v = +i.value; update(); });
+}
+function refreshRows() {
+  document.querySelectorAll('#tol .row').forEach((r, i) => r.querySelector('output').textContent = tolerances[i].fmt(tolerances[i].v * tolerances[i].max * age * 1.6));
+  document.querySelectorAll('#drift .row').forEach((r, i) => r.querySelector('output').textContent = drift[i].fmt(drift[i].v));
+}
+
+// Lanes
+const lanesCv = document.getElementById('lanes');
+document.getElementById('lanetabs').innerHTML = lanes.map(l => `<button aria-pressed="${l.id === lane}" data-l="${l.id}">${l.name}</button>`).join('');
+document.querySelectorAll('#lanetabs button').forEach(b => b.onclick = () => { lane = b.dataset.l; document.querySelectorAll('#lanetabs button').forEach(o => o.setAttribute('aria-pressed', o === b)); drawLanes(); });
+document.querySelectorAll('#which button').forEach(b => b.onclick = () => { which = b.dataset.w; document.querySelectorAll('#which button').forEach(o => o.setAttribute('aria-pressed', o === b)); drawLanes(); });
+let t0 = performance.now();
+function driftNow(v, t) {
+  const amt = drift[0].v, rate = 0.02 + drift[1].v * 0.6, ph = seeded('drift', v) * 10;
+  return amt * (0.6 * Math.sin(t * rate * 2 * Math.PI + ph) + 0.4 * Math.sin(t * rate * 1.37 * 2 * Math.PI + ph * 2.1)) * 0.5;
+}
+function drawLanes() {
+  const dpr = window.devicePixelRatio || 1, w = lanesCv.clientWidth, h = lanesCv.clientHeight;
+  lanesCv.width = w * dpr; lanesCv.height = h * dpr; const g = lanesCv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const n = voiceCount(), pad = 34, cw = (w - pad - 8) / n, mid = h / 2 - 8, amp = h / 2 - 34;
+  g.font = '10px "JetBrains Mono", monospace';
+  g.fillStyle = C.line2; g.fillRect(pad, mid, w - pad - 8, 1);
+  g.fillStyle = C.faint; g.fillText('+', 12, mid - amp + 4); g.fillText('0', 12, mid + 4); g.fillText('−', 12, mid + amp + 4);
+  const t = (performance.now() - t0) / 1000;
+  for (let v = 0; v < n; v++) {
+    const x = pad + v * cw, { x: val, edited } = value(lane, v);
+    const bw = Math.max(6, cw * 0.56), bx = x + (cw - bw) / 2, y = mid - val * amp;
+    g.fillStyle = (edited ? C.amber : C.nova) + '33'; g.fillRect(bx, Math.min(mid, y), bw, Math.abs(y - mid));
+    g.fillStyle = edited ? C.amber : C.nova; g.fillRect(bx, y - 1.5, bw, 3);
+    if (lane === 'pitch' || lane === 'cutoff') {
+      const d = driftNow(v, t) * (lane === 'cutoff' ? drift[2].v * 2 : 1), dy = mid - (val + d) * amp;
+      g.fillStyle = C.teal; g.beginPath(); g.arc(bx + bw / 2, dy, 3, 0, Math.PI * 2); g.fill();
+    }
+    const live = [...playing.values()].includes(v) && which === 'poly';
+    g.fillStyle = live ? C.nova : C.faint; g.font = (live ? '700 ' : '') + '11px "JetBrains Mono", monospace';
+    g.fillText(String(v + 1), bx + bw / 2 - 3, h - 22);
+    g.fillStyle = C.dim; g.font = '9.5px "JetBrains Mono", monospace';
+    const label = unitOf(lane, val); g.fillText(label, bx + bw / 2 - g.measureText(label).width / 2, h - 8);
+  }
+  const hint = { pitch: 'Each voice\'s tuning error. Teal dots: where drift has it right now.', cutoff: 'Each voice\'s filter is a little brighter or darker; drift moves it slowly.',
+    env: 'Envelope times per voice: some open and close a touch slower.', level: 'Output level per voice card.', pan: 'Where each voice sits. On unison voices this replaces the even Width spread.',
+    phase: 'Start phase when Free-running is off.', moda: 'Mod A: a per-voice amount you can use as a source in the mod matrix (e.g. LFO 1 → cutoff × Mod A).', modb: 'Mod B: a second per-voice amount for the mod matrix.' }[lane];
+  document.getElementById('lanehint').textContent = hint + ' Drag across the bars to paint.';
+}
+(() => { let down = false;
+  const paint = e => {
+    const r = lanesCv.getBoundingClientRect(), n = voiceCount(), pad = 34, cw = (r.width - pad - 8) / n;
+    const v = Math.floor((e.clientX - r.left - pad) / cw); if (v < 0 || v >= n) return;
+    const mid = r.height / 2 - 8, amp = r.height / 2 - 34;
+    const x = Math.max(-1, Math.min(1, (mid - (e.clientY - r.top)) / amp));
+    (edits[which][lane] ||= {})[v] = Math.round(x * 50) / 50; drawLanes(); renderCards();
+  };
+  lanesCv.addEventListener('pointerdown', e => { down = true; lanesCv.setPointerCapture(e.pointerId); paint(e); });
+  lanesCv.addEventListener('pointermove', e => down && paint(e));
+  lanesCv.addEventListener('pointerup', () => down = false);
+})();
+document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => {
+  const n = voiceCount(), e = (edits[which][lane] ||= {});
+  if (b.dataset.tool === 'spread') for (let v = 0; v < n; v++) e[v] = Math.round(((v / (n - 1)) * 2 - 1) * 0.8 * 50) / 50;
+  if (b.dataset.tool === 'random') { const r = rng(Date.now()); for (let v = 0; v < n; v++) e[v] = Math.round((r() * 2 - 1) * 0.7 * 50) / 50; }
+  if (b.dataset.tool === 'mirror') for (let v = 0; v < n; v++) e[v] = -value(lane, v).x;
+  if (b.dataset.tool === 'reset') delete edits[which][lane];
+  drawLanes(); renderCards();
+});
+
+// Voice cards + keys
+const keyNames = [['C', 60], ['C#', 61], ['D', 62], ['Eb', 63], ['E', 64], ['F', 65], ['F#', 66], ['G', 67], ['Ab', 68], ['A', 69], ['Bb', 70], ['B', 71], ['C', 72]];
+document.getElementById('keys').innerHTML = keyNames.map(([n, k]) => `<button data-k="${k}" class="${n.length > 1 ? 'black' : ''}">${n}</button>`).join('') +
+  '<button class="btn" id="chord" style="width:auto;height:40px;background:var(--panel2);color:var(--dim)">Hold Cm7</button>';
+let nextVoice = 0;
+function noteOn(k) { if (playing.has(k)) return; const used = new Set(playing.values()); let v = nextVoice; for (let i = 0; i < 8 && used.has(v); i++) v = (v + 1) % 8; playing.set(k, v); nextVoice = (v + 1) % 8; refreshKeys(); }
+function noteOff(k) { playing.delete(k); refreshKeys(); }
+function refreshKeys() { document.querySelectorAll('#keys button[data-k]').forEach(b => b.classList.toggle('down', playing.has(+b.dataset.k))); renderCards(); drawLanes(); }
+document.querySelectorAll('#keys button[data-k]').forEach(b => {
+  b.onpointerdown = () => noteOn(+b.dataset.k); b.onpointerup = b.onpointerleave = () => noteOff(+b.dataset.k);
+});
+document.getElementById('chord').onclick = e => {
+  const on = e.target.dataset.on !== '1'; e.target.dataset.on = on ? '1' : '0'; e.target.textContent = on ? 'Release' : 'Hold Cm7';
+  [60, 63, 67, 70].forEach(k => on ? noteOn(k) : noteOff(k));
+};
+const nn = k => ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'][k % 12] + (Math.floor(k / 12) - 1);
+function renderCards() {
+  const saved = which; which = 'poly';
+  const el = document.getElementById('cards'); el.innerHTML = '';
+  for (let v = 0; v < 8; v++) {
+    const k = [...playing.entries()].find(([, vv]) => vv === v);
+    const d = document.createElement('div'); d.className = 'vc' + (k ? ' playing' : '');
+    d.innerHTML = `<div class="top"><b>V${v + 1}</b><em>${k ? nn(k[0]) : 'idle'}</em></div>
+      <dl><dt>pitch</dt><dd>${unitOf('pitch', value('pitch', v).x)}</dd><dt>cut</dt><dd>${unitOf('cutoff', value('cutoff', v).x)}</dd>
+      <dt>env</dt><dd>${unitOf('env', value('env', v).x)}</dd><dt>pan</dt><dd>${unitOf('pan', value('pan', v).x)}</dd></dl><canvas data-v="${v}"></canvas>`;
+    el.appendChild(d);
+  }
+  which = saved;
+}
+function drawDrift() {
+  const t = (performance.now() - t0) / 1000;
+  document.querySelectorAll('.vc canvas').forEach(cv => {
+    const v = +cv.dataset.v, dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== w * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+    const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+    g.fillStyle = C.line; g.fillRect(0, h / 2, w, 1);
+    g.beginPath();
+    for (let x = 0; x <= w; x++) { const y = h / 2 - driftNow(v, t - (w - x) * 0.04) * h * 1.6; x ? g.lineTo(x, y) : g.moveTo(x, y); }
+    g.strokeStyle = cv.parentElement.classList.contains('playing') ? C.teal : C.line2; g.lineWidth = 1.3; g.stroke();
+  });
+}
+function loop() { if (lane === 'pitch' || lane === 'cutoff') drawLanes(); drawDrift(); requestAnimationFrame(loop); }
+
+// Controls
+document.getElementById('dice').onclick = () => { seed = Math.floor(1000 + Math.random() * 9000); document.getElementById('seedv').textContent = '#' + seed; update(); };
+['power', 'freerun'].forEach(id => document.getElementById(id).onclick = e => { const b = e.currentTarget; b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true'); });
+document.querySelectorAll('#scope button').forEach(b => b.onclick = () => document.querySelectorAll('#scope button').forEach(o => o.setAttribute('aria-pressed', o === b)));
+
+function update() { drawKnob(); refreshRows(); drawLanes(); renderCards(); }
+rows('tol', tolerances); rows('drift', drift);
+window.addEventListener('resize', update);
+update(); loop();
+</script>

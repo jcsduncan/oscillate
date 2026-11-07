@@ -1,0 +1,79 @@
+site_name: Oscillate
+site_description: A Linux-first digital audio workstation (C++20, Qt Quick).
+site_url: https://jcsduncan.github.io/oscillate/
+repo_url: https://github.com/jcsduncan/oscillate
+repo_name: jcsduncan/oscillate
+copyright: Oscillate is licensed under the GNU GPL version 3 or later.
+
+docs_dir: docs
+site_dir: site
+strict: true
+
+# Root README/CONTRIBUTING/SECURITY become pages and links that leave docs/
+# point at GitHub; see the hook for details.
+hooks:
+  - scripts/ci/mkdocs_hooks.py
+
+validation:
+  omitted_files: info
+  absolute_links: warn
+  unrecognized_links: info
+  anchors: info
+  links:
+    not_found: warn
+
+theme:
+  name: material
+  # No Google Fonts request from the published site.
+  font: false
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+
+nav:
+  - Home: index.md
+  - Documentation map: map.md
+  - Product requirements: PRD.md
+  - High-level design: HLD.md
+  - Functional specs:
+      - specs/README.md
+      - specs/01-timing-arrangement.md
+      - specs/02-engine-routing.md
+      - specs/03-project-media.md
+      - specs/04-plugins-instruments.md
+      - specs/05-processing-analysis.md
+      - specs/06-automation-mix-export.md
+      - specs/07-ui-quality.md
+      - specs/08-nova-synth.md
+      - specs/08a-nova-panel-contract.md
+      - specs/09-crate-sampler.md
+  - Implementation status: IMPLEMENTATION_PLAN.md
+  - Decisions: decisions/README.md
+  - Environment: environment.md
+  - Local dependencies: dependencies/local-development.md
+  - Contributing: contributing.md
+  - Security: security.md

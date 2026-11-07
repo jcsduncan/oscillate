@@ -1,0 +1,586 @@
+<title>Temper</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one device panel, as it will sit in the DAW's device dock; notes beneath. Deliberately single dark theme (it is a plugin face). */
+:root {
+  color-scheme: dark;
+  --page: #080a0e;
+  --panel: #10141a;
+  --raised: #161c24;
+  --well: #0b0e13;
+  --line: #222b36;
+  --line-strong: #33404f;
+  --text: #e6ebf1;
+  --dim: #8b97a6;
+  --faint: #5d6977;
+  --listen: #9ad7ff;     /* sensitivity: where Temper listens */
+  --cut: #ff8a3d;        /* reduction: what Temper removes */
+  --cut-hot: #ffd27a;
+  --side: #b892ff;       /* sidechain */
+  --ui: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "DejaVu Sans Mono", monospace;
+}
+* { box-sizing: border-box; }
+body { background: var(--page); color: var(--text); font-family: var(--ui); margin: 0;
+  padding-block: 24px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 20px; }
+.intro { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; justify-content: space-between; }
+.intro h1 { font-size: 15px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); margin: 0; }
+.intro p { margin: 0; color: var(--dim); font-size: 14px; max-width: 70ch; }
+
+/* ---------- device ---------- */
+.device { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 10px 14px; border-bottom: 1px solid var(--line);
+  background: linear-gradient(#141920, #10141a); }
+.mark { font-weight: 700; letter-spacing: .32em; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.mark i { width: 10px; height: 10px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, var(--cut-hot), var(--cut)); box-shadow: 0 0 10px var(--cut); }
+.preset { display: flex; align-items: center; background: var(--well); border: 1px solid var(--line); border-radius: 6px; height: 28px; }
+.preset button { background: none; border: 0; color: var(--dim); width: 26px; height: 100%; cursor: pointer; font-size: 12px; }
+.preset span { padding: 0 8px; font-size: 13px; min-width: 190px; text-align: center; }
+.spacer { flex: 1; }
+.seg { display: inline-flex; background: var(--well); border: 1px solid var(--line); border-radius: 6px; padding: 2px; gap: 2px; }
+.seg button { background: none; border: 0; color: var(--dim); font: 600 11px var(--ui); letter-spacing: .08em; text-transform: uppercase;
+  padding: 5px 9px; border-radius: 4px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.chip { font: 500 11px var(--mono); color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 4px 9px; white-space: nowrap; }
+.tog { font: 700 11px var(--ui); letter-spacing: .1em; text-transform: uppercase; border: 1px solid var(--line-strong); background: var(--well);
+  color: var(--dim); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+.tog[aria-pressed="true"] { color: #1a0d03; background: var(--cut); border-color: var(--cut); box-shadow: 0 0 14px rgba(255,138,61,.45); }
+.tog.layer[aria-pressed="true"] { background: var(--raised); color: var(--text); border-color: var(--line-strong); box-shadow: none; }
+.tog.layer i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+button:focus-visible { outline: 2px solid var(--listen); outline-offset: 2px; }
+
+.screen { position: relative; background: var(--well); border-bottom: 1px solid var(--line); }
+.screen canvas { display: block; width: 100%; }
+#spec { height: 320px; cursor: crosshair; }
+#heat { height: 96px; border-top: 1px solid var(--line); }
+.layers { position: absolute; left: 10px; top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+.heatlabel { position: absolute; left: 10px; bottom: 8px; font: 600 10px var(--ui); letter-spacing: .12em; color: var(--faint); text-transform: uppercase; pointer-events: none; }
+.readout { position: absolute; right: 12px; top: 10px; font: 500 11px var(--mono); color: var(--dim); text-align: right; pointer-events: none; line-height: 1.5; }
+.readout b { color: var(--cut-hot); font-weight: 500; }
+
+.inspector { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line);
+  background: var(--raised); font-size: 12px; color: var(--dim); min-height: 42px; }
+.inspector .swatch { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font: 700 10px var(--ui); color: #071014; }
+.inspector .f { display: flex; gap: 6px; align-items: baseline; }
+.inspector .f b { font: 500 12px var(--mono); color: var(--text); }
+.inspector .hint { margin-left: auto; color: var(--faint); }
+
+.cards { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.card { padding: 12px 12px 14px; border-right: 1px solid var(--line); display: grid; gap: 10px; align-content: start; }
+.card:last-child { border-right: 0; }
+.card h3 { margin: 0; font: 700 10.5px var(--ui); letter-spacing: .16em; color: var(--dim); text-transform: uppercase; display: flex; justify-content: space-between; }
+.card h3 small { font: 500 10px var(--mono); letter-spacing: 0; color: var(--faint); text-transform: none; }
+.knobs { display: flex; flex-wrap: wrap; gap: 8px 6px; justify-content: space-around; }
+.knob { display: grid; justify-items: center; gap: 2px; width: 62px; user-select: none; touch-action: none; cursor: ns-resize; }
+.knob svg { width: 46px; height: 46px; }
+.knob .lab { font: 600 10px var(--ui); letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.knob .val { font: 500 11px var(--mono); color: var(--text); }
+.knob:focus-visible { outline: 2px solid var(--listen); outline-offset: 2px; border-radius: 6px; }
+.card .seg { width: 100%; justify-content: space-between; }
+.card .seg button { flex: 1; padding: 5px 2px; }
+select { width: 100%; background: var(--well); color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: 500 12px var(--ui); padding: 5px 6px; }
+.meter { height: 6px; border-radius: 3px; background: var(--well); overflow: hidden; border: 1px solid var(--line); }
+.meter i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--side), #e3d2ff); }
+.mini { font: 500 10px var(--mono); color: var(--faint); }
+
+@media (max-width: 980px) { .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } .card:nth-child(3n) { border-right: 0; } .card { border-bottom: 1px solid var(--line); } }
+@media (max-width: 560px) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .card:nth-child(3n) { border-right: 1px solid var(--line); } .card:nth-child(2n) { border-right: 0; } #spec { height: 240px; } .preset span { min-width: 0; } }
+
+/* ---------- notes ---------- */
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.note { border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; background: var(--panel); min-width: 0; }
+.note h2 { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 8px; color: var(--text); }
+.note ul { margin: 0; padding-left: 18px; color: var(--dim); font-size: 14px; line-height: 1.5; display: grid; gap: 4px; }
+.note b { color: var(--text); font-weight: 600; }
+.k { font: 500 12px var(--mono); color: var(--listen); }
+</style>
+
+<div class="wrap">
+  <div class="intro">
+    <h1>Temper · mockup</h1>
+    <p>A resonance suppressor and dynamic EQ in one. The audio is simulated (a bright vocal, with a kick on the sidechain), but every control changes it. Drag the blue curve, drag the numbered bands, double-click the display to add a band.</p>
+  </div>
+
+  <div class="device" id="device">
+    <div class="bar">
+      <div class="mark"><i></i>TEMPER</div>
+      <div class="preset"><button id="prevP" aria-label="Previous preset">◀</button><span id="pname">Vocal · Tame 2–5 kHz</span><button id="nextP" aria-label="Next preset">▶</button></div>
+      <div class="seg" id="mode" role="group" aria-label="Mode"><button aria-pressed="true" data-v="soft">Soft</button><button aria-pressed="false" data-v="hard">Hard</button></div>
+      <div class="seg" id="phase" role="group" aria-label="Phase"><button aria-pressed="false" data-v="low">Low latency</button><button aria-pressed="true" data-v="min">Natural</button><button aria-pressed="false" data-v="lin">Linear</button></div>
+      <span class="chip" id="lat">5.8 ms</span>
+      <span class="spacer"></span>
+      <button class="tog" id="delta" aria-pressed="false" title="Hear only what Temper removes">Delta</button>
+    </div>
+
+    <div class="screen">
+      <canvas id="spec" aria-label="Spectrum, sensitivity curve, dynamic bands and live reduction"></canvas>
+      <div class="layers">
+        <button class="tog layer" data-layer="input" aria-pressed="true"><i style="background:#3a4757"></i>In</button>
+        <button class="tog layer" data-layer="output" aria-pressed="true"><i style="background:var(--text)"></i>Out</button>
+        <button class="tog layer" data-layer="side" aria-pressed="true"><i style="background:var(--side)"></i>Sidechain</button>
+        <button class="tog layer" data-layer="cut" aria-pressed="true"><i style="background:var(--cut)"></i>Cut</button>
+      </div>
+      <div class="readout" id="readout"></div>
+      <canvas id="heat" aria-label="Reduction heatmap, newest at top"></canvas>
+      <div class="heatlabel">Reduction history · newest at top</div>
+    </div>
+
+    <div class="inspector" id="insp"></div>
+
+    <div class="cards">
+      <section class="card"><h3>Suppress <small id="cutnow">0.0 dB</small></h3><div class="knobs" id="k-suppress"></div></section>
+      <section class="card"><h3>Time</h3><div class="knobs" id="k-time"></div><div class="mini">Tilt also skews attack and release by register.</div></section>
+      <section class="card"><h3>Split</h3><div class="knobs" id="k-split"></div><div class="mini" id="splitread">attack 0% · sustain 100%</div></section>
+      <section class="card"><h3>Stereo</h3>
+        <div class="seg" id="stereo" role="group" aria-label="Channels"><button aria-pressed="true" data-v="st">St</button><button aria-pressed="false" data-v="m">Mid</button><button aria-pressed="false" data-v="s">Side</button><button aria-pressed="false" data-v="l">L</button><button aria-pressed="false" data-v="r">R</button></div>
+        <div class="knobs" id="k-stereo"></div></section>
+      <section class="card"><h3>Unmask</h3>
+        <select id="scsrc" aria-label="Sidechain source"><option>Kick</option><option>Lead Vocal</option><option>None</option></select>
+        <div class="seg" id="scmode" role="group" aria-label="Sidechain mode"><button aria-pressed="false" data-v="off">Off</button><button aria-pressed="true" data-v="unmask">Unmask</button></div>
+        <div class="knobs" id="k-side"></div>
+        <div class="meter"><i id="scm"></i></div></section>
+      <section class="card"><h3>Output</h3><div class="knobs" id="k-out"></div></section>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note"><h2>Everything soothe3 does</h2><ul>
+      <li><b>Depth</b> and <b>Detail</b> (soothe3 merged sharpness and selectivity into this one control; high Detail goes after narrow ringing).</li>
+      <li><b>Soft</b> mode with an adaptive threshold, and <b>Hard</b> mode for more bite.</li>
+      <li><b>Tilt</b> leans Detail, Attack and Release toward the lows or highs. <b>Max Cut</b> caps how deep any cut can go.</li>
+      <li><b>Low latency</b> for tracking, <b>Natural</b> (minimum phase) and <b>Linear</b> phase for parallel and mid/side work.</li>
+      <li>A drawn <b>sensitivity curve</b> sets where it listens, and <b>Delta</b> lets you hear only what is removed.</li>
+    </ul></div>
+    <div class="note"><h2>What Temper adds</h2><ul>
+      <li><b>Dynamic EQ bands</b> on the same display: up to 8 bells, shelves and cuts, each with threshold, ratio and range. Use them for the problems you can name, and leave the rest to the suppressor.</li>
+      <li><b>Unmask</b>: a sidechain that carves only the frequencies the other track needs, only while it plays (the bass makes room for the kick at 50–110 Hz and nowhere else).</li>
+      <li><b>Split</b>: separate depth for attacks and sustains. It tames ringing tails without dulling the hits.</li>
+      <li>A <b>reduction heatmap</b>, so you can see which notes and syllables set it off.</li>
+    </ul></div>
+    <div class="note"><h2>How it will be built</h2><ul>
+      <li>A new native effect on the existing platform, which already has sidechain inputs and reported latency.</li>
+      <li>An STFT engine with overlap-add, plus a minimum-phase path that resynthesises per-bin gains as a smooth filter. Low latency uses short frames.</li>
+      <li>Oracle tests: a sine buried in noise is cut and the noise is left alone; a static tone stays unchanged at Depth 0; Delta plus Out equals In exactly; export matches live playback; latency is as reported.</li>
+      <li>Then presets for vocals, guitars, cymbals, mix bus, bass unmask and de-essing, then the panel.</li>
+    </ul></div>
+  </div>
+</div>
+
+<script>
+(() => {
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const C = { listen: css('--listen'), cut: css('--cut'), hot: css('--cut-hot'), side: css('--side'), text: css('--text'),
+  dim: css('--dim'), faint: css('--faint'), line: css('--line'), well: css('--well') };
+const BAND_COLORS = ['#4fd1c5', '#ef6fa8', '#a3e05f', '#6fa8ff', '#f3d35a', '#ff9f6b', '#c7a0ff', '#7fe0e0'];
+const F_MIN = 20, F_MAX = 20000, BINS = 260, EQ_RANGE = 18, SPEC_TOP = 0, SPEC_BOTTOM = -84;
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const freqAt = i => F_MIN * Math.pow(F_MAX / F_MIN, i / (BINS - 1));
+const xOfF = (f, w) => Math.log(f / F_MIN) / Math.log(F_MAX / F_MIN) * w;
+const fOfX = (x, w) => F_MIN * Math.pow(F_MAX / F_MIN, Math.min(1, Math.max(0, x / w)));
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const fmtF = f => f >= 1000 ? (f / 1000).toFixed(f >= 10000 ? 1 : 2) + ' kHz' : Math.round(f) + ' Hz';
+const freqs = Array.from({ length: BINS }, (_, i) => freqAt(i));
+
+// ---------- parameters ----------
+const P = {
+  depth: 5, detail: 60, maxcut: 12, tilt: 0,
+  attack: 4, release: 60,
+  attacks: 20, sustains: 100, sep: 50,
+  link: 100, width: 100,
+  unmask: 60, unfocus: 50,
+  mix: 100, trim: 0,
+  mode: 'soft', phase: 'min', stereo: 'st', scmode: 'unmask', delta: false,
+};
+const layers = { input: true, output: true, side: true, cut: true };
+
+// Sensitivity curve: dB of extra (or less) listening at each node.
+let sens = [ { f: 60, d: -9 }, { f: 250, d: -3 }, { f: 1000, d: 0 }, { f: 3200, d: 6 }, { f: 7500, d: 4 }, { f: 15000, d: -4 } ];
+// Dynamic bands.
+let bands = [
+  { kind: 'bell', f: 320, q: 1.4, range: -5, thr: -38, ratio: 3, on: true },
+  { kind: 'bell', f: 6800, q: 3.0, range: -8, thr: -46, ratio: 4, on: true },
+];
+let selected = 1;
+
+const PRESETS = [
+  { name: 'Vocal · Tame 2–5 kHz', p: { depth: 5, detail: 60, maxcut: 12, tilt: 0, attack: 4, release: 60, attacks: 20, sustains: 100 },
+    sens: [[60,-9],[250,-3],[1000,0],[3200,6],[7500,4],[15000,-4]] },
+  { name: 'Cymbals · Glass Off', p: { depth: 7, detail: 75, maxcut: 15, tilt: 30, attack: 2, release: 40, attacks: 0, sustains: 100 },
+    sens: [[60,-12],[250,-9],[1000,-4],[3200,3],[7500,7],[15000,5]] },
+  { name: 'Mix Bus · Gentle', p: { depth: 2.5, detail: 35, maxcut: 6, tilt: 0, attack: 8, release: 120, attacks: 60, sustains: 80 },
+    sens: [[60,-6],[250,-2],[1000,0],[3200,2],[7500,2],[15000,-2]] },
+  { name: 'Bass · Unmask Kick', p: { depth: 3, detail: 50, maxcut: 9, tilt: -40, attack: 3, release: 90, attacks: 40, sustains: 100, unmask: 85 },
+    sens: [[60,2],[250,4],[1000,-2],[3200,-8],[7500,-12],[15000,-12]] },
+];
+let presetIndex = 0;
+
+// ---------- simulated source ----------
+function inputSpectrum(t, out, trans) {
+  const pitch = 190 + 30 * Math.sin(t * 0.7);
+  const phrase = 0.55 + 0.45 * Math.max(0, Math.sin(t * 1.3));
+  const sib = Math.max(0, Math.sin(t * 2.4 - 1)) ** 10;
+  const ring = 0.6 + 0.4 * Math.sin(t * 3.1);
+  for (let i = 0; i < BINS; i++) {
+    const f = freqs[i], o = Math.log2(f / 200);
+    let d = -30 - 4.2 * Math.max(0, o) - 14 * Math.max(0, -Math.log2(f / 110)) ** 1.3;
+    // harmonic comb under 4 kHz, smeared at high bins
+    const h = f / pitch, fr = h - Math.round(h);
+    if (f < 5000) d += 9 * Math.exp(-(fr * fr) / 0.02) * Math.exp(-f / 3000) - 4;
+    d += 6 * Math.exp(-((o - 1.2) ** 2) / 0.12);          // ~460 Hz body formant
+    d += 10 * ring * Math.exp(-((Math.log2(f / 2900)) ** 2) / 0.006);  // harsh 2.9 k ring
+    d += 8 * Math.exp(-((Math.log2(f / 4700)) ** 2) / 0.004);          // 4.7 k ring
+    d += 6 * Math.exp(-((Math.log2(f / 330)) ** 2) / 0.01);            // boxy 330
+    d += 16 * sib * Math.exp(-((Math.log2(f / 7200)) ** 2) / 0.12);    // sibilance burst
+    d += 9 * trans * Math.exp(-((Math.log2(f / 2500)) ** 2) / 4);      // consonant attack, broadband
+    d += (Math.random() - 0.5) * 2.4;
+    out[i] = d + 20 * Math.log10(phrase);
+  }
+}
+function sidechainSpectrum(env, out, src) {
+  for (let i = 0; i < BINS; i++) {
+    const f = freqs[i];
+    if (src === 'Kick') out[i] = -24 - 30 * (1 - env) - 26 * (Math.log2(f / 70) ** 2) / 4 - Math.max(0, Math.log2(f / 140)) * 6;
+    else if (src === 'Lead Vocal') out[i] = -36 - 22 * (1 - env) - 8 * Math.abs(Math.log2(f / 1800)) ** 1.5;
+    else out[i] = -200;
+  }
+}
+
+// ---------- engine model ----------
+const inp = new Float32Array(BINS), sc = new Float32Array(BINS), red = new Float32Array(BINS), smooth = new Float32Array(BINS),
+  target = new Float32Array(BINS), bandG = new Float32Array(BINS), outp = new Float32Array(BINS), sensDb = new Float32Array(BINS);
+
+function sensAt(f) {
+  const s = [...sens].sort((a, b) => a.f - b.f), x = Math.log(f);
+  if (f <= s[0].f) return s[0].d;
+  if (f >= s[s.length - 1].f) return s[s.length - 1].d;
+  for (let i = 0; i < s.length - 1; i++) {
+    const a = Math.log(s[i].f), b = Math.log(s[i + 1].f);
+    if (x <= b) { const u = (x - a) / (b - a), k = (1 - Math.cos(u * Math.PI)) / 2; return s[i].d + (s[i + 1].d - s[i].d) * k; }
+  }
+  return 0;
+}
+function bandShape(b, f) {
+  const o = Math.log2(f / b.f);
+  if (b.kind === 'bell') return Math.exp(-(o * o) * b.q * b.q * 1.4);
+  if (b.kind === 'high shelf') return 1 / (1 + Math.exp(-o * b.q * 4));
+  return 1 / (1 + Math.exp(o * b.q * 4)); // low shelf
+}
+
+let transEnv = 0, kickEnv = 0, lastBeat = -1, scLevel = 0;
+function step(t, dt) {
+  const beat = Math.floor(t / 0.5);
+  if (beat !== lastBeat) { lastBeat = beat; transEnv = 1; kickEnv = 1; }
+  transEnv *= Math.exp(-dt / 0.045); kickEnv *= Math.exp(-dt / 0.16);
+  inputSpectrum(t, inp, transEnv);
+  sidechainSpectrum(kickEnv, sc, document.getElementById('scsrc').value);
+
+  // Smoothed envelope the suppressor compares against: Detail narrows it.
+  const tiltU = P.tilt / 100;
+  for (let i = 0; i < BINS; i++) {
+    const pos = i / (BINS - 1) - 0.5;
+    const det = clamp(P.detail / 100 + tiltU * pos, 0, 1);
+    const halfWidth = Math.round(4 + (1 - det) * 22);
+    let s = 0, n = 0;
+    for (let j = Math.max(0, i - halfWidth); j <= Math.min(BINS - 1, i + halfWidth); j++) { s += inp[j]; n++; }
+    smooth[i] = s / n;
+    sensDb[i] = sensAt(freqs[i]);
+  }
+  const knee = P.mode === 'soft' ? 3 : 0.5;
+  const transW = transEnv > 0.25 ? 1 : 0;
+  const split = (transW * P.attacks + (1 - transW) * P.sustains) / 100;
+  scLevel = 0;
+  for (let i = 0; i < BINS; i++) {
+    const sensMul = Math.pow(2, sensDb[i] / 6);
+    let thr = knee;
+    if (P.mode === 'soft') thr += Math.max(0, (smooth[i] + 40) * 0.05);   // adaptive: louder neighbourhoods need more excess
+    const excess = Math.max(0, inp[i] - smooth[i] - thr);
+    let want = excess * (P.depth / 10) * sensMul * (P.mode === 'hard' ? 1.6 : 1) * split;
+    if (P.scmode === 'unmask' && sc[i] > -150) {
+      const mask = clamp((sc[i] - inp[i] + 10) / 20, 0, 1) * clamp((sc[i] + 60) / 30, 0, 1);
+      scLevel = Math.max(scLevel, mask);
+      want += mask * P.unmask / 100 * 9;
+    }
+    target[i] = Math.min(P.maxcut, want);
+  }
+  // Attack / release ballistics, skewed by Tilt across the spectrum.
+  for (let i = 0; i < BINS; i++) {
+    const pos = i / (BINS - 1) - 0.5, skew = Math.pow(2, -tiltU * pos * 2);
+    const tA = Math.max(0.0005, P.attack / 1000 * skew), tR = Math.max(0.002, P.release / 1000 * skew);
+    const k = target[i] > red[i] ? 1 - Math.exp(-dt / tA) : 1 - Math.exp(-dt / tR);
+    red[i] += (target[i] - red[i]) * k;
+  }
+  // Dynamic bands.
+  bandG.fill(0);
+  for (const b of bands) {
+    if (!b.on) continue;
+    const idx = Math.round(Math.log(b.f / F_MIN) / Math.log(F_MAX / F_MIN) * (BINS - 1));
+    let lvl = -200; for (let j = Math.max(0, idx - 3); j <= Math.min(BINS - 1, idx + 3); j++) lvl = Math.max(lvl, inp[j]);
+    const over = Math.max(0, lvl - b.thr);
+    const g = Math.sign(b.range) * Math.min(Math.abs(b.range), over * (1 - 1 / b.ratio));
+    b.now = b.now === undefined ? g : b.now + (g - b.now) * (1 - Math.exp(-dt / (g * Math.sign(b.range) > b.now * Math.sign(b.range) ? 0.004 : 0.08)));
+    for (let i = 0; i < BINS; i++) bandG[i] += b.now * bandShape(b, freqs[i]);
+  }
+  const wet = P.mix / 100;
+  for (let i = 0; i < BINS; i++) outp[i] = inp[i] + wet * (bandG[i] - red[i]) + P.trim;
+}
+
+// ---------- drawing ----------
+const spec = document.getElementById('spec'), heat = document.getElementById('heat');
+const sctx = spec.getContext('2d'), hctx = heat.getContext('2d');
+let W = 0, H = 0, HW = 0, HH = 0, dpr = 1;
+function resize() {
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  W = spec.clientWidth; H = spec.clientHeight; spec.width = W * dpr; spec.height = H * dpr;
+  HW = heat.clientWidth; HH = heat.clientHeight; heat.width = HW * dpr; heat.height = HH * dpr;
+  hctx.fillStyle = C.well; hctx.fillRect(0, 0, heat.width, heat.height);
+}
+const yOfSpec = d => (SPEC_TOP - d) / (SPEC_TOP - SPEC_BOTTOM) * H;
+const yOfEq = d => H / 2 - d / EQ_RANGE * (H / 2 - 18);
+const eqOfY = y => (H / 2 - y) / (H / 2 - 18) * EQ_RANGE;
+
+function grid(g) {
+  g.strokeStyle = C.line; g.lineWidth = 1; g.fillStyle = C.faint; g.font = '10px ' + css('--mono');
+  for (const f of [30, 50, 100, 200, 500, 1000, 2000, 5000, 10000]) {
+    const x = Math.round(xOfF(f, W)) + .5; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke();
+    g.fillText(f >= 1000 ? f / 1000 + 'k' : f, x + 3, H - 6);
+  }
+  for (const d of [-12, -6, 0, 6, 12]) {
+    const y = Math.round(yOfEq(d)) + .5; g.globalAlpha = d === 0 ? 1 : .55; g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke();
+    g.globalAlpha = 1; g.fillText((d > 0 ? '+' : '') + d, W - 22, y - 3);
+  }
+}
+function pathOf(g, arr, yf) { g.beginPath(); for (let i = 0; i < BINS; i++) { const x = i / (BINS - 1) * W, y = yf(arr[i]); i ? g.lineTo(x, y) : g.moveTo(x, y); } }
+
+function draw() {
+  const g = sctx; g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  grid(g);
+  if (P.delta) {
+    // Delta: the removed signal only.
+    const removed = new Float32Array(BINS);
+    for (let i = 0; i < BINS; i++) { const r = red[i] - Math.min(0, bandG[i]); removed[i] = r > 0.05 ? inp[i] + 20 * Math.log10(1 - Math.pow(10, -r / 20)) : -200; }
+    pathOf(g, removed, d => yOfSpec(d)); g.lineTo(W, H); g.lineTo(0, H); g.closePath();
+    const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, 'rgba(255,210,122,.55)'); gr.addColorStop(1, 'rgba(255,138,61,.05)');
+    g.fillStyle = gr; g.fill();
+  } else {
+    if (layers.input) { pathOf(g, inp, d => yOfSpec(d)); g.lineTo(W, H); g.lineTo(0, H); g.closePath(); g.fillStyle = 'rgba(58,71,87,.55)'; g.fill(); }
+    if (layers.side && P.scmode === 'unmask' && document.getElementById('scsrc').value !== 'None') {
+      pathOf(g, sc, d => yOfSpec(d)); g.setLineDash([4, 4]); g.strokeStyle = C.side; g.lineWidth = 1.3; g.stroke(); g.setLineDash([]);
+    }
+    if (layers.output) { pathOf(g, outp, d => yOfSpec(d)); g.strokeStyle = 'rgba(230,235,241,.85)'; g.lineWidth = 1.2; g.stroke(); }
+  }
+  // live cut, hanging from 0 dB on the EQ scale
+  if (layers.cut) {
+    g.beginPath(); g.moveTo(0, yOfEq(0));
+    for (let i = 0; i < BINS; i++) g.lineTo(i / (BINS - 1) * W, yOfEq(-red[i]));
+    g.lineTo(W, yOfEq(0)); g.closePath();
+    const gr = g.createLinearGradient(0, yOfEq(0), 0, yOfEq(-12)); gr.addColorStop(0, 'rgba(255,138,61,.15)'); gr.addColorStop(1, 'rgba(255,210,122,.75)');
+    g.fillStyle = gr; g.fill();
+    pathOf(g, red, d => yOfEq(-d)); g.strokeStyle = C.cut; g.lineWidth = 1.4; g.stroke();
+  }
+  // dynamic bands: static range (ghost) and live gain (solid)
+  bands.forEach((b, n) => {
+    const col = BAND_COLORS[n];
+    g.beginPath(); for (let i = 0; i < BINS; i++) { const x = i / (BINS - 1) * W, y = yOfEq(b.range * bandShape(b, freqs[i])); i ? g.lineTo(x, y) : g.moveTo(x, y); }
+    g.strokeStyle = col; g.globalAlpha = b.on ? .35 : .15; g.setLineDash([3, 3]); g.lineWidth = 1; g.stroke(); g.setLineDash([]);
+    g.beginPath(); g.moveTo(0, yOfEq(0)); for (let i = 0; i < BINS; i++) g.lineTo(i / (BINS - 1) * W, yOfEq((b.now || 0) * bandShape(b, freqs[i]))); g.lineTo(W, yOfEq(0));
+    g.fillStyle = col; g.globalAlpha = b.on ? .22 : .05; g.fill(); g.globalAlpha = 1;
+  });
+  // sensitivity curve
+  g.beginPath(); for (let i = 0; i < BINS; i++) { const x = i / (BINS - 1) * W, y = yOfEq(sensDb[i]); i ? g.lineTo(x, y) : g.moveTo(x, y); }
+  g.strokeStyle = C.listen; g.lineWidth = 2; g.shadowColor = C.listen; g.shadowBlur = 8; g.stroke(); g.shadowBlur = 0;
+  for (const s of sens) {
+    const x = xOfF(s.f, W), y = yOfEq(s.d);
+    g.save(); g.translate(x, y); g.rotate(Math.PI / 4); g.fillStyle = C.well; g.strokeStyle = C.listen; g.lineWidth = 1.6;
+    const r = s === drag?.node ? 7 : 5.5; g.fillRect(-r, -r, 2 * r, 2 * r); g.strokeRect(-r, -r, 2 * r, 2 * r); g.restore();
+  }
+  // band nodes
+  bands.forEach((b, n) => {
+    const x = xOfF(b.f, W), y = yOfEq(b.range), col = BAND_COLORS[n];
+    g.beginPath(); g.arc(x, y, n === selected ? 10 : 8.5, 0, Math.PI * 2); g.fillStyle = b.on ? col : '#2a323d'; g.fill();
+    if (n === selected) { g.lineWidth = 2; g.strokeStyle = C.text; g.stroke(); }
+    g.fillStyle = '#071014'; g.font = '700 10px ' + css('--ui'); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(n + 1, x, y + .5);
+    g.textAlign = 'start'; g.textBaseline = 'alphabetic';
+    // live gain marker
+    const yn = yOfEq(b.now || 0); g.beginPath(); g.moveTo(x - 6, yn); g.lineTo(x + 6, yn); g.strokeStyle = col; g.lineWidth = 2; g.stroke();
+  });
+  // hover label
+  if (hover && !drag) {
+    g.fillStyle = C.dim; g.font = '11px ' + css('--mono');
+    const f = fOfX(hover.x, W), i = Math.round(Math.log(f / F_MIN) / Math.log(F_MAX / F_MIN) * (BINS - 1));
+    const txt = fmtF(f) + '  cut ' + red[clamp(i, 0, BINS - 1)].toFixed(1) + ' dB';
+    g.fillText(txt, clamp(hover.x + 10, 4, W - 150), clamp(hover.y - 10, 50, H - 20));
+  }
+  // heatmap: scroll down one row, paint newest at top
+  const hg = hctx; hg.setTransform(1, 0, 0, 1, 0, 0);
+  const rowH = Math.max(1, Math.round(dpr));
+  hg.drawImage(heat, 0, 0, heat.width, heat.height - rowH, 0, rowH, heat.width, heat.height - rowH);
+  const img = hg.createImageData(heat.width, rowH);
+  for (let x = 0; x < heat.width; x++) {
+    const i = Math.round(x / (heat.width - 1) * (BINS - 1));
+    const r = clamp((red[i] - Math.min(0, bandG[i])) / 12, 0, 1);
+    // well -> deep copper -> amber -> near-white
+    const c = r < .5 ? lerp3([11, 14, 19], [140, 52, 18], r / .5) : lerp3([140, 52, 18], [255, 214, 140], (r - .5) / .5);
+    for (let y = 0; y < rowH; y++) { const o = (y * heat.width + x) * 4; img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 255; }
+  }
+  hg.putImageData(img, 0, 0);
+
+  let peak = 0, at = 0; for (let i = 0; i < BINS; i++) if (red[i] > peak) { peak = red[i]; at = freqs[i]; }
+  document.getElementById('readout').innerHTML = `max cut <b>${peak.toFixed(1)} dB</b> at ${fmtF(at)}<br>${P.delta ? 'DELTA: removed signal' : (P.mode === 'soft' ? 'soft · adaptive threshold' : 'hard')}`;
+  document.getElementById('cutnow').textContent = '−' + peak.toFixed(1) + ' dB';
+  document.getElementById('scm').style.width = (scLevel * 100).toFixed(0) + '%';
+  document.getElementById('splitread').textContent = transEnv > .25 ? `attack · depth ${P.attacks}%` : `sustain · depth ${P.sustains}%`;
+}
+const lerp3 = (a, b, u) => [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
+
+// ---------- interaction on the display ----------
+let drag = null, hover = null;
+function pick(x, y) {
+  for (let n = bands.length - 1; n >= 0; n--) { const b = bands[n]; if (Math.hypot(xOfF(b.f, W) - x, yOfEq(b.range) - y) < 12) return { type: 'band', n, node: b }; }
+  for (const s of sens) if (Math.hypot(xOfF(s.f, W) - x, yOfEq(s.d) - y) < 11) return { type: 'sens', node: s };
+  return null;
+}
+const local = e => { const r = spec.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+spec.addEventListener('pointerdown', e => {
+  const p = local(e), hit = pick(p.x, p.y);
+  if (hit) { drag = hit; spec.setPointerCapture(e.pointerId); if (hit.type === 'band') { selected = hit.n; renderInspector(); } }
+});
+spec.addEventListener('pointermove', e => {
+  const p = local(e); hover = p;
+  if (!drag) { spec.style.cursor = pick(p.x, p.y) ? 'grab' : 'crosshair'; return; }
+  const f = clamp(fOfX(p.x, W), 25, 18000), d = clamp(eqOfY(p.y), -EQ_RANGE, EQ_RANGE);
+  drag.node.f = f;
+  if (drag.type === 'sens') drag.node.d = d; else { drag.node.range = d; renderInspector(); }
+});
+spec.addEventListener('pointerup', () => { drag = null; });
+spec.addEventListener('pointerleave', () => { hover = null; });
+spec.addEventListener('dblclick', e => {
+  const p = local(e), hit = pick(p.x, p.y);
+  if (hit?.type === 'band') { hit.node.on = !hit.node.on; renderInspector(); return; }
+  if (bands.length >= 8) return;
+  bands.push({ kind: 'bell', f: fOfX(p.x, W), q: 2, range: clamp(eqOfY(p.y), -EQ_RANGE, EQ_RANGE) || -6, thr: -40, ratio: 3, on: true });
+  selected = bands.length - 1; renderInspector();
+});
+spec.addEventListener('wheel', e => {
+  const b = bands[selected]; if (!b) return; e.preventDefault();
+  b.q = clamp(b.q * (e.deltaY < 0 ? 1.1 : 1 / 1.1), 0.3, 12); renderInspector();
+}, { passive: false });
+
+// ---------- band inspector ----------
+const insp = document.getElementById('insp');
+function renderInspector() {
+  const b = bands[selected];
+  if (!b) { insp.innerHTML = '<span>Double-click the display to add a dynamic band.</span>'; return; }
+  const col = BAND_COLORS[selected];
+  insp.innerHTML = `<span class="swatch" style="background:${col}">${selected + 1}</span>
+    <div class="seg" id="bkind">${['low shelf', 'bell', 'high shelf'].map(k => `<button aria-pressed="${b.kind === k}" data-v="${k}">${k}</button>`).join('')}</div>
+    <span class="f">Freq <b>${fmtF(b.f)}</b></span><span class="f">Q <b>${b.q.toFixed(2)}</b></span>
+    <span class="f">Range <b>${b.range > 0 ? '+' : ''}${b.range.toFixed(1)} dB</b></span>
+    <span class="f">Threshold <b id="bthr" style="cursor:ns-resize">${b.thr.toFixed(0)} dB</b></span>
+    <span class="f">Ratio <b id="brat" style="cursor:ns-resize">${b.ratio.toFixed(1)}:1</b></span>
+    <span class="f">Now <b>${(b.now || 0).toFixed(1)} dB</b></span>
+    <button class="tog" id="bon" aria-pressed="${!b.on}">${b.on ? 'Bypass' : 'Bypassed'}</button>
+    <button class="tog" id="bdel">Remove</button>
+    <span class="hint">drag node · wheel = Q · double-click node = bypass</span>`;
+  insp.querySelectorAll('#bkind button').forEach(btn => btn.onclick = () => { b.kind = btn.dataset.v; renderInspector(); });
+  insp.querySelector('#bon').onclick = () => { b.on = !b.on; renderInspector(); };
+  insp.querySelector('#bdel').onclick = () => { bands.splice(selected, 1); selected = Math.min(selected, bands.length - 1); renderInspector(); };
+  scrub(insp.querySelector('#bthr'), () => b.thr, v => { b.thr = clamp(v, -80, 0); }, 0.3);
+  scrub(insp.querySelector('#brat'), () => b.ratio, v => { b.ratio = clamp(v, 1, 20); }, 0.05);
+}
+function scrub(el, get, set, perPx) {
+  el.addEventListener('pointerdown', e => {
+    const y0 = e.clientY, v0 = get(); el.setPointerCapture(e.pointerId);
+    const mv = ev => { set(v0 + (y0 - ev.clientY) * perPx); renderInspector(); };
+    el.addEventListener('pointermove', mv);
+    el.addEventListener('pointerup', () => el.removeEventListener('pointermove', mv), { once: true });
+  });
+}
+setInterval(() => { if (!drag && document.activeElement?.closest?.('#insp') == null) { const now = insp.querySelector('.f:nth-of-type(6) b'); if (now && bands[selected]) now.textContent = (bands[selected].now || 0).toFixed(1) + ' dB'; } }, 120);
+
+// ---------- knobs ----------
+const knobs = {};
+function knob(host, key, label, min, max, fmt, def, curve = 1) {
+  const el = document.createElement('div'); el.className = 'knob'; el.tabIndex = 0; el.setAttribute('role', 'slider');
+  el.setAttribute('aria-label', label); el.setAttribute('aria-valuemin', min); el.setAttribute('aria-valuemax', max);
+  el.innerHTML = `<svg viewBox="0 0 46 46"><circle cx="23" cy="23" r="17" fill="#0b0e13" stroke="#33404f"/>
+    <path class="trk" fill="none" stroke="#222b36" stroke-width="3.5" stroke-linecap="round"/>
+    <path class="arc" fill="none" stroke-width="3.5" stroke-linecap="round"/>
+    <line class="ptr" x1="23" y1="23" x2="23" y2="10" stroke="#e6ebf1" stroke-width="2" stroke-linecap="round"/></svg>
+    <span class="lab">${label}</span><span class="val"></span>`;
+  host.appendChild(el);
+  const bipolar = min < 0 && max > 0;
+  const toU = v => Math.pow((v - min) / (max - min), 1 / curve), fromU = u => min + Math.pow(clamp(u, 0, 1), curve) * (max - min);
+  const arcPath = (u0, u1) => { const a0 = -135 + 270 * u0, a1 = -135 + 270 * u1, r = 20, p = a => [23 + r * Math.sin(a * Math.PI / 180), 23 - r * Math.cos(a * Math.PI / 180)];
+    const [x0, y0] = p(a0), [x1, y1] = p(a1); return `M${x0} ${y0} A${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1} ${y1}`; };
+  el.querySelector('.trk').setAttribute('d', arcPath(0, 1));
+  const color = key === 'unmask' ? C.side : (['attacks', 'sustains', 'sep'].includes(key) ? C.listen : C.cut);
+  el.querySelector('.arc').setAttribute('stroke', color);
+  const render = () => {
+    const u = toU(P[key]), z = bipolar ? toU(0) : 0;
+    el.querySelector('.arc').setAttribute('d', arcPath(Math.min(u, z), Math.max(u, z) + 1e-4));
+    el.querySelector('.ptr').setAttribute('transform', `rotate(${-135 + 270 * u} 23 23)`);
+    el.querySelector('.val').textContent = fmt(P[key]); el.setAttribute('aria-valuenow', P[key]);
+  };
+  el.addEventListener('pointerdown', e => {
+    const y0 = e.clientY, u0 = toU(P[key]); el.setPointerCapture(e.pointerId);
+    const mv = ev => { P[key] = fromU(u0 + (y0 - ev.clientY) / (ev.shiftKey ? 600 : 160)); render(); };
+    el.addEventListener('pointermove', mv);
+    el.addEventListener('pointerup', () => el.removeEventListener('pointermove', mv), { once: true });
+  });
+  el.addEventListener('dblclick', () => { P[key] = def; render(); });
+  el.addEventListener('keydown', e => { const d = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1 }[e.key]; if (d) { e.preventDefault(); P[key] = fromU(toU(P[key]) + d * 0.02); render(); } });
+  knobs[key] = render; render();
+}
+const $ = id => document.getElementById(id);
+const pct = v => Math.round(v) + '%', ms = v => (v < 10 ? v.toFixed(1) : Math.round(v)) + ' ms', db = v => (v > 0 ? '+' : '') + v.toFixed(1) + ' dB';
+knob($('k-suppress'), 'depth', 'Depth', 0, 20, v => v.toFixed(1), 5);
+knob($('k-suppress'), 'detail', 'Detail', 0, 100, pct, 60);
+knob($('k-suppress'), 'maxcut', 'Max Cut', 1, 24, v => v.toFixed(0) + ' dB', 12);
+knob($('k-suppress'), 'tilt', 'Tilt', -100, 100, v => (v > 0 ? 'hi ' : v < 0 ? 'lo ' : '') + Math.abs(Math.round(v)), 0);
+knob($('k-time'), 'attack', 'Attack', 0.5, 50, ms, 4, 2.5);
+knob($('k-time'), 'release', 'Release', 5, 500, ms, 60, 2.5);
+knob($('k-split'), 'attacks', 'Attacks', 0, 100, pct, 20);
+knob($('k-split'), 'sustains', 'Sustains', 0, 100, pct, 100);
+knob($('k-split'), 'sep', 'Separate', 0, 100, pct, 50);
+knob($('k-stereo'), 'link', 'Link', 0, 100, pct, 100);
+knob($('k-side'), 'unmask', 'Amount', 0, 100, pct, 60);
+knob($('k-side'), 'unfocus', 'Focus', 0, 100, pct, 50);
+knob($('k-out'), 'mix', 'Mix', 0, 100, pct, 100);
+knob($('k-out'), 'trim', 'Trim', -12, 12, db, 0);
+
+function segment(id, key, onChange) {
+  $(id).querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    $(id).querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); P[key] = b.dataset.v; onChange?.(b.dataset.v);
+  }));
+}
+const LAT = { low: '0.0 ms', min: '5.8 ms', lin: '42.7 ms' };
+segment('mode', 'mode'); segment('stereo', 'stereo');
+segment('phase', 'phase', v => { $('lat').textContent = LAT[v]; });
+segment('scmode', 'scmode');
+$('delta').addEventListener('click', e => { P.delta = !P.delta; e.currentTarget.setAttribute('aria-pressed', P.delta); });
+document.querySelectorAll('.layer').forEach(b => b.addEventListener('click', () => { const k = b.dataset.layer; layers[k] = !layers[k]; b.setAttribute('aria-pressed', layers[k]); }));
+
+function loadPreset(i) {
+  presetIndex = (i + PRESETS.length) % PRESETS.length; const pr = PRESETS[presetIndex];
+  Object.assign(P, pr.p); sens = pr.sens.map(([f, d]) => ({ f, d })); $('pname').textContent = pr.name;
+  for (const k in knobs) knobs[k]();
+  if (pr.name.startsWith('Bass')) { $('scsrc').value = 'Kick'; bands = [{ kind: 'low shelf', f: 90, q: 1, range: -4, thr: -30, ratio: 2, on: true }]; selected = 0; }
+  renderInspector();
+}
+$('prevP').onclick = () => loadPreset(presetIndex - 1);
+$('nextP').onclick = () => loadPreset(presetIndex + 1);
+
+// ---------- loop ----------
+resize(); addEventListener('resize', resize); renderInspector();
+let last = performance.now(), t = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt;
+  step(t, dt); draw();
+  if (!reduceMotion) requestAnimationFrame(frame); else setTimeout(() => requestAnimationFrame(frame), 250);
+}
+step(0, 0.016); requestAnimationFrame(frame);
+})();
+</script>

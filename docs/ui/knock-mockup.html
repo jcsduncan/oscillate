@@ -1,0 +1,1135 @@
+<title>Knock</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: eight pads and the loop grid on the left; the selected pad's signal path (striker → resonator → coupled → body) as a row of cards on the right, with the ringing modes drawn live above it. One deliberate look: soot-black workshop, chalk ink, a coral strike. */
+:root {
+  --bg: #12110f; --panel: #1b1916; --panel2: #23201c; --well: #0c0b0a; --line: #2e2a25; --line2: #423c35;
+  --ink: #eee8df; --dim: #a69e92; --faint: #6c655c;
+  --strike: #ff7a59; --strike-soft: rgba(255,122,89,.16);
+  --resA: #5fd0d6; --resB: #b79cff; --body: #d9a441;
+  --display: "Syne", "Arial Black", sans-serif;
+  --sans: "Manrope", "Noto Sans", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); padding-block: 22px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; }
+h1 { font-family: var(--display); font-weight: 800; font-size: 38px; letter-spacing: 1px; margin: 0; text-transform: uppercase; }
+h1 span { color: var(--strike); }
+header p { margin: 0; color: var(--dim); max-width: 78ch; line-height: 1.5; }
+header b { color: var(--ink); }
+
+.device { display: grid; grid-template-columns: minmax(0, 430px) minmax(0, 1fr); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+@media (max-width: 980px) { .device { grid-template-columns: 1fr; } }
+.left { border-right: 1px solid var(--line); padding: 14px; display: grid; gap: 14px; align-content: start; }
+@media (max-width: 980px) { .left { border-right: 0; border-bottom: 1px solid var(--line); } }
+.right { padding: 14px; display: grid; gap: 14px; align-content: start; min-width: 0; }
+
+.label { font-family: var(--display); font-weight: 700; font-size: 12px; letter-spacing: 2px; color: var(--dim); text-transform: uppercase; }
+
+.pads { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.pad { position: relative; aspect-ratio: 1 / 0.86; max-width: 100%; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 8px; text-align: left; cursor: pointer; color: var(--ink); display: grid; align-content: space-between; font-family: var(--sans); overflow: hidden; transition: border-color .12s; }
+.pad b { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: .5px; }
+.pad small { font-size: 10.5px; color: var(--dim); line-height: 1.3; }
+.pad em { font-style: normal; font-family: var(--mono); font-size: 10px; color: var(--faint); }
+.pad[aria-pressed="true"] { border-color: var(--strike); box-shadow: inset 0 0 0 1px var(--strike); }
+.pad .flash { position: absolute; inset: 0; background: var(--strike); opacity: 0; pointer-events: none; }
+.pad:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--strike); outline-offset: 2px; }
+
+.transport { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { font: 600 13px var(--sans); color: var(--dim); background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 11px; cursor: pointer; }
+.btn[aria-pressed="true"] { color: var(--strike); border-color: var(--strike); background: var(--strike-soft); }
+.btn.play { color: var(--bg); background: var(--strike); border-color: var(--strike); min-width: 96px; }
+.btn.play[aria-pressed="true"] { background: var(--resA); border-color: var(--resA); color: var(--bg); }
+.tempo { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--dim); }
+.tempo output { font-family: var(--mono); color: var(--ink); min-width: 4ch; font-variant-numeric: tabular-nums; }
+.tempo input { width: 90px; accent-color: var(--strike); }
+
+.grid { display: grid; gap: 3px; overflow-x: auto; }
+.lane { display: grid; grid-template-columns: 16px 52px repeat(16, minmax(14px, 1fr)); gap: 3px; align-items: center; }
+.lock { width: 16px; height: 20px; padding: 0; border: 0; background: none; color: var(--faint); cursor: pointer; font-size: 11px; }
+.lock[aria-pressed="true"] { color: var(--body); }
+.bars { display: flex; gap: 4px; align-items: center; }
+.bars button { font: 600 11px var(--mono); color: var(--dim); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+.bars button[aria-pressed="true"] { color: var(--ink); border-color: var(--line2); background: var(--line); }
+.bars button.live { box-shadow: inset 0 -2px 0 var(--strike); }
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); }
+.tabs button { font: 700 12px var(--display); letter-spacing: 1.5px; text-transform: uppercase; color: var(--faint); background: none; border: 0; border-bottom: 2px solid transparent; padding: 7px 12px; cursor: pointer; }
+.tabs button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--strike); }
+.patpanel { display: grid; gap: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chips button { font: 600 11px var(--sans); color: var(--dim); background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+.chips button[aria-pressed="true"] { color: var(--strike); border-color: var(--strike); background: var(--strike-soft); }
+.loops { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; max-height: 196px; overflow-y: auto; padding-right: 2px; }
+.loop { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; text-align: left; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; cursor: pointer; color: var(--ink); font: 600 12px var(--sans); }
+.loop small { grid-column: 1 / -1; color: var(--faint); font: 500 10px var(--mono); }
+.loop canvas { width: 54px; height: 16px; }
+.loop[aria-pressed="true"] { border-color: var(--strike); background: var(--strike-soft); }
+.genrows { display: grid; gap: 7px; }
+.genrows .row input { accent-color: var(--strike); }
+.actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn.dice { color: var(--bg); background: var(--body); border-color: var(--body); }
+.btn.evolve[aria-pressed="true"] { color: var(--resB); border-color: var(--resB); background: rgba(183,156,255,.14); }
+.stereo { position: absolute; left: 10px; right: 10px; top: 24px; height: 18px; pointer-events: none; }
+.stage.space h3 i { background: var(--resB); } .stage.space input { accent-color: var(--resB); }
+.stage.space .seg button[aria-pressed="true"] { color: var(--resB); border-color: var(--resB); }
+.lane > span { font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.lane > span.sel { color: var(--strike); }
+.cell { height: 20px; border-radius: 4px; background: var(--panel2); border: 1px solid var(--line); cursor: pointer; padding: 0; position: relative; }
+.cell.beat { background: #29251f; }
+.cell[data-v="x"] { background: var(--strike); border-color: var(--strike); opacity: .62; }
+.cell[data-v="X"] { background: var(--strike); border-color: var(--strike); }
+.cell[data-v="?"] { background: repeating-linear-gradient(135deg, var(--strike) 0 3px, transparent 3px 6px); border-color: var(--strike); opacity: .8; }
+.cell[data-v="r"] { background: linear-gradient(90deg, var(--strike) 0 42%, transparent 42% 58%, var(--strike) 58%); border-color: var(--strike); }
+.cell.now { box-shadow: 0 0 0 1px var(--ink); }
+.keyline { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: var(--faint); }
+.keyline i { display: inline-block; width: 12px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; border: 1px solid var(--strike); }
+.hint { font-size: 12px; color: var(--faint); line-height: 1.5; margin: 0; }
+.hint b { color: var(--dim); font-weight: 600; }
+
+.scope { position: relative; height: 190px; background: var(--well); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.scope canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.scope .tag { position: absolute; left: 10px; top: 8px; font-family: var(--mono); font-size: 11px; color: var(--faint); pointer-events: none; }
+.scope .legend { position: absolute; right: 10px; top: 8px; display: flex; gap: 10px; font-family: var(--mono); font-size: 11px; color: var(--faint); pointer-events: none; }
+.scope .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+
+.padhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.padhead h2 { margin: 0; font-family: var(--display); font-weight: 800; font-size: 24px; }
+.padhead p { margin: 0; color: var(--dim); font-size: 13px; }
+.padhead .audition { margin-left: auto; }
+
+.chain { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; align-items: stretch; }
+@media (max-width: 1180px) { .chain { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
+@media (max-width: 560px) { .chain { grid-template-columns: 1fr; } }
+.stage { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 11px; display: grid; gap: 9px; align-content: start; min-width: 0; position: relative; }
+@media (min-width: 1181px) { .stage + .stage { margin-left: 14px; } .stage + .stage::before { content: "→"; position: absolute; left: -14px; top: 10px; width: 14px; text-align: center; color: var(--faint); font-size: 13px; } }
+.stage h3 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 13px; letter-spacing: 1.6px; text-transform: uppercase; display: flex; align-items: center; gap: 7px; }
+.stage h3 i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.stage.striker h3 i { background: var(--strike); } .stage.resA h3 i { background: var(--resA); }
+.stage.resB h3 i { background: var(--resB); } .stage.body h3 i { background: var(--body); }
+.seg { display: flex; flex-wrap: wrap; gap: 3px; }
+.seg button { flex: 1 1 auto; font: 600 11px var(--sans); color: var(--dim); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; cursor: pointer; }
+.seg button[aria-pressed="true"] { color: var(--ink); border-color: var(--line2); background: var(--line); }
+.stage.striker .seg button[aria-pressed="true"] { color: var(--strike); border-color: var(--strike); }
+.stage.resA .seg button[aria-pressed="true"] { color: var(--resA); border-color: var(--resA); }
+.stage.resB .seg button[aria-pressed="true"] { color: var(--resB); border-color: var(--resB); }
+.seg button:disabled { opacity: .45; cursor: not-allowed; }
+.row { display: grid; grid-template-columns: 62px minmax(0, 1fr) 58px; align-items: center; gap: 6px; font-size: 11.5px; color: var(--dim); }
+.row output { font-family: var(--mono); font-size: 11px; color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.row input { width: 100%; min-width: 0; }
+.striker input { accent-color: var(--strike); } .resA input { accent-color: var(--resA); }
+.resB input { accent-color: var(--resB); } .body input { accent-color: var(--body); }
+.stage .note { font-size: 11px; color: var(--faint); line-height: 1.4; margin: 0; }
+
+.outrow { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.outrow .stage { margin: 0 !important; }
+.outrow .stage::before { display: none; }
+.stage.hand h3 i { background: var(--ink); } .stage.hand input, .stage.out input { accent-color: var(--ink); }
+.stage.out h3 i { background: var(--dim); }
+.stage.fin h3 i { background: var(--strike); } .stage.fin input { accent-color: var(--strike); }
+
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.card h2 { margin: 0 0 8px; font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: 1.2px; color: var(--strike); text-transform: uppercase; }
+.card p, .card li { color: var(--dim); font-size: 13px; line-height: 1.5; margin: 0; }
+.card ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.card b { color: var(--ink); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { .pad { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Kn<span>o</span>ck</h1>
+    <p>Eight pads of physically modelled percussion. Each hit is <b>something striking</b> (a mallet, stick, finger or brush) <b>something that rings</b> (wood, skin, metal, glass, tube or card), optionally a <b>second resonator</b> it sets ringing, and a <b>body</b> around it. <b>Tone</b> runs from a knock on a thing to a pitched note. <b>Finish</b> makes it modern: Snap, a hard Length gate, Lift to clear the low end, and Crush. Pick a <b>kit</b> for a genre. <b>Width</b> spreads each pad's ringing modes and moves its hits. Pick a loop from the <b>library</b>, or <b>Generate</b> one: Roll, Mutate, lock the lanes you like, and let it <b>Evolve</b>. Press <b>Play</b>, or click a pad to hear it. Every sound here is synthesised in your browser from these controls.</p>
+  </header>
+
+  <section class="device" aria-label="Knock instrument">
+    <div class="left">
+      <div class="label">Pads · C1 to G1</div>
+      <div class="pads" id="pads"></div>
+
+      <div class="transport">
+        <button class="btn play" id="play" aria-pressed="false">▶ Play</button>
+        <span class="label" style="margin-left:4px">Kit</span>
+        <button class="btn kitbtn" data-kit="minimal" aria-pressed="true">Minimal</button>
+        <button class="btn kitbtn" data-kit="tech" aria-pressed="false">Tech house</button>
+        <button class="btn kitbtn" data-kit="dub" aria-pressed="false">Dub techno</button>
+        <button class="btn kitbtn" data-kit="organic" aria-pressed="false">Organic</button>
+      </div>
+      <div class="transport">
+        <button class="btn" id="kick" aria-pressed="true">Kick guide</button>
+        <button class="btn evolve" id="evolve" aria-pressed="false" title="Mutate a little every four bars while it plays">Evolve</button>
+      </div>
+      <div class="transport">
+        <label class="tempo" for="bpm">Tempo <input type="range" id="bpm" min="90" max="150" value="124"><output id="bpmOut">124</output></label>
+        <label class="tempo" for="decayAll">Decay <input type="range" id="decayAll" min="0" max="1000" value="853"><output id="decayAllOut">100%</output></label>
+        <label class="tempo" for="swing">Swing <input type="range" id="swing" min="0" max="60" value="12"><output id="swingOut">12%</output></label>
+      </div>
+
+      <div class="patpanel">
+        <div class="tabs">
+          <button id="tabLib" aria-pressed="true">Loops</button>
+          <button id="tabGen" aria-pressed="false">Generate</button>
+        </div>
+        <div id="libPane" class="patpanel">
+          <div class="chips" id="roles"></div>
+          <div class="loops" id="loops"></div>
+        </div>
+        <div id="genPane" class="patpanel" hidden>
+          <div class="seg" id="styles"></div>
+          <div class="genrows" id="genrows"></div>
+          <div class="actions">
+            <button class="btn dice" id="roll">🎲 Roll</button>
+            <button class="btn" id="mutate">Mutate</button>
+            <span class="label" style="align-self:center">Seed <output id="seedOut" style="font-family:var(--mono)">—</output></span>
+          </div>
+        </div>
+        <div class="bars"><span class="label">Bar</span><span id="barTabs" class="bars"></span></div>
+      </div>
+      <div class="grid" id="grid" aria-label="Pattern"></div>
+      <div class="keyline">
+        <span><i style="background:var(--strike);opacity:.62"></i>hit</span>
+        <span><i style="background:var(--strike)"></i>accent</span>
+        <span><i style="background:repeating-linear-gradient(135deg,var(--strike) 0 3px,transparent 3px 6px)"></i>50% chance</span>
+        <span><i style="background:linear-gradient(90deg,var(--strike) 0 42%,transparent 42% 58%,var(--strike) 58%)"></i>ratchet</span>
+      </div>
+      <p class="hint">Click a cell to cycle it; 🔒 keeps a lane when you roll or mutate. <b>In the DAW, a loop or a roll is written to the track's MIDI clip</b> (or dragged onto the arrangement), so you edit it in the piano roll like any other; chance and ratchets come out as notes. <b>Evolve</b> mutates a little every four bars, which in the DAW writes a longer clip that keeps changing. The kick guide is a plain sine kick for context.</p>
+    </div>
+
+    <div class="right">
+      <div class="scope">
+        <canvas id="modes" aria-label="Ringing modes of the selected pad"></canvas>
+        <div class="tag">RINGING MODES · log frequency 30 Hz – 16 kHz · above: where each pad lands, L to R</div>
+        <div class="legend"><span><i style="background:var(--resA)"></i>resonator</span><span><i style="background:var(--resB)"></i>coupled</span><span><i style="background:var(--body)"></i>body</span></div>
+      </div>
+
+      <div class="padhead">
+        <h2 id="padName">Thud</h2>
+        <p id="padDesc"></p>
+        <button class="btn audition" id="audition">Hit pad</button>
+      </div>
+
+      <div class="chain" id="chain"></div>
+      <div class="outrow" id="outrow"></div>
+    </div>
+  </section>
+
+  <section class="notes">
+    <div class="card">
+      <h2>How a hit is made</h2>
+      <ul>
+        <li><b>Striker.</b> Hardness sets how long it stays in contact with the surface. A short contact excites high modes, which makes it brighter. Velocity makes the hit harder, as with a real mallet. Click is the contact noise.</li>
+        <li><b>Resonator.</b> Each material has its own mode pattern: a wooden bar's modes are wide apart, a skin's are dense and close, glass rings for a long time. Where you strike sets which modes sound.</li>
+        <li><b>Coupled.</b> A second resonator rung by the first, such as a skin on a box, a plate on a tube, or two glasses beating against each other.</li>
+        <li><b>Body.</b> The box around it: its low modes and hollow air.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>Built from what we have</h2>
+      <ul>
+        <li><b>Concert:</b> the hammer contact model, modal resonators and the soundboard's body network move into a shared library that Concert and Knock both use.</li>
+        <li><b>Pulse and Anvil:</b> the falling pitch of a slack skin (Slack) and drawn pitch curves.</li>
+        <li><b>Ember:</b> seeded variation (Hand), so repeated hits differ but every export matches playback.</li>
+        <li><b>Crate:</b> later, a striker made from your own recording.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>Loops and effects</h2>
+      <ul>
+        <li>The pads take MIDI notes C1 to G1. <b>Velocity changes the tone</b>, not only the level.</li>
+        <li>Each pad has its own pan and room send. In the DAW, each pad also gets its own output, so Orbit, Flyby or Pump can go on a single pad.</li>
+        <li>Patterns come from MIDI clips and note effects (chance, ratchets, echo), so there is no second sequencer to learn.</li>
+      </ul>
+    </div>
+  </section>
+</div>
+
+<script>
+"use strict";
+// ---------- materials: mode frequency ratios and relative amplitudes ----------
+const MATERIALS = {
+  wood:  { name: "Wood",  ratios: [1, 2.756, 5.404, 8.933, 13.344, 18.64], amps: [1, .55, .32, .18, .1, .06], damp: 2.2 },
+  skin:  { name: "Skin",  ratios: [1, 1.594, 2.136, 2.296, 2.653, 2.918, 3.156, 3.501, 3.6, 3.652, 4.06, 4.154], amps: [1, .8, .62, .5, .45, .4, .34, .3, .27, .24, .2, .18], damp: 1.0 },
+  metal: { name: "Metal", ratios: [1, 1.59, 2.14, 2.65, 3.16, 3.5, 4.06, 4.6, 5.1, 5.4, 6.2, 6.8, 7.3, 8.0], amps: [1, .8, .75, .6, .55, .5, .45, .4, .36, .3, .28, .24, .2, .18], damp: .22 },
+  glass: { name: "Glass", ratios: [1, 2.32, 4.25, 6.63, 9.38, 12.6], amps: [1, .62, .42, .26, .16, .1], damp: .3 },
+  tube:  { name: "Tube",  ratios: [1, 2.01, 3.03, 4.05, 5.08, 6.1, 7.15], amps: [1, .5, .36, .26, .2, .15, .1], damp: .6 },
+  card:  { name: "Card",  ratios: [1, 1.37, 1.81, 2.23, 2.71, 3.3, 3.9, 4.6, 5.5, 6.4], amps: [1, .9, .8, .75, .6, .55, .45, .4, .3, .25], damp: 3.5 },
+};
+const MAT_KEYS = Object.keys(MATERIALS);
+const STRIKERS = { mallet: "Mallet", stick: "Stick", finger: "Finger", brush: "Brush" };
+const BODY_RATIOS = [1, 1.48, 2.1, 2.9, 3.7, 4.6];
+
+const PAD_KEYS = ["C1", "C♯1", "D1", "D♯1", "E1", "F1", "F♯1", "G1"];
+// A pad from its sound; anything left out takes these defaults.
+const FIN_OFF = 2;   // Length at its top means no gate
+function pad(name, desc, o) {
+  return {
+    name, desc,
+    s: { type: "stick", hard: .5, pos: .3, click: .3, ...o.s },
+    a: { mat: "wood", pitch: 400, decay: .1, damp: .5, drop: 0, tone: .2, ...o.a },
+    b: { mat: "card", ratio: 1, couple: 0, ...o.b },
+    body: { size: .2, hollow: 0, ...o.body },
+    hand: o.hand ?? .3,
+    out: { level: .7, pan: 0, room: .1, ...o.out },
+    fin: { snap: 0, len: FIN_OFF, lift: 20, crush: 0, ...o.fin },
+    width: { ...defaultWidth(o), ...o.width },
+  };
+}
+// Width from the sound unless a kit says otherwise: lows stay narrow and
+// still, mids spread their modes, shakers and ticks move.
+function defaultWidth(o) {
+  const pitch = o.a?.pitch ?? 400, brush = o.s?.type === "brush";
+  if (brush) return { spread: .6, motion: "random", depth: .55, haas: 3 };
+  if (pitch < 220) return { spread: .15, motion: "fixed", depth: 0, haas: 0 };
+  if (pitch > 1800) return { spread: .5, motion: "alternate", depth: .45, haas: 0 };
+  return { spread: .4, motion: "fixed", depth: 0, haas: 0 };
+}
+const ORGANIC = [
+  { name: "Thud",  desc: "A slack skin on a big box. The pitch falls as the skin settles.",
+    s: { type: "mallet", hard: .15, pos: .35, click: .1 }, a: { mat: "skin", pitch: 58, decay: .35, damp: .5, drop: .6, tone: .08 },
+    b: { mat: "card", ratio: 1.6, couple: .3 }, body: { size: .9, hollow: .7 }, hand: .3, out: { level: .9, pan: 0, room: .1 } },
+  { name: "Knock", desc: "A stick on a wooden panel over a hollow box.",
+    s: { type: "stick", hard: .6, pos: .25, click: .4 }, a: { mat: "wood", pitch: 260, decay: .12, damp: .5, drop: 0, tone: .12 },
+    b: { mat: "card", ratio: .55, couple: .5 }, body: { size: .6, hollow: .8 }, hand: .4, out: { level: .8, pan: -.15, room: .2 } },
+  { name: "Tap",   desc: "A fingertip on a small glass jar.",
+    s: { type: "finger", hard: .45, pos: .2, click: .3 }, a: { mat: "glass", pitch: 1150, decay: .09, damp: .6, drop: 0, tone: .25 },
+    b: { mat: "wood", ratio: 1.3, couple: .2 }, body: { size: .2, hollow: .3 }, hand: .5, out: { level: .7, pan: .3, room: .25 } },
+  { name: "Tick",  desc: "A hard stick on a tiny wooden block.",
+    s: { type: "stick", hard: .95, pos: .15, click: .6 }, a: { mat: "wood", pitch: 2400, decay: .03, damp: .7, drop: 0, tone: .1 },
+    b: { mat: "card", ratio: 1, couple: 0 }, body: { size: .1, hollow: .1 }, hand: .5, out: { level: .55, pan: -.35, room: .15 } },
+  { name: "Tin",   desc: "A metal lid on a tube, slightly out of tune with itself.",
+    s: { type: "stick", hard: .7, pos: .3, click: .3 }, a: { mat: "metal", pitch: 640, decay: .6, damp: .3, drop: 0, tone: .35 },
+    b: { mat: "tube", ratio: 1.48, couple: .35 }, body: { size: .3, hollow: .4 }, hand: .3, out: { level: .55, pan: .4, room: .3 } },
+  { name: "Skin",  desc: "A hand drum played with the fingers.",
+    s: { type: "finger", hard: .35, pos: .4, click: .2 }, a: { mat: "skin", pitch: 190, decay: .25, damp: .5, drop: .15, tone: .2 },
+    b: { mat: "wood", ratio: .5, couple: .25 }, body: { size: .5, hollow: .6 }, hand: .45, out: { level: .75, pan: -.2, room: .2 } },
+  { name: "Brush", desc: "A brush across cardboard, for shaker lines.",
+    s: { type: "brush", hard: .5, pos: .3, click: .9 }, a: { mat: "card", pitch: 900, decay: .05, damp: .8, drop: 0, tone: 0 },
+    b: { mat: "card", ratio: 1, couple: 0 }, body: { size: .3, hollow: .2 }, hand: .6, out: { level: .5, pan: .2, room: .2 } },
+  { name: "Glass", desc: "Two wine glasses a hair apart, so they beat.",
+    s: { type: "mallet", hard: .55, pos: .2, click: .1 }, a: { mat: "glass", pitch: 1760, decay: .8, damp: .3, drop: 0, tone: .5 },
+    b: { mat: "glass", ratio: 1.007, couple: .4 }, body: { size: .1, hollow: .1 }, hand: .2, out: { level: .45, pan: -.3, room: .45 } },
+].map(p => pad(p.name, p.desc, { s: p.s, a: p.a, b: p.b, body: p.body, hand: p.hand, out: p.out }));
+const MOTIONS = { fixed: "Fixed", alternate: "Ping-pong", random: "Scatter", orbit: "Orbit" };
+
+const KITS = {
+  organic: { name: "Organic", pads: ORGANIC, patterns: {
+  top: [
+    "................",
+    "...x......x.....",
+    "x.?.x.?Xx.?.x.r.",
+    "..x...x...x..?x.",
+    "......?.......X.",
+    "................",
+    "x.x.X.x.x.x.X.x?",
+    "............?...",
+  ],
+  under: [
+    "..x.....x?....x.",
+    "x.....x...?.x...",
+    "................",
+    "....?.......?...",
+    "................",
+    ".x..X..x.x..X..r",
+    "................",
+    "................",
+  ],
+  } },
+  minimal: { name: "Minimal", pads: [
+    pad("Plop", "A water drop: the pitch rises as it closes.", { s: { type: "finger", hard: .5, click: .1 }, a: { mat: "glass", pitch: 600, decay: .06, drop: -.8, tone: .7 }, hand: .25, out: { level: .7, pan: .25, room: .06 }, fin: { snap: .3, len: .09, lift: 150 } }),
+    pad("Rubber", "A short, bouncy knock with the tail cut off.", { s: { hard: .4 }, a: { mat: "wood", pitch: 170, decay: .08, drop: .3, tone: .3 }, b: { mat: "card", ratio: .6, couple: .3 }, body: { size: .3, hollow: .3 }, out: { level: .85, pan: -.1, room: .04 }, fin: { snap: .6, len: .12, lift: 60 } }),
+    pad("Click", "The smallest hard wooden click.", { s: { hard: 1, click: .8, pos: .1 }, a: { mat: "wood", pitch: 3200, decay: .015, tone: .05 }, hand: .35, out: { level: .6, pan: -.3, room: .05 }, fin: { snap: .8, len: .03, lift: 800, crush: .15 } }),
+    pad("Tick", "A crushed tick of card, almost pure transient.", { s: { hard: .9, click: 1 }, a: { mat: "card", pitch: 5000, decay: .02, tone: 0 }, hand: .4, out: { level: .5, pan: .35, room: .05 }, fin: { len: .025, lift: 3000, crush: .35 } }),
+    pad("Ping", "A small metal ping, gated short.", { s: { hard: .75 }, a: { mat: "metal", pitch: 1400, decay: .25, tone: .65 }, out: { level: .45, pan: .4, room: .12 }, fin: { snap: .5, len: .15, lift: 500 } }),
+    pad("Bongo", "A tight high skin, struck with a fingertip.", { s: { type: "finger", hard: .6, pos: .35 }, a: { mat: "skin", pitch: 380, decay: .09, drop: .1, tone: .45 }, body: { size: .3, hollow: .3 }, out: { level: .7, pan: -.25, room: .06 }, fin: { snap: .5, len: .14, lift: 120 } }),
+    pad("Shaker", "A tight shaker with nothing below 2.5 kHz.", { s: { type: "brush", click: 1 }, a: { mat: "card", pitch: 2500, decay: .03, tone: 0 }, hand: .5, out: { level: .4, pan: .15, room: .04 }, fin: { snap: .2, len: .05, lift: 2500 } }),
+    pad("Zap", "A pitched tube that falls fast, then crushed.", { s: { hard: .8 }, a: { mat: "tube", pitch: 900, decay: .07, drop: .9, tone: .6 }, out: { level: .45, pan: -.4, room: .08 }, fin: { snap: .4, len: .07, lift: 300, crush: .25 } }),
+  ], patterns: {
+    top: [
+      "......x.....?...",
+      "...x.......x..x.",
+      "x.?.x.x.?.x.x.?x",
+      "..x...x...x...x.",
+      "..........X.....",
+      "................",
+      "x.X.x.X.x.X.x.Xx",
+      "...............?",
+    ],
+    under: [
+      ".....x........x.",
+      "x..x..x...x..x..",
+      "................",
+      "....?.......?...",
+      "................",
+      "..x.....x?..r...",
+      "................",
+      "........?.......",
+    ],
+  } },
+  tech: { name: "Tech house", pads: [
+    pad("Conga lo", "A low conga, open and short.", { s: { type: "finger", hard: .55, pos: .4 }, a: { mat: "skin", pitch: 210, decay: .16, drop: .08, tone: .5 }, b: { mat: "wood", ratio: .5, couple: .2 }, body: { size: .4, hollow: .5 }, out: { level: .75, pan: -.2, room: .08 }, fin: { snap: .4, len: .3, lift: 60 } }),
+    pad("Conga hi", "The high conga.", { s: { type: "finger", hard: .6, pos: .4 }, a: { mat: "skin", pitch: 320, decay: .12, drop: .06, tone: .5 }, body: { size: .35, hollow: .4 }, out: { level: .7, pan: .2, room: .08 }, fin: { snap: .4, len: .25, lift: 90 } }),
+    pad("Bongo", "A bright bongo slap.", { s: { type: "finger", hard: .7, pos: .3 }, a: { mat: "skin", pitch: 520, decay: .07, tone: .45 }, out: { level: .6, pan: .35, room: .08 }, fin: { snap: .5, len: .15, lift: 150 } }),
+    pad("Clave", "Two hardwood sticks.", { s: { hard: .9, click: .4 }, a: { mat: "wood", pitch: 2500, decay: .05, tone: .75 }, out: { level: .5, pan: -.35, room: .1 }, fin: { snap: .3, len: .1, lift: 400 } }),
+    pad("Rim", "A rimshot: wood with a metal edge.", { s: { hard: 1, click: .7 }, a: { mat: "wood", pitch: 1700, decay: .03, tone: .3 }, b: { mat: "metal", ratio: 1.4, couple: .3 }, out: { level: .6, pan: .1, room: .1 }, fin: { snap: .7, len: .06, lift: 300 } }),
+    pad("Shaker", "A sixteenth-note shaker.", { s: { type: "brush", click: 1 }, a: { mat: "card", pitch: 3000, decay: .03, tone: 0 }, hand: .5, out: { level: .4, pan: .25, room: .05 }, fin: { len: .06, lift: 3000 } }),
+    pad("Tamb", "A tambourine's jingles.", { s: { type: "brush", click: .8 }, a: { mat: "metal", pitch: 4200, decay: .1, tone: .15 }, out: { level: .35, pan: -.2, room: .1 }, fin: { len: .12, lift: 3500 } }),
+    pad("Block", "A woodblock for the odd accent.", { s: { hard: .7 }, a: { mat: "wood", pitch: 800, decay: .06, tone: .55 }, out: { level: .5, pan: .3, room: .1 }, fin: { len: .1, lift: 200 } }),
+  ], patterns: {
+    top: [
+      "..x.....x..x....",
+      "x.....x...x...x.",
+      "...x.?.....x.?.x",
+      "x..x..x...x.x...",
+      "....x.......x..?",
+      "xxXxxxXxxxXxxxXx",
+      "....X.......X...",
+      "..........?.....",
+    ],
+    under: [
+      "x..x..x...x..x..",
+      "..x.....x.....x.",
+      "................",
+      "................",
+      "....?.......?...",
+      "................",
+      "................",
+      "......x.......x.",
+    ],
+  } },
+  dub: { name: "Dub techno", pads: [
+    pad("Thud", "A deep slack skin in a big room.", { s: { type: "mallet", hard: .1, pos: .35, click: .05 }, a: { mat: "skin", pitch: 50, decay: .45, drop: .5, tone: .05 }, b: { mat: "card", ratio: 1.6, couple: .3 }, body: { size: .95, hollow: .8 }, out: { level: .9, room: .2 }, fin: { lift: 30 } }),
+    pad("Knock", "A knock on a door, down the corridor.", { s: { hard: .55, pos: .25 }, a: { mat: "wood", pitch: 220, decay: .14, tone: .1 }, b: { mat: "card", ratio: .55, couple: .5 }, body: { size: .7, hollow: .8 }, out: { level: .7, pan: -.2, room: .4 } }),
+    pad("Rim", "A rim click sent into the echo.", { s: { hard: .9, click: .5 }, a: { mat: "wood", pitch: 1500, decay: .04, tone: .25 }, out: { level: .5, pan: .3, room: .6 }, fin: { snap: .4, lift: 300 } }),
+    pad("Metal", "A metal lid on a pipe, left to ring.", { s: { hard: .65 }, a: { mat: "metal", pitch: 520, decay: .9, tone: .4 }, b: { mat: "tube", ratio: 1.48, couple: .35 }, out: { level: .45, pan: .4, room: .55 } }),
+    pad("Hiss", "A breath of high noise on the offbeat.", { s: { type: "brush", click: 1 }, a: { mat: "card", pitch: 6000, decay: .04, tone: 0 }, hand: .5, out: { level: .35, pan: -.3, room: .5 }, fin: { len: .08, lift: 4000 } }),
+    pad("Glass", "A glass rung softly.", { s: { type: "mallet", hard: .5 }, a: { mat: "glass", pitch: 1320, decay: .6, tone: .45 }, out: { level: .4, pan: -.35, room: .6 } }),
+    pad("Skin", "A soft hand drum.", { s: { type: "finger", hard: .35, pos: .4 }, a: { mat: "skin", pitch: 140, decay: .3, drop: .2, tone: .15 }, body: { size: .5, hollow: .6 }, out: { level: .7, pan: .2, room: .3 } }),
+    pad("Pipe", "A struck pipe, half pitched.", { s: { hard: .6 }, a: { mat: "tube", pitch: 330, decay: .35, tone: .6 }, out: { level: .45, pan: .1, room: .5 } }),
+  ], patterns: {
+    top: [
+      "................",
+      "......x.........",
+      "...x......x...?.",
+      "..........X.....",
+      "..x...x...x...x.",
+      "...............?",
+      "................",
+      "......?.........",
+    ],
+    under: [
+      "x.....x...x.....",
+      "...x......?..x..",
+      "................",
+      "................",
+      "................",
+      "................",
+      "..x.....x.?...x.",
+      "............x...",
+    ],
+  } },
+};
+let kit = "minimal";
+// Global Decay: scales every ring, the body's air and any gate, on every pad.
+const DECAY_RANGE = { to: x => .1 * Math.pow(15, x), from: v => Math.log(v / .1) / Math.log(15) };
+let decayAll = 1;
+let PADS = KITS[kit].pads;
+// The pattern: bars of eight lanes of sixteen cells.
+const toBar = rows => rows.map(r => r.split(""));
+let bars = [toBar(KITS[kit].patterns.top)];
+let viewBar = 0;
+const locked = Array(8).fill(false);
+let selected = 0;
+
+// ---------- audio ----------
+let ctx = null, master = null, roomIn = null;
+const VARIANTS = 6;
+const cache = Array.from({ length: 8 }, () => []);
+const lastHit = Array.from({ length: 8 }, () => ({ t: -10, modes: [] }));
+
+function mulberry(seed) {
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+// Spectrum of a half-sine contact force of duration T, at frequency f (normalised to 1 at DC).
+function pulseGain(f, T) {
+  const x = 2 * f * T, d = 1 - x * x;
+  return Math.abs(d) < 1e-3 ? Math.PI / 4 : Math.abs(Math.cos(Math.PI * x / 2) / d);
+}
+function contactSeconds(s, hard) {
+  const base = 0.0065 * Math.pow(0.035, hard);       // 6.5 ms soft .. 0.23 ms hard
+  return s.type === "finger" ? base * 1.7 : s.type === "brush" ? base * 1.2 : base;
+}
+
+function ensureAudio() {
+  if (ctx) return;
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -10; comp.ratio.value = 3; comp.attack.value = .003; comp.release.value = .12;
+  master = ctx.createGain(); master.gain.value = .9;
+  master.connect(comp); comp.connect(ctx.destination);
+  const conv = ctx.createConvolver();
+  const len = Math.floor(ctx.sampleRate * 1.8), ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = ir.getChannelData(c), r = mulberry(91 + c); let lp = 0;
+    for (let i = 0; i < len; i++) { lp += 0.35 * ((r() * 2 - 1) - lp); d[i] = lp * Math.exp(-i / (ctx.sampleRate * 0.42)); }
+  }
+  conv.buffer = ir;
+  roomIn = ctx.createGain(); roomIn.gain.value = .6;
+  roomIn.connect(conv); conv.connect(master);
+}
+
+// The object's mode cloud: the material's main modes plus scattered extras.
+// Low Tone scatters the main modes, adds many more and shortens them, so the
+// hit reads as a knock on a thing rather than a note.
+function modeCloud(mat, tone, cloudRng) {
+  const M = MATERIALS[mat], spread = 1 - tone, out = [];
+  M.ratios.forEach((r, k) => out.push({ r: k === 0 ? r : r * Math.pow(2, (cloudRng() * 2 - 1) * spread * .45), a: M.amps[k] }));
+  const extra = Math.round(spread * 34), top = Math.log(M.ratios[M.ratios.length - 1] * 2.2);
+  for (let e = 0; e < extra; e++) out.push({ r: Math.exp(cloudRng() * top) * (.55 + .45 * cloudRng()), a: (.25 + .75 * cloudRng()) * spread });
+  return out;
+}
+
+// Two-pole resonators summed into `out`. Struck: each mode's impulse response
+// has amplitude m.a. Driven: unity gain at resonance, scaled by m.g.
+// With L and R, each mode also lands at its own place in the stereo field
+// (m.pl, m.pr): Spread.
+function resonate(out, input, inLen, modes, sr, driven, L, R) {
+  const n = out.length;
+  for (const m of modes) {
+    const pl = m.pl ?? Math.SQRT1_2, pr = m.pr ?? Math.SQRT1_2;
+    const w0 = 2 * Math.PI * m.f / sr, r = Math.exp(-1 / (m.tau * sr)), r2 = r * r;
+    const b = driven ? m.g * (1 - r) * 2 * Math.sin(w0) : m.a * Math.sin(w0);
+    let c = 2 * r * Math.cos(w0), y1 = 0, y2 = 0;
+    for (let i = 0; i < n; i++) {
+      if (m.drop !== 0) c = 2 * r * Math.cos(w0 * Math.max(.05, 1 + m.drop * 1.2 * Math.exp(-i / (sr * .045))));
+      const x = i < inLen ? input[i] : 0, y = b * x + c * y1 - r2 * y2;
+      y2 = y1; y1 = y; out[i] += y;
+      if (L) { L[i] += y * pl; R[i] += y * pr; }
+      if (i > inLen && Math.abs(y1) + Math.abs(y2) < 1e-7) break;
+    }
+  }
+}
+
+// Render one hit of pad p, variant v, velocity vel, as a stereo AudioBuffer.
+function renderHit(p, v, vel) {
+  const sr = ctx.sampleRate, idx = PADS.indexOf(p);
+  const rng = mulberry(1013 * (idx + 1) + 7919 * v);
+  const j = () => (rng() * 2 - 1) * p.hand;
+  const hard = Math.min(1, Math.max(0, p.s.hard + j() * .15 + (vel - .8) * .35));
+  const pos = Math.min(.5, Math.max(.02, p.s.pos + j() * .08));
+  const tune = Math.pow(2, j() * 14 / 1200);
+  const T = contactSeconds(p.s, hard), tone = p.a.tone;
+  const dampScale = .3 + 1.4 * p.a.damp;
+  const nyq = sr * .45;
+
+  // The object itself stays the same from hit to hit; only the hand varies.
+  const A = MATERIALS[p.a.mat];
+  const aModes = modeCloud(p.a.mat, tone, mulberry(4421 * (idx + 1))).map((c, k) => {
+    const f = p.a.pitch * tune * c.r;
+    const w = .25 + .75 * Math.abs(Math.sin((k + 1) * Math.PI * pos * (1 + .13 * (k % 3))));
+    const tau = p.a.decay * (.3 + .7 * tone) / (1 + A.damp * dampScale * Math.max(0, c.r - 1) * .5);
+    return { f, a: c.a * w, tau, drop: p.a.drop, att: 0, kind: 0 };
+  }).filter(m => m.f < nyq);
+  const B = MATERIALS[p.b.mat];
+  const bModes = p.b.couple > 0 ? modeCloud(p.b.mat, tone, mulberry(7703 * (idx + 1))).map(c => {
+    const f = p.a.pitch * tune * p.b.ratio * c.r;
+    const tau = Math.max(.02, p.a.decay * 1.4) * (.3 + .7 * tone) / (1 + B.damp * Math.max(0, c.r - 1) * .4);
+    return { f, a: p.b.couple * .6 * c.a, g: p.b.couple * c.a * 1.5, tau, drop: 0, att: .006, kind: 1 };
+  }).filter(m => m.f < nyq) : [];
+  const fb = (60 + (1 - p.body.size) * 260) * tune;
+  const bodyModes = p.body.hollow > 0 ? BODY_RATIOS.map((r, k) => ({
+    f: fb * r, a: p.body.hollow * .5 / (1 + k * .5), g: p.body.hollow * 1.2 / (1 + k * .5),
+    tau: .02 + .12 * p.body.hollow * p.body.size, drop: 0, att: .002, kind: 2 })) : [];
+  const modes = [...aModes, ...bModes, ...bodyModes];
+  modes.forEach(m => { m.tau *= decayAll; });
+  // Spread: every mode radiates from its own place, as a struck plate or
+  // a box does, seeded so the object keeps its image. Below 150 Hz the
+  // modes stay centred, so the low end stays mono-safe.
+  const spreadRng = mulberry(9001 * (idx + 1));
+  modes.forEach(m => {
+    const place = m.f < 150 ? 0 : (spreadRng() * 2 - 1) * p.width.spread;
+    const th = (place + 1) * Math.PI / 4;
+    m.pl = Math.cos(th); m.pr = Math.sin(th);
+  });
+
+  // The exciter: the contact pulse (its length sets brightness) plus grit,
+  // a noise burst that rubs the object rather than ringing it.
+  const pulseLen = Math.max(2, Math.round(T * sr));
+  const noiseLen = Math.round(sr * (p.s.type === "brush" ? .035 : Math.max(.002, T * 4)));
+  const E = Math.max(pulseLen, noiseLen), ex = new Float32Array(E);
+  let psum = 0; for (let i = 0; i < pulseLen; i++) psum += Math.sin(Math.PI * (i + .5) / pulseLen);
+  for (let i = 0; i < pulseLen; i++) ex[i] += Math.sin(Math.PI * (i + .5) / pulseLen) / psum;
+  const grit = (p.s.type === "brush" ? 1.2 : .1) + .9 * (1 - tone);
+  const noiseEff = p.s.type === "brush" ? noiseLen / 2 : noiseLen * .3;
+  for (let i = 0; i < noiseLen; i++) {
+    const e = p.s.type === "brush" ? Math.sin(Math.PI * i / noiseLen) : Math.exp(-i / (noiseLen * .3));
+    ex[i] += (rng() * 2 - 1) * e * grit / Math.sqrt(noiseEff);
+  }
+
+  const longest = Math.max(...modes.map(m => m.tau));
+  const n = Math.min(Math.floor(sr * 4), Math.floor(sr * (longest * 6.9 + .05)));
+  const sa = new Float32Array(n), sb = new Float32Array(n), sbody = new Float32Array(n);
+  const SL = new Float32Array(n), SR = new Float32Array(n);
+  resonate(sa, ex, E, aModes, sr, false, SL, SR);
+  resonate(sb, sa, n, bModes, sr, true, SL, SR);           // the coupled resonator is rung by the first
+  const both = new Float32Array(n); for (let i = 0; i < n; i++) both[i] = sa[i] + sb[i];
+  resonate(sbody, both, n, bodyModes, sr, true, SL, SR);   // and the body by both
+  const mono = new Float32Array(n);
+  for (let i = 0; i < n; i++) mono[i] = sa[i] + sb[i] + sbody[i];
+
+  // contact noise straight to the ear: a short high-passed burst; a brush drags for longer
+  const clickLen = Math.floor(sr * (p.s.type === "brush" ? .035 : T * 1.6 + .0008));
+  let prev = 0, peakA = 1e-9;
+  for (let i = 0; i < n; i++) peakA = Math.max(peakA, Math.abs(mono[i]));
+  for (let i = 0; i < clickLen && i < n; i++) {
+    const x = rng() * 2 - 1, hp = x - prev; prev = x;
+    const e = p.s.type === "brush" ? Math.sin(Math.PI * i / clickLen) : Math.exp(-i / (clickLen * .35));
+    mono[i] += hp * e * p.s.click * (.15 + .6 * hard) * .6 * peakA;
+  }
+  const pan = Math.max(-1, Math.min(1, p.out.pan + j() * .08)), th = (pan + 1) * Math.PI / 4;
+  const gl = Math.cos(th), gr = Math.sin(th);
+  // the body's air: decorrelated noise in each ear, so a hollow box sounds wide
+  const airTau = (.02 + .1 * p.body.hollow * p.body.size) * decayAll * sr, airAmp = p.body.hollow * .12 * peakA;
+  let al = 0, ar = 0; const lpk = .08 + .4 * (1 - p.body.size);
+  const Lr = new Float32Array(n), Rr = new Float32Array(n);
+  // The modes' own stereo image (SL, SR at equal power) plus the click,
+  // which stays where the stick lands; then the pad's pan; then Haas: the
+  // far ear hears it a few milliseconds late.
+  const haas = Math.round(p.width.haas / 1000 * sr);
+  for (let i = 0; i < n; i++) {
+    const e = Math.exp(-i / airTau) * airAmp;
+    al += lpk * ((rng() * 2 - 1) - al); ar += lpk * ((rng() * 2 - 1) - ar);
+    const clickPart = mono[i] - sa[i] - sb[i] - sbody[i];
+    const l = SL[i] * Math.SQRT2 + clickPart, r = SR[i] * Math.SQRT2 + clickPart;
+    Lr[i] = l * gl + al * e;
+    const ri = i + haas;
+    if (ri < n) Rr[ri] += r * gr;
+    Rr[i] += ar * e;
+  }
+  const fin = { ...p.fin, len: p.fin.len < FIN_OFF ? p.fin.len * Math.min(1, decayAll) : FIN_OFF };
+  const nOut = finish(Lr, sr, fin), _ = finish(Rr, sr, fin);
+  let peak = 1e-9; for (let i = 0; i < nOut; i++) peak = Math.max(peak, Math.abs(Lr[i]), Math.abs(Rr[i]));
+  const gain = .55 / peak * p.out.level * (.35 + .65 * vel);
+  const buf = ctx.createBuffer(2, nOut, sr), L = buf.getChannelData(0), R = buf.getChannelData(1);
+  const hold = 1 + Math.round(p.fin.crush * p.fin.crush * 14), steps = Math.pow(2, 16 - p.fin.crush * 11);
+  for (let i = 0; i < nOut; i++) {
+    const k = p.fin.crush > 0 ? i - (i % hold) : i;
+    L[i] = p.fin.crush > 0 ? Math.round(Lr[k] * gain * steps) / steps : Lr[i] * gain;
+    R[i] = p.fin.crush > 0 ? Math.round(Rr[k] * gain * steps) / steps : Rr[i] * gain;
+  }
+  return { buf, modes };
+}
+
+// Finish, in place: Lift (12 dB/oct high-pass), Snap (transient up, sustain
+// down), then Length (a hard gate with a 3 ms fade). Returns the frames kept.
+function finish(x, sr, fin) {
+  const a = Math.exp(-2 * Math.PI * fin.lift / sr);
+  let x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+  const keep = fin.len < FIN_OFF ? Math.min(x.length, Math.ceil((fin.len + .003) * sr)) : x.length;
+  const gate = fin.len * sr, fade = .003 * sr;
+  for (let i = 0; i < keep; i++) {
+    const h1 = a * (y1 + x[i] - x1); x1 = x[i]; y1 = h1;
+    const h2 = a * (y2 + h1 - x2); x2 = h1; y2 = h2;
+    const t = i / sr;
+    const snap = (1 + 2.5 * fin.snap * Math.exp(-t / .005)) * (1 - .45 * fin.snap * (1 - Math.exp(-t / .02)));
+    const g = i < gate ? 1 : Math.max(0, 1 - (i - gate) / fade);
+    x[i] = h2 * snap * g;
+  }
+  return keep;
+}
+
+function getHit(i, v, vel) {
+  const key = v + ":" + Math.round(vel * 4);
+  const c = cache[i];
+  let hit = c.find(h => h.key === key);
+  if (!hit) { hit = { key, ...renderHit(PADS[i], v, vel) }; c.push(hit); if (c.length > VARIANTS * 4) c.shift(); }
+  return hit;
+}
+
+// Motion: where this hit lands, from the pad's hit count (Ping-pong,
+// Scatter, seeded) or the song position (Orbit: once round every 2 bars).
+const padHits = Array(8).fill(0);
+const lastPlace = Array.from({ length: 8 }, () => ({ x: 0, t: -10 }));
+function motionPan(i, when) {
+  const w = PADS[i].width, n = padHits[i]++;
+  if (w.motion === "alternate") return (n % 2 ? 1 : -1) * w.depth;
+  if (w.motion === "random") return (mulberry(7717 * (i + 1) + 31 * n)() * 2 - 1) * w.depth;
+  if (w.motion === "orbit") {
+    const barsLong = 2, period = barsLong * 16 * sixteenth();
+    return Math.sin(2 * Math.PI * ((when - orbitZero) / period)) * w.depth;
+  }
+  return 0;
+}
+let orbitZero = 0;
+function play(i, when, vel, v) {
+  const p = PADS[i];
+  const hit = getHit(i, p.hand > 0 ? v % VARIANTS : 0, vel);
+  const src = ctx.createBufferSource(); src.buffer = hit.buf;
+  const g = ctx.createGain(); g.gain.value = 1;
+  const move = motionPan(i, when);
+  const panner = ctx.createStereoPanner(); panner.pan.value = Math.max(-1, Math.min(1, move));
+  const send = ctx.createGain(); send.gain.value = p.out.room;
+  src.connect(panner); panner.connect(g); g.connect(master); g.connect(send); send.connect(roomIn);
+  src.start(when);
+  const delayMs = Math.max(0, (when - ctx.currentTime) * 1000);
+  setTimeout(() => {
+    lastHit[i] = { t: performance.now(), modes: hit.modes }; flash(i);
+    lastPlace[i] = { x: Math.max(-1, Math.min(1, p.out.pan + move)), t: performance.now() };
+  }, delayMs);
+}
+
+function kickAt(when) {
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.frequency.setValueAtTime(140, when); o.frequency.exponentialRampToValueAtTime(48, when + .09);
+  g.gain.setValueAtTime(.0001, when); g.gain.exponentialRampToValueAtTime(.7, when + .003); g.gain.exponentialRampToValueAtTime(.0001, when + .38);
+  o.connect(g); g.connect(master); o.start(when); o.stop(when + .4);
+}
+
+// ---------- sequencer (demo only) ----------
+let playing = false, step = 0, nextTime = 0, timer = null, bar = 0, kickOn = true;
+const bpmEl = document.getElementById("bpm"), swingEl = document.getElementById("swing");
+function sixteenth() { return 60 / Number(bpmEl.value) / 4; }
+function schedule() {
+  while (nextTime < ctx.currentTime + .14) {
+    const s = step % 16, swing = (s % 2 === 1) ? sixteenth() * Number(swingEl.value) / 100 * .66 : 0;
+    const t = nextTime + swing;
+    if (kickOn && s % 4 === 0) kickAt(t);
+    const current = bars[bar % bars.length];
+    current.forEach((row, i) => {
+      const c = row[s], seed = bar * 16 + s + i * 131;
+      if (c === ".") return;
+      if (c === "?" && mulberry(seed)() < .5) return;
+      const vel = c === "X" ? 1 : c === "r" ? .75 : .68;
+      play(i, t, vel, seed);
+      if (c === "r") play(i, t + sixteenth() / 2, .55, seed + 1);
+    });
+    const shown = s, shownBar = bar % bars.length;
+    setTimeout(() => markStep(shown, shownBar), Math.max(0, (t - ctx.currentTime) * 1000));
+    nextTime += sixteenth(); step++;
+    if (step % 16 === 0) {
+      bar++;
+      // Evolve: every four bars a light mutation, so a loop keeps moving.
+      if (evolveOn && bar % 4 === 0) { mutate(.06); }
+    }
+  }
+}
+let liveBar = -1;
+function markStep(s, b) {
+  document.querySelectorAll(".cell.now").forEach(c => c.classList.remove("now"));
+  if (liveBar !== b) { liveBar = b; document.querySelectorAll("#barTabs button").forEach((x, k) => x.classList.toggle("live", playing && k === b)); }
+  if (playing && b === viewBar) document.querySelectorAll(`.cell[data-s="${s}"]`).forEach(c => c.classList.add("now"));
+}
+
+// ---------- UI ----------
+const padsEl = document.getElementById("pads"), gridEl = document.getElementById("grid");
+const NOTE_NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+function noteName(hz) { const m = Math.round(69 + 12 * Math.log2(hz / 440)); return NOTE_NAMES[(m % 12 + 12) % 12] + (Math.floor(m / 12) - 1); }
+
+function buildPads() {
+  padsEl.innerHTML = "";
+  PADS.forEach((p, i) => {
+    const b = document.createElement("button");
+    b.className = "pad"; b.id = "pad" + i; b.setAttribute("aria-pressed", String(i === selected));
+    b.innerHTML = `<span class="flash"></span><b>${p.name}</b><small>${STRIKERS[p.s.type]} · ${MATERIALS[p.a.mat].name}</small><em>${PAD_KEYS[i]}</em>`;
+    b.addEventListener("click", () => { ensureAudio(); ctx.resume(); select(i); play(i, ctx.currentTime + .01, .85, (Math.random() * 1e6) | 0); });
+    padsEl.appendChild(b);
+  });
+}
+function flash(i) {
+  const f = document.querySelector(`#pad${i} .flash`); if (!f) return;
+  f.animate([{ opacity: .55 }, { opacity: 0 }], { duration: 260, easing: "ease-out" });
+}
+function buildGrid() {
+  gridEl.innerHTML = "";
+  viewBar = Math.min(viewBar, bars.length - 1);
+  const shown = bars[viewBar];
+  PADS.forEach((p, i) => {
+    const lane = document.createElement("div"); lane.className = "lane";
+    const lock = document.createElement("button"); lock.className = "lock"; lock.textContent = locked[i] ? "🔒" : "○";
+    lock.setAttribute("aria-pressed", String(locked[i])); lock.setAttribute("aria-label", `Keep ${p.name} when rolling`);
+    lock.addEventListener("click", () => { locked[i] = !locked[i]; buildGrid(); });
+    const name = document.createElement("span"); name.textContent = p.name; if (i === selected) name.className = "sel";
+    name.addEventListener("click", () => select(i));
+    lane.append(lock, name);
+    for (let s = 0; s < 16; s++) {
+      const c = document.createElement("button");
+      c.className = "cell" + (s % 4 === 0 ? " beat" : ""); c.dataset.s = s; c.dataset.v = shown[i][s];
+      c.setAttribute("aria-label", `${p.name} step ${s + 1}`);
+      c.addEventListener("click", () => {
+        const next = CYCLE[(CYCLE.indexOf(shown[i][s]) + 1) % CYCLE.length];
+        shown[i][s] = next; c.dataset.v = next;
+      });
+      lane.appendChild(c);
+    }
+    gridEl.appendChild(lane);
+  });
+  const tabs = document.getElementById("barTabs"); tabs.innerHTML = "";
+  bars.forEach((_, k) => {
+    const b = document.createElement("button"); b.textContent = String(k + 1);
+    b.setAttribute("aria-pressed", String(k === viewBar)); if (playing && k === liveBar) b.classList.add("live");
+    b.addEventListener("click", () => { viewBar = k; buildGrid(); });
+    tabs.appendChild(b);
+  });
+}
+
+function select(i) {
+  selected = i;
+  document.querySelectorAll(".pad").forEach((b, k) => b.setAttribute("aria-pressed", String(k === i)));
+  document.querySelectorAll(".lane > span").forEach((s, k) => s.className = k === i ? "sel" : "");
+  buildControls();
+}
+
+const LOG = (lo, hi) => ({ to: x => lo * Math.pow(hi / lo, x), from: v => Math.log(v / lo) / Math.log(hi / lo) });
+const LIN = (lo, hi) => ({ to: x => lo + (hi - lo) * x, from: v => (v - lo) / (hi - lo) });
+const pct = v => Math.round(v * 100) + "%";
+
+function segment(options, current, onPick, disabled = []) {
+  const seg = document.createElement("div"); seg.className = "seg";
+  Object.entries(options).forEach(([k, label]) => {
+    const b = document.createElement("button"); b.textContent = label; b.setAttribute("aria-pressed", String(k === current));
+    if (disabled.includes(k)) b.disabled = true;
+    b.addEventListener("click", () => { seg.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", "false")); b.setAttribute("aria-pressed", "true"); onPick(k); });
+    seg.appendChild(b);
+  });
+  return seg;
+}
+function slider(id, label, obj, key, map, fmt) {
+  const row = document.createElement("label"); row.className = "row"; row.htmlFor = id;
+  const out = document.createElement("output");
+  const input = document.createElement("input"); input.type = "range"; input.id = id; input.min = 0; input.max = 1000;
+  input.value = Math.round(map.from(obj[key]) * 1000);
+  out.textContent = fmt(obj[key]);
+  input.addEventListener("input", () => { obj[key] = map.to(input.value / 1000); if (key === "len" && input.value > 990) obj[key] = FIN_OFF; out.textContent = fmt(obj[key]); changed(); });
+  input.addEventListener("change", () => audition());
+  const span = document.createElement("span"); span.textContent = label;
+  row.append(span, input, out); return row;
+}
+function stage(cls, title) {
+  const s = document.createElement("div"); s.className = "stage " + cls;
+  const h = document.createElement("h3"); h.innerHTML = `<i></i>${title}`; s.appendChild(h); return s;
+}
+function changed() { cache[selected] = []; refreshPadCard(); }
+function refreshPadCard() {
+  const p = PADS[selected], b = document.querySelector(`#pad${selected} small`);
+  if (b) b.textContent = `${STRIKERS[p.s.type]} · ${MATERIALS[p.a.mat].name}`;
+}
+function audition() { ensureAudio(); ctx.resume(); play(selected, ctx.currentTime + .01, .85, (Math.random() * 1e6) | 0); }
+
+function buildControls() {
+  const p = PADS[selected], id = k => `p${selected}-${k}`;
+  document.getElementById("padName").textContent = p.name;
+  document.getElementById("padDesc").textContent = p.desc;
+  const chain = document.getElementById("chain"), outrow = document.getElementById("outrow");
+  chain.innerHTML = ""; outrow.innerHTML = "";
+
+  const st = stage("striker", "Striker");
+  st.append(segment({ ...STRIKERS, own: "Recording" }, p.s.type, k => { p.s.type = k; changed(); audition(); }, ["own"]),
+    slider(id("hard"), "Hardness", p.s, "hard", LIN(0, 1), pct),
+    slider(id("pos"), "Position", p.s, "pos", LIN(.02, .5), v => v < .1 ? "edge" : v > .42 ? "centre" : pct(v * 2)),
+    slider(id("click"), "Click", p.s, "click", LIN(0, 1), pct));
+  const n1 = document.createElement("p"); n1.className = "note"; n1.textContent = "Recording: strike with your own sound from Crate. Not in the first version.";
+  st.appendChild(n1);
+
+  const ra = stage("resA", "Resonator");
+  ra.append(segment(Object.fromEntries(MAT_KEYS.map(k => [k, MATERIALS[k].name])), p.a.mat, k => { p.a.mat = k; changed(); audition(); }),
+    slider(id("pitch"), "Pitch", p.a, "pitch", LOG(30, 4000), v => `${v < 100 ? v.toFixed(1) : Math.round(v)} Hz ${noteName(v)}`),
+    slider(id("tone"), "Tone", p.a, "tone", LIN(0, 1), v => v < .15 ? "thing" : v > .85 ? "note" : pct(v)),
+    slider(id("decay"), "Decay", p.a, "decay", LOG(.01, 3), v => v < 1 ? Math.round(v * 1000) + " ms" : v.toFixed(2) + " s"),
+    slider(id("damp"), "Damping", p.a, "damp", LIN(0, 1), pct),
+    slider(id("drop"), "Bend", p.a, "drop", LIN(-1, 1), v => Math.abs(v) < .02 ? "none" : v > 0 ? "falls " + pct(v) : "rises " + pct(-v)));
+
+  const rb = stage("resB", "Coupled");
+  rb.append(segment(Object.fromEntries(MAT_KEYS.map(k => [k, MATERIALS[k].name])), p.b.mat, k => { p.b.mat = k; changed(); audition(); }),
+    slider(id("ratio"), "Tuning", p.b, "ratio", LOG(.25, 4), v => "×" + v.toFixed(3)),
+    slider(id("couple"), "Coupling", p.b, "couple", LIN(0, 1), v => v === 0 ? "off" : pct(v)));
+
+  const bd = stage("body", "Body");
+  bd.append(slider(id("size"), "Size", p.body, "size", LIN(0, 1), v => v < .2 ? "jar" : v < .5 ? "box" : v < .8 ? "crate" : "cupboard"),
+    slider(id("hollow"), "Hollow", p.body, "hollow", LIN(0, 1), pct));
+  const n2 = document.createElement("p"); n2.className = "note"; n2.textContent = "The box around the resonator: its low modes and the air inside it.";
+  bd.appendChild(n2);
+  chain.append(st, ra, rb, bd);
+
+  const hd = stage("hand", "Hand");
+  hd.append(slider(id("hand"), "Variation", p, "hand", LIN(0, 1), v => v === 0 ? "machine" : pct(v)));
+  const n3 = document.createElement("p"); n3.className = "note"; n3.textContent = "Each hit lands a little differently in force, place and tune. The variation is seeded, so an export matches playback.";
+  hd.appendChild(n3);
+  const ou = stage("out", "Output");
+  ou.append(slider(id("level"), "Level", p.out, "level", LIN(0, 1), pct),
+    slider(id("pan"), "Pan", p.out, "pan", LIN(-1, 1), v => Math.abs(v) < .02 ? "C" : (v < 0 ? "L" : "R") + Math.round(Math.abs(v) * 100)),
+    slider(id("room"), "Room", p.out, "room", LIN(0, 1), pct));
+  const fn = stage("fin", "Finish");
+  fn.append(slider(id("snap"), "Snap", p.fin, "snap", LIN(0, 1), pct),
+    slider(id("len"), "Length", p.fin, "len", LOG(.015, FIN_OFF), v => v >= FIN_OFF * .98 ? "full" : Math.round(v * 1000) + " ms"),
+    slider(id("lift"), "Lift", p.fin, "lift", LOG(20, 6000), v => v < 21 ? "off" : Math.round(v) + " Hz"),
+    slider(id("crush"), "Crush", p.fin, "crush", LIN(0, 1), v => v === 0 ? "off" : pct(v)));
+  const sp = stage("space", "Width");
+  sp.append(slider(id("spread"), "Spread", p.width, "spread", LIN(0, 1), v => v === 0 ? "mono" : pct(v)),
+    segment(MOTIONS, p.width.motion, k => { p.width.motion = k; padHits[selected] = 0; audition(); }),
+    slider(id("depth"), "Motion", p.width, "depth", LIN(0, 1), v => v === 0 ? "still" : pct(v)),
+    slider(id("haas"), "Haas", p.width, "haas", LIN(0, 20), v => v < .5 ? "off" : v.toFixed(1) + " ms"));
+  const n4 = document.createElement("p"); n4.className = "note"; n4.textContent = "Spread places each ringing mode in the field (lows stay centred). Motion moves each hit: ping-pong, scatter, or an orbit every two bars. Haas delays the far ear.";
+  sp.appendChild(n4);
+  outrow.append(fn, sp, hd, ou);
+}
+
+// ---------- ringing modes view ----------
+const cv = document.getElementById("modes"), g2 = cv.getContext("2d");
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function draw() {
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  g2.setTransform(dpr, 0, 0, dpr, 0, 0); g2.clearRect(0, 0, w, h);
+  const lo = Math.log(30), hi = Math.log(16000), x = f => 10 + (w - 20) * (Math.log(f) - lo) / (hi - lo);
+  const base = h - 22, top = 48;
+  g2.font = "10px JetBrains Mono, monospace"; g2.fillStyle = css("--faint"); g2.strokeStyle = css("--line");
+  [50, 100, 200, 500, 1000, 2000, 5000, 10000].forEach(f => {
+    const X = x(f); g2.beginPath(); g2.moveTo(X, top); g2.lineTo(X, base); g2.stroke();
+    g2.fillText(f >= 1000 ? f / 1000 + "k" : String(f), X - 8, h - 7);
+  });
+  const hit = lastHit[selected], age = (performance.now() - hit.t) / 1000;
+  const colors = [css("--resA"), css("--resB"), css("--body")];
+  const peak = Math.max(1e-9, ...hit.modes.map(m => m.a));
+  // resting outline of the selected pad's modes, so the view reads before the first hit
+  const p = PADS[selected];
+  if (!hit.modes.length || age > 6) {
+    MATERIALS[p.a.mat].ratios.forEach((r, k) => {
+      const f = p.a.pitch * r; if (f > 16000) return;
+      const H = (base - top) * .5 * MATERIALS[p.a.mat].amps[k];
+      g2.fillStyle = colors[0]; g2.globalAlpha = .28; g2.fillRect(x(f) - 1.5, base - H, 3, H);
+    });
+    g2.globalAlpha = 1;
+  }
+  hit.modes.forEach(m => {
+    const lvl = (m.a / peak) * Math.exp(-age / m.tau) * (m.att > 0 ? 1 - Math.exp(-age / m.att) : 1);
+    if (lvl < .002 || m.f > 16000) return;
+    const H = (base - top) * Math.min(1, Math.pow(lvl, .45));
+    g2.fillStyle = colors[m.kind]; g2.globalAlpha = .9; g2.fillRect(x(m.f) - 1.5, base - H, 3, H);
+    g2.globalAlpha = .25; g2.beginPath(); g2.arc(x(m.f), base - H, 4 + 6 * lvl, 0, Math.PI * 2); g2.fill();
+  });
+  g2.globalAlpha = 1;
+  // Where each pad landed, L to R, fading over a second.
+  const sy = 34, sx = v => 10 + (w - 20) * (v + 1) / 2;
+  g2.strokeStyle = css("--line"); g2.beginPath(); g2.moveTo(10, sy); g2.lineTo(w - 10, sy); g2.stroke();
+  g2.fillStyle = css("--faint"); g2.fillText("L", 12, sy - 4); g2.fillText("R", w - 18, sy - 4);
+  lastPlace.forEach((pl, i) => {
+    const a = 1 - (performance.now() - pl.t) / 900; if (a <= 0) return;
+    g2.globalAlpha = a; g2.fillStyle = i === selected ? css("--strike") : css("--ink");
+    g2.beginPath(); g2.arc(sx(pl.x), sy, 3 + 3 * a, 0, Math.PI * 2); g2.fill();
+  });
+  g2.globalAlpha = 1;
+  requestAnimationFrame(draw);
+}
+
+// ---------- wiring ----------
+document.getElementById("play").addEventListener("click", e => {
+  ensureAudio(); ctx.resume();
+  playing = !playing; e.currentTarget.setAttribute("aria-pressed", String(playing));
+  e.currentTarget.textContent = playing ? "■ Stop" : "▶ Play";
+  if (playing) { step = 0; bar = 0; nextTime = ctx.currentTime + .06; orbitZero = nextTime; timer = setInterval(schedule, 25); schedule(); }
+  else { clearInterval(timer); markStep(-1, -1); }
+});
+
+document.querySelectorAll(".kitbtn").forEach(b => b.addEventListener("click", () => {
+  kit = b.dataset.kit; PADS = KITS[kit].pads;
+  document.querySelectorAll(".kitbtn").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  cache.forEach(c => c.length = 0); lastHit.forEach(h => { h.t = -10; h.modes = []; });
+  buildPads(); buildLibrary(); loadLoop(LIBRARY()[0]); select(Math.min(selected, PADS.length - 1));
+}));
+document.getElementById("kick").addEventListener("click", e => { kickOn = !kickOn; e.currentTarget.setAttribute("aria-pressed", String(kickOn)); });
+document.getElementById("audition").addEventListener("click", audition);
+const decayEl = document.getElementById("decayAll");
+decayEl.value = Math.round(DECAY_RANGE.from(decayAll) * 1000);
+decayEl.addEventListener("input", () => {
+  decayAll = DECAY_RANGE.to(decayEl.value / 1000);
+  document.getElementById("decayAllOut").textContent = Math.round(decayAll * 100) + "%";
+  cache.forEach(c => c.length = 0);
+});
+decayEl.addEventListener("change", audition);
+bpmEl.addEventListener("input", () => document.getElementById("bpmOut").textContent = bpmEl.value);
+swingEl.addEventListener("input", () => document.getElementById("swingOut").textContent = swingEl.value + "%");
+
+// ---------- patterns: generator and library ----------
+// Each pad's role in a loop comes from its sound: low thuds, mid knocks,
+// high ticks and shakers.
+function role(p) {
+  if (p.s.type === "brush" || p.a.pitch > 1800) return "high";
+  return p.a.pitch < 220 ? "low" : "mid";
+}
+const r16 = a => a.length === 4 ? [...a, ...a, ...a, ...a] : a;
+// How likely each sixteenth is, per style and role.
+const STYLES = {
+  top:      { name: "Top", low: r16([.03, .02, .03, .02]), mid: [0, 0, .25, .1, 0, .1, .55, .15, 0, .05, .35, .2, 0, .15, .6, .2], high: r16([.15, .35, .85, .35]) },
+  under:    { name: "Underbelly", low: [.15, .25, .45, .55, .05, .5, .35, .6, .1, .3, .55, .45, .05, .5, .4, .65], mid: r16([0, .2, .12, .3]), high: r16([.04, .04, .06, .04]) },
+  rolling:  { name: "Rolling", low: r16([.2, .3, .25, .35]), mid: r16([.35, .45, .4, .5]), high: r16([.8, .7, .85, .7]) },
+  broken:   { name: "Broken", euclid: true },
+  skippy:   { name: "Skippy", low: [.1, 0, .3, .5, 0, .2, .1, .55, 0, .1, .35, .5, 0, .25, .15, .6], mid: [0, .1, .2, .6, .1, 0, .4, .5, 0, .15, .2, .55, .1, 0, .45, .4], high: r16([.3, .15, .6, .5]) },
+};
+const gen = { style: "top", density: .5, sync: .4, ghosts: .35, ratchets: .2, chance: .15, variation: .4, bars: 2, seed: 1 };
+function euclid(k, n, rot) {
+  const out = []; for (let i = 0; i < n; i++) out.push(((i * k) % n) < k ? 1 : 0);
+  return out.map((_, i) => out[(i + rot) % n]);
+}
+function generateBar(g, rng) {
+  const rows = PADS.map(() => Array(16).fill("."));
+  // How many lanes play: a sparse loop leaves room.
+  const order = PADS.map((_, i) => i).sort(() => rng() - .5);
+  const playingCount = Math.min(8, 3 + Math.round(g.density * 5));
+  const active = new Set(order.slice(0, playingCount));
+  PADS.forEach((p, i) => {
+    if (!active.has(i)) return;
+    const r = role(p), st = STYLES[g.style];
+    let weights;
+    if (st.euclid) {
+      const k = r === "high" ? [5, 7, 9][Math.floor(rng() * 3)] : r === "mid" ? [3, 5][Math.floor(rng() * 2)] : [3, 4][Math.floor(rng() * 2)];
+      weights = euclid(k, 16, Math.floor(rng() * 16)).map(x => x ? .95 : .03);
+    } else weights = st[r];
+    for (let s = 0; s < 16; s++) {
+      const off = s % 2 === 1 || s % 4 === 2;
+      const w = weights[s] * (1 + g.sync * (off ? .8 : -.6));
+      const pr = Math.min(.97, Math.max(0, w * (.35 + 1.3 * g.density)));
+      if (rng() < pr) {
+        rows[i][s] = weights[s] > .5 && rng() < .45 ? "X" : "x";
+        if (r === "high" && rng() < g.ratchets * .5) rows[i][s] = "r";
+        else if (rng() < g.chance * .6) rows[i][s] = "?";
+      } else if (rng() < g.ghosts * .18 && r !== "low") rows[i][s] = "x";
+    }
+  });
+  return rows;
+}
+function generate(g) {
+  const rng = mulberry(g.seed * 2654435761 % 4294967296);
+  const first = generateBar(g, rng);
+  const out = [first];
+  for (let b = 1; b < g.bars; b++) {
+    // Each later bar re-rolls some cells of the first; the last can fill.
+    const next = generateBar({ ...g, density: Math.min(1, g.density + (b === g.bars - 1 ? g.variation * .3 : 0)) }, rng);
+    out.push(first.map((row, i) => row.map((c, s) => {
+      const fill = b === g.bars - 1 && s >= 12 && g.variation > .5;
+      return rng() < g.variation * (fill ? .9 : .35) ? next[i][s] : c;
+    })));
+  }
+  return out;
+}
+// Locked lanes keep what they had, bar for bar.
+function keepLocked(fresh) {
+  return fresh.map((bar, b) => bar.map((row, i) => locked[i] ? [...bars[b % bars.length][i]] : row));
+}
+function mutate(amount) {
+  const rng = mulberry((Date.now() & 0xffff) + 17);
+  bars = bars.map(bar => bar.map((row, i) => locked[i] ? row : row.map(c => {
+    if (rng() >= amount) return c;
+    if (c !== ".") return rng() < .5 ? "." : c === "x" ? "X" : "x";
+    return rng() < .5 ? "x" : rng() < .3 ? "?" : ".";
+  })));
+  buildGrid();
+}
+function roll(newSeed) {
+  if (newSeed) gen.seed = 1 + Math.floor(Math.random() * 9999);
+  document.getElementById("seedOut").textContent = String(gen.seed);
+  bars = keepLocked(generate(gen));
+  buildGrid();
+}
+
+const NAMES = {
+  top: ["Tin Roof", "Night Bus", "Hi-Vis", "Glass Stairs", "Pocket Change", "Rain Gutter"],
+  under: ["Boiler Room", "Low Ceiling", "Basement Pipes", "Sub Rattle", "Engine Hum", "Cellar Door"],
+  rolling: ["Conveyor", "Loose Gravel", "Freight", "Rolling Pin", "Spin Cycle", "Ticker Tape"],
+  broken: ["Crooked Steps", "Off Axis", "Wonky Table", "Fault Line", "Bent Fork", "Odd Socks"],
+  skippy: ["Hopscotch", "Skip Rope", "Pebble Skim", "Stutter", "Tap Shoe", "Pogo"],
+};
+// The library: the kit's own two loops, then thirty from the generator
+// with fixed seeds, so every one is the same every time.
+function LIBRARY() {
+  const kitLoops = [
+    { name: KITS[kit].name + " top", role: "kit", fixed: [toBar(KITS[kit].patterns.top)] },
+    { name: KITS[kit].name + " underbelly", role: "kit", fixed: [toBar(KITS[kit].patterns.under)] },
+  ];
+  const made = [];
+  Object.entries(NAMES).forEach(([style, names], si) => names.forEach((name, k) => {
+    made.push({ name, role: style, gen: { style, density: .3 + .1 * k, sync: .2 + .12 * ((k + si) % 5), ghosts: .2 + .1 * (k % 3), ratchets: .1 + .08 * (k % 4), chance: .1 * (k % 3), variation: .2 + .15 * (k % 4), bars: k % 3 === 2 ? 4 : 2, seed: 101 + 37 * si + 11 * k } });
+  }));
+  return [...kitLoops, ...made];
+}
+let libRole = "all", libPick = null;
+function loadLoop(entry) {
+  libPick = entry.name;
+  bars = entry.fixed ? entry.fixed.map(b => b.map(r => [...r])) : generate(entry.gen);
+  if (entry.gen) { Object.assign(gen, entry.gen); document.getElementById("seedOut").textContent = String(gen.seed); buildGen(); }
+  viewBar = 0;
+  document.querySelectorAll(".loop").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.name === entry.name)));
+  buildGrid();
+}
+function drawThumb(cvs, bar) {
+  const g = cvs.getContext("2d"), w = cvs.width = 108, h = cvs.height = 32;
+  g.fillStyle = css("--strike");
+  bar.forEach((row, i) => row.forEach((c, s) => { if (c !== ".") { g.globalAlpha = c === "X" ? 1 : .55; g.fillRect(s * w / 16 + 1, i * h / 8 + 1, w / 16 - 2, h / 8 - 1); } }));
+}
+function buildLibrary() {
+  const roles = document.getElementById("roles"); roles.innerHTML = "";
+  [["all", "All"], ["kit", "This kit"], ...Object.entries(STYLES).map(([k, v]) => [k, v.name])].forEach(([k, label]) => {
+    const b = document.createElement("button"); b.textContent = label; b.setAttribute("aria-pressed", String(k === libRole));
+    b.addEventListener("click", () => { libRole = k; buildLibrary(); });
+    roles.appendChild(b);
+  });
+  const list = document.getElementById("loops"); list.innerHTML = "";
+  LIBRARY().filter(e => libRole === "all" || e.role === libRole).forEach(e => {
+    const b = document.createElement("button"); b.className = "loop"; b.dataset.name = e.name;
+    b.setAttribute("aria-pressed", String(e.name === libPick));
+    const label = document.createElement("span"); label.textContent = e.name;
+    const thumb = document.createElement("canvas");
+    const meta = document.createElement("small");
+    const shape = e.fixed || generate(e.gen);
+    meta.textContent = (e.role === "kit" ? "kit" : STYLES[e.role].name.toLowerCase()) + " · " + shape.length + (shape.length > 1 ? " bars" : " bar");
+    b.append(label, thumb, meta);
+    b.addEventListener("click", () => { ensureAudio(); ctx.resume(); loadLoop(e); });
+    list.appendChild(b);
+    drawThumb(thumb, shape[0]);
+  });
+}
+function buildGen() {
+  const styles = document.getElementById("styles"); styles.innerHTML = "";
+  Object.entries(STYLES).forEach(([k, v]) => {
+    const b = document.createElement("button"); b.textContent = v.name; b.setAttribute("aria-pressed", String(k === gen.style));
+    b.addEventListener("click", () => { gen.style = k; buildGen(); roll(false); });
+    styles.appendChild(b);
+  });
+  const rows = document.getElementById("genrows"); rows.innerHTML = "";
+  // Moving a slider reshapes the same roll: the seed stays.
+  const genSlider = (key, label, fmt) => {
+    const row = document.createElement("label"); row.className = "row"; row.htmlFor = "gen-" + key;
+    const input = document.createElement("input"); input.type = "range"; input.id = "gen-" + key; input.min = 0; input.max = 1000; input.value = Math.round(gen[key] * 1000);
+    const out = document.createElement("output"); out.textContent = fmt(gen[key]);
+    input.addEventListener("input", () => { gen[key] = input.value / 1000; out.textContent = fmt(gen[key]); roll(false); });
+    const span = document.createElement("span"); span.textContent = label;
+    row.append(span, input, out); rows.appendChild(row);
+  };
+  genSlider("density", "Density", pct);
+  genSlider("sync", "Syncopate", pct);
+  genSlider("ghosts", "Ghosts", pct);
+  genSlider("ratchets", "Ratchets", pct);
+  genSlider("chance", "Chance", pct);
+  genSlider("variation", "Variation", pct);
+  const barRow = document.createElement("div"); barRow.className = "row";
+  const span = document.createElement("span"); span.textContent = "Bars";
+  const seg = segment({ 1: "1", 2: "2", 4: "4", 8: "8" }, String(gen.bars), k => { gen.bars = Number(k); roll(false); });
+  barRow.append(span, seg); rows.appendChild(barRow);
+}
+let evolveOn = false;
+document.getElementById("evolve").addEventListener("click", e => { evolveOn = !evolveOn; e.currentTarget.setAttribute("aria-pressed", String(evolveOn)); });
+document.getElementById("roll").addEventListener("click", () => roll(true));
+document.getElementById("mutate").addEventListener("click", () => mutate(.15));
+const showTab = lib => {
+  document.getElementById("tabLib").setAttribute("aria-pressed", String(lib));
+  document.getElementById("tabGen").setAttribute("aria-pressed", String(!lib));
+  document.getElementById("libPane").hidden = !lib; document.getElementById("genPane").hidden = lib;
+};
+document.getElementById("tabLib").addEventListener("click", () => showTab(true));
+document.getElementById("tabGen").addEventListener("click", () => showTab(false));
+
+buildPads(); buildLibrary(); buildGen(); loadLoop(LIBRARY()[0]); buildControls(); requestAnimationFrame(draw);
+</script>

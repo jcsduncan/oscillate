@@ -1,0 +1,450 @@
+<title>Nova Redesign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#05070c; --win:#0b0e15; --rail:#080a10; --card:#11151f; --card2:#161b28; --well:#06080d;
+  --line:#1d2330; --line2:#2a3242; --text:#e8ecf3; --dim:#8b93a6; --faint:#566074;
+  --cy:#46d6ff; --vi:#a98bff; --am:#f5b14c; --pk:#ff6fb5; --gr:#5fe3a1; --red:#ff6b7a;
+  --cySoft:rgba(70,214,255,.13); --viSoft:rgba(169,139,255,.15);
+  --mono:"JetBrains Mono",ui-monospace,monospace; --sans:Inter,system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);margin:0;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 60px}
+.wrap{max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+header.intro{display:flex;flex-wrap:wrap;gap:18px 40px;align-items:flex-end;justify-content:space-between}
+header.intro h1{font-weight:800;letter-spacing:-.02em;font-size:30px;margin:0;text-wrap:balance}
+header.intro h1 span{background:linear-gradient(90deg,var(--cy),var(--vi) 60%,var(--pk));-webkit-background-clip:text;background-clip:text;color:transparent}
+header.intro p{color:var(--dim);margin:6px 0 0;max-width:62ch;line-height:1.5}
+.legend{display:flex;flex-wrap:wrap;gap:8px}
+.legend b{font:600 11px var(--mono);letter-spacing:.06em;padding:6px 10px;border:1px solid var(--line2);border-radius:20px;color:var(--dim);cursor:pointer;background:var(--card)}
+.legend b i{font-style:normal;color:var(--cy);margin-right:6px}
+.legend b:hover{color:var(--text);border-color:var(--cy)}
+
+/* ---------- stage + resizable window ---------- */
+.stage{position:relative;border:1px dashed var(--line);border-radius:12px;padding:14px;overflow:auto;min-height:420px;
+  background:radial-gradient(1200px 400px at 50% -10%,rgba(70,214,255,.05),transparent),var(--bg)}
+.stage .hint{position:absolute;top:-10px;left:16px;font:600 10px var(--mono);letter-spacing:.1em;color:var(--faint);background:var(--bg);padding:0 8px}
+.nova{--s:1;font-size:calc(13px*var(--s));position:relative;width:1180px;max-width:none;min-width:520px;
+  background:var(--win);border:1px solid var(--line2);border-radius:.9em;overflow:hidden;
+  box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 1px rgba(70,214,255,.04) inset;display:flex;flex-direction:column}
+.grip{position:absolute;right:0;bottom:0;width:22px;height:22px;cursor:nwse-resize;z-index:30;
+  background:linear-gradient(135deg,transparent 50%,var(--line2) 50%,var(--line2) 56%,transparent 56%,transparent 66%,var(--line2) 66%,var(--line2) 72%,transparent 72%)}
+.grip.flash{animation:flash 1.2s ease 3}
+@keyframes flash{50%{background-color:rgba(70,214,255,.4)}}
+
+/* top bar */
+.bar{display:flex;align-items:center;gap:.9em;padding:.6em .9em;border-bottom:1px solid var(--line);background:linear-gradient(#0e121b,#0a0d14)}
+.word{font-weight:800;letter-spacing:.32em;font-size:1.05em;background:linear-gradient(90deg,var(--cy),var(--vi));-webkit-background-clip:text;background-clip:text;color:transparent}
+.pbox{display:flex;align-items:center;gap:.2em;background:var(--well);border:1px solid var(--line2);border-radius:.5em;padding:.15em;min-width:0;flex:0 1 22em}
+.pbox button{all:unset;cursor:pointer;color:var(--dim);padding:.3em .55em;border-radius:.35em;font-size:.9em}
+.pbox button:hover{background:var(--card2);color:var(--text)}
+.pname{flex:1;min-width:0;cursor:pointer;padding:.25em .5em;border-radius:.35em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pname:hover{background:var(--card2)}
+.pname small{color:var(--faint);font:500 .78em var(--mono);margin-left:.5em;letter-spacing:.06em}
+.tbtn{all:unset;cursor:pointer;font:600 .78em var(--mono);letter-spacing:.08em;padding:.55em .8em;border-radius:.45em;border:1px solid var(--line2);color:var(--dim);white-space:nowrap}
+.tbtn:hover{color:var(--text)}
+.tbtn.on{color:var(--bg);background:var(--cy);border-color:var(--cy)}
+.tbtn.star.on{background:linear-gradient(90deg,var(--cy),var(--vi),var(--pk));border-color:transparent}
+.spacer{flex:1}
+.keys{display:flex;align-items:center;gap:.45em;font:600 .74em var(--mono);letter-spacing:.06em;color:var(--gr);padding:.45em .7em;border-radius:2em;background:rgba(95,227,161,.08);border:1px solid rgba(95,227,161,.25);white-space:nowrap}
+.keys.typing{color:var(--am);background:rgba(245,177,76,.08);border-color:rgba(245,177,76,.3)}
+.keys .dot{width:.55em;height:.55em;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+.sizes{display:flex;border:1px solid var(--line2);border-radius:.45em;overflow:hidden}
+.sizes button{all:unset;cursor:pointer;font:600 .72em var(--mono);padding:.5em .6em;color:var(--faint)}
+.sizes button.on{background:var(--card2);color:var(--text)}
+
+/* signal spine */
+.spine{display:flex;align-items:stretch;gap:.35em;padding:.65em .9em;border-bottom:1px solid var(--line);background:var(--rail);overflow-x:auto}
+.mod{all:unset;cursor:pointer;flex:1 1 0;min-width:6.4em;background:var(--card);border:1px solid var(--line);border-radius:.55em;padding:.45em .55em .4em;display:flex;flex-direction:column;gap:.25em;position:relative}
+.mod:hover{border-color:var(--line2)}
+.mod.sel{border-color:var(--c,var(--cy));box-shadow:0 0 0 1px var(--c,var(--cy)) inset,0 0 18px -6px var(--c,var(--cy))}
+.mod .t{display:flex;justify-content:space-between;align-items:center;font:600 .7em var(--mono);letter-spacing:.09em;color:var(--dim)}
+.mod.sel .t{color:var(--text)}
+.mod .led{width:.5em;height:.5em;border-radius:50%;background:var(--c,var(--cy));box-shadow:0 0 6px var(--c,var(--cy))}
+.mod.off .led{background:var(--faint);box-shadow:none}
+.mod.off canvas{opacity:.3}
+.mod canvas{width:100%;height:2.4em;display:block}
+.mod .sub{font:500 .66em var(--mono);color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.arrow{align-self:center;color:var(--faint);font-size:.9em;flex:0 0 auto}
+
+/* body */
+.body{display:flex;min-height:34em;position:relative}
+.browser{flex:0 0 19em;border-right:1px solid var(--line);background:var(--rail);display:flex;flex-direction:column;min-width:0}
+.browser[hidden]{display:none!important}
+.bsearch{display:flex;gap:.4em;padding:.6em;border-bottom:1px solid var(--line)}
+.bsearch input{flex:1;min-width:0;background:var(--well);border:1px solid var(--line2);border-radius:.45em;color:var(--text);font:inherit;font-size:.92em;padding:.45em .6em;outline:none}
+.bsearch input:focus{border-color:var(--am);box-shadow:0 0 0 3px rgba(245,177,76,.12)}
+.bsearch kbd{font:600 .7em var(--mono);color:var(--faint);border:1px solid var(--line2);border-radius:.3em;padding:.3em .45em;align-self:center}
+.chips{display:flex;flex-wrap:wrap;gap:.3em;padding:.5em .6em;border-bottom:1px solid var(--line)}
+.chip{all:unset;cursor:pointer;font:600 .68em var(--mono);letter-spacing:.06em;padding:.32em .55em;border-radius:1em;border:1px solid var(--line2);color:var(--dim)}
+.chip.on{color:var(--bg);background:var(--c,var(--cy));border-color:var(--c,var(--cy))}
+.plist{flex:1;overflow:auto;padding:.3em 0;outline:none;max-height:30em}
+.plist:focus{box-shadow:inset 2px 0 0 var(--gr)}
+.prow{display:grid;grid-template-columns:.55em 1fr auto auto;gap:.6em;align-items:center;padding:.42em .7em;cursor:pointer;font-size:.92em}
+.prow:hover{background:var(--card)}
+.prow.sel{background:var(--cySoft)}
+.prow .cdot{width:.55em;height:.55em;border-radius:50%;background:var(--c)}
+.prow .cat{font:500 .72em var(--mono);color:var(--faint)}
+.prow .fav{color:var(--faint);font-size:.9em}
+.prow .fav.on{color:var(--am)}
+.prow .tagline{grid-column:2/5;font:500 .7em var(--mono);color:var(--faint);margin-top:-.2em}
+.bfoot{border-top:1px solid var(--line);padding:.55em .7em;font:500 .7em var(--mono);color:var(--faint);line-height:1.6}
+.bfoot b{color:var(--dim);font-weight:600}
+
+.main{flex:1;min-width:0;padding:.9em;display:flex;flex-direction:column;gap:.8em}
+.focus{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:.8em}
+.card{background:var(--card);border:1px solid var(--line);border-radius:.65em;padding:.75em .85em;min-width:0}
+.card h3{margin:0 0 .6em;font:600 .74em var(--mono);letter-spacing:.12em;color:var(--dim);display:flex;justify-content:space-between;align-items:center}
+.card h3 em{font-style:normal;color:var(--c,var(--cy))}
+.card canvas{width:100%;display:block;border-radius:.4em;background:var(--well)}
+.knobs{display:grid;grid-template-columns:repeat(auto-fill,minmax(4.6em,1fr));gap:.6em .4em}
+.knob{display:flex;flex-direction:column;align-items:center;gap:.25em;font:600 .64em var(--mono);letter-spacing:.06em;color:var(--dim);cursor:ns-resize;user-select:none}
+.knob .dial{width:3.4em;height:3.4em;border-radius:50%;position:relative;
+  background:conic-gradient(from 225deg,var(--c,var(--cy)) calc(var(--v)*270deg),var(--line) 0 270deg,transparent 0)}
+.knob .dial::after{content:"";position:absolute;inset:.32em;border-radius:50%;background:radial-gradient(circle at 35% 30%,#2a3346,#11151f 70%);box-shadow:0 2px 6px rgba(0,0,0,.5)}
+.knob .dial i{position:absolute;left:50%;top:.42em;width:2px;height:1em;background:var(--text);transform-origin:50% 1.28em;z-index:2;margin-left:-1px;transform:rotate(calc(-135deg + var(--v)*270deg));border-radius:2px}
+.knob .val{color:var(--text);font-weight:400}
+.related{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.8em}
+
+/* mod rail */
+.modrail{display:flex;gap:.35em;flex-wrap:wrap}
+.src{all:unset;cursor:grab;font:600 .68em var(--mono);letter-spacing:.08em;padding:.45em .7em;border-radius:.4em;background:var(--viSoft);color:var(--vi);border:1px solid rgba(169,139,255,.3)}
+.src.env{background:rgba(245,177,76,.1);color:var(--am);border-color:rgba(245,177,76,.3)}
+
+/* keyboard */
+.kbd{display:flex;height:4.2em;border-top:1px solid var(--line);background:var(--rail);padding:.45em .9em;gap:2px;position:relative}
+.wk{flex:1;background:linear-gradient(#dfe5ee,#b9c2d1);border-radius:0 0 .3em .3em;position:relative;display:flex;align-items:flex-end;justify-content:center;font:600 .62em var(--mono);color:#556;padding-bottom:.3em;transition:background .05s}
+.wk.down{background:linear-gradient(var(--cy),#2a9fc4);color:var(--bg)}
+.wk.inkey{box-shadow:inset 0 -3px 0 var(--vi)}
+
+/* constellation */
+.constel{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 40%,#0c1222,#05070c 75%);z-index:20;display:flex;flex-direction:column}
+.constel[hidden]{display:none!important}
+.constel canvas{flex:1;width:100%;min-height:0;cursor:crosshair;display:block}
+.cbar{display:flex;flex-wrap:wrap;gap:.5em 1em;align-items:center;padding:.6em .9em;border-top:1px solid var(--line);background:rgba(8,10,16,.9)}
+.cbar .lbl{font:600 .68em var(--mono);letter-spacing:.1em;color:var(--faint)}
+.cbar .mix{font:500 .78em var(--mono);color:var(--dim);flex:1 1 20em;min-width:0}
+.cbar .mix b{color:var(--text);font-weight:600}
+.lock{all:unset;cursor:pointer;font:600 .66em var(--mono);letter-spacing:.06em;padding:.35em .6em;border-radius:.35em;border:1px solid var(--line2);color:var(--dim)}
+.lock.on{color:var(--am);border-color:var(--am);background:rgba(245,177,76,.08)}
+.caxis{position:absolute;font:600 .64em var(--mono);letter-spacing:.14em;color:var(--faint);pointer-events:none}
+
+/* notes */
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.note{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;min-width:0}
+.note h2{margin:0 0 8px;font-size:15px;font-weight:700;display:flex;gap:10px;align-items:baseline}
+.note h2 i{font:600 11px var(--mono);font-style:normal;color:var(--cy)}
+.note p,.note li{color:var(--dim);line-height:1.55;font-size:13.5px}
+.note ul{margin:0;padding-left:18px}
+.note p{margin:0 0 6px}
+.note.sparkle{border-color:rgba(169,139,255,.4);background:linear-gradient(160deg,rgba(169,139,255,.08),var(--card) 50%)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--card2);border:1px solid var(--line2);padding:10px 16px;border-radius:8px;font:500 13px var(--mono);color:var(--text);opacity:0;transition:opacity .3s;pointer-events:none;z-index:99}
+.toast.show{opacity:1}
+@media (max-width:700px){header.intro h1{font-size:24px}}
+</style>
+
+<div class="wrap">
+  <header class="intro">
+    <div>
+      <h1>Nova, <span>redesigned</span></h1>
+      <p>A playable mockup. Click the stage, then play notes on your keyboard (A–L, W–P) while you browse. Drag the bottom-right corner to resize. Press <b style="color:var(--text)">✦ Constellation</b> for the new bit.</p>
+    </div>
+    <div class="legend" id="legend">
+      <b data-go="size"><i>1</i>Resizable + zoom</b>
+      <b data-go="spine"><i>2</i>Signal path, not tabs</b>
+      <b data-go="browser"><i>3</i>Browser that lets you play</b>
+      <b data-go="constel"><i>4</i>✦ Constellation</b>
+    </div>
+  </header>
+
+  <div class="stage" id="stage">
+    <span class="hint">DAW WINDOW · DRAG THE CORNER</span>
+    <div class="nova" id="nova">
+      <div class="bar">
+        <span class="word">NOVA</span>
+        <div class="pbox">
+          <button id="prev" title="Previous preset">◀</button>
+          <div class="pname" id="pname" title="Open the browser">Warm Flutter Bass <small>BASS</small></div>
+          <button id="next" title="Next preset">▶</button>
+        </div>
+        <button class="tbtn on" id="bBrowse">BROWSE</button>
+        <button class="tbtn star" id="bStar">✦ CONSTELLATION</button>
+        <span class="spacer"></span>
+        <span class="keys" id="keysPill"><span class="dot"></span><span id="keysTxt">KEYS PLAY NOTES</span></span>
+        <div class="sizes" id="sizes">
+          <button data-s=".85">85%</button><button data-s="1" class="on">100%</button><button data-s="1.2">120%</button><button data-s="1.4">140%</button>
+        </div>
+      </div>
+
+      <div class="spine" id="spine"></div>
+
+      <div class="body">
+        <aside class="browser" id="browser">
+          <div class="bsearch">
+            <input id="search" placeholder="Search name, tag, sound…" autocomplete="off" spellcheck="false">
+            <kbd>/</kbd>
+          </div>
+          <div class="chips" id="chips"></div>
+          <div class="plist" id="plist" tabindex="0"></div>
+          <div class="bfoot"><b>↑ ↓</b> audition · <b>/</b> search · <b>Esc</b> back to playing · <b>F</b>-key free: letters always play notes unless the search box is lit amber</div>
+        </aside>
+
+        <section class="main" id="main">
+          <div class="focus">
+            <div class="card" id="focusCard" style="--c:var(--cy)">
+              <h3><span id="focusTitle">OSC A · WAVETABLE</span><em id="focusSub">BASIC SHAPES · FRAME 0.18</em></h3>
+              <canvas id="focusCanvas" height="200"></canvas>
+            </div>
+            <div class="card" style="--c:var(--cy)">
+              <h3>CONTROLS <em id="ctrlTag">OSC A</em></h3>
+              <div class="knobs" id="knobs"></div>
+            </div>
+          </div>
+          <div class="related" id="related"></div>
+          <div class="card">
+            <h3>MOD SOURCES <em style="color:var(--vi)">DRAG ONTO ANY KNOB</em></h3>
+            <div class="modrail">
+              <span class="src env">ENV 1 · AMP</span><span class="src env">ENV 2</span><span class="src env">ENV 3</span>
+              <span class="src">LFO 1</span><span class="src">LFO 2</span><span class="src">LFO 3</span><span class="src">LFO 4</span>
+              <span class="src">VELOCITY</span><span class="src">MOD WHEEL</span><span class="src">VOICE · SPREAD</span><span class="src">MACRO 1</span><span class="src">MACRO 2</span>
+            </div>
+          </div>
+        </section>
+
+        <div class="constel" id="constel" hidden>
+          <canvas id="sky"></canvas>
+          <span class="caxis" style="left:1em;top:50%;transform:rotate(-90deg) translateX(-50%);transform-origin:0 0">SHORT ⟵ ENVELOPE ⟶ LONG</span>
+          <span class="caxis" style="left:50%;bottom:4.2em;transform:translateX(-50%)">DARK ⟵ BRIGHTNESS ⟶ BRIGHT</span>
+          <div class="cbar">
+            <span class="lbl">MORPHING</span>
+            <span class="mix" id="mix">Click or drag anywhere. The nearest presets blend into one sound.</span>
+            <span class="lbl">KEEP MINE</span>
+            <button class="lock" data-lock="fx">FX</button>
+            <button class="lock" data-lock="env">ENVELOPES</button>
+            <button class="lock" data-lock="mod">MOD ROUTES</button>
+            <button class="tbtn" id="mutate">⟡ MUTATE</button>
+            <button class="tbtn" id="pin">★ KEEP THIS</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="kbd" id="kbd"></div>
+      <div class="grip" id="grip" title="Drag to resize"></div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note"><h2><i>1</i>Resizable, with zoom</h2>
+      <p>Today Nova is fixed at 1360×880 and the window shrinks it to fit, so the text gets small. In the redesign:</p>
+      <ul><li>drag any edge or corner;</li><li>the layout reflows instead of scaling;</li><li>a zoom chip makes the text bigger: 85, 100, 120 or 140%;</li><li>Nova remembers both the size and the zoom.</li></ul></div>
+    <div class="note"><h2><i>2</i>A signal path you can see</h2>
+      <p>The tab row and the single big blue card are replaced by a strip running OSC A → B → C → SUB/NOISE → FILTERS → FX → OUT. Each tile shows a live thumbnail, and its light shows whether that part is on.</p>
+      <p>Click a tile to open that part, with its controls beside it and related parts below. The mod sources stay docked on every page. The panel turns graphite, and blue is kept for what's active.</p></div>
+    <div class="note"><h2><i>3</i>A browser that doesn't eat your keys</h2>
+      <p><b>The cause:</b> the browser puts the cursor in its search box when it opens, so letters type there instead of playing notes.</p>
+      <p><b>The fix:</b> the browser now opens with the list selected, so your keys keep playing and ↑/↓ auditions presets.</p>
+      <ul><li><b>/</b> or a click puts you in search, and the pill turns amber;</li><li><b>Esc</b> brings you back to playing;</li><li>the browser docks to the side instead of covering the panel.</li></ul></div>
+    <div class="note sparkle"><h2><i>4</i>✦ Constellation: browse by sound, then morph</h2>
+      <p>Every preset becomes a star, placed by how it actually sounds. Nova renders each one and measures its brightness, envelope, movement and width; the names don't matter.</p>
+      <p>Click between stars and the sound you hear is a blend of its neighbours, with every knob in between. Drag while you hold a chord and it morphs live.</p>
+      <ul><li><b>Mutate</b> scatters six variations around you;</li><li><b>Keep mine</b> holds your FX, envelopes or routes while the rest morphs;</li><li><b>Keep this</b> saves the blend as a new star.</li></ul></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(()=>{
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const CAT={Bass:'#46d6ff',Lead:'#ff6fb5',Pad:'#a98bff',Pluck:'#5fe3a1',Keys:'#f5b14c',FX:'#ff6b7a',Growl:'#ff8a4c','Arp/Seq':'#7fe0d0'};
+// [name, category, brightness 0..1, length 0..1, detune, reso, tags]
+const P=[
+['Warm Flutter Bass','Bass',.34,.28,.18,.35,'analogue · flutter · warm'],['Glass Reese','Bass',.45,.42,.75,.2,'reese · wide'],
+['Deep Sub','Bass',.08,.3,0,.05,'sub · clean'],['Rolling Reese','Bass',.4,.5,.7,.25,'dnb · rolling'],['Acid Line','Bass',.62,.18,.05,.85,'303 · squelch'],
+['Organ Bass','Bass',.3,.22,.05,.1,'house · organ'],['Analog Bass','Bass',.38,.2,.12,.4,'mono · filter'],['FM Bass','Bass',.55,.16,0,.15,'fm · punchy'],
+['Techno Rumble','Bass',.12,.6,.1,.3,'rumble · techno'],['Neuro Bass','Growl',.74,.38,.5,.6,'neuro · growl'],['Talking Bass','Growl',.6,.34,.3,.7,'formant · vowel'],
+['Offbeat Bass','Bass',.42,.12,.1,.3,'trance · offbeat'],['Wobble Growl','Growl',.7,.45,.4,.65,'wobble · lfo'],['Roar','Growl',.82,.5,.55,.5,'roar · dubstep'],
+['Supersaw Lead','Lead',.84,.55,.9,.15,'trance · wide'],['Hoover','Lead',.7,.6,.85,.25,'rave · classic'],['Sync Lead','Lead',.88,.42,.2,.3,'sync · bite'],
+['Chip Lead','Lead',.92,.22,0,.05,'8-bit · square'],['Mono Saw Lead','Lead',.75,.4,.25,.35,'mono · glide'],['Screamer','Lead',.95,.48,.4,.6,'scream · dist'],
+['Whistle','Lead',.66,.52,0,.05,'sine · vibrato'],['Formant Lead','Lead',.6,.46,.2,.5,'vowel · lead'],['Worn Unison Lead','Lead',.72,.5,.65,.2,'analogue · worn'],
+['Analog Pad','Pad',.42,.84,.55,.15,'warm · slow'],['Glass Pad','Pad',.7,.88,.45,.1,'glassy · air'],['Dark Strings','Pad',.25,.9,.5,.1,'strings · dark'],
+['Spectral Drift','Pad',.58,.97,.35,.2,'evolving · spectral'],['Choir Pad','Pad',.48,.86,.3,.35,'choir · vowel'],['Warm Pad','Pad',.32,.8,.5,.1,'warm · chorus'],
+['Sweep Pad','Pad',.55,.92,.4,.45,'sweep · filter'],['Warehouse Poly Pad','Pad',.4,.78,.6,.2,'analogue · warehouse'],['Whispered Ahh','Pad',.78,.95,.35,.4,'breathy · vowel · air'],
+['Pluck','Pluck',.62,.08,.1,.3,'short · classic'],['Glass Pluck','Pluck',.8,.1,.15,.2,'glass · bright'],['Trance Pluck','Pluck',.72,.14,.6,.25,'trance · wide'],
+['Marimba','Pluck',.5,.06,0,.1,'mallet · wood'],['Mallet','Pluck',.58,.05,0,.15,'mallet'],['Lofi Pluck','Pluck',.3,.1,.1,.2,'lofi · dusty'],
+['FM Bell','Keys',.86,.62,0,.05,'bell · fm'],['E-Piano','Keys',.45,.5,.05,.05,'rhodes · soft'],['Drawbar Organ','Keys',.55,.66,.1,.05,'organ'],
+['House Stab','Keys',.62,.16,.3,.35,'stab · house'],['Detroit Chord','Keys',.5,.26,.35,.3,'detroit · chord'],['Detroit Chord Stab','Keys',.56,.2,.4,.35,'analogue · stab'],
+['Dub Chord Echo','Keys',.38,.58,.3,.3,'dub · echo'],['Old Card Brass','Keys',.6,.44,.45,.25,'brass · analogue'],['Arp Sequence','Arp/Seq',.64,.18,.2,.4,'arp · seq'],
+['Riser','FX',.9,.98,.5,.4,'riser'],['Downlifter','FX',.35,.96,.3,.3,'down'],['Metal Hit','FX',.97,.3,.2,.2,'metal · hit'],['Impact Boom','FX',.15,.7,.1,.2,'boom'],
+['Sub Drop','FX',.05,.82,0,.05,'sub · drop'],['Wind Sweep','FX',.74,.99,.2,.5,'noise · air'],['Noise Riser','FX',.86,.95,.1,.4,'noise · riser'],
+].map(([name,cat,br,len,det,res,tags],i)=>({name,cat,br,len,det,res,tags,i}));
+
+/* ---------- audio ---------- */
+let ac=null, out=null, voices={}, cur={br:.34,len:.28,det:.18,res:.35};
+function audio(){ if(ac) return; ac=new (window.AudioContext||window.webkitAudioContext)();
+  out=ac.createGain(); out.gain.value=.22;
+  const comp=ac.createDynamicsCompressor(); out.connect(comp); comp.connect(ac.destination);
+  const d=ac.createDelay(1); d.delayTime.value=.33; const fb=ac.createGain(); fb.gain.value=.28; const wet=ac.createGain(); wet.gain.value=.18;
+  out.connect(d); d.connect(fb); fb.connect(d); d.connect(wet); wet.connect(comp);
+}
+const hz=m=>440*Math.pow(2,(m-69)/12);
+function cutoff(s){return 120*Math.pow(2,s.br*7)}
+function noteOn(m){ audio(); if(voices[m]) return; const t=ac.currentTime, s=cur;
+  const g=ac.createGain(); g.gain.value=0; const f=ac.createBiquadFilter(); f.type='lowpass'; f.Q.value=.7+s.res*12;
+  const fc=cutoff(s); f.frequency.setValueAtTime(fc*(s.len<.3?3.5:1),t); f.frequency.exponentialRampToValueAtTime(Math.max(60,fc),t+.05+s.len*.6);
+  const oscs=[-1,0,1].map(k=>{const o=ac.createOscillator(); o.type='sawtooth'; o.frequency.value=hz(m); o.detune.value=k*(4+s.det*28); o.connect(f); o.start(t); return o});
+  const sub=ac.createOscillator(); sub.type='sine'; sub.frequency.value=hz(m-12); const sg=ac.createGain(); sg.gain.value=(1-s.br)*.6; sub.connect(sg); sg.connect(g); sub.start(t); oscs.push(sub);
+  f.connect(g); g.connect(out);
+  const a=.004+Math.pow(s.len,2.2)*1.6, peak=.33;
+  g.gain.linearRampToValueAtTime(peak,t+a);
+  const sus=s.len<.3?peak*.25:peak*.85; g.gain.setTargetAtTime(sus,t+a,.05+s.len*.5);
+  voices[m]={g,oscs,s};
+}
+function noteOff(m){ const v=voices[m]; if(!v) return; delete voices[m]; const t=ac.currentTime, r=.05+Math.pow(v.s.len,1.5)*2.2;
+  v.g.gain.cancelScheduledValues(t); v.g.gain.setValueAtTime(v.g.gain.value,t); v.g.gain.setTargetAtTime(0,t,r/4);
+  v.oscs.forEach(o=>o.stop(t+r+.2)); }
+function audition(){ audio(); const m=48+keyOffset; noteOn(m); setTimeout(()=>noteOff(m),cur.len<.35?260:700); }
+
+/* ---------- typing keyboard ---------- */
+const MAP={a:0,w:1,s:2,e:3,d:4,f:5,t:6,g:7,y:8,h:9,u:10,j:11,k:12,o:13,l:14,p:15,';':16};
+let keyOffset=0; const held={};
+const kbd=$('#kbd'); const WHITE=[0,2,4,5,7,9,11,12,14,16]; const LBL='ASDFGHJKL;';
+WHITE.forEach((n,i)=>{const k=document.createElement('div'); k.className='wk'+([0,2,4,5,7,9,11].includes(n%12)?'':' '); k.dataset.n=n; k.textContent=LBL[i]; kbd.appendChild(k);
+  k.addEventListener('pointerdown',()=>{noteOn(48+n); k.classList.add('down')}); k.addEventListener('pointerup',()=>{noteOff(48+n);k.classList.remove('down')}); k.addEventListener('pointerleave',()=>{noteOff(48+n);k.classList.remove('down')});});
+function typing(){ return document.activeElement===$('#search'); }
+function setPill(){ const t=typing(); $('#keysPill').classList.toggle('typing',t); $('#keysTxt').textContent=t?'TYPING IN SEARCH · ESC TO PLAY':'KEYS PLAY NOTES'; }
+document.addEventListener('focusin',setPill); document.addEventListener('focusout',()=>setTimeout(setPill));
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
+  if(typing()){ if(e.key==='Escape'){ $('#search').blur(); $('#plist').focus(); } return; }
+  if(e.key==='/'){ e.preventDefault(); if($('#browser').hidden) toggleBrowser(true); $('#search').focus(); return; }
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){ if(!$('#browser').hidden){ e.preventDefault(); step(e.key==='ArrowDown'?1:-1); } return; }
+  const n=MAP[e.key.toLowerCase()]; if(n===undefined||e.repeat) return; e.preventDefault();
+  held[e.key.toLowerCase()]=n; noteOn(48+n); const el=kbd.querySelector(`[data-n="${n}"]`); el&&el.classList.add('down');
+});
+document.addEventListener('keyup',e=>{ const k=e.key.toLowerCase(); if(held[k]===undefined) return; const n=held[k]; delete held[k]; noteOff(48+n); const el=kbd.querySelector(`[data-n="${n}"]`); el&&el.classList.remove('down'); });
+
+/* ---------- browser ---------- */
+let filterCat='', query='', sel=0;
+const chips=$('#chips'); ['All',...Object.keys(CAT)].forEach(c=>{const b=document.createElement('button'); b.className='chip'+(c==='All'?' on':''); b.textContent=c.toUpperCase(); b.style.setProperty('--c',CAT[c]||'var(--cy)');
+  b.onclick=()=>{filterCat=c==='All'?'':c; $$('.chip').forEach(x=>x.classList.toggle('on',x===b)); render(); $('#plist').focus();}; chips.appendChild(b);});
+const favs=new Set(['Warm Flutter Bass','Whispered Ahh','Detroit Chord Stab']);
+function list(){ const w=query.toLowerCase().split(/\s+/).filter(Boolean);
+  return P.filter(p=>(!filterCat||p.cat===filterCat)&&w.every(x=>(p.name+' '+p.cat+' '+p.tags).toLowerCase().includes(x))); }
+function render(){ const L=list(), el=$('#plist'); el.innerHTML='';
+  L.forEach(p=>{const r=document.createElement('div'); r.className='prow'+(p.i===sel?' sel':''); r.style.setProperty('--c',CAT[p.cat]);
+    r.innerHTML=`<span class="cdot"></span><span>${p.name}</span><span class="cat">${p.cat.toUpperCase()}</span><span class="fav${favs.has(p.name)?' on':''}">★</span><span class="tagline">${p.tags}</span>`;
+    r.onclick=e=>{ if(e.target.classList.contains('fav')){favs.has(p.name)?favs.delete(p.name):favs.add(p.name); render(); return;} load(p.i,true); el.focus(); };
+    el.appendChild(r);}); }
+function load(i,play){ sel=i; const p=P[i]; cur={br:p.br,len:p.len,det:p.det,res:p.res};
+  $('#pname').innerHTML=`${p.name} <small>${p.cat.toUpperCase()}</small>`; render(); drawAll(); const s=$('#plist .sel'); s&&s.scrollIntoView({block:'nearest'}); if(play) audition(); }
+function step(d){ const L=list(); if(!L.length) return; let k=L.findIndex(p=>p.i===sel); k=(k+d+L.length)%L.length; load(L[k].i,true); }
+$('#search').addEventListener('input',e=>{query=e.target.value; render();});
+$('#prev').onclick=()=>step(-1); $('#next').onclick=()=>step(1);
+function toggleBrowser(on){ $('#browser').hidden=!on; $('#bBrowse').classList.toggle('on',on); if(on) $('#plist').focus(); drawAll(); }
+$('#bBrowse').onclick=()=>toggleBrowser($('#browser').hidden); $('#pname').onclick=()=>toggleBrowser(true);
+
+/* ---------- signal spine ---------- */
+const MODS=[
+ {k:'A',t:'OSC A',sub:'Basic shapes',c:'var(--cy)',w:'saw'},{k:'B',t:'OSC B',sub:'Off',c:'var(--cy)',w:'sq',off:true},{k:'C',t:'OSC C',sub:'Off',c:'var(--cy)',w:'sine',off:true},
+ {k:'N',t:'SUB · NOISE',sub:'Noise AM ← A',c:'var(--gr)',w:'noise'},{k:'F1',t:'FILTER 1',sub:'MG Low · 700 Hz',c:'var(--am)',w:'lp'},{k:'F2',t:'FILTER 2',sub:'Off',c:'var(--am)',w:'hp',off:true},
+ {k:'FX',t:'FX',sub:'Dist → Comp → Room',c:'var(--pk)',w:'fx'},{k:'V',t:'VOICES',sub:'Analogue · age .40',c:'var(--vi)',w:'voices'},{k:'O',t:'OUT',sub:'−6.2 dB',c:'var(--text)',w:'out'}];
+let focus='A';
+const spine=$('#spine');
+MODS.forEach((m,i)=>{ if(i===7){const s=document.createElement('span'); s.className='arrow'; s.textContent='·'; spine.appendChild(s);}
+  else if(i){const s=document.createElement('span'); s.className='arrow'; s.textContent='→'; spine.appendChild(s);}
+  const b=document.createElement('button'); b.className='mod'+(m.off?' off':'')+(m.k===focus?' sel':''); b.style.setProperty('--c',m.c); b.dataset.k=m.k;
+  b.innerHTML=`<span class="t">${m.t}<span class="led"></span></span><canvas></canvas><span class="sub">${m.sub}</span>`;
+  b.onclick=()=>{focus=m.k; $$('.mod').forEach(x=>x.classList.toggle('sel',x===b)); showFocus();}; spine.appendChild(b); });
+const KN={A:[['LEVEL',.75],['FRAME',.18],['WARP',.0],['OCTAVE',.5],['FINE',.5],['UNISON',.1],['DETUNE',.2],['PAN',.5]],
+ F1:[['CUTOFF',.45],['RESO',.35],['DRIVE',.6],['ENV 2',.55],['KEY',.3],['MIX',1]],N:[['SUB',.0],['NOISE',.3],['AM AMT',.4],['CURVE',.6],['COLOUR',.5],['PAN',.5]],
+ FX:[['DIST',.55],['TONE',.3],['THRESH',.4],['RATIO',.5],['ROOM',.28],['SIZE',.66]],V:[['AGE',.4],['DRIFT',.3],['FLUTTER',.25],['TONE',.5],['CARDS',.5],['SPREAD',.4]],
+ O:[['VOLUME',.7],['WIDTH',.5],['GLIDE',.2],['BEND',.2]]};
+function showFocus(){ const m=MODS.find(x=>x.k===focus); $('#focusCard').style.setProperty('--c',m.c);
+  $('#focusTitle').textContent=m.t+(m.k==='A'?' · WAVETABLE':m.k.startsWith('F')&&m.k!=='FX'?' · RESPONSE':''); $('#focusSub').textContent=m.sub.toUpperCase(); $('#ctrlTag').textContent=m.t;
+  const ks=KN[m.k]||KN.A; $('#knobs').innerHTML=ks.map(([l,v])=>`<div class="knob" style="--c:${m.c};--v:${v}"><div class="dial"><i></i></div>${l}<span class="val">${Math.round(v*100)}</span></div>`).join('');
+  $$('.knob').forEach(k=>{let y0,v0; k.addEventListener('pointerdown',e=>{y0=e.clientY;v0=parseFloat(k.style.getPropertyValue('--v'));k.setPointerCapture(e.pointerId)});
+    k.addEventListener('pointermove',e=>{if(y0===undefined)return; const v=Math.min(1,Math.max(0,v0+(y0-e.clientY)/150)); k.style.setProperty('--v',v); k.querySelector('.val').textContent=Math.round(v*100);});
+    k.addEventListener('pointerup',()=>y0=undefined);});
+  const rel=focus==='A'?['N','F1','V']:focus==='F1'?['A','N','FX']:['A','F1','O'];
+  $('#related').innerHTML=rel.map(k=>{const r=MODS.find(x=>x.k===k); return `<div class="card" style="--c:${r.c}"><h3>${r.t} <em>${r.sub.toUpperCase()}</em></h3><canvas data-w="${r.w}" height="70"></canvas></div>`}).join('');
+  drawAll(); }
+
+/* ---------- drawing ---------- */
+function fit(c){ const r=c.getBoundingClientRect(), d=devicePixelRatio||1; c.width=Math.max(1,r.width*d); c.height=Math.max(1,r.height*d); const x=c.getContext('2d'); x.setTransform(d,0,0,d,0,0); return [x,r.width,r.height]; }
+function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v.replace(/var\(|\)/g,'')).trim()||v; }
+function wave(w,p,amt){ switch(w){case'saw':return 1-2*((p+.5)%1); case'sq':return p<.5?1:-1; case'sine':return Math.sin(p*Math.PI*2);
+  case'noise':return (Math.sin(p*90.1)*Math.sin(p*47.3+1)+Math.sin(p*13))*.5*(.4+.6*Math.abs(1-2*((p*1.5+.5)%1))); default:return 0;} }
+function drawThumb(c,w,col,t){ const [x,W,H]=fit(c); x.clearRect(0,0,W,H); x.strokeStyle=col; x.lineWidth=1.4; x.beginPath();
+  if(w==='lp'||w==='hp'){ const fc=cur.br; for(let i=0;i<=W;i++){const f=i/W; let d=w==='lp'?(f<fc?0:-(f-fc)*3):(f>.15?0:-(.15-f)*6); const bump=w==='lp'?Math.exp(-Math.pow((f-fc)*18,2))*cur.res*.6:0; const y=H*.3-(d+bump)*H*.6; i?x.lineTo(i,y):x.moveTo(i,y);} }
+  else if(w==='fx'){ for(let i=0;i<=W;i++){const p=i/W; const s=Math.tanh(3*Math.sin(p*Math.PI*4))*.8; const y=H/2-s*H*.38; i?x.lineTo(i,y):x.moveTo(i,y);} }
+  else if(w==='voices'){ for(let v=0;v<6;v++){ x.globalAlpha=.35+.1*v; x.beginPath(); for(let i=0;i<=W;i++){const p=i/W; const y=H/2-wave('saw',(p*2+v*.013*(1+Math.sin(t+v)))%1)*H*.32; i?x.lineTo(i,y):x.moveTo(i,y);} x.stroke(); } x.globalAlpha=1; return; }
+  else if(w==='out'){ const lv=.55+.1*Math.sin(t*3); x.fillStyle=col; x.globalAlpha=.8; x.fillRect(4,H*.2,(W-8)*lv,H*.22); x.fillRect(4,H*.58,(W-8)*(lv-.04),H*.22); x.globalAlpha=1; return; }
+  else for(let i=0;i<=W;i++){const p=i/W; const y=H/2-wave(w,(p*2+t*.05)%1)*H*.36; i?x.lineTo(i,y):x.moveTo(i,y);} x.stroke(); }
+function drawFocus(t){ const c=$('#focusCanvas'); const [x,W,H]=fit(c); x.clearRect(0,0,W,H); const m=MODS.find(q=>q.k===focus); const col=css(m.c);
+  if(focus==='A'||focus==='B'||focus==='C'||focus==='N'){ // stacked wavetable frames
+    const N=22; for(let f=N-1;f>=0;f--){ const ox=f*W*.012, oy=-f*H*.022+H*.2; x.globalAlpha=f===4?1:.18+.02*(N-f); x.strokeStyle=f===4?col:css('--line2'); x.lineWidth=f===4?2:1; x.beginPath();
+      for(let i=0;i<=W*.72;i++){const p=i/(W*.72); const morph=f/N; const s=(1-morph)*wave(m.w==='noise'?'noise':'saw',p)+morph*Math.sin(p*Math.PI*2*(1+morph*3)); const y=H*.62+oy-s*H*.22; i?x.lineTo(W*.06+ox+i,y):x.moveTo(W*.06+ox+i,y);} x.stroke(); }
+    x.globalAlpha=1; }
+  else{ x.strokeStyle=col; x.lineWidth=2; x.beginPath(); for(let i=0;i<=W;i++){const p=i/W; const y=H/2-wave('saw',(p*3+t*.1)%1)*Math.tanh(1+cur.br*3)*H*.28; i?x.lineTo(i,y):x.moveTo(i,y);} x.stroke(); } }
+let t0=performance.now();
+function drawAll(){ const t=(performance.now()-t0)/1000; $$('.mod').forEach(b=>{const m=MODS.find(q=>q.k===b.dataset.k); drawThumb(b.querySelector('canvas'),m.w,css(m.c),t);});
+  $$('#related canvas').forEach(c=>{const r=MODS.find(q=>q.w===c.dataset.w); drawThumb(c,c.dataset.w,css(r.c),t)}); drawFocus(t); }
+function tick(){ drawAll(); if(!$('#constel').hidden) drawSky(); requestAnimationFrame(tick); }
+
+/* ---------- constellation ---------- */
+let cursor=null, kids=[], locks=new Set(), stars=P.map(p=>({...p}));
+function skyPos(p,W,H){ const pad=40; return [pad+p.br*(W-pad*2), H-pad-p.len*(H-pad*2)]; }
+function blend(px,py,W,H){ const all=[...stars,...kids]; const d=all.map(p=>{const [x,y]=skyPos(p,W,H); return {p,d:Math.hypot(x-px,y-py)+1}}).sort((a,b)=>a.d-b.d).slice(0,3);
+  const ws=d.map(o=>1/Math.pow(o.d,2)); const sum=ws.reduce((a,b)=>a+b,0);
+  const mix={br:0,len:0,det:0,res:0}; d.forEach((o,i)=>{for(const k in mix) mix[k]+=o.p[k]*ws[i]/sum;});
+  if(locks.has('env')) mix.len=cur.len;
+  return {mix,parts:d.map((o,i)=>({name:o.p.name,w:ws[i]/sum,cat:o.p.cat}))}; }
+function drawSky(){ const c=$('#sky'); const [x,W,H]=fit(c); const t=(performance.now()-t0)/1000; x.clearRect(0,0,W,H);
+  // faint grid
+  x.strokeStyle='rgba(70,214,255,.05)'; for(let i=1;i<10;i++){x.beginPath();x.moveTo(W*i/10,0);x.lineTo(W*i/10,H);x.stroke();x.beginPath();x.moveTo(0,H*i/10);x.lineTo(W,H*i/10);x.stroke();}
+  let near=null; if(cursor){ near=blend(cursor[0],cursor[1],W,H);
+    near.parts.forEach(pp=>{const p=[...stars,...kids].find(s=>s.name===pp.name); const [sx,sy]=skyPos(p,W,H); const g=x.createLinearGradient(cursor[0],cursor[1],sx,sy); g.addColorStop(0,'rgba(255,255,255,.7)'); g.addColorStop(1,CAT[p.cat]+'00');
+      x.strokeStyle=g; x.lineWidth=1+pp.w*4; x.beginPath(); x.moveTo(cursor[0],cursor[1]); x.lineTo(sx,sy); x.stroke(); }); }
+  [...stars,...kids].forEach((p,i)=>{ const [sx,sy]=skyPos(p,W,H); const tw=.6+.4*Math.sin(t*1.7+i*2.3); const col=CAT[p.cat]||'#fff'; const r=p.kid?2.5:3+(p.det*2);
+    const g=x.createRadialGradient(sx,sy,0,sx,sy,r*5); g.addColorStop(0,col); g.addColorStop(1,col+'00'); x.globalAlpha=.35*tw; x.fillStyle=g; x.beginPath(); x.arc(sx,sy,r*5,0,7); x.fill();
+    x.globalAlpha=1; x.fillStyle=p.kid?'#fff':col; x.beginPath(); x.arc(sx,sy,r,0,7); x.fill();
+    if(p.i===sel||p.kid||(near&&near.parts.some(q=>q.name===p.name))||W>900){ x.font=`500 ${p.i===sel?12:10}px JetBrains Mono, monospace`; x.fillStyle=p.i===sel?'#fff':'rgba(232,236,243,.55)'; x.fillText(p.name,sx+r+5,sy+3);} });
+  if(cursor){ const [cx,cy]=cursor; const pulse=8+3*Math.sin(t*5); x.strokeStyle='#fff'; x.lineWidth=1.5; x.beginPath(); x.arc(cx,cy,pulse,0,7); x.stroke();
+    const g=x.createRadialGradient(cx,cy,0,cx,cy,30); g.addColorStop(0,'rgba(255,255,255,.5)'); g.addColorStop(1,'rgba(169,139,255,0)'); x.fillStyle=g; x.beginPath(); x.arc(cx,cy,30,0,7); x.fill(); } }
+let dragging=false;
+function skyAt(e){ const r=$('#sky').getBoundingClientRect(); const px=e.clientX-r.left, py=e.clientY-r.top; cursor=[px,py]; const b=blend(px,py,r.width,r.height); cur=b.mix;
+  $('#mix').innerHTML=b.parts.map(p=>`<b style="color:${CAT[p.cat]}">${Math.round(p.w*100)}%</b> ${p.name}`).join(' · ');
+  Object.values(voices).forEach(v=>{}); }
+$('#sky').addEventListener('pointerdown',e=>{dragging=true; $('#sky').setPointerCapture(e.pointerId); skyAt(e); audition();});
+$('#sky').addEventListener('pointermove',e=>{ if(dragging) skyAt(e); });
+$('#sky').addEventListener('pointerup',()=>{dragging=false; audition();});
+$$('.lock').forEach(b=>b.onclick=()=>{const k=b.dataset.lock; locks.has(k)?locks.delete(k):locks.add(k); b.classList.toggle('on');});
+$('#mutate').onclick=()=>{ const base=cursor?cur:P[sel]; kids=Array.from({length:6},(_,i)=>{const a=i/6*Math.PI*2; return {name:'Variation '+(i+1),cat:'Pad',kid:true,
+  br:Math.min(.98,Math.max(.02,base.br+Math.cos(a)*.07+(Math.random()-.5)*.03)),len:Math.min(.98,Math.max(.02,base.len+Math.sin(a)*.09)),det:Math.min(1,Math.max(0,base.det+(Math.random()-.5)*.3)),res:Math.min(1,Math.max(0,base.res+(Math.random()-.5)*.3))}}); toast('Six variations around your sound. Click one to hear it.'); };
+$('#pin').onclick=()=>{ if(!cursor) return toast('Click the sky first'); const n='My Blend '+(stars.length-P.length+1); stars.push({name:n,cat:'Pad',...cur,i:-1}); toast('★ Saved "'+n+'" as a user preset, and it is now a star.'); };
+$('#bStar').onclick=()=>{ const on=$('#constel').hidden; $('#constel').hidden=!on; $('#bStar').classList.toggle('on',on); if(on){toggleBrowser(false); toast('Click between stars to morph. Hold notes on your keyboard while you drag.');} };
+
+/* ---------- resizing + zoom ---------- */
+const nova=$('#nova');
+$('#grip').addEventListener('pointerdown',e=>{ e.preventDefault(); const sx=e.clientX, sw=nova.offsetWidth, sy=e.clientY, sh=$('.body').offsetHeight; $('#grip').setPointerCapture(e.pointerId);
+  const mv=ev=>{ nova.style.width=Math.max(520,sw+ev.clientX-sx)+'px'; $('.body').style.minHeight=Math.max(260,sh+ev.clientY-sy)+'px'; drawAll(); };
+  const up=()=>{ $('#grip').removeEventListener('pointermove',mv); $('#grip').removeEventListener('pointerup',up); }; $('#grip').addEventListener('pointermove',mv); $('#grip').addEventListener('pointerup',up); });
+$$('#sizes button').forEach(b=>b.onclick=()=>{ nova.style.setProperty('--s',b.dataset.s); $$('#sizes button').forEach(x=>x.classList.toggle('on',x===b)); setTimeout(drawAll); });
+new ResizeObserver(()=>{ const narrow=nova.offsetWidth<900; $('.focus').style.gridTemplateColumns=narrow?'1fr':''; $('#related').style.gridTemplateColumns=narrow?'1fr':''; }).observe(nova);
+function fitStage(){ const w=$('#stage').clientWidth-30; if(w<1180) nova.style.width=Math.max(520,w)+'px'; }
+fitStage();
+
+/* ---------- legend + toast ---------- */
+function toast(s){ const t=$('#toast'); t.textContent=s; t.classList.add('show'); clearTimeout(toast.h); toast.h=setTimeout(()=>t.classList.remove('show'),2600); }
+$$('#legend b').forEach(b=>b.onclick=()=>{ const g=b.dataset.go; $('#stage').scrollIntoView({behavior:'smooth',block:'start'});
+  if(g==='size'){ $('#grip').classList.remove('flash'); void $('#grip').offsetWidth; $('#grip').classList.add('flash'); toast('Drag the bottom-right corner, or pick a zoom up top.'); }
+  if(g==='spine'){ $('#constel').hidden=true; $('#bStar').classList.remove('on'); toast('Click any tile on the signal path to open it.'); }
+  if(g==='browser'){ $('#constel').hidden=true; $('#bStar').classList.remove('on'); toggleBrowser(true); toast('The list has focus: your letter keys play, ↑ ↓ audition, / searches.'); }
+  if(g==='constel'){ if($('#constel').hidden) $('#bStar').click(); } });
+
+render(); load(0,false); showFocus(); requestAnimationFrame(tick);
+})();
+</script>

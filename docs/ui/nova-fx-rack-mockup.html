@@ -1,0 +1,605 @@
+<title>Nova FX Rack</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: Nova's own plate. Left, the chain as a signal-flow list you drag; right, every module stacked in that order, Serum-style, full width. */
+:root {
+  --bg: #070b16; --plate: #0d1426; --card: #111a2e; --card2: #14203a; --well: #080e1c;
+  --line: #1f2c46; --line2: #2b3c5c; --text: #e6ecf5; --dim: #8d9ab0; --faint: #5e6b82;
+  --cy: #46d6ff; --cysoft: rgba(70,214,255,.14); --vi: #a98bff; --am: #f5b14c; --red: #ff6b7a; --gr: #59e3a0;
+  --sans: "Barlow", "Noto Sans", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--text); font-family: var(--sans); padding-block: 20px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.intro { max-width: 1360px; margin: 0 auto 14px; display: grid; gap: 6px; }
+.intro h1 { margin: 0; font-size: 20px; letter-spacing: .5px; text-wrap: balance; }
+.intro p { margin: 0; color: var(--dim); max-width: 75ch; line-height: 1.45; }
+.scroller { overflow-x: auto; max-width: 1360px; margin: 0 auto; border-radius: 14px; }
+.panel { width: 1360px; height: 816px; background: radial-gradient(120% 120% at 20% 0, #111c36, #0d1426 55%, #0a1020); border: 1px solid var(--line); border-radius: 14px; position: relative; overflow: hidden; display: grid; grid-template-rows: 64px 1fr; }
+.hdr { display: flex; align-items: center; gap: 18px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.logo { font-weight: 800; letter-spacing: 8px; font-size: 13px; color: var(--cy); }
+.logo small { display: block; letter-spacing: 2px; font-size: 9px; color: var(--dim); }
+.tabs { margin-left: auto; margin-right: auto; display: flex; gap: 2px; background: #0b1224; border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+.tabs span { padding: 7px 16px; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: var(--dim); border-radius: 7px; }
+.tabs span.on { background: #1a2848; color: var(--text); box-shadow: inset 0 -2px 0 var(--cy); }
+.body { display: grid; grid-template-columns: 284px 1fr; min-height: 0; }
+
+/* ---- Left: the rack ---- */
+.rack { border-right: 1px solid var(--line); display: grid; grid-template-rows: auto auto 1fr auto; min-height: 0; background: rgba(8,14,28,.45); }
+.buses { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 12px 12px 8px; }
+.bus { border: 1px solid var(--line); border-radius: 9px; padding: 7px 8px 6px; cursor: pointer; background: var(--card); position: relative; }
+.bus b { font-size: 10px; letter-spacing: 1.4px; display: block; }
+.bus i { font-style: normal; font-size: 10px; color: var(--faint); }
+.bus.on { border-color: var(--cy); background: #102038; }
+.bus.drop { border-color: var(--am); box-shadow: 0 0 0 2px rgba(245,177,76,.25); }
+.bus .vu { position: absolute; right: 7px; top: 8px; width: 4px; height: 22px; background: #0a1222; border-radius: 2px; overflow: hidden; }
+.bus .vu::after { content: ""; position: absolute; bottom: 0; left: 0; right: 0; height: var(--v, 40%); background: linear-gradient(var(--am), var(--gr) 40%); }
+.route { margin: 0 12px 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; font-size: 11px; color: var(--dim); display: grid; gap: 6px; }
+.route .row { display: flex; align-items: center; gap: 8px; }
+.route label { font-size: 9.5px; letter-spacing: 1.2px; font-weight: 700; color: var(--faint); width: 62px; }
+.seg { display: inline-flex; border: 1px solid var(--line2); border-radius: 6px; overflow: hidden; }
+.seg span { font-size: 9.5px; font-weight: 700; letter-spacing: 1px; padding: 3px 7px; color: var(--dim); cursor: pointer; }
+.seg span.on { background: var(--cysoft); color: var(--cy); }
+.mini { flex: 1; height: 4px; background: var(--line); border-radius: 2px; position: relative; }
+.mini::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: var(--w, 50%); background: var(--cy); border-radius: 2px; }
+.route output { font-family: var(--mono); font-size: 10px; color: var(--text); width: 52px; text-align: right; }
+
+.chain { overflow-y: auto; padding: 4px 12px 8px; position: relative; }
+.node { display: flex; align-items: center; gap: 8px; font-size: 9.5px; letter-spacing: 1.6px; font-weight: 700; color: var(--faint); padding: 4px 2px; }
+.node::before { content: ""; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--faint); }
+.wire { width: 2px; height: 8px; background: var(--line2); margin-left: 5px; }
+.slot { display: grid; grid-template-columns: 14px 16px 1fr auto 18px; align-items: center; gap: 8px; height: 46px; padding: 0 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--card); cursor: grab; user-select: none; position: relative; touch-action: none; }
+.slot + .wire { margin-left: 13px; }
+.slot.sel { border-color: var(--cy); background: #10203a; box-shadow: inset 3px 0 0 var(--cy); }
+.slot.off { opacity: .5; }
+.slot.ghost { opacity: .25; }
+.slot .grip { color: var(--faint); font-size: 13px; letter-spacing: -2px; }
+.led { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--line2); background: #0a1222; cursor: pointer; }
+.led.on { background: var(--cy); border-color: var(--cy); box-shadow: 0 0 8px rgba(70,214,255,.55); }
+.slot .nm { min-width: 0; }
+.slot .nm b { display: block; font-size: 11.5px; letter-spacing: 1.4px; font-weight: 800; }
+.slot .nm i { display: block; font-style: normal; font-size: 10.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slot .meter { width: 34px; height: 18px; }
+.slot .kebab { color: var(--faint); text-align: center; cursor: pointer; font-size: 14px; }
+.slot .kebab:hover { color: var(--text); }
+.insert { height: 3px; border-radius: 2px; background: var(--am); box-shadow: 0 0 8px var(--am); margin: -2px 0 -1px; }
+.add { margin-top: 2px; height: 38px; border: 1px dashed var(--line2); border-radius: 9px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--dim); font-size: 12px; font-weight: 600; cursor: pointer; background: none; width: 100%; font-family: var(--sans); }
+.add:hover, .add:focus-visible { color: var(--cy); border-color: var(--cy); outline: none; }
+.add span { font-family: var(--mono); font-size: 10px; color: var(--faint); }
+.rackfoot { border-top: 1px solid var(--line); padding: 10px 12px; display: grid; gap: 8px; }
+.rackfoot .row { display: flex; align-items: center; gap: 8px; font-size: 9.5px; letter-spacing: 1.2px; font-weight: 700; color: var(--faint); }
+.rackfoot .row > span:first-child { width: 78px; }
+
+/* ---- Right: the modules ---- */
+.stack { overflow-y: auto; padding: 12px 14px 40px; display: grid; gap: 10px; align-content: start; scroll-behavior: smooth; }
+.mod { border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(var(--card), #0f182b); overflow: hidden; }
+.mod.sel { border-color: rgba(70,214,255,.55); box-shadow: 0 0 0 1px rgba(70,214,255,.18), 0 8px 30px rgba(0,0,0,.35); }
+.mod.off .mbody, .mod.off .mh .title { opacity: .45; }
+.mh { height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--line); }
+.mod.col .mh { border-bottom: 0; }
+.mh .idx { font-family: var(--mono); font-size: 10px; color: var(--faint); width: 14px; }
+.mh .title { font-size: 12px; font-weight: 800; letter-spacing: 2.2px; color: var(--cy); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.mh .title::after { content: "▾"; font-size: 9px; color: var(--faint); }
+.dd { display: inline-flex; align-items: center; gap: 8px; height: 24px; padding: 0 9px; border: 1px solid var(--line2); border-radius: 6px; background: var(--well); font-size: 11px; color: var(--text); cursor: pointer; }
+.dd::after { content: "▾"; font-size: 9px; color: var(--faint); }
+.preset { display: inline-flex; align-items: center; border: 1px solid var(--line2); border-radius: 6px; overflow: hidden; height: 24px; }
+.preset button { background: none; border: 0; color: var(--faint); width: 20px; height: 100%; cursor: pointer; font-size: 9px; }
+.preset button:hover { color: var(--text); }
+.preset span { font-size: 11px; padding: 0 8px; min-width: 110px; text-align: center; border-left: 1px solid var(--line); border-right: 1px solid var(--line); line-height: 22px; }
+.preset span em { font-style: normal; color: var(--faint); font-size: 9px; letter-spacing: 1.2px; margin-right: 6px; }
+.mh .sp { flex: 1; }
+.pill { font-size: 9.5px; font-weight: 700; letter-spacing: 1px; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line2); color: var(--dim); cursor: pointer; }
+.pill.on { color: var(--cy); border-color: var(--cy); background: var(--cysoft); }
+.iconbtn { color: var(--faint); cursor: pointer; font-size: 13px; width: 20px; text-align: center; }
+.iconbtn:hover { color: var(--text); }
+.mh .sum { font-family: var(--mono); font-size: 10.5px; color: var(--dim); display: none; gap: 14px; }
+.mod.col .mh .sum { display: flex; }
+.mod.col .mh .preset, .mod.col .mh .dd { display: none; }
+.mbody { display: grid; grid-template-columns: 1fr auto; gap: 14px; padding: 12px; }
+.mod.col .mbody { display: none; }
+.disp { height: 150px; background: var(--well); border: 1px solid var(--line); border-radius: 9px; position: relative; overflow: hidden; }
+.disp canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.disp .tag { position: absolute; left: 8px; top: 6px; font-size: 9px; letter-spacing: 1.3px; color: var(--faint); font-weight: 700; }
+.io { display: grid; grid-template-columns: 1fr 8px 8px; }
+.knobs { display: grid; grid-template-columns: repeat(4, 66px); grid-auto-rows: 72px; gap: 2px 6px; align-content: center; }
+.knob { display: grid; justify-items: center; gap: 1px; cursor: ns-resize; }
+.knob canvas { width: 38px; height: 38px; }
+.knob b { font-size: 9.5px; letter-spacing: 1px; font-weight: 700; color: var(--dim); }
+.knob i { font-style: normal; font-family: var(--mono); font-size: 10px; color: var(--text); }
+.knob.mix b { color: var(--vi); }
+.knob.mod canvas { filter: drop-shadow(0 0 3px rgba(169,139,255,.6)); }
+
+/* Popovers */
+.pop { position: absolute; z-index: 20; background: #0b1224; border: 1px solid var(--line2); border-radius: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.6); }
+.browser { width: 560px; padding: 12px; display: grid; grid-template-columns: 150px 1fr; gap: 12px; }
+.browser input { grid-column: 1 / -1; background: var(--well); border: 1px solid var(--line2); border-radius: 8px; padding: 8px 10px; color: var(--text); font-family: var(--sans); font-size: 12px; }
+.browser input:focus-visible { outline: 1px solid var(--cy); }
+.cats { display: grid; gap: 2px; align-content: start; }
+.cats span { padding: 7px 10px; border-radius: 7px; font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--dim); cursor: pointer; }
+.cats span.on { background: var(--cysoft); color: var(--cy); }
+.items { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-content: start; max-height: 300px; overflow: auto; }
+.item { border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; cursor: pointer; background: var(--card); }
+.item:hover { border-color: var(--cy); }
+.item b { font-size: 11.5px; letter-spacing: 1.2px; display: block; }
+.item i { font-style: normal; font-size: 10.5px; color: var(--faint); line-height: 1.35; display: block; margin-top: 2px; }
+.menu { width: 210px; padding: 6px; display: grid; }
+.menu span { padding: 7px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; display: flex; justify-content: space-between; color: var(--text); }
+.menu span:hover { background: #14203a; }
+.menu span em { font-style: normal; color: var(--faint); font-size: 10.5px; }
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; width: 100%; }
+.menu .danger { color: var(--red); }
+.toast { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); background: #0b1224; border: 1px solid var(--line2); padding: 8px 14px; border-radius: 9px; font-size: 12px; color: var(--dim); opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 30; }
+.toast.show { opacity: 1; }
+
+.notes { max-width: 1360px; margin: 18px auto 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.note { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--card); min-width: 0; }
+.note h2 { margin: 0 0 8px; font-size: 12px; letter-spacing: 1.6px; color: var(--cy); text-transform: uppercase; }
+.note ul { margin: 0; padding-left: 18px; color: var(--dim); line-height: 1.5; font-size: 13px; }
+.note li b { color: var(--text); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { .stack { scroll-behavior: auto; } }
+</style>
+
+<div class="intro">
+  <h1>Nova FX rack</h1>
+  <p>The chain on the left reads top to bottom, in the order the sound passes through it. Drag any row to reorder it, drop it on a bus to move it, or click a row to jump to that module. Every module is shown full width on the right, with all of its controls.</p>
+</div>
+
+<div class="scroller">
+<div class="panel" id="panel">
+  <div class="hdr">
+    <div class="logo">N O V A<small>FLAGSHIP SYNTH</small></div>
+    <div class="tabs"><span>OSC</span><span class="on">FX</span><span>MATRIX</span><span>ARP · CLIP</span><span>GLOBAL</span></div>
+    <div style="font-size:11px;color:var(--dim)">CPU <b style="color:var(--text)">7%</b></div>
+  </div>
+  <div class="body">
+    <aside class="rack">
+      <div class="buses" id="buses"></div>
+      <div class="route" id="route"></div>
+      <div class="chain" id="chain"></div>
+      <div class="rackfoot" id="foot"></div>
+    </aside>
+    <main class="stack" id="stack"></main>
+  </div>
+  <div class="toast" id="toast"></div>
+</div>
+</div>
+
+<div class="notes">
+  <div class="note"><h2>Order and routing</h2><ul>
+    <li><b>Drag the whole row</b>, not a tiny handle. An amber line shows where it will land, and the sound changes on release as one undo step.</li>
+    <li><b>Drop a row on BUS 1 or BUS 2</b> to move the module there. Hold Ctrl while dropping to copy it instead.</li>
+    <li>Each row has <b>a small in/out meter</b>, so you can see which module is adding level and which is taking it away.</li>
+    <li>The bus tabs show <b>their send, their return and a live meter</b>, and the split and oversampling settings sit at the foot of the rack.</li>
+  </ul></div>
+  <div class="note"><h2>Modules</h2><ul>
+    <li><b>Every control is visible.</b> The MORE button is gone.</li>
+    <li><b>Click a module's name to swap it for another</b>, from a browser grouped by type with a one-line description of each.</li>
+    <li><b>Each module type gets 4–6 presets</b> (◂ ▸ to step through them), plus Save as… for your own.</li>
+    <li>The ⋯ menu offers Duplicate, Move to bus, Copy and paste settings, Reset and Remove. You can also collapse a module to a one-line summary.</li>
+  </ul></div>
+  <div class="note"><h2>Live displays (engine work)</h2><ul>
+    <li><b>The engine sends more telemetry:</b> each slot's input and output level and its gain reduction, a per-band gain reduction for Multiband, and a 64-band spectrum after the selected module.</li>
+    <li><b>Filter and EQ:</b> drag the nodes on the curve, with the real spectrum behind it.</li>
+    <li><b>Compressor:</b> a moving dot on the transfer curve and a gain-reduction meter.</li>
+    <li><b>Delay:</b> the taps drawn on the beat grid, with ping-pong shown on separate L and R lanes.</li>
+    <li><b>Reverb:</b> pre-delay and the decay curve drawn in seconds.</li>
+  </ul></div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s)
+const fmt = {
+  db: v => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1) + " dB",
+  pct: v => Math.round(v * 100) + "%",
+  sp: v => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(Math.round(v * 100)) + "%",
+  hz: v => v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 1 : 2) + " kHz" : Math.round(v) + " Hz",
+  ms: v => v >= 1000 ? (v / 1000).toFixed(2) + " s" : (v >= 10 ? Math.round(v) : v.toFixed(1)) + " ms",
+}
+const expo = (a, b) => p => a * Math.pow(b / a, p)
+const DIV = ["1/64","1/32T","1/32","1/16T","1/16","1/16D","1/8T","1/8","1/8D","1/4T","1/4","1/4D","1/2","1/2D","1/1"]
+
+// The 14 contract modules, every parameter each one uses.
+const SPECS = {
+  distortion: { name: "Distortion", cat: "Drive", blurb: "Twelve shapers from tube warmth to wavefolding and bit crush.", modes: ["Tube","Soft","Hard","Diode","Fold","Rectify","Sine Fold","Asym","Bit Crush","Downsample","X-Shaper","Overdrive"],
+    k: [["DRIVE", p => fmt.db(48 * p)], ["TONE", p => fmt.sp(2 * p - 1)], ["BIAS", p => fmt.sp(2 * p - 1)]], presets: ["Warm Tube","Gentle Glue","Fold Growl","Crushed","Rectified Fuzz"] },
+  filter: { name: "Filter", cat: "Filter", blurb: "Nova's filter models after the voices: ladder, SVF, comb, formant.", modes: ["Ladder 24","Ladder 12","SVF LP","SVF BP","SVF HP","Comb +","Formant"],
+    k: [["CUTOFF", p => fmt.hz(expo(8, 22000)(p))], ["RES", fmt.pct], ["DRIVE", p => fmt.db(24 * p)]], presets: ["Dark Sweep","Telephone","Air Lift","Comb Metal"] },
+  chorus: { name: "Chorus", cat: "Motion", blurb: "Two or four voices of slow modulated delay.", modes: ["2 voices","4 voices"],
+    k: [["RATE", p => expo(0.01, 10)(p).toFixed(2) + " Hz"], ["DEPTH", fmt.pct], ["FEEDBK", p => fmt.pct(.95 * p)], ["DELAY", p => fmt.ms(1 + 29 * p)]], presets: ["Juno I","Juno II","Wide Shimmer","Seasick"] },
+  flanger: { name: "Flanger", cat: "Motion", blurb: "Classic or through-zero jet sweeps.", modes: ["Classic","Through-zero"],
+    k: [["RATE", p => expo(0.01, 10)(p).toFixed(2) + " Hz"], ["DEPTH", fmt.pct], ["FEEDBK", p => fmt.sp(1.9 * p - .95)]], presets: ["Jet","Metallic","Slow Zero"] },
+  phaser: { name: "Phaser", cat: "Motion", blurb: "4, 8 or 12 all-pass stages sweeping a notch comb.", modes: ["4 stages","8 stages","12 stages"],
+    k: [["RATE", p => expo(0.01, 10)(p).toFixed(2) + " Hz"], ["DEPTH", fmt.pct], ["FEEDBK", p => fmt.pct(.95 * p)], ["CENTRE", p => fmt.hz(expo(100, 8000)(p))]], presets: ["Small Stone","Deep Twelve","Vocal Swirl"] },
+  delay: { name: "Delay", cat: "Space", blurb: "Stereo, ping-pong or tape echo, synced or free.", modes: ["Stereo","Ping-pong","Tape"], sync: true,
+    k: [["TIME", p => DIV[Math.round(p * 14)]], ["FEEDBK", p => fmt.pct(1.1 * p)], ["HP/LP", p => { const t = 2 * p - 1; return Math.abs(t) < .01 ? "Full" : t < 0 ? "LP " + fmt.hz(20000 * Math.pow(.05, -t)) : "HP " + fmt.hz(20 * Math.pow(100, t)) }]], presets: ["Dotted Eighth","Ping-Pong Quarter","Tape Slap","Dub Throw"] },
+  reverb: { name: "Reverb", cat: "Space", blurb: "Hall, plate, room and shimmer.", modes: ["Hall","Plate","Room","Shimmer"],
+    k: [["SIZE", fmt.pct], ["DECAY", p => expo(.1, 30)(p).toFixed(2) + " s"], ["DAMP", fmt.pct], ["PRE-DLY", p => fmt.ms(250 * p)]], presets: ["Big Hall","Bright Plate","Small Room","Shimmer Wash","Infinite"] },
+  compressor: { name: "Compressor", cat: "Dynamics", blurb: "Feed-forward compressor with makeup gain.", modes: ["Self","Voice sum"],
+    k: [["THRESH", p => fmt.db(-60 + 60 * p)], ["RATIO", p => expo(1, 20)(p).toFixed(1) + ":1"], ["ATTACK", p => fmt.ms(expo(.1, 100)(p))], ["RELEASE", p => fmt.ms(expo(10, 1000)(p))], ["MAKEUP", p => fmt.db(24 * p)]], presets: ["Glue","Punch","Squash","Pump"] },
+  multiband: { name: "Multiband", cat: "Dynamics", blurb: "OTT-style: three bands pushed up and down.", modes: null,
+    k: [["DEPTH", fmt.pct], ["TIME", fmt.pct], ["UP/DN", p => fmt.sp(2 * p - 1)], ["LOW", p => fmt.db(24 * p - 12)], ["MID", p => fmt.db(24 * p - 12)], ["HIGH", p => fmt.db(24 * p - 12)]], presets: ["OTT 30%","OTT Full","Upward Only","Tame Highs"] },
+  eq: { name: "EQ", cat: "Tone", blurb: "Two shelves and a bell, with dynamic movement.", modes: null,
+    k: [["LOW", p => fmt.db(36 * p - 18)], ["MID", p => fmt.db(36 * p - 18)], ["HIGH", p => fmt.db(36 * p - 18)], ["Q", p => expo(.3, 10)(p).toFixed(2)], ["MID FREQ", p => fmt.hz(expo(100, 10000)(p))], ["DYNAMIC", p => fmt.sp(2 * p - 1)]], presets: ["Smile","Low Cut Air","Mid Scoop","Telephone"] },
+  dimension: { name: "Dimension", cat: "Stereo", blurb: "Early reflections that widen without chorus wobble.", modes: null,
+    k: [["SIZE", fmt.pct], ["WIDTH", fmt.pct], ["MOTION", fmt.pct]], presets: ["Subtle","Wide","Huge"] },
+  hyper: { name: "Hyper", cat: "Stereo", blurb: "Up to seven detuned copies for instant width.", modes: ["2 voices","3 voices","4 voices","5 voices","6 voices","7 voices"],
+    k: [["DETUNE", p => Math.round(50 * p) + " ct"], ["RATE", p => expo(.05, 5)(p).toFixed(2) + " Hz"], ["WIDTH", fmt.pct]], presets: ["Supersaw Spread","Gentle Double","Wall"] },
+  utility: { name: "Utility", cat: "Tone", blurb: "Gain, width, bass mono and pan.", modes: null,
+    k: [["GAIN", p => fmt.db(48 * p - 24)], ["WIDTH", p => fmt.pct(2 * p)], ["MONO", p => p <= 0 ? "Off" : fmt.hz(expo(20, 500)(p))], ["PAN", p => Math.abs(p - .5) < .01 ? "C" : (p < .5 ? "L" : "R") + Math.round(Math.abs(p - .5) * 200)]], presets: ["Mono Bass","Wide","−6 dB"] },
+  convolve: { name: "Convolve", cat: "Space", blurb: "Any impulse response: rooms, cabinets, your own audio.", modes: ["Studio A","Spring Tank","Cabinet 4x12","Your audio…"],
+    k: [["PRE", p => fmt.ms(250 * p)], ["LOW CUT", p => fmt.hz(expo(20, 2000)(p))], ["HIGH CUT", p => fmt.hz(expo(1000, 20000)(p))]], presets: ["Studio A","Spring","Cab"] },
+}
+const CATS = ["All","Drive","Filter","Motion","Space","Dynamics","Tone","Stereo"]
+
+let uidN = 0
+const make = (kind, p, mix, extra = {}) => ({ uid: ++uidN, kind, p, mix, on: true, mode: 0, preset: 0, col: false, ...extra })
+const buses = {
+  "MAIN": [make("distortion", [.4,.55,.5], 1, { preset: 0 }), make("filter", [.62,.3,.1], 1),
+           make("compressor", [.7,.4,.5,.5,.15], 1, { mode: 0 }), make("eq", [.6,.45,.62,.4,.55,.5], 1),
+           make("multiband", [.3,.5,.5,.5,.5,.5], 1, { col: true }), make("hyper", [.3,.4,.8], .5, { mode: 3, col: true })],
+  "BUS 1": [make("delay", [8/14,.45,.6], .35, { mode: 1, sync: true }), make("reverb", [.7,.55,.4,.12], 1, { mode: 0 })],
+  "BUS 2": [make("chorus", [.3,.5,.1,.3], .6)],
+}
+const sends = { "BUS 1": [.35, true, 0], "BUS 2": [.2, false, -3] }
+let bus = "MAIN", sel = buses.MAIN[0].uid
+const chainOf = () => buses[bus]
+const find = uid => { for (const b in buses) { const i = buses[b].findIndex(m => m.uid === uid); if (i >= 0) return [b, i] } return [null, -1] }
+const toast = t => { const e = $("#toast"); e.textContent = t; e.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => e.classList.remove("show"), 1600) }
+
+// ---------- Rack ----------
+function renderBuses() {
+  $("#buses").innerHTML = Object.keys(buses).map(b =>
+    `<div class="bus ${b === bus ? "on" : ""}" data-bus="${b}" style="--v:${b === "MAIN" ? 62 : b === "BUS 1" ? 38 : 21}%"><b>${b}</b><i>${buses[b].length} of 8</i><span class="vu"></span></div>`).join("")
+  document.querySelectorAll(".bus").forEach(e => e.onclick = () => { bus = e.dataset.bus; sel = chainOf()[0]?.uid; render() })
+  const r = $("#route")
+  if (bus === "MAIN") {
+    r.innerHTML = `<div style="line-height:1.4">Every voice passes through Main. Bus 1 and Bus 2 take sends from it and return to its output.</div>`
+  } else {
+    const [s, post, ret] = sends[bus]
+    r.innerHTML = `<div class="row"><label>SEND</label><span class="mini" style="--w:${s*100}%"></span><output>${Math.round(s*100)}%</output></div>
+      <div class="row"><label>FROM</label><span class="seg"><span class="${post ? "" : "on"}">PRE MAIN</span><span class="${post ? "on" : ""}">POST MAIN</span></span></div>
+      <div class="row"><label>RETURN</label><span class="mini" style="--w:${(ret + 24) / 30 * 100}%"></span><output>${fmt.db(ret)}</output></div>`
+  }
+  $("#foot").innerHTML = (bus === "MAIN" ? `<div class="row"><span>SPLIT LOW</span><span class="seg"><span class="on">OFF</span><span>BELOW 150 Hz</span></span></div>` : "") +
+    `<div class="row"><span>OVERSAMPLE</span><span class="seg"><span>OFF</span><span class="on">2×</span><span>4×</span></span></div>`
+}
+function renderChain(drag) {
+  const list = chainOf()
+  let h = `<div class="node">VOICES IN</div><div class="wire"></div>`
+  list.forEach((m, i) => {
+    if (drag && drag.to === i && drag.bus === bus) h += `<div class="insert"></div>`
+    const s = SPECS[m.kind]
+    const sub = s.modes ? s.modes[m.mode] : s.blurb.split(":")[0].split(".")[0]
+    h += `<div class="slot ${m.uid === sel ? "sel" : ""} ${m.on ? "" : "off"} ${drag && drag.uid === m.uid ? "ghost" : ""}" data-uid="${m.uid}">
+      <span class="grip">⋮⋮</span><span class="led ${m.on ? "on" : ""}" data-led="${m.uid}" title="On / off"></span>
+      <span class="nm"><b>${s.name.toUpperCase()}</b><i>${s.presets[m.preset]} · ${sub}</i></span>
+      <canvas class="meter" data-meter="${m.uid}" width="68" height="36"></canvas><span class="kebab" data-menu="${m.uid}">⋯</span></div><div class="wire"></div>`
+  })
+  if (drag && drag.to === list.length && drag.bus === bus) h += `<div class="insert"></div>`
+  h += `<div class="node">${bus === "MAIN" ? "OUT" : "RETURN TO MAIN"}</div>`
+  h += list.length < 8 ? `<button class="add" id="add">+ Add effect <span>${8 - list.length} free</span></button>` : `<div class="node" style="justify-content:center">8 OF 8 · REMOVE ONE TO ADD</div>`
+  $("#chain").innerHTML = h
+  const add = $("#add"); if (add) add.onclick = e => openBrowser(add, null)
+}
+function render() { renderBuses(); renderChain(); renderStack() }
+
+// Drag a row: pointer events, insertion line, drop on a bus tab to move.
+let drag = null
+$("#chain").addEventListener("pointerdown", e => {
+  const led = e.target.closest("[data-led]"); if (led) { const [b, i] = find(+led.dataset.led); buses[b][i].on = !buses[b][i].on; render(); return }
+  const kb = e.target.closest("[data-menu]"); if (kb) { openMenu(kb, +kb.dataset.menu); return }
+  const row = e.target.closest(".slot"); if (!row) return
+  const uid = +row.dataset.uid
+  drag = { uid, y0: e.clientY, moved: false, to: null, bus }
+  row.setPointerCapture(e.pointerId)
+})
+window.addEventListener("pointermove", e => {
+  if (!drag) return
+  if (!drag.moved && Math.abs(e.clientY - drag.y0) < 4) return
+  drag.moved = true
+  const busEl = document.elementsFromPoint(e.clientX, e.clientY).find(el => el.classList?.contains("bus"))
+  document.querySelectorAll(".bus").forEach(b => b.classList.toggle("drop", b === busEl && b.dataset.bus !== bus))
+  if (busEl) { drag.toBus = busEl.dataset.bus; drag.to = null; renderChain(drag); return }
+  drag.toBus = null
+  const rows = [...document.querySelectorAll(".slot")]
+  let to = rows.length
+  for (let i = 0; i < rows.length; ++i) { const r = rows[i].getBoundingClientRect(); if (e.clientY < r.top + r.height / 2) { to = i; break } }
+  drag.to = to; drag.bus = bus
+  renderChain(drag)
+})
+window.addEventListener("pointerup", e => {
+  if (!drag) return
+  const d = drag; drag = null
+  document.querySelectorAll(".bus").forEach(b => b.classList.remove("drop"))
+  const [b, i] = find(d.uid)
+  if (!d.moved) { select(d.uid); return }
+  if (d.toBus && d.toBus !== b) {
+    if (buses[d.toBus].length >= 8) { toast(d.toBus + " is full"); render(); return }
+    const m = e.ctrlKey ? { ...buses[b][i], uid: ++uidN } : buses[b].splice(i, 1)[0]
+    buses[d.toBus].push(m); toast((e.ctrlKey ? "Copied " : "Moved ") + SPECS[m.kind].name + " to " + d.toBus); render(); return
+  }
+  if (d.to !== null) {
+    let to = d.to; const m = buses[b].splice(i, 1)[0]; if (to > i) to--
+    buses[b].splice(to, 0, m); if (to !== i) toast(SPECS[m.kind].name + " moved to position " + (to + 1))
+  }
+  render()
+})
+function select(uid) {
+  sel = uid; renderChain(); document.querySelectorAll(".mod").forEach(m => m.classList.toggle("sel", +m.dataset.uid === uid))
+  const el = document.querySelector(`.mod[data-uid="${uid}"]`); if (el) { const m = chainOf().find(x => x.uid === uid); if (m.col) { m.col = false; renderStack() } document.querySelector(`.mod[data-uid="${uid}"]`).scrollIntoView({ block: "nearest" }) }
+}
+
+// ---------- Popovers ----------
+function closePops() { document.querySelectorAll(".pop").forEach(p => p.remove()) }
+function place(pop, anchor) {
+  const pr = $("#panel").getBoundingClientRect(), ar = anchor.getBoundingClientRect()
+  $("#panel").appendChild(pop)
+  let x = ar.left - pr.left, y = ar.bottom - pr.top + 6
+  if (x + pop.offsetWidth > pr.width - 8) x = pr.width - pop.offsetWidth - 8
+  if (y + pop.offsetHeight > pr.height - 8) y = ar.top - pr.top - pop.offsetHeight - 6
+  pop.style.left = x + "px"; pop.style.top = Math.max(8, y) + "px"
+}
+function openBrowser(anchor, replaceUid) {
+  closePops()
+  const pop = document.createElement("div"); pop.className = "pop browser"
+  let cat = "All", q = ""
+  const draw = () => {
+    const ks = Object.keys(SPECS).filter(k => (cat === "All" || SPECS[k].cat === cat) && (SPECS[k].name + SPECS[k].blurb).toLowerCase().includes(q))
+    pop.querySelector(".cats").innerHTML = CATS.map(c => `<span class="${c === cat ? "on" : ""}" data-c="${c}">${c.toUpperCase()}</span>`).join("")
+    pop.querySelector(".items").innerHTML = ks.map(k => `<div class="item" data-k="${k}"><b>${SPECS[k].name.toUpperCase()}</b><i>${SPECS[k].blurb}</i></div>`).join("")
+  }
+  pop.innerHTML = `<input id="fxsearch" placeholder="${replaceUid ? "Replace with…" : "Search effects"}" aria-label="Search effects"><div class="cats"></div><div class="items"></div>`
+  place(pop, anchor); draw()
+  pop.querySelector("input").focus()
+  pop.querySelector("input").oninput = e => { q = e.target.value.toLowerCase(); draw() }
+  pop.onclick = e => {
+    const c = e.target.closest("[data-c]"); if (c) { cat = c.dataset.c; draw(); return }
+    const it = e.target.closest("[data-k]"); if (!it) return
+    const k = it.dataset.k, s = SPECS[k]
+    const p = s.k.map(() => .5)
+    if (replaceUid) { const [b, i] = find(replaceUid); Object.assign(buses[b][i], { kind: k, p, mode: 0, preset: 0 }); toast("Replaced with " + s.name) }
+    else { const m = make(k, p, ["delay","reverb","chorus","convolve","dimension","hyper"].includes(k) ? .35 : 1); chainOf().push(m); sel = m.uid; toast("Added " + s.name) }
+    closePops(); render(); select(sel)
+  }
+}
+function openMenu(anchor, uid) {
+  closePops()
+  const [b, i] = find(uid), m = buses[b][i]
+  const others = Object.keys(buses).filter(x => x !== b)
+  const pop = document.createElement("div"); pop.className = "pop menu"
+  pop.innerHTML = `<span data-a="dup">Duplicate <em>Ctrl+D</em></span>` +
+    others.map(o => `<span data-a="move" data-to="${o}">Move to ${o}</span>`).join("") +
+    `<hr><span data-a="copy">Copy settings</span><span data-a="paste">Paste settings</span><span data-a="save">Save as preset…</span><span data-a="reset">Reset to default</span><hr><span class="danger" data-a="rm">Remove <em>Del</em></span>`
+  place(pop, anchor)
+  pop.onclick = e => {
+    const a = e.target.closest("[data-a]")?.dataset.a; if (!a) return
+    if (a === "dup" && buses[b].length < 8) { buses[b].splice(i + 1, 0, { ...m, p: [...m.p], uid: ++uidN }); toast("Duplicated " + SPECS[m.kind].name) }
+    if (a === "move") { const to = e.target.closest("[data-to]").dataset.to; buses[to].push(buses[b].splice(i, 1)[0]); toast("Moved to " + to) }
+    if (a === "rm") { buses[b].splice(i, 1); toast("Removed " + SPECS[m.kind].name) }
+    if (a === "reset") { m.p = m.p.map(() => .5); m.preset = 0; toast("Reset") }
+    if (["copy","paste","save"].includes(a)) toast({ copy: "Settings copied", paste: "Settings pasted", save: "Saved to your presets" }[a])
+    closePops(); render()
+  }
+}
+document.addEventListener("pointerdown", e => { if (!e.target.closest(".pop") && !e.target.closest("[data-menu]") && !e.target.closest("#add") && !e.target.closest("[data-swap]")) closePops() })
+document.addEventListener("keydown", e => { if (e.key === "Escape") closePops() })
+
+// ---------- Modules ----------
+function renderStack() {
+  const list = chainOf()
+  $("#stack").innerHTML = list.length ? list.map((m, i) => {
+    const s = SPECS[m.kind]
+    const knobs = s.k.map(([l], j) => `<div class="knob ${m.kind === "filter" && j === 0 ? "mod" : ""}" data-u="${m.uid}" data-j="${j}"><canvas width="76" height="76"></canvas><b>${l}</b><i></i></div>`).join("") +
+      `<div class="knob mix" data-u="${m.uid}" data-j="mix"><canvas width="76" height="76"></canvas><b>MIX</b><i></i></div>`
+    const sum = s.k.slice(0, 3).map(([l, f], j) => `<span>${l} ${f(m.p[j])}</span>`).join("") + `<span>MIX ${fmt.pct(m.mix)}</span>`
+    return `<section class="mod ${m.uid === sel ? "sel" : ""} ${m.col ? "col" : ""} ${m.on ? "" : "off"}" data-uid="${m.uid}">
+      <div class="mh"><span class="idx">${i + 1}</span><span class="led ${m.on ? "on" : ""}" data-led2="${m.uid}"></span>
+        <span class="title" data-swap="${m.uid}" title="Swap module">${s.name.toUpperCase()}</span>
+        ${s.modes ? `<span class="dd">${s.modes[m.mode]}</span>` : ""}
+        ${s.sync ? `<span class="pill ${m.sync ? "on" : ""}" data-sync="${m.uid}">SYNC</span>` : ""}
+        <span class="preset"><button data-pv="${m.uid}" data-d="-1" aria-label="Previous preset">◀</button><span><em>PRESET</em>${s.presets[m.preset]}</span><button data-pv="${m.uid}" data-d="1" aria-label="Next preset">▶</button></span>
+        <span class="sum">${sum}</span><span class="sp"></span>
+        <span class="iconbtn" data-col="${m.uid}" title="${m.col ? "Expand" : "Collapse"}">${m.col ? "▸" : "▾"}</span>
+        <span class="iconbtn" data-menu="${m.uid}" title="More">⋯</span></div>
+      <div class="mbody"><div class="disp"><canvas data-disp="${m.uid}"></canvas><span class="tag">${tagFor(m.kind)}</span></div><div class="knobs">${knobs}</div></div></section>`
+  }).join("") : `<div style="text-align:center;color:var(--faint);padding:120px 0;font-size:13px">No effects on ${bus} yet. Use + Add effect in the rack.</div>`
+  sizeCanvases(); drawKnobs()
+}
+const tagFor = k => ({ distortion: "TRANSFER · LIVE INPUT", filter: "RESPONSE · SPECTRUM AFTER", eq: "DRAG THE NODES · SPECTRUM AFTER", compressor: "IN → OUT · GAIN REDUCTION", multiband: "BANDS · UP / DOWN", delay: "TAPS ON THE BEAT GRID · L / R", reverb: "DECAY · SECONDS", chorus: "VOICES", flanger: "SWEEP", phaser: "NOTCHES", hyper: "VOICES · STEREO", dimension: "STEREO FIELD", utility: "STEREO FIELD", convolve: "IMPULSE" })[k]
+$("#stack").addEventListener("click", e => {
+  const t = e.target
+  const g = (a) => t.closest(`[${a}]`)
+  let el
+  if ((el = g("data-led2"))) { const [b, i] = find(+el.dataset.led2); buses[b][i].on = !buses[b][i].on; render(); return }
+  if ((el = g("data-col"))) { const [b, i] = find(+el.dataset.col); buses[b][i].col = !buses[b][i].col; renderStack(); return }
+  if ((el = g("data-menu"))) { openMenu(el, +el.dataset.menu); return }
+  if ((el = g("data-swap"))) { openBrowser(el, +el.dataset.swap); return }
+  if ((el = g("data-sync"))) { const [b, i] = find(+el.dataset.sync); buses[b][i].sync = !buses[b][i].sync; renderStack(); return }
+  if ((el = g("data-pv"))) { const [b, i] = find(+el.dataset.pv), m = buses[b][i], n = SPECS[m.kind].presets.length; m.preset = (m.preset + +el.dataset.d + n) % n; m.p = m.p.map((v, j) => Math.min(1, Math.max(0, .5 + .35 * Math.sin(m.preset * 2.1 + j * 1.7)))); render(); return }
+  const mod = t.closest(".mod"); if (mod && +mod.dataset.uid !== sel) { sel = +mod.dataset.uid; renderChain(); document.querySelectorAll(".mod").forEach(x => x.classList.toggle("sel", +x.dataset.uid === sel)) }
+})
+// Knob drag
+let kd = null
+$("#stack").addEventListener("pointerdown", e => { const k = e.target.closest(".knob"); if (!k) return; const [b, i] = find(+k.dataset.u); kd = { m: buses[b][i], j: k.dataset.j, y: e.clientY }; kd.v0 = kd.j === "mix" ? kd.m.mix : kd.m.p[+kd.j]; k.setPointerCapture(e.pointerId) })
+window.addEventListener("pointermove", e => { if (!kd) return; const v = Math.min(1, Math.max(0, kd.v0 + (kd.y - e.clientY) / 160)); if (kd.j === "mix") kd.m.mix = v; else kd.m.p[+kd.j] = v; drawKnobs() })
+window.addEventListener("pointerup", () => { if (kd) { kd = null; renderChain() } })
+
+function drawKnobs() {
+  document.querySelectorAll(".knob").forEach(k => {
+    const [b, i] = find(+k.dataset.u); if (b === null) return
+    const m = buses[b][i], j = k.dataset.j, v = j === "mix" ? m.mix : m.p[+j]
+    const s = SPECS[m.kind]
+    k.querySelector("i").textContent = j === "mix" ? fmt.pct(v) : (m.kind === "delay" && +j === 0 && !m.sync ? fmt.ms(expo(1, 2000)(v)) : s.k[+j][1](v))
+    const c = k.querySelector("canvas"), x = c.getContext("2d"); x.clearRect(0, 0, 76, 76)
+    const a0 = Math.PI * .75, a1 = Math.PI * 2.25, a = a0 + (a1 - a0) * v
+    x.lineCap = "round"; x.lineWidth = 5
+    x.strokeStyle = "#1c2944"; x.beginPath(); x.arc(38, 38, 30, a0, a1); x.stroke()
+    x.strokeStyle = j === "mix" ? "#a98bff" : "#46d6ff"; x.beginPath(); x.arc(38, 38, 30, a0, a); x.stroke()
+    if (k.classList.contains("mod")) { x.strokeStyle = "#a98bff"; x.lineWidth = 2; x.beginPath(); x.arc(38, 38, 36, a, Math.min(a1, a + .9)); x.stroke() }
+    const g = x.createRadialGradient(32, 30, 2, 38, 38, 22); g.addColorStop(0, "#2e3d5c"); g.addColorStop(1, "#0c1324")
+    x.fillStyle = g; x.beginPath(); x.arc(38, 38, 21, 0, Math.PI * 2); x.fill()
+    x.strokeStyle = "#eef4fb"; x.lineWidth = 3; x.beginPath(); x.moveTo(38 + Math.cos(a) * 8, 38 + Math.sin(a) * 8); x.lineTo(38 + Math.cos(a) * 18, 38 + Math.sin(a) * 18); x.stroke()
+  })
+}
+function sizeCanvases() {
+  document.querySelectorAll("[data-disp]").forEach(c => { const r = c.getBoundingClientRect(); c.width = Math.max(10, r.width * 2); c.height = Math.max(10, r.height * 2) })
+}
+
+// ---------- Live displays (simulated telemetry) ----------
+const logx = (f, W) => Math.log(f / 20) / Math.log(1000) * W
+const fx = (x, W) => 20 * Math.pow(1000, x / W)
+function spectrum(x, W, H, t, ctx, tilt = 0) {
+  ctx.beginPath()
+  for (let i = 0; i <= W; i += 6) {
+    const f = fx(i, W)
+    const lvl = -18 - 9 * Math.log2(f / 120) * (f > 120 ? 1 : -0.6) + 6 * Math.sin(i * .05 + t * 3) * Math.sin(t + i * .013) + tilt * Math.log2(f / 1000)
+    const y = H - (lvl + 84) / 84 * H
+    i ? ctx.lineTo(i, y) : ctx.moveTo(i, y)
+  }
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath()
+  ctx.fillStyle = "rgba(70,214,255,.08)"; ctx.fill()
+}
+function stroke(c, w = 3.6) { c.strokeStyle = "rgba(70,214,255,.18)"; c.lineWidth = w * 3; c.stroke(); c.strokeStyle = "#46d6ff"; c.lineWidth = w; c.stroke() }
+function grid(c, W, H, nx = 8) { c.strokeStyle = "#16223a"; c.lineWidth = 2; for (let i = 1; i < nx; ++i) { c.beginPath(); c.moveTo(i * W / nx, 0); c.lineTo(i * W / nx, H); c.stroke() } c.beginPath(); c.moveTo(0, H / 2); c.lineTo(W, H / 2); c.stroke() }
+function node(c, x, y, on) { c.fillStyle = on ? "#f5b14c" : "#46d6ff"; c.beginPath(); c.arc(x, y, 9, 0, Math.PI * 2); c.fill(); c.strokeStyle = "#080e1c"; c.lineWidth = 3; c.stroke() }
+
+const DRAW = {
+  distortion(c, W, H, m, t) {
+    grid(c, W, H, 4)
+    const drive = Math.pow(10, 48 * m.p[0] / 20), bias = 2 * m.p[2] - 1
+    c.beginPath()
+    for (let i = 0; i <= W; i += 3) { const x = i / W * 2 - 1, y = Math.tanh(drive * .25 * (x + .3 * bias)) - Math.tanh(drive * .25 * .3 * bias); i ? c.lineTo(i, H / 2 - y * H * .4) : c.moveTo(i, H / 2 - y * H * .4) }
+    stroke(c)
+    const xin = Math.sin(t * 5) * .8, yout = Math.tanh(drive * .25 * (xin + .3 * bias)) - Math.tanh(drive * .25 * .3 * bias)
+    node(c, (xin + 1) / 2 * W, H / 2 - yout * H * .4, true)
+  },
+  filter(c, W, H, m, t) {
+    spectrum(0, W, H, t, c); grid(c, W, H)
+    const lfo = .06 * Math.sin(t * 1.3), fc = expo(8, 22000)(Math.min(1, m.p[0] + lfo)), q = .5 + 9 * m.p[1]
+    c.beginPath()
+    for (let i = 0; i <= W; i += 3) { const r = fx(i, W) / fc; const mag = 1 / Math.sqrt(Math.pow(1 - r * r, 2) + Math.pow(r / q, 2)); const db = 20 * Math.log10(Math.pow(mag, 2)); const y = H * .45 - Math.max(-48, Math.min(24, db)) / 60 * H; i ? c.lineTo(i, y) : c.moveTo(i, y) }
+    stroke(c); node(c, logx(fc, W), H * .45 - Math.min(24, 40 * Math.log10(q)) / 60 * H, false)
+  },
+  eq(c, W, H, m, t) {
+    spectrum(0, W, H, t, c, 1.5); grid(c, W, H)
+    const lo = 36 * m.p[0] - 18, mid = 36 * m.p[1] - 18, hi = 36 * m.p[2] - 18, q = expo(.3, 10)(m.p[3]), fm = expo(100, 10000)(m.p[4])
+    const dyn = (2 * m.p[5] - 1) * 4 * Math.max(0, Math.sin(t * 4))
+    const gain = f => lo / (1 + Math.pow(f / 120, 2)) + hi / (1 + Math.pow(8000 / f, 2)) + (mid + dyn) / (1 + Math.pow(q * (f / fm - fm / f), 2))
+    const y = d => H / 2 - d / 24 * H * .5
+    c.beginPath(); for (let i = 0; i <= W; i += 3) { i ? c.lineTo(i, y(gain(fx(i, W)))) : c.moveTo(i, y(gain(fx(i, W)))) }
+    stroke(c)
+    node(c, logx(120, W), y(gain(120)), false); node(c, logx(fm, W), y(gain(fm)), true); node(c, logx(8000, W), y(gain(8000)), false)
+  },
+  compressor(c, W, H, m, t) {
+    const th = -60 + 60 * m.p[0], ratio = expo(1, 20)(m.p[1]), mk = 24 * m.p[4]
+    const D = W - 70, map = d => (d + 60) / 60
+    c.strokeStyle = "#16223a"; c.lineWidth = 2; for (let i = 1; i < 6; ++i) { c.beginPath(); c.moveTo(i * D / 6, 0); c.lineTo(i * D / 6, H); c.stroke(); c.beginPath(); c.moveTo(0, i * H / 6); c.lineTo(D, i * H / 6); c.stroke() }
+    const out = d => (d < th ? d : th + (d - th) / ratio) + mk
+    c.beginPath(); for (let i = 0; i <= D; i += 3) { const d = -60 + 60 * i / D, yy = H - map(out(d)) * H; i ? c.lineTo(i, yy) : c.moveTo(i, yy) } stroke(c)
+    const lvl = -14 + 10 * Math.abs(Math.sin(t * 2.2)) - 6 * Math.abs(Math.sin(t * .7))
+    node(c, map(lvl) * D, H - map(out(lvl)) * H, true)
+    const gr = Math.max(0, lvl - (lvl < th ? lvl : th + (lvl - th) / ratio))
+    c.fillStyle = "#0a1222"; c.fillRect(W - 46, 14, 20, H - 28)
+    c.fillStyle = "#f5b14c"; c.fillRect(W - 46, 14, 20, Math.min(H - 28, gr / 24 * (H - 28)))
+    c.fillStyle = "#8d9ab0"; c.font = "600 18px JetBrains Mono, monospace"; c.textAlign = "center"; c.fillText("GR", W - 36, H - 4)
+  },
+  multiband(c, W, H, m, t) {
+    const bw = W / 3
+    for (let b = 0; b < 3; ++b) {
+      const lvl = .5 + .25 * Math.sin(t * (2 + b) + b), x = b * bw + 18, w = bw - 36
+      c.fillStyle = "rgba(70,214,255,.10)"; c.fillRect(x, H * (1 - lvl), w, H * lvl)
+      const up = m.p[0] * (1 - m.p[2]) * .3, dn = m.p[0] * m.p[2] * .3
+      c.fillStyle = "rgba(89,227,160,.35)"; c.fillRect(x, H * (1 - lvl), w, H * up * lvl)
+      c.fillStyle = "rgba(245,177,76,.5)"; c.fillRect(x, H * (1 - lvl) - H * dn * lvl, w, H * dn * lvl)
+      c.strokeStyle = "#46d6ff"; c.lineWidth = 3; c.beginPath(); c.moveTo(x, H * (1 - .55 - (m.p[3 + b] - .5) * .5)); c.lineTo(x + w, H * (1 - .55 - (m.p[3 + b] - .5) * .5)); c.stroke()
+      c.fillStyle = "#5e6b82"; c.font = "700 18px Barlow, sans-serif"; c.textAlign = "center"; c.fillText(["LOW", "MID", "HIGH"][b], x + w / 2, H - 10)
+    }
+  },
+  delay(c, W, H, m, t) {
+    const beats = 4, bwid = W / beats
+    c.strokeStyle = "#16223a"; c.lineWidth = 2
+    for (let i = 0; i <= beats * 4; ++i) { c.beginPath(); c.moveTo(i * bwid / 4, 0); c.lineTo(i * bwid / 4, H); c.strokeStyle = i % 4 ? "#121c30" : "#22325a"; c.stroke() }
+    c.beginPath(); c.moveTo(0, H / 2); c.lineTo(W, H / 2); c.strokeStyle = "#16223a"; c.stroke()
+    const div = [1/16,1/24,1/8,1/6,1/4,3/8,1/3,1/2,3/4,2/3,1,1.5,2,3,4][Math.round(m.p[0] * 14)]
+    const step = (m.sync ? div : .4) * bwid, pp = m.mode === 1
+    let lvl = 1, k = 0
+    c.fillStyle = "#f5b14c"; c.fillRect(4, H * .1, 6, H * .8)
+    for (let x = step; x < W && lvl > .03; x += step, ++k) {
+      lvl *= Math.min(1, 1.1 * m.p[1]); const hgt = lvl * H * .4
+      const right = pp ? k % 2 === 0 : null
+      c.fillStyle = "#46d6ff"
+      if (right === null || right === false) c.fillRect(x - 3, H / 2 - hgt, 6, hgt)
+      if (right === null || right === true) c.fillRect(x - 3, H / 2, 6, hgt)
+    }
+    c.fillStyle = "#5e6b82"; c.font = "700 16px Barlow, sans-serif"; c.textAlign = "left"; c.fillText("L", W - 22, 22); c.fillText("R", W - 22, H - 10)
+    const ph = (t * .5 % 1) * W; c.fillStyle = "rgba(245,177,76,.6)"; c.fillRect(ph, 0, 2, H)
+  },
+  reverb(c, W, H, m, t) {
+    grid(c, W, H)
+    const pre = m.p[3] * 250, dec = expo(.1, 30)(m.p[1]), span = Math.max(1.5, Math.min(12, dec * 1.3)), px = pre / 1000 / span * W
+    c.fillStyle = "rgba(245,177,76,.12)"; c.fillRect(0, 0, px, H)
+    c.beginPath(); for (let i = 0; i <= W; i += 2) { const s = i / W * span, env = i < px ? 0 : Math.exp(-(s - pre / 1000) * 6.9 / dec), n = Math.sin(i * 1.7) * Math.sin(i * .31 + t * 4); const y = H / 2 - env * n * H * .42; i ? c.lineTo(i, y) : c.moveTo(i, y) }
+    c.strokeStyle = "rgba(70,214,255,.55)"; c.lineWidth = 1.6; c.stroke()
+    c.beginPath(); for (let i = Math.max(0, px); i <= W; i += 3) { const s = i / W * span, env = Math.exp(-(s - pre / 1000) * 6.9 / dec); i > px ? c.lineTo(i, H / 2 - env * H * .42) : c.moveTo(i, H / 2 - env * H * .42) } stroke(c)
+    c.fillStyle = "#8d9ab0"; c.font = "600 17px JetBrains Mono, monospace"; c.textAlign = "right"
+    for (let s = 1; s < span; s += span > 6 ? 2 : 1) c.fillText(s + " s", s / span * W - 4, H - 8)
+  },
+  chorus(c, W, H, m, t) { voices(c, W, H, m, t, m.mode ? 4 : 2) },
+  flanger(c, W, H, m, t) { notches(c, W, H, m, t, 14, true) },
+  phaser(c, W, H, m, t) { notches(c, W, H, m, t, [2, 4, 6][m.mode], false) },
+  hyper(c, W, H, m, t) { voices(c, W, H, m, t, m.mode + 2) },
+  dimension(c, W, H, m, t) { field(c, W, H, m.p[1], t) },
+  utility(c, W, H, m, t) { field(c, W, H, Math.min(1, 2 * m.p[1] * .7), t, m.p[3]) },
+  convolve(c, W, H, m, t) { grid(c, W, H); c.beginPath(); for (let i = 0; i <= W; i += 2) { const e = Math.exp(-i / W * 5), y = H / 2 - e * Math.sin(i * 2.3) * Math.cos(i * .17) * H * .42; i ? c.lineTo(i, y) : c.moveTo(i, y) } stroke(c, 2) },
+}
+function voices(c, W, H, m, t, n) {
+  grid(c, W, H)
+  for (let v = 0; v < n; ++v) {
+    const pan = n === 1 ? 0 : (v / (n - 1) * 2 - 1) * (m.p[2] ?? m.p[1]), det = Math.sin(t * (.6 + v * .37) + v) * m.p[1]
+    const x = W / 2 + pan * W * .42, y = H / 2 + det * H * .32
+    c.fillStyle = "rgba(70,214,255,.15)"; c.beginPath(); c.arc(x, y, 26, 0, Math.PI * 2); c.fill()
+    node(c, x, y, v === 0)
+  }
+  c.fillStyle = "#5e6b82"; c.font = "700 16px Barlow, sans-serif"; c.textAlign = "left"; c.fillText("L", 10, H - 10); c.textAlign = "right"; c.fillText("R", W - 10, H - 10)
+}
+function notches(c, W, H, m, t, n, comb) {
+  spectrum(0, W, H, t, c); grid(c, W, H)
+  const sweep = .5 + .5 * Math.sin(t * expo(.01, 10)(m.p[0]) * 6) * m.p[1]
+  c.beginPath()
+  for (let i = 0; i <= W; i += 2) {
+    const x = i / W, f = comb ? Math.cos((x * n + sweep * 3) * Math.PI * 2) : Math.cos(Math.pow(x, .7) * n * Math.PI * 2 - sweep * 6)
+    const d = -Math.max(0, -f) * (6 + 22 * m.p[2]), y = H * .3 - d / 40 * H
+    i ? c.lineTo(i, y) : c.moveTo(i, y)
+  }
+  stroke(c)
+}
+function field(c, W, H, width, t, pan = .5) {
+  c.strokeStyle = "#16223a"; c.lineWidth = 2; c.beginPath(); c.moveTo(W / 2, 0); c.lineTo(W / 2, H); c.stroke(); c.beginPath(); c.moveTo(W / 2 - H / 2, H); c.lineTo(W / 2, 0); c.lineTo(W / 2 + H / 2, H); c.stroke()
+  c.fillStyle = "rgba(70,214,255,.55)"
+  for (let i = 0; i < 260; ++i) { const a = Math.sin(i * 12.9898 + t * 3) * 43758.5453, r = a - Math.floor(a), b = Math.sin(i * 78.233 + t * 2) * 12345.678, s = b - Math.floor(b); const x = W / 2 + (pan - .5) * W * .5 + (r * 2 - 1) * width * H * .55, y = H - s * H * .92; c.fillRect(x, y, 3, 3) }
+}
+
+// Row meters: input (dim) and output (cyan) bars.
+function drawMeters(t) {
+  document.querySelectorAll("[data-meter]").forEach(cv => {
+    const uid = +cv.dataset.meter, [b, i] = find(uid); if (b === null) return
+    const m = buses[b][i], x = cv.getContext("2d"); x.clearRect(0, 0, 68, 36)
+    const inL = .55 + .3 * Math.abs(Math.sin(t * 2 + uid)), gain = m.on ? ({ distortion: 1.15, compressor: .8, multiband: 1.1, reverb: .9 })[m.kind] ?? 1 : 1, outL = Math.min(1, inL * gain)
+    x.fillStyle = "#1c2944"; x.fillRect(0, 8, 68, 7); x.fillRect(0, 21, 68, 7)
+    x.fillStyle = "#5e6b82"; x.fillRect(0, 8, 68 * inL, 7)
+    x.fillStyle = outL > .95 ? "#ff6b7a" : "#46d6ff"; x.fillRect(0, 21, 68 * outL, 7)
+  })
+}
+function frame(ts) {
+  const t = ts / 1000
+  document.querySelectorAll("[data-disp]").forEach(cv => {
+    const [b, i] = find(+cv.dataset.disp); if (b === null) return
+    const m = buses[b][i], c = cv.getContext("2d"); c.clearRect(0, 0, cv.width, cv.height)
+    c.globalAlpha = m.on ? 1 : .35; DRAW[m.kind](c, cv.width, cv.height, m, m.on ? t : 0); c.globalAlpha = 1
+  })
+  drawMeters(t)
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) requestAnimationFrame(frame)
+}
+render(); requestAnimationFrame(frame)
+window.addEventListener("resize", sizeCanvases)
+</script>
