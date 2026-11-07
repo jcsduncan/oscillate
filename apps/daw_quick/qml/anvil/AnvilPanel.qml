@@ -150,11 +150,8 @@ Rectangle {
     readonly property real lockRuleX: 940
     readonly property real lockX: 960
     // Wide enough for the Lock choice's longest label on each of its tiles.
-    readonly property real lockWidth: Math.max(lockMinWidth, lockChoice.fitWidth)
-    readonly property real lockMinWidth: 170
+    readonly property real lockWidth: Math.max(theme.lockMinWidth, lockChoice.fitWidth)
     readonly property real lastHitRight: 18
-    // The last hit takes the row's room after Lock.
-    readonly property real lastHitGap: 24
 
     // A curve gesture's readout, until a control is touched again.
     property string gestureName: ""
@@ -1071,7 +1068,8 @@ Rectangle {
             }
         }
         Column {
-            x: panel.lockX + panel.lockWidth + panel.lastHitGap
+            // The last hit takes the row's room after Lock.
+            x: panel.lockX + panel.lockWidth + panel.theme.lastHitGap
             y: panel.masterCaptionY
             width: parent.width - panel.lastHitRight - x
             spacing: panel.theme.spaceSm

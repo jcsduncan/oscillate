@@ -593,14 +593,17 @@ Item {
         width: parent.width
         spacing: area.theme.laneSpacing
         readonly property real lockWidth: 16
-        // The name column is as wide as the longest lane name.
-        readonly property real nameMinWidth: 62
+        // The name column is as wide as the longest lane name, short of
+        // squeezing the steps below laneCellMinWidth; a name longer still
+        // is elided, its tooltip showing it whole.
+        readonly property real nameRoom: area.steps > 0
+            ? width - lockWidth - nameGap - (area.theme.laneCellMinWidth + gap) * area.steps : width
         readonly property real nameWidth: {
-            let widest = nameMinWidth
+            let widest = area.theme.laneNameMinWidth
             for (let lane = 0; lane < area.lanes; ++lane)
                 widest = Math.max(widest, Math.ceil(nameMetrics.advanceWidth(area.laneName(lane)))
                                   + area.theme.spaceXs)
-            return widest
+            return Math.min(widest, Math.max(area.theme.laneNameMinWidth, nameRoom))
         }
         FontMetrics {
             id: nameMetrics
@@ -678,6 +681,9 @@ Item {
                     font.family: area.theme.sans
                     font.pixelSize: area.theme.typeSmall
                     elide: Text.ElideRight
+                    readonly property bool tipShowsWhole: true
+                    Accessible.name: text
+                    Shell.Tip {}
                 }
                 Row {
                     spacing: grid.gap

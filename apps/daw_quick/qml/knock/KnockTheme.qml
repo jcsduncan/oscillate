@@ -227,6 +227,10 @@ KitTheme {
     property real loopMetaTop: 21
     // The thumbnail beside the meta line, under the name.
     property real loopThumbTop: 18
+    // The pattern grid: the lane-name column's least width, and the least
+    // width a step cell keeps however long a lane's name.
+    property real laneNameMinWidth: 62
+    property real laneCellMinWidth: 10
     property int loopThumbWidth: 54
     property int loopThumbHeight: 16
     // A plain hit in a thumbnail; accents are drawn solid.

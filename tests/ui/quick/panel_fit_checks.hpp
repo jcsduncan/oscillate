@@ -74,12 +74,6 @@ inline void cards_in(QQuickItem* root, std::vector<QQuickItem*>& cards) {
   }
 }
 
-// Qt's horizontal and vertical alignment flags.
-inline constexpr int align_right = 0x2;
-inline constexpr int align_hcenter = 0x4;
-inline constexpr int align_bottom = 0x40;
-inline constexpr int align_vcenter = 0x80;
-
 // Where a text item paints its glyphs, in scene coordinates.
 inline QRectF painted(const QQuickItem& item) {
   const double width = item.property("contentWidth").toDouble();
@@ -94,15 +88,15 @@ inline QRectF painted(const QQuickItem& item) {
   const int horizontal = item.property("horizontalAlignment").toInt();
   const int vertical = item.property("verticalAlignment").toInt();
   double x = 0.0;
-  if ((horizontal & align_right) != 0) {
+  if ((horizontal & Qt::AlignRight) != 0) {
     x = item.width() - width;
-  } else if ((horizontal & align_hcenter) != 0) {
+  } else if ((horizontal & Qt::AlignHCenter) != 0) {
     x = (item.width() - width) / 2.0;
   }
   double y = 0.0;
-  if ((vertical & align_bottom) != 0) {
+  if ((vertical & Qt::AlignBottom) != 0) {
     y = item.height() - height;
-  } else if ((vertical & align_vcenter) != 0) {
+  } else if ((vertical & Qt::AlignVCenter) != 0) {
     y = (item.height() - height) / 2.0;
   }
   return item.mapRectToScene(QRectF(x, y, width, height));
@@ -143,8 +137,7 @@ inline void require_text_fits(QQuickItem* root, const std::string& panel) {
       }
       // A scrolled view clips what is scrolled out of sight; that text is
       // shown whole once scrolled to.
-      if (parent->inherits("QQuickFlickable") ||
-          (parent->parentItem() != nullptr && parent->parentItem()->inherits("QQuickFlickable"))) {
+      if (parent->inherits("QQuickFlickable")) {
         break;
       }
       const QRectF box = parent->mapRectToScene(parent->boundingRect());

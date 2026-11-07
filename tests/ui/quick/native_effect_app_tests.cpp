@@ -119,33 +119,6 @@ QQuickItem* find_item(QQuickItem* root, const QString& name) {
   return nullptr;
 }
 
-// The device kit's cards under root: the items that say whether their
-// note fits.
-std::vector<QQuickItem*> cards_in(QQuickItem* root) {
-  std::vector<QQuickItem*> cards;
-  if (root->property("noteFits").isValid()) {
-    cards.push_back(root);
-  }
-  for (QQuickItem* child : root->childItems()) {
-    const auto inner = cards_in(child);
-    cards.insert(cards.end(), inner.begin(), inner.end());
-  }
-  return cards;
-}
-
-// The device kit's knob labels under root.
-std::vector<QQuickItem*> knob_labels_in(QQuickItem* root) {
-  std::vector<QQuickItem*> labels;
-  if (root->objectName().contains(QStringLiteral("KnobLabel:"))) {
-    labels.push_back(root);
-  }
-  for (QQuickItem* child : root->childItems()) {
-    const auto inner = knob_labels_in(child);
-    labels.insert(labels.end(), inner.begin(), inner.end());
-  }
-  return labels;
-}
-
 void catalogue_lists_every_engine() {
   QTemporaryDir directory;
   quick::ProjectBridge bridge(directory.path().toStdString());
@@ -367,20 +340,6 @@ void effect_is_inserted_opened_edited_and_live(const effects::EffectEngine& effe
   require(QTest::qWaitFor([&] { return find_item(window->contentItem(), panel_name) != nullptr; },
                           3'000),
           "the designed panel loaded in the app");
-  // Every knob's label shows whole, and every card's note ends inside its
-  // card.
-  auto* designed_panel = find_item(window->contentItem(), panel_name);
-  for (const auto* label : knob_labels_in(designed_panel)) {
-    require(!label->property("truncated").toBool(),
-            "the knob label shows whole: " + label->objectName().toStdString() + " \"" +
-                label->property("text").toString().toStdString() + "\"");
-  }
-  for (const auto* note_card : cards_in(designed_panel)) {
-    require(note_card->property("noteFits").toBool(),
-            "the card note fits: " + id + " " +
-                note_card->property("title").toString().toStdString() + " \"" +
-                note_card->property("note").toString().toStdString() + "\"");
-  }
   require(bridge.native_effect_automation() != nullptr, "track effects have an automation drawer");
 
   // Play, turn a knob, and see the running stage take it live.

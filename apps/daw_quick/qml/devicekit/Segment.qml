@@ -34,7 +34,9 @@ Item {
     readonly property real longestLabel: shownLabels.reduce((widest, label) =>
         Math.max(widest, labelMetrics.advanceWidth(label) + theme.segmentLetterSpacing * label.length), 0)
     readonly property real fitWidth: vertical ? theme.segmentWidth
-        : choices.length * (Math.ceil(longestLabel) + 2 * theme.segmentTextInset)
+        : choices.length * (Math.ceil(longestLabel) + theme.segmentTextInset
+                            + (glyph !== null && theme.segmentGlyphMode === "lead"
+                               ? theme.segmentGlyphLeadTextX : theme.segmentTextInset))
           + spacing * Math.max(0, choices.length - 1)
     // A vertical column's height that sets each tile's label and caption
     // whole, with segmentTextPadVertical above and below.

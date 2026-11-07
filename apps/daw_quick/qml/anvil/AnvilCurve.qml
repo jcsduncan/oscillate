@@ -40,10 +40,6 @@ Kit.CurveEditor {
     readonly property real axisLabelDrop: 3
     readonly property real timeLabelGap: 3
     readonly property real timeLabelRise: 7
-    // The plate behind each label, so the kick drawn across the plot never
-    // runs through it: its padding around the text and its opacity.
-    readonly property real labelPlatePad: 2
-    readonly property real labelPlateAlpha: 0.85
     // The rows: pitches on the log axis, levels on the linear one.
     readonly property var pitchRowsHz: [30, 50, 100, 200, 500, 1000]
     readonly property var levelRows: [0, 0.25, 0.5, 0.75, 1]
@@ -136,10 +132,10 @@ Kit.CurveEditor {
             ctx.lineWidth = t.waveEdgeWidth
             ctx.stroke()
         }
-        const pad = editor.labelPlatePad
+        const pad = t.labelPlatePad
         for (const label of labels) {
             const width = ctx.measureText(label[0]).width
-            ctx.fillStyle = Qt.rgba(t.well.r, t.well.g, t.well.b, editor.labelPlateAlpha)
+            ctx.fillStyle = Qt.rgba(t.well.r, t.well.g, t.well.b, t.labelPlateAlpha)
             ctx.fillRect(label[1] - pad, label[2] - t.typeCaption, width + 2 * pad, t.typeCaption + 2 * pad)
             ctx.fillStyle = t.inkFaint
             ctx.fillText(label[0], label[1], label[2])
