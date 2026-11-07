@@ -725,7 +725,6 @@ void ExportController::export_realtime_jack() {
                         : foundation::Result<timeline::SamplePosition>::failure(tick.error());
   if (!end || end.value().value <= 0 ||
       static_cast<std::uint64_t>(end.value().value) >= std::numeric_limits<std::uint64_t>::max()) {
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the failure prefix, then the status.
     export_status_ = QStringLiteral("Cannot map the selected end bar to a positive project sample");
     emit changed();
     return;
@@ -806,6 +805,7 @@ void ExportController::export_realtime_jack() {
 #endif
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the failure prefix, then the status.
 void ExportController::start(std::shared_ptr<Completion> completion, Job job,
                              const QString& failure_prefix, const QString& running) {
   try {
