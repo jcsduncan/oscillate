@@ -18,4 +18,6 @@ endforeach()
 foreach(bench IN ITEMS effects dust)
   oscillate_add_executable(oscillate_${bench}_bench SOURCES ${bench}_bench.cpp
     LIBS oscillate::native_effects INCLUDES ${PROJECT_SOURCE_DIR}/tests/native_dsp)
+  # effect_test_support.hpp needs the shared test support headers.
+  oscillate_link_test_support(oscillate_${bench}_bench)
 endforeach()

@@ -25,6 +25,7 @@ if(OSCILLATE_BUILD_BENCHES)
       SOURCES listening/${instrument}_audition.cpp
       LIBS oscillate::synth_engines
       INCLUDES ${OSCILLATE_SOURCE_DIR}/tests/native_dsp)
+    oscillate_link_test_support(oscillate_${instrument}_audition)
   endforeach()
   add_subdirectory(listening/warp)
 endif()

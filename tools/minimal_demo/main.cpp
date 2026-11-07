@@ -17,6 +17,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -106,7 +107,13 @@ int main(int argc, char** argv) {
   }
   const fs::path root = argv[1];
   const fs::path output = argv[2];
-  if (fs::exists(root) || fs::exists(output))
+  std::error_code root_error;
+  std::error_code output_error;
+  const bool root_exists = fs::exists(root, root_error);
+  const bool output_exists = fs::exists(output, output_error);
+  if (root_error || output_error)
+    fail("cannot inspect the project folder or output path");
+  if (root_exists || output_exists)
     fail("refusing to replace an existing project or WAV");
 
   auto session = take(application::ProjectSession::create(root, {.default_returns = true}));
