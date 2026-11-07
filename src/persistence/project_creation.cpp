@@ -75,12 +75,35 @@ void remove_stage(const std::filesystem::path& parent, int parent_fd, const std:
     (void)::fsync(parent_fd);
 }
 
-// The stage may be removed only when nothing committed it and no live writer
-// holds it. The returned lock, when held, keeps another writer out meanwhile.
-bool abandoned_stage(int parent_fd, const char* name, UniqueFd& lock) {
+// Evidence that a stage-named folder was made by a creation: it holds only
+// the folders a new project's writer lays out, and no imported media yet.
+bool fresh_project_layout(const std::filesystem::path& stage) {
+  std::error_code error;
+  for (std::filesystem::directory_iterator it(stage, error), end; !error && it != end;
+       it.increment(error)) {
+    const auto name = it->path().filename().string();
+    if ((name != "assets" && name != "state" && name != "cache") ||
+        it->symlink_status(error).type() != std::filesystem::file_type::directory)
+      return false;
+  }
+  if (error)
+    return false;
+  // A creation killed before laying out assets/ leaves none.
+  const auto assets = stage / "assets";
+  struct stat status{};
+  if (::lstat(assets.c_str(), &status) != 0)
+    return errno == ENOENT;
+  return std::filesystem::is_empty(assets, error) && !error;
+}
+
+// The stage may be removed only when a creation made it, nothing committed it
+// and no live writer holds it. The returned lock, when held, keeps another
+// writer out meanwhile.
+bool abandoned_stage(int parent_fd, const std::filesystem::path& parent, const char* name,
+                     UniqueFd& lock) {
   struct stat status{};
   if (::fstatat(parent_fd, name, &status, AT_SYMLINK_NOFOLLOW) != 0 || !S_ISDIR(status.st_mode) ||
-      !before_process_start(status.st_mtim))
+      !before_process_start(status.st_mtim) || !fresh_project_layout(parent / name))
     return false;
   UniqueFd stage(::openat(parent_fd, name, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW));
   if (!stage)
@@ -128,6 +151,10 @@ Result<StartedCreation> ProjectCreation::begin(const std::filesystem::path& root
   if (final_name.empty() || final_name == "." || final_name == "..")
     return Result<StartedCreation>::failure(
         {ErrorCode::invalid_argument, "project root must name a directory"});
+  // Cleanup would treat a project under a stage-shaped name as a stage.
+  if (is_stage_name(final_name))
+    return Result<StartedCreation>::failure(
+        {ErrorCode::invalid_argument, "Project name is reserved for project creation"});
   const auto parent = root.parent_path().empty() ? std::filesystem::path{"."} : root.parent_path();
   UniqueFd parent_fd(::open(parent.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW));
   if (!parent_fd)
@@ -227,11 +254,11 @@ Result<std::size_t> ProjectCreation::clean_abandoned(const std::filesystem::path
       break;
     }
     if (++scanned > max_scanned_entries)
-      break; // Cleanup is best effort; a later scan sees the rest.
+      break; // Bounded and best effort: stages past the bound are left alone.
     if (!is_stage_name(entry->d_name))
       continue;
     UniqueFd lock;
-    if (!abandoned_stage(parent_fd.get(), entry->d_name, lock))
+    if (!abandoned_stage(parent_fd.get(), parent, entry->d_name, lock))
       continue;
     // A stage that cannot be removed is skipped; it never blocks the rest.
     std::error_code error;

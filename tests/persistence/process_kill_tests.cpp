@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <optional>
 #include <stdexcept>
@@ -203,6 +204,7 @@ int run_fresh(const std::vector<std::string>& arguments) {
     std::vector<std::string> owned{"/proc/self/exe"};
     owned.insert(owned.end(), arguments.begin(), arguments.end());
     std::vector<char*> argv;
+    argv.reserve(owned.size() + 1);
     for (auto& argument : owned)
       argv.push_back(argument.data());
     argv.push_back(nullptr);
@@ -341,6 +343,23 @@ void verify_stuck_stage_skipped() {
   REQUIRE_FALSE(fs::exists(loose), "an undeletable stage stopped the cleanup of another");
 }
 
+// Only folders a creation made are stages: a stage-shaped folder holding
+// anything else is kept, and a project cannot take a stage-shaped name.
+void verify_foreign_stage_kept() {
+  Directory directory;
+  const auto foreign = directory.path() / ".Notes.creating-0123456789abcdef0123456789abcdef";
+  fs::create_directories(foreign / "state");
+  std::ofstream(foreign / "notes.txt") << "not a project\n";
+  fs::last_write_time(foreign, fs::file_time_type::clock::now() - stale_stage_age);
+  REQUIRE_EQ(take(ProjectCreation::clean_abandoned(directory.path())), 0U,
+             "cleanup removed a stage-shaped folder it did not make");
+  REQUIRE_TRUE(fs::exists(foreign / "notes.txt"), "a foreign folder lost its contents");
+  const auto reserved = ProjectCreation::begin(directory.path() / foreign.filename());
+  REQUIRE_FALSE(reserved.has_value(), "a project took a stage-shaped name");
+  REQUIRE_EQ(reserved.error().code, foundation::ErrorCode::invalid_argument,
+             "a stage-shaped project name was not rejected as invalid");
+}
+
 int fresh_main(const std::vector<std::string_view>& arguments) {
   try {
     if (arguments.size() == 4 && arguments[0] == verify_creation_mode) {
@@ -369,6 +388,7 @@ int main(int argc, char** argv) {
       verify_killed_creation(kill);
     verify_live_stage_kept();
     verify_stuck_stage_skipped();
+    verify_foreign_stage_kept();
     constexpr std::array stages{SaveStage::manifest_written,     SaveStage::generation_flushed,
                                 SaveStage::generation_published, SaveStage::generations_flushed,
                                 SaveStage::pointer_written,      SaveStage::pointer_published,

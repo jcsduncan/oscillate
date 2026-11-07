@@ -10,23 +10,24 @@ Creating a project opened a writer on the final folder, then made the first expl
 
 ## Decision
 
-`persistence::ProjectCreation` builds a new project in a hidden sibling stage, `.<name>.creating-<random>`. The name part is shortened to fit `NAME_MAX`, and `<random>` is 32 hex digits. The final name must be absent or an empty folder. Anything else is refused with a conflict.
+`persistence::ProjectCreation` builds a new project in a hidden sibling stage, `.<name>.creating-<random>`. The name part is shortened to fit `NAME_MAX`, and `<random>` is 32 hex digits. The final name must be absent or an empty folder. Anything else is refused with a conflict. A project name that matches the stage pattern is refused as invalid.
 
 1. The sole writer creates the stage, flushes its entry in the parent and lays out `assets/`, `state/` and `cache/`.
 2. The first explicit save commits a generation and `CURRENT` inside the stage, using the ADR-0004 protocol.
 3. The stage is flushed, then renamed to the final name. If the final name was absent, the rename uses `RENAME_NOREPLACE`, so a folder that appeared in the meantime is never replaced. If it was an empty folder, a plain rename replaces it, and that rename fails if the folder has gained contents. The writer's directory descriptors stay valid across the rename.
 4. The parent is flushed. A failure of this flush is reported as uncertain durability.
 
-If a process is killed at any point, the final name holds either what it held before (nothing, or the empty folder) or a project with a committed `CURRENT`. When creation fails without being killed, the stage is removed.
+If a process is killed before the rename, the final name holds what it held before: nothing, or the empty folder. If it is killed after the rename, the final name holds a project with a committed `CURRENT`. When creation fails without being killed, the stage is removed on a best-effort basis; a stage that cannot be removed is left for cleanup.
 
 Each creation, and each start of the desktop project library, removes abandoned stages in that folder. It removes only directories that:
 
 - match the stage pattern;
+- contain only the `assets/`, `state/` and `cache/` folders a new project's writer lays out, with `assets/` empty or absent;
 - were last modified before the current process started;
 - hold no `state/CURRENT`;
 - have a writer lock that no other process holds.
 
-A stage that holds a committed `CURRENT` is left in place: it is a complete project that was never renamed, and its owner can recover it by hand. Cleanup is best effort. A stage that cannot be removed is skipped and blocks neither other stages nor the new creation. A scan stops after 8,192 directory entries, and a later scan sees the rest. The library never lists a stage.
+A stage that holds a committed `CURRENT` is left in place: it is a complete project that was never renamed, and its owner can recover it by hand. Cleanup is best effort. A stage that cannot be removed is skipped and blocks neither other stages nor the new creation. A scan stops after 8,192 directory entries; stages past that bound are not removed. The library never lists a stage.
 
 ## Alternatives considered
 
@@ -35,4 +36,4 @@ A stage that holds a committed `CURRENT` is left in place: it is a complete proj
 
 ## Consequences and evidence
 
-A stage killed after its first save but before the rename stays hidden on disk until someone removes it. The process-kill suite (`tests/persistence/process_kill_tests.cpp`) kills a creator at six points: before staging, in the empty stage, after a generation, after `CURRENT`, after the rename and after completion. A freshly executed process then has to open the project, or create it again under the same name. Only the project may be listed, and no uncommitted stage may remain. The same suite checks that cleanup keeps a stage newer than the process and a stage whose writer lock is held, and that it skips a stage it cannot remove. `quick_project_library_recovery_contract` checks cleanup and hiding at library start.
+A stage killed after its first save but before the rename stays hidden on disk until someone removes it. The process-kill suite (`tests/persistence/process_kill_tests.cpp`) kills a creator at six points: before staging, in the empty stage, after a generation, after `CURRENT`, after the rename and after completion. A freshly executed process then has to open the project, or create it again under the same name. Only the project may be listed, and no uncommitted stage may remain. The same suite checks that cleanup keeps a stage newer than the process and a stage whose writer lock is held, that it skips a stage it cannot remove, and that it keeps a stage-shaped folder holding anything else. `quick_project_library_recovery_contract` checks cleanup and hiding at library start.
