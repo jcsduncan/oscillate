@@ -56,6 +56,13 @@ these types:
 | `ci:` | workflows and CI scripts |
 | `chore:` | other maintenance |
 
+`feat`, `fix`, `perf`, `refactor`, `test` and `revert` need a scope: a module
+directory under `src/` (`app` is the Qt Quick application), or `tools`,
+`deps` or `main`. Several scopes are comma-separated: `feat(app,native_dsp):`.
+`docs`, `build`, `ci` and `chore` may omit the scope. Pull request titles are
+checked in CI (`scripts/ci/check_pr_title.py`), because the squash commit
+takes the title.
+
 Mark a breaking change with `!` after the type (`feat!:`) or a
 `BREAKING CHANGE:` footer. Release Please reads these messages on `main` to
 choose the next version and write `CHANGELOG.md`, so do not edit the
