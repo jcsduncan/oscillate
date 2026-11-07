@@ -232,7 +232,10 @@ def main() -> None:
             runtime.resolve(strict=True),
             args.output_dir.resolve(),
         )
-    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+    except subprocess.CalledProcessError as error:
+        output_text = (error.stdout or b"") + (error.stderr or b"")
+        parser.exit(1, f"{error}\n{output_text.decode(errors='replace')}\n")
+    except (ValueError, OSError) as error:
         parser.exit(1, f"{error}\n")
     print(output, record["appimage_sha256"])
 

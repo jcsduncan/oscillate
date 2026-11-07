@@ -74,12 +74,12 @@ jobs:
           ref: ${{ inputs.tag }}
           persist-credentials: false
       # Packaging libraries and tools on top of the README list: the optional
-      # feature libraries, Qt's Wayland platform plugin, dpkg-shlibdeps and
-      # desktop-file-validate.
+      # feature libraries, Qt's Wayland platform plugin, dpkg-shlibdeps,
+      # desktop-file-validate and file (appimagetool needs it).
       - name: Install dependencies
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          scripts/ci/install-deps.sh ccache dpkg-dev desktop-file-utils \
+          scripts/ci/install-deps.sh ccache dpkg-dev desktop-file-utils file \
             libjack-jackd2-dev libsamplerate0-dev libsndfile1-dev libx11-dev qt6-wayland
           echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
       - name: Fetch the pinned VST3 SDK
