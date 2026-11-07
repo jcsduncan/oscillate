@@ -1,0 +1,44 @@
+name: Bug report
+description: Something doesn't work as documented.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a new project
+        2. …
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Commit or release
+      description: Output of `git rev-parse --short HEAD`, or the release version.
+    validations:
+      required: true
+  - type: textarea
+    id: build
+    attributes:
+      label: Build configuration
+      description: The CMake preset and any options you changed (codec, VST3, JACK, resampling).
+  - type: textarea
+    id: system
+    attributes:
+      label: System
+      description: Ubuntu version, audio backend (PipeWire or JACK), buffer size and sample rate.
+    validations:
+      required: true
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Project or log
+      description: A small project that reproduces the problem, and any log output. Don't attach media you aren't allowed to share.

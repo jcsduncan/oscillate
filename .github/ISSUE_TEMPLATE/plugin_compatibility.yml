@@ -1,0 +1,38 @@
+name: Plugin compatibility
+description: A VST3 plugin fails to scan, load, save state or show its editor.
+labels: [plugins]
+body:
+  - type: input
+    id: plugin
+    attributes:
+      label: Plugin
+      description: Name, vendor and version.
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Where it fails
+      options:
+        - Scanning
+        - Loading
+        - Playback or rendering
+        - Saving or restoring state
+        - Editor window
+        - Latency or delay compensation
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Include any message Oscillate showed, and whether the plugin works in another Linux host.
+    validations:
+      required: true
+  - type: textarea
+    id: system
+    attributes:
+      label: System
+      description: Commit, Ubuntu version, X11 or Wayland session, audio backend.
+    validations:
+      required: true

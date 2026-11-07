@@ -34,6 +34,7 @@ ROOT_PAGES = {
     "index.md": "README.md",
     "contributing.md": "CONTRIBUTING.md",
     "security.md": "SECURITY.md",
+    "code-of-conduct.md": "CODE_OF_CONDUCT.md",
 }
 DOCS_MAP_SOURCE = "README.md"
 DOCS_MAP_PAGE = "map.md"
