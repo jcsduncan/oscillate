@@ -3,8 +3,9 @@
 Usage: tidy_changed.py PRESET BASE
 A changed C++ source is checked itself. A changed header is checked through
 the source of the same name beside it, or under src/ for a public header in
-include/oscillate/. Only findings in the changed files are reported, so a
-change is not held to findings in the unchanged headers it includes.
+include/oscillate/. Only findings on the lines the change adds or edits are
+reported, so a change is not held to older findings in the files it touches
+or in the unchanged headers it includes.
 Sources missing from the preset's compilation database (a feature the preset
 leaves out) are skipped. scripts/check-tidy.sh checks the whole tree.
 """
@@ -21,18 +22,43 @@ SOURCE_DIRS = ("apps", "src", "tests")
 HEADER_SUFFIXES = (".hpp", ".h")
 PUBLIC_HEADER_ROOT = PurePosixPath("include/oscillate")
 # A clang-tidy diagnostic's primary line: path:line:column: severity: text [check].
-DIAGNOSTIC = re.compile(r"^(?P<path>[^:\s][^:]*):\d+:\d+: (?:warning|error): .*\[[\w.,-]+\]$")
+DIAGNOSTIC = re.compile(
+    r"^(?P<path>[^:\s][^:]*):(?P<line>\d+):\d+: (?:warning|error): .*\[[\w.,-]+\]$"
+)
+# A unified diff's file header and hunk header (new side: start, optional count).
+DIFF_FILE = re.compile(r"^\+\+\+ b/(?P<path>.+)$")
+DIFF_HUNK = re.compile(r"^@@ -\S+ \+(?P<start>\d+)(?:,(?P<count>\d+))? @@")
+CPP_SUFFIXES = (".cpp", *HEADER_SUFFIXES)
 
 
-def changed_files(base):
+def added_lines(diff):
+    """{path: [[first, last], ...]} of the lines a zero-context diff adds or edits."""
+    lines = {}
+    path = None
+    for text in diff.splitlines():
+        if match := DIFF_FILE.match(text):
+            path = match["path"]
+            continue
+        match = DIFF_HUNK.match(text)
+        if not match or path is None:
+            continue
+        count = int(match["count"]) if match["count"] is not None else 1
+        if count == 0:
+            continue
+        start = int(match["start"])
+        lines.setdefault(path, []).append([start, start + count - 1])
+    return lines
+
+
+def changed_lines(base):
     result = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=ACMR", f"{base}...HEAD"],
+        ["git", "diff", "-U0", "--no-color", "--diff-filter=ACMR", f"{base}...HEAD"],
         check=True,
         capture_output=True,
         text=True,
         cwd=ROOT,
     )
-    return [line for line in result.stdout.splitlines() if line]
+    return added_lines(result.stdout)
 
 
 def candidate_sources(path):
@@ -63,29 +89,35 @@ def translation_units(changed, configured):
     return selected
 
 
-def line_filter(changed):
-    """clang-tidy --line-filter JSON naming every changed C++ file, all lines."""
-    names = [path for path in changed if PurePosixPath(path).suffix in (".cpp", *HEADER_SUFFIXES)]
-    return json.dumps([{"name": name} for name in names])
+def line_filter(lines):
+    """clang-tidy --line-filter JSON: each changed C++ file and its changed lines."""
+    return json.dumps(
+        [
+            {"name": path, "lines": ranges}
+            for path, ranges in lines.items()
+            if PurePosixPath(path).suffix in CPP_SUFFIXES
+        ]
+    )
 
 
-def changed_findings(output, changed, root):
-    """The diagnostics in `output` whose primary location is a changed file.
+def changed_findings(output, lines, root):
+    """The diagnostics in `output` whose primary location is a changed line.
 
-    The line filter can keep a warning in an unchanged header when one of its
-    notes falls in a changed file, so the primary location decides.
+    The line filter can keep a warning elsewhere when one of its notes falls
+    on a changed line, so the primary location decides.
     """
-    wanted = {os.path.normpath(path) for path in changed}
+    wanted = {os.path.normpath(path): ranges for path, ranges in lines.items()}
     found = []
-    for line in output.splitlines():
-        match = DIAGNOSTIC.match(line)
+    for text in output.splitlines():
+        match = DIAGNOSTIC.match(text)
         if not match:
             continue
         path = os.path.normpath(match["path"])
         if os.path.isabs(path):
             path = os.path.relpath(path, root)
-        if path in wanted:
-            found.append(line)
+        line = int(match["line"])
+        if any(first <= line <= last for first, last in wanted.get(path, [])):
+            found.append(text)
     return found
 
 
@@ -101,14 +133,14 @@ def main():
     if len(sys.argv) != 3:
         sys.exit("Usage: tidy_changed.py PRESET BASE")
     preset, base = sys.argv[1], sys.argv[2]
-    changed = changed_files(base)
-    sources = translation_units(changed, configured_sources(preset))
+    lines = changed_lines(base)
+    sources = translation_units(list(lines), configured_sources(preset))
     if not sources:
         print(f"No configured C++ translation unit changed against {base}.")
         return
     print(f"Checking {len(sources)} translation unit(s) against {base}.", flush=True)
     script = str(ROOT / "scripts" / "check-tidy.sh")
-    environment = dict(os.environ, CLANG_TIDY_LINE_FILTER=line_filter(changed))
+    environment = dict(os.environ, CLANG_TIDY_LINE_FILTER=line_filter(lines))
     result = subprocess.run(
         [script, preset, *sources],
         check=False,
@@ -119,9 +151,9 @@ def main():
         text=True,
     )
     print(result.stdout, flush=True)
-    findings = changed_findings(result.stdout, changed, os.path.realpath(ROOT))
+    findings = changed_findings(result.stdout, lines, os.path.realpath(ROOT))
     if findings:
-        print(f"{len(findings)} finding(s) in the changed files:")
+        print(f"{len(findings)} finding(s) on the changed lines:")
         print("\n".join(findings))
         sys.exit(1)
     # A compile error anywhere means a changed translation unit was not checked;

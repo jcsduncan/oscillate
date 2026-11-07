@@ -55,56 +55,68 @@ class TranslationUnitTests(unittest.TestCase):
         )
 
 
-class LineFilterTests(unittest.TestCase):
-    def test_filter_names_only_changed_cpp_files(self):
+DIFF = """\
+diff --git a/src/engine/graph.cpp b/src/engine/graph.cpp
+--- a/src/engine/graph.cpp
++++ b/src/engine/graph.cpp
+@@ -4 +4 @@ void a() {
+@@ -10,0 +11,3 @@ void b() {
+@@ -20,2 +23,0 @@ void c() {
+diff --git a/docs/HLD.md b/docs/HLD.md
+--- a/docs/HLD.md
++++ b/docs/HLD.md
+@@ -1,2 +1,2 @@
+"""
+
+
+class AddedLinesTests(unittest.TestCase):
+    def test_hunks_become_inclusive_ranges_and_deletions_are_skipped(self):
         self.assertEqual(
-            json.loads(
-                tidy_changed.line_filter(
-                    ["src/engine/graph.cpp", "include/oscillate/engine/graph.hpp", "docs/HLD.md"]
-                )
-            ),
-            [{"name": "src/engine/graph.cpp"}, {"name": "include/oscillate/engine/graph.hpp"}],
+            tidy_changed.added_lines(DIFF),
+            {"src/engine/graph.cpp": [[4, 4], [11, 13]], "docs/HLD.md": [[1, 2]]},
+        )
+
+
+class LineFilterTests(unittest.TestCase):
+    def test_filter_names_changed_cpp_files_and_their_lines(self):
+        self.assertEqual(
+            json.loads(tidy_changed.line_filter(tidy_changed.added_lines(DIFF))),
+            [{"name": "src/engine/graph.cpp", "lines": [[4, 4], [11, 13]]}],
         )
 
 
 class ChangedFindingsTests(unittest.TestCase):
     ROOT = "/work/oscillate"
+    GRAPH = {"src/engine/graph.cpp": [[4, 4], [11, 13]]}
 
-    def test_keeps_findings_located_in_changed_files(self):
+    def test_keeps_findings_on_changed_lines_only(self):
         output = "\n".join(
             [
                 "/work/oscillate/src/engine/graph.cpp:4:2: error: bad [bugprone-x]",
-                "/work/oscillate/src/engine/../../include/oscillate/foundation/error.hpp:27:8: "
-                "error: uninitialised [clang-analyzer-core.CallAndMessage]",
-                "/work/oscillate/src/engine/graph.cpp:9:1: note: Calling implicit constructor",
+                "/work/oscillate/src/engine/graph.cpp:8:2: error: older [bugprone-x]",
+                "/work/oscillate/src/engine/graph.cpp:13:1: error: edge [bugprone-x]",
+                "/work/oscillate/src/engine/graph.cpp:12:1: note: Calling implicit constructor",
             ]
         )
-        found = tidy_changed.changed_findings(output, ["src/engine/graph.cpp"], self.ROOT)
-        self.assertEqual(len(found), 1)
+        found = tidy_changed.changed_findings(output, self.GRAPH, self.ROOT)
+        self.assertEqual(len(found), 2)
         self.assertIn("graph.cpp:4:2", found[0])
+        self.assertIn("graph.cpp:13:1", found[1])
 
     def test_finding_in_an_unchanged_header_is_dropped(self):
         output = (
-            "/work/oscillate/src/native_dsp/../../include/oscillate/foundation/error.hpp:27:8: "
+            "/work/oscillate/src/engine/../../include/oscillate/foundation/error.hpp:27:8: "
             "error: uninitialised [clang-analyzer-core.uninitialized.Assign,-warnings-as-errors]"
         )
-        self.assertEqual(
-            tidy_changed.changed_findings(output, ["src/native_dsp/meter.cpp"], self.ROOT), []
-        )
+        self.assertEqual(tidy_changed.changed_findings(output, self.GRAPH, self.ROOT), [])
 
-    def test_changed_header_reached_through_a_relative_path_is_kept(self):
+    def test_changed_header_line_reached_through_a_relative_path_is_kept(self):
         output = (
             "/work/oscillate/src/engine/../../include/oscillate/engine/graph.hpp:3:1: "
             "error: bad [performance-x,-warnings-as-errors]"
         )
-        self.assertEqual(
-            len(
-                tidy_changed.changed_findings(
-                    output, ["include/oscillate/engine/graph.hpp"], self.ROOT
-                )
-            ),
-            1,
-        )
+        lines = {"include/oscillate/engine/graph.hpp": [[2, 5]]}
+        self.assertEqual(len(tidy_changed.changed_findings(output, lines, self.ROOT)), 1)
 
 
 if __name__ == "__main__":
