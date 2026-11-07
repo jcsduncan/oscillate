@@ -2,7 +2,7 @@
 #include "oscillate/test/check.hpp"
 
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
-#include "oscillate/application/vst3/instrument_export.hpp"
+#include "oscillate/application/vst3/offline_export.hpp"
 #include "oscillate/plugins/vst3_scan.hpp"
 #endif
 
@@ -186,8 +186,10 @@ void export_checks() {
     auto altered = task.snapshot();
     ++altered.revision;
     const auto stale_target = directory.root() / "stale.wav";
-    auto stale = exporting::render_vst3_instrument_wav_master(
-        altered, std::move(task).take_authority(), scanner, bundle, {stale_target});
+    const auto& reader = task.reader();
+    auto stale =
+        exporting::render_vst3_master(altered, reader, std::move(task).take_authority(), scanner,
+                                      exporting::MasterRenderOptions{stale_target});
     require(!stale && stale.error().code == foundation::ErrorCode::conflict &&
                 !fs::exists(stale_target),
             "stale authority published output");
@@ -799,8 +801,8 @@ void mixed_export_checks() {
     const auto stale_target = directory.root() / "mixed-stale.wav";
     const auto& reader = stale_task.reader();
     auto authority = std::move(stale_task).take_authority();
-    auto stale = exporting::render_vst3_mixed_wav_master(altered, reader, std::move(authority),
-                                                         scanner, bundle, {stale_target});
+    auto stale = exporting::render_vst3_master(altered, reader, std::move(authority), scanner,
+                                               exporting::MasterRenderOptions{stale_target});
     require(!stale && stale.error().code == foundation::ErrorCode::conflict &&
                 !fs::exists(stale_target),
             "stale mixed authority published output");
@@ -816,8 +818,9 @@ void mixed_export_checks() {
   const auto& detached_snapshot = detached.snapshot();
   const auto& detached_reader = detached.reader();
   auto authority = std::move(detached).take_authority();
-  auto detached_result = exporting::render_vst3_mixed_wav_master(
-      detached_snapshot, detached_reader, std::move(authority), scanner, bundle, {detached_target});
+  auto detached_result =
+      exporting::render_vst3_master(detached_snapshot, detached_reader, std::move(authority),
+                                    scanner, exporting::MasterRenderOptions{detached_target});
   require(detached_result.has_value() && fs::exists(detached_target),
           "detached mixed task lost its saved reader");
   session = take(app::ProjectSession::open(project_root));

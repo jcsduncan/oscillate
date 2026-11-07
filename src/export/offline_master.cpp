@@ -442,6 +442,8 @@ using WriterOptions = MasterOutputOptions;
   std::vector<OpenSource> sources;
   std::vector<PreparedClip> clips;
   std::vector<PreparedSynth> synths;
+  // VST3 instrument tracks with notes: their chains play them.
+  std::size_t vst3_sources = 0;
   std::optional<engine::CompiledMidiPlan> local_midi;
   if (compiled_midi == nullptr) {
     auto compiled = engine::compile_midi_events(snapshot);
@@ -489,7 +491,7 @@ using WriterOptions = MasterOutputOptions;
       if (plan->events().empty()) {
         continue;
       }
-      if (synths.size() == max_export_instruments) {
+      if (synths.size() + vst3_sources == max_export_instruments) {
         return foundation::Result<PublishOutcome>::failure(
             {foundation::ErrorCode::resource_exhausted, "Master export instrument limit exceeded"});
       }
@@ -505,6 +507,38 @@ using WriterOptions = MasterOutputOptions;
       }
       sounds_from(track, static_cast<std::uint64_t>(plan->events().front().sample.value));
       synths.push_back({std::move(player).value(), track_index});
+      continue;
+    }
+    if (track.kind == project::TrackKind::instrument && vst3 &&
+        std::holds_alternative<project::Vst3PluginInstance>(track.instrument_source)) {
+      // A VST3 instrument is its chain's first stage (ADR-0050): it plays
+      // its MIDI in the routed mixer, and its release rings out with the
+      // chain's tail.
+      if (!track.clips.empty()) {
+        return foundation::Result<PublishOutcome>::failure(
+            {foundation::ErrorCode::unsupported,
+             "Master export requires no audio clips on instrument tracks"});
+      }
+      const auto plan =
+          std::ranges::find_if(compiled_midi->instruments(),
+                               [&track](const auto& item) { return item.track() == track.id; });
+      if (plan == compiled_midi->instruments().end()) {
+        return foundation::Result<PublishOutcome>::failure(
+            {foundation::ErrorCode::corrupt_data, "Instrument MIDI event plan is missing"});
+      }
+      if (plan->events().empty()) {
+        continue;
+      }
+      if (synths.size() + vst3_sources == max_export_instruments) {
+        return foundation::Result<PublishOutcome>::failure(
+            {foundation::ErrorCode::resource_exhausted, "Master export instrument limit exceeded"});
+      }
+      if (sets_extent(track)) {
+        total_frames = std::max(total_frames, synth_event_extent(*plan, 0));
+        music_end = std::max(music_end, synth_event_extent(*plan, 0));
+      }
+      sounds_from(track, static_cast<std::uint64_t>(plan->events().front().sample.value));
+      ++vst3_sources;
       continue;
     }
     if (track.kind == project::TrackKind::instrument) {
@@ -605,7 +639,7 @@ using WriterOptions = MasterOutputOptions;
       sounds_from(track, first);
     }
   }
-  if (clips.empty() && synths.empty() && !solo_track) {
+  if (clips.empty() && synths.empty() && vst3_sources == 0 && !solo_track) {
     return foundation::Result<PublishOutcome>::failure(
         {foundation::ErrorCode::unsupported, "Master export requires audible clips or MIDI notes"});
   }
@@ -1120,6 +1154,9 @@ stem_source_extent(const project::Snapshot& snapshot, const engine::CompiledMidi
           return foundation::Result<std::uint64_t>::failure(tail.error());
         }
         extent = std::max(extent, synth_event_extent(*plan, tail.value()));
+      } else if (std::holds_alternative<project::Vst3PluginInstance>(track.instrument_source)) {
+        // Its release rings out with its chain's tail, as in the master.
+        extent = std::max(extent, synth_event_extent(*plan, 0));
       } else {
         for (const auto& event : plan->events()) {
           if (event.kind == engine::MidiEventKind::note_off) {
