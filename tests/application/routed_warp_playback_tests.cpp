@@ -209,18 +209,20 @@ project::Snapshot placed(const Song& song, std::int64_t start, std::int64_t leng
 }
 
 // Independent continuous offline render of the clip at Q0 (the export and
-// cache path), left channel.
+// cache path), left channel. A lower tier from a later output frame is the
+// render a live quality step-down restarts at that frame.
 std::vector<float> offline(const fs::path& root, const project::Snapshot& snapshot,
-                           project::ClipId clip) {
+                           project::ClipId clip, warp::QualityTier tier = warp::QualityTier::q0,
+                           std::uint64_t first = 0) {
   auto request = take(processing::warp_render_request(snapshot, clip));
   auto view =
       take(processing::ProjectRateSourceView::open(root, request.source, request.project_rate));
   auto map = take(processing::make_warp_stream_map(request.plan, request.source.sample_rate,
                                                    request.project_rate));
   auto analysis = take(processing::analyse_warp_source(request, *view));
-  auto stream =
-      take(processing::create_warp_stream(request, analysis, map, warp::QualityTier::q0, 8'192));
-  REQUIRE_EQ(stream->start(map, *view, 0), warp::StreamStatus::ok, "offline stream did not start");
+  auto stream = take(processing::create_warp_stream(request, analysis, map, tier, 8'192));
+  REQUIRE_EQ(stream->start(map, *view, first), warp::StreamStatus::ok,
+             "offline stream did not start");
   std::vector<float> rendered;
   std::vector<float> left(8'192), right(8'192);
   while (stream->next_output_frame() < map.output_frames()) {
@@ -251,6 +253,9 @@ struct Live {
 };
 
 using oscillate::test::wait_until;
+
+// A paced play's stream end while an armed loop keeps the worker queueing.
+constexpr std::uint64_t looping_stream = std::numeric_limits<std::uint64_t>::max();
 
 // Drives the fake device callback and records what it heard per absolute
 // project sample (left channel). Allocation is counted on the callback.
@@ -303,14 +308,19 @@ public:
     require(!step(), "a loop wrap onto stale or mismatched frames played at once");
   }
   // Like a real-time device: before each callback, waits until the worker
-  // has at least `lead` frames (or the rest of the clip) buffered, so the
+  // has at least `lead` frames (or the rest of its stream) buffered, so the
   // fake device never outruns it and never forces a quality step-down.
+  // `stream_end` is the project sample where the worker's queued stream
+  // ends: the clip end, or looping_stream while an armed loop carries it on
+  // from the loop start. Near the loop end the clip end is not a bound, and
+  // waiting only for the rest of the clip lets the device drain the ring
+  // below the step-down threshold whenever the worker is descheduled.
   void paced_play_until(std::uint64_t sample, app::RoutedAudioSource& source,
-                        std::uint64_t clip_end, std::size_t lead = 8'192) {
+                        std::uint64_t stream_end, std::size_t lead = 8'192) {
     while (transport_.completed_snapshot().next_sample < sample) {
       const auto position = transport_.completed_snapshot().next_sample;
       const auto need =
-          position < clip_end ? std::min<std::uint64_t>(lead, clip_end - position) : 0;
+          position < stream_end ? std::min<std::uint64_t>(lead, stream_end - position) : 0;
       wait_until(
           [&] {
             const auto status = source.processed_clip_status();
@@ -572,13 +582,17 @@ void seeks_and_loop_wraps_resume_exactly() {
     const auto loop = start + 5'003;
     const auto loop_end = target + std::uint64_t{128} * 200;
     require(live.source->set_loop(loop, loop_end), "loop was not armed");
-    player.paced_play_until(loop_end, *live.source, start + length);
+    player.paced_play_until(loop_end, *live.source, looping_stream);
     wait_until([&] { return live.source->loop_status().ready_generation == 3; },
                "next loop generation was not pre-primed");
     require(!live.source->loop_status().missed, "armed loop reported missed");
     player.loop_wrap(loop);
     wait_buffered(*live.source, 8'192);
-    player.paced_play_until(loop + 8'192, *live.source, start + length);
+    player.paced_play_until(loop + 8'192, *live.source, looping_stream);
+    // A step-down restarts the stream at a lower tier, which differs slightly from
+    // the Q0 reference; name that cause rather than the sample.
+    REQUIRE_EQ(live.source->status().quality_step_downs, 0,
+               mode_name(mode) + " stepped quality down: the paced device outran the worker");
     require_matches(player, expected, start, loop, loop + 8'192, mode_name(mode) + " loop wrap");
     require_matches(player, expected, start, target, loop_end, mode_name(mode) + " loop body");
     // Arming a loop whose end the worker has already streamed past misses,
@@ -603,13 +617,16 @@ void rearm_after_ready_never_accepts_the_old_loop() {
   constexpr std::uint64_t length = 60'000;
   const auto snapshot = placed(song, start, length, with_mode(project::WarpMode::repitch));
   const auto expected = offline(song.root, snapshot, song.clip);
-  std::atomic<bool> permit{true};
+  // The worker starts paused: the ring holds more than the loop end, so a
+  // worker let run before the loop is armed may stream past it and miss.
+  std::atomic<bool> permit{false};
   Live live(song.root, snapshot, 128, 16'384, &permit);
   Player player(*live.source, 128, start + length + 1'024);
   constexpr std::uint64_t a_start = start + 1'000;
   constexpr std::uint64_t a_end = std::uint64_t{128} * 96; // on the block grid from 0
   require(live.source->set_loop(a_start, a_end), "loop A was not armed");
-  player.paced_play_until(a_end, *live.source, start + length);
+  permit.store(true, std::memory_order_release);
+  player.paced_play_until(a_end, *live.source, looping_stream);
   wait_until([&] { return live.source->loop_status().ready_generation == 2; },
              "loop A was not primed");
 
@@ -627,14 +644,14 @@ void rearm_after_ready_never_accepts_the_old_loop() {
   player.hold_until([&] { return live.source->status().ready_generation == 2; },
                     "refused wrap did not prime as a seek");
   require(!live.source->loop_status().missed, "the seek did not re-arm loop B");
-  player.paced_play_until(a_start + 8'192, *live.source, start + length);
+  player.paced_play_until(a_start + 8'192, *live.source, looping_stream);
   require_matches(player, expected, start, a_start, a_start + 8'192, "seek after refused wrap");
 
-  player.paced_play_until(b_end, *live.source, start + length);
+  player.paced_play_until(b_end, *live.source, looping_stream);
   wait_until([&] { return live.source->loop_status().ready_generation == 3; },
              "loop B was not primed after the seek");
   player.loop_wrap(b_start);
-  player.paced_play_until(b_start + 8'192, *live.source, start + length);
+  player.paced_play_until(b_start + 8'192, *live.source, looping_stream);
   require_matches(player, expected, start, b_start, b_start + 8'192, "loop B wrap");
   REQUIRE_EQ(live.source->status().missing_frames, 0,
              "loop rearm underran or stepped quality down");
@@ -652,11 +669,15 @@ void rearm_after_ready_reports_missed_until_seek() {
   constexpr std::uint64_t length = 60'000;
   const auto snapshot = placed(song, start, length, with_mode(project::WarpMode::tones));
   const auto expected = offline(song.root, snapshot, song.clip);
-  Live live(song.root, snapshot, 128, 16'384);
+  // The worker starts paused: the ring holds more than the loop end, so a
+  // worker let run before the loop is armed may stream past it and miss.
+  std::atomic<bool> permit{false};
+  Live live(song.root, snapshot, 128, 16'384, &permit);
   Player player(*live.source, 128, start + length + 1'024);
   constexpr std::uint64_t a_end = std::uint64_t{128} * 100;
   require(live.source->set_loop(start + 300, a_end), "loop A was not armed");
-  player.paced_play_until(a_end - 2'048, *live.source, start + length);
+  permit.store(true, std::memory_order_release);
+  player.paced_play_until(a_end - 2'048, *live.source, looping_stream);
   wait_until([&] { return live.source->loop_status().ready_generation == 2; },
              "loop A was not primed");
   constexpr std::uint64_t b_start = start + 5'000;
@@ -669,7 +690,7 @@ void rearm_after_ready_reports_missed_until_seek() {
   player.hold_until([&] { return live.source->status().ready_generation == 2; },
                     "seek after missed rearm was not primed");
   require(!live.source->loop_status().missed, "seek did not re-arm loop B");
-  player.paced_play_until(a_end + 8'192, *live.source, start + length);
+  player.paced_play_until(a_end + 8'192, *live.source, looping_stream);
   require_matches(player, expected, start, position, a_end + 8'192,
                   "play through loop A's old end after rearm");
   REQUIRE_EQ(live.source->status().missing_frames, 0, "missed rearm and seek underran");
@@ -685,12 +706,15 @@ void clear_after_ready_requires_a_seek() {
   constexpr std::uint64_t length = 60'000;
   const auto snapshot = placed(song, start, length, with_mode(project::WarpMode::beats));
   const auto expected = offline(song.root, snapshot, song.clip);
-  std::atomic<bool> permit{true};
+  // The worker starts paused: the ring holds more than the loop end, so a
+  // worker let run before the loop is armed may stream past it and miss.
+  std::atomic<bool> permit{false};
   Live live(song.root, snapshot, 128, 16'384, &permit);
   Player player(*live.source, 128, start + length + 1'024);
   constexpr std::uint64_t loop_end = std::uint64_t{128} * 120;
   require(live.source->set_loop(start + 500, loop_end), "loop was not armed");
-  player.paced_play_until(loop_end - 1'024, *live.source, start + length);
+  permit.store(true, std::memory_order_release);
+  player.paced_play_until(loop_end - 1'024, *live.source, looping_stream);
   wait_until([&] { return live.source->loop_status().ready_generation == 2; },
              "loop was not primed");
   permit.store(false, std::memory_order_release);
@@ -728,7 +752,7 @@ void unaligned_loop_end_wraps_sample_exactly() {
   constexpr std::uint64_t loop_start = start + 777;
   constexpr std::uint64_t loop_end = start + 20'011; // 128 does not divide it
   require(live.source->set_loop(loop_start, loop_end), "loop was not armed");
-  player.paced_play_until(loop_end - 4'096, *live.source, start + length);
+  player.paced_play_until(loop_end - 4'096, *live.source, looping_stream);
   wait_until([&] { return live.source->loop_status().ready_generation == 2; },
              "next loop pass was not primed");
   require(player.transport().request_loop_wrap_at(loop_end, loop_start),
@@ -767,11 +791,15 @@ void withdrawn_loop_restarts_in_place() {
   constexpr std::uint64_t length = 60'000;
   const auto snapshot = placed(song, start, length, with_mode(project::WarpMode::beats));
   const auto expected = offline(song.root, snapshot, song.clip);
-  Live live(song.root, snapshot, 128, 16'384);
+  // The worker starts paused: the ring holds more than the loop end, so a
+  // worker let run before the loop is armed may stream past it and miss.
+  std::atomic<bool> permit{false};
+  Live live(song.root, snapshot, 128, 16'384, &permit);
   Player player(*live.source, 128, start + length + 1'024);
   constexpr std::uint64_t loop_end = start + 15'001;
   require(live.source->set_loop(start + 500, loop_end), "loop was not armed");
-  player.paced_play_until(loop_end - 3'000, *live.source, start + length);
+  permit.store(true, std::memory_order_release);
+  player.paced_play_until(loop_end - 3'000, *live.source, looping_stream);
   wait_until([&] { return live.source->loop_status().ready_generation == 2; },
              "loop was not primed");
   require(player.transport().request_loop_wrap_at(loop_end, start + 500),
@@ -904,12 +932,12 @@ void rearm_before_priming_lifts_the_old_limit() {
   constexpr std::uint64_t b_start = start + 4'321;
   constexpr std::uint64_t b_end = std::uint64_t{128} * 300;
   require(live.source->set_loop(b_start, b_end), "loop B was not armed");
-  player.paced_play_until(b_end, *live.source, start + length);
+  player.paced_play_until(b_end, *live.source, looping_stream);
   wait_until([&] { return live.source->loop_status().ready_generation == 2; },
              "loop B was not primed");
   require(!live.source->loop_status().missed, "loop B reported missed");
   player.loop_wrap(b_start);
-  player.paced_play_until(b_start + 8'192, *live.source, start + length);
+  player.paced_play_until(b_start + 8'192, *live.source, looping_stream);
   require_matches(player, expected, start, start, b_end, "play past loop A's old end");
   require_matches(player, expected, start, b_start, b_start + 8'192, "loop B wrap");
   REQUIRE_EQ(live.source->status().missing_frames, 0, "rearm before priming underran");
@@ -1114,6 +1142,57 @@ void falling_behind_steps_down_quality_with_reported_underrun() {
   REQUIRE_GT(peak, 0.1F, "stepped-down clip did not keep playing");
 }
 
+// The cause of a rare Re-Pitch loop parity failure, forced: once the ring
+// has been three-quarters full, a device that drains the lead below a
+// quarter of it (here with the worker paused, in the failure a worker
+// descheduled under load) makes the worker step down without any underrun.
+// Every queued Q0 frame still plays exactly; the next read restarts at Q1,
+// which differs from Q0 only slightly. Paced plays must therefore keep the
+// lead above that threshold for exact parity.
+void draining_a_full_ring_steps_down_at_the_next_read() {
+  constexpr std::uint32_t rate = oscillate::test::sample_rate_48k;
+  Song song(rate, rate, [](std::uint32_t frame) { return tone_with_clicks(frame, rate); });
+  constexpr std::uint64_t length = 60'000;
+  constexpr std::size_t block = 128;
+  constexpr std::size_t ring = 16'384;
+  // RoutedAudioSource::manage_quality steps down below a quarter of the ring.
+  constexpr std::size_t low_lead = ring / 4;
+  constexpr std::uint64_t checked = 4'096;
+  const auto snapshot = placed(song, 0, length, with_mode(project::WarpMode::repitch, -1.0));
+  const auto expected = offline(song.root, snapshot, song.clip);
+  std::atomic<bool> permit{true};
+  Live live(song.root, snapshot, block, ring, &permit);
+  Player player(*live.source, block, length + 1'024);
+  // A full ring, refilled after one block, proves the worker has seen it
+  // three-quarters full.
+  wait_buffered(*live.source, ring);
+  player.paced_play_until(block, *live.source, length);
+  wait_buffered(*live.source, ring);
+  permit.store(false, std::memory_order_release);
+  wait_until([&] { return live.source->status().worker_paused; }, "worker did not pause");
+  const auto buffered = [&] {
+    return live.source->processed_clip_status().front().buffered_frames;
+  };
+  // Each rendered block takes `block` frames from the paused ring.
+  for (std::size_t drained = 0; buffered() >= low_lead; ++drained) {
+    REQUIRE_LT(drained, ring / block, "draining the queued lead did not converge");
+    require(player.step(), "draining the queued lead held");
+  }
+  const auto position = player.transport().completed_snapshot().next_sample;
+  const auto restart = position + buffered();
+  REQUIRE_EQ(live.source->status().quality_step_downs, 0,
+             "quality stepped down while the worker was paused");
+  permit.store(true, std::memory_order_release);
+  wait_until([&] { return live.source->status().quality_step_downs == 1; },
+             "a lead drained below a quarter of the ring did not step down");
+  player.paced_play_until(restart + checked, *live.source, length);
+  require_matches(player, expected, 0, 0, restart, "queued Q0 frames before the step-down");
+  const auto lower = offline(song.root, snapshot, song.clip, warp::QualityTier::q1, restart);
+  require_matches(player, lower, restart, restart, restart + checked,
+                  "Q1 restart after the step-down");
+  REQUIRE_EQ(live.source->status().missing_frames, 0, "the drained lead underran");
+}
+
 // The same recovery serves unprocessed clips: a starved worker resumes ahead
 // of the callback instead of queueing frames it has already passed, and no
 // quality step applies.
@@ -1242,6 +1321,7 @@ int main() {
     different_rate_source_plays_at_its_own_pitch();
     source_failure_is_reported_as_silence();
     falling_behind_steps_down_quality_with_reported_underrun();
+    draining_a_full_ring_steps_down_at_the_next_read();
     starved_unprocessed_clip_recovers_after_underrun();
     saved_edit_prepares_handoff_and_survives_reopen();
     unprocessed_clips_keep_the_source_path();
