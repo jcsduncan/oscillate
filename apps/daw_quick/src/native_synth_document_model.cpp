@@ -686,7 +686,11 @@ bool NativeSynthDocumentModel::set_label(const QString& id, const QString& text)
   // Trim to the model's limit without splitting a UTF-8 sequence.
   QString clean = text.trimmed();
   while (clean.toUtf8().size() > static_cast<qsizetype>(project::max_native_label_length)) {
-    clean.chop(1);
+    // A surrogate pair goes whole; half of one is not valid text.
+    clean.chop(clean.size() >= 2 && clean.back().isLowSurrogate() &&
+                       clean.at(clean.size() - 2).isHighSurrogate()
+                   ? 2
+                   : 1);
   }
   auto next = document_;
   const std::string key = utf8(id);
