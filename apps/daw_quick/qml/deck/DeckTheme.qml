@@ -129,7 +129,7 @@ KitTheme {
     property real bandLevelY: 58
     property real bandLevelWidth: 120
     property real bandLevelHeight: 6
-    property real killMargin: 10
+    property real bandKillY: 78
 
     // The response screen: band fills and outlines, the crossover dash, and
     // the scale captions inside the bottom edge.

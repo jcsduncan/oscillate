@@ -588,7 +588,7 @@ set(oscillate_quick_panel_tests prism ember nova nova_editing nova_browser nova_
   nova_arp
   pulse halo torque
   drift contour concert fret wren anvil crate knock relay orbit forge expanse vista pocket pump loudness lens scope tune
-  trim signal shape press ceiling temper strata flyby dust chop devicekit)
+  trim signal shape press ceiling temper strata flyby dust chop deck devicekit)
 set(oscillate_quick_panel_sources)
 set(oscillate_quick_panel_declarations)
 set(oscillate_quick_panel_entries)

@@ -1,12 +1,14 @@
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
 
+#include "oscillate/engine/graph.hpp"
 #include "oscillate/native_dsp/effects/chop.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QGuiApplication>
 #include <QQmlComponent>
 #include <QQmlEngine>
@@ -17,8 +19,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <numbers>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -29,13 +33,15 @@
 // gesture with the cells between filled, a stepped lane drawing whole
 // values, the pattern chips applying their presets, Re-seed stepping the
 // seed the same way every time, and the telemetry lighting the step that
-// plays.
+// plays; and screenshots on request, live from the real Chop.
 namespace {
 using oscillate::quick::InMemoryNativeSynthAdapter;
 using oscillate::quick::NativeSynthDeviceController;
 using oscillate::quick::NativeSynthGesture;
 namespace synth = oscillate::native_dsp::synth;
 namespace chop = oscillate::native_dsp::effects::chop;
+namespace effects = oscillate::native_dsp::effects;
+namespace engine = oscillate::engine;
 
 using oscillate::test::require;
 
@@ -286,6 +292,105 @@ void the_mode_segment_switches_modes() {
   require(controller.choice(QStringLiteral("chop.mode")) == 2, "Gate + repeat is picked");
 }
 
+// ---- Screenshots ----------------------------------------------------------------
+
+constexpr double rate = 48'000.0;
+constexpr std::size_t block_frames = 160;
+// The panel polls at about 30 Hz while playing.
+constexpr std::size_t poll_frames = 1'600;
+constexpr int poll_ms = 33;
+constexpr int settle_ms = 150;
+constexpr double tempo_beats_per_second = 2.0;
+constexpr double beats_per_bar = 4.0;
+
+std::vector<double> preset(std::string_view name) {
+  for (const auto& entry : table().presets) {
+    if (entry.name == name) {
+      return synth::preset_values(table(), entry).value();
+    }
+  }
+  throw std::runtime_error("missing preset " + std::string(name));
+}
+
+// A held pad to chop: a 110 Hz saw-like stack with a slow swell.
+engine::StereoFrame pad_frame(std::size_t frame) {
+  constexpr double root_hz = 110.0;
+  constexpr int partials = 6;
+  constexpr double level = 0.25;
+  constexpr double swell_hz = 0.5;
+  constexpr double swell_depth = 0.3;
+  const double seconds = static_cast<double>(frame) / rate;
+  double sum = 0.0;
+  for (int k = 1; k <= partials; ++k) {
+    sum += std::sin(2.0 * std::numbers::pi * root_hz * k * seconds) / k;
+  }
+  const double swell =
+      1.0 - swell_depth * (0.5 + 0.5 * std::sin(2.0 * std::numbers::pi * swell_hz * seconds));
+  const auto sample = static_cast<float>(level * swell * sum);
+  return {sample, sample};
+}
+
+// The real Chop over the pad until `stop`; the telemetry every poll.
+std::vector<std::vector<float>> real_telemetry(const std::vector<double>& values,
+                                               std::size_t stop) {
+  auto created = effects::NativeEffectRuntime::create(chop::engine(), values, rate);
+  require(created.has_value(), "a Chop runtime");
+  auto runtime = std::move(created.value());
+  std::vector<std::vector<float>> frames;
+  std::vector<engine::StereoFrame> block;
+  const double beats_per_frame = tempo_beats_per_second / rate;
+  for (std::size_t position = 0; position < stop; position += block_frames) {
+    const std::size_t size = std::min(block_frames, stop - position);
+    block.resize(size);
+    for (std::size_t i = 0; i < size; ++i) {
+      block[i] = pad_frame(position + i);
+    }
+    const double beat = static_cast<double>(position) * beats_per_frame;
+    const synth::SynthTransport transport{beat, beats_per_frame, beat / beats_per_bar,
+                                          beats_per_bar};
+    require(runtime->process(block, {}, position, 1, transport, {}) ==
+                effects::EffectProcessStatus::rendered,
+            "Chop renders");
+    if ((position + size) % poll_frames == 0) {
+      std::vector<float> frame;
+      require(runtime->read_telemetry(frame), "Chop publishes telemetry");
+      frames.push_back(frame);
+    }
+  }
+  return frames;
+}
+
+void screenshots_if_requested() {
+  const char* directory = std::getenv("CHOP_PANEL_SCREENSHOT_DIR");
+  if (directory == nullptr || *directory == '\0') {
+    return;
+  }
+  QDir().mkpath(QString::fromLocal8Bit(directory));
+  constexpr std::size_t shown_polls = 10;
+  struct Shot {
+    const char* preset;
+    double seconds;
+    const char* file;
+  };
+  for (const Shot shot : {Shot{"Off-beat chop", 2.3, "/chop_off_beat.png"},
+                          Shot{"Glitch fill", 2.6, "/chop_glitch_fill.png"}}) {
+    const auto values = preset(shot.preset);
+    InMemoryNativeSynthAdapter adapter(values);
+    NativeSynthDeviceController controller(table(), adapter);
+    auto panel = load_panel(controller);
+    const auto frames = real_telemetry(values, static_cast<std::size_t>(shot.seconds * rate));
+    for (std::size_t i = frames.size() > shown_polls ? frames.size() - shown_polls : 0;
+         i < frames.size(); ++i) {
+      adapter.set_telemetry(frames[i]);
+      QTest::qWait(poll_ms);
+    }
+    QTest::qWait(settle_ms);
+    const QString path = QString::fromLocal8Bit(directory) + QString::fromLatin1(shot.file);
+    require(panel->window->grabWindow().save(path, "PNG"), "screenshot saved");
+    std::cout << "wrote " << path.toStdString() << '\n';
+  }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -298,6 +403,7 @@ int main(int argc, char** argv) {
     reseed_steps_the_seed();
     telemetry_lights_the_playing_step();
     the_mode_segment_switches_modes();
+    screenshots_if_requested();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';
     return 1;

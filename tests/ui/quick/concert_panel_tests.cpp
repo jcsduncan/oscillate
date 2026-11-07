@@ -339,6 +339,13 @@ void screenshots_if_requested() {
   if (directory == nullptr || *directory == '\0') {
     return;
   }
+  // CONCERT_PANEL_SCREENSHOT_LIBRARY names a real library to show.
+  if (const char* real = std::getenv("CONCERT_PANEL_SCREENSHOT_LIBRARY");
+      real != nullptr && *real != '\0') {
+    const auto status = concert::library::load(real);
+    require(status.state == concert::library::State::ready,
+            "the screenshot library loads: " + status.message);
+  }
   QDir().mkpath(QString::fromLocal8Bit(directory));
   struct Shot {
     const char* preset;
