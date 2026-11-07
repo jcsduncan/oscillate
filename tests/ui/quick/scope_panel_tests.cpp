@@ -247,10 +247,11 @@ void telemetry_decodes_into_the_sweep_and_meter() {
   const auto track = js(screen, "track").toList();
   const auto key = js(screen, "key").toList();
   require(track.size() == 960 && key.size() == 960, "480 (min, max) columns each");
-  require(std::fabs(track[2 * 240 + 1].toDouble() - 0.5) < 1e-6 &&
-              std::fabs(track[2 * 240].toDouble() + 0.5) < 1e-6,
+  require(std::fabs(track[qsizetype{2} * 240 + 1].toDouble() - 0.5) < 1e-6 &&
+              std::fabs(track[qsizetype{2} * 240].toDouble() + 0.5) < 1e-6,
           "track column 240 spans +-0.5");
-  require(std::fabs(key[2 * 240 + 1].toDouble() - 0.25) < 1e-6, "sidechain column 240 to 0.25");
+  require(std::fabs(key[qsizetype{2} * 240 + 1].toDouble() - 0.25) < 1e-6,
+          "sidechain column 240 to 0.25");
   auto* needle = item(*panel, QStringLiteral("scopeNeedle"));
   require(std::fabs(needle->property("delayMs").toDouble() - 1.6) < 1e-6 &&
               needle->property("position").toDouble() > 0.0,
@@ -289,6 +290,8 @@ void the_hint_says_which_way_and_how_far() {
     const char* text;
     const char* tone; // The delay's colour; empty when not measuring.
   };
+  // The readings are named in each case below.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   const auto with = [](float delay, float polarity, float correlation, bool key = true) {
     Alignment a;
     a.delay_ms = delay;
@@ -494,7 +497,7 @@ std::vector<engine::StereoFrame> render(const synth::SynthEngine& engine,
     events.push_back({n.frame + n.length, engine::MidiEventKind::note_off, n.key, id});
     ++id;
   }
-  std::stable_sort(events.begin(), events.end(), [](const Event& a, const Event& b) {
+  std::ranges::stable_sort(events, [](const Event& a, const Event& b) {
     return a.frame != b.frame ? a.frame < b.frame : a.kind < b.kind;
   });
   std::vector<engine::StereoFrame> out(frames, {0.0F, 0.0F});
@@ -522,7 +525,7 @@ std::vector<engine::StereoFrame> render(const synth::SynthEngine& engine,
     require(runtime->process(block, block_events, position, 1, transport, {}).status ==
                 synth::SynthProcessStatus::rendered,
             "synth renders");
-    std::copy(block.begin(), block.end(), out.begin() + static_cast<std::ptrdiff_t>(position));
+    std::ranges::copy(block, out.begin() + static_cast<std::ptrdiff_t>(position));
   }
   return out;
 }
@@ -538,6 +541,8 @@ struct Material {
   std::vector<engine::StereoFrame> key;
 };
 
+// The arguments are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 Material kick_and_bass(std::size_t frames, std::ptrdiff_t delay, float gain, bool layered) {
   std::vector<Note> kicks;
   std::vector<Note> bass;
@@ -665,12 +670,12 @@ void telemetry_gives_the_strip_the_sweep() {
   // strip column's outermost is its last.
   const auto track = strip.value(QStringLiteral("track")).toList();
   const auto key = strip.value(QStringLiteral("key")).toList();
-  require(track.size() == static_cast<qsizetype>(2 * columns) && key.size() == track.size(),
+  require(track.size() == 2 * static_cast<qsizetype>(columns) && key.size() == track.size(),
           "(min, max) per column for the track and the key");
   constexpr float key_scale = 0.5F;
   for (std::size_t c = 0; c < columns; ++c) {
     const float outer = static_cast<float>(c * per + per - 1) / static_cast<float>(scope::columns);
-    const auto at = static_cast<qsizetype>(2 * c);
+    const auto at = 2 * static_cast<qsizetype>(c);
     require(track.at(at).toDouble() == static_cast<double>(-outer) &&
                 track.at(at + 1).toDouble() == static_cast<double>(outer) &&
                 key.at(at + 1).toDouble() == static_cast<double>(key_scale * outer),

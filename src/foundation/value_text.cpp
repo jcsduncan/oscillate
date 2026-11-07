@@ -78,6 +78,8 @@ int display_decimals(double magnitude) noexcept {
   return most_decimals;
 }
 
+// The value and its decimals are distinct types callers name at each call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::string format_number(double value, int decimals, ValueSign sign) {
   if (std::isnan(value))
     return std::string(no_value);
@@ -106,6 +108,8 @@ std::string format_number(double value, int decimals, ValueSign sign) {
 
 std::string format_quantity(double value, std::string_view unit, ValueSign sign, int decimals) {
   unit = spelled(unit);
+  // The number and the unit's decimals are named at each call below.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   const auto with = [&](double number, int unit_decimals, std::string_view shown) {
     const int places = decimals == automatic_decimals ? unit_decimals : decimals;
     std::string text = format_number(number, places, sign);

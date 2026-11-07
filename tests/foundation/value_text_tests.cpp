@@ -15,13 +15,15 @@ using foundation::format_number;
 using foundation::format_quantity;
 using foundation::ValueSign;
 
-// U+2212, spelled out so the expectations below read as the user sees them.
-const std::string minus = "\xE2\x88\x92";
+// U+2212 before `rest`, so the expectations below read as the user sees them.
+std::string minus(std::string_view rest) {
+  return std::string(foundation::minus_sign) + std::string(rest);
+}
 constexpr double infinity = std::numeric_limits<double>::infinity();
 constexpr double not_a_number = std::numeric_limits<double>::quiet_NaN();
 
 void minus_sign_and_negative_zero() {
-  REQUIRE_EQ(format_number(-6.0, 1), minus + "6.0", "a negative number takes U+2212");
+  REQUIRE_EQ(format_number(-6.0, 1), minus("6.0"), "a negative number takes U+2212");
   REQUIRE_EQ(format_number(-0.0, 1), "0.0", "negative zero reads as zero");
   REQUIRE_EQ(format_number(-0.04, 1), "0.0", "a value that rounds to zero has no sign");
   REQUIRE_EQ(format_number(-0.04, 1, ValueSign::explicit_plus), "0.0",
@@ -29,7 +31,7 @@ void minus_sign_and_negative_zero() {
   REQUIRE_EQ(format_number(0.04, 1, ValueSign::explicit_plus), "0.0", "zero never has a sign");
   REQUIRE_EQ(format_number(0.06, 1, ValueSign::explicit_plus), "+0.1",
              "an offset above zero takes a plus");
-  REQUIRE_EQ(format_number(-0.06, 1), minus + "0.1", "below zero after rounding keeps its minus");
+  REQUIRE_EQ(format_number(-0.06, 1), minus("0.1"), "below zero after rounding keeps its minus");
   REQUIRE_EQ(format_quantity(-0.01, "dB"), "0.0 dB", "no \"-0.0 dB\"");
   const auto text = format_quantity(-12.5, "dB");
   REQUIRE_TRUE(text.find('-') == std::string::npos, "no hyphen-minus anywhere");
@@ -48,16 +50,16 @@ void decimals_rule() {
   REQUIRE_EQ(format_number(9.996), "10.0");
   REQUIRE_EQ(format_number(2.6, 0), "3", "explicit decimals override the rule");
   REQUIRE_EQ(format_number(infinity), "\xE2\x88\x9E");
-  REQUIRE_EQ(format_number(-infinity), minus + "\xE2\x88\x9E");
+  REQUIRE_EQ(format_number(-infinity), minus("\xE2\x88\x9E"));
   REQUIRE_EQ(format_number(not_a_number), "\xE2\x80\x93", "no value reads as an en dash");
 }
 
 void units() {
   // Levels: one decimal, always.
-  REQUIRE_EQ(format_quantity(-6.0, "dB"), minus + "6.0 dB");
-  REQUIRE_EQ(format_quantity(-14.04, "LUFS"), minus + "14.0 LUFS");
+  REQUIRE_EQ(format_quantity(-6.0, "dB"), minus("6.0 dB"));
+  REQUIRE_EQ(format_quantity(-14.04, "LUFS"), minus("14.0 LUFS"));
   REQUIRE_EQ(format_quantity(3.0, "dB", ValueSign::explicit_plus), "+3.0 dB");
-  REQUIRE_EQ(format_quantity(-infinity, "dB"), minus + "\xE2\x88\x9E dB");
+  REQUIRE_EQ(format_quantity(-infinity, "dB"), minus("\xE2\x88\x9E dB"));
   // Frequency: kHz from 1000 Hz, its case kept.
   REQUIRE_EQ(format_quantity(440.0, "Hz"), "440 Hz");
   REQUIRE_EQ(format_quantity(55.0, "Hz"), "55.0 Hz");
@@ -71,15 +73,15 @@ void units() {
   REQUIRE_EQ(format_quantity(2'000.0, "ms"), "2.00 s");
   // Whole-number units, % spaced like every other unit.
   REQUIRE_EQ(format_quantity(75.0, "%"), "75 %");
-  REQUIRE_EQ(format_quantity(-12.0, "ct", ValueSign::explicit_plus), minus + "12 ct");
+  REQUIRE_EQ(format_quantity(-12.0, "ct", ValueSign::explicit_plus), minus("12 ct"));
   REQUIRE_EQ(format_quantity(7.0, "cents", ValueSign::explicit_plus), "+7 ct",
              "cents are spelled ct");
   REQUIRE_EQ(format_quantity(3.0, "\xC2\xA2"), "3 ct", "so is the cent sign");
   REQUIRE_EQ(format_quantity(90.0, "deg"), "90\xC2\xB0", "degrees take the degree sign");
-  REQUIRE_EQ(format_quantity(-45.0, "\xC2\xB0"), minus + "45\xC2\xB0");
+  REQUIRE_EQ(format_quantity(-45.0, "\xC2\xB0"), minus("45\xC2\xB0"));
   REQUIRE_EQ(format_quantity(1.5, "x"), "1.50\xC3\x97", "a multiplier takes the times sign");
   // Other words follow their number.
-  REQUIRE_EQ(format_quantity(-7.0, "st", ValueSign::explicit_plus, 0), minus + "7 st");
+  REQUIRE_EQ(format_quantity(-7.0, "st", ValueSign::explicit_plus, 0), minus("7 st"));
   REQUIRE_EQ(format_quantity(2.0, "oct"), "2.00 oct");
   REQUIRE_EQ(format_quantity(0.5, ""), "0.50", "no unit, no trailing space");
 }
@@ -94,7 +96,7 @@ void independent_of_the_locale() {
     const std::string level = format_quantity(-6.26, "dB");
     const std::string zero = format_number(-0.004);
     std::setlocale(LC_NUMERIC, "C");
-    REQUIRE_EQ(level, minus + "6.3 dB", "a full stop in any locale");
+    REQUIRE_EQ(level, minus("6.3 dB"), "a full stop in any locale");
     REQUIRE_EQ(zero, "0.00", "a rounded negative zero has no sign in any locale");
     return;
   }

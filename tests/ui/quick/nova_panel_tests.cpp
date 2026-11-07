@@ -151,9 +151,12 @@ private:
     text_.push_back(std::move(text));
     return text_.back();
   }
+  // A descriptor's fields, in its own order, as the tables list them.
+  // NOLINTBEGIN(bugprone-easily-swappable-parameters)
   void add(std::string id, std::string name, std::string group, std::string_view unit,
            synth::ParameterScale scale, double minimum, double maximum, double fallback,
            std::span<const std::string_view> choices, bool automatable, double skew = 1.0) {
+    // NOLINTEND(bugprone-easily-swappable-parameters)
     synth::ParameterDescriptor p;
     p.id = keep(std::move(id));
     p.name = keep(std::move(name));

@@ -177,6 +177,8 @@ struct Rig {
   std::unique_ptr<NativeSynthDeviceController> controller;
   std::unique_ptr<Panel> panel;
 
+  // The main chain and the bus are named at every call.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   explicit Rig(const std::vector<std::string>& main, const std::vector<std::string>& bus = {}) {
     project::NativeSynthDocument document;
     project::NativeChain chain{"fx.main", {}};

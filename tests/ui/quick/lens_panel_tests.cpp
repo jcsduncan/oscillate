@@ -191,6 +191,8 @@ void panel_covers_every_parameter() {
 // A frame with known values: A rises 0.05 dB a point from -40, B sits at
 // -50, the overlay at -45 (silent from point 300), A's hold 3 dB over A;
 // two resonances; `hops` analyses.
+// The arguments are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<float> test_frame(float hops, float a_offset = 0.0F) {
   namespace t = lens::telemetry;
   std::vector<float> frame(t::size, 0.0F);
@@ -425,6 +427,8 @@ struct Note {
   std::uint8_t velocity = 105;
 };
 
+// The arguments are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<engine::StereoFrame> render(const synth::SynthEngine& engine,
                                         const std::vector<double>& values,
                                         const std::vector<Note>& notes, std::size_t frames,
@@ -446,7 +450,7 @@ std::vector<engine::StereoFrame> render(const synth::SynthEngine& engine,
     events.push_back({n.frame + n.length, engine::MidiEventKind::note_off, n.key, 0, id});
     ++id;
   }
-  std::stable_sort(events.begin(), events.end(), [](const Event& a, const Event& b) {
+  std::ranges::stable_sort(events, [](const Event& a, const Event& b) {
     return a.frame != b.frame ? a.frame < b.frame : a.kind < b.kind;
   });
   std::vector<engine::StereoFrame> out(frames, {0.0F, 0.0F});
@@ -599,7 +603,7 @@ void screenshots_if_requested() {
     return;
   }
   QDir().mkpath(QString::fromLocal8Bit(directory));
-  const std::size_t frames = 48'000 * 6;
+  const std::size_t frames = std::size_t{48'000} * 6;
   const auto loop = deep_house(frames);
   const auto reference = pink_reference(frames);
   struct Shot {

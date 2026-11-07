@@ -494,6 +494,8 @@ bool CrateController::rename_chop(int index, const QString& name) {
   return status.message.empty();
 }
 
+// The chop, its new place and its phase are named at every call (from QML).
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 bool CrateController::move_chop(int index, double fraction, int phase) {
   if (!audio_ || phase < static_cast<int>(DragPhase::begin) ||
       phase > static_cast<int>(DragPhase::cancel))

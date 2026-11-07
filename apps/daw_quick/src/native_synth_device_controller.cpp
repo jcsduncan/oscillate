@@ -785,6 +785,8 @@ bool NativeSynthDeviceController::delete_user_preset(const QString& name) {
   return true;
 }
 
+// The two names are named at every call (from QML).
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 bool NativeSynthDeviceController::rename_user_preset(const QString& from, const QString& to) {
   const auto target = to.trimmed();
   if (!usable_preset_name(from) || !usable_preset_name(target) || target == from ||
@@ -825,6 +827,8 @@ QStringList NativeSynthDeviceController::fx_presets(const QString& module) const
   return names;
 }
 
+// The module and the name are named at every call (from QML).
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 bool NativeSynthDeviceController::save_fx_preset(const QString& module, const QString& name,
                                                  const QVariantMap& values) {
   const QString trimmed = name.trimmed();
@@ -927,6 +931,8 @@ bool NativeSynthDeviceController::import_preset(const QString& path) {
   return true;
 }
 
+// The slot and the path are named at every call (from QML).
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 bool NativeSynthDeviceController::import_media(const QString& slot, const QString& path) {
   const auto file = local_path(path).toStdString();
   const bool imported = adapter_.import_media(slot.toStdString(), file);
@@ -1429,11 +1435,11 @@ QVariantMap NativeSynthDeviceController::fm_algorithm(int index) const {
   QVariantList column;
   QVariantList row;
   for (std::size_t op = 0; op < layout.modulates.size(); ++op) {
-    carriers.append(((layout.carriers >> op) & 1U) != 0U);
+    carriers.append(((static_cast<unsigned>(layout.carriers) >> op) & 1U) != 0U);
     column.append(layout.column[op]);
     row.append(layout.row[op]);
     for (std::size_t to = 0; to < op; ++to) {
-      if (((layout.modulates[op] >> to) & 1U) != 0U) {
+      if (((static_cast<unsigned>(layout.modulates[op]) >> to) & 1U) != 0U) {
         edges.append(QVariantMap{{QStringLiteral("from"), static_cast<int>(op)},
                                  {QStringLiteral("to"), static_cast<int>(to)}});
       }

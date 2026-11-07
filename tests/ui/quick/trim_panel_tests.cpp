@@ -413,7 +413,7 @@ std::vector<engine::StereoFrame> render(const synth::SynthEngine& engine,
     events.push_back({n.frame + n.length, engine::MidiEventKind::note_off, n.key, id});
     ++id;
   }
-  std::stable_sort(events.begin(), events.end(), [](const Event& a, const Event& b) {
+  std::ranges::stable_sort(events, [](const Event& a, const Event& b) {
     return a.frame != b.frame ? a.frame < b.frame : a.kind < b.kind;
   });
   std::vector<engine::StereoFrame> out(frames, {0.0F, 0.0F});
@@ -441,7 +441,7 @@ std::vector<engine::StereoFrame> render(const synth::SynthEngine& engine,
     require(runtime->process(block, block_events, position, 1, transport, {}).status ==
                 synth::SynthProcessStatus::rendered,
             "synth renders");
-    std::copy(block.begin(), block.end(), out.begin() + static_cast<std::ptrdiff_t>(position));
+    std::ranges::copy(block, out.begin() + static_cast<std::ptrdiff_t>(position));
   }
   return out;
 }

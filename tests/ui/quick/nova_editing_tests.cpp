@@ -270,6 +270,8 @@ void typing_a_value() {
   InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
+  // The knob and the typed entry are named at every call.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   const auto type = [&](const QString& id, const QString& entry, bool enter) {
     click(*panel, centre(item(*panel, QStringLiteral("novaKnobValue:") + id)));
     auto* field = item(*panel, QStringLiteral("novaKnobField:") + id);

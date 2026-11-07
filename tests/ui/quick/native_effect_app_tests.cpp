@@ -61,13 +61,16 @@ struct Pump {
   float peak = 0.0F;
 
   void blocks(int count) {
-    require(source && cursor, "the fake device has not started");
+    if (!source || cursor == nullptr) {
+      throw std::runtime_error("the fake device has not started");
+    }
     std::array<engine::StereoFrame, app::max_playback_buffer_frames> scratch{};
-    std::array<float, 2 * app::max_playback_buffer_frames> samples{};
+    std::array<float, 2 * std::size_t{app::max_playback_buffer_frames}> samples{};
     for (int block = 0; block < count; ++block) {
-      require(audio::render_transport_block(
-                  *source, *cursor, true, std::span(scratch).first(frames),
-                  std::span(samples).first(frames * 2)) == audio::BlockResult::rendered,
+      require(audio::render_transport_block(*source, *cursor, true,
+                                            std::span(scratch).first(frames),
+                                            std::span(samples).first(std::size_t{frames} * 2)) ==
+                  audio::BlockResult::rendered,
               "a fake device block failed to render");
       for (std::size_t i = 0; i < static_cast<std::size_t>(frames) * 2; ++i)
         peak = std::max(peak, std::fabs(samples[i]));
@@ -83,6 +86,8 @@ public:
     pump_->source = source;
     pump_->cursor = &cursor;
   }
+  // The PlaybackOutput interface's rate and block size.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   [[nodiscard]] oscillate::foundation::Result<void> start(std::uint32_t rate, std::uint32_t frames,
                                                           std::optional<std::uint64_t>) override {
     if (frames == 0 || frames > app::max_playback_buffer_frames)

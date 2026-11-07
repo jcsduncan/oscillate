@@ -33,7 +33,13 @@ using oscillate::test::require;
 
 const synth::EngineDescriptor& table() { return *synth::prism::engine().descriptor; }
 
-std::size_t index(std::string_view id) { return *synth::find_parameter(table(), id); }
+std::size_t index(std::string_view id) {
+  const auto found = synth::find_parameter(table(), id);
+  if (!found) {
+    throw std::runtime_error("unknown parameter " + std::string(id));
+  }
+  return *found;
+}
 
 int preset_index(std::string_view name) {
   for (std::size_t i = 0; i < table().presets.size(); ++i) {

@@ -326,7 +326,7 @@ void a_point_drag_is_one_gesture() {
   require(adapter->document() == before, "Escape cancels the drag");
 }
 
-QVariant call(Panel& panel, const char* function, QVariant argument = {}) {
+QVariant call(Panel& panel, const char* function, const QVariant& argument = {}) {
   QVariant result;
   const bool done =
       argument.isValid()
@@ -482,6 +482,8 @@ void pattern_steps_and_learn() {
   require(controller.value(QStringLiteral("pump.note_low")) == 38.0, "a learnt note is the range");
 }
 
+// The arguments are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<float> frame_of(double phase, double gain_db, bool keyed) {
   namespace t = pump::telemetry;
   std::vector<float> frame(t::size, 0.0F);

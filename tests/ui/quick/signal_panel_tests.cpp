@@ -146,6 +146,8 @@ bool wait_for_text(Panel& panel, const QString& name, const QString& text) {
   return QTest::qWaitFor([&] { return text_of(panel, name) == text; }, 1000);
 }
 
+// The arguments are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<float> frame_of(float hz, float progress) {
   std::vector<float> frame(signal::telemetry::size, 0.0F);
   frame[signal::telemetry::frequency] = hz;

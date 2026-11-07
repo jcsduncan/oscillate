@@ -210,6 +210,8 @@ Reading pitch(double note) {
 // A frame with these readings, a kick glide from 160 Hz down to the
 // settled pitch over the first `glide` points, and a history whose last
 // `filled` notes are `history_note`.
+// The arguments are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<float> frame_of(const Reading& r, std::size_t glide = 0, std::size_t filled = 0,
                             float history_note = 0.0F) {
   namespace t = tune::telemetry;
@@ -496,7 +498,7 @@ std::vector<engine::StereoFrame> render(const synth::SynthEngine& engine,
     events.push_back({n.frame + n.length, engine::MidiEventKind::note_off, n.key, id});
     ++id;
   }
-  std::stable_sort(events.begin(), events.end(), [](const Event& a, const Event& b) {
+  std::ranges::stable_sort(events, [](const Event& a, const Event& b) {
     return a.frame != b.frame ? a.frame < b.frame : a.kind < b.kind;
   });
   std::vector<engine::StereoFrame> out(frames, {0.0F, 0.0F});
@@ -524,7 +526,7 @@ std::vector<engine::StereoFrame> render(const synth::SynthEngine& engine,
     require(runtime->process(block, block_events, position, 1, transport, {}).status ==
                 synth::SynthProcessStatus::rendered,
             "synth renders");
-    std::copy(block.begin(), block.end(), out.begin() + static_cast<std::ptrdiff_t>(position));
+    std::ranges::copy(block, out.begin() + static_cast<std::ptrdiff_t>(position));
   }
   return out;
 }
@@ -567,7 +569,7 @@ void screenshots_if_requested() {
     const char* touched;
     const char* file;
   };
-  const std::size_t frames = 4 * 2 * beat_frames + 30'000;
+  const std::size_t frames = std::size_t{4} * 2 * beat_frames + 30'000;
   // A Prism Sub Bass walking A1, C2, G1 and settling on E1 (or B♭1): its
   // sub oscillator sounds an octave under the keys played.
   const auto bass = [&](std::uint8_t last) {
