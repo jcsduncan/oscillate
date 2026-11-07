@@ -17,7 +17,7 @@ oscillate_add_library(vst3_insert_service SOURCES insert_service.cpp
 oscillate_add_library(vst3_instrument_export SOURCES instrument_export.cpp
   PUBLIC oscillate::export oscillate::application oscillate::vst3_instrument_provider
          oscillate::vst3_track_insert oscillate::plugins
-  PRIVATE oscillate::source_prep)
+  PRIVATE oscillate::source_prep oscillate::render_graph)
 
 oscillate_add_library(vst3_effect_export SOURCES effect_export.cpp
   PUBLIC oscillate::export oscillate::application oscillate::vst3_track_insert

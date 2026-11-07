@@ -1,8 +1,8 @@
 #include "oscillate/application/vst3/instrument_export.hpp"
-#include "oscillate/export/insert_preflight.hpp"
 #include "oscillate/export/master_output.hpp"
 #include "oscillate/export/processed_clip.hpp"
 #include "oscillate/project/clip_fade.hpp"
+#include "oscillate/render_graph/insert_preflight.hpp"
 
 #include "oscillate/application/routed_playback_control.hpp"
 #include "oscillate/application/vst3/instrument_provider.hpp"
@@ -266,9 +266,9 @@ render(const project::Snapshot& snapshot, const persistence::ProjectStore* store
         return track.kind == project::TrackKind::instrument &&
                std::holds_alternative<project::Vst3PluginInstance>(track.instrument_source);
       }) == 2;
-  auto inserts = detail::preflight_inserts(snapshot, detail::ExportSource::vst3_instrument,
-                                           store != nullptr || two_source_project, false, true,
-                                           two_source_project);
+  auto inserts = render_graph::preflight_inserts(
+      snapshot, render_graph::ExportSource::vst3_instrument, store != nullptr || two_source_project,
+      false, true, two_source_project);
   if (!inserts)
     return foundation::Result<PublishOutcome>::failure(inserts.error());
   std::vector<const project::Vst3PluginInstance*> effects;

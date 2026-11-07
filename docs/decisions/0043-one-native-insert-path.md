@@ -1,6 +1,6 @@
 # ADR-0043 — One native insert path
 
-**Status:** Accepted and implemented; the classic kinds become engines in ADR-0047. **Date:** 20 October 2026.
+**Status:** Superseded by [ADR-0090](0090-render-graph-builder.md) where it has export link `native_inserts`: export now reaches it through `render_graph`. The rest is accepted and implemented; the classic kinds become engines in ADR-0047. **Date:** 20 October 2026.
 **Builds on:**
 - ADR-0023, the unified insert chain;
 - ADR-0040, the native effect platform (its model, schema and Quick decisions stand);

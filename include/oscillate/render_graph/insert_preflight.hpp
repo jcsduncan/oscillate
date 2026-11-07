@@ -13,7 +13,7 @@
 #include <variant>
 #include <vector>
 
-namespace oscillate::exporting::detail {
+namespace oscillate::render_graph {
 
 // `native`: the offline master renders built-in instruments and effects only.
 enum class ExportSource : std::uint8_t { native, vst3_instrument };
@@ -178,4 +178,4 @@ preflight_inserts(const project::Snapshot& snapshot, ExportSource source,
   return foundation::Result<ExportInserts>::success(plan);
 }
 
-} // namespace oscillate::exporting::detail
+} // namespace oscillate::render_graph
