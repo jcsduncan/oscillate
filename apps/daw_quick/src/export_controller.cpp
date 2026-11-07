@@ -805,9 +805,11 @@ void ExportController::export_realtime_jack() {
 #endif
 }
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the failure prefix, then the status.
+// The failure prefix, then the running status.
+// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 void ExportController::start(std::shared_ptr<Completion> completion, Job job,
                              const QString& failure_prefix, const QString& running) {
+  // NOLINTEND(bugprone-easily-swappable-parameters)
   try {
     worker_ = std::jthread([job = std::move(job), completion]() mutable {
       using Result = foundation::Result<exporting::PublishOutcome>;
