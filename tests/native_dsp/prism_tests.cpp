@@ -541,10 +541,16 @@ void mono_returns_to_held_note() {
 
 // ---- Presets and real-time ---------------------------------------------------
 
-// The index of a choice parameter's option, by its label.
-double choice(std::string_view id, std::string_view label) {
-  const auto& choices = table().parameters[index(id)].choices;
-  const auto found = std::ranges::find(choices, label);
+// A choice parameter's option, by its label.
+struct Choice {
+  std::string_view id;
+  std::string_view label;
+};
+
+// The index of a choice parameter's option.
+double choice(const Choice& option) {
+  const auto& choices = table().parameters[index(option.id)].choices;
+  const auto found = std::ranges::find(choices, option.label);
   require(found != choices.end(), "choice exists");
   return static_cast<double>(found - choices.begin());
 }
@@ -563,13 +569,13 @@ void mono_lfo_follows_rate_modulation() {
   constexpr std::uint8_t key = 69;
   const auto patch = [&](double hz, bool routed) {
     auto values = sine_patch();
-    values[index("prism.lfo1.mode")] = choice("prism.lfo1.mode", "Mono");
+    values[index("prism.lfo1.mode")] = choice({"prism.lfo1.mode", "Mono"});
     values[index("prism.lfo1.rate")] = hz;
     values[index("prism.lfo1.vibrato")] = vibrato_cents;
     values[index("prism.perf.wheel")] = full_wheel;
     if (routed) {
-      values[index("prism.mod1.source")] = choice("prism.mod1.source", "Mod Wheel");
-      values[index("prism.mod1.target")] = choice("prism.mod1.target", "LFO 1 Rate");
+      values[index("prism.mod1.source")] = choice({"prism.mod1.source", "Mod Wheel"});
+      values[index("prism.mod1.target")] = choice({"prism.mod1.target", "LFO 1 Rate"});
       values[index("prism.mod1.amount")] = one_octave;
     }
     auto runtime = make_runtime(values);
