@@ -117,6 +117,8 @@ Rectangle {
                 if (event.key === Qt.Key_Left || event.key === Qt.Key_Right)
                     amount.released()
             }
+            // Focus moving away mid-key-drag ends it too.
+            onActiveFocusChanged: if (!activeFocus) amount.released()
             Rectangle {
                 width: Math.max(height, parent.width * amount.value)
                 height: parent.height

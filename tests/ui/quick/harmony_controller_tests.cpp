@@ -562,6 +562,16 @@ void rhythm_as_notes_and_live() {
   controller.set_variation(later_variation);
   controller.finish_rhythm_drag();
   require(f.steps() == before_drag + 2, "the next rhythm drag joined the previous one");
+
+  // A drag left open when the clip changes does not join the next clip's.
+  constexpr double reopened_variation = 0.7;
+  constexpr double interrupted_variation = 0.8;
+  const auto clip_id = controller.clip_id();
+  controller.set_variation(interrupted_variation);
+  controller.set_clip_id(QString());
+  controller.set_clip_id(clip_id);
+  controller.set_variation(reopened_variation);
+  require(f.steps() == before_drag + 4, "a drag outlived the clip it was made on");
 }
 
 } // namespace

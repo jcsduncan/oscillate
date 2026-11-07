@@ -252,6 +252,8 @@ std::optional<HarmonyController::ClipView> HarmonyController::clip_view() const 
 void HarmonyController::set_clip_id(const QString& clip_id) {
   if (clip_id == clip_id_)
     return;
+  // A drag on another clip's Comp is not this one's undo step.
+  rhythm_gesture_.reset();
   clip_id_ = clip_id;
   const auto parsed = project::ClipId::parse(clip_id.toStdString());
   clip_ = parsed ? std::optional{parsed.value()} : std::nullopt;
