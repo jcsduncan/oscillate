@@ -116,18 +116,18 @@ enum class Vst3EditorProbe : std::uint8_t {
 };
 
 struct Vst3StereoBlock {
-  std::span<float> input_left;
-  std::span<float> input_right;
-  std::span<float> output_left;
-  std::span<float> output_right;
+  std::span<float> input_left{};
+  std::span<float> input_right{};
+  std::span<float> output_left{};
+  std::span<float> output_right{};
   // The graph owner supplies these at the block boundary. Defaults support
   // isolated host probes; project renderers must use the authoritative map.
   std::int64_t project_sample = 0;
   double quarter_position = 0.0;
   double tempo_bpm = 120.0;
   bool playing = true;
-  std::span<const float> sidechain_left;
-  std::span<const float> sidechain_right;
+  std::span<const float> sidechain_left{};
+  std::span<const float> sidechain_right{};
 };
 
 enum class Vst3NoteKind : std::uint8_t { on, off };
