@@ -132,6 +132,41 @@ void registry_budget_and_clear_preserve_essential_data() {
   REQUIRE_EQ(state.global.entries, 0, "registry or budget did not persist across reopen");
 }
 
+// Forgetting a project drops only its registry entry: its files and cache
+// stay, the rest stay registered, it persists, and a deleted project can go.
+void forgotten_projects_leave_the_registry() {
+  Directory fixture;
+  const auto kept = fixture.root() / "kept";
+  const auto forgotten = fixture.root() / "forgotten";
+  const auto deleted = fixture.root() / "deleted";
+  constexpr std::uint32_t version = 1;
+  constexpr std::size_t bytes = 100;
+  make_project(kept);
+  make_project(forgotten);
+  make_project(deleted);
+  put(forgotten, version, bytes);
+  const auto profile = fixture.root() / "profile";
+  auto control = take(app::CacheControl::open(profile));
+  take(control->register_project(kept));
+  take(control->register_project(forgotten));
+  take(control->register_project(deleted));
+  take(control->forget_project(forgotten));
+  REQUIRE_TRUE(fs::exists(forgotten / "state" / "CURRENT"), "forgetting touched the project");
+  REQUIRE_TRUE(fs::exists(forgotten / "cache" / (key(version).hex() + ".cache")),
+               "forgetting touched the project's cache");
+  fs::remove_all(deleted);
+  take(control->forget_project(deleted));
+  const auto unknown = control->forget_project(forgotten);
+  REQUIRE_TRUE(!unknown, "an unregistered project was forgotten");
+  REQUIRE_EQ(unknown.error().code, foundation::ErrorCode::not_found,
+             "an unregistered project was forgotten");
+  control.reset();
+  auto reopened = take(app::CacheControl::open(profile));
+  const auto state = take(reopened->health());
+  REQUIRE_EQ(state.projects.size(), 1, "forgetting did not persist");
+  REQUIRE_EQ(state.projects.front().root, kept, "forgetting dropped the wrong project");
+}
+
 void shared_source_analysis_counts_once_and_survives_project_clear() {
   Directory fixture;
   const auto root = fixture.root() / "song";
@@ -327,6 +362,7 @@ void service_controls_serialize_with_live_cache_producers() {
 int main() {
   try {
     registry_budget_and_clear_preserve_essential_data();
+    forgotten_projects_leave_the_registry();
     shared_source_analysis_counts_once_and_survives_project_clear();
     moved_and_replaced_paths_are_never_cleared();
     missing_cache_and_corrupt_registry_are_reported();

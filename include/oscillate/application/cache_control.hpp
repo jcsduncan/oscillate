@@ -49,6 +49,10 @@ public:
   // Registration verifies a committed project and records root/cache inode
   // identities. Re-registering a moved project updates its path in place.
   [[nodiscard]] foundation::Result<void> register_project(const std::filesystem::path& root);
+  // Drops the project registered at `root` from the registry, freeing its
+  // place; the project and its cache are left as they are. Works whether or
+  // not the project is still there, so a deleted or moved one can go.
+  [[nodiscard]] foundation::Result<void> forget_project(const std::filesystem::path& root);
   // Include the shared source-analysis store once when supplied by the caller.
   [[nodiscard]] foundation::Result<CacheHealth>
   health(media::CacheStore* shared_cache = nullptr) const;
