@@ -37,6 +37,7 @@
 #include <mutex>
 #include <new>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -407,6 +408,26 @@ private:
   std::thread worker_;
   std::atomic<audio::OutputState> state_{audio::OutputState::stopped};
   std::uint32_t rate_ = 0;
+};
+
+// Fills as a run does, except that it can refuse the next staged candidate's
+// exact fill, as an incomplete candidate does: that block plays the active
+// graph and the edit stays pending.
+class RefusingCandidateFill final : public quick::RoutedSourceFill {
+public:
+  void refuse_next_candidate() noexcept { refuse_next_.store(true, std::memory_order_release); }
+
+  [[nodiscard]] bool fill(app::RoutedAudioSource& source, bool exact, engine::BlockContext block,
+                          std::size_t frames,
+                          std::span<const std::span<const engine::StereoFrame>>& selected,
+                          engine::AudioWorkerPool* workers) noexcept override {
+    if (exact && refuse_next_.exchange(false, std::memory_order_acq_rel))
+      return false;
+    return quick::RoutedSourceFill::fill(source, exact, block, frames, selected, workers);
+  }
+
+private:
+  std::atomic<bool> refuse_next_{false};
 };
 
 void routed_controller_reserves_stopped_export_and_retires_in_order() {
@@ -869,9 +890,10 @@ void live_clip_move_overlay_keeps_source_timing(std::uint32_t frames,
                                                   audio::TransportCursor& cursor) {
     return std::make_unique<SteppedOutput>(source, cursor, evidence);
   };
-  auto run = take(quick::RoutedPlayback::prepare_and_start(root, session->snapshot(),
-                                                           take(session->reserve_playback_start()),
-                                                           factory, std::nullopt, frames));
+  auto candidate_fill = std::make_shared<RefusingCandidateFill>();
+  auto run = take(quick::RoutedPlayback::prepare_and_start(
+      root, session->snapshot(), take(session->reserve_playback_start()), factory, std::nullopt,
+      frames, 0, {}, {}, candidate_fill));
   evidence->permit(1);
   evidence->await_blocks(1);
   const auto original_revision = run->status().active_graph_revision;
@@ -910,7 +932,7 @@ void live_clip_move_overlay_keeps_source_timing(std::uint32_t frames,
   require(run->graph_handoff_in_progress() && run->completed_sample() == frames,
           "prepared source did not offer an exact source-only revision");
   if (refuse_first_candidate)
-    run->reject_next_overlay_candidate_for_test();
+    candidate_fill->refuse_next_candidate();
   evidence->permit(1);
   evidence->await_blocks(2);
   status = run->status();
@@ -1126,9 +1148,10 @@ void live_clip_split_overlay_keeps_playing(std::uint32_t frames, bool refuse_can
                                                   audio::TransportCursor& cursor) {
     return std::make_unique<SteppedOutput>(source, cursor, evidence);
   };
-  auto run = take(quick::RoutedPlayback::prepare_and_start(root, session->snapshot(),
-                                                           take(session->reserve_playback_start()),
-                                                           factory, std::nullopt, frames));
+  auto candidate_fill = std::make_shared<RefusingCandidateFill>();
+  auto run = take(quick::RoutedPlayback::prepare_and_start(
+      root, session->snapshot(), take(session->reserve_playback_start()), factory, std::nullopt,
+      frames, 0, {}, {}, candidate_fill));
   evidence->permit(1);
   evidence->await_blocks(1);
   const auto active = run->status().active_graph_revision;
@@ -1154,7 +1177,7 @@ void live_clip_split_overlay_keeps_playing(std::uint32_t frames, bool refuse_can
   require(run->graph_handoff_in_progress() && run->completed_sample() == frames,
           "live split did not offer a source-only revision");
   if (refuse_candidate)
-    run->reject_next_overlay_candidate_for_test();
+    candidate_fill->refuse_next_candidate();
   evidence->permit(1);
   evidence->await_blocks(2);
   status = run->status();
@@ -1252,9 +1275,10 @@ void multi_track_clip_overlay_preserves_native_processing(std::uint32_t frames,
                                                   audio::TransportCursor& cursor) {
     return std::make_unique<SteppedOutput>(source, cursor, evidence);
   };
-  auto run = take(quick::RoutedPlayback::prepare_and_start(root, session->snapshot(),
-                                                           take(session->reserve_playback_start()),
-                                                           factory, std::nullopt, frames));
+  auto candidate_fill = std::make_shared<RefusingCandidateFill>();
+  auto run = take(quick::RoutedPlayback::prepare_and_start(
+      root, session->snapshot(), take(session->reserve_playback_start()), factory, std::nullopt,
+      frames, 0, {}, {}, candidate_fill));
   evidence->permit(1);
   evidence->await_blocks(1);
   const auto original_revision = run->status().active_graph_revision;
@@ -1271,7 +1295,7 @@ void multi_track_clip_overlay_preserves_native_processing(std::uint32_t frames,
       "the routed run reached the awaited state");
   require(run->graph_handoff_in_progress(), "multi-track source overlay did not prepare");
   if (refuse_candidate)
-    run->reject_next_overlay_candidate_for_test();
+    candidate_fill->refuse_next_candidate();
   evidence->permit(1);
   evidence->await_blocks(2);
   const auto status = run->status();

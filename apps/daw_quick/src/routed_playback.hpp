@@ -15,6 +15,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <future>
@@ -75,6 +76,24 @@ struct Vst3ManualGestureStatus {
 #endif
 
 [[nodiscard]] bool has_saved_vst3_insert(const project::Snapshot& snapshot) noexcept;
+
+// How the device callback fills a block from the source it chose: the active
+// source, or a staged candidate for its own revision (`exact`). A candidate
+// must fill completely; when it cannot, the block plays the active graph and
+// the candidate waits for a later block. Callback only: no allocation, no
+// locks. A run fills straight from the source unless given another fill.
+class RoutedSourceFill {
+public:
+  RoutedSourceFill() = default;
+  RoutedSourceFill(const RoutedSourceFill&) = delete;
+  RoutedSourceFill& operator=(const RoutedSourceFill&) = delete;
+  virtual ~RoutedSourceFill() = default;
+
+  [[nodiscard]] virtual bool fill(application::RoutedAudioSource& source, bool exact,
+                                  engine::BlockContext block, std::size_t frames,
+                                  std::span<const std::span<const engine::StereoFrame>>& selected,
+                                  engine::AudioWorkerPool* workers) noexcept;
+};
 [[nodiscard]] bool has_saved_track_effect(const project::Snapshot& snapshot) noexcept;
 
 // A routed playback run with control-thread publication of project revisions.
@@ -101,7 +120,8 @@ public:
       application::PlaybackOutputFactory output_factory, std::optional<std::uint64_t> target_serial,
       std::uint32_t requested_buffer_frames = application::default_playback_buffer_frames,
       std::uint64_t first_sample = 0, Vst3LiveQualification qualification = {},
-      std::shared_ptr<audio_io::Metronome> metronome = {});
+      std::shared_ptr<audio_io::Metronome> metronome = {},
+      std::shared_ptr<RoutedSourceFill> source_fill = {});
   // Prepare an independent graph/source/cursor without opening an output.
   // The caller must attach exactly one output before using the render source.
   [[nodiscard]] static foundation::Result<std::unique_ptr<RoutedPlayback>>
@@ -244,11 +264,6 @@ public:
   [[nodiscard]] std::optional<Vst3ManualGestureStatus> vst3_manual_edit_status() const;
 #endif
   [[nodiscard]] std::uint64_t completed_sample() const noexcept;
-#ifdef OSCILLATE_ROUTED_OVERLAY_TEST_INPUT
-  void reject_next_overlay_candidate_for_test() noexcept {
-    reject_next_overlay_candidate_.store(true, std::memory_order_release);
-  }
-#endif
   [[nodiscard]] std::uint32_t sample_rate() const noexcept;
   [[nodiscard]] std::size_t prepared_block_limit() const noexcept;
 
@@ -307,9 +322,7 @@ private:
   // Callback reads the exact staged source revision; all other graph
   // revisions may keep using the selected active source.
   std::atomic<std::uint64_t> source_overlay_revision_{0};
-#ifdef OSCILLATE_ROUTED_OVERLAY_TEST_INPUT
-  std::atomic<bool> reject_next_overlay_candidate_{false};
-#endif
+  std::shared_ptr<RoutedSourceFill> source_fill_ = std::make_shared<RoutedSourceFill>();
   std::vector<std::future<void>> source_retirements_;
   bool source_hold_requested_ = false;
   bool source_staged_ = false;

@@ -240,7 +240,8 @@ foundation::Result<std::unique_ptr<RoutedPlayback>> RoutedPlayback::prepare_and_
     application::ControlTransportGate::PlaybackToken token,
     application::PlaybackOutputFactory output_factory, std::optional<std::uint64_t> target_serial,
     std::uint32_t requested_buffer_frames, std::uint64_t first_sample,
-    Vst3LiveQualification qualification, std::shared_ptr<audio_io::Metronome> metronome) {
+    Vst3LiveQualification qualification, std::shared_ptr<audio_io::Metronome> metronome,
+    std::shared_ptr<RoutedSourceFill> source_fill) {
   auto prepared = prepare_run(root, std::move(snapshot), std::move(token), requested_buffer_frames,
                               first_sample, std::move(qualification));
   if (!prepared)
@@ -250,6 +251,8 @@ foundation::Result<std::unique_ptr<RoutedPlayback>> RoutedPlayback::prepare_and_
   // Device playback clicks; export never attaches one.
   run->metronome_ = std::move(metronome);
   run->cursor_.set_metronome(run->metronome_.get());
+  if (source_fill)
+    run->source_fill_ = std::move(source_fill);
   if (!output_factory) {
     output_factory = [](audio_io::StereoRenderSource source, audio_io::TransportCursor& cursor) {
       return std::make_unique<PipeWirePlaybackOutput>(source, cursor);
@@ -370,6 +373,14 @@ RoutedPlayback::prepare_run(const std::filesystem::path& root, project::Snapshot
   return foundation::Result<std::unique_ptr<RoutedPlayback>>::success(std::move(run));
 }
 
+bool RoutedSourceFill::fill(application::RoutedAudioSource& source, bool exact,
+                            engine::BlockContext block, std::size_t frames,
+                            std::span<const std::span<const engine::StereoFrame>>& selected,
+                            engine::AudioWorkerPool* workers) noexcept {
+  return exact ? source.fill_source_bank_exact(block, frames, selected, workers)
+               : source.fill_source_bank(block, frames, selected, workers);
+}
+
 audio_io::StereoRenderSource RoutedPlayback::render_source() noexcept {
   return {this, &RoutedPlayback::render, &RoutedPlayback::freeze_cursor, workers_.get()};
 }
@@ -384,17 +395,10 @@ bool RoutedPlayback::render(void* context, std::span<engine::StereoFrame> output
     application::RoutedSourceSelection::CallbackLease& lease;
     engine::AudioWorkerPool* workers;
     application::RoutedAudioSource* used = nullptr;
+    RoutedSourceFill& fill;
     std::uint64_t exact_revision = 0;
-#ifdef OSCILLATE_ROUTED_OVERLAY_TEST_INPUT
-    std::atomic<bool>& reject_next_overlay_candidate;
-#endif
-  } fill_context{lease, run.workers_.get(), nullptr,
-                 run.source_overlay_revision_.load(std::memory_order_acquire)
-#ifdef OSCILLATE_ROUTED_OVERLAY_TEST_INPUT
-                     ,
-                 run.reject_next_overlay_candidate_
-#endif
-  };
+  } fill_context{lease, run.workers_.get(), nullptr, *run.source_fill_,
+                 run.source_overlay_revision_.load(std::memory_order_acquire)};
   const std::span<const std::span<const engine::StereoFrame>> unused{};
   const auto result = run.control_->render_block(
       unused, output, block,
@@ -404,19 +408,13 @@ bool RoutedPlayback::render(void* context, std::span<engine::StereoFrame> output
           std::span<const std::span<const engine::StereoFrame>>& selected) noexcept {
          auto& state = *static_cast<FillContext*>(context);
          const bool exact = revision == state.exact_revision;
-#ifdef OSCILLATE_ROUTED_OVERLAY_TEST_INPUT
-         if (exact &&
-             state.reject_next_overlay_candidate.exchange(false, std::memory_order_acq_rel))
-           return false;
-#endif
          auto* source = static_cast<application::RoutedAudioSource*>(
              exact ? state.lease.source_for(revision)
                    : state.lease.source_for_graph_revision(revision));
          if (source == nullptr)
            return false;
          state.used = source;
-         return exact ? source->fill_source_bank_exact(fill_block, frames, selected, state.workers)
-                      : source->fill_source_bank(fill_block, frames, selected, state.workers);
+         return state.fill.fill(*source, exact, fill_block, frames, selected, state.workers);
        }},
       run.workers_.get());
   run.callback_frozen_ = result != engine::RoutedRenderStatus::rendered;
