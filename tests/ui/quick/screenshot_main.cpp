@@ -116,8 +116,14 @@ int run(int argc, char** argv) {
   if (first_bar)
     window->setProperty("viewStartBar", *first_bar);
   window->resize(design_width, design_height);
-  if (select_track)
+  if (select_track) {
+    if (*select_track >= bridge.tracks().size()) {
+      std::cerr << "--select-track " << *select_track << ": the project has "
+                << bridge.tracks().size() << " tracks\n";
+      return 1;
+    }
     window->setProperty("selectedTrack", *select_track);
+  }
   if (select_first_clip) {
     QTimer::singleShot(select_clip_delay_ms, &app, [&bridge, window, select_track] {
       // The selected track's first clip; without --select-track, the first clip anywhere.
