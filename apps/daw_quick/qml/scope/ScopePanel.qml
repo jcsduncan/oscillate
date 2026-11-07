@@ -43,6 +43,9 @@ Rectangle {
     readonly property int lengthIndex: revision >= 0 ? controller.choice("scope.length") : 2
     readonly property int channelIndex: revision >= 0 ? controller.choice("scope.channel") : 0
     readonly property var lengthNames: ["1/16", "1/8", "1/4", "1/2", "1 BAR", "2 BARS", "4 BARS"]
+    // The length tiles, in bars under a caption that says so: seven
+    // tiles leave no room for the word on each.
+    readonly property var lengthTiles: ["1/16", "1/8", "1/4", "1/2", "1", "2", "4"]
     readonly property var channelNames: ["MID", "SIDE", "LEFT", "RIGHT"]
     readonly property bool overlayOn: revision >= 0 && controller.choice("scope.overlay") === 1
     readonly property bool alignOn: revision >= 0 && controller.choice("scope.align") === 1
@@ -698,7 +701,7 @@ Rectangle {
         Caption {
             x: panel.theme.windowColumnX
             y: panel.theme.cardCaptionY
-            text: panel.synced ? "LENGTH" : "TIME"
+            text: panel.synced ? "LENGTH IN BARS" : "TIME"
         }
         Kit.Segment {
             visible: panel.synced
@@ -709,7 +712,7 @@ Rectangle {
             controller: panel.controller
             theme: panel.theme
             parameterId: "scope.length"
-            labels: panel.lengthNames
+            labels: panel.lengthTiles
         }
         Kit.Knob {
             visible: !panel.synced

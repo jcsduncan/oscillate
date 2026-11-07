@@ -390,7 +390,7 @@ Rectangle {
             theme: panel.theme
             parameterId: "forge.model"
             glyph: panel.glyph
-            captions: ["Soft tanh, warm", "Asymmetric, even harmonics", "Firm knee",
+            captions: ["Soft tanh, warm", "Even harmonics", "Firm knee",
                        "Exponential, gritty", "Hard ceiling", "Triangle folder",
                        "Sine folder, glassy", "Full wave, octave up"]
         }

@@ -564,7 +564,8 @@ Rectangle {
             x: panel.theme.stereoChoiceX
             y: panel.theme.stereoChoiceY
             width: stereo.width - panel.theme.stereoChoiceX - panel.theme.plateInset
-            height: panel.theme.stereoChoiceHeight
+            // Tall enough for each tile's name and caption.
+            height: Math.max(panel.theme.stereoChoiceHeight, implicitHeight)
             vertical: true
             controller: panel.controller
             theme: panel.theme
