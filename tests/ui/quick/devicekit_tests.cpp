@@ -436,7 +436,8 @@ void every_segmented_choice_fills_its_selection() {
     std::unique_ptr<QObject> object(harness.createWithInitialProperties(
         {{QStringLiteral("controller"), QVariant::fromValue<QObject*>(&controller)},
          {QStringLiteral("theme"), QVariant::fromValue<QObject*>(theme.get())}}));
-    require(object != nullptr, name + ": the harness is created: " + harness.errorString().toStdString());
+    require(object != nullptr,
+            name + ": the harness is created: " + harness.errorString().toStdString());
     auto* item = qobject_cast<QQuickItem*>(object.get());
     QCoreApplication::processEvents();
     for (const char* control_name :
@@ -451,18 +452,17 @@ void every_segmented_choice_fills_its_selection() {
       });
       require(cells.size() >= 2 && chosen == 1,
               name + ": " + control_name + " has one chosen cell among several");
-      const auto on = *std::find_if(cells.begin(), cells.end(), [](QQuickItem* cell) {
-        return cell->property("on").toBool();
-      });
+      const auto on = *std::find_if(cells.begin(), cells.end(),
+                                    [](QQuickItem* cell) { return cell->property("on").toBool(); });
       const auto on_fill = on->property("selectionFill").value<QColor>();
       const auto on_ink = on->property("selectionInk").value<QColor>();
       require(on_fill.alpha() == opaque_alpha,
               name + ": " + control_name + "'s chosen cell is filled, not washed");
       const double ratio = contrast(on_ink, on_fill);
-      require(ratio >= minimum_selection_contrast,
-              name + ": " + control_name + "'s chosen text " + on_ink.name().toStdString() +
-                  " on " + on_fill.name().toStdString() + " reads at " + std::to_string(ratio) +
-                  ":1");
+      require(ratio >= minimum_selection_contrast, name + ": " + control_name + "'s chosen text " +
+                                                       on_ink.name().toStdString() + " on " +
+                                                       on_fill.name().toStdString() + " reads at " +
+                                                       std::to_string(ratio) + ":1");
       for (QQuickItem* cell : cells) {
         if (cell == on) {
           continue;
