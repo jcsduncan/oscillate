@@ -186,7 +186,7 @@ void kill_creation(const fs::path& root, std::optional<SaveStage> stage) {
     auto& [creation, writer] = started.value();
     if (!writer.save(snapshot(created_revision), SaveKind::explicit_save))
       ::_exit(child_setup_failed);
-    if (!creation.publish(writer))
+    if (!creation.publish())
       ::_exit(child_setup_failed);
     if (!stage)
       kill_self();
@@ -242,7 +242,7 @@ std::uint64_t create_project(const fs::path& root, std::uint64_t revision) {
   auto started = take(ProjectCreation::begin(root));
   REQUIRE_EQ(take(started.writer.save(snapshot(revision), SaveKind::explicit_save)).status,
              SaveStatus::committed, "new project save failed");
-  take(started.creation.publish(started.writer));
+  take(started.creation.publish());
   return revision;
 }
 

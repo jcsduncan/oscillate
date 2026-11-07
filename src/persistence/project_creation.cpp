@@ -28,6 +28,7 @@ template <typename T> using Result = foundation::Result<T>;
 
 constexpr std::string_view stage_prefix = ".";
 constexpr std::string_view stage_marker = ".creating-";
+constexpr mode_t private_directory_mode = 0700;
 // A project library is a user folder; refuse to scan one without bound.
 constexpr std::size_t max_scanned_entries = 8192;
 constexpr std::size_t stage_suffix_length =
@@ -97,8 +98,8 @@ bool fresh_project_layout(const std::filesystem::path& stage) {
 }
 
 // The stage may be removed only when a creation made it, nothing committed it
-// and no live writer holds it. The returned lock, when held, keeps another
-// writer out meanwhile.
+// and no live creation holds its lock. The returned lock keeps a creation out
+// while the stage is removed.
 bool abandoned_stage(int parent_fd, const std::filesystem::path& parent, const char* name,
                      UniqueFd& lock) {
   struct stat status{};
@@ -106,18 +107,14 @@ bool abandoned_stage(int parent_fd, const std::filesystem::path& parent, const c
       !before_process_start(status.st_mtim) || !fresh_project_layout(parent / name))
     return false;
   UniqueFd stage(::openat(parent_fd, name, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW));
-  if (!stage)
+  if (!stage || ::flock(stage.get(), LOCK_EX | LOCK_NB) != 0)
     return false;
-  UniqueFd state(::openat(stage.get(), "state", O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW));
-  if (!state)
-    return errno == ENOENT;
   struct stat pointer{};
-  if (::fstatat(state.get(), "CURRENT", &pointer, AT_SYMLINK_NOFOLLOW) == 0 || errno != ENOENT)
+  if (::fstatat(stage.get(), "state/CURRENT", &pointer, AT_SYMLINK_NOFOLLOW) == 0 ||
+      errno != ENOENT)
     return false;
-  lock.reset(::openat(state.get(), "WRITER.lock", O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK));
-  if (!lock)
-    return errno == ENOENT;
-  return ::flock(lock.get(), LOCK_EX | LOCK_NB) == 0;
+  lock = std::move(stage);
+  return true;
 }
 
 } // namespace
@@ -130,9 +127,9 @@ ProjectCreation::ProjectCreation(std::filesystem::path parent, UniqueFd parent_f
 
 ProjectCreation::ProjectCreation(ProjectCreation&& other) noexcept
     : parent_(std::move(other.parent_)), parent_fd_(std::move(other.parent_fd_)),
-      stage_name_(std::move(other.stage_name_)), final_name_(std::move(other.final_name_)),
-      mode_(other.mode_), fault_(std::move(other.fault_)),
-      published_(std::exchange(other.published_, true)) {}
+      stage_name_(std::move(other.stage_name_)), stage_fd_(std::move(other.stage_fd_)),
+      final_name_(std::move(other.final_name_)), mode_(other.mode_),
+      fault_(std::move(other.fault_)), published_(std::exchange(other.published_, true)) {}
 
 ProjectCreation::~ProjectCreation() {
   if (!published_ && parent_fd_ && !stage_name_.empty())
@@ -187,9 +184,16 @@ Result<StartedCreation> ProjectCreation::begin(const std::filesystem::path& root
   if (!stage_name)
     return Result<StartedCreation>::failure(stage_name.error());
   ProjectCreation creation(parent, std::move(parent_fd), final_name, mode, fault);
+  if (::mkdirat(creation.parent_fd_.get(), stage_name.value().c_str(), private_directory_mode) != 0)
+    return Result<StartedCreation>::failure(io_error("create new project stage"));
   creation.stage_name_ = stage_name.value();
-  // open_writer makes the stage, flushes its entry in the parent and lays out
-  // the project folders; a failure leaves the stage for the destructor.
+  // Lock the stage at once, so cleanup never takes a live creation's stage.
+  creation.stage_fd_.reset(::openat(creation.parent_fd_.get(), creation.stage_name_.c_str(),
+                                    O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW));
+  if (!creation.stage_fd_ || ::flock(creation.stage_fd_.get(), LOCK_EX | LOCK_NB) != 0)
+    return Result<StartedCreation>::failure(io_error("lock new project stage"));
+  // open_writer flushes the stage's entry in the parent and lays out the
+  // project folders; a failure leaves the stage for the destructor.
   auto writer = ProjectStore::open_writer(parent / creation.stage_name_, true, std::move(fault));
   if (!writer)
     return Result<StartedCreation>::failure(writer.error());
@@ -197,18 +201,15 @@ Result<StartedCreation> ProjectCreation::begin(const std::filesystem::path& root
       StartedCreation{std::move(creation), std::move(writer).value()});
 }
 
-Result<void> ProjectCreation::publish(const ProjectStore& writer) {
-  if (published_)
+Result<void> ProjectCreation::publish() {
+  if (published_ || !stage_fd_)
     return Result<void>::failure({ErrorCode::conflict, "New project is already published"});
-  auto current = writer.load_current();
-  if (!current)
+  // Validate the stage itself, not whichever writer the caller holds.
+  auto reader = ProjectStore::open_reader(parent_ / stage_name_);
+  if (!reader || !reader.value().load_current())
     return Result<void>::failure(
         {ErrorCode::conflict, "New project has no committed save to publish"});
-  UniqueFd stage(::openat(parent_fd_.get(), stage_name_.c_str(),
-                          O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW));
-  if (!stage)
-    return Result<void>::failure(io_error("open new project stage"));
-  if (auto flushed = foundation::sync(stage.get(), "flush new project folder"); !flushed)
+  if (auto flushed = foundation::sync(stage_fd_.get(), "flush new project folder"); !flushed)
     return flushed;
   auto renamed = foundation::rename_in(parent_fd_.get(), stage_name_, final_name_, mode_,
                                        "publish new project folder");

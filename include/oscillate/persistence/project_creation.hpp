@@ -35,16 +35,16 @@ public:
   [[nodiscard]] static foundation::Result<StartedCreation> begin(const std::filesystem::path& root,
                                                                  FaultHook fault = {});
 
-  // Requires a committed CURRENT in `writer`, flushes the stage, renames it to
-  // the final name without replacing a folder that appeared meanwhile, then
+  // Requires a committed CURRENT in the stage, flushes it, renames it to the
+  // final name without replacing a folder that appeared meanwhile, then
   // flushes the parent. The writer's descriptors stay valid across the rename.
-  [[nodiscard]] foundation::Result<void> publish(const ProjectStore& writer);
+  [[nodiscard]] foundation::Result<void> publish();
 
   // Removes stages in `parent` that a process older than this one abandoned:
-  // only directories matching the stage pattern, holding no CURRENT and whose
-  // writer lock is free. Best effort and bounded: a stage that cannot be
-  // removed is skipped, and a scan stops after a fixed number of entries.
-  // Returns how many were removed; fails only if `parent` cannot be scanned.
+  // only directories matching the stage pattern, holding only a new project's
+  // layout and no CURRENT, and not locked by a live creation. Best effort and bounded: a stage that
+  // cannot be removed is skipped, and a scan stops after a fixed number of entries. Returns how
+  // many were removed; fails only if `parent` cannot be scanned.
   [[nodiscard]] static foundation::Result<std::size_t>
   clean_abandoned(const std::filesystem::path& parent);
 
@@ -58,6 +58,8 @@ private:
   std::filesystem::path parent_;
   foundation::UniqueFd parent_fd_;
   std::string stage_name_;
+  // Held with flock from the moment the stage exists until this is destroyed.
+  foundation::UniqueFd stage_fd_;
   std::string final_name_;
   foundation::PublishMode mode_;
   FaultHook fault_;

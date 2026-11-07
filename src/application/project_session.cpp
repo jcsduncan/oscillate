@@ -73,7 +73,7 @@ ProjectSession::create(const std::filesystem::path& root, CreateOptions options)
   if (!saved) {
     return foundation::Result<std::unique_ptr<ProjectSession>>::failure(saved.error());
   }
-  auto published = creation.publish(session->state_->store);
+  auto published = creation.publish();
   if (!published) {
     return foundation::Result<std::unique_ptr<ProjectSession>>::failure(published.error());
   }
