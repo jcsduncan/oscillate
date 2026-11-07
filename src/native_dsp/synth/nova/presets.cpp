@@ -1488,7 +1488,7 @@ constexpr auto old_card_brass = std::to_array<Value>({
 
 // Route amounts are in a destination's knob travel (08a §3.1). These turn
 // musical depths into that travel for the destinations the pads modulate.
-constexpr double pitch_route_span_cents = 9'600.0; // nova.osc.<o>.pitch: −48..48 st.
+constexpr double pitch_route_span_cents = 9'600.0;   // nova.osc.<o>.pitch: −48..48 st.
 constexpr double cutoff_route_span_octaves = 11.425; // nova.filter.<f>.cutoff: log2(22000 / 8).
 constexpr double cents_of_travel(double cents) { return cents / pitch_route_span_cents; }
 constexpr double octaves_of_travel(double octaves) { return octaves / cutoff_route_span_octaves; }

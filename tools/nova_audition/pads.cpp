@@ -66,15 +66,15 @@ using P = Pitch;
 // Hijaz, back to C, and C to close. The lead starts on beat 8.5.
 std::vector<Note> held_part() {
   return {
-      {0.0, 7.0, key(P::c, 3), medium},      {0.0, 7.0, key(P::g, 3), medium},
-      {2.5, 4.5, key(P::eb, 4), soft},       {9.75, 7.25, key(P::c, 3), medium},
-      {9.75, 7.25, key(P::g, 3), medium},    {11.5, 4.5, key(P::eb, 4), soft},
-      {17.5, 6.5, key(P::ab, 2), medium},    {17.5, 6.5, key(P::eb, 3), medium},
-      {18.25, 5.75, key(P::c, 4), soft},     {25.25, 5.0, key(P::g, 2), medium},
-      {25.25, 5.0, key(P::d, 3), medium},    {26.5, 3.75, key(P::g, 3), soft},
-      {31.0, 8.5, key(P::c, 3), medium},     {31.0, 8.5, key(P::g, 3), medium},
-      {32.75, 6.75, key(P::eb, 4), soft},    {34.5, 3.0, key(P::f, 3), soft},
-      {40.75, 7.25, key(P::c, 2), medium},   {40.75, 7.25, key(P::g, 2), medium},
+      {0.0, 7.0, key(P::c, 3), medium},    {0.0, 7.0, key(P::g, 3), medium},
+      {2.5, 4.5, key(P::eb, 4), soft},     {9.75, 7.25, key(P::c, 3), medium},
+      {9.75, 7.25, key(P::g, 3), medium},  {11.5, 4.5, key(P::eb, 4), soft},
+      {17.5, 6.5, key(P::ab, 2), medium},  {17.5, 6.5, key(P::eb, 3), medium},
+      {18.25, 5.75, key(P::c, 4), soft},   {25.25, 5.0, key(P::g, 2), medium},
+      {25.25, 5.0, key(P::d, 3), medium},  {26.5, 3.75, key(P::g, 3), soft},
+      {31.0, 8.5, key(P::c, 3), medium},   {31.0, 8.5, key(P::g, 3), medium},
+      {32.75, 6.75, key(P::eb, 4), soft},  {34.5, 3.0, key(P::f, 3), soft},
+      {40.75, 7.25, key(P::c, 2), medium}, {40.75, 7.25, key(P::g, 2), medium},
       {41.5, 6.5, key(P::c, 3), soft},
   };
 }
@@ -131,15 +131,13 @@ const std::vector<Audition>& auditions() {
       {"02 breath", "nova", "Ney Breath", "Ambient Wash", wet, held_part},
       {"03 santur", "nova", "Santur Bloom", "Shimmer Heaven", wet, santur_part},
       {"06 flute cloud", "drift", "Ney Mist", "Endless Cloud", cloud, held_part},
-      {"06b flute cloud", "wren", "Two Flutes", "Endless Cloud", cloud, held_part,
-       flute_octaves},
+      {"06b flute cloud", "wren", "Two Flutes", "Endless Cloud", cloud, held_part, flute_octaves},
       {"07 low", "nova", "Warm Sub Bed", "Dark Hall", wet, low_part},
   };
   return list;
 }
 
-std::size_t preset_index(const native_dsp::synth::EngineDescriptor& engine,
-                         std::string_view name) {
+std::size_t preset_index(const native_dsp::synth::EngineDescriptor& engine, std::string_view name) {
   for (std::size_t i = 0; i < engine.presets.size(); ++i)
     if (engine.presets[i].name == name)
       return i;
