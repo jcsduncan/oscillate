@@ -64,6 +64,9 @@ jobs:
         run: scripts/build.sh build/quick --target all oscillate_tests
       - name: Fast tests (no live devices)
         run: ctest --preset quick-fast -LE live -j4
+      # The live/export parity gate (tests/README.md); fails if the label selects no test.
+      - name: Live/export parity
+        run: ctest --preset quick-parity -j4
       - name: ccache stats
         if: always()
         run: ccache --show-stats || true

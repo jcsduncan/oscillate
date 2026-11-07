@@ -1,6 +1,6 @@
 oscillate_add_test_executable(oscillate_engine_tests SOURCES graph_tests.cpp
   LIBS oscillate::engine Threads::Threads
-  TEST engine_graph_contract)
+  TEST engine_graph_contract LABELS parity)
 
 oscillate_add_test_executable(oscillate_midi_events_tests SOURCES midi_events_tests.cpp
   LIBS oscillate::engine
@@ -28,7 +28,7 @@ oscillate_add_test_executable(oscillate_routed_node_meters_tests SOURCES routed_
 
 oscillate_add_test_executable(oscillate_routed_pdc_transition_probe SOURCES routed_pdc_transition_probe.cpp
   LIBS oscillate::engine
-  TEST routed_pdc_transition_probe)
+  TEST routed_pdc_transition_probe LABELS parity)
 
 oscillate_add_test_executable(oscillate_routed_publisher_tests SOURCES routed_publisher_tests.cpp
   LIBS oscillate::engine Threads::Threads
