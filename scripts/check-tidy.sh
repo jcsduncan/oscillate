@@ -62,9 +62,12 @@ for index in range(max(map(len, by_file.values()), default=0)):
 (shard_root / 'index').write_bytes(b''.join(os.fsencode(shard) + b'\0' for shard in shards))
 PY
 mapfile -d '' shards < "$shard_root/index"
+# Check every file, then fail if any reported, so one run lists all findings.
+status=0
 for shard in "${shards[@]}"; do
   mapfile -d '' files < "$shard/files"
   for file in "${files[@]}"; do
-    clang-tidy -p "$shard" "$file"
+    clang-tidy -p "$shard" "$file" || status=1
   done
 done
+exit "$status"

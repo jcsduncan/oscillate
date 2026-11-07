@@ -3,5 +3,7 @@ WarningsAsErrors: '*'
 HeaderFilterRegex: '(^|.*/)(apps|include|src|tests)/.*'
 FormatStyle: file
 CheckOptions:
+  - key: bugprone-signed-bitwise.IgnorePositiveIntegerLiterals
+    value: true
   - key: readability-identifier-naming.NamespaceCase
     value: lower_case
