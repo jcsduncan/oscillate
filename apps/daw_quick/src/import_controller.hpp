@@ -1,12 +1,15 @@
 #pragma once
 
 #include "audio_import_controller.hpp"
+#include "background_job.hpp"
 
 #include "oscillate/application/midi_file_import.hpp"
 #include "oscillate/application/project_session.hpp"
 
+#include <QByteArray>
 #include <QObject>
 #include <QString>
+#include <QTimer>
 #include <QUrl>
 
 #include <cstddef>
@@ -17,8 +20,9 @@
 namespace oscillate::quick {
 
 // Audio and MIDI import (QML: projectBridge.imports). Audio decodes on the
-// AudioImportController's worker and lands as one undo step; a MIDI file
-// becomes new instrument tracks, or notes on the track it was dropped on.
+// AudioImportController's worker and lands as one undo step; a MIDI file is
+// read on a worker, then becomes new instrument tracks, or notes on the
+// track it was dropped on, in the session it was dropped into.
 class ImportController final : public QObject {
   Q_OBJECT
   Q_PROPERTY(QString importStatus READ import_status NOTIFY changed)
@@ -47,7 +51,7 @@ public:
   [[nodiscard]] AudioImportController& audio() noexcept { return audio_; }
   [[nodiscard]] const AudioImportController& audio() const noexcept { return audio_; }
   [[nodiscard]] QString import_status() const { return audio_.status(); }
-  [[nodiscard]] bool import_busy() const noexcept { return audio_.busy(); }
+  [[nodiscard]] bool import_busy() const noexcept { return audio_.busy() || midi_read_.running(); }
   [[nodiscard]] bool import_enabled() const;
   [[nodiscard]] static bool encoded_import_available() noexcept;
 
@@ -69,9 +73,20 @@ private:
   void choose_import_audio_at(std::optional<std::size_t> insert_index);
   void import_audio_at(const QUrl& source, std::optional<std::size_t> insert_index);
   void import_midi_with(const QUrl& source, application::MidiImportOptions options);
+  void poll_midi();
+
+  // A MIDI file being read, and where its notes go once it is.
+  struct MidiRead {
+    QString path;
+    application::MidiImportOptions options;
+    std::uint64_t session = 0;
+  };
 
   Host host_;
   AudioImportController audio_;
+  BackgroundJob<foundation::Result<QByteArray>> midi_read_;
+  std::optional<MidiRead> midi_;
+  QTimer midi_timer_;
 };
 
 } // namespace oscillate::quick

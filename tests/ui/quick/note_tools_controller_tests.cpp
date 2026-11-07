@@ -28,6 +28,8 @@ namespace fs = std::filesystem;
 using oscillate::timeline::ticks_per_quarter;
 
 using oscillate::test::require;
+// How long groove file work may take in the background.
+constexpr int groove_wait_ms = 5000;
 
 class Directory {
 public:
@@ -120,6 +122,8 @@ void tools_edit_in_one_step() {
   file.write(QByteArray::fromStdString(
       oscillate::persistence::encode_groove({"ignored", 1, {{0.25, 1.0}}})));
   file.close();
+  tools.rescan_grooves();
+  require(tools.wait_for_groove_files(groove_wait_ms), "the groove folder was not read");
   const auto pool = tools.grooves();
   require(std::ranges::any_of(pool,
                               [](const QVariant& entry) {
@@ -133,13 +137,18 @@ void tools_edit_in_one_step() {
   tools.apply_groove(clip_id, {}, QStringLiteral("Drag"), 1.0, 1.0, 0.0);
   require(starts() == std::vector<std::int64_t>(3, ticks_per_quarter + ticks_per_quarter / 4),
           "a quarter of a beat late: " + status.toStdString());
-  require(tools.delete_groove(QStringLiteral("Drag")) && tools.grooves().size() == pool.size() - 1,
+  require(tools.delete_groove(QStringLiteral("Drag")) &&
+              tools.wait_for_groove_files(groove_wait_ms) &&
+              tools.grooves().size() == pool.size() - 1,
           "a user groove can be deleted");
 
   // A groove kept from a record joins the pool under a file-safe name and
   // becomes the current groove.
   require(tools.keep_groove({"Ref / Hats", 4, {{0.0, 1.0}, {0.2, 0.8}}}) &&
-              tools.property("currentGroove").toString() == QStringLiteral("Ref - Hats"),
+              tools.property("currentGroove").toString() == QStringLiteral("Ref - Hats") &&
+              tools.wait_for_groove_files(groove_wait_ms) &&
+              tools.find_groove(QStringLiteral("Ref - Hats")).has_value() &&
+              QFile::exists(groove_dir + QStringLiteral("/Ref - Hats.json")),
           "a kept groove is saved and chosen");
   require(!tools.keep_groove({"   ", 4, {{0.0, 1.0}}}), "a groove needs a name");
 }
