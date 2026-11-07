@@ -37,7 +37,7 @@ namespace fs = std::filesystem;
 
 // TailGain's declared tail in its "overlong-tail" mode: eleven seconds at
 // 48 kHz.
-constexpr std::size_t overlong_tail_frames = 48'000U * 11U;
+constexpr std::size_t overlong_tail_frames = std::size_t{48'000} * 11U;
 
 using oscillate::test::require;
 using oscillate::test::take;

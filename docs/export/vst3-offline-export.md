@@ -8,7 +8,9 @@ shared offline render ([ADR-0090](../decisions/0090-render-graph-builder.md)):
 stage preparer, so a VST3 effect is a chain stage like a built-in one
 ([ADR-0050](../decisions/0050-one-chain-per-track.md)). The Qt Quick Export
 Master action takes this path when a track or the master holds a saved VST3
-effect. Export runs on a worker and a failure never replaces an existing
+effect and no track has a VST3 instrument; the shared render does not yet play
+a VST3 instrument track, which the [VST3 instrument
+exporter](vst3-instrument-slice.md) renders. Export runs on a worker and a failure never replaces an existing
 output.
 
 ## Verification

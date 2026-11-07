@@ -476,11 +476,12 @@ void ExportController::export_master() {
   const auto vst3_output =
       export_format_index_ < wav_formats_end
           ? exporting::MasterOutputOptions{exporting::MasterRenderOptions{
-                path, wav_formats[static_cast<std::size_t>(export_format_index_)], 0, output_rate}}
+                path, wav_formats[static_cast<std::size_t>(export_format_index_)], 0, output_rate,
+                nullptr, export_trim_tail_}}
           : exporting::MasterOutputOptions{exporting::EncodedMasterOptions{
                 path,
                 encoded_formats[static_cast<std::size_t>(export_format_index_ - wav_formats_end)],
-                0, 0.5, output_rate}};
+                0, 0.5, output_rate, export_trim_tail_}};
 #endif
   const project::Vst3PluginInstance* instrument_insert = nullptr;
   for (const auto& track : session()->snapshot().tracks) {
