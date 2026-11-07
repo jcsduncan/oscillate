@@ -1,6 +1,5 @@
 #include "oscillate/application/routed_audio_source.hpp"
 #include "oscillate/application/routed_playback_control.hpp"
-#include "oscillate/application/vst3/instrument_export.hpp"
 #include "oscillate/application/vst3/instrument_provider.hpp"
 #include "oscillate/application/vst3/offline_export.hpp"
 #include "oscillate/application/vst3/stage_provider.hpp"
@@ -255,22 +254,30 @@ struct LiveRender {
 // Plays `snapshot` through the live routed graph, as the device callback
 // does, for at least `frames` frames past the route latency.
 LiveRender play_live(const fs::path& root, const project::Snapshot& snapshot,
-                     const plugins::ScanResult& scan, std::size_t block_frames,
+                     std::span<const plugins::ScanResult> scans, std::size_t block_frames,
                      std::size_t frames) {
+  // Each plugin's receipt is the scan of its saved bundle.
+  const auto receipt = [&](const project::Vst3PluginInstance& plugin) {
+    const auto found = std::ranges::find_if(scans, [&](const plugins::ScanResult& scan) {
+      return scan.binary.canonical_bundle.string() == plugin.bundle_path;
+    });
+    require(found != scans.end(), "the live render has a scan of " + plugin.bundle_path);
+    return *found;
+  };
   Gate gate;
   auto model = take(project::ProjectModel::open(snapshot, gate));
   plugins::Vst3InstrumentTrackProvider instruments;
   plugins::Vst3TrackInsertProvider effects;
   for (const auto& track : snapshot.tracks) {
     if (const auto* source = std::get_if<project::Vst3PluginInstance>(&track.instrument_source))
-      instruments.set_scan_receipt(source->id, scan);
+      instruments.set_scan_receipt(source->id, receipt(*source));
     for (const auto& slot : track.effects)
       if (const auto* effect = std::get_if<project::Vst3PluginInstance>(&slot.processor))
-        effects.set_scan_receipt(effect->id, scan);
+        effects.set_scan_receipt(effect->id, receipt(*effect));
   }
   for (const auto& slot : snapshot.master_effects)
     if (const auto* effect = std::get_if<project::Vst3PluginInstance>(&slot.processor))
-      effects.set_scan_receipt(effect->id, scan);
+      effects.set_scan_receipt(effect->id, receipt(*effect));
   plugins::Vst3StageProvider stages(instruments, effects);
   application::RoutedPlaybackControl control(
       model,
@@ -375,16 +382,17 @@ void effect_master_and_stems(plugins::Vst3Scanner& scanner) {
   REQUIRE_EQ(dry.size(), master.size(), "the dry stem is as long as the master");
   // TailGain only takes 128-frame host blocks.
   const auto frames = master.size() / 2;
-  require_nulls(master, play_live(project.root, project.snapshot, scan, block_128, frames),
+  require_nulls(master,
+                play_live(project.root, project.snapshot, std::span(&scan, 1), block_128, frames),
                 "effect master");
-  require_nulls(
-      wet,
-      play_live(project.root, muted_except(project.snapshot, project.wet), scan, block_128, frames),
-      "effect wet stem");
-  require_nulls(
-      dry,
-      play_live(project.root, muted_except(project.snapshot, project.dry), scan, block_128, frames),
-      "effect dry stem");
+  require_nulls(wet,
+                play_live(project.root, muted_except(project.snapshot, project.wet),
+                          std::span(&scan, 1), block_128, frames),
+                "effect wet stem");
+  require_nulls(dry,
+                play_live(project.root, muted_except(project.snapshot, project.dry),
+                          std::span(&scan, 1), block_128, frames),
+                "effect dry stem");
 }
 
 // A latent plugin's export lines up with its parallel dry path and with live
@@ -403,16 +411,17 @@ void latent_effect_timing(plugins::Vst3Scanner& scanner) {
   REQUIRE_LT(peak(lead), parity_tolerance, "nothing sounds before the first clip");
   const auto frames = master.size() / 2;
   for (const auto block_frames : {block_64, block_128}) {
-    const auto live = play_live(project.root, project.snapshot, scan, block_frames, frames);
+    const auto live =
+        play_live(project.root, project.snapshot, std::span(&scan, 1), block_frames, frames);
     REQUIRE_EQ(live.latency, latent_frames, "live playback reports the plugin's latency");
     require_nulls(master, live, "latent master at " + std::to_string(block_frames) + " frames");
   }
   const auto dry =
       export_vst3(project.root, project.snapshot, scanner, directory / "dry.wav", project.dry);
-  require_nulls(
-      dry,
-      play_live(project.root, muted_except(project.snapshot, project.dry), scan, block_128, frames),
-      "latent dry stem");
+  require_nulls(dry,
+                play_live(project.root, muted_except(project.snapshot, project.dry),
+                          std::span(&scan, 1), block_128, frames),
+                "latent dry stem");
 }
 
 // A latent VST3 effect on the master runs after the mix, as live playback
@@ -430,14 +439,16 @@ void master_slot(plugins::Vst3Scanner& scanner) {
       export_vst3(project.root, project.snapshot, scanner, directory / "master.wav");
   const auto frames = master.size() / 2;
   for (const auto block_frames : {block_64, block_128}) {
-    const auto live = play_live(project.root, project.snapshot, scan, block_frames, frames);
+    const auto live =
+        play_live(project.root, project.snapshot, std::span(&scan, 1), block_frames, frames);
     REQUIRE_EQ(live.latency, latent_frames, "live playback reports the master plugin's latency");
     require_nulls(master, live, "master slot at " + std::to_string(block_frames) + " frames");
   }
   for (const auto track : {project.wet, project.dry})
     require_nulls(
         export_vst3(project.root, project.snapshot, scanner, directory / "stem.wav", track),
-        play_live(project.root, muted_except(project.snapshot, track), scan, block_128, frames),
+        play_live(project.root, muted_except(project.snapshot, track), std::span(&scan, 1),
+                  block_128, frames),
         "master slot stem");
 }
 
@@ -448,30 +459,67 @@ void instrument_master_and_stem(plugins::Vst3Scanner& scanner) {
   const auto scan = scanner.scan(VST3_INSTRUMENT_BUNDLE);
   require(scan.ok(), "instrument fixture scan failed: " + scan.diagnostic);
   const auto project = instrument_project(directory / "instrument", scan);
-  Gate gate;
-  const auto master_path = directory / "master.wav";
-  auto authority = take(exporting::StoppedExportAuthority::acquire(project.snapshot, gate));
-  REQUIRE_OK(exporting::render_vst3_instrument_wav_master(project.snapshot, std::move(authority),
-                                                          scanner, VST3_INSTRUMENT_BUNDLE,
-                                                          {master_path}),
-             "VST3 instrument master exported");
-  const auto master = oscillate::test::read_float_wav(master_path);
-  const auto stem_path = directory / "stem.wav";
-  authority = take(exporting::StoppedExportAuthority::acquire(project.snapshot, gate));
-  REQUIRE_OK(exporting::render_vst3_instrument_wav_stem(project.snapshot, std::move(authority),
-                                                        scanner, VST3_INSTRUMENT_BUNDLE,
-                                                        project.track, {stem_path}),
-             "VST3 instrument stem exported");
-  const auto stem = oscillate::test::read_float_wav(stem_path);
+  const auto master =
+      export_vst3(project.root, project.snapshot, scanner, directory / "master.wav");
+  const auto stem =
+      export_vst3(project.root, project.snapshot, scanner, directory / "stem.wav", project.track);
   REQUIRE_EQ(stem.size(), master.size(), "the one-source stem is as long as the master");
   // The export ends with the declared release, which still sounds.
   const auto release = std::span<const float>(master).last(2 * instrument_tail_frames);
   REQUIRE_GT(peak(release), tolerance::coarse, "the instrument's release is exported");
-  require_nulls(master,
-                play_live(project.root, project.snapshot, scan, block_128, master.size() / 2),
-                "instrument master");
-  require_nulls(stem, play_live(project.root, project.snapshot, scan, block_128, stem.size() / 2),
-                "instrument stem");
+  require_nulls(
+      master,
+      play_live(project.root, project.snapshot, std::span(&scan, 1), block_128, master.size() / 2),
+      "instrument master");
+  require_nulls(
+      stem,
+      play_live(project.root, project.snapshot, std::span(&scan, 1), block_128, stem.size() / 2),
+      "instrument stem");
+}
+
+// A VST3 instrument through a latent VST3 effect on its own track, beside an
+// audio track: the master nulls against live playback, and the stem bundle
+// holds exactly the single stems.
+void instrument_through_latent_effect(plugins::Vst3Scanner& scanner) {
+  const oscillate::test::TempDir directory("oscillate-vst3-export-parity");
+  const std::vector scans{scanner.scan(VST3_INSTRUMENT_BUNDLE), scanner.scan(VST3_GAIN_BUNDLE)};
+  for (const auto& scan : scans)
+    require(scan.ok(), "fixture scan failed: " + scan.diagnostic);
+  auto audio = effect_project(directory / "song", scans[1], latent_state);
+  const auto instrument = instrument_project(directory / "instrument", scans[0]);
+  // The instrument track joins the audio project, its plugin's identity and
+  // MIDI unchanged; the latent effect moves from the wet audio track onto it.
+  auto snapshot = audio.snapshot;
+  auto& wet = *std::ranges::find(snapshot.tracks, audio.wet, &project::Track::id);
+  auto track = instrument.snapshot.tracks.front();
+  constexpr std::uint64_t joined_track = 20; // Free in the audio project.
+  track.id = id<project::TrackId>(joined_track);
+  track.sends.clear();
+  track.effects.push_back(std::move(wet.effects.front()));
+  wet.effects.clear();
+  snapshot.tracks.push_back(std::move(track));
+  const auto master = export_vst3(audio.root, snapshot, scanner, directory / "master.wav");
+  require_nulls(master, play_live(audio.root, snapshot, scans, block_128, master.size() / 2),
+                "instrument through a latent effect");
+  const auto bundle = directory / "stems";
+  {
+    Gate gate;
+    auto store = take(persistence::ProjectStore::open_reader(audio.root));
+    auto authority = take(exporting::StoppedExportAuthority::acquire(snapshot, gate));
+    REQUIRE_OK(
+        exporting::render_vst3_stems(snapshot, store, std::move(authority), scanner, {bundle}),
+        "VST3 stem bundle published");
+  }
+  for (const auto& source : snapshot.tracks) {
+    if (source.kind != project::TrackKind::audio && source.kind != project::TrackKind::instrument)
+      continue;
+    const auto single =
+        export_vst3(audio.root, snapshot, scanner, directory / "single.wav", source.id);
+    REQUIRE_EQ(
+        oscillate::test::read_float_wav(bundle / ("track-" + source.id.to_string() + ".wav")),
+        single, "a bundled stem is the single stem");
+    REQUIRE_EQ(single.size(), master.size(), "every stem is as long as the master");
+  }
 }
 
 } // namespace
@@ -484,6 +532,7 @@ int main() {
     effect_master_and_stems(scanner);
     latent_effect_timing(scanner);
     master_slot(scanner);
+    instrument_through_latent_effect(scanner);
     instrument_master_and_stem(scanner);
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';

@@ -186,7 +186,7 @@ This section describes the built platform. Items marked *later* are open work, t
 ### 9.4 Media path into kernels
 - `source_prep::load_synth_media(store, snapshot, document, stop)` decodes every managed slot from verified sources, sharing one asset between slots that name the same source. It returns `SynthMedia` (slot, sha256, `shared_ptr<const SynthMediaAsset>`).
 - `NativeSynthPlayer::prepare(..., media)` and `NativeSynthRuntime::create(engine, values, document, media, rate)` compile the document with its media before the first block.
-- **Callers.** Routed playback, offline master export and mixed VST3 export all load the media; nothing is decoded on the callback.
+- **Callers.** Routed playback and offline export, with or without VST3 stages, load the media; nothing is decoded on the callback.
 - *Later:* a missing asset should fall back to a sine and raise a problem toast. Today, preparation fails with the reason.
 
 ### 9.5 Live edits

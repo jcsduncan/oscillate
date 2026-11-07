@@ -3,7 +3,6 @@
 #include "vst3_helper_path.hpp"
 
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
-#include "oscillate/application/vst3/instrument_export.hpp"
 #include "oscillate/application/vst3/offline_export.hpp"
 #include "oscillate/plugins/vst3_scan.hpp"
 #endif
@@ -109,81 +108,29 @@ output_target(const exporting::MasterOutputOptions& options) {
   return vst3_count + native_instrument_source_count(snapshot) == 2 && vst3_count > 0;
 }
 
+// Why the selected-source stem cannot export, or empty when it can. Any
+// layout renders (ADR-0050); only the build can lack a VST3 host.
 [[nodiscard]] QString two_instrument_source_stem_layout_reason(const project::Snapshot& snapshot) {
-  const auto vst3_count = vst3_instrument_source_count(snapshot);
-  const auto native_count = native_instrument_source_count(snapshot);
-  if (vst3_count + native_count != 2 || vst3_count == 0)
+  if (!selected_source_stems(snapshot))
     return QStringLiteral("Select two instrument sources including a VST3 instrument");
 #if !defined(OSCILLATE_HAVE_VST3) || !OSCILLATE_HAVE_VST3
   return QStringLiteral("Instrument source stems require a scanner-enabled VST3 build");
 #else
-  if (native_count != 0) {
-    const auto audio_count =
-        static_cast<std::size_t>(std::ranges::count_if(snapshot.tracks, [](const auto& track) {
-          return track.kind == project::TrackKind::audio;
-        }));
-    if (native_count != 1 || vst3_count != 1 || audio_count > 1 ||
-        (audio_count == 0 && snapshot.tracks.size() != 2) || !snapshot.master_effects.empty())
-      return QStringLiteral(
-          "Mixed native/VST3 stems support one managed audio track and no master effects");
-    for (const auto& track : snapshot.tracks) {
-      if (!track.effects.empty() || !track.automation.empty() ||
-          (audio_count == 0 && (track.main_output || !track.sends.empty())))
-        return QStringLiteral("Mixed native/VST3 stems require bare source paths");
-      if (track.kind == project::TrackKind::instrument) {
-        if (!track.clips.empty() || std::ranges::any_of(track.midi_clips, [](const auto& clip) {
-              return !clip.automation.empty();
-            }))
-          return QStringLiteral("Mixed native/VST3 stems require bare instrument source paths");
-      } else if (track.kind == project::TrackKind::audio) {
-        if (audio_count != 1 || track.clips.empty())
-          return QStringLiteral("Mixed native/VST3 stems need one managed audio source");
-      } else if ((track.kind == project::TrackKind::group_bus ||
-                  track.kind == project::TrackKind::return_bus) &&
-                 track.clips.empty() && track.midi_clips.empty() &&
-                 std::holds_alternative<std::monostate>(track.instrument_source)) {
-        continue;
-      } else {
-        return QStringLiteral("Mixed native/VST3 stems require bare source paths");
-      }
-    }
-    return {};
-  }
-  const auto paired_effect_paths =
-      snapshot.tracks.size() == 2 && snapshot.master_effects.empty() &&
-      std::ranges::all_of(snapshot.tracks, [](const auto& track) {
-        return track.kind == project::TrackKind::instrument &&
-               detail::vst3_instrument_source(track) && track.clips.empty() &&
-               track.effects.size() == 1 && track.effects.front().enabled &&
-               std::holds_alternative<project::Vst3PluginInstance>(
-                   track.effects.front().processor) &&
-               track.automation.empty() && !track.main_output && track.sends.empty() &&
-               std::ranges::none_of(track.midi_clips,
-                                    [](const auto& clip) { return !clip.automation.empty(); });
-      });
-  if (paired_effect_paths)
-    return {};
-  for (const auto& track : snapshot.tracks) {
-    if (track.kind == project::TrackKind::instrument) {
-      if (!detail::vst3_instrument_source(track))
-        return QStringLiteral("Other instrument sources cannot join this VST3 stem render");
-      if (!track.clips.empty() || !track.effects.empty())
-        return QStringLiteral("Two VST3 source stems require bare instrument tracks");
-    } else if (track.kind == project::TrackKind::group_bus ||
-               track.kind == project::TrackKind::return_bus) {
-      if (!track.clips.empty() || !track.midi_clips.empty() || !track.effects.empty() ||
-          !std::holds_alternative<std::monostate>(track.instrument_source))
-        return QStringLiteral("Two VST3 source stems require empty routing buses");
-    } else {
-      return QStringLiteral("Two VST3 source stems cannot mix managed audio yet");
-    }
-  }
-  if (project::has_convolution_insert(snapshot))
-    return QStringLiteral("Convolution is not available for VST3 source stem export");
-  if (!snapshot.master_effects.empty())
-    return QStringLiteral("Two VST3 source stems need a master path without effects");
   return {};
 #endif
+}
+
+// True when a saved VST3 instrument or enabled VST3 effect needs a VST3 host;
+// the native render skips a bypassed VST3 slot.
+[[nodiscard]] bool has_vst3_stage(const project::Snapshot& snapshot) {
+  const auto vst3_effect = [](const project::EffectInsert& effect) {
+    return effect.enabled && std::holds_alternative<project::Vst3PluginInstance>(effect.processor);
+  };
+  return std::ranges::any_of(snapshot.master_effects, vst3_effect) ||
+         std::ranges::any_of(snapshot.tracks, [&](const project::Track& track) {
+           return detail::vst3_instrument_source(track) != nullptr ||
+                  std::ranges::any_of(track.effects, vst3_effect);
+         });
 }
 } // namespace
 
@@ -483,53 +430,18 @@ void ExportController::export_master() {
                 encoded_formats[static_cast<std::size_t>(export_format_index_ - wav_formats_end)],
                 0, 0.5, output_rate, export_trim_tail_}};
 #endif
-  const project::Vst3PluginInstance* instrument_insert = nullptr;
-  for (const auto& track : session()->snapshot().tracks) {
-    if (track.kind == project::TrackKind::instrument && detail::vst3_instrument_source(track)) {
-      instrument_insert = detail::vst3_instrument_source(track);
-      break;
-    }
-  }
-  if (instrument_insert) {
+  if (has_vst3_stage(session()->snapshot())) {
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
     auto prepared = session()->exports().prepare_stopped_snapshot_export();
     if (!prepared) {
-      export_status_ = QStringLiteral("VST3 instrument export failed: %1")
+      export_status_ = QStringLiteral("VST3 export failed: %1")
                            .arg(QString::fromStdString(prepared.error().message));
       emit changed();
       return;
     }
-    const bool with_managed_audio =
-        std::ranges::any_of(session()->snapshot().tracks, [](const project::Track& track) {
-          return track.kind == project::TrackKind::audio;
-        });
-    start_vst3_instrument_export_task(std::move(prepared.value()), instrument_insert->bundle_path,
-                                      vst3_output, with_managed_audio);
+    start_vst3_master_export_task(std::move(prepared.value()), vst3_output);
 #else
-    export_status_ = QStringLiteral("VST3 instrument export requires a scanner-enabled build");
-    emit changed();
-#endif
-    return;
-  }
-  const auto vst3_effect = [](const project::EffectInsert& effect) {
-    return std::holds_alternative<project::Vst3PluginInstance>(effect.processor);
-  };
-  const auto& saved = session()->snapshot();
-  if (std::ranges::any_of(saved.master_effects, vst3_effect) ||
-      std::ranges::any_of(saved.tracks, [&](const project::Track& track) {
-        return std::ranges::any_of(track.effects, vst3_effect);
-      })) {
-#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
-    auto prepared = session()->exports().prepare_stopped_snapshot_export();
-    if (!prepared) {
-      export_status_ = QStringLiteral("VST3 effect export failed: %1")
-                           .arg(QString::fromStdString(prepared.error().message));
-      emit changed();
-      return;
-    }
-    start_vst3_effect_export_task(std::move(prepared.value()), vst3_output);
-#else
-    export_status_ = QStringLiteral("VST3 effect export requires a scanner-enabled build");
+    export_status_ = QStringLiteral("VST3 export requires a scanner-enabled build");
     emit changed();
 #endif
     return;
@@ -594,6 +506,27 @@ void ExportController::export_stems() {
     emit changed();
     return;
   }
+  if (has_vst3_stage(session()->snapshot())) {
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+    auto stopped = session()->exports().prepare_stopped_snapshot_export();
+    if (!stopped) {
+      export_status_ = QStringLiteral("VST3 stems export failed: %1")
+                           .arg(QString::fromStdString(stopped.error().message));
+      emit changed();
+      return;
+    }
+    start_vst3_stems_export_task(
+        std::move(stopped.value()),
+        {.target_directory = target,
+         .format = exporting::WavFormat::float32,
+         .dither_seed = 0,
+         .sample_rate = export_rates[static_cast<std::size_t>(export_rate_index_)]});
+#else
+    export_status_ = QStringLiteral("VST3 stems export requires a scanner-enabled build");
+    emit changed();
+#endif
+    return;
+  }
   auto prepared = session()->exports().prepare_wav_stem_export(
       {.target_directory = target,
        .format = exporting::WavFormat::float32,
@@ -650,29 +583,16 @@ void ExportController::export_instrument_source_stem(const QString& track_id) {
     return;
   }
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
-  const auto vst3_source = std::ranges::find_if(snapshot.tracks, [](const auto& candidate) {
-    return detail::vst3_instrument_source(candidate) != nullptr;
-  });
-  if (vst3_source == snapshot.tracks.end()) {
-    export_status_ = QStringLiteral("Selected source stem needs a saved VST3 instrument");
-    emit changed();
-    return;
-  }
   auto prepared = session()->exports().prepare_stopped_snapshot_export();
   if (!prepared) {
-    export_status_ = QStringLiteral("Instrument source stem export failed: %1")
+    export_status_ = QStringLiteral("Source stem export failed: %1")
                          .arg(QString::fromStdString(prepared.error().message));
     emit changed();
     return;
   }
-  start_vst3_instrument_stem_export_task(
-      std::move(prepared.value()), track->id,
-      {target, exporting::WavFormat::float32, 0,
-       export_rates[static_cast<std::size_t>(export_rate_index_)]},
-      std::ranges::any_of(
-          snapshot.tracks,
-          [](const auto& candidate) { return candidate.kind == project::TrackKind::audio; }),
-      detail::vst3_instrument_source(*vst3_source)->bundle_path);
+  start_vst3_stem_export_task(std::move(prepared.value()), track->id,
+                              {target, exporting::WavFormat::float32, 0,
+                               export_rates[static_cast<std::size_t>(export_rate_index_)]});
 #else
   export_status_ =
       QStringLiteral("Instrument source stem export requires a scanner-enabled VST3 build");
@@ -853,12 +773,11 @@ void ExportController::start_export_task(application::MasterExportTask task,
 }
 
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
-void ExportController::start_vst3_effect_export_task(application::StoppedSnapshotExportTask task,
+void ExportController::start_vst3_master_export_task(application::StoppedSnapshotExportTask task,
                                                      exporting::MasterOutputOptions options) {
   auto completion = std::make_shared<Completion>();
   completion->revision = task.snapshot().revision;
-  completion->format_name =
-      QStringLiteral("VST3 effect %1 master").arg(output_format_name(options));
+  completion->format_name = QStringLiteral("VST3 %1 master").arg(output_format_name(options));
   completion->target = QString::fromStdString(output_target(options).string());
   start(std::move(completion),
         [task = std::make_shared<application::StoppedSnapshotExportTask>(std::move(task)),
@@ -870,38 +789,31 @@ void ExportController::start_vst3_effect_export_task(application::StoppedSnapsho
           return exporting::render_vst3_master(snapshot, reader, std::move(authority), scanner,
                                                options);
         },
-        QStringLiteral("Cannot start VST3 effect export"), {});
+        QStringLiteral("Cannot start VST3 export"), {});
 }
 
-void ExportController::start_vst3_instrument_export_task(
-    application::StoppedSnapshotExportTask task, std::filesystem::path bundle,
-    exporting::MasterOutputOptions options, bool with_managed_audio) {
+void ExportController::start_vst3_stems_export_task(application::StoppedSnapshotExportTask task,
+                                                    exporting::StemRenderOptions options) {
   auto completion = std::make_shared<Completion>();
   completion->revision = task.snapshot().revision;
-  completion->format_name = (with_managed_audio ? QStringLiteral("VST3 and audio %1 master")
-                                                : QStringLiteral("VST3 instrument %1"))
-                                .arg(output_format_name(options));
-  completion->target = QString::fromStdString(output_target(options).string());
+  completion->format_name = QStringLiteral("VST3 WAV stems");
+  completion->target = QString::fromStdString(options.target_directory.string());
   start(std::move(completion),
         [task = std::make_shared<application::StoppedSnapshotExportTask>(std::move(task)),
-         bundle = std::move(bundle), options = std::move(options),
-         helper = detail::vst3_helper_path(), with_managed_audio] {
+         options = std::move(options), helper = detail::vst3_helper_path()] {
           plugins::Vst3Scanner scanner(helper);
           const auto& snapshot = task->snapshot();
           const auto& reader = task->reader();
           auto authority = std::move(*task).take_authority();
-          return with_managed_audio
-                     ? exporting::render_vst3_mixed_master(snapshot, reader, std::move(authority),
-                                                           scanner, bundle, options)
-                     : exporting::render_vst3_instrument_master(snapshot, std::move(authority),
-                                                                scanner, options);
+          return exporting::render_vst3_stems(snapshot, reader, std::move(authority), scanner,
+                                              options);
         },
-        QStringLiteral("Cannot start VST3 instrument export"), {});
+        QStringLiteral("Cannot start VST3 stem export"), {});
 }
 
-void ExportController::start_vst3_instrument_stem_export_task(
-    application::StoppedSnapshotExportTask task, project::TrackId source_track,
-    exporting::MasterRenderOptions options, bool with_managed_audio, std::filesystem::path bundle) {
+void ExportController::start_vst3_stem_export_task(application::StoppedSnapshotExportTask task,
+                                                   project::TrackId source_track,
+                                                   exporting::MasterRenderOptions options) {
   auto completion = std::make_shared<Completion>();
   completion->revision = task.snapshot().revision;
   completion->format_name = QStringLiteral("source WAV stem");
@@ -909,20 +821,16 @@ void ExportController::start_vst3_instrument_stem_export_task(
   start(
       std::move(completion),
       [task = std::make_shared<application::StoppedSnapshotExportTask>(std::move(task)),
-       source_track, options = std::move(options), helper = detail::vst3_helper_path(),
-       with_managed_audio, bundle = std::move(bundle)] {
+       source_track, options = std::move(options), helper = detail::vst3_helper_path()] {
         plugins::Vst3Scanner scanner(helper);
         const auto& snapshot = task->snapshot();
         const auto& reader = task->reader();
         auto authority = std::move(*task).take_authority();
-        return with_managed_audio
-                   ? exporting::render_vst3_mixed_wav_stem(snapshot, reader, std::move(authority),
-                                                           scanner, bundle, source_track, options)
-                   : exporting::render_vst3_instrument_wav_stem(snapshot, std::move(authority),
-                                                                scanner, source_track, options);
+        return exporting::render_vst3_stem(snapshot, reader, std::move(authority), scanner,
+                                           source_track, options);
       },
-      QStringLiteral("Cannot start instrument source stem export"),
-      QStringLiteral("Exporting selected instrument source WAV stem from project revision %1"));
+      QStringLiteral("Cannot start source stem export"),
+      QStringLiteral("Exporting selected source WAV stem from project revision %1"));
 }
 #endif
 

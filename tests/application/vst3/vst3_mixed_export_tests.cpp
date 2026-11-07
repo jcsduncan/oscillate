@@ -1,10 +1,11 @@
 #include "insert_fixtures.hpp"
-#include "oscillate/application/vst3/instrument_export.hpp"
+#include "oscillate/application/vst3/offline_export.hpp"
 #include "oscillate/media/source_rate_reader.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/tolerances.hpp"
+#include "vst3_export_fixtures.hpp"
 #include "warp_oracle.hpp"
 
 #include <array>
@@ -301,39 +302,38 @@ void simultaneous_instrument_effect_checks() {
   const auto master_path = directory.path / "simultaneous-master.wav";
   auto lease = take(exporting::StoppedExportAuthority::acquire(mixed.snapshot, gate));
   REQUIRE_EQ(
-      take(exporting::render_vst3_mixed_wav_master(mixed.snapshot, mixed.store, std::move(lease),
-                                                   scanner, VST3_INSTRUMENT_BUNDLE, {master_path})),
+      take(exporting::render_vst3_master(mixed.snapshot, mixed.store, std::move(lease), scanner,
+                                         exporting::MasterRenderOptions{master_path})),
       exporting::PublishOutcome::durable, "simultaneous instrument/effect master failed");
   const auto master = read_file(master_path);
-  REQUIRE_EQ(master.size(), 56 + 268 * 8, "simultaneous master latency or tail is incorrect");
+  // The audio clip ends at 268; the shared render pads the latest content
+  // with the longest path's tail, the instrument's eight frames.
+  REQUIRE_EQ(master.size(), 56 + 276 * 8, "simultaneous master latency or tail is incorrect");
   near(sample(master, 5), 0.75F);
   near(sample(master, 260), 0.75F);
   near(sample(master, 260, 1), 0.375F);
   const auto instrument_path = directory.path / "simultaneous-instrument.wav";
   lease = take(exporting::StoppedExportAuthority::acquire(mixed.snapshot, gate));
-  (void)take(exporting::render_vst3_mixed_wav_stem(mixed.snapshot, mixed.store, std::move(lease),
-                                                   scanner, VST3_INSTRUMENT_BUNDLE,
-                                                   id<project::TrackId>(2), {instrument_path}));
+  (void)take(exporting::render_vst3_stem(mixed.snapshot, mixed.store, std::move(lease), scanner,
+                                         id<project::TrackId>(2), {instrument_path}));
   const auto audio_path = directory.path / "simultaneous-audio.wav";
   lease = take(exporting::StoppedExportAuthority::acquire(mixed.snapshot, gate));
-  (void)take(exporting::render_vst3_mixed_wav_stem(mixed.snapshot, mixed.store, std::move(lease),
-                                                   scanner, VST3_INSTRUMENT_BUNDLE,
-                                                   id<project::TrackId>(9), {audio_path}));
+  (void)take(exporting::render_vst3_stem(mixed.snapshot, mixed.store, std::move(lease), scanner,
+                                         id<project::TrackId>(9), {audio_path}));
   const auto instrument = read_file(instrument_path);
   const auto audio = read_file(audio_path);
   REQUIRE_EQ(instrument.size(), master.size(), "simultaneous processed stems lost common duration");
   REQUIRE_EQ(audio.size(), master.size(), "simultaneous processed stems lost common duration");
   near(sample(instrument, 260), 0.375F);
   near(sample(audio, 260), 0.375F);
-  for (std::size_t frame = 0; frame < 268; ++frame) {
+  for (std::size_t frame = 0; frame < 276; ++frame) {
     near(sample(master, frame), sample(instrument, frame) + sample(audio, frame));
     near(sample(master, frame, 1), sample(instrument, frame, 1) + sample(audio, frame, 1));
   }
   const auto repeat_path = directory.path / "simultaneous-repeat.wav";
   lease = take(exporting::StoppedExportAuthority::acquire(mixed.snapshot, gate));
-  (void)take(exporting::render_vst3_mixed_wav_master(mixed.snapshot, mixed.store, std::move(lease),
-                                                     scanner, VST3_INSTRUMENT_BUNDLE,
-                                                     {repeat_path}));
+  (void)take(exporting::render_vst3_master(mixed.snapshot, mixed.store, std::move(lease), scanner,
+                                           exporting::MasterRenderOptions{repeat_path}));
   REQUIRE_EQ(read_file(repeat_path), master, "simultaneous repeat render differs");
 
   auto long_latency = mixed.snapshot;
@@ -343,9 +343,8 @@ void simultaneous_instrument_effect_checks() {
   std::memcpy(delayed_effect.component_state.data(), &latency_setting, sizeof(latency_setting));
   const auto latency_path = directory.path / "simultaneous-latency.wav";
   lease = take(exporting::StoppedExportAuthority::acquire(long_latency, gate));
-  (void)take(exporting::render_vst3_mixed_wav_master(long_latency, mixed.store, std::move(lease),
-                                                     scanner, VST3_INSTRUMENT_BUNDLE,
-                                                     {latency_path}));
+  (void)take(exporting::render_vst3_master(long_latency, mixed.store, std::move(lease), scanner,
+                                           exporting::MasterRenderOptions{latency_path}));
   const auto delayed = read_file(latency_path);
   REQUIRE_EQ(delayed.size(), master.size(), "96-frame effect latency changed output extent");
   near(sample(delayed, 5), 0.75F);
@@ -366,8 +365,8 @@ void simultaneous_instrument_effect_checks() {
   tail_effect.binary_sha256 = tail_scan.binary.sha256;
   const auto tail_path = directory.path / "simultaneous-tail.wav";
   lease = take(exporting::StoppedExportAuthority::acquire(tail_snapshot, gate));
-  (void)take(exporting::render_vst3_mixed_wav_master(tail_snapshot, mixed.store, std::move(lease),
-                                                     scanner, VST3_INSTRUMENT_BUNDLE, {tail_path}));
+  (void)take(exporting::render_vst3_master(tail_snapshot, mixed.store, std::move(lease), scanner,
+                                           exporting::MasterRenderOptions{tail_path}));
   const auto tailed = read_file(tail_path);
   REQUIRE_EQ(tailed.size(), 56 + 276 * 8, "mixed positive effect tail is truncated");
   near(sample(tailed, 267), 0.0F);
@@ -380,9 +379,8 @@ void simultaneous_instrument_effect_checks() {
   saved_effect.binary_sha256[0] ^= 1;
   const auto rejected_path = directory.path / "rejected.wav";
   lease = take(exporting::StoppedExportAuthority::acquire(rejected, gate));
-  REQUIRE_TRUE(!exporting::render_vst3_mixed_wav_master(rejected, mixed.store, std::move(lease),
-                                                        scanner, VST3_INSTRUMENT_BUNDLE,
-                                                        {rejected_path}),
+  REQUIRE_TRUE(!exporting::render_vst3_master(rejected, mixed.store, std::move(lease), scanner,
+                                              exporting::MasterRenderOptions{rejected_path}),
                "changed audio effect was omitted or published");
   REQUIRE_TRUE(!fs::exists(rejected_path), "changed audio effect was omitted or published");
   rejected = mixed.snapshot;
@@ -390,9 +388,8 @@ void simultaneous_instrument_effect_checks() {
       std::get<project::Vst3PluginInstance>(rejected.tracks.back().effects.front().processor);
   wrong_class.version += "-changed";
   lease = take(exporting::StoppedExportAuthority::acquire(rejected, gate));
-  REQUIRE_TRUE(!exporting::render_vst3_mixed_wav_master(rejected, mixed.store, std::move(lease),
-                                                        scanner, VST3_INSTRUMENT_BUNDLE,
-                                                        {rejected_path}),
+  REQUIRE_TRUE(!exporting::render_vst3_master(rejected, mixed.store, std::move(lease), scanner,
+                                              exporting::MasterRenderOptions{rejected_path}),
                "changed audio effect class was omitted or published");
   REQUIRE_TRUE(!fs::exists(rejected_path), "changed audio effect class was omitted or published");
   rejected = mixed.snapshot;
@@ -400,9 +397,8 @@ void simultaneous_instrument_effect_checks() {
       std::get<project::Vst3PluginInstance>(rejected.tracks.back().effects.front().processor);
   missing_effect.bundle_path = (directory.path / "missing-effect.vst3").string();
   lease = take(exporting::StoppedExportAuthority::acquire(rejected, gate));
-  REQUIRE_TRUE(!exporting::render_vst3_mixed_wav_master(rejected, mixed.store, std::move(lease),
-                                                        scanner, VST3_INSTRUMENT_BUNDLE,
-                                                        {rejected_path}),
+  REQUIRE_TRUE(!exporting::render_vst3_master(rejected, mixed.store, std::move(lease), scanner,
+                                              exporting::MasterRenderOptions{rejected_path}),
                "missing audio effect was omitted or published");
   REQUIRE_TRUE(!fs::exists(rejected_path), "missing audio effect was omitted or published");
   rejected = mixed.snapshot;
@@ -411,9 +407,8 @@ void simultaneous_instrument_effect_checks() {
       std::get<project::Vst3PluginInstance>(rejected.tracks.back().effects.front().processor);
   std::memcpy(invalid_state.component_state.data(), &bad_gain, sizeof(bad_gain));
   lease = take(exporting::StoppedExportAuthority::acquire(rejected, gate));
-  REQUIRE_TRUE(!exporting::render_vst3_mixed_wav_master(rejected, mixed.store, std::move(lease),
-                                                        scanner, VST3_INSTRUMENT_BUNDLE,
-                                                        {rejected_path}),
+  REQUIRE_TRUE(!exporting::render_vst3_master(rejected, mixed.store, std::move(lease), scanner,
+                                              exporting::MasterRenderOptions{rejected_path}),
                "invalid audio effect state was omitted or published");
   REQUIRE_TRUE(!fs::exists(rejected_path), "invalid audio effect state was omitted or published");
   rejected = mixed.snapshot;
@@ -422,9 +417,8 @@ void simultaneous_instrument_effect_checks() {
       std::get<project::Vst3PluginInstance>(rejected.tracks.back().effects.front().processor);
   std::memcpy(failing_effect.component_state.data(), &failing_gain, sizeof(failing_gain));
   lease = take(exporting::StoppedExportAuthority::acquire(rejected, gate));
-  REQUIRE_TRUE(!exporting::render_vst3_mixed_wav_master(rejected, mixed.store, std::move(lease),
-                                                        scanner, VST3_INSTRUMENT_BUNDLE,
-                                                        {master_path}),
+  REQUIRE_TRUE(!exporting::render_vst3_master(rejected, mixed.store, std::move(lease), scanner,
+                                              exporting::MasterRenderOptions{master_path}),
                "effect process fault replaced existing output or left a partial WAV");
   REQUIRE_EQ(read_file(master_path), master,
              "effect process fault replaced existing output or left a partial WAV");
@@ -434,37 +428,34 @@ void simultaneous_instrument_effect_checks() {
       std::get<project::Vst3PluginInstance>(rejected.tracks.back().effects.front().processor);
   std::memcpy(over_budget.component_state.data(), &excessive_latency, sizeof(excessive_latency));
   lease = take(exporting::StoppedExportAuthority::acquire(rejected, gate));
-  REQUIRE_TRUE(!exporting::render_vst3_mixed_wav_master(rejected, mixed.store, std::move(lease),
-                                                        scanner, VST3_INSTRUMENT_BUNDLE,
-                                                        {rejected_path}),
+  REQUIRE_TRUE(!exporting::render_vst3_master(rejected, mixed.store, std::move(lease), scanner,
+                                              exporting::MasterRenderOptions{rejected_path}),
                "over-budget effect latency was silently rendered");
   REQUIRE_TRUE(!fs::exists(rejected_path), "over-budget effect latency was silently rendered");
-  rejected = mixed.snapshot;
-  rejected.tracks.back().effects.front().enabled = false;
-  lease = take(exporting::StoppedExportAuthority::acquire(rejected, gate));
-  REQUIRE_TRUE(!exporting::render_vst3_mixed_wav_master(rejected, mixed.store, std::move(lease),
-                                                        scanner, VST3_INSTRUMENT_BUNDLE,
-                                                        {rejected_path}),
-               "unsupported mixed effect bypass was silently ignored");
-  REQUIRE_TRUE(!fs::exists(rejected_path), "unsupported mixed effect bypass was silently ignored");
-  rejected = tail_snapshot;
-  rejected.tracks.back().clips.front().source_range = {{2}, {3}};
-  rejected.tracks.back().clips.front().placement =
-      project::ElapsedInterval{{172'799'999}, {172'800'000}};
-  lease = take(exporting::StoppedExportAuthority::acquire(rejected, gate));
-  REQUIRE_TRUE(!exporting::render_vst3_mixed_wav_master(rejected, mixed.store, std::move(lease),
-                                                        scanner, VST3_INSTRUMENT_BUNDLE,
-                                                        {rejected_path}),
-               "effect tail beyond the one-hour output bound was published");
-  REQUIRE_TRUE(!fs::exists(rejected_path),
-               "effect tail beyond the one-hour output bound was published");
-  for (const auto* mode : {"infinite-tail", "overlong-tail", "activate-fail"}) {
+  // A bypassed effect beside the instrument renders as the project without
+  // it: the audio track plays dry.
+  auto bypassed = mixed.snapshot;
+  bypassed.tracks.back().effects.front().enabled = false;
+  auto dry = mixed.snapshot;
+  dry.tracks.back().effects.clear();
+  const auto bypassed_path = directory.path / "simultaneous-bypassed.wav";
+  const auto dry_path = directory.path / "simultaneous-dry.wav";
+  for (const auto& [candidate, path] :
+       {std::pair{&bypassed, &bypassed_path}, std::pair{&dry, &dry_path}}) {
+    lease = take(exporting::StoppedExportAuthority::acquire(*candidate, gate));
+    REQUIRE_EQ(take(exporting::render_vst3_master(*candidate, mixed.store, std::move(lease),
+                                                  scanner, exporting::MasterRenderOptions{*path})),
+               exporting::PublishOutcome::durable, "a bypassed effect beside the source failed");
+  }
+  REQUIRE_EQ(read_file(bypassed_path), read_file(dry_path),
+             "a bypassed effect changed the mixed master");
+  for (const auto* mode : {"infinite-tail", "activate-fail"}) {
     REQUIRE_EQ(::setenv("OSCILLATE_TEST_EXPORT_EFFECT_MODE", mode, 1), 0,
                "cannot select effect tail failure mode");
     lease = take(exporting::StoppedExportAuthority::acquire(tail_snapshot, gate));
-    REQUIRE_TRUE(!exporting::render_vst3_mixed_wav_master(tail_snapshot, mixed.store,
-                                                          std::move(lease), scanner,
-                                                          VST3_INSTRUMENT_BUNDLE, {rejected_path}),
+    REQUIRE_TRUE(!exporting::render_vst3_master(tail_snapshot, mixed.store, std::move(lease),
+                                                scanner,
+                                                exporting::MasterRenderOptions{rejected_path}),
                  "invalid effect tail or activation was published");
     REQUIRE_TRUE(!fs::exists(rejected_path), "invalid effect tail or activation was published");
     REQUIRE_EQ(::unsetenv("OSCILLATE_TEST_EXPORT_EFFECT_MODE"), 0,
@@ -514,23 +505,20 @@ void instrument_track_effect_survives_reopen_and_export() {
              "cannot set instrument-chain fixture tail");
   const auto master_path = directory.path / "instrument-chain-master.wav";
   auto lease = take(exporting::StoppedExportAuthority::acquire(mixed.snapshot, gate));
-  (void)take(exporting::render_vst3_mixed_wav_master(mixed.snapshot, mixed.store, std::move(lease),
-                                                     scanner, VST3_INSTRUMENT_BUNDLE,
-                                                     {master_path}));
+  (void)take(exporting::render_vst3_master(mixed.snapshot, mixed.store, std::move(lease), scanner,
+                                           exporting::MasterRenderOptions{master_path}));
   const auto stem_path = directory.path / "instrument-chain-stem.wav";
   lease = take(exporting::StoppedExportAuthority::acquire(mixed.snapshot, gate));
-  (void)take(exporting::render_vst3_mixed_wav_stem(mixed.snapshot, mixed.store, std::move(lease),
-                                                   scanner, VST3_INSTRUMENT_BUNDLE,
-                                                   id<project::TrackId>(2), {stem_path}));
+  (void)take(exporting::render_vst3_stem(mixed.snapshot, mixed.store, std::move(lease), scanner,
+                                         id<project::TrackId>(2), {stem_path}));
   const auto master = read_file(master_path);
   const auto stem = read_file(stem_path);
   auto dry = mixed.snapshot;
   dry.tracks.front().effects.clear();
   const auto dry_path = directory.path / "instrument-chain-dry.wav";
   lease = take(exporting::StoppedExportAuthority::acquire(dry, gate));
-  (void)take(exporting::render_vst3_mixed_wav_stem(dry, mixed.store, std::move(lease), scanner,
-                                                   VST3_INSTRUMENT_BUNDLE, id<project::TrackId>(2),
-                                                   {dry_path}));
+  (void)take(exporting::render_vst3_stem(dry, mixed.store, std::move(lease), scanner,
+                                         id<project::TrackId>(2), {dry_path}));
   const auto unprocessed = read_file(dry_path);
   REQUIRE_GT(std::fabs(sample(unprocessed, 5)), 0.01F,
              "instrument-chain fixture did not produce a note");
@@ -538,9 +526,8 @@ void instrument_track_effect_survives_reopen_and_export() {
   near(sample(stem, 260), sample(unprocessed, 260) * gain);
   const auto audio_path = directory.path / "instrument-chain-audio.wav";
   lease = take(exporting::StoppedExportAuthority::acquire(mixed.snapshot, gate));
-  (void)take(exporting::render_vst3_mixed_wav_stem(mixed.snapshot, mixed.store, std::move(lease),
-                                                   scanner, VST3_INSTRUMENT_BUNDLE,
-                                                   id<project::TrackId>(9), {audio_path}));
+  (void)take(exporting::render_vst3_stem(mixed.snapshot, mixed.store, std::move(lease), scanner,
+                                         id<project::TrackId>(9), {audio_path}));
   const auto audio = read_file(audio_path);
   near(sample(master, 5), sample(stem, 5) + sample(audio, 5));
   REQUIRE_EQ(master.size(), stem.size(), "instrument-chain stem lost effect tail");
@@ -554,13 +541,12 @@ void instrument_track_effect_survives_reopen_and_export() {
   serial = *serial_model.snapshot();
   const auto serial_master_path = directory.path / "instrument-two-effects-master.wav";
   lease = take(exporting::StoppedExportAuthority::acquire(serial, gate));
-  (void)take(exporting::render_vst3_mixed_wav_master(serial, mixed.store, std::move(lease), scanner,
-                                                     VST3_INSTRUMENT_BUNDLE, {serial_master_path}));
+  (void)take(exporting::render_vst3_master(serial, mixed.store, std::move(lease), scanner,
+                                           exporting::MasterRenderOptions{serial_master_path}));
   const auto serial_stem_path = directory.path / "instrument-two-effects-stem.wav";
   lease = take(exporting::StoppedExportAuthority::acquire(serial, gate));
-  (void)take(exporting::render_vst3_mixed_wav_stem(serial, mixed.store, std::move(lease), scanner,
-                                                   VST3_INSTRUMENT_BUNDLE, id<project::TrackId>(2),
-                                                   {serial_stem_path}));
+  (void)take(exporting::render_vst3_stem(serial, mixed.store, std::move(lease), scanner,
+                                         id<project::TrackId>(2), {serial_stem_path}));
   const auto serial_master = read_file(serial_master_path);
   const auto serial_stem = read_file(serial_stem_path);
   near(sample(serial_stem, 5), sample(unprocessed, 5) * gain * second_gain);
@@ -581,27 +567,28 @@ void instrument_track_effect_survives_reopen_and_export() {
   last.binary_sha256 = tail_scan.binary.sha256;
   const auto serial_tail_path = directory.path / "instrument-two-effects-tail.wav";
   lease = take(exporting::StoppedExportAuthority::acquire(serial_tail, gate));
-  (void)take(exporting::render_vst3_mixed_wav_stem(serial_tail, mixed.store, std::move(lease),
-                                                   scanner, VST3_INSTRUMENT_BUNDLE,
-                                                   id<project::TrackId>(2), {serial_tail_path}));
+  (void)take(exporting::render_vst3_stem(serial_tail, mixed.store, std::move(lease), scanner,
+                                         id<project::TrackId>(2), {serial_tail_path}));
   const auto tailed = read_file(serial_tail_path);
   REQUIRE_EQ(tailed.size(), serial_stem.size() + 8 * 8,
              "second serial VST3 effect tail was truncated");
   near(sample(tailed, 13), sample(serial_stem, 5));
   auto serial_rejected = serial;
   serial_rejected.tracks.front().effects.back().enabled = false;
+  // A bypassed second effect leaves an ordinary one-effect chain.
   lease = take(exporting::StoppedExportAuthority::acquire(serial_rejected, gate));
-  require(!exporting::render_vst3_mixed_wav_master(
-              serial_rejected, mixed.store, std::move(lease), scanner, VST3_INSTRUMENT_BUNDLE,
-              {directory.path / "instrument-two-effects-bypassed.wav"}),
-          "two-effect instrument chain silently ignored bypass");
+  REQUIRE_EQ(
+      take(exporting::render_vst3_master(
+          serial_rejected, mixed.store, std::move(lease), scanner,
+          exporting::MasterRenderOptions{directory.path / "instrument-two-effects-bypassed.wav"})),
+      exporting::PublishOutcome::durable, "a bypassed second effect failed the export");
   serial_rejected = serial;
   serial_rejected.tracks.front().effects.push_back(serial_rejected.tracks.front().effects.back());
   lease = take(exporting::StoppedExportAuthority::acquire(serial_rejected, gate));
-  require(!exporting::render_vst3_mixed_wav_master(
-              serial_rejected, mixed.store, std::move(lease), scanner, VST3_INSTRUMENT_BUNDLE,
-              {directory.path / "instrument-three-effects.wav"}),
-          "third instrument effect escaped the bounded offline contract");
+  require(!exporting::render_vst3_master(
+              serial_rejected, mixed.store, std::move(lease), scanner,
+              exporting::MasterRenderOptions{directory.path / "instrument-three-effects.wav"}),
+          "a repeated slot identity reached the writer");
   REQUIRE_EQ(::unsetenv("OSCILLATE_VST3_INSTRUMENT_TAIL"), 0,
              "cannot clear instrument-chain fixture tail");
 }
@@ -673,20 +660,22 @@ void paired_instrument_effect_paths_export() {
              "cannot set paired instrument tail");
   const auto render_master = [&](const project::Snapshot& project, const fs::path& path) {
     auto lease = take(exporting::StoppedExportAuthority::acquire(project, gate));
-    return exporting::render_vst3_instrument_wav_master(project, std::move(lease), scanner, {path});
+    return exporting::render_vst3_master(project, reader, std::move(lease), scanner,
+                                         exporting::MasterRenderOptions{path});
   };
   const auto master_path = directory.path / "paired-master.wav";
   REQUIRE_EQ(take(render_master(snapshot, master_path)), exporting::PublishOutcome::durable,
              "paired source/effect master failed");
   const auto master = read_file(master_path);
   const auto frames = (master.size() - 56) / 8;
-  REQUIRE_GE(frames, 278, "paired source/effect tail was truncated");
+  // The first source's release, delayed eight frames by TailGain, ends at 272.
+  REQUIRE_GE(frames, 272, "paired source/effect tail was truncated");
   std::array<std::vector<std::uint8_t>, 2> stems;
   for (std::size_t index = 0; index < 2; ++index) {
     const auto stem_path = directory.path / ("paired-stem-" + std::to_string(index) + ".wav");
     auto lease = take(exporting::StoppedExportAuthority::acquire(snapshot, gate));
-    REQUIRE_EQ(take(exporting::render_vst3_instrument_wav_stem(
-                   snapshot, std::move(lease), scanner, snapshot.tracks[index].id, {stem_path})),
+    REQUIRE_EQ(take(exporting::render_vst3_stem(snapshot, reader, std::move(lease), scanner,
+                                                snapshot.tracks[index].id, {stem_path})),
                exporting::PublishOutcome::durable, "paired source/effect stem failed");
     stems[index] = read_file(stem_path);
     REQUIRE_EQ(stems[index].size(), master.size(), "paired stem lost master extent");
@@ -730,9 +719,8 @@ void paired_instrument_effect_paths_export() {
   REQUIRE_EQ(read_file(master_path), master, "changed second effect replaced an existing master");
   const auto retained_stem_path = directory.path / "paired-stem-1.wav";
   auto stem_lease = take(exporting::StoppedExportAuthority::acquire(changed, gate));
-  REQUIRE_TRUE(!exporting::render_vst3_instrument_wav_stem(changed, std::move(stem_lease), scanner,
-                                                           snapshot.tracks.back().id,
-                                                           {retained_stem_path}),
+  REQUIRE_TRUE(!exporting::render_vst3_stem(changed, reader, std::move(stem_lease), scanner,
+                                            snapshot.tracks.back().id, {retained_stem_path}),
                "changed second effect replaced an existing stem");
   REQUIRE_EQ(read_file(retained_stem_path), stems[1],
              "changed second effect replaced an existing stem");
@@ -786,19 +774,16 @@ void instrument_and_bus_effect_share_offline_routing() {
              "instrument/bus tail fixture failed");
   const auto master_path = directory.path / "instrument-bus-master.wav";
   auto lease = take(exporting::StoppedExportAuthority::acquire(mixed.snapshot, gate));
-  (void)take(exporting::render_vst3_mixed_wav_master(mixed.snapshot, mixed.store, std::move(lease),
-                                                     scanner, VST3_INSTRUMENT_BUNDLE,
-                                                     {master_path}));
+  (void)take(exporting::render_vst3_master(mixed.snapshot, mixed.store, std::move(lease), scanner,
+                                           exporting::MasterRenderOptions{master_path}));
   const auto instrument_path = directory.path / "instrument-bus-instrument.wav";
   lease = take(exporting::StoppedExportAuthority::acquire(mixed.snapshot, gate));
-  (void)take(exporting::render_vst3_mixed_wav_stem(mixed.snapshot, mixed.store, std::move(lease),
-                                                   scanner, VST3_INSTRUMENT_BUNDLE,
-                                                   id<project::TrackId>(2), {instrument_path}));
+  (void)take(exporting::render_vst3_stem(mixed.snapshot, mixed.store, std::move(lease), scanner,
+                                         id<project::TrackId>(2), {instrument_path}));
   const auto audio_path = directory.path / "instrument-bus-audio.wav";
   lease = take(exporting::StoppedExportAuthority::acquire(mixed.snapshot, gate));
-  (void)take(exporting::render_vst3_mixed_wav_stem(mixed.snapshot, mixed.store, std::move(lease),
-                                                   scanner, VST3_INSTRUMENT_BUNDLE,
-                                                   id<project::TrackId>(9), {audio_path}));
+  (void)take(exporting::render_vst3_stem(mixed.snapshot, mixed.store, std::move(lease), scanner,
+                                         id<project::TrackId>(9), {audio_path}));
   const auto master = read_file(master_path);
   const auto instrument = read_file(instrument_path);
   const auto audio = read_file(audio_path);
@@ -825,23 +810,23 @@ void mixed_render_checks() {
   const auto master_path = directory.path / "mixed-master.wav";
   auto lease = take(exporting::StoppedExportAuthority::acquire(mixed.snapshot, gate));
   REQUIRE_EQ(
-      take(exporting::render_vst3_mixed_wav_master(mixed.snapshot, mixed.store, std::move(lease),
-                                                   scanner, VST3_INSTRUMENT_BUNDLE, {master_path})),
+      take(exporting::render_vst3_master(mixed.snapshot, mixed.store, std::move(lease), scanner,
+                                         exporting::MasterRenderOptions{master_path})),
       exporting::PublishOutcome::durable, "mixed master render failed");
   const auto master = read_file(master_path);
-  REQUIRE_EQ(master.size(), 56 + 268 * 8, "mixed master duration omitted audio or tail");
+  // The audio clip ends at 268; the shared render pads the latest content
+  // with the longest path's tail, the instrument's eight frames.
+  REQUIRE_EQ(master.size(), 56 + 276 * 8, "mixed master duration omitted audio or tail");
   const auto instrument_path = directory.path / "instrument-stem.wav";
   lease = take(exporting::StoppedExportAuthority::acquire(mixed.snapshot, gate));
-  REQUIRE_EQ(take(exporting::render_vst3_mixed_wav_stem(
-                 mixed.snapshot, mixed.store, std::move(lease), scanner, VST3_INSTRUMENT_BUNDLE,
-                 id<project::TrackId>(2), {instrument_path})),
+  REQUIRE_EQ(take(exporting::render_vst3_stem(mixed.snapshot, mixed.store, std::move(lease),
+                                              scanner, id<project::TrackId>(2), {instrument_path})),
              exporting::PublishOutcome::durable, "instrument processed stem failed");
   const auto instrument = read_file(instrument_path);
   const auto audio_path = directory.path / "audio-stem.wav";
   lease = take(exporting::StoppedExportAuthority::acquire(mixed.snapshot, gate));
-  REQUIRE_EQ(take(exporting::render_vst3_mixed_wav_stem(
-                 mixed.snapshot, mixed.store, std::move(lease), scanner, VST3_INSTRUMENT_BUNDLE,
-                 id<project::TrackId>(9), {audio_path})),
+  REQUIRE_EQ(take(exporting::render_vst3_stem(mixed.snapshot, mixed.store, std::move(lease),
+                                              scanner, id<project::TrackId>(9), {audio_path})),
              exporting::PublishOutcome::durable, "audio processed stem failed");
   const auto audio = read_file(audio_path);
   REQUIRE_EQ(instrument.size(), master.size(), "mixed stems are not time-aligned");
@@ -857,7 +842,7 @@ void mixed_render_checks() {
   near(sample(audio, 267), 0.1875F);
   near(sample(master, 260), 0.5625F);
   near(sample(master, 260, 1), 0.0F);
-  for (std::size_t frame = 0; frame < 268; ++frame) {
+  for (std::size_t frame = 0; frame < 276; ++frame) {
     near(sample(master, frame), sample(instrument, frame) + sample(audio, frame));
     near(sample(master, frame, 1), sample(instrument, frame, 1) + sample(audio, frame, 1));
   }
@@ -866,19 +851,17 @@ void mixed_render_checks() {
       project::MusicalInterval{{10'400'000}, {10'720'000}};
   const auto musical_path = directory.path / "musical-placement.wav";
   lease = take(exporting::StoppedExportAuthority::acquire(musical, gate));
-  REQUIRE_EQ(
-      take(exporting::render_vst3_mixed_wav_master(musical, mixed.store, std::move(lease), scanner,
-                                                   VST3_INSTRUMENT_BUNDLE, {musical_path})),
-      exporting::PublishOutcome::durable,
-      "musical and elapsed audio placement disagree at shared tempo");
+  REQUIRE_EQ(take(exporting::render_vst3_master(musical, mixed.store, std::move(lease), scanner,
+                                                exporting::MasterRenderOptions{musical_path})),
+             exporting::PublishOutcome::durable,
+             "musical and elapsed audio placement disagree at shared tempo");
   REQUIRE_EQ(read_file(musical_path), master,
              "musical and elapsed audio placement disagree at shared tempo");
   const auto rejected = directory.path / "rejected.wav";
   auto reject = [&](const project::Snapshot& candidate, project::TrackId stem) {
     auto stopped = take(exporting::StoppedExportAuthority::acquire(candidate, gate));
-    REQUIRE_TRUE(!exporting::render_vst3_mixed_wav_stem(candidate, mixed.store, std::move(stopped),
-                                                        scanner, VST3_INSTRUMENT_BUNDLE, stem,
-                                                        {rejected}),
+    REQUIRE_TRUE(!exporting::render_vst3_stem(candidate, mixed.store, std::move(stopped), scanner,
+                                              stem, {rejected}),
                  "unsupported mixed stem published output");
     REQUIRE_TRUE(!fs::exists(rejected), "unsupported mixed stem published output");
   };
@@ -891,9 +874,8 @@ void mixed_render_checks() {
     // A stretched clip now renders through the shared warp path.
     const auto stretched = directory.path / "stretched-stem.wav";
     auto lease = take(exporting::StoppedExportAuthority::acquire(wrong, gate));
-    REQUIRE_EQ(take(exporting::render_vst3_mixed_wav_stem(wrong, mixed.store, std::move(lease),
-                                                          scanner, VST3_INSTRUMENT_BUNDLE,
-                                                          id<project::TrackId>(9), {stretched})),
+    REQUIRE_EQ(take(exporting::render_vst3_stem(wrong, mixed.store, std::move(lease), scanner,
+                                                id<project::TrackId>(9), {stretched})),
                exporting::PublishOutcome::durable,
                "stretched clip did not render through the mixed export warp path");
     // The processed audio stem follows the direct Q0 stream of its clip.
@@ -923,15 +905,21 @@ void mixed_render_checks() {
   bus_effect.missing = false;
   test_insert::append_effect(wrong, wrong.tracks[1], bus_effect);
   auto bus_lease = take(exporting::StoppedExportAuthority::acquire(wrong, gate));
-  auto bus_result = exporting::render_vst3_mixed_wav_master(
-      wrong, mixed.store, std::move(bus_lease), scanner, VST3_INSTRUMENT_BUNDLE, {rejected});
+  auto bus_result = exporting::render_vst3_master(wrong, mixed.store, std::move(bus_lease), scanner,
+                                                  exporting::MasterRenderOptions{rejected});
   REQUIRE_TRUE(!bus_result,
                "instrument-class bus effect was accepted as a verified audio processor");
   REQUIRE_TRUE(!fs::exists(rejected),
                "instrument-class bus effect was accepted as a verified audio processor");
+  // An empty audio track beside them is an ordinary project.
   wrong = mixed.snapshot;
   wrong.tracks.emplace_back(id<project::TrackId>(20));
-  reject(wrong, id<project::TrackId>(9));
+  auto extra_lease = take(exporting::StoppedExportAuthority::acquire(wrong, gate));
+  REQUIRE_EQ(take(exporting::render_vst3_stem(wrong, mixed.store, std::move(extra_lease), scanner,
+                                              id<project::TrackId>(9), {rejected})),
+             exporting::PublishOutcome::durable, "an empty audio track stopped the stem");
+  REQUIRE_EQ(read_file(rejected), audio, "an empty audio track changed the audio stem");
+  fs::remove(rejected);
   wrong = mixed.snapshot;
   wrong.sources.front().sha256[0] = '0';
   reject(wrong, id<project::TrackId>(9));
@@ -940,9 +928,8 @@ void mixed_render_checks() {
   REQUIRE_EQ(::setenv("OSCILLATE_VST3_INSTRUMENT_FAIL", "process", 1), 0,
              "cannot enable instrument fault fixture");
   auto stopped = take(exporting::StoppedExportAuthority::acquire(mixed.snapshot, gate));
-  REQUIRE_TRUE(!exporting::render_vst3_mixed_wav_master(mixed.snapshot, mixed.store,
-                                                        std::move(stopped), scanner,
-                                                        VST3_INSTRUMENT_BUNDLE, {rejected}),
+  REQUIRE_TRUE(!exporting::render_vst3_master(mixed.snapshot, mixed.store, std::move(stopped),
+                                              scanner, exporting::MasterRenderOptions{rejected}),
                "instrument fault published partial mixed master");
   REQUIRE_TRUE(!fs::exists(rejected), "instrument fault published partial mixed master");
   REQUIRE_EQ(::unsetenv("OSCILLATE_VST3_INSTRUMENT_FAIL"), 0,
@@ -1031,10 +1018,10 @@ void mixed_clip_automation_checks() {
   const auto render = [&](std::optional<project::TrackId> stem, const fs::path& output) {
     auto lease = take(exporting::StoppedExportAuthority::acquire(snapshot, gate));
     const auto result =
-        stem ? exporting::render_vst3_mixed_wav_stem(snapshot, reader, std::move(lease), scanner,
-                                                     VST3_INSTRUMENT_BUNDLE, *stem, {output})
-             : exporting::render_vst3_mixed_wav_master(snapshot, reader, std::move(lease), scanner,
-                                                       VST3_INSTRUMENT_BUNDLE, {output});
+        stem ? exporting::render_vst3_stem(snapshot, reader, std::move(lease), scanner, *stem,
+                                           {output})
+             : exporting::render_vst3_master(snapshot, reader, std::move(lease), scanner,
+                                             exporting::MasterRenderOptions{output});
     REQUIRE_EQ(take(std::move(result)), exporting::PublishOutcome::durable,
                "mixed automation render failed");
     return read_file(output);
@@ -1043,7 +1030,7 @@ void mixed_clip_automation_checks() {
   const auto instrument =
       render(id<project::TrackId>(2), directory.path / "automation-instrument.wav");
   const auto master = render(std::nullopt, directory.path / "automation-master.wav");
-  REQUIRE_EQ(audio.size(), 56 + 278 * 8, "mixed automation master/stem extents differ");
+  REQUIRE_EQ(audio.size(), 56 + 286 * 8, "mixed automation master/stem extents differ");
   REQUIRE_EQ(instrument.size(), audio.size(), "mixed automation master/stem extents differ");
   REQUIRE_EQ(master.size(), audio.size(), "mixed automation master/stem extents differ");
   for (std::size_t frame = 0; frame < 278; ++frame) {
@@ -1074,9 +1061,8 @@ void mixed_clip_automation_checks() {
     require(file.good(), "cannot seed automation output preservation fixture");
   }
   auto lease = take(exporting::StoppedExportAuthority::acquire(unsupported, gate));
-  REQUIRE_TRUE(!exporting::render_vst3_mixed_wav_master(unsupported, reader, std::move(lease),
-                                                        scanner, VST3_INSTRUMENT_BUNDLE,
-                                                        {preserved}),
+  REQUIRE_TRUE(!exporting::render_vst3_master(unsupported, reader, std::move(lease), scanner,
+                                              exporting::MasterRenderOptions{preserved}),
                "unsupported clip target replaced a valid mixed render");
   REQUIRE_EQ(read_file(preserved), master, "unsupported clip target replaced a valid mixed render");
   REQUIRE_EQ(::unsetenv("OSCILLATE_VST3_INSTRUMENT_TAIL"), 0,
@@ -1095,12 +1081,10 @@ void multi_audio_render_checks() {
   auto render = [&](std::optional<project::TrackId> stem, const fs::path& target) {
     auto lease = take(exporting::StoppedExportAuthority::acquire(mixed.snapshot, gate));
     auto outcome =
-        stem
-            ? exporting::render_vst3_mixed_wav_stem(mixed.snapshot, mixed.store, std::move(lease),
-                                                    scanner, VST3_INSTRUMENT_BUNDLE, *stem,
-                                                    {target})
-            : exporting::render_vst3_mixed_wav_master(mixed.snapshot, mixed.store, std::move(lease),
-                                                      scanner, VST3_INSTRUMENT_BUNDLE, {target});
+        stem ? exporting::render_vst3_stem(mixed.snapshot, mixed.store, std::move(lease), scanner,
+                                           *stem, {target})
+             : exporting::render_vst3_master(mixed.snapshot, mixed.store, std::move(lease), scanner,
+                                             exporting::MasterRenderOptions{target});
     REQUIRE_EQ(take(std::move(outcome)), exporting::PublishOutcome::durable,
                "multi-audio render did not publish");
     return read_file(target);
@@ -1109,7 +1093,7 @@ void multi_audio_render_checks() {
   const auto instrument = render(id<project::TrackId>(2), directory.path / "multi-instrument.wav");
   const auto first = render(id<project::TrackId>(9), directory.path / "multi-first.wav");
   const auto second = render(id<project::TrackId>(12), directory.path / "multi-second.wav");
-  REQUIRE_EQ(master.size(), 56 + 274 * 8,
+  REQUIRE_EQ(master.size(), 56 + 282 * 8,
              "multi-audio master and stems do not share the full duration");
   REQUIRE_EQ(instrument.size(), master.size(),
              "multi-audio master and stems do not share the full duration");
@@ -1154,9 +1138,8 @@ void multi_audio_render_checks() {
   }
   auto reject = [&](const project::Snapshot& candidate) {
     auto lease = take(exporting::StoppedExportAuthority::acquire(candidate, gate));
-    REQUIRE_TRUE(!exporting::render_vst3_mixed_wav_master(candidate, mixed.store, std::move(lease),
-                                                          scanner, VST3_INSTRUMENT_BUNDLE,
-                                                          {target}),
+    REQUIRE_TRUE(!exporting::render_vst3_master(candidate, mixed.store, std::move(lease), scanner,
+                                                exporting::MasterRenderOptions{target}),
                  "rejected multi-audio render replaced existing output");
     REQUIRE_EQ(read_file(target), sentinel, "rejected multi-audio render replaced existing output");
   };
@@ -1171,18 +1154,27 @@ void multi_audio_render_checks() {
   {
     // A stretched clip renders through the shared warp path instead.
     auto lease = take(exporting::StoppedExportAuthority::acquire(wrong, gate));
-    REQUIRE_EQ(take(exporting::render_vst3_mixed_wav_master(
-                   wrong, mixed.store, std::move(lease), scanner, VST3_INSTRUMENT_BUNDLE,
-                   {directory.path / "multi-stretched.wav"})),
+    REQUIRE_EQ(take(exporting::render_vst3_master(
+                   wrong, mixed.store, std::move(lease), scanner,
+                   exporting::MasterRenderOptions{directory.path / "multi-stretched.wav"})),
                exporting::PublishOutcome::durable,
                "stretched multi-audio clip did not render through the warp path");
     REQUIRE_EQ(read_file(target), sentinel,
                "stretched multi-audio clip did not render through the warp path");
   }
+  // More tracks than the former exporter's limit are an ordinary project.
   wrong = mixed.snapshot;
   for (std::uint64_t index = 0; index < 7; ++index)
     wrong.tracks.emplace_back(id<project::TrackId>(20 + index));
-  reject(wrong);
+  {
+    auto lease = take(exporting::StoppedExportAuthority::acquire(wrong, gate));
+    REQUIRE_EQ(take(exporting::render_vst3_master(
+                   wrong, mixed.store, std::move(lease), scanner,
+                   exporting::MasterRenderOptions{directory.path / "multi-many.wav"})),
+               exporting::PublishOutcome::durable, "more empty audio tracks stopped the export");
+    REQUIRE_EQ(read_file(directory.path / "multi-many.wav"), master,
+               "empty audio tracks changed the master");
+  }
   const auto asset =
       directory.path / "project/assets" / (mixed.snapshot.sources.back().sha256 + ".wav");
   require(fs::is_regular_file(asset), "second managed source asset is missing");
@@ -1270,12 +1262,10 @@ void source_rate_render_checks() {
   auto render = [&](std::optional<project::TrackId> stem, const fs::path& target) {
     auto lease = take(exporting::StoppedExportAuthority::acquire(mixed.snapshot, gate));
     auto outcome =
-        stem
-            ? exporting::render_vst3_mixed_wav_stem(mixed.snapshot, mixed.store, std::move(lease),
-                                                    scanner, VST3_INSTRUMENT_BUNDLE, *stem,
-                                                    {target})
-            : exporting::render_vst3_mixed_wav_master(mixed.snapshot, mixed.store, std::move(lease),
-                                                      scanner, VST3_INSTRUMENT_BUNDLE, {target});
+        stem ? exporting::render_vst3_stem(mixed.snapshot, mixed.store, std::move(lease), scanner,
+                                           *stem, {target})
+             : exporting::render_vst3_master(mixed.snapshot, mixed.store, std::move(lease), scanner,
+                                             exporting::MasterRenderOptions{target});
     REQUIRE_EQ(take(std::move(outcome)), exporting::PublishOutcome::durable,
                "source-rate mixed render did not publish");
     return read_file(target);
@@ -1290,9 +1280,8 @@ void source_rate_render_checks() {
   }
   auto reject = [&](const project::Snapshot& candidate) {
     auto lease = take(exporting::StoppedExportAuthority::acquire(candidate, gate));
-    REQUIRE_TRUE(!exporting::render_vst3_mixed_wav_master(candidate, mixed.store, std::move(lease),
-                                                          scanner, VST3_INSTRUMENT_BUNDLE,
-                                                          {target}),
+    REQUIRE_TRUE(!exporting::render_vst3_master(candidate, mixed.store, std::move(lease), scanner,
+                                                exporting::MasterRenderOptions{target}),
                  "rejected source-rate render replaced existing output");
     REQUIRE_EQ(read_file(target), sentinel, "rejected source-rate render replaced existing output");
   };
@@ -1306,7 +1295,7 @@ void source_rate_render_checks() {
   const auto converted = render(converted_track, directory.path / "rate-stem.wav");
   const auto same_rate = render(id<project::TrackId>(9), directory.path / "same-rate-stem.wav");
   const auto instrument = render(id<project::TrackId>(2), directory.path / "rate-instrument.wav");
-  REQUIRE_EQ(master.size(), 56 + 1'880 * 8,
+  REQUIRE_EQ(master.size(), 56 + 1'888 * 8,
              "source-rate master/stem duration differs from rounded trim endpoints");
   REQUIRE_EQ(converted.size(), master.size(),
              "source-rate master/stem duration differs from rounded trim endpoints");
@@ -1342,9 +1331,9 @@ void source_rate_render_checks() {
   {
     // A converted-rate clip stretched by one frame renders through the warp path.
     auto lease = take(exporting::StoppedExportAuthority::acquire(wrong, gate));
-    REQUIRE_EQ(take(exporting::render_vst3_mixed_wav_master(
-                   wrong, mixed.store, std::move(lease), scanner, VST3_INSTRUMENT_BUNDLE,
-                   {directory.path / "rate-stretched.wav"})),
+    REQUIRE_EQ(take(exporting::render_vst3_master(
+                   wrong, mixed.store, std::move(lease), scanner,
+                   exporting::MasterRenderOptions{directory.path / "rate-stretched.wav"})),
                exporting::PublishOutcome::durable,
                "stretched converted-rate clip did not render through the warp path");
     REQUIRE_EQ(read_file(target), sentinel,
@@ -1356,9 +1345,9 @@ void source_rate_render_checks() {
     // One source frame across the whole placement is an extreme but valid
     // stretch, rendered by the warp path rather than refused.
     auto lease = take(exporting::StoppedExportAuthority::acquire(wrong, gate));
-    REQUIRE_EQ(take(exporting::render_vst3_mixed_wav_master(wrong, mixed.store, std::move(lease),
-                                                            scanner, VST3_INSTRUMENT_BUNDLE,
-                                                            {directory.path / "rate-extreme.wav"})),
+    REQUIRE_EQ(take(exporting::render_vst3_master(
+                   wrong, mixed.store, std::move(lease), scanner,
+                   exporting::MasterRenderOptions{directory.path / "rate-extreme.wav"})),
                exporting::PublishOutcome::durable,
                "extreme stretch did not render through the warp path");
     REQUIRE_EQ(read_file(target), sentinel, "extreme stretch did not render through the warp path");
@@ -1408,11 +1397,10 @@ void native_master_reverb_checks() {
                     const fs::path& target) {
     auto lease = take(exporting::StoppedExportAuthority::acquire(candidate, gate));
     auto outcome =
-        stem ? exporting::render_vst3_mixed_wav_stem(candidate, mixed.store, std::move(lease),
-                                                     scanner, VST3_INSTRUMENT_BUNDLE, *stem,
-                                                     {target})
-             : exporting::render_vst3_mixed_wav_master(candidate, mixed.store, std::move(lease),
-                                                       scanner, VST3_INSTRUMENT_BUNDLE, {target});
+        stem ? exporting::render_vst3_stem(candidate, mixed.store, std::move(lease), scanner, *stem,
+                                           {target})
+             : exporting::render_vst3_master(candidate, mixed.store, std::move(lease), scanner,
+                                             exporting::MasterRenderOptions{target});
     REQUIRE_EQ(take(std::move(outcome)), exporting::PublishOutcome::durable,
                "master reverb fixture render did not publish");
     return read_file(target);
@@ -1422,7 +1410,7 @@ void native_master_reverb_checks() {
   const auto reverb = test_insert::expanse(0.2, 1.0);
   test_insert::set_master(wet, reverb);
   const auto reverb_tail = static_cast<std::size_t>(test_insert::tail_frames(reverb, 48'000));
-  constexpr std::size_t base_end = 271;
+  constexpr std::size_t base_end = 279;
   const auto master = render(wet, std::nullopt, directory.path / "wet-master.wav");
   const auto audio = render(wet, id<project::TrackId>(9), directory.path / "wet-audio.wav");
   const auto instrument =
@@ -1450,9 +1438,8 @@ void native_master_reverb_checks() {
   }
   auto reject = [&](const project::Snapshot& candidate) {
     auto lease = take(exporting::StoppedExportAuthority::acquire(candidate, gate));
-    REQUIRE_TRUE(!exporting::render_vst3_mixed_wav_master(candidate, mixed.store, std::move(lease),
-                                                          scanner, VST3_INSTRUMENT_BUNDLE,
-                                                          {target}),
+    REQUIRE_TRUE(!exporting::render_vst3_master(candidate, mixed.store, std::move(lease), scanner,
+                                                exporting::MasterRenderOptions{target}),
                  "rejected native master reverb render replaced existing output");
     REQUIRE_EQ(read_file(target), sentinel,
                "rejected native master reverb render replaced existing output");
@@ -1460,9 +1447,11 @@ void native_master_reverb_checks() {
   auto invalid = wet;
   test_insert::set_master(invalid, test_insert::with_raw_value(reverb, "expanse.mix", 2.0));
   reject(invalid);
+  // A latent master limiter beside the reverb renders (ADR-0050).
   invalid = wet;
   test_insert::set_master(invalid, test_insert::ceiling({-6.0, 5.0, 70.0}));
-  reject(invalid);
+  REQUIRE_GE(render(invalid, std::nullopt, directory.path / "reverb-limited.wav").size(),
+             master.size(), "a master limiter cut the reverb's tail");
   invalid = wet;
   invalid.master_effects.front().enabled = false;
   REQUIRE_EQ(render(invalid, std::nullopt, directory.path / "bypassed-reverb.wav"), dry,
@@ -1475,10 +1464,6 @@ void native_master_reverb_checks() {
   REQUIRE_GT(reversed.size(), master.size(),
              "reordered master EQ/reverb lost the conservative EQ drain");
   REQUIRE_NE(reversed, master, "reordered master EQ/reverb lost the conservative EQ drain");
-  invalid = wet;
-  invalid.tracks.back().clips.front().placement =
-      project::ElapsedInterval{{172'799'999}, {172'800'000}};
-  reject(invalid);
   REQUIRE_EQ(::setenv("OSCILLATE_VST3_INSTRUMENT_FAIL", "process", 1), 0,
              "cannot enable native master reverb plugin fault");
   reject(wet);
@@ -1504,11 +1489,10 @@ void native_master_eq_compressor_checks() {
                     const fs::path& target) {
     auto lease = take(exporting::StoppedExportAuthority::acquire(candidate, gate));
     auto result =
-        stem ? exporting::render_vst3_mixed_wav_stem(candidate, mixed.store, std::move(lease),
-                                                     scanner, VST3_INSTRUMENT_BUNDLE, *stem,
-                                                     {target})
-             : exporting::render_vst3_mixed_wav_master(candidate, mixed.store, std::move(lease),
-                                                       scanner, VST3_INSTRUMENT_BUNDLE, {target});
+        stem ? exporting::render_vst3_stem(candidate, mixed.store, std::move(lease), scanner, *stem,
+                                           {target})
+             : exporting::render_vst3_master(candidate, mixed.store, std::move(lease), scanner,
+                                             exporting::MasterRenderOptions{target});
     REQUIRE_EQ(take(std::move(result)), exporting::PublishOutcome::durable,
                "master EQ/compressor render did not publish");
     return read_file(target);
@@ -1518,7 +1502,7 @@ void native_master_eq_compressor_checks() {
                                                   std::numbers::sqrt2 / 2.0, 0.0}));
   const auto eq_audio = render(eq, id<project::TrackId>(9), directory.path / "eq-audio.wav");
   const float b0 = static_cast<float>(1.0 - std::numbers::sqrt2 / 2.0);
-  REQUIRE_EQ(eq_audio.size(), 56 + (271 + 304) * 8,
+  REQUIRE_EQ(eq_audio.size(), 56 + (279 + 304) * 8,
              "master EQ conservative tail or common extent is wrong");
   near(sample(eq_audio, 269), 0.0F);
   near(sample(eq_audio, 270), 0.1875F * b0);
@@ -1535,7 +1519,7 @@ void native_master_eq_compressor_checks() {
   const double compressor_envelope = 0.375 * (1.0 - std::exp(-1.0 / 4.8));
   const double compressor_reduction =
       (20.0 * std::log10(compressor_envelope) + 60.0) * (1.0 - 1.0 / 8.0);
-  REQUIRE_EQ(compressed_audio.size(), 56 + 271 * 8,
+  REQUIRE_EQ(compressed_audio.size(), 56 + 279 * 8,
              "zero-latency compressor added a silent export tail");
   near(sample(compressed_audio, 270),
        static_cast<float>(0.1875 * std::pow(10.0, -compressor_reduction / 20.0)));
@@ -1575,7 +1559,7 @@ void native_master_eq_compressor_checks() {
   const auto audio = render(chain, id<project::TrackId>(9), directory.path / "chain-audio.wav");
   const auto instrument =
       render(chain, id<project::TrackId>(2), directory.path / "chain-instrument.wav");
-  REQUIRE_EQ(master.size(), 56 + (265 + 304) * 8,
+  REQUIRE_EQ(master.size(), 56 + (264 + 304) * 8,
              "EQ/compressor chain lost the source or the EQ drain");
   REQUIRE_EQ(audio.size(), master.size(), "EQ/compressor chain lost the source or the EQ drain");
   REQUIRE_EQ(instrument.size(), master.size(),
@@ -1604,9 +1588,8 @@ void native_master_eq_compressor_checks() {
   }
   auto reject = [&](const project::Snapshot& candidate) {
     auto lease = take(exporting::StoppedExportAuthority::acquire(candidate, gate));
-    REQUIRE_TRUE(!exporting::render_vst3_mixed_wav_master(candidate, mixed.store, std::move(lease),
-                                                          scanner, VST3_INSTRUMENT_BUNDLE,
-                                                          {target}),
+    REQUIRE_TRUE(!exporting::render_vst3_master(candidate, mixed.store, std::move(lease), scanner,
+                                                exporting::MasterRenderOptions{target}),
                  "rejected EQ/compressor chain replaced existing output");
     REQUIRE_EQ(read_file(target), sentinel,
                "rejected EQ/compressor chain replaced existing output");
@@ -1621,13 +1604,11 @@ void native_master_eq_compressor_checks() {
   invalid = chain;
   test_insert::set_master(invalid, test_insert::with_raw_value(compressor, "press.attack", 0.0));
   reject(invalid);
+  // A latent master limiter after the EQ and compressor renders (ADR-0050).
   invalid = chain;
   test_insert::set_master(invalid, test_insert::ceiling({-6.0, 5.0, 70.0}));
-  reject(invalid);
-  invalid = chain;
-  invalid.tracks.back().clips.front().placement =
-      project::ElapsedInterval{{172'799'999}, {172'800'000}};
-  reject(invalid);
+  REQUIRE_GE(render(invalid, std::nullopt, directory.path / "chain-limited.wav").size(),
+             master.size(), "a master limiter cut the EQ's drain");
   REQUIRE_EQ(::setenv("OSCILLATE_VST3_INSTRUMENT_FAIL", "process", 1), 0,
              "cannot enable master EQ/compressor plugin fault");
   reject(chain);
@@ -1671,11 +1652,10 @@ void three_source_native_vst3_audio_checks() {
                     const fs::path& target) {
     auto lease = take(exporting::StoppedExportAuthority::acquire(snapshot, gate));
     const auto result =
-        stem ? exporting::render_vst3_mixed_wav_stem(snapshot, mixed.store, std::move(lease),
-                                                     scanner, VST3_INSTRUMENT_BUNDLE, *stem,
-                                                     {target})
-             : exporting::render_vst3_mixed_wav_master(snapshot, mixed.store, std::move(lease),
-                                                       scanner, VST3_INSTRUMENT_BUNDLE, {target});
+        stem ? exporting::render_vst3_stem(snapshot, mixed.store, std::move(lease), scanner, *stem,
+                                           {target})
+             : exporting::render_vst3_master(snapshot, mixed.store, std::move(lease), scanner,
+                                             exporting::MasterRenderOptions{target});
     REQUIRE_EQ(take(std::move(result)), exporting::PublishOutcome::durable,
                "three-source render did not publish");
     return read_file(target);
@@ -1738,9 +1718,8 @@ void three_source_native_vst3_audio_checks() {
   }
   auto reject = [&](const project::Snapshot& candidate) {
     auto lease = take(exporting::StoppedExportAuthority::acquire(candidate, gate));
-    REQUIRE_TRUE(!exporting::render_vst3_mixed_wav_master(candidate, mixed.store, std::move(lease),
-                                                          scanner, VST3_INSTRUMENT_BUNDLE,
-                                                          {preserved}),
+    REQUIRE_TRUE(!exporting::render_vst3_master(candidate, mixed.store, std::move(lease), scanner,
+                                                exporting::MasterRenderOptions{preserved}),
                  "rejected three-source render changed target");
     REQUIRE_EQ(read_file(preserved), sentinel, "rejected three-source render changed target");
   };
@@ -1748,10 +1727,12 @@ void three_source_native_vst3_audio_checks() {
   auto& binary_digit = test_insert::vst3_source(invalid.tracks.front()).binary_sha256[0];
   binary_digit = binary_digit == '0' ? '1' : '0';
   reject(invalid);
+  // A reverb on the VST3 source's track is an ordinary chain (ADR-0050).
   invalid = wet;
   invalid.tracks.front().effects.push_back(
       {test_insert::next_slot(invalid), true, test_insert::expanse(0.2, 0.2)});
-  reject(invalid);
+  REQUIRE_GT(render(invalid, std::nullopt, directory.path / "three-source-reverb.wav").size(),
+             wet_master.size(), "the source track's reverb tail was cut");
   invalid = wet;
   invalid.sources.front().sha256 = std::string(64, '0');
   reject(invalid);
@@ -1764,9 +1745,8 @@ void three_source_native_vst3_audio_checks() {
   auto stale = take(exporting::StoppedExportAuthority::acquire(wet, gate));
   invalid = wet;
   ++invalid.revision;
-  REQUIRE_TRUE(!exporting::render_vst3_mixed_wav_master(invalid, mixed.store, std::move(stale),
-                                                        scanner, VST3_INSTRUMENT_BUNDLE,
-                                                        {preserved}),
+  REQUIRE_TRUE(!exporting::render_vst3_master(invalid, mixed.store, std::move(stale), scanner,
+                                              exporting::MasterRenderOptions{preserved}),
                "stale three-source authority changed target");
   REQUIRE_EQ(read_file(preserved), sentinel, "stale three-source authority changed target");
 }
