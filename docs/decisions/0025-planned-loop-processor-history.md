@@ -1,6 +1,6 @@
 # ADR-0025 — Planned loop processor history
 
-**Status:** Accepted for the headless planned-wrap contract. **Date:** 17 October 2026.
+**Status:** Accepted; implemented: `BlockContext` carries separate transport and processing generations, the headless prefetch contract plans loop wraps through `PrefetchControl::plan_loop_wrap`, and routed playback loops its sources through `RoutedAudioSource::set_loop` and `prime_loop`. **Date:** 17 October 2026.
 **Requirements:** ER-04b, ER-10, ER-11.
 
 ## Context

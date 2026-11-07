@@ -1,6 +1,6 @@
 # ADR-0007 — Musical timing and meter representation
 
-**Status:** Accepted; implemented (reviewed 20 October 2026). 960,000,000 ticks per quarter note (`include/oscillate/timeline/timing.hpp`); tempo and meter maps and the shared conversions live in `src/timeline`.
+**Status:** Accepted; implemented. 960,000,000 ticks per quarter note (`include/oscillate/timeline/timing.hpp`); tempo and meter maps and the shared conversions live in `src/timeline`.
 **Date:** 14 October 2026
 **Requirements:** PRD §§7, 9–10, 13–14, 17; FS-01 TA-01–04/08–10.
 

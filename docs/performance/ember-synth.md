@@ -32,9 +32,9 @@ Prism is unaffected:
 
 **Real-time.** Allocation-free in `process` at full load, with an automation lane.
 
-## Update, 19 October 2026: the full OTA model is restored
+## Full four-stage OTA saturation
 
-The OTA ladder once saturated only its input and first two stages, using a cheaper cubic curve, to save CPU. All four stages now saturate again with the smooth rational curve, as the hardware does. Sound comes first, and the cubic's harder knee also aliased more.
+All four OTA stages saturate with the smooth rational curve, as the hardware does. The table compares a cheaper variant that saturated only the input and first two stages with a cubic curve; sound comes first, and the cubic's harder knee also aliased more.
 
 The four-stage saturation compresses about 2 dB, so Ember's post-filter voice gain rose from 0.6 to 0.75 to keep preset loudness. Goldens were rebaselined.
 

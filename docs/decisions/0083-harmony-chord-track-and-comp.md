@@ -2,7 +2,7 @@
 
 **Superseded in part by [ADR-0084](0084-chord-clips.md):** chords are notes in MIDI clips. The Chord track (`Snapshot::chords`, `SetChordTrack`, schema 1.46), Comp's Chord-track mode, its voicing parameters and Render to clip are gone. The harmony library, the Progression Lab and Comp's rhythm engine stay.
 
-**Status:** Superseded by ADR-0084: the Chord track was removed; the harmony library, the Progression Lab and Comp's rhythm engine carry over to chord clips.
+**Status:** Superseded in part by [ADR-0084](0084-chord-clips.md): there is no Chord track; the harmony library, the Progression Lab and Comp's rhythm engine serve chord clips.
 
 **Date:** 1 November 2026.
 

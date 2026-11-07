@@ -1,6 +1,6 @@
 # ADR-0039 — Background publication of routine editor changes
 
-**Status:** Accepted. **Date:** 19 October 2026. **Amends:** ADR-0004 (writer capability and publication scheduling).
+**Status:** Accepted; implemented. **Date:** 19 October 2026. **Amends:** ADR-0004 (writer capability and publication scheduling).
 
 ## Context
 

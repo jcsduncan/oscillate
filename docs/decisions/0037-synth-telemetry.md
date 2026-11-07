@@ -1,6 +1,6 @@
 # ADR-0037 — Live synth telemetry for panels
 
-**Status:** Accepted. **Date:** 19 October 2026.
+**Status:** Accepted; implemented. **Date:** 19 October 2026.
 
 ## Context
 

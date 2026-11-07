@@ -1,6 +1,6 @@
 # ADR-0036 — Concert: physically modelled grand piano (eighth native engine)
 
-**Status:** Superseded by [ADR-0071](0071-concert-sampled.md) on 29 October 2026: Concert is now a sampled grand, and the model below (`piano_dsp`) has been removed. Kept as the record of what was tried.
+**Status:** Superseded by [ADR-0071](0071-concert-sampled.md): Concert is a sampled grand; the physical model below (`piano_dsp`) is not in the code.
 **Date:** 19 October 2026.
 **Builds on:** ADR-0027 (the native-synth platform), ADR-0034 (stepped automation) and ADR-0035 (pedals in MIDI clips).
 

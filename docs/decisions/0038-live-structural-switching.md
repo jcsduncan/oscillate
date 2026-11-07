@@ -1,6 +1,6 @@
 # ADR-0038 — Live structural switching in native synths
 
-**Status:** Accepted. **Date:** 19 October 2026.
+**Status:** Accepted; implemented. **Date:** 19 October 2026.
 **Amends:** ADR-0034, which defined next-note semantics for the parameters this ADR makes live.
 
 ## Context

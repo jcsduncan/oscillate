@@ -43,8 +43,8 @@ ring wrap, and explicit rejection above the supplied limit. It also covers
 small growth/shrink, failed preparation retaining the old line, and zero
 callback allocations. `routed_mixer_contract` checks the graph-level
 growth/shrink and failed hold. A transition requesting a delay larger than
-its own frame budget now reports `resource_exhausted` immediately, rather
-than `unavailable` (which could be mistaken for a retryable priming failure).
+its own frame budget reports `resource_exhausted` immediately, not
+`unavailable`, so it is not mistaken for a retryable priming failure.
 
 ## Recommendation and remaining gate
 

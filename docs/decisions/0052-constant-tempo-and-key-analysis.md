@@ -1,6 +1,6 @@
 # ADR-0052 — Constant-tempo and key analysis
 
-**Status:** Accepted; implemented. The downbeat rule arrived with the clip strip (ADR-0053). **Date:** 21 October 2026.
+**Status:** Accepted; implemented. The downbeat rule is part of the clip strip ([ADR-0053](0053-clip-strip.md)). **Date:** 21 October 2026.
 
 ## Context
 

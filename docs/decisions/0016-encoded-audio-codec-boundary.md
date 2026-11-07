@@ -1,6 +1,6 @@
 # ADR-0016 — Encoded audio codec boundary
 
-**Status:** Accepted for a worker-only decoder slice; export encoding and resampling remain separate measured decisions.
+**Status:** Accepted; implemented: libsndfile decodes on workers (`src/codec/encoded_reader.cpp`); FLAC and MP3 export and export resampling are covered in [encoded master export](../dependencies/encoded-master-export.md) and [export resampler](../dependencies/export-resampler.md).
 **Date:** 14 October 2026
 **Requirements:** FS-03 PM-01/PM-08/PM-09; PRD §§8, 17, 21.
 

@@ -1,6 +1,6 @@
 # ADR-0087 — Nova voices on the GPU
 
-**Status:** Rejected (reverted). Built in four slices and reverted on 5 November 2026 (commit b3886b93). **Date:** 5 November 2026.
+**Status:** Rejected. Nova voices render on the CPU ([ADR-0085](0085-nested-voice-rendering.md)); there is no GPU path. **Date:** 5 November 2026.
 **Builds on:** ADR-0057 (Nova), ADR-0061 (performance tracing), ADR-0085 (voices across helpers).
 
 ## Context

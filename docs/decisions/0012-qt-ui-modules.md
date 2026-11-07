@@ -1,6 +1,6 @@
 # ADR-0012 — Qt modules for the desktop UI
 
-**Status:** Superseded for the production presentation layer by ADR-0022; retained for the tested Widgets prototype and Core/Gui licensing boundary
+**Status:** Superseded by [ADR-0022](0022-qt-quick-ui-direction.md) for the presentation layer. Its Core/Gui licensing boundary still applies; Qt Widgets is used only for file dialogs and the VST3 editor host (`src/app/plugin_ui`).
 **Date:** 14 October 2026  
 **Requirements:** PRD §§5–6, 20, 23; FS-07; G8 dependency gate.
 

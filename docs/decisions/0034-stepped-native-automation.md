@@ -1,6 +1,6 @@
 # ADR-0034 — Stepped automation for discrete and next-note synth parameters
 
-**Status:** Accepted. **Date:** 19 October 2026.
+**Status:** Accepted; implemented. **Date:** 19 October 2026.
 **Amends:** ADR-0027 (native-synth platform). It applies to every native engine (Prism, Ember, Lumen, Pulse, Halo, Torque) and to Drift.
 
 ## Context

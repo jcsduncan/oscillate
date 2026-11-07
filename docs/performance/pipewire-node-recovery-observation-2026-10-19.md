@@ -3,7 +3,7 @@
 The PipeWire stream event API does not expose an exact stream xrun count. The
 `SPA_IO_Position` area does, however, carry the graph driver's
 `SPA_IO_CLOCK_FLAG_XRUN_RECOVER` flag to a node whose previous process call
-missed its deadline. The adapter now samples that flag once at the start of
+missed its deadline. The adapter samples that flag once at the start of
 every process callback and reports `graph_xrun_recovery_events` separately
 from `xruns`. A missing or undersized position area in any callback makes the
 recovery observation unavailable for the entire stream session. A new stream

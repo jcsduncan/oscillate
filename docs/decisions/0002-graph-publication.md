@@ -1,6 +1,6 @@
 # ADR-0002 — Prepared graph publication and reclamation
 
-**Status:** Accepted; implemented (reviewed 20 October 2026). `GraphPublisher` publishes prepared plans at a block boundary and reclaims retired plans off the callback (`src/engine/graph.cpp`); the routed mixer follows [ADR-0018](0018-routed-mixer-publication.md).
+**Status:** Accepted; implemented. `GraphPublisher` publishes prepared plans at a block boundary and reclaims retired plans off the callback (`src/engine/graph.cpp`); the routed mixer follows [ADR-0018](0018-routed-mixer-publication.md).
 **Date:** 14 October 2026
 **Requirements:** PRD §§7, 18, 21; FS-02 ER-01/ER-06/ER-09.
 

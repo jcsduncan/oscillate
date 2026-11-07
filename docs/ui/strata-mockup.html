@@ -213,7 +213,7 @@ select { background: var(--well); color: var(--text); border: 1px solid var(--li
     <div class="note"><h4>Crossovers</h4>
       <ul>
         <li><b>Minimum phase:</b> Linkwitz–Riley 24 dB/oct, zero latency beyond lookahead, bands sum flat in level.</li>
-        <li><b>Linear phase:</b> FIR crossovers, no phase shift between bands, about 21 ms more latency. For the master and buses.</li>
+        <li><b>Linear phase:</b> FIR crossovers, no phase shift between bands, about 32 ms more latency. For the master and buses.</li>
         <li>Crossovers stay a third of an octave apart. The preview here always plays minimum phase.</li>
       </ul></div>
     <div class="note"><h4>What the panel draws</h4>
@@ -231,7 +231,7 @@ select { background: var(--well); color: var(--text); border: 1px solid var(--li
 const BAND_COLORS = ["--b0","--b1","--b2","--b3","--b4","--b5"].map(v => getComputedStyle(document.documentElement).getPropertyValue(v).trim());
 const MAX_BANDS = 6, F_MIN = 20, F_MAX = 20000, XO_MIN = 30, XO_MAX = 16000, XO_GAP = Math.pow(2, 1/3);
 const SPEC_TOP = -6, SPEC_BOT = -96, TILT_DB_PER_OCT = 3, GR_SPAN = 18;
-const LIN_PHASE_MS = 21.3, BPM = 126, OTT_XO = [88, 2500];
+const LIN_PHASE_MS = 32, BPM = 126, OTT_XO = [88, 2500];
 const CURVE_MIN = -60;
 
 function defBand(o) { return Object.assign({ thr: -18, ra: 2, rb: 1, att: 10, rel: 120, knee: 6, range: 24, makeup: 0, route: "stereo", key: "band", solo: false, mute: false, bypass: false }, o || {}); }

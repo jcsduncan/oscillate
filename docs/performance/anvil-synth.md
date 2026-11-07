@@ -17,6 +17,6 @@ ADR-0060 follow-up, 25 October 2026. Local measurement only.
 
 `process` is allocation-free.
 
-**Preview.** `anvil::render_preview` of one beat (23,226 frames at 48 kHz) takes 8.4–9.6 ms; Hard Techno Screech's 700 ms hit (33,600 frames) takes 18.8 ms. That is the kernel's own cost (about 0.4 µs a frame): the 4x drive and 2x ceiling on both channels are about half of it, and are kept for sound. A panel that redraws on every drag step should render the preview at 24 kHz (half the cost; the drawing needs no more) or off the UI thread.
+**Preview.** `anvil::render_preview` of one beat (23,226 frames at 48 kHz) takes 8.4–9.6 ms; Hard Techno Screech's 700 ms hit (33,600 frames) takes 18.8 ms. That is the kernel's own cost (about 0.4 µs a frame): the 4x drive and 2x ceiling on both channels are about half of it, and are kept for sound. Anvil's panel renders the preview on a worker thread and shows only the newest edit's render.
 
-**What was measured and fixed on the way:** decaying states reaching denormals (a 50 ms hit's beat cost 24 ms before flushing), integer modulo in the rumble's delay lines, per-sample partial tables and `pow` calls, and two `sin`/`cos` per 4x sample (now one exact pair a frame and a rotation).
+**What was measured and fixed on the way:** decaying states reaching denormals (a 50 ms hit's beat cost 24 ms before flushing), integer modulo in the rumble's delay lines, per-sample partial tables and `pow` calls, and two `sin`/`cos` per 4x sample (replaced by one exact pair a frame and a rotation).

@@ -1,6 +1,6 @@
 # ADR-0050 — One chain per track
 
-**Status:** Accepted and implemented for live playback, routing and authoring; export still keeps two VST3 renderers to unify. **Date:** 21 October 2026.
+**Status:** Accepted and implemented for live playback, routing and authoring. Export has two VST3 offline renderers with their own limits (`src/application/vst3/effect_export.cpp`, `instrument_export.cpp`). **Date:** 21 October 2026.
 
 ## Context
 
@@ -67,7 +67,7 @@ A VST3 stage is prepared for blocks of at most `vst3_host_block_frames` (128). I
 
 ## Consequences
 
-- **Unrestricted chains.** Any chain plays, exports and edits live; a VST3 plugin is never re-instantiated by an edit that does not change it.
+- **Unrestricted chains.** Any chain plays and edits live (export has its own limits, see the status); a VST3 plugin is never re-instantiated by an edit that does not change it.
 - **Plugin loading.** A new VST3 instance is still prepared on the control thread, which delays the edit by the plugin's load time but never the audio. Moving this to a worker is a follow-up.
 - **Not yet covered while playing:**
   - **Step 2 of the seamless programme:** VST3 instrument replacement, source and MIDI changes, and adding or removing tracks. These will switch at a block primed in advance, with voice continuity.

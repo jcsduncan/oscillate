@@ -1,6 +1,6 @@
 # ADR-0020 — Convolution reverb core and FFT boundary
 
-**Status:** Opt-in native core implemented; graph and release integration remain gated.
+**Status:** Accepted; implemented as an opt-in build (`OSCILLATE_BUILD_CONVOLUTION_DSP`): offline export renders a saved convolution insert; the Quick app refuses live playback of a project that holds one. Release packages leave it out.
 **Date:** 15 October 2026
 **Requirements:** PRD §§5, 7, 15, 17, 21–22; FS-06 native processing and export tails.
 

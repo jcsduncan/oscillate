@@ -1,6 +1,6 @@
 # ADR-0018 — Bounded routed mixer handoff
 
-**Status:** Implemented engine contract with bounded routed application use.
+**Status:** Accepted; implemented: `RoutedMixerPublisher` (`src/engine/routed_publisher.cpp`) hands prepared routed mixers to `application::RoutedPlaybackControl`.
 **Date:** 15 October 2026.  
 **Requirements:** ER-01/03/06/08/09/10 and PI-08.  
 **Affected interfaces:** `RoutedMixerPublisher`; no project schema change.

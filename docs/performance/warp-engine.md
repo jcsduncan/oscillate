@@ -327,12 +327,12 @@ A tabulated window, with its division hoisted to once per grain, also brought To
 
 **Limits.**
 - Externally linked sources are still refused for processing.
-- The render cache still accepts only same-rate sources. The cache stage adds `rate_view_algorithm` and its version to the key before lifting that gate.
+- The render cache reads different-rate sources through `RateConvertedSourceView`; `rate_view_algorithm` and its version are part of the key.
 - Unprocessed clips keep the optional libsamplerate reader.
 
 ## P2 — Processed-clip render cache (LDW2)
 
-`processing::render_warp_to_cache` renders any of the six saved modes for one clip. It runs from `warp_render_request()`, which resolves the clip through `prepare_clip_frame_plan`. The path reads source through `ProjectRateSourceView` and maps it with `make_warp_stream_map`. `WarpRenderQueue` runs these renders on the shared bounded `Executor`.
+`processing::render_warp_to_cache` renders any of the six saved modes for one clip. It runs from `warp_render_request()`, which resolves the clip through `prepare_clip_frame_plan`. The path reads source through `ProjectRateSourceView` and maps it with `make_warp_stream_map`.
 
 **Analysis per render.** Analysis runs on the whole project-rate source view, so its results depend on the source alone.
 - Beats, Complex and Complex Pro detect transients: 698× real time (Release, 48 kHz, 30 s of dense noise).
@@ -366,7 +366,7 @@ The reader checks every header field, then that every sample is finite, before i
 - Transient and pitch analysis is recomputed for each render. A shared source-analysis cache (PA-07) would remove that cost.
 - Grid-based Beats preserve points are not implemented; Beats slices at transients.
 - Texture uses the fixed seed `texture_render_seed`.
-- Activating renders for playback and export is the next stage.
+- Playback (P3) can use these cached renders; export (P4) renders its own stream and does not read the cache.
 
 ## P3 — Live processed-clip playback
 
@@ -421,5 +421,5 @@ Export renders each processed clip with `processing::OfflineWarpClip`, opened th
   - **Routing and raw clips:** a processed stem beside a raw clip still matches the oracle; the raw clip's stem is its source; the master is the sum. Through a group bus with a reverb insert, the tail continues after the processed clip, byte-identical on repeat.
   - **Source failures:** changed source bytes and a missing source fail without replacing an existing target.
 - `tests/processing/verified_source_view_tests.cpp`: a descriptor-bound view keeps reading the verified bytes after the managed path is moved and replaced. Truncating the pinned file is a reported decoder error, and mismatched metadata or an external link is refused.
-- `tests/application/vst3/vst3_mixed_export_tests.cpp`: a processed audio stem in the mixed VST3 instrument variant follows the routed direct stream (dry plus 0.5 send) within 1e-6. Stretched clips, including converted-rate and one-source-frame extremes, render in the mixed and VST3 effect variants. The previous refusals became positive renders.
+- `tests/application/vst3/vst3_mixed_export_tests.cpp`: a processed audio stem in the mixed VST3 instrument variant follows the routed direct stream (dry plus 0.5 send) within 1e-6. Stretched clips, including converted-rate and one-source-frame extremes, render in the mixed and VST3 effect variants.
 - **Mutation check:** forcing export to Q1 fails the master oracle at frame 0.

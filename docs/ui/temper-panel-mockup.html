@@ -159,11 +159,11 @@ select { width: 100%; background: var(--well); color: var(--text); border: 1px s
       <li><b>Split</b>: separate depth for attacks and sustains. It tames ringing tails without dulling the hits.</li>
       <li>A <b>reduction heatmap</b>, so you can see which notes and syllables set it off.</li>
     </ul></div>
-    <div class="note"><h2>How it will be built</h2><ul>
-      <li>A new native effect on the existing platform, which already has sidechain inputs and reported latency.</li>
+    <div class="note"><h2>How it is built</h2><ul>
+      <li>A native effect on the platform, using its sidechain inputs and reported latency.</li>
       <li>An STFT engine with overlap-add, plus a minimum-phase path that resynthesises per-bin gains as a smooth filter. Low latency uses short frames.</li>
       <li>Oracle tests: a sine buried in noise is cut and the noise is left alone; a static tone stays unchanged at Depth 0; Delta plus Out equals In exactly; export matches live playback; latency is as reported.</li>
-      <li>Then presets for vocals, guitars, cymbals, mix bus, bass unmask and de-essing, then the panel.</li>
+      <li>Factory presets cover vocals and de-essing, guitar, cymbals and drums, the mix bus, the master, and unmasking.</li>
     </ul></div>
   </div>
 </div>

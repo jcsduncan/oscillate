@@ -1,23 +1,35 @@
 # Offline WAV master: bounded production slice
 
-Both offline renderers preflight the read-only schema-1.12 insert projection before
-opening an output writer. It distinguishes sampler and VST3 instrument sources
-from audio-effect slots and preserves the native master EQ → compressor →
-reverb → limiter order. Unresolved instrument roles and unrendered VST3 effects
-fail explicitly; a saved missing VST3 instrument may be resolved only by the
-stopped VST3 exporter's fresh binary and class check.
+Both offline renderers preflight the read-only insert projection
+(`project::project_insert_chains`) before opening an output writer. It
+distinguishes built-in and VST3 instrument sources from audio-effect slots and
+keeps the saved order of active master slots. Unresolved instrument roles and
+unrendered VST3 effects fail explicitly; a saved missing VST3 instrument may be
+resolved only by the stopped VST3 exporter's fresh binary and class check.
 
-The offline renderer mixes managed WAV audio clips and native-sampler MIDI tracks into a stereo master. Saved main routes through group buses and sends to group or return buses use the shared project route compiler and engine stereo mixer. Send gains are linear. One enabled native EQ on one audio track runs before routing; it has zero latency and contributes a bounded tail. Other track/bus inserts, VST3 inserts, sidechains and unsupported automation fail explicitly. It processes at the project sample rate in bounded blocks, includes sampler release tails, and writes float32, PCM24 or PCM16 WAV. An optional [output-rate adapter](output-sample-rate.md) converts the completed stream to a selected supported rate. Integer output uses deterministic dither. Publication is atomic: a read or write failure leaves any prior target intact; a directory sync failure after rename is reported as uncertain durability.
+The offline renderer mixes managed audio clips and built-in instrument MIDI tracks into a stereo master. Saved main routes through group buses and sends to group or return buses use the shared project route compiler and engine stereo mixer. Send gains are linear. Built-in effect chains on audio, instrument, group and return tracks run in saved order, each stage adding its own latency and bounded tail. Enabled VST3 inserts and unsupported automation fail explicitly. It processes at the project sample rate in bounded blocks, includes instrument release tails, and writes float32, PCM24 or PCM16 WAV. An optional [output-rate adapter](output-sample-rate.md) converts the completed stream to a selected supported rate. Integer output uses deterministic dither. Publication is atomic: a read or write failure leaves any prior target intact; a directory sync failure after rename is reported as uncertain durability.
 
-The renderer preflights all tracks and clips, pins verified managed sources through `ProjectStore`, compiles MIDI events from the authoritative tempo map, and rejects an unsupported path before publishing output. Supported audio sources are mono or stereo managed WAV, with optional encoded formats and source-rate conversion when those build paths are enabled. Converted source-range endpoints must span exactly the rendered clip duration on the project frame grid; stretch and warp are not yet rendered. The source-rate reader is worker-only and reads at most 1,024 project frames per call. The current limits are 4,096 audio clips, 128 instruments and 16,777,216 prepared sampler frames. The persisted master EQ uses the same validated `PreparedEq` coefficients and `EqRuntime` processor as live playback, applied once after routed audio and instrument summation. Its offline instance retains filter history across blocks and never shares live processor state. The renderer also supports native master compressor, reverb and sample-peak limiter, processed WAV track stems and optional codec master export. Unsupported automation and plugin paths fail explicitly rather than disappearing from a master.
+The renderer preflights all tracks and clips, pins verified managed sources through `ProjectStore`, compiles MIDI events from the authoritative tempo map, and rejects an unsupported path before publishing output. Supported audio sources are mono or stereo managed WAV, with optional encoded formats and source-rate conversion when those build paths are enabled. Processed (warped, pitched or stretched) clips render through `processing::OfflineWarpClip`; for an unprocessed clip, the converted source-range endpoints must span exactly the rendered clip duration on the project frame grid. The source-rate reader is worker-only and reads at most 1,024 project frames per call. The limits are 4,096 audio clips and 128 instruments. The renderer also renders built-in master effects in saved order after routed audio and instrument summation, processed WAV track stems and optional codec master export. Offline instances keep their state across blocks and never share live processor state. Unsupported automation and plugin paths fail explicitly rather than disappearing from a master.
 
-The optional saved limiter runs last, after master EQ, compressor and reverb. Its linked-stereo ceiling is a digital sample-peak ceiling; true-peak limiting is separate work. Offline master and each processed stem render a complete additional drain for the prepared 0–10 ms lookahead after all preceding effect tails. The writer discards the leading lookahead frames, so the published first transient and final effect tail retain their project positions. Output headers and selected-rate conversion use this compensated duration. Overflow is checked before opening the writer. A failed setting, processor guard or output operation leaves an existing master or stem bundle intact. Repeated renders are deterministic under the same snapshot and export settings. Direct and routed live graphs reject saved limiter state with explicit status until graph latency accounting, delay-line priming and state-preserving replacement are specified and tested; neither live path bypasses it silently.
+A latent master or track stage, such as a limiter's lookahead, is
+compensated: offline master and each processed stem render an additional
+drain for the route and master latency after all preceding effect tails, and
+the writer discards the leading latency frames, so the published first
+transient and final effect tail keep their project positions. Output headers
+and selected-rate conversion use this compensated duration. Overflow is
+checked before opening the writer. A failed setting, processor guard or output
+operation leaves an existing master or stem bundle intact. Repeated renders
+are deterministic under the same snapshot and export settings. The direct live
+graph rejects master effects; the routed live graph renders them.
 
-For master EQ, export reserves a finite decay tail from the largest filter pole radius. The conservative bound targets approximately −180 dB per section, adds cascade settling and 256 frames, and allows at most ten seconds. A setting whose estimated tail exceeds that limit fails before opening the output writer; it cannot silently truncate a continuing EQ response. The extra duration is included in the WAV header and consists of processing zero input through the same continuous EQ instance. This is a first native-effect tail policy, not a general effect-tail contract for reverb or plugins. A non-finite or overflowing EQ output fails the render, leaving any previous target intact.
+Every built-in effect reports a bounded tail for its saved settings
+(`EffectEngine::tail_frames`), and export renders that tail by processing zero
+input through the same continuous instance. A non-finite or overflowing output
+fails the render, leaving any previous target intact.
 
 There are two export authorities. During live playback, the caller supplies an observed active graph revision matching the project snapshot; pending, failed or stale revisions are rejected. For a stopped project, the control sequencer acquires `StoppedExportAuthority` from its transport gate. This move-only authority binds project ID and revision and holds a lease through preflight, rendering and publication. The gate must prevent playback starting while the lease exists. No caller may synthesize an active graph status from a saved revision.
 
-The desktop prepares a stable snapshot, independent read-only asset store and stopped authority on its control thread, then renders on an owned worker. It reports the exported revision and keeps the window open until an in-progress export finishes. The desktop's current gate is valid only while that desktop has no live playback; integrating desktop transport must replace it with a gate that excludes transport starts during export.
+The desktop prepares a stable snapshot, independent read-only asset store and stopped authority on its control thread, then renders on an owned worker. It reports the exported revision and keeps the window open until an in-progress export finishes. The desktop's `ControlTransportGate` refuses a playback start while a stopped-export lease is held, and refuses the lease while playback runs.
 
 ## Quick export dialog
 
