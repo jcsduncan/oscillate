@@ -80,7 +80,9 @@ of the file and do not use `hasattr` in place of knowing an API.
 
 ## Pull request checks
 
-A pull request to `main` runs these checks; they must pass before merging:
+A pull request to `main` runs these checks; they must pass before merging.
+`scripts/ci/changes.py` skips the build, Python and documentation jobs when
+a pull request changes none of their inputs; a skipped job counts as passed.
 
 - **Build and fast tests**: the Quick preset on Ubuntu 26.04 and the fast
   test tier without live devices.

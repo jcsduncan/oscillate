@@ -5,7 +5,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
-for suite in scripts/packaging tools/listening/warp tests/qualification; do
+for suite in scripts/ci scripts/packaging tools/listening/warp tests/qualification; do
   echo "== $suite"
   python3 -I -m unittest discover -s "$suite" -p 'test_*.py'
 done
