@@ -96,7 +96,7 @@ void a_trace_saves_in_the_background() {
   io.release.release();
   wait_until([&] { return !tracer.saving(); }, "the trace save did not finish");
   require(tracer.status().startsWith(QStringLiteral("Trace saved")) &&
-              tracer.status().contains(QString::number(written_events)) &&
+              tracer.status().endsWith(QStringLiteral("(%1 events)").arg(written_events)) &&
               written_to.parent_path() == directory.path() / "oscillate" / "traces",
           "the saved trace was not reported: " + tracer.status().toStdString());
   // The fake writer did not end the real recording.

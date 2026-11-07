@@ -147,6 +147,9 @@ void PerformanceTrace::finish(const std::filesystem::path& path) {
             {foundation::ErrorCode::internal, "Trace not saved: " + what});
       });
   if (failed) {
+    // The writer never ran, so the recording is still on: end it, or no
+    // later trace could start.
+    trace::stop();
     report(path, foundation::Result<std::size_t>::failure(
                      {foundation::ErrorCode::unavailable, "Trace not saved: " + *failed}));
     return;
