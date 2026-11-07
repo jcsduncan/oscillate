@@ -4,6 +4,7 @@
 #include <cmath>
 #include <limits>
 #include <new>
+#include <optional>
 #include <utility>
 
 namespace oscillate::engine {
@@ -134,19 +135,42 @@ foundation::Result<void> RoutedMixerPublisher::prepare_source_overlay(std::uint6
 foundation::Result<void>
 RoutedMixerPublisher::prepare_control_overlay(std::uint64_t revision,
                                               std::span<const RoutedNodeControl> controls) {
+  return prepare_overlay(revision, controls, std::nullopt);
+}
+
+foundation::Result<void>
+RoutedMixerPublisher::prepare_edge_overlay(std::uint64_t revision,
+                                           std::span<const RoutedEdgeControl> controls) {
+  return prepare_overlay(revision, std::nullopt, controls);
+}
+
+foundation::Result<void>
+RoutedMixerPublisher::prepare_mix_overlay(std::uint64_t revision,
+                                          std::span<const RoutedNodeControl> controls,
+                                          std::span<const RoutedEdgeControl> edge_controls) {
+  return prepare_overlay(revision, controls, edge_controls);
+}
+
+foundation::Result<void> RoutedMixerPublisher::prepare_overlay(
+    std::uint64_t revision, std::optional<std::span<const RoutedNodeControl>> node_overlay,
+    std::optional<std::span<const RoutedEdgeControl>> edge_overlay) {
   auto* prior = active_.load(std::memory_order_acquire);
   if (!prior || revision <= prior->revision || has_pending() ||
       retired_.load(std::memory_order_acquire) != nullptr ||
       hold_requested_.load(std::memory_order_acquire) || held_.load(std::memory_order_acquire))
     return fail(foundation::ErrorCode::conflict,
-                "Control overlay needs a settled graph without a dry insert and a new revision");
+                "Mix overlay needs a settled graph without a dry insert and a new revision");
   if (!prior->mixer->control_overlay_safe())
     return fail(foundation::ErrorCode::unsupported,
-                "Control overlay has a revision-sensitive processor or an active tail");
+                "Mix overlay has a revision-sensitive processor or an active tail");
+  // An overlay that leaves nodes or edges alone keeps the active graph's.
+  const auto controls = node_overlay.value_or(std::span<const RoutedNodeControl>(prior->controls));
+  const auto edge_controls =
+      edge_overlay.value_or(std::span<const RoutedEdgeControl>(prior->edge_controls));
   const auto& nodes = prior->mixer->plan().nodes;
   if (controls.size() != nodes.size() || controls.size() != prior->controls.size())
     return fail(foundation::ErrorCode::invalid_argument,
-                "Control overlay must cover every existing route node");
+                "Mix overlay must cover every existing route node");
   for (std::size_t index = 0; index < controls.size(); ++index) {
     const auto& control = controls[index];
     if (control.id != nodes[index].id || !std::isfinite(control.output_gain.left) ||
@@ -154,14 +178,29 @@ RoutedMixerPublisher::prepare_control_overlay(std::uint64_t revision,
         control.output_gain.left > 4.0F || control.output_gain.right < 0.0F ||
         control.output_gain.right > 4.0F)
       return fail(foundation::ErrorCode::invalid_argument,
-                  "Control overlay has a mismatched node or invalid gain");
+                  "Mix overlay has a mismatched node or invalid gain");
     const auto& old = prior->controls[index];
     if (control.muted != old.muted || control.output_gain.left != old.output_gain.left ||
         control.output_gain.right != old.output_gain.right) {
       if (prior->gains && prior->gains->binds_node_gain(control.id))
         return fail(foundation::ErrorCode::unsupported,
-                    "Control overlay conflicts with channel-level automation");
+                    "Mix overlay conflicts with channel-level automation");
     }
+  }
+  const auto& edges = prior->mixer->plan().edges;
+  if (edge_controls.size() != edges.size() || edge_controls.size() != prior->edge_controls.size())
+    return fail(foundation::ErrorCode::invalid_argument,
+                "Mix overlay must cover every existing route edge");
+  for (std::size_t index = 0; index < edge_controls.size(); ++index) {
+    const auto& control = edge_controls[index];
+    if (control.id != edges[index].id || !std::isfinite(control.gain) || control.gain < 0.0F ||
+        control.gain > 4.0F)
+      return fail(foundation::ErrorCode::invalid_argument,
+                  "Mix overlay has a mismatched edge or invalid gain");
+    if (control.gain != prior->edge_controls[index].gain && prior->gains &&
+        prior->gains->binds_edge_gain(control.id))
+      return fail(foundation::ErrorCode::unsupported,
+                  "Mix overlay conflicts with send-gain automation");
   }
   try {
     auto candidate = std::make_unique<Plan>(Plan{.revision = revision,
@@ -170,58 +209,13 @@ RoutedMixerPublisher::prepare_control_overlay(std::uint64_t revision,
                                                  .control_overlay = true,
                                                  .source_revision = prior->source_revision});
     candidate->controls.assign(controls.begin(), controls.end());
-    candidate->edge_controls = prior->edge_controls;
+    candidate->edge_controls.assign(edge_controls.begin(), edge_controls.end());
     auto* raw = candidate.get();
     owned_.push_back(std::move(candidate));
     pending_.store(raw, std::memory_order_release);
   } catch (const std::bad_alloc&) {
     return fail(foundation::ErrorCode::resource_exhausted,
-                "Control overlay preparation ran out of memory");
-  }
-  return foundation::Result<void>::success();
-}
-
-foundation::Result<void>
-RoutedMixerPublisher::prepare_edge_overlay(std::uint64_t revision,
-                                           std::span<const RoutedEdgeControl> controls) {
-  auto* prior = active_.load(std::memory_order_acquire);
-  if (!prior || revision <= prior->revision || has_pending() ||
-      retired_.load(std::memory_order_acquire) != nullptr ||
-      hold_requested_.load(std::memory_order_acquire) || held_.load(std::memory_order_acquire))
-    return fail(foundation::ErrorCode::conflict,
-                "Edge overlay needs a settled graph without a dry insert and a new revision");
-  if (!prior->mixer->control_overlay_safe())
-    return fail(foundation::ErrorCode::unsupported,
-                "Edge overlay has a revision-sensitive processor or an active tail");
-  const auto& edges = prior->mixer->plan().edges;
-  if (controls.size() != edges.size() || controls.size() != prior->edge_controls.size())
-    return fail(foundation::ErrorCode::invalid_argument,
-                "Edge overlay must cover every existing route edge");
-  for (std::size_t index = 0; index < controls.size(); ++index) {
-    const auto& control = controls[index];
-    if (control.id != edges[index].id || !std::isfinite(control.gain) || control.gain < 0.0F ||
-        control.gain > 4.0F)
-      return fail(foundation::ErrorCode::invalid_argument,
-                  "Edge overlay has a mismatched edge or invalid gain");
-    if (control.gain != prior->edge_controls[index].gain && prior->gains &&
-        prior->gains->binds_edge_gain(control.id))
-      return fail(foundation::ErrorCode::unsupported,
-                  "Edge overlay conflicts with send-gain automation");
-  }
-  try {
-    auto candidate = std::make_unique<Plan>(Plan{.revision = revision,
-                                                 .mixer = prior->mixer,
-                                                 .gains = prior->gains,
-                                                 .control_overlay = true,
-                                                 .source_revision = prior->source_revision});
-    candidate->controls = prior->controls;
-    candidate->edge_controls.assign(controls.begin(), controls.end());
-    auto* raw = candidate.get();
-    owned_.push_back(std::move(candidate));
-    pending_.store(raw, std::memory_order_release);
-  } catch (const std::bad_alloc&) {
-    return fail(foundation::ErrorCode::resource_exhausted,
-                "Edge overlay preparation ran out of memory");
+                "Mix overlay preparation ran out of memory");
   }
   return foundation::Result<void>::success();
 }

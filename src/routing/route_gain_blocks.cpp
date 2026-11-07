@@ -4,6 +4,7 @@
 #include <cmath>
 #include <limits>
 #include <new>
+#include <set>
 #include <utility>
 
 namespace oscillate::routing {
@@ -35,6 +36,19 @@ using Result = foundation::Result<std::shared_ptr<PreparedRouteGainBlocks>>;
   return saved != owner->sends.end() && saved->purpose == project::SendPurpose::sidechain &&
          !live_sidechain(snapshot, *saved);
 }
+
+// A sidechain key whose source is silent (silent_key_sources) sounds at zero
+// whatever its lane says.
+[[nodiscard]] bool silent_key(const project::Snapshot& snapshot,
+                              const std::set<project::TrackId>& silent_keys, project::TrackId track,
+                              project::SendId send) {
+  const auto owner = std::ranges::find(snapshot.tracks, track, &project::Track::id);
+  if (owner == snapshot.tracks.end())
+    return false;
+  const auto saved = std::ranges::find(owner->sends, send, &project::SendRoute::id);
+  return saved != owner->sends.end() && saved->purpose == project::SendPurpose::sidechain &&
+         silent_keys.contains(owner->id);
+}
 } // namespace
 
 Result PreparedRouteGainBlocks::prepare(
@@ -53,6 +67,7 @@ Result PreparedRouteGainBlocks::prepare(
     for (const auto& node : route.latency.nodes)
       result->node_spans_.push_back({node.id, {}});
     result->ticks_.resize(max_frames);
+    const auto silent_keys = silent_key_sources(snapshot);
     result->targets_.assign(targets.begin(), targets.end());
     for (std::size_t index = 0; index < targets.size(); ++index) {
       const auto& target = targets[index];
@@ -129,8 +144,9 @@ Result PreparedRouteGainBlocks::prepare(
           storage_per_frame(result->node_bindings_.size(), count) >
               storage_budget_bytes / max_frames)
         return fail(ErrorCode::resource_exhausted, "route gain block storage exceeds budget");
-      result->edge_bindings_.push_back(
-          {index, edge_index, std::vector<double>(max_frames), std::vector<float>(max_frames)});
+      const bool silent = silent_key(snapshot, silent_keys, target.track(), send->send);
+      result->edge_bindings_.push_back({index, edge_index, std::vector<double>(max_frames),
+                                        std::vector<float>(max_frames), silent ? 0.0F : 1.0F});
     }
     return Result::success(std::move(result));
   } catch (const std::bad_alloc&) {
@@ -166,7 +182,7 @@ bool PreparedRouteGainBlocks::fill_block(engine::BlockContext context, std::size
       for (std::size_t index = 0; index < frames; ++index) {
         if (!std::isfinite(values[index]) || values[index] < 0.0 || values[index] > 4.0)
           return false;
-        binding.samples[index] = static_cast<float>(values[index]);
+        binding.samples[index] = static_cast<float>(values[index]) * binding.key_gain;
       }
       edge_spans_[binding.edge_index].values = std::span(binding.samples).first(frames);
     }

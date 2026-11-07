@@ -59,7 +59,7 @@ The process contains the UI, model, engine, and default plugin host. Plugin scan
 | `processing` | Warp maps, clip frame plans, verified source views, warp render cache, Clay sources | `foundation`, `media`, `project`, `warp_dsp`, `clay_dsp`, `persistence` |
 | `plugins` | VST3 discovery, instance lifecycle, state, parameter metadata, graph nodes | `foundation`, engine processor interface (see §3.1) |
 | `native_dsp` | DSP primitives, built-in processors, the native synth platform (§8.1), note effects, the native effect platform (§8.2) and the optional convolution core | engine processor interface, `warp_dsp` (Crate's sample reader) (see §3.1) |
-| `native_inserts` | Preparing native effect and instrument stages for every chain builder ([ADR-0043](decisions/0043-one-native-insert-path.md)) | `project`, `engine`, `native_dsp`, `automation_project`, `timeline` |
+| `native_inserts` | Preparing native effect and instrument stages for every chain builder ([ADR-0043](decisions/0043-one-native-insert-path.md)) | `project`, `engine`, `routing`, `native_dsp`, `automation_project`, `timeline` |
 | `track_chain` | One chain per track: instrument then inserts, prepared for live playback and export ([ADR-0050](decisions/0050-one-chain-per-track.md)) | `project`, `engine`, `routing`, `native_inserts` |
 | `persistence` | Manifest codec, committed asset references, generations, recovery | `project`, `media`, `codec` |
 | `source_prep` | Bounded control/worker decode of integrity-checked managed audio, for synth media slots and export | `engine`, `persistence`, `media`, `project` |

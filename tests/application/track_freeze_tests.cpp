@@ -255,6 +255,12 @@ void bounce_and_flatten_keep_the_mix() {
   auto session = take(app::ProjectSession::create(root));
   const auto track = add_synth(*session, 57);
   done(session->tracks().set_track_level_pan(track, 0.8, 0.3), "channel");
+  // The track keys a compressor on another: the bounce keys it the same.
+  constexpr std::uint8_t keyed_note = 45;
+  const auto keyed = add_synth(*session, keyed_note);
+  const auto press =
+      take(session->effects().add_effect_engine(project::SignalPathId{keyed}, 0, "press"));
+  (void)take(session->routing().add_sidechain(track, keyed, press, 1.0));
   done(session->saving().save(), "save");
   const auto before = export_master(root, session->snapshot(), directory.path() / "before.wav");
   const auto tracks = session->snapshot().tracks.size();
@@ -277,6 +283,7 @@ void bounce_and_flatten_keep_the_mix() {
     REQUIRE_EQ(copy->clips.size(), 1, "the bounce is a new audio track below its muted source");
     REQUIRE_EQ(copy->level, 0.8, "the bounce is a new audio track below its muted source");
     REQUIRE_EQ(copy->pan, 0.3, "the bounce is a new audio track below its muted source");
+    REQUIRE_EQ(copy->sends.size(), 1, "the bounce keys what its muted source keyed");
   }
   const auto bounced = export_master(root, session->snapshot(), directory.path() / "bounce.wav");
   auto largest = largest_difference(before, bounced);
