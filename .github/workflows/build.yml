@@ -14,7 +14,27 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: classify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 -I scripts/ci/changes.py "$BASE_SHA" "${HEAD_SHA:-HEAD}"
+
+  # Skipped (which satisfies the required check) when only docs changed.
   build-test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     name: Build and fast tests (Ubuntu 26.04, Qt Quick)
     runs-on: ubuntu-latest
     container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
