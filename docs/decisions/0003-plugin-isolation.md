@@ -1,6 +1,6 @@
 # ADR-0003 — Plugin scanning and execution boundaries
 
-**Status:** Accepted; implemented for scanning (reviewed 20 October 2026). VST3 scanning runs in a forked helper with failure counting and quarantine (`src/plugins/vst3_scan.cpp`, `scan_protocol.cpp`). Hosting is in-process; the optional per-plugin isolation route is not built.
+**Status:** Accepted; implemented for scanning. VST3 scanning runs in a forked helper with failure counting and quarantine (`src/plugins/vst3_scan.cpp`, `scan_protocol.cpp`). Hosting is in-process; the optional per-plugin isolation route is not built.
 **Date:** 14 October 2026
 **Requirements:** PRD §§7, 16, 21; FS-04 PI-01/PI-05.
 

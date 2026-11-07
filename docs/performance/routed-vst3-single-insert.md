@@ -18,9 +18,9 @@ blocks in the same thread. An overridden allocator counts callback allocations.
 | 128 frames | 2,296 ns/block | 0 |
 
 Run with `OSCILLATE_BENCHMARK_ROUTED_VST3=1` on the Release
-`oscillate_vst3_routed_insert_tests` executable. This recorded baseline
-predates the fixture's change to physically delay the seven frames it reports;
-rebenchmark before comparing current callback time against it. The independent
+`oscillate_vst3_routed_insert_tests` executable. The fixture delays its
+audio by the seven frames it reports; this baseline was measured without that
+delay, so rebenchmark before comparing current callback time against it. The independent
 application route test uses a delay processor for the parallel-path
 impulse-alignment oracle. The VST3 test proves
 selective track processing, saved component-state restoration, runtime-history

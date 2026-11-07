@@ -1,6 +1,6 @@
 # ADR-0011 — Device loss and in-process reselection
 
-**Status:** Accepted for C1 control contract; live reselection proof remains open
+**Status:** Accepted; the control contract is implemented and tested (`application::DevicePlaybackControl`), but the app does not use it: on device loss playback stops and the user picks an output and presses Play. In-process resume and a physical disconnect and reselect test are not built.
 **Date:** 14 October 2026  
 **Requirements:** PRD §§5, 7, 19, 21; FS-02 ER-05/ER-11; ADR-0006.
 

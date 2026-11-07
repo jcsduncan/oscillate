@@ -1,6 +1,6 @@
 # ADR-0006 — Media prefetch and adaptive playback processing
 
-**Status:** Accepted; implemented (reviewed 20 October 2026). The clip prefetch worker with priming status, per-clip rings and transport-generation tags is `src/application/clip_prefetch_worker.cpp` and `prefetch_control.cpp`.
+**Status:** Accepted; implemented. The clip prefetch worker with priming status, per-clip rings and transport-generation tags is `src/application/clip_prefetch_worker.cpp` and `prefetch_control.cpp`.
 **Date:** 14 October 2026
 **Requirements:** PRD §§7–8, 11–12; FS-02 ER-05/ER-11; FS-05 PA-05/PA-07.
 

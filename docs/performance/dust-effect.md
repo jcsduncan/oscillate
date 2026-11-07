@@ -7,9 +7,9 @@ ADR-0069 follow-up. Measured 29 October 2026 on an Intel Core i7-10700K, GCC 15.
 The bench (`bench/native_dsp/dust_bench.cpp`) is built only with `-DOSCILLATE_BUILD_BENCHES=ON`, and it is not a CTest gate. Build and run it in an uninstrumented Release build, one core pinned, with nothing else building:
 
 ```sh
-cmake -DOSCILLATE_BUILD_BENCHES=ON build/quick-opt
-scripts/build.sh build/quick-opt --target oscillate_dust_bench
-build/quick-opt/bench/native_dsp/oscillate_dust_bench
+cmake -DOSCILLATE_BUILD_BENCHES=ON build/release
+scripts/build.sh build/release --target oscillate_dust_bench
+build/release/bench/native_dsp/oscillate_dust_bench
 ```
 
 ## What it measures
@@ -29,8 +29,8 @@ Expect the cost to follow:
 ## Results
 
 **Setup**
-- Hardware: _(fill in)_
-- Build: _(compiler, flags)_
+- Hardware: Intel Core i7-10700K.
+- Build: GCC 15.2, `quick-opt` Release, DAW open.
 - Units: % of one core, per block's real-time duration.
 
 | Preset | 64 mean | 64 p99 | 128 mean | 128 p99 |

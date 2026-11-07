@@ -1,6 +1,6 @@
 # ADR-0010 — Derived-media identity and stale-result rejection
 
-**Status:** Accepted for durable cache identity and project-local eviction; shared source-analysis cache specified, budget integration pending
+**Status:** Accepted; implemented: derived-media cache keys, project-local caches and the shared source-analysis cache, each held to a byte budget (`CacheControl::enforce_budget`, `enforce_source_analysis_cache_budget`).
 **Date:** 14 October 2026  
 **Requirements:** PRD §§8, 10–12, 18, 21; FS-03 PM-03/PM-04/PM-08; FS-05 PA-06/PA-07; ADR-0006/0009.
 

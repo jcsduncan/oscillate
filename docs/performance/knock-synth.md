@@ -5,9 +5,9 @@ ADR-0068 follow-up. Measured 29 October 2026 on an Intel Core i7-10700K (3.8 GHz
 **How to run**
 
 ```sh
-cmake -DOSCILLATE_BUILD_BENCHES=ON build/quick-opt
-scripts/build.sh build/quick-opt --target oscillate_knock_bench
-build/quick-opt/bench/native_dsp/oscillate_knock_bench
+cmake -DOSCILLATE_BUILD_BENCHES=ON build/release
+scripts/build.sh build/release --target oscillate_knock_bench
+build/release/bench/native_dsp/oscillate_knock_bench
 ```
 
 **Workload.** `oscillate_knock_bench` hits all eight pads on every sixteenth at 124 BPM for 10 s, so both voices of every pad ring. The kit loads a sixteenth before the first hits, as a kit chosen while playing does. It prints:

@@ -1,6 +1,6 @@
 # ADR-0056 — Snarl: a dubstep growl and wobble synth (ninth native engine)
 
-**Status:** Superseded by [ADR-0057](0057-nova-flagship-synth.md) on 25 October 2026: Snarl was removed. Its growl tables, formant model and rack modules live on in Nova. **Date:** 21 October 2026.
+**Status:** Superseded by [ADR-0057](0057-nova-flagship-synth.md): Snarl is not in the code; its growl tables, formant model and rack modules are part of Nova. **Date:** 21 October 2026.
 **Builds on:** ADR-0027 (native-synth platform), ADR-0044 (Lumen wavetables), ADR-0031 (Halo FM), ADR-0038 (live switching).
 
 ## Context

@@ -230,7 +230,7 @@ header b { color: var(--ink); }
     <div class="card">
       <h2>Built from what we have</h2>
       <ul>
-        <li><b>Concert:</b> the hammer contact model, modal resonators and the soundboard's body network move into a shared library that Concert and Knock both use.</li>
+        <li><b>Modal library:</b> the felt contact law, the modal resonators and a body resonator live in a shared library (<code>modal_dsp</code>) that Knock strikes.</li>
         <li><b>Pulse and Anvil:</b> the falling pitch of a slack skin (Slack) and drawn pitch curves.</li>
         <li><b>Ember:</b> seeded variation (Hand), so repeated hits differ but every export matches playback.</li>
         <li><b>Crate:</b> later, a striker made from your own recording.</li>
@@ -240,7 +240,7 @@ header b { color: var(--ink); }
       <h2>Loops and effects</h2>
       <ul>
         <li>The pads take MIDI notes C1 to G1. <b>Velocity changes the tone</b>, not only the level.</li>
-        <li>Each pad has its own pan and room send. In the DAW, each pad also gets its own output, so Orbit, Flyby or Pump can go on a single pad.</li>
+        <li>Each pad has its own pan and room send. Knock renders one stereo output.</li>
         <li>Patterns come from MIDI clips and note effects (chance, ratchets, echo), so there is no second sequencer to learn.</li>
       </ul>
     </div>

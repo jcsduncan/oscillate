@@ -1,6 +1,6 @@
 # Concert sampled piano: memory and callback cost
 
-ADR-0071, 29 October 2026. The figures below are design numbers measured on the installed library. **CPU has not been measured yet**: the sampled engine has not been built. The modelled engine's figures (ADR-0036, 14.6–54 % of a core) no longer apply.
+ADR-0071. The memory figures below are measured on the installed library. Concert's CPU has not been measured; see *To measure*.
 
 ## Memory
 

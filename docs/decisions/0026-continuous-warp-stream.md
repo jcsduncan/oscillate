@@ -1,6 +1,6 @@
 # ADR-0026 — Continuous warp stream and musical-time warp model
 
-**Status:** Accepted for the schema 1.28 production contract (points 4–8), which is implemented: per-clip warp mode and parameters, source-rate conversion and the LDW2 cache, served by the in-house `warp_dsp` engine. Per-mode quality and CPU evidence is recorded in the implementation history. **Date:** 18 October 2026 (status reviewed 20 October 2026).
+**Status:** Accepted; points 4–8 are implemented: per-clip warp mode and parameters, source-rate conversion and the LDW2 cache, served by the in-house `warp_dsp` engine. **Date:** 18 October 2026.
 **Requirements:** PRD §11–12; FS-01 TA-03/TA-05; FS-02 ER-05/ER-11; FS-05 PA-01–PA-08. Amends ADR-0006 (ring tag semantics) and supersedes the Signalsmith candidate decisions in `docs/performance/warp-continuous-decision.md`.
 
 ## Context

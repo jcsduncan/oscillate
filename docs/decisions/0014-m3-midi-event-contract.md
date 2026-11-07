@@ -1,6 +1,6 @@
 # ADR-0014 — M3 MIDI clips, event timing and sampler boundary
 
-**Status:** Accepted; implemented. The bundled sampler is superseded by Crate ([ADR-0063](0063-crate-chop-sampler.md)) and removed. As built, the event plan fed the bundled sampler, the native synths and VST3 instruments, and since schema 1.32 also carries pedal lanes ([ADR-0035](0035-pedals-in-midi-clips.md)).
+**Status:** Accepted; implemented. The MIDI event plan feeds the native synths, Crate ([ADR-0063](0063-crate-chop-sampler.md)) and VST3 instruments, and carries pedal lanes ([ADR-0035](0035-pedals-in-midi-clips.md)).
 **Date:** 14 October 2026
 **Requirements:** PRD §§9–10, 13, 17–18; FS-01 TA-03/TA-08/TA-09; FS-04 PI-06; FS-06 AM-07.
 

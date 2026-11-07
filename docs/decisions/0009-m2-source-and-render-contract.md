@@ -1,6 +1,6 @@
 # ADR-0009 — Durable source identity and stereo render context for M2
 
-**Status:** Accepted for the M2 implementation slice
+**Status:** Accepted; implemented: durable source records (`project::SourceRecord`) and a stereo render context whose `engine::BlockContext` carries the project sample position and transport generation.
 **Date:** 14 October 2026
 **Requirements:** PRD §§7–9, 18, 21; FS-02 ER-05/ER-11; FS-03 PM-01–PM-05; ADR-0004/0006/0008.
 

@@ -18,6 +18,6 @@
 | Signal | under 0.2% | One oscillator, or noise through the 30-odd first-order pink corners. Creation fits the pink filter in about 15 ms. |
 | Expanse | 5.1–6.5% | 16 lines with two allpasses and two biquads each; Hadamard mixing; shimmer when on. |
 
-Quality comes first (see the native synth roadmap), so nothing is traded for CPU here. The obvious savings, if they're ever needed:
+Quality comes first, so nothing is traded for CPU here. The obvious savings, if they're ever needed:
 - **Forge:** a lower oversampling factor while the drive is low.
 - **Expanse:** computing absorption only when the decay controls move, instead of every tick.

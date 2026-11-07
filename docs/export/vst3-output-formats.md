@@ -18,9 +18,8 @@ hand it to the same master output stage as the native offline master
 - publishes through the writer's private temporary file and atomic rename, so a
   rejected or failed render leaves an existing target unchanged.
 
-The native master now uses this stage too, keeping its loudness tap as an
-observer on the emitted output samples. Its previous resampler/writer loop was
-moved, not reimplemented.
+The native master uses this stage too, keeping its loudness tap as an
+observer on the emitted output samples.
 
 New APIs take `MasterOutputOptions`, a variant of `MasterRenderOptions` and
 `EncodedMasterOptions`: `render_vst3_effect_master`,
@@ -39,7 +38,7 @@ rate to these paths; its existing rate validation still rejects MP3 above
 - VST3 paths do not produce loudness reports; requesting one fails before
   output is opened. Report support remains the native float32 WAV slice.
 - VST3 stems are single-file WAV APIs (any WAV format/rate); there is no VST3
-  stem-directory bundle or encoded stem, and Quick does not expose VST3 stems.
+  stem-directory bundle or encoded stem, and Quick exports the VST3 instrument source stem but no VST3 effect stems.
 - The JACK real-time master remains project-rate float32 WAV.
 - An MP3 above 48 kHz, an unsupported output rate, a missing codec or a missing
   converter fails before publication. Plugin process faults fail mid-render and
