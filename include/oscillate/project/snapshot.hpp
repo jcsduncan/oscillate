@@ -229,4 +229,9 @@ channel_control_domain(TrackControlTarget::Key key) noexcept {
 // explicitly reject a saved convolution insert even when its slot is bypassed.
 [[nodiscard]] bool has_convolution_insert(const Snapshot& snapshot) noexcept;
 
+// The heap and inline bytes a snapshot holds, estimated from its element
+// counts, strings and plugin state blobs. Undo history retention budgets with
+// it; it is not an allocator measurement.
+[[nodiscard]] std::size_t estimated_bytes(const Snapshot& snapshot) noexcept;
+
 } // namespace oscillate::project
