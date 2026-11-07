@@ -207,11 +207,16 @@ void trace_contract() {
   REQUIRE_EQ(trace::capacity_events(), pool_chunks * trace::chunk_events,
              "the pool holds whole chunks of the budget");
   trace::label("node", 7, "Kick \"808\"");
+  // Each thread records its spans, one instant and one counter.
+  constexpr int trace_threads = 4;
+  constexpr int spans_per_thread = 100;
+  constexpr int other_events_per_thread = 2;
   std::vector<std::thread> threads;
-  for (int t = 0; t < 4; ++t) {
+  threads.reserve(trace_threads);
+  for (int t = 0; t < trace_threads; ++t) {
     threads.emplace_back([t] {
       trace::name_thread(t == 0 ? "audio" : "worker");
-      for (int i = 0; i < 100; ++i) {
+      for (int i = 0; i < spans_per_thread; ++i) {
         OSCILLATE_TRACE_SPAN("node", t == 0 ? 7 : 1);
       }
       trace::instant("over budget", 3);
@@ -226,7 +231,9 @@ void trace_contract() {
   }
   const auto written = trace::stop_and_write(path);
   REQUIRE_TRUE(written, "every event, newest first, was written");
-  REQUIRE_EQ(written.value(), 4 * 102 + trace::chunk_events,
+  REQUIRE_EQ(written.value(),
+             std::size_t{trace_threads} * (spans_per_thread + other_events_per_thread) +
+                 trace::chunk_events,
              "every event, newest first, was written");
   {
     OSCILLATE_TRACE_SPAN("after");
@@ -375,6 +382,7 @@ void file_io_contract() {
   UniqueFd target;
   target = std::move(moved);
   REQUIRE_TRUE(target.valid(), "UniqueFd moves and closes");
+  // NOLINTNEXTLINE(bugprone-use-after-move,clang-analyzer-cplusplus.Move): the moved-from state.
   REQUIRE_TRUE(!moved.valid(), "UniqueFd moves and closes");
   REQUIRE_OK(target.close("close"), "UniqueFd moves and closes");
   std::filesystem::remove_all(root);

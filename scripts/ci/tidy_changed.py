@@ -3,7 +3,8 @@
 Usage: tidy_changed.py PRESET BASE
 A changed C++ source is checked itself. A changed header is checked through
 the source of the same name beside it, or under src/ for a public header in
-include/oscillate/; HeaderFilterRegex then reports the header's findings.
+include/oscillate/. Only findings in the changed files are reported, so a
+change is not held to findings in the unchanged headers it includes.
 Sources missing from the preset's compilation database (a feature the preset
 leaves out) are skipped. scripts/check-tidy.sh checks the whole tree.
 """
@@ -59,6 +60,12 @@ def translation_units(changed, configured):
     return selected
 
 
+def line_filter(changed):
+    """clang-tidy --line-filter JSON naming every changed C++ file, all lines."""
+    names = [path for path in changed if PurePosixPath(path).suffix in (".cpp", *HEADER_SUFFIXES)]
+    return json.dumps([{"name": name} for name in names])
+
+
 def configured_sources(preset):
     database = ROOT / "build" / preset / "compile_commands.json"
     with open(database, encoding="utf-8") as stream:
@@ -71,13 +78,16 @@ def main():
     if len(sys.argv) != 3:
         sys.exit("Usage: tidy_changed.py PRESET BASE")
     preset, base = sys.argv[1], sys.argv[2]
-    sources = translation_units(changed_files(base), configured_sources(preset))
+    changed = changed_files(base)
+    sources = translation_units(changed, configured_sources(preset))
     if not sources:
         print(f"No configured C++ translation unit changed against {base}.")
         return
     print(f"Checking {len(sources)} translation unit(s) against {base}.", flush=True)
     script = str(ROOT / "scripts" / "check-tidy.sh")
-    sys.exit(subprocess.run([script, preset, *sources], check=False, cwd=ROOT).returncode)
+    environment = dict(os.environ, CLANG_TIDY_LINE_FILTER=line_filter(changed))
+    result = subprocess.run([script, preset, *sources], check=False, cwd=ROOT, env=environment)
+    sys.exit(result.returncode)
 
 
 if __name__ == "__main__":
