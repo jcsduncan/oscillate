@@ -157,10 +157,14 @@ Rectangle {
                     id: cellText
                     visible: !cell.iconShown
                     anchors.centerIn: parent
+                    // Equal cells can be narrower than a long label: it
+                    // stays inside its cell, elided.
+                    width: Math.min(implicitWidth, parent.width - control.theme.segmentedIconInset)
                     horizontalAlignment: Text.AlignHCenter
                     text: cell.label
                     color: cell.selectionInk
                     font: control.theme.segmentedFont(cell)
+                    elide: Text.ElideRight
                 }
                 Loader {
                     readonly property string kind: control.icons.length > cell.index ? control.icons[cell.index] : ""
