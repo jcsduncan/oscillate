@@ -69,8 +69,12 @@ payload = (b'fmt ' + struct.pack('<IHHIIHH', 16, 1, 1, 48000, 96000, 2, 16)
            + b'data' + struct.pack('<I', len(frames)) + frames)
 Path(sys.argv[1]).write_bytes(b'RIFF' + struct.pack('<I', len(payload) + 4) + b'WAVE' + payload)
 PY
+# Each routing step starts from a fresh profile, so neither relies on
+# layout preferences an earlier scenario saved.
+export XDG_CONFIG_HOME="$fixture/routing-config"
 routing=$("$app" --create "$fixture/routing" --smoke --smoke-routing --smoke-routing-source "$fixture/routing.wav")
 [[ $routing == *"Qt Quick routed audio played, edited, stopped and reopened"* ]]
+export XDG_CONFIG_HOME="$fixture/routing-reopen-config"
 routing_reopened=$("$app" --open "$fixture/routing" --smoke --smoke-verify-routing)
 [[ $routing_reopened == *"Qt Quick routing reopened"* ]]
 
