@@ -18,6 +18,7 @@
 #include <string>
 #include <string_view>
 #include <sys/wait.h>
+#include <thread>
 #include <unistd.h>
 #include <utility>
 #include <vector>
@@ -155,6 +156,9 @@ constexpr std::uint64_t created_revision = 1;
 constexpr std::uint64_t recreated_revision = 2;
 // Comfortably older than the test process, whatever the filesystem's clock.
 constexpr auto stale_stage_age = std::chrono::hours(1);
+// File times come from a coarse clock that can trail the precise clock the
+// process start is read from; wait it out before making "newer" stages.
+constexpr auto coarse_clock_margin = std::chrono::milliseconds(50);
 
 void wait_for_sigkill(pid_t child, std::string_view what) {
   int status = 0;
@@ -387,6 +391,7 @@ int main(int argc, char** argv) {
   if (argc > 1)
     return fresh_main(std::vector<std::string_view>(argv + 1, argv + argc));
   try {
+    std::this_thread::sleep_for(coarse_clock_margin);
     for (const auto& kill : creation_kills)
       verify_killed_creation(kill);
     verify_live_stage_kept();
