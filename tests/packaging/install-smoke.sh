@@ -33,6 +33,9 @@ launch() {
 case $kind in
 deb)
   export DEBIAN_FRONTEND=noninteractive
+  # The minimised container image skips /usr/share/doc on install; a desktop
+  # install keeps it, and the notices and SBOM live there.
+  rm -f /etc/dpkg/dpkg.cfg.d/excludes
   apt-get update -qq
   apt-get install -y -qq "$artifact"
   docs=/usr/share/doc/oscillate
