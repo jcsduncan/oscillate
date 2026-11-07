@@ -10,6 +10,8 @@ set(oscillate_quick_core_sources
   src/automation_projection.hpp
   src/app_logging.cpp
   src/app_logging.hpp
+  src/crash_report_controller.cpp
+  src/crash_report_controller.hpp
   src/audio_import_controller.cpp
   src/audio_import_controller.hpp
   src/insert_chain_view.cpp
@@ -322,6 +324,8 @@ oscillate_add_quick_core(oscillate_quick_core
 
 add_executable(oscillate main.cpp)
 target_link_libraries(oscillate PRIVATE oscillate_quick_core)
+# Recorded in each session's crash-report description.
+target_compile_definitions(oscillate PRIVATE OSCILLATE_VERSION="${PROJECT_VERSION}")
 if(OSCILLATE_BUILD_VST3_SCANNER)
   add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/oscillate_vst3_scan_helper

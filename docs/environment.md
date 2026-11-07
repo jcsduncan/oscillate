@@ -16,7 +16,7 @@ for ordinary use.
 | `OSCILLATE_WREN_LIBRARY` | `src/native_dsp/synth/wren_library.cpp` | Directory of Wren's flute library. |
 | `XDG_DATA_HOME` | presets, grooves, racks, traces, sample libraries | Base for user data; defaults to `~/.local/share`. |
 | `XDG_CACHE_HOME` | shared source-analysis cache, Nova preset map | Base for disposable caches; defaults to `~/.cache`. |
-| `XDG_STATE_HOME` | log files | Base for the log directory; defaults to `~/.local/state`. |
+| `XDG_STATE_HOME` | log files, crash reports | Base for the log and crash-report directories; defaults to `~/.local/state`. |
 | `HOME` | project library, VST3 scan roots, fallbacks above | Used when the XDG variables are unset. |
 
 The sample-library installers in `tools/concert`, `tools/fret` and
@@ -35,6 +35,7 @@ variable for both or for neither. See the README's
 | `$XDG_DATA_HOME/oscillate/traces/` | Performance traces saved from the command palette. |
 | `$XDG_DATA_HOME/oscillate/instruments/` | Installed sample libraries (Concert, Fret, Wren). |
 | `$XDG_STATE_HOME/oscillate/logs/` | The application log, `oscillate.log`, also written to stderr. It rotates at 1 MiB, keeping `oscillate.1.log` to `oscillate.4.log`. Status messages, Qt and QML warnings, device start and stop, VST3 scan failures with the plugin's stderr, and audio-callback events (silenced blocks, xruns) go here. |
+| `$XDG_STATE_HOME/oscillate/crash-reports/` | Local [crash reports](crash-reports.md): `session.txt` (this session's description), `crashed` (the marker a crash leaves) and one `oscillate-crash-<time>.txt` per crash. Nothing here is sent anywhere. |
 | `$XDG_CACHE_HOME/oscillate/` | Disposable caches: `source-analysis/` (shared waveform, tempo and key results) and `constellation/` (Nova preset map). Safe to delete while the application is closed. |
 | `~/.vst3`, `/usr/lib/vst3`, `/usr/lib64/vst3`, `/usr/local/lib/vst3`, `/usr/local/lib64/vst3` | VST3 scan roots. |
 

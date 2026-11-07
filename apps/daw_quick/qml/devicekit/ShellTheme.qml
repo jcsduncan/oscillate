@@ -1251,4 +1251,12 @@ KitTheme {
     readonly property color editorButtonHover: "#35556a"
     readonly property color editorButtonEdge: "#738397"
     readonly property color editorButtonInk: "#e9eef5"
+
+    // ---- Crash report notice (CrashReportNotice) ----
+    // A card over the shell after a crash: the export dialog's scrim and
+    // card shape, a fixed width, and a row of buttons under the report path.
+    readonly property int crashNoticeWidth: 520
+    readonly property int crashNoticeZ: 60
+    readonly property int crashNoticeButtonHeight: 30
+    readonly property int crashNoticePathPadding: 8
 }

@@ -12,7 +12,15 @@ on:
       - CODE_OF_CONDUCT.md
       - scripts/ci/docs-requirements.txt
       - scripts/ci/mkdocs_hooks.py
+      - scripts/ci/known_issues.py
       - .github/workflows/pages.yml
+  # The known-issues page lists open issues labelled known-issue, so a
+  # labelled issue changing republishes the site.
+  issues:
+    types: [opened, edited, closed, reopened, labeled, unlabeled, deleted]
+  # Weekly backstop, so the page never drifts far from the issues.
+  schedule:
+    - cron: "23 4 * * 1"
   workflow_dispatch:
 
 concurrency:
@@ -25,8 +33,23 @@ permissions:
 jobs:
   build:
     name: Build the MkDocs site
+    # An issue event matters only when the issue carries, gains or loses the label.
+    # A label event matters only for that label itself.
+    if: >-
+      github.event_name != 'issues' ||
+      (
+        (github.event.action == 'labeled' || github.event.action == 'unlabeled') &&
+        github.event.label.name == 'known-issue'
+      ) ||
+      (
+        github.event.action != 'labeled' && github.event.action != 'unlabeled' &&
+        contains(github.event.issue.labels.*.name, 'known-issue')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read # Check out the repository.
+      issues: read # List the issues labelled known-issue.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -36,9 +59,15 @@ jobs:
           python-version: "3.14"
       - name: Install MkDocs
         run: python -I -m pip install --quiet -r scripts/ci/docs-requirements.txt
+      - name: Gather known issues
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: python -I scripts/ci/known_issues.py --repository "$REPOSITORY" --output "$RUNNER_TEMP/known-issues.md"
       - name: Build
         env:
           NO_MKDOCS_2_WARNING: "1"
+          OSCILLATE_KNOWN_ISSUES: ${{ runner.temp }}/known-issues.md
         run: python -I -m mkdocs build --strict --site-dir site
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
