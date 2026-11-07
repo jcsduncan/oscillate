@@ -277,14 +277,18 @@ ChordQuality still_colour(ChordQuality q) noexcept {
 // Measured over PML's Iconic Chord Progressions (430 chords of a beat or
 // more): 63 % plain triads, add9 on 8. Each degree's colours, weighted by
 // how often the records use them there; the first is the plain chord.
+// Slots past a degree's count stay unread; they hold a plain major at no weight.
 struct Weighted {
-  ChordQuality quality;
-  double weight;
+  ChordQuality quality = ChordQuality::major;
+  double weight = 0.0;
 };
 struct DegreeColours {
   std::array<Weighted, 5> choices;
   std::uint8_t count;
 };
+// The slots past each count take Weighted's default member initialisers, which
+// this check reads as zero.
+// NOLINTBEGIN(bugprone-invalid-enum-default-initialization)
 constexpr DegreeColours natural_colours(std::uint8_t degree, bool minor_chord) noexcept {
   using enum ChordQuality;
   switch (degree) {
@@ -313,6 +317,7 @@ constexpr DegreeColours natural_colours(std::uint8_t degree, bool minor_chord) n
                        : DegreeColours{{{{major, 33}, {sixth, 8}, {sus4, 8}, {sus2, 4}}}, 4};
   }
 }
+// NOLINTEND(bugprone-invalid-enum-default-initialization)
 constexpr std::uint64_t natural_salt = 0x4E41'5455ULL;
 
 bool inside(const ChordSymbol& chord, const Scale& scale, std::uint8_t tonic) noexcept {
@@ -412,7 +417,7 @@ void apply_devices(std::vector<ChordRegion>& ch, const LabOptions& o, const Scal
   const auto tonic = pc(o.tonic);
   if (has(Device::borrowed)) {
     auto& c = ch[ch.size() > 2 ? ch.size() - 2 : 1];
-    ChordQuality q{};
+    auto q = c.chord.quality;
     if (detail::flipped(c.chord.quality, q)) {
       c.chord.quality = q;
       c.device = ChordDevice::borrowed;
@@ -579,7 +584,7 @@ Suggestion generate(const LabOptions& o, Variant variant) {
     detail::SplitMix64 rng(o.seed ^ rotate_salt);
     const auto r =
         1 + static_cast<std::size_t>(rng.unit() * static_cast<double>(degrees.size() - 1));
-    std::rotate(degrees.begin(), degrees.begin() + static_cast<std::ptrdiff_t>(r), degrees.end());
+    std::ranges::rotate(degrees, degrees.begin() + static_cast<std::ptrdiff_t>(r));
     detail_label = "starts on chord " + std::to_string(r + 1);
   }
   const auto borrowed_at = degrees.size() - 2;

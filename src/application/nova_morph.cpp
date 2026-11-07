@@ -152,7 +152,7 @@ Result<Sound> morph(const native_dsp::synth::EngineDescriptor& table, std::span<
     double weight = 0.0;
     double position = 0.0;
     for (const auto& part : parts) {
-      if (module != nullptr) {
+      if (uid && module != nullptr) {
         const auto* theirs = module_at(part.sound->document, *uid);
         if (theirs == nullptr || *theirs != *module)
           continue;

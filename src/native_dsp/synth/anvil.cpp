@@ -815,7 +815,7 @@ private:
   void clear() noexcept {
     for (auto& hit : hits_)
       hit = Hit{};
-    std::fill(comb_.begin(), comb_.end(), 0.0);
+    std::ranges::fill(comb_, 0.0);
     comb_write_ = 0;
     comb_lp_ = 0.0;
     for (std::size_t i = 0; i < space_.size(); ++i) {
@@ -1357,7 +1357,7 @@ Preview render_preview(std::span<const double> values, const project::NativeSynt
       kernel.note_on({{1, 1}, {0, 1}, key, velocity});
       preview.tail_hz = kernel.sounding_tail_hz();
     }
-    std::fill(block.begin(), block.end(), engine::StereoFrame{0.0F, 0.0F});
+    std::ranges::fill(block, engine::StereoFrame{0.0F, 0.0F});
     kernel.render(std::span(block).first(count));
     for (std::size_t i = 0; i < count; ++i) {
       preview.master[frame + i] = 0.5F * (block[i].left + block[i].right);

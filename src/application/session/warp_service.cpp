@@ -25,7 +25,7 @@ using Follow = std::pair<const project::Clip*, ClipWarpProposal>;
 void append_proposal(std::vector<project::Operation>& operations, const project::Clip& clip,
                      ClipWarpProposal proposal) {
   if (proposal.placement != clip.placement)
-    operations.emplace_back(project::SetClipPlacement{clip.id, std::move(proposal.placement)});
+    operations.emplace_back(project::SetClipPlacement{clip.id, proposal.placement});
   if (proposal.processing != clip.processing)
     operations.emplace_back(project::SetClipProcessing{clip.id, std::move(proposal.processing)});
 }
@@ -72,7 +72,7 @@ Result<void> WarpService::apply_audio_clip_warp(project::ClipId clip,
         {ErrorCode::conflict, "The clip changed since this warp proposal was made"});
   std::vector<project::Operation> operations;
   if (placement != found->placement)
-    operations.emplace_back(project::SetClipPlacement{clip, std::move(placement)});
+    operations.emplace_back(project::SetClipPlacement{clip, placement});
   if (processing != found->processing)
     operations.emplace_back(project::SetClipProcessing{clip, std::move(processing)});
   if (operations.empty())

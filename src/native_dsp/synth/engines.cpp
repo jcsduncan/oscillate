@@ -18,6 +18,7 @@
 
 namespace oscillate::native_dsp::synth {
 namespace {
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): engines are built from constant tables.
 const std::array<const SynthEngine*, 13> registry{
     &prism::engine(),  &ember::engine(), &nova::engine(),    &pulse::engine(), &halo::engine(),
     &torque::engine(), &drift::engine(), &concert::engine(), &anvil::engine(), &crate::engine(),

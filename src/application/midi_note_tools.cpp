@@ -57,8 +57,14 @@ struct Stream {
 
 // Moved notes must not share a start and key with each other or with notes
 // that stay.
-[[nodiscard]] bool collides(std::span<const project::MidiNote> notes,
-                            std::span<const project::MidiNote> changed) {
+// A clip's notes and the ones an edit changes.
+struct NoteEdit {
+  std::span<const project::MidiNote> notes;
+  std::span<const project::MidiNote> changed;
+};
+[[nodiscard]] bool collides(NoteEdit edit) {
+  const auto notes = edit.notes;
+  const auto changed = edit.changed;
   std::set<std::pair<std::int64_t, std::uint8_t>> taken;
   for (const auto& note : notes) {
     const auto moved = std::ranges::find(changed, note.id, &project::MidiNote::id);
@@ -125,7 +131,7 @@ namespace {
 
 } // namespace
 
-std::uint8_t transpose_in_scale(int key, int degrees, project::MusicalKey scale) noexcept {
+std::uint8_t transpose_in_scale(int key, project::MusicalKey scale, int degrees) noexcept {
   const auto classes = scale_pitch_classes(scale);
   int at = snap_to_scale(key, scale);
   const int direction = degrees < 0 ? -1 : 1;
@@ -285,7 +291,9 @@ std::vector<project::MidiNote> humanize_timing(std::span<const project::MidiNote
 
 NoteResult quantize_notes(std::span<const project::MidiNote> notes,
                           std::span<const project::NoteId> scope, const QuantizeSettings& settings,
-                          std::int64_t clip_start, std::int64_t pattern_length) {
+                          ClipPattern pattern) {
+  const std::int64_t clip_start = pattern.clip_start;
+  const std::int64_t pattern_length = pattern.pattern_length;
   if (settings.grid_ticks <= 0 || !std::isfinite(settings.strength) ||
       !std::isfinite(settings.swing))
     return NoteResult::failure({ErrorCode::invalid_argument, "Choose a quantise grid"});
@@ -332,7 +340,7 @@ NoteResult quantize_notes(std::span<const project::MidiNote> notes,
     if (result.start != note.start || result.end != note.end)
       changed.push_back(result);
   }
-  if (collides(notes, changed))
+  if (collides({.notes = notes, .changed = changed}))
     return NoteResult::failure(
         {ErrorCode::conflict, "Quantise would place two notes at the same pitch and time"});
   return NoteResult::success(std::move(changed));
@@ -341,7 +349,9 @@ NoteResult quantize_notes(std::span<const project::MidiNote> notes,
 NoteResult apply_groove(std::span<const project::MidiNote> notes,
                         std::span<const project::NoteId> scope,
                         const persistence::GrooveTemplate& groove, const GrooveAmounts& amounts,
-                        std::int64_t clip_start, std::int64_t pattern_length) {
+                        ClipPattern pattern) {
+  const std::int64_t clip_start = pattern.clip_start;
+  const std::int64_t pattern_length = pattern.pattern_length;
   if (auto valid = persistence::validate_groove(groove); !valid)
     return NoteResult::failure(valid.error());
   const auto step = timeline::ticks_per_quarter / groove.steps_per_quarter;
@@ -367,7 +377,7 @@ NoteResult apply_groove(std::span<const project::MidiNote> notes,
     if (result.start != note.start || result.velocity != note.velocity)
       changed.push_back(result);
   }
-  if (collides(notes, changed))
+  if (collides({.notes = notes, .changed = changed}))
     return NoteResult::failure(
         {ErrorCode::conflict, "The groove would place two notes at the same pitch and time"});
   return NoteResult::success(std::move(changed));

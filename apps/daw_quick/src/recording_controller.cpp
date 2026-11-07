@@ -13,15 +13,21 @@ namespace {
 // Undo gestures for takes, apart from other controllers' ("REC" high bytes).
 constexpr std::uint64_t take_gesture_base = 0x5245'4300'0000'0000ULL;
 constexpr int max_midi_value = 127;
-const QString click_setting = QStringLiteral("recording/click");
-const QString count_in_setting = QStringLiteral("recording/countIn");
+const QString& click_setting() {
+  static const QString value = QStringLiteral("recording/click");
+  return value;
+}
+const QString& count_in_setting() {
+  static const QString value = QStringLiteral("recording/countIn");
+  return value;
+}
 } // namespace
 
 RecordingController::RecordingController(Hooks hooks, QObject* parent)
     : QObject(parent), hooks_(std::move(hooks)) {
   QSettings settings;
-  click_ = settings.value(click_setting, true).toBool();
-  count_in_ = settings.value(count_in_setting, true).toBool();
+  click_ = settings.value(click_setting(), true).toBool();
+  count_in_ = settings.value(count_in_setting(), true).toBool();
   apply_click();
 }
 
@@ -44,7 +50,7 @@ void RecordingController::set_click(bool on) {
   if (on == click_)
     return;
   click_ = on;
-  QSettings{}.setValue(click_setting, on);
+  QSettings{}.setValue(click_setting(), on);
   apply_click();
   emit changed();
 }
@@ -53,7 +59,7 @@ void RecordingController::set_count_in(bool on) {
   if (on == count_in_)
     return;
   count_in_ = on;
-  QSettings{}.setValue(count_in_setting, on);
+  QSettings{}.setValue(count_in_setting(), on);
   emit changed();
 }
 
@@ -152,8 +158,8 @@ void RecordingController::finish(int key, const Held& held, std::uint64_t end_sa
           QStringLiteral("Recording: %1").arg(QString::fromStdString(written.error().message)));
     return;
   }
-  if (written.value())
-    take_clips_.insert_or_assign(held.track, *written.value());
+  if (const auto& clip = written.value())
+    take_clips_.insert_or_assign(held.track, *clip);
   if (hooks_.commit)
     hooks_.commit();
 }

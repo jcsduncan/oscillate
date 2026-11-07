@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Data tables keep one entry per row; clang-format would split them.
@@ -25,14 +26,14 @@ inline constexpr std::array off_on{"Off"sv, "On"sv};
 // adaptive threshold: only what truly stands out is cut); Hard with the
 // mean level, so it cuts more, and harder.
 inline constexpr std::array modes{"Soft"sv, "Hard"sv};
-enum Mode : int { soft, hard };
+enum Mode : std::uint8_t { soft, hard };
 inline constexpr std::array phases{"Low Latency"sv, "Natural"sv, "Linear"sv};
-enum Phase : int { low_latency, natural, linear };
+enum Phase : std::uint8_t { low_latency, natural, linear };
 // What is processed; the rest passes untouched (delayed by the latency).
 inline constexpr std::array stereo_modes{"Stereo"sv, "Mid"sv, "Side"sv, "Left"sv, "Right"sv};
-enum StereoMode : int { stereo, mid, side, left, right };
+enum StereoMode : std::uint8_t { stereo, mid, side, left, right };
 inline constexpr std::array kinds{"Bell"sv, "Low Shelf"sv, "High Shelf"sv};
-enum Kind : int { bell, low_shelf, high_shelf };
+enum Kind : std::uint8_t { bell, low_shelf, high_shelf };
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
 inline constexpr double g = synth::effect_glide_seconds;

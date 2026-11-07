@@ -119,12 +119,18 @@ struct Reading {
   bool operator==(const Reading&) const = default;
 };
 
-// The chord of a pitch-class set over `bass`. `drone` is the highest note's
-// pitch class when it may be a drone: it is read as one when the chord is
-// complete without it and not with it.
-std::optional<Reading> read_set(std::uint16_t pcs, std::uint8_t bass,
-                                std::optional<std::uint8_t> drone,
-                                std::optional<std::uint8_t> previous_root) noexcept {
+// What a reading may lean on besides the notes: `drone` is the highest note's
+// pitch class when it may be a drone, read as one when the chord is complete
+// without it and not with it; `previous_root` is the chord before.
+struct ReadHints {
+  std::optional<std::uint8_t> drone;
+  std::optional<std::uint8_t> previous_root;
+};
+
+// The chord of a pitch-class set over `bass`.
+std::optional<Reading> read_set(std::uint16_t pcs, std::uint8_t bass, ReadHints hints) noexcept {
+  const auto drone = hints.drone;
+  const auto previous_root = hints.previous_root;
   if (count(pcs) < min_pitch_classes)
     return std::nullopt;
   const auto with = best_match(pcs, bass, previous_root);
@@ -174,8 +180,7 @@ std::vector<Sounding> quantise(std::span<const project::MidiNote> notes, std::in
     if (to > from)
       out.push_back({from, to, n.key});
   }
-  std::sort(out.begin(), out.end(),
-            [](const Sounding& x, const Sounding& y) { return x.from < y.from; });
+  std::ranges::sort(out, [](const Sounding& x, const Sounding& y) { return x.from < y.from; });
   return out;
 }
 
@@ -222,9 +227,9 @@ std::vector<std::optional<Reading>> read_spans(std::span<const Sounding> notes,
     std::optional<Reading> reading;
     if (lowest >= 0) {
       const bool held = weight[static_cast<std::size_t>(highest)] >= span.to - span.from;
-      reading =
-          read_set(pcs, pc(lowest), held ? std::optional<std::uint8_t>{pc(highest)} : std::nullopt,
-                   previous_root);
+      reading = read_set(pcs, pc(lowest),
+                         {.drone = held ? std::optional<std::uint8_t>{pc(highest)} : std::nullopt,
+                          .previous_root = previous_root});
     }
     if (reading)
       previous_root = reading->chord.root;
@@ -250,7 +255,7 @@ void merge_equal(std::vector<Run>& runs) {
     if (!out.empty() && out.back().reading == r.reading)
       out.back().to = r.to;
     else
-      out.push_back(std::move(r));
+      out.push_back(r);
   }
   runs = std::move(out);
 }
@@ -268,8 +273,7 @@ std::vector<Run> step_runs(std::span<const Sounding> notes, std::int64_t steps) 
     edges.push_back({n.from, n.key, true});
     edges.push_back({n.to, n.key, false});
   }
-  std::sort(edges.begin(), edges.end(),
-            [](const Edge& x, const Edge& y) { return x.step < y.step; });
+  std::ranges::sort(edges, [](const Edge& x, const Edge& y) { return x.step < y.step; });
   std::array<std::uint32_t, midi_keys> sounding{};
   std::array<std::int64_t, midi_keys> struck_at{};
   struck_at.fill(-1);
@@ -300,23 +304,24 @@ std::vector<Run> step_runs(std::span<const Sounding> notes, std::int64_t steps) 
     const int distinct = count(pcs);
     const auto previous_root =
         previous ? std::optional<std::uint8_t>{previous->chord.root} : std::nullopt;
-    const auto read = [&] { return read_set(pcs, pc(lowest), pc(highest), previous_root); };
+    const auto read = [&] {
+      return read_set(pcs, pc(lowest), {.drone = pc(highest), .previous_root = previous_root});
+    };
     // A lone bass struck here, or other than the chord's bass, may lead in.
     const bool lone = distinct == 1 && (!previous || bass_of(*previous) != pc(lowest) ||
                                         struck_at[static_cast<std::size_t>(lowest)] == at);
-    if (distinct >= min_step_pitch_classes) {
-      reading = read();
-    } else if (previous && !lone) {
+    // Too few notes to read alone, held over from the chord before.
+    bool fits_previous = false;
+    if (previous && !lone) {
       auto fits = pitch_class_set(previous->chord);
       if (previous->top)
         fits = static_cast<std::uint16_t>(fits | bit(*previous->top));
-      if ((pcs & ~fits) == 0)
-        reading = previous;
-      else if (distinct >= min_pitch_classes)
-        reading = read();
-    } else if (distinct >= min_pitch_classes) {
-      reading = read();
+      fits_previous = (pcs & ~fits) == 0;
     }
+    if (distinct >= min_step_pitch_classes || (!fits_previous && distinct >= min_pitch_classes))
+      reading = read();
+    else if (fits_previous)
+      reading = previous;
     std::optional<std::uint8_t> lone_bass;
     if (!reading) {
       reading = previous;
@@ -355,7 +360,7 @@ void absorb_short(std::vector<Run>& runs) {
     else
       kept.push_back(runs[i]);
   }
-  std::reverse(kept.begin(), kept.end());
+  std::ranges::reverse(kept);
   if (kept.size() > 1 && kept.front().to - kept.front().from < min_region_steps) {
     kept[1].from = kept.front().from;
     kept.erase(kept.begin());
@@ -445,18 +450,23 @@ project::MidiNote made(std::int64_t start, std::int64_t end, std::uint8_t key,
 }
 
 void sort_and_dedupe(std::vector<project::MidiNote>& notes) {
-  std::stable_sort(notes.begin(), notes.end(), [](const auto& x, const auto& y) {
+  std::ranges::stable_sort(notes, [](const auto& x, const auto& y) {
     return x.start != y.start ? x.start < y.start : x.key < y.key;
   });
-  notes.erase(std::unique(notes.begin(), notes.end(),
-                          [](const auto& x, const auto& y) {
-                            return x.start == y.start && x.key == y.key;
-                          }),
-              notes.end());
+  const auto duplicates = std::ranges::unique(
+      notes, [](const auto& x, const auto& y) { return x.start == y.start && x.key == y.key; });
+  notes.erase(duplicates.begin(), duplicates.end());
 }
 
 // The bass `pitch_class` in the octave nearest `old`, kept in the bass role.
-std::uint8_t bass_near(std::uint8_t old, std::uint8_t pitch_class, std::uint8_t split) noexcept {
+// A bass pitch class, kept below the split key.
+struct BassTarget {
+  std::uint8_t pitch_class = 0;
+  std::uint8_t split = 0;
+};
+std::uint8_t bass_near(std::uint8_t old, BassTarget target) noexcept {
+  const auto pitch_class = target.pitch_class;
+  const auto split = target.split;
   const int below = old - pc(static_cast<int>(old) - pitch_class);
   int key = old - below <= below + octave - old ? below : below + octave;
   while (key >= split)
@@ -603,7 +613,7 @@ void revoice_notes(std::vector<project::MidiNote>& out, std::vector<project::Mid
   bool has_bass = false;
   for (auto& n : notes) {
     if (n.key < o.lowest) {
-      n.key = bass_near(n.key, bass_pc, o.lowest);
+      n.key = bass_near(n.key, {.pitch_class = bass_pc, .split = o.lowest});
       has_bass = true;
     }
   }
@@ -643,9 +653,10 @@ void revoice_notes(std::vector<project::MidiNote>& out, std::vector<project::Mid
         n.key = v.notes[target(r)];
       }
       for (std::size_t r = 0; r + 1 < upper.size(); ++r) {
-        if (!by_rank[r] || !by_rank[r + 1])
+        const auto lower = by_rank[r];
+        if (!lower || !by_rank[r + 1])
           continue;
-        const auto& from = notes[*by_rank[r]];
+        const auto& from = notes[*lower];
         for (auto x = target(r) + 1; x < target(r + 1); ++x)
           joined.push_back({unassigned_note_id(), from.start, from.end, v.notes[x], from.velocity});
       }
@@ -687,8 +698,7 @@ std::vector<ChordRegion> recognise(std::span<const project::MidiNote> notes,
   const auto steps = steps_in(length.value);
   const auto sounding = quantise(notes, steps);
   auto runs = step_runs(sounding, steps);
-  const auto first =
-      std::find_if(runs.begin(), runs.end(), [](const Run& r) { return r.reading.has_value(); });
+  const auto first = std::ranges::find_if(runs, [](const Run& r) { return r.reading.has_value(); });
   if (first == runs.end())
     return {};
   const auto lead = first->reading;
@@ -712,6 +722,9 @@ std::vector<ChordRegion> recognise(std::span<const project::MidiNote> notes,
   std::vector<ChordRegion> out;
   out.reserve(runs.size());
   for (const auto& r : runs) {
+    // Every run holds a reading: the lead fills those before the first.
+    if (!r.reading)
+      continue;
     const auto start = r.from * step_ticks;
     const auto end = std::min(r.to * step_ticks, length.value);
     out.push_back({{start}, end - start, r.reading->chord, r.reading->top, ChordDevice::none});
@@ -761,8 +774,7 @@ std::vector<project::MidiNote> rewrite(std::span<const project::MidiNote> notes,
   }
   const auto readings = read_spans(sounding, spans);
   std::vector<std::optional<Reading>> current(readings.size());
-  const auto first =
-      std::find_if(readings.begin(), readings.end(), [](const auto& r) { return r.has_value(); });
+  const auto first = std::ranges::find_if(readings, [](const auto& r) { return r.has_value(); });
   std::optional<Reading> inherited = first != readings.end() ? *first : std::nullopt;
   // Bass-role notes by start (input is sorted by start), with the latest end
   // so far: a region overlaps a bass note when one starting before its end
@@ -786,8 +798,7 @@ std::vector<project::MidiNote> rewrite(std::span<const project::MidiNote> notes,
         inherited && inherited->chord == r.chord && inherited->top == drone_of(r.chord, r.top);
     // A region whose bass the switch turned on or off is rewritten too.
     const auto before_end = static_cast<std::size_t>(
-        std::lower_bound(bass_starts.begin(), bass_starts.end(), detail::end_of(r)) -
-        bass_starts.begin());
+        std::ranges::lower_bound(bass_starts, detail::end_of(r)) - bass_starts.begin());
     const bool has_bass = before_end != 0 && bass_latest_end[before_end - 1] > r.position.value;
     rewritten[i] = !same || (revoice && *revoice == lane_index[i]) || has_bass != o.bass;
     if (rewritten[i]) {
@@ -795,14 +806,14 @@ std::vector<project::MidiNote> rewrite(std::span<const project::MidiNote> notes,
       cuts.push_back(detail::end_of(r));
     }
   }
-  std::sort(cuts.begin(), cuts.end());
+  std::ranges::sort(cuts);
 
   // Cut notes held across a rewritten region's edges; later pieces are new notes.
   std::vector<project::MidiNote> pieces;
   pieces.reserve(input.size());
   for (const auto& n : input) {
     auto rest = n;
-    for (auto c = std::upper_bound(cuts.begin(), cuts.end(), rest.start.value);
+    for (auto c = std::ranges::upper_bound(cuts, rest.start.value);
          c != cuts.end() && *c < rest.end.value; ++c) {
       auto head = rest;
       head.end.value = *c;
@@ -818,9 +829,8 @@ std::vector<project::MidiNote> rewrite(std::span<const project::MidiNote> notes,
   std::vector<project::MidiNote> out;
   out.reserve(pieces.size());
   for (const auto& n : pieces) {
-    const auto after =
-        std::upper_bound(regions.begin(), regions.end(), n.start.value,
-                         [](std::int64_t t, const ChordRegion& r) { return t < r.position.value; });
+    const auto after = std::ranges::upper_bound(
+        regions, n.start.value, {}, [](const ChordRegion& r) { return r.position.value; });
     if (after != regions.begin()) {
       const auto i = static_cast<std::size_t>(after - regions.begin()) - 1;
       if (n.start.value < detail::end_of(regions[i])) {
@@ -951,7 +961,9 @@ std::vector<project::MidiNote> running_tonic(timeline::TickPosition length, std:
 }
 
 std::vector<project::MidiNote> bass_line(std::span<const ChordRegion> lane, BassStyle style,
-                                         std::uint8_t lowest, std::uint8_t velocity) {
+                                         BassLineOptions options) {
+  const auto lowest = options.lowest;
+  const auto velocity = options.velocity;
   std::vector<project::MidiNote> notes;
   constexpr std::int64_t steps_per_beat = 4;
   for (const auto& region : lane) {

@@ -31,8 +31,8 @@ inline constexpr std::size_t max_crossovers = max_bands - 1;
 // (band i centred at 20 * 1000^((i + 0.5) / n)).
 inline constexpr std::size_t display_bands = 96;
 
-enum class Process : int { stereo, mid, side, left, right };
-enum class Key : int { band, input, sidechain };
+enum class Process : std::uint8_t { stereo, mid, side, left, right };
+enum class Key : std::uint8_t { band, input, sidechain };
 
 // One band's static curve, in dB. Above the threshold the slope is
 // 1 / above (above > 1 compresses down, < 1 expands up); below it the slope

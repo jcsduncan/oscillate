@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -60,7 +61,7 @@ consteval std::size_t parameter_index(const std::array<ParameterDescriptor, N>& 
       return i;
     }
   }
-  throw "unknown parameter id";
+  throw std::invalid_argument("unknown parameter id");
 }
 
 // How long a panel jump takes to arrive on a continuous control: the

@@ -47,13 +47,12 @@ inline constexpr double radio_gate_floor = 0.1;
 
 class Radio {
 public:
-  void prepare(double rate, double reference);
+  void prepare(LayerFormat format);
   // The dial: where the stations are, from the seed alone.
   void tune(std::uint64_t seed_key) noexcept;
   void reseed(std::uint64_t key) noexcept { rng_.seed(key); }
   void reset() noexcept;
-  void set(std::span<const double> v, double tone, double width, double steps,
-           double seconds_per_beat) noexcept;
+  void set(std::span<const double> v, LayerShape shape, LayerTiming timing) noexcept;
   [[nodiscard]] Pair next(double beat) noexcept {
     double sferic = 0.0;
     if (rng_.unit() < sferic_chance_) {

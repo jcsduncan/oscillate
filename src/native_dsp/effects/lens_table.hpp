@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Lens v1: a spectrum analyser (ADR-0042). It passes audio untouched; its
@@ -17,7 +18,7 @@ using namespace std::string_view_literals;
 
 inline constexpr std::array views{"Mid"sv,   "Side"sv,       "Left"sv,
                                   "Right"sv, "Mid / Side"sv, "Left / Right"sv};
-enum View : int { mid, side, left, right, mid_side, left_right };
+enum View : std::uint8_t { mid, side, left, right, mid_side, left_right };
 inline constexpr std::array resolutions{"Fast"sv, "Balanced"sv, "Precise"sv};
 inline constexpr std::array averages{"Fast"sv, "Medium"sv, "Slow"sv, "Infinite"sv};
 inline constexpr std::array<double, 4> average_seconds{0.025, 0.3, 1.5, 0.0};

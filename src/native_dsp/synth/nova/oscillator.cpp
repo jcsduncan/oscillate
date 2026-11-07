@@ -439,7 +439,6 @@ double Oscillator::warp_phase(double phase, WarpMode mode, double a, double cros
   case WarpMode::bend_minus:
     return wrap(phase + 0.9 * a / two_pi * sin_cycle(phase));
   case WarpMode::sync:
-    return wrap(phase * (1.0 + 7.0 * a));
   case WarpMode::window_sync:
     return wrap(phase * (1.0 + 7.0 * a));
   case WarpMode::mirror: {

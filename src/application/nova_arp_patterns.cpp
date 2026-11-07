@@ -723,8 +723,7 @@ foundation::Result<std::vector<double>> apply(const synth::EngineDescriptor& tab
   const auto rate = ids.find("nova.arp.rate");
   const auto rate_index =
       rate ? choice_index(table.parameters[*rate], pattern.rate) : std::optional<std::size_t>{};
-  const auto variation = std::find(nova::arp_variation_bars.begin(), nova::arp_variation_bars.end(),
-                                   pattern.variation);
+  const auto variation = std::ranges::find(nova::arp_variation_bars, pattern.variation);
   if (!rate_index || variation == nova::arp_variation_bars.end())
     return R::failure(invalid(pattern, "an unknown rate or variation"));
 
@@ -826,8 +825,7 @@ foundation::Result<std::vector<double>> apply_groove(const synth::EngineDescript
     return R::failure({ErrorCode::invalid_argument, "The values do not fit the synth"});
   if (auto valid = persistence::validate_groove(groove); !valid)
     return R::failure(valid.error());
-  const auto grid = std::find(nova::arp_groove_grids.begin(), nova::arp_groove_grids.end(),
-                              groove.steps_per_quarter);
+  const auto grid = std::ranges::find(nova::arp_groove_grids, groove.steps_per_quarter);
   if (grid == nova::arp_groove_grids.end())
     return R::failure({ErrorCode::invalid_argument, "The arp has no groove grid of " +
                                                         std::to_string(groove.steps_per_quarter) +

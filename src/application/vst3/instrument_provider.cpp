@@ -621,11 +621,13 @@ Vst3InstrumentTrackProvider::prepare(const project::Snapshot& snapshot,
       qualified_blocks = std::move(blocks);
     }
     std::vector<std::uint32_t> automated;
+    automated.reserve(instrument_automation.size());
     for (const auto& lane : instrument_automation)
       automated.push_back(std::get<project::Vst3ParameterTarget>(lane.target()).parameter_id);
     auto manual_events = std::make_shared<Vst3ManualEventSlot>(
-        instance_id, compatibility_key, std::move(eligible), std::move(automated),
-        fixed_latency_verified, std::move(qualified_blocks));
+        Vst3InstanceKey{.instance_id = instance_id, .compatibility_key = compatibility_key},
+        std::move(eligible), std::move(automated), fixed_latency_verified,
+        std::move(qualified_blocks));
     // Pedals reach the plugin through its own MIDI mapping (ADR-0035): the
     // standard controllers sustain (64), sostenuto (66) and soft (67).
     constexpr std::array<std::int16_t, project::midi_pedal_count> pedal_controllers{64, 66, 67};
@@ -652,7 +654,7 @@ Vst3InstrumentTrackProvider::prepare(const project::Snapshot& snapshot,
     prepared.finite_tail_frames = finite_tail;
     prepared.fixed_tail_qualified = tail_qualified;
     if (fixed_latency_verified) {
-      prepared.manual_events = manual_events;
+      prepared.manual_events = std::move(manual_events);
       prepared.active_manual_graph = [slot = prepared.manual_events]() noexcept {
         return slot->active_graph();
       };

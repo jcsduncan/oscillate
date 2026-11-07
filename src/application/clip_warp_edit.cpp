@@ -121,8 +121,9 @@ Result<project::ClipProcessing> add_warp_marker(const project::Snapshot& snapsho
 }
 
 Result<project::ClipProcessing> move_warp_marker(const project::Snapshot& snapshot,
-                                                 project::ClipId id, std::size_t index,
-                                                 std::uint64_t output_frame) {
+                                                 project::ClipId id, WarpMarkerMove move) {
+  const auto index = move.index;
+  const auto output_frame = move.output_frame;
   using Edited = Result<project::ClipProcessing>;
   auto located = locate(snapshot, id);
   auto layout = clip_warp_layout(snapshot, id);
@@ -423,7 +424,9 @@ private:
 [[nodiscard]] std::int64_t marker_position(const project::ClipWarpMarker& marker) noexcept {
   if (const auto* tick = std::get_if<timeline::TickPosition>(&marker.target_offset))
     return tick->value;
-  return std::get<timeline::SamplePosition>(marker.target_offset).value;
+  // A marker's offset always holds one of the two.
+  const auto* sample = std::get_if<timeline::SamplePosition>(&marker.target_offset);
+  return sample != nullptr ? sample->value : 0;
 }
 
 } // namespace

@@ -4,6 +4,7 @@
 #include <array>
 #include <cstring>
 #include <deque>
+#include <exception>
 #include <new>
 #include <optional>
 #include <string>
@@ -17,12 +18,13 @@ using foundation::Error;
 using foundation::ErrorCode;
 
 // A failure carried out of the nested readers; never thrown past parse().
-struct Failure {
+struct Failure : std::exception {
+  explicit Failure(Error failure) : error(std::move(failure)) {}
   Error error;
 };
 
 [[noreturn]] void fail(ErrorCode code, std::string message) {
-  throw Failure{{code, std::move(message)}};
+  throw Failure({code, std::move(message)});
 }
 
 [[noreturn]] void corrupt(std::string message) {

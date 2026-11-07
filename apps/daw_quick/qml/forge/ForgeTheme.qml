@@ -25,10 +25,8 @@ KitTheme {
     segmentRadius: 3
     segmentRadiusVertical: 3
     segmentFillAcross: false
-    segmentRule: "bar"
     segmentLetterSpacingVertical: 1.2
     segmentTextXVertical: 14
-    segmentWash: true
     segmentSizeVertical: 11
     segmentLetterSpacing: 0.8
     segmentTextRightVertical: 8
@@ -360,12 +358,8 @@ KitTheme {
     function segmentEdge(tile) {
         return tile.on ? Qt.rgba(ember.r, ember.g, ember.b, 0.7) : seam
     }
-    function segmentWashColor(tile, stop) {
-        const lit = stop === 0 ? (tile.vertical ? 0.16 : 0) : (tile.vertical ? 0 : 0.14)
-        return Qt.rgba(ember.r, ember.g, ember.b, lit)
-    }
     function segmentLabelInk(tile) {
-        return tile.on ? molten : inkDim
+        return inkDim
     }
     function segmentBold(tile) {
         return true

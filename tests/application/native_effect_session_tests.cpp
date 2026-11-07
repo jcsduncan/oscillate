@@ -215,7 +215,7 @@ void pump_follows_its_key_tracks_notes() {
   const auto& bass_track = snapshot.tracks.back();
   auto stage = take(native_inserts::NativeEffectStage::create(
       snapshot, slot, std::get<project::NativeEffectPatch>(bass_track.effects.front().processor),
-      {}, 128, std::numeric_limits<std::uint64_t>::max()));
+      {}, {.max_frames = 128}));
   std::vector<engine::StereoFrame> out;
   for (std::uint64_t position = 0; position < static_cast<std::uint64_t>(note) + 4'800;
        position += 128) {

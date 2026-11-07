@@ -70,14 +70,15 @@ struct YinFrame {
 
 class Yin {
 public:
-  Yin(std::uint32_t sample_rate, double minimum_hz, double maximum_hz)
+  Yin(std::uint32_t sample_rate, const AnalysisOptions& options)
       : rate_(sample_rate),
         window_(static_cast<std::size_t>(std::round(yin_window_seconds * sample_rate))),
         size_(fft_size_at_least(3.0 * static_cast<double>(window_))), fft_(size_), a_(size_),
         b_(size_), spectrum_a_(size_), spectrum_b_(size_), product_(size_), d_(window_),
         cmndf_(window_), squares_(2 * window_ + 1) {
-    min_lag_ = std::max<std::size_t>(2, static_cast<std::size_t>(sample_rate / maximum_hz));
-    max_lag_ = std::min(window_ - 2, static_cast<std::size_t>(sample_rate / minimum_hz) + 1);
+    min_lag_ = std::max<std::size_t>(2, static_cast<std::size_t>(sample_rate / options.maximum_hz));
+    max_lag_ =
+        std::min(window_ - 2, static_cast<std::size_t>(sample_rate / options.minimum_hz) + 1);
     double total = 0.0;
     for (int i = 0; i < threshold_count; ++i) {
       const double s = (i + 1.0) / threshold_count;
@@ -200,11 +201,18 @@ struct PathPoint {
 };
 
 // Viterbi over (voiced, unvoiced) x pitch bins.
-[[nodiscard]] std::vector<PathPoint> viterbi(const std::vector<YinFrame>& frames, double min_hz,
-                                             double max_hz, double peak_db) {
+[[nodiscard]] std::vector<PathPoint> viterbi(const std::vector<YinFrame>& frames,
+                                             const AnalysisOptions& options, double peak_db) {
+  const double min_hz = options.minimum_hz;
+  const double max_hz = options.maximum_hz;
   const auto bins =
       static_cast<int>(std::ceil(cents_per_octave * std::log2(max_hz / min_hz) / bin_cents)) + 1;
-  const auto states = static_cast<std::size_t>(2 * bins);
+  // Each pitch bin voiced, then each unvoiced.
+  const auto state_index = [bins](int voicing, int bin) {
+    return static_cast<std::size_t>(voicing) * static_cast<std::size_t>(bins) +
+           static_cast<std::size_t>(bin);
+  };
+  const auto states = state_index(2, 0);
   const auto bin_of = [&](double hz) {
     return cents_per_octave * std::log2(hz / min_hz) / bin_cents;
   };
@@ -223,7 +231,7 @@ struct PathPoint {
   std::vector<double> next(states);
   std::vector<double> observed(states);
   for (std::size_t t = 0; t < count; ++t) {
-    std::fill(observed.begin(), observed.end(), 0.0);
+    std::ranges::fill(observed, 0.0);
     double total = 0.0;
     const bool silent = frames[t].energy_db < peak_db + silence_db;
     if (!silent) {
@@ -239,7 +247,7 @@ struct PathPoint {
     for (int b = 0; b < bins; ++b) {
       observed[static_cast<std::size_t>(b)] =
           std::log(observed[static_cast<std::size_t>(b)] + tiny);
-      observed[static_cast<std::size_t>(bins + b)] = std::log(unvoiced + tiny);
+      observed[state_index(1, b)] = std::log(unvoiced + tiny);
     }
     if (t == 0) {
       for (std::size_t s = 0; s < states; ++s)
@@ -254,7 +262,7 @@ struct PathPoint {
              ++p) {
           const double j = jump[static_cast<std::size_t>(std::abs(b - p))];
           for (int previous = 0; previous < 2; ++previous) {
-            const auto s = static_cast<std::size_t>(previous * bins + p);
+            const auto s = state_index(previous, p);
             const double value = score[s] + j + (previous == voicing ? stay : change);
             if (value > best) {
               best = value;
@@ -262,20 +270,20 @@ struct PathPoint {
             }
           }
         }
-        const auto target = static_cast<std::size_t>(voicing * bins + b);
+        const auto target = state_index(voicing, b);
         next[target] = best + observed[target];
         back[t * states + target] = from;
       }
     }
-    const double top = *std::max_element(next.begin(), next.end());
+    const double top = *std::ranges::max_element(next);
     for (std::size_t s = 0; s < states; ++s)
       score[s] = next[s] - top;
   }
   std::vector<PathPoint> path(count);
   if (count == 0)
     return path;
-  auto state = static_cast<std::size_t>(
-      std::distance(score.begin(), std::max_element(score.begin(), score.end())));
+  auto state =
+      static_cast<std::size_t>(std::distance(score.begin(), std::ranges::max_element(score)));
   for (std::size_t t = count; t-- > 0;) {
     const auto b = static_cast<int>(state) % bins;
     const bool voiced = static_cast<int>(state) < bins;
@@ -525,7 +533,7 @@ void track_partials(Note& note, std::span<const float> mono, std::uint32_t rate,
     const double f0 = note.pitch[k];
     analyser->analyse(mono, (note.first_hop + static_cast<std::int64_t>(k)) * hop);
     const auto magnitude = analyser->magnitude();
-    const double loudest = *std::max_element(magnitude.begin(), magnitude.end());
+    const double loudest = *std::ranges::max_element(magnitude);
     const double floor = loudest * db_to_ratio(peak_floor_db);
     double total = 0.0;
     for (std::size_t h = 0; h < note.partial_count; ++h) {
@@ -568,7 +576,7 @@ bool detect_melodic(const Context& context, std::int64_t hop, std::vector<Note>&
   const auto mono = context.mono;
   const auto length = static_cast<std::int64_t>(mono.size());
   const auto hop_count = static_cast<std::size_t>(length / hop + 1);
-  Yin yin(rate, options.minimum_hz, options.maximum_hz);
+  Yin yin(rate, options);
   std::vector<YinFrame> frames(hop_count);
   double peak_db = -std::numeric_limits<double>::infinity();
   for (std::size_t k = 0; k < hop_count; ++k) {
@@ -577,7 +585,7 @@ bool detect_melodic(const Context& context, std::int64_t hop, std::vector<Note>&
     yin.analyse(mono, static_cast<std::int64_t>(k) * hop, frames[k]);
     peak_db = std::max(peak_db, frames[k].energy_db);
   }
-  const auto path = viterbi(frames, options.minimum_hz, options.maximum_hz, peak_db);
+  const auto path = viterbi(frames, options, peak_db);
   // Voiced runs, bridging short gaps.
   const auto bridge = static_cast<std::size_t>(bridge_seconds * rate / static_cast<double>(hop));
   std::vector<Run> runs;

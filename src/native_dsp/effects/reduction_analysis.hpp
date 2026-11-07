@@ -59,11 +59,9 @@ public:
         rest = 0.0;
       }
       for (std::size_t k = 0; k < splits; ++k) {
-        double low = 0.0;
-        double high = 0.0;
-        split_[k].process(rest, low, high);
-        power_[k] += low * low;
-        rest = high;
+        const auto split = split_[k].process(rest);
+        power_[k] += split.low * split.low;
+        rest = split.high;
       }
       power_[splits] += rest * rest;
     }

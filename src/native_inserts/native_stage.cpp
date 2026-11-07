@@ -21,8 +21,10 @@ using StageResult = foundation::Result<PreparedStage>;
   if (context.snapshot == nullptr)
     return StageResult::failure(
         {ErrorCode::invalid_argument, "A built-in effect stage needs its project"});
-  auto created = NativeEffectStage::create(*context.snapshot, slot, saved, context.automation,
-                                           context.max_frames, context.last_safe_automation_sample);
+  auto created = NativeEffectStage::create(
+      *context.snapshot, slot, saved, context.automation,
+      {.max_frames = context.max_frames,
+       .last_safe_automation_sample = context.last_safe_automation_sample});
   if (!created)
     return StageResult::failure(created.error());
   auto resolved = resolve_native_effect(saved);
@@ -93,6 +95,7 @@ bool is_native(const project::EffectProcessor& processor) noexcept {
   return !std::holds_alternative<project::Vst3PluginInstance>(processor);
 }
 
+// NOLINTNEXTLINE(bugprone-exception-escape): a saved processor is never valueless.
 std::uint64_t native_generation(const project::EffectProcessor& processor) noexcept {
   return std::visit(
       [](const auto& saved) -> std::uint64_t {

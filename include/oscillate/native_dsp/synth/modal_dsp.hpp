@@ -18,26 +18,22 @@ inline constexpr int default_substeps = 8;          // Contact sub-steps per sam
 inline constexpr double max_contact_seconds = 0.05;
 
 // The Stulov law, F = K (x^p + alpha d(x^p)/dt) for compression x > 0, with
-// the stiffness scaled by `share` (a hammer pressing several strings at
-// once). last_xp is the previous step's x^p. A felt never pulls.
-[[nodiscard]] inline double contact_force(double k, double p, double alpha, double& last_xp,
-                                          double x, double dt, double share) noexcept {
-  const double xp = x > 0.0 ? std::pow(x, p) : 0.0;
-  const double rate = (xp - last_xp) / dt;
-  last_xp = xp;
-  return std::max(0.0, share * k * (xp + alpha * rate));
-}
-
-// The law with its own state, mass-free.
+// its own state, mass-free.
 struct ContactLaw {
-  double k = 1.0;     // Stiffness, N / m^p.
-  double p = 1.5;     // Exponent (1.5 is Hertz; felt is 2.2-3.5).
-  double alpha = 0.0; // Hysteresis (s).
-  double last_xp = 0.0;
+  double k = 1.0;       // Stiffness, N / m^p.
+  double p = 1.5;       // Exponent (1.5 is Hertz; felt is 2.2-3.5).
+  double alpha = 0.0;   // Hysteresis (s).
+  double last_xp = 0.0; // The previous step's x^p.
 
   void reset() noexcept { last_xp = 0.0; }
+  // The force at compression x after a step of dt seconds, the stiffness
+  // scaled by `share` (a hammer pressing several strings at once). A felt
+  // never pulls.
   [[nodiscard]] double force(double x, double dt, double share = 1.0) noexcept {
-    return contact_force(k, p, alpha, last_xp, x, dt, share);
+    const double xp = x > 0.0 ? std::pow(x, p) : 0.0;
+    const double rate = (xp - last_xp) / dt;
+    last_xp = xp;
+    return std::max(0.0, share * k * (xp + alpha * rate));
   }
 };
 
@@ -64,10 +60,13 @@ struct Striker {
 // The stiffness K for which a mass at `speed` against a rigid surface,
 // F = K x^p, stays in contact for `seconds`; and the inverse. For p = 1 the
 // contact is half a period of the mass on the spring.
-[[nodiscard]] double rigid_contact_stiffness(double mass, double exponent, double speed,
-                                             double seconds) noexcept;
-[[nodiscard]] double rigid_contact_seconds(double mass, double stiffness, double exponent,
-                                           double speed) noexcept;
+struct RigidStrike {
+  double mass = 0.0;     // kg.
+  double exponent = 1.0; // The contact law's p.
+  double speed = 0.0;    // m/s at impact.
+};
+[[nodiscard]] double rigid_contact_stiffness(RigidStrike strike, double seconds) noexcept;
+[[nodiscard]] double rigid_contact_seconds(RigidStrike strike, double stiffness) noexcept;
 
 // One mode of a bank as designed.
 struct ModeDesign {

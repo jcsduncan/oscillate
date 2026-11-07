@@ -75,28 +75,26 @@ void AudioWorkerPool::stop_owned_threads() noexcept {
   reset_after_join();
 }
 
-bool AudioWorkerPool::claim(Batch& batch, std::uint64_t& word, std::size_t& index) noexcept {
+std::optional<std::size_t> AudioWorkerPool::claim(Batch& batch, std::uint64_t& word) noexcept {
   const auto number = word >> 40;
   for (;;) {
     // A newer batch has its own task, count and lanes; the caller must
     // observe it afresh.
     if ((word >> 40) != number)
-      return false;
+      return std::nullopt;
     const auto count = static_cast<std::size_t>((word >> 20) & field_mask);
     const auto next = static_cast<std::size_t>(word & field_mask);
     if (next >= count)
-      return false;
+      return std::nullopt;
     if (batch.claim.compare_exchange_weak(word, word + 1, std::memory_order_acquire,
-                                          std::memory_order_acquire)) {
-      index = next;
-      return true;
-    }
+                                          std::memory_order_acquire))
+      return next;
   }
 }
 
 void AudioWorkerPool::work(Batch& batch, std::uint64_t observed) noexcept {
-  std::size_t index = 0;
-  if (!claim(batch, observed, index))
+  auto index = claim(batch, observed);
+  if (!index)
     return;
   // A successful claim belongs to an unfinished batch, so its task and
   // context cannot change until this thread reports the task done.
@@ -105,10 +103,11 @@ void AudioWorkerPool::work(Batch& batch, std::uint64_t observed) noexcept {
   const auto count = static_cast<std::size_t>((observed >> 20) & field_mask);
   const auto lane = batch.lanes.fetch_add(1, std::memory_order_relaxed);
   do {
-    task(context, index, lane);
+    task(context, *index, lane);
     if (batch.done.fetch_add(1, std::memory_order_acq_rel) + 1 == count)
       batch.done.notify_one();
-  } while (claim(batch, observed, index));
+    index = claim(batch, observed);
+  } while (index);
 }
 
 void AudioWorkerPool::work_any() noexcept {

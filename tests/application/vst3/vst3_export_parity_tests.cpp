@@ -1,8 +1,8 @@
 #include "oscillate/application/routed_audio_source.hpp"
 #include "oscillate/application/routed_playback_control.hpp"
-#include "oscillate/application/vst3/effect_export.hpp"
 #include "oscillate/application/vst3/instrument_export.hpp"
 #include "oscillate/application/vst3/instrument_provider.hpp"
+#include "oscillate/application/vst3/offline_export.hpp"
 #include "oscillate/application/vst3/stage_provider.hpp"
 #include "oscillate/application/vst3/track_insert_provider.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
@@ -34,10 +34,11 @@
 #include <utility>
 #include <vector>
 
-// VST3 export parity (ADR-0050): a VST3 effect's master and stems, its finite
-// tail, a latent plugin's timing and a VST3 instrument export exactly what
-// live routed playback plays. Live playback is the oracle: the export, with
-// its route latency trimmed, must null against it.
+// VST3 export parity (ADR-0050, ADR-0090): a VST3 effect's master and stems,
+// its finite tail, a latent plugin's timing on a track and on the master, and
+// a VST3 instrument export exactly what live routed playback plays. Live
+// playback is the oracle: the export, with its route latency trimmed, must
+// null against it.
 namespace {
 using namespace oscillate;
 namespace fs = std::filesystem;
@@ -267,6 +268,9 @@ LiveRender play_live(const fs::path& root, const project::Snapshot& snapshot,
       if (const auto* effect = std::get_if<project::Vst3PluginInstance>(&slot.processor))
         effects.set_scan_receipt(effect->id, scan);
   }
+  for (const auto& slot : snapshot.master_effects)
+    if (const auto* effect = std::get_if<project::Vst3PluginInstance>(&slot.processor))
+      effects.set_scan_receipt(effect->id, scan);
   plugins::Vst3StageProvider stages(instruments, effects);
   application::RoutedPlaybackControl control(
       model,
@@ -323,18 +327,19 @@ void require_nulls(const std::vector<float>& exported, const LiveRender& live,
              what + ": live playback is silent after the export ends (no tail cut)");
 }
 
-std::vector<float> export_effect(const EffectProject& project, plugins::Vst3Scanner& scanner,
-                                 const fs::path& bundle, const fs::path& target,
-                                 std::optional<project::TrackId> stem = std::nullopt) {
+// The shared offline render with VST3 stages: the master, or one stem.
+std::vector<float> export_vst3(const fs::path& root, const project::Snapshot& snapshot,
+                               plugins::Vst3Scanner& scanner, const fs::path& target,
+                               std::optional<project::TrackId> stem = std::nullopt) {
   Gate gate;
-  auto store = take(persistence::ProjectStore::open_reader(project.root));
-  auto authority = take(exporting::StoppedExportAuthority::acquire(project.snapshot, gate));
+  auto store = take(persistence::ProjectStore::open_reader(root));
+  auto authority = take(exporting::StoppedExportAuthority::acquire(snapshot, gate));
   const auto published =
-      stem ? exporting::render_vst3_effect_wav_stem(project.snapshot, store, std::move(authority),
-                                                    scanner, bundle, *stem, {target})
-           : exporting::render_vst3_effect_wav_master(project.snapshot, store, std::move(authority),
-                                                      scanner, bundle, {target});
-  REQUIRE_OK(published, "VST3 effect export published");
+      stem ? exporting::render_vst3_stem(snapshot, store, std::move(authority), scanner, *stem,
+                                         {target})
+           : exporting::render_vst3_master(snapshot, store, std::move(authority), scanner,
+                                           exporting::MasterRenderOptions{target});
+  REQUIRE_OK(published, "VST3 export published");
   return oscillate::test::read_float_wav(target);
 }
 
@@ -352,7 +357,8 @@ void effect_master_and_stems(plugins::Vst3Scanner& scanner) {
   const auto scan = scanner.scan(VST3_TAIL_BUNDLE);
   require(scan.ok(), "tail fixture scan failed: " + scan.diagnostic);
   const auto project = effect_project(directory / "effect", scan, std::nullopt);
-  const auto master = export_effect(project, scanner, VST3_TAIL_BUNDLE, directory / "master.wav");
+  const auto master =
+      export_vst3(project.root, project.snapshot, scanner, directory / "master.wav");
   // Finite tail: the export ends where the plugin's declared tail does.
   const auto source_end = static_cast<std::size_t>(dry_clip_first) + source_frames;
   REQUIRE_EQ(master.size(), 2 * (source_end + tail_gain_tail_frames),
@@ -362,9 +368,9 @@ void effect_master_and_stems(plugins::Vst3Scanner& scanner) {
       std::span<const float>(master).subspan(2 * wet_end, 2 * tail_gain_tail_frames);
   REQUIRE_GT(peak(wet_tail), tolerance::coarse, "the effect's tail is exported");
   const auto wet =
-      export_effect(project, scanner, VST3_TAIL_BUNDLE, directory / "wet.wav", project.wet);
+      export_vst3(project.root, project.snapshot, scanner, directory / "wet.wav", project.wet);
   const auto dry =
-      export_effect(project, scanner, VST3_TAIL_BUNDLE, directory / "dry.wav", project.dry);
+      export_vst3(project.root, project.snapshot, scanner, directory / "dry.wav", project.dry);
   REQUIRE_EQ(wet.size(), master.size(), "the wet stem is as long as the master");
   REQUIRE_EQ(dry.size(), master.size(), "the dry stem is as long as the master");
   // TailGain only takes 128-frame host blocks.
@@ -388,7 +394,8 @@ void latent_effect_timing(plugins::Vst3Scanner& scanner) {
   const auto scan = scanner.scan(VST3_GAIN_BUNDLE);
   require(scan.ok(), "latent fixture scan failed: " + scan.diagnostic);
   const auto project = effect_project(directory / "latent", scan, latent_state);
-  const auto master = export_effect(project, scanner, VST3_GAIN_BUNDLE, directory / "master.wav");
+  const auto master =
+      export_vst3(project.root, project.snapshot, scanner, directory / "master.wav");
   // The latency is trimmed: nothing sounds before the first clip, which
   // sounds from its first frame.
   const auto lead =
@@ -401,11 +408,37 @@ void latent_effect_timing(plugins::Vst3Scanner& scanner) {
     require_nulls(master, live, "latent master at " + std::to_string(block_frames) + " frames");
   }
   const auto dry =
-      export_effect(project, scanner, VST3_GAIN_BUNDLE, directory / "dry.wav", project.dry);
+      export_vst3(project.root, project.snapshot, scanner, directory / "dry.wav", project.dry);
   require_nulls(
       dry,
       play_live(project.root, muted_except(project.snapshot, project.dry), scan, block_128, frames),
       "latent dry stem");
+}
+
+// A latent VST3 effect on the master runs after the mix, as live playback
+// runs it on the master node: the master and each stem (the master chain
+// included) null against live playback.
+void master_slot(plugins::Vst3Scanner& scanner) {
+  const oscillate::test::TempDir directory("oscillate-vst3-export-parity");
+  const auto scan = scanner.scan(VST3_GAIN_BUNDLE);
+  require(scan.ok(), "latent fixture scan failed: " + scan.diagnostic);
+  auto project = effect_project(directory / "master-slot", scan, latent_state);
+  auto& wet = *std::ranges::find(project.snapshot.tracks, project.wet, &project::Track::id);
+  project.snapshot.master_effects.push_back(std::move(wet.effects.front()));
+  wet.effects.clear();
+  const auto master =
+      export_vst3(project.root, project.snapshot, scanner, directory / "master.wav");
+  const auto frames = master.size() / 2;
+  for (const auto block_frames : {block_64, block_128}) {
+    const auto live = play_live(project.root, project.snapshot, scan, block_frames, frames);
+    REQUIRE_EQ(live.latency, latent_frames, "live playback reports the master plugin's latency");
+    require_nulls(master, live, "master slot at " + std::to_string(block_frames) + " frames");
+  }
+  for (const auto track : {project.wet, project.dry})
+    require_nulls(
+        export_vst3(project.root, project.snapshot, scanner, directory / "stem.wav", track),
+        play_live(project.root, muted_except(project.snapshot, track), scan, block_128, frames),
+        "master slot stem");
 }
 
 // A VST3 instrument's master, its stem and its finite release null against
@@ -450,6 +483,7 @@ int main() {
     plugins::Vst3Scanner scanner(VST3_HELPER_PATH);
     effect_master_and_stems(scanner);
     latent_effect_timing(scanner);
+    master_slot(scanner);
     instrument_master_and_stem(scanner);
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';

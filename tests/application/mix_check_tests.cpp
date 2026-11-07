@@ -334,7 +334,8 @@ void true_peak_lowers_the_ceiling() {
   // run 0.8 dB over the ceiling, so -0.3 - 0.8 - margin (-1.6 dB).
   constexpr double club_db = -0.3;
   constexpr double funky_peak_db = -0.2;
-  REQUIRE_LT(std::fabs(check::lowered_ceiling_db(limit_db, club_db, funky_peak_db) -
+  REQUIRE_LT(std::fabs(check::lowered_ceiling_db(
+                           {.current = limit_db, .target = club_db, .true_peak = funky_peak_db}) -
                        (club_db - (funky_peak_db - limit_db) - margin)),
              rounding_db, "a ceiling the peaks run over is lowered by that and the margin");
   // A ceiling above a stricter target: down by at least the overshoot and
@@ -342,11 +343,13 @@ void true_peak_lowers_the_ceiling() {
   constexpr double loose_db = -0.1;
   constexpr double strict_db = -1.0;
   constexpr double loose_peak_db = -0.05;
-  REQUIRE_LE(check::lowered_ceiling_db(loose_db, strict_db, loose_peak_db),
+  REQUIRE_LE(check::lowered_ceiling_db(
+                 {.current = loose_db, .target = strict_db, .true_peak = loose_peak_db}),
              loose_db - (loose_peak_db - strict_db) - margin + rounding_db,
              "by at least the overshoot and the margin");
-  REQUIRE_EQ(check::lowered_ceiling_db(std::nullopt, club_db, funky_peak_db), club_db - margin,
-             "a new limiter sits the margin under the target");
+  REQUIRE_EQ(check::lowered_ceiling_db(
+                 {.current = std::nullopt, .target = club_db, .true_peak = funky_peak_db}),
+             club_db - margin, "a new limiter sits the margin under the target");
 
   Song song;
   song.import("Loud", seconds, [](double t, std::size_t) {

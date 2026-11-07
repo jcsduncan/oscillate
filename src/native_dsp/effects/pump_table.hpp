@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Data tables keep one entry per row; clang-format would split them.
@@ -21,7 +22,7 @@ using namespace std::string_view_literals;
 // MIDI restarts the cycle on each note-on of the tracks keying Pump, read
 // from the timeline ahead of time: on the beat with no lookahead.
 inline constexpr std::array triggers{"Tempo"sv, "Kick Audio"sv, "MIDI"sv};
-enum Trigger : int { tempo, audio, midi };
+enum Trigger : std::uint8_t { tempo, audio, midi };
 inline constexpr std::array rates{"1/16"sv, "1/8"sv, "1/4"sv, "1/2"sv, "1 Bar"sv, "2 Bars"sv};
 // Beats per cycle; the bar rates take the meter's beats per bar.
 inline constexpr std::array<double, 6> rate_beats{0.25, 0.5, 1.0, 2.0, 0.0, 0.0};
@@ -31,22 +32,22 @@ inline constexpr std::array<double, 3> feel_scale{1.0, 1.5, 2.0 / 3.0};
 // Three Band splits at the two crossovers and gives each band its own
 // depth and, when the document draws one, its own curve.
 inline constexpr std::array bands{"Full"sv, "Lows Only"sv, "Three Band"sv};
-enum Band : int { full, lows, three };
+enum Band : std::uint8_t { full, lows, three };
 // Which part of the stereo image pumps: both channels, the centre (the
 // width stays put) or the sides.
 inline constexpr std::array stereo_modes{"Stereo"sv, "Mid"sv, "Side"sv};
-enum StereoMode : int { stereo, mid, side };
+enum StereoMode : std::uint8_t { stereo, mid, side };
 // Kick Spacing stretches each cycle to the gap until the next trigger (the
 // next note, or the last gap between kicks), so half-time and fills land.
 inline constexpr std::array follows{"Rate"sv, "Kick Spacing"sv};
-enum Follow : int { rate_length, kick_spacing };
+enum Follow : std::uint8_t { rate_length, kick_spacing };
 inline constexpr std::array listens{"Off"sv, "On"sv};
 // Up to four shapes, A to D, each a curve in the document. Slot picks one
 // to play, steps through the pattern, or morphs A into B.
 inline constexpr std::size_t slot_count = 4;
 inline constexpr std::array slot_names{"A"sv, "B"sv, "C"sv, "D"sv};
 inline constexpr std::array slot_modes{"Pattern"sv, "A"sv, "B"sv, "C"sv, "D"sv, "Morph A-B"sv};
-enum SlotMode : int { pattern, slot_a, slot_b, slot_c, slot_d, morph };
+enum SlotMode : std::uint8_t { pattern, slot_a, slot_b, slot_c, slot_d, morph };
 inline constexpr std::size_t max_pattern = 8;
 inline constexpr std::array lookaheads{"Off"sv, "5 ms"sv, "10 ms"sv, "20 ms"sv};
 inline constexpr std::array<double, 4> lookahead_ms{0, 5, 10, 20};

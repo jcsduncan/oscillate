@@ -428,6 +428,9 @@ oscillate_target_defaults(oscillate_quick_routed_revision_status_tests)
 oscillate_add_test(NAME quick_routed_revision_status_contract
   COMMAND oscillate_quick_routed_revision_status_tests)
 set_tests_properties(quick_routed_revision_status_contract PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${oscillate_quick_qml_import_dir}")
+oscillate_add_test(NAME quick_routed_solo_pause_contract
+  COMMAND oscillate_quick_routed_revision_status_tests --solo-pause TIER slow)
+set_tests_properties(quick_routed_solo_pause_contract PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${oscillate_quick_qml_import_dir}")
 oscillate_add_test(NAME quick_vst3_browser_contract
   COMMAND bash ${CMAKE_SOURCE_DIR}/tests/ui/quick/vst3_browser.sh
     $<TARGET_FILE:oscillate_quick_smoke> ${OSCILLATE_BUILD_VST3_SCANNER}

@@ -211,6 +211,7 @@ planar(std::uint32_t source_rate, std::size_t frames, auto&& left_of, auto&& rig
 std::optional<double> parse_bpm(std::string_view text) noexcept {
   double value = 0.0;
   const auto* end = text.data() + text.size();
+  // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage): from_chars reads [data, end).
   const auto [last, error] = std::from_chars(text.data(), end, value);
   if (error != std::errc{} || last != end || !std::isfinite(value) || value < min_sample_bpm ||
       value > max_sample_bpm)

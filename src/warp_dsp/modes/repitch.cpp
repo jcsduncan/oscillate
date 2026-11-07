@@ -1,6 +1,7 @@
 #include "../core/bandlimited_kernel.hpp"
 #include "../core/bandlimited_read.hpp"
 #include "../core/source_window.hpp"
+#include "oscillate/foundation/stereo_span.hpp"
 #include "oscillate/warp_dsp/stream.hpp"
 
 #include <algorithm>
@@ -83,8 +84,9 @@ public:
         right[written + offset] = sample.right;
         stepper.advance();
       }
-      if (segment.splice && !blend_splice(cursor.index(), next_, frames, left.subspan(written),
-                                          right.subspan(written))) {
+      if (segment.splice &&
+          !blend_splice(cursor.index(), next_, frames,
+                        {.left = left.subspan(written), .right = right.subspan(written)})) {
         status_ = StreamStatus::source_failed;
         break;
       }
@@ -101,7 +103,9 @@ private:
   // Equal-gain linear crossfade from the previous segment's continuation into
   // the splice target over the first splice_crossfade_frames of the segment.
   bool blend_splice(std::size_t index, std::uint64_t first, std::uint64_t frames,
-                    std::span<float> left, std::span<float> right) noexcept {
+                    foundation::StereoSpan<float> out) noexcept {
+    const auto left = out.left;
+    const auto right = out.right;
     const auto& segment = map_->segments()[index];
     const auto& previous = map_->segments()[index - 1];
     const auto length =
