@@ -2,7 +2,7 @@
 
 **Status:** Draft for review. Describes the current module boundaries, the native synth and effect platforms, the dependency choices and the known boundary violations (§3.1).
 
-**Basis:** [PRD](PRD.md), 14 October 2026
+**Basis:** [PRD](PRD.md)
 
 **Language:** C++20 throughout production C++ code
 
