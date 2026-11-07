@@ -25,9 +25,45 @@ Item {
     readonly property var choices: info.choices !== undefined ? info.choices : []
     readonly property int current: controller.revision >= 0 ? controller.choice(parameterId) : 0
 
+    // The tiles' labels as shown, and the width that sets the longest of
+    // them whole on every (equal) tile of a row: what a row is sized from.
+    readonly property var shownLabels: choices.map((choice, index) => {
+        const label = labels.length > index ? labels[index] : choice
+        return theme.segmentUpper ? String(label).toUpperCase() : String(label)
+    })
+    readonly property real longestLabel: shownLabels.reduce((widest, label) =>
+        Math.max(widest, labelMetrics.advanceWidth(label) + theme.segmentLetterSpacing * label.length), 0)
+    readonly property real fitWidth: vertical ? theme.segmentWidth
+        : choices.length * (Math.ceil(longestLabel) + theme.segmentTextInset
+                            + (glyph !== null && theme.segmentGlyphMode === "lead"
+                               ? theme.segmentGlyphLeadTextX : theme.segmentTextInset))
+          + spacing * Math.max(0, choices.length - 1)
+    // A vertical column's height that sets each tile's label and caption
+    // whole, with segmentTextPadVertical above and below.
+    readonly property real fitHeight: !vertical ? theme.segmentHeight
+        : choices.length * (verticalLabelMetrics.height
+                            + (captions.length > 0 ? theme.segmentCaptionGap + captionMetrics.height : 0)
+                            + 2 * theme.segmentTextPadVertical)
+          + spacing * Math.max(0, choices.length - 1)
+    FontMetrics {
+        id: verticalLabelMetrics
+        font.family: segment.theme.segmentFont
+        font.pixelSize: segment.theme.segmentSizeVertical
+    }
+    FontMetrics {
+        id: captionMetrics
+        font.pixelSize: segment.theme.segmentCaptionSize
+    }
+    FontMetrics {
+        id: labelMetrics
+        font.family: segment.theme.segmentFont
+        font.pixelSize: segment.theme.segmentSize
+        font.bold: true
+    }
+
     objectName: theme.prefix + "Segment:" + parameterId
-    implicitWidth: theme.segmentWidth
-    implicitHeight: theme.segmentHeight
+    implicitWidth: Math.max(theme.segmentWidth, fitWidth)
+    implicitHeight: vertical ? fitHeight : theme.segmentHeight
     activeFocusOnTab: controller.editable
     opacity: controller.editable ? 1 : theme.segmentDisabledOpacity
     Accessible.role: Accessible.ComboBox

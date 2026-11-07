@@ -1066,6 +1066,28 @@ void ProjectBridge::move_selected_clips(double from, double to, int track_delta)
   set_status(QStringLiteral("%1 clips moved").arg(static_cast<qulonglong>(clips.size())));
 }
 
+void ProjectBridge::nudge_selected_clips(int beat_direction) {
+  if (!audio_edit_enabled()) {
+    set_status(QStringLiteral("Finish active project work before moving clips"));
+    return;
+  }
+  const auto clips = parse_ids<project::ClipId>(selected_clip_ids_);
+  if (clips.empty() || (beat_direction != -1 && beat_direction != 1)) {
+    set_status(QStringLiteral("Select clips and a move direction"));
+    return;
+  }
+  const auto moved =
+      session_->clipboard().move_clips(clips, beat_direction * timeline::ticks_per_quarter, 0);
+  if (!moved) {
+    set_status(
+        QStringLiteral("Move rejected: %1").arg(QString::fromStdString(moved.error().message)));
+    return;
+  }
+  refresh();
+  submit_audio_clip_edit();
+  set_status(QStringLiteral("%1 clips moved").arg(static_cast<qulonglong>(clips.size())));
+}
+
 void ProjectBridge::delete_selected_clips() {
   if (!audio_edit_enabled()) {
     set_status(QStringLiteral("Finish active project work before deleting clips"));

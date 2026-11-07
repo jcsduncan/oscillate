@@ -293,7 +293,7 @@ Rectangle {
             id: phaseSegment
             x: modeSegment.x + modeSegment.width + panel.theme.spaceLg
             y: panel.theme.headerControlY
-            width: panel.theme.phaseWidth
+            width: Math.max(panel.theme.phaseWidth, Math.ceil(fitWidth))
             height: panel.theme.segmentHeight
             controller: panel.controller
             theme: panel.theme
