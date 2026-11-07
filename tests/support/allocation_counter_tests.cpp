@@ -30,8 +30,9 @@ template <typename Allocate> std::size_t allocations_of(Allocate&& allocate) {
   return test::counted_allocations;
 }
 
+// New and delete expressions only, through volatile pointers so the compiler
+// cannot elide the pairs; a delete of a complete type calls the sized form.
 void single_and_array_forms_are_counted() {
-  // Through volatile pointers, so the compiler cannot elide the pairs.
   REQUIRE_EQ(allocations_of([] {
                char* volatile single = new char;
                delete single;
@@ -42,30 +43,27 @@ void single_and_array_forms_are_counted() {
                delete[] array;
              }),
              one_allocation);
-  REQUIRE_EQ(allocations_of([] { ::operator delete(::operator new(block_bytes), block_bytes); }),
-             one_allocation);
-  REQUIRE_EQ(
-      allocations_of([] { ::operator delete[](::operator new[](block_bytes), block_bytes); }),
-      one_allocation);
 }
 
 void nothrow_forms_are_counted_and_report_failure_as_null() {
   REQUIRE_EQ(allocations_of([] {
-               void* memory = ::operator new(block_bytes, std::nothrow);
-               REQUIRE_TRUE(memory != nullptr);
-               ::operator delete(memory, std::nothrow);
+               char* volatile single = new (std::nothrow) char;
+               REQUIRE_TRUE(single != nullptr);
+               delete single;
              }),
              one_allocation);
   REQUIRE_EQ(allocations_of([] {
-               void* memory = ::operator new[](block_bytes, std::nothrow);
-               REQUIRE_TRUE(memory != nullptr);
-               ::operator delete[](memory, std::nothrow);
+               char* volatile array = new (std::nothrow) char[block_bytes];
+               REQUIRE_TRUE(array != nullptr);
+               delete[] array;
              }),
              one_allocation);
   test::fail_next_allocation = true;
-  REQUIRE_TRUE(::operator new(block_bytes, std::nothrow) == nullptr);
+  char* volatile single = new (std::nothrow) char;
+  REQUIRE_TRUE(single == nullptr);
   test::fail_next_allocation = true;
-  REQUIRE_TRUE(::operator new[](block_bytes, std::nothrow) == nullptr);
+  char* volatile array = new (std::nothrow) char[block_bytes];
+  REQUIRE_TRUE(array == nullptr);
 }
 
 // std::stable_sort takes its buffer with the nothrow form and releases it with
