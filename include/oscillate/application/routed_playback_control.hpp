@@ -129,6 +129,14 @@ struct RoutedSourcePreparationCapture {
   bool source_overlay_eligible = false;
 };
 
+// Callback blocks (not frames) the playing graph may render while a live
+// switch's candidate waits before the control withdraws it as one that can
+// never be adopted. A
+// candidate takes over at the first block it can, so even a few passed
+// blocks mean it cannot; the margin covers a source bank that is briefly
+// late.
+inline constexpr std::uint64_t live_candidate_passed_block_limit = 64;
+
 // Headless live-routing seam. The caller renders one source span per prepared
 // topological node; source_layout() identifies external source slots. A bound
 // MIDI instrument generates its own frames on its instrument-track node.
@@ -196,6 +204,9 @@ public:
   [[nodiscard]] foundation::Result<void> publish_held_with_source();
   [[nodiscard]] foundation::Result<void> cancel_captured_source_hold(foundation::Error error);
   [[nodiscard]] foundation::Result<void> retry();
+  // Also withdraws a live switch's candidate the callback has passed over for
+  // live_candidate_passed_block_limit blocks: the old graph plays on, the
+  // candidate's revision is reported failed and the next edit publishes.
   void observe();
 
   [[nodiscard]] RevisionStatus status() const { return revisions_.snapshot(); }
@@ -443,6 +454,25 @@ private:
   // only.
   void refresh_synth_locks();
   [[nodiscard]] foundation::Result<void> fail(std::uint64_t revision, foundation::Error error);
+  // Effects that read notes ahead and every live synth's Lock follow the
+  // published snapshot. Control only.
+  void follow_published_notes();
+  // The control state a live switch replaced at publication, restored when
+  // its candidate is withdrawn or discarded instead of adopted.
+  struct LiveCandidate {
+    std::uint64_t revision = 0;
+    std::uint64_t passed_at_publication = 0;
+    bool withdrawing = false;
+    std::shared_ptr<const project::Snapshot> published_snapshot;
+    std::optional<routing::ProjectRoutePlan> route_plan;
+    std::shared_ptr<native_dsp::ConvolutionRuntime> convolution;
+    std::vector<ActiveChain> chains;
+    std::vector<Vst3Stage> vst3_stages;
+    std::vector<std::pair<project::Vst3ParameterTarget, std::uint64_t>> vst3_automation;
+    bool prepared_limiter = false;
+    std::uint32_t master_output_latency_frames = 0;
+  };
+  void settle_live_candidate();
 
   project::ProjectModel& model_;
   engine::RoutedMixerLimits limits_;
@@ -462,6 +492,7 @@ private:
   std::shared_ptr<const project::Snapshot> published_snapshot_;
   std::optional<PendingNativeRevision> pending_native_revision_;
   std::optional<PendingManualRevision> pending_manual_;
+  std::optional<LiveCandidate> live_candidate_;
   RoutedAudioSource* live_source_ = nullptr;
   bool retry_live_after_ack_ = false;
   std::uint32_t master_output_latency_frames_ = 0;

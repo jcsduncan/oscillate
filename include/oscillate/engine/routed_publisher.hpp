@@ -109,8 +109,18 @@ public:
   // has_pending() stays true, so nothing new is published meanwhile. False
   // when nothing is pending or a withdrawal is already requested.
   [[nodiscard]] bool withdraw_pending() noexcept;
+  // Blocks the active graph rendered while a live candidate stayed pending,
+  // counted since construction. A live candidate takes over at the first
+  // block it can, so each one is a block it could not: the control side
+  // withdraws a candidate after a bounded number of them.
+  [[nodiscard]] std::uint64_t live_candidate_passed_blocks() const noexcept {
+    return live_passed_blocks_.load(std::memory_order_acquire);
+  }
   [[nodiscard]] std::uint64_t active_revision() const noexcept;
   // A candidate awaits adoption, or a withdrawal awaits the callback.
+  // A live candidate's adoption stores it active before it stops being
+  // pending, so a control side that reads has_pending() before
+  // active_revision() can tell an adoption from a withdrawal.
   [[nodiscard]] bool has_pending() const noexcept;
   // The callback-accepted mixer's post-fader meter for this node. Retired
   // plans are destroyed only by collect_retired(), so this control-side read
@@ -172,6 +182,7 @@ private:
   std::atomic<bool> hold_requested_{false};
   std::atomic<bool> held_{false};
   std::atomic<bool> withdraw_requested_{false};
+  std::atomic<std::uint64_t> live_passed_blocks_{0}; // callback writes, control reads
   BlockContext boundary_{0, 0}; // callback writes, control reads after held_ acquire
   // Single-producer (control), single-consumer (callback) live controls.
   std::array<LiveControl, live_capacity> live_{};
@@ -179,6 +190,7 @@ private:
   std::atomic<std::size_t> live_tail_{0};
   static_assert(std::atomic<Plan*>::is_always_lock_free);
   static_assert(std::atomic<bool>::is_always_lock_free);
+  static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
 };
 
 } // namespace oscillate::engine

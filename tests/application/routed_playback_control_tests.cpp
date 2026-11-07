@@ -224,6 +224,84 @@ void live_mute_solo_and_inaudible_solo_revision_do_not_hold() {
              "inaudible solo edit did not publish its saved revision");
 }
 
+// A live switch whose candidate can never take over (its source bank never
+// fills) is withdrawn after a bounded number of passed blocks. The old graph
+// plays throughout, the edit's revision is reported failed, and the next
+// edit publishes and switches.
+void unadoptable_live_switch_is_withdrawn_and_next_edit_publishes() {
+  constexpr std::size_t block = 64;
+  constexpr float level = 0.25F;
+  Gate gate;
+  auto state = model(gate);
+  const auto track = id<project::TrackId>(1'921);
+  const auto initial = take(state.apply({project::AddTrack{track}}));
+  app::RoutedPlaybackControl control(state, limits());
+  REQUIRE_OK(control.submit_current(), "withdrawal fixture did not prepare");
+  std::array<engine::StereoFrame, block> signal{}, output{};
+  signal.fill({level, -level});
+  std::array<std::span<const engine::StereoFrame>, 2> inputs{};
+  set_source(inputs, control.source_layout(), track, signal);
+  struct Bank {
+    std::span<const std::span<const engine::StereoFrame>> inputs;
+    std::uint64_t refused = 0;
+  } bank{inputs};
+  const engine::RoutedSourceFill fill{
+      &bank, nullptr,
+      [](void* context, std::uint64_t revision, engine::BlockContext, std::size_t,
+         std::span<const std::span<const engine::StereoFrame>>& selected) noexcept {
+        auto& self = *static_cast<Bank*>(context);
+        if (revision == self.refused)
+          return false;
+        selected = self.inputs;
+        return true;
+      }};
+  std::uint64_t position = 0;
+  const auto render = [&] {
+    const auto status = control.render_block(inputs, output, {position, 1}, fill);
+    position += block;
+    control.observe();
+    return status;
+  };
+  REQUIRE_EQ(render(), engine::RoutedRenderStatus::rendered, "the first graph did not render");
+  REQUIRE_EQ(control.status().active_graph_revision, initial.snapshot->revision,
+             "the first graph did not activate");
+
+  const auto stuck = take(state.apply({project::AddNativeEffect{track, 0, press_patch({})}}));
+  bank.refused = stuck.snapshot->revision;
+  REQUIRE_OK(control.begin_edit(stuck, "add Press"), "the live switch was not published");
+  REQUIRE_TRUE(!control.held_boundary(), "the edit did not take the live path");
+  for (std::uint64_t passed = 0; passed < app::live_candidate_passed_block_limit; ++passed) {
+    REQUIRE_EQ(control.status().application, app::PlaybackApplication::pending,
+               "the candidate was settled before its bounded wait ran out");
+    REQUIRE_EQ(render(), engine::RoutedRenderStatus::rendered,
+               "the old graph stopped while the candidate waited");
+    near(output.back(), level);
+  }
+  // The callback answers the withdrawal at its next block.
+  REQUIRE_EQ(render(), engine::RoutedRenderStatus::rendered,
+             "the withdrawal interrupted the old graph");
+  near(output.back(), level);
+  REQUIRE_EQ(control.status().application, app::PlaybackApplication::failed,
+             "the withdrawn candidate's revision was not reported failed");
+  REQUIRE_TRUE(control.status().failure.has_value(),
+               "the withdrawn candidate's revision carries no error");
+  REQUIRE_EQ(control.status().model_revision, stuck.snapshot->revision,
+             "the failure was reported for another revision");
+  REQUIRE_EQ(control.status().active_graph_revision, initial.snapshot->revision,
+             "withdrawing the candidate changed the audible revision");
+  REQUIRE_TRUE(!control.graph_handoff_in_progress(), "the withdrawn candidate still blocks edits");
+
+  const auto next = take(state.apply({project::AddNativeEffect{track, 1, press_patch({})}}));
+  REQUIRE_OK(control.begin_edit(next, "add a second Press"),
+             "the edit after the withdrawal was refused");
+  REQUIRE_EQ(render(), engine::RoutedRenderStatus::rendered,
+             "the edit after the withdrawal held or silenced a block");
+  REQUIRE_EQ(control.status().application, app::PlaybackApplication::active,
+             "the edit after the withdrawal did not switch");
+  REQUIRE_EQ(control.status().active_graph_revision, next.snapshot->revision,
+             "the edit after the withdrawal did not switch");
+}
+
 void live_channel_automation_uses_sample_values_before_routing() {
   Gate gate;
   auto state = model(gate);
@@ -3700,6 +3778,8 @@ int main(int argc, char** argv) {
            live_vst3_edit_spanning_two_tracks_switches_live},
           {"missing_insert_provider_does_not_publish", missing_insert_provider_does_not_publish},
           {"pending_supersession_and_hold_validation", pending_supersession_and_hold_validation},
+          {"unadoptable_live_switch_is_withdrawn_and_next_edit_publishes",
+           unadoptable_live_switch_is_withdrawn_and_next_edit_publishes},
           {"changed_model_during_hold_is_reported", changed_model_during_hold_is_reported},
           {"constrained_publication_preserves_failed_revision",
            constrained_publication_preserves_failed_revision},

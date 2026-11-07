@@ -355,6 +355,7 @@ RoutedRenderStatus RoutedMixerPublisher::render_block(
   }
   auto* active = active_.load(std::memory_order_relaxed);
   bool filled = false;
+  bool live_passed = false;
   RoutedGainSpans gains;
   auto selected_sources = sources;
   const auto fill_sources = [&](Plan* plan) noexcept {
@@ -443,12 +444,16 @@ RoutedRenderStatus RoutedMixerPublisher::render_block(
     } else if (candidate->mixer->accepts_context(context, output.size()) &&
                fill_sources(candidate) &&
                candidate->mixer->adopt_live_state(*active->mixer, context)) {
-      pending_.store(nullptr, std::memory_order_release);
       active->mixer->graph_deactivated(active->revision);
       active_.store(candidate, std::memory_order_release);
       candidate->mixer->graph_activated(candidate->revision);
       retired_.store(active, std::memory_order_release);
+      // Cleared last: a control side that sees no candidate pending also
+      // sees it active, so it cannot mistake an adoption for a withdrawal.
+      pending_.store(nullptr, std::memory_order_release);
       active = candidate;
+    } else {
+      live_passed = true;
     }
   } else if (auto* candidate = pending_.load(std::memory_order_acquire);
              candidate && (candidate->source_overlay || candidate->control_overlay) &&
@@ -496,6 +501,9 @@ RoutedRenderStatus RoutedMixerPublisher::render_block(
   if (!active->mixer->mix_block(selected_sources, output, context, gains.edges, gains.nodes,
                                 workers))
     return RoutedRenderStatus::invalid_block;
+  if (live_passed)
+    live_passed_blocks_.store(live_passed_blocks_.load(std::memory_order_relaxed) + 1,
+                              std::memory_order_release);
   return RoutedRenderStatus::rendered;
 }
 

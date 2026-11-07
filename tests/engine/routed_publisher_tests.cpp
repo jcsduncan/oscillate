@@ -1382,6 +1382,8 @@ void unfillable_live_candidate_is_withdrawn() {
                "the old graph stopped while the candidate could not fill");
   }
   REQUIRE_EQ(publisher.active_revision(), first_revision, "an unfilled candidate was adopted");
+  REQUIRE_EQ(publisher.live_candidate_passed_blocks(), static_cast<std::uint64_t>(attempts),
+             "the blocks that passed the candidate over were not counted");
   REQUIRE_TRUE(publisher.withdraw_pending(), "the unfilled candidate could not be withdrawn");
   REQUIRE_TRUE(publisher.has_pending(), "a withdrawal showed as done before the callback answered");
   counting_allocations = true;
@@ -1397,6 +1399,8 @@ void unfillable_live_candidate_is_withdrawn() {
              "a publication after the withdrawal was refused");
   REQUIRE_EQ(render(), RoutedRenderStatus::rendered, "the later candidate did not switch");
   REQUIRE_EQ(publisher.active_revision(), later_revision, "the later candidate did not switch");
+  REQUIRE_EQ(publisher.live_candidate_passed_blocks(), static_cast<std::uint64_t>(attempts),
+             "a block with no candidate waiting, or one adopting it, was counted");
 }
 
 } // namespace
