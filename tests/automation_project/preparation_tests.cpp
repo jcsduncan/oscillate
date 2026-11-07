@@ -13,6 +13,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace tolerance = oscillate::test::tolerance;
@@ -633,6 +634,312 @@ void macro_values_blend_round_and_clamp() {
       "an overflowing discrete span maps to a finite value");
 }
 
+// A macro lane on a track with a built-in instrument and a built-in effect:
+// two mappings, the instrument's cutoff and the effect's mix.
+constexpr double cutoff_minimum = 20.0;
+constexpr double cutoff_maximum = 20'000.0;
+constexpr double cutoff_default = 2'400.0;
+constexpr double macro_low = 100.0;  // The cutoff at macro 0.
+constexpr double macro_high = 300.0; // The cutoff at macro 1.
+constexpr double macro_lane_value = 0.25;
+constexpr std::int64_t macro_point_sample = 0;
+constexpr std::int64_t macro_probe_sample = 10;
+
+project::AutomationDomain cutoff_domain() {
+  return {project::AutomationRepresentation::physical,
+          "prism.filter.cutoff",
+          "Hz",
+          cutoff_minimum,
+          cutoff_maximum,
+          cutoff_default,
+          false,
+          0};
+}
+
+project::AutomationDomain mix_domain() {
+  return {project::AutomationRepresentation::physical, "mix", "", 0.0, 1.0, 1.0, false, 0};
+}
+
+project::AutomationLane macro_lane(project::TrackId track, std::uint32_t index) {
+  return {id<project::AutomationLaneId>(120),
+          project::MacroTarget{track, index},
+          {project::AutomationRepresentation::physical, "macro", "", 0.0, 1.0, 0.0, false, 0},
+          project::AutomationTimebase::elapsed,
+          {point(121, macro_point_sample, macro_lane_value)},
+          1};
+}
+
+project::Snapshot macro_snapshot() {
+  auto state = snapshot();
+  auto& track = state.tracks.front();
+  track.instrument_source = project::NativeInstrumentPatch{"prism", 1, {}};
+  const auto slot = id<project::InsertSlotId>(122);
+  track.effects.push_back({slot, true, project::NativeEffectPatch{"filter", 1, {}}});
+  project::Macro macro;
+  macro.mappings.push_back({project::NativeParameterTarget{track.id, "prism.filter.cutoff"},
+                            cutoff_domain(), macro_low, macro_high});
+  macro.mappings.push_back(
+      {project::NativeEffectParameterTarget{slot, "mix"}, mix_domain(), 0.0, 1.0});
+  track.macros.push_back(std::move(macro));
+  track.automation.push_back(macro_lane(track.id, 0));
+  return state;
+}
+
+const prep::PreparedTargetAutomation&
+prepared_for(const std::vector<prep::PreparedTargetAutomation>& prepared,
+             const project::AutomationTarget& target) {
+  const auto found = std::ranges::find(prepared, target, &prep::PreparedTargetAutomation::target);
+  REQUIRE_NE(found, prepared.end(), "a prepared lane drives the target");
+  return *found;
+}
+
+// A macro lane becomes one prepared lane per mapped parameter, in that
+// parameter's units, and never a lane on the macro itself.
+void macro_lane_drives_each_mapped_parameter() {
+  auto state = macro_snapshot();
+  const auto& track = state.tracks.front();
+  const project::AutomationTarget cutoff =
+      project::NativeParameterTarget{track.id, "prism.filter.cutoff"};
+  const project::AutomationTarget mix =
+      project::NativeEffectParameterTarget{track.effects.front().id, "mix"};
+  auto prepared = take(prep::prepare_project_automation(state, state.revision));
+  REQUIRE_EQ(prepared.size(), 2, "one prepared lane per mapped parameter");
+  REQUIRE_TRUE(std::ranges::none_of(prepared,
+                                    [](const prep::PreparedTargetAutomation& lane) {
+                                      return std::holds_alternative<project::MacroTarget>(
+                                          lane.target());
+                                    }),
+               "no prepared lane targets the macro");
+  // 0.25 of the way from 100 to 300, and 0.25 of the mix's 0..1.
+  near(at(prepared_for(prepared, cutoff), macro_probe_sample),
+       macro_low + macro_lane_value * (macro_high - macro_low),
+       "the macro lane drives the cutoff in its units");
+  near(at(prepared_for(prepared, mix), macro_probe_sample), macro_lane_value,
+       "the macro lane drives the effect's mix");
+  REQUIRE_NE(prepared_for(prepared, cutoff).semantics_key(),
+             prepared_for(prepared, mix).semantics_key(),
+             "each destination has its own runtime identity");
+}
+
+// The runtime identity of a macro-driven lane follows its mapping, and only
+// its own mapping.
+void macro_mapping_change_changes_semantics_key() {
+  auto state = macro_snapshot();
+  auto& track = state.tracks.front();
+  const project::AutomationTarget cutoff =
+      project::NativeParameterTarget{track.id, "prism.filter.cutoff"};
+  const project::AutomationTarget mix =
+      project::NativeEffectParameterTarget{track.effects.front().id, "mix"};
+  const auto before = take(prep::prepare_project_automation(state, state.revision));
+  constexpr double wider_high = 500.0;
+  track.macros.front().mappings.front().maximum = wider_high;
+  const auto after = take(prep::prepare_project_automation(state, state.revision));
+  REQUIRE_NE(prepared_for(after, cutoff).semantics_key(),
+             prepared_for(before, cutoff).semantics_key(),
+             "a changed mapping reused a stale runtime identity");
+  REQUIRE_EQ(prepared_for(after, mix).semantics_key(), prepared_for(before, mix).semantics_key(),
+             "an unchanged mapping lost its runtime identity");
+  near(at(prepared_for(after, cutoff), macro_probe_sample),
+       macro_low + macro_lane_value * (wider_high - macro_low),
+       "the changed mapping drives the cutoff");
+  track.macros.front().mappings.front().domain.scale = project::AutomationScale::logarithmic;
+  const auto rescaled = take(prep::prepare_project_automation(state, state.revision));
+  REQUIRE_NE(prepared_for(rescaled, cutoff).semantics_key(),
+             prepared_for(after, cutoff).semantics_key(),
+             "a changed mapping scale reused a stale runtime identity");
+}
+
+void macro_lane_rejects_missing_macro_and_conflicts() {
+  auto out_of_range = macro_snapshot();
+  auto& macro_track = out_of_range.tracks.front();
+  macro_track.automation.front().target =
+      project::MacroTarget{macro_track.id, static_cast<std::uint32_t>(macro_track.macros.size())};
+  REQUIRE_EQ(prep::prepare_project_automation(out_of_range, out_of_range.revision).error().code,
+             foundation::ErrorCode::invalid_argument, "a lane on a missing macro is rejected");
+
+  // The mapped cutoff also has a lane of its own, on the track or in a clip.
+  auto track_lane = macro_snapshot();
+  auto& track = track_lane.tracks.front();
+  const auto cutoff_lane =
+      project::AutomationLane{id<project::AutomationLaneId>(123),
+                              project::NativeParameterTarget{track.id, "prism.filter.cutoff"},
+                              cutoff_domain(),
+                              project::AutomationTimebase::elapsed,
+                              {point(124, 0, cutoff_default)},
+                              1};
+  track.automation.push_back(cutoff_lane);
+  REQUIRE_EQ(prep::prepare_project_automation(track_lane, track_lane.revision).error().code,
+             foundation::ErrorCode::conflict,
+             "a macro-mapped parameter with its own track lane is rejected");
+  auto clip_lane = macro_snapshot();
+  clip_lane.tracks.front().midi_clips.push_back(
+      midi(125, project::ElapsedInterval{{0}, {10}}, {cutoff_lane}));
+  REQUIRE_EQ(prep::prepare_project_automation(clip_lane, clip_lane.revision).error().code,
+             foundation::ErrorCode::conflict,
+             "a macro-mapped parameter with its own clip lane is rejected");
+
+  // A second macro lane mapping the same parameter.
+  auto two_macros = macro_snapshot();
+  auto& doubled = two_macros.tracks.front();
+  doubled.macros.push_back(doubled.macros.front());
+  auto second = macro_lane(doubled.id, 1);
+  second.id = id<project::AutomationLaneId>(126);
+  doubled.automation.push_back(second);
+  REQUIRE_EQ(prep::prepare_project_automation(two_macros, two_macros.revision).error().code,
+             foundation::ErrorCode::conflict, "two macro lanes on one parameter are rejected");
+
+  auto foreign = macro_snapshot();
+  foreign.tracks.front().macros.front().mappings.front().destination =
+      project::NativeParameterTarget{id<project::TrackId>(127), "prism.filter.cutoff"};
+  REQUIRE_EQ(prep::prepare_project_automation(foreign, foreign.revision).error().code,
+             foundation::ErrorCode::invalid_argument,
+             "a mapping to another track's parameter is rejected");
+}
+
+// A built-in effect's parameter lane: the saved value is the unautomated
+// baseline, a clip envelope takes precedence, and the lane must match a
+// built-in effect on its track.
+void native_effect_parameter_baseline_and_binding() {
+  constexpr double saved_cutoff = 800.0;
+  constexpr double clip_cutoff = 2'000.0;
+  // Distinct from the cutoff's default, so each lane's own domain is used.
+  constexpr double resonance_default = 1'200.0;
+  constexpr std::int64_t clip_start = 101;
+  constexpr std::int64_t clip_end = 103;
+  auto state = snapshot();
+  auto& track = state.tracks.front();
+  track.kind = project::TrackKind::audio;
+  track.instrument_source = std::monostate{};
+  const auto slot = id<project::InsertSlotId>(130);
+  track.effects.push_back(
+      {slot, true,
+       project::NativeEffectPatch{"filter", 1, {{"prism.filter.cutoff", saved_cutoff}}}});
+  const auto effect_lane = [&](std::uint64_t lane_id, std::string parameter,
+                               double domain_default) {
+    auto domain = cutoff_domain();
+    domain.semantic_key = parameter;
+    domain.default_value = domain_default;
+    return project::AutomationLane{id<project::AutomationLaneId>(lane_id),
+                                   project::NativeEffectParameterTarget{slot, std::move(parameter)},
+                                   std::move(domain),
+                                   project::AutomationTimebase::elapsed,
+                                   {point(lane_id + 1, 0, clip_cutoff)},
+                                   1};
+  };
+  track.clips.push_back({id<project::ClipId>(131),
+                         id<project::SourceId>(132),
+                         {{0}, {clip_end - clip_start}},
+                         project::ElapsedInterval{{clip_start}, {clip_end}},
+                         1,
+                         {effect_lane(133, "prism.filter.cutoff", cutoff_default),
+                          effect_lane(135, "prism.filter.resonance", resonance_default)}});
+  auto prepared = take(prep::prepare_project_automation(state, state.revision));
+  REQUIRE_EQ(prepared.size(), 2, "each effect parameter is its own target");
+  const project::AutomationTarget cutoff_target =
+      project::NativeEffectParameterTarget{slot, "prism.filter.cutoff"};
+  const project::AutomationTarget resonance_target =
+      project::NativeEffectParameterTarget{slot, "prism.filter.resonance"};
+  const auto& cutoff = prepared_for(prepared, cutoff_target);
+  const auto& resonance = prepared_for(prepared, resonance_target);
+  near(at(cutoff, clip_start - 1), saved_cutoff, "saved effect value is the baseline");
+  near(at(cutoff, clip_start), clip_cutoff, "the clip envelope takes precedence");
+  near(at(cutoff, clip_end), saved_cutoff, "the saved value resumes after the clip");
+  near(at(resonance, clip_start - 1), resonance_default,
+       "an id the sparse patch omits uses the domain default");
+
+  const auto rejects = [&](auto change, foundation::ErrorCode code, std::string_view message) {
+    auto broken = state;
+    change(broken.tracks.front());
+    const auto result = prep::prepare_project_automation(broken, broken.revision);
+    REQUIRE_TRUE(!result, message);
+    REQUIRE_EQ(result.error().code, code, message);
+  };
+  rejects([](project::Track& changed) { changed.effects.clear(); },
+          foundation::ErrorCode::unavailable, "a lane on a missing effect slot is rejected");
+  rejects(
+      [](project::Track& changed) {
+        changed.effects.front().processor =
+            project::Vst3PluginInstance{id<project::PluginInstanceId>(137),
+                                        "class",
+                                        "vendor",
+                                        "name",
+                                        "1",
+                                        "",
+                                        "",
+                                        {},
+                                        {},
+                                        false};
+      },
+      foundation::ErrorCode::unavailable, "a lane on a VST3 slot is not a built-in effect lane");
+  rejects(
+      [](project::Track& changed) {
+        changed.clips.front().automation.front().domain.semantic_key = "other";
+      },
+      foundation::ErrorCode::invalid_argument, "the domain must name its parameter");
+  rejects(
+      [](project::Track& changed) {
+        changed.clips.front().automation.front().domain.representation =
+            project::AutomationRepresentation::vst3_normalized;
+      },
+      foundation::ErrorCode::invalid_argument, "an effect lane must be physical");
+  rejects(
+      [](project::Track& changed) {
+        constexpr double beyond_domain = 50'000.0;
+        std::get<project::NativeEffectPatch>(changed.effects.front().processor)
+            .parameters.front()
+            .value = beyond_domain;
+      },
+      foundation::ErrorCode::invalid_argument, "a saved value outside the domain is rejected");
+}
+
+// A send-gain lane must name a send on its track and carry the send-gain
+// domain exactly.
+void send_gain_validation_failures() {
+  auto state = snapshot();
+  auto& track = state.tracks.front();
+  const auto send = id<project::SendId>(140);
+  track.sends.push_back({send, id<project::TrackId>(141), 0.5});
+  track.automation.push_back({id<project::AutomationLaneId>(142),
+                              project::SendGainTarget{send},
+                              {project::AutomationRepresentation::physical, "mixer.send_gain",
+                               "linear", 0.0, 4.0, 1.0, false, 0},
+                              project::AutomationTimebase::elapsed,
+                              {point(143, 0, 1.0)},
+                              1});
+  REQUIRE_EQ(take(prep::prepare_project_automation(state, state.revision)).size(), 1,
+             "a well-formed send-gain lane prepares");
+  const auto rejects = [&](auto change, std::string_view message) {
+    auto broken = state;
+    change(broken.tracks.front());
+    const auto result = prep::prepare_project_automation(broken, broken.revision);
+    REQUIRE_TRUE(!result, message);
+    REQUIRE_EQ(result.error().code, foundation::ErrorCode::invalid_argument, message);
+  };
+  rejects([](project::Track& changed) { changed.sends.clear(); },
+          "a lane on a missing send is rejected");
+  rejects([](project::Track& changed) { changed.automation.front().domain.semantic_key = "gain"; },
+          "a send-gain lane must use the send-gain key");
+  rejects(
+      [](project::Track& changed) {
+        changed.automation.front().domain.representation =
+            project::AutomationRepresentation::vst3_normalized;
+      },
+      "a send-gain lane must be physical");
+  rejects(
+      [](project::Track& changed) {
+        constexpr double narrower_maximum = 2.0;
+        changed.automation.front().domain.maximum = narrower_maximum;
+      },
+      "a send-gain lane must span the send-gain range");
+  rejects(
+      [](project::Track& changed) {
+        constexpr std::uint32_t steps = 4;
+        changed.automation.front().domain.discrete = true;
+        changed.automation.front().domain.step_count = steps;
+      },
+      "a send-gain lane must be continuous");
+}
+
 } // namespace
 
 int main() {
@@ -650,6 +957,11 @@ int main() {
     vst3_effect_clip_precedence_and_saved_baseline();
     native_parameter_baseline_precedence_and_binding();
     macro_values_blend_round_and_clamp();
+    macro_lane_drives_each_mapped_parameter();
+    macro_mapping_change_changes_semantics_key();
+    macro_lane_rejects_missing_macro_and_conflicts();
+    native_effect_parameter_baseline_and_binding();
+    send_gain_validation_failures();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return 1;
