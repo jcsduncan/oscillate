@@ -50,7 +50,7 @@ never reused. 0070 was never assigned.
 | 0040 | [A generic native effect platform](0040-native-effect-platform.md) | Accepted; implemented (integration completed under ADR-0043) |
 | 0041 | [Pocket, a kick and bass masking resolver](0041-pocket-kick-bass.md) | Accepted; phase 1 built |
 | 0042 | [A native utility suite](0042-native-utility-suite.md) | Accepted; all six built |
-| 0043 | [One native insert path](0043-one-native-insert-path.md) | Accepted and implemented; classic kinds follow in ADR-0047; superseded in part by ADR-0090 |
+| 0043 | [One native insert path](0043-one-native-insert-path.md) | Superseded by ADR-0090 for export's link to native_inserts; otherwise implemented, classic kinds follow in ADR-0047 |
 | 0044 | [Lumen: wavetable synth (third native engine)](0044-lumen-wavetable-synth.md) | Superseded by ADR-0057 |
 | 0045 | [The development build](0045-development-build.md) | Accepted and implemented |
 | 0046 | [The workspace redesign](0046-workspace-redesign.md) | Accepted and implemented |
@@ -96,4 +96,4 @@ never reused. 0070 was never assigned.
 | 0087 | [Nova voices on the GPU](0087-gpu-nova-voices.md) | Rejected |
 | 0088 | [Fret: a sampled bass guitar with Feel, realtime auto-articulation](0088-fret-sampled-bass.md) | Accepted; implemented; not part of Kick & Bass Lock |
 | 0089 | [Wren: a sampled concert flute with Breath, realtime phrasing](0089-wren-sampled-flute.md) | Accepted; implemented |
-| 0090 | [Export renders a graph the render_graph builder prepares](0090-render-graph-builder.md) | Accepted; implemented for built-in chains; VST3 renderers follow (#100) |
+| 0090 | [Export renders a graph the render_graph builder prepares](0090-render-graph-builder.md) | Accepted; implemented for built-in chains |
