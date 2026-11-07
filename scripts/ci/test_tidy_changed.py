@@ -1,10 +1,12 @@
 """Unit tests for tidy_changed.py's choice of translation units."""
 
 import json
+import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import tidy_changed
 
@@ -124,6 +126,13 @@ class ChangedFindingsTests(unittest.TestCase):
 
 class MovedBaseTests(unittest.TestCase):
     """GitHub checks out the pull request merged into the current base tip."""
+
+    def setUp(self):
+        # A Git hook's GIT_DIR and friends would point these commands at its repository.
+        scrubbed = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        patcher = mock.patch.dict(os.environ, scrubbed, clear=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def git(self, *arguments):
         return subprocess.run(
