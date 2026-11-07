@@ -1,10 +1,10 @@
 #include "../../../apps/daw_quick/src/project_bridge.hpp"
+#include "oscillate/test/check.hpp"
 
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
 #include "oscillate/application/vst3/effect_export.hpp"
 #include "oscillate/application/vst3/instrument_export.hpp"
 #include "oscillate/plugins/vst3_scan.hpp"
-#include "oscillate/test/check.hpp"
 #endif
 
 #include <QColor>

@@ -16,7 +16,6 @@
 #include <unistd.h>
 
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <condition_variable>
 #include <cstring>
@@ -324,7 +323,12 @@ public:
       permits_->stopping = false;
     }
     state_.store(oscillate::audio_io::OutputState::streaming, std::memory_order_release);
-    worker_ = std::thread([this, requested_frames] {
+    // Scratch for the largest block this fake device was asked for, made
+    // here, off the render loop.
+    std::vector<oscillate::engine::StereoFrame> frames(requested_frames);
+    std::vector<float> samples(static_cast<std::size_t>(requested_frames) * 2);
+    worker_ = std::thread([this, requested_frames, frames = std::move(frames),
+                           samples = std::move(samples)]() mutable {
       for (;;) {
         {
           std::unique_lock lock(permits_->mutex);
@@ -333,11 +337,8 @@ public:
             return;
           --permits_->permits;
         }
-        std::array<oscillate::engine::StereoFrame, 128> frames{};
-        std::array<float, 256> samples{};
-        (void)oscillate::audio_io::render_transport_block(
-            source_, cursor_, true, std::span(frames).first(requested_frames),
-            std::span(samples).first(static_cast<std::size_t>(requested_frames) * 2));
+        (void)oscillate::audio_io::render_transport_block(source_, cursor_, true, std::span(frames),
+                                                          std::span(samples));
       }
     });
     return oscillate::foundation::Result<void>::success();

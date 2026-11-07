@@ -202,7 +202,7 @@ target_link_libraries(oscillate_quick_smoke PRIVATE
   oscillate_quick_test_core Qt6::Test)
 if(OSCILLATE_BUILD_VST3_SCANNER)
   add_dependencies(oscillate_quick_smoke oscillate_quick_vst3_helper_copy
-    oscillate_vst3_instrument_fixture)
+    oscillate_vst3_instrument_fixture oscillate_vst3_loaded_gain_fixture)
 endif()
 oscillate_target_defaults(oscillate_quick_smoke)
 # Mockup-comparison screenshots of the real shell; a developer tool, not a test.

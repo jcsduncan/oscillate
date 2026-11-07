@@ -10,10 +10,10 @@
 #include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/test/allocation_counter.hpp"
-#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
-#include "oscillate/plugins/vst3_scan.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/wait.hpp"
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+#include "oscillate/plugins/vst3_scan.hpp"
 #endif
 
 #include <algorithm>
@@ -2051,13 +2051,14 @@ void saved_vst3_is_not_silently_omitted() {
        .canonical_bundle_path = scan.binary.canonical_bundle.string(),
        .binary_sha256 = scan.binary.sha256});
 #else
-  auto inserted = session->insert_vst3_plugin(track.value(), 0,
-                                              {.class_id = std::string(32, 'a'),
-                                               .vendor = "Fixture Vendor",
-                                               .name = "Missing Effect",
-                                               .version = "1",
-                                               .canonical_bundle_path = "/tmp/Missing.vst3",
-                                               .binary_sha256 = std::string(64, 'a')});
+  auto inserted =
+      session->effects().insert_vst3_plugin(track.value(), 0,
+                                            {.class_id = std::string(32, 'a'),
+                                             .vendor = "Fixture Vendor",
+                                             .name = "Missing Effect",
+                                             .version = "1",
+                                             .canonical_bundle_path = "/tmp/Missing.vst3",
+                                             .binary_sha256 = std::string(64, 'a')});
 #endif
   require(inserted.has_value(), "VST3 fixture insert failed");
   require(quick::has_saved_vst3_insert(session->snapshot()),
