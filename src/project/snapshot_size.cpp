@@ -63,8 +63,8 @@ template <typename T> [[nodiscard]] std::size_t elements(const std::vector<T>& v
     total += text(media.id);
     if (const auto* builtin = std::get_if<NativeBuiltinMedia>(&media.media))
       total += text(builtin->name);
-    else
-      total += bytes(std::get<ManagedAudioReference>(media.media));
+    else if (const auto* managed = std::get_if<ManagedAudioReference>(&media.media))
+      total += bytes(*managed);
   }
   for (const auto& label : document.labels)
     total += text(label.id) + text(label.text);
