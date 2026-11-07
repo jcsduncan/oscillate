@@ -2,6 +2,7 @@
 #include "oscillate/test/check.hpp"
 
 #include <QCoreApplication>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QStandardPaths>
 #include <QString>
@@ -10,6 +11,8 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -20,6 +23,7 @@
 #include <iostream>
 #include <memory>
 #include <numbers>
+#include <semaphore>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -44,6 +48,9 @@ constexpr double gap_seconds = 0.15;
 constexpr int harmonics = 8;
 constexpr int wait_ms = 60'000;
 constexpr std::int16_t full_scale = 32'767;
+// How long the slow decoder waits to be released before giving up, so a
+// controller that waits for it fails the test instead of hanging.
+constexpr auto release_timeout = std::chrono::seconds(2);
 
 using oscillate::test::require;
 
@@ -251,6 +258,50 @@ void a_detection_for_a_replaced_session_is_dropped() {
               controller.status().toStdString());
 }
 
+// Closing the editor while detection is still reading the audio (a slow
+// disk) neither waits for the read nor keeps its result: the worker is told
+// to stop, left to finish on its own and joined once it has.
+void cancelling_a_detection_never_waits_for_the_disk() {
+  Directory directory;
+  auto session = take(application::ProjectSession::create(directory.path() / "song"));
+  const auto wav = write_sung(directory.path() / "vocal.wav");
+  const int fd = ::open(wav.c_str(), O_RDONLY | O_CLOEXEC);
+  require(fd >= 0, "fixture open failed");
+  (void)take(session->imports().import_wav_audio(fd));
+  (void)::close(fd);
+  require(static_cast<bool>(session->saving().save()), "the project saves");
+  const auto clip = session->snapshot().tracks.front().clips.front().id;
+  // Before the controller: its destructor joins the decoder that uses them.
+  std::binary_semaphore entered{0};
+  std::binary_semaphore release{0};
+  std::atomic<bool> told_to_stop{false};
+  quick::ClayController controller(
+      [&] { return session.get(); }, [] { return true; }, [](const QString&) {}, [] {},
+      [](const QString&) { return std::optional<oscillate::persistence::GrooveTemplate>{}; }, [] {},
+      [] {});
+  controller.set_decoder([&](const auto&, const auto&, const std::stop_token& stop) {
+    entered.release();
+    (void)release.try_acquire_for(release_timeout);
+    told_to_stop.store(stop.stop_requested());
+    return oscillate::foundation::Result<oscillate::processing::clay::DecodedSource>::failure(
+        {oscillate::foundation::ErrorCode::cancelled, "slow disk"});
+  });
+  controller.open_clip(QString::fromStdString(clip.to_string()));
+  controller.detect(QStringLiteral("melodic"));
+  require(entered.try_acquire_for(release_timeout), "detection did not read the audio");
+  controller.close();
+  require(!controller.detecting() && controller.abandoned_detections() == 1,
+          "closing waited for the detection's read");
+  release.release();
+  QElapsedTimer waited;
+  waited.start();
+  while (controller.abandoned_detections() != 0 && waited.elapsed() < wait_ms)
+    QCoreApplication::processEvents();
+  require(controller.abandoned_detections() == 0 && told_to_stop.load(),
+          "the cancelled detection was not told to stop or never finished");
+  require(!controller.has_take() && !controller.is_open(), "a cancelled detection left a take");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -259,6 +310,7 @@ int main(int argc, char** argv) {
   try {
     the_notes_tab_edits_a_clip();
     a_detection_for_a_replaced_session_is_dropped();
+    cancelling_a_detection_never_waits_for_the_disk();
   } catch (const std::exception& error) {
     std::cerr << "clay controller: " << error.what() << '\n';
     return EXIT_FAILURE;

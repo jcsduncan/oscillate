@@ -1,3 +1,4 @@
+#include "../../../apps/daw_quick/src/background_job.hpp"
 #include "../../../apps/daw_quick/src/import_controller.hpp"
 #include "../../../apps/daw_quick/src/note_tools_controller.hpp"
 #include "../../../apps/daw_quick/src/performance_trace.hpp"
@@ -142,6 +143,34 @@ template <typename Done> void wait_until(Done done, const char* what) {
   require(done(), what);
 }
 
+// The runner itself: work given up, or replaced by new work, is never
+// waited for; its thread is joined once it finishes.
+void abandoned_work_is_never_waited_for() {
+  constexpr int first_result = 1;
+  constexpr int second_result = 2;
+  const auto failure = [](const std::string&) { return 0; };
+  SlowIo io; // Before the job: the job's destructor joins work that uses it.
+  quick::BackgroundJob<int> job;
+  require(!job.start(
+              0,
+              [&] {
+                io.wait();
+                return first_result;
+              },
+              failure),
+          "the first work did not start");
+  require(io.entered.try_acquire_for(release_timeout), "the first work did not run");
+  require(!job.start(
+              0, [] { return second_result; }, failure) &&
+              job.abandoned() == 1,
+          "starting new work waited for the running work");
+  wait_until([&] { return job.finished(); }, "the second work did not finish");
+  const auto taken = job.take();
+  require(taken && taken->result == second_result, "the abandoned work's result was taken");
+  io.release.release();
+  wait_until([&] { return job.abandoned() == 0; }, "the abandoned work was never joined");
+}
+
 void a_trace_saves_in_the_background() {
   Directory directory;
   qputenv("XDG_DATA_HOME", QByteArray::fromStdString(directory.path().string()));
@@ -283,6 +312,7 @@ int main(int argc, char** argv) {
   qunsetenv("OSCILLATE_TRACE");
   QCoreApplication app(argc, argv);
   try {
+    abandoned_work_is_never_waited_for();
     a_trace_saves_in_the_background();
     a_failed_trace_save_is_reported();
     a_midi_file_is_read_in_the_background();

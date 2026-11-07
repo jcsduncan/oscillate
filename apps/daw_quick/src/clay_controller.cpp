@@ -28,6 +28,8 @@ namespace source_clay = oscillate::processing::clay;
 namespace song_clay = oscillate::application::clay;
 
 constexpr int poll_interval_ms = 50;
+// A detection's progress once the audio is read, before the analysis.
+constexpr double detect_read_progress = 0.3;
 constexpr int waveform_column_count = 1'024;
 // Points drawn per note curve at most.
 constexpr std::size_t curve_points = 64;
@@ -102,9 +104,9 @@ ClayController::ClayController(Session session, CanEdit can_edit, Report report,
 
 ClayController::~ClayController() {
   if (job_)
-    job_->cancel.store(true, std::memory_order_release);
-  if (warm_)
-    warm_->stop.request_stop();
+    job_->cancel.request_stop();
+  if (warm_stop_)
+    warm_stop_->request_stop();
 }
 
 QString ClayController::clip_id() const { return clip_ ? text(clip_->to_string()) : QString{}; }
@@ -231,6 +233,8 @@ void ClayController::open_clip(const QString& clip_id) {
     return;
   }
   cancel_detect();
+  audition_.abandon(); // An audition of the previous clip is never published.
+  stop_warm();
   clip_ = parsed.value();
   loaded_.reset();
   edited_.reset();
@@ -250,6 +254,8 @@ void ClayController::open_clip(const QString& clip_id) {
 
 void ClayController::close() {
   cancel_detect();
+  audition_.abandon();
+  stop_warm();
   clip_.reset();
   take_.reset();
   preview_.reset();
@@ -300,17 +306,16 @@ void ClayController::start_detect(project::ClayMode mode, bool save) {
   job->stage = "Reading the audio";
   job->session = session->session_generation();
   const auto source = *found.value().source;
-  try {
-    worker_ = std::jthread([job, source, mode, pinned = std::move(pinned).value()] {
-      try {
-        std::stop_source stop;
-        auto audio = source_clay::decode_source(pinned.reader, source, stop.get_token());
-        if (!audio) {
-          job->result = foundation::Result<std::shared_ptr<const Loaded>>::failure(audio.error());
-          job->done.store(true, std::memory_order_release);
-          return;
-        }
-        job->progress.store(0.3, std::memory_order_relaxed);
+  auto decode = decode_ ? decode_ : Decode(source_clay::decode_source);
+  const auto failed = detect_.start(
+      0,
+      [job, source, mode, decode = std::move(decode), pinned = std::move(pinned).value()] {
+        // Cancelling stops the reading and the analysis between hops.
+        const auto stop = job->cancel.get_token();
+        auto audio = decode(pinned.reader, source, stop);
+        if (!audio)
+          return Detected::failure(audio.error());
+        job->progress.store(detect_read_progress, std::memory_order_relaxed);
         {
           const std::scoped_lock lock(job->mutex);
           job->stage = "Finding notes";
@@ -319,36 +324,22 @@ void ClayController::start_detect(project::ClayMode mode, bool save) {
         if (auto directory = pinned.reader.open_cache_directory())
           if (auto adopted = media::CacheStore::adopt_directory_fd(directory.value()))
             cache.emplace(std::move(adopted).value());
-        // Cancelling stops the analysis between hops.
-        std::jthread watcher([job, &stop](const std::stop_token& done) {
-          while (!done.stop_requested() && !job->cancel.load(std::memory_order_acquire))
-            std::this_thread::sleep_for(std::chrono::milliseconds(poll_interval_ms));
-          if (job->cancel.load(std::memory_order_acquire))
-            stop.request_stop();
-        });
         auto analysed = source_clay::analysed_take(cache ? &*cache : nullptr, source, mode,
-                                                   audio.value(), stop.get_token());
-        watcher.request_stop();
-        if (!analysed) {
-          job->result =
-              foundation::Result<std::shared_ptr<const Loaded>>::failure(analysed.error());
-        } else {
-          auto loaded = std::make_shared<Loaded>(source);
-          loaded->mode = mode;
-          loaded->audio = std::move(audio).value();
-          loaded->analysed = std::move(analysed).value();
-          job->result = foundation::Result<std::shared_ptr<const Loaded>>::success(
-              std::shared_ptr<const Loaded>(std::move(loaded)));
-        }
-      } catch (const std::exception& error) {
-        job->result = foundation::Result<std::shared_ptr<const Loaded>>::failure(
-            {foundation::ErrorCode::internal, error.what()});
-      }
-      job->progress.store(1.0, std::memory_order_relaxed);
-      job->done.store(true, std::memory_order_release);
-    });
-  } catch (const std::exception& error) {
-    set_status(QStringLiteral("Cannot start detecting: %1").arg(QString::fromUtf8(error.what())));
+                                                   audio.value(), stop);
+        job->progress.store(1.0, std::memory_order_relaxed);
+        if (!analysed)
+          return Detected::failure(analysed.error());
+        auto loaded = std::make_shared<Loaded>(source);
+        loaded->mode = mode;
+        loaded->audio = std::move(audio).value();
+        loaded->analysed = std::move(analysed).value();
+        return Detected::success(std::shared_ptr<const Loaded>(std::move(loaded)));
+      },
+      [](std::string what) {
+        return Detected::failure({foundation::ErrorCode::internal, std::move(what)});
+      });
+  if (failed) {
+    set_status(QStringLiteral("Cannot start detecting: %1").arg(QString::fromStdString(*failed)));
     return;
   }
   job_ = std::move(job);
@@ -360,57 +351,52 @@ void ClayController::start_detect(project::ClayMode mode, bool save) {
 void ClayController::cancel_detect() {
   if (!job_)
     return;
-  job_->cancel.store(true, std::memory_order_release);
-  if (worker_.joinable())
-    worker_.join();
+  // Never waits: the worker stops at its next check and is joined once done.
+  job_->cancel.request_stop();
+  detect_.abandon();
   job_.reset();
   emit detectingChanged();
 }
 
 void ClayController::poll() {
-  if (job_ && job_->done.load(std::memory_order_acquire)) {
-    if (worker_.joinable())
-      worker_.join();
+  if (job_ && detect_.finished()) {
     finish_detect();
   } else if (job_) {
     emit detectingChanged();
   }
-  if (warm_ && warm_->done.load(std::memory_order_acquire)) {
-    if (warm_worker_.joinable())
-      warm_worker_.join();
-    if (warm_->error && !warm_->stop.stop_requested())
-      set_status(QStringLiteral("The edit could not render: %1").arg(text(warm_->error->message)));
-    warm_.reset();
+  if (warm_.finished()) {
+    auto finished = warm_.take();
+    warm_stop_.reset();
+    if (finished && finished->result)
+      set_status(
+          QStringLiteral("The edit could not render: %1").arg(text(finished->result->message)));
     set_render_state(take_ ? QStringLiteral("ready") : QStringLiteral("none"));
   }
-  if (audition_ && audition_->done.load(std::memory_order_acquire)) {
-    if (audition_worker_.joinable())
-      audition_worker_.join();
-    auto result = std::move(*audition_->result);
-    audition_.reset();
-    if (!result) {
-      set_status(QStringLiteral("Cannot audition: %1").arg(text(result.error().message)));
-    } else {
-      audition_path_ = result.value();
+  if (audition_.finished()) {
+    if (auto finished = audition_.take(); finished && !finished->result) {
+      set_status(QStringLiteral("Cannot audition: %1").arg(text(finished->result.error().message)));
+    } else if (finished) {
+      audition_path_ = finished->result.value();
       emit auditionReady(audition_path_);
     }
   }
-  if (!job_ && !warm_ && !audition_)
+  if (!job_ && !warm_.running() && !audition_.running())
     timer_.stop();
 }
 
 void ClayController::finish_detect() {
   auto job = std::move(job_);
   job_.reset();
+  auto finished = detect_.take();
   emit detectingChanged();
-  if (job->cancel.load(std::memory_order_acquire))
+  if (!finished || job->cancel.stop_requested())
     return;
   if (auto* session = session_ ? session_() : nullptr;
       session == nullptr || session->session_generation() != job->session) {
     set_status(QStringLiteral("Detection dropped: the project changed"));
     return;
   }
-  auto& result = *job->result;
+  auto& result = finished->result;
   if (!result) {
     set_status(QStringLiteral("No notes: %1").arg(text(result.error().message)));
     return;
@@ -495,7 +481,7 @@ void ClayController::reload_from_snapshot() {
   rebuild_edited();
   if (!take_) {
     set_render_state(QStringLiteral("none"));
-  } else if (!warm_) {
+  } else if (!warm_.running()) {
     auto pinned = session->exports().pin_snapshot();
     if (pinned && source_clay::render_cached(pinned.value().reader, *found.value().source, *take_))
       set_render_state(QStringLiteral("ready"));
@@ -737,35 +723,42 @@ bool ClayController::commit(project::ClayTake take, const QString& label) {
   return true;
 }
 
+void ClayController::stop_warm() {
+  // A render of an older take or clip is stopped and left to finish on its own.
+  if (warm_stop_)
+    warm_stop_->request_stop();
+  warm_.abandon();
+  warm_stop_.reset();
+}
+
 void ClayController::warm_render() {
   auto* session = session_ ? session_() : nullptr;
   if (session == nullptr || !clip_ || !take_)
     return;
-  if (warm_) {
-    warm_->stop.request_stop();
-    if (warm_worker_.joinable())
-      warm_worker_.join();
-    warm_.reset();
-  }
+  stop_warm();
+  // The abandoned render never reaches poll(), so settle the state as poll() would.
+  set_render_state(take_ ? QStringLiteral("ready") : QStringLiteral("none"));
   auto found = song_clay::find_clip(session->snapshot(), *clip_);
   auto pinned = session->exports().pin_snapshot();
   if (!found || !pinned)
     return;
-  auto warm = std::make_shared<Warm>();
+  std::stop_source stop;
   const auto source = *found.value().source;
   const auto take = *take_;
-  try {
-    warm_worker_ = std::jthread([warm, source, take, pinned = std::move(pinned).value()] {
-      auto rendered =
-          source_clay::open_rendered(pinned.reader, source, take, warm->stop.get_token());
-      if (!rendered)
-        warm->error = rendered.error();
-      warm->done.store(true, std::memory_order_release);
-    });
-  } catch (const std::exception&) {
+  const auto failed = warm_.start(
+      0,
+      [stop = stop.get_token(), source, take, pinned = std::move(pinned).value()] {
+        auto rendered = source_clay::open_rendered(pinned.reader, source, take, stop);
+        return rendered || stop.stop_requested() ? std::optional<foundation::Error>{}
+                                                 : std::optional(rendered.error());
+      },
+      [](std::string what) {
+        return std::optional<foundation::Error>(
+            foundation::Error{foundation::ErrorCode::internal, std::move(what)});
+      });
+  if (failed)
     return;
-  }
-  warm_ = std::move(warm);
+  warm_stop_ = std::move(stop);
   set_render_state(QStringLiteral("rendering"));
   timer_.start();
 }
@@ -1284,7 +1277,7 @@ void ClayController::audition_selection() {
 
 void ClayController::audition_span(double from_frame, double to_frame) {
   auto* session = session_ ? session_() : nullptr;
-  if (session == nullptr || !loaded_ || !take_ || audition_)
+  if (session == nullptr || !loaded_ || !take_ || audition_.running())
     return;
   auto pinned = session->exports().pin_snapshot();
   if (!pinned)
@@ -1296,60 +1289,59 @@ void ClayController::audition_span(double from_frame, double to_frame) {
   static std::uint64_t serial = 0;
   ++serial;
   const auto path = QStringLiteral("%1/audition-%2.wav").arg(folder).arg(serial);
-  auto audition = std::make_shared<Audition>();
   const auto pad = audition_pad_seconds * loaded_->audio.sample_rate;
   const auto total = static_cast<double>(loaded_->audio.left.size());
   const auto first = static_cast<std::size_t>(std::clamp(from_frame - pad, 0.0, total));
   const auto last = static_cast<std::size_t>(std::clamp(to_frame + pad, 0.0, total));
   if (last <= first)
     return;
-  try {
-    audition_worker_ =
-        std::jthread([audition, loaded = loaded_, take = *take_, original = ab_original_, first,
-                      last, path, pinned = std::move(pinned).value()] {
-          auto result = [&]() -> foundation::Result<QString> {
-            const auto& audio = loaded->audio;
-            std::vector<float> left;
-            std::vector<float> right;
-            if (original) {
-              left = audio.left;
-              right = audio.right;
-            } else {
-              left.resize(audio.left.size());
-              right.resize(audio.right.size());
-              std::optional<media::CacheStore> cache;
-              if (auto directory = pinned.reader.open_cache_directory())
-                if (auto adopted = media::CacheStore::adopt_directory_fd(directory.value()))
-                  cache.emplace(std::move(adopted).value());
-              auto rendered = source_clay::render_take(cache ? &*cache : nullptr, loaded->source,
-                                                       take, audio, left, right);
-              if (!rendered)
-                return foundation::Result<QString>::failure(rendered.error());
-            }
-            std::vector<float> interleaved;
-            interleaved.reserve((last - first) * 2);
-            for (auto i = first; i < last; ++i) {
-              interleaved.push_back(left[i]);
-              interleaved.push_back(right.empty() ? left[i] : right[i]);
-            }
-            auto writer = exporting::WavWriter::begin(
-                path.toStdString(),
-                {audio.sample_rate, exporting::WavFormat::float32, last - first, 0});
-            if (!writer)
-              return foundation::Result<QString>::failure(writer.error());
-            if (auto written = writer.value().write_interleaved_stereo(interleaved); !written)
-              return foundation::Result<QString>::failure(written.error());
-            if (auto finished = writer.value().finish(); !finished)
-              return foundation::Result<QString>::failure(finished.error());
-            return foundation::Result<QString>::success(path);
-          }();
-          audition->result = std::move(result);
-          audition->done.store(true, std::memory_order_release);
-        });
-  } catch (const std::exception&) {
+  const auto failed = audition_.start(
+      0,
+      [loaded = loaded_, take = *take_, original = ab_original_, first, last, path,
+       pinned = std::move(pinned).value()] {
+        return [&]() -> foundation::Result<QString> {
+          const auto& audio = loaded->audio;
+          std::vector<float> left;
+          std::vector<float> right;
+          if (original) {
+            left = audio.left;
+            right = audio.right;
+          } else {
+            left.resize(audio.left.size());
+            right.resize(audio.right.size());
+            std::optional<media::CacheStore> cache;
+            if (auto directory = pinned.reader.open_cache_directory())
+              if (auto adopted = media::CacheStore::adopt_directory_fd(directory.value()))
+                cache.emplace(std::move(adopted).value());
+            auto rendered = source_clay::render_take(cache ? &*cache : nullptr, loaded->source,
+                                                     take, audio, left, right);
+            if (!rendered)
+              return foundation::Result<QString>::failure(rendered.error());
+          }
+          std::vector<float> interleaved;
+          interleaved.reserve((last - first) * 2);
+          for (auto i = first; i < last; ++i) {
+            interleaved.push_back(left[i]);
+            interleaved.push_back(right.empty() ? left[i] : right[i]);
+          }
+          auto writer = exporting::WavWriter::begin(
+              path.toStdString(),
+              {audio.sample_rate, exporting::WavFormat::float32, last - first, 0});
+          if (!writer)
+            return foundation::Result<QString>::failure(writer.error());
+          if (auto written = writer.value().write_interleaved_stereo(interleaved); !written)
+            return foundation::Result<QString>::failure(written.error());
+          if (auto finished = writer.value().finish(); !finished)
+            return foundation::Result<QString>::failure(finished.error());
+          return foundation::Result<QString>::success(path);
+        }();
+      },
+      [](std::string what) {
+        return foundation::Result<QString>::failure(
+            {foundation::ErrorCode::internal, std::move(what)});
+      });
+  if (failed)
     return;
-  }
-  audition_ = std::move(audition);
   timer_.start();
 }
 
@@ -1370,7 +1362,7 @@ bool ClayController::wait_for_detect(int timeout_ms) {
   clock.start();
   while (job_ && clock.elapsed() < timeout_ms) {
     QCoreApplication::processEvents(QEventLoop::AllEvents, poll_interval_ms);
-    if (job_ && job_->done.load(std::memory_order_acquire))
+    if (job_ && detect_.finished())
       poll();
   }
   return !job_;
@@ -1379,11 +1371,11 @@ bool ClayController::wait_for_detect(int timeout_ms) {
 bool ClayController::wait_for_render(int timeout_ms) {
   QElapsedTimer clock;
   clock.start();
-  while ((warm_ || audition_) && clock.elapsed() < timeout_ms) {
+  while ((warm_.running() || audition_.running()) && clock.elapsed() < timeout_ms) {
     QCoreApplication::processEvents(QEventLoop::AllEvents, poll_interval_ms);
     poll();
   }
-  return !warm_ && !audition_;
+  return !warm_.running() && !audition_.running();
 }
 
 } // namespace oscillate::quick
