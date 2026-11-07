@@ -80,6 +80,8 @@ std::vector<double> press_values() {
   return values;
 }
 
+// Commutative, so a swapped call is harmless.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 Stereo sum(const Stereo& a, const Stereo& b) {
   Stereo out = a;
   for (std::size_t i = 0; i < out.size(); ++i) {

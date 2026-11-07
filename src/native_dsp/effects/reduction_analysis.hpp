@@ -71,6 +71,8 @@ public:
 
   // Callback, after analyse: the reduction over that block (dB, positive)
   // and its length.
+  // The order (reduction, then frames) is the call contract.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   void settle(double reduction_db, std::size_t frames) noexcept {
     double total = 0.0;
     for (std::size_t band = 0; band < bands; ++band) {

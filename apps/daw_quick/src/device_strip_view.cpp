@@ -32,6 +32,8 @@ constexpr double whole_kilohertz_from = 10'000.0;
 // Between two readings: " · ".
 QString separator() { return QStringLiteral(" \u00b7 "); }
 
+// Callers pass the named decimal constants.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 QString number(double value, int decimals) {
   return QString::number(value, 'f', decimals).replace(QLatin1Char('-'), minus);
 }
