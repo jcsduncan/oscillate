@@ -1323,7 +1323,6 @@ void unadoptable_live_candidate_is_withdrawn() {
           "a publication passed a pending candidate");
   REQUIRE_TRUE(publisher.withdraw_pending(), "the pending candidate could not be withdrawn");
   REQUIRE_TRUE(!publisher.withdraw_pending(), "a withdrawal was requested twice");
-  REQUIRE_TRUE(publisher.has_pending(), "a withdrawal showed as done before the callback answered");
   oscillate::test::wait_until([&] { return !publisher.has_pending(); },
                               "the callback did not answer the withdrawal");
   REQUIRE_EQ(publisher.collect_retired(), 1, "the withdrawn candidate was not reclaimed");
@@ -1384,6 +1383,7 @@ void unfillable_live_candidate_is_withdrawn() {
   }
   REQUIRE_EQ(publisher.active_revision(), first_revision, "an unfilled candidate was adopted");
   REQUIRE_TRUE(publisher.withdraw_pending(), "the unfilled candidate could not be withdrawn");
+  REQUIRE_TRUE(publisher.has_pending(), "a withdrawal showed as done before the callback answered");
   counting_allocations = true;
   counted_allocations = 0;
   const auto answered = render();
