@@ -86,10 +86,10 @@ TransportController::PlaybackView ProjectBridge::playback_view(PlaybackViewOptio
   view.active = playback_active();
   view.routed_present = routed_playback_ != nullptr;
   view.routed_stopping = routed_stop_completion_ != nullptr;
-  view.routed_paused = routed_playback_ && routed_playback_->paused();
-  view.routed_output_streaming =
-      options.include_output && routed_playback_ &&
-      routed_playback_->output_status().state == audio_io::OutputState::streaming;
+  auto* const run = routed_run();
+  view.routed_paused = run && run->paused();
+  view.routed_output_streaming = options.include_output && run &&
+                                 run->output_status().state == audio_io::OutputState::streaming;
   view.routed_preparing = routed_completion_ != nullptr;
   view.direct_preparing = playback_completion_ != nullptr;
   view.direct_playing = playback_ && playback_->playing();
@@ -98,8 +98,8 @@ TransportController::PlaybackView ProjectBridge::playback_view(PlaybackViewOptio
     view.graph = observed_routed_graph_;
   else if (options.include_direct_graph && view.direct_playing)
     view.graph = playback_->status();
-  if (options.include_fault && routed_playback_)
-    view.plugin_fault = routed_playback_->processor_fault();
+  if (options.include_fault && run)
+    view.plugin_fault = run->processor_fault();
   return view;
 }
 
@@ -363,7 +363,7 @@ void ProjectBridge::toggle_pause() {
        .deferred = deferred_routed_transport_.has_value(),
        .routed_preparing = routed_completion_ != nullptr,
        .routed_present = routed_playback_ != nullptr,
-       .routed_paused = routed_playback_ && routed_playback_->paused(),
+       .routed_paused = routed_run() && routed_run()->paused(),
        .direct_playing = playback_ && playback_->playing(),
        .playback_enabled = playback_enabled(),
        .direct_present = playback_ != nullptr,
@@ -411,7 +411,7 @@ void ProjectBridge::stop_playback() {
       {.transport_pending = routed_transport_completion_ != nullptr,
        .routed_preparing = routed_completion_ != nullptr,
        .routed_present = routed_playback_ != nullptr,
-       .routed_paused = routed_playback_ && routed_playback_->paused(),
+       .routed_paused = routed_run() && routed_run()->paused(),
        .direct_playing = playback_ && playback_->playing(),
        .audio_edit_pending = audio_edit_completion_ != nullptr});
   switch (action) {
@@ -489,7 +489,8 @@ void ProjectBridge::toggle_playback() {
   }
   if (routed_playback_) {
     deferred_routed_transport_.reset();
-    begin_async_routed_stop(!routed_playback_->paused());
+    if (auto* const run = routed_run())
+      begin_async_routed_stop(!run->paused());
     return;
   }
   if (audio_edit_completion_) {
@@ -725,25 +726,27 @@ void ProjectBridge::poll_live_audio_edit() {
 }
 
 void ProjectBridge::preview_track_level_pan(const QString& track_id, double level, double pan) {
-  if (!routed_playback_)
+  auto* const run = routed_run();
+  if (!run)
     return;
   if (const auto track = project::TrackId::parse(track_id.toStdString()))
-    (void)routed_playback_->set_live_channel(track.value(), level, pan);
+    (void)run->set_live_channel(track.value(), level, pan);
 }
 
 void ProjectBridge::preview_master_level(double level) {
-  if (routed_playback_)
-    (void)routed_playback_->set_live_channel(std::nullopt, level, 0.0);
+  if (auto* const run = routed_run())
+    (void)run->set_live_channel(std::nullopt, level, 0.0);
 }
 
 void ProjectBridge::preview_send_gain(const QString& send_id, double gain) {
   const auto send = project::SendId::parse(send_id.toStdString());
-  if (!routed_playback_ || !session_ || !send)
+  auto* const run = routed_run();
+  if (!run || !session_ || !send)
     return;
   for (const auto& track : session_->snapshot().tracks)
     if (std::ranges::any_of(track.sends,
                             [&](const auto& item) { return item.id == send.value(); })) {
-      (void)routed_playback_->set_live_send(track.id, send.value(), gain);
+      (void)run->set_live_send(track.id, send.value(), gain);
       return;
     }
 }
@@ -765,13 +768,17 @@ void ProjectBridge::submit_playback_edit() {
     return;
   }
   if (routed_playback_) {
+    // A stopping run takes no edits; the next Play prepares the saved one.
+    auto* const run = routed_run();
+    if (!run)
+      return;
     const auto snapshot = session_->snapshot();
     foundation::trace::instant("edit.committed", snapshot.revision);
-    const auto graph = routed_playback_->status();
+    const auto graph = run->status();
     // Names, colours and markers never need a new graph.
     if (graph.active_graph_revision >= snapshot.audible_revision)
       return;
-    const auto submitted = routed_playback_->submit_revision(snapshot);
+    const auto submitted = run->submit_revision(snapshot);
     if (!submitted) {
       set_playback_status(
           QStringLiteral("Edit revision %1 saved but not active: %2. Stop and Play to retry.")

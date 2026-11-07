@@ -27,6 +27,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unistd.h>
 #include <vector>
 
@@ -254,6 +255,13 @@ struct OutputProbe {
   std::vector<float> first_samples;
   std::atomic<std::uint32_t> starts{0};
   std::atomic<FakeOutput*> active{nullptr};
+  // Set, stop() waits for release_stop, then renders one last block, as a
+  // device callback can before its stop joins it.
+  std::atomic<bool> hold_stop{false};
+  std::atomic<bool> stop_held{false};
+  std::atomic<bool> release_stop{false};
+  std::atomic<bool> stop_block_rendered{false};
+  std::atomic<float> stop_block_last_sample{0.0F};
 };
 
 class FakeOutput final : public app::PlaybackOutput {
@@ -291,6 +299,14 @@ public:
   }
 
   void stop() noexcept override {
+    if (probe_->hold_stop.load(std::memory_order_acquire)) {
+      probe_->stop_held.store(true, std::memory_order_release);
+      while (!probe_->release_stop.load(std::memory_order_acquire))
+        std::this_thread::yield();
+      const auto last = pump_last_sample();
+      probe_->stop_block_last_sample.store(last.value_or(0.0F), std::memory_order_release);
+      probe_->stop_block_rendered.store(last.has_value(), std::memory_order_release);
+    }
     probe_->active.store(nullptr, std::memory_order_release);
     state_.store(audio::OutputState::stopped, std::memory_order_release);
   }
@@ -302,6 +318,18 @@ public:
         source_, cursor_, true, std::span(frames).first(block_frames_),
         std::span(samples).first(static_cast<std::size_t>(block_frames_) * 2));
     return result == audio::BlockResult::rendered;
+  }
+
+  // The last left sample of one rendered block, if it rendered.
+  [[nodiscard]] std::optional<float> pump_last_sample() noexcept {
+    std::array<engine::StereoFrame, app::max_playback_buffer_frames> frames{};
+    std::array<float, 2 * app::max_playback_buffer_frames> samples{};
+    const auto interleaved = static_cast<std::size_t>(block_frames_) * 2;
+    if (audio::render_transport_block(
+            source_, cursor_, true, std::span(frames).first(block_frames_),
+            std::span(samples).first(interleaved)) != audio::BlockResult::rendered)
+      return std::nullopt;
+    return samples[interleaved - 2];
   }
 
   [[nodiscard]] audio::OutputStatus status() const noexcept override {
@@ -438,6 +466,66 @@ void routed_revision_status_checks() {
   auto persisted = app::ProjectSession::open(root);
   require(persisted.has_value() && persisted.value()->snapshot().tracks.front().sends.size() == 1,
           "saved route edit was lost after playback and reopen");
+}
+
+// A mixer gesture during Stop: the stop worker owns the run until it joins,
+// so the previews must not reach it. The fake output holds its stop and
+// renders one last block, which would carry a preview that got through.
+void stop_during_mixer_preview_leaves_the_stopping_run_alone() {
+  constexpr float fixture_level = 0.25F;
+  constexpr float sample_tolerance = 0.00001F;
+  constexpr double silent_level = 0.0;
+  constexpr double centre_pan = 0.0;
+  constexpr int wait_ms = 10'000;
+  Directory directory;
+  const auto root = directory.root() / "preview-stop-song";
+  auto session = app::ProjectSession::create(root);
+  require(session.has_value(), "preview-stop project create failed");
+  const auto source = source_wav(directory.root());
+  const int fd = ::open(source.c_str(), O_RDONLY | O_CLOEXEC);
+  require(fd >= 0, "preview-stop WAV open failed");
+  const auto imported = session.value()->imports().import_wav_audio(fd);
+  (void)::close(fd);
+  require(imported && session.value()->saving().save(), "preview-stop WAV import/save failed");
+  const auto track = QString::fromStdString(imported.value().to_string());
+  auto probe = std::make_shared<OutputProbe>();
+  app::PlaybackOutputFactory factory = [probe](audio::StereoRenderSource render,
+                                               audio::TransportCursor& cursor) {
+    return std::make_unique<FakeOutput>(render, cursor, probe);
+  };
+  quick::ProjectBridge bridge(directory.root(), nullptr, std::move(factory), [] {
+    return foundation::Result<std::vector<audio::PipeWireSink>>::success({});
+  });
+  bridge.set_project(std::move(session.value()), root);
+  // Play/Pause starts the routed path whatever the project holds.
+  bridge.toggle_pause();
+  require(
+      QTest::qWaitFor([&probe] { return probe->active.load(std::memory_order_acquire) != nullptr; },
+                      wait_ms),
+      "preview-stop fixture did not start routed playback");
+  require(QTest::qWaitFor(
+              [&probe, fixture_level, sample_tolerance] {
+                auto* output = probe->active.load(std::memory_order_acquire);
+                const auto last = output ? output->pump_last_sample() : std::nullopt;
+                return last && std::fabs(*last - fixture_level) < sample_tolerance;
+              },
+              wait_ms),
+          "preview-stop fixture did not stream its clip");
+  probe->hold_stop.store(true, std::memory_order_release);
+  bridge.stop_playback();
+  require(QTest::qWaitFor([&probe] { return probe->stop_held.load(std::memory_order_acquire); },
+                          wait_ms),
+          "the stop worker did not reach the output");
+  bridge.preview_master_level(silent_level);
+  bridge.preview_track_level_pan(track, silent_level, centre_pan);
+  probe->release_stop.store(true, std::memory_order_release);
+  require(QTest::qWaitFor([&bridge] { return !bridge.playback_active(); }, wait_ms),
+          "routed playback did not stop after the preview");
+  require(probe->stop_block_rendered.load(std::memory_order_acquire),
+          "the held stop did not render its last block");
+  require(std::fabs(probe->stop_block_last_sample.load(std::memory_order_acquire) - fixture_level) <
+              sample_tolerance,
+          "a mixer preview reached the run while it was stopping");
 }
 
 // A project opens at bar 1, after any bars before it, so Play does not
@@ -739,6 +827,7 @@ int main(int argc, char** argv) {
     routed_revision_status_checks();
     project_opens_with_the_playhead_at_bar_one();
     transport_pause_seek_bridge_checks();
+    stop_during_mixer_preview_leaves_the_stopping_run_alone();
     record_counts_in_then_plays();
     close_persists_clip_and_master_effect_edits();
     reopening_current_project_disk_checks();

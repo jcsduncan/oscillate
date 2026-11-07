@@ -661,7 +661,7 @@ void ProjectBridge::create_vst3_controllers() {
           .transfers_busy = [this] { return export_busy() || import_busy(); },
           .playback_busy = [this] { return playback_busy(); },
           .browser_busy = [this] { return vst3_browser_busy(); },
-          .routed = [this] { return routed_playback_.get(); },
+          .routed = [this] { return routed_run(); },
           .routed_settled =
               [this] { return !routed_stop_completion_ && !routed_transport_completion_; },
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
@@ -1605,9 +1605,10 @@ QVariant ProjectBridge::cpu_load() const {
   // The whole device callback against its period, from the output's
   // DeviceTelemetry (PipeWire or JACK): the same figure as the trace's audio.load.
   std::optional<audio_io::CallbackLoad> load;
-  if (routed_playback_)
-    load = routed_playback_->output_status().callback_load;
-  else if (playback_)
+  if (routed_playback_) {
+    if (const auto* run = routed_run())
+      load = run->output_status().callback_load;
+  } else if (playback_)
     load = playback_->output_status().callback_load;
   else if (monitor_)
     load = monitor_->output_status().callback_load;
@@ -1615,9 +1616,10 @@ QVariant ProjectBridge::cpu_load() const {
 }
 
 int ProjectBridge::audio_threads() const {
-  if (!routed_playback_)
+  const auto* run = routed_run();
+  if (!run)
     return 0;
-  const auto output = routed_playback_->output_status();
+  const auto output = run->output_status();
   return output.state == audio_io::OutputState::streaming
              ? 1 + static_cast<int>(output.realtime_workers)
              : 0;
