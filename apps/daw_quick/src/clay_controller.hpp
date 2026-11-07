@@ -293,6 +293,7 @@ private:
   void rebuild_waveform();
   bool commit(project::ClayTake take, const QString& label);
   void warm_render();
+  void stop_warm();
   void set_status(QString status);
   void set_render_state(QString state);
   [[nodiscard]] std::vector<std::uint32_t> selected_notes() const;

@@ -234,6 +234,7 @@ void ClayController::open_clip(const QString& clip_id) {
   }
   cancel_detect();
   audition_.abandon(); // An audition of the previous clip is never published.
+  stop_warm();
   clip_ = parsed.value();
   loaded_.reset();
   edited_.reset();
@@ -254,6 +255,7 @@ void ClayController::open_clip(const QString& clip_id) {
 void ClayController::close() {
   cancel_detect();
   audition_.abandon();
+  stop_warm();
   clip_.reset();
   take_.reset();
   preview_.reset();
@@ -721,15 +723,19 @@ bool ClayController::commit(project::ClayTake take, const QString& label) {
   return true;
 }
 
-void ClayController::warm_render() {
-  auto* session = session_ ? session_() : nullptr;
-  if (session == nullptr || !clip_ || !take_)
-    return;
-  // A render of an older take is stopped and left to finish on its own.
+void ClayController::stop_warm() {
+  // A render of an older take or clip is stopped and left to finish on its own.
   if (warm_stop_)
     warm_stop_->request_stop();
   warm_.abandon();
   warm_stop_.reset();
+}
+
+void ClayController::warm_render() {
+  auto* session = session_ ? session_() : nullptr;
+  if (session == nullptr || !clip_ || !take_)
+    return;
+  stop_warm();
   // The abandoned render never reaches poll(), so settle the state as poll() would.
   set_render_state(take_ ? QStringLiteral("ready") : QStringLiteral("none"));
   auto found = song_clay::find_clip(session->snapshot(), *clip_);
