@@ -13,8 +13,8 @@
 #include <QUrl>
 
 #include <array>
-#include <chrono>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -280,7 +280,7 @@ public:
       return foundation::Result<void>::failure(
           {foundation::ErrorCode::invalid_argument, "fake output needs a playback buffer size"});
     std::array<engine::StereoFrame, app::max_playback_buffer_frames> frames{};
-    std::array<float, 2 * app::max_playback_buffer_frames> samples{};
+    std::array<float, std::size_t{2} * app::max_playback_buffer_frames> samples{};
     if (audio::render_transport_block(
             source_, cursor_, true, std::span(frames).first(requested_frames),
             std::span(samples).first(static_cast<std::size_t>(requested_frames) * 2)) !=
@@ -315,7 +315,7 @@ public:
 
   [[nodiscard]] bool pump() noexcept {
     std::array<engine::StereoFrame, app::max_playback_buffer_frames> frames{};
-    std::array<float, 2 * app::max_playback_buffer_frames> samples{};
+    std::array<float, std::size_t{2} * app::max_playback_buffer_frames> samples{};
     const auto result = audio::render_transport_block(
         source_, cursor_, true, std::span(frames).first(block_frames_),
         std::span(samples).first(static_cast<std::size_t>(block_frames_) * 2));
@@ -325,7 +325,7 @@ public:
   // The last left sample of one rendered block, if it rendered.
   [[nodiscard]] std::optional<float> pump_last_sample() noexcept {
     std::array<engine::StereoFrame, app::max_playback_buffer_frames> frames{};
-    std::array<float, 2 * app::max_playback_buffer_frames> samples{};
+    std::array<float, std::size_t{2} * app::max_playback_buffer_frames> samples{};
     const auto interleaved = static_cast<std::size_t>(block_frames_) * 2;
     if (audio::render_transport_block(
             source_, cursor_, true, std::span(frames).first(block_frames_),
@@ -542,11 +542,14 @@ void stop_during_mixer_preview_leaves_the_stopping_run_alone() {
 }
 
 // Renders blocks on its own thread at the device's pace, with the source's
-// worker pool running, as a real output does; stop() joins both.
+// worker pool running, as a real output does; stop() joins both. Every
+// block that fails to render is counted in `failures`, across pause and
+// resume.
 class PacedOutput final : public app::PlaybackOutput {
 public:
-  PacedOutput(audio::StereoRenderSource source, audio::TransportCursor& cursor)
-      : source_(source), cursor_(cursor) {}
+  PacedOutput(audio::StereoRenderSource source, audio::TransportCursor& cursor,
+              std::shared_ptr<std::atomic<std::uint64_t>> failures)
+      : source_(source), cursor_(cursor), failures_(std::move(failures)) {}
   PacedOutput(const PacedOutput&) = delete;
   PacedOutput& operator=(const PacedOutput&) = delete;
   ~PacedOutput() override { stop(); }
@@ -581,6 +584,7 @@ public:
     audio::OutputStatus status;
     status.state = state_.load(std::memory_order_acquire);
     status.requested_client_rate = rate_;
+    status.render_failures = failures_->load(std::memory_order_acquire);
     return status;
   }
 
@@ -590,11 +594,13 @@ private:
     const auto period = std::chrono::microseconds(microseconds_per_second * frames_ / rate_);
     auto next = std::chrono::steady_clock::now();
     std::array<engine::StereoFrame, app::max_playback_buffer_frames> frames{};
-    std::array<float, 2 * app::max_playback_buffer_frames> samples{};
+    std::array<float, std::size_t{2} * app::max_playback_buffer_frames> samples{};
     while (running_.load(std::memory_order_acquire)) {
-      (void)audio::render_transport_block(
-          source_, cursor_, true, std::span(frames).first(frames_),
-          std::span(samples).first(static_cast<std::size_t>(frames_) * 2));
+      if (audio::render_transport_block(
+              source_, cursor_, true, std::span(frames).first(frames_),
+              std::span(samples).first(static_cast<std::size_t>(frames_) * 2)) !=
+          audio::BlockResult::rendered)
+        failures_->fetch_add(1, std::memory_order_acq_rel);
       next += period;
       std::this_thread::sleep_until(next);
     }
@@ -602,6 +608,7 @@ private:
 
   audio::StereoRenderSource source_;
   audio::TransportCursor& cursor_;
+  std::shared_ptr<std::atomic<std::uint64_t>> failures_;
   std::atomic<audio::OutputState> state_{audio::OutputState::stopped};
   std::atomic<bool> running_{false};
   std::thread thread_;
@@ -633,9 +640,10 @@ void pause_after_live_solo_stays_paused() {
     tracks.push_back(QString::fromStdString(imported.value().to_string()));
   }
   require(session.value()->saving().save().has_value(), "solo-pause project save failed");
-  app::PlaybackOutputFactory factory = [](audio::StereoRenderSource render,
-                                          audio::TransportCursor& cursor) {
-    return std::make_unique<PacedOutput>(render, cursor);
+  auto failures = std::make_shared<std::atomic<std::uint64_t>>(0);
+  app::PlaybackOutputFactory factory = [failures](audio::StereoRenderSource render,
+                                                  audio::TransportCursor& cursor) {
+    return std::make_unique<PacedOutput>(render, cursor, failures);
   };
   quick::ProjectBridge bridge(directory.root(), nullptr, std::move(factory), [] {
     return foundation::Result<std::vector<audio::PipeWireSink>>::success({});
@@ -673,15 +681,16 @@ void pause_after_live_solo_stays_paused() {
               bridge.playback_status().startsWith(QStringLiteral("Paused")),
           "the paused run moved or left its paused state");
   bridge.toggle_pause();
-  require(QTest::qWaitFor(
-              [&bridge, held] {
-                return !bridge.playback_paused() && bridge.playhead_sample() > held;
-              },
-              wait_ms),
-          "the paused run did not resume after the wait");
+  require(
+      QTest::qWaitFor(
+          [&bridge, held] { return !bridge.playback_paused() && bridge.playhead_sample() > held; },
+          wait_ms),
+      "the paused run did not resume after the wait");
   bridge.stop_playback();
   require(QTest::qWaitFor([&bridge] { return !bridge.playback_active(); }, wait_ms),
           "playback did not stop after the solo-pause sequence");
+  require(failures->load(std::memory_order_acquire) == 0,
+          "a block failed to render during the solo-pause sequence");
 }
 
 // A project opens at bar 1, after any bars before it, so Play does not
@@ -697,7 +706,8 @@ void project_opens_with_the_playhead_at_bar_one() {
   });
   bridge.set_project(std::move(session.value()), root);
   // Two 4/4 bars at the default 120 BPM are four seconds.
-  require(bridge.playhead_sample() == 4 * 48'000, "the playhead did not open at bar 1");
+  constexpr qulonglong two_bars_at_120_bpm = qulonglong{4} * 48'000;
+  require(bridge.playhead_sample() == two_bars_at_120_bpm, "the playhead did not open at bar 1");
 }
 
 void transport_pause_seek_bridge_checks() {
@@ -797,7 +807,7 @@ void transport_pause_seek_bridge_checks() {
   constexpr int loop_start_bar = 3;
   constexpr int loop_end_bar = 5;
   // Two 4/4 bars at the default 120 BPM are four seconds.
-  constexpr std::uint64_t loop_start_sample = 4 * 48'000;
+  constexpr std::uint64_t loop_start_sample = std::uint64_t{4} * 48'000;
   loop->set_range(loop_start_bar, loop_end_bar);
   loop->set_enabled(true);
   bridge.seek_to_sample(3072);
