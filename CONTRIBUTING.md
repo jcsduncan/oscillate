@@ -23,6 +23,11 @@ open a GitHub issue with:
 
 After a crash, Oscillate saves a [crash report](docs/crash-reports.md) on
 your computer and offers it at the next start; read it, then attach it.
+A [diagnostics bundle](docs/diagnostics.md) (**Save diagnostics** in the
+command palette, or `oscillate --save-diagnostics`) gathers the session
+description, build features, plug-in scan, logs and latest crash report in
+one zip; read it, then attach it. [Support](docs/support.md) lists which
+form to use and what to attach.
 Attach a small project that reproduces the problem when possible. Do not
 attach copyrighted media you are not allowed to share. For a security
 problem, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.

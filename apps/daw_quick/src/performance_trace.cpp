@@ -11,6 +11,7 @@
 #include <QThread>
 
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -23,6 +24,11 @@ constexpr double bytes_per_mebibyte = 1024.0 * 1024.0;
 // How often a save in progress is checked for its result.
 constexpr int save_poll_ms = 50;
 
+constexpr std::string_view trace_prefix = "trace-";
+constexpr std::string_view trace_extension = ".json";
+
+} // namespace
+
 std::filesystem::path traces_directory() {
   QString data = qEnvironmentVariable("XDG_DATA_HOME");
   if (data.isEmpty())
@@ -30,7 +36,20 @@ std::filesystem::path traces_directory() {
   return std::filesystem::path((data + QStringLiteral("/oscillate/traces")).toStdString());
 }
 
-} // namespace
+std::optional<std::filesystem::path> latest_trace() {
+  // The names hold a zero-padded local time, so the greatest is the newest.
+  std::optional<std::filesystem::path> latest;
+  std::error_code error;
+  for (const auto& entry : std::filesystem::directory_iterator(traces_directory(), error)) {
+    const auto name = entry.path().filename().string();
+    if (!entry.is_regular_file(error) || !name.starts_with(trace_prefix) ||
+        !name.ends_with(trace_extension))
+      continue;
+    if (!latest || name > latest->filename().string())
+      latest = entry.path();
+  }
+  return latest;
+}
 
 PerformanceTrace::PerformanceTrace(QObject* parent, Writer writer)
     : QObject(parent), writer_(writer ? std::move(writer) : Writer(trace::stop_and_write)),
@@ -135,7 +154,8 @@ void PerformanceTrace::stop_and_save() {
   std::error_code error;
   std::filesystem::create_directories(directory, error);
   const auto stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
-  finish(directory / ("trace-" + stamp.toStdString() + ".json"));
+  finish(directory /
+         (std::string(trace_prefix) + stamp.toStdString() + std::string(trace_extension)));
 }
 
 void PerformanceTrace::finish(const std::filesystem::path& path) {
