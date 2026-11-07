@@ -1,0 +1,450 @@
+<title>Deep Chords</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a night-session control strip on top, the progression library in
+   four genre columns below, a live keyboard view of the voicing. Single dark
+   look on purpose: it is a studio at night. */
+:root {
+  --night: #0c0d12;
+  --panel: #14161e;
+  --panel2: #1b1e29;
+  --line: #2a2e3d;
+  --ink: #e9e6f2;
+  --dim: #9a98ab;
+  --faint: #636277;
+  --dawn: #f2a65a;      /* the accent: a sunrise over the dancefloor */
+  --deep: #7d8cff;      /* the second accent, for bass */
+  --display: "Big Shoulders Display", "Arial Narrow", sans-serif;
+  --body: "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--night); color: var(--ink); font-family: var(--body); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 22px; }
+h1 { font-family: var(--display); font-weight: 800; font-size: clamp(40px, 7vw, 72px); line-height: .9; letter-spacing: .01em; margin: 0; text-transform: uppercase; text-wrap: balance; }
+h1 span { color: var(--dawn); }
+.lede { color: var(--dim); max-width: 68ch; margin: 8px 0 0; }
+.lede b { color: var(--ink); font-weight: 600; }
+.strip { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: color-mix(in srgb, var(--night) 88%, transparent); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: end; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--night); }
+.ctl { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.lab { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); flex-wrap: wrap; }
+.seg button, .tog, .play { font: 600 12px var(--mono); color: var(--dim); background: transparent; border: 0; padding: 7px 11px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--dawn); color: #1b1006; }
+.tog { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.tog[aria-pressed="true"] { border-color: var(--deep); color: var(--ink); box-shadow: inset 0 0 0 1px var(--deep); }
+.play { background: var(--dawn); color: #1b1006; border-radius: 8px; padding: 9px 16px; font-size: 13px; }
+.play[aria-pressed="true"] { background: var(--ink); }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--deep); outline-offset: 2px; }
+select { font: 600 12px var(--mono); background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; }
+.now { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 16px; }
+@media (max-width: 760px) { .now { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-width: 0; }
+.nowname { font-family: var(--display); font-weight: 800; font-size: 34px; line-height: 1; text-transform: uppercase; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip { font: 600 13px var(--mono); padding: 5px 9px; border-radius: 6px; background: var(--panel2); color: var(--dim); border: 1px solid var(--line); }
+.chip.on { color: #1b1006; background: var(--dawn); border-color: var(--dawn); }
+.why { color: var(--dim); margin: 10px 0 0; max-width: 60ch; }
+canvas { width: 100%; height: 150px; display: block; border-radius: 8px; background: var(--night); }
+.lib { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 16px; }
+.col h2 { font-family: var(--display); font-weight: 600; font-size: 24px; letter-spacing: .03em; text-transform: uppercase; margin: 0 0 2px; }
+.col p.sub { color: var(--faint); font-size: 12px; margin: 0 0 10px; }
+.prog { width: 100%; text-align: left; cursor: pointer; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; color: var(--ink); font: inherit; display: flex; flex-direction: column; gap: 3px; }
+.prog:hover { border-color: var(--faint); }
+.prog[aria-pressed="true"] { border-color: var(--dawn); background: color-mix(in srgb, var(--dawn) 9%, var(--panel)); }
+.prog .t { font-weight: 600; }
+.prog .n { font: 600 12px var(--mono); color: var(--dawn); }
+.prog .c { font: 12px var(--mono); color: var(--dim); }
+.prog .f { font-size: 12px; color: var(--faint); }
+.notes { color: var(--faint); font-size: 12px; max-width: 80ch; }
+.notes a { color: var(--dim); }
+.legend { display: flex; gap: 14px; font: 11px var(--mono); color: var(--faint); margin-top: 8px; flex-wrap: wrap; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Deep <span>Chords</span></h1>
+    <p class="lede">Progressions as melodic techno, Anjunadeep, Ben Böhmer-style progressive and trance use them, voiced the way those records sound: <b>triads with add9 and sus2 colour, open fifths and octaves in the left hand, a note ringing on top</b>, and no jazz pull. Pick a progression, then flip <b>Voicing</b> to hear the difference. <b>Lush 9ths</b> is what the DAW writes today.</p>
+  </header>
+
+  <div class="strip" role="toolbar" aria-label="Playback and voicing">
+    <button class="play" id="play" aria-pressed="false">▶ Play</button>
+    <div class="ctl"><label class="lab" for="key">Key</label>
+      <select id="key"></select></div>
+    <div class="ctl"><span class="lab">Voicing</span>
+      <div class="seg" id="voicing"></div></div>
+    <div class="ctl"><span class="lab">Sound</span>
+      <div class="seg" id="sound"></div></div>
+    <div class="ctl"><span class="lab">Add</span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="tog" id="drone" aria-pressed="true">Top note</button>
+        <button class="tog" id="pedal" aria-pressed="false">Pedal bass</button>
+        <button class="tog" id="kick" aria-pressed="true">Kick</button>
+      </div></div>
+    <div class="ctl"><label class="lab" for="tempo">Tempo <output id="tempoOut">122</output></label>
+      <input id="tempo" type="range" min="110" max="138" value="122"></div>
+  </div>
+
+  <section class="now" aria-live="polite">
+    <div class="card">
+      <div class="lab" id="nowGenre">—</div>
+      <div class="nowname" id="nowName">—</div>
+      <div class="chips" id="nowChips"></div>
+      <p class="why" id="nowWhy"></p>
+    </div>
+    <div class="card">
+      <div class="lab">The voicing being played</div>
+      <canvas id="roll" aria-label="Keyboard view of the current chord's notes"></canvas>
+      <div class="legend"><span><i style="background:var(--deep)"></i>left hand, bass and fifths</span><span><i style="background:var(--dawn)"></i>right hand</span><span><i style="background:var(--ink)"></i>top note</span></div>
+    </div>
+  </section>
+
+  <section class="lib" id="lib"></section>
+
+  <p class="notes">Sources for the progressions and voicing habits: <a href="https://www.samplesoundmusic.com/blogs/news/popular-chord-progressions-and-how-to-use-them-in-edm-techno-and-more" target="_blank" rel="noopener">SampleSound</a> (i–VI–III–VII in melodic techno), <a href="https://attackmagazine.com/technique/tutorials/the-theory-of-techno-pads-part-1" target="_blank" rel="noopener">Attack: theory of techno pads</a> (minor triads, octave doubling, a passing major chord), <a href="https://www.attackmagazine.com/technique/passing-notes/passing-notes-deep-house-chords/" target="_blank" rel="noopener">Attack: deep house chords</a> (7ths sparingly, the top note is the melody), <a href="https://unison.audio/trance-chord-progressions/" target="_blank" rel="noopener">Unison: trance progressions</a>, <a href="https://unison.audio/techno-chord-progressions/" target="_blank" rel="noopener">Unison: techno progressions</a> (octave spreading), <a href="https://www.productionmusiclive.com/blogs/news/ben-bohmer-harmony-breakdown" target="_blank" rel="noopener">PML: Ben Böhmer harmony breakdown</a> (octave piano, a three-chord loop whose second chord carries the voice leading). The progressions are typical shapes in these styles, not transcriptions of particular records.</p>
+</div>
+
+<script>
+// ---- Theory --------------------------------------------------------------------------
+const NAMES_FLAT = ["C","D♭","D","E♭","E","F","G♭","G","A♭","A","B♭","B"];
+const NAMES_SHARP = ["C","C♯","D","D♯","E","F","F♯","G","G♯","A","A♯","B"];
+const MINOR = [0, 2, 3, 5, 7, 8, 10];          // natural minor
+const KEYS = [["C minor",0],["D minor",2],["E minor",4],["F minor",5],["F♯ minor",6],["G minor",7],["A minor",9],["B♭ minor",10]];
+const SHARP_KEYS = new Set([4, 6, 9]);
+// A chord: scale degree (0-based), quality, optional bass degree (slash), bars.
+// q: "m" minor, "M" major, "s2" sus2, "s4" sus4, "M7" major seventh (kept even in triad voicings).
+const LIB = [
+  { genre: "Melodic techno", sub: "Afterlife, Innervisions: minor, patient, cinematic", items: [
+    { t: "Epic loop", n: "i – VI – III – VII", why: "The melodic techno staple. Every chord comes from the minor scale, so nothing pulls; it circles.", ch: [[0,"m"],[5,"M"],[2,"M"],[6,"M"]] },
+    { t: "Hypnotic vamp", n: "i – VI", why: "Two chords, two bars each. The tension comes from the drone and the arp, not the harmony.", ch: [[0,"m",null,2],[5,"M",null,2]] },
+    { t: "Rocking", n: "i – VII – VI – VII", why: "Rocks between the flat seven and six and keeps falling back home.", ch: [[0,"m"],[6,"M"],[5,"M"],[6,"M"]] },
+    { t: "Dark drive", n: "i – iv – VI – v", why: "Minor four and a minor five: no leading tone, so it stays dark.", ch: [[0,"m"],[3,"m"],[5,"M"],[4,"m"]] },
+  ]},
+  { genre: "Ben Böhmer", sub: "Anjunadeep: warm piano in octaves, bass that walks", items: [
+    { t: "Three-chord glow", n: "i – VI – III (sus)", why: "A three-chord loop where the middle chord moves inside: III arrives suspended and settles.", ch: [[0,"m"],[5,"M7"],[2,"s4",null,1,"M"],[2,"M"]] },
+    { t: "Walk down", n: "i – v/♭7 – VI – III/5", why: "The bass steps down A, G, F, E under the chords: inversions instead of jumps.", ch: [[0,"m"],[4,"m",6],[5,"M7"],[2,"M",4]] },
+    { t: "Warm lift", n: "VI – VII – i – III", why: "Starts away from home and lands on the tonic in bar 3: lifts without getting cheesy.", ch: [[5,"M"],[6,"M"],[0,"m"],[2,"M"]] },
+    { t: "Breathing", n: "i – III – VII – VI", why: "Up a third, down, down: a long exhale. Lovely with Top note on.", ch: [[0,"m"],[2,"M"],[6,"M"],[5,"M7"]] },
+  ]},
+  { genre: "Progressive house", sub: "Lane 8, Yotto, Prydz: 8 to 32 bar loops that never quite resolve", items: [
+    { t: "Open road", n: "i – iv – VII – III", why: "A falling circle of fourths in minor. Circular, never fully resolves.", ch: [[0,"m"],[3,"m"],[6,"M"],[2,"M"]] },
+    { t: "Bittersweet", n: "VI – III – VII – i", why: "The pop four chords from the sad side, ending at home every four bars.", ch: [[5,"M"],[2,"M"],[6,"M"],[0,"m"]] },
+    { t: "Sunrise", n: "i – VI – VII – VII sus", why: "Holds the seven and lets it hang suspended before the loop comes round.", ch: [[0,"m"],[5,"M"],[6,"M"],[6,"s4"]] },
+  ]},
+  { genre: "Trance", sub: "Above & Beyond, Armin, Rayel: big minor anthems", items: [
+    { t: "Anthem", n: "VI – VII – i – i", why: "Climb six, seven, home, and stay. The classic breakdown lift.", ch: [[5,"M"],[6,"M"],[0,"m",null,2]] },
+    { t: "Sun & Moon shape", n: "III – VII – i – VI", why: "I–V–vi–IV from the relative major: hopeful, then the minor bites.", ch: [[2,"M"],[6,"M"],[0,"m"],[5,"M"]] },
+    { t: "Reflection", n: "VI – v – iv – III", why: "Walks straight down the scale; melancholy that resolves into something moving.", ch: [[5,"M"],[4,"m"],[3,"m"],[2,"M"]] },
+    { t: "Andalusian lift", n: "i – VII – VI – V", why: "The one place trance uses a major V: the final chord is a lift, not a cadence.", ch: [[0,"m"],[6,"M"],[5,"M"],[4,"M"]] },
+  ]},
+];
+const VOICINGS = [["open","Open + add9"],["sus","Sus2"],["triad","Triads"],["lush","Lush 9ths"]];
+const SOUNDS = [["pad","Pad"],["keys","Piano"],["pluck","Pluck"]];
+
+const state = { key: 0, voicing: "open", sound: "pad", drone: true, pedal: false, kick: true, tempo: 122, sel: [1, 0], playing: false };
+
+function nameOf(pc) { return (SHARP_KEYS.has(state.key) ? NAMES_SHARP : NAMES_FLAT)[((pc % 12) + 12) % 12]; }
+function rootPc(deg) { return (state.key + MINOR[deg % 7]) % 12; }
+function chordTones(q) {   // semitones from the root
+  return { m: [0,3,7], M: [0,4,7], s2: [0,2,7], s4: [0,5,7], M7: [0,4,7,11] }[q];
+}
+function symbol(c) {
+  const [deg, q, bassDeg] = c;
+  const suffix = { m: "m", M: "", s2: "sus2", s4: "sus4", M7: "maj7" }[q];
+  const base = nameOf(rootPc(deg)) + suffix;
+  return bassDeg === null || bassDeg === undefined ? base : base + "/" + nameOf(rootPc(bassDeg));
+}
+// The bars of a progression, one chord per bar, with any suspension resolving mid-bar.
+function bars(p) {
+  const out = [];
+  for (const c of p.ch) for (let b = 0; b < (c[3] || 1); ++b) out.push(c);
+  return out;
+}
+
+// ---- Voicing -------------------------------------------------------------------------
+const RH_LOW = 57, RH_HIGH = 79, RH_CENTRE = 67, BASS_LOW = 36;
+function upperPcs(c) {
+  const [deg, q] = c;
+  const r = rootPc(deg);
+  let iv = chordTones(q).slice();
+  const v = state.voicing;
+  if (v === "lush") {
+    // What the DAW writes today: 7ths and 9ths stacked from the scale over
+    // every chord, the root left to the bass.
+    const at = step => (state.key + MINOR[(deg + step) % 7]) % 12;
+    return [q === "s2" ? at(1) : q === "s4" ? at(3) : at(2), at(4), at(6), at(1)];
+  } else if (v === "sus") {
+    if (q === "m" || q === "M") iv = [0, 2, 7];          // sus2: open and ambiguous
+  } else if (v === "open") {
+    if (q === "m" || q === "M") iv = iv.concat([14]);    // add9 on top of the triad
+  }
+  return iv.map(x => (r + x) % 12);
+}
+function permutations(xs) {
+  if (xs.length <= 1) return [xs];
+  return xs.flatMap((x, i) => permutations(xs.slice(0, i).concat(xs.slice(i + 1))).map(rest => [x].concat(rest)));
+}
+function voiceRight(pcs, prev) {
+  // Every stacking order and starting note in range (so a 9th can sit an octave
+  // up instead of rubbing a semitone against the minor third); no semitones;
+  // keep the one moving least from the last chord, else nearest the centre.
+  let best = null, bestCost = Infinity;
+  const uniq = [...new Set(pcs)];
+  for (const order of permutations(uniq)) {
+    for (let base = RH_LOW; base < RH_LOW + 12; ++base) {
+      if (base % 12 !== order[0]) continue;
+      const notes = [base];
+      for (const pc of order.slice(1)) {
+        const last = notes[notes.length - 1];
+        notes.push(last + 1 + ((pc - (last + 1) % 12 + 12) % 12));
+      }
+      for (let shift = 0; notes[notes.length - 1] + shift <= RH_HIGH; shift += 12) {
+        const v = notes.map(n => n + shift);
+        let clash = false;
+        for (let i = 1; i < v.length; ++i) if (v[i] - v[i - 1] < 2) clash = true;
+        if (clash) continue;
+        const mean = v.reduce((a, b) => a + b, 0) / v.length;
+        let cost = Math.abs(mean - RH_CENTRE) * 0.5 + (v[v.length - 1] - v[0]) * 0.08;
+        if (prev) for (const n of v) cost += Math.min(...prev.map(p => Math.abs(p - n)));
+        if (cost < bestCost) { bestCost = cost; best = v; }
+      }
+    }
+  }
+  return best || uniq.map(pc => 60 + pc).sort((x, y) => x - y);
+}
+function voice(c, prev) {
+  const [deg, q, bassDeg] = c;
+  const bassPc = state.pedal ? state.key : rootPc(bassDeg ?? deg);
+  const bass = BASS_LOW + ((bassPc - BASS_LOW % 12 + 12) % 12);
+  // Left hand: the bass, an open fifth above the root, the root's octave (Triads: just octaves).
+  const r = rootPc(deg);
+  let rootLow = bass + ((r - bass % 12 + 12) % 12);
+  const left = [bass];
+  if (state.voicing !== "lush") {
+    if (rootLow === bass) left.push(bass + 7, bass + 12);
+    else left.push(rootLow + (rootLow - bass < 5 ? 12 : 0));
+  }
+  const right = voiceRight(upperPcs(c), prev);
+  // Böhmer and trance double the top voice an octave down in the piano; keep it simple: drone on top.
+  let top = null;
+  // The top note rings over every chord, unless the chord already has it on top.
+  if (state.drone && right[right.length - 1] % 12 !== (state.key + 7) % 12) {
+    const dronePc = (state.key + 7) % 12;      // the fifth of the key rings over every chord
+    top = Math.max(right[right.length - 1] + 1, 72);
+    top = top + ((dronePc - top % 12 + 12) % 12);
+    if (top - right[right.length - 1] < 2) top += 12;
+  }
+  return { left: [...new Set(left)].sort((a, b) => a - b), right, top };
+}
+
+// ---- Audio ---------------------------------------------------------------------------
+let ac = null, master, verb, dry;
+function ensureAudio() {
+  if (ac) return;
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  master = ac.createGain(); master.gain.value = 0.55;
+  const comp = ac.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 3;
+  master.connect(comp).connect(ac.destination);
+  verb = ac.createConvolver();
+  const len = ac.sampleRate * 3.2, ir = ac.createBuffer(2, len, ac.sampleRate);
+  for (let ch = 0; ch < 2; ++ch) { const d = ir.getChannelData(ch); for (let i = 0; i < len; ++i) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6); }
+  verb.buffer = ir;
+  const wet = ac.createGain(); wet.gain.value = 0.42;
+  verb.connect(wet).connect(master);
+  dry = ac.createGain(); dry.gain.value = 0.8; dry.connect(master);
+}
+const hz = n => 440 * Math.pow(2, (n - 69) / 12);
+function out(node, send) { node.connect(dry); const s = ac.createGain(); s.gain.value = send; node.connect(s).connect(verb); }
+function padNote(n, t, dur, vel, bright) {
+  const g = ac.createGain(), f = ac.createBiquadFilter();
+  f.type = "lowpass"; f.Q.value = 0.6;
+  f.frequency.setValueAtTime(bright * 0.5, t); f.frequency.linearRampToValueAtTime(bright, t + dur * 0.6);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vel, t + 0.35);
+  g.gain.setValueAtTime(vel, t + dur); g.gain.linearRampToValueAtTime(0, t + dur + 1.1);
+  for (const det of [-9, 0, 8]) {
+    const o = ac.createOscillator(); o.type = "sawtooth"; o.frequency.value = hz(n); o.detune.value = det;
+    o.connect(f); o.start(t); o.stop(t + dur + 1.2);
+  }
+  f.connect(g); out(g, 0.55);
+}
+function keysNote(n, t, dur, vel) {
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vel, t + 0.005);
+  g.gain.setTargetAtTime(vel * 0.25, t + 0.01, 0.6);
+  g.gain.setTargetAtTime(0, t + dur, 0.35);
+  const f = ac.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 2600 - (n - 60) * 10;
+  [[1, "triangle", 1], [2, "sine", 0.35], [3, "sine", 0.12]].forEach(([mul, type, amp]) => {
+    const o = ac.createOscillator(), a = ac.createGain(); o.type = type; o.frequency.value = hz(n) * mul; a.gain.value = amp;
+    o.connect(a).connect(f); o.start(t); o.stop(t + dur + 1.6);
+  });
+  f.connect(g); out(g, 0.45);
+}
+function pluckNote(n, t, vel) {
+  const g = ac.createGain(), f = ac.createBiquadFilter(); f.type = "lowpass"; f.Q.value = 3;
+  f.frequency.setValueAtTime(3800, t); f.frequency.exponentialRampToValueAtTime(400, t + 0.25);
+  g.gain.setValueAtTime(vel, t); g.gain.exponentialRampToValueAtTime(0.0008, t + 0.42);
+  const o = ac.createOscillator(); o.type = "sawtooth"; o.frequency.value = hz(n); o.connect(f); o.start(t); o.stop(t + 0.5);
+  f.connect(g); out(g, 0.6);
+}
+function bassNote(n, t, dur) {
+  const g = ac.createGain(), o = ac.createOscillator(), f = ac.createBiquadFilter();
+  o.type = "triangle"; o.frequency.value = hz(n); f.type = "lowpass"; f.frequency.value = 260;
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.42, t + 0.02);
+  g.gain.setValueAtTime(0.42, t + dur - 0.05); g.gain.linearRampToValueAtTime(0, t + dur);
+  o.connect(f).connect(g); out(g, 0.05); o.start(t); o.stop(t + dur + 0.05);
+}
+function kick(t) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
+  g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+  o.connect(g).connect(master); o.start(t); o.stop(t + 0.4);
+}
+
+// ---- Transport -----------------------------------------------------------------------
+let timer = null, nextBarTime = 0, barIndex = 0, prevRight = null, shown = null;
+function progression() { return LIB[state.sel[0]].items[state.sel[1]]; }
+function scheduleBar(t) {
+  const list = bars(progression());
+  const c = list[barIndex % list.length];
+  const beat = 60 / state.tempo, bar = beat * 4;
+  // A suspension (fifth field) resolves to its quality halfway through the bar.
+  const parts = c[4] ? [[c, 0, bar / 2], [[c[0], c[4], c[2]], bar / 2, bar / 2]] : [[c, 0, bar]];
+  for (const [chord, off, len] of parts) {
+    const v = voice(chord, prevRight); prevRight = v.right;
+    const at = t + off, vel = 0.07;
+    const hands = v.left.concat(v.right).concat(v.top ? [v.top] : []);
+    if (state.sound === "pad") {
+      v.left.forEach(n => padNote(n, at, len - 0.05, n < 48 ? 0.05 : 0.045, 900));
+      v.right.forEach(n => padNote(n, at, len - 0.05, vel, 2400));
+      if (v.top) padNote(v.top, at, len - 0.05, 0.05, 3200);
+    } else if (state.sound === "keys") {
+      v.left.forEach(n => keysNote(n, at, len, 0.22));
+      v.right.forEach(n => keysNote(n, at + 0.012, len, 0.2));
+      if (v.top) keysNote(v.top, at + 0.02, len, 0.17);
+    } else {
+      // Offbeat 8ths, as a progressive house pluck plays them.
+      for (let e = 1; e < len / (beat / 2); e += 2) {
+        const tt = at + e * beat / 2;
+        v.right.forEach(n => pluckNote(n, tt, 0.09));
+        if (v.top) pluckNote(v.top, tt, 0.06);
+      }
+      v.left.slice(1).forEach(n => padNote(n, at, len - 0.05, 0.03, 800));
+    }
+    bassNote(v.left[0] - 12 >= 28 ? v.left[0] - 12 : v.left[0], at, len);
+    const delay = Math.max(0, (at - ac.currentTime) * 1000);
+    const index = barIndex;
+    setTimeout(() => show(chord, v, list, index), delay);
+  }
+  if (state.kick) for (let b = 0; b < 4; ++b) kick(t + b * beat);
+  barIndex++;
+}
+function tick() {
+  while (nextBarTime < ac.currentTime + 0.3) {
+    scheduleBar(nextBarTime);
+    nextBarTime += 4 * 60 / state.tempo;
+  }
+}
+function start() {
+  ensureAudio(); ac.resume();
+  barIndex = 0; prevRight = null; nextBarTime = ac.currentTime + 0.08;
+  clearInterval(timer); timer = setInterval(tick, 40); tick();
+  state.playing = true; playBtn.setAttribute("aria-pressed", "true"); playBtn.textContent = "■ Stop";
+}
+function stop() {
+  clearInterval(timer); timer = null; state.playing = false;
+  playBtn.setAttribute("aria-pressed", "false"); playBtn.textContent = "▶ Play";
+  if (master) { const m = master; m.gain.setTargetAtTime(0, ac.currentTime, 0.08); setTimeout(() => { m.gain.value = 0.55; }, 400); }
+}
+
+// ---- View ----------------------------------------------------------------------------
+const $ = id => document.getElementById(id);
+const playBtn = $("play");
+function seg(el, options, key) {
+  el.innerHTML = "";
+  for (const [v, label] of options) {
+    const b = document.createElement("button");
+    b.textContent = label; b.setAttribute("aria-pressed", String(state[key] === v));
+    b.onclick = () => { state[key] = v; prevRight = null; seg(el, options, key); preview(); };
+    el.appendChild(b);
+  }
+}
+function toggle(id) {
+  const b = $(id);
+  b.onclick = () => { state[id] = !state[id]; b.setAttribute("aria-pressed", String(state[id])); prevRight = null; preview(); };
+}
+function renderLib() {
+  const lib = $("lib"); lib.innerHTML = "";
+  LIB.forEach((g, gi) => {
+    const col = document.createElement("div"); col.className = "col";
+    col.innerHTML = `<h2>${g.genre}</h2><p class="sub">${g.sub}</p>`;
+    g.items.forEach((p, pi) => {
+      const b = document.createElement("button"); b.className = "prog";
+      b.setAttribute("aria-pressed", String(state.sel[0] === gi && state.sel[1] === pi));
+      b.innerHTML = `<span class="t">${p.t}</span><span class="n">${p.n}</span><span class="c">${p.ch.map(symbol).join(" · ")}</span><span class="f">${p.why}</span>`;
+      b.onclick = () => { state.sel = [gi, pi]; renderLib(); barIndex = 0; prevRight = null; preview(); if (!state.playing) start(); };
+      col.appendChild(b);
+    });
+    lib.appendChild(col);
+  });
+}
+function show(chord, v, list, at) {
+  shown = { chord, v };
+  const p = progression();
+  $("nowGenre").textContent = LIB[state.sel[0]].genre + " · " + p.n;
+  $("nowName").textContent = p.t;
+  $("nowWhy").textContent = p.why;
+  const chips = $("nowChips"); chips.innerHTML = "";
+  p.ch.forEach(c => {
+    const s = document.createElement("span"); s.className = "chip" + (c === list[at % list.length] ? " on" : "");
+    s.textContent = symbol(c); chips.appendChild(s);
+  });
+  drawRoll();
+}
+function preview() {
+  const list = bars(progression());
+  const v = voice(list[0], null);
+  show(list[0], v, list, 0);
+}
+function drawRoll() {
+  const cv = $("roll"), dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight; cv.width = w * dpr; cv.height = h * dpr;
+  const ctx = cv.getContext("2d"); ctx.scale(dpr, dpr);
+  const lo = 33, hi = 86, kw = w / (hi - lo + 1);
+  const css = getComputedStyle(document.documentElement);
+  for (let n = lo; n <= hi; ++n) {
+    const black = [1,3,6,8,10].includes(n % 12);
+    ctx.fillStyle = black ? "#1a1c26" : "#22252f";
+    ctx.fillRect((n - lo) * kw + 0.5, black ? 0 : 0, kw - 1, h);
+    if (n % 12 === 0) { ctx.fillStyle = css.getPropertyValue("--faint"); ctx.font = "10px IBM Plex Mono, monospace"; ctx.fillText("C" + (n / 12 - 1), (n - lo) * kw + 2, h - 6); }
+  }
+  if (!shown) return;
+  const mark = (n, colour, label) => {
+    const x = (n - lo) * kw;
+    ctx.fillStyle = colour; ctx.fillRect(x + 1, 18, kw - 3, h - 44);
+    ctx.fillStyle = css.getPropertyValue("--night"); ctx.font = "600 10px IBM Plex Mono, monospace";
+    ctx.save(); ctx.translate(x + kw / 2 + 3, 26); ctx.rotate(Math.PI / 2); ctx.fillText(label, 0, 0); ctx.restore();
+  };
+  shown.v.left.forEach(n => mark(n, css.getPropertyValue("--deep"), nameOf(n)));
+  shown.v.right.forEach(n => mark(n, css.getPropertyValue("--dawn"), nameOf(n)));
+  if (shown.v.top) mark(shown.v.top, css.getPropertyValue("--ink"), nameOf(shown.v.top));
+}
+
+// ---- Wire up -------------------------------------------------------------------------
+const keySel = $("key");
+KEYS.forEach(([label, pc]) => { const o = document.createElement("option"); o.value = pc; o.textContent = label; keySel.appendChild(o); });
+keySel.value = String(state.key);
+keySel.onchange = () => { state.key = Number(keySel.value); prevRight = null; renderLib(); preview(); };
+seg($("voicing"), VOICINGS, "voicing");
+seg($("sound"), SOUNDS, "sound");
+["drone", "pedal", "kick"].forEach(toggle);
+$("tempo").oninput = e => { state.tempo = Number(e.target.value); $("tempoOut").textContent = state.tempo; };
+playBtn.onclick = () => state.playing ? stop() : start();
+window.addEventListener("resize", drawRoll);
+renderLib(); preview();
+</script>

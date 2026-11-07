@@ -1,0 +1,424 @@
+<title>Flyby</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a surveyor's chart of the space around your head on the left, the controls in a narrow instrument column on the right; below, how the effect works. One deliberate look: night slate, amber trace. */
+:root {
+  --bg: #0e1416; --panel: #141c1f; --panel2: #1a2428; --well: #0a1012; --line: #24323a; --line2: #33454f;
+  --ink: #e4ece9; --dim: #93a6a3; --faint: #5f7472;
+  --amber: #f2a541; --amber-soft: rgba(242,165,65,.16); --mint: #6fd3b8; --rose: #f07a7a; --sky: #79b7e6;
+  --display: "Barlow Condensed", "Roboto Condensed", "Arial Narrow", sans-serif;
+  --sans: "IBM Plex Sans", "Noto Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); padding-block: 22px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; }
+h1 { font-family: var(--display); font-weight: 700; font-size: 34px; letter-spacing: 3px; margin: 0; text-transform: uppercase; }
+h1 span { color: var(--amber); }
+header p { margin: 0; color: var(--dim); max-width: 70ch; line-height: 1.45; }
+.device { display: grid; grid-template-columns: minmax(0, 1fr) 300px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+@media (max-width: 860px) { .device { grid-template-columns: 1fr; } }
+.chart { position: relative; background: var(--well); border-right: 1px solid var(--line); min-height: 520px; }
+@media (max-width: 860px) { .chart { border-right: 0; border-bottom: 1px solid var(--line); min-height: 380px; } }
+.chart canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+.chart .legend { position: absolute; left: 12px; top: 10px; font-family: var(--mono); font-size: 11px; color: var(--faint); pointer-events: none; line-height: 1.6; }
+.chart .scale { position: absolute; right: 12px; bottom: 10px; font-family: var(--mono); font-size: 11px; color: var(--faint); pointer-events: none; }
+.readouts { position: absolute; left: 12px; right: 12px; bottom: 34px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
+.read { background: rgba(14,20,22,.86); border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; min-width: 92px; }
+.read b { display: block; font-family: var(--display); font-weight: 600; font-size: 11px; letter-spacing: 1.4px; color: var(--faint); text-transform: uppercase; }
+.read output { font-family: var(--mono); font-size: 14px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.read.hot output { color: var(--amber); }
+.side { display: grid; align-content: start; gap: 14px; padding: 14px; }
+.group { display: grid; gap: 8px; }
+.group > b { font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: 2px; color: var(--dim); text-transform: uppercase; }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.seg button { flex: 1 1 auto; font: 500 12px var(--sans); color: var(--dim); background: var(--panel2); border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; cursor: pointer; }
+.seg button[aria-pressed="true"] { color: var(--amber); border-color: var(--amber); background: var(--amber-soft); }
+.seg button:focus-visible, .play:focus-visible, input[type=range]:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.row { display: grid; grid-template-columns: 82px 1fr 64px; align-items: center; gap: 8px; font-size: 12px; color: var(--dim); }
+.row output { font-family: var(--mono); font-size: 12px; color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+input[type=range] { width: 100%; accent-color: var(--amber); }
+.play { display: flex; align-items: center; justify-content: center; gap: 10px; font: 600 14px var(--sans); color: var(--bg); background: var(--amber); border: 0; border-radius: 9px; padding: 11px; cursor: pointer; }
+.play[aria-pressed="true"] { background: var(--mint); }
+.hint { font-size: 12px; color: var(--faint); line-height: 1.45; margin: 0; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.note { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.note h2 { margin: 0 0 8px; font-family: var(--display); font-weight: 600; font-size: 16px; letter-spacing: 1.6px; color: var(--amber); text-transform: uppercase; }
+.note p, .note li { color: var(--dim); font-size: 13px; line-height: 1.5; margin: 0; }
+.note ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.note b { color: var(--ink); font-weight: 600; }
+code { font-family: var(--mono); font-size: 12px; color: var(--mint); }
+@media (prefers-reduced-motion: reduce) { .play { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Fly<span>by</span></h1>
+    <p>A sound travels along a path past your head. You hear its pitch fall as it passes, its level and brightness change with distance, the timing between your ears, and how much of the room you hear. <b>Put on headphones and press Play.</b> Drag the white points to reshape the path.</p>
+  </header>
+
+  <section class="device" aria-label="Flyby effect">
+    <div class="chart" id="chart">
+      <canvas id="map" aria-label="Top-down map: you at the centre, the path around you"></canvas>
+      <div class="legend">FRONT ↑ · you face up the page<br>rings every 10 m</div>
+      <div class="readouts">
+        <div class="read"><b>Distance</b><output id="rDist">—</output></div>
+        <div class="read"><b>Speed</b><output id="rSpeed">—</output></div>
+        <div class="read hot"><b>Doppler</b><output id="rPitch">—</output></div>
+        <div class="read"><b>Ears L/R</b><output id="rItd">—</output></div>
+        <div class="read"><b>Level</b><output id="rLevel">—</output></div>
+        <div class="read"><b>Room</b><output id="rRoom">—</output></div>
+      </div>
+      <div class="scale" id="scale">±60 m</div>
+    </div>
+
+    <div class="side">
+      <button class="play" id="play" aria-pressed="false">▶ Play the pass</button>
+      <div class="group">
+        <b>Scene</b>
+        <div class="seg" id="scenes" role="group" aria-label="Scene"></div>
+      </div>
+      <div class="group">
+        <b>Path</b>
+        <div class="seg" id="paths" role="group" aria-label="Path shape"></div>
+        <div class="row"><label for="height">Height</label><input id="height" type="range" min="0" max="120" step="1" value="0"><output id="oHeight"></output></div>
+      </div>
+      <div class="group">
+        <b>Motion</b>
+        <div class="seg" id="runs" role="group" aria-label="How it moves"></div>
+        <div class="row"><label for="speed">Speed</label><input id="speed" type="range" min="10" max="400" step="1" value="90"><output id="oSpeed"></output></div>
+        <div class="row"><label for="pos">Position</label><input id="pos" type="range" min="0" max="1000" step="1" value="0"><output id="oPos"></output></div>
+      </div>
+      <div class="group">
+        <b>Physics</b>
+        <div class="row"><label for="doppler">Doppler</label><input id="doppler" type="range" min="0" max="100" value="100"><output id="oDoppler"></output></div>
+        <div class="row"><label for="air">Air</label><input id="air" type="range" min="0" max="100" value="70"><output id="oAir"></output></div>
+        <div class="row"><label for="room">Room</label><input id="room" type="range" min="0" max="100" value="45"><output id="oRoom"></output></div>
+      </div>
+      <div class="group">
+        <b>Listen on</b>
+        <div class="seg" id="modes" role="group" aria-label="Listening mode"></div>
+      </div>
+      <p class="hint" id="modeHint"></p>
+    </div>
+  </section>
+
+  <section class="notes">
+    <div class="note"><h2>Why a pan LFO isn't enough</h2><p>A pan control only changes how loud the sound is in each speaker. A real pass also changes pitch, level, brightness, the timing between your ears and how much of the room you hear, all at once and in step. Flyby works all of them out from one moving position.</p></div>
+    <div class="note"><h2>How it works</h2><ul>
+      <li><b>Doppler:</b> each ear hears the source through its own delay line, set to that ear's distance divided by the speed of sound, 343 m/s. As the distance changes, the delay changes, and that moves the pitch.</li>
+      <li><b>Ear timing:</b> the same per-ear delays put up to about 0.65 ms between your ears. The ear in your head's shadow also loses its highs (a spherical head model).</li>
+      <li><b>Distance:</b> the level falls with 1/r, and air absorption darkens the sound as it moves away.</li>
+      <li><b>Room:</b> as the source moves away you hear more of the reflections and less of the source itself.</li>
+    </ul></div>
+    <div class="note"><h2>In the DAW</h2><ul>
+      <li>A native effect for any track or bus, and a module in Nova's FX rack.</li>
+      <li><b>Run:</b> Loop, Once per MIDI note, Sync to bars, or Position, which you automate to place the pass exactly on the timeline.</li>
+      <li><b>On time at the closest point:</b> the travel delay is measured from the path's closest point, so the moment it passes you lands on the beat and the effect adds no latency.</li>
+      <li><b>Headphones</b> use the ear timing and head shadow. <b>Speakers</b> use a constant-power pan, so no ear timing reaches both ears.</li>
+    </ul></div>
+  </section>
+</div>
+
+<script>
+const $ = s => document.querySelector(s)
+const C = 343            // speed of sound, m/s
+const EAR = 0.0875       // half head width, m
+const VIEW = 60          // metres from centre to the edge of the map
+const REF = 5            // metres where the level is 0 dB
+
+// ---- Paths: a pass is a cubic Bézier, an orbit a circle --------------------------------
+const PATHS = {
+  straight: { name: "Straight", pts: [[-90, 14], [-30, 14], [30, 14], [90, 14]] },
+  arc:      { name: "Arc",      pts: [[-70, -40], [-40, 60], [40, 60], [70, -40]] },
+  swerve:   { name: "Swerve",   pts: [[-80, 30], [-10, -40], [10, 50], [80, -20]] },
+  orbit:    { name: "Orbit",    r: 18 },
+}
+const SCENES = {
+  train: { name: "Train",       source: "train", path: "straight", speed: 90,  height: 0,  pts: [[-90, 14], [-30, 14], [30, 14], [90, 14]] },
+  car:   { name: "Car pass",    source: "car",   path: "straight", speed: 140, height: 0,  pts: [[-90, 6], [-30, 6], [30, 6], [90, 6]] },
+  jet:   { name: "Jet flyover", source: "jet",   path: "straight", speed: 380, height: 90, pts: [[-120, -30], [-40, -10], [40, 10], [120, 30]] },
+  bee:   { name: "Bee",         source: "bee",   path: "orbit",    speed: 12,  height: 0 },
+}
+let scene = "train", pathKind = "straight", pts = PATHS.straight.pts.map(p => [...p])
+let run = "loop", mode = "headphones"
+let u = 0, playing = false, lastT = 0
+
+function bez(t) {
+  const [a, b, c, d] = pts, s = 1 - t
+  return [s*s*s*a[0] + 3*s*s*t*b[0] + 3*s*t*t*c[0] + t*t*t*d[0], s*s*s*a[1] + 3*s*s*t*b[1] + 3*s*t*t*c[1] + t*t*t*d[1]]
+}
+// Position at fraction u (0..1) of the path's length, so the speed is even.
+let lut = []
+function buildLut() {
+  lut = [{ t: 0, s: 0 }]
+  if (pathKind === "orbit") return
+  let s = 0, prev = bez(0)
+  for (let i = 1; i <= 400; ++i) { const t = i / 400, p = bez(t); s += Math.hypot(p[0] - prev[0], p[1] - prev[1]); lut.push({ t, s }); prev = p }
+}
+function pathLength() { return pathKind === "orbit" ? 2 * Math.PI * PATHS.orbit.r : lut[lut.length - 1].s }
+function at(frac) {
+  if (pathKind === "orbit") { const a = frac * Math.PI * 2 - Math.PI / 2; return [Math.cos(a) * PATHS.orbit.r, Math.sin(a) * PATHS.orbit.r] }
+  const target = frac * pathLength()
+  let lo = 0, hi = lut.length - 1
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (lut[m].s < target) lo = m; else hi = m }
+  const k = (target - lut[lo].s) / Math.max(1e-9, lut[hi].s - lut[lo].s)
+  return bez(lut[lo].t + k * (lut[hi].t - lut[lo].t))
+}
+// The path's closest approach (3-D, with height), for the travel-time offset.
+function closest() {
+  let best = 1e9
+  for (let i = 0; i <= 400; ++i) { const p = at(i / 400); best = Math.min(best, Math.hypot(p[0], p[1], height())) }
+  return best
+}
+const height = () => +$("#height").value
+const speed = () => +$("#speed").value / 3.6
+
+// ---- Geometry → what each ear hears --------------------------------------------------------
+function hear(p) {
+  const h = height()
+  const dc = Math.hypot(p[0], p[1], h)
+  const dl = Math.hypot(p[0] + EAR, p[1], h), dr = Math.hypot(p[0] - EAR, p[1], h)
+  const az = Math.atan2(p[0], p[1])               // 0 ahead, +90° to the right
+  const side = Math.sin(az) * Math.hypot(p[0], p[1]) / Math.max(dc, 1e-6) // overhead → less sideways
+  const dop = +$("#doppler").value / 100, air = +$("#air").value / 100, room = +$("#room").value / 100
+  const dmin = closestCache
+  const travel = dop * (dc - dmin) / C             // on time at the closest point
+  const head = mode === "headphones"
+  const itdL = head ? (dl - dc) / C : 0, itdR = head ? (dr - dc) / C : 0
+  const gain = Math.min(2, REF / Math.max(dc, 0.5))
+  const airHz = 20000 * Math.exp(-air * dc / 90)  // brighter close, darker far
+  // Head shadow: the far ear loses highs and a little level.
+  const shadowL = head ? Math.max(0, side) : 0, shadowR = head ? Math.max(0, -side) : 0
+  const pan = (side + 1) / 2                       // speakers: constant power
+  return {
+    dc, side,
+    delayL: Math.max(0, travel + itdL), delayR: Math.max(0, travel + itdR),
+    gainL: gain * (head ? 1 - 0.35 * shadowL : Math.cos(pan * Math.PI / 2) * Math.SQRT2),
+    gainR: gain * (head ? 1 - 0.35 * shadowR : Math.sin(pan * Math.PI / 2) * Math.SQRT2),
+    cutL: Math.max(400, airHz * (1 - 0.82 * shadowL)), cutR: Math.max(400, airHz * (1 - 0.82 * shadowR)),
+    send: room * dc / (dc + 12),
+    itdUs: (dr - dl) / C * 1e6 * (head ? 1 : 0),
+  }
+}
+let closestCache = 14
+
+// ---- Audio --------------------------------------------------------------------------------
+let ac = null, nodes = null
+function makeIr(ctx, seconds) {
+  const n = Math.floor(ctx.sampleRate * seconds), ir = ctx.createBuffer(2, n, ctx.sampleRate)
+  for (let ch = 0; ch < 2; ++ch) { const d = ir.getChannelData(ch); for (let i = 0; i < n; ++i) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3.2) * (i < 200 ? i / 200 : 1) }
+  return ir
+}
+function source(ctx, kind) {
+  const out = ctx.createGain(); out.gain.value = 0.5
+  const stop = []
+  const osc = (type, f, g) => { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; const gg = ctx.createGain(); gg.gain.value = g; o.connect(gg).connect(out); o.start(); stop.push(o); return o }
+  const noise = (g, f, q) => {
+    const b = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = b.getChannelData(0)
+    for (let i = 0; i < d.length; ++i) d[i] = Math.random() * 2 - 1
+    const s = ctx.createBufferSource(); s.buffer = b; s.loop = true
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = f; bp.Q.value = q
+    const gg = ctx.createGain(); gg.gain.value = g; s.connect(bp).connect(gg).connect(out); s.start(); stop.push(s); return gg
+  }
+  if (kind === "train") {
+    osc("sawtooth", 55, 0.25); osc("sawtooth", 82.5, 0.15)
+    const rumble = noise(0.6, 300, 0.7)
+    // Wheels on rail joints: a two-beat clack.
+    const clack = ctx.createGain(); clack.gain.value = 0; noise(1, 2200, 1.2).disconnect();
+    const cb = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), cd = cb.getChannelData(0)
+    for (let i = 0; i < cd.length; ++i) cd[i] = Math.random() * 2 - 1
+    const cs = ctx.createBufferSource(); cs.buffer = cb; cs.loop = true
+    const cf = ctx.createBiquadFilter(); cf.type = "bandpass"; cf.frequency.value = 1800; cf.Q.value = 1.5
+    cs.connect(cf).connect(clack).connect(out); cs.start(); stop.push(cs)
+    const lfo = ctx.createOscillator(); lfo.type = "square"; lfo.frequency.value = 2.6
+    const depth = ctx.createGain(); depth.gain.value = 0.35; lfo.connect(depth).connect(clack.gain); lfo.start(); stop.push(lfo)
+    // The horn: a minor third, the classic two-tone.
+    osc("square", 311, 0.06); osc("square", 370, 0.06)
+  } else if (kind === "car") {
+    osc("sawtooth", 98, 0.28); osc("sawtooth", 196, 0.12); noise(0.5, 900, 0.6)
+  } else if (kind === "jet") {
+    noise(0.9, 1200, 0.4); noise(0.6, 5200, 0.8); osc("sawtooth", 440, 0.05)
+  } else {
+    const o = osc("sawtooth", 220, 0.2); const v = ctx.createOscillator(); v.frequency.value = 23; const vg = ctx.createGain(); vg.gain.value = 9
+    v.connect(vg).connect(o.frequency); v.start(); stop.push(v)
+  }
+  return { out, stop }
+}
+function startAudio() {
+  ac = ac || new (window.AudioContext || window.webkitAudioContext)()
+  ac.resume()
+  const src = source(ac, SCENES[scene].source)
+  const merger = ac.createChannelMerger(2)
+  const master = ac.createGain(); master.gain.value = 0.8
+  const ear = ch => {
+    const d = ac.createDelay(2.0), f = ac.createBiquadFilter(), g = ac.createGain()
+    f.type = "lowpass"; f.Q.value = 0.5
+    src.out.connect(d).connect(f).connect(g).connect(merger, 0, ch)
+    return { d, f, g }
+  }
+  const L = ear(0), R = ear(1)
+  const rd = ac.createDelay(2.0), conv = ac.createConvolver(), send = ac.createGain()
+  conv.buffer = makeIr(ac, 2.4); send.gain.value = 0
+  src.out.connect(rd).connect(conv).connect(send).connect(master)
+  merger.connect(master).connect(ac.destination)
+  nodes = { src, L, R, rd, send, master }
+}
+function stopAudio() {
+  if (!nodes) return
+  const n = nodes; nodes = null
+  n.master.gain.setTargetAtTime(0, ac.currentTime, 0.05)
+  setTimeout(() => { n.src.stop.forEach(s => { try { s.stop() } catch (e) {} }); n.master.disconnect() }, 300)
+}
+function drive(h) {
+  if (!nodes) return
+  const t = ac.currentTime, k = 0.015
+  nodes.L.d.delayTime.setTargetAtTime(h.delayL, t, k); nodes.R.d.delayTime.setTargetAtTime(h.delayR, t, k)
+  nodes.L.g.gain.setTargetAtTime(h.gainL, t, k); nodes.R.g.gain.setTargetAtTime(h.gainR, t, k)
+  nodes.L.f.frequency.setTargetAtTime(h.cutL, t, k); nodes.R.f.frequency.setTargetAtTime(h.cutR, t, k)
+  nodes.rd.delayTime.setTargetAtTime((h.delayL + h.delayR) / 2, t, k)
+  nodes.send.gain.setTargetAtTime(h.send * 0.9, t, k)
+}
+
+// ---- Drawing --------------------------------------------------------------------------------
+const cv = $("#map"), ctx2 = cv.getContext("2d")
+let W = 0, H = 0, scale = 1, dpr = 1
+function size() {
+  const r = cv.getBoundingClientRect(); dpr = window.devicePixelRatio || 1
+  W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr
+  scale = Math.min(W, H) / 2 / VIEW
+}
+const toPx = p => [W / 2 + p[0] * scale, H / 2 - p[1] * scale]
+const toM = (x, y) => [(x - W / 2) / scale, (H / 2 - y) / scale]
+let wave = [], waveClock = 0
+function draw(h, p) {
+  const g = ctx2; g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H)
+  // Range rings and axes.
+  g.strokeStyle = "#1c282e"; g.lineWidth = 1
+  for (let r = 10; r <= 90; r += 10) { g.beginPath(); g.arc(W / 2, H / 2, r * scale, 0, Math.PI * 2); g.stroke() }
+  g.beginPath(); g.moveTo(W / 2, 0); g.lineTo(W / 2, H); g.moveTo(0, H / 2); g.lineTo(W, H / 2); g.stroke()
+  // Wavefronts: each ring left the source when it was there, so ahead of the
+  // source they bunch up. Drawn at an eighth of the speed of sound to be seen.
+  g.strokeStyle = "rgba(242,165,65,.22)"
+  for (const w of wave) { const r = (performance.now() - w.t) / 1000 * C / 8; const c = toPx(w.p); g.beginPath(); g.arc(c[0], c[1], r * scale, 0, Math.PI * 2); g.stroke() }
+  // The path.
+  g.strokeStyle = "#f2a541"; g.lineWidth = 2; g.beginPath()
+  for (let i = 0; i <= 200; ++i) { const q = toPx(at(i / 200)); i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]) }
+  if (pathKind === "orbit") g.closePath()
+  g.stroke()
+  // Direction arrows.
+  g.fillStyle = "#f2a541"
+  for (const f of [0.25, 0.5, 0.75]) { const a = toPx(at(f)), b = toPx(at(Math.min(1, f + 0.01))); const ang = Math.atan2(b[1] - a[1], b[0] - a[0]); g.save(); g.translate(a[0], a[1]); g.rotate(ang); g.beginPath(); g.moveTo(6, 0); g.lineTo(-4, -4); g.lineTo(-4, 4); g.closePath(); g.fill(); g.restore() }
+  // Bézier handles.
+  if (pathKind !== "orbit") {
+    g.strokeStyle = "rgba(228,236,233,.25)"; g.lineWidth = 1
+    const P = pts.map(toPx)
+    g.beginPath(); g.moveTo(P[0][0], P[0][1]); g.lineTo(P[1][0], P[1][1]); g.moveTo(P[3][0], P[3][1]); g.lineTo(P[2][0], P[2][1]); g.stroke()
+    P.forEach((q, i) => { g.fillStyle = i === 0 || i === 3 ? "#e4ece9" : "#0a1012"; g.strokeStyle = "#e4ece9"; g.lineWidth = 1.5; g.beginPath(); g.arc(q[0], q[1], i === 0 || i === 3 ? 6 : 5, 0, Math.PI * 2); g.fill(); g.stroke() })
+  }
+  // You: a head facing up, ears left and right.
+  const c = [W / 2, H / 2]
+  g.fillStyle = "#1a2428"; g.strokeStyle = "#6fd3b8"; g.lineWidth = 2
+  g.beginPath(); g.arc(c[0], c[1], 11, 0, Math.PI * 2); g.fill(); g.stroke()
+  g.beginPath(); g.moveTo(c[0] - 4, c[1] - 10); g.lineTo(c[0], c[1] - 16); g.lineTo(c[0] + 4, c[1] - 10); g.stroke()
+  g.fillStyle = "#6fd3b8"
+  const lv = Math.max(0, Math.min(1, h.gainL / 1.2)), rv = Math.max(0, Math.min(1, h.gainR / 1.2))
+  g.globalAlpha = 0.4 + 0.6 * lv; g.fillRect(c[0] - 16, c[1] - 4, 4, 8)
+  g.globalAlpha = 0.4 + 0.6 * rv; g.fillRect(c[0] + 12, c[1] - 4, 4, 8)
+  g.globalAlpha = 1
+  g.font = "11px IBM Plex Mono, monospace"; g.fillStyle = "#93a6a3"; g.textAlign = "center"
+  g.fillText("L", c[0] - 26, c[1] + 4); g.fillText("R", c[0] + 26, c[1] + 4)
+  // The source.
+  const s = toPx(p)
+  g.strokeStyle = "rgba(242,165,65,.35)"; g.setLineDash([3, 4]); g.beginPath(); g.moveTo(c[0], c[1]); g.lineTo(s[0], s[1]); g.stroke(); g.setLineDash([])
+  g.fillStyle = "#f2a541"; g.beginPath(); g.arc(s[0], s[1], 8, 0, Math.PI * 2); g.fill()
+  g.fillStyle = "#0e1416"; g.beginPath(); g.arc(s[0], s[1], 3, 0, Math.PI * 2); g.fill()
+  if (height() > 0) { g.fillStyle = "#93a6a3"; g.textAlign = "left"; g.fillText("↑ " + height() + " m up", s[0] + 12, s[1] - 10) }
+}
+
+// ---- Loop -------------------------------------------------------------------------------------
+let prevDc = null
+function frame(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000 || 0); lastT = now
+  if (playing && run !== "position") {
+    u += speed() * dt / pathLength()
+    if (u >= 1) { if (run === "loop" || pathKind === "orbit") u -= 1; else { u = 1; setPlaying(false) } }
+    $("#pos").value = Math.round(u * 1000)
+  }
+  const p = at(u), h = hear(p)
+  drive(h)
+  // Pitch from the rate of change of travel time (what the delay line does).
+  const dop = +$("#doppler").value / 100
+  const radial = prevDc === null || dt === 0 ? 0 : (h.dc - prevDc) / dt
+  prevDc = h.dc
+  const ratio = 1 / (1 + dop * radial / C)
+  const cents = 1200 * Math.log2(Math.max(0.01, ratio))
+  if (playing && now - waveClock > 220) { wave.push({ p, t: now }); waveClock = now; if (wave.length > 24) wave.shift() }
+  $("#rDist").textContent = h.dc.toFixed(1) + " m"
+  $("#rSpeed").textContent = Math.round(+$("#speed").value) + " km/h"
+  $("#rPitch").textContent = (cents >= 0 ? "+" : "−") + Math.abs(cents).toFixed(0) + " ct"
+  $("#rItd").textContent = mode === "headphones" ? (h.itdUs >= 0 ? "R " : "L ") + Math.abs(h.itdUs).toFixed(0) + " µs" : "pan only"
+  $("#rLevel").textContent = (20 * Math.log10(Math.max(1e-4, (h.gainL + h.gainR) / 2))).toFixed(1) + " dB"
+  $("#rRoom").textContent = Math.round(h.send * 100) + "%"
+  $("#oPos").textContent = Math.round(u * 100) + "%"
+  draw(h, p)
+  requestAnimationFrame(frame)
+}
+
+// ---- Controls ---------------------------------------------------------------------------------
+function segs(el, items, current, pick) {
+  el.innerHTML = Object.entries(items).map(([k, v]) => `<button type="button" data-k="${k}" aria-pressed="${k === current}">${v}</button>`).join("")
+  el.onclick = e => { const b = e.target.closest("button"); if (!b) return; pick(b.dataset.k); el.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)) }
+}
+function refreshPath() { buildLut(); closestCache = closest(); prevDc = null }
+function setPlaying(on) {
+  playing = on
+  $("#play").setAttribute("aria-pressed", on); $("#play").textContent = on ? "■ Stop" : "▶ Play the pass"
+  if (on) { if (u >= 1) u = 0; startAudio() } else stopAudio()
+}
+function loadScene(k) {
+  const s = SCENES[k]; scene = k; pathKind = s.path
+  if (s.pts) pts = s.pts.map(p => [...p])
+  $("#speed").value = s.speed; $("#height").value = s.height; u = 0
+  segs($("#paths"), Object.fromEntries(Object.entries(PATHS).map(([k, v]) => [k, v.name])), pathKind, pickPath)
+  refreshPath(); outputs()
+  if (playing) { stopAudio(); startAudio() }
+}
+function pickPath(k) {
+  pathKind = k
+  if (PATHS[k].pts) pts = PATHS[k].pts.map(p => [...p])
+  refreshPath()
+}
+function outputs() {
+  $("#oHeight").textContent = height() + " m"; $("#oSpeed").textContent = $("#speed").value + " km/h"
+  $("#oDoppler").textContent = $("#doppler").value + "%"; $("#oAir").textContent = $("#air").value + "%"; $("#oRoom").textContent = $("#room").value + "%"
+}
+segs($("#scenes"), Object.fromEntries(Object.entries(SCENES).map(([k, v]) => [k, v.name])), scene, loadScene)
+segs($("#runs"), { loop: "Loop", once: "Once", position: "Position" }, run, k => { run = k })
+const HINTS = { headphones: "Headphones: each ear gets its own delay and head shadow, so the source sits outside your head.", speakers: "Speakers: a constant-power pan replaces the ear timing, which would blur when both ears hear both speakers. Doppler, distance, air and room stay the same." }
+segs($("#modes"), { headphones: "Headphones", speakers: "Speakers" }, mode, k => { mode = k; $("#modeHint").textContent = HINTS[k] })
+$("#modeHint").textContent = HINTS[mode]
+$("#play").onclick = () => setPlaying(!playing)
+$("#pos").oninput = e => { u = +e.target.value / 1000; if (run !== "position") { run = "position"; segs($("#runs"), { loop: "Loop", once: "Once", position: "Position" }, run, k => { run = k }) } }
+for (const id of ["height", "speed", "doppler", "air", "room"]) $("#" + id).addEventListener("input", () => { outputs(); if (id === "height") closestCache = closest() })
+
+// Drag the path's points.
+let dragging = -1
+cv.addEventListener("pointerdown", e => {
+  if (pathKind === "orbit") return
+  const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top
+  pts.forEach((q, i) => { const s = toPx(q); if (Math.hypot(s[0] - x, s[1] - y) < 14) dragging = i })
+  if (dragging >= 0) cv.setPointerCapture(e.pointerId)
+})
+cv.addEventListener("pointermove", e => {
+  if (dragging < 0) return
+  const r = cv.getBoundingClientRect(); pts[dragging] = toM(e.clientX - r.left, e.clientY - r.top); refreshPath()
+})
+cv.addEventListener("pointerup", () => { dragging = -1 })
+
+window.addEventListener("resize", size)
+size(); loadScene("train"); outputs(); requestAnimationFrame(frame)
+</script>
