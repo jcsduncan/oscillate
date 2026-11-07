@@ -416,10 +416,10 @@ oscillate_add_test(NAME application_sound_map_render
   COMMAND oscillate_application_sound_map_tests render TIER slow)
 
 # Clay in the project (ADR-0081 phase 2): take persistence, undo, rendering
-# and export, To MIDI.
+# and export, To MIDI, follow targets.
 oscillate_add_test_executable(oscillate_application_clay_session_tests SOURCES clay_session_tests.cpp
   LIBS oscillate::application oscillate::export oscillate::persistence oscillate::clay_source)
-foreach(clay_case saves undo refused unedited export to_midi voices warp)
+foreach(clay_case saves undo refused unedited export to_midi voices warp follow)
   oscillate_add_test(NAME application_clay_session_${clay_case}
     COMMAND oscillate_application_clay_session_tests ${clay_case})
 endforeach()

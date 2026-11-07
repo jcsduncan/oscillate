@@ -16,6 +16,9 @@ using foundation::ErrorCode;
 template <typename T> using Result = foundation::Result<T>;
 
 constexpr double seconds_per_minute = 60.0;
+// Playback schedules at most this many notes in a project: an on and an off
+// each.
+constexpr std::size_t max_followed_notes = project::max_midi_events_per_project / 2;
 // Division names and their steps per quarter note.
 constexpr std::array<std::pair<std::string_view, int>, 4> divisions{
     {{"1/4", 1}, {"1/8", 2}, {"1/16", 4}, {"1/32", 8}}};
@@ -189,30 +192,52 @@ std::vector<clay_dsp::TargetNote> follow_targets(const project::Snapshot& snapsh
     return targets;
   const auto first = static_cast<double>(time.first_source_frame());
   const auto end = static_cast<double>(time.end_source_frame());
+  // The audio clip's song ticks: only the pattern repeats that reach them
+  // are walked, so a short looping pattern costs what the clip covers.
+  auto window_start = time.tick(first);
+  auto window_end = time.tick(end);
+  if (!window_start || !window_end)
+    return targets;
   const auto source_at_tick = [&](std::int64_t tick) -> std::optional<double> {
     auto sample = snapshot.tempo.tick_to_sample({tick}, snapshot.sample_rate);
     if (!sample)
       return std::nullopt;
     return time.source_frame(static_cast<double>(sample.value().value));
   };
+  std::size_t followed = 0;
   for (const auto& clip : track->midi_clips) {
     const auto* musical = std::get_if<project::MusicalInterval>(&clip.placement);
-    if (musical == nullptr || clip.pattern_length.value <= 0)
+    const auto pattern = clip.pattern_length.value;
+    // A pattern whose notes all lie past its end is silent; every other
+    // repeat follows at least one note, so the budget below bounds the walk.
+    if (musical == nullptr || pattern <= 0 ||
+        std::ranges::none_of(clip.notes,
+                             [pattern](const auto& note) { return note.start.value < pattern; }))
       continue;
     const auto clip_start = musical->start.value;
     const auto clip_end = musical->end.value;
-    // A looping clip repeats its pattern to its end.
-    for (auto origin = clip_start; origin < clip_end;
-         origin += clip.loop ? clip.pattern_length.value : clip_end - clip_start) {
+    // A looping clip repeats its pattern to its end. One repeat before the
+    // window is walked too, so rounding between ticks and frames loses none.
+    const auto span = clip.loop ? pattern : clip_end - clip_start;
+    const auto skipped =
+        std::max<std::int64_t>(0, (window_start.value().value - clip_start) / span - 1);
+    const auto last = std::min(clip_end, window_end.value().value);
+    for (auto origin = clip_start + skipped * span; origin < clip_end && origin <= last;
+         origin += span) {
       // As playback hears them: notes past the pattern are silent, and a
       // note crossing its end is cut there.
-      const auto pattern_end = std::min(origin + clip.pattern_length.value, clip_end);
+      const auto pattern_end = std::min(origin + pattern, clip_end);
       for (const auto& note : clip.notes) {
-        if (note.start.value >= clip.pattern_length.value)
+        if (note.start.value >= pattern)
           continue;
         const auto note_start = origin + note.start.value;
         if (note_start >= pattern_end)
           continue;
+        // Playback schedules no more notes than this, so neither does Clay.
+        if (++followed > max_followed_notes) {
+          std::ranges::sort(targets, {}, &clay_dsp::TargetNote::start);
+          return targets;
+        }
         // Cut at the pattern end before adding the origin, so a long note
         // cannot overflow.
         const auto note_end = origin + std::min(note.end.value, pattern_end - origin);
