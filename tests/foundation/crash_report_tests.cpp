@@ -3,6 +3,7 @@
 #include "oscillate/test/check.hpp"
 
 #include <array>
+#include <chrono>
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
@@ -222,6 +223,26 @@ void redaction_replaces_whole_home_paths() {
              std::string("/mnt/backup/home/me/x"), "only a path that starts with home");
 }
 
+void latest_report_is_the_most_recently_written() {
+  constexpr auto older_age = std::chrono::hours(2);
+  constexpr auto newer_age = std::chrono::hours(1);
+  const auto fixture = make_fixture("crash-report-latest");
+  REQUIRE_FALSE(crash::latest_report(fixture.reports).has_value(), "no directory, no report");
+  std::filesystem::create_directories(fixture.reports);
+  write_text(fixture.reports / crash::session_name, "session");
+  REQUIRE_FALSE(crash::latest_report(fixture.reports).has_value(), "only reports count");
+  const auto older = fixture.reports / "oscillate-crash-20261107T120000Z-1.txt";
+  const auto newer = fixture.reports / "oscillate-crash-20261107T120000Z.txt";
+  write_text(older, "older");
+  write_text(newer, "newer");
+  const auto now = std::filesystem::file_time_type::clock::now();
+  std::filesystem::last_write_time(older, now - older_age);
+  std::filesystem::last_write_time(newer, now - newer_age);
+  REQUIRE_EQ(crash::latest_report(fixture.reports), std::optional(newer),
+             "the write time decides, not the name");
+  std::filesystem::remove_all(fixture.root);
+}
+
 void directory_fallback() {
   REQUIRE_EQ(crash::default_directory("/state", "/home/me"),
              std::filesystem::path("/state/oscillate/crash-reports"));
@@ -240,6 +261,7 @@ int main() {
     session_lists_only_relevant_variables();
     log_section_is_bounded();
     redaction_replaces_whole_home_paths();
+    latest_report_is_the_most_recently_written();
     directory_fallback();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

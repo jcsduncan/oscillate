@@ -10,3 +10,8 @@ oscillate_add_test_executable(oscillate_foundation_logging_tests SOURCES logging
 oscillate_add_test_executable(oscillate_foundation_crash_report_tests SOURCES crash_report_tests.cpp
   LIBS oscillate::foundation
   TEST foundation_crash_report)
+
+# The zip writer, read back by an independent parser, and the diagnostics bundle.
+oscillate_add_test_executable(oscillate_foundation_diagnostics_tests SOURCES diagnostics_bundle_tests.cpp
+  LIBS oscillate::foundation
+  TEST foundation_diagnostics)

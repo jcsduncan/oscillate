@@ -26,28 +26,6 @@ constexpr plugins::Vst3CatalogueLimits catalogue_limits{
     .max_bundles = 128, .max_entries = 20000, .max_search_paths = 32};
 #endif
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
-[[nodiscard]] QString scan_state(plugins::ScanStatus status) {
-  switch (status) {
-  case plugins::ScanStatus::ok:
-    return QStringLiteral("ready");
-  case plugins::ScanStatus::invalid_bundle:
-    return QStringLiteral("invalid bundle");
-  case plugins::ScanStatus::invalid_metadata:
-    return QStringLiteral("invalid metadata");
-  case plugins::ScanStatus::scanner_error:
-    return QStringLiteral("scan error");
-  case plugins::ScanStatus::crashed:
-    return QStringLiteral("scanner crashed");
-  case plugins::ScanStatus::timed_out:
-    return QStringLiteral("scan timed out");
-  case plugins::ScanStatus::oversized_response:
-    return QStringLiteral("response too large");
-  case plugins::ScanStatus::quarantined:
-    return QStringLiteral("quarantined");
-  }
-  return QStringLiteral("unknown");
-}
-
 [[nodiscard]] bool is_effect_class(const plugins::Vst3Class& klass) {
   if (klass.category != "Audio Module Class")
     return false;
@@ -80,6 +58,30 @@ constexpr plugins::Vst3CatalogueLimits catalogue_limits{
 
 #endif
 } // namespace
+
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+QString vst3_scan_state(plugins::ScanStatus status) {
+  switch (status) {
+  case plugins::ScanStatus::ok:
+    return QStringLiteral("ready");
+  case plugins::ScanStatus::invalid_bundle:
+    return QStringLiteral("invalid bundle");
+  case plugins::ScanStatus::invalid_metadata:
+    return QStringLiteral("invalid metadata");
+  case plugins::ScanStatus::scanner_error:
+    return QStringLiteral("scan error");
+  case plugins::ScanStatus::crashed:
+    return QStringLiteral("scanner crashed");
+  case plugins::ScanStatus::timed_out:
+    return QStringLiteral("scan timed out");
+  case plugins::ScanStatus::oversized_response:
+    return QStringLiteral("response too large");
+  case plugins::ScanStatus::quarantined:
+    return QStringLiteral("quarantined");
+  }
+  return QStringLiteral("unknown");
+}
+#endif
 
 Vst3BrowserController::Vst3BrowserController(Host host, QObject* parent)
     : QObject(parent), host_(std::move(host)), timer_(this) {
@@ -488,7 +490,7 @@ void Vst3BrowserController::publish() {
   for (std::size_t index = 0; index < catalogue_.entries.size(); ++index) {
     const auto& entry = catalogue_.entries[index];
     const auto bundle = QString::fromStdString(entry.canonical_bundle.string());
-    const auto status = scan_state(entry.scan.status);
+    const auto status = vst3_scan_state(entry.scan.status);
     if (!entry.scan.ok() || entry.scan.metadata.classes.empty()) {
       entries_.push_back(
           QVariantMap{{"index", static_cast<int>(index)},

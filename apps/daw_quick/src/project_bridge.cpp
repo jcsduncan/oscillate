@@ -11,6 +11,7 @@
 #include "clip_warp_controller.hpp"
 #include "command_palette.hpp"
 #include "computer_keyboard.hpp"
+#include "diagnostics_controller.hpp"
 #include "freeze_controller.hpp"
 #include "groove_capture_controller.hpp"
 #include "harmony_controller.hpp"
@@ -637,6 +638,7 @@ void ProjectBridge::create_job_controllers() {
   connect(exports_.get(), &ExportController::readyToClose, this, &ProjectBridge::readyToClose);
   connect(this, &ProjectBridge::projectChanged, exports_.get(), &ExportController::notify);
   create_vst3_controllers();
+  create_diagnostics();
 }
 
 void ProjectBridge::create_vst3_controllers() {
@@ -677,6 +679,23 @@ void ProjectBridge::create_vst3_controllers() {
           .schedule_save = [this] { schedule_background_save(); },
           .status = [this](QString message) { set_status(std::move(message)); }},
       *plugin_automation_, this);
+}
+
+void ProjectBridge::create_diagnostics() {
+  diagnostics_ = std::make_unique<DiagnosticsController>(
+      DiagnosticsController::Host{
+          .plugins =
+              [this] {
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+                return diagnostics_plugins(vst3_browser_->catalogue());
+#else
+                return DiagnosticsPlugins{};
+#endif
+              },
+          .status = [this](QString message) { set_status(std::move(message)); },
+          .reveal = {},
+          .write = {}},
+      this);
 }
 
 void ProjectBridge::create_lifecycle() {
@@ -842,6 +861,7 @@ QObject* ProjectBridge::route_commands() const noexcept { return route_commands_
 QObject* ProjectBridge::track_commands() const noexcept { return track_commands_.get(); }
 QObject* ProjectBridge::history() const noexcept { return history_.get(); }
 QObject* ProjectBridge::command_palette() const noexcept { return command_palette_.get(); }
+QObject* ProjectBridge::diagnostics() const noexcept { return diagnostics_.get(); }
 QObject* ProjectBridge::master_section() const noexcept { return master_section_.get(); }
 QObject* ProjectBridge::note_tools() const noexcept { return note_tools_.get(); }
 QObject* ProjectBridge::note_effects() const noexcept { return note_effects_.get(); }

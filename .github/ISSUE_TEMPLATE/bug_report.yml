@@ -41,4 +41,4 @@ body:
     id: attachments
     attributes:
       label: Project, log or crash report
-      description: A small project that reproduces the problem, and any log output. After a crash, attach the crash report Oscillate offered at the next start (in ~/.local/state/oscillate/crash-reports). Don't attach media you aren't allowed to share.
+      description: A small project that reproduces the problem, and a diagnostics bundle (Save diagnostics in the command palette, or `oscillate --save-diagnostics`). After a crash, attach the crash report Oscillate offered at the next start (in ~/.local/state/oscillate/crash-reports). Don't attach media you aren't allowed to share.
