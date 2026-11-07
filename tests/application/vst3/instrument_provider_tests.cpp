@@ -1640,6 +1640,48 @@ void pedal_reaches_mapped_controller(const plugins::ScanResult& scanned, std::ui
   REQUIRE_EQ(::unsetenv("OSCILLATE_VST3_INSTRUMENT_PEDAL"), 0, "pedal mode cleared");
 }
 
+// A manual edit to the parameter a pedal is mapped to, in the block where
+// the pedal moves at the same offset, sends one value there (the manual
+// edit's, applied last), not two the host would refuse.
+void manual_edit_meets_pedal_at_one_offset(const plugins::ScanResult& scanned,
+                                           std::uint32_t frames) {
+  constexpr std::uint32_t level_parameter = 1;
+  constexpr double pedal_down = 1.0;
+  constexpr double manual_value = 0.25;
+  constexpr std::uint64_t manual_revision = 1;
+  REQUIRE_EQ(::setenv("OSCILLATE_VST3_INSTRUMENT_PEDAL", "visible", 1), 0, "pedal mode set");
+  Gate gate;
+  auto state = make_model(gate, saved(scanned));
+  (void)take(state.apply({project::SetMidiPedalLane{
+      id<project::ClipId>(4), project::MidiPedal::sustain, {{{0}, pedal_down}}}}));
+  plugins::Vst3InstrumentTrackProvider provider(plugins::Vst3ProcessingMode::realtime, true);
+  provider.set_scan_receipt(id<project::PluginInstanceId>(5), scanned);
+  auto source = take(
+      provider.prepare(*state.snapshot(), saved_instrument(state.snapshot()->tracks[0]), frames));
+  REQUIRE_TRUE(source.manual_events, "the pedalled instrument admits manual edits");
+  const auto graph_revision = state.snapshot()->revision;
+  source.processor->graph_activated(graph_revision);
+  const auto identity = source.manual_events->active_graph();
+  REQUIRE_EQ(source.manual_events->submit(graph_revision, identity.instance_id,
+                                          identity.compatibility_key, manual_revision,
+                                          {level_parameter, 0, manual_value}),
+             plugins::Vst3ManualEventStatus::accepted, "the manual edit is admitted");
+  std::vector<engine::StereoFrame> output(frames);
+  counting_allocations = true;
+  counted_allocations = 0;
+  source.processor->process(output, {0, 1});
+  counting_allocations = false;
+  REQUIRE_EQ(counted_allocations, 0, "the colliding block allocated");
+  REQUIRE_TRUE(!source.process_failed(),
+               "a manual edit and a pedal at one offset failed the block");
+  const auto points = delivered_points(scanned);
+  REQUIRE_EQ(points.size(), 1, "one value reaches the parameter at the shared offset");
+  REQUIRE_EQ(points[0].id, level_parameter, "one value reaches the parameter at the shared offset");
+  REQUIRE_EQ(points[0].offset, 0, "one value reaches the parameter at the shared offset");
+  REQUIRE_EQ(points[0].value, manual_value, "the manual edit, applied last, wins");
+  REQUIRE_EQ(::unsetenv("OSCILLATE_VST3_INSTRUMENT_PEDAL"), 0, "pedal mode cleared");
+}
+
 void automation_event_budget_contract() {
   using plugins::vst3_automation_event_budget;
   REQUIRE_EQ(vst3_automation_event_budget(8, 128), 1'025U,
@@ -1764,6 +1806,8 @@ int main() {
     automation_event_budget_contract();
     pedal_reaches_mapped_controller(scanned, 64);
     pedal_reaches_mapped_controller(scanned, 128);
+    manual_edit_meets_pedal_at_one_offset(scanned, 64);
+    manual_edit_meets_pedal_at_one_offset(scanned, 128);
     auto lanes = scanner.scan(fs::path(VST3_LANE_INSTRUMENT_BUNDLE));
     if (!lanes.ok() || lanes.metadata.classes.size() != 1)
       throw std::runtime_error("lane instrument fixture scan failed: " + lanes.diagnostic);
