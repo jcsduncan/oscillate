@@ -500,6 +500,11 @@ def main() -> int:
     previous = library.with_name(library.name + ".previous")
     if previous.exists():
         shutil.rmtree(previous)
+    # Only an earlier install (or an empty directory) is replaced: a library
+    # path that holds anything else is left alone.
+    if library.exists() and any(library.iterdir()) and not (library / MANIFEST).is_file():
+        shutil.rmtree(partial)
+        raise SystemExit(f"{library} is not empty and holds no {MANIFEST}; refusing to replace it")
     if library.exists():
         library.rename(previous)
     partial.rename(library)

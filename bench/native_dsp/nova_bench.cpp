@@ -232,7 +232,7 @@ int main(int argc, char** argv) {
       if (scene.name == argv[2]) {
         const char* trace = std::getenv("NOVA_TRACE");
         if (trace != nullptr)
-          (void)foundation::trace::start(std::size_t{1} << 22, 4);
+          (void)foundation::trace::start(std::size_t{1} << 22);
         if (std::getenv("NOVA_TIMELINE") != nullptr) {
           // Each 1024-frame block's cost, against its budget, over time.
           constexpr std::size_t block = 1024;
