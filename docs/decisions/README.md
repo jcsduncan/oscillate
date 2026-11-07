@@ -1,8 +1,7 @@
 # Architecture decisions
 
-Every architecture decision record (ADR). Statuses in older records are
-dated snapshots; verify current implementation against the code and
-[implementation plan](../IMPLEMENTATION_PLAN.md).
+Every architecture decision record (ADR). An ADR records the decision as made;
+the code is the current implementation.
 
 Numbering: take the next free number before writing a new ADR. Numbers are
 never reused. 0070 was never assigned. The Lumen ADR was renumbered from a

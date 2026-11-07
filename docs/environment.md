@@ -22,7 +22,7 @@ for ordinary use.
 The sample-library installers in `tools/concert`, `tools/fret` and
 `tools/wren` write to the same directory the instrument reads, so set the
 variable for both or for neither. See the README's
-[optional sample libraries](../README.md#optional-sample-libraries).
+[optional sample libraries](../README.md#sample-libraries).
 
 ## Where the application keeps files
 
@@ -52,5 +52,5 @@ when there is no Music folder).
 
 CMake options (`OSCILLATE_BUILD_*`, `OSCILLATE_VST3_SDK_ROOT` and so on) are
 configure-time settings, not environment variables. They are described in the
-README's [build section](../README.md#build-and-run) and
+README's [build section](../README.md#build) and
 [local dependency setup](dependencies/local-development.md).

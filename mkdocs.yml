@@ -71,7 +71,6 @@ nav:
       - specs/08-nova-synth.md
       - specs/08a-nova-panel-contract.md
       - specs/09-crate-sampler.md
-  - Implementation status: IMPLEMENTATION_PLAN.md
   - Decisions: decisions/README.md
   - Environment: environment.md
   - Local dependencies: dependencies/local-development.md

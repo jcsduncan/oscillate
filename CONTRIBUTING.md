@@ -29,8 +29,10 @@ problem, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
    need an ADR in [docs/decisions](docs/decisions/README.md).
 2. Follow [AGENTS.md](AGENTS.md): real-time rules, data-integrity rules,
    DSP measurement policy, test registration and the local checks.
-3. Build with the commands in the [README](README.md#build-and-run), add or
+3. Build with the commands in the [README](README.md#build), add or
    update tests for the changed behaviour, and run the affected tests.
+   Deliver a feature as a vertical slice that renders, saves and reopens a
+   real project before broadening it.
 4. Open a pull request against `main` with one coherent change. Describe the
    requirement IDs, any API or schema change, the tests you ran, and the
    real-time and licensing effects.
@@ -94,7 +96,11 @@ a pull request changes none of their inputs; a skipped job counts as passed.
 - **Documentation**: `scripts/check-doc-links.py` and a strict MkDocs build
   of the documentation site.
 
-The slow test tier runs nightly. CodeRabbit reviews each pull request with
+The slow test tier runs nightly. Before a release, run the broad sweep:
+GCC and Clang builds, the fast and slow tiers, clang-format, clang-tidy,
+ASan/UBSan, TSan where concurrency changed, and coverage
+([AGENTS.md](AGENTS.md#commands)). A release needs evidence for each PRD
+release gate (PRD §23); coverage does not waive a blocker. CodeRabbit reviews each pull request with
 the rules in `.coderabbit.yaml`, which follow [AGENTS.md](AGENTS.md).
 
 ## Licence of contributions

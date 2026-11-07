@@ -29,7 +29,7 @@ the production entry point.
 ## Local build and focused checks
 
 Build and run the app as described in the README's
-[Build and run](../../README.md#build-and-run) section. Build the affected UI
+[Build](../../README.md#build) section. Build the affected UI
 test targets, then select their CTest names or the `ui` label; the
 [contributor guidance](../../AGENTS.md#commands) gives the test commands and
 resource limits.
@@ -45,5 +45,4 @@ The bridge and parts of the arrangement remain large. Split along feature
 ownership and a stable command/read-model interface when editing those areas;
 avoid mechanical moves in playback-sensitive code. Native VST3 editor support
 depends on plugin and window-system behaviour, and Wayland-native editor
-support remains open. See the [implementation status](../../docs/IMPLEMENTATION_PLAN.md)
-for current qualification work.
+support remains open.
