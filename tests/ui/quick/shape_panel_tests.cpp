@@ -392,6 +392,31 @@ void handles_drag_scroll_and_add() {
           "a tile makes band 3 a low shelf");
 }
 
+// The device-chain strip draws only the output spectrum, never the packed
+// frame (peaks, then the input spectrum, then the output spectrum).
+void telemetry_gives_the_strip_the_output_spectrum() {
+  namespace t = shape::telemetry;
+  constexpr float input_band_db = -70.0F;
+  constexpr float output_base_db = -60.0F;
+  constexpr float output_step_db = 0.25F;
+  InMemoryNativeSynthAdapter adapter(preset("Flat"));
+  NativeSynthDeviceController controller(table(), adapter);
+  auto frame = frame_of(-6.0F, -12.0F, -1.0F, -200.0F);
+  for (std::size_t band = 0; band < shape::spectrum_bands; ++band) {
+    frame[t::input_spectrum + band] = input_band_db;
+    frame[t::output_spectrum + band] = output_base_db + output_step_db * static_cast<float>(band);
+  }
+  adapter.set_telemetry(frame);
+  const auto spectrum = controller.telemetry().value(QStringLiteral("spectrum")).toList();
+  require(spectrum.size() == static_cast<qsizetype>(shape::spectrum_bands),
+          "one value per output band: " + std::to_string(spectrum.size()));
+  for (std::size_t band = 0; band < shape::spectrum_bands; ++band) {
+    const double expected = output_base_db + output_step_db * static_cast<float>(band);
+    require(spectrum.at(static_cast<qsizetype>(band)).toDouble() == expected,
+            "band " + std::to_string(band) + " is the output spectrum's");
+  }
+}
+
 void telemetry_decodes_into_the_meters() {
   InMemoryNativeSynthAdapter adapter(preset("Flat"));
   NativeSynthDeviceController controller(table(), adapter);
@@ -543,6 +568,7 @@ int main(int argc, char** argv) {
     the_slope_steepens_the_curve();
     handles_drag_scroll_and_add();
     telemetry_decodes_into_the_meters();
+    telemetry_gives_the_strip_the_output_spectrum();
     presets_and_status();
     screenshots_if_requested();
   } catch (const std::exception& error) {
