@@ -259,8 +259,8 @@ void key_match_drops_a_replaced_sessions_result() {
   std::atomic<int> analyses{0};
   int commits = 0;
   quick::KeyMatchController match(
-      [&] { return current; }, [&] { return current_root; }, [] { return true; }, [](QString) {},
-      [&] { ++commits; },
+      [&] { return current; }, [&] { return current_root; }, [] { return true; },
+      [](const QString&) {}, [&] { ++commits; },
       [&](const auto&, const project::SourceRecord& source, std::uint64_t generation, const auto&) {
         if (analyses.fetch_add(1) == 0) {
           entered.release();

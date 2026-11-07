@@ -516,10 +516,14 @@ void invalid_input_is_rejected() {
           "duplicate ID accepted");
   std::vector<NodeRequest> too_many(1025, ramp());
   require(!prepare_graph(1, 4, too_many, nullptr), "node bound ignored");
-  require(!prepare_graph(1, 4,
-                         std::vector<NodeRequest>{
-                             {1, 1, []() -> std::unique_ptr<ProcessorRuntime> { throw 7; }}},
-                         nullptr),
+  require(!prepare_graph(
+              1, 4,
+              std::vector<NodeRequest>{
+                  {1, 1,
+                   []() -> std::unique_ptr<ProcessorRuntime> {
+                     throw 7; // NOLINT(bugprone-std-exception-baseclass): any exception type.
+                   }}},
+              nullptr),
           "unknown preparation failure accepted");
   auto first = prepared(1, {ramp()});
   require(!prepare_graph(1, 4, std::vector<NodeRequest>{ramp()}, first.get()),

@@ -92,9 +92,8 @@ double rms(std::span<const StereoFrame> audio) {
 }
 
 bool finite(std::span<const StereoFrame> audio) {
-  return std::all_of(audio.begin(), audio.end(), [](const StereoFrame& f) {
-    return std::isfinite(f.left) && std::isfinite(f.right);
-  });
+  return std::ranges::all_of(
+      audio, [](const StereoFrame& f) { return std::isfinite(f.left) && std::isfinite(f.right); });
 }
 
 // A decaying, decorrelated noise IR at 44.1 kHz, so the module resamples it.
@@ -493,7 +492,7 @@ void rack_telemetry_and_meters_are_finite() {
   nova::FxRack::Telemetry t;
   rack.telemetry(t);
   const auto all_finite = [](std::span<const float> values) {
-    return std::all_of(values.begin(), values.end(), [](float v) { return std::isfinite(v); });
+    return std::ranges::all_of(values, [](float v) { return std::isfinite(v); });
   };
   REQUIRE_TRUE(all_finite(t.live), "every telemetry value is finite");
   REQUIRE_TRUE(all_finite(t.input), "every telemetry value is finite");
@@ -507,7 +506,7 @@ void rack_telemetry_and_meters_are_finite() {
   REQUIRE_LE(t.meters[4], -119.0F, "an idle Bus 2 meters silence");
   const auto detail =
       std::span<const float>(t.detail).subspan(2 * nova::fx_detail_values, nova::fx_detail_values);
-  require(std::any_of(detail.begin(), detail.end(), [](float v) { return std::fabs(v) > 0.5F; }),
+  require(std::ranges::any_of(detail, [](float v) { return std::fabs(v) > 0.5F; }),
           "Multiband reports its band gain changes");
   REQUIRE_LE(t.input[3], -119.0F, "an empty uid meters nothing");
   REQUIRE_LE(t.output[3], -119.0F, "an empty uid meters nothing");
@@ -683,7 +682,7 @@ void the_rack_reports_each_slot_level_and_spectrum() {
              "the spectrum shows the tone at its level (" + std::to_string(spectrum[27]) + " dB)");
   REQUIRE_LT(spectrum[10], -60.0F, "and little far from it");
   REQUIRE_LT(spectrum[44], -60.0F, "and little far from it");
-  const auto peak_band = std::max_element(spectrum.begin(), spectrum.end()) - spectrum.begin();
+  const auto peak_band = std::ranges::max_element(spectrum) - spectrum.begin();
   REQUIRE_EQ(peak_band, 27, "the spectrum peaks in the tone's band");
 }
 

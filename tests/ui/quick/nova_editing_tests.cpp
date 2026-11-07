@@ -197,17 +197,25 @@ void captions_never_overlap() {
       const QRectF a = painted_text(captions[i]);
       const auto name = captions[i]->objectName().toStdString();
       require(captions[i]->property("implicitWidth").toDouble() <= captions[i]->width() + 0.5,
+              // A failure message in a test loop.
+              // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
               where + ": caption cut short: " + name);
       auto* knob = captions[i]->parentItem();
       const QRectF k = scene_rect(knob);
       require(k.left() >= bounds.left() - 0.5 && k.right() <= bounds.right() + 0.5,
+              // A failure message in a test loop.
+              // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
               where + ": knob outside its card: " + name);
       for (std::size_t j = i + 1; j < captions.size(); ++j) {
         require(!a.intersects(painted_text(captions[j])),
+                // A failure message in a test loop.
+                // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
                 where + ": captions overlap: " + name + " and " +
                     captions[j]->objectName().toStdString());
       }
       for (auto* dropdown : dropdowns) {
+        // A failure message in a test loop.
+        // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
         require(!a.intersects(scene_rect(dropdown)), where + ": caption under a dropdown: " + name);
       }
     }

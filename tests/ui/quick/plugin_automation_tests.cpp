@@ -82,7 +82,7 @@ public:
   [[nodiscard]] oscillate::foundation::Result<void>
   start(std::uint32_t, std::uint32_t requested_frames, std::optional<std::uint64_t>) override {
     std::array<oscillate::engine::StereoFrame, app::max_playback_buffer_frames> frames{};
-    std::array<float, 2 * app::max_playback_buffer_frames> samples{};
+    std::array<float, std::size_t{2} * app::max_playback_buffer_frames> samples{};
     if (requested_frames > frames.size() ||
         oscillate::audio_io::render_transport_block(
             source_, cursor_, true, std::span(frames).first(requested_frames),

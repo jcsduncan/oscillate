@@ -186,7 +186,7 @@ std::pair<std::vector<float>, std::vector<float>> rendered(Song& song) {
   accepted(song.session->saving().save());
   auto pinned = take(song.session->exports().pin_snapshot());
   const auto& clip = song.clip();
-  auto audio = take(source_clay::open_rendered(pinned.reader, song.source(), *clip.clay));
+  auto audio = take(source_clay::open_rendered(pinned.reader, song.source(), take(clip.clay)));
   return read_all(audio.fd(), audio.record());
 }
 
@@ -215,7 +215,7 @@ void every_edit_is_one_undo_step() {
   const auto steps = song.session->history().undo_steps().size();
   accepted(song.session->audio_clips().set_clip_clay(song.clip().id, song.fresh()));
   REQUIRE_EQ(song.session->history().undo_steps().size(), steps + 1, "detecting is one step");
-  auto edited = *song.clip().clay;
+  auto edited = take(song.clip().clay);
   edited.edits.push_back({1, 0, shift_cents});
   accepted(song.session->audio_clips().set_clip_clay(song.clip().id, edited));
   REQUIRE_EQ(song.session->history().undo_steps().size(), steps + 2, "an edit is one step");

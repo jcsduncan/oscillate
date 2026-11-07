@@ -222,9 +222,7 @@ Result<void> write_entries(zip::Writer& zip, const Options& options, std::int64_
 
 } // namespace
 
-std::filesystem::path
-default_directory(const char* xdg_state_home, // NOLINT(bugprone-easily-swappable-parameters)
-                  const char* home) {
+std::filesystem::path default_directory(const char* xdg_state_home, const char* home) {
   const auto absolute = [](const char* text) {
     return text != nullptr && text[0] == '/' ? std::filesystem::path(text)
                                              : std::filesystem::path{};

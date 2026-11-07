@@ -75,7 +75,7 @@ Frames sine(std::size_t frames, double hz, double amplitude = 0.5) {
 }
 
 // Constant levels, one per section of `length` frames.
-Frames steps(std::vector<float> levels, std::size_t length) {
+Frames steps(const std::vector<float>& levels, std::size_t length) {
   Frames out;
   for (const float level : levels)
     out.insert(out.end(), length, engine::StereoFrame{level, level});
@@ -87,7 +87,7 @@ struct Cut {
   std::uint64_t start;
 };
 
-project::NativeSynthDocument document_for(const Frames& frames, std::vector<Cut> cuts,
+project::NativeSynthDocument document_for(const Frames& frames, const std::vector<Cut>& cuts,
                                           double bpm = 0.0) {
   project::NativeSynthDocument document;
   const project::ManagedAudioReference reference{project::SourceId::from_bits({1, 1}).value(),
@@ -112,10 +112,10 @@ SynthMedia media_for(const Frames& frames) {
 }
 
 std::unique_ptr<NativeSynthRuntime> runtime_with(const std::vector<double>& values,
-                                                 const Frames& frames, std::vector<Cut> cuts,
+                                                 const Frames& frames, const std::vector<Cut>& cuts,
                                                  double bpm = 0.0) {
-  auto created = NativeSynthRuntime::create(
-      crate_engine(), values, document_for(frames, std::move(cuts), bpm), media_for(frames), rate);
+  auto created = NativeSynthRuntime::create(crate_engine(), values, document_for(frames, cuts, bpm),
+                                            media_for(frames), rate);
   REQUIRE_OK(created, "runtime is created");
   return std::move(created.value());
 }
@@ -208,7 +208,7 @@ void documents_validate_and_compile() {
   REQUIRE_OK(valid(document_for(frames, {{5, 0}, {2, 24'000}})), "a cut sample");
   REQUIRE_OK(valid(document_for(frames, {}, 120.0)), "an uncut sample with a tempo");
   REQUIRE_OK(valid({}), "an empty document");
-  const auto fails = [&](project::NativeSynthDocument document, std::string_view why) {
+  const auto fails = [&](const project::NativeSynthDocument& document, std::string_view why) {
     require(!valid(document).has_value(), why);
   };
   fails(document_for(frames, {{32, 0}}), "slot 32 is out of range");
@@ -217,7 +217,7 @@ void documents_validate_and_compile() {
   {
     std::vector<Cut> cuts;
     for (std::uint32_t i = 0; i <= 32; ++i)
-      cuts.push_back({i % 32, i * 100});
+      cuts.push_back({i % 32, static_cast<std::uint64_t>(i) * 100});
     fails(document_for(frames, cuts), "at most 32 chops");
   }
   {
@@ -436,9 +436,9 @@ void eras_set_bits_and_rate() {
   // Noise, not a tone: a quantised tone repeats values near its peaks, which
   // would hide clock ticks from the count.
   const auto tone = noise(96'000);
-  const auto changes = [](const std::vector<double>& x, std::size_t from, std::size_t to) {
+  const auto changes = [](const std::vector<double>& x, std::size_t begin, std::size_t end) {
     std::size_t count = 0;
-    for (std::size_t i = from + 1; i < to; ++i)
+    for (std::size_t i = begin + 1; i < end; ++i)
       count += x[i] != x[i - 1] ? 1U : 0U;
     return count;
   };
@@ -470,6 +470,8 @@ void eras_set_bits_and_rate() {
   for (std::size_t i = 0; i < 60'000; ++i)
     REQUIRE_EQ(r.left[i] * 128.0, std::round(r.left[i] * 128.0), "8 bits are 8-bit steps");
   // Every era renders finite and bounded audio.
+  // The sweep grid is the test input.
+  // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
   for (double era = 0.0; era <= 4.0; era += 1.0) {
     values = plain();
     values[at("crate.era")] = era;
@@ -566,10 +568,12 @@ void sustain_pedal_holds_a_gate() {
 
 void any_block_split_renders_identically() {
   const auto frames = noise(96'000, 11);
+  constexpr std::uint32_t cut_count = 8;
   std::vector<Cut> cuts;
-  for (std::uint32_t i = 0; i < 8; ++i)
-    cuts.push_back({7 - i, i * 12'000});
-  const auto check = [&](std::vector<double> values, std::string_view what) {
+  cuts.reserve(cut_count);
+  for (std::uint32_t i = 0; i < cut_count; ++i)
+    cuts.push_back({7 - i, static_cast<std::uint64_t>(i) * 12'000});
+  const auto check = [&](const std::vector<double>& values, std::string_view what) {
     std::vector<Event> events;
     for (std::uint64_t i = 0; i < 24; ++i) {
       const auto n =
@@ -627,9 +631,11 @@ void full_load_does_not_allocate() {
   values[at("crate.swing")] = 60.0;
   values[at("crate.time")] = 1.0;
   values[at("crate.voices")] = 32.0;
+  constexpr std::uint32_t cut_count = 32;
   std::vector<Cut> cuts;
-  for (std::uint32_t i = 0; i < 32; ++i)
-    cuts.push_back({i, i * 3'000});
+  cuts.reserve(cut_count);
+  for (std::uint32_t i = 0; i < cut_count; ++i)
+    cuts.push_back({i, static_cast<std::uint64_t>(i) * 3'000});
   for (std::size_t slot = 0; slot < 32; ++slot) {
     values[chop_at(slot, "filter")] = static_cast<double>(slot % 5);
     values[chop_at(slot, "mode")] = static_cast<double>(slot % 3);

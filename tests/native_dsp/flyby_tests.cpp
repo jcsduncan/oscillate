@@ -72,17 +72,16 @@ Stereo impulse(std::size_t frames, std::size_t at_frame = 100) {
 
 std::size_t peak_at(const std::vector<double>& x) {
   return static_cast<std::size_t>(
-      std::max_element(x.begin(), x.end(),
-                       [](double a, double b) { return std::fabs(a) < std::fabs(b); }) -
+      std::ranges::max_element(x, [](double a, double b) { return std::fabs(a) < std::fabs(b); }) -
       x.begin());
 }
 
 // Frequency from zero crossings, interpolated, over [from, to).
-double frequency(const std::vector<double>& x, std::size_t from, std::size_t to) {
+double frequency(const std::vector<double>& x, std::size_t begin, std::size_t end) {
   double first = -1.0;
   double last = -1.0;
   int crossings = 0;
-  for (std::size_t i = from + 1; i < to; ++i) {
+  for (std::size_t i = begin + 1; i < end; ++i) {
     if (x[i - 1] < 0.0 && x[i] >= 0.0) {
       const double at_crossing = static_cast<double>(i - 1) + x[i - 1] / (x[i - 1] - x[i]);
       if (first < 0.0) {

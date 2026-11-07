@@ -160,7 +160,7 @@ void the_notes_tab_edits_a_clip() {
   const auto notes = controller.notes();
   require(notes.size() == static_cast<int>(sung_hz.size()),
           "the three sung notes are shown: " + std::to_string(notes.size()));
-  require(controller.waveform().size() == 2 * quick::ClayController::waveform_columns(),
+  require(controller.waveform().size() == qsizetype{2} * quick::ClayController::waveform_columns(),
           "with the waveform behind them");
   const auto first = note_at(notes, 0);
   require(std::abs(first.value(QStringLiteral("centre")).toDouble() - 5'700.0) < 20.0,

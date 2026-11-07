@@ -21,6 +21,7 @@ namespace {
 
 namespace quick = oscillate::quick;
 
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): a throw fails the test at start-up.
 const std::filesystem::path report_file =
     "/state/oscillate/crash-reports/oscillate-crash-20261107T120000Z.txt";
 constexpr const char* issue_template_directory = ".github/ISSUE_TEMPLATE";

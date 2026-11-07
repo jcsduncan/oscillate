@@ -227,7 +227,7 @@ void parallel_live_playback_is_bit_identical() {
     for (const auto* engine : synth::engines()) {
       const auto track = take(session->instruments().add_synth_track());
       require(session->instruments()
-                  .select_native_instrument(track, std::string(engine->descriptor->id), 0)
+                  .select_native_instrument(track, engine->descriptor->id, 0)
                   .has_value(),
               "engine selected");
       REQUIRE_OK(session->midi_clips().add_midi_clip(track, {0}), "MIDI clip");
@@ -319,9 +319,8 @@ int main() {
     const auto* torque = synth::find_engine("torque");
     REQUIRE_NE(torque, nullptr, "Torque is registered");
     const auto presets = torque->descriptor->presets;
-    const auto sequenced = std::find_if(presets.begin(), presets.end(), [](const auto& entry) {
-      return entry.name == "Seq Acid Line";
-    });
+    const auto sequenced = std::ranges::find_if(
+        presets, [](const auto& entry) { return entry.name == "Seq Acid Line"; });
     REQUIRE_NE(sequenced, presets.end(), "Torque has a sequencer preset");
     // Its pattern is also reshaped by stepped lanes: step 1's note and the
     // acid wave switch.
@@ -333,9 +332,8 @@ int main() {
     const auto* drift = synth::find_engine("drift");
     REQUIRE_NE(drift, nullptr, "Drift is registered");
     const auto drift_presets = drift->descriptor->presets;
-    const auto synced =
-        std::find_if(drift_presets.begin(), drift_presets.end(),
-                     [](const auto& entry) { return entry.name == "Stutter Clock"; });
+    const auto synced = std::ranges::find_if(
+        drift_presets, [](const auto& entry) { return entry.name == "Stutter Clock"; });
     REQUIRE_NE(synced, drift_presets.end(), "Drift has a synced preset");
     const std::array<SteppedPoint, 2> grains{
         {{"drift.freeze", 1.0}, {"drift.grain.intervals", 2.0}}};

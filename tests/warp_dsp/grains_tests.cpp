@@ -146,6 +146,8 @@ double spectral_peak(const std::vector<float>& signal, std::size_t begin, std::s
   const auto span = static_cast<double>(length);
   double best = -1.0;
   double best_frequency = 0.0;
+  // The sweep grid is the test input.
+  // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
   for (double frequency = expected / 1.5; frequency < expected * 1.5; frequency += 0.25) {
     double re = 0.0;
     double im = 0.0;
@@ -233,7 +235,7 @@ void tones_transpose_with_formants() {
 void texture_keeps_level_and_transposes() {
   auto pad = warp_fixtures::vibrato_pad(rate, 4.0);
   warp::MemorySourceView view(pad.left, pad.right);
-  const double reference = rms(pad.left, 2 * rate, 3 * rate);
+  const double reference = rms(pad.left, std::size_t{2} * rate, std::size_t{3} * rate);
   for (const double speed : {0.25, 0.5, 2.0}) {
     const auto map = stretch_map(pad.left.size(), speed);
     auto stream = texture(30.0F);
@@ -371,6 +373,7 @@ void dense_segment_map_matches_single_run() {
 }
 
 void grains_reject_invalid_quality() {
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange): an invalid tier on purpose.
   const auto invalid = static_cast<warp::QualityTier>(255);
   require(!warp::create_tones_stream({rate, 128}, invalid, {{}, 40.0F, 0}),
           "Tones accepted an invalid quality tier");

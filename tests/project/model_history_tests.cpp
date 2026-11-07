@@ -52,6 +52,7 @@ ProjectModel model(FakeGate& gate) {
       take(timeline::MeterMap::create({{{0}, 4, 4}}, 1)), gate));
 }
 
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): a throw fails the test at start-up.
 const TrackId track = id<TrackId>(1);
 
 void edit(ProjectModel& project, std::size_t number) {

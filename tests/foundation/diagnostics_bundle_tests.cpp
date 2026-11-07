@@ -349,7 +349,7 @@ void missing_inputs_are_noted_in_the_readme() {
   const auto& readme = entries.at(std::string(bundle::readme_entry)).data;
   for (const std::string_view note :
        {"No log files were found.", "No crash report", "No performance trace: none was requested."})
-    REQUIRE_NE(readme.find(note), std::string::npos, std::string(note));
+    REQUIRE_NE(readme.find(note), std::string::npos, note);
   REQUIRE_EQ(entries.at(std::string(bundle::plugins_entry)).data,
              std::string("No plug-ins found.\n"));
   std::filesystem::remove_all(fixture.root);

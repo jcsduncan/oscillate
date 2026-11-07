@@ -381,6 +381,8 @@ void rumble_is_tuned_and_ducks() {
   const std::size_t length = std::min<std::size_t>(9'600, rumble.size() - from);
   double best_hz = 0.0;
   double best = 0.0;
+  // The sweep grid is the test input.
+  // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
   for (double hz = 30.0; hz <= 80.0; hz += 0.25) {
     const double m = magnitude(rumble, from, length, hz);
     if (m > best) {
@@ -411,6 +413,8 @@ void rumble_is_tuned_and_ducks() {
 // steady 1.5 kHz body driven hard has little energy between its harmonics.
 void drive_is_bounded_and_clean() {
   const auto document = held_pitch(1'500, 1'500);
+  // The sweep grid is the test input.
+  // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
   for (double type = 0.0; type <= 3.0; type += 1.0) {
     auto values = body_only();
     values[at("anvil.drive.type")] = type;
@@ -422,6 +426,8 @@ void drive_is_bounded_and_clean() {
     REQUIRE_LT(peak(x), 0.5, "the drive keeps full scale where it was");
     const double fundamental = magnitude(x, 16'000, 16'384, 1'500.0);
     double alias = 0.0;
+    // The sweep grid is the test input.
+    // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
     for (double hz = 2'250.0; hz < 20'000.0; hz += 1'500.0)
       alias = std::max(alias, magnitude(x, 16'000, 16'384, hz));
     REQUIRE_LT(20.0 * std::log10(alias / fundamental), -30.0,

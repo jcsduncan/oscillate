@@ -237,6 +237,8 @@ void every_module_reaches_every_parameter() {
     const std::string label = std::string(use.id) + ": ";
     for (const auto& p : use.knobs) {
       auto* knob = find_item(strip, QStringLiteral("novaKnob:") + fx_id(1, p));
+      // A failure message in a test loop.
+      // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
       require(knob != nullptr, label + "no control for " + p);
       require(knob->isVisible() && within(knob, strip), label + p + " is shown on the strip");
     }
@@ -245,6 +247,8 @@ void every_module_reaches_every_parameter() {
       const bool used = std::ranges::find(use.knobs, p) != use.knobs.end();
       auto* knob = find_item(strip, QStringLiteral("novaKnob:") + fx_id(1, p));
       require(used == (knob != nullptr && knob->isVisible()),
+              // A failure message in a test loop.
+              // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
               label + "a knob for " + p + " exactly when the module uses it");
     }
     auto* mode = find_item(strip, QStringLiteral("novaFxMode:1"));

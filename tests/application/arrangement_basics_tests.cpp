@@ -126,8 +126,8 @@ void names_colours_and_markers() {
   REQUIRE_EQ(markers.size(), 2, "markers are kept in position order");
   REQUIRE_EQ(markers[0].name, "Start", "markers are kept in position order");
   REQUIRE_EQ(markers[1].id, drop, "markers are kept in position order");
-  REQUIRE_EQ(session->song().next_marker({1})->id, drop, "next and previous marker queries");
-  REQUIRE_EQ(session->song().previous_marker({8 * bar})->id, intro,
+  REQUIRE_EQ(take(session->song().next_marker({1})).id, drop, "next and previous marker queries");
+  REQUIRE_EQ(take(session->song().previous_marker({8 * bar})).id, intro,
              "next and previous marker queries");
   require(!session->song().next_marker({8 * bar}), "no marker after the last one");
   accepted(session->song().move_marker(intro, {16 * bar}));
