@@ -347,28 +347,14 @@ private:
       const auto& id = pedal_parameters_[static_cast<std::size_t>(pedal.pedal)];
       if (!id)
         continue;
-      if (parameter_events_.size() >= event_capacity_)
+      if (!place_parameter_event({*id, pedal.offset, static_cast<double>(pedal.value)}))
         return false;
-      // Grouped by parameter, offsets ascending; a later value at the same
-      // offset replaces the earlier one.
-      const Vst3ParameterEvent event{*id, pedal.offset, static_cast<double>(pedal.value)};
-      const auto at = std::ranges::lower_bound(
-          parameter_events_, std::pair{event.id, event.sample_offset}, {},
-          [](const Vst3ParameterEvent& item) { return std::pair{item.id, item.sample_offset}; });
-      if (at != parameter_events_.end() && at->id == event.id &&
-          at->sample_offset == event.sample_offset)
-        *at = event;
-      else
-        parameter_events_.insert(at, event);
     }
     pedal_generation_ = generation;
-    if (manual) {
-      if (parameter_events_.size() >= event_capacity_)
-        return false;
-      const auto insertion =
-          std::ranges::lower_bound(parameter_events_, manual->id, {}, &Vst3ParameterEvent::id);
-      parameter_events_.insert(insertion, *manual);
-    }
+    // A manual edit comes last, so it replaces a pedal or automation value
+    // for its parameter at its offset rather than sending two.
+    if (manual && !place_parameter_event(*manual))
+      return false;
     if (instrument_->host().process_instrument(
             {std::span(left_).first(count), std::span(right_).first(count)},
             std::span(notes_).first(copied.count), transport,
@@ -377,6 +363,23 @@ private:
     }
     for (std::size_t frame = 0; frame < count; ++frame)
       stereo[frame] = {left_[frame], right_[frame]};
+    return true;
+  }
+  // Grouped by parameter, offsets ascending, one value per parameter and
+  // offset: a later value at the same offset replaces the earlier one.
+  // Preparation proves the capacity; false rather than reallocate.
+  [[nodiscard]] bool place_parameter_event(const Vst3ParameterEvent& event) noexcept {
+    const auto at = std::ranges::lower_bound(
+        parameter_events_, std::pair{event.id, event.sample_offset}, {},
+        [](const Vst3ParameterEvent& item) { return std::pair{item.id, item.sample_offset}; });
+    if (at != parameter_events_.end() && at->id == event.id &&
+        at->sample_offset == event.sample_offset) {
+      *at = event;
+      return true;
+    }
+    if (parameter_events_.size() >= event_capacity_)
+      return false;
+    parameter_events_.insert(at, event);
     return true;
   }
   static void silence(std::span<StereoFrame> stereo) noexcept {

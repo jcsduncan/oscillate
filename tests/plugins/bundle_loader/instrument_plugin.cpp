@@ -52,8 +52,15 @@ constexpr const char* class_name = lane_build ? "Lane Instrument" : "Timed Instr
 // With OSCILLATE_VST3_INSTRUMENT_PEDAL set, the controller's IMidiMapping
 // assigns CC64 (sustain) to a hidden parameter that is not in the parameter
 // list, as MIDI-learn targets often are, and process() accepts and logs it.
+// Set to "visible", it assigns CC64 to the listed level parameter instead,
+// which manual edits may also reach.
 constexpr Steinberg::Vst::ParamID sustain_parameter = 900;
+constexpr Steinberg::Vst::ParamID level_parameter = 1;
 bool pedal_mode() { return std::getenv("OSCILLATE_VST3_INSTRUMENT_PEDAL") != nullptr; }
+bool visible_pedal() {
+  const auto* value = std::getenv("OSCILLATE_VST3_INSTRUMENT_PEDAL");
+  return value && std::strcmp(value, "visible") == 0;
+}
 
 bool fail_mode(const char* mode) {
   const auto* value = std::getenv("OSCILLATE_VST3_INSTRUMENT_FAIL");
@@ -222,7 +229,7 @@ public:
                                                             Steinberg::Vst::ParamID& id) override {
     if (bus != 0 || channel != 0 || controller != 64)
       return Steinberg::kResultFalse;
-    id = sustain_parameter;
+    id = visible_pedal() ? level_parameter : sustain_parameter;
     return Steinberg::kResultTrue;
   }
   Steinberg::tresult PLUGIN_API setBusArrangements(Steinberg::Vst::SpeakerArrangement*,
