@@ -416,12 +416,55 @@ void warp_plays_the_render() {
 
 } // namespace
 
+// Follow targets walk only the pattern repeats under the audio clip, so a
+// one-tick looping pattern over a long clip stays bounded by what playback
+// can schedule, and an ordinary loop still yields one target per repeat.
+void follow_targets_are_bounded() {
+  constexpr std::int64_t quarter = oscillate::timeline::ticks_per_quarter;
+  constexpr std::int64_t long_clip_quarters = 1'000'000;
+  constexpr std::int64_t one_tick = 1;
+  constexpr std::uint8_t key = 60;
+  constexpr std::uint8_t velocity = 100;
+  constexpr std::size_t playback_notes = project::max_midi_events_per_project / 2;
+  constexpr std::uint64_t first_new_id = 1'000'000;
+  Song song;
+  const auto time = take(clay::ClipTime::of(song.session->snapshot(), song.clip()));
+  const auto id_bits = [](std::uint64_t number) { return foundation::IdBits{0, number}; };
+  const auto looping = [&](std::int64_t pattern, std::int64_t note_end) {
+    auto snapshot = song.session->snapshot();
+    const auto track = take(project::TrackId::from_bits(id_bits(first_new_id)));
+    project::MidiNote note{take(project::NoteId::from_bits(id_bits(first_new_id + 1))),
+                           {0},
+                           {note_end},
+                           key,
+                           velocity};
+    project::MidiClip clip{take(project::ClipId::from_bits(id_bits(first_new_id + 2))),
+                           project::MusicalInterval{{0}, {long_clip_quarters * quarter}},
+                           {pattern},
+                           true,
+                           {note}};
+    snapshot.tracks.push_back(
+        project::Track{track, {}, project::TrackKind::instrument, {}, {std::move(clip)}});
+    return clay::follow_targets(snapshot, time, track);
+  };
+  const auto tiny = looping(one_tick, one_tick);
+  REQUIRE_TRUE(!tiny.empty(), "a one-tick pattern is followed");
+  REQUIRE_LE(tiny.size(), playback_notes, "a one-tick pattern is bounded by playback's notes");
+  // The sung clip lasts 3 x (0.4 + 0.15) + 0.15 = 1.8 s from the song's
+  // start; at the project's 120 BPM a quarter is 0.5 s, so repeats start at
+  // 0, 0.5, 1.0 and 1.5 s.
+  constexpr std::size_t repeats = 4;
+  REQUIRE_EQ(looping(quarter, quarter / 2).size(), repeats,
+             "a quarter-note loop yields one target per repeat under the clip");
+}
+
 int main(int argc, char** argv) {
   const std::vector<std::pair<std::string_view, void (*)()>> cases{
       {"saves", a_take_saves_and_loads},        {"undo", every_edit_is_one_undo_step},
       {"refused", bad_takes_are_refused},       {"unedited", unedited_render_is_the_source},
       {"export", edited_render_reaches_export}, {"to_midi", to_midi_writes_notes_and_bends},
       {"voices", macros_map_to_voices},         {"warp", warp_plays_the_render},
+      {"follow", follow_targets_are_bounded},
   };
   const std::vector<std::string_view> wanted(argv + 1, argv + argc);
   // A misspelt or renamed case fails rather than silently running nothing.
