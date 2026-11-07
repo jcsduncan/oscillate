@@ -464,7 +464,7 @@ Rectangle {
             x: panel.theme.platePad
             y: feedbackPlate.height - panel.theme.plateNoteBottom
             width: feedbackPlate.width - 2 * panel.theme.platePad
-            text: panel.character === 0 ? "Digital stays clean below 0 dBFS; drive is for Tape and Analog."
+            text: panel.character === 0 ? "Digital is clean below 0 dBFS; Tape and Analog drive."
                 : panel.character === 1 ? "Every pass: the cuts, tape HF loss and tanh saturation."
                 : "Every pass: the cuts, the BBD clock filter and a soft clip."
             elide: Text.ElideRight
