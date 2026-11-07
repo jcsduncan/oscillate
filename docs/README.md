@@ -12,7 +12,9 @@ ADRs and specs.
 | Cross-component decisions | [ADR index](decisions/README.md) |
 | Build, test and contribution rules | [README](../README.md#build), [AGENTS.md](../AGENTS.md), [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Environment variables and user files | [Environment](environment.md) |
+| How to report a problem and what to attach | [Support](support.md) |
 | What a crash report contains | [Crash reports](crash-reports.md) |
+| What a diagnostics bundle contains | [Diagnostics bundle](diagnostics.md) |
 | Known problems not fixed yet | [Known issues](https://jcsduncan.github.io/oscillate/known-issues/) (built from issues labelled `known-issue`) |
 
 ## Evidence and reference

@@ -2,6 +2,7 @@
 #include "bundled_fonts.hpp"
 #include "computer_keyboard.hpp"
 #include "crash_report_controller.hpp"
+#include "diagnostics_controller.hpp"
 #include "project_bridge.hpp"
 
 #include "oscillate/foundation/crash_report.hpp"
@@ -17,13 +18,38 @@
 #include <exception>
 #include <filesystem>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <string_view>
 
 namespace {
 namespace log = oscillate::foundation::log;
 
+constexpr std::string_view save_diagnostics_option = "--save-diagnostics";
+constexpr std::string_view with_trace_option = "--with-trace";
+constexpr std::string_view usage =
+    "Usage: oscillate [--check-startup] [--create FOLDER | --open FOLDER]\n"
+    "       oscillate --save-diagnostics [--with-trace]\n";
+constexpr int usage_status = 2;
+
+// `oscillate --save-diagnostics [--with-trace]` writes a diagnostics bundle
+// and exits without starting the window, logging or the crash handlers, so a
+// running session's crash-report state is left alone; a malformed one prints
+// the usage before anything starts. nullopt for any other command line.
+std::optional<int> save_diagnostics(int argc, char** argv) {
+  if (argc < 2 || std::string_view(argv[1]) != save_diagnostics_option)
+    return std::nullopt;
+  const bool with_trace = argc == 3 && std::string_view(argv[2]) == with_trace_option;
+  if (argc > 3 || (argc == 3 && !with_trace)) {
+    std::cerr << usage;
+    return usage_status;
+  }
+  return oscillate::quick::save_diagnostics_from_command_line(with_trace, std::cout, std::cerr);
+}
+
 int run(int argc, char** argv) {
+  if (const auto saved = save_diagnostics(argc, argv))
+    return *saved;
   const auto crash_startup = oscillate::quick::start_crash_reports(OSCILLATE_VERSION);
   oscillate::quick::start_logging();
   oscillate::quick::log_crash_report_startup(crash_startup);
@@ -35,8 +61,6 @@ int run(int argc, char** argv) {
 
   oscillate::quick::ProjectBridge bridge;
   app.installEventFilter(bridge.computer_keyboard());
-  constexpr std::string_view usage =
-      "Usage: oscillate [--check-startup] [--create FOLDER | --open FOLDER]\n";
   bool check_startup = false;
   std::string_view project_option;
   std::filesystem::path project_path;
@@ -51,7 +75,7 @@ int run(int argc, char** argv) {
       project_path = argv[++index];
     } else {
       std::cerr << usage;
-      return 2;
+      return usage_status;
     }
   }
   if (!project_option.empty()) {

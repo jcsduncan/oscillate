@@ -142,6 +142,15 @@ Item {
               enabled: !bridge.performanceTrace.saving,
               run: () => bridge.performanceTrace.recording ? bridge.performanceTrace.stop_and_save()
                                                            : bridge.performanceTrace.start() },
+            { id: "diagnostics", title: "Save diagnostics", keywords: "support bug report issue logs crash zip",
+              enabled: Boolean(bridge.diagnostics) && !bridge.diagnostics.saving,
+              run: () => bridge.diagnostics.save(false) },
+            { id: "diagnostics-trace", title: "Save diagnostics with the latest performance trace",
+              keywords: "support bug report issue logs crash zip profile",
+              enabled: Boolean(bridge.diagnostics) && !bridge.diagnostics.saving
+                       && !bridge.performanceTrace.recording && !bridge.performanceTrace.saving
+                       && bridge.diagnostics.trace_available(),
+              run: () => bridge.diagnostics.save(true) },
             { id: "zoom-in", title: "Zoom in", shortcut: "+", enabled: open, run: () => shell.zoomIn() },
             { id: "zoom-out", title: "Zoom out", shortcut: "−", enabled: open, run: () => shell.zoomOut() },
             { id: "view-arrange", title: "Show the arrangement", keywords: "timeline view", enabled: open,

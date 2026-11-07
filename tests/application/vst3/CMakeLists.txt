@@ -99,6 +99,18 @@ oscillate_add_test_executable(oscillate_vst3_effect_export_tests SOURCES vst3_ef
     oscillate_vst3_sidechain_fixture oscillate_vst3_sidechain_tail_fixture
     oscillate_vst3_export_tail_fixture oscillate_vst3_scan_helper
   TEST application_vst3_effect_export)
+# VST3 export against live playback (ADR-0050): master, stems, finite tails
+# and a latent plugin's timing.
+oscillate_add_test_executable(oscillate_vst3_export_parity_tests SOURCES vst3_export_parity_tests.cpp
+  LIBS oscillate::vst3_effect_export oscillate::vst3_instrument_export
+    oscillate::vst3_instrument_provider oscillate::vst3_track_insert oscillate::persistence
+  DEFINITIONS VST3_HELPER_PATH="$<TARGET_FILE:oscillate_vst3_scan_helper>"
+    VST3_INSTRUMENT_BUNDLE="${_bundle_fixtures}/TimedInstrument.vst3"
+    VST3_GAIN_BUNDLE="${_bundle_fixtures}/LoadedGain.vst3"
+    VST3_TAIL_BUNDLE="${CMAKE_CURRENT_BINARY_DIR}/fixtures/TailGain.vst3"
+  DEPENDS oscillate_vst3_instrument_fixture oscillate_vst3_loaded_gain_fixture
+    oscillate_vst3_export_tail_fixture oscillate_vst3_scan_helper
+  TEST application_vst3_export_parity LABELS parity)
 # Both VST3 export suites decode the shared master output stage's formats/rates.
 foreach(format_test oscillate_vst3_effect_export_tests oscillate_vst3_instrument_export_tests)
   target_compile_definitions(${format_test} PRIVATE

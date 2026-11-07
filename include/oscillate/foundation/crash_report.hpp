@@ -7,6 +7,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 // Local crash reports. Nothing here sends anything anywhere.
 //
@@ -77,5 +78,18 @@ struct CollectOptions {
 // `text` with every occurrence of `home` (as a whole path component prefix)
 // replaced with "~".
 [[nodiscard]] std::string redact(std::string_view text, std::string_view home);
+
+// The collectors a report uses, shared with the diagnostics bundle.
+//
+// The log files a report includes, oldest first: oscillate.<n>.log from the
+// highest n down, then oscillate.log; at most log::Options::default_max_files.
+[[nodiscard]] std::vector<std::filesystem::path>
+log_files(const std::filesystem::path& log_directory);
+// The part of one log file a report includes: its last
+// log::Options::default_max_file_bytes. nullopt when it cannot be read.
+[[nodiscard]] std::optional<std::string> read_log(const std::filesystem::path& path);
+// The most recently written report in the directory, or nullopt.
+[[nodiscard]] std::optional<std::filesystem::path>
+latest_report(const std::filesystem::path& directory);
 
 } // namespace oscillate::foundation::crash_report

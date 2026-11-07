@@ -12,10 +12,17 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <optional>
 
 class QQuickWindow;
 
 namespace oscillate::quick {
+
+// Where traces saved from the command palette go:
+// $XDG_DATA_HOME/oscillate/traces, else ~/.local/share/oscillate/traces.
+[[nodiscard]] std::filesystem::path traces_directory();
+// The newest trace saved there (trace-<local time>.json), if any.
+[[nodiscard]] std::optional<std::filesystem::path> latest_trace();
 
 // Records a performance trace (ADR-0061) from the command palette, or from
 // launch when OSCILLATE_TRACE names the file. While recording it adds the
