@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the extracted contents of a local Ubuntu package prototype."""
+"""Check the extracted contents of the Ubuntu .deb against its sidecar inventory."""
 
 from __future__ import annotations
 
@@ -13,6 +13,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 from package_notices import verify_notices
+from package_sbom import verify_sbom
+
+SIDECAR_STATUS = "oscillate .deb inventory"
+DESKTOP_ENTRY = "usr/share/applications/oscillate.desktop"
 
 
 def sha256(path: Path) -> str:
@@ -32,6 +36,8 @@ def check_qml_runtime_dependencies(control: str, inventory: dict) -> None:
 
 def smoke(package: Path, inventory_path: Path) -> None:
     inventory = json.loads(inventory_path.read_text())
+    if inventory.get("status") != SIDECAR_STATUS:
+        raise ValueError("not an oscillate .deb inventory")
     if sha256(package) != inventory["package_sha256"]:
         raise ValueError("package hash differs from sidecar")
     control = subprocess.run(
@@ -58,12 +64,15 @@ def smoke(package: Path, inventory_path: Path) -> None:
         actual = {str(path.relative_to(root)) for path in root.rglob("*") if path.is_file()}
         if actual != expected:
             raise ValueError("package file set differs from sidecar")
-        with_scanner = inventory["scanner_helper_sha256"] is not None
-        notices = verify_notices(root, expected_copied_elfs=set(), scanner_enabled=with_scanner)
+        notices = verify_notices(root, expected_copied_elfs=set(), scanner_enabled=True)
         if notices["system_dependencies"] != inventory["depends"]:
             raise ValueError("system dependency inventory differs from package sidecar")
         if any(path.startswith("usr/lib/") for path in actual):
             raise ValueError("native package unexpectedly bundles a shared library")
+        sbom = verify_sbom(root)
+        if sbom["packages"][0]["versionInfo"] != inventory["version"]:
+            raise ValueError("SBOM version differs from the package")
+        subprocess.run(["desktop-file-validate", str(root / DESKTOP_ENTRY)], check=True)
 
 
 def main() -> None:
@@ -72,7 +81,7 @@ def main() -> None:
     parser.add_argument("--inventory", type=Path, required=True)
     args = parser.parse_args()
     smoke(args.package.resolve(strict=True), args.inventory.resolve(strict=True))
-    print("Extracted Ubuntu package payload and third-party notice inventory passed")
+    print("Extracted .deb payload, notices, SBOM and desktop entry passed")
 
 
 if __name__ == "__main__":

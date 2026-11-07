@@ -21,8 +21,18 @@ jobs:
       contents: write # tags, releases and the release branch
       pull-requests: write # the release pull request
       issues: write # release labels
+      actions: write # dispatch the packaging workflow for a new release
     steps:
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+      - id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      # A tag pushed with this job's token starts no workflow, so the release
+      # packages are built by dispatch.
+      - name: Build and attach the release packages
+        if: steps.release.outputs.release_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: gh workflow run packaging.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG" -f tag="$TAG"

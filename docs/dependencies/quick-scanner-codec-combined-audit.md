@@ -1,6 +1,6 @@
 # Combined Quick, VST3 scanner and codec dependency audit
 
-**Status:** Local engineering evidence, 15 October 2026. **Not a release or legal sign-off.** This audit is for a fresh Ubuntu 26.04 x86-64 prototype at repository commit `1b6a8e6`. It combines the Qt Quick UI, VST3 scanner/helper, libsndfile codec adapter and export resampler in **one** `BUILD_TESTING=OFF` build. Earlier [package prototypes](ubuntu-package-prototype.md) tested the scanner and codec switches separately. No AppImage was built.
+**Status:** Local engineering evidence, 15 October 2026. **Not a release or legal sign-off.** This audit is for a fresh Ubuntu 26.04 x86-64 prototype at repository commit `1b6a8e6`. It combines the Qt Quick UI, VST3 scanner/helper, libsndfile codec adapter and export resampler in **one** `BUILD_TESTING=OFF` build. Earlier package prototypes tested the scanner and codec switches separately. No AppImage was built.
 
 ## Exact observed artifact and build
 
@@ -48,4 +48,4 @@ The local `ldd` sidecar records 96 resolution lines for the Quick ELF and a sepa
 3. Resolve LAME's file-level licence issue and decide how Qt/LGPL source, licence text, shared-library replacement and notice routes will be delivered for a native package. Record review against the exact artifact hash; do not infer completion from a `Depends` field.
 4. Build a separate AppImage, then enumerate **every copied file**, Qt QML/platform plugin and type-2 runtime component with exact version, hash, licence, notice and source/replacement route. This `.deb` inventory does not describe that future payload. Test on clean Wayland and X11 Ubuntu 26.04 targets.
 
-Replay this observation with the options above, `cmake --build build/audit-quick-scanner-codec --target oscillate oscillate_vst3_scan_helper -j1`, then `python3 scripts/package-ubuntu-prototype.py --binary build/audit-quick-scanner-codec/apps/daw_quick/oscillate --scanner-helper build/audit-quick-scanner-codec/apps/daw_quick/oscillate_vst3_scan_helper --output-dir build/audit-package`. Inspect `dpkg-deb --field`, `dpkg-deb --contents`, `readelf -d` for both binaries and the generated `.inventory.json` before relying on any result. The ignored local build and package are evidence only; neither is committed or approved for publishing.
+Replay this observation with the options above, `cmake --build build/audit-quick-scanner-codec --target oscillate oscillate_vst3_scan_helper -j1`, then package it as described in [release packages](release-packages.md). Inspect `dpkg-deb --field`, `dpkg-deb --contents`, `readelf -d` for both binaries and the generated `.inventory.json` before relying on any result. The ignored local build and package are evidence only; neither is committed or approved for publishing.

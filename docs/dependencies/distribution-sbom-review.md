@@ -3,10 +3,11 @@
 **MP3 source gate:** The exact local AppDir's copied LAME binary and notice
 match Ubuntu's `libmp3lame0` 3.101~svn6525+dfsg-2 package. That package
 classifies `libmp3lame/fft.c` GPL-1+, and its matching development archive
-contains `fft.o`. A [codec source ledger and packaging drift gate](mp3-flac-redistribution-gate.md)
-now retain this evidence. Distribution remains blocked on the exact compiled
-source map and a product/licence decision; the native `.deb` has a distinct
-system-package route and no copied LAME binary.
+contains `fft.o`. A [codec source ledger](mp3-flac-redistribution-gate.md)
+retains this evidence. Redistributing the copied encoder remains blocked on
+the exact compiled source map and a licence decision, so the
+[release AppImage](release-packages.md) leaves the codec adapter out; the
+native `.deb` has a system-package route and no copied LAME binary.
 
 **Static-runtime notice checkpoint:** The local AppDir/AppImage prototype now
 stages and verifies [full notice files for musl, libfuse, squashfuse, zstd,
@@ -21,8 +22,8 @@ includes a hash-pinned copy of the [type-2 runtime 20251108 licence](https://git
 and the extracted-image verifier requires it. The licence names statically
 linked musl, libfuse, squashfuse, zstd and zlib; staging that top-level notice
 does not discharge those components' notice, source or LGPL obligations. The
-native `.deb` remains a system-library package route. The [payload note](package-notice-payload.md)
-records the changed verifier and the local replay. G8 remains open.
+native `.deb` remains a system-library package route. [Release packages](release-packages.md)
+describes the verifier. G8 remains open.
 
 ## 15 October 2026 package audit update
 
@@ -69,20 +70,20 @@ The precise product-code licence, sound-content grant, LAME interpretation and
 Qt/AppImage LGPL fulfilment are still product/release choices. This audit does
 not select them or constitute legal sign-off.
 
-**Later packaging evidence:** The local package scripts now embed checked-in VST3 and nlohmann notice material, and the AppDir stages installed Ubuntu copyright files for its copied ELF closure. See the [notice payload gate](package-notice-payload.md). These files do not resolve the release licence, source/offer or replacement gates below.
+**Later packaging evidence:** The local package scripts now embed checked-in VST3 and nlohmann notice material, and the AppDir stages installed Ubuntu copyright files for its copied ELF closure. See [release packages](release-packages.md). These files do not resolve the release licence, source/offer or replacement gates below.
 
 **Status:** Evidence inventory, **not distribution sign-off**. Reviewed
 15 October 2026 for Ubuntu 26.04 x86-64. This document combines current
 CMake declarations, one local development ELF inspection, and the linked
 licence sources. It does not identify the contents of a future `.deb` or
-AppImage release candidate. A [local-only `.deb` prototype](ubuntu-package-prototype.md)
+AppImage release candidate. A local-only `.deb` prototype
 has since been built and inspected, followed by a scanner-enabled variant
 that includes the sibling VST3 helper. Neither is a release candidate. A newer [combined Quick, scanner and codec audit](quick-scanner-codec-combined-audit.md)
 inspects one `BUILD_TESTING=OFF` package with all three paths and export
 resampling enabled; it remains a local prototype and does not close the
-licence gate. A [staged AppDir experiment](appdir-local-prototype.md) records
-copied ELF and Qt plugin files and passes offscreen smoke. A later [local
-AppImage experiment](appimage-local-prototype.md) pins the runtime/tool and
+licence gate. A staged AppDir experiment recorded
+copied ELF and Qt plugin files and passes offscreen smoke. A later local
+AppImage experiment pinned the runtime/tool and
 verifies an extracted image, but is not an approved distribution payload. The
 [copied-ELF licence ledger](appdir-copied-elf-licence-review.md) now maps its
 111 shared libraries and four Qt plugins to exact installed binary/source
