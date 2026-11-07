@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "status": "reviewed local Ubuntu 26.04 AppDir codec bytes; not a licence approval",
+  "components": {
+    "libsndfile": {
+      "path": "usr/lib/libsndfile.so.1",
+      "soname": "libsndfile.so.1",
+      "binary_package": "libsndfile1:amd64",
+      "binary_version": "1.2.2-4",
+      "source_package": "libsndfile",
+      "binary_sha256": "dd944b9bf1d06df6bb1c4f730fdcb3321d114aace43f66560ece7eeb726ed1c4",
+      "notice_sha256": "66706015979e7ecb0ddfd155c00c5f70d0b69a5f7aa78481ee8ce31e3bf2139a",
+      "review": "core LGPL-2.1+ with file-level exceptions in Ubuntu copyright"
+    },
+    "libmp3lame": {
+      "path": "usr/lib/libmp3lame.so.0",
+      "soname": "libmp3lame.so.0",
+      "binary_package": "libmp3lame0:amd64",
+      "binary_version": "3.101~svn6525+dfsg-2",
+      "source_package": "lame",
+      "binary_sha256": "e0676e6702b0095212724f2d298685d189dc3b54845c90cb1db1bd2970c29ed2",
+      "notice_sha256": "0e4b0e56bb8e5b72a5d3af0629b617c9d78c2c8fb42a722f4b0a0d9bb3cac202",
+      "review": "Ubuntu copyright classifies libmp3lame/fft.c GPL-1+; rest of source has differing declarations"
+    },
+    "libmpg123": {
+      "path": "usr/lib/libmpg123.so.0",
+      "soname": "libmpg123.so.0",
+      "binary_package": "libmpg123-0t64:amd64",
+      "binary_version": "1.33.3-2",
+      "source_package": "mpg123",
+      "binary_sha256": "97c50f2bc117d0edd3721d7886809a76e92a96c9572b84549d4c34fea4fe11e0",
+      "notice_sha256": "96a8ad2037ec07953ee02ea7f9c56710e403d7d01be33500e9cd05d900998b7a",
+      "review": "Ubuntu copyright declares LGPL-2.1 for the mpg123 library"
+    }
+  },
+  "lame_source_evidence": {
+    "source_archive_sha256": "c4c3aae99c495d50caac9a181fbd6f5f7fb5859ad2d27431ec7a0a0010bdec01",
+    "debian_rules_archive_sha256": "bd2d8fb86ba7e2a19e99decceee84a4df97ff84b77f4976bb7e89a29d0c93331",
+    "binary_deb_sha256": "20ab98afff633ed2c8e2cfb1b69a2c0a0cb86c8328b663c5825e6592dab600b4",
+    "development_deb_sha256": "bf180d1e85af665f6cd3ded3360af056a1c41d2162b141497fd7c5afc1c9db09",
+    "fft_c_sha256": "5148c76c02607dfd285a71da2ffec64cbdae293c450ac84bdd442a032d94eea1",
+    "makefile_am_sha256": "8bc65c25183438f00978ff0f531bd1c46895f099ff200893881a6fb46f7234c3",
+    "development_archive_fft_o_sha256": "e2cc66929e0646b3620553ea7c9e430690f8c5ccd19ec77c2b40c1773d12fed5",
+    "fft_text_match": {
+      "object_text_offset": 67,
+      "shared_elf_file_offset": 33411,
+      "length": 781,
+      "sha256": "605b96ca9ac3f7296007386ce5290f69c02bda547855e6bbb422ad92465b53d1"
+    },
+    "declared_fft_c_license": "GPL-1+",
+    "classification_source": "debian/copyright in lame 3.101~svn6525+dfsg-2 source package",
+    "binary_compilation_status": "781 byte-identical fht instruction bytes from matching fft.o occur in the copied shared ELF; full shared-object source map remains unavailable"
+  },
+  "release_gate": "GPL-classified fft.c is implicated in the bundled MP3 encoder; do not treat this ledger as legal clearance"
+}
