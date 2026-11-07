@@ -1,5 +1,7 @@
 #pragma once
 
+#include "oscillate/clay_dsp/analysis.hpp"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -37,7 +39,8 @@ struct NoteChoice {
 // last frame's notes.
 class NoteSets {
 public:
-  NoteSets(std::uint32_t rate, double minimum_hz, double maximum_hz);
+  // Searches the options' pitch range.
+  NoteSets(std::uint32_t rate, const AnalysisOptions& options);
 
   // One pitch on its own: its refined pitch and the share of the frame's
   // energy its partial series covers (0 without a fundamental's series).
@@ -48,9 +51,13 @@ public:
   [[nodiscard]] double fresh(std::span<const SpectralPeak> peaks, double f0,
                              std::span<const double> sounding);
 
+  // Pitches to start from: the estimator's picks and the last frame's notes.
+  struct Hints {
+    std::span<const double> seeds;
+    std::span<const double> previous;
+  };
   // `peaks` sorted by frequency.
-  void choose(std::span<const SpectralPeak> peaks, std::span<const double> seeds,
-              std::span<const double> previous, std::vector<NoteChoice>& out);
+  void choose(std::span<const SpectralPeak> peaks, Hints hints, std::vector<NoteChoice>& out);
 
 private:
   static constexpr std::size_t max_peaks = 256;

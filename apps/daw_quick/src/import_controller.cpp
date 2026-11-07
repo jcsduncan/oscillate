@@ -17,7 +17,7 @@
 
 namespace oscillate::quick {
 namespace {
-constexpr std::uint64_t bytes_per_mebibyte = 1024U * 1024U;
+constexpr std::uint64_t bytes_per_mebibyte = std::uint64_t{1024} * 1024U;
 // How often a MIDI file being read is checked for its bytes.
 constexpr int midi_poll_ms = 20;
 
@@ -153,7 +153,10 @@ void ImportController::poll_midi() {
     return;
   midi_timer_.stop();
   auto finished = midi_read_.take();
-  const auto read = *std::exchange(midi_, std::nullopt);
+  if (!midi_)
+    return;
+  const auto read = std::move(*midi_);
+  midi_.reset();
   emit changed();
   auto options = read.options;
   if (!finished) {

@@ -21,8 +21,10 @@ using StageResult = foundation::Result<PreparedStage>;
   if (context.snapshot == nullptr)
     return StageResult::failure(
         {ErrorCode::invalid_argument, "A built-in effect stage needs its project"});
-  auto created = NativeEffectStage::create(*context.snapshot, slot, saved, context.automation,
-                                           context.max_frames, context.last_safe_automation_sample);
+  auto created = NativeEffectStage::create(
+      *context.snapshot, slot, saved, context.automation,
+      {.max_frames = context.max_frames,
+       .last_safe_automation_sample = context.last_safe_automation_sample});
   if (!created)
     return StageResult::failure(created.error());
   auto resolved = resolve_native_effect(saved);

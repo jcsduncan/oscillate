@@ -174,15 +174,24 @@ private:
   void finish(FileOutcome outcome);
   // One pedal-strip or velocity edit with the shared guards, status and refresh.
   using PedalEdit = std::function<foundation::Result<void>(project::ClipId, project::MidiPedal)>;
-  bool apply_pedal_edit(const QString& clip_id, const QString& pedal, const PedalEdit& edit);
+  // The MIDI clip and the pedal (by name) a pedal edit applies to.
+  struct PedalTarget {
+    QString clip_id;
+    QString pedal;
+  };
+  bool apply_pedal_edit(const PedalTarget& where, const PedalEdit& edit);
   using VelocityEdit = std::function<std::vector<application::VelocityChange>(
       const project::MidiClip&, const std::vector<project::NoteId>&)>;
   bool apply_velocity_edit(const QString& clip_id, const QStringList& note_ids,
                            const VelocityEdit& edit);
+  // What a commit reports: the action, named in a refusal, and the text once done.
+  struct CommitText {
+    QString action;
+    QString done;
+  };
   bool commit(application::ProjectSession& session, project::ClipId clip,
               std::span<const project::MidiNote> changed, std::span<const project::MidiNote> added,
-              const QString& action, const QString& done,
-              std::vector<project::NoteId>* created = nullptr);
+              const CommitText& text, std::vector<project::NoteId>* created = nullptr);
 
   Session session_;
   CanEdit can_edit_;

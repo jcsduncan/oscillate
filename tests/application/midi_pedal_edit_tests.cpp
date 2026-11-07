@@ -77,16 +77,16 @@ void spans_and_painting() {
              "points after the pattern's end make no spans");
   REQUIRE_EQ(application::paint_pedal(kept, 0, bar, 0.0, bar), points({{bar, 0.0}, {bar + q, 1.0}}),
              "edits inside the pattern dropped points kept after its end");
-  REQUIRE_EQ(application::remove_pedal_span(kept, q + 10, bar),
+  REQUIRE_EQ(application::remove_pedal_span(kept, {q + 10}, bar),
              points({{bar, 0.0}, {bar + q, 1.0}}),
              "edits inside the pattern dropped points kept after its end");
 }
 
 void lifting_and_chords() {
   const auto lane = points({{0, 1.0}, {q, 0.0}, {2 * q, 1.0}, {3 * q, 0.0}});
-  REQUIRE_EQ(application::remove_pedal_span(lane, 2 * q + 10, bar), points({{0, 1.0}, {q, 0.0}}),
+  REQUIRE_EQ(application::remove_pedal_span(lane, {2 * q + 10}, bar), points({{0, 1.0}, {q, 0.0}}),
              "lifting a span leaves the others");
-  REQUIRE_EQ(application::remove_pedal_span(lane, q + 10, bar), lane,
+  REQUIRE_EQ(application::remove_pedal_span(lane, {q + 10}, bar), lane,
              "lifting where the pedal is up changes nothing");
 
   // Chords at 0, 1 and 2.5 quarters (two notes share the first onset).
@@ -96,7 +96,7 @@ void lifting_and_chords() {
                                              {id<NoteId>(4), {5 * q / 2}, {bar}, 65, 100}};
   const std::int64_t repress = q / 8;
   REQUIRE_EQ(
-      application::pedal_per_chord(notes, bar, repress),
+      application::pedal_per_chord(notes, bar, {.repress = repress}),
       points({{repress, 1.0},
               {q, 0.0},
               {q + repress, 1.0},

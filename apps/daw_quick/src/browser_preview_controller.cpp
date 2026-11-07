@@ -18,7 +18,7 @@ constexpr auto sample_folder_key = "browser/sampleFolder";
 
 // The first of the usual sample folders that exists, else ~/Music.
 [[nodiscard]] QString default_folder() {
-  const auto music = QStandardPaths::writableLocation(QStandardPaths::MusicLocation);
+  auto music = QStandardPaths::writableLocation(QStandardPaths::MusicLocation);
   const auto home = QDir::homePath();
   for (const auto& candidate :
        {music + QStringLiteral("/Samples"), home + QStringLiteral("/Samples"), music})
@@ -41,7 +41,7 @@ BrowserPreviewController::BrowserPreviewController(SongNow song, Output output,
   library_timer_.setInterval(100);
   connect(&library_timer_, &QTimer::timeout, this, &BrowserPreviewController::poll_library);
   // Errors arrive on the preview worker; show them on this thread.
-  preview_ = std::make_unique<SamplePreview>([this](std::string message) {
+  preview_ = std::make_unique<SamplePreview>([this](const std::string& message) {
     QMetaObject::invokeMethod(
         this,
         [this, text = QString::fromStdString(message)] {

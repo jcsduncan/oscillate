@@ -71,7 +71,9 @@ NativeEffectStage::create(const project::Snapshot& snapshot,
                           std::optional<project::InsertSlotId> slot,
                           const project::NativeEffectPatch& patch,
                           std::span<const automation_project::PreparedTargetAutomation> automation,
-                          std::size_t max_frames, std::uint64_t last_safe_automation_sample) {
+                          EffectStageLimits limits) {
+  const auto max_frames = limits.max_frames;
+  const auto last_safe_automation_sample = limits.last_safe_automation_sample;
   using R = Result<std::unique_ptr<NativeEffectStage>>;
   if (max_frames == 0 || max_frames > engine::max_midi_block_frames)
     return R::failure({ErrorCode::invalid_argument, "Effect stage block size is invalid"});
