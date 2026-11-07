@@ -4,10 +4,10 @@
 #include "oscillate/export/offline_master.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/test/allocation_counter.hpp"
-#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
-#include "oscillate/plugins/vst3_scan.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/wait.hpp"
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+#include "oscillate/plugins/vst3_scan.hpp"
 #endif
 
 #include <algorithm>
