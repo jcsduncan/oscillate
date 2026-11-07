@@ -274,7 +274,18 @@ function(oscillate_add_quick_core target codec export_resampler vst3)
   # Paths resolve against this file, so the test suite can add a variant.
   set(here ${CMAKE_CURRENT_FUNCTION_LIST_DIR})
   list(TRANSFORM oscillate_quick_core_sources PREPEND "${here}/" OUTPUT_VARIABLE sources)
-  add_library(${target} ${sources} ${here}/qml.qrc ${here}/fonts/fonts.qrc)
+  set(resources ${here}/qml.qrc ${here}/fonts/fonts.qrc)
+  if(BUILD_SHARED_LIBS)
+    add_library(${target} ${sources} ${resources})
+  else()
+    # A static archive's resource initialisers have no caller, so the linker
+    # drops them and the app finds no QML. Link their objects into each program.
+    add_library(${target} ${sources})
+    add_library(${target}_resources OBJECT ${resources})
+    set_target_properties(${target}_resources PROPERTIES AUTORCC ON)
+    target_link_libraries(${target}_resources PRIVATE Qt6::Core)
+    target_sources(${target} INTERFACE $<TARGET_OBJECTS:${target}_resources>)
+  endif()
   target_sources(${target} PRIVATE $<TARGET_OBJECTS:oscillate_quick_shared>)
   target_include_directories(${target} PUBLIC ${here}/src)
   target_link_libraries(${target} PUBLIC

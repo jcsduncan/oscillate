@@ -34,10 +34,10 @@
       }
     },
     {
-      "name": "ubuntu-package-prototype",
-      "displayName": "Ubuntu Qt Quick package input (local prototype)",
+      "name": "package-deb",
+      "displayName": "Release build for the .deb (docs/dependencies/release-packages.md)",
       "inherits": "release",
-      "binaryDir": "${sourceDir}/build/ubuntu-package-prototype",
+      "binaryDir": "${sourceDir}/build/package-deb",
       "cacheVariables": {
         "BUILD_TESTING": "OFF",
         "CMAKE_SKIP_BUILD_RPATH": "ON",
@@ -48,6 +48,15 @@
         "OSCILLATE_BUILD_EXPORT_RESAMPLER": "ON",
         "OSCILLATE_BUILD_SOURCE_RESAMPLER": "ON",
         "OSCILLATE_BUILD_CONVOLUTION_DSP": "OFF"
+      }
+    },
+    {
+      "name": "package-appimage",
+      "displayName": "Release build for the AppImage (no codec adapter; see release-packages.md)",
+      "inherits": "package-deb",
+      "binaryDir": "${sourceDir}/build/package-appimage",
+      "cacheVariables": {
+        "OSCILLATE_BUILD_CODEC_ADAPTER": "OFF"
       }
     },
     {
@@ -132,7 +141,8 @@
     { "name": "dev", "configurePreset": "dev" },
     { "name": "release", "configurePreset": "release" },
     { "name": "quick", "configurePreset": "quick" },
-    { "name": "ubuntu-package-prototype", "configurePreset": "ubuntu-package-prototype" },
+    { "name": "package-deb", "configurePreset": "package-deb" },
+    { "name": "package-appimage", "configurePreset": "package-appimage" },
     { "name": "vst3", "configurePreset": "vst3" },
     { "name": "codec", "configurePreset": "codec" },
     { "name": "coverage", "configurePreset": "coverage" },

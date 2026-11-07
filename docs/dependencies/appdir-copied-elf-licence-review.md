@@ -1,8 +1,8 @@
 # Copied AppDir ELF licence evidence
 
-**Later packaging change:** The staging script now copies the installed copyright file for every copied ELF's binary package and embeds the file-to-notice mapping in the AppDir. The committed ledger and counts below describe the earlier AppDir that contained no notices. See the [notice payload gate](package-notice-payload.md); source, SPDX and LGPL replacement review remain open.
+**Later packaging change:** The staging script now copies the installed copyright file for every copied ELF's binary package and embeds the file-to-notice mapping in the AppDir. The committed ledger and counts below describe the earlier AppDir that contained no notices. See [release packages](release-packages.md); source, SPDX and LGPL replacement review remain open.
 
-**Status:** Local Ubuntu 26.04 x86-64 evidence, 15 October 2026. **No distribution sign-off.** This audit maps the exact [local AppImage prototype](appimage-local-prototype.md) payload to installed Ubuntu binary/source packages and their copyright files. It does not decide a final SPDX expression for any linked ELF or supply the notices and source needed for publication.
+**Status:** Local Ubuntu 26.04 x86-64 evidence, 15 October 2026. **No distribution sign-off.** This audit maps the exact local AppImage prototype payload to installed Ubuntu binary/source packages and their copyright files. It does not decide a final SPDX expression for any linked ELF or supply the notices and source needed for publication.
 
 ## Reproducible inventory
 
@@ -19,7 +19,7 @@ python3 scripts/packaging/appdir_licence_ledger.py \
 python3 -m unittest discover -s scripts/packaging -p 'test_*.py' -v
 ```
 
-The ignored `build/audit-source.AppDir` can be recreated from the local image using the [staging script](../../scripts/stage-appdir-prototype.py): extract the image into `build/source-image`, then pass `build/source-image/squashfs-root/usr/bin/oscillate` and its sibling `oscillate_vst3_scan_helper` as the `--binary` and `--scanner-helper` arguments. This replay depends on the same installed Ubuntu package versions and can fail intentionally after an OS package update. Do not overwrite the committed ledger to make a drift failure disappear; inspect the changed package and image first.
+The committed ledger describes the prototype AppDir, which bundled the codec chain. The release [staging script](../../scripts/stage-appdir.py) leaves the codec adapter out and refuses `libmp3lame.so.0` ([release packages](release-packages.md)), so it cannot reproduce that AppDir. To replay it, use `scripts/stage-appdir-prototype.py` from revision `a93d4eb` with `--binary` and `--scanner-helper` set to the extracted image's `usr/bin/oscillate` and `oscillate_vst3_scan_helper`. A replay depends on the same installed Ubuntu package versions and can fail intentionally after an OS package update. Do not overwrite the committed ledger to make a drift failure disappear; inspect the changed package and image first.
 
 ## Result and review queue
 

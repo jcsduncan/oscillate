@@ -13,6 +13,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from package_notices import stage_notices, verify_notices
 
 SOURCE_ROOT = Path(__file__).resolve().parents[2]
+# nlohmann/json and PFFFT, plus the VST3 SDK root and pluginterfaces notices.
+SCANNER_PROJECT_NOTICES = 4
+# The AppImage adds the type-2 runtime's own licence.
+APPIMAGE_PROJECT_NOTICES = SCANNER_PROJECT_NOTICES + 1
+RUNTIME_STATIC_NOTICE_FILES = 7
 
 
 class NoticePayloadTest(unittest.TestCase):
@@ -20,12 +25,31 @@ class NoticePayloadTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             inventory = stage_notices(root, SOURCE_ROOT, scanner_enabled=True)
-            self.assertEqual(len(inventory["project_notices"]), 3)
+            self.assertEqual(len(inventory["project_notices"]), SCANNER_PROJECT_NOTICES)
             verify_notices(root, expected_copied_elfs=set(), scanner_enabled=True)
             notice = root / inventory["project_notices"][0]["path"]
             notice.write_text("changed")
             with self.assertRaisesRegex(ValueError, "changed staged notice"):
                 verify_notices(root, expected_copied_elfs=set(), scanner_enabled=True)
+
+    def test_compiled_in_pffft_notice_is_shipped_and_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            inventory = stage_notices(root, SOURCE_ROOT, scanner_enabled=False)
+            pffft = next(
+                item for item in inventory["project_notices"] if item["component"] == "pffft"
+            )
+            self.assertEqual(
+                (root / pffft["path"]).read_bytes(),
+                (SOURCE_ROOT / "third_party/pffft/LICENSE.txt").read_bytes(),
+            )
+            inventory_path = root / "usr/share/doc/oscillate/third-party/inventory.json"
+            inventory["project_notices"] = [
+                item for item in inventory["project_notices"] if item["component"] != "pffft"
+            ]
+            inventory_path.write_text(json.dumps(inventory))
+            with self.assertRaisesRegex(ValueError, "project third-party notices are incomplete"):
+                verify_notices(root, expected_copied_elfs=set(), scanner_enabled=False)
 
     def test_missing_copied_elf_notice_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -58,8 +82,8 @@ class NoticePayloadTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             inventory = stage_notices(root, SOURCE_ROOT, scanner_enabled=True, runtime_enabled=True)
-            self.assertEqual(len(inventory["project_notices"]), 4)
-            self.assertEqual(len(inventory["runtime_static_notices"]), 7)
+            self.assertEqual(len(inventory["project_notices"]), APPIMAGE_PROJECT_NOTICES)
+            self.assertEqual(len(inventory["runtime_static_notices"]), RUNTIME_STATIC_NOTICE_FILES)
             verify_notices(
                 root, expected_copied_elfs=set(), scanner_enabled=True, runtime_enabled=True
             )

@@ -36,7 +36,7 @@ class LedgerTests(unittest.TestCase):
         ]
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
         self.inventory = {
-            "status": "local AppDir prototype; not for distribution",
+            "status": "oscillate AppDir inventory",
             "tree_sha256": hashlib.sha256(encoded).hexdigest(),
             "project_commit": "fixture",
             "payload": payload,

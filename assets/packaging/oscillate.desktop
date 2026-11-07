@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Oscillate
+GenericName=Digital Audio Workstation
+Comment=Arrange, play and mix music
+Exec=oscillate
+Icon=oscillate
+Terminal=false
+Categories=AudioVideo;Audio;Midi;Sequencer;
+Keywords=DAW;music;audio;MIDI;

@@ -1,0 +1,192 @@
+name: Packaging
+
+# Builds the .deb and the AppImage (docs/dependencies/release-packages.md),
+# installs, launches and removes each in a clean container, and attaches them
+# to the GitHub release. Release Please dispatches this workflow with the new
+# tag; a manual run with a tag rebuilds and re-attaches that release's
+# packages. Pull requests build it only when a packaging input changes.
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and attach to (empty builds the selected ref only)
+        required: false
+        type: string
+
+concurrency:
+  group: packaging-${{ inputs.tag || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || (github.ref_type == 'tag' && github.ref_name) || '' }}
+
+jobs:
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      packaging: ${{ steps.classify.outputs.packaging }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - id: classify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 -I scripts/ci/changes.py "$BASE_SHA" "${HEAD_SHA:-HEAD}"
+
+  build:
+    needs: changes
+    if: needs.changes.outputs.packaging == 'true'
+    name: Build ${{ matrix.form }}
+    strategy:
+      fail-fast: false
+      matrix:
+        form: [deb, appimage]
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    timeout-minutes: 150
+    env:
+      BUILD_DIR: build/package-${{ matrix.form }}
+      CCACHE_MAXSIZE: 2G
+      OSCILLATE_BUILD_JOBS: 4
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Install Git for checkout and the VST3 SDK
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+            ca-certificates git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      # Packaging libraries and tools on top of the README list: the optional
+      # feature libraries, Qt's Wayland platform plugin, dpkg-shlibdeps,
+      # desktop-file-validate and file (appimagetool needs it).
+      - name: Install dependencies
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          scripts/ci/install-deps.sh ccache dpkg-dev desktop-file-utils file \
+            libjack-jackd2-dev libsamplerate0-dev libsndfile1-dev libx11-dev qt6-wayland
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
+      - name: Fetch the pinned VST3 SDK
+        run: scripts/ci/fetch-vst3-sdk.sh "$RUNNER_TEMP/vst3sdk"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-package-${{ matrix.form }}-${{ github.sha }}
+          restore-keys: ccache-package-${{ matrix.form }}-
+      - name: Configure
+        run: cmake --preset "package-${{ matrix.form }}" -DOSCILLATE_VST3_SDK_ROOT="$RUNNER_TEMP/vst3sdk"
+      - name: Build the app and scanner helper
+        run: scripts/build.sh "$BUILD_DIR" --target oscillate oscillate_vst3_scan_helper
+      - name: Package version
+        run: |
+          if [ -n "$RELEASE_TAG" ]; then
+            echo "VERSION_ARGS=--release-tag $RELEASE_TAG" >> "$GITHUB_ENV"
+          else
+            echo "VERSION_ARGS=--version-suffix ci.${GITHUB_RUN_NUMBER}.g$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
+          fi
+          echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+      - name: Build and check the .deb
+        if: matrix.form == 'deb'
+        run: |
+          # shellcheck disable=SC2086 # VERSION_ARGS is two words
+          python3 -I scripts/package-deb.py --build-dir "$BUILD_DIR" --output-dir build/packages $VERSION_ARGS
+          deb=$(ls build/packages/*.deb)
+          python3 -I tests/packaging/smoke_ubuntu_package.py --package "$deb" --inventory "$deb.inventory.json"
+      - name: Stage and check the AppDir
+        if: matrix.form == 'appimage'
+        run: |
+          # shellcheck disable=SC2086 # VERSION_ARGS is two words
+          python3 -I scripts/stage-appdir.py --build-dir "$BUILD_DIR" --output build/appdir/Oscillate.AppDir $VERSION_ARGS
+          python3 -I tests/packaging/smoke_appdir.py --appdir build/appdir/Oscillate.AppDir \
+            --inventory build/appdir/Oscillate.AppDir.inventory.json
+      # Downloads the SHA-256-pinned appimagetool and type-2 runtime.
+      - name: Build and check the AppImage
+        if: matrix.form == 'appimage'
+        run: |
+          python3 -I scripts/build-appimage.py --appdir build/appdir/Oscillate.AppDir \
+            --inventory build/appdir/Oscillate.AppDir.inventory.json --output-dir build/packages
+          cp build/appdir/Oscillate.AppDir.inventory.json build/packages/
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages-${{ matrix.form }}
+          path: build/packages/
+          if-no-files-found: error
+      - name: ccache stats
+        if: always()
+        run: ccache --show-stats || true
+
+  install-smoke:
+    needs: build
+    name: Install, launch and remove (${{ matrix.form }}, clean Ubuntu 26.04)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - form: deb
+            pattern: oscillate_*_amd64.deb
+          - form: appimage
+            pattern: Oscillate-*-x86_64.AppImage
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages-${{ matrix.form }}
+          path: packages
+      - name: Smoke test
+        env:
+          PATTERN: ${{ matrix.pattern }}
+          FORM: ${{ matrix.form }}
+        run: |
+          # shellcheck disable=SC2086 # the pattern must glob
+          set -- packages/$PATTERN
+          test "$#" -eq 1 && test -f "$1"
+          sh tests/packaging/install-smoke.sh "$FORM" "$1"
+
+  release:
+    needs: install-smoke
+    if: inputs.tag || github.ref_type == 'tag'
+    name: Attach to the release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # upload release assets
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: packages-*
+          merge-multiple: true
+          path: packages
+      - name: Upload packages, inventories and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          cd packages
+          sha256sum -- * > SHA256SUMS
+          if ! gh release view "$RELEASE_TAG" --repo "$REPOSITORY" > /dev/null; then
+            echo "::warning::No GitHub release for $RELEASE_TAG; the packages are in this run's artifacts"
+            exit 0
+          fi
+          gh release upload "$RELEASE_TAG" --repo "$REPOSITORY" --clobber -- *

@@ -1,7 +1,7 @@
 """Classify a pull request's changed files for CI job selection.
 
 Usage: changes.py BASE_SHA HEAD_SHA
-Writes code=, python= and docs= (true/false) to $GITHUB_OUTPUT, or to stdout
+Writes code=, python=, docs= and packaging= (true/false) to $GITHUB_OUTPUT, or to stdout
 when that variable is unset. With no BASE_SHA (a push to main or a manual
 run) every class is true.
 
@@ -39,7 +39,28 @@ PYTHON = (
 )
 # Paths whose change needs the documentation build.
 DOCS = DOC_ONLY + ("scripts/ci/changes.py",)
-CLASSES = ("code", "python", "docs")
+# Inputs of the release packages (packaging.yml): the build configuration,
+# the packaging scripts and smoke tests, and the files the packages ship.
+PACKAGING = (
+    "CMakeLists.txt",
+    "CMakePresets.json",
+    "cmake/Features.cmake",
+    "LICENSE",
+    "assets/packaging/*",
+    "third_party/notices/*",
+    "third_party/pffft/LICENSE.txt",
+    "docs/dependencies/notices/*",
+    "scripts/package-deb.py",
+    "scripts/stage-appdir.py",
+    "scripts/build-appimage.py",
+    "scripts/package_*.py",
+    "scripts/packaging/*",
+    "scripts/ci/install-deps.sh",
+    "scripts/ci/fetch-vst3-sdk.sh",
+    "tests/packaging/*",
+    ".github/workflows/packaging.yml",
+)
+CLASSES = ("code", "python", "docs", "packaging")
 
 
 def matches(path, patterns):
@@ -61,6 +82,7 @@ def classify(files):
         "code": any(not matches(f, DOC_ONLY) for f in files),
         "python": any(matches(f, PYTHON) for f in files),
         "docs": any(matches(f, DOCS) for f in files),
+        "packaging": any(matches(f, PACKAGING) for f in files),
     }
 
 
