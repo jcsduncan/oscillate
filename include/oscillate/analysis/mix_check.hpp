@@ -383,7 +383,7 @@ private:
     double sum = 0.0;
   };
   void close_hit(std::size_t hit);
-  void take_envelope();
+  void take_envelope(std::size_t pending);
 
   std::uint32_t sample_rate_;
   std::vector<std::uint64_t> hits_;

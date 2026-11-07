@@ -93,6 +93,7 @@ bool is_native(const project::EffectProcessor& processor) noexcept {
   return !std::holds_alternative<project::Vst3PluginInstance>(processor);
 }
 
+// NOLINTNEXTLINE(bugprone-exception-escape): a saved processor is never valueless.
 std::uint64_t native_generation(const project::EffectProcessor& processor) noexcept {
   return std::visit(
       [](const auto& saved) -> std::uint64_t {

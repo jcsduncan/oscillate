@@ -2,6 +2,7 @@
 #include "../core/bandlimited_read.hpp"
 #include "../core/real_fft.hpp"
 #include "../core/source_window.hpp"
+#include "oscillate/foundation/stereo_span.hpp"
 #include "oscillate/warp_dsp/stream.hpp"
 
 #include <algorithm>
@@ -187,7 +188,8 @@ public:
         speed_step_(
             static_cast<std::uint64_t>(std::llround(speed * static_cast<double>(source_unit)))),
         max_half_(max_half), generator_(std::move(generator)),
-        ring_mask_(ring_size(static_cast<std::size_t>(4 * max_half_) + 2 * 65'536) - 1),
+        ring_mask_(ring_size(static_cast<std::size_t>(4 * max_half_) + std::size_t{2} * 65'536) -
+                   1),
         ring_left_(ring_mask_ + 1, 0.0F), ring_right_(ring_mask_ + 1, 0.0F),
         ring_weight_(ring_mask_ + 1, 0.0F), ring_power_(ring_mask_ + 1, 0.0F),
         ring_coherence_(ring_mask_ + 1, 0.0F),
@@ -240,7 +242,7 @@ public:
       if (want < ready) {
         const auto count = static_cast<std::size_t>(std::min<std::int64_t>(
             {ready - want, end - want, static_cast<std::int64_t>(requested - written)}));
-        emit(want, left.subspan(written, count), right.subspan(written, count));
+        emit(want, {.left = left.subspan(written, count), .right = right.subspan(written, count)});
         written += count;
         next_ += count;
         continue;
@@ -321,9 +323,9 @@ private:
     }
   }
 
-  // Channels are positional (left, right) like every planar stereo API here.
-  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-  void emit(std::int64_t first, std::span<float> left, std::span<float> right) noexcept {
+  void emit(std::int64_t first, foundation::StereoSpan<float> out) noexcept {
+    const auto left = out.left;
+    const auto right = out.right;
     for (std::size_t index = 0; index < left.size(); ++index) {
       const auto slot =
           static_cast<std::size_t>(first + static_cast<std::int64_t>(index)) & ring_mask_;
@@ -843,7 +845,7 @@ prepare_tones_seek_index(const WarpTimeMap& map, const StreamLimits& limits, Qua
       generator.prime(map, entry.run);
       entry.checkpoints.push_back({generator.position()});
       while (generator.position() < static_cast<double>(entry.run.output_end)) {
-        if (data->grain_count >= 16U * 1024U * 1024U)
+        if (data->grain_count >= std::size_t{16} * 1024U * 1024U)
           return foundation::Result<std::shared_ptr<const TonesSeekIndex>>::failure(
               {foundation::ErrorCode::resource_exhausted, "Tones index grain limit exceeded"});
         (void)generator.next(grain);

@@ -29,7 +29,7 @@ constexpr std::uint32_t unix_file_attributes = 0100644U << 16U;
 // Offset of the CRC-32 field inside a local header; both sizes follow it.
 constexpr std::uint64_t local_crc_offset = 14;
 constexpr std::uint32_t crc_polynomial = 0xEDB88320; // Reflected 0x04C11DB7.
-constexpr int bits_per_byte = 8;
+constexpr std::uint32_t bits_per_byte = 8;
 constexpr std::size_t byte_values = 256;
 constexpr std::uint32_t byte_mask = 0xFF;
 // MS-DOS dates start in 1980; seconds are kept in two-second steps.
@@ -46,7 +46,7 @@ constexpr std::array<std::uint32_t, byte_values> crc_table = [] {
   std::array<std::uint32_t, byte_values> table{};
   for (std::uint32_t value = 0; value < byte_values; ++value) {
     std::uint32_t crc = value;
-    for (int bit = 0; bit < bits_per_byte; ++bit)
+    for (std::uint32_t bit = 0; bit < bits_per_byte; ++bit)
       crc = (crc & 1U) != 0 ? (crc >> 1U) ^ crc_polynomial : crc >> 1U;
     table[value] = crc;
   }
@@ -56,8 +56,9 @@ constexpr std::array<std::uint32_t, byte_values> crc_table = [] {
 class Record {
 public:
   void u16(std::uint16_t value) {
+    const std::uint32_t wide = value;
     for (std::size_t index = 0; index < sizeof value; ++index)
-      bytes_.push_back(static_cast<std::byte>((value >> (index * bits_per_byte)) & byte_mask));
+      bytes_.push_back(static_cast<std::byte>((wide >> (index * bits_per_byte)) & byte_mask));
   }
   void u32(std::uint32_t value) {
     for (std::size_t index = 0; index < sizeof value; ++index)

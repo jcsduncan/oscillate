@@ -5,6 +5,7 @@
 #include "oscillate/foundation/id.hpp"
 #include "oscillate/foundation/sha256.hpp"
 #include "oscillate/foundation/split_mix.hpp"
+#include "oscillate/foundation/stereo_span.hpp"
 #include "oscillate/foundation/trace.hpp"
 #include "oscillate/test/check.hpp"
 
@@ -41,6 +42,7 @@ using oscillate::foundation::Id;
 using oscillate::foundation::IdBits;
 using oscillate::foundation::parse_id_bits;
 using oscillate::foundation::Result;
+using oscillate::foundation::StereoSpan;
 
 struct TrackTag {};
 struct ClipTag {};
@@ -147,6 +149,33 @@ void diagnostic_contract() {
              "fixed diagnostic fields did not survive capture");
   REQUIRE_EQ(sink.last_.category, DiagnosticCategory::media,
              "fixed diagnostic fields did not survive capture");
+}
+
+void stereo_span_contract() {
+  constexpr std::size_t frames = 6;
+  constexpr std::size_t offset = 2;
+  constexpr std::size_t count = 3;
+  std::array<float, frames> left{};
+  std::array<float, frames> right{};
+  const StereoSpan<float> both{.left = left, .right = right};
+  REQUIRE_EQ(both.size(), frames, "a stereo span is as long as its channels");
+  const auto head = both.first(count);
+  REQUIRE_TRUE(head.left.data() == left.data() && head.right.data() == right.data(),
+               "first kept each channel in place");
+  REQUIRE_EQ(head.size(), count, "first kept the requested frames");
+  const auto tail = both.subspan(offset);
+  REQUIRE_TRUE(tail.left.data() == left.data() + offset &&
+                   tail.right.data() == right.data() + offset,
+               "subspan moved both channels by the offset");
+  REQUIRE_EQ(tail.size(), frames - offset, "subspan kept the rest");
+  const auto middle = both.subspan(offset, count);
+  REQUIRE_TRUE(middle.left.data() == left.data() + offset && middle.size() == count,
+               "a counted subspan took the requested frames");
+  const StereoSpan<const float> read_only = both;
+  REQUIRE_TRUE(read_only.left.data() == left.data() && read_only.right.data() == right.data(),
+               "a writable stereo span reads as a read-only one, channels unswapped");
+  static_assert(!std::is_convertible_v<StereoSpan<const float>, StereoSpan<float>>,
+                "read-only channels never become writable");
 }
 
 std::size_t occurrences(const std::string& text, std::string_view needle) {
@@ -403,6 +432,7 @@ int main() {
     malformed_ids();
     result_contract();
     diagnostic_contract();
+    stereo_span_contract();
     trace_contract();
     file_io_contract();
     encoding_contract();

@@ -249,6 +249,7 @@ struct Marker {
 template <typename T> std::optional<T> parse_number(std::string_view text) {
   T value{};
   const auto* end = text.data() + text.size();
+  // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage): from_chars reads [data, end).
   const auto [rest, error] = std::from_chars(text.data(), end, value);
   if (error != std::errc{} || rest != end)
     return std::nullopt;
