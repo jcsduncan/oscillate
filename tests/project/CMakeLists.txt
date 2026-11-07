@@ -13,3 +13,7 @@ oscillate_add_test_executable(oscillate_clip_fade_tests SOURCES clip_fade_tests.
 oscillate_add_test_executable(oscillate_native_instrument_model_tests SOURCES native_instrument_model_tests.cpp
   LIBS oscillate::project
   TEST project_native_instrument_contract)
+
+oscillate_add_test_executable(oscillate_project_history_tests SOURCES model_history_tests.cpp
+  LIBS oscillate::project
+  TEST project_history_contract)
