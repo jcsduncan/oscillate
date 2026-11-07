@@ -4,3 +4,4 @@
 # them. Remove the line in the pull request that fixes the test.
 quick_shell_smoke 227
 quick_native_effect_app_contract 228
+audio_io_contract 238
