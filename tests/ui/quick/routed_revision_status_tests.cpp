@@ -511,6 +511,17 @@ void stop_during_mixer_preview_leaves_the_stopping_run_alone() {
               },
               wait_ms),
           "preview-stop fixture did not stream its clip");
+  require(QTest::qWaitFor([&bridge] { return bridge.routed_graph_current(); }, wait_ms),
+          "preview-stop fixture did not install the routed run");
+  // Declared after the bridge, so a failed check releases the held stop
+  // before the bridge joins its worker.
+  struct ReleaseStop {
+    explicit ReleaseStop(OutputProbe& held) : probe(held) {}
+    OutputProbe& probe;
+    ReleaseStop(const ReleaseStop&) = delete;
+    ReleaseStop& operator=(const ReleaseStop&) = delete;
+    ~ReleaseStop() { probe.release_stop.store(true, std::memory_order_release); }
+  } release_on_exit{*probe};
   probe->hold_stop.store(true, std::memory_order_release);
   bridge.stop_playback();
   require(QTest::qWaitFor([&probe] { return probe->stop_held.load(std::memory_order_acquire); },
