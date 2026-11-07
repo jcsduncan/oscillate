@@ -118,6 +118,25 @@ int root_at(int absolute_bar) {
   return bass_roots[static_cast<std::size_t>(absolute_bar / chord_bars) % chords_in_cycle];
 }
 
+// One instrument track: its engine and factory preset, name, colour and fader.
+struct Voice {
+  std::string_view engine;
+  std::string_view preset;
+  std::string name;
+  std::uint32_t colour;
+  double level;
+  double pan = 0.0;
+};
+
+// One note; `bar` counts from the clip's start, beat and length are in beats.
+struct NoteAt {
+  int bar;
+  double beat;
+  double length;
+  int key;
+  int velocity;
+};
+
 struct Song {
   std::vector<project::Operation> operations;
   std::uint64_t next_track = 1;
@@ -125,18 +144,17 @@ struct Song {
   std::uint64_t next_note = 1;
   std::uint64_t next_marker = 1;
 
-  project::TrackId instrument(std::string_view engine_id, std::string_view preset, std::string name,
-                              std::uint32_t colour, double level, double pan = 0.0) {
-    const auto* engine = synth::find_engine(engine_id);
+  project::TrackId instrument(Voice voice) {
+    const auto* engine = synth::find_engine(voice.engine);
     if (engine == nullptr)
-      throw std::runtime_error("missing native synth: " + std::string(engine_id));
+      throw std::runtime_error("missing native synth: " + std::string(voice.engine));
     const auto track = id<project::TrackId>(next_track++);
     operations.emplace_back(project::AddTrack{track, project::TrackKind::instrument});
     operations.emplace_back(project::SetNativeInstrumentPatch{
-        track, take(synth::native_patch_for_preset(*engine, preset_index(*engine, preset)))});
-    operations.emplace_back(project::SetTrackName{track, std::move(name)});
-    operations.emplace_back(project::SetTrackColor{track, colour});
-    operations.emplace_back(project::SetTrackLevelPan{track, level, pan});
+        track, take(synth::native_patch_for_preset(*engine, preset_index(*engine, voice.preset)))});
+    operations.emplace_back(project::SetTrackName{track, std::move(voice.name)});
+    operations.emplace_back(project::SetTrackColor{track, voice.colour});
+    operations.emplace_back(project::SetTrackLevelPan{track, voice.level, voice.pan});
     return track;
   }
 
@@ -145,8 +163,7 @@ struct Song {
     if (effects::find_engine(engine) == nullptr)
       throw std::runtime_error("missing native effect: " + std::string(engine));
     operations.emplace_back(project::AddNativeEffect{
-        std::move(path), index,
-        project::NativeEffectPatch{std::string(engine), 1, std::move(parameters), 1}});
+        path, index, project::NativeEffectPatch{std::string(engine), 1, std::move(parameters), 1}});
   }
 
   void marker(int at_bar, std::string name) {
@@ -161,16 +178,15 @@ struct Song {
     int bars;
     std::vector<project::MidiNote> notes;
 
-    // `local_bar` counts from the clip's start; offsets and lengths in beats.
-    void note(int local_bar, double beat_offset, double length_beats, int key, int velocity) {
-      const auto start = static_cast<std::int64_t>(local_bar) * bar +
-                         static_cast<std::int64_t>(beat_offset * beat);
-      const auto length = static_cast<std::int64_t>(length_beats * beat);
+    void note(const NoteAt& at) {
+      const auto start =
+          static_cast<std::int64_t>(at.bar) * bar + static_cast<std::int64_t>(at.beat * beat);
+      const auto length = static_cast<std::int64_t>(at.length * beat);
       notes.push_back({id<project::NoteId>(song.next_note++),
                        {start},
                        {start + length},
-                       static_cast<std::uint8_t>(key),
-                       static_cast<std::uint8_t>(velocity)});
+                       static_cast<std::uint8_t>(at.key),
+                       static_cast<std::uint8_t>(at.velocity)});
     }
 
     void finish() {
@@ -200,7 +216,8 @@ void kick(Song& song, project::TrackId track) {
     auto clip = song.clip(track, start, bars);
     for (int b = 0; b < bars; ++b) {
       for (int quarter = 0; quarter < beats_per_bar; ++quarter)
-        clip.note(b, quarter, length, kick_key, quarter == 0 ? accent : pulse);
+        clip.note(
+            {b, static_cast<double>(quarter), length, kick_key, quarter == 0 ? accent : pulse});
     }
     clip.finish();
   }
@@ -222,17 +239,17 @@ void drums(Song& song, project::TrackId track) {
     auto clip = song.clip(track, start, bars);
     for (int b = 0; b < bars; ++b) {
       for (int quarter = 0; quarter < beats_per_bar; ++quarter) {
-        clip.note(b, quarter + offbeat, hat_length, closed_hat_key, hat_velocity);
+        clip.note({b, quarter + offbeat, hat_length, closed_hat_key, hat_velocity});
         if (start >= lift_bar && quarter % 2 == 1)
-          clip.note(b, quarter + offbeat + 1.0 / sixteenths_per_beat, hat_length, closed_hat_key,
-                    ghost_velocity);
+          clip.note({b, quarter + offbeat + 1.0 / sixteenths_per_beat, hat_length, closed_hat_key,
+                     ghost_velocity});
       }
       if (start >= groove_bar) {
-        clip.note(b, 1, clap_length, clap_key, clap_velocity);
-        clip.note(b, 3, clap_length, clap_key, clap_velocity);
+        clip.note({b, 1, clap_length, clap_key, clap_velocity});
+        clip.note({b, 3, clap_length, clap_key, clap_velocity});
       }
       if (start >= lift_bar && b % 2 == 1)
-        clip.note(b, 3 + offbeat, hat_length, open_hat_key, open_hat_velocity);
+        clip.note({b, 3 + offbeat, hat_length, open_hat_key, open_hat_velocity});
     }
     clip.finish();
   }
@@ -250,10 +267,10 @@ void bass(Song& song, project::TrackId track) {
     auto clip = song.clip(track, start, bars);
     for (int b = 0; b < bars; ++b) {
       const int root = root_at(start + b);
-      clip.note(b, 0.5, length, root, velocity);
-      clip.note(b, 1.5, length, root, soft);
-      clip.note(b, 2.5, length, root, velocity);
-      clip.note(b, 3.5, length, b % 2 == 1 ? root + fifth : root, soft);
+      clip.note({b, 0.5, length, root, velocity});
+      clip.note({b, 1.5, length, root, soft});
+      clip.note({b, 2.5, length, root, velocity});
+      clip.note({b, 3.5, length, b % 2 == 1 ? root + fifth : root, soft});
     }
     clip.finish();
   }
@@ -268,7 +285,7 @@ void chord_part(Song& song, project::TrackId track) {
     auto clip = song.clip(track, start, lift_bar);
     for (int b = 0; b < lift_bar; b += chord_bars) {
       for (const int key : chord_at(start + b))
-        clip.note(b, 0, held, key, start >= lift_bar ? lifted : velocity);
+        clip.note({b, 0, held, key, start >= lift_bar ? lifted : velocity});
     }
     clip.finish();
   }
@@ -292,7 +309,8 @@ void arp(Song& song, project::TrackId track) {
         if (position % rest_every == rest_every - 1)
           continue;
         const auto key = chord[order[static_cast<std::size_t>(position) % order.size()]];
-        clip.note(b, s * step, length, key + semitones_per_octave, s % 3 == 0 ? accent : velocity);
+        clip.note(
+            {b, s * step, length, key + semitones_per_octave, s % 3 == 0 ? accent : velocity});
       }
     }
     clip.finish();
@@ -320,9 +338,9 @@ void bells(Song& song, project::TrackId track) {
   for (int phrase = 0; phrase < (song_bars - lift_bar) / phrase_bars; ++phrase) {
     const bool answer = phrase % 2 == 1;
     for (const auto& hit : motif) {
-      clip.note(phrase * phrase_bars + hit.bar, hit.beat, hit.length,
-                answer ? hit.key - semitones_per_octave : hit.key,
-                answer ? answer_velocity : velocity);
+      clip.note({phrase * phrase_bars + hit.bar, hit.beat, hit.length,
+                 answer ? hit.key - semitones_per_octave : hit.key,
+                 answer ? answer_velocity : velocity});
     }
   }
   clip.finish();
@@ -337,8 +355,8 @@ void pad(Song& song, project::TrackId track) {
     auto clip = song.clip(track, start, lift_bar);
     for (int b = 0; b < lift_bar; b += section_bars) {
       const auto& chord = chord_at(start + b);
-      clip.note(b, 0, held, chord[0] - semitones_per_octave, velocity);
-      clip.note(b, 0, held, chord[fifth_voice], velocity);
+      clip.note({b, 0, held, chord[0] - semitones_per_octave, velocity});
+      clip.note({b, 0, held, chord[fifth_voice], velocity});
     }
     clip.finish();
   }
@@ -356,15 +374,16 @@ void create_demo_project(const std::filesystem::path& root) {
       take(timeline::MeterMap::create({{{0}, beats_per_bar, beat_unit}}, 1)), gate));
   Song song;
   const auto kick_track =
-      song.instrument("anvil", "Tech House Thump", "Kick", kick_colour, kick_level);
-  const auto drum_track = song.instrument("pulse", "909 House", "Drums", drums_colour, drums_level);
-  const auto bass_track = song.instrument("torque", "Moog Bass", "Bass", bass_colour, bass_level);
+      song.instrument({"anvil", "Tech House Thump", "Kick", kick_colour, kick_level});
+  const auto drum_track =
+      song.instrument({"pulse", "909 House", "Drums", drums_colour, drums_level});
+  const auto bass_track = song.instrument({"torque", "Moog Bass", "Bass", bass_colour, bass_level});
   const auto chord_track =
-      song.instrument("ember", "Juno Strings", "Chords", chords_colour, chords_level, chords_pan);
-  const auto arp_track = song.instrument("nova", "Pluck", "Arp", arp_colour, arp_level, arp_pan);
+      song.instrument({"ember", "Juno Strings", "Chords", chords_colour, chords_level, chords_pan});
+  const auto arp_track = song.instrument({"nova", "Pluck", "Arp", arp_colour, arp_level, arp_pan});
   const auto bell_track =
-      song.instrument("halo", "Bells", "Bells", bells_colour, bells_level, bells_pan);
-  const auto pad_track = song.instrument("drift", "Aurora", "Pad", pad_colour, pad_level);
+      song.instrument({"halo", "Bells", "Bells", bells_colour, bells_level, bells_pan});
+  const auto pad_track = song.instrument({"drift", "Aurora", "Pad", pad_colour, pad_level});
 
   // The chords' chain shows live displays while playing: Shape's output
   // spectrum and Press's gain reduction.
