@@ -7,7 +7,7 @@ Each release ships two Ubuntu 26.04 x86-64 packages, built by the
 | File | Form |
 | --- | --- |
 | `oscillate_<version>_amd64.deb` | Native package. Installs `/usr/bin/oscillate` and depends on Ubuntu's shared libraries. |
-| `Oscillate-<version>-x86_64.AppImage` | Image with Qt and its other libraries; glibc and `libproxy` come from the host. |
+| `Oscillate-<version>-x86_64.AppImage` | Image with Qt and its other libraries; glibc and `libproxy` (`libproxy1v5`, on every Ubuntu desktop through glib-networking) come from the host. |
 | `oscillate_<version>_amd64.deb.inventory.json` | `.deb` sidecar: package hash, features, `Depends` and payload. |
 | `Oscillate-<version>-x86_64.AppImage.inventory.json` | AppImage sidecar: image hash, features and pinned tool and runtime. |
 | `Oscillate.AppDir.inventory.json` | The AppImage's payload: every file with hash and mode, and each copied ELF's Ubuntu package. |
@@ -52,6 +52,8 @@ cannot be made from a build configured differently.
   replacement works where it is installed. The AppImage bundles JACK2's client
   library, which reaches a running `jackd`; with only PipeWire running, use
   the PipeWire output.
+- **PipeWire.** The AppImage bundles the PipeWire client library, which loads
+  its SPA support plugins from the host's PipeWire installation.
 
 Each package's `README` lists the same features and exclusions.
 
@@ -96,9 +98,11 @@ provenance and makes no licence conclusion, which belongs to G8.
 | `.deb` | [`smoke_ubuntu_package.py`](../../tests/packaging/smoke_ubuntu_package.py): payload against the sidecar, notices, SBOM, QML runtime dependency, desktop entry. |
 | AppDir | [`smoke_appdir.py`](../../tests/packaging/smoke_appdir.py): payload tree, notices, SBOM, no MP3 encoder, app startup with the Qt platform plugin loaded from the AppDir and no host Qt plugin, scanner helper reply, loader picking bundled libraries. |
 | AppImage | [`build-appimage.py`](../../scripts/build-appimage.py): pinned appimagetool 1.9.1 and type-2 runtime 20251108 by SHA-256, runtime bytes unchanged outside appimagetool's MD5 slot, extracted payload, notices and SBOM. |
-| Clean container | [`install-smoke.sh`](../../tests/packaging/install-smoke.sh) in a fresh `ubuntu:26.04`: install (`apt-get install` for the `.deb`), launch with `--check-startup` to create and reopen a project offscreen, uninstall, and check that nothing is left behind. |
+| Clean container | [`install-smoke.sh`](../../tests/packaging/install-smoke.sh) in a fresh `ubuntu:26.04`: install (`apt-get install` for the `.deb`; for the AppImage, only `libproxy1v5` is added to the base image), launch with `--check-startup` to create and reopen a project offscreen, uninstall, and check that nothing is left behind. |
 
-The clean-container launch is offscreen with no audio server. X11, Wayland,
+The clean-container launch is offscreen with no audio server. Without FUSE
+the AppImage runtime extracts the image under `TMPDIR` and keeps it as a
+cache, so the AppImage check allows only that directory to remain. X11, Wayland,
 real audio devices and third-party plug-ins are not covered by CI.
 
 ## Build locally

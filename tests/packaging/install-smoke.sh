@@ -53,8 +53,13 @@ deb)
   done <"$work/files"
   ;;
 appimage)
-  # Containers have no FUSE; the runtime extracts to a temporary directory
-  # and removes it when the app exits.
+  # The AppImage takes libproxy from the host, as it does glibc: Ubuntu's
+  # copy has a fixed path to its backend. Desktops have it through
+  # glib-networking; the bare container does not.
+  apt-get update -qq
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends libproxy1v5
+  # Containers have no FUSE, so the runtime extracts the image under TMPDIR
+  # and keeps that copy as a cache for the next launch.
   export APPIMAGE_EXTRACT_AND_RUN=1 TMPDIR="$work/tmp"
   mkdir -p "$TMPDIR" "$HOME/Applications"
   installed="$HOME/Applications/Oscillate.AppImage"
@@ -63,8 +68,8 @@ appimage)
   launch "$installed"
   rm "$installed"
   test ! -e "$installed" || fail "AppImage still present"
-  leftovers=$(find "$TMPDIR" -mindepth 1 -maxdepth 1)
-  test -z "$leftovers" || fail "AppImage left extracted files: $leftovers"
+  leftovers=$(find "$TMPDIR" -mindepth 1 -maxdepth 1 ! -name 'appimage_extracted_*')
+  test -z "$leftovers" || fail "AppImage left files outside its extraction cache: $leftovers"
   ;;
 *)
   fail "unknown package kind: $kind"
