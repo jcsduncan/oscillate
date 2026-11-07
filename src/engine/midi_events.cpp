@@ -480,7 +480,8 @@ Result<CompiledMidiPlan> compile_midi_events(const project::Snapshot& snapshot) 
         --sounding;
       } else if (++sounding > max_concurrent_midi_notes) {
         return Result<CompiledMidiPlan>::failure(
-            exhausted("more than 1024 MIDI notes sound at once on one instrument"));
+            exhausted("more than " + std::to_string(max_concurrent_midi_notes) +
+                      " MIDI notes sound at once on one instrument"));
       }
     }
     instruments.emplace_back(track.id, std::move(events), std::move(pedals));
