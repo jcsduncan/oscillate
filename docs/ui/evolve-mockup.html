@@ -1,0 +1,822 @@
+<title>Evolve</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: the DAW shell as it is (graphite, teal, amber playhead). The arrangement on top shows every repeat of every looping clip as its own pass; below, the selected clip's Evolve controls sit beside a large view of the selected pass. Evolve owns one colour, violet, so anything it changed reads at a glance. */
+:root {
+  --bg: #0b0e12; --panel: #11151b; --panel2: #151b22; --well: #080a0d; --line: #222a33; --line2: #2f3943;
+  --ink: #e6ebf0; --dim: #97a3ae; --faint: #5d6873;
+  --teal: #5fe0bf; --amber: #f5b14c;
+  --evo: #b79cff; --evo-soft: rgba(183,156,255,.15);
+  --changed: #6ec6ff; --dropped: #5d6873;
+  --sans: "Inter", "Noto Sans", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 13px; padding-block: 22px 60px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1280px; margin: 0 auto; display: grid; gap: 16px; }
+header { display: grid; gap: 8px; }
+h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -.5px; display: flex; align-items: center; gap: 10px; }
+h1 i { width: 12px; height: 12px; border-radius: 3px; background: var(--evo); display: inline-block; transform: rotate(45deg); }
+header p { margin: 0; color: var(--dim); max-width: 92ch; line-height: 1.55; text-wrap: pretty; }
+header b { color: var(--ink); font-weight: 600; }
+.label { font-size: 10.5px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--faint); }
+
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.btn { font: 600 12.5px var(--sans); color: var(--dim); background: var(--panel2); border: 1px solid var(--line); border-radius: 7px; padding: 7px 11px; cursor: pointer; }
+.btn:hover { color: var(--ink); border-color: var(--line2); }
+.btn.play { color: var(--bg); background: var(--teal); border-color: var(--teal); min-width: 84px; }
+.btn.play[aria-pressed="true"] { background: var(--amber); border-color: var(--amber); }
+.btn.evo { color: var(--evo); border-color: rgba(183,156,255,.5); background: var(--evo-soft); }
+.btn[disabled] { opacity: .4; cursor: default; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.pos { font: 500 13px var(--mono); color: var(--amber); font-variant-numeric: tabular-nums; min-width: 9ch; }
+.tinfo { color: var(--dim); font-size: 12px; }
+.tinfo b { color: var(--ink); font-family: var(--mono); font-weight: 500; }
+.spacer { flex: 1; }
+.check { display: flex; align-items: center; gap: 6px; color: var(--dim); font-size: 12px; cursor: pointer; }
+.check input { accent-color: var(--evo); }
+
+/* Arrangement */
+.arrwrap { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
+.arr { display: grid; grid-template-columns: 184px minmax(660px, 1fr); min-width: 844px; }
+.heads { border-right: 1px solid var(--line); }
+.lanes { position: relative; }
+.row { height: var(--h); border-bottom: 1px solid var(--line); }
+.row:last-child { border-bottom: 0; }
+.r-ruler { --h: 40px; } .r-guide { --h: 40px; } .r-clip { --h: 58px; } .r-auto { --h: 46px; } .r-amount { --h: 58px; }
+.head { display: grid; grid-template-columns: 4px minmax(0, 1fr) auto; gap: 0 9px; align-items: center; padding: 0 10px 0 0; cursor: pointer; }
+.head .cap { height: 100%; }
+.head .nm { display: grid; gap: 2px; min-width: 0; }
+.head .nm b { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.head .nm small { color: var(--faint); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.head .tag { font: 600 9.5px var(--mono); letter-spacing: .5px; padding: 2px 6px; border-radius: 99px; color: var(--evo); background: var(--evo-soft); }
+.head .tag.off { color: var(--faint); background: var(--panel2); }
+.head .ms { display: flex; gap: 3px; }
+.ms button { width: 20px; height: 18px; padding: 0; font: 700 10px var(--sans); color: var(--faint); background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
+.ms button[aria-pressed="true"] { color: var(--bg); background: var(--amber); border-color: var(--amber); }
+.head.sel { background: linear-gradient(90deg, rgba(95,224,191,.08), transparent); }
+.head.sel .nm b { color: var(--teal); }
+.rulerhead { display: flex; align-items: flex-end; padding: 0 10px 7px; }
+.cells { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); height: 100%; }
+.cell { position: relative; border-left: 1px solid var(--line); cursor: pointer; padding: 4px 2px; }
+.cell:first-child { border-left: 0; }
+.cell.bar4 { border-left-color: var(--line2); }
+.cell canvas { width: 100%; height: 100%; display: block; border-radius: 4px; }
+.cell.sel { box-shadow: inset 0 0 0 2px var(--teal); border-radius: 5px; }
+.cell .badge { position: absolute; right: 4px; top: 3px; font: 600 8.5px var(--mono); color: var(--evo); pointer-events: none; }
+.cell.frozen::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(135deg, rgba(151,163,174,.11) 0 2px, transparent 2px 7px); }
+.ruler { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); height: 100%; cursor: pointer; }
+.ruler div { border-left: 1px solid var(--line); display: grid; align-content: end; padding: 0 0 6px 5px; font: 500 11px var(--mono); color: var(--faint); position: relative; }
+.ruler div:first-child { border-left: 0; }
+.ruler div.bar4 { border-left-color: var(--line2); color: var(--dim); }
+.ruler div span.sec { position: absolute; top: 5px; left: 5px; font: 700 9.5px var(--sans); letter-spacing: 1.4px; text-transform: uppercase; color: var(--dim); white-space: nowrap; }
+.playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--amber); pointer-events: none; left: 0; opacity: 0; box-shadow: 0 0 8px rgba(245,177,76,.5); }
+.amountcv { width: 100%; height: 100%; display: block; }
+.r-amount .head .nm b { color: var(--evo); }
+
+/* Lower split */
+.lower { display: grid; grid-template-columns: minmax(0, 400px) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 960px) { .lower { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 14px; min-width: 0; }
+.cardhead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cardhead h2 { margin: 0; font-size: 15px; font-weight: 700; }
+.cardhead h2 small { font-weight: 500; color: var(--dim); font-size: 12px; margin-left: 6px; }
+.switch { margin-left: auto; display: flex; align-items: center; gap: 8px; font: 600 12px var(--sans); color: var(--dim); cursor: pointer; background: none; border: 0; padding: 0; }
+.switch span.t { width: 34px; height: 19px; border-radius: 99px; background: var(--line2); position: relative; transition: background .15s; }
+.switch span.t::after { content: ""; position: absolute; left: 2px; top: 2px; width: 15px; height: 15px; border-radius: 50%; background: var(--ink); transition: transform .15s; }
+.switch[aria-checked="true"] span.t { background: var(--evo); }
+.switch[aria-checked="true"] span.t::after { transform: translateX(15px); background: var(--bg); }
+.ctl { display: grid; grid-template-columns: 74px minmax(0, 1fr) 52px; align-items: center; gap: 10px; }
+.ctl > span { color: var(--dim); font-size: 12px; }
+.ctl output { font: 500 12px var(--mono); text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ctl input[type=range] { width: 100%; accent-color: var(--evo); }
+.ctl .note { grid-column: 2 / -1; color: var(--faint); font-size: 11px; margin-top: -6px; line-height: 1.4; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { font: 600 12px var(--sans); color: var(--dim); background: var(--panel2); border: 0; border-left: 1px solid var(--line); padding: 6px 11px; cursor: pointer; }
+.seg button:first-child { border-left: 0; }
+.seg button[aria-pressed="true"] { color: var(--evo); background: var(--evo-soft); }
+.ctl .seg { justify-self: start; }
+.seedrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.seedrow output { font: 500 12px var(--mono); color: var(--ink); background: var(--well); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; min-width: 6ch; text-align: center; }
+.reads { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--dim); font-size: 12px; }
+.reads b { color: var(--ink); font-weight: 600; }
+.chip0 { font: 600 11px var(--sans); color: var(--ink); background: var(--panel2); border: 1px solid var(--line2); border-radius: 99px; padding: 3px 9px; }
+.rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.rule { text-align: left; display: grid; gap: 2px; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; cursor: pointer; color: var(--dim); font-family: var(--sans); }
+.rule b { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.rule b::before { content: ""; width: 8px; height: 8px; border-radius: 2px; border: 1.5px solid var(--faint); }
+.rule small { font-size: 10.5px; color: var(--faint); line-height: 1.35; }
+.rule[aria-pressed="true"] { color: var(--ink); border-color: rgba(183,156,255,.55); background: var(--evo-soft); }
+.rule[aria-pressed="true"] b::before { background: var(--evo); border-color: var(--evo); }
+.hint { margin: 0; color: var(--faint); font-size: 11.5px; line-height: 1.5; }
+.hint b { color: var(--dim); font-weight: 600; }
+fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 12px; }
+fieldset[disabled] { opacity: .38; }
+select { font: 500 12px var(--sans); color: var(--ink); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; }
+
+.passhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.passhead h2 { margin: 0; font-size: 15px; font-weight: 700; }
+.passhead .sum { font: 500 12px var(--mono); color: var(--dim); }
+.passhead .sum em { font-style: normal; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--dim); font-size: 11.5px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 8px; border-radius: 2px; display: inline-block; }
+.pvwrap { background: var(--well); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+#pv { width: 100%; height: 268px; display: block; cursor: pointer; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--line2); color: var(--ink); border-radius: 9px; padding: 9px 12px; display: flex; gap: 12px; align-items: center; box-shadow: 0 8px 30px rgba(0,0,0,.5); z-index: 20; max-width: calc(100% - 32px); font-size: 12.5px; }
+.toast button { font: 600 12px var(--sans); color: var(--teal); background: none; border: 0; cursor: pointer; padding: 0; }
+@media (prefers-reduced-motion: reduce) { .switch span.t, .switch span.t::after { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1><i aria-hidden="true"></i>Evolve</h1>
+    <p>A setting on any looping clip: drums, a bassline, chords or an automation lane. Your notes stay as you wrote them, and <b>each repeat plays a slightly changed pass</b>. The arrangement below shows all sixteen repeats of each clip; violet marks what Evolve changed. Bar 1 always plays as written. <b>Click a repeat</b> to see that pass, <b>click a note</b> in the pass view to lock it, and press <b>Play</b> to hear it. Every pass comes from the seed and the pass number, so jumping to bar 11 gives the same notes as playing from bar 1, and the export matches.</p>
+  </header>
+
+  <div class="transport">
+    <button class="btn play" id="play" aria-pressed="false">▶ Play</button>
+    <span class="pos" id="pos">1.1.1</span>
+    <span class="tinfo"><b>124</b> BPM · <b>A minor</b> from analysis</span>
+    <span class="spacer"></span>
+    <label class="check"><input type="checkbox" id="follow" checked> Pass view follows playback</label>
+  </div>
+
+  <div class="arrwrap">
+    <div class="arr">
+      <div class="heads" id="heads"></div>
+      <div class="lanes" id="lanes"><div class="playhead" id="playhead"></div></div>
+    </div>
+  </div>
+
+  <div class="lower">
+    <section class="card" id="strip" aria-label="Evolve settings for the selected clip"></section>
+    <section class="card">
+      <div class="passhead">
+        <h2 id="pvtitle">Bar 1</h2>
+        <span class="sum" id="pvsum"></span>
+      </div>
+      <div class="legend" id="legend">
+        <span><i style="background:var(--ink);opacity:.8"></i>As written</span>
+        <span><i style="background:var(--evo)"></i>Added</span>
+        <span><i style="background:var(--changed)"></i>Changed</span>
+        <span><i style="border:1.5px dashed var(--dropped)"></i>Sitting out</span>
+        <span>🔒 Locked</span>
+      </div>
+      <div class="pvwrap"><canvas id="pv" aria-label="Notes of the selected pass"></canvas></div>
+      <div class="actions">
+        <button class="btn evo" id="keep">Keep this pass</button>
+        <button class="btn" id="freeze">Freeze from here</button>
+        <button class="btn" id="clearlocks">Clear locks</button>
+        <span class="spacer"></span>
+      </div>
+      <p class="hint" id="pvhint"></p>
+    </section>
+  </div>
+</div>
+<div class="toast" id="toast" hidden><span id="toastmsg"></span><button id="toastundo">Undo</button></div>
+
+<script>
+const STEPS = 16, BARS = 16, BPM = 124;
+const STEP_DUR = 60 / BPM / 4, BAR_DUR = STEP_DUR * STEPS;
+const SECTIONS = { 0: "Intro", 4: "Build", 8: "Drop", 12: "Groove" };
+const MINOR = [0, 2, 3, 5, 7, 8, 10]; // from A
+const inKey = p => MINOR.includes(((p - 9) % 12 + 12) % 12);
+const keyStep = (p, dir) => { let q = p; do { q += dir; } while (!inKey(q)); return q; };
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const NOTE_NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+const noteName = p => NOTE_NAMES[p % 12] + (Math.floor(p / 12) - 1);
+
+// How likely a step is to change: on the beat least, 16ths most.
+const weight = st => { st = ((st % 16) + 16) % 16; return st % 4 === 0 ? .2 : st % 2 === 0 ? .55 : 1; };
+
+function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rngFor = (seed, pass, salt) => mulberry((Math.imul(seed, 2654435761) ^ Math.imul(pass + 1, 40503) ^ Math.imul(salt, 97)) >>> 0);
+
+const RULES = {
+  drums: [["velocity", "Velocity", "Accents drift"], ["ghosts", "Ghosts", "Quiet notes come and go"], ["drops", "Drops", "A hit sits out"], ["timing", "Timing", "Pushes and pulls, in 1/128s"], ["pad", "Pad swap", "A hit moves to another pad"], ["rotate", "Rotate", "The pattern shifts a step"]],
+  bass: [["notes", "Notes", "Moves to a neighbour in the key"], ["octaves", "Octaves", "An occasional octave jump"], ["length", "Length", "Notes get shorter or longer"], ["drops", "Rests", "A note sits out"], ["ghosts", "Ghosts", "A quiet extra root note"], ["velocity", "Velocity", "Accents drift"], ["timing", "Timing", "Pushes and pulls, in 1/128s"]],
+  chords: [["voicing", "Voicing", "Inversions and spread"], ["tones", "Chord tones", "Which notes of the chord sound"], ["length", "Length", "Stab length, big for dub"], ["stabs", "Stabs", "A stab answered by an echo"], ["drops", "Skips", "A stab sits out"], ["velocity", "Velocity", "Accents drift"], ["timing", "Timing", "Pushes and pulls, in 1/128s"]],
+  automation: [["shape", "Shape", "The curve wobbles"], ["timing", "Timing", "Peaks land earlier or later"], ["depth", "Depth", "How far it swings breathes"]],
+};
+const KIND_NAME = { drums: "Drums", bass: "Bass line", chords: "Chords", automation: "Automation" };
+const KIND_WHY = { drums: "detected from Knock's pads", bass: "detected: one note at a time", chords: "detected: stacked notes", automation: "an automation lane" };
+
+let uid = 0;
+const n = (step, p, len, v, extra) => Object.assign({ id: "o" + (uid++), step, off: 0, p, len, v, g: 0, src: "orig" }, extra || {});
+const hats = [1, 3, 5, 7, 9, 11, 13, 15].map((s, i) => n(s, 0, .25, i % 2 ? .62 : .44));
+const opens = [2, 6, 10, 14].map(s => n(s, 1, .5, .8));
+const tracks = [
+  { id: "kick", name: "Kick", device: "Anvil", color: "#e07a5f", kind: "drums", guide: true, lanes: ["Kick"],
+    orig: [0, 4, 8, 12].map(s => n(s, 0, .5, 1)) },
+  { id: "perc", name: "Top perc", device: "Knock", color: "#7fd18b", kind: "drums", lanes: ["Closed hat", "Open hat", "Rim", "Shaker"],
+    orig: [...hats, ...opens, n(7, 2, .25, .66), n(13, 2, .25, .58), ...[0, 4, 8, 12].map(s => n(s, 3, .25, .34))],
+    locks: new Set(opens.map(o => o.id)),
+    ev: { on: true, amount: 22, auto: true, lane: [[0, .06], [4, .06], [8, .42], [8, 0], [12, 0], [12, .24], [16, .24]], every: 1, mode: "wander", home: 55, seed: 4127,
+      rules: new Set(["velocity", "ghosts", "drops", "timing"]) } },
+  { id: "bass", name: "Rolling bass", device: "Nova", color: "#6aa7ff", kind: "bass", range: [26, 52],
+    orig: [n(2, 33, 1, .9), n(3, 33, .5, .6), n(6, 33, 1, .85), n(10, 36, 1, .8), n(11, 33, .5, .55), n(14, 31, 1.5, .8)],
+    ev: { on: true, amount: 18, auto: false, lane: null, every: 2, mode: "wander", home: 75, seed: 881,
+      rules: new Set(["notes", "octaves", "drops", "velocity"]) } },
+  { id: "chord", name: "Dub chord", device: "Prism", color: "#e58fc0", kind: "chords", range: [50, 76],
+    orig: [57, 60, 64, 67].map(p => n(3, p, 2, .8, { g: 0 })).concat([57, 60, 64, 67].map(p => n(10, p, 1, .66, { g: 1 }))),
+    ev: { on: true, amount: 30, auto: false, lane: null, every: 1, mode: "vary", home: 50, seed: 2290,
+      rules: new Set(["voicing", "tones", "length", "stabs"]) } },
+  { id: "cut", name: "Dub chord · Filter", device: "Prism cutoff", color: "#e58fc0", kind: "automation", auto_lane: true,
+    orig: [n(0, 0, 0, .3), n(6, 0, 0, .72), n(12, 0, 0, .42)],
+    ev: { on: true, amount: 35, auto: false, lane: null, every: 1, mode: "wander", home: 40, seed: 77,
+      rules: new Set(["shape", "timing", "depth"]) } },
+];
+tracks.forEach((t, i) => {
+  t.salt = i * 7919 + 13; t.locks = t.locks || new Set(); t.muted = false; t.freeze = null;
+  if (!t.ev) t.ev = { on: false, amount: 0, auto: false, lane: null, every: 1, mode: "vary", home: 50, seed: 1, rules: new Set() };
+  // A bass line's first note starts the phrase, so it never moves.
+  t.protect = new Set(t.kind === "bass" ? [t.orig.reduce((a, b) => (b.step < a.step ? b : a)).id] : []);
+});
+
+function amountAt(t, bar) {
+  if (!t.ev.auto || !t.ev.lane) return t.ev.amount / 100;
+  const L = t.ev.lane; let v = L[0][1];
+  for (let i = 0; i < L.length - 1; i++) {
+    const [b0, v0] = L[i], [b1, v1] = L[i + 1];
+    if (bar >= b0 && bar < b1) v = b1 === b0 ? v1 : v0 + (v1 - v0) * (bar - b0) / (b1 - b0);
+    if (bar >= b1) v = v1;
+  }
+  return v;
+}
+
+function mutate(prev, t, rng, s, pass) {
+  const R = t.ev.rules, fixed = id => t.locks.has(id) || t.protect.has(id);
+  let out = prev.map(x => ({ ...x }));
+  const nudge = x => { x.off = clamp(x.off + (rng() < .5 ? -1 : 1) * (rng() < .7 ? 1 : 2), -3, 3); };
+  if (t.kind === "automation") {
+    out.forEach((x, i) => {
+      if (R.has("shape")) x.v = clamp(x.v + (rng() - .5) * .5 * s, .05, .98);
+      if (R.has("timing") && i > 0) x.step = clamp(x.step + Math.round((rng() - .5) * 5 * s), out[i - 1].step + 1, 15);
+    });
+    if (R.has("depth")) { const k = 1 + (rng() - .5) * 1.2 * s; out.forEach(x => { x.v = clamp(.5 + (x.v - .5) * k, .05, .98); }); }
+    return out;
+  }
+  if (t.kind === "drums") {
+    const lanes = t.lanes.length;
+    if (R.has("drops")) out = out.filter(x => fixed(x.id) || rng() >= s * weight(x.step) * .3);
+    out.forEach(x => {
+      if (fixed(x.id)) return;
+      if (R.has("velocity")) x.v = clamp(x.v + (rng() - .5) * .8 * s * weight(x.step), .12, 1);
+      if (R.has("timing") && rng() < s * weight(x.step) * .6) nudge(x);
+      if (R.has("pad") && rng() < s * weight(x.step) * .14) x.p = (x.p + 1 + Math.floor(rng() * (lanes - 1))) % lanes;
+    });
+    if (R.has("ghosts")) for (let l = 0; l < lanes; l++) {
+      if (l === 1) continue;
+      for (let st = 0; st < STEPS; st++) {
+        if (out.some(x => x.p === l && x.step === st)) continue;
+        if (rng() < s * weight(st) * .16) out.push({ id: `gh${l}_${st}`, step: st, off: 0, p: l, len: .25, v: .16 + rng() * .18, g: 0, src: "ghost" });
+      }
+    }
+    if (R.has("rotate") && rng() < s * .25) { const d = rng() < .5 ? -1 : 1; out.forEach(x => { if (!fixed(x.id)) x.step = (x.step + d + STEPS) % STEPS; }); }
+    return out;
+  }
+  if (t.kind === "bass") {
+    if (R.has("drops")) out = out.filter(x => fixed(x.id) || rng() >= s * weight(x.step) * .25);
+    out.forEach(x => {
+      if (fixed(x.id)) return;
+      if (R.has("notes") && rng() < s * weight(x.step) * .45) x.p = keyStep(x.p, rng() < .5 ? -1 : 1);
+      if (R.has("octaves") && rng() < s * weight(x.step) * .18) x.p += x.p < 40 ? 12 : -12;
+      if (R.has("length") && rng() < s * weight(x.step) * .4) x.len = [.5, 1, 1.5, 2][Math.floor(rng() * 4)];
+      if (R.has("velocity")) x.v = clamp(x.v + (rng() - .5) * .7 * s * weight(x.step), .2, 1);
+      if (R.has("timing") && rng() < s * weight(x.step) * .5) nudge(x);
+    });
+    if (R.has("ghosts")) for (let st = 0; st < STEPS; st++) {
+      if (out.some(x => Math.abs(x.step - st) < 1)) continue;
+      if (rng() < s * weight(st) * .1) out.push({ id: `gb${st}`, step: st, off: 0, p: 33, len: .5, v: .34, g: 0, src: "ghost" });
+    }
+    return out;
+  }
+  // chords: work stab by stab
+  const groups = [...new Set(out.map(x => x.g))];
+  for (const g of groups) {
+    const notes = out.filter(x => x.g === g), st = notes[0].step, anyFixed = notes.some(x => fixed(x.id));
+    if (R.has("drops") && !anyFixed && rng() < s * weight(st) * .14) { out = out.filter(x => x.g !== g); continue; }
+    if (R.has("tones")) {
+      const sorted = notes.slice().sort((a, b) => a.p - b.p);
+      for (const x of sorted.slice(1)) if (!fixed(x.id) && out.filter(y => y.g === g).length > 2 && rng() < s * .3) out = out.filter(y => y !== x);
+    }
+    const live = out.filter(x => x.g === g);
+    if (R.has("voicing") && rng() < s * weight(st) * .5) {
+      const sorted = live.slice().sort((a, b) => a.p - b.p);
+      const pick = rng() < .5 ? sorted[sorted.length - 1] : sorted[0];
+      if (!fixed(pick.id)) pick.p += pick === sorted[0] ? 12 : -12;
+    }
+    if (R.has("length") && !anyFixed && rng() < s * weight(st) * .5) { const L = [.5, 1, 2, 3][Math.floor(rng() * 4)]; live.forEach(x => { x.len = L; }); }
+    if (R.has("velocity") && !anyFixed) { const dv = (rng() - .5) * .6 * s; live.forEach(x => { x.v = clamp(x.v + dv, .25, 1); }); }
+    if (R.has("timing") && !anyFixed && rng() < s * weight(st) * .5) { const d = (rng() < .5 ? -1 : 1); live.forEach(x => { x.off = clamp(x.off + d, -3, 3); }); }
+    if (R.has("stabs") && g < 100 && !out.some(x => x.g === g + 100) && rng() < s * weight(st) * .5) {
+      const at = st + (rng() < .5 ? 2 : 3);
+      if (at < STEPS) live.forEach((x, i) => out.push({ id: `db${g}_${i}`, step: at, off: 0, p: x.p, len: .5, v: x.v * .55, g: g + 100, src: "double" }));
+    }
+  }
+  return out;
+}
+
+function pullHome(cur, orig, home, rng, t) {
+  const o = new Map(orig.map(x => [x.id, x])), have = new Set(cur.map(x => x.id)), out = [];
+  for (const x of cur) {
+    if (!o.has(x.id)) { if (rng() >= home * .5) out.push(x); }
+    else out.push(rng() < home * .5 ? { ...o.get(x.id) } : x);
+  }
+  for (const x of orig) if (!have.has(x.id) && (t.locks.has(x.id) || rng() < home * .5)) out.push({ ...x });
+  return out;
+}
+
+function computePasses(t) {
+  const res = []; let prev = t.orig;
+  for (let bar = 0; bar < BARS; bar++) {
+    let notes, pass = Math.floor(bar / t.ev.every), amt = amountAt(t, bar);
+    if (t.guide || !t.ev.on) { notes = t.orig; pass = 0; }
+    else if (t.freeze != null && bar > t.freeze) { notes = res[t.freeze].notes; pass = res[t.freeze].pass; amt = res[t.freeze].amt; }
+    else if (bar % t.ev.every !== 0) { notes = res[bar - 1].notes; pass = res[bar - 1].pass; amt = res[bar - 1].amt; }
+    else if (pass === 0 || amt <= 0) notes = t.orig;  // Amount 0 plays exactly what you wrote
+    else {
+      const rng = rngFor(t.ev.seed, pass, t.salt), wander = t.ev.mode === "wander";
+      let m = mutate(wander ? prev : t.orig, t, rng, amt, pass);
+      if (wander) m = pullHome(m, t.orig, t.ev.home / 100, rng, t);
+      notes = m.sort((a, b) => a.step - b.step || a.p - b.p);
+    }
+    prev = notes; res.push({ notes, pass, amt });
+  }
+  t.passes = res;
+}
+
+function diff(t, notes) {
+  const o = new Map(t.orig.map(x => [x.id, x])), have = new Set(notes.map(x => x.id));
+  const status = new Map(); let added = 0, changed = 0;
+  for (const x of notes) {
+    const y = o.get(x.id);
+    let s = "same";
+    if (!y) s = "added";
+    else if (y.step !== x.step || y.off !== x.off || y.p !== x.p || y.len !== x.len || Math.abs(y.v - x.v) > .14) s = "changed";
+    if (s === "added") added++; if (s === "changed") changed++;
+    status.set(x.id, s);
+  }
+  const dropped = t.orig.filter(x => !have.has(x.id));
+  return { status, dropped, added, changed };
+}
+
+// ---------- drawing ----------
+const css = getComputedStyle(document.documentElement);
+const C = k => css.getPropertyValue(k).trim();
+const col = { ink: C("--ink"), dim: C("--dim"), faint: C("--faint"), line: C("--line"), line2: C("--line2"), evo: C("--evo"), changed: C("--changed"), dropped: C("--dropped"), amber: C("--amber"), well: C("--well"), panel2: C("--panel2") };
+
+function fit(cv) {
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(r.width * d)), h = Math.max(1, Math.round(r.height * d));
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  const g = cv.getContext("2d"); g.setTransform(d, 0, 0, d, 0, 0); return [g, r.width, r.height];
+}
+function rows(t) {
+  if (t.kind === "drums") return t.lanes.length;
+  if (t.kind === "automation") return 1;
+  return t.range[1] - t.range[0];
+}
+const yOf = (t, x, h, pad) => {
+  if (t.kind === "drums") { const k = t.lanes.length; return pad + (x.p + .5) * (h - 2 * pad) / k; }
+  return h - pad - (x.p - t.range[0] + .5) * (h - 2 * pad) / rows(t);
+};
+
+function drawCurve(g, pts, w, h, pad, color, lw, dash) {
+  g.save(); g.strokeStyle = color; g.lineWidth = lw; if (dash) g.setLineDash(dash);
+  g.beginPath();
+  const X = st => pad + st / STEPS * (w - 2 * pad), Y = v => h - pad - v * (h - 2 * pad);
+  g.moveTo(X(0), Y(pts[pts.length - 1].v));
+  pts.forEach(p => g.lineTo(X(p.step), Y(p.v)));
+  g.lineTo(X(STEPS), Y(pts[pts.length - 1].v));
+  g.stroke(); g.restore();
+}
+
+function drawCell(cv, t, bar) {
+  const [g, w, h] = fit(cv); g.clearRect(0, 0, w, h);
+  const P = t.passes[bar], d = diff(t, P.notes), pad = 3;
+  g.fillStyle = t.guide ? "rgba(255,255,255,.02)" : hexA(t.color, .07); g.fillRect(0, 0, w, h);
+  if (t.kind === "automation") {
+    drawCurve(g, t.orig, w, h, pad, col.faint, 1, [2, 2]);
+    drawCurve(g, P.notes, w, h, pad, d.changed ? col.evo : col.ink, 1.5);
+    return d;
+  }
+  const sx = (w - 2 * pad) / STEPS, rh = Math.max(1.5, (h - 2 * pad) / rows(t));
+  g.strokeStyle = col.dropped; g.lineWidth = 1;
+  for (const x of d.dropped) { const y = yOf(t, x, h, pad); g.strokeRect(pad + x.step * sx + .5, y - rh / 2 + .5, Math.max(2, x.len * sx) - 1, Math.max(1.5, rh) - 1); }
+  for (const x of P.notes) {
+    const s = d.status.get(x.id), y = yOf(t, x, h, pad);
+    g.globalAlpha = .35 + .65 * x.v;
+    g.fillStyle = s === "added" ? col.evo : s === "changed" ? col.changed : (t.guide ? t.color : col.ink);
+    g.fillRect(pad + (x.step + x.off / 8) * sx, y - rh / 2, Math.max(2, x.len * sx - 1), Math.max(1.5, rh - (t.kind === "drums" ? 1.5 : 0)));
+  }
+  g.globalAlpha = 1;
+  return d;
+}
+
+function hexA(hex, a) { const v = parseInt(hex.slice(1), 16); return `rgba(${v >> 16 & 255},${v >> 8 & 255},${v & 255},${a})`; }
+
+// ---------- arrangement ----------
+const heads = document.getElementById("heads"), lanes = document.getElementById("lanes");
+let selTrack = tracks[1], selBar = 9;
+const cellEls = new Map();
+
+function buildArrangement() {
+  heads.innerHTML = '<div class="row r-ruler rulerhead"><span class="label">16 bars · 1-bar loops</span></div>';
+  lanes.querySelectorAll(".row").forEach(r => r.remove());
+  const ruler = document.createElement("div"); ruler.className = "row r-ruler";
+  const rg = document.createElement("div"); rg.className = "ruler"; rg.title = "Click to jump here";
+  for (let b = 0; b < BARS; b++) {
+    const d = document.createElement("div"); if (b % 4 === 0) d.className = "bar4";
+    d.innerHTML = (SECTIONS[b] ? `<span class="sec">${SECTIONS[b]}</span>` : "") + (b + 1);
+    d.addEventListener("click", () => seek(b)); rg.appendChild(d);
+  }
+  ruler.appendChild(rg); lanes.appendChild(ruler);
+
+  for (const t of tracks) {
+    const h = document.createElement("div");
+    h.className = "row head " + (t.guide ? "r-guide" : t.kind === "automation" ? "r-auto" : "r-clip");
+    h.dataset.track = t.id;
+    h.innerHTML = `<span class="cap" style="background:${t.color}${t.kind === "automation" ? ";opacity:.45" : ""}"></span>
+      <span class="nm"><b>${t.name}</b><small>${t.device}${t.guide ? " · as written" : ""}</small></span>
+      <span style="display:grid;gap:4px;justify-items:end">${t.guide ? "" : `<span class="tag ${t.ev.on ? "" : "off"}">${t.ev.on ? "EVOLVE" : "OFF"}</span>`}
+      ${t.kind === "automation" ? "" : `<span class="ms"><button aria-pressed="false" title="Mute" data-mute="${t.id}">M</button></span>`}</span>`;
+    if (!t.guide) h.addEventListener("click", e => { if (e.target.closest("[data-mute]")) return; select(t, selBar); });
+    heads.appendChild(h);
+    const r = document.createElement("div"); r.className = "row " + (t.guide ? "r-guide" : t.kind === "automation" ? "r-auto" : "r-clip");
+    const cs = document.createElement("div"); cs.className = "cells";
+    const list = [];
+    for (let b = 0; b < BARS; b++) {
+      const c = document.createElement("div"); c.className = "cell" + (b % 4 === 0 ? " bar4" : "");
+      c.innerHTML = '<canvas></canvas><span class="badge"></span>';
+      if (!t.guide) c.addEventListener("click", () => { document.getElementById("follow").checked = false; select(t, b); });
+      cs.appendChild(c); list.push(c);
+    }
+    cellEls.set(t.id, list);
+    r.appendChild(cs); lanes.appendChild(r);
+  }
+  heads.querySelectorAll("[data-mute]").forEach(b => b.addEventListener("click", () => {
+    const t = tracks.find(x => x.id === b.dataset.mute); t.muted = !t.muted; b.setAttribute("aria-pressed", String(t.muted));
+  }));
+  // Evolve amount lane for the selected clip
+  const ah = document.createElement("div"); ah.className = "row head r-amount";
+  ah.innerHTML = `<span class="cap" style="background:var(--evo);opacity:.5"></span><span class="nm"><b>Evolve amount</b><small id="amtname"></small></span><span></span>`;
+  heads.appendChild(ah);
+  const ar = document.createElement("div"); ar.className = "row r-amount"; ar.innerHTML = '<canvas class="amountcv" id="amountcv"></canvas>';
+  lanes.appendChild(ar);
+}
+
+function renderArrangement() {
+  for (const t of tracks) {
+    const list = cellEls.get(t.id);
+    list.forEach((c, b) => {
+      const d = drawCell(c.querySelector("canvas"), t, b);
+      c.classList.toggle("sel", t === selTrack && b === selBar);
+      c.classList.toggle("frozen", t.freeze != null && b > t.freeze);
+      const P = t.passes[b], fresh = b % t.ev.every === 0 && (t.freeze == null || b <= t.freeze);
+      c.querySelector(".badge").textContent = !t.guide && t.ev.on && fresh && P.pass > 0 && (d.added + d.changed + d.dropped.length) ? "●" : "";
+    });
+  }
+  heads.querySelectorAll(".head[data-track]").forEach(h => h.classList.toggle("sel", h.dataset.track === selTrack.id));
+  heads.querySelectorAll(".head[data-track]").forEach(h => {
+    const t = tracks.find(x => x.id === h.dataset.track), tag = h.querySelector(".tag");
+    if (tag) { tag.textContent = t.ev.on ? "EVOLVE" : "OFF"; tag.classList.toggle("off", !t.ev.on); }
+  });
+  drawAmount();
+}
+
+function drawAmount() {
+  const cv = document.getElementById("amountcv"), [g, w, h] = fit(cv), t = selTrack, pad = 6;
+  document.getElementById("amtname").textContent = t.name + (t.ev.auto ? " · automated" : " · fixed");
+  g.clearRect(0, 0, w, h);
+  const X = b => b / BARS * w, Y = v => h - pad - v / .5 * (h - 2 * pad);
+  g.strokeStyle = col.line; g.lineWidth = 1;
+  [.1, .2, .3, .4].forEach(v => { g.beginPath(); g.moveTo(0, Y(v)); g.lineTo(w, Y(v)); g.stroke(); });
+  for (let b = 1; b < BARS; b++) { g.strokeStyle = b % 4 ? col.line : col.line2; g.beginPath(); g.moveTo(X(b), 0); g.lineTo(X(b), h); g.stroke(); }
+  g.font = "500 9.5px JetBrains Mono, monospace"; g.fillStyle = col.faint;
+  [.2, .4].forEach(v => g.fillText(Math.round(v * 100) + "%", 4, Y(v) - 3));
+  const pts = []; for (let i = 0; i <= 160; i++) { const b = i / 10; pts.push([X(b), Y(clamp(amountAt(t, Math.min(b, BARS - .001)), 0, .5))]); }
+  if (!t.ev.on) { g.fillStyle = col.faint; g.fillText("Evolve is off for this clip", 40, h / 2 + 3); return; }
+  g.beginPath(); g.moveTo(pts[0][0], h); pts.forEach(p => g.lineTo(p[0], p[1])); g.lineTo(w, h); g.closePath();
+  g.fillStyle = "rgba(183,156,255,.13)"; g.fill();
+  g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.strokeStyle = col.evo; g.lineWidth = 1.6; g.stroke();
+  if (t.ev.auto) {
+    g.fillStyle = col.evo;
+    t.ev.lane.forEach(([b, v]) => { if (b > 0 && b < BARS) { g.beginPath(); g.arc(X(b), Y(v), 3, 0, Math.PI * 2); g.fill(); } });
+  }
+}
+
+// ---------- the Evolve strip ----------
+const strip = document.getElementById("strip");
+function renderStrip() {
+  const t = selTrack, ev = t.ev, R = RULES[t.kind];
+  strip.innerHTML = `
+    <div class="cardhead">
+      <span style="width:10px;height:10px;border-radius:3px;background:${t.color}"></span>
+      <h2>${t.name}<small>${t.device}</small></h2>
+      <button class="switch" role="switch" id="evon" aria-checked="${ev.on}"><span class="t"></span>Evolve</button>
+    </div>
+    <div class="reads">Reads as <span class="chip0">${KIND_NAME[t.kind]}</span><span>${KIND_WHY[t.kind]}${t.kind === "bass" || t.kind === "chords" ? " · stays in A minor" : ""}</span></div>
+    <fieldset id="evfields" ${ev.on ? "" : "disabled"}>
+      <div class="ctl"><span>Amount</span><input type="range" id="amount" min="0" max="60" value="${ev.amount}" ${ev.auto ? "disabled" : ""}><output id="amountv">${ev.auto ? "lane" : ev.amount + "%"}</output>
+        <label class="check note" style="margin-top:0"><input type="checkbox" id="auto" ${ev.auto ? "checked" : ""}> Follow the amount lane in the arrangement</label></div>
+      <div class="ctl"><span>Every</span><select id="every">${[1, 2, 4, 8].map(v => `<option value="${v}" ${v === ev.every ? "selected" : ""}>${v === 1 ? "every pass" : v + " passes"}</option>`).join("")}</select><span></span></div>
+      <div class="ctl"><span>Mode</span><span class="seg" id="mode"><button data-m="vary" aria-pressed="${ev.mode === "vary"}">Vary</button><button data-m="wander" aria-pressed="${ev.mode === "wander"}">Wander</button></span><span></span>
+        <span class="note">${ev.mode === "vary" ? "Each pass is a fresh variation of what you wrote, so it never strays far." : "Each pass changes the one before, so the loop slowly travels."}</span></div>
+      <div class="ctl" ${ev.mode === "wander" ? "" : 'style="opacity:.4"'}><span>Home</span><input type="range" id="home" min="0" max="100" value="${ev.home}" ${ev.mode === "wander" ? "" : "disabled"}><output id="homev">${ev.home}%</output>
+        <span class="note">How hard it pulls back to what you wrote. 0% roams freely; 100% comes back every pass.</span></div>
+      <div class="ctl"><span>Seed</span><span class="seedrow"><output id="seedv">${ev.seed}</output><button class="btn evo" id="dice" title="Same seed, same passes. Roll for a new set.">🎲 New seed</button></span><span></span></div>
+      <div style="display:grid;gap:8px"><span class="label">What can change</span>
+        <div class="rules">${R.map(([k, name, desc]) => `<button class="rule" data-r="${k}" aria-pressed="${ev.rules.has(k)}"><b>${name}</b><small>${desc}</small></button>`).join("")}</div></div>
+    </fieldset>
+    <p class="hint">${t.kind === "automation"
+      ? "<b>Automation evolves gently.</b> The filter on the dub chord opens a little earlier or later and a little further each pass."
+      : t.kind === "bass"
+        ? "<b>Basslines stay close to home.</b> The first note of the phrase never moves, notes only step to neighbours in the key, and Home defaults higher than for drums."
+        : t.kind === "chords"
+          ? "<b>Chords keep their root.</b> Voicings flip, chord tones come and go, and the stab is sometimes answered by a shorter echo."
+          : "<b>Strong beats are protected.</b> Steps on the beat change far less than off-beats and 16ths. The open hats are locked, so they always play."}</p>`;
+  document.getElementById("evon").addEventListener("click", () => { ev.on = !ev.on; changed(); });
+  if (!ev.on) return;
+  document.getElementById("amount").addEventListener("input", e => { ev.amount = +e.target.value; document.getElementById("amountv").textContent = ev.amount + "%"; changed(false); });
+  document.getElementById("auto").addEventListener("change", e => {
+    ev.auto = e.target.checked;
+    if (ev.auto && !ev.lane) ev.lane = [[0, .05], [4, .05], [8, .4], [8, 0], [12, 0], [12, .25], [16, .25]];
+    changed();
+  });
+  document.getElementById("every").addEventListener("change", e => { ev.every = +e.target.value; changed(); });
+  document.querySelectorAll("#mode button").forEach(b => b.addEventListener("click", () => { ev.mode = b.dataset.m; changed(); }));
+  document.getElementById("home").addEventListener("input", e => { ev.home = +e.target.value; document.getElementById("homev").textContent = ev.home + "%"; changed(false); });
+  document.getElementById("dice").addEventListener("click", () => { ev.seed = 1 + Math.floor(Math.random() * 9999); changed(); });
+  document.querySelectorAll(".rule").forEach(b => b.addEventListener("click", () => {
+    const k = b.dataset.r; ev.rules.has(k) ? ev.rules.delete(k) : ev.rules.add(k); changed();
+  }));
+}
+
+// ---------- the pass view ----------
+const pv = document.getElementById("pv");
+let pvHits = [];
+function renderPass() {
+  const t = selTrack, P = t.passes[selBar], d = diff(t, P.notes);
+  const fresh = selBar % t.ev.every === 0;
+  document.getElementById("pvtitle").textContent = `${t.name} · bar ${selBar + 1}`;
+  const parts = [];
+  if (!t.ev.on) parts.push("Evolve off · as written");
+  else if (t.freeze != null && selBar > t.freeze) parts.push(`frozen at bar ${t.freeze + 1}`);
+  else if (P.pass === 0 || P.amt <= 0) parts.push(P.pass === 0 ? "pass 1 · as written" : `pass ${P.pass + 1} · amount 0%, as written`);
+  else parts.push(`pass ${P.pass + 1}${fresh ? "" : " (held)"} · amount ${Math.round(P.amt * 100)}%`);
+  if (t.kind === "automation") { if (d.changed) parts.push(`<em style="color:var(--changed)">${d.changed} points moved</em>`); }
+  else {
+    if (d.added) parts.push(`<em style="color:var(--evo)">${d.added} added</em>`);
+    if (d.changed) parts.push(`<em style="color:var(--changed)">${d.changed} changed</em>`);
+    if (d.dropped.length) parts.push(`${d.dropped.length} sitting out`);
+    if (t.locks.size) parts.push(`${t.locks.size} locked`);
+  }
+  document.getElementById("pvsum").innerHTML = parts.join(" · ");
+  document.getElementById("legend").hidden = t.kind === "automation";
+  document.getElementById("freeze").textContent = t.freeze != null ? `Evolve again after bar ${t.freeze + 1}` : "Freeze from here";
+  document.getElementById("freeze").disabled = !t.ev.on;
+  document.getElementById("keep").disabled = !t.ev.on || (d.added + d.changed + d.dropped.length) === 0;
+  document.getElementById("clearlocks").disabled = t.locks.size === 0;
+  document.getElementById("pvhint").innerHTML = t.kind === "automation"
+    ? "Dashed: the lane as you drew it. Solid: this pass. <b>Keep this pass</b> makes this the lane; <b>Freeze from here</b> stops it changing after this bar."
+    : "<b>Click a note to lock it</b> (Alt-click in the DAW); a locked note always plays as written. The strip under the grid shows how likely each step is to change. <b>Keep this pass</b> makes it the clip; <b>Freeze from here</b> stops changes after this bar.";
+
+  const [g, w, h] = fit(pv); g.clearRect(0, 0, w, h);
+  const left = t.kind === "drums" ? 78 : 40, top = 10, bot = t.kind === "automation" ? 10 : 30, gw = w - left - 8, gh = h - top - bot;
+  const sx = gw / STEPS;
+  // grid
+  for (let st = 0; st <= STEPS; st++) {
+    g.strokeStyle = st % 4 === 0 ? col.line2 : col.line; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(left + st * sx + .5, top); g.lineTo(left + st * sx + .5, top + gh); g.stroke();
+  }
+  g.font = "500 10px JetBrains Mono, monospace";
+  pvHits = [];
+  if (t.kind === "automation") {
+    g.fillStyle = col.faint; g.fillText("open", 4, top + 10); g.fillText("closed", 4, top + gh - 2);
+    const sub = (pts, color, lw, dash) => {
+      g.save(); g.translate(left, top); drawCurve(g, pts, gw, gh, 0, color, lw, dash); g.restore();
+    };
+    sub(t.orig, col.faint, 1.2, [4, 4]);
+    sub(P.notes, col.evo, 2.2);
+    g.fillStyle = col.evo;
+    P.notes.forEach(p => { g.beginPath(); g.arc(left + p.step / STEPS * gw, top + gh - p.v * gh, 4, 0, Math.PI * 2); g.fill(); });
+  } else {
+    const k = rows(t), rh = gh / k;
+    for (let r = 0; r < k; r++) {
+      if (t.kind === "drums") {
+        g.fillStyle = r % 2 ? "rgba(255,255,255,.015)" : "transparent"; g.fillRect(left, top + r * rh, gw, rh);
+        g.fillStyle = col.dim; g.fillText(t.lanes[r], 6, top + r * rh + rh / 2 + 3.5);
+      } else {
+        const p = t.range[0] + (k - 1 - r);
+        if (!inKey(p)) { g.fillStyle = "rgba(0,0,0,.28)"; g.fillRect(left, top + r * rh, gw, rh); }
+        if (p % 12 === 9 || p % 12 === 0) { g.fillStyle = p % 12 === 9 ? col.dim : col.faint; g.fillText(noteName(p), 4, top + r * rh + rh / 2 + 3.5); }
+      }
+    }
+    const nb = (x, fill, stroke, dash) => {
+      const y = top + (t.kind === "drums" ? (x.p + .5) * rh : (t.range[1] - 1 - x.p + .5) * rh);
+      const bx = left + (x.step + x.off / 8) * sx + 1, bw = Math.max(5, x.len * sx - 2), bh = Math.max(5, rh - (t.kind === "drums" ? 8 : 1));
+      if (fill) { g.globalAlpha = .3 + .7 * x.v; g.fillStyle = fill; g.fillRect(bx, y - bh / 2, bw, bh); g.globalAlpha = 1; }
+      if (stroke) { g.save(); g.strokeStyle = stroke; g.lineWidth = 1.3; if (dash) g.setLineDash(dash); g.strokeRect(bx + .5, y - bh / 2 + .5, bw - 1, bh - 1); g.restore(); }
+      return [bx, y - bh / 2, bw, bh];
+    };
+    for (const x of d.dropped) pvHits.push({ id: x.id, box: nb(x, null, col.dropped, [3, 3]) });
+    // where the written note was, when it moved
+    for (const x of P.notes) { const o = t.orig.find(y => y.id === x.id); if (o && d.status.get(x.id) === "changed" && (o.step !== x.step || o.p !== x.p || o.off !== x.off)) nb(o, null, "rgba(110,198,255,.35)", [2, 3]); }
+    for (const x of P.notes) {
+      const s = d.status.get(x.id);
+      const box = nb(x, s === "added" ? col.evo : s === "changed" ? col.changed : col.ink, null);
+      if (t.locks.has(x.id) || t.protect.has(x.id)) { g.font = "10px sans-serif"; g.fillText(t.locks.has(x.id) ? "🔒" : "◆", box[0] + 1, box[1] - 2 < top + 8 ? box[1] + box[3] + 10 : box[1] - 2); g.font = "500 10px JetBrains Mono, monospace"; }
+      if (s !== "added") pvHits.push({ id: x.id, box });
+    }
+    // change likelihood per step
+    const by = top + gh + 8, bh = 14;
+    for (let st = 0; st < STEPS; st++) {
+      const wv = weight(st);
+      g.fillStyle = hexA("#b79cff", .15 + .55 * wv * (t.ev.on ? 1 : .3));
+      g.fillRect(left + st * sx + 2, by + bh * (1 - wv), sx - 4, bh * wv);
+    }
+    g.fillStyle = col.faint; g.fillText("change", 4, by + 11);
+  }
+  // playhead in the pass view
+  if (playing && curBar === selBar) {
+    const x = left + curStepF * sx;
+    g.strokeStyle = col.amber; g.lineWidth = 2; g.beginPath(); g.moveTo(x, top); g.lineTo(x, top + gh); g.stroke();
+  }
+}
+
+pv.addEventListener("click", e => {
+  const t = selTrack; if (t.kind === "automation") return;
+  const r = pv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+  const hit = pvHits.find(({ box: [x, y, w, h] }) => mx >= x - 2 && mx <= x + w + 2 && my >= y - 3 && my <= y + h + 3);
+  if (!hit) return;
+  if (t.protect.has(hit.id)) { toast("That note starts the phrase, so it never moves.", null); return; }
+  t.locks.has(hit.id) ? t.locks.delete(hit.id) : t.locks.add(hit.id);
+  changed();
+});
+
+function select(t, bar) { selTrack = t; selBar = bar; renderStrip(); renderArrangement(); renderPass(); }
+function changed(full = true) {
+  computePasses(selTrack);
+  if (full) renderStrip();
+  renderArrangement(); renderPass();
+}
+
+document.getElementById("clearlocks").addEventListener("click", () => { selTrack.locks.clear(); changed(); });
+document.getElementById("freeze").addEventListener("click", () => {
+  const t = selTrack; t.freeze = t.freeze != null ? null : selBar; changed();
+  if (t.freeze != null) toast(`${t.name} now holds bar ${selBar + 1}'s pass to the end.`, null);
+});
+document.getElementById("keep").addEventListener("click", () => {
+  const t = selTrack, before = t.orig, beforeLocks = new Set(t.locks), P = t.passes[selBar];
+  t.orig = P.notes.map(x => ({ ...x, id: x.src === "orig" ? x.id : "k" + (uid++), src: "orig", g: x.g >= 100 ? x.g - 50 : x.g }));
+  t.freeze = null;
+  changed();
+  toast(`Bar ${selBar + 1}'s pass is now the ${t.name} clip. Evolve carries on from it.`, () => { t.orig = before; t.locks = beforeLocks; changed(); });
+});
+
+let toastTimer;
+function toast(msg, undo) {
+  const el = document.getElementById("toast"), ub = document.getElementById("toastundo");
+  document.getElementById("toastmsg").textContent = msg; el.hidden = false; ub.hidden = !undo;
+  ub.onclick = () => { if (undo) undo(); el.hidden = true; };
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 5000);
+}
+
+// ---------- audio ----------
+let ac = null, master, chordBus, chordFilter, noiseBuf, playing = false, timer = null;
+let nextTime = 0, schedBar = 0, schedStep = 0, curBar = 0, curStepF = 0;
+const uiQueue = [];
+
+function initAudio() {
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  const comp = ac.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 3;
+  master = ac.createGain(); master.gain.value = .55; master.connect(comp); comp.connect(ac.destination);
+  noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+  const d = noiseBuf.getChannelData(0), r = mulberry(99); for (let i = 0; i < d.length; i++) d[i] = r() * 2 - 1;
+  chordFilter = ac.createBiquadFilter(); chordFilter.type = "lowpass"; chordFilter.Q.value = 3; chordFilter.frequency.value = 600;
+  chordBus = ac.createGain(); chordBus.gain.value = .5; chordBus.connect(chordFilter); chordFilter.connect(master);
+  const delay = ac.createDelay(2); delay.delayTime.value = STEP_DUR * 3;
+  const fb = ac.createGain(); fb.gain.value = .48; const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2200;
+  const hp = ac.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 350;
+  const send = ac.createGain(); send.gain.value = .45;
+  chordFilter.connect(send); send.connect(delay); delay.connect(lp); lp.connect(hp); hp.connect(fb); fb.connect(delay); hp.connect(master);
+}
+const cutoff = v => 180 * Math.pow(2, v * 5.6);
+
+function env(g, t, a, peak, dec) { g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(.0005, t + a + dec); }
+function playNote(tr, x, t) {
+  const v = x.v;
+  if (tr.id === "kick") {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(46, t + .07);
+    env(g, t, .002, .95 * v, .38); o.connect(g); g.connect(master); o.start(t); o.stop(t + .45);
+  } else if (tr.kind === "drums") {
+    const lane = x.p, g = ac.createGain();
+    if (lane === 2) {
+      const o = ac.createOscillator(), bp = ac.createBiquadFilter(); o.type = "triangle"; o.frequency.value = 1650;
+      bp.type = "bandpass"; bp.frequency.value = 1900; bp.Q.value = 6;
+      env(g, t, .001, .5 * v, .04); o.connect(bp); bp.connect(g); g.connect(master); o.start(t); o.stop(t + .08);
+    } else {
+      const s = ac.createBufferSource(), f = ac.createBiquadFilter(); s.buffer = noiseBuf;
+      if (lane === 3) { f.type = "bandpass"; f.frequency.value = 5200; f.Q.value = 1.2; env(g, t, .012, .32 * v, .06); }
+      else { f.type = "highpass"; f.frequency.value = lane === 1 ? 7000 : 8500; env(g, t, .001, (lane === 1 ? .22 : .26) * v, lane === 1 ? .2 : .035); }
+      s.connect(f); f.connect(g); g.connect(master); s.start(t, Math.random() * .5); s.stop(t + .3);
+    }
+  } else if (tr.kind === "bass") {
+    const o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain(), dur = x.len * STEP_DUR;
+    o.type = "sawtooth"; o.frequency.value = 440 * Math.pow(2, (x.p - 69) / 12);
+    f.type = "lowpass"; f.Q.value = 7; f.frequency.setValueAtTime(260 + 900 * v, t); f.frequency.exponentialRampToValueAtTime(150, t + dur + .05);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.42 * v, t + .004); g.gain.setValueAtTime(.42 * v, t + dur); g.gain.linearRampToValueAtTime(0, t + dur + .03);
+    o.connect(f); f.connect(g); g.connect(master); o.start(t); o.stop(t + dur + .05);
+  } else if (tr.kind === "chords") {
+    const dur = x.len * STEP_DUR, g = ac.createGain();
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.16 * v, t + .004); g.gain.exponentialRampToValueAtTime(.05 * v, t + dur); g.gain.linearRampToValueAtTime(0, t + dur + .04);
+    for (const det of [-8, 8]) {
+      const o = ac.createOscillator(); o.type = "sawtooth"; o.frequency.value = 440 * Math.pow(2, (x.p - 69) / 12); o.detune.value = det;
+      o.connect(g); o.start(t); o.stop(t + dur + .06);
+    }
+    g.connect(chordBus);
+  }
+}
+
+function scheduleStep(bar, st, t) {
+  for (const tr of tracks) {
+    const notes = tr.passes[bar].notes;
+    if (tr.kind === "automation") {
+      if (st === 0 && !tracks.find(x => x.id === "chord").muted) {
+        const f = chordFilter.frequency, pts = notes;
+        f.cancelScheduledValues(t);
+        f.setValueAtTime(cutoff(pts[pts.length - 1].v * .6 + pts[0].v * .4), t);
+        pts.forEach(p => f.linearRampToValueAtTime(cutoff(p.v), t + p.step * STEP_DUR + .001));
+      }
+      continue;
+    }
+    if (tr.muted) continue;
+    for (const x of notes) if (x.step === st) playNote(tr, x, t + x.off / 8 * STEP_DUR);
+  }
+  uiQueue.push({ t, bar, st });
+}
+
+function tick() {
+  while (nextTime < ac.currentTime + .12) {
+    scheduleStep(schedBar, schedStep, nextTime);
+    nextTime += STEP_DUR; schedStep++;
+    if (schedStep === STEPS) { schedStep = 0; schedBar = (schedBar + 1) % BARS; }
+  }
+}
+
+let lastDrawnBar = -1;
+function frame() {
+  if (!playing) return;
+  const now = ac.currentTime;
+  while (uiQueue.length > 1 && uiQueue[1].t <= now) uiQueue.shift();
+  const q = uiQueue[0];
+  if (q && q.t <= now) {
+    curBar = q.bar; curStepF = q.st + clamp((now - q.t) / STEP_DUR, 0, 1);
+    const lanesW = lanes.getBoundingClientRect().width;
+    const ph = document.getElementById("playhead");
+    ph.style.opacity = 1; ph.style.left = ((curBar + curStepF / STEPS) / BARS * lanesW) + "px";
+    document.getElementById("pos").textContent = `${curBar + 1}.${Math.floor(q.st / 4) + 1}.${q.st % 4 + 1}`;
+    if (document.getElementById("follow").checked && curBar !== selBar) { selBar = curBar; renderArrangement(); }
+    if (curBar === selBar || lastDrawnBar !== curBar) renderPass();
+    lastDrawnBar = curBar;
+  }
+  requestAnimationFrame(frame);
+}
+
+function start(bar) {
+  if (!ac) initAudio();
+  ac.resume();
+  playing = true; schedBar = bar; schedStep = 0; nextTime = ac.currentTime + .06; uiQueue.length = 0;
+  clearInterval(timer); timer = setInterval(tick, 25); tick();
+  document.getElementById("play").setAttribute("aria-pressed", "true"); document.getElementById("play").textContent = "■ Stop";
+  requestAnimationFrame(frame);
+}
+function stop() {
+  playing = false; clearInterval(timer);
+  document.getElementById("play").setAttribute("aria-pressed", "false"); document.getElementById("play").textContent = "▶ Play";
+  document.getElementById("playhead").style.opacity = 0; document.getElementById("pos").textContent = "1.1.1";
+  renderPass();
+}
+function seek(bar) {
+  selBar = bar; renderArrangement(); renderPass();
+  if (playing) { stop(); start(bar); }
+  document.getElementById("pos").textContent = `${bar + 1}.1.1`;
+}
+document.getElementById("play").addEventListener("click", () => {
+  if (playing) stop(); else { document.getElementById("follow").checked = true; start(0); }
+});
+
+// ---------- boot ----------
+tracks.forEach(computePasses);
+buildArrangement();
+select(selTrack, selBar);
+let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { renderArrangement(); renderPass(); }, 80); });
+document.fonts && document.fonts.ready.then(() => { renderArrangement(); renderPass(); });
+</script>

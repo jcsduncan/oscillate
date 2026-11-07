@@ -1,0 +1,1322 @@
+<title>Creative Tools</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Creative tools mockup: Nova Arp rebuilt (Nova graphite with per-module accents), Groove from a record and
+   Arrange from a loop (the DAW shell's graphite). A deliberate single dark look, like the DAW itself.
+   Project: "Funky", 126 BPM, A minor. Everything that plays is seeded, so the same settings always sound the same. */
+:root{
+  color-scheme:dark;
+  /* Nova */
+  --bg:#0a0a0b; --win:#0f1011; --rail:#0c0c0d; --card:#151618; --card2:#1b1c1f; --well:#08090a;
+  --line:#232427; --line2:#303236; --text:#ececee; --dim:#9a9ca3; --faint:#63656c;
+  --cy:#46d6ff; --vi:#a98bff; --am:#f5b14c; --pk:#ff6fb5; --gr:#5fe3a1; --rd:#ff5d6c;
+  /* shell */
+  --panel:#11151b; --panel2:#151b22; --swell:#080a0d; --sline:#222a33; --sline2:#2f3943; --ink:#e6ebf0;
+  --sdim:#97a3ae; --sfaint:#5d6873; --teal:#5fe0bf; --blue:#6aa7ff; --kick:#f08a5d;
+  --mono:"JetBrains Mono",ui-monospace,monospace; --sans:Inter,"Noto Sans",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;margin:0;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:26px 70px}
+button{font:inherit;color:inherit}
+button:focus-visible,[tabindex]:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--cy);outline-offset:2px}
+.wrap{max-width:1440px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header.intro{display:flex;flex-wrap:wrap;gap:14px 40px;align-items:flex-end;justify-content:space-between}
+header.intro h1{font-weight:800;letter-spacing:-.02em;font-size:28px;margin:0;text-wrap:balance}
+header.intro h1 span{background:linear-gradient(90deg,var(--cy),var(--vi) 55%,var(--pk));-webkit-background-clip:text;background-clip:text;color:transparent}
+header.intro p{color:var(--dim);margin:6px 0 0;max-width:72ch;line-height:1.55}
+header.intro p b{color:var(--text);font-weight:600}
+.proj{display:flex;gap:10px;align-items:center;font:600 11px var(--mono);letter-spacing:.08em;color:var(--dim)}
+.proj i{width:8px;height:8px;border-radius:50%;background:var(--gr);box-shadow:0 0 8px var(--gr)}
+nav.tabs{display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid var(--line);padding-bottom:10px}
+nav.tabs a{color:var(--dim);text-decoration:none;font:600 12px var(--mono);letter-spacing:.08em;padding:9px 14px;border-radius:8px;border:1px solid var(--line);background:var(--rail);display:flex;gap:8px;align-items:center}
+nav.tabs a i{width:8px;height:8px;border-radius:50%;background:var(--c)}
+nav.tabs a:hover{color:var(--text)}
+nav.tabs a.on{color:var(--bg);background:var(--text);border-color:var(--text)}
+.lede{color:var(--dim);max-width:92ch;line-height:1.55;margin:0}
+.lede b{color:var(--text);font-weight:600}
+.tag{display:inline-block;font:600 9.5px var(--mono);letter-spacing:.06em;padding:2px 6px;border-radius:4px;white-space:nowrap;vertical-align:middle}
+.tag.new{color:var(--gr);background:rgba(95,227,161,.08);border:1px solid rgba(95,227,161,.28)}
+.tag.ext{color:var(--cy);background:rgba(70,214,255,.07);border:1px solid rgba(70,214,255,.26)}
+.tag.rep{color:var(--am);background:rgba(245,177,76,.07);border:1px solid rgba(245,177,76,.28)}
+.tag.keep{color:var(--dim);border:1px solid var(--line2)}
+.toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;
+  background:var(--card2);border:1px solid var(--line2);border-radius:10px;padding:10px 16px;font-weight:500;box-shadow:0 14px 40px rgba(0,0,0,.6);transition:.25s;max-width:calc(100% - 32px);z-index:99}
+.toast.show{opacity:1;transform:translateX(-50%)}
+.toast b{color:var(--gr)}
+
+/* ---------- Nova arp window ---------- */
+.stage{position:relative;border:1px dashed var(--line);border-radius:12px;padding:14px;overflow:auto}
+.stage .hint{position:absolute;top:-9px;left:16px;font:600 10px var(--mono);letter-spacing:.1em;color:var(--faint);background:var(--bg);padding:0 8px}
+.nova{font-size:12px;min-width:980px;background:var(--win);border:1px solid var(--line2);border-radius:11px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6);display:flex;flex-direction:column}
+.nbar{display:flex;align-items:center;gap:10px;padding:7px 11px;border-bottom:1px solid var(--line);background:var(--rail)}
+.word{font-weight:300;letter-spacing:.4em;font-size:18px;background:linear-gradient(90deg,#9fe9ff,var(--cy),var(--vi));-webkit-background-clip:text;background-clip:text;color:transparent}
+.crumb{font:600 10px var(--mono);letter-spacing:.14em;color:var(--am);border:1px solid rgba(245,177,76,.35);border-radius:4px;padding:3px 6px}
+.pbox{display:flex;align-items:center;background:var(--well);border:1px solid var(--line2);border-radius:6px;flex:0 1 300px;min-width:0}
+.pbox button{all:unset;cursor:pointer;color:var(--dim);padding:6px 9px}
+.pbox button:hover{color:var(--text);background:var(--card2)}
+.pname{flex:1;min-width:0;padding:4px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;font-size:13px}
+.pname small{color:var(--faint);font:500 9px var(--mono);margin-left:7px;letter-spacing:.08em}
+.tbtn{all:unset;cursor:pointer;font:600 9.5px var(--mono);letter-spacing:.08em;padding:7px 10px;border-radius:6px;border:1px solid var(--line2);color:var(--dim);white-space:nowrap}
+.tbtn:hover{color:var(--text)}
+.tbtn.on{color:var(--bg);background:var(--text);border-color:var(--text)}
+.tbtn.go.on{background:var(--gr);border-color:var(--gr)}
+.tbtn.fill.on{background:var(--pk);border-color:var(--pk)}
+.spacer{flex:1}
+.keys{display:flex;align-items:center;gap:6px;font:600 9px var(--mono);letter-spacing:.06em;color:var(--gr);padding:6px 9px;border-radius:20px;background:rgba(95,227,161,.07);border:1px solid rgba(95,227,161,.25);white-space:nowrap}
+.keys.typing{color:var(--am);background:rgba(245,177,76,.07);border-color:rgba(245,177,76,.3)}
+.keys i{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 7px currentColor}
+.varbadge{font:700 9px var(--mono);letter-spacing:.1em;color:var(--faint);padding:5px 7px;border-radius:4px;border:1px solid var(--line2)}
+.varbadge.on{color:var(--bg);background:var(--vi);border-color:var(--vi)}
+.abody{display:flex;min-height:0}
+.lib{flex:0 0 220px;border-right:1px solid var(--line);background:var(--rail);display:flex;flex-direction:column;min-width:0}
+.lsearch{display:flex;gap:6px;padding:8px;border-bottom:1px solid var(--line)}
+.lsearch input{flex:1;min-width:0;background:var(--well);border:1px solid var(--line2);border-radius:6px;color:var(--text);font:inherit;padding:6px 8px;outline:none}
+.lsearch input:focus{border-color:var(--am)}
+.lsearch kbd{font:600 9px var(--mono);color:var(--faint);border:1px solid var(--line2);border-radius:4px;padding:4px 6px;align-self:center}
+.cats{display:flex;flex-wrap:wrap;gap:4px;padding:7px 8px;border-bottom:1px solid var(--line)}
+.chip{all:unset;cursor:pointer;font:600 8.5px var(--mono);letter-spacing:.05em;padding:4px 7px;border-radius:12px;border:1px solid var(--line2);color:var(--dim)}
+.chip.on{color:var(--bg);background:var(--c,var(--text));border-color:var(--c,var(--text))}
+.plist{flex:1;overflow:auto;outline:none;max-height:640px}
+.plist:focus{box-shadow:inset 2px 0 0 var(--gr)}
+.prow{display:grid;grid-template-columns:7px 1fr auto;gap:8px;align-items:center;padding:5px 9px;cursor:pointer}
+.prow:hover{background:var(--card)} .prow.sel{background:var(--card2)}
+.prow .d{width:7px;height:7px;border-radius:50%;background:var(--c)}
+.prow .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow .c{font:500 8.5px var(--mono);color:var(--faint)}
+.pgroup{font:700 8.5px var(--mono);letter-spacing:.14em;color:var(--faint);padding:9px 9px 3px}
+.libfoot{border-top:1px solid var(--line);padding:7px 9px;font:500 9px var(--mono);color:var(--faint);line-height:1.6}
+.amain{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px;padding:10px}
+.mcard{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:10px;display:flex;flex-direction:column;gap:8px;--c:var(--am)}
+.mhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mhead h3{margin:0;font:700 10px var(--mono);letter-spacing:.14em;color:var(--c)}
+.mhead .led{width:7px;height:7px;border-radius:50%;background:var(--c);box-shadow:0 0 7px var(--c)}
+.mhead .sub{color:var(--faint);font-size:11px}
+.modes{display:flex;flex-wrap:wrap;gap:10px 16px}
+.mgroup{display:flex;flex-direction:column;gap:4px}
+.mgroup>span{font:700 8.5px var(--mono);letter-spacing:.14em;color:var(--faint)}
+.mgroup>div{display:flex;gap:3px;flex-wrap:wrap}
+.mode{all:unset;cursor:pointer;font:600 10px var(--sans);padding:5px 8px;border-radius:5px;border:1px solid var(--line2);color:var(--dim);position:relative}
+.mode:hover{color:var(--text)}
+.mode.on{color:var(--bg);background:var(--am);border-color:var(--am)}
+.mode.nw::after{content:"";position:absolute;top:2px;right:2px;width:4px;height:4px;border-radius:50%;background:var(--gr)}
+.euc{display:none;gap:12px;align-items:center;padding:6px 8px;border-radius:6px;background:var(--well);border:1px solid var(--line)}
+.euc.on{display:flex}
+.ctrls{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px 14px;align-items:end}
+.ctl{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ctl label{display:flex;justify-content:space-between;gap:6px;font:600 8.5px var(--mono);letter-spacing:.1em;color:var(--faint)}
+.ctl label b{color:var(--text);font-weight:600;letter-spacing:0}
+.ctl .tags{display:flex;gap:4px;flex-wrap:wrap}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:18px;background:transparent;margin:0}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(90deg,var(--c,var(--am)) var(--p,50%),var(--line2) var(--p,50%))}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:linear-gradient(90deg,var(--c,var(--am)) var(--p,50%),var(--line2) var(--p,50%))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--text);margin-top:-4px;border:0}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--text);border:0}
+select{background:var(--well);border:1px solid var(--line2);border-radius:5px;color:var(--text);font:500 11px var(--sans);padding:5px 6px;min-width:0;max-width:100%}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:5px;overflow:hidden;flex-wrap:wrap}
+.seg button{all:unset;cursor:pointer;font:600 9.5px var(--mono);padding:5px 7px;color:var(--faint);border-left:1px solid var(--line)}
+.seg button:first-child{border-left:0}
+.seg button.on{background:var(--card2);color:var(--text)}
+.tog{all:unset;cursor:pointer;font:600 9.5px var(--mono);letter-spacing:.06em;padding:5px 8px;border-radius:5px;border:1px solid var(--line2);color:var(--faint)}
+.tog.on{color:var(--bg);background:var(--c,var(--gr));border-color:var(--c,var(--gr))}
+.mut{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.seed{font:600 11px var(--mono);color:var(--vi);min-width:54px;text-align:center}
+.mutbtn{all:unset;cursor:pointer;font:700 10px var(--mono);letter-spacing:.12em;padding:7px 11px;border-radius:6px;color:var(--bg);background:linear-gradient(90deg,var(--vi),var(--pk))}
+/* lanes */
+.lanes{display:flex;flex-direction:column;gap:3px}
+.lane{display:grid;grid-template-columns:170px 1fr;gap:8px;align-items:stretch;--c:var(--am)}
+.lhead{display:flex;align-items:center;gap:6px;padding:0 6px;border-radius:5px;background:var(--card2);min-width:0}
+.lhead .nm{font:600 10px var(--sans);color:var(--text);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px}
+.lhead .nm::before{content:"";width:6px;height:6px;border-radius:2px;background:var(--c);flex:none}
+.len{display:flex;align-items:center;font:600 9.5px var(--mono);color:var(--c)}
+.len button{all:unset;cursor:pointer;color:var(--faint);padding:2px 4px}
+.len button:hover{color:var(--text)}
+.len span{min-width:16px;text-align:center}
+.lock{all:unset;cursor:pointer;font:700 8px var(--mono);letter-spacing:.06em;color:var(--faint);border:1px solid var(--line2);border-radius:3px;padding:2px 4px}
+.lock.on{color:var(--bg);background:var(--vi);border-color:var(--vi)}
+.cells{display:grid;grid-template-columns:repeat(32,minmax(0,1fr));gap:2px;height:30px;touch-action:none;user-select:none}
+.lane.short .cells{height:20px}
+.cell{position:relative;background:var(--well);border-radius:3px;overflow:hidden;cursor:ns-resize;display:flex;align-items:center;justify-content:center;font:600 8.5px var(--mono);color:var(--dim)}
+.cell:nth-child(4n+1){background:#0d0e10}
+.cell.out{opacity:.18;cursor:default}
+.cell .b{position:absolute;left:0;right:0;bottom:0;background:var(--c);opacity:.55}
+.cell .t{position:relative;z-index:1}
+.cell.on{background:color-mix(in srgb,var(--c) 70%,transparent)}
+.cell.on .t{color:var(--bg)}
+.cell.ph{box-shadow:inset 0 0 0 1.5px var(--text)}
+.cell.ph .b{opacity:.95}
+.cell.skip{box-shadow:inset 0 0 0 1.5px var(--rd)}
+.cell.wrap::after{content:"";position:absolute;right:0;top:3px;bottom:3px;width:2px;background:var(--c);border-radius:1px}
+.lanefoot{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--faint);font-size:11px;padding-top:4px}
+.lanefoot b{color:var(--dim);font-weight:600}
+/* keyboard */
+.kbrow{display:flex;gap:12px;align-items:stretch;flex-wrap:wrap}
+.kb{position:relative;height:74px;flex:1 1 420px;display:flex;user-select:none;touch-action:manipulation}
+.wk{flex:1;background:#d9dade;border:1px solid #0a0a0b;border-radius:0 0 4px 4px;cursor:pointer;position:relative;display:flex;align-items:flex-end;justify-content:center;padding-bottom:4px;font:600 8px var(--mono);color:#62646a}
+.bk{position:absolute;top:0;height:46px;background:#17181b;border:1px solid #000;border-radius:0 0 3px 3px;cursor:pointer;z-index:2;display:flex;align-items:flex-end;justify-content:center;padding-bottom:3px;font:600 7px var(--mono);color:#6b6d73}
+.wk.held{background:var(--am);color:var(--bg)} .bk.held{background:#a8742a;color:var(--bg)}
+.wk.hit{box-shadow:inset 0 -14px 0 var(--pk)} .bk.hit{box-shadow:inset 0 -10px 0 var(--pk)}
+.kbside{display:flex;flex-direction:column;gap:6px;min-width:170px}
+.chordname{font:700 18px var(--sans);letter-spacing:-.01em}
+.chordname small{display:block;font:500 9.5px var(--mono);color:var(--faint);letter-spacing:.06em}
+.map{width:100%;border-collapse:collapse;font-size:12px}
+.map th,.map td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+.map th{font:700 9px var(--mono);letter-spacing:.12em;color:var(--faint)}
+.map td code{font:500 11px var(--mono);color:var(--cy)}
+.tablebox{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:10px}
+
+/* ---------- shell (groove, arrange) ---------- */
+.shell{display:flex;flex-direction:column;gap:14px;color:var(--ink)}
+.sbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--sline);border-radius:10px;padding:9px 10px}
+.sbar .label,.label{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--sfaint)}
+.btn{font:600 12.5px var(--sans);color:var(--sdim);background:var(--panel2);border:1px solid var(--sline);border-radius:7px;padding:7px 11px;cursor:pointer}
+.btn:hover{color:var(--ink);border-color:var(--sline2)}
+.btn.run{color:var(--bg);background:var(--teal);border-color:var(--teal)}
+.btn.bin{color:var(--rd)}
+.btn.play.on{color:var(--bg);background:var(--ink);border-color:var(--ink)}
+.sseg{display:inline-flex;border:1px solid var(--sline);border-radius:7px;overflow:hidden;flex-wrap:wrap}
+.sseg button{font:600 12px var(--sans);color:var(--sdim);background:var(--panel2);border:0;border-left:1px solid var(--sline);padding:6px 10px;cursor:pointer}
+.sseg button:first-child{border-left:0}
+.sseg button.on{color:var(--ink);background:var(--sline2)}
+.scard{background:var(--panel);border:1px solid var(--sline);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.scard h2{margin:0;font-size:14px;font-weight:700}
+.scard p{margin:0;color:var(--sdim);line-height:1.5}
+.sgrid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:14px}
+@media (max-width:980px){.sgrid{grid-template-columns:minmax(0,1fr)}}
+.srclist{display:flex;flex-direction:column;gap:4px}
+.src{all:unset;cursor:pointer;display:grid;grid-template-columns:auto 1fr;gap:2px 10px;padding:8px 10px;border-radius:8px;border:1px solid var(--sline);background:var(--panel2)}
+.src:hover{border-color:var(--sline2)}
+.src.on{border-color:var(--teal);background:rgba(95,224,191,.06)}
+.src .k{grid-row:span 2;font:700 9px var(--mono);letter-spacing:.08em;color:var(--sfaint);align-self:center;writing-mode:vertical-rl;transform:rotate(180deg)}
+.src .n{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.src .m{font:500 10.5px var(--mono);color:var(--sfaint)}
+.opts{display:grid;gap:9px}
+.opt{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.well{background:var(--swell);border:1px solid var(--sline);border-radius:8px;overflow:hidden;position:relative}
+#fp{width:100%;height:330px;display:block;cursor:crosshair}
+.tip{position:absolute;pointer-events:none;background:var(--panel2);border:1px solid var(--sline2);border-radius:7px;padding:7px 9px;font:500 11px var(--mono);color:var(--ink);white-space:nowrap;opacity:0;transition:opacity .12s;z-index:5}
+.facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media (max-width:760px){.facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.fact{background:var(--panel2);border:1px solid var(--sline);border-radius:8px;padding:9px 10px;display:grid;gap:3px;min-width:0}
+.fact b{font:600 18px var(--mono);font-variant-numeric:tabular-nums}
+.fact small{color:var(--sfaint);font-size:11px;line-height:1.35}
+.fact.good b{color:var(--teal)} .fact.warn b{color:var(--am)}
+.summary{color:var(--sdim);line-height:1.55;margin:0}
+.summary b{color:var(--ink)}
+.steps{font:500 11px var(--mono);color:var(--sdim);display:flex;gap:14px;flex-wrap:wrap}
+.steps span.done{color:var(--teal)}
+.progress{height:3px;background:var(--sline);border-radius:2px;overflow:hidden}
+.progress i{display:block;height:100%;width:0;background:var(--teal);transition:width .15s linear}
+.pool{display:flex;flex-direction:column;gap:3px;max-height:220px;overflow:auto}
+.pool div{display:flex;justify-content:space-between;gap:8px;padding:5px 8px;border-radius:6px;background:var(--panel2);font-size:12px}
+.pool div small{font:500 10px var(--mono);color:var(--sfaint)}
+.pool div.rec small{color:var(--teal)}
+.pool div.fresh{outline:1px solid var(--teal)}
+pre.tmpl{margin:0;font:500 10.5px/1.5 var(--mono);color:var(--sdim);background:var(--swell);border:1px solid var(--sline);border-radius:8px;padding:9px;overflow:auto;max-height:200px}
+.targets{display:grid;gap:5px}
+.targets label{display:flex;gap:9px;align-items:center;padding:6px 8px;border-radius:6px;background:var(--panel2);cursor:pointer}
+.targets label small{color:var(--sfaint);font:500 10.5px var(--mono);margin-left:auto;text-align:right}
+.targets input{accent-color:var(--teal)}
+.amounts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.amounts .ctl label{color:var(--sfaint)}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+@media (max-width:980px){.two{grid-template-columns:minmax(0,1fr)}}
+.nameinput{background:var(--swell);border:1px solid var(--sline2);border-radius:7px;color:var(--ink);font:inherit;padding:7px 9px;flex:1;min-width:0}
+/* arrange */
+.roles{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px}
+.role{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:2px 9px;align-items:center;padding:7px 9px;border-radius:8px;background:var(--panel2);border:1px solid var(--sline)}
+.role i{grid-row:span 2;width:4px;align-self:stretch;border-radius:2px;background:var(--c)}
+.role .n{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.role .n small{color:var(--sfaint);font:500 10px var(--mono);margin-left:6px}
+.role .e{font-size:11px;color:var(--sfaint);grid-column:2/4;line-height:1.35}
+.role .lk{all:unset;cursor:pointer;font:700 8.5px var(--mono);letter-spacing:.06em;color:var(--sfaint);border:1px solid var(--sline2);border-radius:4px;padding:3px 5px}
+.role .lk.on{color:var(--bg);background:var(--blue);border-color:var(--blue)}
+.role .n small.rl{color:var(--c);font-weight:700;letter-spacing:.08em}
+.tlbox{overflow-x:auto;background:var(--swell);border:1px solid var(--sline);border-radius:10px}
+#tl{display:block;min-width:960px;width:100%;user-select:none;touch-action:none}
+.rules{display:flex;flex-wrap:wrap;gap:6px}
+.rule{display:flex;gap:7px;align-items:center;padding:5px 9px;border-radius:20px;border:1px solid var(--sline);background:var(--panel2);font-size:11.5px;color:var(--sdim)}
+.rule i{width:7px;height:7px;border-radius:50%;background:var(--teal);box-shadow:0 0 6px var(--teal)}
+.readout{font:600 12px var(--mono);color:var(--sdim);font-variant-numeric:tabular-nums}
+.note{border-left:3px solid var(--vi);background:var(--panel);border-radius:0 10px 10px 0;padding:11px 14px;color:var(--sdim);line-height:1.55}
+.note b{color:var(--ink)}
+.view[hidden]{display:none!important}
+@media (max-width:560px){header.intro h1{font-size:23px}}
+</style>
+
+<div class="wrap">
+<header class="intro">
+  <div>
+    <h1>Creative tools: <span>Arp · Groove · Arrange</span></h1>
+    <p>Three tools for the <b>Funky</b> project (126 BPM, A minor): a <b>Nova arp</b> rebuilt as a pattern engine, <b>grooves taken from records</b> into the groove pool, and <b>a whole arrangement proposed from a loop</b> that you keep or bin in one step. Click a <b>Play</b> button to hear it. Every random choice is seeded, so the same settings always play the same.</p>
+  </div>
+  <div class="proj"><i></i>FUNKY · 126 BPM · A MINOR · 4/4</div>
+</header>
+<nav class="tabs" id="tabs">
+  <a href="#arp" style="--c:var(--am)"><i></i>NOVA ARP</a>
+  <a href="#groove" style="--c:var(--teal)"><i></i>GROOVE FROM A RECORD</a>
+  <a href="#arrange" style="--c:var(--blue)"><i></i>ARRANGE FROM A LOOP</a>
+</nav>
+
+<!-- ======================= ARP ======================= -->
+<section class="view" id="v-arp">
+  <div style="display:flex;flex-direction:column;gap:14px">
+  <p class="lede">The arp page of Nova. <b>Sixteen modes</b> in six groups, <b>sixty factory patterns</b>, and <b>ten step lanes, each with its own length</b>, so a 16-step velocity lane, a 12-step gate lane and a 7-step note lane drift against each other and line up again only every 336 steps. Grooves come from the pool, including ones taken from records. Hold a chord on the keyboard or with the typing keys (<b>A W S E D F T G Y H U J K</b>, Z/X for octave). The patterns list is focused, so the keys play. Press <b>/</b> to search and <b>Esc</b> to go back.</p>
+  <div class="stage"><span class="hint">NOVA · ARP PAGE</span>
+  <div class="nova" id="nova">
+    <div class="nbar">
+      <span class="word">NOVA</span><span class="crumb">ARP</span>
+      <div class="pbox"><button id="pPrev" aria-label="Previous pattern">‹</button><div class="pname" id="pName">—</div><button id="pNext" aria-label="Next pattern">›</button></div>
+      <button class="tbtn go" id="arpPlay">▶ PLAY</button>
+      <button class="tbtn fill" id="arpFill" title="Hold to play Fill conditions">HOLD FILL</button>
+      <span class="varbadge" id="varBadge">VARIATION BAR</span>
+      <div class="spacer"></div>
+      <span class="tag keep">RETRIG ON</span><span class="tag keep">nova.arp.retrigger</span>
+      <div class="keys" id="keysPill"><i></i><span>KEYS PLAY · / TO SEARCH</span></div>
+    </div>
+    <div class="abody">
+      <aside class="lib">
+        <div class="lsearch"><input id="libSearch" placeholder="Search 60 patterns" aria-label="Search patterns"><kbd>/</kbd></div>
+        <div class="cats" id="cats"></div>
+        <div class="plist" id="plist" tabindex="0" aria-label="Arp patterns"></div>
+        <div class="libfoot">↑↓ load · keys play · / search<br>A pattern sets the mode, rate, groove and lanes. It never changes the sound.</div>
+      </aside>
+      <div class="amain">
+        <div class="mcard" style="--c:var(--am)">
+          <div class="mhead"><span class="led"></span><h3>MODE</h3><span class="sub">which held note plays on each step</span><span class="spacer"></span><span class="tag ext">EXTENDS nova.arp.mode · 6 → 16</span><span class="tag keep">● = new</span></div>
+          <div class="modes" id="modes"></div>
+          <div class="euc" id="euc">
+            <span class="label" style="font:700 8.5px var(--mono);letter-spacing:.14em;color:var(--faint)">EUCLIDEAN</span>
+            <div class="ctl" style="width:120px"><label>HITS <b id="eHv">5</b></label><input type="range" id="eH" min="1" max="16" value="5"></div>
+            <div class="ctl" style="width:120px"><label>STEPS <b id="eSv">16</b></label><input type="range" id="eS" min="2" max="32" value="16"></div>
+            <div class="ctl" style="width:120px"><label>ROTATE <b id="eRv">0</b></label><input type="range" id="eR" min="0" max="15" value="0"></div>
+            <span class="tag new">NEW nova.arp.euclid.*</span>
+          </div>
+        </div>
+        <div class="mcard" style="--c:var(--cy)">
+          <div class="mhead"><span class="led"></span><h3>TIME · GROOVE · HARMONY</h3></div>
+          <div class="ctrls">
+            <div class="ctl"><label>RATE <b id="rateV">1/16</b></label><div class="seg" id="rateSeg"></div><div class="tags"><span class="tag keep">nova.arp.rate</span></div></div>
+            <div class="ctl"><label>OCTAVES <b id="octV">1</b></label><input type="range" id="oct" min="1" max="4" value="1" style="--c:var(--cy)"><div class="tags"><span class="tag keep">nova.arp.octaves</span></div></div>
+            <div class="ctl"><label>GATE <b id="gateV">60%</b></label><input type="range" id="gate" min="10" max="100" value="60" style="--c:var(--cy)"><div class="tags"><span class="tag ext">nova.arp.gate · scales lane</span></div></div>
+            <div class="ctl"><label>SWING <b id="swingV">0%</b></label><input type="range" id="swing" min="0" max="75" value="0" style="--c:var(--cy)"><div class="tags"><span class="tag keep">nova.arp.swing</span></div></div>
+            <div class="ctl"><label>GROOVE</label><select id="grooveSel" aria-label="Groove"></select><div class="tags"><span class="tag new">NEW nova.arp.groove</span></div></div>
+            <div class="ctl"><label>GROOVE AMOUNT <b id="gaV">100%</b></label><input type="range" id="ga" min="0" max="100" value="100" style="--c:var(--cy)"><div class="tags"><span class="tag new">NEW nova.arp.groove_amount</span></div></div>
+            <div class="ctl"><label>PASSING NOTES</label><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="tog" id="passing" style="--c:var(--gr)">OFF</button><select id="scaleSel" aria-label="Scale"></select></div><div class="tags"><span class="tag new">NEW scale-aware fill</span></div></div>
+            <div class="ctl"><label>VARIATION EVERY <b id="varV">4 bars</b></label><div class="seg" id="varSeg"></div><div class="tags"><span class="tag new">NEW nova.arp.variation</span></div></div>
+          </div>
+        </div>
+        <div class="mcard" style="--c:var(--vi)">
+          <div class="mhead"><span class="led"></span><h3>STEP LANES</h3><span class="sub">drag bars up or down · click toggles and cycles · double-click resets · − / + sets each lane's length</span><span class="spacer"></span><span class="tag rep">REPLACES nova.arp.step.1–16.* and nova.arp.repeats</span></div>
+          <div class="lanes" id="lanes"></div>
+          <div class="lanefoot" id="laneFoot"></div>
+          <div class="mut">
+            <button class="mutbtn" id="mutate">✦ MUTATE</button>
+            <button class="tbtn" id="seedDn" aria-label="Previous seed">‹</button><span class="seed" id="seedV">seed 0</span><button class="tbtn" id="seedUp" aria-label="Next seed">›</button>
+            <div class="ctl" style="width:170px"><label>AMOUNT <b id="mamtV">35%</b></label><input type="range" id="mamt" min="5" max="100" value="35" style="--c:var(--vi)"></div>
+            <button class="tbtn" id="mutReset">BACK TO PATTERN</button>
+            <span class="sub" style="color:var(--faint);font-size:11px">LOCK keeps a lane while the rest changes. The same seed always gives the same result.</span>
+          </div>
+        </div>
+        <div class="mcard" style="--c:var(--pk)">
+          <div class="mhead"><span class="led"></span><h3>AUDITION</h3><span class="sub">click keys to hold a chord · typing keys start a new chord when none are down</span><span class="spacer"></span><button class="tog on" id="latch" style="--c:var(--pk)">LATCH</button><span class="tag keep">nova.arp.latch</span></div>
+          <div class="kbrow">
+            <div class="kb" id="kb"></div>
+            <div class="kbside"><div class="chordname" id="chordName">Cm7<small>C3 · E♭3 · G3 · B♭3</small></div><button class="tbtn" id="clearChord">CLEAR</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <div class="tablebox">
+  <table class="map">
+    <thead><tr><th>Today's parameter</th><th>In the rebuilt arp</th><th></th></tr></thead>
+    <tbody>
+      <tr><td><code>nova.arp.mode</code> (6 modes)</td><td>16 modes in six groups. Up, Down, Up/Down, Played, Random and Chord keep their values, so saved patches open unchanged.</td><td><span class="tag ext">EXTENDS</span></td></tr>
+      <tr><td><code>nova.arp.step.N.on / velocity / gate / tie</code> (16 steps)</td><td>Gate, Velocity and Tie/Slide lanes of up to 32 steps, each with its own length. A gate of 0 is a rest.</td><td><span class="tag rep">REPLACES</span></td></tr>
+      <tr><td><code>nova.arp.repeats</code></td><td>The Ratchet lane: 1–4 hits inside a step, set per step.</td><td><span class="tag rep">REPLACES</span></td></tr>
+      <tr><td><code>nova.arp.gate</code>, <code>nova.arp.swing</code>, <code>nova.arp.rate</code>, <code>nova.arp.octaves</code></td><td>Unchanged. Gate now scales the Gate lane, and Swing adds on top of the groove.</td><td><span class="tag keep">KEPT</span></td></tr>
+      <tr><td><code>nova.arp.velocity</code> (Played / Pattern), <code>nova.arp.latch</code>, <code>nova.arp.retrigger</code></td><td>Unchanged. Pattern takes its velocity from the Velocity lane.</td><td><span class="tag keep">KEPT</span></td></tr>
+      <tr><td>—</td><td>Note, Octave, Chance, Condition, Accent and Mod lanes, plus each lane's length and lock.</td><td><span class="tag new">NEW</span></td></tr>
+      <tr><td>—</td><td><b>Arp Accent</b> and <b>Arp Mod</b> become sources in the mod matrix (in this preview, Accent opens the filter and Mod drives the cutoff, like a 303).</td><td><span class="tag new">NEW</span></td></tr>
+      <tr><td>—</td><td>Groove (from the pool) and its amount, Euclidean hits, steps and rotate, passing notes and scale, variation every N bars, mutate seed and amount.</td><td><span class="tag new">NEW</span></td></tr>
+      <tr><td>—</td><td>Arp patterns are files of their own. Loading one sets only the arp section, so the sound stays.</td><td><span class="tag new">NEW</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  </div>
+</section>
+
+<!-- ======================= GROOVE ======================= -->
+<section class="view shell" id="v-groove" hidden>
+  <p class="lede">Take the timing and accents from a record, or from an audio clip in the project, and save them to the <b>groove pool</b> as an ordinary groove template. It uses the beat grid we already have (tempo and key analysis, ADR-0052), finds onsets in one band, and averages every 16th step over the bars you choose: how late or early it lands (in ms and as a share of a step) and how loud it is. The result works anywhere a groove does: MIDI clips, the Nova arp, Chop and Knock.</p>
+  <div class="sgrid">
+    <div class="scard">
+      <span class="label">Reference</span>
+      <div class="srclist" id="srcList"></div>
+      <span class="label" style="margin-top:4px">Listen to</span>
+      <div class="opts">
+        <div class="opt"><span>Band</span><div class="sseg" id="bandSeg"></div></div>
+        <div class="opt"><span>Average over</span><div class="sseg" id="barsSeg"></div></div>
+        <div class="opt"><span>Steps</span><div class="sseg" id="stepsSeg"></div></div>
+      </div>
+      <button class="btn run" id="take">Take groove</button>
+      <div class="progress" id="gprog"><i></i></div>
+      <div class="steps" id="gsteps"></div>
+    </div>
+    <div class="scard">
+      <div style="display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center">
+        <h2 id="gTitle">Fingerprint</h2><span class="spacer"></span>
+        <button class="btn play" id="abPlay">▶ Play A/B</button>
+        <div class="sseg" id="abSeg"><button class="on" data-v="A">A · straight</button><button data-v="B">B · grooved</button></div>
+      </div>
+      <div class="facts" id="facts"></div>
+      <div class="well"><canvas id="fp"></canvas><div class="tip" id="fpTip"></div></div>
+      <p class="summary" id="gSummary"></p>
+    </div>
+  </div>
+  <div class="two">
+    <div class="scard">
+      <h2>Save to the groove pool</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="nameinput" id="gName" aria-label="Groove name"><button class="btn run" id="gSave">Save</button></div>
+      <pre class="tmpl" id="tmpl"></pre>
+      <span class="label">Groove pool</span>
+      <div class="pool" id="pool"></div>
+    </div>
+    <div class="scard">
+      <h2>Apply</h2>
+      <div class="targets" id="targets"></div>
+      <div class="amounts">
+        <div class="ctl"><label>QUANTIZE <b id="aqV">100%</b></label><input type="range" id="aq" min="0" max="100" value="100" style="--c:var(--teal)"></div>
+        <div class="ctl"><label>TIMING <b id="atV">100%</b></label><input type="range" id="at" min="0" max="100" value="100" style="--c:var(--teal)"></div>
+        <div class="ctl"><label>VELOCITY <b id="avV">80%</b></label><input type="range" id="av" min="0" max="100" value="80" style="--c:var(--teal)"></div>
+      </div>
+      <p>These are the three amounts the groove tool already has: pull to the groove's grid, then move by its offsets, then take its accents. Clips change as a single undo step. The arp, Chop and Knock store the groove's name and amount and follow the template if it changes.</p>
+      <div><button class="btn run" id="gApply">Apply to selected</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= ARRANGE ======================= -->
+<section class="view shell" id="v-arrange" hidden>
+  <p class="lede">Select a loop and get a full, DJ-friendly arrangement. It works out each track's role from its instrument and its analysis, places sections on 8, 16 and 32-bar boundaries with something new every 16 bars, writes the automation (filter sweeps, a high-pass before the drop, reverb and delay throws, Chop fills) and keeps the intro and outro as beats only for mixing. The proposal is <b>one changeset: Keep applies it as a single undo step, and Bin leaves the project as it was.</b> Drag a section edge, lock a track, or regenerate for a new seed.</p>
+  <div class="sbar">
+    <span class="label">Loop</span><div class="sseg" id="loopSeg"></div>
+    <span class="label">Template</span><div class="sseg" id="tplSeg"></div>
+    <span class="spacer"></span>
+    <button class="btn play" id="arrPlay">▶ Preview</button>
+    <div class="sseg" id="arrAB"><button data-v="A">A · loop</button><button class="on" data-v="B">B · proposal</button></div>
+  </div>
+  <div class="sbar" style="gap:16px">
+    <div class="ctl" style="width:200px"><label>LENGTH <b id="lenV"></b></label><input type="range" id="len" min="160" max="256" step="8" value="208" style="--c:var(--blue)"></div>
+    <div class="ctl"><label>INTRO / OUTRO · BEATS ONLY</label><div class="sseg" id="introSeg"></div></div>
+    <div class="ctl" style="width:180px"><label>BREAKDOWN AT <b id="bpV"></b></label><input type="range" id="bp" min="0" max="100" value="55" style="--c:var(--blue)"></div>
+    <div class="ctl" style="width:160px"><label>VARIATION <b id="varAmtV">50%</b></label><input type="range" id="varAmt" min="0" max="100" value="50" style="--c:var(--blue)"></div>
+    <span class="spacer"></span>
+    <button class="btn" id="regen">↻ Regenerate</button><span class="readout" id="arrSeed"></span>
+    <button class="btn bin" id="bin">Bin</button>
+    <button class="btn run" id="keep">Keep</button>
+  </div>
+  <div class="scard">
+    <div style="display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center"><h2>Roles found in the loop</h2><span class="spacer"></span><span class="readout" id="playRead">bar 1 · 0:00 · Intro</span></div>
+    <div class="roles" id="roles"></div>
+  </div>
+  <div class="tlbox"><svg id="tl" viewBox="0 0 1100 460" preserveAspectRatio="none"></svg></div>
+  <div class="rules" id="rules"></div>
+  <div class="note"><b>A deterministic rule engine for now.</b> The same loop, template and seed always give the same arrangement, and every rule is listed above. Later, an LLM agent uses the same tools: <b>Ears</b> (roles, energy and the beat grid) and <b>Hands</b> (session commands for clip copies, mutes and automation). Its proposals arrive the same way, as a changeset you keep or bin.</div>
+</section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* =================== shared =================== */
+const BPM = 126, SPB = 60 / BPM, BAR = 4 * SPB;
+const $ = s => document.querySelector(s);
+const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function strHash(s) { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+function hash(...xs) { let h = 2166136261; for (const x of xs) { h ^= (x * 2654435761) >>> 0; h = Math.imul(h, 16777619); h ^= h >>> 13; } h = Math.imul(h ^ (h >>> 16), 2246822507); h ^= h >>> 13; return (h >>> 0) / 4294967296; }
+function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const arr = (n, f) => Array.from({ length: n }, (_, i) => f(i));
+const NOTE = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+const nn = m => NOTE[m % 12] + (Math.floor(m / 12) - 1);
+const fmtTime = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+function setRangeFill(r) { r.style.setProperty('--p', ((r.value - r.min) / (r.max - r.min) * 100) + '%'); }
+function toast(html) { const t = $('#toast'); t.innerHTML = html; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 3200); }
+function seg(container, items, value, onPick, label = x => x) {
+  container.innerHTML = '';
+  for (const it of items) { const b = el('button', it === value ? 'on' : '', label(it)); b.onclick = () => { [...container.children].forEach(c => c.classList.remove('on')); b.classList.add('on'); onPick(it); }; container.appendChild(b); }
+}
+
+/* =================== audio =================== */
+let ctx = null, master, hp, space, verb, noiseBuf;
+function audio() {
+  if (!ctx) {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 3;
+    hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 20;
+    master = ctx.createGain(); master.gain.value = .8; master.connect(hp); hp.connect(comp); comp.connect(ctx.destination);
+    space = ctx.createDelay(2); space.delayTime.value = SPB * .75;
+    const fb = ctx.createGain(); fb.gain.value = .38; const dl = ctx.createBiquadFilter(); dl.type = 'lowpass'; dl.frequency.value = 2400;
+    space.connect(dl); dl.connect(fb); fb.connect(space); const dr = ctx.createGain(); dr.gain.value = .45; dl.connect(dr); dr.connect(hp);
+    verb = ctx.createConvolver(); const len = ctx.sampleRate * 2.6, ir = ctx.createBuffer(2, len, ctx.sampleRate); const r = rng(77);
+    for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (r() * 2 - 1) * Math.pow(1 - i / len, 3.2); }
+    verb.buffer = ir; const vr = ctx.createGain(); vr.gain.value = .5; verb.connect(vr); vr.connect(hp);
+    noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate); const nd = noiseBuf.getChannelData(0); const r2 = rng(5); for (let i = 0; i < nd.length; i++) nd[i] = r2() * 2 - 1;
+  }
+  if (ctx.state === 'suspended') ctx.resume();
+  return ctx;
+}
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+function sends(node, d = 0, v = 0) { if (d > 0) { const g = ctx.createGain(); g.gain.value = d; node.connect(g); g.connect(space); } if (v > 0) { const g = ctx.createGain(); g.gain.value = v; node.connect(g); g.connect(verb); } }
+function synth(t, m, dur, vel, o = {}) {
+  const osc = ctx.createOscillator(); osc.type = o.wave || 'sawtooth';
+  if (o.slideFrom != null) { osc.frequency.setValueAtTime(mtof(o.slideFrom), t); osc.frequency.exponentialRampToValueAtTime(mtof(m), t + .055); }
+  else osc.frequency.setValueAtTime(mtof(m), t);
+  const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 5 + (o.accent ? 9 : 0);
+  const cut = o.cut ?? .4, base = 160 + cut * cut * 5200, peak = base + (o.slideFrom != null ? 300 : 900 + (o.accent ? 3200 : 0)) * vel;
+  f.frequency.setValueAtTime(peak, t); f.frequency.exponentialRampToValueAtTime(base, t + .16 + (o.accent ? .1 : 0));
+  const g = ctx.createGain(), a = (o.level ?? .16) * vel * (o.accent ? 1.35 : 1);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(a, t + (o.slideFrom != null ? .012 : .004));
+  g.gain.setValueAtTime(a, t + dur); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + (o.rel ?? .05));
+  osc.connect(f); f.connect(g); g.connect(master); sends(g, o.delay ?? .22, o.verb ?? .18);
+  osc.start(t); osc.stop(t + dur + (o.rel ?? .05) + .05);
+}
+function pad(t, notes, dur, cut, lvl = .05, v = .5) {
+  for (const [i, m] of notes.entries()) for (const det of [-6, 7]) {
+    const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mtof(m); o.detune.value = det + i;
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 300 + cut * cut * 3000; f.Q.value = 1;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(lvl, t + dur * .3); g.gain.setValueAtTime(lvl, t + dur * .75); g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    o.connect(f); f.connect(g); g.connect(master); sends(g, 0, v); o.start(t); o.stop(t + dur + .05);
+  }
+}
+function kick(t, v = 1) {
+  const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(55, t + .07);
+  const g = ctx.createGain(); g.gain.setValueAtTime(.9 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + .42);
+  o.connect(g); g.connect(master); o.start(t); o.stop(t + .45);
+}
+function noiseHit(t, v, f0, dec, type = 'highpass', q = .7, d = 0, rv = 0) {
+  const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+  const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = f0; f.Q.value = q;
+  const g = ctx.createGain(); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0008, t + dec);
+  s.connect(f); f.connect(g); g.connect(master); sends(g, d, rv); s.start(t, (t * 7.31) % .9); s.stop(t + dec + .02);
+}
+const hat = (t, v, open = false) => noiseHit(t, .22 * v, 7800, open ? .2 : .045);
+function perc(t, v = 1) {
+  const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(820, t); o.frequency.exponentialRampToValueAtTime(560, t + .04);
+  const g = ctx.createGain(); g.gain.setValueAtTime(.16 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + .09);
+  o.connect(g); g.connect(master); sends(g, .2, .2); o.start(t); o.stop(t + .1);
+}
+
+/* one transport for every preview: the callback schedules a step and returns its length */
+const T = { on: false, owner: null, next: 0, k: 0, timer: 0, cb: null, vis: [], onStop: null };
+function play(owner, cb, onStop) {
+  audio(); stop(); T.owner = owner; T.cb = cb; T.onStop = onStop; T.k = 0; T.next = ctx.currentTime + .08; T.on = true; T.vis = [];
+  T.timer = setInterval(pump, 25); pump();
+}
+function pump() { if (!T.on) return; while (T.next < ctx.currentTime + .14) { const d = T.cb(T.k, T.next); T.next += d; T.k++; } }
+function stop() { if (!T.on) return; T.on = false; clearInterval(T.timer); const f = T.onStop; T.owner = null; T.vis = []; if (f) f(); }
+function visual(item) { T.vis.push(item); }
+const visHandlers = {};
+function frame() {
+  if (T.on && ctx) { const now = ctx.currentTime; while (T.vis.length && T.vis[0].t <= now) { const v = T.vis.shift(); visHandlers[T.owner]?.(v); } visHandlers[T.owner + ':frame']?.(now); }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* =================== routing =================== */
+function route() {
+  const id = ['arp', 'groove', 'arrange'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'arp';
+  for (const v of ['arp', 'groove', 'arrange']) $('#v-' + v).hidden = v !== id;
+  [...$('#tabs').children].forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + id));
+  if (T.on && T.owner !== id) stop();
+  if (id === 'groove') drawFP();
+  if (id === 'arrange') drawTL();
+}
+addEventListener('hashchange', route);
+
+/* =================== ARP =================== */
+const MODES = [
+  ['Order', [['up', 'Up', 0], ['down', 'Down', 0], ['updown', 'Up/Down', 0], ['downup', 'Down/Up', 1], ['converge', 'Converge', 1], ['diverge', 'Diverge', 1], ['played', 'Played', 0]]],
+  ['Pedal', [['thumb', 'Thumb', 1], ['pinky', 'Pinky', 1]]],
+  ['Chance', [['random', 'Random', 0], ['walk', 'Random walk', 1]]],
+  ['Harmony', [['chord', 'Chord', 0], ['strum', 'Strum', 1]]],
+  ['Drawn', [['shape', 'Shape', 1]]],
+  ['Rhythm', [['euclid', 'Euclidean', 1]]],
+];
+const RATES = { '1/8': SPB / 2, '1/8 T': SPB / 3, '1/16': SPB / 4, '1/16 T': SPB / 6, '1/32': SPB / 8 };
+const SCALES = { 'C minor': [0, 2, 3, 5, 7, 8, 10], 'C dorian': [0, 2, 3, 5, 7, 9, 10], 'C phrygian': [0, 1, 3, 5, 7, 8, 10], 'C major': [0, 2, 4, 5, 7, 9, 11] };
+const CONDS = ['—', '1:2', '2:4', '3:4', 'Fill', 'First', 'Not first'];
+const LANES = [
+  { id: 'note', name: 'Note', kind: 'int', min: -3, max: 7, def: 0, c: 'var(--cy)' },
+  { id: 'oct', name: 'Octave', kind: 'int', min: -2, max: 2, def: 0, c: 'var(--vi)' },
+  { id: 'vel', name: 'Velocity', kind: 'bar', def: .8, c: 'var(--am)' },
+  { id: 'gate', name: 'Gate', kind: 'bar', def: .7, c: 'var(--gr)' },
+  { id: 'tie', name: 'Tie / Slide', kind: 'bool', def: 0, c: 'var(--pk)', short: 1 },
+  { id: 'rat', name: 'Ratchet', kind: 'int', min: 1, max: 4, def: 1, c: 'var(--am)', short: 1 },
+  { id: 'chance', name: 'Chance', kind: 'bar', def: 1, c: 'var(--gr)' },
+  { id: 'cond', name: 'Condition', kind: 'enum', opts: CONDS, def: '—', c: 'var(--vi)', short: 1 },
+  { id: 'acc', name: 'Accent', kind: 'bool', def: 0, c: 'var(--pk)', short: 1 },
+  { id: 'mod', name: 'Mod', kind: 'bar', def: .3, c: 'var(--cy)' },
+];
+const LANE = Object.fromEntries(LANES.map(l => [l.id, l]));
+const GROOVES = {
+  'Straight': { rec: 0, steps: arr(16, () => ({ timing: 0, velocity: 1 })) },
+  'Swing 16ths 58%': { rec: 0, steps: arr(16, i => ({ timing: i % 2 ? .16 : 0, velocity: i % 2 ? .85 : 1 })) },
+  'Swing 16ths 66%': { rec: 0, steps: arr(16, i => ({ timing: i % 2 ? .32 : 0, velocity: i % 2 ? .8 : 1 })) },
+  'Swing 8ths 58%': { rec: 0, steps: arr(16, i => ({ timing: i % 4 === 2 ? .32 : 0, velocity: 1 })) },
+};
+const A = {
+  mode: 'up', rate: '1/16', octaves: 1, gate: .6, swing: 0, groove: 'Straight', ga: 1, passing: false, scale: 'C minor', variation: 4,
+  euclid: { h: 5, s: 16, r: 0 }, noteMode: 'held', held: [48, 51, 55, 58], order: [48, 51, 55, 58], latch: true, fill: false,
+  seed: 0, mamt: .35, lanes: {}, base: {}, pattern: null,
+};
+
+/* ---- the pattern library ---- */
+const CATS = [
+  ['Minimal', 'var(--gr)', ['Displaced Five', 'Skip Stone', 'Seven Over Sixteen', 'Hollow Steps', 'Ghost Thumb', 'Offset Pulse', 'Three Gaps', 'Late Bloom']],
+  ['Deep House', 'var(--am)', ['Rhodes Offbeats', 'Warm Strum', 'Garage Shuffle', 'Soft Ladder', 'Sunday Chords', 'Chicago Walk', 'Velvet Eighths']],
+  ['Techno', 'var(--rd)', ['Rolling 16ths', 'Warehouse Ratchet', 'Steel Ladder', 'Dark Drive', 'Pressure Up', 'Concrete Converge', 'Night Bus']],
+  ['Acid', 'var(--gr)', ['Squelch Walk', '303 Slides', 'Rubber Ladder', 'Bubbling Under', 'Acid Thumb', 'Resonant Steps', 'Dirty Octaves']],
+  ['Dub Chords', 'var(--cy)', ['Echo Stab', 'Chord Rain', 'Berlin Fog', 'Deep Drift', 'Tape Skank', 'Wide Dub', 'Late Night Chords']],
+  ['Trance Gate', 'var(--pk)', ['Sidechain Gate 16', 'Stutter Gate', 'Breathing Gate', 'Triplet Gate', 'Half Gate', 'Lift Gate', 'Pump Chords']],
+  ['Classic', 'var(--vi)', ['Munich Bounce', 'Lyon Arpeggio', 'Oxygen Ladder', 'Disco Octaves', 'Berlin School Run', 'Sequencer 1979', 'Cascades']],
+  ['Polymetric', 'var(--cy)', ['16 · 12 · 7', 'Five Against Four', 'Euclid 7 of 16', 'Euclid 5 of 12', 'Spiral Threes', 'Drifting Thirds', 'Phase Pair', 'Prime Lanes']],
+];
+const lane = (len, vals) => ({ len, vals });
+const HAND = {
+  'Displaced Five': { mode: 'euclid', euclid: { h: 5, s: 16, r: 3 }, rate: '1/16', gate: .5, swing: .12, groove: 'Swing 16ths 58%', variation: 4,
+    lanes: { note: lane(7, [0, 2, 1, 3, 0, 4, 2]), vel: lane(16, [1, .6, .8, .55, .9, .6, .75, .5, 1, .6, .8, .55, .95, .6, .7, .65]), gate: lane(12, [.6, .3, .6, .6, .3, .8, .6, .3, .6, .9, .3, .6]), chance: lane(16, [1, 1, 1, .7, 1, 1, 1, 1, 1, 1, .6, 1, 1, 1, 1, .8]), mod: lane(5, [.2, .5, .3, .7, .4]) } },
+  'Rhodes Offbeats': { mode: 'chord', rate: '1/8', gate: .45, swing: .2, groove: 'Swing 16ths 58%', variation: 8,
+    lanes: { gate: lane(8, [0, .7, 0, .7, 0, .7, 0, 1]), vel: lane(8, [0, .7, 0, .85, 0, .7, 0, .95]), oct: lane(16, arr(16, () => 0)), chance: lane(8, [1, 1, 1, 1, 1, .75, 1, 1]), mod: lane(16, arr(16, i => .3 + .3 * Math.sin(i / 2.5))) } },
+  'Rolling 16ths': { mode: 'up', rate: '1/16', gate: .55, octaves: 2, variation: 4,
+    lanes: { oct: lane(3, [0, 0, 1]), acc: lane(4, [1, 0, 0, 0]), rat: lane(16, [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3]), vel: lane(4, [1, .6, .75, .6]), mod: lane(32, arr(32, i => i / 31)) } },
+  'Squelch Walk': { mode: 'walk', rate: '1/16', gate: .7, octaves: 2,
+    lanes: { tie: lane(16, [0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0]), acc: lane(7, [1, 0, 0, 1, 0, 0, 0]), oct: lane(12, [0, 0, 1, 0, -1, 0, 0, 0, 1, 0, 0, -1]), mod: lane(7, [.1, .25, .4, .55, .7, .55, .3]), gate: lane(16, [.7, .7, 1, .7, 0, .7, .7, 1, .7, .7, 1, .7, 0, .7, .7, .7]) } },
+  'Echo Stab': { mode: 'chord', rate: '1/16', gate: .3, groove: 'Swing 16ths 58%',
+    lanes: { gate: lane(16, [0, 0, .6, 0, 0, 0, 0, .6, 0, 0, .6, 0, 0, 0, .5, 0]), cond: lane(16, ['—', '—', '—', '—', '—', '—', '—', '—', '—', '—', '—', '—', '—', '—', '1:2', '—']), vel: lane(16, arr(16, () => .8)), mod: lane(16, arr(16, () => .35)) } },
+  'Sidechain Gate 16': { mode: 'chord', rate: '1/16', gate: .9,
+    lanes: { gate: lane(16, [0, .8, .8, .8, 0, .8, .8, .5, 0, .8, .8, .8, 0, .8, .4, .8]), vel: lane(4, [.5, 1, .8, .9]), mod: lane(16, arr(16, () => .55)) } },
+  'Munich Bounce': { mode: 'played', rate: '1/16', gate: .45, octaves: 1,
+    lanes: { note: lane(4, [0, 0, 2, 0]), oct: lane(2, [0, 1]), vel: lane(2, [1, .7]), mod: lane(16, arr(16, i => .25 + i / 40)) } },
+  '16 · 12 · 7': { mode: 'up', rate: '1/16', gate: .55, octaves: 2,
+    lanes: { vel: lane(16, [1, .5, .7, .5, .9, .5, .7, .55, 1, .5, .7, .5, .9, .5, .7, .6]), gate: lane(12, [.7, 0, .5, .7, .5, 0, .7, .5, 0, .7, .5, .5]), note: lane(7, [0, 1, 0, 2, 0, 3, 1]), acc: lane(5, [1, 0, 0, 0, 0]) } },
+};
+function genPattern(name, cat) {
+  const r = rng(strHash(name)); const pick = a => a[Math.floor(r() * a.length)]; const P = { lanes: {} }; const L = P.lanes;
+  const rest = p => arr(32, () => r() < p ? 0 : .35 + r() * .5);
+  switch (cat) {
+    case 'Minimal': P.mode = pick(['up', 'played', 'converge', 'thumb', 'euclid']); P.rate = '1/16'; P.swing = .1 + r() * .15; P.euclid = { h: pick([3, 5, 7]), s: 16, r: Math.floor(r() * 8) };
+      L.gate = lane(pick([12, 14, 16]), rest(.45)); L.note = lane(pick([5, 7, 9]), arr(32, () => Math.floor(r() * 4))); L.chance = lane(16, arr(32, () => r() < .2 ? .6 : 1)); L.mod = lane(pick([5, 7]), arr(32, () => .2 + r() * .5)); break;
+    case 'Deep House': P.mode = pick(['chord', 'strum', 'updown', 'played']); P.rate = pick(['1/8', '1/16']); P.swing = .2 + r() * .15; P.groove = 'Swing 16ths 58%';
+      L.gate = lane(8, arr(32, i => i % 2 ? .6 : (r() < .7 ? 0 : .4))); L.vel = lane(8, arr(32, () => .6 + r() * .35)); L.mod = lane(16, arr(32, i => .3 + .25 * Math.sin(i / 3))); break;
+    case 'Techno': P.mode = pick(['up', 'converge', 'downup', 'random']); P.rate = '1/16'; P.octaves = 2;
+      L.acc = lane(pick([3, 4, 5]), arr(32, i => i === 0 ? 1 : 0)); L.rat = lane(16, arr(32, i => i === 15 ? pick([2, 3]) : (r() < .08 ? 2 : 1))); L.oct = lane(pick([3, 5, 6]), arr(32, () => r() < .25 ? 1 : 0)); L.mod = lane(32, arr(32, i => i / 31)); break;
+    case 'Acid': P.mode = pick(['walk', 'up', 'thumb', 'random']); P.rate = '1/16'; P.octaves = 2;
+      L.tie = lane(16, arr(32, () => r() < .2 ? 1 : 0)); L.acc = lane(pick([5, 7]), arr(32, () => r() < .3 ? 1 : 0)); L.oct = lane(pick([7, 12]), arr(32, () => r() < .2 ? 1 : (r() < .1 ? -1 : 0))); L.mod = lane(pick([7, 9]), arr(32, () => r()));
+      L.gate = lane(16, arr(32, () => r() < .12 ? 0 : .7)); break;
+    case 'Dub Chords': P.mode = 'chord'; P.rate = '1/16'; P.gate = .3; P.groove = 'Swing 16ths 58%';
+      L.gate = lane(16, arr(32, i => [2, 7, 10, 14].includes(i % 16) && r() < .85 ? .55 : 0)); L.cond = lane(16, arr(32, () => r() < .12 ? pick(['1:2', '3:4', 'Fill']) : '—')); L.mod = lane(16, arr(32, () => .25 + r() * .2)); break;
+    case 'Trance Gate': P.mode = pick(['chord', 'chord', 'strum']); P.rate = pick(['1/16', '1/16 T']); P.gate = .9;
+      L.gate = lane(16, arr(32, () => r() < .3 ? 0 : .8)); L.vel = lane(4, [.5, 1, .8, .9]); L.mod = lane(16, arr(32, () => .5)); break;
+    case 'Classic': P.mode = pick(['updown', 'up', 'played', 'pinky']); P.rate = pick(['1/16', '1/16 T']); P.octaves = pick([1, 2]);
+      L.oct = lane(2, [0, 1]); L.vel = lane(4, [1, .7, .8, .7]); L.mod = lane(16, arr(32, i => .2 + i / 50)); break;
+    default: P.mode = pick(['up', 'euclid', 'converge', 'shape']); P.rate = '1/16'; P.euclid = { h: pick([5, 7]), s: pick([12, 16]), r: Math.floor(r() * 5) };
+      L.vel = lane(pick([16, 15]), arr(32, () => .5 + r() * .5)); L.gate = lane(pick([12, 11, 10]), rest(.3)); L.note = lane(pick([7, 5, 9]), arr(32, () => Math.floor(r() * 5))); L.acc = lane(pick([5, 3]), arr(32, i => i === 0 ? 1 : 0));
+  }
+  return P;
+}
+const PATTERNS = [];
+for (const [cat, c, names] of CATS) for (const name of names) PATTERNS.push({ name, cat, c, def: HAND[name] || genPattern(name, cat), hand: !!HAND[name] });
+let libCat = 'All', libQuery = '', libSel = 0;
+
+function freshLanes() { const o = {}; for (const L of LANES) o[L.id] = { len: 16, vals: arr(32, () => L.def), lock: false }; return o; }
+function loadPattern(p) {
+  A.pattern = p; const d = p.def;
+  A.mode = d.mode || 'up'; A.rate = d.rate || '1/16'; A.octaves = d.octaves || 1; A.gate = d.gate ?? .6; A.swing = d.swing ?? 0;
+  A.groove = GROOVES[d.groove] ? d.groove : 'Straight'; A.variation = d.variation ?? 4; A.euclid = { ...(d.euclid || { h: 5, s: 16, r: 0 }) };
+  const locks = Object.fromEntries(Object.entries(A.lanes).map(([k, v]) => [k, v.lock]));
+  A.lanes = freshLanes();
+  for (const [id, L] of Object.entries(d.lanes || {})) { const vals = arr(32, i => L.vals[i % L.vals.length]); A.lanes[id] = { len: L.len, vals, lock: false }; }
+  for (const id in A.lanes) A.lanes[id].lock = !!locks[id];
+  A.seed = 0; snapshotBase(); renderArp();
+  $('#pName').innerHTML = p.name + ' <small>' + p.cat.toUpperCase() + '</small>';
+}
+function snapshotBase() { A.base = {}; for (const id in A.lanes) A.base[id] = A.lanes[id].vals.slice(); }
+
+/* ---- what plays ---- */
+const inScale = m => SCALES[A.scale].includes(((m % 12) + 12) % 12);
+function degShift(m, d) { let x = m; while (!inScale(x)) x--; const dir = Math.sign(d); for (let i = 0; i < Math.abs(d); i++) { do { x += dir; } while (!inScale(x)); } return x; }
+function pool() {
+  let base = A.mode === 'played' ? A.order.filter(n => A.held.includes(n)) : [...A.held].sort((a, b) => a - b);
+  if (!base.length) return [];
+  if (A.passing && A.mode !== 'played' && A.mode !== 'chord' && A.mode !== 'strum') { const s = new Set(base); for (let m = Math.min(...base); m <= Math.max(...base); m++) if (inScale(m)) s.add(m); base = [...s].sort((a, b) => a - b); }
+  const out = []; for (let o = 0; o < A.octaves; o++) for (const n of base) out.push(n + 12 * o); return out;
+}
+function converge(P) { const o = []; let i = 0, j = P.length - 1; while (i <= j) { o.push(P[i]); if (i !== j) o.push(P[j]); i++; j--; } return o; }
+function order(P) {
+  const n = P.length; if (n < 2) return P;
+  switch (A.mode) {
+    case 'down': return [...P].reverse();
+    case 'updown': return n < 3 ? P : [...P, ...[...P].reverse().slice(1, -1)];
+    case 'downup': { const d = [...P].reverse(); return n < 3 ? d : [...d, ...P.slice(1, -1)]; }
+    case 'converge': return converge(P);
+    case 'diverge': return converge(P).reverse();
+    case 'thumb': { const o = []; for (let i = 1; i < n; i++) o.push(P[0], P[i]); return o; }
+    case 'pinky': { const o = []; for (let i = 0; i < n - 1; i++) o.push(P[n - 1], P[i]); return o; }
+    default: return P;
+  }
+}
+const euclidHit = k => { const { h, s, r } = A.euclid; const i = ((k % s) + r) % s; return (i * h) % s < h; };
+function condOk(c, cycle, fill) {
+  switch (c) { case '1:2': return cycle % 2 === 0; case '2:4': return cycle % 4 === 1; case '3:4': return cycle % 4 === 2; case 'Fill': return fill; case 'First': return cycle === 0; case 'Not first': return cycle > 0; default: return true; }
+}
+const run = { pos: 0, walk: 0, slideFrom: null };
+function arpStep(k, t) {
+  const sd = RATES[A.rate], perBar = Math.round(BAR / sd), bar = Math.floor(k / perBar);
+  const varBar = A.variation > 0 && bar % A.variation === A.variation - 1;
+  const fill = A.fill || varBar;
+  const idx = id => { const L = A.lanes[id]; let i = k % L.len; if (varBar && id === 'note') i = (i + 1 + Math.floor(hash(A.seed, bar, 5) * 3)) % L.len; return i; };
+  const v = id => A.lanes[id].vals[idx(id)];
+  const g = GROOVES[A.groove].steps; const gs = g[k % g.length];
+  let tt = t + gs.timing * A.ga * sd + (k % 2 ? A.swing * sd * .5 : 0);
+  const vis = { t: tt, k, varBar, notes: [], skip: false, idx: Object.fromEntries(LANES.map(L => [L.id, idx(L.id)])) };
+  visual(vis);
+  let gate = v('gate'); if (A.mode === 'euclid' && !euclidHit(k)) gate = 0;
+  const slideFrom = run.slideFrom; run.slideFrom = null;
+  if (gate <= 0) return sd;
+  if (hash(A.seed + 1, k, 3) >= v('chance') || !condOk(v('cond'), Math.floor(k / A.lanes.cond.len), fill)) { vis.skip = true; return sd; }
+  const P = pool(); if (!P.length) return sd;
+  const S = order(P), n = S.length, nv = v('note'), pos = run.pos++;
+  let notes;
+  if (A.mode === 'chord' || A.mode === 'strum') notes = [...A.held].sort((a, b) => a - b);
+  else {
+    let i;
+    if (A.mode === 'random') i = Math.floor(hash(A.seed, k, 11) * n);
+    else if (A.mode === 'walk') { run.walk = clamp(run.walk + (hash(A.seed, k, 13) < .5 ? -1 : 1) * (hash(A.seed, k, 17) < .25 ? 2 : 1), 0, n - 1); i = run.walk; }
+    else if (A.mode === 'shape') i = ((nv % n) + n) % n;
+    else i = pos % n;
+    let m;
+    if (A.mode !== 'shape' && A.noteMode === 'held') m = S[(((i + nv) % n) + n) % n];
+    else { m = S[i]; if (A.mode !== 'shape' && nv) m = degShift(m, nv); }
+    notes = [m];
+  }
+  notes = notes.map(m => m + 12 * v('oct'));
+  const vel = clamp(v('vel') * (1 + (gs.velocity - 1) * A.ga), .05, 1.2), acc = !!v('acc'), cut = .18 + v('mod') * .62;
+  const rat = v('rat'), tie = !!v('tie') && notes.length === 1 && rat === 1;
+  const len = sd * clamp(gate * A.gate * 1.5, .06, 1);
+  if (notes.length > 1) {
+    const dn = A.mode === 'strum' && pos % 2 ? [...notes].reverse() : notes;
+    dn.forEach((m, j) => synth(tt + (A.mode === 'strum' ? j * .016 : 0), m, len, vel * .62, { cut, accent: acc, level: .11 }));
+  } else {
+    for (let r = 0; r < rat; r++) synth(tt + r * sd / rat, notes[0], tie ? sd * 1.08 : (rat > 1 ? sd / rat * .6 : len), vel * (r ? .8 : 1), { cut, accent: acc && !r, slideFrom: r ? null : slideFrom });
+    if (tie) run.slideFrom = notes[0];
+  }
+  vis.notes = notes;
+  return sd;
+}
+visHandlers.arp = v => {
+  for (const L of LANES) { const cells = laneEls[L.id]; if (!cells) continue; cells.forEach(c => c.classList.remove('ph', 'skip')); const c = cells[v.idx[L.id]]; if (c) { c.classList.add('ph'); if (v.skip) c.classList.add('skip'); } }
+  $('#varBadge').classList.toggle('on', v.varBar);
+  for (const m of v.notes) { const key = keyEls[m]; if (key) { key.classList.add('hit'); setTimeout(() => key.classList.remove('hit'), 110); } }
+};
+
+/* ---- arp UI ---- */
+const laneEls = {}; const keyEls = {};
+function renderModes() {
+  const box = $('#modes'); box.innerHTML = '';
+  for (const [g, ms] of MODES) {
+    const grp = el('div', 'mgroup'); grp.appendChild(el('span', '', g.toUpperCase())); const row = el('div');
+    for (const [id, label, isNew] of ms) { const b = el('button', 'mode' + (isNew ? ' nw' : '') + (A.mode === id ? ' on' : ''), label); b.onclick = () => { A.mode = id; run.walk = 0; renderModes(); renderLanes(); }; row.appendChild(b); }
+    grp.appendChild(row); box.appendChild(grp);
+  }
+  $('#euc').classList.toggle('on', A.mode === 'euclid');
+  for (const [k, id] of [['h', 'eH'], ['s', 'eS'], ['r', 'eR']]) { $('#' + id).value = A.euclid[k]; $('#' + id + 'v').textContent = A.euclid[k]; setRangeFill($('#' + id)); }
+}
+function cellContent(L, val) {
+  switch (L.kind) {
+    case 'bar': return `<span class="b" style="height:${val * 100}%"></span>` + (L.id === 'chance' && val < 1 ? `<span class="t">${Math.round(val * 100)}</span>` : '');
+    case 'int': {
+      if (L.id === 'rat') return `<span class="t">${val > 1 ? '×' + val : '·'}</span>` + (val > 1 ? `<span class="b" style="height:${(val - 1) / 3 * 100}%;opacity:.3"></span>` : '');
+      const f = (val - L.min) / (L.max - L.min); return `<span class="b" style="height:${f * 100}%;opacity:.35"></span><span class="t">${val > 0 && L.id === 'oct' ? '+' + val : val}</span>`;
+    }
+    case 'bool': return '';
+    case 'enum': return `<span class="t">${val === '—' ? '' : val}</span>`;
+  }
+}
+function paintLane(id) {
+  const L = LANE[id], st = A.lanes[id], cells = laneEls[id];
+  cells.forEach((c, i) => {
+    const out = i >= st.len; c.classList.toggle('out', out); c.classList.toggle('wrap', i === st.len - 1 && st.len < 32);
+    const val = st.vals[i]; c.classList.toggle('on', (L.kind === 'bool' && !!val) || (L.kind === 'enum' && val !== '—'));
+    c.innerHTML = cellContent(L, val);
+  });
+}
+function renderLanes() {
+  const box = $('#lanes'); box.innerHTML = '';
+  for (const L of LANES) {
+    const st = A.lanes[L.id];
+    const row = el('div', 'lane' + (L.short ? ' short' : '')); row.style.setProperty('--c', L.c);
+    const h = el('div', 'lhead');
+    let nm = L.name; if (L.id === 'note') nm = A.mode === 'shape' ? 'Shape · note index' : (A.noteMode === 'held' ? 'Note · + held notes' : 'Note · + scale degrees');
+    h.appendChild(el('span', 'nm', nm));
+    if (L.id === 'note' && A.mode !== 'shape') { const t = el('button', 'lock', A.noteMode === 'held' ? 'HELD' : 'SCALE'); t.title = 'Offset by held notes or by scale degrees'; t.onclick = () => { A.noteMode = A.noteMode === 'held' ? 'scale' : 'held'; renderLanes(); }; h.appendChild(t); }
+    const len = el('span', 'len'); const dn = el('button', '', '−'), up = el('button', '', '+'), lv = el('span', '', st.len);
+    dn.onclick = () => { st.len = Math.max(1, st.len - 1); lv.textContent = st.len; paintLane(L.id); renderFoot(); };
+    up.onclick = () => { st.len = Math.min(32, st.len + 1); lv.textContent = st.len; paintLane(L.id); renderFoot(); };
+    len.append(dn, lv, up); h.appendChild(len);
+    const lk = el('button', 'lock' + (st.lock ? ' on' : ''), 'LOCK'); lk.onclick = () => { st.lock = !st.lock; lk.classList.toggle('on', st.lock); }; h.appendChild(lk);
+    const cells = el('div', 'cells'); laneEls[L.id] = [];
+    for (let i = 0; i < 32; i++) { const c = el('div', 'cell'); c.dataset.i = i; cells.appendChild(c); laneEls[L.id].push(c); }
+    attachEdit(cells, L);
+    row.append(h, cells); box.appendChild(row); paintLane(L.id);
+  }
+  renderFoot();
+}
+function lcm(a, b) { const g = (x, y) => y ? g(y, x % y) : x; return a / g(a, b) * b; }
+function renderFoot() {
+  const lens = [...new Set(LANES.map(L => A.lanes[L.id].len))].sort((a, b) => b - a);
+  const cycle = lens.reduce(lcm, 1), sd = RATES[A.rate], bars = cycle * sd / BAR;
+  $('#laneFoot').innerHTML = `<span>Lane lengths <b>${lens.join(' · ')}</b></span><span>The whole pattern repeats every <b>${cycle} steps</b> (${bars >= 1 ? bars.toFixed(bars % 1 ? 1 : 0) + ' bars' : '< 1 bar'} at ${A.rate})</span><span>Variation bar: <b>${A.variation ? 'every ' + A.variation + ' bars' : 'off'}</b> rotates the Note lane and plays Fill steps</span><span>A Gate of 0 is a rest · <b>Mod</b> and <b>Accent</b> are mod-matrix sources</span>`;
+}
+function attachEdit(cells, L) {
+  let dragging = false;
+  const at = e => { const r = cells.getBoundingClientRect(); const i = clamp(Math.floor((e.clientX - r.left) / r.width * 32), 0, 31); return { i, y: clamp(1 - (e.clientY - r.top) / r.height, 0, 1) }; };
+  const set = e => {
+    const { i, y } = at(e), st = A.lanes[L.id]; if (i >= st.len) return;
+    if (L.kind === 'bar') st.vals[i] = Math.round(y * 20) / 20;
+    else if (L.kind === 'int') st.vals[i] = Math.round(L.min + y * (L.max - L.min));
+    paintLane(L.id);
+  };
+  cells.addEventListener('pointerdown', e => {
+    const { i } = at(e), st = A.lanes[L.id]; if (i >= st.len) return;
+    if (L.kind === 'bool') { st.vals[i] = st.vals[i] ? 0 : 1; paintLane(L.id); snapshotBase(); return; }
+    if (L.kind === 'enum') { const o = L.opts, j = o.indexOf(st.vals[i]); st.vals[i] = o[(j + (e.shiftKey ? o.length - 1 : 1)) % o.length]; paintLane(L.id); snapshotBase(); return; }
+    dragging = true; cells.setPointerCapture(e.pointerId); set(e);
+  });
+  cells.addEventListener('pointermove', e => { if (dragging) set(e); });
+  cells.addEventListener('pointerup', () => { if (dragging) { dragging = false; snapshotBase(); } });
+  cells.addEventListener('dblclick', e => { const { i } = at(e); A.lanes[L.id].vals[i] = L.def; paintLane(L.id); snapshotBase(); });
+}
+function mutateVal(L, h1, h2, h3, base) {
+  switch (L.id) {
+    case 'note': return Math.floor(h1 * 5) - (h2 < .2 ? 1 : 0);
+    case 'oct': return h1 < .7 ? 0 : (h2 < .7 ? 1 : -1);
+    case 'vel': return Math.round((.45 + h1 * .55) * 20) / 20;
+    case 'gate': return h1 < .25 ? 0 : Math.round((.3 + h2 * .65) * 20) / 20;
+    case 'tie': return h1 < .18 ? 1 : 0;
+    case 'rat': return h1 < .85 ? 1 : 2 + Math.floor(h2 * 3);
+    case 'chance': return h1 < .75 ? 1 : Math.round((.4 + h2 * .5) * 20) / 20;
+    case 'cond': return h1 < .82 ? '—' : CONDS[1 + Math.floor(h2 * (CONDS.length - 1))];
+    case 'acc': return h1 < .25 ? 1 : 0;
+    case 'mod': return clamp(Math.round(((typeof base === 'number' ? base : .4) + (h3 - .5) * .8) * 20) / 20, 0, 1);
+  }
+}
+function applyMutation() {
+  LANES.forEach((L, li) => {
+    const st = A.lanes[L.id]; if (st.lock) return;
+    st.vals = A.base[L.id].map((b, i) => A.seed && hash(A.seed, li, i, 1) < A.mamt ? mutateVal(L, hash(A.seed, li, i, 2), hash(A.seed, li, i, 3), hash(A.seed, li, i, 4), b) : b);
+    paintLane(L.id);
+  });
+  $('#seedV').textContent = 'seed ' + A.seed;
+}
+function renderControls() {
+  seg($('#rateSeg'), Object.keys(RATES), A.rate, r => { A.rate = r; $('#rateV').textContent = r; renderFoot(); });
+  $('#rateV').textContent = A.rate;
+  const sets = [['oct', A.octaves, v => v], ['gate', Math.round(A.gate * 100), v => v + '%'], ['swing', Math.round(A.swing * 100), v => v + '%'], ['ga', Math.round(A.ga * 100), v => v + '%']];
+  for (const [id, val, f] of sets) { $('#' + id).value = val; $('#' + id + 'V').textContent = f(val); setRangeFill($('#' + id)); }
+  const gs = $('#grooveSel'); gs.innerHTML = ''; for (const [name, g] of Object.entries(GROOVES)) { const o = el('option', '', (g.rec ? '◉ ' : '') + name + (g.rec ? ' · from a record' : '')); o.value = name; gs.appendChild(o); } gs.value = A.groove;
+  const ss = $('#scaleSel'); if (!ss.options.length) for (const s of Object.keys(SCALES)) ss.appendChild(new Option(s, s)); ss.value = A.scale;
+  $('#passing').classList.toggle('on', A.passing); $('#passing').textContent = A.passing ? 'ON' : 'OFF';
+  seg($('#varSeg'), [0, 2, 4, 8, 16], A.variation, n => { A.variation = n; $('#varV').textContent = n ? n + ' bars' : 'off'; renderFoot(); }, n => n ? String(n) : 'OFF');
+  $('#varV').textContent = A.variation ? A.variation + ' bars' : 'off';
+}
+function renderArp() { renderModes(); renderControls(); renderLanes(); $('#seedV').textContent = 'seed ' + A.seed; }
+
+/* library list */
+function libItems() { return PATTERNS.filter(p => (libCat === 'All' || p.cat === libCat) && (!libQuery || (p.name + ' ' + p.cat).toLowerCase().includes(libQuery))); }
+function renderLib() {
+  const cats = $('#cats'); cats.innerHTML = '';
+  for (const [name, c] of [['All', 'var(--text)'], ...CATS.map(x => [x[0], x[1]])]) { const b = el('button', 'chip' + (libCat === name ? ' on' : ''), name.toUpperCase()); b.style.setProperty('--c', c); b.onclick = () => { libCat = name; renderLib(); }; cats.appendChild(b); }
+  const list = $('#plist'); list.innerHTML = ''; let last = '';
+  for (const p of libItems()) {
+    if (p.cat !== last) { list.appendChild(el('div', 'pgroup', p.cat.toUpperCase())); last = p.cat; }
+    const r = el('div', 'prow' + (A.pattern === p ? ' sel' : ''), `<span class="d"></span><span class="n">${p.name}</span><span class="c">${p.def.mode === 'euclid' ? 'EUCLID' : (p.def.mode || 'up').toUpperCase()} · ${p.def.rate || '1/16'}</span>`);
+    r.style.setProperty('--c', p.c); r.onclick = () => { loadPattern(p); renderLib(); list.focus(); }; p._row = r; list.appendChild(r);
+  }
+}
+function stepPattern(d) {
+  const items = libItems(); if (!items.length) return; let i = items.indexOf(A.pattern); i = clamp(i + d, 0, items.length - 1);
+  if (i < 0) i = 0; loadPattern(items[i]); renderLib(); items[i]._row?.scrollIntoView({ block: 'nearest' });
+}
+
+/* keyboard */
+const KB_LO = 48, KB_HI = 72; const isBlack = m => [1, 3, 6, 8, 10].includes(m % 12);
+function renderKB() {
+  const kb = $('#kb'); kb.innerHTML = ''; const whites = []; for (let m = KB_LO; m <= KB_HI; m++) if (!isBlack(m)) whites.push(m);
+  const w = 100 / whites.length;
+  for (let m = KB_LO; m <= KB_HI; m++) {
+    const black = isBlack(m); const k = el('div', black ? 'bk' : 'wk', m % 12 === 0 ? nn(m) : '');
+    if (black) { const wi = whites.filter(x => x < m).length; k.style.left = `calc(${wi * w}% - ${w * .3}%)`; k.style.width = w * .6 + '%'; }
+    k.onpointerdown = e => { e.preventDefault(); toggleHeld(m); };
+    keyEls[m] = k; kb.appendChild(k);
+  }
+  paintHeld();
+}
+function addHeld(m) { if (A.held.includes(m)) return; A.held.push(m); A.order = [...A.order.filter(x => x !== m), m]; blip(m); }
+function toggleHeld(m) { if (A.held.includes(m)) A.held = A.held.filter(x => x !== m); else addHeld(m); paintHeld(); }
+function blip(m) { if (ctx && !(T.on && T.owner === 'arp')) synth(ctx.currentTime + .01, m, .18, .7, { cut: .45, level: .12 }); }
+const CHORDS = [[[0, 3, 7, 10], 'm7'], [[0, 4, 7, 11], 'maj7'], [[0, 4, 7, 10], '7'], [[0, 3, 7], 'm'], [[0, 4, 7], ''], [[0, 3, 7, 10, 14], 'm9'], [[0, 5, 7], 'sus4'], [[0, 7], '5'], [[0, 3, 7, 14], 'm(add9)']];
+function chordName(ns) {
+  if (!ns.length) return 'No chord';
+  const s = [...new Set(ns)].sort((a, b) => a - b);
+  for (const root of s) { const iv = [...new Set(s.map(m => ((m - root) % 12 + 12) % 12))].sort((a, b) => a - b); for (const [shape, q] of CHORDS) { const sh = [...new Set(shape.map(x => x % 12))].sort((a, b) => a - b); if (sh.length === iv.length && sh.every((x, i) => x === iv[i])) return NOTE[root % 12] + q; } }
+  return s.length === 1 ? nn(s[0]) : s.length + ' notes';
+}
+function paintHeld() {
+  for (const [m, k] of Object.entries(keyEls)) k.classList.toggle('held', A.held.includes(+m));
+  const s = [...A.held].sort((a, b) => a - b); $('#chordName').innerHTML = chordName(s) + `<small>${s.map(nn).join(' · ') || 'click keys or type'}</small>`;
+}
+const TYPE = { a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6, g: 7, y: 8, h: 9, u: 10, j: 11, k: 12, o: 13, l: 14 };
+let typeOct = 48; const down = new Set();
+function typingTarget(e) { const t = e.target; return t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA'); }
+document.addEventListener('keydown', e => {
+  if ($('#v-arp').hidden || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (typingTarget(e)) { if (e.key === 'Escape') { e.target.blur(); $('#plist').focus(); pill(false); } return; }
+  if (e.key === '/') { e.preventDefault(); $('#libSearch').focus(); pill(true); return; }
+  if (document.activeElement === $('#plist') && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); stepPattern(e.key === 'ArrowDown' ? 1 : -1); return; }
+  const k = e.key.toLowerCase();
+  if (k === 'z') { typeOct = Math.max(24, typeOct - 12); return; } if (k === 'x') { typeOct = Math.min(84, typeOct + 12); return; }
+  if (!(k in TYPE) || e.repeat) return;
+  e.preventDefault(); const m = typeOct + TYPE[k];
+  if (A.latch && down.size === 0) A.held = [];
+  down.add(k); addHeld(m); paintHeld();
+});
+document.addEventListener('keyup', e => {
+  const k = e.key.toLowerCase(); if (!down.has(k)) return; down.delete(k);
+  if (!A.latch) { const m = typeOct + TYPE[k]; A.held = A.held.filter(x => x !== m); paintHeld(); }
+});
+function pill(typing) { const p = $('#keysPill'); p.classList.toggle('typing', typing); p.querySelector('span').textContent = typing ? 'TYPING · ESC TO PLAY' : 'KEYS PLAY · / TO SEARCH'; }
+
+function initArp() {
+  A.lanes = freshLanes();
+  renderKB(); renderLib();
+  $('#libSearch').addEventListener('input', e => { libQuery = e.target.value.toLowerCase().trim(); renderLib(); });
+  $('#libSearch').addEventListener('focus', () => pill(true)); $('#libSearch').addEventListener('blur', () => pill(false));
+  $('#pPrev').onclick = () => stepPattern(-1); $('#pNext').onclick = () => stepPattern(1);
+  $('#arpPlay').onclick = () => {
+    if (T.on && T.owner === 'arp') { stop(); return; }
+    run.pos = 0; run.walk = 0; run.slideFrom = null;
+    play('arp', arpStep, () => { $('#arpPlay').classList.remove('on'); $('#arpPlay').textContent = '▶ PLAY'; $('#varBadge').classList.remove('on'); Object.values(laneEls).flat().forEach(c => c.classList.remove('ph', 'skip')); });
+    $('#arpPlay').classList.add('on'); $('#arpPlay').textContent = '■ STOP';
+  };
+  const fb = $('#arpFill'); const fon = v => { A.fill = v; fb.classList.toggle('on', v); };
+  fb.onpointerdown = () => fon(true); fb.onpointerup = fb.onpointerleave = () => fon(false);
+  for (const [k, id] of [['h', 'eH'], ['s', 'eS'], ['r', 'eR']]) $('#' + id).oninput = e => { A.euclid[k] = +e.target.value; $('#' + id + 'v').textContent = e.target.value; setRangeFill(e.target); };
+  $('#oct').oninput = e => { A.octaves = +e.target.value; $('#octV').textContent = A.octaves; setRangeFill(e.target); };
+  $('#gate').oninput = e => { A.gate = e.target.value / 100; $('#gateV').textContent = e.target.value + '%'; setRangeFill(e.target); };
+  $('#swing').oninput = e => { A.swing = e.target.value / 100; $('#swingV').textContent = e.target.value + '%'; setRangeFill(e.target); };
+  $('#ga').oninput = e => { A.ga = e.target.value / 100; $('#gaV').textContent = e.target.value + '%'; setRangeFill(e.target); };
+  $('#grooveSel').onchange = e => { A.groove = e.target.value; };
+  $('#scaleSel').onchange = e => { A.scale = e.target.value; };
+  $('#passing').onclick = () => { A.passing = !A.passing; renderControls(); };
+  $('#latch').onclick = () => { A.latch = !A.latch; $('#latch').classList.toggle('on', A.latch); };
+  $('#clearChord').onclick = () => { A.held = []; paintHeld(); };
+  $('#mutate').onclick = () => { A.seed++; applyMutation(); };
+  $('#seedUp').onclick = () => { A.seed++; applyMutation(); };
+  $('#seedDn').onclick = () => { A.seed = Math.max(0, A.seed - 1); applyMutation(); };
+  $('#mutReset').onclick = () => { A.seed = 0; applyMutation(); };
+  $('#mamt').oninput = e => { A.mamt = e.target.value / 100; $('#mamtV').textContent = e.target.value + '%'; setRangeFill(e.target); if (A.seed) applyMutation(); };
+  setRangeFill($('#mamt'));
+  loadPattern(PATTERNS[0]); renderLib();
+}
+
+/* =================== GROOVE =================== */
+const REFS = [
+  { id: 'clip', kind: 'CLIP', name: 'Funky › Hats (Knock)', meta: 'audio clip · bars 17–32 · 126 BPM', bpm: 126, swing: .18, push: -.04, acc: [1, .62, .86, .7], jit: .05, seed: 3 },
+  { id: 'r04', kind: 'LIB', name: 'Ref 04 · deep house', meta: 'library · 124 BPM · 8A', bpm: 124, swing: .27, push: -.02, acc: [1, .55, .9, .6], jit: .07, seed: 4 },
+  { id: 'r11', kind: 'LIB', name: 'Ref 11 · minimal', meta: 'library · 127 BPM · 5A', bpm: 127, swing: .12, push: .03, acc: [1, .7, .8, .75], jit: .04, seed: 11 },
+  { id: 'r19', kind: 'LIB', name: 'Ref 19 · tech house', meta: 'library · 125 BPM · 10A', bpm: 125, swing: .21, push: -.06, acc: [.95, .5, 1, .58], jit: .06, seed: 19 },
+  { id: 'r23', kind: 'LIB', name: 'Ref 23 · dub techno', meta: 'library · 122 BPM · 6A', bpm: 122, swing: .33, push: 0, acc: [1, .4, .75, .5], jit: .09, seed: 23 },
+];
+const BANDS = { Kick: '40–120 Hz', Hats: '6–16 kHz', Perc: '1–5 kHz', All: 'full range' };
+const G = { ref: REFS[0], band: 'Hats', bars: 16, steps: 16, taken: null, ab: 'A', fresh: null };
+const hits = (band, s) => band === 'Kick' ? s % 4 === 0 : band === 'Perc' ? [3, 6, 10, 13, 14].includes(s % 16) : true;
+function measure() {
+  const R = G.ref, out = [];
+  for (let s = 0; s < G.steps; s++) {
+    const q = s % 16, bar2 = s >= 16;
+    if (!hits(G.band, q)) { out.push({ s, hit: false, timing: 0, velocity: 1, spread: 0, conf: 0 }); continue; }
+    let tr = G.band === 'Kick' ? (hash(R.seed, q, 1) - .5) * .03 : (q % 2 ? R.swing : 0) + (q % 4 === 2 ? R.push : 0) + (hash(R.seed, q, 2) - .5) * .06;
+    if (G.band === 'All' && q % 4 === 0) tr *= .3;
+    if (bar2) tr += (hash(R.seed, q, 9) - .5) * .05;
+    let vr = G.band === 'Kick' ? .95 + hash(R.seed, q, 3) * .1 : R.acc[q % 4] * (1 + (hash(R.seed, q, 4) - .5) * .18);
+    if (G.band === 'Perc') vr = .6 + hash(R.seed, q, 5) * .5;
+    if (bar2 && q >= 12) vr *= .9 + hash(R.seed, q, 10) * .25;
+    const jit = R.jit * (G.band === 'Kick' ? .3 : 1);
+    const timing = clamp(tr + (hash(R.seed, q, G.bars) - .5) * jit * 2 / Math.sqrt(G.bars), -.5, .5);
+    const conf = clamp(1 - .32 / Math.sqrt(G.bars) - jit * 1.6 - (G.band === 'Perc' ? .05 : 0), .2, .99);
+    out.push({ s, hit: true, timing, velocity: clamp(vr, 0, 2), spread: jit, conf });
+  }
+  const hv = out.filter(x => x.hit); const mean = hv.reduce((a, x) => a + x.velocity, 0) / Math.max(1, hv.length);
+  for (const x of out) if (x.hit) x.velocity = clamp(x.velocity / mean, 0, 2);
+  return out;
+}
+const stepMs = () => 60 / G.ref.bpm / 4 * 1000;
+function renderSources() {
+  const box = $('#srcList'); box.innerHTML = '';
+  for (const R of REFS) { const b = el('button', 'src' + (G.ref === R ? ' on' : ''), `<span class="k">${R.kind}</span><span class="n">${R.name}</span><span class="m">${R.meta}</span>`); b.onclick = () => { G.ref = R; renderSources(); take(true); }; box.appendChild(b); }
+}
+function take(quick) {
+  const steps = [`Beat grid ${G.ref.bpm.toFixed(2)} BPM · cached`, `Onsets · ${G.band} ${BANDS[G.band]}`, `${G.bars} bars averaged`];
+  const prog = $('#gprog i'), st = $('#gsteps');
+  const finish = () => { G.taken = measure(); prog.style.width = '100%'; st.innerHTML = steps.map(s => `<span class="done">✓ ${s}</span>`).join(''); $('#gName').value = defaultName(); renderGroove(); };
+  if (quick) { finish(); return; }
+  let i = 0; prog.style.width = '0'; st.innerHTML = '';
+  const tick = () => { if (i < steps.length) { st.innerHTML = steps.map((s, j) => j < i ? `<span class="done">✓ ${s}</span>` : j === i ? `<span>… ${s}</span>` : '').join(''); prog.style.width = ((i + 1) / steps.length * 100) + '%'; i++; setTimeout(tick, 260); } else finish(); };
+  tick();
+}
+function defaultName() { return G.ref.name.replace(' › ', ' ').replace(/^Ref /, 'Ref ') + ' · ' + G.band + (G.steps === 32 ? ' · 2 bars' : ''); }
+function grooveSteps() { return G.taken.map(x => ({ timing: +x.timing.toFixed(3), velocity: +x.velocity.toFixed(2) })); }
+function renderGroove() {
+  const m = G.taken, hv = m.filter(x => x.hit), ms = stepMs();
+  const odd = hv.filter(x => x.s % 2 === 1), off8 = hv.filter(x => x.s % 4 === 2);
+  const avg = a => a.length ? a.reduce((s, x) => s + x.timing, 0) / a.length : 0;
+  const swingPct = 50 + avg(odd) * 50; // an off 16th late by t steps sits at (1 + t) / 2 of its pair
+  const conf = hv.length ? hv.reduce((s, x) => s + x.conf, 0) / hv.length : 0;
+  const accents = m.filter(x => x.hit && x.velocity > 1.08).length;
+  $('#gTitle').textContent = 'Fingerprint · ' + G.ref.name + ' · ' + G.band;
+  $('#facts').innerHTML = [
+    [`${swingPct.toFixed(1)}%`, '16th swing (50% is straight)', ''],
+    [`${(avg(off8) * ms) >= 0 ? '+' : ''}${(avg(off8) * ms).toFixed(1)} ms`, 'offbeat 8ths vs the grid (− is a push)', ''],
+    [`${accents} of ${hv.length}`, 'steps accented above the average level', ''],
+    [`${Math.round(conf * 100)}%`, `confidence · ${G.bars} bars, ${hv.length * G.bars / (G.steps / 16)} onsets`, conf > .8 ? 'good' : 'warn'],
+  ].map(([b, s, c]) => `<div class="fact ${c}"><b>${b}</b><small>${s}</small></div>`).join('');
+  const late = odd.length ? avg(odd) * ms : 0;
+  $('#gSummary').innerHTML = G.band === 'Kick'
+    ? `The kick sits on the grid (within <b>${Math.max(...hv.map(x => Math.abs(x.timing * ms))).toFixed(1)} ms</b>). The feel of this record is in the tops, so try <b>Hats</b> or <b>All</b>.`
+    : `The off 16ths land <b>${late.toFixed(1)} ms late</b> on average (${(avg(odd) * 100).toFixed(0)}% of a step), and the offbeat 8ths land <b>${Math.abs(avg(off8) * ms).toFixed(1)} ms ${avg(off8) < 0 ? 'early' : 'late'}</b>. ${accents ? `Accents fall on <b>${m.filter(x => x.hit && x.velocity > 1.08).map(x => 'step ' + (x.s + 1)).slice(0, 6).join(', ')}</b>.` : ''} Steps with no onsets in this band stay straight.`;
+  $('#tmpl').textContent = `// GrooveTemplate · timing is a share of a step, velocity scales\n{ "name": ${JSON.stringify($('#gName').value)},\n  "steps_per_quarter": 4,\n  "steps": [\n` + grooveSteps().map(x => `    { "timing": ${x.timing.toFixed(3)}, "velocity": ${x.velocity.toFixed(2)} }`).join(',\n') + `\n  ] }`;
+  drawFP();
+}
+function drawFP() {
+  const cv = $('#fp'); if (!cv || $('#v-groove').hidden || !G.taken) return;
+  const dpr = devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight; cv.width = W * dpr; cv.height = H * dpr;
+  const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const L = 34, R = W - 10, n = G.steps, sw = (R - L) / n, X = s => L + s * sw;
+  const wave = [8, 128], tim = [146, 236], vel = [252, 318];
+  c.font = '600 9px JetBrains Mono, monospace'; c.fillStyle = css('--sfaint');
+  c.fillText('AUDIO', 2, wave[0] + 10); c.fillText('LATE', 2, tim[0] + 10); c.fillText('EARLY', 2, tim[1] - 2); c.fillText('LEVEL', 2, vel[0] + 10);
+  // waveform of the bar
+  const mid = (wave[0] + wave[1]) / 2, amp = (wave[1] - wave[0]) / 2 - 4, r = rng(G.ref.seed * 31 + G.band.length);
+  c.strokeStyle = 'rgba(151,163,174,.55)'; c.beginPath();
+  for (let px = 0; px < R - L; px++) {
+    const pos = px / (R - L) * n; let a = 0;
+    for (const x of G.taken) { const on = x.s + x.timing; const d = pos - on; if (x.hit && d >= 0 && d < 1.6) a = Math.max(a, x.velocity * .55 * Math.exp(-d * (G.band === 'Kick' ? 1.6 : 4.5))); }
+    if (G.band !== 'Kick' && G.band !== 'All') a += .03; const y = amp * Math.min(1, a) * (.55 + r() * .45);
+    c.moveTo(L + px + .5, mid - y); c.lineTo(L + px + .5, mid + y);
+  }
+  c.stroke();
+  // grid
+  for (let s = 0; s <= n; s++) { c.strokeStyle = s % 4 === 0 ? css('--sline2') : css('--sline'); c.setLineDash(s % 4 === 0 ? [] : [3, 3]); c.beginPath(); c.moveTo(X(s) + .5, wave[0]); c.lineTo(X(s) + .5, vel[1]); c.stroke(); }
+  c.setLineDash([]);
+  for (let b = 0; b < n / 4; b++) { c.fillStyle = css('--sfaint'); c.fillText((Math.floor(b / 4) + 1) + '.' + (b % 4 + 1), X(b * 4) + 3, wave[1] + 12); }
+  // onset markers
+  for (const x of G.taken) if (x.hit) { c.strokeStyle = css('--teal'); c.globalAlpha = .45 + x.conf * .55; c.lineWidth = 2; c.beginPath(); c.moveTo(X(x.s + x.timing), wave[0] + 2); c.lineTo(X(x.s + x.timing), wave[1] - 2); c.stroke(); c.globalAlpha = 1; c.lineWidth = 1; }
+  // timing
+  const tz = (tim[0] + tim[1]) / 2, tscale = (tim[1] - tim[0]) / 2 / .5;
+  c.strokeStyle = css('--sline2'); c.beginPath(); c.moveTo(L, tz + .5); c.lineTo(R, tz + .5); c.stroke();
+  for (const x of G.taken) {
+    const cx = X(x.s) + sw * .2, w = sw * .6;
+    if (!x.hit) { c.fillStyle = css('--sline'); c.fillRect(cx, tz - 1, w, 2); continue; }
+    const h = -x.timing * tscale; c.fillStyle = x.timing >= 0 ? css('--teal') : css('--am'); c.globalAlpha = .4 + x.conf * .6; c.fillRect(cx, Math.min(tz, tz + h), w, Math.abs(h) || 1); c.globalAlpha = 1;
+    c.strokeStyle = css('--sdim'); c.beginPath(); const y0 = tz + h - x.spread * tscale, y1 = tz + h + x.spread * tscale; c.moveTo(cx + w / 2, y0); c.lineTo(cx + w / 2, y1); c.moveTo(cx + w / 2 - 3, y0); c.lineTo(cx + w / 2 + 3, y0); c.moveTo(cx + w / 2 - 3, y1); c.lineTo(cx + w / 2 + 3, y1); c.stroke();
+    if (sw > 26 && Math.abs(x.timing) > .04) { c.fillStyle = css('--ink'); c.fillText(Math.round(x.timing * stepMs()), cx, x.timing >= 0 ? tz + h - 4 : tz + h + 11); }
+  }
+  // velocity
+  const vb = vel[1], vs = (vel[1] - vel[0]) / 1.6;
+  for (const x of G.taken) { const cx = X(x.s) + sw * .2, w = sw * .6; c.fillStyle = x.hit ? (x.velocity > 1.08 ? css('--pk') : css('--blue')) : css('--sline'); c.fillRect(cx, vb - (x.hit ? x.velocity : .08) * vs, w, (x.hit ? x.velocity : .08) * vs); }
+  c.strokeStyle = css('--sline2'); c.setLineDash([2, 3]); c.beginPath(); c.moveTo(L, vb - vs + .5); c.lineTo(R, vb - vs + .5); c.stroke(); c.setLineDash([]);
+  if (G.playStep != null) { c.fillStyle = 'rgba(230,235,240,.08)'; c.fillRect(X(G.playStep), wave[0], sw, vel[1] - wave[0]); }
+}
+function initGroove() {
+  renderSources();
+  seg($('#bandSeg'), Object.keys(BANDS), G.band, b => { G.band = b; take(true); });
+  seg($('#barsSeg'), [4, 8, 16, 32], G.bars, b => { G.bars = b; take(true); }, b => b + ' bars');
+  seg($('#stepsSeg'), [16, 32], G.steps, s => { G.steps = s; take(true); }, s => s + ' steps');
+  $('#take').onclick = () => take(false);
+  const cv = $('#fp'), tip = $('#fpTip');
+  cv.addEventListener('pointermove', e => {
+    if (!G.taken) return; const r = cv.getBoundingClientRect(), L = 34, sw = (r.width - 10 - L) / G.steps; const s = Math.floor((e.clientX - r.left - L) / sw);
+    if (s < 0 || s >= G.steps) { tip.style.opacity = 0; return; } const x = G.taken[s], ms = stepMs();
+    const beat = Math.floor(s / 4) % 4 + 1, sub = ['the beat', 'the 2nd 16th', 'the offbeat 8th', 'the 4th 16th'][s % 4];
+    tip.innerHTML = x.hit ? `Step ${s + 1} · beat ${beat}, ${sub}<br>${x.timing >= 0 ? '+' : ''}${(x.timing * ms).toFixed(1)} ms (${x.timing >= 0 ? '+' : ''}${(x.timing * 100).toFixed(0)}% of a step) · ±${(x.spread * ms).toFixed(1)} ms<br>level ×${x.velocity.toFixed(2)} · confidence ${Math.round(x.conf * 100)}%` : `Step ${s + 1} · no onsets in ${G.band}<br>stays straight (timing 0, level ×1)`;
+    tip.style.opacity = 1; const tx = clamp(e.clientX - r.left + 12, 0, r.width - tip.offsetWidth - 4); tip.style.left = tx + 'px'; tip.style.top = clamp(e.clientY - r.top + 12, 0, r.height - 60) + 'px';
+  });
+  cv.addEventListener('pointerleave', () => tip.style.opacity = 0);
+  addEventListener('resize', () => { drawFP(); drawTL(); });
+  [...$('#abSeg').children].forEach(b => b.onclick = () => { G.ab = b.dataset.v; [...$('#abSeg').children].forEach(x => x.classList.toggle('on', x === b)); });
+  $('#abPlay').onclick = () => {
+    if (T.on && T.owner === 'groove') { stop(); return; }
+    play('groove', grooveStep, () => { $('#abPlay').classList.remove('on'); $('#abPlay').textContent = '▶ Play A/B'; G.playStep = null; drawFP(); });
+    $('#abPlay').classList.add('on'); $('#abPlay').textContent = '■ Stop';
+  };
+  $('#gName').addEventListener('input', () => renderGroove());
+  $('#gSave').onclick = () => {
+    const name = $('#gName').value.trim() || defaultName();
+    GROOVES[name] = { rec: 1, steps: grooveSteps() };
+    G.fresh = name; renderPool(); renderControls();
+    toast(`Saved <b>${name}</b> to the groove pool. It's in the Nova arp's Groove list now.`);
+  };
+  const tg = [['clip', 'MIDI clip · Funky › Stab 1', 'bars 1–16 · 42 notes', 1], ['arp', 'Nova arp · Bass', 'nova.arp.groove', 1], ['chop', 'Chop · Stab bus', 'chop groove', 0], ['knock', 'Knock pattern · Perc', 'pattern A', 1]];
+  $('#targets').innerHTML = tg.map(([id, n, m, on]) => `<label><input type="checkbox" ${on ? 'checked' : ''} data-id="${id}"> ${n}<small>${m}</small></label>`).join('');
+  for (const [id, lab] of [['aq', 'aqV'], ['at', 'atV'], ['av', 'avV']]) { const r = $('#' + id); setRangeFill(r); r.oninput = () => { $('#' + lab).textContent = r.value + '%'; setRangeFill(r); }; }
+  $('#gApply').onclick = () => {
+    const n = [...$('#targets').querySelectorAll('input:checked')].length; if (!n) { toast('Select a target first.'); return; }
+    toast(`Applied <b>${$('#gName').value}</b> to ${n} target${n > 1 ? 's' : ''}: quantize ${$('#aq').value}%, timing ${$('#at').value}%, velocity ${$('#av').value}%. One undo step.`);
+  };
+  renderPool(); take(true);
+}
+function renderPool() {
+  const box = $('#pool'); box.innerHTML = '';
+  const builtins = ['Swing 16ths 54%', 'Swing 16ths 58%', 'Swing 16ths 62%', 'Swing 16ths 66%', 'Swing 16ths 75%', 'Swing 8ths 58%', 'Swing 8ths 66%'];
+  for (const [name, g] of Object.entries(GROOVES).filter(([, g]) => g.rec).reverse()) box.appendChild(el('div', 'rec' + (G.fresh === name ? ' fresh' : ''), `<span>${name}</span><small>FROM A RECORD · ${g.steps.length} steps</small>`));
+  for (const b of builtins) box.appendChild(el('div', '', `<span>${b}</span><small>BUILT IN</small>`));
+}
+function grooveStep(k, t) {
+  const sd = 60 / BPM / 4, q = k % G.steps, x = G.taken[q];
+  const amtT = $('#at').value / 100, amtV = $('#av').value / 100;
+  const off = G.ab === 'B' ? x.timing * amtT * sd : 0, lvl = G.ab === 'B' ? 1 + (x.velocity - 1) * amtV : (q % 2 ? .72 : .9);
+  if (q % 4 === 0) kick(t, .9);
+  hat(t + off, clamp(lvl, .1, 1.6), q % 4 === 2);
+  if (G.ab === 'B' && [3, 10, 14].includes(q % 16)) perc(t + off, .5);
+  visual({ t: t + off, q });
+  return sd;
+}
+visHandlers.groove = v => { G.playStep = v.q; drawFP(); };
+
+/* =================== ARRANGE =================== */
+const TRACKS = [
+  { id: 'kick', name: 'Kick', inst: 'Anvil', role: 'Kick', ev: 'four on the floor · tail tuned to A (55 Hz) · 100% of bars', c: 'var(--kick)' },
+  { id: 'hats', name: 'Hats', inst: 'Knock', role: 'Top', ev: 'offbeat 8ths + 16ths · 6–16 kHz · no pitch', c: 'var(--am)' },
+  { id: 'perc', name: 'Perc', inst: 'Knock', role: 'Perc', ev: 'syncopated rim and clave · 3 hits a bar', c: 'var(--pk)' },
+  { id: 'bass', name: 'Bass', inst: 'Nova', role: 'Bass', ev: 'mono · root A1 · offbeat 16ths · below 120 Hz', c: 'var(--teal)' },
+  { id: 'stab', name: 'Stab', inst: 'Nova', role: 'Hook', ev: 'Am7 stab · 2 hits a bar · most energy at 1–3 kHz', c: 'var(--cy)' },
+  { id: 'pad', name: 'Pad', inst: 'Nova', role: 'Bed', ev: 'sustained · wide (side/mid 0.71) · one chord per 4 bars', c: 'var(--vi)' },
+  { id: 'fx', name: 'Fx', inst: 'Dust + Flyby', role: 'Texture', ev: 'noise bed · no pitch · rises over 8 bars', c: 'var(--blue)' },
+];
+const TPL = {
+  dj: { name: 'DJ Tool ~6:30', bars: 208, build: 16, brk: 16, drop: 16 },
+  hyp: { name: 'Hypnotic ~7:00', bars: 224, build: 32, brk: 16, drop: 16 },
+  peak: { name: 'Peak-time build', bars: 192, build: 32, brk: 32, drop: 16 },
+};
+const SEC_C = { Intro: '#3a4654', Build: '#4a5a3a', Groove: '#2f5a55', Break: '#5a3f63', Drop: '#6a3a3a', 'Groove 2': '#2f5a55', Outro: '#3a4654' };
+const RULES = { // per role and section: 1 on, 0 off, 'in8'/'in16' enters after n bars, 'out8'/'out16' leaves n bars before the end, 'half' second half only
+  kick: { Intro: 1, Build: 1, Groove: 1, Break: 0, Drop: 1, 'Groove 2': 1, Outro: 1 },
+  hats: { Intro: 'in8', Build: 1, Groove: 1, Break: 'half', Drop: 1, 'Groove 2': 1, Outro: 'out8' },
+  perc: { Intro: 'in16', Build: 1, Groove: 1, Break: 0, Drop: 1, 'Groove 2': 1, Outro: 'out16' },
+  bass: { Intro: 0, Build: 'in8', Groove: 1, Break: 0, Drop: 1, 'Groove 2': 1, Outro: 0 },
+  stab: { Intro: 0, Build: 'half', Groove: 1, Break: 1, Drop: 1, 'Groove 2': 1, Outro: 0 },
+  pad: { Intro: 0, Build: 0, Groove: 0, Break: 1, Drop: 1, 'Groove 2': 0, Outro: 0 },
+  fx: { Intro: 0, Build: 1, Groove: 0, Break: 1, Drop: 0, 'Groove 2': 0, Outro: 0 },
+};
+const R2 = { hyp: { pad: { Groove: 1, 'Groove 2': 1 }, fx: { Build: 'half' } }, peak: { stab: { Build: 0 }, fx: { Build: 1, Break: 1 }, pad: { Drop: 'out8' } } };
+const S = { tpl: 'dj', bars: 208, intro: 32, bp: .55, vary: .5, seed: 7, loop: 16, locked: new Set(), custom: null, play: 0, ab: 'B', plan: null };
+function minBars() { const t = TPL[S.tpl]; return Math.ceil((2 * S.intro + t.build + t.brk + t.drop + 32) / 8) * 8; }
+function sections() {
+  if (S.custom) return S.custom;
+  const t = TPL[S.tpl], tot = S.bars, intro = S.intro, m1 = tot - intro;
+  const lo = intro + t.build + 16, hi = m1 - t.brk - t.drop - 16;
+  const bs = clamp(Math.round((lo + S.bp * Math.max(0, hi - lo)) / 8) * 8, lo, Math.max(lo, hi));
+  return [['Intro', 0, intro], ['Build', intro, t.build], ['Groove', intro + t.build, bs - intro - t.build], ['Break', bs, t.brk], ['Drop', bs + t.brk, t.drop], ['Groove 2', bs + t.brk + t.drop, m1 - bs - t.brk - t.drop], ['Outro', m1, intro]]
+    .map(([name, start, len]) => ({ name, start, len }));
+}
+function plan() {
+  const secs = sections(), tot = secs.at(-1).start + secs.at(-1).len, r = rng(S.seed * 7919 + Math.round(S.vary * 100));
+  const on = {}; const notes = [];
+  for (const T0 of TRACKS) {
+    const a = new Array(tot).fill(false);
+    if (S.locked.has(T0.id)) a.fill(true);
+    else for (const s of secs) {
+      let rule = RULES[T0.id][s.name]; const o = R2[S.tpl]?.[T0.id]?.[s.name]; if (o !== undefined) rule = o;
+      for (let b = 0; b < s.len; b++) {
+        let v = rule === 1 || (rule === 'in8' && b >= 8) || (rule === 'in16' && b >= Math.min(16, s.len - 8)) || (rule === 'out8' && b < s.len - 8) || (rule === 'out16' && b < s.len - 16) || (rule === 'half' && b >= s.len / 2);
+        a[s.start + b] = !!v;
+      }
+    }
+    on[T0.id] = a;
+  }
+  // variation inside the groove sections: 16-bar windows where a secondary part sits out
+  const tog = []; const fills = []; const kickOut = [];
+  for (const s of secs) if (s.name === 'Groove' || s.name === 'Groove 2') {
+    for (let w = 16; w + 16 <= s.len; w += 16) {
+      if (r() < S.vary * .8) { const cand = ['perc', 'stab', 'hats'].filter(id => !S.locked.has(id) && on[id][s.start + w]); if (cand.length) { const id = cand[Math.floor(r() * cand.length)]; const n = r() < .5 ? 8 : 16; for (let b = 0; b < n; b++) on[id][s.start + w + b] = false; tog.push({ id, bar: s.start + w, n }); } }
+      if (S.vary > .7 && r() < .3 && !S.locked.has('bass')) { for (let b = 0; b < 4; b++) on.bass[s.start + w + 12 + b] = false; tog.push({ id: 'bass', bar: s.start + w + 12, n: 4 }); }
+    }
+    for (let p = 16; p <= s.len; p += 16) { const bar = s.start + p - 1; if (r() < .35 + S.vary * .6) { const id = on.bass[bar] && r() < .6 ? 'bass' : 'stab'; if (on[id][bar]) fills.push({ bar, id }); } }
+  }
+  // the kick sits out the last bar before the drop and before the groove
+  for (const s of secs) if ((s.name === 'Drop' || s.name === 'Groove') && !S.locked.has('kick')) { const b = s.start - 1; if (b > 0 && on.kick[b]) { on.kick[b] = false; kickOut.push(b); } }
+  // automation
+  const sec = n => secs.find(s => s.name === n);
+  const G1 = sec('Groove'), Br = sec('Break'), Dr = sec('Drop'), G2 = sec('Groove 2'), Ou = sec('Outro'), Bu = sec('Build');
+  const filt = [[0, .3], [G1.start, .3], [G1.start + Math.min(16, G1.len), 1], [Br.start, 1], [Br.start + 4, .3], [Dr.start - 1, .92], [Dr.start, 1], [Math.max(G2.start, Ou.start - 16), 1], [Ou.start, .3], [tot, .3]];
+  const hpl = [[0, 0], [Bu.start + Bu.len - (S.tpl === 'peak' ? 8 : 4), 0], [Bu.start + Bu.len, S.tpl === 'peak' ? .35 : .15], [Bu.start + Bu.len + .01, 0], [Br.start + Br.len - 8, 0], [Dr.start, .6], [Dr.start + .01, 0], [tot, 0]];
+  const verbT = []; for (let b = Br.start + 7; b < Br.start + Br.len; b += 8) verbT.push(b); verbT.push(Dr.start - 1);
+  const delayT = []; for (const s of [G1, G2]) for (let p = 16; p <= s.len; p += 16) { if (r() < .4 + S.vary * .4) delayT.push(s.start + p - 1); }
+  // the rule: something changes in every 16-bar window
+  const changed = []; const evBars = new Set([...fills.map(f => f.bar), ...verbT, ...delayT, ...kickOut]);
+  for (let w = 16; w < tot; w += 16) {
+    let c = false; for (let b = w; b < Math.min(tot, w + 16) && !c; b++) { if (evBars.has(b)) c = true; for (const id in on) if (on[id][b] !== on[id][b - 1]) c = true; }
+    for (const s of secs) if (s.start >= w && s.start < w + 16) c = true;
+    if (!c) { delayT.push(w + 15); c = true; changed.push({ w, added: true }); } else changed.push({ w, added: false });
+  }
+  S.plan = { secs, tot, on, fills, kickOut, tog, filt, hpl, verbT, delayT: delayT.sort((a, b) => a - b), changed };
+  return S.plan;
+}
+const valAt = (pts, b) => { for (let i = 1; i < pts.length; i++) if (b <= pts[i][0]) { const [x0, y0] = pts[i - 1], [x1, y1] = pts[i]; return x1 === x0 ? y1 : y0 + (y1 - y0) * (b - x0) / (x1 - x0); } return pts.at(-1)[1]; };
+const NS = 'http://www.w3.org/2000/svg';
+function sv(tag, attrs, parent, text) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; parent.appendChild(e); return e; }
+const TL = { W: 1100, L: 150, top: 26, secH: 26, trH: 22, gap: 12, autoH: 26 };
+function drawTL() {
+  const svg = $('#tl'); if ($('#v-arrange').hidden) return; const P = S.plan || plan(); svg.innerHTML = '';
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const { W, L } = TL, bw = (W - L - 10) / P.tot, X = b => L + b * bw;
+  const yTr = TL.top + TL.secH + 6, yAuto = yTr + TRACKS.length * TL.trH + TL.gap, autos = 5, yChk = yAuto + autos * TL.autoH + 6, H = yChk + 26;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.style.height = H + 'px';
+  const defs = sv('defs', {}, svg); const pat = sv('pattern', { id: 'lockp', width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs); sv('rect', { width: 3, height: 6, fill: 'rgba(106,167,255,.35)' }, pat);
+  // ruler
+  for (let b = 0; b <= P.tot; b += 8) { const major = b % 32 === 0; sv('line', { x1: X(b), x2: X(b), y1: major ? 4 : 14, y2: H - 4, stroke: major ? css('--sline2') : css('--sline'), 'stroke-width': 1, 'stroke-dasharray': b % 16 ? '2 4' : '' }, svg); if (b % 32 === 0 && b < P.tot) sv('text', { x: X(b) + 3, y: 13, fill: css('--sfaint'), 'font-size': 9.5, 'font-family': 'JetBrains Mono' }, svg, b + 1); }
+  sv('text', { x: 8, y: 13, fill: css('--sfaint'), 'font-size': 9.5, 'font-family': 'JetBrains Mono' }, svg, `BAR · ${P.tot} bars · ${fmtTime(P.tot * BAR)}`);
+  // sections + handles
+  P.secs.forEach((s, i) => {
+    sv('rect', { x: X(s.start) + 1, y: TL.top, width: Math.max(1, s.len * bw - 2), height: TL.secH, rx: 4, fill: SEC_C[s.name] }, svg);
+    if (s.len * bw > 40) sv('text', { x: X(s.start) + 6, y: TL.top + 17, fill: css('--ink'), 'font-size': 11, 'font-weight': 600, 'font-family': 'Inter' }, svg, s.name + (s.len * bw > 90 ? ` · ${s.len}` : ''));
+    if (i > 0) { const h = sv('rect', { x: X(s.start) - 4, y: TL.top - 2, width: 8, height: TL.secH + 4, fill: 'transparent', style: 'cursor:ew-resize', 'data-edge': i }, svg); sv('rect', { x: X(s.start) - 1, y: TL.top + 6, width: 2, height: TL.secH - 12, rx: 1, fill: css('--ink'), opacity: .6, 'pointer-events': 'none' }, svg); }
+  });
+  sv('text', { x: 8, y: TL.top + 17, fill: css('--sdim'), 'font-size': 10.5, 'font-weight': 700, 'font-family': 'Inter' }, svg, 'SECTIONS');
+  // tracks
+  TRACKS.forEach((t, i) => {
+    const y = yTr + i * TL.trH, c = css(t.c.slice(4, -1));
+    sv('text', { x: 8, y: y + 15, fill: css('--ink'), 'font-size': 11.5, 'font-weight': 600, 'font-family': 'Inter' }, svg, t.name);
+    sv('text', { x: 52, y: y + 15, fill: css('--sfaint'), 'font-size': 9.5, 'font-family': 'JetBrains Mono' }, svg, S.locked.has(t.id) ? 'locked · as is' : t.inst);
+    const a = P.on[t.id]; let b = 0;
+    while (b < P.tot) { if (!a[b]) { b++; continue; } let e = b; while (e < P.tot && a[e]) e++; sv('rect', { x: X(b) + .5, y: y + 3, width: (e - b) * bw - 1, height: TL.trH - 6, rx: 3, fill: S.locked.has(t.id) ? 'url(#lockp)' : c, opacity: S.locked.has(t.id) ? 1 : .72 }, svg); b = e; }
+    for (const f of P.fills) if (f.id === t.id) sv('rect', { x: X(f.bar) + .5, y: y + 3, width: bw - 1, height: TL.trH - 6, fill: css('--ink'), opacity: .9 }, svg);
+    if (t.id === 'kick') for (const k of P.kickOut) sv('rect', { x: X(k) + .5, y: y + 3, width: bw - 1, height: TL.trH - 6, fill: 'none', stroke: css('--rd'), 'stroke-width': 1 }, svg);
+  });
+  // automation lanes
+  const lanes = [['Music filter · Pad, Stab LP', 'filt', 'var(--cy)'], ['Master high-pass', 'hpl', 'var(--am)'], ['Reverb throws · Stab', 'verbT', 'var(--vi)'], ['Delay throws · Stab, Perc', 'delayT', 'var(--teal)'], ['Chop fills · Bass, Stab', 'fills', 'var(--pk)']];
+  lanes.forEach(([name, key, cv], i) => {
+    const y = yAuto + i * TL.autoH, h = TL.autoH - 6, c = css(cv.slice(4, -1));
+    sv('rect', { x: L, y: y + 1, width: W - L - 10, height: h + 2, fill: 'rgba(255,255,255,.015)' }, svg);
+    sv('text', { x: 8, y: y + 15, fill: css('--sdim'), 'font-size': 10.5, 'font-family': 'Inter' }, svg, name);
+    if (key === 'filt' || key === 'hpl') {
+      const pts = P[key]; let d = ''; for (let b = 0; b <= P.tot; b += .5) { const v = valAt(pts, b); d += (d ? 'L' : 'M') + X(b).toFixed(1) + ' ' + (y + 2 + h - v * h).toFixed(1); }
+      sv('path', { d: d + `L${X(P.tot)} ${y + 2 + h}L${X(0)} ${y + 2 + h}Z`, fill: c, opacity: .14 }, svg); sv('path', { d, fill: 'none', stroke: c, 'stroke-width': 1.5 }, svg);
+    } else {
+      const items = key === 'fills' ? P.fills.map(f => f.bar) : P[key];
+      for (const b of items) { sv('rect', { x: X(b + .75), y: y + 3, width: Math.max(2, bw * .25), height: h, rx: 1, fill: c }, svg); }
+      if (key === 'fills') for (const f of P.fills) if (bw > 5) sv('text', { x: X(f.bar) - 1, y: y + h, fill: c, 'font-size': 8, 'font-family': 'JetBrains Mono', 'text-anchor': 'end' }, svg, f.id === 'bass' ? 'B' : 'S');
+    }
+  });
+  // the 16-bar rule
+  sv('text', { x: 8, y: yChk + 14, fill: css('--sdim'), 'font-size': 10.5, 'font-family': 'Inter' }, svg, 'Change every 16 bars');
+  for (const c of P.changed) { sv('circle', { cx: X(c.w + 8), cy: yChk + 10, r: 3.5, fill: c.added ? css('--am') : css('--teal') }, svg); }
+  // playhead
+  TL.ph = sv('line', { x1: X(S.play), x2: X(S.play), y1: 2, y2: H - 2, stroke: css('--ink'), 'stroke-width': 1.5 }, svg);
+  TL.X = X; TL.bw = bw; TL.H = H;
+  renderRules(); readout(S.play);
+}
+function renderRules() {
+  const P = S.plan, added = P.changed.filter(c => c.added).length;
+  const items = [
+    `Section edges on 8-bar lines · ${P.secs.map(s => s.len).join(' + ')} = ${P.tot}`,
+    `Intro and outro: ${S.intro} bars of beats only, for mixing`,
+    `Something changes in every 16 bars · ${P.changed.length}/${P.changed.length}${added ? ` (${added} delay throw${added > 1 ? 's' : ''} added)` : ''}`,
+    `Kick out 1 bar before the groove and the drop`,
+    `${P.fills.length} Chop fill${P.fills.length === 1 ? '' : 's'} on phrase ends · ${P.tog.length} part${P.tog.length === 1 ? '' : 's'} sit${P.tog.length === 1 ? 's' : ''} out for a while`,
+    `High-pass rises over the last 8 bars of the break`,
+  ];
+  $('#rules').innerHTML = items.map(t => `<span class="rule"><i></i>${t}</span>`).join('');
+}
+function readout(b) { const s = S.plan.secs.find(x => b >= x.start && b < x.start + x.len) || S.plan.secs.at(-1); $('#playRead').textContent = `bar ${Math.floor(b) + 1} · ${fmtTime(b * BAR)} · ${s.name}`; }
+function renderRoles() {
+  const box = $('#roles'); box.innerHTML = '';
+  for (const t of TRACKS) {
+    const locked = S.locked.has(t.id);
+    const r = el('div', 'role', `<i></i><span class="n">${t.name}<small>${t.inst}</small><small class="rl">${t.role.toUpperCase()}</small></span>`); r.style.setProperty('--c', t.c);
+    const lk = el('button', 'lk' + (locked ? ' on' : ''), locked ? 'LOCKED' : 'LOCK'); lk.title = 'Leave this track as it is';
+    lk.onclick = () => { locked ? S.locked.delete(t.id) : S.locked.add(t.id); renderRoles(); regen(true); };
+    r.append(lk, el('span', 'e', t.ev)); box.appendChild(r);
+  }
+}
+function arrStep(k, t) {
+  if (k === 0) S.t0 = t;
+  const P = S.plan, sd = SPB / 4, step = S.startStep + k, bar = Math.floor(step / 16), q = step % 16;
+  if (bar >= P.tot) { setTimeout(stop, 0); return sd; }
+  const B = S.ab === 'B', on = id => !B || P.on[id][bar], loopBar = bar % S.loop;
+  const cut = B ? valAt(P.filt, bar + q / 16) : 1, hpv = B ? valAt(P.hpl, bar + q / 16) : 0;
+  hp.frequency.setValueAtTime(20 + hpv * hpv * 1400, t);
+  const fill = B && P.fills.find(f => f.bar === bar);
+  if (on('kick') && q % 4 === 0) kick(t);
+  if (on('hats')) { if (q % 4 === 2) hat(t, .9, true); else if (q % 2) hat(t, .45); }
+  if (on('perc') && [3, 10, 14].includes(q)) perc(t, .8);
+  if (on('bass') && [2, 6, 10, 14, 15].includes(q)) { const ch = fill && fill.id === 'bass' && q >= 8; for (let r = 0; r < (ch ? 2 : 1); r++) synth(t + r * sd / 2, q === 15 ? 31 : 33, ch ? sd * .4 : sd * .8, .9, { cut: .16, level: .22, delay: 0, verb: 0, wave: 'square' }); }
+  const throwD = B && P.delayT.includes(bar) && q >= 12, throwV = B && P.verbT.includes(bar) && q >= 12;
+  if (on('stab') && (q === 3 || (q === 11 && loopBar % 2))) for (const m of [57, 60, 64, 67]) synth(t, m, sd * 1.2, .7, { cut: .25 + cut * .45, level: .07, delay: throwD ? .9 : .15, verb: throwV ? 1.2 : .15 });
+  if (fill && fill.id === 'stab' && q >= 12) for (const m of [57, 64]) synth(t, m, sd * .4, .6, { cut: .5, level: .06 });
+  if (on('pad') && q === 0 && loopBar % 4 === 0) pad(t, [45, 57, 60, 64, 71], BAR * 4, .3 + cut * .6);
+  if (on('fx') && q === 0) { const s = P.secs.find(x => bar >= x.start && bar < x.start + x.len); const p = s ? (bar - s.start) / s.len : 0; noiseHit(t, .03 + p * .08, 600 + p * 6000, BAR * .95, 'bandpass', 2, 0, .4); }
+  if (q === 0) visual({ t, bar });
+  return sd;
+}
+visHandlers.arrange = v => { S.playBar = v.bar; };
+visHandlers['arrange:frame'] = now => {
+  if (S.t0 == null) return; const b = S.startStep / 16 + (now - S.t0) / BAR; S.play = b; if (TL.ph) { const x = TL.X(Math.min(b, S.plan.tot)); TL.ph.setAttribute('x1', x); TL.ph.setAttribute('x2', x); } readout(Math.min(b, S.plan.tot - .01));
+};
+function regen(keepCustom) { if (!keepCustom) S.custom = null; plan(); drawTL(); $('#arrSeed').textContent = 'seed ' + S.seed; }
+function initArrange() {
+  renderRoles();
+  seg($('#loopSeg'), [8, 16], S.loop, v => { S.loop = v; }, v => `Funky bars 33–${32 + v} · ${v} bars`);
+  seg($('#tplSeg'), Object.keys(TPL), S.tpl, v => { S.tpl = v; S.bars = Math.max(TPL[v].bars, minBars()); $('#len').value = S.bars; lenLabel(); regen(); }, v => TPL[v].name);
+  seg($('#introSeg'), [16, 32, 64], S.intro, v => { S.intro = v; S.bars = Math.max(S.bars, minBars()); $('#len').value = S.bars; lenLabel(); regen(); }, v => v + ' bars');
+  const lenLabel = () => { $('#lenV').textContent = `${S.bars} bars · ${fmtTime(S.bars * BAR)}`; setRangeFill($('#len')); };
+  $('#len').oninput = e => { S.bars = Math.max(+e.target.value, minBars()); lenLabel(); regen(); }; lenLabel();
+  const bpLabel = () => { $('#bpV').textContent = Math.round(S.bp * 100) + '% through'; setRangeFill($('#bp')); };
+  $('#bp').oninput = e => { S.bp = e.target.value / 100; bpLabel(); regen(); }; bpLabel();
+  $('#varAmt').oninput = e => { S.vary = e.target.value / 100; $('#varAmtV').textContent = e.target.value + '%'; setRangeFill(e.target); regen(true); }; setRangeFill($('#varAmt'));
+  $('#regen').onclick = () => { S.seed++; regen(true); };
+  $('#keep').onclick = () => { const P = S.plan; let blocks = 0; for (const id in P.on) { const a = P.on[id]; for (let b = 0; b < P.tot; b++) if (a[b] && (b === 0 || !a[b - 1])) blocks++; } toast(`<b>Kept.</b> ${blocks} clip runs on ${TRACKS.length} tracks, 5 automation lanes and ${P.fills.length} Chop fills, as one undo step (Ctrl+Z).`); };
+  $('#bin').onclick = () => toast('Binned. The project is as it was: just the loop.');
+  [...$('#arrAB').children].forEach(b => b.onclick = () => { S.ab = b.dataset.v; [...$('#arrAB').children].forEach(x => x.classList.toggle('on', x === b)); });
+  $('#arrPlay').onclick = () => {
+    if (T.on && T.owner === 'arrange') { stop(); return; }
+    S.startStep = Math.floor(S.play) * 16; if (S.startStep >= S.plan.tot * 16) S.startStep = 0;
+    play('arrange', arrStep, () => { $('#arrPlay').classList.remove('on'); $('#arrPlay').textContent = '▶ Preview'; S.t0 = null; if (hp) hp.frequency.value = 20; });
+    $('#arrPlay').classList.add('on'); $('#arrPlay').textContent = '■ Stop';
+  };
+  // section edges and seeking
+  const svg = $('#tl'); let drag = null;
+  const toBar = e => { const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; const q = p.matrixTransform(svg.getScreenCTM().inverse()); return { b: (q.x - TL.L) / TL.bw, y: q.y }; };
+  svg.addEventListener('pointerdown', e => {
+    const edge = e.target.getAttribute && e.target.getAttribute('data-edge');
+    if (edge) { drag = +edge; svg.setPointerCapture(e.pointerId); S.custom = S.plan.secs.map(s => ({ ...s })); return; }
+    const { b } = toBar(e); if (b < 0 || b > S.plan.tot) return; S.play = clamp(Math.floor(b), 0, S.plan.tot - 1);
+    if (T.on && T.owner === 'arrange') { stop(); $('#arrPlay').click(); } else drawTL();
+  });
+  svg.addEventListener('pointermove', e => {
+    if (drag == null) return; const secs = S.custom, a = secs[drag - 1], bsec = secs[drag];
+    const nb = clamp(Math.round(toBar(e).b / 8) * 8, a.start + 8, bsec.start + bsec.len - 8);
+    if (nb !== bsec.start) { const end = bsec.start + bsec.len; a.len = nb - a.start; bsec.start = nb; bsec.len = end - nb; regen(true); }
+  });
+  svg.addEventListener('pointerup', () => { if (drag != null) { drag = null; toast('Section edge moved. It snaps to 8-bar lines and the parts follow it.'); } });
+  regen();
+}
+
+/* =================== start =================== */
+initArp(); initGroove(); initArrange(); route();
+</script>
