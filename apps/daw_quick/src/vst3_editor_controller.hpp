@@ -1,0 +1,125 @@
+#pragma once
+
+#include "routed_playback.hpp"
+
+#include "oscillate/application/project_session.hpp"
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+#include "oscillate/plugins/vst3_bundle_loader.hpp"
+#include "oscillate/plugins/vst3_catalogue.hpp"
+#include "oscillate/plugins/vst3_effect_host.hpp"
+#endif
+
+#include <QObject>
+#include <QPointer>
+#include <QString>
+#include <QTimer>
+#include <QVariantMap>
+#include <QWindow>
+
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+namespace oscillate::plugin_ui {
+class Vst3EditorAttachment;
+}
+
+namespace oscillate::quick {
+
+class PluginAutomationController;
+
+// The VST3 parameter editor (QML: projectBridge.vst3Editor): one saved
+// effect or instrument source at a time, as its native X11 view or a list of
+// its parameters. Completed gestures save as undo steps and, while the
+// routed graph plays, reach live audio when the plugin qualifies.
+class Vst3EditorController final : public QObject {
+  Q_OBJECT
+  Q_PROPERTY(QVariantMap vst3InsertEditor READ editor NOTIFY editorChanged)
+  Q_PROPERTY(QWindow* vst3NativeWindow READ native_window NOTIFY nativeWindowChanged)
+
+public:
+  struct Host {
+    std::function<application::ProjectSession*()> session;
+    // An audio edit or media verification holds the project.
+    std::function<bool()> control_busy;
+    // An export or import is running.
+    std::function<bool()> transfers_busy;
+    std::function<bool()> playback_busy;
+    std::function<bool()> browser_busy;
+    // The routed run (null without one), and whether no stop or transport
+    // change is pending on it.
+    std::function<RoutedPlayback*()> routed;
+    std::function<bool()> routed_settled;
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+    std::function<const plugins::Vst3CatalogueSnapshot&()> catalogue;
+#endif
+    // A committed edit: re-project and update playback.
+    std::function<void()> commit;
+    std::function<void()> schedule_save;
+    std::function<void(QString)> status;
+
+    [[nodiscard]] bool jobs_busy() const { return transfers_busy() || control_busy(); }
+  };
+
+  Vst3EditorController(Host host, PluginAutomationController& plugin_automation,
+                       QObject* parent = nullptr);
+  ~Vst3EditorController() override;
+  Vst3EditorController(const Vst3EditorController&) = delete;
+  Vst3EditorController& operator=(const Vst3EditorController&) = delete;
+
+  [[nodiscard]] QVariantMap editor() const { return editor_; }
+  [[nodiscard]] QWindow* native_window() const noexcept { return native_window_; }
+
+  Q_INVOKABLE void open_vst3_insert_editor(const QString& track_id, const QString& slot_id);
+  // Saved references only: the plugins layer has no instrument-source binding yet.
+  Q_INVOKABLE void open_vst3_instrument_editor(const QString& track_id);
+  Q_INVOKABLE void apply_vst3_insert_editor();
+  Q_INVOKABLE void set_vst3_insert_parameter(quint32 parameter_id, double normalized_value);
+  Q_INVOKABLE void discard_vst3_insert_editor();
+
+  // A native editor saves its state before the project changes or the
+  // window closes: false while it stays open (the save was refused).
+  [[nodiscard]] bool commit_native_editor();
+  // Follows the latest live gesture's receipt in the open editor.
+  void refresh_live_status();
+
+signals:
+  void editorChanged();
+  void nativeWindowChanged();
+
+private:
+  [[nodiscard]] application::ProjectSession* session() const { return host_.session(); }
+  void set_parameter(quint32 parameter_id, double normalized_value, bool from_native_editor,
+                     std::uint64_t gesture_sequence = 0);
+  void poll_native_gestures();
+
+  Host host_;
+  PluginAutomationController& plugin_automation_;
+  QTimer timer_;
+  QVariantMap editor_;
+  QPointer<QWindow> native_window_;
+  // Latest run gesture status shown in the editor, as (saved revision, phase).
+  std::pair<std::uint64_t, int> live_status_shown_{0, -1};
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+  struct PendingNativeGesture {
+    plugins::Vst3ParameterEvent event;
+    std::uint64_t sequence;
+  };
+  std::unique_ptr<plugins::LoadedVst3Effect> plugin_;
+  std::shared_ptr<plugin_ui::Vst3EditorAttachment> attachment_;
+  std::optional<project::Vst3PluginInstance> original_;
+  std::optional<project::TrackId> track_;
+  std::optional<project::InsertSlotId> slot_;
+  std::uint64_t revision_ = 0;
+  std::vector<PendingNativeGesture> pending_gestures_;
+  std::unordered_map<std::uint32_t, std::uint64_t> active_sequences_;
+  std::uint64_t next_sequence_{0};
+  std::uint32_t restart_flags_ = 0;
+#endif
+};
+
+} // namespace oscillate::quick
