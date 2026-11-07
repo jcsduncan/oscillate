@@ -10,7 +10,9 @@
 #include <QQuickWindow>
 #include <QThread>
 
+#include <string>
 #include <system_error>
+#include <utility>
 
 namespace oscillate::quick {
 namespace trace = foundation::trace;
@@ -18,6 +20,8 @@ namespace trace = foundation::trace;
 namespace {
 
 constexpr double bytes_per_mebibyte = 1024.0 * 1024.0;
+// How often a save in progress is checked for its result.
+constexpr int save_poll_ms = 50;
 
 std::filesystem::path traces_directory() {
   QString data = qEnvironmentVariable("XDG_DATA_HOME");
@@ -28,7 +32,11 @@ std::filesystem::path traces_directory() {
 
 } // namespace
 
-PerformanceTrace::PerformanceTrace(QObject* parent) : QObject(parent) {
+PerformanceTrace::PerformanceTrace(QObject* parent, Writer writer)
+    : QObject(parent), writer_(writer ? std::move(writer) : Writer(trace::stop_and_write)),
+      timer_(this) {
+  timer_.setInterval(save_poll_ms);
+  connect(&timer_, &QTimer::timeout, this, &PerformanceTrace::poll);
   trace::name_thread("ui");
   // From launch, so opening the project is traced too.
   const auto requested = qEnvironmentVariable("OSCILLATE_TRACE");
@@ -41,6 +49,7 @@ PerformanceTrace::PerformanceTrace(QObject* parent) : QObject(parent) {
 PerformanceTrace::~PerformanceTrace() {
   if (recording_ && !launch_path_.empty())
     finish(launch_path_);
+  wait_for_save();
 }
 
 void PerformanceTrace::attach(QQuickWindow* window) {
@@ -92,6 +101,7 @@ void PerformanceTrace::attach(QQuickWindow* window) {
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [this] {
       if (recording_)
         finish(launch_path_);
+      wait_for_save();
     });
   }
 }
@@ -99,7 +109,9 @@ void PerformanceTrace::attach(QQuickWindow* window) {
 void PerformanceTrace::start() {
   if (recording_)
     return;
-  if (!trace::start()) {
+  if (saving()) {
+    status_ = QStringLiteral("Still saving the last trace");
+  } else if (!trace::start()) {
     status_ = QStringLiteral("A trace is already recording");
   } else {
     recording_ = true;
@@ -113,7 +125,7 @@ void PerformanceTrace::start() {
 }
 
 void PerformanceTrace::stop_and_save() {
-  if (!recording_)
+  if (!recording_ || saving())
     return;
   if (!launch_path_.empty()) {
     finish(launch_path_);
@@ -128,7 +140,42 @@ void PerformanceTrace::stop_and_save() {
 
 void PerformanceTrace::finish(const std::filesystem::path& path) {
   recording_ = false;
-  const auto written = trace::stop_and_write(path);
+  const auto failed = save_.start(
+      0, [writer = writer_, path] { return writer(path); },
+      [](std::string what) {
+        return foundation::Result<std::size_t>::failure(
+            {foundation::ErrorCode::internal, "Trace not saved: " + what});
+      });
+  if (failed) {
+    report(path, foundation::Result<std::size_t>::failure(
+                     {foundation::ErrorCode::unavailable, "Trace not saved: " + *failed}));
+    return;
+  }
+  saving_path_ = path;
+  status_ = QStringLiteral("Saving the trace to %1").arg(QString::fromStdString(path.string()));
+  timer_.start();
+  emit changed();
+}
+
+void PerformanceTrace::poll() {
+  if (!save_.finished())
+    return;
+  timer_.stop();
+  auto finished = save_.take();
+  report(saving_path_, finished ? std::move(finished->result)
+                                : foundation::Result<std::size_t>::failure(
+                                      {foundation::ErrorCode::internal, "Trace not saved"}));
+}
+
+void PerformanceTrace::wait_for_save() {
+  if (!save_.running())
+    return;
+  save_.wait();
+  poll();
+}
+
+void PerformanceTrace::report(const std::filesystem::path& path,
+                              const foundation::Result<std::size_t>& written) {
   status_ = written ? QStringLiteral("Trace saved: %1 (%2 events)")
                           .arg(QString::fromStdString(path.string()))
                           .arg(written.value())

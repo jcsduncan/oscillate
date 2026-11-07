@@ -138,7 +138,8 @@ Item {
               run: () => bridge.duplicate_track(track.id) },
             { id: "trace", title: bridge.performanceTrace.recording ? "Stop and save the performance trace"
                                                                     : "Start a performance trace",
-              keywords: "profile perf timing cpu jank glitch xrun", enabled: true,
+              keywords: "profile perf timing cpu jank glitch xrun",
+              enabled: !bridge.performanceTrace.saving,
               run: () => bridge.performanceTrace.recording ? bridge.performanceTrace.stop_and_save()
                                                            : bridge.performanceTrace.start() },
             { id: "zoom-in", title: "Zoom in", shortcut: "+", enabled: open, run: () => shell.zoomIn() },
