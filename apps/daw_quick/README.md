@@ -5,18 +5,24 @@ behaviour is specified in the [functional specs](../../docs/specs/README.md);
 the [HLD](../../docs/HLD.md) defines the boundaries with the engine and project
 model. This file describes where to make a UI change.
 
-![The shell: browser, arrangement and device chain](../../docs/images/app/arrangement.png)
+<img src="../../docs/images/app/arrangement.png" alt="The shell: browser, arrangement and device chain" width="880">
 
 *The shell: the browser on the left, the arrangement, and the selected track's
 device chain in the dock below.*
 
-![The piano roll in the dock's Notes tab](../../docs/images/app/piano-roll.png)
+<img src="../../docs/images/app/piano-roll.png" alt="The piano roll in the dock's Notes tab" width="880">
 
 *The dock's Notes tab: the piano roll, with velocity and pedal lanes.*
 
-![The mixer view](../../docs/images/app/mixer.png)
+<img src="../../docs/images/app/mixer.png" alt="The mixer view" width="880">
 
 *The mixer view.*
+
+The shell screenshots are `oscillate_quick_screenshot` (tests/ui/quick) renders
+of its `--demo` project, playing (`--play-from`), at `QT_SCALE_FACTOR=2` and
+`--size 1760x1000`. Panel screenshots come from each panel test with its
+`<PANEL>_PANEL_SCREENSHOT_DIR` set, also at `QT_SCALE_FACTOR=2`. Both are saved
+as truecolour PNGs.
 
 ## Structure
 

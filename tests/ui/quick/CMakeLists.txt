@@ -206,7 +206,7 @@ if(OSCILLATE_BUILD_VST3_SCANNER)
 endif()
 oscillate_target_defaults(oscillate_quick_smoke)
 # Mockup-comparison screenshots of the real shell; a developer tool, not a test.
-add_executable(oscillate_quick_screenshot screenshot_main.cpp)
+add_executable(oscillate_quick_screenshot screenshot_main.cpp screenshot_demo.cpp)
 target_link_libraries(oscillate_quick_screenshot PRIVATE oscillate_quick_core)
 oscillate_target_defaults(oscillate_quick_screenshot)
 oscillate_add_test(NAME quick_shell_smoke

@@ -4,6 +4,7 @@
 #include "bundled_fonts.hpp"
 #include "computer_keyboard.hpp"
 #include "project_bridge.hpp"
+#include "screenshot_demo.hpp"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -28,6 +29,8 @@ constexpr int design_height = 1000;
 constexpr int default_settle_ms = 1'500;
 constexpr int select_clip_delay_ms = 200;
 constexpr int dock_tab_delay_ms = 400;
+// Long enough for the shell to load and the output devices to be listed.
+constexpr int play_delay_ms = 600;
 
 int run(int argc, char** argv) {
   QApplication app(argc, argv);
@@ -43,7 +46,8 @@ int run(int argc, char** argv) {
       "                                  [--select-track N] [--select-first-clip]\n"
       "                                  [--visible-bars N]\n"
       "                                  [--first-bar N] [--dock-tab 0|1|2]\n"
-      "                                  [--create FOLDER | --open FOLDER]\n";
+      "                                  [--play-from BAR] [--size WIDTHxHEIGHT]\n"
+      "                                  [--create FOLDER | --open FOLDER | --demo FOLDER]\n";
   if (argc < 2) {
     std::cerr << usage;
     return 2;
@@ -52,6 +56,10 @@ int run(int argc, char** argv) {
   // first (background analysis included), --select-first-clip selects the
   // first clip (of the selected track, with --select-track N) and
   // --dock-tab the device dock's tab: 0 chain, 1 clip, 2 notes.
+  // --size sets the window's logical size (default the design size).
+  // --play-from plays from that zero-based bar until the shot, so meters and
+  // device displays are live; --demo writes the documentation project into
+  // a new folder and opens it.
   const QString screenshot = QString::fromLocal8Bit(argv[1]);
   std::optional<QString> view;
   int settle_ms = default_settle_ms;
@@ -60,6 +68,9 @@ int run(int argc, char** argv) {
   std::optional<int> dock_tab;
   std::optional<double> visible_bars;
   std::optional<double> first_bar;
+  std::optional<double> play_from;
+  int width = design_width;
+  int height = design_height;
   std::string_view project_option;
   std::filesystem::path project_path;
   for (int index = 2; index < argc; ++index) {
@@ -79,7 +90,18 @@ int run(int argc, char** argv) {
       visible_bars = std::stod(argv[++index]);
     } else if (option == "--first-bar" && has_value) {
       first_bar = std::stod(argv[++index]);
-    } else if ((option == "--create" || option == "--open") && has_value &&
+    } else if (option == "--size" && has_value) {
+      const std::string size(argv[++index]);
+      const auto separator = size.find('x');
+      if (separator == std::string::npos) {
+        std::cerr << usage;
+        return 2;
+      }
+      width = std::stoi(size.substr(0, separator));
+      height = std::stoi(size.substr(separator + 1));
+    } else if (option == "--play-from" && has_value) {
+      play_from = std::stod(argv[++index]);
+    } else if ((option == "--create" || option == "--open" || option == "--demo") && has_value &&
                project_option.empty()) {
       project_option = option;
       project_path = argv[++index];
@@ -88,6 +110,8 @@ int run(int argc, char** argv) {
       return 2;
     }
   }
+  if (project_option == "--demo")
+    oscillate::quick::screenshot::create_demo_project(project_path);
   if (!project_option.empty()) {
     auto session = project_option == "--create"
                        ? oscillate::application::ProjectSession::create(project_path)
@@ -115,7 +139,7 @@ int run(int argc, char** argv) {
     window->setProperty("visibleBars", *visible_bars);
   if (first_bar)
     window->setProperty("viewStartBar", *first_bar);
-  window->resize(design_width, design_height);
+  window->resize(width, height);
   if (select_track) {
     if (*select_track >= bridge.tracks().size()) {
       std::cerr << "--select-track " << *select_track << ": the project has "
@@ -147,8 +171,16 @@ int run(int argc, char** argv) {
         dock->setProperty("activeTab", tab);
     });
   }
-  QTimer::singleShot(settle_ms, &app, [&app, window, path = screenshot]() {
-    if (!window->grabWindow().save(path, "PNG")) {
+  if (play_from) {
+    QTimer::singleShot(play_delay_ms, &app, [&bridge, bar = *play_from] {
+      bridge.seek_to_bar(bar);
+      bridge.toggle_playback();
+    });
+  }
+  QTimer::singleShot(settle_ms, &app, [&app, &bridge, window, path = screenshot]() {
+    const QImage frame = window->grabWindow();
+    bridge.stop_playback();
+    if (!frame.save(path, "PNG")) {
       std::cerr << "Screenshot: could not write " << path.toStdString() << '\n';
       app.exit(1);
       return;
