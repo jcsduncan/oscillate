@@ -1277,6 +1277,128 @@ void concurrent_handoff() {
   callback.join();
 }
 
+// A live candidate whose max_frames is below every device block can never be
+// adopted. The control side withdraws it while the callback keeps playing:
+// the callback retires it before touching it again, the old graph plays on
+// unbroken, and later publications succeed.
+void unadoptable_live_candidate_is_withdrawn() {
+  constexpr std::size_t device_block = 64;
+  constexpr std::uint64_t first_revision = 1;
+  constexpr std::uint64_t short_revision = 2;
+  constexpr std::uint64_t later_revision = 3;
+  constexpr std::uint64_t renders_while_pending = 16;
+  const std::array<RoutedNode, 1> nodes{{{{3, 0}, {}}}};
+  const auto fitting = limits(1, 0, 0);
+  auto too_short = fitting;
+  too_short.max_frames = device_block / 2;
+  RoutedMixerPublisher publisher;
+  REQUIRE_OK(publisher.prepare_and_publish(first_revision, nodes, {}, fitting),
+             "withdrawal fixture did not prepare");
+  std::atomic<std::uint64_t> renders{0};
+  std::atomic<bool> broken{false};
+  std::jthread callback([&](const std::stop_token& stop) {
+    std::array<StereoFrame, device_block> output{};
+    const std::array<std::span<const StereoFrame>, 1> input{{}};
+    std::uint64_t position = 0;
+    while (!stop.stop_requested()) {
+      if (publisher.render_block(input, output, {position, 1}) != RoutedRenderStatus::rendered)
+        broken.store(true, std::memory_order_relaxed);
+      position += output.size();
+      renders.fetch_add(1, std::memory_order_release);
+      std::this_thread::yield();
+    }
+  });
+  oscillate::test::wait_until([&] { return publisher.active_revision() == first_revision; },
+                              "the callback did not adopt the first graph");
+  REQUIRE_OK(publisher.prepare_and_publish_live(short_revision, nodes, {}, too_short),
+             "the too-short live candidate did not prepare");
+  const auto published_at = renders.load(std::memory_order_acquire);
+  oscillate::test::wait_until(
+      [&] { return renders.load() >= published_at + renders_while_pending; },
+      "callback fixture made no progress");
+  REQUIRE_EQ(publisher.active_revision(), first_revision,
+             "a candidate shorter than the device block was adopted");
+  REQUIRE_TRUE(publisher.has_pending(), "a candidate shorter than the device block was adopted");
+  require(!publisher.prepare_and_publish_live(later_revision, nodes, {}, fitting),
+          "a publication passed a pending candidate");
+  REQUIRE_TRUE(publisher.withdraw_pending(), "the pending candidate could not be withdrawn");
+  REQUIRE_TRUE(!publisher.withdraw_pending(), "a withdrawal was requested twice");
+  oscillate::test::wait_until([&] { return !publisher.has_pending(); },
+                              "the callback did not answer the withdrawal");
+  REQUIRE_EQ(publisher.collect_retired(), 1, "the withdrawn candidate was not reclaimed");
+  REQUIRE_EQ(publisher.active_revision(), first_revision,
+             "withdrawing the candidate changed the audible graph");
+  REQUIRE_OK(publisher.prepare_and_publish_live(later_revision, nodes, {}, fitting),
+             "a publication after the withdrawal was refused");
+  oscillate::test::wait_until([&] { return publisher.active_revision() == later_revision; },
+                              "the publication after the withdrawal did not activate");
+  callback.request_stop();
+  callback.join();
+  REQUIRE_TRUE(!broken.load(), "the old graph stopped rendering around the withdrawal");
+  REQUIRE_EQ(publisher.collect_retired(), 1, "the replaced graph was not reclaimed");
+}
+
+// A live candidate whose source bank never fills renders nothing: the old
+// graph keeps playing its own bank. Withdrawn, it is retired at the next
+// block without allocating, and the next candidate switches normally.
+void unfillable_live_candidate_is_withdrawn() {
+  constexpr std::size_t block = 4;
+  constexpr std::uint64_t first_revision = 1;
+  constexpr std::uint64_t unfilled_revision = 2;
+  constexpr std::uint64_t later_revision = 3;
+  constexpr int attempts = 8;
+  constexpr float old_level = 0.25F;
+  const std::array<RoutedNode, 1> nodes{{{{3, 0}, {}}}};
+  RoutedMixerPublisher publisher;
+  REQUIRE_OK(publisher.prepare_and_publish(first_revision, nodes, {}, limits(1, 0, 0)),
+             "unfilled-bank fixture did not prepare");
+  std::array<StereoFrame, block> frames{}, output{};
+  frames.fill({old_level, old_level});
+  const std::array<std::span<const StereoFrame>, 1> bank{frames};
+  struct Banks {
+    std::span<const std::span<const StereoFrame>> old;
+  } banks{bank};
+  const RoutedSourceFill fill{&banks, nullptr,
+                              [](void* context, std::uint64_t revision, BlockContext, std::size_t,
+                                 std::span<const std::span<const StereoFrame>>& selected) noexcept {
+                                if (revision == unfilled_revision)
+                                  return false;
+                                selected = static_cast<Banks*>(context)->old;
+                                return true;
+                              }};
+  std::uint64_t position = 0;
+  const auto render = [&] {
+    const auto status = publisher.render_block(bank, output, {position, 1}, fill);
+    position += block;
+    return status;
+  };
+  REQUIRE_EQ(render(), RoutedRenderStatus::rendered, "the first graph did not render");
+  REQUIRE_OK(publisher.prepare_and_publish_live(unfilled_revision, nodes, {}, limits(1, 0, 0)),
+             "the unfillable live candidate did not prepare");
+  for (int attempt = 0; attempt < attempts; ++attempt) {
+    REQUIRE_EQ(render(), RoutedRenderStatus::rendered,
+               "the old graph stopped while the candidate could not fill");
+    REQUIRE_EQ(output[0].left, old_level,
+               "the old graph stopped while the candidate could not fill");
+  }
+  REQUIRE_EQ(publisher.active_revision(), first_revision, "an unfilled candidate was adopted");
+  REQUIRE_TRUE(publisher.withdraw_pending(), "the unfilled candidate could not be withdrawn");
+  REQUIRE_TRUE(publisher.has_pending(), "a withdrawal showed as done before the callback answered");
+  counting_allocations = true;
+  counted_allocations = 0;
+  const auto answered = render();
+  counting_allocations = false;
+  REQUIRE_EQ(answered, RoutedRenderStatus::rendered, "the withdrawal interrupted the old graph");
+  REQUIRE_EQ(counted_allocations, 0, "the callback allocated answering a withdrawal");
+  REQUIRE_TRUE(!publisher.has_pending(), "the callback did not answer the withdrawal");
+  REQUIRE_EQ(publisher.collect_retired(), 1, "the withdrawn candidate was not reclaimed");
+  REQUIRE_TRUE(!publisher.withdraw_pending(), "a withdrawal was accepted with nothing pending");
+  REQUIRE_OK(publisher.prepare_and_publish_live(later_revision, nodes, {}, limits(1, 0, 0)),
+             "a publication after the withdrawal was refused");
+  REQUIRE_EQ(render(), RoutedRenderStatus::rendered, "the later candidate did not switch");
+  REQUIRE_EQ(publisher.active_revision(), later_revision, "the later candidate did not switch");
+}
+
 } // namespace
 
 // A live switch (no hold) to an identical graph must be inaudible: the
@@ -1593,6 +1715,8 @@ int main() {
     invalid_blocks_never_activate();
     preparation_allocation_failure();
     concurrent_handoff();
+    unadoptable_live_candidate_is_withdrawn();
+    unfillable_live_candidate_is_withdrawn();
   } catch (const std::exception& error) {
     std::fprintf(stderr, "routed publisher test: %s\n", error.what());
     return 1;

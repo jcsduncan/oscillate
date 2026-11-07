@@ -293,6 +293,26 @@ std::size_t RoutedMixerPublisher::collect_retired() {
   return 1;
 }
 
+bool RoutedMixerPublisher::withdraw_pending() noexcept {
+  if (pending_.load(std::memory_order_acquire) == nullptr ||
+      withdraw_requested_.load(std::memory_order_acquire))
+    return false;
+  withdraw_requested_.store(true, std::memory_order_release);
+  return true;
+}
+
+// Callback: the candidate moves to the retired slot, which is empty while one
+// is pending (each publication needs it empty, and only a callback switch,
+// which consumes the candidate, fills it). Once the request is answered the
+// callback never reads the candidate again, so the control side may free it.
+void RoutedMixerPublisher::answer_withdrawal() noexcept {
+  if (!withdraw_requested_.load(std::memory_order_acquire))
+    return;
+  if (auto* candidate = pending_.exchange(nullptr, std::memory_order_acq_rel))
+    retired_.store(candidate, std::memory_order_release);
+  withdraw_requested_.store(false, std::memory_order_release);
+}
+
 void RoutedMixerPublisher::destroy_owned(const Plan* plan) {
   const auto found =
       std::ranges::find_if(owned_, [plan](const auto& item) { return item.get() == plan; });
@@ -306,7 +326,8 @@ std::uint64_t RoutedMixerPublisher::active_revision() const noexcept {
 }
 
 bool RoutedMixerPublisher::has_pending() const noexcept {
-  return pending_.load(std::memory_order_acquire) != nullptr;
+  return pending_.load(std::memory_order_acquire) != nullptr ||
+         withdraw_requested_.load(std::memory_order_acquire);
 }
 
 std::optional<RoutedNodeMeterReading>
@@ -324,6 +345,7 @@ RoutedMixerPublisher::render_block(std::span<const std::span<const StereoFrame>>
 RoutedRenderStatus RoutedMixerPublisher::render_block(
     std::span<const std::span<const StereoFrame>> sources, std::span<StereoFrame> output,
     BlockContext context, RoutedSourceFill source_fill, AudioWorkerPool* workers) noexcept {
+  answer_withdrawal();
   if (output.size() > callback_frame_cap)
     return RoutedRenderStatus::invalid_block;
   if (output.empty() || context.transport_generation == 0 ||
