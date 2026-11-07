@@ -236,9 +236,16 @@ void project_revision_cancels_late_result() {
 }
 // A clip's key analysis that finishes after its session was replaced, here
 // by an on-disk copy of the same project with the same source and clip
-// IDs, is dropped: neither stored in the copy nor offered there.
+// IDs, is dropped: neither stored in the copy nor offered there. A clip still
+// waiting for analysis is not analysed in the copy either.
 void key_match_drops_a_replaced_sessions_result() {
   Fixture fixture;
+  (void)Fixture::import_source(*fixture.session);
+  std::vector<project::ClipId> clips;
+  for (const auto& track : fixture.session->snapshot().tracks)
+    for (const auto& clip : track.clips)
+      clips.push_back(clip.id);
+  require(clips.size() == 2, "the second clip was not imported");
   require(fixture.session->song().set_project_key(song_key).has_value(), "song key");
   require(fixture.session->saving().save().has_value(), "save");
   const auto copy_root = fixture.directory.path() / "copy";
@@ -249,22 +256,23 @@ void key_match_drops_a_replaced_sessions_result() {
   fs::path current_root = fixture.root;
   std::binary_semaphore entered{0};
   std::binary_semaphore release{0};
-  std::atomic<bool> first{true};
+  std::atomic<int> analyses{0};
   int commits = 0;
   quick::KeyMatchController match(
       [&] { return current; }, [&] { return current_root; }, [] { return true; }, [](QString) {},
       [&] { ++commits; },
       [&](const auto&, const project::SourceRecord& source, std::uint64_t generation, const auto&) {
-        if (first.exchange(false)) {
+        if (analyses.fetch_add(1) == 0) {
           entered.release();
           release.acquire();
         }
         return foundation::Result<application::KeyCacheResult>::success(
             suggestion(source, generation, false));
       });
-  match.dropped(fixture.session->snapshot().tracks.front().clips.front().id);
+  match.dropped(clips.front());
   require(match.busy(), "the drop did not start key analysis");
   entered.acquire();
+  match.dropped(clips.back());
   current = copy.get();
   current_root = copy_root;
   release.release();
@@ -276,6 +284,7 @@ void key_match_drops_a_replaced_sessions_result() {
   require(commits == 0 && copy->snapshot().revision == copy_revision &&
               copy->snapshot().source_key_reviews.empty() && match.hint().isEmpty(),
           "a replaced session's key analysis landed on the copy that replaced it");
+  require(analyses.load() == 1, "a clip queued in the replaced session was analysed in the copy");
 }
 } // namespace
 
