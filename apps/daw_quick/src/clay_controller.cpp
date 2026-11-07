@@ -766,7 +766,7 @@ void ClayController::warm_render() {
 
 void ClayController::remove_take() {
   auto* session = session_ ? session_() : nullptr;
-  if (session == nullptr || !clip_ || !take_)
+  if (session == nullptr || !clip_ || !take_ || (can_edit_ && !can_edit_()))
     return;
   auto applied = session->audio_clips().set_clip_clay(*clip_, std::nullopt);
   if (!applied) {

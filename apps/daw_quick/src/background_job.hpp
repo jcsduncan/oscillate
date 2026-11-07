@@ -43,9 +43,9 @@ public:
         try {
           state->result.emplace(work());
         } catch (const std::exception& error) {
-          state->result.emplace(failure(std::string(error.what())));
+          report(*state, failure, std::string(error.what()));
         } catch (...) {
-          state->result.emplace(failure(std::string{}));
+          report(*state, failure, std::string{});
         }
         state->done.store(true, std::memory_order_release);
       });
@@ -68,12 +68,15 @@ public:
     if (worker_.joinable())
       worker_.join();
   }
-  // The result once finished, leaving the job idle; nothing while it runs.
+  // The result once finished, leaving the job idle; nothing while it runs
+  // (or when the failure callback itself threw).
   [[nodiscard]] std::optional<Finished> take() {
     if (!finished())
       return std::nullopt;
     wait();
     auto state = std::exchange(state_, {});
+    if (!state->result)
+      return std::nullopt; // The failure callback threw: the job is idle with no result.
     return Finished{std::move(*state->result), generation_};
   }
 
@@ -82,6 +85,18 @@ private:
     std::atomic<bool> done{false};
     std::optional<Result> result;
   };
+  // The failure callback's result for a worker exception. A callback that
+  // itself throws leaves no result (taken as a failed job) rather than
+  // escaping the thread and terminating the process.
+  template <typename Failure>
+  static void report(State& state, Failure& failure, std::string what) noexcept {
+    try {
+      state.result.emplace(failure(std::move(what)));
+    } catch (...) {
+      state.result.reset();
+    }
+  }
+
   std::shared_ptr<State> state_;
   std::uint64_t generation_ = 0;
   std::jthread worker_;
