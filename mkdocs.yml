@@ -72,6 +72,8 @@ nav:
       - specs/08a-nova-panel-contract.md
       - specs/09-crate-sampler.md
   - Decisions: decisions/README.md
+  - Known issues: known-issues.md
+  - Crash reports: crash-reports.md
   - Environment: environment.md
   - Local dependencies: dependencies/local-development.md
   - Contributing: contributing.md

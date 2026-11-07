@@ -50,3 +50,30 @@ if "$app" --check-startup --bogus "$project" >"$fixture/error" 2>&1; then
   exit 1
 fi
 [[ $(<"$fixture/error") == *'Usage:'* ]]
+
+# A killed run leaves a crash report for the next start, and only one.
+reports="$XDG_STATE_HOME/oscillate/crash-reports"
+# Startup arms the handlers within this many tenths of a second.
+arm_wait_tenths=100
+# Earlier starts left a session description; wait for this run's own.
+rm -f -- "$reports/session.txt"
+"$app" &
+running=$!
+for ((tenth = 0; tenth < arm_wait_tenths; ++tenth)); do
+  [[ -f $reports/session.txt ]] && break
+  sleep 0.1
+done
+[[ -f $reports/session.txt ]]
+kill -ILL "$running"
+if wait "$running"; then
+  echo 'Killed run exited cleanly' >&2
+  exit 1
+fi
+[[ -f $reports/crashed ]]
+[[ $("$app" --check-startup) == "$welcome" ]]
+[[ ! -e $reports/crashed ]]
+shopt -s nullglob
+crash_reports=("$reports"/oscillate-crash-*.txt)
+[[ ${#crash_reports[@]} -eq 1 ]]
+grep -q 'SIGILL' "${crash_reports[0]}"
+grep -q '^application: Oscillate ' "${crash_reports[0]}"

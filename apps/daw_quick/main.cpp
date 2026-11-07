@@ -1,8 +1,10 @@
 #include "app_logging.hpp"
 #include "bundled_fonts.hpp"
 #include "computer_keyboard.hpp"
+#include "crash_report_controller.hpp"
 #include "project_bridge.hpp"
 
+#include "oscillate/foundation/crash_report.hpp"
 #include "oscillate/foundation/log.hpp"
 
 #include <QApplication>
@@ -15,13 +17,16 @@
 #include <exception>
 #include <filesystem>
 #include <iostream>
+#include <string>
 #include <string_view>
 
 namespace {
 namespace log = oscillate::foundation::log;
 
 int run(int argc, char** argv) {
+  const auto crash_startup = oscillate::quick::start_crash_reports(OSCILLATE_VERSION);
   oscillate::quick::start_logging();
+  oscillate::quick::log_crash_report_startup(crash_startup);
   QApplication app(argc, argv);
   QCoreApplication::setOrganizationName(QStringLiteral("Oscillate"));
   QCoreApplication::setApplicationName(QStringLiteral("Oscillate"));
@@ -61,8 +66,10 @@ int run(int argc, char** argv) {
     bridge.set_project(std::move(session.value()), project_path);
   }
 
+  oscillate::quick::CrashReportController crash_report(crash_startup.report);
   QQmlApplicationEngine engine;
   engine.rootContext()->setContextProperty("projectBridge", &bridge);
+  engine.rootContext()->setContextProperty("crashReport", &crash_report);
   engine.load(QUrl(QStringLiteral("qrc:/DawShell.qml")));
   auto* window = engine.rootObjects().isEmpty()
                      ? nullptr
@@ -72,6 +79,7 @@ int run(int argc, char** argv) {
     return 1;
   }
   bridge.performance_trace()->attach(window);
+  oscillate::quick::show_crash_report_notice(engine, *window, crash_report);
   if (check_startup) {
     QTimer::singleShot(0, &app, [&app, &bridge, window]() {
       const QString expected = bridge.project_open()
@@ -102,6 +110,8 @@ int main(int argc, char** argv) {
   } catch (const std::exception& error) {
     log::error(log::Category::application, "Unhandled exception: {}", error.what());
     log::flush();
+    oscillate::foundation::crash_report::note_fatal_error(std::string("unhandled exception: ") +
+                                                          error.what());
     return 1;
   }
 }

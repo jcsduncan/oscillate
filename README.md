@@ -27,6 +27,7 @@ pipeline and VST3 host; Qt Quick user interface.
 
 Not included: Session View, audio recording, hardware MIDI input.
 Scope: [PRD](docs/PRD.md). Open work: [issues](https://github.com/jcsduncan/oscillate/issues).
+Known problems: [known issues](https://jcsduncan.github.io/oscillate/known-issues/).
 
 ## Screenshots
 

@@ -8,7 +8,11 @@ root README). MkDocs only sees docs/, so these hooks:
   SECURITY.md as ordinary pages, rewriting their links for the site;
 * move docs/README.md (the documentation map) to map.md so it does not
   collide with the home page;
-* rewrite any other link that leaves docs/ to the file on GitHub.
+* rewrite any other link that leaves docs/ to the file on GitHub;
+* publish known-issues.md from the file OSCILLATE_KNOWN_ISSUES names, which
+  the Pages workflow writes with scripts/ci/known_issues.py just before the
+  build. Without it (a local or pull-request build) the page points at the
+  labelled issues on GitHub instead. The list is never committed.
 
 Links that stay inside docs/ are left alone, so `mkdocs build --strict`
 still reports a genuinely broken documentation link.
@@ -16,6 +20,7 @@ still reports a genuinely broken documentation link.
 
 from __future__ import annotations
 
+import os
 import posixpath
 import re
 from pathlib import Path
@@ -38,6 +43,15 @@ ROOT_PAGES = {
 }
 DOCS_MAP_SOURCE = "README.md"
 DOCS_MAP_PAGE = "map.md"
+
+KNOWN_ISSUES_PAGE = "known-issues.md"
+KNOWN_ISSUES_VARIABLE = "OSCILLATE_KNOWN_ISSUES"
+KNOWN_ISSUES_PLACEHOLDER = f"""# Known issues
+
+This page lists the open issues labelled `known-issue`. It is built when the
+site is published; this build has no list. See the
+[known issues on GitHub]({REPOSITORY_URL}/issues?q=is%3Aissue+is%3Aopen+label%3Aknown-issue).
+"""
 
 # Inline Markdown links and images: [text](target "title") / ![alt](target).
 LINK = re.compile(r"(!?\[[^\]]*\]\()(<[^>]+>|[^)\s]+)([^)]*\))")
@@ -104,6 +118,11 @@ def on_files(files: Files, config: MkDocsConfig) -> Files:
         files.append(File.generated(config, DOCS_MAP_PAGE, abs_src_path=docs_map.abs_src_path))
     for page, source in ROOT_PAGES.items():
         files.append(File.generated(config, page, abs_src_path=str(root / source)))
+    known_issues = os.environ.get(KNOWN_ISSUES_VARIABLE, "")
+    if known_issues:
+        files.append(File.generated(config, KNOWN_ISSUES_PAGE, abs_src_path=known_issues))
+    else:
+        files.append(File.generated(config, KNOWN_ISSUES_PAGE, content=KNOWN_ISSUES_PLACEHOLDER))
     return files
 
 

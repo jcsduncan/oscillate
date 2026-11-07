@@ -184,7 +184,7 @@ Qt 6 Core, Gui, Quick and Qml are the production UI direction under [ADR-0022](d
 
 Offline and real-time export both request an engine render snapshot from the same project revision. Export reuses timing, graph, automation, and PDC code; only the driving clock, quality policy, and writer differ. Output sample-rate conversion runs in the writer worker. A real-time export xrun fails the render without replacing a previous valid output. Stems include routing effects and tails. Export records format, bit depth, sample rate, revision, warnings, and processing quality in a report.
 
-Diagnostics use bounded event capture and non-real-time formatting. Crash/performance sharing is opt-in; diagnostic bundles are previewed before export. Paths are redacted in shared reports by default.
+Diagnostics use bounded event capture and non-real-time formatting. Crash/performance sharing is opt-in; diagnostic bundles are previewed before export. Paths are redacted in shared reports by default. Crash reports (`foundation/crash_report`, [crash reports](crash-reports.md)) stay local: a fatal-signal handler writes only a marker with async-signal-safe calls, and the next start gathers the session description and log into a plain-text report with the home path redacted, which the user opens and attaches to an issue themselves.
 
 ## 11. Dependency and licensing decisions
 

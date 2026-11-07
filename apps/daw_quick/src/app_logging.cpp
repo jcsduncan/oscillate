@@ -1,5 +1,6 @@
 #include "app_logging.hpp"
 
+#include "oscillate/foundation/crash_report.hpp"
 #include "oscillate/foundation/log.hpp"
 
 #include <QMessageLogContext>
@@ -40,6 +41,7 @@ void qt_message(QtMsgType type, const QMessageLogContext& context, const QString
     log::message(level, log::Category::application, "{}: {}", category, text.toStdString());
   if (type == QtFatalMsg) {
     log::flush();
+    foundation::crash_report::note_fatal_error(text.toStdString());
     std::abort();
   }
 }

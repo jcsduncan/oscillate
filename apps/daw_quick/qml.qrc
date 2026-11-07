@@ -30,6 +30,7 @@
     <file alias="ProjectGlobalControls.qml">qml/ProjectGlobalControls.qml</file>
     <file alias="ExportPanel.qml">qml/ExportPanel.qml</file>
     <file alias="ExportDialog.qml">qml/ExportDialog.qml</file>
+    <file alias="CrashReportNotice.qml">qml/CrashReportNotice.qml</file>
     <file alias="MixCheckView.qml">qml/MixCheckView.qml</file>
     <file alias="GrooveCapturePanel.qml">qml/GrooveCapturePanel.qml</file>
     <file alias="mixcheck/MixCheckTheme.qml">qml/mixcheck/MixCheckTheme.qml</file>

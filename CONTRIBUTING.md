@@ -8,7 +8,9 @@ Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md).
 
 ## Reporting a bug
 
-Open a GitHub issue with:
+Check the [known issues](https://jcsduncan.github.io/oscillate/known-issues/)
+first; if the problem is listed, add what you found to that issue. Otherwise
+open a GitHub issue with:
 
 - what you did, what you expected and what happened;
 - the commit you built and the build preset or CMake options you used;
@@ -19,6 +21,8 @@ Open a GitHub issue with:
   command palette and summarised with
   [trace_report](tools/trace_report/README.md), if you can.
 
+After a crash, Oscillate saves a [crash report](docs/crash-reports.md) on
+your computer and offers it at the next start; read it, then attach it.
 Attach a small project that reproduces the problem when possible. Do not
 attach copyrighted media you are not allowed to share. For a security
 problem, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.

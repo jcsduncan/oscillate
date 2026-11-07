@@ -40,5 +40,5 @@ body:
   - type: textarea
     id: attachments
     attributes:
-      label: Project or log
-      description: A small project that reproduces the problem, and any log output. Don't attach media you aren't allowed to share.
+      label: Project, log or crash report
+      description: A small project that reproduces the problem, and any log output. After a crash, attach the crash report Oscillate offered at the next start (in ~/.local/state/oscillate/crash-reports). Don't attach media you aren't allowed to share.
