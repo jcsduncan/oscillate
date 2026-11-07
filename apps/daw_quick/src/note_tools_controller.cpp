@@ -78,7 +78,11 @@ constexpr std::array<ShapeName, 5> shape_names{{{"Triad", application::ChordShap
   if (file.size() > static_cast<qint64>(persistence::max_groove_file_bytes) ||
       !file.open(QIODevice::ReadOnly))
     return std::nullopt;
-  const auto bytes = file.readAll();
+  // At most one byte past the limit: a file that grew since the size check
+  // is refused rather than read whole.
+  const auto bytes = file.read(static_cast<qint64>(persistence::max_groove_file_bytes) + 1);
+  if (bytes.size() > static_cast<qsizetype>(persistence::max_groove_file_bytes))
+    return std::nullopt;
   auto groove = persistence::decode_groove(
       std::string_view(bytes.constData(), static_cast<std::size_t>(bytes.size())));
   if (!groove)

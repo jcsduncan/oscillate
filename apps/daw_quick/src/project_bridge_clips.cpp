@@ -245,6 +245,10 @@ void ProjectBridge::move_midi_clip_to_track(const QString& clip_id, const QStrin
 void ProjectBridge::nudge_midi_clip(const QString& clip_id, int beat_direction) {
   if (!session_ || beat_direction == 0)
     return;
+  if (control_busy() || playback_completion_ || export_busy() || import_busy()) {
+    set_status(QStringLiteral("Finish the current project operation before editing MIDI clips"));
+    return;
+  }
   const auto clip = project::ClipId::parse(clip_id.toStdString());
   if (!clip)
     return;
