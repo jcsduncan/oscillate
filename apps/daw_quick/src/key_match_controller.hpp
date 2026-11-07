@@ -52,6 +52,8 @@ public:
   void refresh();
   Q_INVOKABLE void apply();
   Q_INVOKABLE void dismiss();
+  // A clip's key is being analysed or waits for analysis.
+  [[nodiscard]] bool busy() const { return analysing_.has_value() || !waiting_.empty(); }
 
 signals:
   void changed();
@@ -62,8 +64,14 @@ private:
   void consider(project::ClipId clip);
   void clear_hint();
 
+  // A clip waiting for analysis, in the session it was dropped into.
+  struct Waiting {
+    project::ClipId clip;
+    std::uint64_t session = 0;
+  };
   struct Offer {
     project::ClipId clip;
+    std::uint64_t session = 0;
     std::uint64_t settings_generation = 0;
     project::MusicalKey song;
     int semitones = 0;
@@ -76,11 +84,14 @@ private:
   Commit commit_;
   SourceAnalysisWorker<application::KeyCacheResult> worker_;
   QTimer timer_;
-  std::deque<project::ClipId> waiting_;
+  std::deque<Waiting> waiting_;
   std::optional<project::ClipId> analysing_;
   std::optional<project::SourceRecord> source_;
   std::uint64_t generation_ = 0;
   std::uint64_t origin_revision_ = 0;
+  // The session the running analysis was started for; a result that
+  // finishes after that session was replaced is dropped.
+  std::uint64_t origin_session_ = 0;
   int retries_ = 0;
   std::optional<Offer> offer_;
   QVariantMap hint_;
