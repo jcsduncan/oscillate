@@ -3,7 +3,9 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -286,6 +288,59 @@ void relocated(const plugins::ScanResult& receipt, const fs::path& root) {
   require(binding.ready(), "explicitly rescanned relocation failed to bind");
 }
 
+// A binary hashed on a worker loads without a second hash: the load compares
+// the file's stamp, so a replaced or touched file is refused before it loads.
+void hashed_binding(const plugins::ScanResult& receipt, const RuntimePaths& paths) {
+  constexpr double hashed_rate = 48000.0;
+  constexpr std::uint32_t hashed_block = 128;
+  // A modification time the copy cannot already have.
+  constexpr auto later = std::chrono::seconds(1);
+  const auto bundle = paths.root / "HashedGain.vst3";
+  const auto binary = bundle / "Contents/x86_64-linux/HashedGain.so";
+  fs::create_directories(binary.parent_path());
+  fs::copy_file(receipt.binary.canonical_binary, binary);
+  const auto fresh = scan(bundle);
+  const auto instance = saved(receipt);
+  const auto hashed = plugins::hash_vst3_binary(bundle);
+  REQUIRE_TRUE(hashed.has_value(), "copied binary did not hash");
+  REQUIRE_EQ(hashed->identity.sha256, fresh.binary.sha256, "worker hash differs from the scan");
+  {
+    auto binding = plugins::bind_hashed_vst3_project_effect(instance, fresh, *hashed, hashed_rate,
+                                                            hashed_block);
+    REQUIRE_TRUE(binding.ready(), "hashed binary did not bind: " + binding.diagnostic);
+  }
+
+  const auto other = plugins::hash_vst3_binary(receipt.binary.canonical_bundle);
+  REQUIRE_TRUE(other.has_value(), "fixture binary did not hash");
+  const auto entries = std::ranges::count(log_events(paths.log_path), "module-entry");
+  auto foreign =
+      plugins::bind_hashed_vst3_project_effect(instance, fresh, *other, hashed_rate, hashed_block);
+  REQUIRE_EQ(foreign.status, plugins::Vst3BindingStatus::identity_mismatch,
+             "a hash of another bundle was accepted for this scan");
+
+  // Same bytes under a new inode: the stamp differs, so the load is refused.
+  const auto replacement = binary.parent_path() / "replacement.so";
+  fs::copy_file(binary, replacement);
+  fs::rename(replacement, binary);
+  auto replaced =
+      plugins::bind_hashed_vst3_project_effect(instance, fresh, *hashed, hashed_rate, hashed_block);
+  REQUIRE_EQ(replaced.status, plugins::Vst3BindingStatus::load_failed,
+             "a binary replaced after hashing was loaded");
+  REQUIRE_TRUE(replaced.diagnostic.find("changed") != std::string::npos,
+               "refusal does not say the binary changed: " + replaced.diagnostic);
+
+  // Same inode with a later modification time is refused too.
+  const auto rehashed = plugins::hash_vst3_binary(bundle);
+  REQUIRE_TRUE(rehashed.has_value(), "replaced binary did not hash");
+  fs::last_write_time(binary, fs::last_write_time(binary) + later);
+  auto touched = plugins::bind_hashed_vst3_project_effect(instance, fresh, *rehashed, hashed_rate,
+                                                          hashed_block);
+  REQUIRE_EQ(touched.status, plugins::Vst3BindingStatus::load_failed,
+             "a binary modified after hashing was loaded");
+  REQUIRE_EQ(std::ranges::count(log_events(paths.log_path), "module-entry"), entries,
+             "a refused binary reached module entry");
+}
+
 void instrument_source_binding(const plugins::ScanResult& receipt) {
   auto instance = saved(receipt);
   instance.component_state.clear();
@@ -351,6 +406,7 @@ int main() {
     reject_unapplied_values(receipt, log_path);
     failures(receipt, {root, log_path});
     relocated(receipt, root);
+    hashed_binding(receipt, {root, log_path});
     instrument_source_binding(scan(fs::canonical(fs::path(VST3_INSTRUMENT_BUNDLE))));
     fs::remove_all(root);
     return 0;

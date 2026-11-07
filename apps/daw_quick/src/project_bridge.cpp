@@ -174,6 +174,9 @@ ProjectBridge::ProjectBridge(const std::filesystem::path& home_directory, QObjec
   if (dependencies.fixed_latency_vst3_binaries)
     vst3_live_qualification_.fixed_latency_binaries =
         std::move(*dependencies.fixed_latency_vst3_binaries);
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+  vst3_binary_hasher_ = std::move(dependencies.vst3_binary_hasher);
+#endif
   start_timers();
   create_audio_output(std::move(output_factory), std::move(jack_output_factory),
                       std::move(jack_server_probe), std::move(audio_device_discovery));
@@ -668,6 +671,7 @@ void ProjectBridge::create_vst3_controllers() {
           .catalogue = [this]() -> const plugins::Vst3CatalogueSnapshot& {
             return vst3_browser_->catalogue();
           },
+          .hash_binary = vst3_binary_hasher_,
 #endif
           .commit = [this] { commit_edit(); },
           .schedule_save = [this] { schedule_background_save(); },

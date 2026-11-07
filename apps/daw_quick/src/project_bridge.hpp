@@ -105,6 +105,11 @@ struct BridgeDependencies {
   // Sees each prepared live audio edit on the worker, before the handoff
   // replaces the playing graph.
   BridgeLiveEditHandoffHook before_live_edit_handoff{};
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+  // Hashes a plugin binary for the VST3 editor, on its worker; default:
+  // plugins::hash_vst3_binary.
+  Vst3BinaryHasher vst3_binary_hasher{};
+#endif
 };
 
 // A UI-thread, revisioned projection. QML receives values, never model pointers.
@@ -1056,6 +1061,9 @@ private:
   std::uint64_t project_generation_ = 0;
   // Exact binary/class/control/rate/block qualifications for live manual edits.
   Vst3LiveQualification vst3_live_qualification_;
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+  Vst3BinaryHasher vst3_binary_hasher_;
+#endif
   mutable std::optional<QVariantList> browser_catalogue_cache_;
 };
 

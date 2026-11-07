@@ -1,9 +1,11 @@
 #pragma once
 
+#include "background_job.hpp"
 #include "routed_playback.hpp"
 
 #include "oscillate/application/project_session.hpp"
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+#include "oscillate/plugins/project_binding.hpp"
 #include "oscillate/plugins/vst3_bundle_loader.hpp"
 #include "oscillate/plugins/vst3_catalogue.hpp"
 #include "oscillate/plugins/vst3_effect_host.hpp"
@@ -13,10 +15,12 @@
 #include <QPointer>
 #include <QString>
 #include <QTimer>
+#include <QVariantList>
 #include <QVariantMap>
 #include <QWindow>
 
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -32,10 +36,18 @@ namespace oscillate::quick {
 
 class PluginAutomationController;
 
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+// Reads and hashes a bundle's binary on a worker (plugins::hash_vst3_binary).
+using Vst3BinaryHasher =
+    std::function<std::optional<plugins::Vst3HashedBinary>(const std::filesystem::path&)>;
+#endif
+
 // The VST3 parameter editor (QML: projectBridge.vst3Editor): one saved
 // effect or instrument source at a time, as its native X11 view or a list of
 // its parameters. Completed gestures save as undo steps and, while the
-// routed graph plays, reach live audio when the plugin qualifies.
+// routed graph plays, reach live audio when the plugin qualifies. Opening
+// hashes the plugin binary on a worker while the editor shows as pending;
+// the plugin then loads on the GUI thread.
 class Vst3EditorController final : public QObject {
   Q_OBJECT
   Q_PROPERTY(QVariantMap vst3InsertEditor READ editor NOTIFY editorChanged)
@@ -56,6 +68,8 @@ public:
     std::function<bool()> routed_settled;
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
     std::function<const plugins::Vst3CatalogueSnapshot&()> catalogue;
+    // Empty: plugins::hash_vst3_binary.
+    Vst3BinaryHasher hash_binary;
 #endif
     // A committed edit: re-project and update playback.
     std::function<void()> commit;
@@ -96,6 +110,32 @@ private:
   void set_parameter(quint32 parameter_id, double normalized_value, bool from_native_editor,
                      std::uint64_t gesture_sequence = 0);
   void poll_native_gestures();
+  void publish_instrument_editor(const project::Vst3PluginInstance& source,
+                                 const project::TrackId& track, const QString& message,
+                                 QVariantList parameters, bool editable, bool native);
+  void show_native_window();
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+  // An editor whose binary is being hashed on a worker.
+  struct PendingVerification {
+    project::Vst3PluginInstance saved;
+    project::TrackId track;
+    // None: the track's instrument source.
+    std::optional<project::InsertSlotId> slot;
+    QString track_id;
+    QString slot_id;
+    plugins::ScanResult scan;
+    // The project the editor was opened in (ProjectSession::session_generation).
+    std::uint64_t session = 0;
+  };
+  void begin_verification(PendingVerification pending);
+  void poll_verification();
+  void finish_insert_open(const PendingVerification& pending,
+                          plugins::Vst3ProjectBindingResult binding);
+  void finish_instrument_open(const PendingVerification& pending,
+                              plugins::Vst3ProjectBindingResult binding);
+  void publish_insert_editor(const project::Vst3PluginInstance& saved, const QString& track_id,
+                             const QString& slot_id, const QString& message, bool native);
+#endif
 
   Host host_;
   PluginAutomationController& plugin_automation_;
@@ -119,6 +159,10 @@ private:
   std::unordered_map<std::uint32_t, std::uint64_t> active_sequences_;
   std::uint64_t next_sequence_{0};
   std::uint32_t restart_flags_ = 0;
+  std::optional<PendingVerification> verifying_;
+  QTimer verify_timer_;
+  // The hash runs here; its worker holds no controller state.
+  BackgroundJob<std::optional<plugins::Vst3HashedBinary>> hash_;
 #endif
 };
 

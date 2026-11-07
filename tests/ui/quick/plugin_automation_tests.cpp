@@ -36,6 +36,17 @@ namespace quick = oscillate::quick;
 
 using oscillate::test::require;
 
+// Opening an editor hashes the plugin binary on a worker before it loads.
+constexpr int editor_verify_timeout_ms = 10'000;
+
+void await_editor(quick::ProjectBridge& bridge) {
+  require(
+      QTest::qWaitFor(
+          [&] { return !bridge.vst3_editor()->editor().value(QStringLiteral("pending")).toBool(); },
+          editor_verify_timeout_ms),
+      "VST3 editor did not finish verifying its plugin binary");
+}
+
 class Directory {
 public:
   Directory() {
@@ -267,6 +278,7 @@ void effect_parameter_lane_contract() {
         qobject_cast<quick::PluginAutomationController*>(bridge->plugin_automation());
     require(controller != nullptr, "plugin automation controller missing");
     bridge->vst3_editor()->open_vst3_insert_editor(track_id, slot_id);
+    await_editor(*bridge);
     auto view = controller->view();
     const auto gain = parameter_entry(view, 101);
     require(view.value(QStringLiteral("active")).toBool() &&
@@ -402,6 +414,7 @@ void effect_parameter_lane_contract() {
     auto* controller =
         qobject_cast<quick::PluginAutomationController*>(bridge->plugin_automation());
     bridge->vst3_editor()->open_vst3_insert_editor(track_id, slot_id);
+    await_editor(*bridge);
     auto* action = require_item(window, QStringLiteral("vst3ParameterAutomate_101"));
     require(QTest::qWaitFor(
                 [&] {
@@ -517,6 +530,7 @@ void instrument_and_missing_reference_contract() {
 
     bridge->vst3_editor()->open_vst3_insert_editor(
         track_id, QString::fromStdString(missing_slot.to_string()));
+    await_editor(*bridge);
     view = controller->view();
     require(!view.value(QStringLiteral("verified")).toBool() &&
                 parameter_entry(view, 7).value(QStringLiteral("name")) ==
@@ -581,6 +595,7 @@ void verified_instrument_parameter_contract() {
     auto* controller =
         qobject_cast<quick::PluginAutomationController*>(bridge->plugin_automation());
     bridge->vst3_editor()->open_vst3_instrument_editor(track_id);
+    await_editor(*bridge);
     auto view = controller->view();
     require(view.value(QStringLiteral("verified")).toBool() &&
                 parameter_entry(view, 1).value(QStringLiteral("name")) == QStringLiteral("Level") &&
@@ -811,6 +826,7 @@ void large_effect_parameter_browser_contract() {
   require(controller != nullptr, "plugin automation controller missing");
   bridge->vst3_editor()->open_vst3_insert_editor(QString::fromStdString(track.to_string()),
                                                  QString::fromStdString(slot.to_string()));
+  await_editor(*bridge);
   require(controller->view().value(QStringLiteral("role")) == QStringLiteral("effect"),
           "large effect editor did not select the effect");
   browse_large_plugin(
@@ -851,6 +867,7 @@ void large_instrument_parameter_browser_contract() {
   require(controller != nullptr, "plugin automation controller missing");
   bridge->vst3_editor()->open_vst3_instrument_editor(
       QString::fromStdString(track.value().to_string()));
+  await_editor(*bridge);
   require(controller->view().value(QStringLiteral("role")) == QStringLiteral("source"),
           "large instrument editor did not select the source");
   browse_large_plugin(
@@ -863,6 +880,7 @@ void large_instrument_parameter_browser_contract() {
       [&bridge, &track] {
         bridge->vst3_editor()->open_vst3_instrument_editor(
             QString::fromStdString(track.value().to_string()));
+        await_editor(*bridge);
       });
   bridge->vst3_editor()->discard_vst3_insert_editor();
 }
