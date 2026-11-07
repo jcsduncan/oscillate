@@ -377,8 +377,12 @@ void consolidating_a_silent_tiny_loop_is_bounded() {
 // would pass what a clip holds is refused, and nothing changes.
 void consolidating_past_the_clip_limits_is_refused() {
   constexpr std::int64_t quarter = timeline::ticks_per_quarter;
-  constexpr std::int64_t repeats = static_cast<std::int64_t>(project::max_midi_notes_per_clip) + 4;
-  static_assert(project::max_midi_pedal_points_per_lane < static_cast<std::size_t>(repeats));
+  // A clip holds 4096 notes, and 4096 points on each pedal lane; one more
+  // repeat than that passes both.
+  constexpr std::size_t clip_limit = 4'096;
+  static_assert(project::max_midi_notes_per_clip == clip_limit);
+  static_assert(project::max_midi_pedal_points_per_lane == clip_limit);
+  constexpr std::int64_t repeats = 4'097;
   constexpr int key = 60;
   constexpr double pedal_down = 1.0;
   const auto refused = [&](bool pedalled) {
