@@ -2,12 +2,15 @@
 
 #include "preview_pipewire_output.hpp"
 
+#include "oscillate/engine/midi_events.hpp"
+
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <exception>
 #include <limits>
 #include <span>
+#include <tuple>
 #include <utility>
 
 namespace oscillate::quick {
@@ -75,68 +78,114 @@ struct NativeSynthAudition::Stream {
     return true;
   }
 
+  // A block's note events, sorted as the runtime takes them: offs (all at
+  // frame 0) before ons, each by note id. An off only ever ends a note held
+  // before the block, so there are at most `capacity`; ons come from at most
+  // a queue of commands and a list of phrase notes.
+  static constexpr std::size_t max_block_ons = std::size_t{capacity} * 2;
+  static constexpr std::size_t max_block_offs = capacity;
+  static_assert(max_block_offs + max_block_ons <= engine::HeldNotes::instrument_capacity);
+  std::array<engine::BlockMidiEvent, max_block_offs> offs{}; // Callback only.
+  std::size_t off_count = 0;                                 // Callback only.
+  std::array<engine::BlockMidiEvent, max_block_ons> ons{};   // Callback only.
+  std::size_t on_count = 0;                                  // Callback only.
+  std::array<engine::BlockMidiEvent, max_block_offs + max_block_ons>
+      block_notes{}; // Callback only.
+  // Notes with this serial or later started in the current block.
+  std::uint64_t block_first_serial = 1; // Callback only.
+
+  // A note-off at frame 0 for a held note; a note-on also sets its frame
+  // and velocity.
+  [[nodiscard]] static engine::BlockMidiEvent note_event(engine::MidiEventKind kind,
+                                                         const HeldNote& note) noexcept {
+    engine::BlockMidiEvent event;
+    event.offset = 0;
+    event.clip_id_bits = {1, 1};
+    event.note_id_bits = {0, note.serial};
+    event.kind = kind;
+    event.key = note.key;
+    event.velocity = 0;
+    return event;
+  }
+  // A note to start: its key and velocity, its frame in the block and the
+  // project frame it releases at.
+  struct NoteStart {
+    std::uint8_t key = 0;
+    std::uint8_t velocity = 0;
+    std::uint32_t offset = 0;
+    std::uint64_t release_frame = 0;
+  };
+
+  // Ends held note `index`. A note that started in this block never reaches
+  // the instrument: its note-on is withdrawn, because the runtime takes a
+  // frame's offs before its ons and the off would land first.
+  void release(std::size_t index) noexcept {
+    const auto note = held[index];
+    held[index] = held[--held_count];
+    if (note.serial < block_first_serial) {
+      offs[off_count++] = note_event(engine::MidiEventKind::note_off, note);
+      return;
+    }
+    const auto first = ons.begin();
+    const auto last = first + static_cast<std::ptrdiff_t>(on_count);
+    const auto started = std::find_if(first, last, [&](const engine::BlockMidiEvent& event) {
+      return event.note_id_bits.low == note.serial;
+    });
+    if (started != last) {
+      std::copy(started + 1, last, started);
+      --on_count;
+    }
+  }
+
+  // Starts a note. With every held slot taken, the oldest held note is
+  // released first, as a synth steals its oldest voice: the newest key always
+  // sounds and every note-on keeps a matching note-off.
+  void start(const NoteStart& note) noexcept {
+    if (held_count == capacity) {
+      const auto oldest = std::ranges::min_element(
+          held.begin(), held.begin() + static_cast<std::ptrdiff_t>(held_count), {},
+          &HeldNote::serial);
+      release(static_cast<std::size_t>(oldest - held.begin()));
+    }
+    const HeldNote started{note.key, ++note_serial, note.release_frame};
+    auto& on = ons[on_count++];
+    on = note_event(engine::MidiEventKind::note_on, started);
+    on.offset = note.offset;
+    on.velocity = note.velocity;
+    held[held_count++] = started;
+  }
+
   static bool render(void* opaque, std::span<engine::StereoFrame> frames,
                      engine::BlockContext block) noexcept {
     auto& stream = *static_cast<Stream*>(opaque);
     std::fill(frames.begin(), frames.end(), engine::StereoFrame{0.0F, 0.0F});
-    std::array<engine::BlockMidiEvent, capacity * 3> notes{};
-    std::size_t count = 0;
+    stream.off_count = 0;
+    stream.on_count = 0;
+    stream.block_first_serial = stream.note_serial + 1;
     // Release preview voices on the audio callback, even if no new UI
     // command arrives. A release is rounded to the next block boundary.
     for (std::size_t index = 0; index < stream.held_count;) {
-      const auto held = stream.held[index];
-      if (held.release_frame > block.project_sample_position) {
+      if (stream.held[index].release_frame > block.project_sample_position)
         ++index;
-        continue;
-      }
-      auto& event = notes[count++];
-      event.offset = 0;
-      event.clip_id_bits = {1, 1};
-      event.note_id_bits = {0, held.serial};
-      event.kind = engine::MidiEventKind::note_off;
-      event.key = held.key;
-      stream.held[index] = stream.held[--stream.held_count];
+      else
+        stream.release(index);
     }
-    const auto release = [&](std::size_t index) {
-      const auto held = stream.held[index];
-      auto& off = notes[count++];
-      off.offset = 0;
-      off.clip_id_bits = {1, 1};
-      off.note_id_bits = {0, held.serial};
-      off.kind = engine::MidiEventKind::note_off;
-      off.key = held.key;
-      stream.held[index] = stream.held[--stream.held_count];
-    };
     auto next = stream.read.load(std::memory_order_relaxed);
     const auto end = stream.write.load(std::memory_order_acquire);
-    while (next != end) {
+    for (; next != end; ++next) {
       const auto command = stream.commands[next % capacity];
       if (command.command == Command::off || command.command == Command::all_off) {
-        if (count + stream.held_count > notes.size())
-          break;
         for (std::size_t index = 0; index < stream.held_count;) {
           if (command.command == Command::all_off || stream.held[index].key == command.key)
-            release(index);
+            stream.release(index);
           else
             ++index;
         }
-        ++next;
         continue;
       }
-      if (count + 1 + (command.replace_previous ? stream.held_count : 0) > notes.size() ||
-          (!command.replace_previous && stream.held_count == capacity))
-        break;
       if (command.replace_previous) {
-        for (std::size_t index = 0; index < stream.held_count; ++index) {
-          const auto& held = stream.held[index];
-          auto& off = notes[count++];
-          off.offset = 0;
-          off.clip_id_bits = {1, 1};
-          off.note_id_bits = {0, held.serial};
-          off.kind = engine::MidiEventKind::note_off;
-          off.key = held.key;
-        }
-        stream.held_count = 0;
+        while (stream.held_count > 0)
+          stream.release(stream.held_count - 1);
         stream.scheduled_count = 0;
         stream.phrase_anchor = block.project_sample_position;
       }
@@ -151,40 +200,26 @@ struct NativeSynthAudition::Stream {
           stream.scheduled[stream.scheduled_count++] = {start, release_after(start), command.key,
                                                         command.velocity};
         }
-        ++next;
         continue;
       }
-      const auto serial = ++stream.note_serial;
-      auto& event = notes[count++];
-      event.offset = 0;
-      event.clip_id_bits = {1, 1};
-      event.note_id_bits = {0, serial};
-      event.kind = engine::MidiEventKind::note_on;
-      event.key = command.key;
-      event.velocity = command.velocity;
-      stream.held[stream.held_count++] = {command.key, serial,
-                                          release_after(block.project_sample_position)};
-      ++next;
+      stream.start({.key = command.key,
+                    .velocity = command.velocity,
+                    .offset = 0,
+                    .release_frame = release_after(block.project_sample_position)});
     }
     stream.read.store(next, std::memory_order_release);
     // Scheduled phrase notes due in this block start at their own frame.
     const auto block_end = block.project_sample_position + frames.size();
     std::size_t due = 0;
-    while (due < stream.scheduled_count && stream.scheduled[due].on_frame < block_end &&
-           count < notes.size() && stream.held_count < capacity) {
+    while (due < stream.scheduled_count && stream.scheduled[due].on_frame < block_end) {
       const auto& waiting = stream.scheduled[due++];
-      const auto serial = ++stream.note_serial;
-      auto& event = notes[count++];
-      event.offset =
-          static_cast<std::uint32_t>(waiting.on_frame > block.project_sample_position
-                                         ? waiting.on_frame - block.project_sample_position
-                                         : 0);
-      event.clip_id_bits = {1, 1};
-      event.note_id_bits = {0, serial};
-      event.kind = engine::MidiEventKind::note_on;
-      event.key = waiting.key;
-      event.velocity = waiting.velocity;
-      stream.held[stream.held_count++] = {waiting.key, serial, waiting.release_frame};
+      stream.start({.key = waiting.key,
+                    .velocity = waiting.velocity,
+                    .offset = static_cast<std::uint32_t>(
+                        waiting.on_frame > block.project_sample_position
+                            ? waiting.on_frame - block.project_sample_position
+                            : 0),
+                    .release_frame = waiting.release_frame});
     }
     if (due > 0) {
       std::copy(stream.scheduled.begin() + static_cast<std::ptrdiff_t>(due),
@@ -192,12 +227,22 @@ struct NativeSynthAudition::Stream {
                 stream.scheduled.begin());
       stream.scheduled_count -= due;
     }
+    const auto by_frame_then_id = [](const engine::BlockMidiEvent& left,
+                                     const engine::BlockMidiEvent& right) {
+      return std::tie(left.offset, left.note_id_bits) < std::tie(right.offset, right.note_id_bits);
+    };
+    const auto offs = std::span(stream.offs).first(stream.off_count);
+    const auto ons = std::span(stream.ons).first(stream.on_count);
+    std::ranges::sort(offs, by_frame_then_id);
+    std::ranges::sort(ons, by_frame_then_id);
+    const auto notes_end =
+        std::ranges::copy(ons, std::ranges::copy(offs, stream.block_notes.begin()).out).out;
+    const auto notes = std::span(stream.block_notes.begin(), notes_end);
     const auto beat = static_cast<double>(block.project_sample_position) *
                       (120.0 / 60.0 / static_cast<double>(stream.sample_rate));
     const native_dsp::synth::SynthTransport transport{
         beat, 120.0 / 60.0 / static_cast<double>(stream.sample_rate), beat / 4.0, 4.0};
-    const auto result = stream.runtime->process(frames, std::span(notes).first(count),
-                                                block.project_sample_position,
+    const auto result = stream.runtime->process(frames, notes, block.project_sample_position,
                                                 block.transport_generation, transport, {});
     if (result.status != native_dsp::synth::SynthProcessStatus::rendered)
       return false;
