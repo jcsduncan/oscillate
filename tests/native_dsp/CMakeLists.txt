@@ -610,6 +610,20 @@ oscillate_add_test_executable(oscillate_trim_tests SOURCES trim_tests.cpp
   LIBS oscillate::native_effects
   TEST native_trim_contract)
 
+# Where Ceiling's and Press's gain reduction comes from (reduction_bands.hpp).
+oscillate_add_test_executable(oscillate_reduction_bands_tests SOURCES reduction_bands_tests.cpp
+  LIBS oscillate::native_effects)
+oscillate_add_case_tests(native_reduction_bands_contract oscillate_reduction_bands_tests
+  CASES
+  ceiling_puts_a_low_sine_in_the_low_band
+  ceiling_puts_a_high_sine_in_the_high_band
+  press_puts_a_low_sine_in_the_low_band
+  press_puts_a_high_sine_in_the_high_band
+  press_follows_its_key
+  press_weighs_its_detector_high_pass
+  nothing_reduced_shows_nothing
+  the_callback_never_allocates)
+
 oscillate_add_test_executable(oscillate_deck_tests SOURCES deck_tests.cpp
   LIBS oscillate::native_effects
   TEST native_deck_contract)

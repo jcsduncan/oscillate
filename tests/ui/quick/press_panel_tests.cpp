@@ -1,3 +1,4 @@
+#include "device_strip_view.hpp"
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
 
@@ -428,6 +429,32 @@ void screenshots_if_requested() {
   }
 }
 
+// The device-chain strip (device_strip_view.hpp): Press's reduction view on
+// its panel's range, with a cymbal's band leading.
+void telemetry_gives_the_strip_the_reduction_and_its_band() {
+  namespace t = press::telemetry;
+  namespace strip_view = oscillate::quick::strip_view;
+  constexpr float peak_db = -6.0F;
+  constexpr float reduction_db = 9.0F;
+  constexpr std::size_t top_band = effects::reduction_bands::count - 1;
+  constexpr float top_share = 0.8F;
+  InMemoryNativeSynthAdapter adapter(preset("Default"));
+  NativeSynthDeviceController controller(table(), adapter);
+  auto frame = frame_of(peak_db, peak_db, peak_db, peak_db, reduction_db);
+  frame[t::reduction_bands + top_band] = top_share;
+  adapter.set_telemetry(frame);
+  const auto strip = controller.telemetry().value(QStringLiteral("strip")).toMap();
+  require(strip.value(QStringLiteral("kind")).toString() == QStringLiteral("reduction") &&
+              strip.value(QStringLiteral("range_db")).toDouble() == strip_view::press_range_db,
+          "Press's strip is a reduction view on its panel's range");
+  require(strip.value(QStringLiteral("text")).toString() == QStringLiteral("−9.0 dB · max −9.0"),
+          "now and the largest: " + strip.value(QStringLiteral("text")).toString().toStdString());
+  require(strip.value(QStringLiteral("lead")).toInt() == static_cast<int>(top_band) &&
+              strip.value(QStringLiteral("lead_text")).toString() == QStringLiteral("8.4–20 kHz"),
+          "the top band leads: " +
+              strip.value(QStringLiteral("lead_text")).toString().toStdString());
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -439,6 +466,7 @@ int main(int argc, char** argv) {
     telemetry_decodes_into_the_meters();
     the_real_press_lands_on_its_curve();
     presets_and_status();
+    telemetry_gives_the_strip_the_reduction_and_its_band();
     screenshots_if_requested();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';

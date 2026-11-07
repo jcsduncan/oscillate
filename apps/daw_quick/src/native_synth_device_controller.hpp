@@ -1,5 +1,6 @@
 #pragma once
 
+#include "device_strip_view.hpp"
 #include "macro_map_state.hpp"
 #include "native_synth_panel_adapter.hpp"
 #include "native_synth_visuals.hpp"
@@ -287,7 +288,9 @@ public:
   // live is false when nothing plays. Any non-empty frame also passes
   // through raw as {frame}, for panels that decode their layout themselves.
   // Engines with an output spectrum (Shape, Strata, Temper) also give
-  // {spectrum}: dBFS per log-spaced band, low to high.
+  // {spectrum}: dBFS per log-spaced band, low to high. Ceiling, Press, Trim,
+  // Lens, Scope and Loudness give {strip}, the device-chain strip's view of
+  // the frame (device_strip_view.hpp).
   // Panels poll it while visible.
   Q_INVOKABLE QVariantMap telemetry();
 
@@ -402,6 +405,8 @@ private:
   // thousand parameters, so lookups must not scan it.
   std::unordered_map<std::string_view, std::size_t> index_;
   std::vector<double> values_;
+  // The strip's decoded view and its reduction history.
+  DeviceStripView strip_view_;
   std::vector<std::vector<double>> preset_values_;
   NativeSynthPanelStatus status_{};
   QString gesture_parameter_;

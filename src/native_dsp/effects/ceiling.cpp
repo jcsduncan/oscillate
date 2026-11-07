@@ -4,6 +4,7 @@
 #include "ceiling_table.hpp"
 #include "effect_dsp.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
+#include "reduction_analysis.hpp"
 
 #include <algorithm>
 #include <array>
@@ -35,7 +36,9 @@ public:
   CeilingKernel(double sample_rate, PreparedLimiter prepared)
       : rate_(dsp::classic_rate(sample_rate)),
         hold_(std::exp(std::log(1e-3) / (hold_seconds * sample_rate))), limiter_(prepared),
-        offered_(prepared.settings()) {}
+        offered_(prepared.settings()) {
+    bands_.prepare(sample_rate);
+  }
 
   // Only a change of ceiling or release reaches the classic runtime, which
   // adopts an offer outright at its next block (so before the first block it
@@ -59,12 +62,15 @@ public:
                std::span<const engine::StereoFrame>) noexcept override {
     meter(input_, audio);
     drive(audio);
+    // The limiter's detector reads the driven mix.
+    bands_.analyse(audio);
     // The classic runtime reads only the state generation from its context,
     // and silences generation 0.
     limiter_.process(audio, engine::BlockContext{0, generation_});
     meter(output_, audio);
     reduction_ = std::max(reduction_ * std::pow(hold_, static_cast<double>(audio.size())),
                           static_cast<double>(limiter_.latest_gain_reduction_db()));
+    bands_.settle(limiter_.latest_gain_reduction_db(), audio.size());
   }
 
   // A new generation clears the delay line, peak window and gain at the
@@ -74,6 +80,7 @@ public:
     input_ = {};
     output_ = {};
     reduction_ = 0.0;
+    bands_.reset();
   }
 
   [[nodiscard]] std::size_t telemetry(std::span<float> out) const noexcept override {
@@ -85,6 +92,7 @@ public:
       out[telemetry::output_peak + c] = static_cast<float>(gain_to_db(output_[c]));
     }
     out[telemetry::reduction] = static_cast<float>(reduction_);
+    bands_.write(out.subspan(telemetry::reduction_bands, reduction_bands::count));
     return telemetry::size;
   }
 
@@ -124,6 +132,7 @@ private:
   std::array<double, 2> input_{};
   std::array<double, 2> output_{};
   double reduction_ = 0.0;
+  dsp::ReductionBands bands_;
 };
 
 std::unique_ptr<EffectKernel> create_kernel(std::span<const double> values, double sample_rate) {

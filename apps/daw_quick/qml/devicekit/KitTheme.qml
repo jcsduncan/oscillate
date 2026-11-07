@@ -144,6 +144,9 @@ QtObject {
     property bool knobStacked: false
     property real knobCaptionGap: 1
     property real knobCaptionInset: 6
+    // Captions clipped to their width: for tight rows of knobs, where Qt's
+    // elision (which ignores letter spacing) may leave a glyph past the edge.
+    property bool knobCaptionClip: false
     property bool knobLabelUpper: true
     property string knobLabelFont: sans
     property int knobLabelSize: 8

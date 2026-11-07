@@ -1,3 +1,4 @@
+#include "device_strip_view.hpp"
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
 
@@ -540,6 +541,34 @@ void screenshots_if_requested() {
   }
 }
 
+// The device-chain strip (device_strip_view.hpp): Trim's input and output
+// peak and RMS per channel on the panel's meter scale, and the gain.
+void telemetry_gives_the_strip_the_meters_and_gain() {
+  namespace strip_view = oscillate::quick::strip_view;
+  constexpr double gain_db = 3.0;
+  InMemoryNativeSynthAdapter adapter(preset("Unity"));
+  NativeSynthDeviceController controller(table(), adapter);
+  controller.set_value(QStringLiteral("trim.gain"), gain_db);
+  const Levels levels;
+  adapter.set_telemetry(frame_of(levels));
+  const auto strip = controller.telemetry().value(QStringLiteral("strip")).toMap();
+  require(strip.value(QStringLiteral("kind")).toString() == QStringLiteral("meters"),
+          "Trim's strip is a meter view");
+  const auto pair_is = [&](const char* key, const float (&expected)[2]) {
+    const auto values = strip.value(QString::fromLatin1(key)).toList();
+    return values.size() == 2 && values.at(0).toDouble() == static_cast<double>(expected[0]) &&
+           values.at(1).toDouble() == static_cast<double>(expected[1]);
+  };
+  require(pair_is("input_peak", levels.in_peak) && pair_is("output_peak", levels.out_peak) &&
+              pair_is("input_rms", levels.in_rms) && pair_is("output_rms", levels.out_rms),
+          "peak and RMS, left and right, in and out");
+  require(strip.value(QStringLiteral("floor_db")).toDouble() == strip_view::meter_floor_db &&
+              strip.value(QStringLiteral("ceiling_db")).toDouble() == strip_view::meter_ceiling_db,
+          "on the Trim panel's meter scale");
+  require(strip.value(QStringLiteral("text")).toString() == QStringLiteral("+3.0 dB"),
+          "the gain: " + strip.value(QStringLiteral("text")).toString().toStdString());
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -550,6 +579,7 @@ int main(int argc, char** argv) {
     controls_drive_the_readouts_and_image();
     the_summary_says_what_trim_does();
     presets_controls_and_status();
+    telemetry_gives_the_strip_the_meters_and_gain();
     screenshots_if_requested();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';

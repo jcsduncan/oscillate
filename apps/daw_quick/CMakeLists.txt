@@ -330,6 +330,8 @@ oscillate_target_defaults(oscillate)
 # seam, with per-engine curve helpers. QML skins live in qml/<engine>/.
 add_library(oscillate_quick_native_synth
   src/native_synth_device_controller.cpp src/native_synth_device_controller.hpp
+  # The device-chain strip's live view of an engine's telemetry.
+  src/device_strip_view.cpp src/device_strip_view.hpp
   # Crate's panel model: chopping orchestrated over the application's crate functions.
   src/crate_controller.cpp src/crate_controller.hpp
   # Nova's Constellation (ADR-0077): presets placed by sound, morph and mutate.

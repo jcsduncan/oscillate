@@ -4,6 +4,7 @@
 #include "oscillate/native_dsp/dsp/math.hpp"
 #include "press_presets.hpp"
 #include "press_table.hpp"
+#include "reduction_analysis.hpp"
 
 #include <algorithm>
 #include <array>
@@ -44,7 +45,10 @@ public:
   PressKernel(double sample_rate, PreparedCompressor prepared)
       : rate_(dsp::classic_rate(sample_rate)),
         hold_(std::exp(std::log(1e-3) / (hold_seconds * sample_rate))), compressor_(prepared),
-        offered_(prepared.settings()) {}
+        offered_(prepared.settings()) {
+    bands_.prepare(sample_rate);
+    weigh(offered_);
+  }
 
   // Only a change of the classic settings reaches the classic runtime. Before
   // the first block (a lane's first value may differ from the creation
@@ -69,12 +73,15 @@ public:
       ++revision_;
       offered_ = wanted;
     }
+    weigh(offered_);
   }
 
   void process(std::span<engine::StereoFrame> audio,
                std::span<const engine::StereoFrame> sidechain) noexcept override {
     primed_ = true;
     meter(input_, audio);
+    // What the detector hears: the key when there is one.
+    bands_.analyse(sidechain.empty() ? std::span<const engine::StereoFrame>(audio) : sidechain);
     // The classic runtime reads only the state generation from its context.
     const engine::BlockContext context{0, generation_};
     if (sidechain.empty()) {
@@ -85,6 +92,7 @@ public:
     meter(output_, audio);
     reduction_ = std::max(reduction_ * std::pow(hold_, static_cast<double>(audio.size())),
                           static_cast<double>(compressor_.latest_gain_reduction_db()));
+    bands_.settle(compressor_.latest_gain_reduction_db(), audio.size());
   }
 
   // A new generation clears the detector envelope and filter at the next
@@ -94,6 +102,7 @@ public:
     input_ = {};
     output_ = {};
     reduction_ = 0.0;
+    bands_.reset();
   }
 
   [[nodiscard]] std::size_t telemetry(std::span<float> out) const noexcept override {
@@ -105,10 +114,25 @@ public:
       out[telemetry::output_peak + c] = static_cast<float>(gain_to_db(output_[c]));
     }
     out[telemetry::reduction] = static_cast<float>(reduction_);
+    bands_.write(out.subspan(telemetry::reduction_bands, reduction_bands::count));
     return telemetry::size;
   }
 
 private:
+  // The detector high-pass (first order) passes (f/fc)^2 / (1 + (f/fc)^2)
+  // of the power at f: each band is weighed at its centre.
+  void weigh(const CompressorSettings& settings) noexcept {
+    std::array<double, reduction_bands::count> weights{};
+    weights.fill(1.0);
+    if (settings.sidechain_highpass_hz != 0.0) {
+      for (std::size_t band = 0; band < weights.size(); ++band) {
+        const double ratio = reduction_bands::centre_hz(band) / settings.sidechain_highpass_hz;
+        weights[band] = ratio * ratio / (1.0 + ratio * ratio);
+      }
+    }
+    bands_.set_weights(weights);
+  }
+
   void meter(std::array<double, 2>& peak,
              std::span<const engine::StereoFrame> audio) const noexcept {
     for (const auto& frame : audio) {
@@ -128,6 +152,7 @@ private:
   std::array<double, 2> output_{};
   double reduction_ = 0.0;
   bool primed_ = false;
+  dsp::ReductionBands bands_;
 };
 
 std::unique_ptr<EffectKernel> create_kernel(std::span<const double> values, double sample_rate) {

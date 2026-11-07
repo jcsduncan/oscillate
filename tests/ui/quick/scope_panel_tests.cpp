@@ -1,3 +1,4 @@
+#include "device_strip_view.hpp"
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
 
@@ -645,6 +646,52 @@ void screenshots_if_requested() {
   }
 }
 
+// The device-chain strip (device_strip_view.hpp): Scope's sweep at every
+// fourth column (the outer min and max of each four), the beam, the key
+// overlaid when there is one, and the correlation.
+void telemetry_gives_the_strip_the_sweep() {
+  namespace strip_view = oscillate::quick::strip_view;
+  constexpr std::size_t per = strip_view::scope_columns_per_column;
+  constexpr std::size_t columns = scope::columns / per;
+  InMemoryNativeSynthAdapter adapter(preset("Kick and Bass"));
+  NativeSynthDeviceController controller(table(), adapter);
+  const Alignment keyed;
+  adapter.set_telemetry(frame_of(keyed));
+  auto strip = controller.telemetry().value(QStringLiteral("strip")).toMap();
+  require(strip.value(QStringLiteral("kind")).toString() == QStringLiteral("scope") &&
+              strip.value(QStringLiteral("columns")).toInt() == static_cast<int>(columns),
+          "Scope's strip is a sweep of fewer columns");
+  // frame_of: track column c spans +-(c / columns), the key half that; each
+  // strip column's outermost is its last.
+  const auto track = strip.value(QStringLiteral("track")).toList();
+  const auto key = strip.value(QStringLiteral("key")).toList();
+  require(track.size() == static_cast<qsizetype>(2 * columns) && key.size() == track.size(),
+          "(min, max) per column for the track and the key");
+  constexpr float key_scale = 0.5F;
+  for (std::size_t c = 0; c < columns; ++c) {
+    const float outer = static_cast<float>(c * per + per - 1) / static_cast<float>(scope::columns);
+    const auto at = static_cast<qsizetype>(2 * c);
+    require(track.at(at).toDouble() == static_cast<double>(-outer) &&
+                track.at(at + 1).toDouble() == static_cast<double>(outer) &&
+                key.at(at + 1).toDouble() == static_cast<double>(key_scale * outer),
+            "column " + std::to_string(c) + " spans its four");
+  }
+  require(strip.value(QStringLiteral("write_column")).toInt() ==
+              static_cast<int>(static_cast<std::size_t>(keyed.write_column) / per),
+          "the beam stands at its column");
+  require(strip.value(QStringLiteral("keyed")).toBool() &&
+              strip.value(QStringLiteral("text")).toString() == QStringLiteral("corr 0.90"),
+          "the correlation: " + strip.value(QStringLiteral("text")).toString().toStdString());
+  Alignment unkeyed;
+  unkeyed.key = false;
+  adapter.set_telemetry(frame_of(unkeyed));
+  strip = controller.telemetry().value(QStringLiteral("strip")).toMap();
+  require(!strip.value(QStringLiteral("keyed")).toBool() &&
+              strip.value(QStringLiteral("key")).toList().isEmpty() &&
+              strip.value(QStringLiteral("text")).toString() == QStringLiteral("no key"),
+          "no key, no overlay");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -655,6 +702,7 @@ int main(int argc, char** argv) {
     the_hint_says_which_way_and_how_far();
     the_grid_follows_the_window();
     presets_controls_and_status();
+    telemetry_gives_the_strip_the_sweep();
     screenshots_if_requested();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';

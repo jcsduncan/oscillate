@@ -386,6 +386,7 @@ Item {
     // stacked style, the label above an always-shown value.
     Text {
         id: caption
+        objectName: knob.theme.knobCaptions ? knob.theme.prefix + "KnobLabel:" + knob.parameterId : ""
         readonly property bool value: knob.valueSwapped && !knob.theme.knobStacked
         visible: knob.theme.knobCaptions
         y: dialCanvas.y + dialCanvas.height + knob.theme.knobCaptionGap
@@ -402,6 +403,7 @@ Item {
         font.bold: value ? knob.theme.knobValueBold : knob.theme.knobLabelBold
         font.letterSpacing: value ? 0 : knob.theme.knobLabelSpacing
         elide: Text.ElideRight
+        clip: knob.theme.knobCaptionClip
     }
     // The value under the label: always in the stacked style, and on hero
     // knobs with a readout.
@@ -420,6 +422,7 @@ Item {
         font.family: knob.theme.knobValueFont
         font.pixelSize: knob.theme.knobStacked ? knob.theme.knobStackedValueSize : knob.theme.knobReadoutValueSize
         elide: Text.ElideRight
+        clip: knob.theme.knobCaptionClip
     }
 
     // Parameters that apply to new notes carry a small hollow mark.

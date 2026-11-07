@@ -25,6 +25,7 @@
 #include <filesystem>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <span>
@@ -265,6 +266,36 @@ void effect_is_inserted_opened_edited_and_live(const effects::EffectEngine& effe
                 },
                 2'000),
             "the strip has a knob for " + parameter.toString().toStdString());
+  }
+  // Each knob's label and value keep to the knob's own slot, elided and
+  // clipped there, so no caption runs into its neighbour's.
+  constexpr double layout_slack_px = 0.5;
+  double previous_right = -std::numeric_limits<double>::infinity();
+  for (const auto& parameter : strip_parameters) {
+    const auto name = parameter.toString();
+    auto* slot_item = find_item(card, QStringLiteral("stripKnob:") + name);
+    const double left = slot_item->mapToScene({0.0, 0.0}).x();
+    const double right = left + slot_item->width();
+    require(left + layout_slack_px >= previous_right,
+            "strip knobs sit side by side: " + name.toStdString());
+    for (const auto& kind :
+         {QStringLiteral("stripKnobLabel:"), QStringLiteral("stripKnobValue:")}) {
+      auto* caption = find_item(slot_item, kind + name);
+      require(caption != nullptr, "the strip knob has its caption " + (kind + name).toStdString());
+      const double from = caption->mapToScene({0.0, 0.0}).x();
+      // Inside the slot, and nothing drawn past its own width: the text fits
+      // (elided when long) or the caption clips it.
+      require(from + layout_slack_px >= left &&
+                  from + caption->width() <= right + layout_slack_px &&
+                  (caption->clip() || caption->property("contentWidth").toDouble() <=
+                                          caption->width() + layout_slack_px),
+              "the caption keeps to its slot, elided: " + (kind + name).toStdString() + " \"" +
+                  caption->property("text").toString().toStdString() + "\" at " +
+                  std::to_string(from) + "+" + std::to_string(caption->width()) + " (content " +
+                  std::to_string(caption->property("contentWidth").toDouble()) + ") in " +
+                  std::to_string(left) + ".." + std::to_string(right));
+    }
+    previous_right = right;
   }
   auto* strip_controller = qobject_cast<quick::NativeSynthDeviceController*>(
       bridge.device_strip_controller(track_id, slot.value("slotId").toString()));
