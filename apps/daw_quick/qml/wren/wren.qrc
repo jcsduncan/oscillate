@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/wren">
+    <file>WrenPanel.qml</file>
+    <file>WrenTheme.qml</file>
+    <file>WrenPhrase.qml</file>
+  </qresource>
+</RCC>

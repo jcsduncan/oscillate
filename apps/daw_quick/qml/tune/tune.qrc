@@ -1,0 +1,10 @@
+<RCC>
+  <qresource prefix="/tune">
+    <file>TunePanel.qml</file>
+    <file>TuneTheme.qml</file>
+    <file>TuneStrobe.qml</file>
+    <file>TuneCents.qml</file>
+    <file>TuneHistory.qml</file>
+    <file>TuneTrajectory.qml</file>
+  </qresource>
+</RCC>
