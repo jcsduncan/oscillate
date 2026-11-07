@@ -38,8 +38,9 @@ existing registry identity. A corrupt registry is reported rather than
 overwritten.
 
 The service reports per-project status/usage, global reachable usage and budget;
-supports a persistent budget change, enforcement, one-project clear and clear
-of reachable caches. It opens each registered project through `ProjectStore`
+supports a persistent budget change, enforcement, one-project clear, clear
+of reachable caches, and `forget_project`, which drops one registry entry
+(reachable or not) without touching the project or its cache. It opens each registered project through `ProjectStore`
 and uses pinned cache-directory descriptors. The Quick bridge registers opened
 projects and reports registration failure in its status line. There is no
 processing-panel UI for health, budget or clear yet, and the service does not

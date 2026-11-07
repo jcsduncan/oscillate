@@ -310,6 +310,22 @@ Result<void> CacheControl::register_project(const std::filesystem::path& root) {
   return saved;
 }
 
+Result<void> CacheControl::forget_project(const std::filesystem::path& root) {
+  std::lock_guard lock(mutex_);
+  const auto found = std::ranges::find(entries_, root, &Entry::root);
+  if (found == entries_.end()) {
+    return Result<void>::failure({ErrorCode::not_found, "project is not registered"});
+  }
+  auto updated = entries_;
+  updated.erase(updated.begin() + (found - entries_.begin()));
+  bool published = false;
+  auto saved = persist(updated, budget_bytes_, published);
+  if (saved || published) {
+    entries_ = std::move(updated);
+  }
+  return saved;
+}
+
 Result<CacheHealth> CacheControl::health(media::CacheStore* shared_cache) const {
   std::lock_guard lock(mutex_);
   CacheHealth health{budget_bytes_, {}, {}};
