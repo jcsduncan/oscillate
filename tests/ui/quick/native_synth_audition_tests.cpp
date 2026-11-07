@@ -6,6 +6,7 @@
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/wait.hpp"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -210,6 +211,109 @@ void live_notes_hold_until_released() {
   }
   require(level < 0.0001F, "a released note kept sounding");
 }
+
+// Every note the instrument hears, by note id: what sounds and what was
+// released without sounding.
+struct NoteLedger {
+  std::vector<std::uint64_t> sounding;
+  std::size_t note_ons = 0;
+  std::size_t note_offs = 0;
+  std::size_t stray_offs = 0;
+};
+NoteLedger ledger; // Touched only on the rendering (test) thread.
+
+class LedgerKernel final : public synth::SynthKernel {
+public:
+  void control(std::span<const double>, std::uint32_t,
+               const synth::SynthTransport&) noexcept override {}
+  void note_on(const synth::NoteEvent& event) noexcept override {
+    ++ledger.note_ons;
+    ledger.sounding.push_back(event.note.low);
+  }
+  void note_off(const synth::NoteEvent& event) noexcept override {
+    ++ledger.note_offs;
+    const auto found = std::ranges::find(ledger.sounding, event.note.low);
+    if (found == ledger.sounding.end()) {
+      ++ledger.stray_offs;
+      return;
+    }
+    ledger.sounding.erase(found);
+  }
+  void render(std::span<engine::StereoFrame>) noexcept override {}
+  void reset() noexcept override { ledger.sounding.clear(); }
+  [[nodiscard]] synth::KernelStatus status() const noexcept override { return {}; }
+};
+
+const synth::SynthEngine& ledger_engine() {
+  static const synth::EngineDescriptor descriptor{"ledger-test", "Ledger Test", 1, {}, {}};
+  static const synth::SynthEngine selected{
+      &descriptor,
+      [](double) -> std::unique_ptr<synth::SynthKernel> {
+        return std::make_unique<LedgerKernel>();
+      },
+      [](std::span<const double>, double) -> std::uint64_t { return 0; }, false};
+  return selected;
+}
+
+// Live playing holds more keys than the preview has held-note slots: the
+// oldest note is released to make room, every key still sounds when pressed,
+// and every note-on the instrument hears gets its note-off.
+void more_held_keys_than_slots_all_release() {
+  constexpr std::uint32_t held_slots = quick::NativeSynthAudition::max_phrase_notes;
+  constexpr std::uint32_t extra_keys = 16;
+  constexpr std::uint32_t pressed = held_slots + extra_keys;
+  constexpr std::uint8_t first_key = 24;
+  constexpr std::uint8_t velocity = 100;
+  constexpr std::uint32_t sample_rate = 48'000;
+  constexpr std::uint32_t block_frames = 128;
+  static_assert(first_key + pressed <= 128);
+  auto probe = std::make_shared<ProbeState>();
+  auto output_factory =
+      [probe](audio::StereoRenderSource source,
+              audio::TransportCursor& cursor) -> std::unique_ptr<app::PlaybackOutput> {
+    probe->source = source;
+    probe->cursor = &cursor;
+    return std::make_unique<ProbeOutput>(probe);
+  };
+  quick::NativeSynthAudition audition;
+  std::array<engine::StereoFrame, block_frames> scratch{};
+  std::array<float, block_frames * 2> output{};
+  const auto render = [&] {
+    require(audio::render_transport_block(probe->source, *probe->cursor, true, scratch, output) ==
+                audio::BlockResult::rendered,
+            "live preview failed to render");
+  };
+  for (std::uint32_t index = 0; index < pressed; ++index) {
+    const auto key = static_cast<std::uint8_t>(first_key + index);
+    require(audition.note_on({&ledger_engine(), {}, {}, {}}, sample_rate, block_frames, key,
+                             velocity, std::nullopt, output_factory),
+            "live note request failed");
+    oscillate::test::wait_until([&] { return probe->started.load(std::memory_order_acquire); },
+                                "the preview device started");
+    oscillate::test::wait_until(
+        [&] {
+          render();
+          return ledger.note_ons == index + 1;
+        },
+        "every pressed key reached the instrument");
+  }
+  require(ledger.sounding.size() == held_slots, "the oldest notes were not released to make room");
+  for (std::uint32_t index = 0; index < pressed; ++index) {
+    require(audition.note_off(static_cast<std::uint8_t>(first_key + index)),
+            "release request failed");
+    // The newest held notes release in turn; an evicted one has nothing left.
+    const auto expected = std::min<std::size_t>(held_slots, pressed - index - 1);
+    oscillate::test::wait_until(
+        [&] {
+          render();
+          return ledger.sounding.size() == expected;
+        },
+        "each released key ended its note");
+  }
+  require(ledger.sounding.empty(), "a note kept sounding after every key was released");
+  require(ledger.note_offs == pressed, "a note-on was not matched by exactly one note-off");
+  require(ledger.stray_offs == 0, "the instrument heard a note-off for a note it never started");
+}
 } // namespace
 
 // A preset preview's phrase: each note starts on its own frame, whatever
@@ -260,6 +364,7 @@ int main() {
     audition_uses_velocity_and_releases_the_note();
     live_notes_hold_until_released();
     phrase_notes_land_on_their_frames();
+    more_held_keys_than_slots_all_release();
     return 0;
   } catch (const std::exception& error) {
     std::fprintf(stderr, "%s\n", error.what());
