@@ -101,7 +101,16 @@ public:
   [[nodiscard]] std::optional<BlockContext> held_boundary() const noexcept;
   [[nodiscard]] bool cancel_hold() noexcept;
   [[nodiscard]] std::size_t collect_retired();
+  // Asks the callback to withdraw the pending candidate, for one that can
+  // never be adopted (a live switch whose max_frames is below every device
+  // block, or whose source bank never fills). The callback retires it at the
+  // start of its next block, before touching it, unless that block already
+  // adopted it; collect_retired() then frees it. Until the callback answers,
+  // has_pending() stays true, so nothing new is published meanwhile. False
+  // when nothing is pending or a withdrawal is already requested.
+  [[nodiscard]] bool withdraw_pending() noexcept;
   [[nodiscard]] std::uint64_t active_revision() const noexcept;
+  // A candidate awaits adoption, or a withdrawal awaits the callback.
   [[nodiscard]] bool has_pending() const noexcept;
   // The callback-accepted mixer's post-fader meter for this node. Retired
   // plans are destroyed only by collect_retired(), so this control-side read
@@ -149,6 +158,7 @@ private:
   static constexpr std::size_t live_capacity = 256;
 
   void destroy_owned(const Plan* plan);
+  void answer_withdrawal() noexcept;
   [[nodiscard]] bool push_live(LiveControl control) noexcept;
   void drain_live(const Plan& active) noexcept;
   static void silence(std::span<StereoFrame> output) noexcept;
@@ -161,6 +171,7 @@ private:
   std::atomic<Plan*> retired_{nullptr};
   std::atomic<bool> hold_requested_{false};
   std::atomic<bool> held_{false};
+  std::atomic<bool> withdraw_requested_{false};
   BlockContext boundary_{0, 0}; // callback writes, control reads after held_ acquire
   // Single-producer (control), single-consumer (callback) live controls.
   std::array<LiveControl, live_capacity> live_{};
