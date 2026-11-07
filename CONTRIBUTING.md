@@ -51,6 +51,8 @@ these types:
 | `fix:` | a bug fix |
 | `docs:` | documentation only |
 | `refactor:` | a code change that neither fixes a bug nor adds a feature |
+| `perf:` | a performance improvement |
+| `revert:` | reverting an earlier commit |
 | `test:` | adding or correcting tests |
 | `build:` | CMake, presets, dependencies or packaging |
 | `ci:` | workflows and CI scripts |

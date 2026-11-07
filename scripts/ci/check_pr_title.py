@@ -39,8 +39,10 @@ def problems(title, scopes):
     found = []
     if scope is None and kind in SCOPED_TYPES:
         found.append(f"`{kind}` needs a scope, e.g. `{kind}(engine): …`")
-    for part in (scope or "").split(","):
-        if part and part not in scopes:
+    for part in scope.split(",") if scope is not None else []:
+        if not part:
+            found.append("empty scope part; write `type(scope): …` or `type(a,b): …`")
+        elif part not in scopes:
             extras = ", ".join(EXTRA_SCOPES)
             found.append(f"unknown scope `{part}`; use a module under src/ or one of {extras}")
     return found

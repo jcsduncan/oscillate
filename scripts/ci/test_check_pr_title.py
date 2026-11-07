@@ -30,6 +30,15 @@ class TitleTests(unittest.TestCase):
         ):
             self.assertEqual(check_pr_title.problems(title, SCOPES), [], title)
 
+    def test_empty_scope_parts_fail(self):
+        for title in ("feat(,): x", "feat(app,): x", "fix(,engine): x"):
+            self.assertTrue(check_pr_title.problems(title, SCOPES), title)
+
+    def test_perf_and_revert_need_a_scope(self):
+        self.assertTrue(check_pr_title.problems("perf: faster mixing", SCOPES))
+        self.assertTrue(check_pr_title.problems("revert: undo the change", SCOPES))
+        self.assertEqual(check_pr_title.problems("perf(engine): faster mixing", SCOPES), [])
+
     def test_breaking_marker_passes(self):
         self.assertEqual(check_pr_title.problems("feat(engine)!: new graph API", SCOPES), [])
 
