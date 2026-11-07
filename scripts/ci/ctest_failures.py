@@ -3,8 +3,8 @@
 Usage: ctest_failures.py REPORT.xml...
 Each report's parent directory names its shard. Prints a Markdown table of
 the tests with a <failure> (failed or timed out; skipped tests have none) for
-$GITHUB_STEP_SUMMARY, or a line saying none failed. A missing report is
-listed too: its shard never finished.
+$GITHUB_STEP_SUMMARY, or a line saying none failed. A missing or
+truncated report is listed too: its shard never finished.
 """
 
 import sys
@@ -28,6 +28,18 @@ def failures(report_text):
     return found
 
 
+def readable(path):
+    """The report's text, or None when it is missing or cut short (a cancelled shard)."""
+    if not path.is_file():
+        return None
+    text = path.read_text(encoding="utf-8")
+    try:
+        ElementTree.fromstring(text)
+    except ElementTree.ParseError:
+        return None
+    return text
+
+
 def cell(text):
     return text.replace("|", "\\|").replace("\n", " ")
 
@@ -37,7 +49,9 @@ def summary(reports):
     rows = []
     for shard, text in sorted(reports.items()):
         if text is None:
-            rows.append((shard, "(no report)", "missing", "the shard did not finish"))
+            rows.append(
+                (shard, "(no report)", "missing", "no readable report; the shard did not finish")
+            )
             continue
         rows.extend((shard, name, status, excerpt) for name, status, excerpt in failures(text))
     if not rows:
@@ -58,7 +72,7 @@ def main():
     reports = {}
     for argument in sys.argv[1:]:
         path = Path(argument)
-        reports[path.parent.name] = path.read_text(encoding="utf-8") if path.is_file() else None
+        reports[path.parent.name] = readable(path)
     sys.stdout.write(summary(reports))
 
 

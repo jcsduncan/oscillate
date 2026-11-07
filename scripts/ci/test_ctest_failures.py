@@ -1,6 +1,8 @@
 """Unit tests for ctest_failures.py's failure summary."""
 
+import tempfile
 import unittest
+from pathlib import Path
 
 import ctest_failures
 
@@ -48,6 +50,16 @@ class FailureTests(unittest.TestCase):
         self.assertIn(
             "| shard-3 | `(no report)` | missing |", ctest_failures.summary({"shard-3": None})
         )
+
+    def test_truncated_or_missing_reports_are_unreadable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            truncated = Path(directory) / "junit.xml"
+            truncated.write_text(REPORT[: len(REPORT) // 2], encoding="utf-8")
+            self.assertIsNone(ctest_failures.readable(truncated))
+            self.assertIsNone(ctest_failures.readable(Path(directory) / "absent.xml"))
+            complete = Path(directory) / "complete.xml"
+            complete.write_text(REPORT, encoding="utf-8")
+            self.assertEqual(ctest_failures.readable(complete), REPORT)
 
     def test_clean_reports_say_so(self):
         clean = REPORT.split('  <testcase name="native_halo', maxsplit=1)[0] + "</testsuite>\n"
