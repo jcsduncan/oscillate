@@ -1481,6 +1481,174 @@ constexpr auto old_card_brass = std::to_array<Value>({
     {"nova.analogue.drift.amount", 0.5},
 });
 
+// ---- Pads for the flute ---------------------------------------------------------------
+// Beds for Wren playing Hijaz and Shur phrases in C minor: breath, santur
+// and a sub. Each leaves the space to the track's reverb, so the in-synth
+// effects stay small.
+
+// Route amounts are in a destination's knob travel (08a §3.1). These turn
+// musical depths into that travel for the destinations the pads modulate.
+constexpr double pitch_route_span_cents = 9'600.0; // nova.osc.<o>.pitch: −48..48 st.
+constexpr double cutoff_route_span_octaves = 11.425; // nova.filter.<f>.cutoff: log2(22000 / 8).
+constexpr double cents_of_travel(double cents) { return cents / pitch_route_span_cents; }
+constexpr double octaves_of_travel(double octaves) { return octaves / cutoff_route_span_octaves; }
+// A filter keytracked at 100 % sits at its cutoff on middle C (key 60), so
+// a comb or band-pass set here follows each note's fundamental.
+constexpr double middle_c_hz = 261.63;
+// The delay module's division index (08a §5) as its p0: 1/8 dotted.
+constexpr double delay_divisions = 14.0;
+constexpr double eighth_dotted = 8.0 / delay_divisions;
+
+// Breath an octave under the flute, like a ney: breath noise through a
+// band-pass keyed to each note's fundamental, so the air itself is pitched,
+// beside a second, wide band for the hiss on top; a faint sine and triangle
+// under it, a slow swell in the breath and a late, small vibrato.
+constexpr auto ney_breath = std::to_array<Value>({
+    {"nova.master", -1.0},
+    {"nova.osc.a.type", 0.0},
+    {"nova.osc.a.shape", 0.0},
+    {"nova.osc.a.level", 0.3},
+    {"nova.osc.b.on", 1.0},
+    {"nova.osc.b.type", 0.0},
+    {"nova.osc.b.shape", 1.0},
+    {"nova.osc.b.level", 0.08},
+    {"nova.osc.b.fine", 6.0},
+    {"nova.noise.on", 1.0},
+    {"nova.noise.level", 1.0},
+    {"nova.noise.tone", -0.2},
+    {"nova.filter.routing", 1.0},
+    {"nova.filter.1.model", 7.0},
+    {"nova.filter.1.cutoff", middle_c_hz},
+    {"nova.filter.1.resonance", 0.45},
+    {"nova.filter.1.keytrack", 1.0},
+    {"nova.filter.2.on", 1.0},
+    {"nova.filter.2.model", 7.0},
+    {"nova.filter.2.cutoff", 2'500.0},
+    {"nova.filter.2.resonance", 0.2},
+    {"nova.filter.2.keytrack", 0.5},
+    {"nova.filter.2.mix", 0.5},
+    {"nova.env.1.attack", 1.4},
+    {"nova.env.1.decay", 1.0},
+    {"nova.env.1.sustain", 1.0},
+    {"nova.env.1.release", 3.5},
+    {"nova.lfo.1.sync", 0.0},
+    {"nova.lfo.1.rate", 0.18},
+    {"nova.lfo.1.mode", 2.0},
+    {"nova.lfo.1.smooth", 0.6},
+    {"nova.lfo.2.sync", 0.0},
+    {"nova.lfo.2.rate", 4.8},
+    {"nova.lfo.2.delay", 0.8},
+    {"nova.lfo.2.rise", 1.2},
+    {"nova.lfo.3.sync", 0.0},
+    {"nova.lfo.3.rate", 0.07},
+    {"nova.lfo.3.mode", 2.0},
+    {"nova.lfo.3.smooth", 0.6},
+    {"nova.mod.0.amount", 0.12},
+    {"nova.mod.1.amount", cents_of_travel(9.0)},
+    {"nova.mod.2.amount", 0.1},
+    {"nova.fx.1.mix", 0.25},
+    {"nova.analogue.on", 1.0},
+    {"nova.analogue.age", 0.4},
+    {"nova.analogue.seed", 1'384.0},
+});
+
+// A santur course: four strings per note, a few cents apart, struck by a
+// felt-less hammer. A bright, quickly closing filter and a click of metal
+// noise make the strike; a keyed comb and an FM-bell table an octave up
+// ring on into a long, glittering tail, with a little ping-pong echo.
+constexpr auto santur_bloom = std::to_array<Value>({
+    {"nova.master", -1.5},
+    {"nova.osc.a.type", 0.0},
+    {"nova.osc.a.shape", 2.0},
+    {"nova.osc.a.unison.voices", 4.0},
+    {"nova.osc.a.unison.detune", 7.0},
+    {"nova.osc.a.unison.width", 0.8},
+    {"nova.osc.b.on", 1.0},
+    {"nova.osc.b.position", 0.3},
+    {"nova.osc.b.octave", 1.0},
+    {"nova.osc.b.level", 0.3},
+    {"nova.osc.b.unison.voices", 3.0},
+    {"nova.osc.b.unison.detune", 9.0},
+    {"nova.osc.b.unison.width", 1.0},
+    {"nova.noise.on", 1.0},
+    {"nova.noise.level", 0.0},
+    {"nova.noise.tone", 0.4},
+    {"nova.filter.1.model", 6.0},
+    {"nova.filter.1.cutoff", 1'800.0},
+    {"nova.filter.1.resonance", 0.1},
+    {"nova.filter.1.keytrack", 0.6},
+    {"nova.filter.2.on", 1.0},
+    {"nova.filter.2.model", 15.0},
+    {"nova.filter.2.cutoff", middle_c_hz},
+    {"nova.filter.2.resonance", 0.75},
+    {"nova.filter.2.keytrack", 1.0},
+    {"nova.filter.2.mix", 0.4},
+    {"nova.env.1.attack", 0.001},
+    {"nova.env.1.decay", 6.0},
+    {"nova.env.1.sustain", 0.0},
+    {"nova.env.1.release", 6.0},
+    {"nova.env.1.velocity", 0.8},
+    {"nova.env.2.attack", 0.0},
+    {"nova.env.2.decay", 0.35},
+    {"nova.env.2.sustain", 0.15},
+    {"nova.env.2.release", 3.0},
+    {"nova.env.3.attack", 0.0},
+    {"nova.env.3.decay", 0.04},
+    {"nova.env.3.sustain", 0.0},
+    {"nova.env.3.release", 0.04},
+    {"nova.mod.0.amount", octaves_of_travel(4.0)},
+    {"nova.mod.1.amount", 0.5},
+    {"nova.fx.1.mix", 0.2},
+    {"nova.fx.2.p0", eighth_dotted},
+    {"nova.fx.2.p1", 0.35},
+    {"nova.fx.2.p2", 0.3},
+    {"nova.fx.2.mix", 0.18},
+    {"nova.analogue.on", 1.0},
+    {"nova.analogue.age", 0.25},
+    {"nova.analogue.seed", 3'030.0},
+});
+
+// A warm floor under everything: a soft triangle pair, a hint of saw and a
+// sine sub an octave down, through a gently driven low-pass that breathes
+// over a long cycle, with the lows kept mono.
+constexpr auto warm_sub_bed = std::to_array<Value>({
+    {"nova.master", -4.0},
+    {"nova.osc.a.type", 0.0},
+    {"nova.osc.a.shape", 1.0},
+    {"nova.osc.a.level", 0.6},
+    {"nova.osc.a.unison.voices", 2.0},
+    {"nova.osc.a.unison.detune", 6.0},
+    {"nova.osc.a.unison.width", 0.3},
+    {"nova.osc.b.on", 1.0},
+    {"nova.osc.b.type", 0.0},
+    {"nova.osc.b.shape", 2.0},
+    {"nova.osc.b.level", 0.18},
+    {"nova.osc.b.fine", 4.0},
+    {"nova.sub.on", 1.0},
+    {"nova.sub.level", 0.6},
+    {"nova.filter.1.model", 6.0},
+    {"nova.filter.1.cutoff", 420.0},
+    {"nova.filter.1.resonance", 0.1},
+    {"nova.filter.1.keytrack", 0.3},
+    {"nova.filter.1.drive", 3.0},
+    {"nova.env.1.attack", 1.5},
+    {"nova.env.1.decay", 1.0},
+    {"nova.env.1.sustain", 1.0},
+    {"nova.env.1.release", 3.5},
+    {"nova.lfo.1.sync", 0.0},
+    {"nova.lfo.1.rate", 0.05},
+    {"nova.lfo.1.mode", 2.0},
+    {"nova.lfo.1.scope", 1.0},
+    {"nova.lfo.1.smooth", 0.5},
+    {"nova.mod.0.amount", octaves_of_travel(0.4)},
+    // Utility: bass mono below about 120 Hz (p2, log 20..500 Hz).
+    {"nova.fx.1.p2", 0.557},
+    {"nova.analogue.on", 1.0},
+    {"nova.analogue.age", 0.35},
+    {"nova.analogue.seed", 909.0},
+    {"nova.analogue.drift.amount", 0.4},
+});
+
 // ---- Tags -------------------------------------------------------------------------------
 // A small shared vocabulary: character, then genre. Categories already say
 // what a preset is for, so no tag repeats one.
@@ -1545,6 +1713,9 @@ constexpr auto t_flutter_bass = std::to_array<std::string_view>({"warm", "analog
 constexpr auto t_worn_lead = std::to_array<std::string_view>({"analog", "mono", "wide"});
 constexpr auto t_dub_chord = std::to_array<std::string_view>({"analog", "dark", "techno"});
 constexpr auto t_brass = std::to_array<std::string_view>({"warm", "analog"});
+constexpr auto t_ney = std::to_array<std::string_view>({"airy", "noise", "soft"});
+constexpr auto t_santur = std::to_array<std::string_view>({"metallic", "percussive", "bright"});
+constexpr auto t_sub_bed = std::to_array<std::string_view>({"warm", "soft", "bass"});
 
 // ---- Documents --------------------------------------------------------------------------
 
@@ -2092,6 +2263,34 @@ NativeSynthDocument brass_document() {
   return document;
 }
 
+// Pads for the flute's documents.
+NativeSynthDocument ney_document() {
+  auto document = base();
+  document.media[3] = {"noise", NativeBuiltinMedia{"breath"}, 0};
+  document.routes = {route(0, "lfo.1", "nova.noise.level", true),
+                     route(1, "lfo.2", "nova.osc.a.pitch", true),
+                     route(2, "lfo.3", "nova.filter.1.resonance", true)};
+  document.chains = {{"fx.main", {{1, "chorus"}}}};
+  return document;
+}
+
+NativeSynthDocument santur_document() {
+  auto document = base();
+  document.media[1] = table("osc.b", "fm_bell");
+  document.media[3] = {"noise", NativeBuiltinMedia{"metal_shimmer"}, 0};
+  document.routes = {route(0, "env.2", "nova.filter.1.cutoff"),
+                     route(1, "env.3", "nova.noise.level")};
+  document.chains = {{"fx.main", {{1, "chorus"}, {2, "delay"}}}};
+  return document;
+}
+
+NativeSynthDocument sub_bed_document() {
+  auto document = base();
+  document.routes = {route(0, "lfo.1", "nova.filter.1.cutoff", true)};
+  document.chains = {{"fx.main", {{1, "utility"}}}};
+  return document;
+}
+
 // A factory preset: its values, tags and document.
 struct PresetSpec {
   std::string_view name;
@@ -2168,6 +2367,10 @@ const std::array preset_specs{
     PresetSpec{"Whispered Ahh", "Pad", whispered_ahh, t_whisper, whispered_document},
     PresetSpec{"Warm Flutter Bass", "Bass", warm_flutter_bass, t_flutter_bass,
                warm_flutter_bass_document},
+    // Pads for the flute.
+    PresetSpec{"Ney Breath", "Pad", ney_breath, t_ney, ney_document},
+    PresetSpec{"Santur Bloom", "Pluck", santur_bloom, t_santur, santur_document},
+    PresetSpec{"Warm Sub Bed", "Pad", warm_sub_bed, t_sub_bed, sub_bed_document},
 };
 
 } // namespace
