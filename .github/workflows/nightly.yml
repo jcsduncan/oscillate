@@ -1,0 +1,97 @@
+name: Nightly slow tier
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  slow:
+    name: Slow tests (Ubuntu 26.04, Qt Quick)
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    timeout-minutes: 360
+    env:
+      CCACHE_MAXSIZE: 2G
+      OSCILLATE_BUILD_JOBS: 4
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install dependencies (README list + ccache)
+        run: |
+          scripts/ci/install-deps.sh ccache
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-quick-${{ github.sha }}
+          restore-keys: ccache-quick-
+      # Hosted runners are slower than a desktop, so test budgets get headroom.
+      - name: Configure
+        run: cmake --preset quick -DOSCILLATE_TEST_TIMEOUT_SCALE=3 -DOSCILLATE_WARNINGS_AS_ERRORS=ON
+      - name: Build app and tests
+        run: scripts/build.sh build/quick --target oscillate oscillate_tests
+      - name: Slow tests (no live devices)
+        run: ctest --preset quick-slow -LE live -j4
+
+  coverage:
+    name: Core line coverage (gcovr, Codecov)
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    timeout-minutes: 300
+    permissions:
+      contents: read
+      id-token: write # Codecov upload via OIDC, no stored token
+    env:
+      CCACHE_MAXSIZE: 2G
+      OSCILLATE_BUILD_JOBS: 4
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Install Git for checkout and the Codecov uploader
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+            ca-certificates curl git gnupg
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install dependencies (README list + ccache) and pinned gcovr
+        run: |
+          scripts/ci/install-deps.sh ccache
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
+          python3 -m venv /opt/qa
+          /opt/qa/bin/pip install --quiet "$(grep '^gcovr==' scripts/qa-requirements.txt)"
+          echo /opt/qa/bin >> "$GITHUB_PATH"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-coverage-${{ github.sha }}
+          restore-keys: ccache-coverage-
+      # The preset scales budgets by 2 for instrumentation; hosted runners need
+      # a further 3x. Warnings stay non-fatal until a coverage (-O0 --coverage)
+      # build has been shown clean; the quick build above is fatal.
+      - name: Configure
+        run: >-
+          cmake --preset coverage
+          -DOSCILLATE_TEST_TIMEOUT_SCALE=6
+          -DOSCILLATE_WARNINGS_AS_ERRORS=OFF
+      - name: Build app and tests
+        run: scripts/build.sh build/coverage --target oscillate oscillate_tests
+      - name: Tests (no live devices)
+        run: ctest --preset coverage -LE live -j4
+      - name: Line coverage floor and Cobertura report
+        run: scripts/ci/coverage.sh
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          files: build/coverage/coverage.xml
+          disable_search: true
+          flags: core
+          # Fork pull requests get no OIDC token; the gcovr floor above still gates them.
+          fail_ci_if_error: ${{ github.event_name == 'push' }}

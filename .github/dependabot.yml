@@ -1,0 +1,33 @@
+# Weekly dependency updates. There is no Dockerfile: the ubuntu:26.04
+# container image named in the workflows is not tracked by the
+# github-actions ecosystem, so bump it by hand.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # scripts/qa-requirements.txt: clang-format, clang-tidy and gcovr pins.
+  - package-ecosystem: pip
+    directory: /scripts
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+
+  # scripts/ci/docs-requirements.txt and lint-requirements.txt.
+  - package-ecosystem: pip
+    directory: /scripts/ci
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      ci-python:
+        patterns: ["*"]
