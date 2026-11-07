@@ -59,7 +59,9 @@ struct CollectOptions {
   // Where arm() wrote the marker and the session description.
   std::filesystem::path directory;
   // The log directory (foundation::log::Options::directory); its rotated
-  // oscillate*.log files go into the report, oldest first.
+  // oscillate*.log files go into the report, oldest first: at most the
+  // newest log::Options::default_max_files, and the last
+  // default_max_file_bytes of each.
   std::filesystem::path log_directory;
   // The user's home directory, replaced with "~" throughout the report.
   // Empty: nothing is replaced.

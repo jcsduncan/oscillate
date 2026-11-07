@@ -34,15 +34,22 @@ jobs:
   build:
     name: Build the MkDocs site
     # An issue event matters only when the issue carries, gains or loses the label.
+    # A label event matters only for that label itself.
     if: >-
       github.event_name != 'issues' ||
-      contains(github.event.issue.labels.*.name, 'known-issue') ||
-      github.event.label.name == 'known-issue'
+      (
+        (github.event.action == 'labeled' || github.event.action == 'unlabeled') &&
+        github.event.label.name == 'known-issue'
+      ) ||
+      (
+        github.event.action != 'labeled' && github.event.action != 'unlabeled' &&
+        contains(github.event.issue.labels.*.name, 'known-issue')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: read
-      issues: read
+      contents: read # Check out the repository.
+      issues: read # List the issues labelled known-issue.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

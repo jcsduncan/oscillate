@@ -1,8 +1,11 @@
 #include "oscillate/foundation/crash_report.hpp"
+#include "oscillate/foundation/log.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <array>
 #include <csignal>
+#include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
@@ -180,11 +183,41 @@ void session_lists_only_relevant_variables() {
   REQUIRE_EQ(::unsetenv(std::string(variable_name).c_str()), 0);
 }
 
+// The log's rotation limits, which bound a report's log section.
+constexpr std::size_t log_files_kept = oscillate::foundation::log::Options::default_max_files;
+constexpr std::uint64_t log_bytes_kept =
+    oscillate::foundation::log::Options::default_max_file_bytes;
+constexpr std::string_view dropped_head = "head-of-an-oversized-log";
+constexpr char filler = 'x';
+
+void log_section_is_bounded() {
+  const auto fixture = make_fixture("crash-bounded");
+  for (std::size_t number = 1; number <= log_files_kept; ++number)
+    write_text(fixture.logs / ("oscillate." + std::to_string(number) + ".log"),
+               "numbered log " + std::to_string(number) + "\n");
+  write_text(fixture.logs / "oscillate.log",
+             std::string(dropped_head) + std::string(log_bytes_kept, filler));
+  std::filesystem::create_directories(fixture.reports);
+  write_text(fixture.reports / crash::marker_name, "signal 4 0\n");
+
+  const auto report = take(crash::collect(collect_options(fixture)));
+  REQUIRE_TRUE(report.has_value());
+  const auto text = read_text(*report);
+  REQUIRE_EQ(text.find("numbered log " + std::to_string(log_files_kept)), std::string::npos,
+             "the oldest file beyond the rotation limit is left out");
+  REQUIRE_NE(text.find("numbered log " + std::to_string(log_files_kept - 1)), std::string::npos);
+  REQUIRE_EQ(text.find(dropped_head), std::string::npos, "only the tail of a large file is kept");
+  REQUIRE_NE(text.find(std::string(log_bytes_kept, filler)), std::string::npos);
+  std::filesystem::remove_all(fixture.root);
+}
+
 void redaction_replaces_whole_home_paths() {
   REQUIRE_EQ(crash::redact("/home/me/a and /home/meow and /home/me", "/home/me/"),
              std::string("~/a and /home/meow and ~"));
   REQUIRE_EQ(crash::redact("/home/me/a", ""), std::string("/home/me/a"), "no home, no change");
   REQUIRE_EQ(crash::redact("/etc", "/"), std::string("/etc"), "a root home is not redacted");
+  REQUIRE_EQ(crash::redact("/mnt/backup/home/me/x", "/home/me"),
+             std::string("/mnt/backup/home/me/x"), "only a path that starts with home");
 }
 
 void directory_fallback() {
@@ -203,6 +236,7 @@ int main() {
     fatal_error_is_reported_with_its_message();
     clean_exit_leaves_no_report();
     session_lists_only_relevant_variables();
+    log_section_is_bounded();
     redaction_replaces_whole_home_paths();
     directory_fallback();
   } catch (const std::exception& error) {

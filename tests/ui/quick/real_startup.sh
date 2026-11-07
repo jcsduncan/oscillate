@@ -53,17 +53,19 @@ fi
 
 # A killed run leaves a crash report for the next start, and only one.
 reports="$XDG_STATE_HOME/oscillate/crash-reports"
+log="$XDG_STATE_HOME/oscillate/logs/oscillate.log"
 # Startup arms the handlers within this many tenths of a second.
 arm_wait_tenths=100
-# Earlier starts left a session description; wait for this run's own.
-rm -f -- "$reports/session.txt"
+# The start line is logged after the handlers are armed; earlier starts
+# logged theirs, so start from an empty log.
+rm -f -- "$log"
 "$app" &
 running=$!
 for ((tenth = 0; tenth < arm_wait_tenths; ++tenth)); do
-  [[ -f $reports/session.txt ]] && break
+  grep -qs 'Oscillate starting' "$log" && break
   sleep 0.1
 done
-[[ -f $reports/session.txt ]]
+grep -qs 'Oscillate starting' "$log"
 kill -ILL "$running"
 if wait "$running"; then
   echo 'Killed run exited cleanly' >&2

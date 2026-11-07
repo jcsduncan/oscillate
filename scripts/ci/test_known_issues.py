@@ -75,11 +75,11 @@ class RenderTests(unittest.TestCase):
 
     def test_titles_cannot_inject_markdown_or_html(self):
         page = known_issues.render(
-            [issue(1, "Crash | [click](http://x) <script>", "2026-11-01T00:00:00Z")],
+            [issue(1, "Crash | [click](http://x) <script> &lt;", "2026-11-01T00:00:00Z")],
             REPOSITORY,
             GENERATED,
         )
-        self.assertIn("Crash \\| \\[click\\]\\(http://x\\) &lt;script&gt;", page)
+        self.assertIn("Crash \\| \\[click\\]\\(http://x\\) &lt;script&gt; &amp;lt;", page)
         self.assertNotIn("<script>", page)
 
 

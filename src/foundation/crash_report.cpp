@@ -49,6 +49,10 @@ constexpr std::size_t alternate_stack_bytes = std::size_t{64} * 1024;
 // Room for "signal <number> <seconds>\n".
 constexpr std::size_t signal_line_bytes = 64;
 constexpr int decimal_base = 10;
+// A report holds at most this many log files, newest kept, and at most the
+// last max_log_bytes of each: the log's own rotation limits.
+constexpr std::size_t max_log_files = log::Options::default_max_files;
+constexpr std::uintmax_t max_log_bytes = log::Options::default_max_file_bytes;
 // The log's file names: oscillate.log, oscillate.1.log...
 constexpr std::string_view log_stem = log::Options::file_stem;
 constexpr std::string_view log_extension = ".log";
@@ -177,6 +181,16 @@ std::int64_t now_seconds() {
       .count();
 }
 
+// At most the last `limit` bytes of a file.
+std::optional<std::string> read_tail(const std::filesystem::path& path, std::uintmax_t limit) {
+  std::ifstream file(path, std::ios::binary | std::ios::ate);
+  if (!file)
+    return std::nullopt;
+  const auto size = static_cast<std::uintmax_t>(file.tellg());
+  file.seekg(static_cast<std::streamoff>(size > limit ? size - limit : 0));
+  return std::string(std::istreambuf_iterator<char>(file), {});
+}
+
 std::optional<std::string> read_text(const std::filesystem::path& path) {
   std::ifstream file(path, std::ios::binary);
   if (!file)
@@ -193,7 +207,8 @@ std::string_view trim(std::string_view text) noexcept {
 }
 
 // The value of `key=` in a KEY=value file such as /etc/os-release.
-std::string key_value(std::string_view text, std::string_view key) {
+std::string key_value(std::string_view text, // NOLINT(bugprone-easily-swappable-parameters)
+                      std::string_view key) {
   while (!text.empty()) {
     const auto end = text.find('\n');
     const auto line = text.substr(0, end);
@@ -302,6 +317,8 @@ std::vector<std::filesystem::path> log_files(const std::filesystem::path& direct
     files.push_back(std::move(path));
   if (live)
     files.push_back(std::move(*live));
+  if (files.size() > max_log_files)
+    files.erase(files.begin(), files.end() - static_cast<std::ptrdiff_t>(max_log_files));
   return files;
 }
 
@@ -369,7 +386,7 @@ std::string build_report(const Marker& marker, const std::optional<std::string>&
 
   for (const auto& path : logs) {
     report += std::format("\n## Log: {}\n\n", path.filename().string());
-    const auto text = read_text(path);
+    const auto text = read_tail(path, max_log_bytes);
     report += text ? *text : std::string("unreadable\n");
     if (!report.ends_with('\n'))
       report += '\n';
@@ -381,7 +398,9 @@ std::string build_report(const Marker& marker, const std::optional<std::string>&
 
 } // namespace
 
-std::filesystem::path default_directory(const char* xdg_state_home, const char* home) {
+std::filesystem::path
+default_directory(const char* xdg_state_home, // NOLINT(bugprone-easily-swappable-parameters)
+                  const char* home) {
   const auto absolute = [](const char* text) {
     return text != nullptr && text[0] == '/' ? std::filesystem::path(text)
                                              : std::filesystem::path{};
@@ -447,7 +466,8 @@ Result<void> arm(const std::filesystem::path& directory, std::string_view sessio
   std::ranges::copy(marker, marker_path.begin());
 
   stack_t current{};
-  if (::sigaltstack(nullptr, &current) == 0 && (current.ss_flags & SS_DISABLE) != 0) {
+  if (::sigaltstack(nullptr, &current) == 0 &&
+      (static_cast<unsigned>(current.ss_flags) & static_cast<unsigned>(SS_DISABLE)) != 0U) {
     stack_t stack{};
     stack.ss_sp = alternate_stack.data();
     stack.ss_size = alternate_stack.size();
@@ -522,10 +542,9 @@ std::string redact(std::string_view text, std::string_view home) {
   for (auto at = text.find(home); at != std::string_view::npos; at = text.find(home, from)) {
     const auto after = at + home.size();
     result.append(text.substr(from, at - from));
-    if (after < text.size() && continues_name(text[after]))
-      result.append(home);
-    else
-      result.append(home_placeholder);
+    const bool starts_path = at == 0 || !(continues_name(text[at - 1]) || text[at - 1] == '/');
+    const bool ends_path = after >= text.size() || !continues_name(text[after]);
+    result.append(starts_path && ends_path ? home_placeholder : home);
     from = after;
   }
   result.append(text.substr(from));

@@ -73,7 +73,9 @@ def open_known_issues(repository: str, fetch: Fetch = fetch_page) -> list[dict[s
 def escape(text: str) -> str:
     """A title as plain Markdown text: no links, emphasis or HTML."""
     escaped = "".join(f"\\{c}" if c in MARKDOWN_SPECIAL else c for c in text)
-    return escaped.replace("<", "&lt;").replace(">", "&gt;").replace("\n", " ")
+    return (
+        escaped.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", " ")
+    )
 
 
 def render(issues: list[dict[str, Any]], repository: str, generated: datetime) -> str:
