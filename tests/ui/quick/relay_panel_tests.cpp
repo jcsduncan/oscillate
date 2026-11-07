@@ -465,7 +465,9 @@ void feedback_note_fits_for_every_character() {
     f.controller.set_choice(QStringLiteral("relay.character"), character);
     QCoreApplication::processEvents();
     const QString text = note->property("text").toString();
-    require(!text.isEmpty() && text != text.toUpper(),
+    const auto first = std::ranges::find_if(text, [](QChar c) { return c.isLetter(); });
+    require(first != text.end() && first->isUpper() &&
+                std::ranges::any_of(text, [](QChar c) { return c.isLower(); }),
             "the note is in sentence case: " + text.toStdString());
     require(!note->property("truncated").toBool(), "the note fits: " + text.toStdString());
   }

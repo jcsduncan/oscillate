@@ -16,6 +16,7 @@
 #include <QTest>
 #include <QWheelEvent>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
@@ -185,7 +186,10 @@ void helper_sentences_are_in_sentence_case() {
   auto panel = load_panel(controller);
   for (const char* name : {"orbitToneNote", "orbitVoiceNote"}) {
     const QString text = text_of(*panel, QString::fromLatin1(name));
-    require(!text.isEmpty() && text != text.toUpper(),
+    // A capital first letter and lower-case letters after it.
+    const auto first = std::ranges::find_if(text, [](QChar c) { return c.isLetter(); });
+    require(first != text.end() && first->isUpper() &&
+                std::ranges::any_of(text, [](QChar c) { return c.isLower(); }),
             std::string(name) + " is in sentence case: " + text.toStdString());
   }
 }

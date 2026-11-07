@@ -17,6 +17,7 @@
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QRegularExpression>
 #include <QTest>
 #include <QUrl>
 #include <QVariant>
@@ -270,6 +271,8 @@ void read_only_panels_edit_nothing() {
 // theme's inkGround. Every *Theme.qml under the QML tree is checked, so a
 // new panel theme is covered as soon as it exists.
 constexpr double minimum_text_contrast = 4.5;
+// QColor's 8-bit alpha of a fully opaque colour.
+constexpr int opaque_alpha = 255;
 // WCAG 2 relative luminance: the sRGB transfer function's linear segment,
 // its curve, the channel weights and the flare term in the ratio.
 constexpr double srgb_linear_limit = 0.03928;
@@ -303,7 +306,10 @@ double contrast(const QColor& first, const QColor& second) {
 bool is_singleton(const QString& path) {
   QFile file(path);
   require(file.open(QIODevice::ReadOnly), "theme opens: " + path.toStdString());
-  return file.readAll().contains("pragma Singleton");
+  // The pragma at the start of a line, not a mention in a comment.
+  static const QRegularExpression pragma(QStringLiteral("^\\s*pragma\\s+Singleton\\b"),
+                                         QRegularExpression::MultilineOption);
+  return pragma.match(QString::fromUtf8(file.readAll())).hasMatch();
 }
 
 void every_theme_reads_at_body_text_contrast() {
@@ -323,11 +329,11 @@ void every_theme_reads_at_body_text_contrast() {
     std::unique_ptr<QObject> theme(component.create());
     require(theme != nullptr, name + " loads: " + component.errorString().toStdString());
     const auto ground = theme->property("inkGround").value<QColor>();
-    require(ground.isValid() && ground.alpha() == QColor(Qt::black).alpha(),
+    require(ground.isValid() && ground.alpha() == opaque_alpha,
             name + ": inkGround is an opaque colour");
     for (const char* token : {"ink", "inkDim", "inkFaint"}) {
       const auto ink = theme->property(token).value<QColor>();
-      require(ink.isValid() && ink.alpha() == QColor(Qt::black).alpha(),
+      require(ink.isValid() && ink.alpha() == opaque_alpha,
               name + ": " + token + " is an opaque colour");
       const double ratio = contrast(ink, ground);
       require(ratio >= minimum_text_contrast, name + ": " + token + " " + ink.name().toStdString() +
