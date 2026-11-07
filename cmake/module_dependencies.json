@@ -42,11 +42,18 @@
       "path": "src/source_prep",
       "allowed": ["engine", "persistence", "media", "project"]
     },
+    "render_graph": {
+      "path": "src/render_graph",
+      "allowed": [
+        "project", "engine", "routing", "automation_project", "timeline", "native_dsp",
+        "native_inserts", "track_chain", "source_prep", "persistence"
+      ]
+    },
     "export": {
       "path": "src/export",
       "allowed": [
         "engine", "routing", "project", "media", "source_prep", "persistence", "processing",
-        "audio_io"
+        "audio_io", "render_graph", "oscillate::native_dsp"
       ]
     },
     "application": {
@@ -55,7 +62,7 @@
         "foundation", "timeline", "automation", "project", "automation_project", "harmony",
         "midi_file", "engine", "routing", "audio_io", "codec", "media", "analysis", "warp_dsp",
         "clay_dsp", "processing", "plugins", "native_dsp", "native_inserts", "track_chain",
-        "persistence", "source_prep", "export"
+        "persistence", "source_prep", "render_graph", "export"
       ]
     },
     "plugin_ui": { "path": "src/app/plugin_ui", "allowed": ["plugins"] }
@@ -64,12 +71,6 @@
     { "module": "native_dsp", "target": "oscillate::automation_project", "issue": 129 },
     { "module": "native_dsp", "target": "oscillate::timeline", "issue": 129 },
     { "module": "native_dsp", "target": "oscillate::media", "issue": 131 },
-    { "module": "plugins", "target": "oscillate::automation_project", "issue": 133 },
-    { "module": "export", "target": "oscillate::convolution_ir", "issue": 131 },
-    { "module": "export", "target": "oscillate::automation_project", "issue": 134 },
-    { "module": "export", "target": "oscillate::native_dsp", "issue": 134 },
-    { "module": "export", "target": "oscillate::synth_engines", "issue": 134 },
-    { "module": "export", "target": "oscillate::native_inserts", "issue": 134 },
-    { "module": "export", "target": "oscillate::track_chain", "issue": 134 }
+    { "module": "plugins", "target": "oscillate::automation_project", "issue": 133 }
   ]
 }

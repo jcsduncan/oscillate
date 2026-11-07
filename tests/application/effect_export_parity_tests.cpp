@@ -29,7 +29,9 @@
 
 // ADR-0043: every built-in effect, on a track, on the master and (when it
 // reads a detector) keyed by a sidechain, exports
-// exactly what live routed playback plays, including its automation.
+// exactly what live routed playback plays, including its automation. With
+// one source track, that track's stem (its routes and the master chain
+// included) is the master, so it nulls against live playback too.
 namespace {
 namespace app = oscillate::application;
 namespace audio = oscillate::audio_io;
@@ -75,6 +77,9 @@ engine::RoutedMixerLimits limits(std::size_t max_frames, std::uint32_t effect_la
 }
 
 using oscillate::test::read_float_wav;
+
+// The largest sample difference an export may show against live playback.
+constexpr double null_tolerance = 1e-6;
 
 // The effect's first continuous, automatable, live parameter.
 std::string automated_parameter(const effects::EffectEngine& engine) {
@@ -147,6 +152,18 @@ std::vector<float> export_nulls_against_live(const effects::EffectEngine& effect
                exporting::PublishOutcome::durable, "master export published");
   }
   const auto exported = read_float_wav(output);
+  std::vector<float> stem;
+  if (placement != Placement::keyed) {
+    const auto stems = directory.path() / "stems";
+    Gate gate;
+    auto store = take(persistence::ProjectStore::open_reader(root));
+    auto authority = take(exporting::StoppedExportAuthority::acquire(saved, gate));
+    REQUIRE_EQ(take(exporting::render_wav_stems(saved, store, std::move(authority),
+                                                {stems, exporting::WavFormat::float32})),
+               exporting::PublishOutcome::durable, "stems published");
+    stem = read_float_wav(stems / ("track-" + saved.tracks.front().id.to_string() + ".wav"));
+    REQUIRE_GT(stem.size(), 0U, "the stem has audio");
+  }
   double peak = 0.0;
   for (const float sample : exported)
     peak = std::max(peak, std::fabs(static_cast<double>(sample)));
@@ -186,7 +203,12 @@ std::vector<float> export_nulls_against_live(const effects::EffectEngine& effect
       largest = std::max(largest, std::fabs(static_cast<double>(exported[i]) - live[offset + i]));
     std::cout << block_frames << " frames: peak " << peak << ", largest difference " << largest
               << "; ";
-    REQUIRE_LT(largest, 1e-6, "offline export nulls against live playback");
+    REQUIRE_LT(largest, null_tolerance, "offline export nulls against live playback");
+    double stem_largest = 0.0;
+    for (std::size_t i = 0; i < std::min(stem.size(), exported.size()); ++i)
+      stem_largest =
+          std::max(stem_largest, std::fabs(static_cast<double>(stem[i]) - live[offset + i]));
+    REQUIRE_LT(stem_largest, null_tolerance, "the stem export nulls against live playback");
   }
   std::cout << exported.size() / 2 << " frames\n";
   return exported;
