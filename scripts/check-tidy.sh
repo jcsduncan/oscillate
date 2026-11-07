@@ -4,6 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 if (($# > 0)) && [[ ! "$1" =~ ^[a-z0-9_-]+$ ]]; then
   echo "Usage: $0 [configured-preset] [source.cpp ...]" >&2
+  echo "CLANG_TIDY_LINE_FILTER, when set, is passed as clang-tidy's --line-filter." >&2
   exit 2
 fi
 preset="${1:-dev}"
@@ -62,9 +63,13 @@ for index in range(max(map(len, by_file.values()), default=0)):
 (shard_root / 'index').write_bytes(b''.join(os.fsencode(shard) + b'\0' for shard in shards))
 PY
 mapfile -d '' shards < "$shard_root/index"
+# Check every file, then fail if any reported, so one run lists all findings.
+status=0
 for shard in "${shards[@]}"; do
   mapfile -d '' files < "$shard/files"
   for file in "${files[@]}"; do
-    clang-tidy -p "$shard" "$file"
+    clang-tidy ${CLANG_TIDY_LINE_FILTER:+"--line-filter=$CLANG_TIDY_LINE_FILTER"} -p "$shard" "$file" ||
+      status=1
   done
 done
+exit "$status"

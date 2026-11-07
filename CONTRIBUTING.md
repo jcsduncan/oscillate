@@ -119,6 +119,10 @@ a pull request changes none of their inputs; a skipped job counts as passed.
 - **Documentation**: `scripts/check-doc-links.py` and a strict MkDocs build
   of the documentation site.
 
+An advisory **clang-tidy** job, not required for merging, runs the
+`.clang-tidy` checks on the translation units a pull request touches
+(`scripts/ci/tidy_changed.py`); `scripts/check-tidy.sh` checks the whole tree.
+
 The slow test tier runs nightly. Before a release, run the broad sweep:
 GCC and Clang builds, the fast and slow tiers, clang-format, clang-tidy,
 ASan/UBSan, TSan where concurrency changed, and coverage
