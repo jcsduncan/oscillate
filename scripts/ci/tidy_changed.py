@@ -21,8 +21,6 @@ SOURCE_DIRS = ("apps", "src", "tests")
 HEADER_SUFFIXES = (".hpp", ".h")
 PUBLIC_HEADER_ROOT = PurePosixPath("include/oscillate")
 # A clang-tidy diagnostic's primary line: path:line:column: severity: text [check].
-# Any diagnostic at all: a failed run without one is a tool failure, not findings.
-DIAGNOSTIC_SEEN = re.compile(r": (?:warning|error): ", re.MULTILINE)
 DIAGNOSTIC = re.compile(r"^(?P<path>[^:\s][^:]*):\d+:\d+: (?:warning|error): .*\[[\w.,-]+\]$")
 
 
@@ -126,7 +124,13 @@ def main():
         print(f"{len(findings)} finding(s) in the changed files:")
         print("\n".join(findings))
         sys.exit(1)
-    if result.returncode != 0 and not DIAGNOSTIC_SEEN.search(result.stdout):
+    # A compile error anywhere means a changed translation unit was not checked;
+    # a failed run with no parsed diagnostic is a tool failure.
+    parsed = [line for line in result.stdout.splitlines() if DIAGNOSTIC.match(line)]
+    if any("[clang-diagnostic-error" in line for line in parsed):
+        print("A changed translation unit failed to compile.")
+        sys.exit(1)
+    if result.returncode != 0 and not parsed:
         sys.exit(result.returncode)
 
 
