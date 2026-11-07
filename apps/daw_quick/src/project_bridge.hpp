@@ -773,6 +773,11 @@ private:
   // meters all hear them. The run that is sounding now, transport or monitor
   // (null when neither runs).
   [[nodiscard]] RoutedPlayback* live_run() const noexcept;
+  // The routed transport run, or null while none runs or its stop worker
+  // owns it: that worker resets the run's control, source and output, so
+  // every UI-thread access goes through here. The stop completion is set and
+  // cleared on the UI thread, around the worker's whole life.
+  [[nodiscard]] RoutedPlayback* routed_run() const noexcept;
   void start_monitor();
   void poll_monitor();
   // Stops at once (the callback is joined). With a preparation in flight it

@@ -39,9 +39,13 @@ bool ProjectBridge::transport_running() const noexcept {
          routed_transport_completion_ || (playback_ && playback_->playing());
 }
 
+RoutedPlayback* ProjectBridge::routed_run() const noexcept {
+  return routed_stop_completion_ ? nullptr : routed_playback_.get();
+}
+
 RoutedPlayback* ProjectBridge::live_run() const noexcept {
   if (routed_playback_)
-    return routed_stop_completion_ ? nullptr : routed_playback_.get();
+    return routed_run();
   return monitor_.get();
 }
 
