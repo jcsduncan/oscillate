@@ -24,6 +24,10 @@ A module of its own, `oscillate::render_graph` (`src/render_graph`), prepares th
 - `OfflineInstrument` holds a built-in instrument's `NativeSynthPlayer`, the player live playback runs.
 - `held_non_finite` is the guard for a stage that held a non-finite frame.
 
+Its routed mixer's nodes come from `routing::graph_nodes`, which live playback's `RoutedPlaybackControl` builds its nodes from too: each track's chain, mute and channel gain. The two differ only by its options:
+- Live playback runs the master chain and master level on the master node, and adds its chain switches' drains and handoffs.
+- An offline render runs the master chain and level after the mix, and mutes tracks nobody can hear so it skips their work.
+
 `export` asks `render_graph` for the graph. It reads clips, runs blocks and writes. It links `render_graph`, and `native_dsp` only for the loudness and true-peak meters.
 
 ## Consequences

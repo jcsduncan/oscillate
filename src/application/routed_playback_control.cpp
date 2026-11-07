@@ -1276,42 +1276,25 @@ Result<void> RoutedPlaybackControl::build_and_publish(
   }
   const auto* master_chain = chain_of(std::nullopt);
   const auto master_latency = master_chain ? master_chain->chain.latency_frames() : 0;
-  std::vector<engine::RoutedNode> nodes;
-  nodes.reserve(route.value().nodes.size());
-  const auto track_mutes = routing::effective_track_mutes(snapshot, route.value());
-  for (auto node : route.value().nodes) {
-    std::optional<project::TrackId> track;
-    bool muted = false;
-    engine::StereoFrame output_gain{1.0F, 1.0F};
-    if (node.id == route.value().master) {
-      node.processor_latency_frames = master_latency;
-      const auto level = static_cast<float>(snapshot.master_level);
-      output_gain = {level, level};
-    } else if (const auto owner = std::ranges::find(route.value().track_nodes, node.id,
-                                                    &routing::ProjectRouteTrackNode::node);
-               owner != route.value().track_nodes.end()) {
-      track = owner->track;
-      muted = track_mutes[static_cast<std::size_t>(owner - route.value().track_nodes.begin())];
-      if (const auto saved = std::ranges::find(snapshot.tracks, owner->track, &project::Track::id);
-          saved != snapshot.tracks.end()) {
-        const auto gain = routing::track_stereo_gain(*saved);
-        output_gain = {gain.left, gain.right};
-      }
-    } else {
-      return fail(snapshot.revision, {ErrorCode::internal, "Route node has no owner"});
+  // The graph's nodes as export builds them, with the master chain on the
+  // master node and each switched chain's predecessor retiring beside it.
+  auto graph = routing::graph_nodes(
+      snapshot, route.value(),
+      {.track_processor = [&](project::TrackId track) -> std::shared_ptr<engine::ProcessorRuntime> {
+         const auto* chain = chain_of(track);
+         return chain ? chain->chain.runtime : nullptr;
+       },
+       .master_at_node = true,
+       .master_processor = master_chain ? master_chain->chain.runtime : nullptr,
+       .master_latency_frames = master_latency});
+  if (!graph)
+    return fail(snapshot.revision, graph.error());
+  auto& nodes = graph.value().nodes;
+  for (std::size_t index = 0; index < nodes.size(); ++index) {
+    if (const auto* switched = switch_of(graph.value().owners[index])) {
+      nodes[index].replacement = switched->change.drain;
+      nodes[index].state_handoff_prior = switched->change.handoff;
     }
-    const auto* chain = chain_of(track);
-    std::shared_ptr<engine::ProcessorRuntime> processor;
-    if (chain)
-      processor = chain->chain.runtime;
-    std::optional<engine::RoutedTailReplacement> replacement;
-    std::shared_ptr<engine::ProcessorRuntime> handoff;
-    if (const auto* switched = switch_of(track)) {
-      replacement = switched->change.drain;
-      handoff = switched->change.handoff;
-    }
-    nodes.push_back({node, std::move(processor), std::move(replacement), muted, output_gain,
-                     std::move(handoff)});
   }
   auto gains = routing::PreparedRouteGainBlocks::prepare(snapshot, route.value(),
                                                          automation.value(), limits_.max_frames);

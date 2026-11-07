@@ -155,6 +155,51 @@ TrackStereoGain track_stereo_gain(const project::Track& track) noexcept {
   return channel_stereo_gain(track.level, track.pan);
 }
 
+foundation::Result<GraphNodes> graph_nodes(const project::Snapshot& snapshot,
+                                           const ProjectRoutePlan& plan,
+                                           const GraphNodeSources& sources) {
+  GraphNodes graph;
+  graph.nodes.reserve(plan.nodes.size());
+  graph.owners.reserve(plan.nodes.size());
+  const auto track_mutes = effective_track_mutes(snapshot, plan);
+  const auto silent_tracks = sources.mute_silent_tracks
+                                 ? silent_track_nodes(snapshot, plan)
+                                 : std::vector<bool>(plan.track_nodes.size());
+  for (auto node : plan.nodes) {
+    std::optional<project::TrackId> track;
+    std::shared_ptr<engine::ProcessorRuntime> processor;
+    bool muted = false;
+    engine::StereoFrame output_gain{1.0F, 1.0F};
+    if (const auto owner =
+            std::ranges::find(plan.track_nodes, node.id, &ProjectRouteTrackNode::node);
+        owner != plan.track_nodes.end()) {
+      track = owner->track;
+      if (sources.track_processor)
+        processor = sources.track_processor(owner->track);
+      const auto index = static_cast<std::size_t>(owner - plan.track_nodes.begin());
+      muted = track_mutes[index] || silent_tracks[index];
+      if (silent_tracks[index])
+        graph.silent.push_back(node.id);
+      if (const auto saved = std::ranges::find(snapshot.tracks, owner->track, &project::Track::id);
+          saved != snapshot.tracks.end()) {
+        const auto gain = track_stereo_gain(*saved);
+        output_gain = {gain.left, gain.right};
+      }
+    } else if (node.id != plan.master) {
+      return foundation::Result<GraphNodes>::failure(
+          {foundation::ErrorCode::internal, "Route node has no owner"});
+    } else if (sources.master_at_node) {
+      processor = sources.master_processor;
+      node.processor_latency_frames = sources.master_latency_frames;
+      const auto level = static_cast<float>(snapshot.master_level);
+      output_gain = {level, level};
+    }
+    graph.nodes.emplace_back(node, std::move(processor), std::nullopt, muted, output_gain);
+    graph.owners.push_back(track);
+  }
+  return foundation::Result<GraphNodes>::success(std::move(graph));
+}
+
 foundation::Result<std::vector<engine::RoutedNodeControl>>
 project_node_controls(const project::Snapshot& snapshot, const ProjectRoutePlan& plan) {
   using Controls = std::vector<engine::RoutedNodeControl>;

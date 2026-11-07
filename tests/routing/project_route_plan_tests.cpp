@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -1851,6 +1852,70 @@ void silent_tracks_are_muted_or_feed_only_muted_tracks_and_never_keys() {
   require(!silent(group, bound), "a bus fed by a key was skipped");
 }
 
+// A processor that does nothing, standing in for a prepared chain.
+class Stage final : public engine::ProcessorRuntime {
+public:
+  void process(std::span<engine::StereoFrame>, engine::BlockContext) noexcept override {}
+};
+
+// Live playback and export build their mixer nodes the same way: each
+// track's chain, mute and channel gain on its node; the master chain on the
+// master node only when the mixer runs it.
+void graph_nodes_carry_chains_mutes_and_the_master() {
+  constexpr double master_level = 0.5;
+  constexpr double track_level = 0.25;
+  constexpr std::uint32_t master_latency = 32;
+  routing::ProjectRouteIdRegistry registry;
+  auto state = snapshot();
+  const auto audio = state.tracks[0].id;
+  const auto group = state.tracks[2].id;
+  state.tracks[0].main_output = group;
+  state.tracks[0].level = track_level;
+  state.tracks[2].muted = true;
+  state.master_level = master_level;
+  const auto plan = take(registry.compile(state, 64, {}));
+  const auto chain = std::make_shared<Stage>();
+  const auto master = std::make_shared<Stage>();
+  const auto on_audio = [&](project::TrackId track) -> std::shared_ptr<engine::ProcessorRuntime> {
+    return track == audio ? chain : nullptr;
+  };
+  const auto node_of = [&](const routing::GraphNodes& graph,
+                           std::optional<project::TrackId> track) {
+    const auto found = std::ranges::find(graph.owners, track);
+    REQUIRE_NE(found, graph.owners.end(), "every track and the master has a node");
+    return graph.nodes[static_cast<std::size_t>(found - graph.owners.begin())];
+  };
+
+  const auto live = take(routing::graph_nodes(state, plan,
+                                              {.track_processor = on_audio,
+                                               .master_at_node = true,
+                                               .master_processor = master,
+                                               .master_latency_frames = master_latency}));
+  REQUIRE_EQ(live.nodes.size(), plan.nodes.size(), "one node per route node");
+  REQUIRE_TRUE(node_of(live, audio).processor == chain, "the track's chain runs on its node");
+  REQUIRE_EQ(node_of(live, audio).output_gain.left, static_cast<float>(track_level),
+             "the track's level is its node's gain");
+  REQUIRE_TRUE(node_of(live, group).muted, "the muted bus is muted at its node");
+  REQUIRE_TRUE(!node_of(live, audio).muted, "only effective mutes apply live");
+  REQUIRE_TRUE(live.silent.empty(), "live playback keeps unheard tracks running");
+  REQUIRE_TRUE(node_of(live, std::nullopt).processor == master,
+               "the master chain runs in the mixer");
+  REQUIRE_EQ(node_of(live, std::nullopt).routing.processor_latency_frames, master_latency,
+             "the master node reports its chain's latency");
+  REQUIRE_EQ(node_of(live, std::nullopt).output_gain.left, static_cast<float>(master_level),
+             "the master level is the master node's gain");
+
+  const auto offline = take(
+      routing::graph_nodes(state, plan, {.track_processor = on_audio, .mute_silent_tracks = true}));
+  REQUIRE_TRUE(node_of(offline, audio).processor == chain, "the track's chain runs on its node");
+  REQUIRE_TRUE(node_of(offline, audio).muted, "a track feeding only a muted bus skips its work");
+  REQUIRE_EQ(offline.silent.size(), 2U, "the muted bus and what feeds only it are silent");
+  REQUIRE_TRUE(node_of(offline, std::nullopt).processor == nullptr,
+               "the master chain runs after the mix");
+  REQUIRE_EQ(node_of(offline, std::nullopt).output_gain.left, 1.0F,
+             "the master level is applied after the mix");
+}
+
 void sidechain_send_binds_a_separate_input() {
   routing::ProjectRouteIdRegistry registry;
   auto state = snapshot();
@@ -2146,6 +2211,7 @@ int main() {
     mixed_limiter_vst3_receipts_sum_latency_and_bind_exact_slot();
     mixed_bus_receipts_preserve_order_and_parallel_pdc();
     mixed_bus_accepts_each_zero_latency_native_kind();
+    graph_nodes_carry_chains_mutes_and_the_master();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return 1;
