@@ -166,6 +166,14 @@
       "output": { "outputOnFailure": true },
       "filter": { "include": { "label": "^slow$" } }
     },
+    {
+      "name": "quick-parity",
+      "displayName": "Quick: live/export parity gate",
+      "configurePreset": "quick",
+      "output": { "outputOnFailure": true },
+      "filter": { "include": { "label": "^parity$" } },
+      "execution": { "noTestsAction": "error" }
+    },
     { "name": "vst3", "configurePreset": "vst3", "output": { "outputOnFailure": true } },
     { "name": "codec", "configurePreset": "codec", "output": { "outputOnFailure": true } },
     { "name": "coverage", "configurePreset": "coverage", "output": { "outputOnFailure": true } },

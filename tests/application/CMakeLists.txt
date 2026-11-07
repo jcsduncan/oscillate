@@ -262,7 +262,7 @@ oscillate_add_test(NAME application_clip_warp_edit_rate_conversion
 
 oscillate_add_test_executable(oscillate_application_routed_warp_playback_tests SOURCES routed_warp_playback_tests.cpp
   LIBS oscillate::application oscillate::export oscillate::persistence
-  TEST application_routed_warp_playback TIER slow)
+  TEST application_routed_warp_playback TIER slow LABELS parity)
 
 oscillate_add_test_executable(oscillate_application_routed_source_selection_tests SOURCES routed_source_selection_tests.cpp
   LIBS oscillate::application
@@ -309,7 +309,7 @@ oscillate_add_test_executable(oscillate_application_kick_bass_lock_tests SOURCES
 
 oscillate_add_test_executable(oscillate_application_synth_export_parity_tests SOURCES synth_export_parity_tests.cpp
   LIBS oscillate::application
-  TEST application_synth_export_parity TIER slow)
+  TEST application_synth_export_parity TIER slow LABELS parity)
 
 oscillate_add_test_executable(oscillate_application_pedal_edit_tests SOURCES midi_pedal_edit_tests.cpp
   LIBS oscillate::application
@@ -358,7 +358,7 @@ oscillate_add_test_executable(oscillate_application_sampler_conversion_tests SOU
 
 oscillate_add_test_executable(oscillate_application_effect_export_parity_tests SOURCES effect_export_parity_tests.cpp
   LIBS oscillate::application oscillate::native_effects
-  TEST application_effect_export_parity TIER slow)
+  TEST application_effect_export_parity TIER slow LABELS parity)
 
 oscillate_add_test_executable(oscillate_application_history_labels_tests SOURCES history_labels_tests.cpp
   LIBS oscillate::application
@@ -387,7 +387,7 @@ oscillate_add_test_executable(oscillate_application_channel_automation_tests SOU
 # ADR-0059: track renders, freeze export parity, bounce, flatten, consolidate.
 oscillate_add_test_executable(oscillate_application_track_freeze_tests SOURCES track_freeze_tests.cpp
   LIBS oscillate::application
-  TEST application_track_freeze TIER slow)
+  TEST application_track_freeze TIER slow LABELS parity)
 
 # Mix Check (ADR-0074): planted problems found, fixed in one step, re-checked.
 oscillate_add_test_executable(oscillate_application_mix_check_tests SOURCES mix_check_tests.cpp

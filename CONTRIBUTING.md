@@ -86,8 +86,9 @@ A pull request to `main` runs these checks; they must pass before merging.
 `scripts/ci/changes.py` skips the build, Python and documentation jobs when
 a pull request changes none of their inputs; a skipped job counts as passed.
 
-- **Build and fast tests**: the Quick preset on Ubuntu 26.04 and the fast
-  test tier without live devices.
+- **Build and fast tests**: the Quick preset on Ubuntu 26.04, the fast
+  test tier without live devices, and the live/export parity gate
+  (`ctest --preset quick-parity`, [tests/README.md](tests/README.md#liveexport-parity-gate)).
 - **Core line coverage**: the `coverage` preset and
   `scripts/check-coverage.sh`, which fails below 90% line coverage of
   `src/` and `include/`; the report is uploaded to Codecov.

@@ -638,7 +638,7 @@ oscillate_add_test_executable(oscillate_dsp_primitives_tests SOURCES dsp_primiti
 
 oscillate_add_test_executable(oscillate_meter_parity_tests SOURCES meter_parity_tests.cpp
   LIBS oscillate::native_effects oscillate::native_dsp
-  TEST native_meter_parity_contract)
+  TEST native_meter_parity_contract LABELS parity)
 
 # A built-in effect as an insert stage (ADR-0043): its live monitoring.
 oscillate_add_test_executable(oscillate_native_effect_stage_tests SOURCES native_effect_stage_tests.cpp
