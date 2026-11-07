@@ -1,0 +1,472 @@
+<title>Kick &amp; Bass Lock</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: the DAW shell's graphite. A big low-end scope (one beat, kick and bass below 120 Hz and their sum) is the hero, with a cancellation strip for the whole bar under it; below it, the two places Lock lives: Anvil's Tune and Nova's Kick Lock. Kick is warm orange, bass is blue, their sum is white, and anything lost to phase is red. */
+:root {
+  --bg: #0b0e12; --panel: #11151b; --panel2: #151b22; --well: #080a0d; --line: #222a33; --line2: #2f3943;
+  --ink: #e6ebf0; --dim: #97a3ae; --faint: #5d6873;
+  --teal: #5fe0bf; --amber: #f5b14c;
+  --kick: #f08a5d; --bass: #6aa7ff; --sum: #f1f4f7; --loss: #ff5d6c; --good: #5fe0bf;
+  --sans: "Inter", "Noto Sans", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 13px; padding-block: 22px 60px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 16px; }
+header { display: grid; gap: 8px; }
+h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -.5px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+h1 .chain { display: inline-flex; gap: 3px; }
+h1 .chain i { width: 14px; height: 14px; border-radius: 50%; border: 3px solid var(--kick); display: inline-block; }
+h1 .chain i + i { border-color: var(--bass); margin-left: -7px; }
+header p { margin: 0; color: var(--dim); max-width: 96ch; line-height: 1.55; text-wrap: pretty; }
+header b { color: var(--ink); font-weight: 600; }
+.label { font-size: 10.5px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--faint); }
+
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; }
+.btn { font: 600 12.5px var(--sans); color: var(--dim); background: var(--panel2); border: 1px solid var(--line); border-radius: 7px; padding: 7px 11px; cursor: pointer; }
+.btn:hover { color: var(--ink); border-color: var(--line2); }
+.btn.play { color: var(--bg); background: var(--teal); border-color: var(--teal); min-width: 84px; }
+.btn.play[aria-pressed="true"] { background: var(--amber); border-color: var(--amber); }
+.lockbtn { font: 700 13.5px var(--sans); color: var(--ink); background: var(--panel2); border: 1.5px solid var(--line2); border-radius: 9px; padding: 8px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 9px; }
+.lockbtn .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--faint); }
+.lockbtn[aria-pressed="true"] { border-color: var(--teal); color: var(--teal); background: rgba(95,224,191,.1); }
+.lockbtn[aria-pressed="true"] .dot { background: var(--teal); box-shadow: 0 0 10px var(--teal); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; flex-wrap: wrap; }
+.seg button { font: 600 12px var(--sans); color: var(--dim); background: var(--panel2); border: 0; border-left: 1px solid var(--line); padding: 6px 10px; cursor: pointer; }
+.seg button:first-child { border-left: 0; }
+.seg button[aria-pressed="true"] { color: var(--ink); background: var(--line); }
+.spacer { flex: 1; }
+.hint { color: var(--faint); font-size: 11.5px; }
+
+.scopecard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 12px 10px; display: grid; gap: 10px; }
+.scopehead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--dim); font-size: 11.5px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+.meters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 760px) { .meters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.meter { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; display: grid; gap: 3px; }
+.meter b { font: 600 19px var(--mono); font-variant-numeric: tabular-nums; }
+.meter small { color: var(--faint); font-size: 11px; line-height: 1.35; }
+.meter.bad b { color: var(--loss); } .meter.ok b { color: var(--good); }
+.scopewrap { background: var(--well); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; position: relative; }
+#scope { width: 100%; height: 290px; display: block; }
+#strip { width: 100%; height: 46px; display: block; cursor: pointer; border-top: 1px solid var(--line); }
+
+.places { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 900px) { .places { grid-template-columns: 1fr; } }
+.dev { border-radius: 10px; border: 1px solid var(--line); background: var(--panel); overflow: hidden; display: grid; }
+.devhead { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--panel2); }
+.devhead .cap { width: 10px; height: 10px; border-radius: 3px; }
+.devhead b { font-size: 13.5px; }
+.devhead small { color: var(--faint); }
+.devhead .where { margin-left: auto; font: 500 11px var(--mono); color: var(--faint); }
+.devbody { padding: 12px; display: grid; gap: 12px; }
+.row { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; align-items: center; }
+.row > span:first-child { color: var(--dim); font-size: 12px; }
+.row .val { font: 500 12px var(--mono); color: var(--ink); }
+.toggle { display: flex; align-items: center; gap: 8px; background: none; border: 0; padding: 0; cursor: pointer; color: var(--dim); font: 600 12px var(--sans); text-align: left; }
+.toggle .t { width: 32px; height: 18px; border-radius: 99px; background: var(--line2); position: relative; flex: none; transition: background .15s; }
+.toggle .t::after { content: ""; position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--ink); transition: transform .15s; }
+.toggle[aria-checked="true"] { color: var(--ink); }
+.toggle[aria-checked="true"] .t { background: var(--teal); }
+.toggle[aria-checked="true"] .t::after { transform: translateX(14px); background: var(--bg); }
+.slider { display: grid; grid-template-columns: minmax(0, 1fr) 54px; gap: 10px; align-items: center; }
+.slider input { width: 100%; accent-color: var(--teal); }
+.slider output { font: 500 12px var(--mono); text-align: right; }
+.explain { color: var(--faint); font-size: 11.5px; line-height: 1.5; margin: -4px 0 0; }
+.explain b { color: var(--dim); font-weight: 600; }
+.tailread { font: 500 12px var(--mono); color: var(--dim); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tailread b { color: var(--kick); font-weight: 600; }
+.tailread .arrow { color: var(--faint); }
+select { font: 500 12px var(--sans); color: var(--ink); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; }
+.notes { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 8px; }
+.notes ol { margin: 0; padding-left: 20px; color: var(--dim); line-height: 1.6; display: grid; gap: 4px; }
+.notes ol b { color: var(--ink); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { .toggle .t, .toggle .t::after { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1><span class="chain" aria-hidden="true"><i></i><i></i></span>Kick &amp; Bass Lock</h1>
+    <p>Below about 120 Hz, a kick's tail and a bassline are two sine waves fighting over the same space. When their phases disagree they cancel, and the low end goes thin, wobbles from bar to bar and falls apart in mono. <b>Lock fixes it where the sound is made</b>, because both instruments are ours: Anvil tunes its tail to the bass, the later sound starts in phase with the one already playing, Nova's sub ducks under the kick's exact shape (no detector, no latency), and the lows go mono. The scope shows one beat below 120 Hz; red is energy lost to cancellation. Press <b>Play</b>, then flip <b>Lock</b>.</p>
+  </header>
+
+  <div class="bar">
+    <button class="btn play" id="play" aria-pressed="false">▶ Play</button>
+    <button class="lockbtn" id="lock" aria-pressed="false"><span class="dot"></span>Lock kick &amp; bass</button>
+    <span class="hint">Hold <b style="color:var(--dim)">B</b> to hear it unlocked</span>
+    <span class="spacer"></span>
+    <span class="label">Bassline</span>
+    <span class="seg" id="pattern">
+      <button data-p="offbeat" aria-pressed="true">Offbeat</button>
+      <button data-p="rolling" aria-pressed="false">Rolling 16ths</button>
+      <button data-p="held" aria-pressed="false">Held under kick</button>
+      <button data-p="moving" aria-pressed="false">Moving line</button>
+    </span>
+  </div>
+
+  <section class="scopecard" aria-label="Low-end scope">
+    <div class="scopehead">
+      <span class="label" id="scopetitle">Beat 1 · below 120 Hz</span>
+      <div class="legend">
+        <span><i style="background:var(--kick)"></i>Kick</span>
+        <span><i style="background:var(--bass)"></i>Bass</span>
+        <span><i style="background:var(--sum)"></i>What you hear</span>
+        <span><i style="background:var(--loss);height:8px;opacity:.6"></i>Lost to cancellation</span>
+      </div>
+    </div>
+    <div class="meters">
+      <div class="meter" id="m-loss"><span class="label">Lost to phase</span><b>–</b><small>Share of the low end cancelled across the bar</small></div>
+      <div class="meter" id="m-wobble"><span class="label">Deepest dip</span><b>–</b><small>The worst 10 ms hole the two dig together</small></div>
+      <div class="meter" id="m-mono"><span class="label">In mono</span><b>–</b><small>Low end lost when the club sums to mono</small></div>
+      <div class="meter" id="m-tail"><span class="label">Kick tail</span><b>–</b><small id="m-tail-s">Against the bass</small></div>
+    </div>
+    <div class="scopewrap">
+      <canvas id="scope" aria-label="Kick, bass and their sum below 120 Hz for one beat"></canvas>
+      <canvas id="strip" aria-label="Cancellation across the bar; click a beat to view it"></canvas>
+    </div>
+  </section>
+
+  <div class="places">
+    <section class="dev" aria-label="Anvil: Tune">
+      <div class="devhead"><span class="cap" style="background:var(--kick)"></span><b>Anvil</b><small>Kick · Tune</small><span class="where">anvil.lock</span></div>
+      <div class="devbody">
+        <div class="row"><span>Tune tail to</span>
+          <span class="seg" id="tune">
+            <button data-t="off" aria-pressed="true">Off</button>
+            <button data-t="key" aria-pressed="false">Track key</button>
+            <button data-t="bass" aria-pressed="false">Bass note</button>
+          </span></div>
+        <div class="row"><span>Tail</span><span class="tailread" id="tailread"></span></div>
+        <p class="explain"><b>Bass note</b> reads the bass track's notes ahead and tunes each hit's tail to the note under it, folded into 40–70 Hz. A moving bassline gets a kick that moves with it. <b>Track key</b> uses the key from analysis.</p>
+        <div class="row"><span>Align</span><button class="toggle" role="switch" id="alignK" aria-checked="false"><span class="t"></span>Start in phase with a bass note already playing</button></div>
+      </div>
+    </section>
+    <section class="dev" aria-label="Nova: Kick Lock">
+      <div class="devhead"><span class="cap" style="background:var(--bass)"></span><b>Nova</b><small>Bass · Kick Lock</small><span class="where">nova.lock</span></div>
+      <div class="devbody">
+        <div class="row"><span>Kick</span><select id="src"><option>Kick · Anvil</option><option>None</option></select></div>
+        <div class="row"><span>Align</span><button class="toggle" role="switch" id="alignB" aria-checked="false"><span class="t"></span>Notes start in phase with the kick</button></div>
+        <div class="row"><span>Duck sub</span><span class="slider"><input type="range" id="duck" min="0" max="100" value="0"><output id="duckv">0%</output></span></div>
+        <p class="explain">Only the sub ducks, below the crossover, and it follows the kick's own volume curve, read from Anvil, so it opens the moment the kick fades. Mids and top of the bass keep playing.</p>
+        <div class="row"><span>Crossover</span><span class="slider"><input type="range" id="xover" min="60" max="200" value="120"><output id="xoverv">120 Hz</output></span></div>
+        <div class="row"><span>Mono lows</span><button class="toggle" role="switch" id="mono" aria-checked="false"><span class="t"></span>Everything below the crossover in mono</button></div>
+      </div>
+    </section>
+  </div>
+
+  <section class="notes">
+    <span class="label">How Lock works</span>
+    <ol>
+      <li><b>Tune.</b> Anvil's tail moves to the bass note (or the key) at each hit, so kick and bass share a pitch and can add instead of beat.</li>
+      <li><b>Align.</b> Whichever starts second starts in phase with the one already sounding: a bass note during a kick takes the kick's phase, and a kick over a held note picks its start phase so its tail lands on the bass. Both synths know each other's notes ahead from the project, so it is exact.</li>
+      <li><b>Duck.</b> Nova's sub dips under the kick's exact volume curve, below the crossover only. No detector, no lookahead latency, no attack or release to set.</li>
+      <li><b>Mono.</b> Below the crossover, Nova's unison and stereo spread fold to mono, so the club system sums what you heard.</li>
+    </ol>
+    <span class="hint">In the DAW: <b style="color:var(--dim)">Lock kick &amp; bass</b> appears in the track menu of any Nova track when the project has an Anvil track, and as a section on both panels. It is one undo step and stays live as you edit either part.</span>
+  </section>
+</div>
+
+<script>
+const SR = 48000, BPM = 124, BEAT = 60 / BPM, BAR = 4 * BEAT, N = Math.round(BAR * SR);
+const TWO_PI = Math.PI * 2;
+const hz = m => 440 * Math.pow(2, (m - 69) / 12);
+const NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+const nameOf = m => NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
+function nearestNote(f) { return Math.round(69 + 12 * Math.log2(f / 440)); }
+
+const KICK = { f0: 190, drawnTail: 47.0, sweep: 0.016, decay: 0.15, length: 0.40, alignAt: 0.06 };
+const KEY_ROOT = 33; // A1, from analysis
+
+const PATTERNS = {
+  offbeat: [0, 1, 2, 3].map(b => ({ s: b + .5, l: .42, m: 33 })),
+  rolling: [0, 1, 2, 3].flatMap(b => [.25, .5, .75].map(o => ({ s: b + o, l: .2, m: 33 }))),
+  held: [{ s: 0, l: 1.95, m: 33 }, { s: 2, l: 1.95, m: 33 }],
+  moving: [{ s: .5, l: .42, m: 33 }, { s: 1.5, l: .42, m: 36 }, { s: 2.5, l: .42, m: 31 }, { s: 3.25, l: .2, m: 33 }, { s: 3.5, l: .45, m: 28 }],
+};
+
+const state = { pattern: "offbeat", tune: "off", alignK: false, alignB: false, duck: 0, xover: 120, mono: false, lock: false, beat: 0, hearUnlocked: false };
+const LOCKED = { tune: "bass", alignK: true, alignB: true, duck: 65, mono: true };
+let saved = null;
+
+function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+// Kick frequency and amplitude at time t after the hit, for a tail.
+const kf = (t, tail) => tail + (KICK.f0 - tail) * Math.exp(-t / KICK.sweep);
+const ka = t => t < 0 ? 0 : Math.min(1, t / 0.0005) * Math.exp(-t / KICK.decay) * (t > KICK.length - .03 ? Math.max(0, (KICK.length - t) / .03) : 1);
+// Phase of the kick body t seconds in (integral of 2πf).
+const kphase = (t, tail) => TWO_PI * (tail * t + (KICK.f0 - tail) * KICK.sweep * (1 - Math.exp(-t / KICK.sweep)));
+
+function render(s) {
+  const notes = PATTERNS[s.pattern].map(n => ({ ...n, t0: n.s * BEAT, t1: (n.s + n.l) * BEAT, f: hz(n.m) }));
+  const kicks = [0, 1, 2, 3].map(b => ({ t0: b * BEAT }));
+  // Tune each kick's tail.
+  for (const k of kicks) {
+    let tail = KICK.drawnTail;
+    if (s.tune === "key") tail = hz(KEY_ROOT);
+    else if (s.tune === "bass") {
+      const under = notes.find(n => n.t0 <= k.t0 + 1e-6 && n.t1 > k.t0) || notes.find(n => n.t0 > k.t0 && n.t0 < k.t0 + BEAT) || null;
+      let f = under ? under.f : hz(KEY_ROOT);
+      while (f > 70) f /= 2; while (f < 40) f *= 2;
+      tail = f;
+    }
+    k.tail = tail; k.phi0 = 0;
+  }
+  // Phases: whoever starts second aligns to whatever is already sounding.
+  const rnd = mulberry(1234);
+  const events = [...kicks.map(k => ({ kind: "k", t: k.t0, o: k })), ...notes.map(n => ({ kind: "b", t: n.t0, o: n }))].sort((a, b) => a.t - b.t || (a.kind === "k" ? -1 : 1));
+  const kickAt = t => kicks.filter(k => k.t0 <= t && t - k.t0 < KICK.length).pop();
+  const bassPhase = (n, t) => n.phi0 + TWO_PI * n.f * (t - n.t0);
+  for (const e of events) {
+    if (e.kind === "b") {
+      const n = e.o; n.phi0 = rnd() * TWO_PI; // Nova's random start phase
+      const k = kickAt(n.t0);
+      if (s.alignB && k) n.phi0 = k.phi0 + kphase(n.t0 - k.t0, k.tail);
+    } else {
+      const k = e.o;
+      const n = notes.find(n => n.t0 < k.t0 - 1e-6 && n.t1 > k.t0 + KICK.alignAt);
+      if (s.alignK && n) { const ta = k.t0 + KICK.alignAt; k.phi0 = bassPhase(n, ta) - kphase(KICK.alignAt, k.tail); }
+    }
+  }
+  const kick = new Float32Array(N), kickClick = new Float32Array(N), subL = new Float32Array(N), subR = new Float32Array(N), mid = new Float32Array(N), env = new Float32Array(N);
+  for (const k of kicks) {
+    const a0 = Math.round(k.t0 * SR), len = Math.round(KICK.length * SR), nr = mulberry(77 + a0);
+    let lp = 0;
+    for (let i = 0; i < len && a0 + i < N; i++) {
+      const t = i / SR, a = ka(t);
+      const ph = k.phi0 + kphase(t, k.tail);
+      const body = Math.tanh(1.6 * Math.sin(ph)) / Math.tanh(1.6);
+      kick[a0 + i] += .78 * a * body;
+      env[a0 + i] = Math.max(env[a0 + i], a);
+      if (t < .006) { const nz = nr() * 2 - 1; lp += .5 * (nz - lp); kickClick[a0 + i] += (nz - lp) * .35 * Math.exp(-t / .0012); }
+    }
+  }
+  const detune = s.mono ? 0 : 7; // cents: Nova's unison spread on the sub
+  for (const n of notes) {
+    const a0 = Math.round(n.t0 * SR), a1 = Math.min(N, Math.round(n.t1 * SR) + Math.round(.01 * SR));
+    const fL = n.f * Math.pow(2, -detune / 1200), fR = n.f * Math.pow(2, detune / 1200);
+    let saw = 0, lp1 = 0, lp2 = 0;
+    for (let i = a0; i < a1; i++) {
+      const t = (i - a0) / SR, rel = (n.t1 - n.t0) - t;
+      const g = Math.min(1, t / .002) * (rel < 0 ? Math.max(0, 1 + rel / .01) : 1);
+      subL[i] += .5 * g * Math.sin(n.phi0 + TWO_PI * fL * t);
+      subR[i] += .5 * g * Math.sin(n.phi0 + 0.9 * (s.mono ? 0 : 1) + TWO_PI * fR * t);
+      // mids: a filtered saw an octave up
+      saw = ((2 * n.f * t) % 1) * 2 - 1;
+      lp1 += .09 * (saw - lp1); lp2 += .09 * (lp1 - lp2);
+      mid[i] += .16 * g * (lp1 - lp2 * .6);
+    }
+  }
+  // Duck the sub under the kick's own curve.
+  const depth = s.duck / 100;
+  if (depth > 0) for (let i = 0; i < N; i++) { const g = 1 - depth * env[i]; subL[i] *= g; subR[i] *= g; }
+  return { kick, kickClick, subL, subR, mid, kicks, notes };
+}
+
+// A 12 dB/oct low-pass for the scope and meters.
+function lowpass(x, fc) {
+  const w = Math.tan(Math.PI * fc / SR), k = 1 / Math.SQRT2, n = 1 / (1 + w / k + w * w);
+  const b0 = w * w * n, b1 = 2 * b0, a1 = 2 * (w * w - 1) * n, a2 = (1 - w / k + w * w) * n;
+  const y = new Float32Array(x.length); let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  for (let i = 0; i < x.length; i++) { const v = b0 * x[i] + b1 * x1 + b0 * x2 - a1 * y1 - a2 * y2; x2 = x1; x1 = x[i]; y2 = y1; y1 = v; y[i] = v; }
+  return y;
+}
+
+let R = null, L = null;
+function analyse() {
+  R = render(state);
+  const fc = state.xover;
+  const subM = R.subL.map((v, i) => .5 * (v + R.subR[i]));
+  const k = lowpass(R.kick, fc), bL = lowpass(R.subL, fc), bR = lowpass(R.subR, fc), bM = lowpass(subM, fc);
+  const sumL = k.map((v, i) => v + bL[i]), sumR = k.map((v, i) => v + bR[i]);
+  const sumM = k.map((v, i) => v + bM[i]);
+  // Cancellation per 10 ms window: energy of the sum against the parts' energies.
+  const W = Math.round(.01 * SR), wins = Math.floor(N / W), loss = new Float32Array(wins);
+  let eParts = 0, eSum = 0, eStereo = 0, eMono = 0, deficit = 0;
+  const winE = new Float32Array(wins);
+  for (let w = 0; w < wins; w++) {
+    let ek = 0, eb = 0, es = 0;
+    for (let i = w * W; i < (w + 1) * W; i++) {
+      const b = .5 * (bL[i] + bR[i]);
+      ek += k[i] * k[i]; eb += .5 * (bL[i] * bL[i] + bR[i] * bR[i]); es += .5 * (sumL[i] * sumL[i] + sumR[i] * sumR[i]);
+      eStereo += .5 * (sumL[i] * sumL[i] + sumR[i] * sumR[i]); eMono += sumM[i] * sumM[i];
+    }
+    eParts += ek + eb; eSum += es; deficit += Math.max(0, ek + eb - es); winE[w] = ek + eb;
+    loss[w] = ek + eb > 1e-6 ? Math.max(0, 10 * Math.log10((ek + eb) / Math.max(es, 1e-9))) : 0;
+  }
+  // The deepest dip, among windows carrying real low end.
+  const meanE = eParts / wins;
+  let dip = 0;
+  for (let w = 0; w < wins; w++) if (winE[w] > .25 * meanE) dip = Math.max(dip, loss[w]);
+  L = { k, bL, bR, sumL, sumR, loss, W, lost: 100 * deficit / eParts, dip, monoDb: Math.max(0, 10 * Math.log10(eStereo / eMono)) };
+  meters();
+  draw();
+  if (playing) swapBuffer();
+}
+
+function meters() {
+  const set = (id, val, bad, txt) => { const m = document.getElementById(id); m.querySelector("b").textContent = txt; m.classList.toggle("bad", bad); m.classList.toggle("ok", !bad); };
+  set("m-loss", L.lost, L.lost > 2, L.lost.toFixed(1) + "%");
+  set("m-wobble", L.dip, L.dip > 3, (L.dip > .05 ? "−" : "") + L.dip.toFixed(1) + " dB");
+  set("m-mono", L.monoDb, L.monoDb > .5, L.monoDb.toFixed(1) + " dB");
+  const tails = [...new Set(R.kicks.map(k => k.tail.toFixed(1)))];
+  const k0 = R.kicks[state.beat];
+  const under = R.notes.find(n => n.t0 <= k0.t0 + KICK.alignAt && n.t1 > k0.t0) || R.notes.find(n => n.t0 > k0.t0 && n.t0 < k0.t0 + BEAT);
+  const off = under ? 1200 * Math.log2(k0.tail / (under.f / Math.pow(2, Math.round(Math.log2(under.f / k0.tail))))) : 0;
+  const m = document.getElementById("m-tail");
+  m.querySelector("b").textContent = k0.tail.toFixed(1) + " Hz";
+  m.classList.toggle("bad", Math.abs(off) > 15); m.classList.toggle("ok", Math.abs(off) <= 15);
+  document.getElementById("m-tail-s").textContent = under ? `${nameOf(nearestNote(k0.tail))} against bass ${nameOf(under.m)}: ${Math.abs(off) < 1 ? "in tune" : (off > 0 ? "+" : "−") + Math.abs(off).toFixed(0) + " cents"}` : "No bass note near this kick";
+  const tr = document.getElementById("tailread");
+  tr.innerHTML = state.tune === "off"
+    ? `Drawn <b>${KICK.drawnTail.toFixed(1)} Hz</b> <span>(${nameOf(nearestNote(KICK.drawnTail))} −${Math.abs(1200 * Math.log2(KICK.drawnTail / hz(nearestNote(KICK.drawnTail)))).toFixed(0)} c)</span>`
+    : `Drawn ${KICK.drawnTail.toFixed(1)} Hz <span class="arrow">→</span> ${tails.map(t => `<b>${t} Hz</b>`).join(" ")} <span>(${[...new Set(R.kicks.map(k => nameOf(nearestNote(k.tail))))].join(", ")})</span>`;
+}
+
+// ---------- drawing ----------
+const css = getComputedStyle(document.documentElement), C = k => css.getPropertyValue(k).trim();
+function fit(cv) {
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const g = cv.getContext("2d"); g.setTransform(d, 0, 0, d, 0, 0); return [g, r.width, r.height];
+}
+let playPos = -1;
+function draw() {
+  const cv = document.getElementById("scope"), [g, w, h] = fit(cv);
+  g.clearRect(0, 0, w, h);
+  const a0 = Math.round(state.beat * BEAT * SR), len = Math.round(BEAT * SR), mid = h * .5, amp = h * .36;
+  document.getElementById("scopetitle").textContent = `Beat ${state.beat + 1} · below ${state.xover} Hz`;
+  // loss shading
+  for (let x = 0; x < w; x++) {
+    const i = a0 + Math.floor(x / w * len), lw = L.loss[Math.floor(i / L.W)] || 0;
+    if (lw > .5) { g.fillStyle = `rgba(255,93,108,${Math.min(.5, lw / 14)})`; g.fillRect(x, 0, 1, h); }
+  }
+  // grid: 16ths
+  g.strokeStyle = C("--line"); g.lineWidth = 1;
+  for (let q = 1; q < 4; q++) { const x = Math.round(q / 4 * w) + .5; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+  g.beginPath(); g.moveTo(0, mid + .5); g.lineTo(w, mid + .5); g.stroke();
+  const trace = (arr, arr2, color, lw, alpha) => {
+    g.save(); g.globalAlpha = alpha; g.strokeStyle = color; g.lineWidth = lw; g.beginPath();
+    for (let x = 0; x < w; x++) {
+      const i0 = a0 + Math.floor(x / w * len), i1 = a0 + Math.floor((x + 1) / w * len);
+      let lo = Infinity, hi = -Infinity;
+      for (let i = i0; i < Math.max(i1, i0 + 1); i++) { const v = arr2 ? .5 * (arr[i] + arr2[i]) : arr[i]; lo = Math.min(lo, v); hi = Math.max(hi, v); }
+      if (x === 0) g.moveTo(x, mid - hi * amp); g.lineTo(x, mid - hi * amp); g.lineTo(x, mid - lo * amp);
+    }
+    g.stroke(); g.restore();
+  };
+  trace(L.k, null, C("--kick"), 1.2, .75);
+  trace(L.bL, L.bR, C("--bass"), 1.2, .75);
+  trace(L.sumL, L.sumR, C("--sum"), 1.6, .95);
+  g.font = "500 10px JetBrains Mono, monospace"; g.fillStyle = C("--faint");
+  ["1", "e", "&", "a"].forEach((t, q) => g.fillText(`${state.beat + 1}.${t}`, q / 4 * w + 5, 13));
+  if (playPos >= 0 && Math.floor(playPos / BEAT) === state.beat) {
+    const x = (playPos - state.beat * BEAT) / BEAT * w;
+    g.strokeStyle = C("--amber"); g.lineWidth = 2; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke();
+  }
+  drawStrip();
+}
+function drawStrip() {
+  const cv = document.getElementById("strip"), [g, w, h] = fit(cv);
+  g.fillStyle = C("--panel2"); g.fillRect(0, 0, w, h);
+  g.fillStyle = "rgba(95,224,191,.06)"; g.fillRect(state.beat / 4 * w, 0, w / 4, h);
+  const n = L.loss.length;
+  for (let i = 0; i < n; i++) {
+    const v = Math.min(1, L.loss[i] / 12);
+    if (v > .03) { g.fillStyle = C("--loss"); g.globalAlpha = .25 + .75 * v; const x = i / n * w; g.fillRect(x, h - 6 - v * (h - 16), Math.max(1, w / n), v * (h - 16)); }
+  }
+  g.globalAlpha = 1;
+  // kicks and bass notes
+  R.kicks.forEach(k => { g.fillStyle = C("--kick"); g.fillRect(k.t0 / BAR * w, h - 5, Math.max(2, KICK.length / BAR * w * .25), 3); });
+  R.notes.forEach(nn => { g.fillStyle = C("--bass"); g.fillRect(nn.t0 / BAR * w, h - 2, Math.max(2, (nn.t1 - nn.t0) / BAR * w - 1), 2); });
+  g.strokeStyle = C("--line2");
+  for (let b = 1; b < 4; b++) { g.beginPath(); g.moveTo(b / 4 * w + .5, 0); g.lineTo(b / 4 * w + .5, h); g.stroke(); }
+  g.fillStyle = C("--faint"); g.font = "600 9.5px Inter, sans-serif";
+  for (let b = 0; b < 4; b++) g.fillText(`BEAT ${b + 1}`, b / 4 * w + 6, 12);
+  if (playPos >= 0) { g.fillStyle = C("--amber"); g.fillRect(playPos / BAR * w, 0, 2, h); }
+}
+document.getElementById("strip").addEventListener("click", e => {
+  const r = e.currentTarget.getBoundingClientRect(); state.beat = Math.min(3, Math.floor((e.clientX - r.left) / r.width * 4)); meters(); draw();
+});
+
+// ---------- controls ----------
+function syncControls() {
+  document.querySelectorAll("#tune button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.t === state.tune)));
+  document.querySelectorAll("#pattern button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.p === state.pattern)));
+  document.getElementById("alignK").setAttribute("aria-checked", String(state.alignK));
+  document.getElementById("alignB").setAttribute("aria-checked", String(state.alignB));
+  document.getElementById("mono").setAttribute("aria-checked", String(state.mono));
+  document.getElementById("duck").value = state.duck; document.getElementById("duckv").textContent = state.duck + "%";
+  document.getElementById("xover").value = state.xover; document.getElementById("xoverv").textContent = state.xover + " Hz";
+  const on = state.tune !== "off" && state.alignK && state.alignB && state.duck > 0 && state.mono;
+  state.lock = on; document.getElementById("lock").setAttribute("aria-pressed", String(on));
+}
+function changed() { syncControls(); analyse(); }
+document.querySelectorAll("#tune button").forEach(b => b.addEventListener("click", () => { state.tune = b.dataset.t; changed(); }));
+document.querySelectorAll("#pattern button").forEach(b => b.addEventListener("click", () => { state.pattern = b.dataset.p; changed(); }));
+["alignK", "alignB", "mono"].forEach(id => document.getElementById(id).addEventListener("click", () => { state[id] = !state[id]; changed(); }));
+document.getElementById("duck").addEventListener("input", e => { state.duck = +e.target.value; changed(); });
+document.getElementById("xover").addEventListener("input", e => { state.xover = +e.target.value; changed(); });
+document.getElementById("lock").addEventListener("click", () => {
+  if (state.lock) { Object.assign(state, saved && !saved.lockedLike ? saved : { tune: "off", alignK: false, alignB: false, duck: 0, mono: false }); }
+  else { saved = { tune: state.tune, alignK: state.alignK, alignB: state.alignB, duck: state.duck, mono: state.mono }; Object.assign(state, LOCKED); }
+  changed();
+});
+// Hold B: hear it unlocked.
+let held = null;
+window.addEventListener("keydown", e => {
+  if (e.key.toLowerCase() !== "b" || e.repeat || held || e.target.closest("input,select")) return;
+  held = { tune: state.tune, alignK: state.alignK, alignB: state.alignB, duck: state.duck, mono: state.mono };
+  Object.assign(state, { tune: "off", alignK: false, alignB: false, duck: 0, mono: false }); changed();
+});
+window.addEventListener("keyup", e => { if (e.key.toLowerCase() === "b" && held) { Object.assign(state, held); held = null; changed(); } });
+
+// ---------- audio ----------
+let ac = null, src = null, gainNode = null, playing = false, startedAt = 0, raf = 0;
+function buildBuffer() {
+  const buf = ac.createBuffer(2, N, SR), l = buf.getChannelData(0), r = buf.getChannelData(1);
+  const hatRnd = mulberry(5);
+  for (let i = 0; i < N; i++) {
+    const k = R.kick[i] + R.kickClick[i];
+    l[i] = .55 * (k + R.subL[i] + R.mid[i]); r[i] = .55 * (k + R.subR[i] + R.mid[i]);
+  }
+  // a quiet closed hat on the offbeats for time
+  for (let b = 0; b < 4; b++) { const a = Math.round((b + .5) * BEAT * SR); let hp = 0, prev = 0; for (let i = 0; i < 2400; i++) { const nz = hatRnd() * 2 - 1; hp = .9 * (hp + nz - prev); prev = nz; const v = .05 * hp * Math.exp(-i / 500); l[a + i] += v; r[a + i] += v; } }
+  return buf;
+}
+function swapBuffer() {
+  const pos = ((ac.currentTime - startedAt) % BAR + BAR) % BAR;
+  const old = src, oldGain = gainNode;
+  gainNode = ac.createGain(); gainNode.connect(ac.destination);
+  src = ac.createBufferSource(); src.buffer = buildBuffer(); src.loop = true; src.connect(gainNode);
+  const t = ac.currentTime + .01;
+  gainNode.gain.setValueAtTime(0, t); gainNode.gain.linearRampToValueAtTime(1, t + .012);
+  src.start(t, (pos + .01) % BAR);
+  if (old) { oldGain.gain.setValueAtTime(1, t); oldGain.gain.linearRampToValueAtTime(0, t + .012); old.stop(t + .02); }
+}
+function tick() {
+  if (!playing) return;
+  playPos = ((ac.currentTime - startedAt) % BAR + BAR) % BAR;
+  draw(); raf = requestAnimationFrame(tick);
+}
+document.getElementById("play").addEventListener("click", () => {
+  const b = document.getElementById("play");
+  if (playing) {
+    playing = false; cancelAnimationFrame(raf); if (src) { src.stop(); src = null; } playPos = -1; draw();
+    b.setAttribute("aria-pressed", "false"); b.textContent = "▶ Play"; return;
+  }
+  if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SR });
+  ac.resume(); playing = true; startedAt = ac.currentTime + .02;
+  gainNode = ac.createGain(); gainNode.connect(ac.destination);
+  src = ac.createBufferSource(); src.buffer = buildBuffer(); src.loop = true; src.connect(gainNode); src.start(startedAt);
+  b.setAttribute("aria-pressed", "true"); b.textContent = "■ Stop"; tick();
+});
+
+syncControls(); analyse();
+let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(draw, 80); });
+document.fonts && document.fonts.ready.then(draw);
+</script>

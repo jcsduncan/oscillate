@@ -1,0 +1,741 @@
+<title>Strata</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&display=swap">
+<style>
+/* Strata: multiband dynamics. One device panel as it will sit in the device dock, notes beneath.
+   Deliberately single dark theme (a plugin face), matching Temper and Pump. */
+:root {
+  color-scheme: dark;
+  --page: #080a0e;
+  --panel: #10141a;
+  --raised: #161c24;
+  --well: #0b0e13;
+  --line: #222b36;
+  --line-strong: #33404f;
+  --text: #e6ebf1;
+  --dim: #8b97a6;
+  --faint: #5d6977;
+  --cut: #ff8a3d;
+  --boost: #5fe0a8;
+  --side: #b892ff;
+  --b0: #4fd1c5; --b1: #ffb547; --b2: #ff7a6b; --b3: #b892ff; --b4: #6cb8ff; --b5: #b6e36b;
+  --ui: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "DejaVu Sans Mono", monospace;
+}
+* { box-sizing: border-box; }
+body { background: var(--page); color: var(--text); font-family: var(--ui); margin: 0;
+  padding-block: 24px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1200px; margin: 0 auto; display: grid; gap: 18px; }
+.intro { display: grid; gap: 6px; }
+.intro h1 { font-size: 15px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); margin: 0; }
+.intro p { margin: 0; color: var(--dim); font-size: 14px; max-width: 72ch; line-height: 1.45; }
+
+.device { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; min-width: 0; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--raised); }
+.mark { font-weight: 700; letter-spacing: .32em; font-size: 15px; display: flex; align-items: center; gap: 8px; margin-right: 6px; }
+.mark i { width: 16px; height: 14px; display: grid; gap: 2px; }
+.mark i b { display: block; height: 2px; border-radius: 1px; }
+.preset { display: flex; align-items: center; height: 28px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--well); position: relative; }
+.preset button { background: none; border: 0; color: var(--dim); width: 26px; height: 100%; cursor: pointer; font-size: 12px; }
+.preset .name { padding: 0 8px; font-size: 13px; min-width: 170px; text-align: center; cursor: pointer; }
+.menu { position: absolute; top: 32px; left: 0; z-index: 20; background: var(--raised); border: 1px solid var(--line-strong); border-radius: 8px; padding: 4px; min-width: 240px; box-shadow: 0 12px 30px rgba(0,0,0,.5); }
+.menu button { display: flex; justify-content: space-between; width: 100%; text-align: left; background: none; border: 0; color: var(--text); font: 500 13px var(--ui); padding: 7px 10px; border-radius: 5px; cursor: pointer; }
+.menu button:hover, .menu button.on { background: var(--well); }
+.menu button small { color: var(--faint); font: 500 11px var(--mono); }
+.seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; background: var(--well); height: 28px; }
+.seg button { background: none; border: 0; color: var(--dim); font: 600 11px var(--ui); letter-spacing: .08em; text-transform: uppercase; padding: 0 10px; cursor: pointer; }
+.seg button.on { background: var(--line-strong); color: var(--text); }
+.tog { font: 700 11px var(--ui); letter-spacing: .1em; text-transform: uppercase; border: 1px solid var(--line-strong); background: var(--well); color: var(--dim); height: 28px; padding: 0 10px; border-radius: 6px; cursor: pointer; }
+.tog.on { color: #071014; background: var(--text); border-color: var(--text); }
+.tog.delta.on { background: var(--side); border-color: var(--side); }
+.tog.kick.on { background: var(--b0); border-color: var(--b0); }
+.tog.play { min-width: 74px; }
+.tog.play.on { background: var(--boost); border-color: var(--boost); }
+.spacer { flex: 1; }
+.meters { display: grid; gap: 3px; }
+.meter { display: flex; align-items: center; gap: 6px; font: 500 10px var(--mono); color: var(--faint); }
+.meter .bars { display: grid; gap: 1px; width: 64px; }
+.meter > span:first-child { width: 22px; }
+.meter .bars span { display: block; height: 3px; background: var(--well); border-radius: 2px; overflow: hidden; }
+.meter .bars span i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--boost), #e8f06a 75%, var(--cut)); }
+.chip { font: 500 11px var(--mono); color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 4px 9px; white-space: nowrap; }
+
+.stage { position: relative; background: var(--well); border-bottom: 1px solid var(--line); }
+.bandstrip { position: relative; height: 34px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.bhead { position: absolute; top: 5px; transform: translateX(-50%); display: flex; align-items: center; gap: 3px; padding: 2px 4px 2px 7px; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--raised); font: 600 11px var(--ui); white-space: nowrap; cursor: pointer; }
+.bhead.sel { border-color: currentColor; box-shadow: 0 0 0 1px currentColor inset; }
+.bhead .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.bhead .rng { color: var(--dim); font: 500 10px var(--mono); margin: 0 3px; }
+.bhead button { border: 0; background: var(--well); color: var(--faint); font: 700 9.5px var(--ui); width: 18px; height: 18px; border-radius: 4px; cursor: pointer; padding: 0; }
+.bhead button.on.s { background: #ffd27a; color: #111; }
+.bhead button.on.m { background: #ff6b6b; color: #111; }
+.bhead button.on.b { background: var(--line-strong); color: var(--text); }
+.bhead button.x:hover { color: var(--text); }
+#spec { display: block; width: 100%; height: 320px; cursor: crosshair; touch-action: none; }
+.hint { padding: 7px 12px; border-bottom: 1px solid var(--line); font: 600 10px var(--ui); letter-spacing: .12em; color: var(--faint); text-transform: uppercase; pointer-events: none; }
+.readout { position: absolute; right: 12px; top: 10px; font: 500 11px var(--mono); color: var(--dim); text-align: right; pointer-events: none; line-height: 1.5; }
+.readout b { color: var(--text); font-weight: 500; }
+
+.lower { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 0; }
+.card { padding: 14px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.card + .card { border-left: 1px solid var(--line); }
+.card h3 { margin: 0; font: 700 10.5px var(--ui); letter-spacing: .16em; color: var(--dim); text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.card h3 small { font: 500 10px var(--mono); letter-spacing: 0; color: var(--faint); text-transform: none; }
+.card h3 .who { display: inline-flex; align-items: center; gap: 7px; color: var(--text); }
+.card h3 .who i { width: 10px; height: 10px; border-radius: 50%; }
+.insp { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 14px; }
+.curvebox { position: relative; }
+#curve { display: block; width: 230px; height: 230px; background: var(--well); border: 1px solid var(--line); border-radius: 8px; touch-action: none; cursor: grab; }
+.curvebox .cap { display: flex; justify-content: space-between; font: 500 10.5px var(--mono); color: var(--dim); margin-top: 6px; gap: 6px; }
+.curvebox .cap b { color: var(--text); font-weight: 500; }
+.knobs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 6px; }
+.knob { display: grid; justify-items: center; gap: 2px; user-select: none; touch-action: none; }
+.knob svg { width: 50px; height: 50px; cursor: ns-resize; }
+.knob .lab { font: 600 10px var(--ui); letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.knob .val { font: 500 11px var(--mono); color: var(--text); }
+.knob.big svg { width: 96px; height: 96px; }
+.knob.big .val { font-size: 14px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.row .lbl { font: 600 10px var(--ui); letter-spacing: .12em; color: var(--faint); text-transform: uppercase; min-width: 62px; }
+select { background: var(--well); color: var(--text); border: 1px solid var(--line-strong); border-radius: 6px; height: 28px; font: 500 12px var(--ui); padding: 0 8px; }
+.ottcard { border: 1px solid var(--line-strong); border-radius: 10px; padding: 12px; display: grid; gap: 10px; background: linear-gradient(180deg, rgba(255,138,61,.06), rgba(95,224,168,.05)); }
+.ottcard.off { opacity: .5; }
+.ottknobs { display: flex; align-items: center; justify-content: space-around; gap: 8px; flex-wrap: wrap; }
+.note-ott { font-size: 12px; color: var(--dim); line-height: 1.4; }
+.progress { height: 4px; background: var(--well); border-radius: 2px; overflow: hidden; }
+.progress i { display: block; height: 100%; width: 0; background: var(--side); transition: width .1s linear; }
+.drive { font-size: 12px; color: var(--cut); }
+
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.note { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 8px; align-content: start; }
+.note h4 { margin: 0; font: 700 11px var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--text); }
+.note p, .note li { margin: 0; color: var(--dim); font-size: 13.5px; line-height: 1.45; }
+.note ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.note code { font: 500 12px var(--mono); color: var(--text); }
+
+@media (max-width: 900px) {
+  .lower { grid-template-columns: minmax(0, 1fr); }
+  .card + .card { border-left: 0; border-top: 1px solid var(--line); }
+}
+@media (max-width: 620px) {
+  .insp { grid-template-columns: minmax(0, 1fr); }
+  #curve { width: 100%; max-width: 260px; height: 230px; }
+  .knobs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .knob svg { width: 42px; height: 42px; }
+  .preset .name { min-width: 120px; }
+  #spec { height: 260px; }
+  .bhead .rng { display: none; }
+}
+</style>
+
+<div class="wrap">
+  <header class="intro">
+    <h1>Strata · multiband dynamics</h1>
+    <p>Up to six bands, each with one transfer curve that compresses or expands both above and below its threshold. OTT in one knob, a kick-aware low band, and a delta listen that plays only what each band takes away. Press <b>Play</b>: the loop below runs through a working multiband in your browser.</p>
+  </header>
+
+  <section class="device" aria-label="Strata device panel">
+    <div class="top">
+      <div class="mark"><i><b style="background:var(--b0)"></b><b style="background:var(--b1)"></b><b style="background:var(--b2)"></b><b style="background:var(--b3)"></b></i>STRATA</div>
+      <div class="preset">
+        <button id="prevP" aria-label="Previous preset">◀</button>
+        <span class="name" id="pname">Init</span>
+        <button id="nextP" aria-label="Next preset">▶</button>
+        <div class="menu" id="pmenu" hidden></div>
+      </div>
+      <div class="seg" id="modeSeg"><button data-v="bands" class="on">Bands</button><button data-v="ott">OTT</button></div>
+      <div class="seg" id="phaseSeg" title="Crossover type"><button data-v="min" class="on">Min phase</button><button data-v="lin">Linear</button></div>
+      <span class="chip" id="latency">latency 5.0 ms</span>
+      <div class="spacer"></div>
+      <button class="tog delta" id="delta" title="Hear only what each band removes or adds">Δ Listen</button>
+      <button class="tog" id="ab" title="A/B: bypass the whole device">A/B · On</button>
+      <button class="tog play" id="play">▶ Play</button>
+      <div class="meters"><div class="meter"><span>IN</span><div class="bars"><span><i id="mInL"></i></span><span><i id="mInR"></i></span></div></div>
+      <div class="meter"><span>OUT</span><div class="bars"><span><i id="mOutL"></i></span><span><i id="mOutR"></i></span></div></div></div>
+    </div>
+
+    <div class="bandstrip" id="strip"></div>
+    <div class="stage">
+      <canvas id="spec" aria-label="Spectrum with crossovers and gain change"></canvas>
+      <div class="readout" id="sread"></div>
+    </div>
+    <div class="hint">Drag a crossover · double-click to add a band · drag a band's dashed line to set its threshold</div>
+
+    <div class="lower">
+      <div class="card">
+        <h3><span class="who"><i id="selDot"></i><span id="selName">Band 1</span></span><small id="selRange">20 Hz – 120 Hz</small></h3>
+        <div class="insp">
+          <div class="curvebox">
+            <canvas id="curve" aria-label="Transfer curve"></canvas>
+            <div class="cap"><span>above <b id="capA">2.0:1 ↓</b></span><span>below <b id="capB">off</b></span></div>
+          </div>
+          <div style="display:grid; gap:12px; align-content:start; min-width:0">
+            <div class="knobs" id="bandKnobs"></div>
+            <div class="row"><span class="lbl">Process</span>
+              <div class="seg" id="routeSeg"><button data-v="stereo">Stereo</button><button data-v="mid">Mid</button><button data-v="side">Side</button><button data-v="left">L</button><button data-v="right">R</button></div>
+            </div>
+            <div class="row"><span class="lbl">Key</span>
+              <select id="keySel" aria-label="Sidechain">
+                <option value="band">This band</option>
+                <option value="wide">Whole input</option>
+                <option value="kick">Ext · Kick (Anvil)</option>
+                <option value="hats">Ext · Hats (Knock)</option>
+                <option value="bass">Ext · Bass (Nova)</option>
+              </select>
+              <button class="tog kick" id="kickAware" title="Key the low band from the Anvil kick, sample-aligned">Kick-aware</button>
+            </div>
+            <div class="drive" id="ottDrive" hidden>Driven by OTT. Touch any control to take this band over.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>OTT <small>one knob, three bands</small></h3>
+        <div class="ottcard off" id="ottCard">
+          <div class="ottknobs" id="ottKnobs"></div>
+          <div class="note-ott" id="ottNote">Switch to OTT to drive every band from Depth: crossovers at 88 Hz and 2.5 kHz, upward and downward squash in one move.</div>
+        </div>
+        <h3>Global <small id="agRead">auto gain +0.0 dB</small></h3>
+        <div class="knobs" id="globalKnobs"></div>
+        <div class="row">
+          <button class="tog on" id="autoGain" title="Match loudness in and out so you judge the shape, not the level">Auto gain</button>
+          <button class="tog" id="autoThr" title="Listen for 4 seconds and set each band's threshold so it works 3–6 dB">Auto threshold</button>
+        </div>
+        <div class="progress" id="autoProg" hidden><i></i></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="notes">
+    <div class="note"><h4>One curve, both directions</h4>
+      <p>Each band has a single threshold. Above it the ratio pushes loud parts down (or expands them up); below it a second ratio lifts quiet parts (upward compression) or pushes them down (expansion). Drag the threshold node and the two handles on the curve, or use the knobs. <b>Range</b> caps the change either way.</p></div>
+    <div class="note"><h4>Kick-aware low band</h4>
+      <p>The low band can key from the Anvil kick through the existing sidechain sends. Because Anvil's curves are known ahead, the engine can start ducking on the kick's first sample with no lookahead, the same source Kick &amp; Bass Lock and Pump read.</p></div>
+    <div class="note"><h4>Crossovers</h4>
+      <ul>
+        <li><b>Minimum phase:</b> Linkwitz–Riley 24 dB/oct, zero latency beyond lookahead, bands sum flat in level.</li>
+        <li><b>Linear phase:</b> FIR crossovers, no phase shift between bands, about 21 ms more latency. For the master and buses.</li>
+        <li>Crossovers stay a third of an octave apart. The preview here always plays minimum phase.</li>
+      </ul></div>
+    <div class="note"><h4>What the panel draws</h4>
+      <ul>
+        <li>Faint: the spectrum going in. Bright: coming out.</li>
+        <li>Coloured fills under the 0 dB line: each band's live gain change in its shape. Orange-tinted cuts down, green lifts up.</li>
+        <li>On the curve, the moving dot is where the band's level is now.</li>
+      </ul></div>
+  </section>
+</div>
+
+<script>
+"use strict";
+// ---------- constants ----------
+const BAND_COLORS = ["--b0","--b1","--b2","--b3","--b4","--b5"].map(v => getComputedStyle(document.documentElement).getPropertyValue(v).trim());
+const MAX_BANDS = 6, F_MIN = 20, F_MAX = 20000, XO_MIN = 30, XO_MAX = 16000, XO_GAP = Math.pow(2, 1/3);
+const SPEC_TOP = -6, SPEC_BOT = -96, TILT_DB_PER_OCT = 3, GR_SPAN = 18;
+const LIN_PHASE_MS = 21.3, BPM = 126, OTT_XO = [88, 2500];
+const CURVE_MIN = -60;
+
+function defBand(o) { return Object.assign({ thr: -18, ra: 2, rb: 1, att: 10, rel: 120, knee: 6, range: 24, makeup: 0, route: "stereo", key: "band", solo: false, mute: false, bypass: false }, o || {}); }
+const PRESETS = [
+  { name: "Init", tag: "4 bands", xo: [120, 1000, 6000], bands: [defBand(), defBand(), defBand(), defBand()] },
+  { name: "Glue the drums", tag: "drum bus", xo: [150, 2500], mix: 0.7, look: 2, bands: [
+    defBand({ thr: -20, ra: 2, att: 30, rel: 150 }), defBand({ thr: -22, ra: 2.5, att: 10, rel: 120 }), defBand({ thr: -26, ra: 2, att: 5, rel: 80 }) ] },
+  { name: "Tame the bass", tag: "kick-aware", xo: [60, 180, 600], bands: [
+    defBand({ thr: -24, ra: 3, att: 20, rel: 200, key: "kick" }), defBand({ thr: -22, ra: 4, att: 15, rel: 160, key: "kick" }),
+    defBand({ thr: -18, ra: 1, rb: 1 }), defBand({ thr: -18, ra: 1, rb: 1 }) ] },
+  { name: "Air on the hats", tag: "upward", xo: [6500], bands: [
+    defBand({ ra: 1, rb: 1 }), defBand({ thr: -30, ra: 1.5, rb: 2.5, att: 2, rel: 60, makeup: 1.5 }) ] },
+  { name: "OTT 30%", tag: "OTT", ott: { depth: 0.3, time: 0.5, bal: 0 } },
+  { name: "Master polish", tag: "linear phase", xo: [100, 400, 2500, 9000], phase: "lin", look: 5, bands: [
+    defBand({ thr: -16, ra: 1.5, att: 30, rel: 250, range: 4 }), defBand({ thr: -18, ra: 1.5, att: 30, rel: 250, range: 4 }),
+    defBand({ thr: -20, ra: 1.5, att: 25, rel: 200, range: 4 }), defBand({ thr: -22, ra: 1.5, att: 15, rel: 160, range: 4 }),
+    defBand({ thr: -24, ra: 1.4, rb: 1.3, att: 8, rel: 120, range: 4 }) ] },
+  { name: "De-mud the pad", tag: "mid only", xo: [180, 520], bands: [
+    defBand({ ra: 1, rb: 1 }), defBand({ thr: -26, ra: 3, att: 15, rel: 180, range: 6, route: "mid" }), defBand({ ra: 1, rb: 1 }) ] },
+];
+
+const S = { mode: "bands", phase: "min", listen: false, bypass: false, playing: false,
+  input: 0, output: 0, mix: 1, look: 5, autoGain: true, xo: [], bands: [], sel: 0,
+  ott: { depth: 0.3, time: 0.5, bal: 0 }, preset: 0, ottDriven: false };
+const live = { gr: [], lvl: [], agDb: 0, preRms: -60, postRms: -60 };
+
+// ---------- helpers ----------
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const $ = id => document.getElementById(id);
+const fmtHz = f => f >= 1000 ? (f / 1000).toFixed(f >= 10000 ? 0 : 1).replace(/\.0$/, "") + " kHz" : Math.round(f) + " Hz";
+const fmtRatio = r => r >= 10 ? r.toFixed(0) : r.toFixed(1);
+function bandEdges(i) { return [i === 0 ? F_MIN : S.xo[i - 1], i === S.bands.length - 1 ? F_MAX : S.xo[i]]; }
+function aboveLabel(r) { return Math.abs(r - 1) < 0.02 ? "off" : r > 1 ? fmtRatio(r) + ":1 ↓" : "1:" + fmtRatio(1 / r) + " ↑ expand"; }
+function belowLabel(r) { return Math.abs(r - 1) < 0.02 ? "off" : r > 1 ? fmtRatio(r) + ":1 ↑ lift" : "1:" + fmtRatio(1 / r) + " ↓ expand"; }
+// Static curve, shared by the drawing and the worklet (same formula is inlined there).
+function curveOut(x, b) {
+  const T = b.thr, k = Math.max(0.01, b.knee);
+  const ya = T + (x - T) / b.ra, yb = T + (x - T) / b.rb;
+  const s = clamp((x - (T - k / 2)) / k, 0, 1), w = s * s * (3 - 2 * s);
+  let y = yb * (1 - w) + ya * w;
+  let g = clamp(y - x, -b.range, b.range);
+  if (g > 0) g *= clamp((x + 90) / 18, 0, 1);
+  return x + g;
+}
+function lrShape(f, i) { // LR4 magnitude of band i at f
+  const [lo, hi] = bandEdges(i); let m = 1;
+  if (i > 0) { const r = Math.pow(f / lo, 4); m *= r / (1 + r); }
+  if (i < S.bands.length - 1) { const r = Math.pow(f / hi, 4); m *= 1 / (1 + r); }
+  return m;
+}
+
+// ---------- knobs ----------
+function knob(host, o) {
+  const el = document.createElement("div"); el.className = "knob" + (o.big ? " big" : "");
+  el.innerHTML = `<svg viewBox="0 0 50 50"><circle cx="25" cy="25" r="19" fill="#0b0e13" stroke="#222b36"/><path class="trk" fill="none" stroke="#222b36" stroke-width="4" stroke-linecap="round"/><path class="arc" fill="none" stroke-width="4" stroke-linecap="round"/><line class="ptr" x1="25" y1="25" stroke="#e6ebf1" stroke-width="2" stroke-linecap="round"/></svg><div class="lab">${o.label}</div><div class="val"></div>`;
+  host.appendChild(el);
+  const svg = el.querySelector("svg"), arc = el.querySelector(".arc"), trk = el.querySelector(".trk"), ptr = el.querySelector(".ptr"), val = el.querySelector(".val");
+  const A0 = -135, A1 = 135, R = 19;
+  const pt = a => { const r = (a - 90) * Math.PI / 180; return [25 + R * Math.cos(r), 25 + R * Math.sin(r)]; };
+  const arcPath = (a, b) => { const [x0, y0] = pt(a), [x1, y1] = pt(b); return `M${x0} ${y0} A${R} ${R} 0 ${Math.abs(b - a) > 180 ? 1 : 0} ${b > a ? 1 : 0} ${x1} ${y1}`; };
+  trk.setAttribute("d", arcPath(A0, A1));
+  const toN = v => o.log ? Math.log(v / o.min) / Math.log(o.max / o.min) : (v - o.min) / (o.max - o.min);
+  const fromN = n => o.log ? o.min * Math.pow(o.max / o.min, n) : o.min + n * (o.max - o.min);
+  const api = { set(v) { api.v = clamp(v, o.min, o.max); const n = toN(api.v), a = A0 + n * (A1 - A0);
+      const z = o.bipolar ? A0 + toN(o.zero ?? 0) * (A1 - A0) : A0;
+      arc.setAttribute("d", Math.abs(a - z) < 0.5 ? "" : arcPath(Math.min(z, a), Math.max(z, a)));
+      arc.setAttribute("stroke", typeof o.color === "function" ? o.color() : (o.color || "#e6ebf1"));
+      const [x, y] = pt(a); ptr.setAttribute("x2", x); ptr.setAttribute("y2", y); val.textContent = o.fmt(api.v); },
+    el, v: o.value };
+  let dragging = null;
+  svg.addEventListener("pointerdown", e => { svg.setPointerCapture(e.pointerId); dragging = { y: e.clientY, n: toN(api.v) }; });
+  svg.addEventListener("pointermove", e => { if (!dragging) return; const n = clamp(dragging.n + (dragging.y - e.clientY) / (e.shiftKey ? 600 : 150), 0, 1); api.set(fromN(n)); o.onChange(api.v); });
+  svg.addEventListener("pointerup", () => dragging = null);
+  svg.addEventListener("dblclick", () => { api.set(o.reset ?? o.value); o.onChange(api.v); });
+  svg.addEventListener("wheel", e => { e.preventDefault(); api.set(fromN(clamp(toN(api.v) - Math.sign(e.deltaY) * 0.02, 0, 1))); o.onChange(api.v); }, { passive: false });
+  api.set(o.value);
+  return api;
+}
+
+const selColor = () => BAND_COLORS[S.sel % 6];
+function bandChange(key) { return v => { S.bands[S.sel][key] = v; takeOver(); pushBand(S.sel); refreshInspector(false); }; }
+const K = {};
+const bk = $("bandKnobs");
+K.thr = knob(bk, { label: "Threshold", min: -60, max: 0, value: -18, reset: -18, fmt: v => v.toFixed(1) + " dB", color: selColor, onChange: bandChange("thr") });
+K.ra = knob(bk, { label: "Above", min: 0.5, max: 20, log: true, value: 2, reset: 1, bipolar: true, zero: 1, fmt: aboveLabel, color: () => "#ff8a3d", onChange: bandChange("ra") });
+K.rb = knob(bk, { label: "Below", min: 0.25, max: 8, log: true, value: 1, reset: 1, bipolar: true, zero: 1, fmt: belowLabel, color: () => "#5fe0a8", onChange: bandChange("rb") });
+K.makeup = knob(bk, { label: "Makeup", min: -12, max: 12, value: 0, reset: 0, bipolar: true, zero: 0, fmt: v => (v >= 0 ? "+" : "") + v.toFixed(1) + " dB", color: selColor, onChange: bandChange("makeup") });
+K.att = knob(bk, { label: "Attack", min: 0.1, max: 300, log: true, value: 10, reset: 10, fmt: v => v < 10 ? v.toFixed(1) + " ms" : Math.round(v) + " ms", color: selColor, onChange: bandChange("att") });
+K.rel = knob(bk, { label: "Release", min: 5, max: 2000, log: true, value: 120, reset: 120, fmt: v => v >= 1000 ? (v / 1000).toFixed(2) + " s" : Math.round(v) + " ms", color: selColor, onChange: bandChange("rel") });
+K.knee = knob(bk, { label: "Knee", min: 0, max: 24, value: 6, reset: 6, fmt: v => v.toFixed(1) + " dB", color: selColor, onChange: bandChange("knee") });
+K.range = knob(bk, { label: "Range", min: 0, max: 36, value: 24, reset: 24, fmt: v => "±" + v.toFixed(1) + " dB", color: selColor, onChange: bandChange("range") });
+
+const gk = $("globalKnobs");
+K.input = knob(gk, { label: "Input", min: -24, max: 24, value: 0, reset: 0, bipolar: true, zero: 0, fmt: v => (v >= 0 ? "+" : "") + v.toFixed(1) + " dB", onChange: v => { S.input = v; pushGlobal(); } });
+K.output = knob(gk, { label: "Output", min: -24, max: 24, value: 0, reset: 0, bipolar: true, zero: 0, fmt: v => (v >= 0 ? "+" : "") + v.toFixed(1) + " dB", onChange: v => { S.output = v; pushGlobal(); } });
+K.mix = knob(gk, { label: "Mix", min: 0, max: 1, value: 1, reset: 1, fmt: v => Math.round(v * 100) + " %", onChange: v => { S.mix = v; pushGlobal(); } });
+K.look = knob(gk, { label: "Lookahead", min: 0, max: 20, value: 5, reset: 5, fmt: v => v.toFixed(1) + " ms", onChange: v => { S.look = v; pushGlobal(); pushAllBands(); updateLatency(); } });
+
+const ok = $("ottKnobs");
+K.depth = knob(ok, { label: "Depth", big: true, min: 0, max: 1, value: 0.3, reset: 0.3, fmt: v => Math.round(v * 100) + " %", color: () => "#ff8a3d", onChange: v => { S.ott.depth = v; ensureOtt(); } });
+K.time = knob(ok, { label: "Time", min: 0, max: 1, value: 0.5, reset: 0.5, fmt: v => Math.round(v * 100) + " %", onChange: v => { S.ott.time = v; ensureOtt(); } });
+K.bal = knob(ok, { label: "Up ⟷ Down", min: -1, max: 1, value: 0, reset: 0, bipolar: true, zero: 0, fmt: v => Math.abs(v) < 0.02 ? "both" : v < 0 ? "up " + Math.round(-v * 100) + "%" : "down " + Math.round(v * 100) + "%", color: () => "#5fe0a8", onChange: v => { S.ott.bal = v; ensureOtt(); } });
+
+// ---------- OTT mapping ----------
+function ottBands() {
+  const { depth: d, time: t, bal: b } = S.ott;
+  const up = d * Math.min(1, 1 - b), down = d * Math.min(1, 1 + b);
+  const thr = [-26, -28, -32], slow = [1.6, 1, 0.7];
+  return thr.map((T, i) => defBand({ thr: T, ra: 1 + 6 * down, rb: 1 + 3 * up, att: (1 + 29 * t) * slow[i], rel: (40 + 360 * t) * slow[i],
+    knee: 6, range: 24, makeup: 1.5 * down }));
+}
+function ensureOtt() {
+  if (S.mode !== "ott") setMode("ott");
+  const same = S.bands.length === 3 && S.xo.length === 2 && S.xo[0] === OTT_XO[0] && S.xo[1] === OTT_XO[1] && S.bands.every(b => b.key === "band");
+  const keep = S.bands.map(b => ({ solo: b.solo, mute: b.mute, bypass: b.bypass }));
+  S.xo = OTT_XO.slice(); S.bands = ottBands(); S.ottDriven = true;
+  if (same) S.bands.forEach((b, i) => Object.assign(b, keep[i]));
+  S.sel = clamp(S.sel, 0, S.bands.length - 1);
+  if (same && chains.length === 3) { pushAllBands(); refreshInspector(false); } else rebuild();
+}
+function takeOver() { if (S.mode === "ott") { S.mode = "bands"; S.ottDriven = false; syncSeg("modeSeg", "bands"); $("ottCard").classList.add("off"); $("ottDrive").hidden = true; } }
+function setMode(m) {
+  S.mode = m; syncSeg("modeSeg", m);
+  $("ottCard").classList.toggle("off", m !== "ott");
+  $("ottNote").textContent = m === "ott" ? "Depth sets upward and downward squash on all three bands at once; Time slows attack and release; Up ⟷ Down leans it one way. Touch a band to take it over." : "Switch to OTT to drive every band from Depth: crossovers at 88 Hz and 2.5 kHz, upward and downward squash in one move.";
+  if (m === "ott") ensureOtt(); else { S.ottDriven = false; refreshInspector(true); }
+}
+
+// ---------- segmented controls ----------
+function syncSeg(id, v) { $(id).querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.v === v)); }
+$("modeSeg").addEventListener("click", e => { const v = e.target.dataset.v; if (v) setMode(v); });
+$("phaseSeg").addEventListener("click", e => { const v = e.target.dataset.v; if (v) { S.phase = v; syncSeg("phaseSeg", v); updateLatency(); } });
+$("routeSeg").addEventListener("click", e => { const v = e.target.dataset.v; if (!v) return; S.bands[S.sel].route = v; takeOver(); syncSeg("routeSeg", v); pushBand(S.sel); });
+$("keySel").addEventListener("change", e => { S.bands[S.sel].key = e.target.value; takeOver(); refreshInspector(false); rebuild(); });
+$("kickAware").addEventListener("click", () => { const b = S.bands[0]; b.key = b.key === "kick" ? "band" : "kick"; takeOver(); refreshInspector(false); rebuild(); });
+function updateLatency() { $("latency").textContent = "latency " + (S.look + (S.phase === "lin" ? LIN_PHASE_MS : 0)).toFixed(1) + " ms"; }
+
+// ---------- presets ----------
+function loadPreset(i) {
+  S.preset = (i + PRESETS.length) % PRESETS.length; const p = PRESETS[S.preset];
+  $("pname").textContent = p.name;
+  S.mix = p.mix ?? 1; S.look = p.look ?? 5; S.phase = p.phase ?? "min";
+  K.mix.set(S.mix); K.look.set(S.look); syncSeg("phaseSeg", S.phase); updateLatency();
+  if (p.ott) { S.ott = Object.assign({}, p.ott); K.depth.set(S.ott.depth); K.time.set(S.ott.time); K.bal.set(S.ott.bal); S.sel = 0; setMode("ott"); }
+  else { S.xo = p.xo.slice(); S.bands = p.bands.map(b => Object.assign({}, b)); S.sel = 0; setMode("bands"); rebuild(); }
+  pushGlobal();
+}
+$("prevP").onclick = () => loadPreset(S.preset - 1);
+$("nextP").onclick = () => loadPreset(S.preset + 1);
+$("pname").onclick = () => { const m = $("pmenu"); m.hidden = !m.hidden;
+  m.innerHTML = PRESETS.map((p, i) => `<button data-i="${i}" class="${i === S.preset ? "on" : ""}">${p.name}<small>${p.tag}</small></button>`).join(""); };
+$("pmenu").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; loadPreset(+b.dataset.i); $("pmenu").hidden = true; });
+document.addEventListener("click", e => { if (!e.target.closest(".preset")) $("pmenu").hidden = true; });
+
+// ---------- band strip ----------
+function renderStrip() {
+  const strip = $("strip"), w = strip.clientWidth; strip.innerHTML = "";
+  S.bands.forEach((b, i) => {
+    const [lo, hi] = bandEdges(i), c = Math.sqrt(lo * hi);
+    const h = document.createElement("div"); h.className = "bhead" + (i === S.sel ? " sel" : ""); h.style.color = BAND_COLORS[i];
+    h.style.left = xOfF(c, w) + "px";
+    h.innerHTML = `<span class="dot"></span><span style="color:var(--text)">${i + 1}</span><span class="rng">${fmtHz(lo)}–${fmtHz(hi)}</span>` +
+      `<button class="s ${b.solo ? "on" : ""}" title="Solo">S</button><button class="m ${b.mute ? "on" : ""}" title="Mute">M</button><button class="b ${b.bypass ? "on" : ""}" title="Bypass">B</button>` +
+      (S.bands.length > 1 ? `<button class="x" title="Remove band">×</button>` : "");
+    h.addEventListener("click", e => {
+      const t = e.target;
+      if (t.classList.contains("s")) { b.solo = !b.solo; pushRouting(); }
+      else if (t.classList.contains("m")) { b.mute = !b.mute; pushRouting(); }
+      else if (t.classList.contains("b")) { b.bypass = !b.bypass; pushBand(i); }
+      else if (t.classList.contains("x")) { removeBand(i); return; }
+      S.sel = i; refreshInspector(true); renderStrip();
+    });
+    strip.appendChild(h);
+    const half = h.offsetWidth / 2 + 4; h.style.left = clamp(xOfF(c, w), half, w - half) + "px";
+  });
+}
+function removeBand(i) {
+  takeOver();
+  const xi = i === S.bands.length - 1 ? i - 1 : i; // merge into the neighbour above, or below for the last band
+  S.xo.splice(xi, 1); S.bands.splice(i, 1);
+  S.sel = clamp(S.sel >= i ? S.sel - 1 : S.sel, 0, S.bands.length - 1); rebuild();
+}
+function addBandAt(f) {
+  if (S.bands.length >= MAX_BANDS) return flash("Six bands is the most");
+  f = clamp(f, XO_MIN, XO_MAX);
+  if (S.xo.some(x => Math.max(x, f) / Math.min(x, f) < XO_GAP)) return flash("Too close to a crossover");
+  takeOver();
+  let at = S.xo.findIndex(x => x > f); if (at < 0) at = S.xo.length;
+  S.xo.splice(at, 0, f); S.bands.splice(at + 1, 0, Object.assign({}, S.bands[at], { solo: false, mute: false }));
+  S.sel = at + 1; rebuild();
+}
+let flashT = 0, flashMsg = "";
+function flash(m) { flashMsg = m; flashT = performance.now(); }
+
+// ---------- spectrum canvas ----------
+const spec = $("spec"), sctx = spec.getContext("2d");
+const curve = $("curve"), cctx = curve.getContext("2d");
+function fit(c, ctx) { const r = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight; if (c.width !== Math.round(w * r) || c.height !== Math.round(h * r)) { c.width = Math.round(w * r); c.height = Math.round(h * r); } ctx.setTransform(r, 0, 0, r, 0, 0); return [w, h]; }
+function xOfF(f, w) { return Math.log(f / F_MIN) / Math.log(F_MAX / F_MIN) * w; }
+function fOfX(x, w) { return F_MIN * Math.pow(F_MAX / F_MIN, x / w); }
+const thrY = (db, h) => h * 0.3 + (-db / -CURVE_MIN) * (h * 0.6);
+const dbOfThrY = (y, h) => -(y - h * 0.3) / (h * 0.6) * -CURVE_MIN;
+function yOfDb(db, h) { return (SPEC_TOP - db) / (SPEC_TOP - SPEC_BOT) * h; }
+function dbOfY(y, h) { return SPEC_TOP - y / h * (SPEC_TOP - SPEC_BOT); }
+const grY0 = h => h * 0.17, grScale = h => h * 0.14 / GR_SPAN;
+
+let drag = null, hoverX = -1;
+spec.addEventListener("pointerdown", e => {
+  const r = spec.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, w = r.width, h = r.height;
+  const xi = S.xo.findIndex(f => Math.abs(xOfF(f, w) - x) < 7);
+  if (xi >= 0) { drag = { kind: "xo", i: xi }; spec.setPointerCapture(e.pointerId); return; }
+  const fi = fOfX(x, w); let bi = S.bands.findIndex((_, i) => { const [lo, hi] = bandEdges(i); return fi >= lo && fi < hi; }); if (bi < 0) bi = S.bands.length - 1;
+  const ty = thrY(S.bands[bi].thr, h);
+  if (Math.abs(ty - y) < 8) { drag = { kind: "thr", i: bi }; S.sel = bi; spec.setPointerCapture(e.pointerId); refreshInspector(true); renderStrip(); return; }
+  if (bi !== S.sel) { S.sel = bi; refreshInspector(true); renderStrip(); }
+});
+spec.addEventListener("pointermove", e => {
+  const r = spec.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, w = r.width, h = r.height; hoverX = x;
+  if (!drag) { spec.style.cursor = S.xo.some(f => Math.abs(xOfF(f, w) - x) < 7) ? "ew-resize" : "crosshair"; return; }
+  takeOver();
+  if (drag.kind === "xo") {
+    const lo = drag.i === 0 ? XO_MIN : S.xo[drag.i - 1] * XO_GAP, hi = drag.i === S.xo.length - 1 ? XO_MAX : S.xo[drag.i + 1] / XO_GAP;
+    S.xo[drag.i] = clamp(fOfX(x, w), lo, hi); pushCrossovers(); renderStrip(); refreshInspector(false);
+  } else { S.bands[drag.i].thr = clamp(dbOfThrY(y, h), CURVE_MIN, -1); pushBand(drag.i); refreshInspector(false); }
+});
+spec.addEventListener("pointerup", () => drag = null);
+spec.addEventListener("pointerleave", () => hoverX = -1);
+spec.addEventListener("dblclick", e => { const r = spec.getBoundingClientRect(); addBandAt(fOfX(e.clientX - r.left, r.width)); });
+
+let specPre = null, specPost = null;
+const POINTS = 260;
+function specPoints(an, buf, w, h) {
+  if (!an) return null;
+  an.getFloatFrequencyData(buf);
+  const sr = actx.sampleRate, n = buf.length, pts = [];
+  for (let p = 0; p < POINTS; p++) {
+    const f0 = F_MIN * Math.pow(F_MAX / F_MIN, p / POINTS), f1 = F_MIN * Math.pow(F_MAX / F_MIN, (p + 1) / POINTS);
+    let i0 = Math.floor(f0 / sr * 2 * n), i1 = Math.max(i0 + 1, Math.ceil(f1 / sr * 2 * n)); let m = -200;
+    for (let i = i0; i < i1 && i < n; i++) m = Math.max(m, buf[i]);
+    const fc = Math.sqrt(f0 * f1); m += TILT_DB_PER_OCT * Math.log2(fc / 1000);
+    pts.push([xOfF(fc, w), yOfDb(m, h)]);
+  }
+  return pts;
+}
+function drawSpectrum() {
+  const [w, h] = fit(spec, sctx); sctx.clearRect(0, 0, w, h);
+  // band tints
+  S.bands.forEach((b, i) => { const [lo, hi] = bandEdges(i); sctx.fillStyle = BAND_COLORS[i] + (i === S.sel ? "16" : "08"); sctx.fillRect(xOfF(lo, w), 0, xOfF(hi, w) - xOfF(lo, w), h); });
+  // grid
+  sctx.strokeStyle = "#1a212b"; sctx.lineWidth = 1; sctx.font = "500 10px IBM Plex Mono, monospace"; sctx.fillStyle = "#5d6977";
+  [50, 100, 200, 500, 1000, 2000, 5000, 10000].forEach(f => { const x = Math.round(xOfF(f, w)) + .5; sctx.beginPath(); sctx.moveTo(x, 0); sctx.lineTo(x, h); sctx.stroke(); sctx.fillText(fmtHz(f).replace(" ", ""), x + 3, h - 20); });
+  for (let db = -84; db <= -12; db += 12) { const y = Math.round(yOfDb(db, h)) + .5; sctx.beginPath(); sctx.moveTo(0, y); sctx.lineTo(w, y); sctx.stroke(); sctx.fillText(db, 4, y - 3); }
+  // spectra
+  if (S.playing && an.pre) {
+    specPre = specPoints(an.pre, an.preBuf, w, h); specPost = specPoints(an.post, an.postBuf, w, h);
+    const line = (pts, stroke, fill) => { sctx.beginPath(); pts.forEach(([x, y], i) => i ? sctx.lineTo(x, y) : sctx.moveTo(x, y));
+      if (fill) { sctx.lineTo(w, h); sctx.lineTo(0, h); sctx.closePath(); sctx.fillStyle = fill; sctx.fill(); } else { sctx.strokeStyle = stroke; sctx.lineWidth = 1.5; sctx.stroke(); } };
+    line(specPre, null, "rgba(139,151,166,.10)"); line(specPre, "rgba(139,151,166,.45)");
+    line(specPost, null, "rgba(230,235,241,.06)"); line(specPost, "rgba(230,235,241,.9)");
+  }
+  // gain change
+  const y0 = grY0(h), sc = grScale(h);
+  sctx.strokeStyle = "#33404f"; sctx.setLineDash([2, 3]); sctx.beginPath(); sctx.moveTo(0, y0 + .5); sctx.lineTo(w, y0 + .5); sctx.stroke(); sctx.setLineDash([]);
+  sctx.fillStyle = "#5d6977"; sctx.fillText("GAIN CHANGE ±" + GR_SPAN + " dB", 34, y0 - 5);
+  S.bands.forEach((b, i) => {
+    const g = live.gr[i] || 0; if (Math.abs(g) < 0.05) return;
+    sctx.beginPath(); sctx.moveTo(0, y0);
+    for (let p = 0; p <= 200; p++) { const x = p / 200 * w, f = fOfX(x, w); sctx.lineTo(x, y0 - clamp(g, -GR_SPAN, GR_SPAN) * sc * lrShape(f, i)); }
+    sctx.lineTo(w, y0); sctx.closePath();
+    sctx.fillStyle = BAND_COLORS[i] + "55"; sctx.fill(); sctx.strokeStyle = g < 0 ? BAND_COLORS[i] : "#5fe0a8"; sctx.lineWidth = 1.25; sctx.stroke();
+  });
+  // thresholds
+  S.bands.forEach((b, i) => { const [lo, hi] = bandEdges(i), y = thrY(b.thr, h);
+    sctx.strokeStyle = BAND_COLORS[i]; sctx.globalAlpha = i === S.sel ? 0.95 : 0.45; sctx.setLineDash([5, 4]); sctx.lineWidth = i === S.sel ? 1.5 : 1;
+    sctx.beginPath(); sctx.moveTo(xOfF(lo, w) + 3, y); sctx.lineTo(xOfF(hi, w) - 3, y); sctx.stroke(); sctx.setLineDash([]);
+    if (i === S.sel) { sctx.fillStyle = BAND_COLORS[i]; const lab = "thr " + b.thr.toFixed(1) + " dB"; sctx.fillText(lab, clamp(xOfF(hi, w) - sctx.measureText(lab).width - 6, 4, w - 90), y - 5); }
+    sctx.globalAlpha = 1; });
+  // crossovers
+  S.xo.forEach((f, i) => { const x = Math.round(xOfF(f, w)) + .5, act = drag && drag.kind === "xo" && drag.i === i;
+    sctx.strokeStyle = act ? "#e6ebf1" : "#8b97a6"; sctx.lineWidth = act ? 2 : 1; sctx.beginPath(); sctx.moveTo(x, 0); sctx.lineTo(x, h); sctx.stroke();
+    sctx.fillStyle = "#e6ebf1"; sctx.beginPath(); sctx.moveTo(x, h - 14); sctx.lineTo(x + 6, h - 8); sctx.lineTo(x, h - 2); sctx.lineTo(x - 6, h - 8); sctx.closePath(); sctx.fill();
+    sctx.fillStyle = "#e6ebf1"; sctx.fillText(fmtHz(f), x + 8, h - 5); });
+  // readout
+  let txt = S.playing ? "" : "press <b>Play</b> to hear the loop through Strata";
+  if (hoverX >= 0) txt = "<b>" + fmtHz(fOfX(hoverX, w)) + "</b>";
+  if (performance.now() - flashT < 1600) txt = "<b>" + flashMsg + "</b>";
+  $("sread").innerHTML = txt + (S.playing ? `<br>band ${S.sel + 1} change <b>${(live.gr[S.sel] || 0).toFixed(1)} dB</b>` : "");
+}
+
+// ---------- transfer curve ----------
+const cmap = { x: (db, w) => (db - CURVE_MIN) / -CURVE_MIN * w, y: (db, h) => (-db) / -CURVE_MIN * h, dbx: (x, w) => CURVE_MIN + x / w * -CURVE_MIN, dby: (y, h) => -y / h * -CURVE_MIN };
+const HA = 0.6, HB = 0.6;
+function handles(b) { const xa = b.thr + (0 - b.thr) * HA, xb = b.thr - (b.thr - CURVE_MIN) * HB; return { xa, ya: curveOut(xa, b), xb, yb: curveOut(xb, b) }; }
+let cdrag = null;
+curve.addEventListener("pointerdown", e => {
+  const r = curve.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, w = r.width, h = r.height, b = S.bands[S.sel], H = handles(b);
+  const near = (dx, dy) => Math.hypot(cmap.x(dx, w) - x, cmap.y(dy, h) - y) < 12;
+  cdrag = near(b.thr, curveOut(b.thr, b)) ? "thr" : near(H.xa, H.ya) ? "a" : near(H.xb, H.yb) ? "b" : x > cmap.x(b.thr, w) ? "a" : "b";
+  curve.setPointerCapture(e.pointerId); curve.style.cursor = "grabbing";
+});
+curve.addEventListener("pointermove", e => {
+  if (!cdrag) return; const r = curve.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, w = r.width, h = r.height, b = S.bands[S.sel];
+  takeOver();
+  if (cdrag === "thr") b.thr = clamp(cmap.dbx(x, w), CURVE_MIN + 2, -1);
+  else { const H = handles(b), out = cmap.dby(y, h);
+    if (cdrag === "a") { const s = (out - b.thr) / (H.xa - b.thr); b.ra = clamp(1 / Math.max(0.05, s), 0.5, 20); }
+    else { const s = (out - b.thr) / (H.xb - b.thr); b.rb = clamp(1 / Math.max(0.125, s), 0.25, 8); } }
+  pushBand(S.sel); refreshInspector(false);
+});
+curve.addEventListener("pointerup", () => { cdrag = null; curve.style.cursor = "grab"; });
+curve.addEventListener("dblclick", () => { const b = S.bands[S.sel]; b.ra = 1; b.rb = 1; takeOver(); pushBand(S.sel); refreshInspector(false); });
+function drawCurve() {
+  const [w, h] = fit(curve, cctx), b = S.bands[S.sel]; if (!b) return; const col = BAND_COLORS[S.sel];
+  cctx.clearRect(0, 0, w, h); cctx.strokeStyle = "#1a212b"; cctx.lineWidth = 1;
+  for (let d = -48; d < 0; d += 12) { const x = cmap.x(d, w) + .5, y = cmap.y(d, h) + .5; cctx.beginPath(); cctx.moveTo(x, 0); cctx.lineTo(x, h); cctx.moveTo(0, y); cctx.lineTo(w, y); cctx.stroke(); }
+  cctx.strokeStyle = "#33404f"; cctx.setLineDash([3, 3]); cctx.beginPath(); cctx.moveTo(0, h); cctx.lineTo(w, 0); cctx.stroke(); cctx.setLineDash([]);
+  // shade: above diagonal = lift, below = cut
+  cctx.beginPath(); for (let p = 0; p <= 120; p++) { const xi = CURVE_MIN + p / 120 * -CURVE_MIN; cctx.lineTo(cmap.x(xi, w), cmap.y(curveOut(xi, b), h)); }
+  for (let p = 120; p >= 0; p--) { const xi = CURVE_MIN + p / 120 * -CURVE_MIN; cctx.lineTo(cmap.x(xi, w), cmap.y(xi, h)); }
+  cctx.closePath(); cctx.fillStyle = col + "22"; cctx.fill();
+  cctx.beginPath(); for (let p = 0; p <= 160; p++) { const xi = CURVE_MIN + p / 160 * -CURVE_MIN; const X = cmap.x(xi, w), Y = cmap.y(curveOut(xi, b), h); p ? cctx.lineTo(X, Y) : cctx.moveTo(X, Y); }
+  cctx.strokeStyle = col; cctx.lineWidth = 2.25; cctx.stroke();
+  const H = handles(b), dot = (dx, dy, fill, r) => { cctx.beginPath(); cctx.arc(cmap.x(dx, w), cmap.y(dy, h), r, 0, 7); cctx.fillStyle = fill; cctx.fill(); cctx.strokeStyle = "#0b0e13"; cctx.lineWidth = 2; cctx.stroke(); };
+  dot(H.xa, H.ya, "#ff8a3d", 5); dot(H.xb, H.yb, "#5fe0a8", 5); dot(b.thr, curveOut(b.thr, b), col, 6.5);
+  if (S.playing && live.lvl[S.sel] > CURVE_MIN) { const l = live.lvl[S.sel]; cctx.beginPath(); cctx.arc(cmap.x(l, w), cmap.y(curveOut(l, b), h), 4, 0, 7); cctx.fillStyle = "#e6ebf1"; cctx.fill(); }
+  cctx.fillStyle = "#5d6977"; cctx.font = "500 10px IBM Plex Mono, monospace"; cctx.fillText("in →", w - 30, h - 6); cctx.fillText("out", 5, 13);
+  cctx.fillText("thr " + b.thr.toFixed(1), clamp(cmap.x(b.thr, w) + 8, 4, w - 64), clamp(cmap.y(b.thr, h) + 16, 26, h - 18));
+}
+
+// ---------- inspector ----------
+function refreshInspector(all) {
+  const b = S.bands[S.sel]; if (!b) return; const [lo, hi] = bandEdges(S.sel);
+  $("selDot").style.background = BAND_COLORS[S.sel]; $("selName").textContent = "Band " + (S.sel + 1);
+  $("selRange").textContent = fmtHz(lo) + " – " + fmtHz(hi);
+  $("capA").textContent = aboveLabel(b.ra); $("capB").textContent = belowLabel(b.rb);
+  ["thr", "ra", "rb", "makeup", "att", "rel", "knee", "range"].forEach(k => K[k].set(b[k]));
+  syncSeg("routeSeg", b.route); $("keySel").value = b.key;
+  $("kickAware").classList.toggle("on", S.bands[0].key === "kick");
+  $("ottDrive").hidden = !(S.mode === "ott");
+  if (all) renderStrip();
+}
+function rebuild() { renderStrip(); refreshInspector(true); buildBands(); }
+
+// ---------- audio ----------
+let actx = null, node = {}, an = {}, chains = [], workletOK = false, sched = null;
+const WORKLET = `
+class StrataBand extends AudioWorkletProcessor {
+  constructor() { super(); this.p = { thr: -18, ra: 2, rb: 1, att: 10, rel: 120, knee: 6, range: 24, makeup: 0, route: 0, ext: 0, bypass: 0, listen: 0, look: 5 };
+    this.env = -120; this.n = 0; this.grAcc = 0; this.lvAcc = 0; this.size = 2048; this.bl = new Float32Array(this.size); this.br = new Float32Array(this.size); this.w = 0;
+    this.port.onmessage = e => Object.assign(this.p, e.data); }
+  curve(x) { const p = this.p, T = p.thr, k = Math.max(0.01, p.knee); const ya = T + (x - T) / p.ra, yb = T + (x - T) / p.rb;
+    let s = (x - (T - k / 2)) / k; s = s < 0 ? 0 : s > 1 ? 1 : s; const wgt = s * s * (3 - 2 * s); let g = yb * (1 - wgt) + ya * wgt - x;
+    g = Math.max(-p.range, Math.min(p.range, g)); if (g > 0) g *= Math.max(0, Math.min(1, (x + 90) / 18)); return g; }
+  process(inputs, outputs) {
+    const p = this.p, inp = inputs[0], key = inputs[1], out = outputs[0]; const L = inp[0], R = inp[1] || inp[0];
+    const oL = out[0], oR = out[1] || out[0]; if (!L) { oL.fill(0); if (oR !== oL) oR.fill(0); return true; }
+    const kL = key && key[0], kR = key && (key[1] || key[0]);
+    const ca = Math.exp(-1 / (Math.max(0.05, p.att) * sampleRate / 1000)), cr = Math.exp(-1 / (Math.max(1, p.rel) * sampleRate / 1000));
+    const d = Math.min(this.size - 1, Math.round(p.look * sampleRate / 1000));
+    for (let i = 0; i < L.length; i++) {
+      const l = L[i], r = R[i], m = (l + r) * 0.5, s = (l - r) * 0.5; let det;
+      if (p.ext && kL) det = Math.max(Math.abs(kL[i]), Math.abs(kR[i]));
+      else det = p.route === 1 ? Math.abs(m) : p.route === 2 ? Math.abs(s) : p.route === 3 ? Math.abs(l) : p.route === 4 ? Math.abs(r) : Math.max(Math.abs(l), Math.abs(r));
+      const x = 20 * Math.log10(det + 1e-9); this.env = x > this.env ? ca * this.env + (1 - ca) * x : cr * this.env + (1 - cr) * x;
+      const gdb = p.bypass ? 0 : this.curve(this.env); const g = Math.pow(10, (gdb + (p.bypass ? 0 : p.makeup)) / 20);
+      this.bl[this.w] = l; this.br[this.w] = r; const ri = (this.w - d + this.size) % this.size; this.w = (this.w + 1) % this.size;
+      const dl = this.bl[ri], dr = this.br[ri]; let yl, yr;
+      if (p.route === 1) { const dm = (dl + dr) * 0.5 * g, ds = (dl - dr) * 0.5; yl = dm + ds; yr = dm - ds; }
+      else if (p.route === 2) { const dm = (dl + dr) * 0.5, ds = (dl - dr) * 0.5 * g; yl = dm + ds; yr = dm - ds; }
+      else if (p.route === 3) { yl = dl * g; yr = dr; } else if (p.route === 4) { yl = dl; yr = dr * g; } else { yl = dl * g; yr = dr * g; }
+      if (p.listen) { yl = yl - dl; yr = yr - dr; }
+      oL[i] = yl; if (oR !== oL) oR[i] = yr; this.grAcc += gdb; this.lvAcc += this.env; this.n++;
+    }
+    if (this.n >= 1024) { this.port.postMessage({ gr: this.grAcc / this.n, lvl: this.lvAcc / this.n }); this.n = 0; this.grAcc = 0; this.lvAcc = 0; }
+    return true; }
+}
+registerProcessor("strata-band", StrataBand);`;
+const ROUTE = { stereo: 0, mid: 1, side: 2, left: 3, right: 4 };
+
+async function initAudio() {
+  actx = new (window.AudioContext || window.webkitAudioContext)();
+  try { const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" })); await actx.audioWorklet.addModule(url); workletOK = true; } catch (e) { workletOK = false; flash("This browser can't run the band processors; playing dry"); }
+  node.kick = actx.createGain(); node.hats = actx.createGain(); node.bass = actx.createGain(); node.pad = actx.createGain();
+  node.mixBus = actx.createGain(); [node.kick, node.hats, node.bass, node.pad].forEach(n => n.connect(node.mixBus));
+  node.inGain = actx.createGain(); node.mixBus.connect(node.inGain);
+  an.pre = actx.createAnalyser(); an.pre.fftSize = 8192; an.pre.smoothingTimeConstant = 0.82; node.inGain.connect(an.pre);
+  node.wet = actx.createGain(); node.wetMix = actx.createGain(); node.wet.connect(node.wetMix);
+  node.dryDelay = actx.createDelay(0.05); node.dryMix = actx.createGain(); node.inGain.connect(node.dryDelay); node.dryDelay.connect(node.dryMix);
+  node.out = actx.createGain(); node.wetMix.connect(node.out); node.dryMix.connect(node.out);
+  node.byp = actx.createGain(); node.byp.gain.value = 0; node.mixBus.connect(node.byp);
+  node.master = actx.createGain(); node.out.connect(node.master); node.byp.connect(node.master);
+  an.post = actx.createAnalyser(); an.post.fftSize = 8192; an.post.smoothingTimeConstant = 0.82; node.master.connect(an.post); node.master.connect(actx.destination);
+  an.preBuf = new Float32Array(an.pre.frequencyBinCount); an.postBuf = new Float32Array(an.post.frequencyBinCount);
+  an.preT = new Float32Array(2048); an.postT = new Float32Array(2048);
+  node.noise = actx.createBuffer(1, actx.sampleRate, actx.sampleRate); const nd = node.noise.getChannelData(0); let seed = 7;
+  for (let i = 0; i < nd.length; i++) { seed = (seed * 16807) % 2147483647; nd[i] = seed / 1073741823.5 - 1; }
+  buildBands(); pushGlobal();
+}
+function lr4(type, f) { const a = actx.createBiquadFilter(), b = actx.createBiquadFilter(); a.type = b.type = type; a.Q.value = b.Q.value = Math.SQRT1_2; a.frequency.value = b.frequency.value = f; a.connect(b); return [a, b]; }
+function buildBands() {
+  if (!actx) return;
+  chains.forEach(c => { try { c.head.disconnect(); c.proc.disconnect(); c.outG.disconnect(); if (c.keyFrom) c.keyFrom.disconnect(c.keyNode); } catch (e) {} });
+  try { node.inGain.disconnect(); } catch (e) {}
+  node.inGain.connect(an.pre); node.inGain.connect(node.dryDelay);
+  chains = []; live.gr = []; live.lvl = [];
+  S.bands.forEach((b, i) => {
+    const filters = []; let head = null, tail = null;
+    const add = pair => { if (!head) head = pair[0]; else tail.connect(pair[0]); tail = pair[1]; filters.push(...pair); };
+    if (i > 0) add(lr4("highpass", S.xo[i - 1]));
+    if (i < S.bands.length - 1) add(lr4("lowpass", S.xo[i]));
+    if (!head) { head = actx.createGain(); tail = head; }
+    node.inGain.connect(head);
+    const proc = workletOK ? new AudioWorkletNode(actx, "strata-band", { numberOfInputs: 2, numberOfOutputs: 1, outputChannelCount: [2] }) : actx.createGain();
+    tail.connect(proc, 0, 0);
+    const outG = actx.createGain(); proc.connect(outG); outG.connect(node.wet);
+    const c = { head, filters, proc, outG, keyNode: proc, keyFrom: null, i };
+    if (workletOK) {
+      const src = b.key === "wide" ? node.inGain : b.key === "kick" ? node.kick : b.key === "hats" ? node.hats : b.key === "bass" ? node.bass : null;
+      if (src) { src.connect(proc, 0, 1); c.keyFrom = src; }
+      proc.port.onmessage = e => { live.gr[i] = live.gr[i] === undefined ? e.data.gr : live.gr[i] * 0.6 + e.data.gr * 0.4; live.lvl[i] = e.data.lvl; if (autoRun && autoRun.acc[i]) autoRun.acc[i].push(e.data.lvl); };
+    }
+    chains.push(c); pushBand(i);
+  });
+  pushRouting();
+}
+function pushBand(i) { const c = chains[i], b = S.bands[i]; if (!c || !workletOK) return;
+  c.proc.port.postMessage({ thr: b.thr, ra: b.ra, rb: b.rb, att: b.att, rel: b.rel, knee: b.knee, range: b.range, makeup: b.makeup, route: ROUTE[b.route], ext: b.key !== "band" ? 1 : 0, bypass: b.bypass ? 1 : 0, listen: S.listen ? 1 : 0, look: S.look }); }
+function pushAllBands() { S.bands.forEach((_, i) => pushBand(i)); }
+function pushCrossovers() { chains.forEach((c, i) => { let k = 0;
+  if (i > 0) { c.filters[k++].frequency.value = S.xo[i - 1]; c.filters[k++].frequency.value = S.xo[i - 1]; }
+  if (i < S.bands.length - 1) { c.filters[k++].frequency.value = S.xo[i]; c.filters[k++].frequency.value = S.xo[i]; } }); }
+function pushRouting() { const anySolo = S.bands.some(b => b.solo); chains.forEach((c, i) => { const b = S.bands[i]; c.outG.gain.value = b.mute || (anySolo && !b.solo) ? 0 : 1; }); renderStrip(); }
+function pushGlobal() { if (!actx) return; const t = actx.currentTime;
+  node.inGain.gain.setTargetAtTime(Math.pow(10, S.input / 20), t, 0.02);
+  const listenDry = S.listen ? 0 : 1 - S.mix; node.wetMix.gain.setTargetAtTime(S.listen ? 1 : S.mix, t, 0.02); node.dryMix.gain.setTargetAtTime(listenDry, t, 0.02);
+  node.dryDelay.delayTime.setTargetAtTime(S.look / 1000, t, 0.01);
+  const ag = S.autoGain && !S.listen ? live.agDb : 0;
+  node.out.gain.setTargetAtTime(S.bypass ? 0 : Math.pow(10, (S.output + ag) / 20), t, 0.05); node.byp.gain.setTargetAtTime(S.bypass ? 1 : 0, t, 0.02); }
+
+// ---------- the loop: 126 BPM minimal: kick, hats, offbeat bass, dub stab ----------
+const STEP = 60 / BPM / 4;
+function playKick(t) { const o = actx.createOscillator(), g = actx.createGain(); o.frequency.setValueAtTime(155, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.09);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.95, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.38); o.connect(g); g.connect(node.kick); o.start(t); o.stop(t + 0.4);
+  const c = actx.createBufferSource(), cg = actx.createGain(), hp = actx.createBiquadFilter(); c.buffer = node.noise; hp.type = "highpass"; hp.frequency.value = 2500; cg.gain.setValueAtTime(0.18, t); cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.012); c.connect(hp); hp.connect(cg); cg.connect(node.kick); c.start(t, 0.1, 0.02); }
+function playHat(t, open, pan, v) { const s = actx.createBufferSource(), hp = actx.createBiquadFilter(), g = actx.createGain(), p = actx.createStereoPanner(); s.buffer = node.noise; hp.type = "highpass"; hp.frequency.value = open ? 6500 : 8500;
+  const len = open ? 0.13 : 0.035; g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + len); p.pan.value = pan; s.connect(hp); hp.connect(g); g.connect(p); p.connect(node.hats); s.start(t, (t * 7.3) % 0.8, len + 0.02); }
+function playBass(t, f) { const o = actx.createOscillator(), lp = actx.createBiquadFilter(), g = actx.createGain(); o.type = "sawtooth"; o.frequency.value = f; lp.type = "lowpass"; lp.Q.value = 5; lp.frequency.setValueAtTime(900, t); lp.frequency.exponentialRampToValueAtTime(140, t + 0.16);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.42, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2); o.connect(lp); lp.connect(g); g.connect(node.bass); o.start(t); o.stop(t + 0.22); }
+function playStab(t) { [220, 261.63, 329.63, 392, 493.88].forEach((f, k) => { const o = actx.createOscillator(), lp = actx.createBiquadFilter(), g = actx.createGain(), p = actx.createStereoPanner(); o.type = "sawtooth"; o.frequency.value = f * (1 + (k - 2) * 0.0015);
+  lp.type = "lowpass"; lp.frequency.setValueAtTime(2200, t); lp.frequency.exponentialRampToValueAtTime(350, t + 0.5); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.06, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+  p.pan.value = (k - 2) * 0.25; o.connect(lp); lp.connect(g); g.connect(p); p.connect(node.pad); o.start(t); o.stop(t + 0.75); }); }
+const BASS = { 2: 55, 6: 55, 10: 55, 14: 65.41, 15: 55 };
+let step = 0, nextT = 0;
+function scheduler() {
+  while (nextT < actx.currentTime + 0.12) {
+    const s = step % 32, sb = s % 16;
+    if (sb % 4 === 0) playKick(nextT);
+    if (sb % 4 === 2) playHat(nextT, true, 0.2, 0.22); else playHat(nextT, false, sb % 2 ? -0.35 : 0.3, sb % 4 === 3 ? 0.11 : 0.06);
+    if (BASS[sb] && !(s === 31)) playBass(nextT, BASS[sb]);
+    if (s === 3 || s === 22) playStab(nextT);
+    step++; nextT += STEP;
+  }
+}
+$("play").onclick = async () => {
+  if (!actx) await initAudio();
+  if (actx.state === "suspended") await actx.resume();
+  S.playing = !S.playing; $("play").classList.toggle("on", S.playing); $("play").textContent = S.playing ? "■ Stop" : "▶ Play";
+  if (S.playing) { step = 0; nextT = actx.currentTime + 0.05; sched = setInterval(scheduler, 25); scheduler(); } else { clearInterval(sched); live.gr = []; }
+};
+$("ab").onclick = () => { S.bypass = !S.bypass; $("ab").textContent = S.bypass ? "A/B · Bypassed" : "A/B · On"; $("ab").classList.toggle("on", S.bypass); pushGlobal(); };
+$("delta").onclick = () => { S.listen = !S.listen; $("delta").classList.toggle("on", S.listen); pushAllBands(); pushGlobal(); };
+$("autoGain").onclick = () => { S.autoGain = !S.autoGain; $("autoGain").classList.toggle("on", S.autoGain); pushGlobal(); };
+
+// ---------- auto threshold ----------
+let autoRun = null; const AUTO_MS = 4000, AUTO_ABOVE_DB = 4;
+$("autoThr").onclick = async () => {
+  if (!S.playing) await $("play").onclick();
+  if (!workletOK) return flash("Auto threshold needs the band processors");
+  autoRun = { t0: performance.now(), acc: S.bands.map(() => []) }; $("autoProg").hidden = false; $("autoThr").classList.add("on"); $("autoThr").textContent = "Listening…";
+};
+function stepAuto() {
+  if (!autoRun) return; const k = (performance.now() - autoRun.t0) / AUTO_MS; $("autoProg").firstElementChild.style.width = clamp(k, 0, 1) * 100 + "%";
+  if (k < 1) return;
+  takeOver();
+  autoRun.acc.forEach((a, i) => { if (!a.length || !S.bands[i]) return; const sorted = a.slice().sort((x, y) => x - y); const p75 = sorted[Math.floor(sorted.length * 0.75)];
+    S.bands[i].thr = clamp(p75 - AUTO_ABOVE_DB, CURVE_MIN, -1); pushBand(i); });
+  autoRun = null; $("autoProg").hidden = true; $("autoThr").classList.remove("on"); $("autoThr").textContent = "Auto threshold"; refreshInspector(true); flash("Thresholds set from 4 s of playing");
+}
+
+// ---------- meters + auto gain ----------
+function rms(an_, buf, ch) { an_.getFloatTimeDomainData(buf); let s = 0; for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i]; return 10 * Math.log10(s / buf.length + 1e-12); }
+function meters() {
+  if (!actx || !S.playing) { ["mInL", "mInR", "mOutL", "mOutR"].forEach(id => $(id).style.width = "0"); return; }
+  const pre = rms(an.pre, an.preT), post = rms(an.post, an.postT);
+  const pct = db => clamp((db + 48) / 48 * 100, 0, 100) + "%";
+  $("mInL").style.width = $("mInR").style.width = pct(pre + 3); $("mOutL").style.width = $("mOutR").style.width = pct(post + 3);
+  live.preRms = live.preRms * 0.97 + pre * 0.03; live.postRms = live.postRms * 0.97 + (post - (S.autoGain && !S.listen ? live.agDb : 0)) * 0.03;
+  if (S.autoGain && !S.bypass && !S.listen) { live.agDb = clamp(live.agDb * 0.9 + clamp(live.preRms - live.postRms, -12, 12) * 0.1, -12, 12); pushGlobal(); }
+  $("agRead").textContent = "auto gain " + (S.autoGain ? (live.agDb >= 0 ? "+" : "") + live.agDb.toFixed(1) + " dB" : "off");
+}
+
+// ---------- frame ----------
+function frame() { drawSpectrum(); drawCurve(); meters(); stepAuto(); requestAnimationFrame(frame); }
+window.addEventListener("resize", renderStrip);
+loadPreset(1);
+requestAnimationFrame(frame);
+</script>

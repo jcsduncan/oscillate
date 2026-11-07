@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nova Panel Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* Nova: the flagship synth's device panel, in the house synth-panel style
+   (navy plate, section cards, wordmark, preset bar with a "touch a control"
+   readout, Live badge, ringed knobs). Accent: cyan for values, violet for
+   modulation (every knob shows its modulation ring), amber for time. */
+:root{
+  color-scheme:dark;
+  --bg:#070b16; --plate:#0d1426; --card:#111a2e; --card2:#14203a; --well:#080e1c; --line:#1f2c46; --line2:#2b3c5c;
+  --text:#e6ecf5; --dim:#8d9ab0; --faint:#5e6b82;
+  --cy:#46d6ff; --cy-soft:rgba(70,214,255,.14); --vi:#a98bff; --vi-soft:rgba(169,139,255,.16); --am:#f5b14c; --red:#ff6b7a; --live:#4fd18b;
+  --sans:Inter,system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--bg);color:var(--text);font:12px var(--sans);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.wrap{padding:16px;display:flex;flex-direction:column;align-items:center;gap:14px;overflow-x:auto}
+@media (max-width:1400px){.wrap{align-items:flex-start}}
+.notes{max-width:1360px;width:100%;color:var(--dim);font-size:12px;line-height:1.55}
+.notes b{color:var(--text)}
+.panel{flex:none;width:1360px;height:880px;border-radius:14px;background:radial-gradient(120% 90% at 20% 0%,#111c36 0%,var(--plate) 55%,#0a1020 100%);border:1px solid #1a2640;box-shadow:0 30px 80px rgba(0,0,0,.55);position:relative;overflow:hidden;display:flex;flex-direction:column}
+
+/* ---------- Header ---------- */
+.hdr{height:64px;display:flex;align-items:center;gap:14px;padding:0 16px;border-bottom:1px solid var(--line)}
+.word{display:flex;flex-direction:column;gap:1px;width:190px}
+.word b{font-size:26px;font-weight:300;letter-spacing:.42em;background:linear-gradient(90deg,#9fe9ff,#46d6ff 40%,#a98bff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.word span{font-size:8.5px;letter-spacing:.24em;color:var(--dim);font-weight:700}
+.preset{flex:0 0 440px;height:44px;display:flex;align-items:stretch;border:1px solid var(--line2);border-radius:9px;background:var(--well);overflow:hidden}
+.preset button.arr{width:34px;border:0;background:#0f1830;color:var(--dim)}
+.preset .pm{flex:1;padding:5px 12px;display:flex;flex-direction:column;justify-content:center;border-right:1px solid var(--line)}
+.preset .pm small{font-size:8.5px;letter-spacing:.16em;color:var(--faint);font-weight:700}
+.preset .pm b{font-size:15px;font-weight:600}
+.preset .touch{width:170px;padding:5px 10px;display:flex;flex-direction:column;justify-content:center}
+.preset .touch small{font-size:8.5px;letter-spacing:.16em;color:var(--faint);font-weight:700}
+.preset .touch b{font-family:var(--mono);font-size:12px;color:var(--cy);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tabs{display:flex;gap:3px;background:var(--well);border:1px solid var(--line);border-radius:9px;padding:3px;margin-left:6px}
+.tabs button{height:32px;padding:0 14px;border:0;border-radius:6px;background:none;color:var(--dim);font-size:11px;font-weight:700;letter-spacing:.14em}
+.tabs button[aria-pressed=true]{background:#1a2848;color:var(--text);box-shadow:inset 0 -2px 0 var(--cy)}
+.spacer{flex:1}
+.stat{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:10px;color:var(--dim)}
+.stat .mono{color:var(--text);font-size:11px}
+.live{height:26px;padding:0 10px;border-radius:13px;border:1px solid var(--live);color:var(--live);display:flex;align-items:center;gap:6px;font-weight:600}
+.live::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--live)}
+
+/* ---------- Pages ---------- */
+.page{flex:1;min-height:0;padding:12px;display:flex;flex-direction:column;gap:10px}
+.row{display:flex;gap:10px;min-height:0}
+.card{background:linear-gradient(180deg,var(--card) 0%,#0f182b 100%);border:1px solid var(--line);border-radius:11px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;min-width:0;position:relative}
+.card.off{opacity:.45}
+.ch{display:flex;align-items:center;gap:8px;min-height:22px}
+.ch .ttl{font-size:10px;font-weight:800;letter-spacing:.2em}
+.ch .sub{font-size:9.5px;color:var(--faint);letter-spacing:.06em}
+.led{width:13px;height:13px;border-radius:4px;border:1px solid var(--line2);background:var(--well);padding:0}
+.led.on{background:var(--cy);border-color:var(--cy);box-shadow:0 0 8px rgba(70,214,255,.55)}
+.dd{height:24px;padding:0 22px 0 9px;border-radius:6px;border:1px solid var(--line2);background:var(--well) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%238d9ab0'/%3E%3C/svg%3E") no-repeat right 8px center;color:var(--text);font-size:11px;font-weight:500;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;appearance:none}
+.dd.accent{border-color:#2c5f74;color:var(--cy)}
+.pill{height:22px;padding:0 8px;border-radius:6px;border:1px solid var(--line2);background:var(--well);color:var(--dim);font-size:10px;font-weight:700;letter-spacing:.06em}
+.pill.on{border-color:var(--cy);color:var(--cy);background:var(--cy-soft)}
+.segs{display:flex;border:1px solid var(--line2);border-radius:6px;overflow:hidden}
+.segs button{height:22px;padding:0 7px;white-space:nowrap;border:0;background:var(--well);color:var(--dim);font-size:10px;font-weight:600}
+.segs button[aria-pressed=true]{background:#1a2848;color:var(--cy)}
+.disp{background:var(--well);border:1px solid var(--line);border-radius:8px;position:relative;overflow:hidden}
+.disp canvas{display:block;width:100%;height:100%}
+.disp .tag{position:absolute;left:8px;top:6px;font-size:8.5px;letter-spacing:.14em;color:var(--faint);font-weight:700}
+.disp .tagr{position:absolute;right:8px;top:6px;font-size:10px;color:var(--cy);font-family:var(--mono)}
+.knobs{display:flex;gap:4px;align-items:flex-start}
+.knobs.spread{justify-content:space-between}
+.grp{display:flex;flex-direction:column;gap:4px;border-left:1px solid var(--line);padding-left:8px}
+.grp .gl{font-size:8.5px;letter-spacing:.16em;color:var(--faint);font-weight:800}
+
+/* Knob: value arc (cyan), modulation arc (violet, outer), body, pointer. */
+.k{display:flex;flex-direction:column;align-items:center;gap:1px;width:46px;user-select:none}
+.k.big{width:64px}
+.k.sm{width:38px}
+.k svg{overflow:visible;cursor:ns-resize}
+.k .kl{font-size:8.5px;font-weight:700;letter-spacing:.1em;color:var(--dim);white-space:nowrap}
+.k .kv{font-size:9.5px;font-family:var(--mono);color:var(--faint);white-space:nowrap;height:12px}
+.k.touched .kv{color:var(--cy)}
+.k.drop svg .body{stroke:var(--vi);stroke-width:2}
+.k-track{fill:none;stroke:#1c2944;stroke-linecap:round}
+.k-val{fill:none;stroke:var(--cy);stroke-linecap:round}
+.k-mod{fill:none;stroke:var(--vi);stroke-linecap:round;opacity:.95}
+.k-modlive{fill:var(--vi)}
+.body{fill:url(#kbody);stroke:#2a3a58}
+.ptr{stroke:#eef4fb;stroke-linecap:round}
+.modbadge{position:absolute;font-size:8px;font-family:var(--mono);color:var(--vi)}
+
+/* Mod sources: drag the ✥ onto any knob. */
+.src{white-space:nowrap;flex:none;display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px 0 4px;border-radius:6px;border:1px solid var(--line2);background:var(--well);font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--dim)}
+.src .hdl{width:16px;height:16px;border-radius:4px;display:grid;place-items:center;background:var(--vi-soft);color:var(--vi);cursor:grab;font-size:11px}
+.src.on{border-color:#3c3466;color:var(--text)}
+.src .cnt{font-family:var(--mono);color:var(--vi);font-size:9px}
+
+/* Mod strip (bottom of the OSC page). */
+.modtabs{display:flex;gap:3px;flex-wrap:wrap}
+.modtabs button{white-space:nowrap;height:24px;padding:0 3px 0 7px;border-radius:6px;border:1px solid var(--line2);background:var(--well);color:var(--dim);font-size:10px;font-weight:700;letter-spacing:.06em;display:inline-flex;align-items:center;gap:6px}
+.modtabs button[aria-pressed=true]{border-color:var(--vi);color:var(--text);background:#1a1738}
+.modtabs .hdl{width:16px;height:16px;border-radius:4px;display:grid;place-items:center;background:var(--vi-soft);color:var(--vi);cursor:grab;font-size:10px}
+.lfo{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:10px;flex:1;min-height:0}
+.lfo-tools{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.macros{display:grid;grid-template-columns:repeat(4,1fr);gap:4px 2px}
+.macro{display:flex;flex-direction:column;align-items:center}
+.macro .mn{font-size:9px;color:var(--text);font-weight:600;max-width:72px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* FX page */
+.bus{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-content:start}
+.fx{min-width:0}
+.fx .ch .ttl{color:var(--cy)}
+.addfx{grid-column:1/-1;height:44px;background:none;border:1px dashed var(--line2);border-radius:11px;display:grid;place-items:center;color:var(--faint);font-weight:600}
+.chev{align-self:center;color:var(--faint);font-size:14px}
+
+/* Matrix */
+table{width:100%;border-collapse:collapse}
+th{font-size:9px;letter-spacing:.14em;color:var(--faint);text-align:left;font-weight:800;padding:6px 8px;border-bottom:1px solid var(--line2)}
+td{padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.amt{position:relative;height:16px;width:180px;background:var(--well);border:1px solid var(--line);border-radius:4px}
+.amt i{position:absolute;top:2px;bottom:2px;background:var(--vi);border-radius:2px}
+.amt::after{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--line2)}
+
+/* Arp / clip */
+.pr{display:grid;grid-template-columns:44px minmax(0,1fr)}
+
+/* Wavetable editor overlay */
+.ed{position:absolute;inset:60px 40px 40px;background:#0b1224;border:1px solid var(--line2);border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.6);z-index:30;display:flex;flex-direction:column;padding:14px;gap:10px}
+.frames{display:flex;gap:4px;overflow-x:auto;padding-bottom:4px}
+.frames canvas{flex:none;width:64px;height:44px;border-radius:5px;border:1px solid var(--line);background:var(--well);cursor:pointer}
+.frames canvas.sel{border-color:var(--cy)}
+
+/* Route popover on knob hover */
+.pop{position:absolute;z-index:40;background:#0b1224;border:1px solid var(--line2);border-radius:9px;padding:8px 10px;min-width:200px;box-shadow:0 12px 30px rgba(0,0,0,.5);pointer-events:none}
+.pop .r{display:flex;align-items:center;gap:8px;font-size:11px;padding:2px 0}
+.pop .r i{flex:1;height:4px;border-radius:2px;background:var(--line)}
+.pop .r i b{display:block;height:100%;background:var(--vi);border-radius:2px}
+.dragghost{position:fixed;z-index:60;pointer-events:none;padding:3px 8px;border-radius:6px;background:var(--vi);color:#120a2a;font-weight:800;font-size:10px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs>
+  <radialGradient id="kbody" cx=".38" cy=".32" r=".85"><stop offset="0" stop-color="#2e3d5c"/><stop offset=".6" stop-color="#16213a"/><stop offset="1" stop-color="#0c1324"/></radialGradient>
+</defs></svg>
+<div class="wrap">
+<div class="notes"><b>Nova</b>: panel design, version 1. Drag any <b style="color:var(--vi)">✥</b> source (LFO, envelope, macro, velocity…) onto a knob to modulate it; drag on the knob's violet ring to set the depth. Hover a modulated knob to see its routes. Tabs: <b>OSC</b> (sound sources, filters, modulation), <b>FX</b>, <b>MATRIX</b>, <b>ARP · CLIP</b>, <b>GLOBAL</b>. The pencil on a wavetable opens the editor. Every control here maps to the spec.</div>
+<div class="panel" id="panel">
+  <header class="hdr">
+    <div class="word"><b>NOVA</b><span>FLAGSHIP SYNTH</span></div>
+    <div class="preset"><button class="arr" aria-label="Previous preset">◀</button>
+      <div class="pm"><small>BASS · FACTORY</small><b>Glass Reese</b></div>
+      <div class="touch"><small>TOUCH A CONTROL</small><b id="touch">—</b></div>
+      <button class="arr" aria-label="Next preset">▶</button><button class="arr" aria-label="Browse presets" style="width:40px">☰</button></div>
+    <nav class="tabs" id="tabs"><button data-p="osc" aria-pressed="true">OSC</button><button data-p="fx" aria-pressed="false">FX</button><button data-p="matrix" aria-pressed="false">MATRIX</button><button data-p="arp" aria-pressed="false">ARP · CLIP</button><button data-p="global" aria-pressed="false">GLOBAL</button></nav>
+    <div class="spacer"></div>
+    <div class="stat"><span>VOICES <span class="mono" id="vox">3 / 16</span></span><span>CPU <span class="mono">7 %</span></span></div>
+    <div id="masterK"></div>
+    <div class="live">Live</div>
+  </header>
+
+  <!-- ================= OSC ================= -->
+  <section class="page" id="p-osc">
+    <div class="row" style="height:330px">
+      <div class="card" id="oscA" style="flex:1"></div>
+      <div class="card" id="oscB" style="flex:1"></div>
+      <div class="card" id="oscC" style="flex:1"></div>
+      <div class="card" style="width:150px;flex:none" id="subnoise"></div>
+    </div>
+    <div class="row" style="height:178px">
+      <div class="card" style="flex:1" id="f1"></div>
+      <div class="card" style="flex:1" id="f2"></div>
+      <div class="card" style="width:200px;flex:none" id="route"></div>
+    </div>
+    <div class="row" style="flex:1;min-height:0">
+      <div class="card" style="flex:1" id="modstrip"></div>
+      <div class="card" style="width:330px;flex:none" id="macros"></div>
+    </div>
+  </section>
+
+  <!-- ================= FX ================= -->
+  <section class="page" id="p-fx" hidden>
+    <div class="row" style="align-items:center;gap:8px"><span class="ch"><span class="ttl">EFFECTS</span><span class="sub">DRAG TO REORDER · EACH BUS RUNS IN SERIES · BUSES SUM INTO MAIN</span></span><span class="spacer"></span>
+      <div class="segs" id="busSel"><button aria-pressed="true">MAIN</button><button aria-pressed="false">BUS 1</button><button aria-pressed="false">BUS 2</button></div>
+      <button class="pill">SPLIT LOW/HIGH</button><button class="pill on">OVERSAMPLE 2×</button></div>
+    <div class="bus" id="bus"></div>
+  </section>
+
+  <!-- ================= MATRIX ================= -->
+  <section class="page" id="p-matrix" hidden><div class="card" style="flex:1;overflow:auto" id="matrix"></div></section>
+
+  <!-- ================= ARP ================= -->
+  <section class="page" id="p-arp" hidden></section>
+
+  <!-- ================= GLOBAL ================= -->
+  <section class="page" id="p-global" hidden></section>
+
+  <div class="ed" id="editor" hidden></div>
+  <div class="pop" id="pop" hidden></div>
+</div>
+</div>
+
+<script>
+"use strict";
+/* ================= Parameter store and modulation routes ================= */
+const P={};const DEF={};const ROUTES=[];      // {src, dst, amt (−1..1)}
+function def(id,label,v,fmt){P[id]=v;DEF[id]={label,v,fmt:fmt||(x=>Math.round(x*100)+'%')};}
+const SRC_COLOR='var(--vi)';
+// LFO and envelope live values for the demo animation.
+const LIVE={};
+function routesTo(id){return ROUTES.filter(r=>r.dst===id);}
+function routesFrom(src){return ROUTES.filter(r=>r.src===src);}
+
+/* ================= Knob component ================= */
+function arc(r,a0,a1,c){const p=a=>[c+r*Math.sin(a*Math.PI/180),c-r*Math.cos(a*Math.PI/180)];const s=p(a0),e=p(a1);return`M${s[0].toFixed(2)} ${s[1].toFixed(2)}A${r} ${r} 0 ${Math.abs(a1-a0)>180?1:0} ${a1>a0?1:0} ${e[0].toFixed(2)} ${e[1].toFixed(2)}`;}
+function knobHTML(id,label,size,bip){
+  const s=size==='big'?54:size==='sm'?30:38;
+  return`<div class="k ${size||''}" data-k="${id}" data-bip="${bip?1:''}"><svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}" data-s="${s}"></svg><span class="kl">${label}</span><span class="kv"></span></div>`;}
+function paintKnob(el){
+  const id=el.dataset.k,svg=el.querySelector('svg'),s=+svg.dataset.s,c=s/2,v=P[id],bip=!!el.dataset.bip;
+  const rT=c-5,rM=c-1.5,w=s>40?3.5:3;const a=-135+270*v;
+  let h=`<path class="k-track" stroke-width="${w}" d="${arc(rT,-135,135,c)}"/>`;
+  const f=bip?0:-135;h+=`<path class="k-val" stroke-width="${w}" d="${arc(rT,Math.min(f,a),Math.max(f,a)+.01,c)}"/>`;
+  // modulation: outer violet arc from the value over each route's depth, plus a live dot
+  routesTo(id).forEach(r=>{const a1=Math.max(-135,Math.min(135,a+270*r.amt));h+=`<path class="k-mod" stroke-width="2" d="${arc(rM,Math.min(a,a1),Math.max(a,a1)+.01,c)}"/>`;
+    const lv=(LIVE[r.src]??0)*r.amt;const al=Math.max(-135,Math.min(135,a+270*lv));const p=[c+rM*Math.sin(al*Math.PI/180),c-rM*Math.cos(al*Math.PI/180)];h+=`<circle class="k-modlive" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.2"/>`;});
+  h+=`<circle class="body" cx="${c}" cy="${c}" r="${rT-5}"/><line class="ptr" stroke-width="2" x1="${c}" y1="${c}" x2="${c}" y2="${c-rT+8}" transform="rotate(${a} ${c} ${c})"/>`;
+  svg.innerHTML=h;el.querySelector('.kv').textContent=DEF[id].fmt(v);}
+function paintAll(){document.querySelectorAll('[data-k]').forEach(paintKnob);}
+
+/* ================= Definitions ================= */
+const pct=x=>Math.round(x*100)+'%',st=n=>x=>(x>=.5?'+':'−')+Math.abs(Math.round((x-.5)*2*n))+(n===24?' st':n===100?' ct':''),db=x=>x<.01?'−∞':(x>=.75?'+':'−')+Math.abs((x-.75)*48).toFixed(1)+' dB',hz=x=>{const f=20*Math.pow(1000,x);return f>=1000?(f/1000).toFixed(1)+' kHz':Math.round(f)+' Hz';};
+const OSCS=['A','B','C'];
+const TYPES=['Classic','Wavetable','Sample','Multisample','Granular','Spectral'];
+const TABLES=['Basic Shapes','Glass Formant','Reese Saw','Vowel Morph','FM Bell','Grit Fold','Spectral Pad','Analog Pulse'];
+const WARPS=['Off','Bend +','Bend −','Sync','Window Sync','Mirror','Asym','Quantise','PWM','FM ← B','PM ← B','AM ← B','RM ← B','Flip','Remap','Fold'];
+const STATE={osc:{A:{type:'Wavetable',table:'Reese Saw',on:true,w1:'Bend +',w2:'FM ← B',shape:'Saw'},B:{type:'Classic',table:'Basic Shapes',on:true,w1:'Off',w2:'Off',shape:'Saw'},C:{type:'Granular',table:'Spectral Pad',on:false,w1:'Off',w2:'Off',shape:'Sine'}},
+  modTab:'LFO 1',page:'osc',lfoPts:{},env:{}};
+OSCS.forEach((o,i)=>{def(`${o}.pos`,'POS',[.32,.0,.55][i]);def(`${o}.warp1`,'WARP 1',[.35,0,0][i]);def(`${o}.warp2`,'WARP 2',[.22,0,0][i]);def(`${o}.level`,'LEVEL',[.78,.6,.5][i]);def(`${o}.pan`,'PAN',.5,x=>x===.5?'C':(x<.5?'L':'R')+Math.round(Math.abs(x-.5)*200));
+  def(`${o}.voices`,'VOICES',[.4,.13,0][i],x=>String(1+Math.round(x*15)));def(`${o}.detune`,'DETUNE',[.36,.2,.1][i]);def(`${o}.blend`,'BLEND',.6);def(`${o}.width`,'WIDTH',.8);def(`${o}.spread`,'SPREAD',[.25,0,0][i]);
+  def(`${o}.oct`,'OCT',[.5,.33,.5][i],x=>{const n=Math.round((x-.5)*8);return(n>0?'+':'')+n;});def(`${o}.semi`,'SEMI',.5,st(24));def(`${o}.fine`,'FINE',[.5,.53,.5][i],st(100));def(`${o}.phase`,'PHASE',.0,x=>Math.round(x*360)+'°');def(`${o}.rand`,'RAND',[1,.3,1][i]);
+  def(`${o}.pw`,'PW',.5);def(`${o}.sync`,'SYNC',0,x=>(1+x*7).toFixed(2)+'×');def(`${o}.drift`,'DRIFT',.2);
+  def(`${o}.gsize`,'SIZE',.4,x=>Math.round(10+x*490)+' ms');def(`${o}.gdens`,'DENSITY',.6);def(`${o}.gscan`,'SCAN',.3);def(`${o}.gspray`,'SPRAY',.25);});
+def('sub.level','LEVEL',.45);def('sub.oct','OCT',.33,x=>['−2','−1','0'][Math.round(x*2)]);def('noise.level','LEVEL',.12);def('noise.pitch','PITCH',.6);def('noise.tone','TONE',.7);
+['1','2'].forEach((f,i)=>{def(`f${f}.cut`,'CUTOFF',[.62,.45][i],hz);def(`f${f}.res`,'RES',[.32,.6][i]);def(`f${f}.drive`,'DRIVE',[.2,0][i]);def(`f${f}.fat`,'FAT',[.0,.3][i]);def(`f${f}.mix`,'MIX',1);def(`f${f}.key`,'KEY',.0);def(`f${f}.pan`,'PAN',.5,x=>x===.5?'C':(x<.5?'L':'R')+Math.round(Math.abs(x-.5)*200));});
+def('master','MASTER',.75,db);def('fx.verb.mix','MIX',.25);
+const MACROS=['Growl','Width','Space','Bite','Movement','Air','Drive','Tone'];MACROS.forEach((n,i)=>def(`m${i+1}`,n.toUpperCase(),[.2,.6,.3,.1,.45,0,.15,.5][i]));
+// Default routes: the preset's modulation
+ROUTES.push({src:'LFO 1',dst:'A.pos',amt:.35},{src:'LFO 1',dst:'f1.cut',amt:.22},{src:'ENV 2',dst:'f1.cut',amt:.3},{src:'Macro 1',dst:'A.warp2',amt:.5},{src:'LFO 2',dst:'A.detune',amt:.15},{src:'Velocity',dst:'f1.res',amt:-.12},{src:'Macro 3',dst:'fx.verb.mix',amt:.6});
+
+/* ================= OSC page ================= */
+function oscCard(o){const S=STATE.osc[o];const el=document.getElementById('osc'+o);el.classList.toggle('off',!S.on);
+  const typeSel=`<select class="dd accent" data-type="${o}">${TYPES.map(t=>`<option ${t===S.type?'selected':''}>${t}</option>`).join('')}</select>`;
+  let src='';
+  if(S.type==='Classic'){src=`<div class="disp" style="height:118px"><span class="tag">CLASSIC · BAND-LIMITED</span><span class="tagr">${S.shape}</span><canvas data-classic="${o}"></canvas></div>
+    <div class="segs" data-shape="${o}">${['Sine','Triangle','Saw','Square','Pulse'].map(s=>`<button aria-pressed="${s===S.shape}">${s}</button>`).join('')}</div>`;}
+  else if(S.type==='Granular'){src=`<div class="disp" style="height:118px"><span class="tag">GRAINS · FROM ${S.table.toUpperCase()}</span><span class="tagr">24 grains</span><canvas data-grain="${o}"></canvas></div>
+    <div style="display:flex;gap:6px"><button class="dd" style="flex:1">${S.table}</button><button class="pill">✎ SAMPLE</button></div>`;}
+  else if(S.type==='Sample'||S.type==='Multisample'||S.type==='Spectral'){src=`<div class="disp" style="height:118px"><span class="tag">${S.type.toUpperCase()}</span><span class="tagr">${S.type==='Spectral'?'FFT 4096':'C3 root'}</span><canvas data-sample="${o}"></canvas></div>
+    <div style="display:flex;gap:6px"><button class="dd" style="flex:1">Choose a sample…</button><button class="pill">${S.type==='Spectral'?'✎ RESYNTH':'LOOP'}</button></div>`;}
+  else{src=`<div class="disp" style="height:118px"><span class="tag" style="z-index:1;background:var(--well);padding:0 3px">FRAME ${1+Math.round(P[o+'.pos']*255)} / 256</span><span class="tagr">${S.table}</span><canvas data-table="${o}"></canvas></div>
+    <div style="display:flex;gap:6px"><select class="dd" style="flex:1" data-table-sel="${o}">${TABLES.map(t=>`<option ${t===S.table?'selected':''}>${t}</option>`).join('')}</select><button class="pill" data-edit="${o}" title="Open the wavetable editor">✎ EDIT</button></div>`;}
+  const shapeKnobs=S.type==='Classic'?knobHTML(o+'.pw','PW','sm')+knobHTML(o+'.sync','SYNC','sm')+knobHTML(o+'.drift','DRIFT','sm')
+    :S.type==='Granular'?knobHTML(o+'.gsize','SIZE','sm')+knobHTML(o+'.gdens','DENSITY','sm')+knobHTML(o+'.gscan','SCAN','sm')+knobHTML(o+'.gspray','SPRAY','sm')
+    :`${knobHTML(o+'.pos','POS','sm')}<div style="display:flex;flex-direction:column;gap:3px;align-items:center"><select class="dd" style="width:82px;height:20px;font-size:10px">${WARPS.map(w=>`<option ${w===S.w1?'selected':''}>${w}</option>`).join('')}</select>${knobHTML(o+'.warp1','WARP 1','sm')}</div><div style="display:flex;flex-direction:column;gap:3px;align-items:center"><select class="dd" style="width:82px;height:20px;font-size:10px">${WARPS.map(w=>`<option ${w===S.w2?'selected':''}>${w}</option>`).join('')}</select>${knobHTML(o+'.warp2','WARP 2','sm')}</div>`;
+  el.innerHTML=`<div class="ch"><button class="led ${S.on?'on':''}" data-on="${o}" aria-label="Oscillator ${o} on"></button><span class="ttl">OSC ${o}</span>${typeSel}<span class="spacer"></span>${knobHTML(o+'.level','LEVEL','sm')}${knobHTML(o+'.pan','PAN','sm')}</div>
+    ${src}
+    <div class="knobs" style="align-items:flex-end">${shapeKnobs}</div>
+    <div class="knobs spread"><div class="grp" style="border:0;padding:0"><span class="gl">UNISON</span><div class="knobs">${knobHTML(o+'.voices','VOICES','sm')}${knobHTML(o+'.detune','DETUNE','sm')}${knobHTML(o+'.blend','BLEND','sm')}${knobHTML(o+'.width','WIDTH','sm')}${S.type==='Wavetable'?knobHTML(o+'.spread','SPREAD','sm'):''}</div></div>
+      <div class="grp"><span class="gl">PITCH · PHASE</span><div class="knobs">${knobHTML(o+'.oct','OCT','sm')}${knobHTML(o+'.semi','SEMI','sm')}${knobHTML(o+'.fine','FINE','sm')}${knobHTML(o+'.rand','RAND','sm')}</div></div></div>`;}
+function subNoise(){document.getElementById('subnoise').innerHTML=`<div class="ch"><button class="led on"></button><span class="ttl">SUB</span></div>
+  <div class="segs" style="align-self:flex-start"><button aria-pressed="true">SIN</button><button aria-pressed="false">TRI</button><button aria-pressed="false">SAW</button><button aria-pressed="false">SQ</button></div>
+  <div class="knobs">${knobHTML('sub.level','LEVEL','sm')}${knobHTML('sub.oct','OCT','sm')}</div>
+  <div class="ch" style="margin-top:8px"><button class="led on"></button><span class="ttl">NOISE</span></div>
+  <select class="dd"><option>Analog Hiss</option><option>Vinyl Crackle</option><option>Pink</option><option>Breath</option></select>
+  <div class="knobs">${knobHTML('noise.level','LEVEL','sm')}${knobHTML('noise.pitch','PITCH','sm')}${knobHTML('noise.tone','TONE','sm')}</div>`;}
+const FTYPES=[['Analog','Ladder 24','Ladder 12','Diode','MG Low','OTA'],['Clean','LP 12','LP 24','BP 12','HP 12','HP 24','Notch'],['Character','Formant','Vowel','Comb +','Comb −','Phaser','Flanger'],['Morph','LP→BP→HP','Dual Peak','Ring']];
+function filterCard(f){const el=document.getElementById('f'+f);
+  el.innerHTML=`<div class="ch"><button class="led on"></button><span class="ttl">FILTER ${f}</span><select class="dd accent">${FTYPES.map(([g,...t])=>`<optgroup label="${g}">${t.map(x=>`<option ${x===(f==='1'?'Ladder 24':'Formant')?'selected':''}>${x}</option>`).join('')}</optgroup>`).join('')}</select>
+    <span class="sub">${f==='1'?'4× OVERSAMPLED · DRIVEN':'VOWEL A → O'}</span></div>
+    <div style="display:flex;gap:10px;flex:1;min-height:0"><div class="disp" style="width:240px;flex:none"><canvas data-filter="${f}"></canvas></div>
+    <div class="knobs" style="flex-wrap:wrap;align-content:flex-start">${knobHTML(`f${f}.cut`,'CUTOFF')}${knobHTML(`f${f}.res`,'RES')}${knobHTML(`f${f}.drive`,'DRIVE')}${knobHTML(`f${f}.fat`,'FAT')}${knobHTML(`f${f}.key`,'KEYTRK')}${knobHTML(`f${f}.pan`,'PAN')}${knobHTML(`f${f}.mix`,'MIX')}</div></div>`;}
+function routeCard(){const srcs=['A','B','C','SUB','NOISE'];const R={A:'1',B:'1',C:'2',SUB:'—',NOISE:'2'};
+  document.getElementById('route').innerHTML=`<div class="ch"><span class="ttl">ROUTING</span></div>
+  <div class="segs"><button aria-pressed="true">SERIAL</button><button aria-pressed="false">PARALLEL</button><button aria-pressed="false">SPLIT</button></div>
+  <div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:4px 6px;align-items:center;font-size:10px;color:var(--dim);margin-top:4px">
+    <span></span><span class="gl" style="font-size:8.5px">F1</span><span class="gl" style="font-size:8.5px">F2</span><span class="gl" style="font-size:8.5px">DIRECT</span>
+    ${srcs.map(s=>`<b style="font-size:10px;color:var(--text)">${s}</b>${['1','2','—'].map(t=>`<button class="pill ${R[s]===t?'on':''}" style="height:18px;padding:0">${R[s]===t?'●':''}</button>`).join('')}`).join('')}</div>
+  `;}
+const MODSRC=['ENV 1','ENV 2','ENV 3','ENV 4','LFO 1','LFO 2','LFO 3','LFO 4','LFO 5','LFO 6','LFO 7','LFO 8'];
+function modStrip(){const tab=STATE.modTab;const isEnv=tab.startsWith('ENV');
+  const tabs=MODSRC.map(s=>`<button data-mtab="${s}" aria-pressed="${s===tab}">${s}${routesFrom(s).length?` <span class="mono" style="color:var(--vi);font-size:9px">${routesFrom(s).length}</span>`:''}<span class="hdl" data-src="${s}" title="Drag onto a knob">✥</span></button>`).join('');
+  const other=['Velocity','Note','Mod Wheel','Aftertouch','Slide','Pressure','Chaos 1','Chaos 2','Random','Bend'];
+  document.getElementById('modstrip').innerHTML=`<div class="ch"><span class="ttl" style="color:var(--vi)">MODULATION</span><span class="sub">DRAG ✥ ONTO ANY KNOB</span></div><div class="modtabs" style="flex-wrap:nowrap;overflow:hidden">${other.map(s=>`<span class="src ${routesFrom(s).length?'on':''}"><span class="hdl" data-src="${s}">✥</span>${s}${routesFrom(s).length?`<span class="cnt">${routesFrom(s).length}</span>`:''}</span>`).join('')}</div>
+    <div class="modtabs">${tabs}</div>
+    <div class="lfo"><div class="disp" style="min-height:0"><span class="tag">${isEnv?'ENVELOPE · '+tab:tab+' · DRAW POINTS · ALT-DRAG CURVES'}</span><span class="tagr" id="lfoRate">${isEnv?'':'1/4 · SYNC'}</span><canvas id="modCanvas" style="cursor:crosshair"></canvas></div>
+    <div style="display:flex;flex-direction:column;gap:6px">${isEnv?`<div class="knobs" style="flex-wrap:wrap">${['A','H','D','S','R'].map(x=>{const id=tab+'.'+x;if(!(id in P))def(id,x,{A:.08,H:0,D:.4,S:.6,R:.3}[x],v=>x==='S'?pct(v):(Math.pow(v,3)*8).toFixed(2)+' s');return knobHTML(id,x,'sm');}).join('')}</div>
+      <div class="lfo-tools"><span class="pill">CURVES</span><span class="pill">LEGATO</span><span class="pill on">VEL → AMT</span></div>`
+      :`<div class="lfo-tools"><div class="segs"><button aria-pressed="true">TRIG</button><button aria-pressed="false">ENV</button><button aria-pressed="false">FREE</button></div><select class="dd"><option>1/4</option><option>1/8</option><option>1 bar</option><option>Hz</option></select></div>
+      <div class="knobs" style="flex-wrap:wrap">${['RATE','RISE','DELAY','SMOOTH','PHASE'].map(x=>{const id=tab+'.'+x;if(!(id in P))def(id,x,{RATE:.5,RISE:0,DELAY:0,SMOOTH:.1,PHASE:0}[x]);return knobHTML(id,x,'sm');}).join('')}</div>
+      <div class="lfo-tools"><span class="pill">SHAPES ▾</span><span class="pill">GRID 8</span><span class="pill">BIPOLAR</span><span class="pill">ANCHOR</span></div>`}</div></div>`;}
+function macroCard(){document.getElementById('macros').innerHTML=`<div class="ch"><span class="ttl" style="color:var(--vi)">MACROS</span><span class="sub">NAMED BY THE PRESET</span></div>
+  <div class="macros">${MACROS.map((n,i)=>`<div class="macro">${knobHTML('m'+(i+1),'M'+(i+1),'')}<span class="mn">${n}</span><span class="hdl" data-src="Macro ${i+1}" style="width:16px;height:16px;border-radius:4px;display:grid;place-items:center;background:var(--vi-soft);color:var(--vi);cursor:grab;font-size:10px;margin-top:2px">✥</span></div>`).join('')}</div>`;}
+
+/* ================= Canvases ================= */
+function cv(c){const r=c.getBoundingClientRect(),d=Math.min(2,devicePixelRatio||1);c.width=Math.max(1,r.width*d);c.height=Math.max(1,r.height*d);const x=c.getContext('2d');x.scale(d,d);return[x,r.width,r.height];}
+function tableWave(name,t,x){const k=TABLES.indexOf(name);const ph=x*Math.PI*2;
+  switch(k){case 0:{const s=t*3;const a=[Math.sin(ph),1-4*Math.abs(((x+.25)%1)-.5),2*((x+.5)%1)-1,x<.5?1:-1];const i=Math.min(2,Math.floor(s));return a[i]*(1-(s-i))+a[i+1]*(s-i);}
+    case 2:{let v=0;for(let h=1;h<24;h++)v+=Math.sin(ph*h+t*h*.4)/h*(1+.3*Math.sin(h*t*3));return v*.6;}
+    case 1:{let v=0;for(let h=1;h<30;h++){const f=h*110;v+=Math.sin(ph*h)/h*Math.exp(-(((f-(500+t*1800))/260)**2))*3;}return v+Math.sin(ph)*.3;}
+    default:{let v=0;for(let h=1;h<16;h++)v+=Math.sin(ph*h*(1+t*.02)+h)/h*Math.cos(h*t*2);return v*.8;}}}
+function drawTable(c,o){const[x,W,H]=cv(c);const S=STATE.osc[o];const pos=Math.max(0,Math.min(1,P[o+'.pos']+(LIVE['LFO 1']||0)*.35*(o==='A'?1:0)));
+  const N=18;for(let f=N-1;f>=0;f--){const t=f/(N-1);const dx=f*3.4,dy=-f*2.2;const cur=Math.abs(t-pos)<.5/N;
+    x.beginPath();for(let i=0;i<=120;i++){const xx=i/120;const y=tableWave(S.table,t,xx);const px=12+dx+xx*(W-90),py=H*.74+dy-y*H*.16;i?x.lineTo(px,py):x.moveTo(px,py);}
+    x.strokeStyle=cur?'#46d6ff':`rgba(120,150,210,${.08+.18*(1-f/N)})`;x.lineWidth=cur?2:1;x.stroke();}
+  x.beginPath();for(let i=0;i<=200;i++){const xx=i/200;const y=tableWave(S.table,pos,xx);const px=12+pos*(N-1)*3.4+xx*(W-90),py=H*.74-pos*(N-1)*2.2-y*H*.16;i?x.lineTo(px,py):x.moveTo(px,py);}x.strokeStyle='#46d6ff';x.lineWidth=2.2;x.shadowColor='#46d6ff';x.shadowBlur=8;x.stroke();x.shadowBlur=0;}
+function drawClassic(c,o){const[x,W,H]=cv(c);const s=STATE.osc[o].shape;const pw=P[o+'.pw'];x.strokeStyle='#1f2c46';x.beginPath();x.moveTo(0,H/2);x.lineTo(W,H/2);x.stroke();
+  x.beginPath();for(let i=0;i<=400;i++){const t=(i/400*2)%1;let y;switch(s){case'Sine':y=Math.sin(t*Math.PI*2);break;case'Triangle':y=1-4*Math.abs(t-.5);break;case'Saw':y=1-2*t;break;case'Square':y=t<.5?1:-1;break;default:y=t<pw?1:-1;}
+    const px=10+i/400*(W-20),py=H/2-y*H*.32;i?x.lineTo(px,py):x.moveTo(px,py);}x.strokeStyle='#46d6ff';x.lineWidth=2;x.stroke();}
+function drawGrain(c){const[x,W,H]=cv(c);const t=performance.now()/1000;for(let g=0;g<24;g++){const a=((g*.137+t*.18)%1),y=H*(.2+.6*((g*.61)%1));const w=10+20*((g*.3)%1);x.fillStyle=`rgba(70,214,255,${.15+.5*(1-a)})`;x.fillRect(a*W,y,w,3);}}
+function drawSample(c){const[x,W,H]=cv(c);x.fillStyle='rgba(70,214,255,.35)';for(let i=0;i<W;i++){const a=(.3+.7*Math.abs(Math.sin(i*.05)*Math.sin(i*.013)))*Math.exp(-i/W*1.2)*H*.4;x.fillRect(i,H/2-a,1,a*2);}x.fillStyle='#5e6b82';x.font='10px Inter';x.fillText('Drop a sample, or choose one from the library',12,H-10);}
+function drawFilter(c,f){const[x,W,H]=cv(c);const cut=Math.max(0,Math.min(1,P[`f${f}.cut`]+(f==='1'?(LIVE['LFO 1']||0)*.22+(LIVE['ENV 2']||0)*.3:0))),res=P[`f${f}.res`];
+  x.strokeStyle='#1c2944';for(let i=1;i<4;i++){x.beginPath();x.moveTo(i*W/4,0);x.lineTo(i*W/4,H);x.stroke();}
+  x.beginPath();for(let i=0;i<=W;i++){const fx=i/W;let g;if(f==='1'){const d=fx-cut;g=d<0?0:-d*4;g+=res*.8*Math.exp(-(d*d)/.0015);}else{g=-.6;[.25,.42,.7].forEach((p,k)=>{g=Math.max(g,(.9-k*.25)*Math.exp(-((fx-p*(.8+cut*.4))**2)/.0012)-.3);});}
+    const py=H*.55-g*H*.35;i?x.lineTo(i,py):x.moveTo(i,py);}x.strokeStyle='#46d6ff';x.lineWidth=2;x.stroke();x.lineTo(W,H);x.lineTo(0,H);x.fillStyle='rgba(70,214,255,.07)';x.fill();
+  x.fillStyle='#46d6ff';x.font='10px JetBrains Mono';x.fillText(DEF[`f${f}.cut`].fmt(cut),8,14);}
+// LFO points: [x, y, curve]
+STATE.lfoPts['LFO 1']=[[0,.1,0],[.18,1,-.5],[.5,.35,.4],[.75,.8,0],[1,.1,0]];
+STATE.lfoPts['LFO 2']=[[0,.5,0],[.5,1,.6],[1,.5,.6]];
+function lfoShape(name){return STATE.lfoPts[name]||(STATE.lfoPts[name]=[[0,0,0],[.5,1,0],[1,0,0]]);}
+function segVal(a,b,t){const k=a[2];const u=k===0?t:k>0?Math.pow(t,1+k*4):1-Math.pow(1-t,1-k*4);return a[1]+(b[1]-a[1])*u;}
+function lfoAt(name,ph){const p=lfoShape(name);for(let i=1;i<p.length;i++)if(ph<=p[i][0]){const a=p[i-1],b=p[i];return segVal(a,b,(ph-a[0])/Math.max(1e-6,b[0]-a[0]));}return p[p.length-1][1];}
+function drawMod(){const c=document.getElementById('modCanvas');if(!c)return;const[x,W,H]=cv(c);const tab=STATE.modTab;const pad=14;const X=t=>pad+t*(W-2*pad),Y=v=>H-pad-v*(H-2*pad-10);
+  x.strokeStyle='#16223a';for(let i=0;i<=8;i++){x.beginPath();x.moveTo(X(i/8),pad);x.lineTo(X(i/8),H-pad);x.stroke();}
+  if(tab.startsWith('ENV')){const v=k=>P[tab+'.'+k];const a=Math.pow(v('A'),3)*8+.01,h=Math.pow(v('H'),3)*8,d=Math.pow(v('D'),3)*8+.01,s=v('S'),r=Math.pow(v('R'),3)*8+.01;const tot=a+h+d+r+1.2;
+    const pts=[[0,0],[a,1],[a+h,1],[a+h+d,s],[a+h+d+1.2,s],[tot,0]];x.beginPath();pts.forEach(([t,y],i)=>{const px=X(t/tot),py=Y(y);i?x.lineTo(px,py):x.moveTo(px,py);});x.strokeStyle='#a98bff';x.lineWidth=2;x.stroke();x.lineTo(X(1),Y(0));x.fillStyle='rgba(169,139,255,.08)';x.fill();
+    pts.forEach(([t,y])=>{x.fillStyle='#0b1224';x.strokeStyle='#a98bff';x.beginPath();x.arc(X(t/tot),Y(y),4,0,7);x.fill();x.stroke();});return;}
+  const p=lfoShape(tab);x.beginPath();for(let i=0;i<=300;i++){const t=i/300;const px=X(t),py=Y(lfoAt(tab,t));i?x.lineTo(px,py):x.moveTo(px,py);}x.strokeStyle='#a98bff';x.lineWidth=2;x.stroke();x.lineTo(X(1),Y(0));x.lineTo(X(0),Y(0));x.fillStyle='rgba(169,139,255,.08)';x.fill();
+  p.forEach(([t,y])=>{x.fillStyle='#0b1224';x.strokeStyle='#a98bff';x.lineWidth=1.5;x.beginPath();x.arc(X(t),Y(y),4.5,0,7);x.fill();x.stroke();});
+  const ph=(performance.now()/1000*.9)%1;x.fillStyle='#f5b14c';x.fillRect(X(ph)-1,pad,2,H-2*pad);x.beginPath();x.arc(X(ph),Y(lfoAt(tab,ph)),4,0,7);x.fill();
+  STATE._lfoGeo={X,Y,W,H,pad};}
+
+/* ================= FX page ================= */
+const FX=[['Distortion','Tube · 2× OS',['DRIVE','TONE','BIAS','MIX']],['Filter','Comb · tracks note',['FREQ','RES','DRIVE','MIX']],['Flanger','Through-zero',['RATE','DEPTH','FEEDBK','MIX']],['Multiband','OTT-style',['DEPTH','TIME','UP/DN','MIX']],['Delay','Ping-pong · 1/8D',['TIME','FEEDBK','HP/LP','MIX']],['Reverb','Hall · plate · shimmer',['SIZE','DECAY','DAMP','MIX']],['EQ','3 bands · dynamic',['LOW','MID','HIGH','Q']],['Compressor','Glue · sidechain',['THRESH','RATIO','ATTACK','MIX']]];
+function renderFX(){const b=document.getElementById('bus');b.innerHTML=FX.map(([n,s,ks],i)=>{ks.forEach(k=>{const id=`fx.${n}.${k}`;if(!(id in P))def(id,k,.3+.4*((i*7+k.length)%5)/5);});
+  return`<div class="card fx"><div class="ch"><button class="led on"></button><span class="ttl">${n.toUpperCase()}</span><span class="spacer"></span><span class="sub">⋮⋮</span></div><span class="sub">${s}</span>
+    <div class="disp" style="height:110px"><canvas data-fxv="${i}"></canvas></div><div class="knobs spread">${ks.map(k=>knobHTML(n==='Reverb'&&k==='MIX'?'fx.verb.mix':`fx.${n}.${k}`,k)).join('')}</div></div>`;}).join('')+'<button class="addfx">+ Add effect</button>';
+  paintAll();b.querySelectorAll('[data-fxv]').forEach(c=>{const[x,W,H]=cv(c);const i=+c.dataset.fxv;x.strokeStyle='#46d6ff';x.lineWidth=1.8;x.beginPath();
+    for(let k=0;k<=W;k++){const t=k/W;let y;switch(i){case 0:y=Math.tanh((t*2-1)*3)*.8;break;case 4:y=(k%40<2?.9*Math.exp(-k/120):0);break;case 5:y=Math.exp(-t*3)*Math.sin(k*.9)*.7;break;case 6:y=.2*Math.sin(t*6)+.2*Math.exp(-((t-.6)**2)/.01);break;default:y=Math.sin(t*12+i)*.5*Math.exp(-t);}
+      const py=H/2-y*H*.4;k?x.lineTo(k,py):x.moveTo(k,py);}x.stroke();});}
+
+/* ================= Matrix ================= */
+function destGroup(id){const g=id.split('.')[0];if(g==='fx')return'Reverb';if(/^f\d$/.test(g))return'Filter '+g[1];if(/^[ABC]$/.test(g))return'Osc '+g;return g;}
+function renderMatrix(){const el=document.getElementById('matrix');
+  el.innerHTML=`<div class="ch"><span class="ttl" style="color:var(--vi)">MOD MATRIX</span><span class="sub">EVERY ROUTE, INCLUDING THOSE MADE BY DRAGGING · UNLIMITED ROUTES</span><span class="spacer"></span><button class="pill">+ ADD ROUTE</button><button class="pill">FILTER: ALL ▾</button></div>
+  <table><thead><tr><th>SOURCE</th><th>×</th><th>AUX SOURCE</th><th>AMOUNT</th><th>CURVE</th><th>POLARITY</th><th>DESTINATION</th><th>OUTPUT</th><th></th></tr></thead><tbody>
+  ${ROUTES.map((r,i)=>`<tr><td><span class="src on"><span class="hdl">✥</span>${r.src}</span></td><td style="color:var(--faint)">×</td><td><select class="dd" style="width:110px"><option>—</option><option>Mod Wheel</option><option>Velocity</option><option>Macro 2</option></select></td>
+    <td><div class="amt"><i style="left:${r.amt<0?50+r.amt*50:50}%;width:${Math.abs(r.amt)*50}%"></i></div><span class="mono" style="font-size:10px;color:var(--vi)">${(r.amt*100).toFixed(0)}%</span></td>
+    <td><svg width="44" height="18"><path d="M2 16 C ${14+i*3} 16, ${20-i*2} 2, 42 2" fill="none" stroke="#a98bff" stroke-width="1.5"/></svg></td><td><div class="segs"><button aria-pressed="${r.amt>=0}">UNI</button><button aria-pressed="false">BI</button></div></td>
+    <td><b>${(DEF[r.dst]&&DEF[r.dst].label)||r.dst}</b> <span style="color:var(--faint)">${destGroup(r.dst)}</span></td><td>${knobHTML('mo'+i,'','sm').replace('<span class="kl"></span>','')}</td><td><button class="pill">✕</button></td></tr>`).join('')}
+  </tbody></table>`;ROUTES.forEach((_,i)=>{if(!('mo'+i in P))def('mo'+i,'OUT',1);});paintAll();}
+
+/* ================= Arp / clip ================= */
+function renderArp(){const el=document.getElementById('p-arp');['arp.rate','arp.gate','arp.swing','arp.oct','arp.vel'].forEach((k,i)=>{if(!(k in P))def(k,['RATE','GATE','SWING','OCTAVES','VEL'][i],[.5,.6,.1,.33,.8][i]);});
+  const cells=[];for(let r=0;r<12;r++)for(let c=0;c<32;c++){const on=(c*3+r*5)%11===0&&r<10;cells.push(on?{r,c,l:1+((c+r)%3)}:null);}
+  el.innerHTML=`<div class="row" style="height:200px"><div class="card" style="width:420px;flex:none"><div class="ch"><button class="led on"></button><span class="ttl">ARPEGGIATOR</span><span class="spacer"></span><select class="dd"><option>Up</option><option>Down</option><option>Up/Down</option><option>Played</option><option>Random</option><option>Chord</option></select></div>
+    <div class="knobs spread">${knobHTML('arp.rate','RATE')}${knobHTML('arp.gate','GATE')}${knobHTML('arp.swing','SWING')}${knobHTML('arp.oct','OCTAVES')}${knobHTML('arp.vel','VEL')}</div>
+    <div class="segs" style="align-self:flex-start"><button aria-pressed="true">RETRIG</button><button aria-pressed="false">LATCH</button><button aria-pressed="false">REPEATS 2</button></div></div>
+    <div class="card" style="flex:1"><div class="ch"><span class="ttl">STEP PATTERN</span><span class="sub">VELOCITY · GATE · TIE PER STEP</span></div><div style="display:grid;grid-template-columns:repeat(16,1fr);gap:4px;flex:1">${Array.from({length:16},(_,i)=>`<div style="background:var(--well);border:1px solid var(--line);border-radius:4px;display:flex;align-items:flex-end;padding:2px"><div style="width:100%;height:${30+((i*37)%70)}%;background:${i%5===4?'var(--line2)':'var(--cy)'};opacity:.85;border-radius:2px"></div></div>`).join('')}</div></div></div>
+  <div class="card" style="flex:1;min-height:0"><div class="ch"><button class="led"></button><span class="ttl">CLIP SEQUENCER</span><span class="sub">PLAYS WITH THE HOST'S TRANSPORT · DRAG A CLIP TO THE ARRANGEMENT</span><span class="spacer"></span><div class="segs"><button aria-pressed="true">CLIP 1</button><button aria-pressed="false">2</button><button aria-pressed="false">3</button><button aria-pressed="false">4</button></div><button class="pill">TRIGGER: NOTE C1–D♯1</button></div>
+    <div class="disp" style="flex:1"><canvas id="clipCanvas"></canvas></div></div>`;paintAll();
+  const c=document.getElementById('clipCanvas');const[x,W,H]=cv(c);const rows=12,cols=32,rh=H/rows,cw=(W-44)/cols;
+  for(let r=0;r<rows;r++){x.fillStyle=[1,3,6,8,10].includes(r)?'#0a1122':'#0e172b';x.fillRect(44,r*rh,W-44,rh);x.fillStyle='#5e6b82';x.font='9px JetBrains Mono';x.fillText(['C','B','A♯','A','G♯','G','F♯','F','E','D♯','D','C♯'][r]+'3',6,r*rh+rh*.7);}
+  for(let cI=0;cI<=cols;cI++){x.fillStyle=cI%4?'#16223a':'#22325a';x.fillRect(44+cI*cw,0,1,H);}
+  cells.forEach(n=>{if(!n)return;x.fillStyle='#46d6ff';x.fillRect(44+n.c*cw+1,n.r*rh+2,n.l*cw-2,rh-4);});}
+
+/* ================= Global ================= */
+function renderGlobal(){const el=document.getElementById('p-global');['g.poly','g.porta','g.curve','g.bend','g.mpe','g.drift','g.vel'].forEach((k,i)=>{if(!(k in P))def(k,['POLY','PORTA','CURVE','BEND','MPE BEND','DRIFT','VEL CURVE'][i],[.5,.1,.5,.08,1,.15,.5][i],k==='g.poly'?(v=>String(1+Math.round(v*31))):k==='g.bend'||k==='g.mpe'?(v=>Math.round(v*48)+' st'):undefined);});
+  el.innerHTML=`<div class="row" style="height:220px"><div class="card" style="flex:1"><div class="ch"><span class="ttl">VOICING</span></div><div class="segs" style="align-self:flex-start"><button aria-pressed="true">POLY</button><button aria-pressed="false">MONO</button><button aria-pressed="false">LEGATO</button></div>
+    <div class="knobs">${knobHTML('g.poly','POLY')}${knobHTML('g.porta','PORTA')}${knobHTML('g.curve','CURVE')}${knobHTML('g.drift','DRIFT')}</div><div class="segs" style="align-self:flex-start"><button aria-pressed="true">PORTA: LEGATO ONLY</button><button aria-pressed="false">ALWAYS</button></div></div>
+    <div class="card" style="flex:1"><div class="ch"><span class="ttl">PLAYING</span></div><div class="knobs">${knobHTML('g.bend','BEND')}${knobHTML('g.vel','VEL CURVE')}${knobHTML('g.mpe','MPE BEND')}</div><div class="segs" style="align-self:flex-start"><button aria-pressed="false">MPE OFF</button><button aria-pressed="true">MPE ON</button></div><span class="sub" style="font-size:10px;color:var(--faint)">MPE: per-note bend, slide (CC74) and pressure become modulation sources.</span></div>
+    <div class="card" style="flex:1"><div class="ch"><span class="ttl">QUALITY</span></div><div class="segs" style="align-self:flex-start"><button aria-pressed="false">ECO</button><button aria-pressed="true">HIGH</button><button aria-pressed="false">ULTRA</button></div><span class="sub" style="font-size:10px;color:var(--faint);line-height:1.5">HIGH: 2× oscillators, 4× filters and distortion. ULTRA: 4× everywhere, for rendering. ECO halves unison above 8 voices.</span>
+      <div class="ch"><span class="ttl">TUNING</span></div><select class="dd" style="align-self:flex-start"><option>12-TET · A4 440 Hz</option><option>Import .scl / .kbm…</option></select></div></div>`;paintAll();}
+
+/* ================= Wavetable editor ================= */
+function openEditor(o){const S=STATE.osc[o];const el=document.getElementById('editor');el.hidden=false;
+  el.innerHTML=`<div class="ch"><span class="ttl">WAVETABLE EDITOR</span><span class="sub">OSC ${o} · ${S.table.toUpperCase()} · 256 FRAMES × 2048 SAMPLES</span><span class="spacer"></span><button class="pill">UNDO</button><button class="pill on" id="edClose">DONE</button></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="pill on">DRAW</button><button class="pill">FORMULA</button><button class="pill">IMPORT AUDIO → RESYNTH</button><button class="pill">FROM IMAGE</button><span class="spacer"></span><button class="pill">MORPH: CROSSFADE</button><button class="pill">SPECTRAL</button><button class="pill">NORMALISE</button><button class="pill">REMOVE DC</button><button class="pill">EXPORT .WAV</button></div>
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:10px;flex:1;min-height:0"><div class="disp" style="flex:1"><span class="tag">FRAME 82 · DRAW WITH THE MOUSE · SHIFT FOR STRAIGHT LINES</span><canvas id="edWave"></canvas></div>
+      <div style="display:flex;flex-direction:column;gap:8px"><div class="disp" style="height:180px"><span class="tag">HARMONICS · DRAG BARS</span><canvas id="edHarm"></canvas></div>
+      <div class="card"><span class="ttl" style="font-size:10px;letter-spacing:.2em;font-weight:800">FORMULA</span><code class="mono" style="font-size:11px;color:var(--cy);background:var(--well);padding:8px;border-radius:6px">sin(w*x + y*3*sin(2*w*x))</code><span class="sub" style="font-size:10px;color:var(--faint)">x is the phase, y the frame (0–1), w is 2π.</span></div>
+      <div class="card"><span class="ttl" style="font-size:10px;letter-spacing:.2em;font-weight:800">RESYNTHESIS</span><span class="sub" style="font-size:10px;color:var(--faint);line-height:1.5">Import audio, detect its pitch, slice one cycle per frame and band-limit it. Or spread a whole sample over 256 frames.</span></div></div></div>
+    <div class="frames" id="edFrames"></div>`;
+  document.getElementById('edClose').onclick=()=>el.hidden=true;
+  const fr=document.getElementById('edFrames');fr.innerHTML=Array.from({length:32},(_,i)=>`<canvas data-fr="${i}" class="${i===10?'sel':''}"></canvas>`).join('');
+  fr.querySelectorAll('canvas').forEach(c=>{const[x,W,H]=cv(c);const t=+c.dataset.fr/31;x.beginPath();for(let i=0;i<=60;i++){const xx=i/60;const y=tableWave(S.table,t,xx);i?x.lineTo(xx*W,H/2-y*H*.35):x.moveTo(0,H/2-y*H*.35);}x.strokeStyle='#46d6ff';x.lineWidth=1.2;x.stroke();});
+  {const[x,W,H]=cv(document.getElementById('edWave'));x.strokeStyle='#16223a';for(let i=1;i<8;i++){x.beginPath();x.moveTo(i*W/8,0);x.lineTo(i*W/8,H);x.stroke();}x.beginPath();x.moveTo(0,H/2);x.lineTo(W,H/2);x.stroke();
+    x.beginPath();for(let i=0;i<=600;i++){const xx=i/600;const y=tableWave(S.table,.32,xx);i?x.lineTo(xx*W,H/2-y*H*.38):x.moveTo(0,H/2-y*H*.38);}x.strokeStyle='#46d6ff';x.lineWidth=2.5;x.stroke();}
+  {const[x,W,H]=cv(document.getElementById('edHarm'));for(let h=0;h<40;h++){const a=Math.abs(Math.sin(h*.7+1))/(1+h*.15);x.fillStyle=h<12?'#46d6ff':'#2b3c5c';x.fillRect(8+h*(W-16)/40,H-8-a*(H-30),(W-16)/40-2,a*(H-30));}}}
+
+/* ================= Rendering & interaction ================= */
+function renderOSC(){OSCS.forEach(oscCard);subNoise();filterCard('1');filterCard('2');routeCard();modStrip();macroCard();paintAll();drawStatic();}
+function drawStatic(){document.querySelectorAll('[data-classic]').forEach(c=>drawClassic(c,c.dataset.classic));document.querySelectorAll('[data-sample]').forEach(drawSample);}
+function show(p){STATE.page=p;['osc','fx','matrix','arp','global'].forEach(k=>document.getElementById('p-'+k).hidden=k!==p);document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.p===p));
+  if(p==='osc')renderOSC();if(p==='fx')renderFX();if(p==='matrix')renderMatrix();if(p==='arp')renderArp();if(p==='global')renderGlobal();}
+document.getElementById('tabs').onclick=e=>{const b=e.target.closest('[data-p]');if(b)show(b.dataset.p);};
+const panel=document.getElementById('panel');
+panel.addEventListener('change',e=>{const t=e.target;if(t.dataset.type){STATE.osc[t.dataset.type].type=t.value;renderOSC();}if(t.dataset.tableSel){STATE.osc[t.dataset.tableSel].table=t.value;renderOSC();}});
+panel.addEventListener('click',e=>{const on=e.target.closest('[data-on]');if(on){const S=STATE.osc[on.dataset.on];S.on=!S.on;renderOSC();return;}
+  const sh=e.target.closest('[data-shape] button');if(sh){STATE.osc[sh.parentElement.dataset.shape].shape=sh.textContent;renderOSC();return;}
+  const ed=e.target.closest('[data-edit]');if(ed){openEditor(ed.dataset.edit);return;}
+  const mt=e.target.closest('[data-mtab]');if(mt&&!e.target.closest('.hdl')){STATE.modTab=mt.dataset.mtab;modStrip();paintAll();return;}
+  const sg=e.target.closest('.segs button');if(sg&&!sg.closest('[data-shape]')){sg.parentElement.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b===sg));}});
+// Knob drag: plain drag sets the value; drag on the outer ring (or with Alt) sets the newest route's depth.
+let kd=null;
+panel.addEventListener('pointerdown',e=>{
+  const h=e.target.closest('.hdl');if(h){e.preventDefault();const g=document.createElement('div');g.className='dragghost';g.textContent='✥ '+h.dataset.src;document.body.appendChild(g);kd={src:h.dataset.src,ghost:g};move(e);return;}
+  const k=e.target.closest('[data-k] svg');if(k){const el=k.parentElement,id=el.dataset.k;const r=k.getBoundingClientRect();const cx=r.left+r.width/2,cy=r.top+r.height/2;const dist=Math.hypot(e.clientX-cx,e.clientY-cy);
+    const routes=routesTo(id);const onRing=routes.length&&(dist>r.width/2-3||e.altKey);kd={id,y:e.clientY,v:P[id],el,route:onRing?routes[routes.length-1]:null,amt:onRing?routes[routes.length-1].amt:0};k.setPointerCapture(e.pointerId);touch(id);e.preventDefault();return;}
+  if(e.target.id==='modCanvas'&&STATE.modTab.startsWith('LFO')){const g=STATE._lfoGeo;const r=e.target.getBoundingClientRect();const tx=(e.clientX-r.left-g.pad)/(g.W-2*g.pad),ty=(g.H-g.pad-(e.clientY-r.top))/(g.H-2*g.pad-10);
+    const pts=lfoShape(STATE.modTab);let idx=pts.findIndex(p=>Math.abs(p[0]-tx)<.03&&Math.abs(p[1]-ty)<.08);
+    if(idx<0){idx=pts.findIndex(p=>p[0]>tx);pts.splice(idx,0,[tx,Math.max(0,Math.min(1,ty)),0]);}kd={lfo:idx,alt:e.altKey,y:e.clientY,c0:pts[idx-1]?pts[idx-1][2]:0};e.target.setPointerCapture(e.pointerId);}});
+function move(e){if(kd&&kd.ghost){kd.ghost.style.left=e.clientX+12+'px';kd.ghost.style.top=e.clientY+8+'px';document.querySelectorAll('.k.drop').forEach(x=>x.classList.remove('drop'));const t=document.elementFromPoint(e.clientX,e.clientY);const k=t&&t.closest&&t.closest('[data-k]');if(k)k.classList.add('drop');}}
+document.addEventListener('pointermove',e=>{if(!kd)return;if(kd.ghost){move(e);return;}
+  if(kd.lfo!=null){const g=STATE._lfoGeo;const c=document.getElementById('modCanvas');const r=c.getBoundingClientRect();const pts=lfoShape(STATE.modTab);
+    if(kd.alt&&kd.lfo>0){pts[kd.lfo-1][2]=Math.max(-1,Math.min(1,kd.c0+(e.clientY-kd.y)/80));return;}
+    const p=pts[kd.lfo];const first=kd.lfo===0,last=kd.lfo===pts.length-1;const tx=(e.clientX-r.left-g.pad)/(g.W-2*g.pad),ty=(g.H-g.pad-(e.clientY-r.top))/(g.H-2*g.pad-10);
+    if(!first&&!last)p[0]=Math.max(pts[kd.lfo-1][0]+.01,Math.min(pts[kd.lfo+1][0]-.01,tx));p[1]=Math.max(0,Math.min(1,ty));if(first||last){pts[0][1]=p[1];pts[pts.length-1][1]=p[1];}return;}
+  const d=(kd.y-e.clientY)/(e.shiftKey?600:160);if(kd.route){kd.route.amt=Math.max(-1,Math.min(1,kd.amt+d));}else P[kd.id]=Math.max(0,Math.min(1,kd.v+d));paintKnob(kd.el);touch(kd.id,kd.route);});
+document.addEventListener('pointerup',e=>{if(kd&&kd.ghost){kd.ghost.remove();document.querySelectorAll('.k.drop').forEach(x=>x.classList.remove('drop'));const t=document.elementFromPoint(e.clientX,e.clientY);const k=t&&t.closest&&t.closest('[data-k]');
+    if(k){const id=k.dataset.k;let r=ROUTES.find(x=>x.src===kd.src&&x.dst===id);if(!r){r={src:kd.src,dst:id,amt:.3};ROUTES.push(r);}document.getElementById('touch').textContent=`${kd.src} → ${DEF[id].label} 30%`;if(STATE.page==='osc'){modStrip();}paintAll();}}kd=null;});
+panel.addEventListener('dblclick',e=>{const k=e.target.closest('[data-k]');if(k){P[k.dataset.k]=DEF[k.dataset.k].v;paintKnob(k);}});
+function touch(id,route){document.getElementById('touch').textContent=route?`${route.src} → ${DEF[id].label} ${(route.amt*100).toFixed(0)}%`:`${DEF[id].label} ${DEF[id].fmt(P[id])}`;document.querySelectorAll('.k.touched').forEach(x=>x.classList.remove('touched'));const el=document.querySelector(`[data-k="${id}"]`);if(el)el.classList.add('touched');}
+// Hover popover with the routes into a knob
+panel.addEventListener('pointerover',e=>{const k=e.target.closest('[data-k]');const pop=document.getElementById('pop');if(!k||kd){pop.hidden=true;return;}const rs=routesTo(k.dataset.k);if(!rs.length){pop.hidden=true;return;}
+  const pr=panel.getBoundingClientRect(),r=k.getBoundingClientRect();pop.style.left=(r.right-pr.left+6)+'px';pop.style.top=(r.top-pr.top)+'px';
+  pop.innerHTML=`<div style="font-size:9px;letter-spacing:.14em;color:var(--faint);font-weight:800;margin-bottom:4px">${DEF[k.dataset.k].label} · MODULATED BY</div>`+rs.map(x=>`<div class="r"><b style="width:70px;color:var(--vi)">${x.src}</b><i><b style="width:${Math.abs(x.amt)*100}%"></b></i><span class="mono" style="font-size:10px">${(x.amt*100).toFixed(0)}%</span></div>`).join('')+`<div style="font-size:10px;color:var(--faint);margin-top:4px">Drag the ring to change depth · right-click to remove</div>`;pop.hidden=false;});
+panel.addEventListener('pointerout',e=>{if(!e.relatedTarget||!e.relatedTarget.closest||!e.relatedTarget.closest('[data-k]'))document.getElementById('pop').hidden=true;});
+panel.addEventListener('contextmenu',e=>{const k=e.target.closest('[data-k]');if(!k)return;e.preventDefault();const id=k.dataset.k;for(let i=ROUTES.length-1;i>=0;i--)if(ROUTES[i].dst===id){ROUTES.splice(i,1);break;}paintKnob(k);if(STATE.page==='osc')modStrip(),paintAll();});
+
+/* ================= Animation: live modulation ================= */
+let last=0;function frame(t){const s=t/1000;LIVE['LFO 1']=lfoAt('LFO 1',(s*.9)%1)*2-1;LIVE['LFO 2']=lfoAt('LFO 2',(s*.3)%1)*2-1;LIVE['ENV 2']=Math.exp(-((s%2))*2.5);LIVE['Macro 1']=P.m1;LIVE['Macro 3']=P.m3;LIVE['Velocity']=.8;
+  if(STATE.page==='osc'&&t-last>40){last=t;document.querySelectorAll('[data-table]').forEach(c=>drawTable(c,c.dataset.table));document.querySelectorAll('[data-grain]').forEach(drawGrain);document.querySelectorAll('[data-filter]').forEach(c=>drawFilter(c,c.dataset.filter));drawMod();
+    ROUTES.forEach(r=>{const el=document.querySelector(`[data-k="${r.dst}"]`);if(el&&!(kd&&kd.el===el))paintKnob(el);});}
+  requestAnimationFrame(frame);}
+document.getElementById('masterK').innerHTML=knobHTML('master','MASTER','sm');const h0=location.hash.slice(1);show(['fx','matrix','arp','global'].includes(h0)?h0:'osc');if(h0==='editor')openEditor('A');requestAnimationFrame(frame);
+</script>
+</body>
+</html>
