@@ -15,6 +15,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <optional>
 #include <span>
@@ -50,6 +51,23 @@ struct AppliedRevision {
   std::unique_ptr<StoppedTransportLease> stopped_transport;
 };
 
+// Undo history retention. Undo keeps at most `steps` entries, and trims
+// the oldest while the history's estimated bytes (estimated_bytes of each
+// snapshot it alone keeps alive) exceed `bytes`, but never below
+// `kept_steps`, so even a project with large plugin states can undo its
+// recent edits. Redo is never trimmed: it only holds steps just undone.
+// A 16-track song with 175 clips and 1,600 notes estimates about 170 KB a
+// snapshot, so the depth decides there (about 80 MiB); a project holding
+// several MiB of plugin state reaches the bytes limit first.
+inline constexpr std::size_t default_undo_steps = 500;
+inline constexpr std::size_t default_undo_history_bytes = std::size_t{256} * 1024 * 1024;
+inline constexpr std::size_t default_kept_undo_steps = 32;
+struct HistoryLimits {
+  std::size_t steps = default_undo_steps;
+  std::size_t bytes = default_undo_history_bytes;
+  std::size_t kept_steps = default_kept_undo_steps;
+};
+
 class ProjectModel {
 public:
   ProjectModel(const ProjectModel&) = delete;
@@ -69,6 +87,11 @@ public:
   [[nodiscard]] std::shared_ptr<const Snapshot> snapshot() const noexcept { return current_; }
   [[nodiscard]] std::size_t undo_depth() const noexcept { return undo_.size(); }
   [[nodiscard]] std::size_t redo_depth() const noexcept { return redo_.size(); }
+  // The estimated bytes of the snapshots only the history keeps alive.
+  [[nodiscard]] std::size_t history_bytes() const noexcept { return history_bytes_; }
+  [[nodiscard]] const HistoryLimits& history_limits() const noexcept { return limits_; }
+  // Applies to the current history at once, trimming its oldest undo steps.
+  void set_history_limits(HistoryLimits limits);
   // One undoable step, read-only: the snapshots either side of it.
   struct HistoryStep {
     std::shared_ptr<const Snapshot> before;
@@ -99,18 +122,31 @@ private:
     std::shared_ptr<const Snapshot> before;
     std::shared_ptr<const Snapshot> after;
     std::optional<std::uint64_t> gesture;
+    // estimated_bytes of each side, measured once when it was published.
+    std::size_t before_bytes = 0;
+    std::size_t after_bytes = 0;
   };
 
   explicit ProjectModel(std::shared_ptr<const Snapshot> initial, TransportGate& transport)
-      : current_(std::move(initial)), transport_(&transport) {}
+      : current_(std::move(initial)), current_bytes_(estimated_bytes(*current_)),
+        transport_(&transport) {}
 
   [[nodiscard]] foundation::Result<AppliedRevision> publish_history(const Snapshot& target,
                                                                     bool undoing);
 
+  // Publishes `next` as current with an undo step from the old current,
+  // clears redo and trims the history to its limits.
+  void push_undo(std::shared_ptr<const Snapshot> next, std::optional<std::uint64_t> gesture);
+  void recount_history();
+  void trim_history();
+
   std::shared_ptr<const Snapshot> current_;
+  std::size_t current_bytes_ = 0;
   TransportGate* transport_;
-  std::vector<HistoryEntry> undo_;
-  std::vector<HistoryEntry> redo_;
+  std::deque<HistoryEntry> undo_;
+  std::deque<HistoryEntry> redo_;
+  std::size_t history_bytes_ = 0;
+  HistoryLimits limits_;
   std::optional<std::uint64_t> eligible_gesture_;
 };
 

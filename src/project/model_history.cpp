@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <limits>
 #include <map>
 #include <memory>
@@ -19,6 +20,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -299,12 +301,17 @@ Result<AppliedRevision> ProjectModel::apply(const std::vector<Operation>& operat
   auto next = std::make_shared<const Snapshot>(std::move(candidate));
   if (gesture && eligible_gesture_ == gesture && !undo_.empty() &&
       undo_.back().gesture == gesture) {
-    undo_.back().after = next;
+    // The step's `before` is unchanged; the replaced current was its
+    // `after` and is released.
+    redo_.clear();
+    current_ = std::move(next);
+    current_bytes_ = estimated_bytes(*current_);
+    undo_.back().after = current_;
+    undo_.back().after_bytes = current_bytes_;
+    recount_history();
   } else {
-    undo_.push_back({current_, next, gesture});
+    push_undo(std::move(next), gesture);
   }
-  redo_.clear();
-  current_ = std::move(next);
   eligible_gesture_ = gesture;
   return Result<AppliedRevision>::success({current_, std::move(changes), std::move(lease)});
 }
@@ -335,10 +342,7 @@ Result<AppliedRevision> ProjectModel::restore_snapshot(Snapshot saved) {
   saved.audible_revision =
       same_audio(*current_, saved) ? current_->audible_revision : saved.revision;
   auto changes = broad_changes(*current_, saved);
-  auto next = std::make_shared<const Snapshot>(std::move(saved));
-  undo_.push_back({current_, next, std::nullopt});
-  redo_.clear();
-  current_ = std::move(next);
+  push_undo(std::make_shared<const Snapshot>(std::move(saved)), std::nullopt);
   eligible_gesture_.reset();
   return Result<AppliedRevision>::success({current_, std::move(changes), std::move(lease)});
 }
@@ -358,8 +362,10 @@ Result<AppliedRevision> ProjectModel::adopt_authoritative_snapshot(Snapshot save
       same_audio(*current_, saved) ? current_->audible_revision : saved.revision;
   auto changes = broad_changes(*current_, saved);
   current_ = std::make_shared<const Snapshot>(std::move(saved));
+  current_bytes_ = estimated_bytes(*current_);
   undo_.clear();
   redo_.clear();
+  recount_history();
   eligible_gesture_.reset();
   return Result<AppliedRevision>::success({current_, std::move(changes), nullptr});
 }
@@ -399,8 +405,56 @@ Result<AppliedRevision> ProjectModel::publish_history(const Snapshot& target, bo
     undo_.push_back(std::move(redo_.back()));
     redo_.pop_back();
   }
+  // The new current is a copy of the target with its own revision; the
+  // history keeps the snapshots it already held.
   current_ = std::move(next);
+  current_bytes_ = estimated_bytes(*current_);
+  recount_history();
   return Result<AppliedRevision>::success({current_, std::move(changes), std::move(lease)});
+}
+
+void ProjectModel::push_undo(std::shared_ptr<const Snapshot> next,
+                             std::optional<std::uint64_t> gesture) {
+  redo_.clear();
+  const auto before_bytes = current_bytes_;
+  auto before = std::exchange(current_, std::move(next));
+  current_bytes_ = estimated_bytes(*current_);
+  undo_.push_back({std::move(before), current_, gesture, before_bytes, current_bytes_});
+  trim_history();
+}
+
+void ProjectModel::recount_history() {
+  // Neighbouring steps share snapshots, and the newest step's may be the
+  // current one: count each snapshot only the history keeps alive once.
+  std::unordered_set<const Snapshot*> counted{current_.get()};
+  history_bytes_ = 0;
+  const auto count = [&](const std::shared_ptr<const Snapshot>& snapshot, std::size_t bytes) {
+    if (counted.insert(snapshot.get()).second)
+      history_bytes_ += bytes;
+  };
+  for (const auto* history : {&undo_, &redo_})
+    for (const auto& entry : *history) {
+      count(entry.before, entry.before_bytes);
+      count(entry.after, entry.after_bytes);
+    }
+}
+
+void ProjectModel::trim_history() {
+  recount_history();
+  const auto over_limits = [&] {
+    const bool too_deep = undo_.size() > limits_.steps;
+    const bool too_large = history_bytes_ > limits_.bytes && undo_.size() > limits_.kept_steps;
+    return too_deep || too_large;
+  };
+  while (!undo_.empty() && over_limits()) {
+    undo_.pop_front();
+    recount_history();
+  }
+}
+
+void ProjectModel::set_history_limits(HistoryLimits limits) {
+  limits_ = limits;
+  trim_history();
 }
 
 Result<AppliedRevision> ProjectModel::undo() {
