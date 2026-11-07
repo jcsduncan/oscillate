@@ -1329,6 +1329,19 @@ Result<void> RoutedPlaybackControl::build_and_publish(
                                            std::move(gains).value());
   if (!published)
     return fail(snapshot.revision, published.error());
+  if (publish_live_) {
+    live_candidate_ =
+        LiveCandidate{.revision = snapshot.revision,
+                      .passed_at_publication = publisher_.live_candidate_passed_blocks(),
+                      .published_snapshot = published_snapshot_,
+                      .route_plan = published_route_plan_,
+                      .convolution = live_convolution_,
+                      .chains = active_chains_,
+                      .vst3_stages = vst3_stages_,
+                      .vst3_automation = active_vst3_automation_,
+                      .prepared_limiter = prepared_limiter_,
+                      .master_output_latency_frames = master_output_latency_frames_};
+  }
   const auto route_master_output_latency = route.value().latency.master_output_latency_frames;
   if (topological_order_.empty()) {
     sources_ = std::move(route.value().sources);
@@ -1341,6 +1354,18 @@ Result<void> RoutedPlaybackControl::build_and_publish(
   if (prepared_convolution)
     live_convolution_ = std::move(prepared_convolution);
   active_chains_ = std::move(chains_next);
+  follow_published_notes();
+  vst3_stages_ = std::move(vst3_next);
+  active_vst3_automation_ = std::move(vst3_automation);
+  // A lookahead stage (a limiter such as Ceiling) holds audio Stop must drain.
+  prepared_limiter_ = std::ranges::any_of(
+      active_chains_, [](const ActiveChain& chain) { return chain.chain.latency_frames() != 0; });
+  master_output_latency_frames_ =
+      master_latency + static_cast<std::uint32_t>(route_master_output_latency);
+  return Result<void>::success();
+}
+
+void RoutedPlaybackControl::follow_published_notes() {
   // Effects that read their keying tracks' notes ahead (Pump's MIDI
   // trigger, ADR-0058) take the new notes on a kept stage, no rebuild. A
   // failure keeps the notes it had.
@@ -1351,14 +1376,41 @@ Result<void> RoutedPlaybackControl::build_and_publish(
     }
   }
   refresh_synth_locks();
-  vst3_stages_ = std::move(vst3_next);
-  active_vst3_automation_ = std::move(vst3_automation);
-  // A lookahead stage (a limiter such as Ceiling) holds audio Stop must drain.
-  prepared_limiter_ = std::ranges::any_of(
-      active_chains_, [](const ActiveChain& chain) { return chain.chain.latency_frames() != 0; });
-  master_output_latency_frames_ =
-      master_latency + static_cast<std::uint32_t>(route_master_output_latency);
-  return Result<void>::success();
+}
+
+void RoutedPlaybackControl::settle_live_candidate() {
+  if (!live_candidate_)
+    return;
+  const auto active = publisher_.active_revision();
+  if (active >= live_candidate_->revision) {
+    live_candidate_.reset(); // Adopted.
+    return;
+  }
+  if (publisher_.has_pending()) {
+    if (!live_candidate_->withdrawing &&
+        publisher_.live_candidate_passed_blocks() - live_candidate_->passed_at_publication >=
+            live_candidate_passed_block_limit)
+      live_candidate_->withdrawing = publisher_.withdraw_pending();
+    return;
+  }
+  // Withdrawn, or discarded by the callback as prepared against another
+  // graph: the old graph played on, so the control state it replaced returns.
+  auto prior = std::move(*live_candidate_);
+  live_candidate_.reset();
+  published_snapshot_ = std::move(prior.published_snapshot);
+  published_route_plan_ = std::move(prior.route_plan);
+  live_convolution_ = std::move(prior.convolution);
+  active_chains_ = std::move(prior.chains);
+  vst3_stages_ = std::move(prior.vst3_stages);
+  active_vst3_automation_ = std::move(prior.vst3_automation);
+  prepared_limiter_ = prior.prepared_limiter;
+  master_output_latency_frames_ = prior.master_output_latency_frames;
+  if (published_snapshot_)
+    follow_published_notes();
+  (void)revisions_.fail_revision(
+      prior.revision, {ErrorCode::unavailable,
+                       "The edit's graph could not take over playback; the previous graph plays "
+                       "on. The edit is saved: edit again or retry to apply it"});
 }
 
 void RoutedPlaybackControl::refresh_synth_locks() {
@@ -2525,6 +2577,7 @@ Result<void> RoutedPlaybackControl::retry() {
 
 void RoutedPlaybackControl::observe() {
   OSCILLATE_TRACE_SPAN("edit.observe");
+  settle_live_candidate();
   (void)publisher_.collect_retired();
   // A group is applied when its slowest stage is.
   const auto group_applied = [this] {
