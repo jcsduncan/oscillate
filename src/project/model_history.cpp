@@ -257,6 +257,9 @@ Result<AppliedRevision> ProjectModel::apply(const std::vector<Operation>& operat
       return Result<AppliedRevision>::failure(result.error());
     }
   }
+  if (auto released = release_lone_links(*current_, context); !released) {
+    return Result<AppliedRevision>::failure(released.error());
+  }
   changes.sources.assign(changed_source_ids.begin(), changed_source_ids.end());
   auto valid = validate(candidate);
   if (!valid) {

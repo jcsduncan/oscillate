@@ -293,6 +293,59 @@ Result<void> apply_command(ApplyContext& context, const AddNativeEffect& command
   return Result<void>::success();
 }
 
+namespace {
+using LinkGroup = std::pair<std::string, std::string>; // Engine and link.
+
+// Each linked built-in effect, with where it sits and whether its track is
+// frozen; const or not as the snapshot is.
+template <typename State, typename Visit> void for_each_linked(State& snapshot, Visit visit) {
+  const auto walk = [&](const SignalPathId& path, auto& effects, bool frozen) {
+    for (auto& effect : effects) {
+      if (auto* patch = std::get_if<NativeEffectPatch>(&effect.processor);
+          patch != nullptr && !patch->link.empty())
+        visit(path, *patch, frozen);
+    }
+  };
+  for (auto& track : snapshot.tracks)
+    walk(track.id, track.effects, track.frozen.has_value());
+  walk(MasterSignalPath{}, snapshot.master_effects, false);
+}
+} // namespace
+
+Result<void> release_lone_links(const Snapshot& before, ApplyContext& context) {
+  std::map<LinkGroup, std::size_t> sizes_before;
+  for_each_linked(before, [&](const SignalPathId&, const NativeEffectPatch& patch, bool) {
+    ++sizes_before[{patch.engine, patch.link}];
+  });
+  struct Member {
+    SignalPathId path;
+    NativeEffectPatch* patch;
+    bool frozen;
+  };
+  std::map<LinkGroup, std::vector<Member>> groups;
+  for_each_linked(context.candidate,
+                  [&](const SignalPathId& path, NativeEffectPatch& patch, bool frozen) {
+                    groups[{patch.engine, patch.link}].push_back({path, &patch, frozen});
+                  });
+  for (auto& [group, members] : groups) {
+    const auto was = sizes_before.find(group);
+    // A frozen track's effects cannot change, so one left there keeps its
+    // link rather than blocking the edit; a group of one links nothing.
+    if (members.size() != 1 || members.front().frozen || was == sizes_before.end() ||
+        was->second < 2)
+      continue;
+    // The edit left this effect alone in its group: a group of one is no
+    // group, as unlinking the last partner leaves it.
+    auto& [path, patch, frozen] = members.front();
+    if (patch->generation == std::numeric_limits<std::uint64_t>::max())
+      return Result<void>::failure(exhausted("native effect generation exhausted"));
+    patch->link.clear();
+    ++patch->generation;
+    mark_effect_path_changed(path, context.changes);
+  }
+  return Result<void>::success();
+}
+
 Result<void> apply_command(ApplyContext& context, const SetNativeEffectSettings& command) {
   auto& candidate = context.candidate;
   auto& changes = context.changes;
