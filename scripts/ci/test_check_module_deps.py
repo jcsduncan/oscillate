@@ -108,8 +108,10 @@ class CheckTests(TreeTest):
         self.assertIn("oscillate::engine_extra", found[0])
 
     def test_nested_module_path_wins(self):
+        nested = table()
+        nested["modules"]["app"] = {"path": "src/app", "allowed": []}
         self.write("app/plugin_ui", "target_link_libraries(x oscillate::engine)\n")
-        self.assertEqual(self.check(), [])
+        self.assertEqual(check_module_deps.check(self.root, nested), [])
 
     def test_unowned_directory_fails(self):
         self.write("newmodule", "oscillate_add_library(newmodule SOURCES n.cpp)\n")
