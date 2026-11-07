@@ -1,6 +1,10 @@
 """Runs scripts/check-tidy.sh on the translation units a change touches.
 
 Usage: tidy_changed.py PRESET BASE
+BASE is the commit the change is measured against. In CI it is HEAD^1: the
+pull request's merge commit's first parent, the base branch tip it merges
+into, so commits that reached the base after the pull request opened never
+count as the change's own.
 A changed C++ source is checked itself. A changed header is checked through
 the source of the same name beside it, or under src/ for a public header in
 include/oscillate/. Only findings on the lines the change adds or edits are
@@ -50,13 +54,13 @@ def added_lines(diff):
     return lines
 
 
-def changed_lines(base):
+def changed_lines(base, cwd=ROOT):
     result = subprocess.run(
         ["git", "diff", "-U0", "--no-color", "--diff-filter=ACMR", f"{base}...HEAD"],
         check=True,
         capture_output=True,
         text=True,
-        cwd=ROOT,
+        cwd=cwd,
     )
     return added_lines(result.stdout)
 

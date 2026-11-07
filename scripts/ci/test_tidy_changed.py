@@ -1,7 +1,10 @@
 """Unit tests for tidy_changed.py's choice of translation units."""
 
 import json
+import subprocess
+import tempfile
 import unittest
+from pathlib import Path
 
 import tidy_changed
 
@@ -117,6 +120,40 @@ class ChangedFindingsTests(unittest.TestCase):
         )
         lines = {"include/oscillate/engine/graph.hpp": [[2, 5]]}
         self.assertEqual(len(tidy_changed.changed_findings(output, lines, self.ROOT)), 1)
+
+
+class MovedBaseTests(unittest.TestCase):
+    """GitHub checks out the pull request merged into the current base tip."""
+
+    def git(self, *arguments):
+        return subprocess.run(
+            ["git", *arguments], check=True, capture_output=True, text=True, cwd=self.root
+        ).stdout.strip()
+
+    def write(self, name, lines):
+        (Path(self.root) / name).write_text("".join(f"{line}\n" for line in lines))
+
+    def test_commits_that_reach_the_base_later_are_not_the_change(self):
+        with tempfile.TemporaryDirectory() as root:
+            self.root = root
+            self.git("init", "-q", "-b", "main")
+            self.git("config", "user.email", "ci@example.invalid")
+            self.git("config", "user.name", "CI")
+            self.write("a.cpp", ["a1", "a2", "a3"])
+            self.write("b.cpp", ["b1", "b2"])
+            self.git("add", ".")
+            self.git("commit", "-q", "-m", "base")
+            recorded_base = self.git("rev-parse", "HEAD")
+            self.git("checkout", "-q", "-b", "change")
+            self.write("a.cpp", ["a1", "changed", "a3"])
+            self.git("commit", "-q", "-am", "the change")
+            self.git("checkout", "-q", "main")
+            self.write("b.cpp", ["b1", "b2", "landed later"])
+            self.git("commit", "-q", "-am", "another pull request")
+            self.git("merge", "-q", "--no-ff", "-m", "merge", "change")
+            self.assertEqual(tidy_changed.changed_lines("HEAD^1", cwd=root), {"a.cpp": [[2, 2]]})
+            # The event's recorded base would also count the other pull request.
+            self.assertIn("b.cpp", tidy_changed.changed_lines(recorded_base, cwd=root))
 
 
 if __name__ == "__main__":
