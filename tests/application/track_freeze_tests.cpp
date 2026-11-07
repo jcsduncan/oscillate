@@ -351,10 +351,33 @@ void consolidate_writes_clips_out() {
           "an empty selection is refused");
 }
 
+// An empty one-tick pattern looped over many bars repeats trillions of
+// times: consolidating it writes an empty clip at once rather than walking
+// every silent repeat.
+void consolidating_a_silent_tiny_loop_is_bounded() {
+  constexpr std::int64_t one_tick = 1;
+  constexpr std::int64_t long_bars = 1'000;
+  Directory directory;
+  auto session = take(app::ProjectSession::create(directory.path() / "song"));
+  const auto track = take(session->instruments().add_synth_track());
+  done(session->midi_clips().add_midi_clip(track, {0}), "clip");
+  const auto looped = only_clip(session->snapshot(), track);
+  done(session->midi_clips().set_midi_clip_loop(looped, true), "loop");
+  done(session->midi_clips().resize_midi_clip(looped, {long_bars * bar}), "many bars");
+  done(session->midi_clips().replace_midi_clip_notes(looped, {one_tick}, {}), "one tick");
+  const auto clip =
+      take(session->midi_clips().consolidate_midi_clips(track, {0}, {long_bars * bar}));
+  const auto& clips = session->snapshot().tracks.front().midi_clips;
+  REQUIRE_EQ(clips.size(), 1, "the silent loop is written out as one clip");
+  REQUIRE_EQ(clips.front().id, clip, "the silent loop is written out as one clip");
+  REQUIRE_TRUE(clips.front().notes.empty(), "a silent loop writes no notes");
+}
+
 } // namespace
 
 int main() {
   try {
+    consolidating_a_silent_tiny_loop_is_bounded();
     the_render_is_the_track_before_its_channel();
     frozen_tracks_export_what_they_played();
     a_stale_render_is_refused();

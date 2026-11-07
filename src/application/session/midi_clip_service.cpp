@@ -658,6 +658,23 @@ MidiClipService::merge_chosen_midi_clips(project::TrackId track,
 
   // Every repeat written out where it sounds, as compiled playback reads it:
   // a note past the pattern is silent, one crossing it or the clip's end is cut.
+  // Overlapping clips can repeat a note: one note per start and key, the
+  // longest and loudest.
+  const auto merge_repeated = [](std::vector<project::MidiNote> notes) {
+    std::ranges::sort(notes, [](const project::MidiNote& a, const project::MidiNote& b) {
+      return a.start != b.start ? a.start < b.start : a.key < b.key;
+    });
+    std::vector<project::MidiNote> merged;
+    for (const auto& note : notes) {
+      if (!merged.empty() && merged.back().start == note.start && merged.back().key == note.key) {
+        merged.back().end = std::max(merged.back().end, note.end);
+        merged.back().velocity = std::max(merged.back().velocity, note.velocity);
+        continue;
+      }
+      merged.push_back(note);
+    }
+    return merged;
+  };
   std::vector<project::MidiNote> notes;
   std::array<std::vector<project::MidiPedalPoint>, project::midi_pedal_count> pedals;
   for (const auto& span : chosen) {
@@ -665,23 +682,43 @@ MidiClipService::merge_chosen_midi_clips(project::TrackId track,
     const auto length = clip.pattern_length.value;
     if (length <= 0)
       return R::failure({ErrorCode::corrupt_data, "A MIDI clip has no pattern"});
-    for (std::int64_t base = span.first; base < span.last; base += length) {
-      for (const auto& note : clip.notes) {
-        if (note.start.value >= length)
-          continue;
+    // The pattern's audible notes, merged as the whole result is: each repeat
+    // then writes notes no other repeat of this clip writes, so a clip that
+    // would write more than a clip holds fails at once rather than expanding
+    // a short pattern over a long clip without bound.
+    std::vector<project::MidiNote> pattern;
+    for (const auto& note : clip.notes)
+      if (note.start.value < length)
+        pattern.push_back(note);
+    pattern = merge_repeated(std::move(pattern));
+    const bool pedalled = std::ranges::any_of(clip.pedals, [length](const auto& lane) {
+      return !lane.points.empty() && lane.points.front().position.value < length;
+    });
+    const bool silent = pattern.empty() && !pedalled;
+    std::size_t written = 0;
+    std::array<std::size_t, project::midi_pedal_count> pedal_written{};
+    for (std::int64_t base = span.first; !silent && base < span.last; base += length) {
+      for (const auto& note : pattern) {
         const auto note_first = base + note.start.value;
         const auto note_last = std::min(base + std::min(note.end.value, length), span.last);
         if (note_first >= span.last || note_last <= note_first)
           continue;
+        if (++written > project::max_midi_notes_per_clip)
+          return R::failure(
+              {ErrorCode::resource_exhausted, "The consolidated clip would have too many notes"});
         // Fresh ids replace the originals once the notes are merged.
         notes.push_back(
             {note.id, {note_first - first}, {note_last - first}, note.key, note.velocity});
       }
       for (const auto& lane : clip.pedals) {
-        auto& points = pedals[static_cast<std::size_t>(lane.pedal)];
+        const auto index = static_cast<std::size_t>(lane.pedal);
+        auto& points = pedals[index];
         for (const auto& point : lane.points) {
           if (point.position.value >= length || base + point.position.value >= span.last)
             break;
+          if (++pedal_written[index] > project::max_midi_pedal_points_per_lane)
+            return R::failure({ErrorCode::resource_exhausted,
+                               "The consolidated clip would have too many pedal points"});
           points.push_back({{base + point.position.value - first}, point.value});
         }
       }
@@ -695,20 +732,7 @@ MidiClipService::merge_chosen_midi_clips(project::TrackId track,
         points.push_back({{span.last - first}, 0.0});
     }
   }
-  // Overlapping clips can repeat a note: one note per start and key, the
-  // longest and loudest.
-  std::ranges::sort(notes, [](const project::MidiNote& a, const project::MidiNote& b) {
-    return a.start != b.start ? a.start < b.start : a.key < b.key;
-  });
-  std::vector<project::MidiNote> merged;
-  for (const auto& note : notes) {
-    if (!merged.empty() && merged.back().start == note.start && merged.back().key == note.key) {
-      merged.back().end = std::max(merged.back().end, note.end);
-      merged.back().velocity = std::max(merged.back().velocity, note.velocity);
-      continue;
-    }
-    merged.push_back(note);
-  }
+  auto merged = merge_repeated(std::move(notes));
   if (merged.size() > project::max_midi_notes_per_clip)
     return R::failure(
         {ErrorCode::resource_exhausted, "The consolidated clip would have too many notes"});
