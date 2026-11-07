@@ -1,6 +1,6 @@
 # 08a — Nova panel ↔ engine contract
 
-**Status:** Draft, written with the panel (23 October 2026). **Parent spec:** [08-nova-synth.md](08-nova-synth.md). **Decision:** [ADR-0057](../decisions/0057-nova-flagship-synth.md). **Panel:** `apps/daw_quick/qml/nova/`, tested by `nova_panel_tests`.
+**Status:** Draft. **Parent spec:** [08-nova-synth.md](08-nova-synth.md). **Decision:** [ADR-0057](../decisions/0057-nova-flagship-synth.md). **Panel:** `apps/daw_quick/qml/nova/`, tested by `nova_panel_tests`.
 
 The Nova panel was written before the engine. This file is what the engine must publish so the panel works unchanged: the flat parameter table, the document conventions, the modulation sources, the FX modules and the telemetry frame. Everything here is binding on both sides; a change is made here first, then in `NovaContract.js` (panel) and the engine.
 

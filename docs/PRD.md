@@ -2,13 +2,9 @@
 
 **Status:** Draft for HLD and detailed specifications
 
-**Date:** 14 October 2026
-
 **Target platform:** Ubuntu 26.04 LTS, x86-64
 
 **Product direction:** A production-ready, Linux-first digital audio workstation for beginners through professional producers.
-
-**Amended:** the bundled instruments and native effects now match what is built ([ADR-0027](decisions/0027-prism-native-synth.md) onwards). Computer-keyboard MIDI recording, the metronome and the count-in moved into scope with [ADR-0086](decisions/0086-midi-recording-and-click.md), and sample-folder previews in the browser with [ADR-0059](decisions/0059-play-and-sparkle.md). Chords are notes in MIDI clips ([ADR-0084](decisions/0084-chord-clips.md)). Audio recording, hardware MIDI input and Session View remain deferred.
 
 ## 1. Product vision
 

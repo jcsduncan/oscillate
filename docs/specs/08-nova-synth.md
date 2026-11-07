@@ -1,6 +1,6 @@
 # 08 — Nova flagship synth
 
-**Status:** Draft for sign-off (23 October 2026). **Decision:** [ADR-0057](../decisions/0057-nova-flagship-synth.md). **Panel design:** [nova-panel-mockup.html](../ui/nova-panel-mockup.html). Open it in a browser; it is interactive.
+**Status:** Draft for sign-off. **Decision:** [ADR-0057](../decisions/0057-nova-flagship-synth.md). **Panel design:** [nova-panel-mockup.html](../ui/nova-panel-mockup.html). Open it in a browser; it is interactive.
 
 This spec is written so that a contributor who has read AGENTS.md, the HLD, ADR-0027 and this file can work on Nova without further context. Requirement IDs are stable; tests cite them.
 
@@ -158,7 +158,7 @@ The voice runs at 2× internal rate in HIGH and 4× in ULTRA. ECO runs at 1× an
 
 ## 9. Platform changes (the hard part — do this before DSP)
 
-**Status: built (phase 1, 23 October 2026).** This section describes what exists; items marked *later* are still to do.
+This section describes the built platform. Items marked *later* are open work, tracked in [issues](https://github.com/jcsduncan/oscillate/issues).
 
 ### 9.1 Structured synth document
 - **Data.** `NativeInstrumentPatch` (`model.hpp`) has a `NativeSynthDocument document`, which is empty for engines without one. It holds:
