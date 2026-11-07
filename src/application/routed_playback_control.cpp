@@ -547,8 +547,7 @@ constexpr std::uint64_t unbounded_ring_out_seconds = 4;
           prepared.latency_frames,
           prepared.fixed_tail_qualified ? declared : std::nullopt,
           declared,
-          prepared.routed_sidechain,
-          prepared.process_failed};
+          prepared.routed_sidechain};
 }
 
 // True when `chain` runs exactly the `saved` stages.

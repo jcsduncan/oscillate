@@ -11,6 +11,7 @@
 #include <iostream>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -58,7 +59,7 @@ Song song_with_reverb(const Directory& directory, bool on_master) {
   const auto track = take(session->instruments().add_synth_track());
   const project::SignalPathId path =
       on_master ? project::SignalPathId{project::MasterSignalPath{}} : project::SignalPathId{track};
-  (void)take(session->effects().add_effect_engine(path, 0, std::string(reverb)));
+  (void)take(session->effects().add_effect_engine(path, 0, reverb));
   REQUIRE_OK(session->saving().save(), "project saved");
   return {session->snapshot(), take(persistence::ProjectStore::open_reader(root))};
 }
@@ -95,6 +96,8 @@ void track_chain_runs_in_the_route() {
   REQUIRE_TRUE(graph.route.has_value(), "a track chain routes the render");
   REQUIRE_EQ(graph.chain_stages.size(), track_stages(song.snapshot),
              "every enabled track effect is a chain stage");
+  if (!graph.route)
+    throw std::runtime_error("a track chain routes the render");
   REQUIRE_GT(graph.route->native_tail_frames, 0U, "the reverb's ring-out reaches the master");
   REQUIRE_EQ(graph.master_stages.size(), master_stages(song.snapshot),
              "the master runs its own slots");
@@ -166,6 +169,8 @@ void vst3_stages_come_from_the_host() {
   REQUIRE_EQ(graph.master_stages.size(), master_stages(song.snapshot),
              "the master's plugin is a master stage");
   REQUIRE_TRUE(graph.route.has_value(), "the chain routes the render");
+  if (!graph.route)
+    throw std::runtime_error("the chain routes the render");
   REQUIRE_EQ(graph.route->output_latency_frames, vst3_latency_frames,
              "the track plugin's latency is the route's");
   REQUIRE_EQ(graph.master_latency_frames, vst3_latency_frames,

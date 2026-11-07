@@ -135,6 +135,7 @@ private:
 // the music's loudest stretch, fading out over tail_fade_seconds.
 class TailTrim {
 public:
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the rate, then a frame count.
   TailTrim(std::uint32_t rate, std::uint64_t music_frames)
       : music_frames_(music_frames),
         window_(std::max<std::uint64_t>(1, static_cast<std::uint64_t>(rate * tail_window_seconds))),
