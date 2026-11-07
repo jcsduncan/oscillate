@@ -103,8 +103,8 @@ public:
 
 std::size_t preset_index(const synth::SynthEngine& engine, std::string_view name) {
   const auto presets = engine.descriptor->presets;
-  const auto found =
-      std::ranges::find(presets, name, [](const synth::SynthPreset& preset) { return preset.name; });
+  const auto found = std::ranges::find(
+      presets, name, [](const synth::SynthPreset& preset) { return preset.name; });
   if (found == presets.end())
     throw std::runtime_error("missing preset: " + std::string(name));
   return static_cast<std::size_t>(found - presets.begin());
@@ -125,9 +125,8 @@ struct Song {
   std::uint64_t next_note = 1;
   std::uint64_t next_marker = 1;
 
-  project::TrackId instrument(std::string_view engine_id, std::string_view preset,
-                              std::string name, std::uint32_t colour, double level,
-                              double pan = 0.0) {
+  project::TrackId instrument(std::string_view engine_id, std::string_view preset, std::string name,
+                              std::uint32_t colour, double level, double pan = 0.0) {
     const auto* engine = synth::find_engine(engine_id);
     if (engine == nullptr)
       throw std::runtime_error("missing native synth: " + std::string(engine_id));
@@ -164,8 +163,8 @@ struct Song {
 
     // `local_bar` counts from the clip's start; offsets and lengths in beats.
     void note(int local_bar, double beat_offset, double length_beats, int key, int velocity) {
-      const auto start =
-          static_cast<std::int64_t>(local_bar) * bar + static_cast<std::int64_t>(beat_offset * beat);
+      const auto start = static_cast<std::int64_t>(local_bar) * bar +
+                         static_cast<std::int64_t>(beat_offset * beat);
       const auto length = static_cast<std::int64_t>(length_beats * beat);
       notes.push_back({id<project::NoteId>(song.next_note++),
                        {start},
@@ -245,9 +244,9 @@ void bass(Song& song, project::TrackId track) {
   constexpr int velocity = 92;
   constexpr int soft = 74;
   constexpr double length = 0.4;
-  for (const auto& [start, bars] : {std::pair{groove_bar, section_bars},
-                                    std::pair{lift_bar, section_bars},
-                                    std::pair{drop_bar, song_bars - drop_bar}}) {
+  for (const auto& [start, bars] :
+       {std::pair{groove_bar, section_bars}, std::pair{lift_bar, section_bars},
+        std::pair{drop_bar, song_bars - drop_bar}}) {
     auto clip = song.clip(track, start, bars);
     for (int b = 0; b < bars; ++b) {
       const int root = root_at(start + b);
@@ -293,8 +292,7 @@ void arp(Song& song, project::TrackId track) {
         if (position % rest_every == rest_every - 1)
           continue;
         const auto key = chord[order[static_cast<std::size_t>(position) % order.size()]];
-        clip.note(b, s * step, length, key + semitones_per_octave,
-                  s % 3 == 0 ? accent : velocity);
+        clip.note(b, s * step, length, key + semitones_per_octave, s % 3 == 0 ? accent : velocity);
       }
     }
     clip.finish();
@@ -357,13 +355,12 @@ void create_demo_project(const std::filesystem::path& root) {
       take(timeline::TempoMap::create({{{0}, tempo_bpm, timeline::TempoShape::step}}, 1)),
       take(timeline::MeterMap::create({{{0}, beats_per_bar, beat_unit}}, 1)), gate));
   Song song;
-  const auto kick_track = song.instrument("anvil", "Tech House Thump", "Kick", kick_colour,
-                                          kick_level);
-  const auto drum_track = song.instrument("pulse", "909 House", "Drums", drums_colour,
-                                          drums_level);
+  const auto kick_track =
+      song.instrument("anvil", "Tech House Thump", "Kick", kick_colour, kick_level);
+  const auto drum_track = song.instrument("pulse", "909 House", "Drums", drums_colour, drums_level);
   const auto bass_track = song.instrument("torque", "Moog Bass", "Bass", bass_colour, bass_level);
-  const auto chord_track = song.instrument("ember", "Juno Strings", "Chords", chords_colour,
-                                           chords_level, chords_pan);
+  const auto chord_track =
+      song.instrument("ember", "Juno Strings", "Chords", chords_colour, chords_level, chords_pan);
   const auto arp_track = song.instrument("nova", "Pluck", "Arp", arp_colour, arp_level, arp_pan);
   const auto bell_track =
       song.instrument("halo", "Bells", "Bells", bells_colour, bells_level, bells_pan);
@@ -380,15 +377,15 @@ void create_demo_project(const std::filesystem::path& root) {
   constexpr double bells_reverb_decay = 4.0;
   constexpr double master_ceiling_db = -1.0;
   song.effect(chord_track, 0, "shape");
-  song.effect(chord_track, 1, "press",
-              {{"press.threshold", chords_press_threshold_db}, {"press.ratio", chords_press_ratio}});
+  song.effect(
+      chord_track, 1, "press",
+      {{"press.threshold", chords_press_threshold_db}, {"press.ratio", chords_press_ratio}});
   song.effect(arp_track, 0, "relay",
               {{"relay.mix", arp_delay_mix}, {"relay.feedback", arp_delay_feedback}});
   song.effect(bell_track, 0, "orbit", {{"orbit.mix", bells_chorus_mix}});
   song.effect(bell_track, 1, "expanse",
               {{"expanse.mix", bells_reverb_mix}, {"expanse.decay", bells_reverb_decay}});
-  song.effect(project::MasterSignalPath{}, 0, "ceiling",
-              {{"ceiling.ceiling", master_ceiling_db}});
+  song.effect(project::MasterSignalPath{}, 0, "ceiling", {{"ceiling.ceiling", master_ceiling_db}});
 
   kick(song, kick_track);
   drums(song, drum_track);

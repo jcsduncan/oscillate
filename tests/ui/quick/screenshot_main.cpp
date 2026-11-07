@@ -15,6 +15,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <cmath>
 #include <exception>
 #include <filesystem>
 #include <iostream>
@@ -99,8 +100,16 @@ int run(int argc, char** argv) {
       }
       width = std::stoi(size.substr(0, separator));
       height = std::stoi(size.substr(separator + 1));
+      if (width <= 0 || height <= 0) {
+        std::cerr << usage;
+        return 2;
+      }
     } else if (option == "--play-from" && has_value) {
       play_from = std::stod(argv[++index]);
+      if (!std::isfinite(*play_from) || *play_from < 0.0) {
+        std::cerr << usage;
+        return 2;
+      }
     } else if ((option == "--create" || option == "--open" || option == "--demo") && has_value &&
                project_option.empty()) {
       project_option = option;
@@ -109,6 +118,11 @@ int run(int argc, char** argv) {
       std::cerr << usage;
       return 2;
     }
+  }
+  if (play_from && settle_ms <= play_delay_ms) {
+    std::cerr << "--play-from needs a --settle longer than " << play_delay_ms
+              << " ms, when playback starts\n";
+    return 2;
   }
   if (project_option == "--demo")
     oscillate::quick::screenshot::create_demo_project(project_path);

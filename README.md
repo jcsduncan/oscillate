@@ -7,7 +7,7 @@ pipeline and VST3 host; Qt Quick user interface.
 - **Status:** pre-release; not yet release-qualified
 - **Licence:** GPL-3.0-or-later
 
-<img src="docs/images/app/arrangement.png" alt="Arrangement with the device chain of the selected track" width="880">
+![Arrangement with the device chain of the selected track](docs/images/app/arrangement.png)
 
 *The arrangement, with the selected track's device chain below.*
 
@@ -31,15 +31,15 @@ Known problems: [known issues](https://jcsduncan.github.io/oscillate/known-issue
 
 ## Screenshots
 
-<img src="docs/images/app/mixer.png" alt="Mixer" width="880">
+![Mixer](docs/images/app/mixer.png)
 
 *The mixer: one strip per track with its inserts, and the master meters.*
 
-<img src="docs/images/instruments/nova.png" alt="Nova panel" width="800">
+![Nova panel](docs/images/instruments/nova.png)
 
 *Nova, the flagship wavetable synth ([spec 08](docs/specs/08-nova-synth.md)).*
 
-<img src="docs/images/app/piano-roll.png" alt="Piano roll" width="880">
+![Piano roll](docs/images/app/piano-roll.png)
 
 *The piano roll, with velocity and pedal lanes.*
 
