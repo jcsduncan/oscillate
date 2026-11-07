@@ -373,11 +373,47 @@ void consolidating_a_silent_tiny_loop_is_bounded() {
   REQUIRE_TRUE(clips.front().notes.empty(), "a silent loop writes no notes");
 }
 
+// A sounding loop whose written-out notes, or pedal points on one lane,
+// would pass what a clip holds is refused, and nothing changes.
+void consolidating_past_the_clip_limits_is_refused() {
+  constexpr std::int64_t quarter = timeline::ticks_per_quarter;
+  constexpr std::int64_t repeats = static_cast<std::int64_t>(project::max_midi_notes_per_clip) + 4;
+  static_assert(project::max_midi_pedal_points_per_lane < static_cast<std::size_t>(repeats));
+  constexpr int key = 60;
+  constexpr double pedal_down = 1.0;
+  const auto refused = [&](bool pedalled) {
+    Directory directory;
+    auto session = take(app::ProjectSession::create(directory.path() / "song"));
+    const auto track = take(session->instruments().add_synth_track());
+    done(session->midi_clips().add_midi_clip(track, {0}), "clip");
+    const auto looped = only_clip(session->snapshot(), track);
+    if (pedalled)
+      done(session->pedals().set_midi_pedal_lane(looped, project::MidiPedal::sustain,
+                                                 {{{0}, pedal_down}}),
+           "pedal");
+    else
+      done(session->notes().add_note_with_duration(looped, {0}, {quarter / 2}, key), "note");
+    done(session->midi_clips().resize_midi_clip(looped, {quarter}), "one quarter");
+    done(session->midi_clips().set_midi_clip_loop(looped, true), "loop");
+    done(session->midi_clips().resize_midi_clip(looped, {repeats * quarter}), "many repeats");
+    const auto before = session->snapshot().revision;
+    const auto result =
+        session->midi_clips().consolidate_midi_clips(track, {0}, {repeats * quarter});
+    REQUIRE_TRUE(!result, "a loop past the clip limits is refused");
+    REQUIRE_EQ(result.error().code, foundation::ErrorCode::resource_exhausted,
+               "a loop past the clip limits is refused");
+    REQUIRE_EQ(session->snapshot().revision, before, "a refused consolidate changes nothing");
+  };
+  refused(false);
+  refused(true);
+}
+
 } // namespace
 
 int main() {
   try {
     consolidating_a_silent_tiny_loop_is_bounded();
+    consolidating_past_the_clip_limits_is_refused();
     the_render_is_the_track_before_its_channel();
     frozen_tracks_export_what_they_played();
     a_stale_render_is_refused();
