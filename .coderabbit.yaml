@@ -67,10 +67,47 @@ reviews:
       instructions: |
         Imports at the top of the file, never inside functions. Do not use
         hasattr to avoid knowing an API. Scripts are run with python3 -I.
+    - path: "{include/oscillate/**,cmake/module_dependencies.json,src/**/CMakeLists.txt,src/persistence/**,src/engine/**,include/oscillate/native_dsp/**/telemetry*,include/oscillate/native_dsp/effects/*.hpp}"
+      instructions: |
+        Architecture and contracts. Check whether this change alters a module
+        boundary or dependency (cmake/module_dependencies.json, HLD §3), a
+        persisted format or schema, a real-time or threading contract, a
+        public API, a telemetry layout, or behaviour that docs/HLD.md, a spec
+        in docs/specs/ or an ADR in docs/decisions/ describes. Name the doc.
+        The HLD and specs must be updated in the same PR to describe the new
+        state. ADRs are the decision history: if the change contradicts an
+        accepted ADR, the PR must add a new ADR and mark the old one
+        "Superseded by ADR-NNNN" rather than rewrite it. Flag the PR if it
+        leaves any of these stale.
+    - path: "docs/**/*.md"
+      instructions: |
+        Docs describe the current state only: no dated amendment notes,
+        changelogs, "what works today", status logs or plans (open work lives
+        in GitHub issues). ADRs are the exception: they record a decision as
+        made, with a Status of Proposed, Accepted or Superseded by ADR-NNNN.
+        Check that edited docs match the code in this PR.
     - path: ".github/workflows/**"
       instructions: |
         Pin third-party actions by full commit SHA with a version comment and
         keep permissions least-privilege per workflow and job.
+
+  pre_merge_checks:
+    custom_checks:
+      - name: Architecture docs current
+        mode: error
+        instructions: |
+          Fail only if this PR leaves a document inaccurate. If it changes a
+          module boundary or dependency, persisted format or schema,
+          real-time or threading contract, public API in include/oscillate,
+          telemetry layout, or documented behaviour, check that docs/HLD.md
+          (including the §3 dependency table, kept in step with
+          cmake/module_dependencies.json), the relevant spec in docs/specs/
+          and the relevant ADR in docs/decisions/ still describe the code
+          after this PR. A document that is already accurate needs no edit.
+          If the change contradicts an accepted ADR, a new ADR must supersede
+          it, with the old ADR's status set to "Superseded by ADR-NNNN"; an
+          accepted ADR is otherwise left as written. Name each inaccurate
+          document.
 
   tools:
     ruff:
