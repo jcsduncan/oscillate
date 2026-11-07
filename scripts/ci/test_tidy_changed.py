@@ -67,5 +67,45 @@ class LineFilterTests(unittest.TestCase):
         )
 
 
+class ChangedFindingsTests(unittest.TestCase):
+    ROOT = "/work/oscillate"
+
+    def test_keeps_findings_located_in_changed_files(self):
+        output = "\n".join(
+            [
+                "/work/oscillate/src/engine/graph.cpp:4:2: error: bad [bugprone-x]",
+                "/work/oscillate/src/engine/../../include/oscillate/foundation/error.hpp:27:8: "
+                "error: uninitialised [clang-analyzer-core.CallAndMessage]",
+                "/work/oscillate/src/engine/graph.cpp:9:1: note: Calling implicit constructor",
+            ]
+        )
+        found = tidy_changed.changed_findings(output, ["src/engine/graph.cpp"], self.ROOT)
+        self.assertEqual(len(found), 1)
+        self.assertIn("graph.cpp:4:2", found[0])
+
+    def test_finding_in_an_unchanged_header_is_dropped(self):
+        output = (
+            "/work/oscillate/src/native_dsp/../../include/oscillate/foundation/error.hpp:27:8: "
+            "error: uninitialised [clang-analyzer-core.uninitialized.Assign,-warnings-as-errors]"
+        )
+        self.assertEqual(
+            tidy_changed.changed_findings(output, ["src/native_dsp/meter.cpp"], self.ROOT), []
+        )
+
+    def test_changed_header_reached_through_a_relative_path_is_kept(self):
+        output = (
+            "/work/oscillate/src/engine/../../include/oscillate/engine/graph.hpp:3:1: "
+            "error: bad [performance-x,-warnings-as-errors]"
+        )
+        self.assertEqual(
+            len(
+                tidy_changed.changed_findings(
+                    output, ["include/oscillate/engine/graph.hpp"], self.ROOT
+                )
+            ),
+            1,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

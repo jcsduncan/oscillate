@@ -11,6 +11,7 @@ leaves out) are skipped. scripts/check-tidy.sh checks the whole tree.
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
@@ -19,6 +20,10 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 SOURCE_DIRS = ("apps", "src", "tests")
 HEADER_SUFFIXES = (".hpp", ".h")
 PUBLIC_HEADER_ROOT = PurePosixPath("include/oscillate")
+# A clang-tidy diagnostic's primary line: path:line:column: severity: text [check].
+# Any diagnostic at all: a failed run without one is a tool failure, not findings.
+DIAGNOSTIC_SEEN = re.compile(r": (?:warning|error): ", re.MULTILINE)
+DIAGNOSTIC = re.compile(r"^(?P<path>[^:\s][^:]*):\d+:\d+: (?:warning|error): .*\[[\w.,-]+\]$")
 
 
 def changed_files(base):
@@ -66,6 +71,26 @@ def line_filter(changed):
     return json.dumps([{"name": name} for name in names])
 
 
+def changed_findings(output, changed, root):
+    """The diagnostics in `output` whose primary location is a changed file.
+
+    The line filter can keep a warning in an unchanged header when one of its
+    notes falls in a changed file, so the primary location decides.
+    """
+    wanted = {os.path.normpath(path) for path in changed}
+    found = []
+    for line in output.splitlines():
+        match = DIAGNOSTIC.match(line)
+        if not match:
+            continue
+        path = os.path.normpath(match["path"])
+        if os.path.isabs(path):
+            path = os.path.relpath(path, root)
+        if path in wanted:
+            found.append(line)
+    return found
+
+
 def configured_sources(preset):
     database = ROOT / "build" / preset / "compile_commands.json"
     with open(database, encoding="utf-8") as stream:
@@ -86,8 +111,23 @@ def main():
     print(f"Checking {len(sources)} translation unit(s) against {base}.", flush=True)
     script = str(ROOT / "scripts" / "check-tidy.sh")
     environment = dict(os.environ, CLANG_TIDY_LINE_FILTER=line_filter(changed))
-    result = subprocess.run([script, preset, *sources], check=False, cwd=ROOT, env=environment)
-    sys.exit(result.returncode)
+    result = subprocess.run(
+        [script, preset, *sources],
+        check=False,
+        cwd=ROOT,
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    print(result.stdout, flush=True)
+    findings = changed_findings(result.stdout, changed, os.path.realpath(ROOT))
+    if findings:
+        print(f"{len(findings)} finding(s) in the changed files:")
+        print("\n".join(findings))
+        sys.exit(1)
+    if result.returncode != 0 and not DIAGNOSTIC_SEEN.search(result.stdout):
+        sys.exit(result.returncode)
 
 
 if __name__ == "__main__":
