@@ -130,6 +130,8 @@ class MovedBaseTests(unittest.TestCase):
     def setUp(self):
         # A Git hook's GIT_DIR and friends would point these commands at its repository.
         scrubbed = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        scrubbed["GIT_CONFIG_GLOBAL"] = os.devnull
+        scrubbed["GIT_CONFIG_SYSTEM"] = os.devnull
         patcher = mock.patch.dict(os.environ, scrubbed, clear=True)
         patcher.start()
         self.addCleanup(patcher.stop)
