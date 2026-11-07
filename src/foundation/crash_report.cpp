@@ -528,6 +528,9 @@ Result<std::optional<std::filesystem::path>> collect(const CollectOptions& optio
   return Collected::success(options.directory / name);
 }
 
+// A file URL's path starts straight after this, so its home part is redacted too.
+constexpr std::string_view file_url_scheme = "file://";
+
 std::string redact(std::string_view text, std::string_view home) {
   while (home.size() > 1 && home.ends_with('/'))
     home.remove_suffix(1);
@@ -542,7 +545,9 @@ std::string redact(std::string_view text, std::string_view home) {
   for (auto at = text.find(home); at != std::string_view::npos; at = text.find(home, from)) {
     const auto after = at + home.size();
     result.append(text.substr(from, at - from));
-    const bool starts_path = at == 0 || !(continues_name(text[at - 1]) || text[at - 1] == '/');
+    const bool after_url = text.substr(0, at).ends_with(file_url_scheme);
+    const bool starts_path =
+        at == 0 || after_url || !(continues_name(text[at - 1]) || text[at - 1] == '/');
     const bool ends_path = after >= text.size() || !continues_name(text[after]);
     result.append(starts_path && ends_path ? home_placeholder : home);
     from = after;

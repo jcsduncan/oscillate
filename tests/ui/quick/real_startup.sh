@@ -59,7 +59,8 @@ arm_wait_tenths=100
 # The start line is logged after the handlers are armed; earlier starts
 # logged theirs, so start from an empty log.
 rm -f -- "$log"
-"$app" &
+# The start line is an info message; a quieter OSCILLATE_LOG would hide it.
+OSCILLATE_LOG=info "$app" &
 running=$!
 for ((tenth = 0; tenth < arm_wait_tenths; ++tenth)); do
   grep -qs 'Oscillate starting' "$log" && break

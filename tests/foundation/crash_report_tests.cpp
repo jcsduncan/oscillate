@@ -216,6 +216,8 @@ void redaction_replaces_whole_home_paths() {
              std::string("~/a and /home/meow and ~"));
   REQUIRE_EQ(crash::redact("/home/me/a", ""), std::string("/home/me/a"), "no home, no change");
   REQUIRE_EQ(crash::redact("/etc", "/"), std::string("/etc"), "a root home is not redacted");
+  REQUIRE_EQ(crash::redact("open file:///home/me/Music/song.wav", "/home/me"),
+             std::string("open file://~/Music/song.wav"), "a file URL's home is redacted");
   REQUIRE_EQ(crash::redact("/mnt/backup/home/me/x", "/home/me"),
              std::string("/mnt/backup/home/me/x"), "only a path that starts with home");
 }
