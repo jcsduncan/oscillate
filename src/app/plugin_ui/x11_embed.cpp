@@ -27,6 +27,18 @@ void send_message(Display* display, Window child, Atom atom, long opcode, Window
   XSendEvent(display, child, False, NoEventMask, &event);
 }
 
+// The scan's own connection: a child destroyed after XQueryTree raises
+// BadWindow there, which must not reach the default handler (it exits the
+// process). Errors on any other connection go to the handler that was set.
+Display* scanning_display = nullptr;
+XErrorHandler previous_handler = nullptr;
+
+int scan_error_handler(Display* display, XErrorEvent* error) {
+  if (display == scanning_display)
+    return 0;
+  return previous_handler != nullptr ? previous_handler(display, error) : 0;
+}
+
 } // namespace
 
 void notify_xembed_child(std::uintptr_t parent_window) noexcept {
@@ -35,6 +47,9 @@ void notify_xembed_child(std::uintptr_t parent_window) noexcept {
   Display* display = XOpenDisplay(nullptr);
   if (!display)
     return;
+  // UI thread only, like every caller of this function.
+  scanning_display = display;
+  previous_handler = XSetErrorHandler(scan_error_handler);
   const auto parent = static_cast<Window>(parent_window);
   const Atom info_atom = XInternAtom(display, "_XEMBED_INFO", True);
   const Atom message_atom = XInternAtom(display, "_XEMBED", False);
@@ -67,6 +82,9 @@ void notify_xembed_child(std::uintptr_t parent_window) noexcept {
   if (children)
     XFree(children);
   XSync(display, False);
+  XSetErrorHandler(previous_handler);
+  scanning_display = nullptr;
+  previous_handler = nullptr;
   XCloseDisplay(display);
 }
 

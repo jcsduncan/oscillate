@@ -74,15 +74,20 @@ QtVst3RunLoop::unregisterEventHandler(Steinberg::Linux::IEventHandler* handler) 
     return Steinberg::kInvalidArgument;
   if (std::ranges::find(fds_, handler, &FdEntry::handler) == fds_.end())
     return Steinberg::kResultFalse;
-  std::erase_if(fds_, [handler](const FdEntry& entry) {
+  // Remove every matching entry first: a final release() may destroy the
+  // handler, whose destructor may unregister other handlers here.
+  std::size_t released = 0;
+  std::erase_if(fds_, [handler, &released](const FdEntry& entry) {
     if (entry.handler != handler)
       return false;
     entry.notifier->setEnabled(false);
     QObject::disconnect(entry.notifier, nullptr, entry.notifier, nullptr);
     entry.notifier->deleteLater();
-    entry.handler->release();
+    ++released;
     return true;
   });
+  for (; released > 0; --released)
+    handler->release();
   return Steinberg::kResultTrue;
 }
 Steinberg::tresult PLUGIN_API QtVst3RunLoop::registerTimer(
@@ -131,8 +136,9 @@ QtVst3RunLoop::unregisterTimer(Steinberg::Linux::ITimerHandler* handler) {
   found->timer->stop();
   QObject::disconnect(found->timer, nullptr, found->timer, nullptr);
   found->timer->deleteLater();
-  found->handler->release();
+  // Erase before releasing: a final release() may unregister other timers.
   timers_.erase(found);
+  handler->release();
   return Steinberg::kResultTrue;
 }
 

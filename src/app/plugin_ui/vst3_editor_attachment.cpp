@@ -223,9 +223,11 @@ void Vst3EditorAttachment::close() noexcept {
   }
   attached_ = false;
   attach_attempted_ = false;
+  // The view goes first: references it still holds to the frame or the run
+  // loop are released while both are alive.
+  view_.reset();
   frame_.reset();
   run_loop_.reset();
-  view_.reset();
   shell_.reset();
   window_ = nullptr;
 }
