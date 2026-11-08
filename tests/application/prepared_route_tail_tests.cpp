@@ -2,7 +2,7 @@
 #include "oscillate/export/realtime_tail_plan.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/eq.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/test/check.hpp"
 
@@ -211,9 +211,9 @@ void native_prepared_tails_match_export_drain_policy() {
   const auto audio = id<project::TrackId>(2);
   // Shape with one low-pass band on the track; Expanse then Ceiling on the master.
   const auto& shape = *oscillate::native_dsp::effects::find_engine("shape");
-  auto values = oscillate::native_dsp::synth::default_values(*shape.descriptor);
+  auto values = oscillate::native_dsp::default_values(*shape.descriptor);
   const auto set = [&](std::string_view parameter, double value) {
-    values[*oscillate::native_dsp::synth::find_parameter(*shape.descriptor, parameter)] = value;
+    values[*oscillate::native_dsp::find_parameter(*shape.descriptor, parameter)] = value;
   };
   set("shape.on_1", 1.0);
   set("shape.kind_1", static_cast<double>(oscillate::native_dsp::EqBandKind::low_pass));

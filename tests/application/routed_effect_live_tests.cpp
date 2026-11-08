@@ -4,7 +4,7 @@
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/pump.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/test/allocation_counter.hpp"
 #include "oscillate/test/check.hpp"
@@ -40,7 +40,6 @@ namespace engine = oscillate::engine;
 namespace foundation = oscillate::foundation;
 namespace project = oscillate::project;
 namespace timeline = oscillate::timeline;
-namespace synth = oscillate::native_dsp::synth;
 namespace effects = oscillate::native_dsp::effects;
 namespace inserts = oscillate::native_inserts;
 namespace fs = std::filesystem;
@@ -126,7 +125,8 @@ struct Live {
 project::NativeEffectPatch with_value(const project::NativeEffectPatch& patch,
                                       std::string_view parameter, double value) {
   auto resolved = take(inserts::resolve_native_effect(patch));
-  resolved.values[take(synth::find_parameter(*resolved.engine->descriptor, parameter))] = value;
+  resolved.values[take(
+      oscillate::native_dsp::find_parameter(*resolved.engine->descriptor, parameter))] = value;
   return take(inserts::make_native_effect_patch(*resolved.engine, resolved.values, patch.document));
 }
 
@@ -285,15 +285,16 @@ void sidechained_effect_edits_live() {
   const auto& table = *effects::find_engine("pocket")->descriptor;
   const auto* depth = &table.parameters.front();
   for (const auto& parameter : table.parameters) {
-    if (parameter.automatable && !synth::is_discrete(parameter) &&
-        parameter.timing == synth::ParameterTiming::live) {
+    if (parameter.automatable && !oscillate::native_dsp::is_discrete(parameter) &&
+        parameter.timing == oscillate::native_dsp::ParameterTiming::live) {
       depth = &parameter;
       break;
     }
   }
   live.edit_live(
       {project::SetNativeEffectSettings{
-          bus->id, slot.id, with_value(patch, depth->id, synth::from_normalised(*depth, 0.8))}},
+          bus->id, slot.id,
+          with_value(patch, depth->id, oscillate::native_dsp::from_normalised(*depth, 0.8))}},
       "sidechained effect value");
 }
 
@@ -306,19 +307,20 @@ void master_effect_values_edit_live() {
   const auto& slot = live.model.snapshot()->master_effects.front();
   const auto& patch = std::get<project::NativeEffectPatch>(slot.processor);
   const auto& table = *effects::find_engine("vista")->descriptor;
-  const synth::ParameterDescriptor* control = nullptr;
+  const oscillate::native_dsp::ParameterDescriptor* control = nullptr;
   for (const auto& parameter : table.parameters) {
-    if (parameter.automatable && !synth::is_discrete(parameter) &&
-        parameter.timing == synth::ParameterTiming::live) {
+    if (parameter.automatable && !oscillate::native_dsp::is_discrete(parameter) &&
+        parameter.timing == oscillate::native_dsp::ParameterTiming::live) {
       control = &parameter;
       break;
     }
   }
   REQUIRE_NE(control, nullptr, "Vista has a live control");
-  live.edit_live({project::SetNativeEffectSettings{
-                     project::MasterSignalPath{}, slot.id,
-                     with_value(patch, control->id, synth::from_normalised(*control, 0.7))}},
-                 "master effect value");
+  live.edit_live(
+      {project::SetNativeEffectSettings{
+          project::MasterSignalPath{}, slot.id,
+          with_value(patch, control->id, oscillate::native_dsp::from_normalised(*control, 0.7))}},
+      "master effect value");
 }
 
 } // namespace
@@ -460,8 +462,8 @@ KeyedPumpSong keyed_pump_song(const fs::path& root, double trigger) {
   const auto slot = take(session->effects().add_effect_engine(bass, 0, "pump", hard_gate_preset));
   const auto key = take(session->routing().add_sidechain(kick, bass, slot, 1.0));
   auto values = take(session->effects().native_effect_values(bass, slot));
-  const auto trigger_index =
-      synth::find_parameter(*effects::find_engine("pump")->descriptor, "pump.trigger");
+  const auto trigger_index = oscillate::native_dsp::find_parameter(
+      *effects::find_engine("pump")->descriptor, "pump.trigger");
   REQUIRE_TRUE(trigger_index.has_value(), "Pump has a trigger parameter");
   values[*trigger_index] = trigger;
   REQUIRE_OK(session->effects().set_native_effect_values(bass, slot, values), "Pump's trigger");

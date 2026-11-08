@@ -4,8 +4,8 @@
 //   oscillate_application_sound_map_tests [case...]
 #include "oscillate/application/nova_morph.hpp"
 #include "oscillate/application/sound_map.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/nova.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/persistence/effect_preset.hpp"
 #include "oscillate/test/check.hpp"
@@ -51,10 +51,10 @@ using oscillate::test::require;
 using oscillate::test::take;
 
 const synth::SynthEngine& nova() { return synth::nova::engine(); }
-const synth::EngineDescriptor& table() { return *nova().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *nova().descriptor; }
 
 std::size_t index_of(std::string_view id) {
-  const auto index = synth::find_parameter(table(), id);
+  const auto index = oscillate::native_dsp::find_parameter(table(), id);
   REQUIRE_TRUE(index, "Nova has " + std::string(id));
   return *index;
 }
@@ -241,10 +241,11 @@ double expected_blend(std::string_view id,
   double position = 0.0;
   double weight = 0.0;
   for (const auto& [sound, w] : parts) {
-    position += w * synth::to_normalised(parameter, sound->values[index]);
+    position += w * oscillate::native_dsp::to_normalised(parameter, sound->values[index]);
     weight += w;
   }
-  return synth::sanitise(parameter, synth::from_normalised(parameter, position / weight));
+  return oscillate::native_dsp::sanitise(
+      parameter, oscillate::native_dsp::from_normalised(parameter, position / weight));
 }
 
 void morph_rules() {
@@ -345,8 +346,9 @@ void mutate_rules() {
                    std::string(parameter.id) + " is not mutated");
         continue;
       }
-      const double moved = std::abs(synth::to_normalised(parameter, variation.values[i]) -
-                                    synth::to_normalised(parameter, base.values[i]));
+      const double moved =
+          std::abs(oscillate::native_dsp::to_normalised(parameter, variation.values[i]) -
+                   oscillate::native_dsp::to_normalised(parameter, base.values[i]));
       REQUIRE_LE(moved, morph::mutation_spread + 1e-9, "a mutation is modest");
     }
   }

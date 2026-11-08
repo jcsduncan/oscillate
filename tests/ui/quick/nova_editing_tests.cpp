@@ -1,8 +1,8 @@
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
 
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/nova.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QCoreApplication>
@@ -40,7 +40,7 @@ namespace synth = oscillate::native_dsp::synth;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *synth::nova::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *synth::nova::engine().descriptor; }
 
 // ---- Harness ---------------------------------------------------------------------------------
 
@@ -184,7 +184,7 @@ QString text_of(Panel& panel, const QString& name) {
 // oscillator type, Sub · Noise, the filters, an envelope and an LFO, and on
 // the Global page.
 void captions_never_overlap() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   const auto check_card = [&](QQuickItem* card, const std::string& where) {
@@ -253,7 +253,7 @@ void captions_never_overlap() {
 // The source tabs start with ENV 1, which says it is the amp envelope; a
 // click on it draws the amp envelope on the MODULATION card.
 void amp_envelope_comes_first() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   panel->root->setProperty("modTab", QStringLiteral("lfo.2"));
@@ -275,7 +275,7 @@ void amp_envelope_comes_first() {
 // Click a value to type one: units read as shown, Enter sets it in one undo
 // step, Esc and nonsense change nothing.
 void typing_a_value() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   // The knob and the typed entry are named at every call.
@@ -322,7 +322,7 @@ void typing_a_value() {
 
 // Ctrl+click resets a knob, as double-click does; a tooltip names it in full.
 void ctrl_click_resets_and_tips_name_it() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   const QString cutoff = QStringLiteral("nova.filter.1.cutoff");
@@ -350,7 +350,7 @@ void ctrl_click_resets_and_tips_name_it() {
 
 // Counts read as plain numbers: unison voices, polyphony, arp octaves.
 void counts_have_no_sign() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(text_of(*panel, QStringLiteral("novaKnobValue:nova.osc.a.unison.voices")) ==
@@ -371,7 +371,7 @@ void counts_have_no_sign() {
 
 // Dragging across the wavetable display scans the position in one undo step.
 void dragging_the_oscillator_scans() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   const QString position = QStringLiteral("nova.osc.a.position");
@@ -390,7 +390,7 @@ void dragging_the_oscillator_scans() {
 
 // Dragging on the filter curve sets the cutoff across and the resonance up.
 void dragging_the_filter_curve() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   focus(*panel, "filter1");
@@ -417,7 +417,7 @@ void dragging_the_filter_curve() {
 // An envelope node, dragged: right lengthens its stage; the sustain node
 // moves the sustain level.
 void dragging_envelope_nodes() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   focus(*panel, "env.1");
@@ -465,7 +465,7 @@ void dragging_envelope_nodes() {
 // The arrows beside the wavetable list step through every factory table,
 // wrapping at the ends.
 void table_arrows_step_through_the_tables() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   const auto shown = [&] { return text_of(*panel, QStringLiteral("novaTable:a")); };

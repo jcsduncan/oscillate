@@ -5,7 +5,7 @@
 #include "oscillate/engine/graph.hpp"
 #include "oscillate/native_dsp/effects/edge.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/tolerances.hpp"
 
@@ -42,7 +42,6 @@
 namespace {
 using oscillate::quick::InMemoryNativeSynthAdapter;
 using oscillate::quick::NativeSynthDeviceController;
-namespace synth = oscillate::native_dsp::synth;
 namespace effects = oscillate::native_dsp::effects;
 namespace edge = oscillate::native_dsp::effects::edge;
 namespace engine = oscillate::engine;
@@ -52,7 +51,7 @@ using oscillate::test::require;
 constexpr double rate = 48'000.0;
 constexpr int wait_ms = 1'000;
 
-const synth::EngineDescriptor& table() { return *edge::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *edge::engine().descriptor; }
 int preset_index(std::string_view name) {
   for (std::size_t i = 0; i < table().presets.size(); ++i) {
     if (table().presets[i].name == name) {
@@ -63,13 +62,14 @@ int preset_index(std::string_view name) {
 }
 
 std::vector<double> preset(std::string_view name) {
-  return synth::preset_values(table(),
-                              table().presets[static_cast<std::size_t>(preset_index(name))])
+  return oscillate::native_dsp::preset_values(
+             table(), table().presets[static_cast<std::size_t>(preset_index(name))])
       .value();
 }
 
 std::size_t at(std::string_view id) {
-  const auto found = std::ranges::find(table().parameters, id, &synth::ParameterDescriptor::id);
+  const auto found =
+      std::ranges::find(table().parameters, id, &oscillate::native_dsp::ParameterDescriptor::id);
   require(found != table().parameters.end(), "Edge has " + std::string(id));
   return static_cast<std::size_t>(found - table().parameters.begin());
 }
@@ -194,7 +194,7 @@ std::vector<std::vector<float>> real_telemetry(const std::vector<double>& values
     slice.assign(input.begin() + static_cast<std::ptrdiff_t>(position),
                  input.begin() + static_cast<std::ptrdiff_t>(position + size));
     const double beat = static_cast<double>(position) * beats_per_frame;
-    const synth::SynthTransport transport{beat, beats_per_frame, beat / 4.0, 4.0};
+    const oscillate::native_dsp::Transport transport{beat, beats_per_frame, beat / 4.0, 4.0};
     require(runtime->process(slice, {}, position, 1, transport, {}) ==
                 effects::EffectProcessStatus::rendered,
             "Edge renders");

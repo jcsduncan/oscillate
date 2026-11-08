@@ -5,7 +5,7 @@
 #include "oscillate/engine/graph.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/vista.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QColor>
@@ -37,14 +37,15 @@
 namespace {
 using oscillate::quick::InMemoryNativeSynthAdapter;
 using oscillate::quick::NativeSynthDeviceController;
-namespace synth = oscillate::native_dsp::synth;
 namespace effects = oscillate::native_dsp::effects;
 namespace vista = oscillate::native_dsp::effects::vista;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *vista::engine().descriptor; }
-std::size_t index(std::string_view id) { return *synth::find_parameter(table(), id); }
+const oscillate::native_dsp::EngineDescriptor& table() { return *vista::engine().descriptor; }
+std::size_t index(std::string_view id) {
+  return *oscillate::native_dsp::find_parameter(table(), id);
+}
 
 int preset_index(std::string_view name) {
   for (std::size_t i = 0; i < table().presets.size(); ++i) {
@@ -56,8 +57,8 @@ int preset_index(std::string_view name) {
 }
 
 std::vector<double> preset(std::string_view name) {
-  return synth::preset_values(table(),
-                              table().presets[static_cast<std::size_t>(preset_index(name))])
+  return oscillate::native_dsp::preset_values(
+             table(), table().presets[static_cast<std::size_t>(preset_index(name))])
       .value();
 }
 
@@ -150,7 +151,7 @@ QString text_of(Panel& panel, const QString& name) {
 // ---- Contract -------------------------------------------------------------------
 
 void panel_covers_every_parameter() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   // The lower cards' readouts end inside their cards.
@@ -173,7 +174,7 @@ void panel_covers_every_parameter() {
 }
 
 void bands_follow_the_band_count() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   for (int choice = 0; choice < 4; ++choice) {
@@ -202,7 +203,7 @@ void bands_follow_the_band_count() {
 }
 
 void dragging_keeps_the_crossovers_in_order() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   controller.set_choice(QStringLiteral("vista.bands"), 3);
   auto panel = load_panel(controller);
@@ -248,7 +249,7 @@ void dragging_keeps_the_crossovers_in_order() {
 }
 
 void haas_time_shows_only_for_haas() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   auto* time = item(*panel, QStringLiteral("vistaKnob:vista.haas_time"));
@@ -283,7 +284,7 @@ std::vector<float> test_frame() {
 }
 
 void telemetry_reaches_the_scope_and_meters() {
-  auto values = synth::default_values(table());
+  auto values = oscillate::native_dsp::default_values(table());
   values[index("vista.bands")] = 3.0;
   values[index("vista.safe")] = 1.0;
   values[index("vista.safe_floor")] = 0.2;
@@ -326,7 +327,7 @@ void telemetry_reaches_the_scope_and_meters() {
 }
 
 void presets_status_and_mono_bass() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   click(*panel, centre(item(*panel, QStringLiteral("vistaPresetNext"))));

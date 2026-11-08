@@ -2,8 +2,8 @@
 #include "ui_contracts.hpp"
 
 #include "oscillate/native_dsp/effects/effect.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/runtime.hpp"
 #include "oscillate/test/check.hpp"
 

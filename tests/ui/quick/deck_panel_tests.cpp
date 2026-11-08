@@ -4,7 +4,7 @@
 #include "oscillate/engine/graph.hpp"
 #include "oscillate/native_dsp/effects/deck.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QCoreApplication>
@@ -36,7 +36,6 @@
 namespace {
 using oscillate::quick::InMemoryNativeSynthAdapter;
 using oscillate::quick::NativeSynthDeviceController;
-namespace synth = oscillate::native_dsp::synth;
 namespace effects = oscillate::native_dsp::effects;
 namespace deck = oscillate::native_dsp::effects::deck;
 namespace engine = oscillate::engine;
@@ -59,12 +58,12 @@ constexpr double band_level_fill = 0.75;
 constexpr double fill_tolerance = 1e-6;
 constexpr float output_peak_db = -6.0F;
 
-const synth::EngineDescriptor& table() { return *deck::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *deck::engine().descriptor; }
 
 std::vector<double> preset(std::string_view name) {
   for (const auto& entry : table().presets) {
     if (entry.name == name) {
-      return synth::preset_values(table(), entry).value();
+      return oscillate::native_dsp::preset_values(table(), entry).value();
     }
   }
   throw std::runtime_error("missing preset " + std::string(name));

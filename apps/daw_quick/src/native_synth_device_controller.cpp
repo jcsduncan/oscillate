@@ -60,9 +60,9 @@
 namespace oscillate::quick {
 namespace {
 
-using native_dsp::synth::ParameterDescriptor;
-using native_dsp::synth::ParameterScale;
-using native_dsp::synth::ParameterTiming;
+using native_dsp::ParameterDescriptor;
+using native_dsp::ParameterScale;
+using native_dsp::ParameterTiming;
 
 constexpr double min_hz = 20.0;
 constexpr double max_hz = 20'000.0;
@@ -228,9 +228,9 @@ QString scale_name(ParameterScale scale) {
 
 } // namespace
 
-NativeSynthDeviceController::NativeSynthDeviceController(
-    const native_dsp::synth::EngineDescriptor& engine, NativeSynthPanelAdapter& adapter,
-    QObject* parent)
+NativeSynthDeviceController::NativeSynthDeviceController(const native_dsp::EngineDescriptor& engine,
+                                                         NativeSynthPanelAdapter& adapter,
+                                                         QObject* parent)
     : QObject(parent), adapter_(adapter), engine_(engine), visuals_(visuals_for(engine.id)) {
   register_ui_contracts();
   index_.reserve(engine_.parameters.size());
@@ -245,8 +245,8 @@ NativeSynthDeviceController::NativeSynthDeviceController(
     arp_ = new NovaArp(*this, this);
   }
   for (const auto& preset : engine_.presets) {
-    auto values = native_dsp::synth::preset_values(engine_, preset);
-    preset_values_.push_back(values ? values.value() : native_dsp::synth::default_values(engine_));
+    auto values = native_dsp::preset_values(engine_, preset);
+    preset_values_.push_back(values ? values.value() : native_dsp::default_values(engine_));
   }
   load_favourites();
   refresh();
@@ -256,7 +256,7 @@ void NativeSynthDeviceController::refresh() {
   OSCILLATE_TRACE_SPAN("ui.device_refresh");
   auto values = adapter_.values();
   if (values.size() != engine_.parameters.size()) {
-    values = native_dsp::synth::default_values(engine_);
+    values = native_dsp::default_values(engine_);
   }
   const bool changed = values != values_;
   values_ = std::move(values);
@@ -411,23 +411,22 @@ QVariantMap NativeSynthDeviceController::parameter(const QString& id) const {
   for (const auto choice : p.choices) {
     choices.append(text(choice));
   }
-  return {
-      {QStringLiteral("id"), id},
-      {QStringLiteral("name"), text(p.name)},
-      {QStringLiteral("group"), text(p.group)},
-      {QStringLiteral("unit"), text(p.unit)},
-      {QStringLiteral("scale"), scale_name(p.scale)},
-      {QStringLiteral("minimum"), p.minimum},
-      {QStringLiteral("maximum"), p.maximum},
-      {QStringLiteral("default"), p.default_value},
-      {QStringLiteral("default_normalised"), native_dsp::synth::to_normalised(p, p.default_value)},
-      {QStringLiteral("choices"), choices},
-      {QStringLiteral("discrete"), native_dsp::synth::is_discrete(p)},
-      {QStringLiteral("steps"),
-       native_dsp::synth::is_discrete(p) ? static_cast<int>(p.maximum - p.minimum) : 0},
-      {QStringLiteral("bipolar"), p.minimum < 0.0 && p.maximum > 0.0},
-      {QStringLiteral("next_note"), p.timing == ParameterTiming::next_note},
-      {QStringLiteral("automatable"), p.automatable}};
+  return {{QStringLiteral("id"), id},
+          {QStringLiteral("name"), text(p.name)},
+          {QStringLiteral("group"), text(p.group)},
+          {QStringLiteral("unit"), text(p.unit)},
+          {QStringLiteral("scale"), scale_name(p.scale)},
+          {QStringLiteral("minimum"), p.minimum},
+          {QStringLiteral("maximum"), p.maximum},
+          {QStringLiteral("default"), p.default_value},
+          {QStringLiteral("default_normalised"), native_dsp::to_normalised(p, p.default_value)},
+          {QStringLiteral("choices"), choices},
+          {QStringLiteral("discrete"), native_dsp::is_discrete(p)},
+          {QStringLiteral("steps"),
+           native_dsp::is_discrete(p) ? static_cast<int>(p.maximum - p.minimum) : 0},
+          {QStringLiteral("bipolar"), p.minimum < 0.0 && p.maximum > 0.0},
+          {QStringLiteral("next_note"), p.timing == ParameterTiming::next_note},
+          {QStringLiteral("automatable"), p.automatable}};
 }
 
 QStringList NativeSynthDeviceController::parameter_ids(const QString& group) const {
@@ -443,7 +442,7 @@ QStringList NativeSynthDeviceController::parameter_ids(const QString& group) con
 QStringList NativeSynthDeviceController::modulatable_ids() const {
   QStringList ids;
   for (const auto& p : engine_.parameters) {
-    if (p.automatable && !native_dsp::synth::is_discrete(p) && p.timing == ParameterTiming::live) {
+    if (p.automatable && !native_dsp::is_discrete(p) && p.timing == ParameterTiming::live) {
       ids.append(text(p.id));
     }
   }
@@ -452,8 +451,7 @@ QStringList NativeSynthDeviceController::modulatable_ids() const {
 
 double NativeSynthDeviceController::normalised(const QString& id) const {
   const auto index = index_of(id);
-  return index ? native_dsp::synth::to_normalised(engine_.parameters[*index], values_[*index])
-               : 0.0;
+  return index ? native_dsp::to_normalised(engine_.parameters[*index], values_[*index]) : 0.0;
 }
 
 double NativeSynthDeviceController::value(const QString& id) const {
@@ -469,7 +467,7 @@ int NativeSynthDeviceController::choice(const QString& id) const {
 QString NativeSynthDeviceController::display(const QString& id) const {
   const auto index = index_of(id);
   return index ? QString::fromStdString(
-                     native_dsp::synth::format_value(engine_.parameters[*index], values_[*index]))
+                     native_dsp::format_value(engine_.parameters[*index], values_[*index]))
                : QString();
 }
 
@@ -480,7 +478,7 @@ QString NativeSynthDeviceController::display_at(const QString& id, double normal
   }
   const auto& p = engine_.parameters[*index];
   return QString::fromStdString(
-      native_dsp::synth::format_value(p, native_dsp::synth::from_normalised(p, normalised)));
+      native_dsp::format_value(p, native_dsp::from_normalised(p, normalised)));
 }
 
 bool NativeSynthDeviceController::is_default(const QString& id) const {
@@ -489,7 +487,7 @@ bool NativeSynthDeviceController::is_default(const QString& id) const {
 }
 
 void NativeSynthDeviceController::write(std::size_t index, double value) {
-  const double clean = native_dsp::synth::sanitise(engine_.parameters[index], value);
+  const double clean = native_dsp::sanitise(engine_.parameters[index], value);
   if (clean == values_[index] || !status_.editable) {
     return;
   }
@@ -511,7 +509,7 @@ void NativeSynthDeviceController::submit(NativeSynthGesture gesture) {
 
 void NativeSynthDeviceController::set_normalised(const QString& id, double normalised) {
   if (const auto index = index_of(id)) {
-    write(*index, native_dsp::synth::from_normalised(engine_.parameters[*index], normalised));
+    write(*index, native_dsp::from_normalised(engine_.parameters[*index], normalised));
   }
 }
 
@@ -537,8 +535,7 @@ void NativeSynthDeviceController::set_values(const QVariantMap& values) {
     if (!index) {
       continue;
     }
-    const double clean =
-        native_dsp::synth::sanitise(engine_.parameters[*index], entry.value().toDouble());
+    const double clean = native_dsp::sanitise(engine_.parameters[*index], entry.value().toDouble());
     changed = changed || clean != values_[*index];
     values_[*index] = clean;
   }
@@ -554,12 +551,12 @@ void NativeSynthDeviceController::step(const QString& id, int direction, bool fi
   }
   const auto& p = engine_.parameters[*index];
   const double sign = direction > 0 ? 1.0 : -1.0;
-  if (native_dsp::synth::is_discrete(p)) {
+  if (native_dsp::is_discrete(p)) {
     write(*index, values_[*index] + sign);
     return;
   }
-  const double position = native_dsp::synth::to_normalised(p, values_[*index]);
-  write(*index, native_dsp::synth::from_normalised(p, position + sign * (fine ? 0.001 : 0.01)));
+  const double position = native_dsp::to_normalised(p, values_[*index]);
+  write(*index, native_dsp::from_normalised(p, position + sign * (fine ? 0.001 : 0.01)));
 }
 
 void NativeSynthDeviceController::reset_to_default(const QString& id) {

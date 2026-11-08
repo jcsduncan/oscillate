@@ -3,7 +3,7 @@
 #include "panel_fit_checks.hpp"
 
 #include "oscillate/native_dsp/effects/forge.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/prism.hpp"
 #include "oscillate/test/check.hpp"
 
@@ -38,9 +38,9 @@ namespace forge = oscillate::native_dsp::effects::forge;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *forge::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *forge::engine().descriptor; }
 std::size_t index(std::string_view id) {
-  const auto found = synth::find_parameter(table(), id);
+  const auto found = oscillate::native_dsp::find_parameter(table(), id);
   if (!found) {
     throw std::runtime_error("unknown parameter " + std::string(id));
   }
@@ -57,8 +57,8 @@ int preset_index(std::string_view name) {
 }
 
 std::vector<double> preset(std::string_view name) {
-  return synth::preset_values(table(),
-                              table().presets[static_cast<std::size_t>(preset_index(name))])
+  return oscillate::native_dsp::preset_values(
+             table(), table().presets[static_cast<std::size_t>(preset_index(name))])
       .value();
 }
 
@@ -89,7 +89,7 @@ void the_curve_sketch_is_the_engines() {
   controller.refresh();
   require(controller.forge_makeup_db() == 0.0, "no auto gain, no makeup");
   const auto& prism = *synth::prism::engine().descriptor;
-  InMemoryNativeSynthAdapter other(synth::default_values(prism));
+  InMemoryNativeSynthAdapter other(oscillate::native_dsp::default_values(prism));
   NativeSynthDeviceController not_forge(prism, other);
   require(not_forge.forge_curve(65).isEmpty() && not_forge.forge_makeup_db() == 0.0,
           "only Forge has a transfer curve");
@@ -111,7 +111,7 @@ std::vector<float> forge_frame(float input, float output, float makeup) {
 }
 
 void controller_decodes_forge_telemetry() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   require(!controller.telemetry().value(QStringLiteral("live")).toBool(), "nothing plays");
   adapter.set_telemetry(forge_frame(0.25F, 0.2F, -6.5F));
@@ -196,7 +196,7 @@ QString text_of(Panel& panel, const QString& name) {
 }
 
 void panel_covers_every_parameter() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(panel->root->implicitWidth() >= 1100 && panel->root->implicitHeight() >= 540,
@@ -228,7 +228,7 @@ void panel_covers_every_parameter() {
 }
 
 void curves_and_presets() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   auto* view = item(*panel, QStringLiteral("forgeCurveView"));

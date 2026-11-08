@@ -2,10 +2,10 @@
 #include "native_synth_device_controller.hpp"
 #include "native_synth_visuals.hpp"
 
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/dx_envelope.hpp"
 #include "oscillate/native_dsp/synth/fm.hpp"
 #include "oscillate/native_dsp/synth/halo.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/prism.hpp"
 #include "oscillate/test/check.hpp"
 
@@ -41,9 +41,11 @@ namespace q = oscillate::quick;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *synth::halo::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *synth::halo::engine().descriptor; }
 
-std::size_t index(std::string_view id) { return *synth::find_parameter(table(), id); }
+std::size_t index(std::string_view id) {
+  return *oscillate::native_dsp::find_parameter(table(), id);
+}
 
 int preset_index(std::string_view name) {
   for (std::size_t i = 0; i < table().presets.size(); ++i) {
@@ -55,8 +57,8 @@ int preset_index(std::string_view name) {
 }
 
 std::vector<double> preset(std::string_view name) {
-  return synth::preset_values(table(),
-                              table().presets[static_cast<std::size_t>(preset_index(name))])
+  return oscillate::native_dsp::preset_values(
+             table(), table().presets[static_cast<std::size_t>(preset_index(name))])
       .value();
 }
 
@@ -143,14 +145,15 @@ void operator_envelopes_follow_the_kernel() {
   require(piano.points[at_release] < 1e-3, "the tine decays to its zero sustain");
 
   const auto& prism = *synth::prism::engine().descriptor;
-  require(q::halo_operator_envelope(prism, synth::default_values(prism), 0, 64).points.empty(),
+  require(q::halo_operator_envelope(prism, oscillate::native_dsp::default_values(prism), 0, 64)
+              .points.empty(),
           "only Halo has operator sketches");
   require(q::halo_operator_envelope(table(), values, 6, 64).points.empty(),
           "there are six operators");
 }
 
 void controller_exposes_halo_sketches() {
-  auto values = synth::default_values(table());
+  auto values = oscillate::native_dsp::default_values(table());
   values[index("halo.filter.resonance")] = 0.0;
   InMemoryNativeSynthAdapter adapter(values);
   NativeSynthDeviceController controller(table(), adapter);
@@ -180,7 +183,7 @@ void controller_exposes_halo_sketches() {
           "operator envelopes reach QML");
 
   const auto& prism = *synth::prism::engine().descriptor;
-  InMemoryNativeSynthAdapter prism_adapter(synth::default_values(prism));
+  InMemoryNativeSynthAdapter prism_adapter(oscillate::native_dsp::default_values(prism));
   NativeSynthDeviceController prism_controller(prism, prism_adapter);
   require(prism_controller.fm_algorithm(0).isEmpty() &&
               prism_controller.operator_envelope(0, 64).isEmpty(),
@@ -265,7 +268,7 @@ QString text_of(Panel& panel, const QString& name) {
 }
 
 void panel_covers_every_parameter() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(panel->root->implicitWidth() >= 1240 && panel->root->implicitHeight() >= 740,
@@ -286,7 +289,7 @@ void panel_covers_every_parameter() {
 }
 
 void algorithm_keys_drive_the_diagram_and_roles() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
 
@@ -327,7 +330,7 @@ void algorithm_keys_drive_the_diagram_and_roles() {
 }
 
 void controls_edit_with_gestures_and_keys() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
 
@@ -429,7 +432,7 @@ void controls_edit_with_gestures_and_keys() {
 }
 
 void presets_and_status() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(text_of(*panel, QStringLiteral("haloPresetName")) == QStringLiteral("E-Piano"),
@@ -467,7 +470,7 @@ void feedback_loops_are_drawn_and_badged() {
               q::fm_algorithm_layout(5).feedback_from == 4 &&
               q::fm_algorithm_layout(4).feedback_from == q::fm_algorithm_layout(4).feedback,
           "the layout reports each loop's source");
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   require(controller.fm_algorithm(3).value(QStringLiteral("feedback_from")).toInt() == 3,
           "the controller reports the loop's source");
@@ -524,7 +527,7 @@ void screenshots_if_requested() {
     require(panel->window->grabWindow().save(path, "PNG"), "screenshot saved");
     std::cout << "wrote " << path.toStdString() << '\n';
   }
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   controller.set_choice(QStringLiteral("halo.algorithm"), 3);
   auto panel = load_panel(controller);

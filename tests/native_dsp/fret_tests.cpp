@@ -38,6 +38,8 @@ using oscillate::test::counting_allocations;
 // bound covers a released note.
 namespace {
 
+using namespace oscillate::native_dsp;
+
 using namespace oscillate::native_dsp::synth;
 using namespace synth_test;
 namespace library = fret::library;

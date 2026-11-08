@@ -95,7 +95,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t frames,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     const bool jump = !primed_;
     const double steps = std::max<double>(1.0, frames);
     input_.settle(dsp::db_to_gain(v[p::input]), steps, jump);
@@ -391,8 +391,7 @@ std::uint32_t engine_latency(std::span<const double> values, double sample_rate)
                         static_cast<std::size_t>(values[p::filters]), sample_rate);
 }
 
-const synth::EngineDescriptor descriptor{"edge", "Edge", 1, edge_table::parameters,
-                                         edge_presets::presets};
+const EngineDescriptor descriptor{"edge", "Edge", 1, edge_table::parameters, edge_presets::presets};
 const EffectEngine edge_engine{&descriptor, &create_kernel, &tail_frames, &engine_latency, false};
 
 } // namespace

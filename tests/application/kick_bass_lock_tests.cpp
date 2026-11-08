@@ -4,9 +4,9 @@
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/export/offline_master.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
 #include "oscillate/native_dsp/synth/lock.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/player.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/test/check.hpp"
@@ -84,7 +84,7 @@ double value_of(app::ProjectSession& session, project::TrackId track, std::strin
   const auto& patch = std::get<project::NativeInstrumentPatch>(found.instrument_source);
   const auto* engine = synth::find_engine(patch.engine);
   REQUIRE_NE(engine, nullptr, "the track's engine is registered");
-  const auto index = synth::find_parameter(*engine->descriptor, id);
+  const auto index = oscillate::native_dsp::find_parameter(*engine->descriptor, id);
   REQUIRE_TRUE(index, "the engine has " + std::string(id));
   return values[*index];
 }
@@ -94,7 +94,8 @@ void set_kick_lock(app::ProjectSession& session, project::TrackId kick, double c
   auto values = take(session.instruments().native_instrument_values(kick));
   const auto* anvil = synth::find_engine(synth::lock_kick_engine);
   REQUIRE_NE(anvil, nullptr, "Anvil is registered");
-  values[take(synth::find_parameter(*anvil->descriptor, synth::lock_kick_parameter))] = choice;
+  values[take(oscillate::native_dsp::find_parameter(*anvil->descriptor,
+                                                    synth::lock_kick_parameter))] = choice;
   accepted(session.instruments().set_native_instrument_values(kick, values));
 }
 

@@ -111,7 +111,7 @@ public:
 std::size_t preset_index(const synth::SynthEngine& engine, std::string_view name) {
   const auto presets = engine.descriptor->presets;
   const auto found = std::ranges::find(
-      presets, name, [](const synth::SynthPreset& preset) { return preset.name; });
+      presets, name, [](const native_dsp::Preset& preset) { return preset.name; });
   if (found == presets.end())
     throw std::runtime_error("missing preset: " + std::string(name));
   return static_cast<std::size_t>(found - presets.begin());

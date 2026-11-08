@@ -62,7 +62,7 @@ signals:
   void playbackStatusChanged();
 
 private:
-  [[nodiscard]] const native_dsp::synth::ParameterDescriptor* selected_descriptor() const;
+  [[nodiscard]] const native_dsp::ParameterDescriptor* selected_descriptor() const;
   [[nodiscard]] const project::AutomationLane* selected_lane() const;
   [[nodiscard]] bool commit(const foundation::Result<void>& result);
   [[nodiscard]] bool targets(const project::AutomationTarget& target, std::string_view id) const;
@@ -72,7 +72,7 @@ private:
   application::ProjectSession& session_;
   project::TrackId track_;
   std::optional<project::InsertSlotId> slot_;
-  const native_dsp::synth::EngineDescriptor& descriptor_;
+  const native_dsp::EngineDescriptor& descriptor_;
   Changed after_edit_;
   AudibleRevision audible_revision_;
   SaveHook request_save_;

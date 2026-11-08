@@ -5,7 +5,7 @@
 #include "oscillate/engine/graph.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/press.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QColor>
@@ -44,14 +44,13 @@ namespace {
 using oscillate::quick::InMemoryNativeSynthAdapter;
 using oscillate::quick::NativeSynthDeviceController;
 using oscillate::quick::NativeSynthGesture;
-namespace synth = oscillate::native_dsp::synth;
 namespace effects = oscillate::native_dsp::effects;
 namespace press = oscillate::native_dsp::effects::press;
 namespace engine = oscillate::engine;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *press::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *press::engine().descriptor; }
 int preset_index(std::string_view name) {
   for (std::size_t i = 0; i < table().presets.size(); ++i) {
     if (table().presets[i].name == name) {
@@ -64,7 +63,7 @@ int preset_index(std::string_view name) {
 std::vector<double> preset(std::string_view name) {
   for (const auto& entry : table().presets) {
     if (entry.name == name) {
-      return synth::preset_values(table(), entry).value();
+      return oscillate::native_dsp::preset_values(table(), entry).value();
     }
   }
   throw std::runtime_error("missing preset " + std::string(name));

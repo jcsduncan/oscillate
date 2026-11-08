@@ -1,7 +1,7 @@
 #include "../../../apps/daw_quick/src/native_synth_audition.hpp"
 
 #include "oscillate/audio_io/stereo_block.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/pulse.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/wait.hpp"
@@ -47,7 +47,8 @@ private:
 };
 
 const synth::SynthEngine& preview_engine() {
-  static const synth::EngineDescriptor descriptor{"preview-test", "Preview Test", 1, {}, {}};
+  static const oscillate::native_dsp::EngineDescriptor descriptor{
+      "preview-test", "Preview Test", 1, {}, {}};
   static const synth::SynthEngine selected{
       &descriptor,
       [](double) -> std::unique_ptr<synth::SynthKernel> {
@@ -97,7 +98,7 @@ void pulse_pad_produces_audio_without_a_real_device() {
     return std::make_unique<ProbeOutput>(probe);
   };
   const auto& pulse = synth::pulse::engine();
-  const auto values = synth::default_values(*pulse.descriptor);
+  const auto values = oscillate::native_dsp::default_values(*pulse.descriptor);
   {
     quick::NativeSynthAudition audition;
     require(audition.trigger(pulse, values, 48'000, 128, synth::pulse::first_key, 100, std::nullopt,
@@ -245,7 +246,8 @@ public:
 };
 
 const synth::SynthEngine& ledger_engine() {
-  static const synth::EngineDescriptor descriptor{"ledger-test", "Ledger Test", 1, {}, {}};
+  static const oscillate::native_dsp::EngineDescriptor descriptor{
+      "ledger-test", "Ledger Test", 1, {}, {}};
   static const synth::SynthEngine selected{
       &descriptor,
       [](double) -> std::unique_ptr<synth::SynthKernel> {

@@ -1,6 +1,6 @@
 #include "native_synth_automation_controller.hpp"
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -99,10 +99,10 @@ QVariantList NativeSynthAutomationController::parameters() const {
   return result;
 }
 
-const native_dsp::synth::ParameterDescriptor*
+const native_dsp::ParameterDescriptor*
 NativeSynthAutomationController::selected_descriptor() const {
   const auto id = selected_parameter_.toStdString();
-  const auto index = native_dsp::synth::find_parameter(descriptor_, id);
+  const auto index = native_dsp::find_parameter(descriptor_, id);
   if (!index)
     return nullptr;
   const auto& descriptor = descriptor_.parameters[*index];
@@ -128,19 +128,16 @@ QVariantMap NativeSynthAutomationController::lane() const {
   result.insert("name", text(descriptor->name));
   result.insert("minimum", descriptor->minimum);
   result.insert("maximum", descriptor->maximum);
-  result.insert("baseline",
-                native_dsp::synth::to_normalised(*descriptor, descriptor->default_value));
+  result.insert("baseline", native_dsp::to_normalised(*descriptor, descriptor->default_value));
   const auto& tracks = session_.snapshot().tracks;
   const auto track = std::ranges::find(tracks, track_, &project::Track::id);
   if (track != tracks.end()) {
     // The slot (or the track's synth) still plays this engine.
     if (const auto values = saved_values();
         values && values.value().size() == descriptor_.parameters.size()) {
-      const auto index =
-          native_dsp::synth::find_parameter(descriptor_, selected_parameter_.toStdString());
+      const auto index = native_dsp::find_parameter(descriptor_, selected_parameter_.toStdString());
       if (index)
-        result.insert("baseline",
-                      native_dsp::synth::to_normalised(*descriptor, values.value()[*index]));
+        result.insert("baseline", native_dsp::to_normalised(*descriptor, values.value()[*index]));
     } else {
       return result;
     }
@@ -166,17 +163,16 @@ QVariantMap NativeSynthAutomationController::lane() const {
       if (const auto beat = session_.snapshot().meter.locate(tick.value()); beat)
         position = QStringLiteral("Bar %1 · beat %2").arg(beat.value().bar).arg(beat.value().beat);
     }
-    points.push_back(
-        QVariantMap{{"id", text(point.id.to_string())},
-                    {"position", position},
-                    {"value", native_dsp::synth::to_normalised(*descriptor, point.value)}});
+    points.push_back(QVariantMap{{"id", text(point.id.to_string())},
+                                 {"position", position},
+                                 {"value", native_dsp::to_normalised(*descriptor, point.value)}});
   }
   result.insert("points", points);
   return result;
 }
 
 void NativeSynthAutomationController::select_parameter(const QString& id) {
-  const auto index = native_dsp::synth::find_parameter(descriptor_, id.toStdString());
+  const auto index = native_dsp::find_parameter(descriptor_, id.toStdString());
   if (!index || !descriptor_.parameters[*index].automatable || selected_parameter_ == id)
     return;
   selected_parameter_ = id;
@@ -207,7 +203,7 @@ bool NativeSynthAutomationController::set_point(int zero_based_bar, double norma
   if (!descriptor || zero_based_bar < 0 || zero_based_bar >= 65'536 ||
       !std::isfinite(normalized_value) || normalized_value < 0 || normalized_value > 1)
     return false;
-  const auto value = native_dsp::synth::from_normalised(*descriptor, normalized_value);
+  const auto value = native_dsp::from_normalised(*descriptor, normalized_value);
   const auto result = slot_ ? session_.parameter_automation().set_effect_automation_point(
                                   track_, *slot_, descriptor->id, zero_based_bar, value)
                             : session_.parameter_automation().set_native_automation_point(
@@ -223,7 +219,7 @@ bool NativeSynthAutomationController::set_value(const QString& point_id, double 
   if (!descriptor || !point || !std::isfinite(normalized_value) || normalized_value < 0 ||
       normalized_value > 1)
     return false;
-  const auto value = native_dsp::synth::from_normalised(*descriptor, normalized_value);
+  const auto value = native_dsp::from_normalised(*descriptor, normalized_value);
   return commit(slot_ ? session_.parameter_automation().set_effect_automation_value(
                             track_, *slot_, descriptor->id, point.value(), value)
                       : session_.parameter_automation().set_native_automation_value(

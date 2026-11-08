@@ -3,7 +3,7 @@
 #include "native_synth_panel_adapter.hpp"
 
 #include "oscillate/application/crate_chops.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/runtime.hpp"
 #include "oscillate/project/model.hpp"
 
@@ -71,9 +71,8 @@ public:
   // `engine` must outlive the controller (registered engines are static).
   // `after_edit` runs after every edit and when the sample decodes, so the
   // owner refreshes every view (and this one) from the adapter.
-  CrateController(const native_dsp::synth::EngineDescriptor& engine,
-                  NativeSynthPanelAdapter& adapter, std::function<void()> after_edit,
-                  QObject* parent = nullptr);
+  CrateController(const native_dsp::EngineDescriptor& engine, NativeSynthPanelAdapter& adapter,
+                  std::function<void()> after_edit, QObject* parent = nullptr);
   ~CrateController() override;
   CrateController(const CrateController&) = delete;
   CrateController& operator=(const CrateController&) = delete;
@@ -155,7 +154,7 @@ private:
   void rebuild_chops();
   void edited();
 
-  const native_dsp::synth::EngineDescriptor& engine_;
+  const native_dsp::EngineDescriptor& engine_;
   NativeSynthPanelAdapter& adapter_;
   std::function<void()> after_edit_;
 

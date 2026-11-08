@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <cstddef>
 #include <span>
@@ -15,9 +15,10 @@ namespace oscillate::quick {
 // panel cutoff (the live, modulated one). Points read their exact frequency,
 // so notches show their depth; the combs keep each slice's loudest bin, so
 // their narrow peaks show. Empty for other engines.
-[[nodiscard]] std::vector<double>
-contour_response(const native_dsp::synth::EngineDescriptor& engine, std::size_t points,
-                 std::span<const double> values, double cutoff_hz);
+[[nodiscard]] std::vector<double> contour_response(const native_dsp::EngineDescriptor& engine,
+                                                   std::size_t points,
+                                                   std::span<const double> values,
+                                                   double cutoff_hz);
 
 // Shape (native effect) sketch: the EQ's magnitude in dB at `points`
 // log-spaced frequencies from 20 Hz to 20 kHz, evaluated on the classic EQ's
@@ -25,7 +26,7 @@ contour_response(const native_dsp::synth::EngineDescriptor& engine, std::size_t 
 // runs. `band` < 0 gives the bands that are on together (their dB sum);
 // 0 to 7 gives that band alone, empty while it is off. Empty for other
 // engines.
-[[nodiscard]] std::vector<double> shape_response(const native_dsp::synth::EngineDescriptor& engine,
+[[nodiscard]] std::vector<double> shape_response(const native_dsp::EngineDescriptor& engine,
                                                  std::size_t points, std::span<const double> values,
                                                  int band);
 
@@ -33,17 +34,17 @@ contour_response(const native_dsp::synth::EngineDescriptor& engine, std::size_t 
 // in dB (makeup included) at `points` steady input levels evenly spaced from
 // `floor_db` (below 0) to 0 dBFS, through the classic compressor's own gain
 // computer. Empty for other engines.
-[[nodiscard]] std::vector<double> press_transfer(const native_dsp::synth::EngineDescriptor& engine,
+[[nodiscard]] std::vector<double> press_transfer(const native_dsp::EngineDescriptor& engine,
                                                  double floor_db, std::span<const double> values,
                                                  std::size_t points);
 
 // Edge (native effect) sketches, empty or 0 for other engines: the static
 // curve's output in dBFS for `points` inputs evenly spaced from `from_db` to
 // `to_db`, and the latency in milliseconds at `sample_rate`.
-[[nodiscard]] std::vector<double> edge_transfer(const native_dsp::synth::EngineDescriptor& engine,
+[[nodiscard]] std::vector<double> edge_transfer(const native_dsp::EngineDescriptor& engine,
                                                 std::span<const double> values, double from_db,
                                                 double to_db, std::size_t points);
-[[nodiscard]] double edge_latency_ms(const native_dsp::synth::EngineDescriptor& engine,
+[[nodiscard]] double edge_latency_ms(const native_dsp::EngineDescriptor& engine,
                                      std::span<const double> values, double sample_rate);
 
 // Strata (native effect) sketches, empty for other engines:
@@ -54,17 +55,16 @@ contour_response(const native_dsp::synth::EngineDescriptor& engine, std::size_t 
 //    `points` log-spaced frequencies from 20 Hz to 20 kHz;
 //  - strata_ott_values: the plain values (id, value) that write OTT mode
 //    out as bands, for a panel taking a band over.
-[[nodiscard]] std::vector<double> strata_transfer(const native_dsp::synth::EngineDescriptor& engine,
+[[nodiscard]] std::vector<double> strata_transfer(const native_dsp::EngineDescriptor& engine,
                                                   std::span<const double> values, int band,
                                                   double floor_db, std::size_t points);
-[[nodiscard]] std::vector<double>
-strata_crossovers(const native_dsp::synth::EngineDescriptor& engine, std::span<const double> values,
-                  double sample_rate);
+[[nodiscard]] std::vector<double> strata_crossovers(const native_dsp::EngineDescriptor& engine,
+                                                    std::span<const double> values,
+                                                    double sample_rate);
 [[nodiscard]] std::vector<std::vector<double>>
-strata_band_shapes(const native_dsp::synth::EngineDescriptor& engine,
-                   std::span<const double> values, double sample_rate, std::size_t points);
-[[nodiscard]] std::vector<native_dsp::synth::NamedValue>
-strata_ott_values(const native_dsp::synth::EngineDescriptor& engine,
-                  std::span<const double> values);
+strata_band_shapes(const native_dsp::EngineDescriptor& engine, std::span<const double> values,
+                   double sample_rate, std::size_t points);
+[[nodiscard]] std::vector<native_dsp::NamedValue>
+strata_ott_values(const native_dsp::EngineDescriptor& engine, std::span<const double> values);
 
 } // namespace oscillate::quick

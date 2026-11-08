@@ -2,8 +2,8 @@
 #include "native_synth_device_controller.hpp"
 #include "native_synth_visuals.hpp"
 
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/ember.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/vintage_filters.hpp"
 #include "oscillate/test/check.hpp"
 
@@ -33,9 +33,13 @@ namespace synth = oscillate::native_dsp::synth;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *synth::ember::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() {
+  return *synth::ember::engine().descriptor;
+}
 
-std::size_t index(std::string_view id) { return *synth::find_parameter(table(), id); }
+std::size_t index(std::string_view id) {
+  return *oscillate::native_dsp::find_parameter(table(), id);
+}
 
 int preset_index(std::string_view name) {
   for (std::size_t i = 0; i < table().presets.size(); ++i) {
@@ -55,7 +59,7 @@ double response_db(std::vector<double> values, double hz) {
 }
 
 void filter_visuals_match_the_prototypes() {
-  auto values = synth::default_values(table());
+  auto values = oscillate::native_dsp::default_values(table());
   values[index("ember.filter.cutoff")] = 1'000.0;
   values[index("ember.filter.resonance")] = 0.0;
   // OTA at zero resonance: four one-pole stages, -12 dB at cutoff.
@@ -140,7 +144,7 @@ QQuickItem* item(Panel& panel, const QString& name) {
 }
 
 void panel_covers_every_parameter_and_edits() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(panel->root->implicitWidth() >= 1200 && panel->root->implicitHeight() >= 680,
@@ -237,7 +241,7 @@ void panel_covers_every_parameter_and_edits() {
 }
 
 void controls_follow_their_modes() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   const auto visible = [&](const char* name) {
@@ -312,7 +316,7 @@ std::vector<float> circuit_frame() {
 }
 
 void circuit_view_shows_the_cards() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   adapter.set_telemetry(circuit_frame());
@@ -343,7 +347,7 @@ void screenshots_if_requested() {
   for (const Shot shot :
        {Shot{"Ember Default", "/ember_default.png"}, Shot{"Sweep Pad", "/ember_sweep_pad.png"},
         Shot{"Chord Stab", "/ember_chord_stab.png"}}) {
-    auto values = synth::preset_values(
+    auto values = oscillate::native_dsp::preset_values(
                       table(), table().presets[static_cast<std::size_t>(preset_index(shot.preset))])
                       .value();
     InMemoryNativeSynthAdapter adapter(values);

@@ -1,8 +1,8 @@
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
 
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/nova.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/project/model.hpp"
 #include "oscillate/test/check.hpp"
 
@@ -47,7 +47,7 @@ namespace project = oscillate::project;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *synth::nova::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *synth::nova::engine().descriptor; }
 
 // The contract's modules (08a §5), written out here as the oracle: the
 // values each uses as knobs (with mix), whether p7 is its mode, whether p5
@@ -173,7 +173,7 @@ QString text_of(Panel& panel, const QString& name) {
 
 // A panel whose main bus holds these modules at uids 1, 2, ...
 struct Rig {
-  InMemoryNativeSynthAdapter adapter{synth::default_values(table())};
+  InMemoryNativeSynthAdapter adapter{oscillate::native_dsp::default_values(table())};
   std::unique_ptr<NativeSynthDeviceController> controller;
   std::unique_ptr<Panel> panel;
 

@@ -2,8 +2,8 @@
 #include "native_synth_device_controller.hpp"
 #include "native_synth_visuals.hpp"
 
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/bass_dsp.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/prism.hpp"
 #include "oscillate/native_dsp/synth/torque.hpp"
 #include "oscillate/test/check.hpp"
@@ -44,9 +44,13 @@ using Complex = std::complex<double>;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *synth::torque::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() {
+  return *synth::torque::engine().descriptor;
+}
 
-std::size_t index(std::string_view id) { return *synth::find_parameter(table(), id); }
+std::size_t index(std::string_view id) {
+  return *oscillate::native_dsp::find_parameter(table(), id);
+}
 
 int preset_index(std::string_view name) {
   for (std::size_t i = 0; i < table().presets.size(); ++i) {
@@ -58,8 +62,8 @@ int preset_index(std::string_view name) {
 }
 
 std::vector<double> preset(std::string_view name) {
-  return synth::preset_values(table(),
-                              table().presets[static_cast<std::size_t>(preset_index(name))])
+  return oscillate::native_dsp::preset_values(
+             table(), table().presets[static_cast<std::size_t>(preset_index(name))])
       .value();
 }
 
@@ -109,7 +113,7 @@ double response_db(std::vector<double> values, double hz) {
 }
 
 void diode_curve_matches_the_linear_model() {
-  auto values = synth::default_values(table());
+  auto values = oscillate::native_dsp::default_values(table());
   require(values[index("torque.model")] == 0.0, "Acid is the default model");
   for (double cutoff : {200.0, 800.0, 3'000.0}) {
     for (double resonance : {0.0, 0.5, 0.9}) {
@@ -151,7 +155,7 @@ void diode_curve_matches_the_linear_model() {
 }
 
 void other_models_draw_their_filters() {
-  auto values = synth::default_values(table());
+  auto values = oscillate::native_dsp::default_values(table());
   values[index("torque.cutoff")] = 1'000.0;
   values[index("torque.resonance")] = 0.0;
   values[index("torque.model")] = 3; // Sub: LP 12 at half resonance.
@@ -183,7 +187,7 @@ void other_models_draw_their_filters() {
 }
 
 void oscillator_and_drop_sketches_follow_the_kernel() {
-  auto values = synth::default_values(table());
+  auto values = oscillate::native_dsp::default_values(table());
   const auto saw = q::torque_oscillator_cycle(table(), values, 100);
   require(saw.size() == 100 && std::fabs(saw.front() + 1.0) < 1e-12, "the acid saw starts at -1");
   for (std::size_t i = 1; i < saw.size(); ++i) {
@@ -218,14 +222,14 @@ void oscillator_and_drop_sketches_follow_the_kernel() {
           "the drop falls in Hz with its time constant");
 
   const auto& prism = *synth::prism::engine().descriptor;
-  const auto prism_values = synth::default_values(prism);
+  const auto prism_values = oscillate::native_dsp::default_values(prism);
   require(q::torque_oscillator_cycle(prism, prism_values, 64).empty() &&
               q::torque_pitch_drop(prism, prism_values, 1.0, 64).empty(),
           "only Torque has bass sketches");
 }
 
 void controller_exposes_torque_sketches() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   require(controller.has_filter_response(), "Torque draws its filter");
   require(controller.filter_response(32).size() == 32, "the response reaches QML");
@@ -233,7 +237,7 @@ void controller_exposes_torque_sketches() {
               controller.pitch_drop(0.5, 20).size() == 20,
           "the oscillator and drop sketches reach QML");
   const auto& prism = *synth::prism::engine().descriptor;
-  InMemoryNativeSynthAdapter prism_adapter(synth::default_values(prism));
+  InMemoryNativeSynthAdapter prism_adapter(oscillate::native_dsp::default_values(prism));
   NativeSynthDeviceController prism_controller(prism, prism_adapter);
   require(prism_controller.oscillator_cycle(48).isEmpty() &&
               prism_controller.pitch_drop(0.5, 20).isEmpty(),
@@ -319,7 +323,7 @@ QString text_of(Panel& panel, const QString& name) {
 }
 
 void panel_covers_every_parameter() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(panel->root->implicitWidth() >= 1240 && panel->root->implicitHeight() >= 740,
@@ -336,7 +340,7 @@ void panel_covers_every_parameter() {
 }
 
 void model_tabs_switch_colour_labels_and_extras() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   auto* theme = panel->root->property("theme").value<QObject*>();
@@ -388,7 +392,7 @@ void model_tabs_switch_colour_labels_and_extras() {
 }
 
 void steps_edit_by_mouse_and_keyboard() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   const auto value = [&](const char* id) { return controller.value(QString::fromLatin1(id)); };
@@ -460,7 +464,7 @@ void steps_edit_by_mouse_and_keyboard() {
 }
 
 void controls_edit_with_gestures_and_keys() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
 
@@ -532,7 +536,7 @@ void controls_edit_with_gestures_and_keys() {
 }
 
 void presets_and_status() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(text_of(*panel, QStringLiteral("torquePresetName")) == QStringLiteral("Acid Classic"),

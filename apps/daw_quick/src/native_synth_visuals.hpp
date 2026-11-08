@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -18,7 +18,7 @@ public:
   virtual ~NativeSynthVisuals() = default;
   // Analog-prototype filter magnitude in dB at `hz`, for the patch `values`
   // (dense, in `engine` table order).
-  [[nodiscard]] virtual double filter_response_db(const native_dsp::synth::EngineDescriptor& engine,
+  [[nodiscard]] virtual double filter_response_db(const native_dsp::EngineDescriptor& engine,
                                                   std::span<const double> values,
                                                   double hz) const = 0;
 };
@@ -37,18 +37,18 @@ public:
 // key order from C1. Each is empty (or 0 dB) unless `engine` is Pulse.
 // Amplitude at `points` times evenly spaced over [0, seconds], peak 1, at the
 // reference velocity (where velocity leaves the filters alone).
-[[nodiscard]] std::vector<double>
-pulse_pad_envelope(const native_dsp::synth::EngineDescriptor& engine,
-                   std::span<const double> values, std::size_t pad, double seconds,
-                   std::size_t points);
+[[nodiscard]] std::vector<double> pulse_pad_envelope(const native_dsp::EngineDescriptor& engine,
+                                                     std::span<const double> values,
+                                                     std::size_t pad, double seconds,
+                                                     std::size_t points);
 // Pitch of the swept sine body in Hz at the same times; empty for pads with
 // no swept body (everything but the kicks and toms).
-[[nodiscard]] std::vector<double> pulse_pad_pitch(const native_dsp::synth::EngineDescriptor& engine,
+[[nodiscard]] std::vector<double> pulse_pad_pitch(const native_dsp::EngineDescriptor& engine,
                                                   std::span<const double> values, std::size_t pad,
                                                   double seconds, std::size_t points);
 // The pad's noise or metal shaping filters in dB at `hz`; 0 for the kicks and
 // toms, which have none.
-[[nodiscard]] double pulse_pad_band_db(const native_dsp::synth::EngineDescriptor& engine,
+[[nodiscard]] double pulse_pad_band_db(const native_dsp::EngineDescriptor& engine,
                                        std::span<const double> values, std::size_t pad, double hz);
 
 // Halo routing diagram for algorithm `index` (0..31), from the engine's
@@ -81,9 +81,9 @@ struct EnvelopeSketch {
   double seconds = 0.0;
   double release_at = 0.0;
 };
-[[nodiscard]] EnvelopeSketch
-halo_operator_envelope(const native_dsp::synth::EngineDescriptor& engine,
-                       std::span<const double> values, std::size_t op, std::size_t points);
+[[nodiscard]] EnvelopeSketch halo_operator_envelope(const native_dsp::EngineDescriptor& engine,
+                                                    std::span<const double> values, std::size_t op,
+                                                    std::size_t points);
 
 // Torque sketches, from the laws the Torque kernel runs; empty unless
 // `engine` is Torque. One cycle of the current model's oscillator mix at
@@ -91,13 +91,13 @@ halo_operator_envelope(const native_dsp::synth::EngineDescriptor& engine,
 // three-oscillator mix, the Reese stack (drifted as at 0.2 s into a C2
 // note) with its sub, or the Sub sine with its layer.
 [[nodiscard]] std::vector<double>
-torque_oscillator_cycle(const native_dsp::synth::EngineDescriptor& engine,
-                        std::span<const double> values, std::size_t points);
+torque_oscillator_cycle(const native_dsp::EngineDescriptor& engine, std::span<const double> values,
+                        std::size_t points);
 // The Sub/808 pitch drop: semitones above the note at `points` times evenly
 // spaced over [0, seconds]. It falls in Hz, f = f0 + (f_start - f0) e^(-t/tau).
-[[nodiscard]] std::vector<double>
-torque_pitch_drop(const native_dsp::synth::EngineDescriptor& engine, std::span<const double> values,
-                  double seconds, std::size_t points);
+[[nodiscard]] std::vector<double> torque_pitch_drop(const native_dsp::EngineDescriptor& engine,
+                                                    std::span<const double> values, double seconds,
+                                                    std::size_t points);
 // The note the Reese comb sketch is tuned to (C2); the kernel tunes it to
 // the playing note.
 inline constexpr double torque_comb_reference_hz = 65.40639132514966;
@@ -120,7 +120,7 @@ struct GrainPreview {
   double pan = 0.0; // -1..1.
 };
 [[nodiscard]] std::vector<GrainPreview>
-drift_grain_cloud(const native_dsp::synth::EngineDescriptor& engine, std::span<const double> values,
+drift_grain_cloud(const native_dsp::EngineDescriptor& engine, std::span<const double> values,
                   double seconds, std::size_t max_grains);
 // The partial bank's sixteen lines: frequency ratio n sqrt(1 + B n^2) and
 // level (n^-tilt with the odd/even balance), scaled to peak 1.
@@ -129,14 +129,13 @@ struct PartialLine {
   double level = 0.0;
 };
 [[nodiscard]] std::vector<PartialLine>
-drift_partial_spectrum(const native_dsp::synth::EngineDescriptor& engine,
-                       std::span<const double> values);
+drift_partial_spectrum(const native_dsp::EngineDescriptor& engine, std::span<const double> values);
 // Grain window `shape` (0 Hann, 1 Tukey, 2 Decay, 3 Swell) at `points` evenly
 // spaced positions over [0, 1]; empty for an unknown shape.
 [[nodiscard]] std::vector<double> drift_grain_window(int shape, std::size_t points);
 // The amp envelope, run with the kernel's envelope and curve.
 inline constexpr double drift_envelope_curve = 0.6;
-[[nodiscard]] EnvelopeSketch drift_amp_envelope(const native_dsp::synth::EngineDescriptor& engine,
+[[nodiscard]] EnvelopeSketch drift_amp_envelope(const native_dsp::EngineDescriptor& engine,
                                                 std::span<const double> values, std::size_t points);
 
 } // namespace oscillate::quick

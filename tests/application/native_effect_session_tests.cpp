@@ -2,7 +2,7 @@
 #include "oscillate/automation_project/preparation.hpp"
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/native_inserts/effect_stage.hpp"
 #include "oscillate/test/check.hpp"
@@ -38,8 +38,6 @@ namespace {
 using namespace oscillate;
 namespace fs = std::filesystem;
 namespace effects = oscillate::native_dsp::effects;
-namespace synth = oscillate::native_dsp::synth;
-
 using oscillate::test::require;
 
 using oscillate::test::take;
@@ -75,11 +73,11 @@ void effects_are_added_edited_and_undone() {
   REQUIRE_EQ(patch(*session, track).engine, "contour", "the default patch stores no values");
   REQUIRE_TRUE(patch(*session, track).parameters.empty(), "the default patch stores no values");
   const auto defaults = take(session->effects().native_effect_values(track, slot));
-  REQUIRE_EQ(defaults, synth::default_values(*contour().descriptor),
+  REQUIRE_EQ(defaults, native_dsp::default_values(*contour().descriptor),
              "values resolve to the engine defaults");
 
   // Two steps of one gesture are one undo step.
-  const auto cutoff = *synth::find_parameter(*contour().descriptor, "contour.cutoff");
+  const auto cutoff = *native_dsp::find_parameter(*contour().descriptor, "contour.cutoff");
   auto values = defaults;
   values[cutoff] = 400.0;
   accepted(session->effects().set_native_effect_values(track, slot, values, 7));
@@ -123,7 +121,7 @@ void automation_follows_its_slot() {
              "one lane with two points");
   const auto& model = contour().descriptor->parameters;
   for (const auto& parameter : model) {
-    if (parameter.automatable && synth::is_discrete(parameter)) {
+    if (parameter.automatable && native_dsp::is_discrete(parameter)) {
       (void)take(session->parameter_automation().set_effect_automation_point(
           track, slot, parameter.id, 0, parameter.minimum));
       require(session->snapshot().tracks.front().automation.back().domain.discrete,
@@ -151,7 +149,8 @@ void documents_travel_with_the_effect() {
   REQUIRE_EQ(classic.curves.front().id, "shape", "a new Pump starts with Classic Pump's shape");
 
   auto values = take(session->effects().native_effect_values(track, slot));
-  values[*synth::find_parameter(*effects::find_engine("pump")->descriptor, "pump.depth")] = 0.5;
+  values[*native_dsp::find_parameter(*effects::find_engine("pump")->descriptor, "pump.depth")] =
+      0.5;
   accepted(session->effects().set_native_effect_values(track, slot, values));
   REQUIRE_EQ(take(session->effects().native_effect_document(track, slot)), classic,
              "a value edit keeps the shape");
@@ -224,7 +223,7 @@ KeyedPump keyed_pump(const fs::path& root) {
   const auto key = take(session->routing().add_sidechain(kick, bass, slot, 1.0));
   auto values = take(session->effects().native_effect_values(bass, slot));
   const auto trigger_index =
-      synth::find_parameter(*effects::find_engine("pump")->descriptor, "pump.trigger");
+      native_dsp::find_parameter(*effects::find_engine("pump")->descriptor, "pump.trigger");
   REQUIRE_TRUE(trigger_index.has_value(), "Pump has a trigger parameter");
   values[*trigger_index] = midi_trigger;
   accepted(session->effects().set_native_effect_values(bass, slot, values));
@@ -364,7 +363,8 @@ void linked_effects_share_their_shape() {
   REQUIRE_EQ(take(session->effects().native_effect_document(keys, c)), drawn,
              "a drawn edit reaches every linked Pump");
   auto values = take(session->effects().native_effect_values(pad, a));
-  values[*synth::find_parameter(*effects::find_engine("pump")->descriptor, "pump.depth")] = 0.25;
+  values[*native_dsp::find_parameter(*effects::find_engine("pump")->descriptor, "pump.depth")] =
+      0.25;
   accepted(session->effects().set_native_effect_values(pad, a, values));
   REQUIRE_NE(take(session->effects().native_effect_values(bass, b)), values,
              "knobs stay per instance and keep the link");

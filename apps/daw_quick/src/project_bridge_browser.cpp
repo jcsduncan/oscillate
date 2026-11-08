@@ -9,9 +9,9 @@
 #include "native_synth_audition.hpp"
 #include "oscillate/application/browser_preview.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/crate.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 
 #include <QSettings>
 
@@ -37,7 +37,7 @@ namespace oscillate::quick {
 namespace {
 
 // The engine's preset named Init, if it has one.
-std::optional<std::size_t> init_preset(const native_dsp::synth::EngineDescriptor& table) {
+std::optional<std::size_t> init_preset(const native_dsp::EngineDescriptor& table) {
   for (std::size_t i = 0; i < table.presets.size(); ++i) {
     if (table.presets[i].name == "Init")
       return i;
@@ -65,8 +65,7 @@ constexpr std::array starters{Starter{"kick", "Kick", "Drums"}, Starter{"snare",
   if (engine == nullptr || engine->descriptor == nullptr)
     return std::nullopt;
   const auto& presets = engine->descriptor->presets;
-  const auto found =
-      std::ranges::find(presets, starter.name, &native_dsp::synth::SynthPreset::name);
+  const auto found = std::ranges::find(presets, starter.name, &native_dsp::Preset::name);
   if (found == presets.end())
     return std::nullopt;
   return static_cast<std::size_t>(std::distance(presets.begin(), found));
@@ -429,9 +428,9 @@ void ProjectBridge::preview_browser_preset(const QString& engine_id, int preset_
   const auto* preset = preset_index >= 0 && preset_index < static_cast<int>(table.presets.size())
                            ? &table.presets[static_cast<std::size_t>(preset_index)]
                            : nullptr;
-  auto values = preset ? native_dsp::synth::preset_values(table, *preset)
-                       : foundation::Result<std::vector<double>>::success(
-                             native_dsp::synth::default_values(table));
+  auto values =
+      preset ? native_dsp::preset_values(table, *preset)
+             : foundation::Result<std::vector<double>>::success(native_dsp::default_values(table));
   if (!values) {
     set_status(QString::fromStdString(values.error().message));
     return;

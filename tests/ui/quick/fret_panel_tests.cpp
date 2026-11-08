@@ -2,9 +2,9 @@
 #include "native_synth_device_controller.hpp"
 
 #include "../../native_dsp/fret_test_library.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/fret.hpp"
 #include "oscillate/native_dsp/synth/fret_feel.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/prism.hpp"
 #include "oscillate/project/model.hpp"
 #include "oscillate/test/check.hpp"
@@ -49,7 +49,7 @@ namespace timeline = oscillate::timeline;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *fret::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *fret::engine().descriptor; }
 
 QString qs(std::string_view text) {
   return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
@@ -129,7 +129,7 @@ void controller_reports_a_missing_library() {
   const auto nowhere = fret_test::scratch_directory("fret-panel-library");
   std::filesystem::remove_all(nowhere);
   ::setenv(std::string(fret::library::directory_variable).c_str(), nowhere.c_str(), 1);
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   const auto library = controller.fret_library();
   require(library.value(QStringLiteral("state")).toString() == QStringLiteral("missing") &&
@@ -142,7 +142,7 @@ void controller_reports_a_missing_library() {
       library.value(QStringLiteral("required")).toString().contains(qs(fret::library::attribution)),
       "and which library, with its credit");
   const auto& prism = *synth::prism::engine().descriptor;
-  InMemoryNativeSynthAdapter other(synth::default_values(prism));
+  InMemoryNativeSynthAdapter other(oscillate::native_dsp::default_values(prism));
   NativeSynthDeviceController prism_controller(prism, other);
   require(prism_controller.fret_library().isEmpty() &&
               prism_controller.fret_groove(false).isEmpty(),
@@ -163,7 +163,7 @@ std::vector<float> fret_frame(int key, int velocity, feel::Articulation articula
 }
 
 void controller_decodes_fret_telemetry() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   require(!controller.telemetry().value(QStringLiteral("live")).toBool(), "nothing plays");
   auto frame = fret_frame(28, 96, feel::Articulation::ghost, true);
@@ -188,7 +188,7 @@ void controller_decodes_fret_telemetry() {
 // The lane is empty without a clip, and with one it is exactly what Feel
 // decides: velocities, articulations, pushes and Pocket's delays, in order.
 void controller_groove_follows_feel() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   require(controller.fret_groove(false).value(QStringLiteral("notes")).toList().isEmpty(),
           "no clip, no notes");
@@ -321,7 +321,7 @@ QString text_of(Panel& panel, const QString& name) {
 // Without its library the panel says why and how to install it; once
 // installed, Look Again finds it and the credit shows.
 void the_library_plate_guides_the_install() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(item(*panel, QStringLiteral("fretLibraryMessage"))->isVisible() &&
@@ -357,7 +357,7 @@ void the_library_plate_guides_the_install() {
 }
 
 void panel_covers_every_parameter() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(panel->root->implicitWidth() >= 1280 && panel->root->implicitHeight() >= 800,
@@ -377,7 +377,7 @@ void panel_covers_every_parameter() {
 
 // The tiles write their parameters; sliders step from the keyboard.
 void tiles_and_sliders_write_their_parameters() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   const auto style = static_cast<int>(feel::Style::laid_back);
@@ -409,7 +409,7 @@ QQuickItem* lane_note(Panel& panel, std::size_t index) {
 // The lane draws the controller's groove: each note's colour is its
 // articulation's, its bar as tall as its velocity, ringed when pushed.
 void the_lane_draws_what_feel_plays() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(item(*panel, QStringLiteral("fretGrooveHint"))->isVisible() &&
@@ -463,7 +463,7 @@ void the_lane_draws_what_feel_plays() {
 
 // The header shows the latest note as Feel played it, and the output.
 void the_last_note_reads_out_live() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(text_of(*panel, QStringLiteral("fretLastNote")) == QStringLiteral("—"),
@@ -493,7 +493,7 @@ void screenshots_if_requested() {
             "the screenshot library loads: " + status.message);
   }
   QDir().mkpath(QString::fromLocal8Bit(directory));
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   draw_line(adapter);
   auto panel = load_panel(controller);

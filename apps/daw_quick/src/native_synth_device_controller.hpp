@@ -5,7 +5,7 @@
 #include "native_synth_panel_adapter.hpp"
 #include "native_synth_visuals.hpp"
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <QByteArray>
 #include <QObject>
@@ -94,7 +94,7 @@ class NativeSynthDeviceController final : public QObject {
 
 public:
   // `engine` must outlive the controller (registered engines are static).
-  NativeSynthDeviceController(const native_dsp::synth::EngineDescriptor& engine,
+  NativeSynthDeviceController(const native_dsp::EngineDescriptor& engine,
                               NativeSynthPanelAdapter& adapter, QObject* parent = nullptr);
 
   [[nodiscard]] QString engine_id() const;
@@ -355,9 +355,7 @@ public:
   // own while dragging) and the document model.
   [[nodiscard]] const std::vector<double>& current_values() const noexcept { return values_; }
   [[nodiscard]] NativeSynthDocumentModel* document_model() const noexcept { return document_; }
-  [[nodiscard]] const native_dsp::synth::EngineDescriptor& table() const noexcept {
-    return engine_;
-  }
+  [[nodiscard]] const native_dsp::EngineDescriptor& table() const noexcept { return engine_; }
   // The project's document now.
   [[nodiscard]] project::NativeSynthDocument current_document() const {
     return adapter_.document();
@@ -405,7 +403,7 @@ private:
   bool save_favourites() const;
 
   NativeSynthPanelAdapter& adapter_;
-  const native_dsp::synth::EngineDescriptor& engine_;
+  const native_dsp::EngineDescriptor& engine_;
   const NativeSynthVisuals* visuals_;
   // Id -> table index. Nova binds hundreds of controls to a table of about a
   // thousand parameters, so lookups must not scan it.

@@ -2,7 +2,7 @@
 #include "native_synth_device_controller.hpp"
 
 #include "oscillate/native_dsp/effects/expanse.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QColor>
@@ -37,14 +37,13 @@
 namespace {
 using oscillate::quick::InMemoryNativeSynthAdapter;
 using oscillate::quick::NativeSynthDeviceController;
-namespace synth = oscillate::native_dsp::synth;
 namespace expanse = oscillate::native_dsp::effects::expanse;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *expanse::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *expanse::engine().descriptor; }
 std::size_t index(std::string_view id) {
-  const auto found = synth::find_parameter(table(), id);
+  const auto found = oscillate::native_dsp::find_parameter(table(), id);
   if (!found) {
     throw std::runtime_error("unknown parameter " + std::string(id));
   }
@@ -61,8 +60,8 @@ int preset_index(std::string_view name) {
 }
 
 std::vector<double> preset(std::string_view name) {
-  return synth::preset_values(table(),
-                              table().presets[static_cast<std::size_t>(preset_index(name))])
+  return oscillate::native_dsp::preset_values(
+             table(), table().presets[static_cast<std::size_t>(preset_index(name))])
       .value();
 }
 
@@ -271,7 +270,7 @@ void landscape_follows_the_absorption_design() {
 }
 
 void panel_covers_every_parameter() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(panel->root->implicitWidth() >= 1240 && panel->root->implicitHeight() >= 640,
@@ -288,7 +287,7 @@ void panel_covers_every_parameter() {
 }
 
 void spaces_presets_and_keys() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   auto* spaces = item(*panel, QStringLiteral("expanseSegment:expanse.mode"));

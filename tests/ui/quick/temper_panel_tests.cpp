@@ -3,7 +3,7 @@
 
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/temper.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QCoreApplication>
@@ -40,12 +40,11 @@ namespace {
 using oscillate::quick::InMemoryNativeSynthAdapter;
 using oscillate::quick::NativeSynthDeviceController;
 using oscillate::quick::NativeSynthGesture;
-namespace synth = oscillate::native_dsp::synth;
 namespace temper = oscillate::native_dsp::effects::temper;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *temper::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *temper::engine().descriptor; }
 
 QString qs(std::string_view text) {
   return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
@@ -148,7 +147,7 @@ bool wait_for_text(Panel& panel, const QString& name, const QString& text) {
   return QTest::qWaitFor([&] { return text_of(panel, name) == text; }, 1000);
 }
 
-std::vector<double> defaults() { return synth::default_values(table()); }
+std::vector<double> defaults() { return oscillate::native_dsp::default_values(table()); }
 
 // ---- Contract -------------------------------------------------------------------
 
@@ -344,8 +343,8 @@ std::vector<float> frame_of(float cut_db, float band_gain_db) {
 
 void telemetry_drives_the_display() {
   auto values = defaults();
-  values[*synth::find_parameter(table(), "temper.band_on_1")] = 1.0;
-  values[*synth::find_parameter(table(), "temper.unmask")] = 1.0;
+  values[*oscillate::native_dsp::find_parameter(table(), "temper.band_on_1")] = 1.0;
+  values[*oscillate::native_dsp::find_parameter(table(), "temper.unmask")] = 1.0;
   InMemoryNativeSynthAdapter adapter(values);
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
@@ -484,7 +483,7 @@ void screenshots_if_requested() {
     std::vector<double> values;
     for (const auto& entry : table().presets) {
       if (entry.name == shot.preset) {
-        auto resolved = synth::preset_values(table(), entry);
+        auto resolved = oscillate::native_dsp::preset_values(table(), entry);
         require(resolved.has_value(), "preset resolves");
         values = resolved.value();
       }

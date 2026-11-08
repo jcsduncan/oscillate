@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string>
@@ -27,6 +27,6 @@ struct DeviceStripStyle {
 
 // Up to four parameter ids for the engine's strip, curated first.
 [[nodiscard]] std::vector<std::string>
-device_strip_parameters(const native_dsp::synth::EngineDescriptor& engine);
+device_strip_parameters(const native_dsp::EngineDescriptor& engine);
 
 } // namespace oscillate::quick
