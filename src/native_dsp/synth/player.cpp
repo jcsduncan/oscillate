@@ -147,7 +147,8 @@ Result<void> NativeSynthPlayer::refresh_lock(const project::Snapshot& snapshot) 
   const auto* patch = track != snapshot.tracks.end()
                           ? std::get_if<project::NativeInstrumentPatch>(&track->instrument_source)
                           : nullptr;
-  if (patch == nullptr)
+  // A replaced instrument rings out with the Lock it had.
+  if (patch == nullptr || patch->engine != engine.descriptor->id)
     return Result<void>::success();
   auto resolved = resolve_native_instrument(*patch);
   if (!resolved)

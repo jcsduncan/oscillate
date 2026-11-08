@@ -173,7 +173,7 @@ Result<void> NativeEffectStage::stage_automation(
     const project::Snapshot& snapshot,
     std::span<const automation_project::PreparedTargetAutomation> automation,
     std::uint64_t last_safe_automation_sample) {
-  if (automation_mailbox_->stale(snapshot.revision))
+  if (automation_mailbox_->stale_for_stage(snapshot.revision))
     return Result<void>::failure({ErrorCode::conflict, "Effect automation revision is stale"});
   if (!automation_mailbox_->make_room())
     return Result<void>::failure(

@@ -38,6 +38,11 @@ public:
   [[nodiscard]] bool stale(std::uint64_t revision) const noexcept {
     return revision <= last_offered_;
   }
+  // Control: true when `revision` is older than the last offer or stage. A
+  // switch withdrawn before it took over stages the same revision again.
+  [[nodiscard]] bool stale_for_stage(std::uint64_t revision) const noexcept {
+    return revision < last_offered_;
+  }
   // Control: retires the plans the callback has moved past; false when the
   // mailbox is still full.
   [[nodiscard]] bool make_room() {

@@ -31,7 +31,7 @@ never reused. 0070 was never assigned.
 | 0021 | [Stable send-gain automation binding](0021-send-gain-automation.md) | Implemented; focused live/offline qualification complete |
 | 0022 | [Custom Qt Quick UI for the DAW](0022-qt-quick-ui-direction.md) | Accepted for the production UI direction; module and packaging qualification open |
 | 0023 | [Unified insert chain and visible buses](0023-unified-insert-chain-and-bus-ui.md) | Accepted; implemented through ADR-0043 and ADR-0050 |
-| 0024 | [Live routed source handoff contract](0024-live-source-handoff-contract.md) | Superseded in part by ADR-0093 (MIDI) and ADR-0094 (held handoff) |
+| 0024 | [Live routed source handoff contract](0024-live-source-handoff-contract.md) | Superseded in part by ADR-0093 (MIDI), ADR-0094 (held handoff) and ADR-0098 (track, timing, media and instrument changes) |
 | 0025 | [Planned loop processor history](0025-planned-loop-processor-history.md) | Accepted; implemented |
 | 0026 | [Continuous warp stream and musical-time warp model](0026-continuous-warp-stream.md) | Accepted; points 4–8 implemented |
 | 0027 | [Prism: default native synth and native-synth platform](0027-prism-native-synth.md) | Accepted; implemented |
