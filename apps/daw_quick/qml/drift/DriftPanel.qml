@@ -75,6 +75,7 @@ Rectangle {
     readonly property real ampKnobsY: 110
     readonly property real filterViewWidth: 184
     readonly property real filterControlsX: 206
+    readonly property real filterViewGap: filterControlsX - filterViewWidth - viewInset
     readonly property real filterKnobsY: 62
     readonly property real keytrackY: 126
     readonly property real lfoShapeWidth: 104
@@ -673,15 +674,18 @@ Rectangle {
             caption: panel.filterCaption
             x: panel.viewInset
             y: panel.contentTop
-            width: panel.filterViewWidth
+            // Gives way when the type selector needs more than its column.
+            width: Math.min(panel.filterViewWidth, filterType.x - panel.filterViewGap - x)
             height: filter.height - panel.contentTop - panel.viewInset
             controller: panel.controller
             theme: panel.theme
         }
         Kit.Segment {
-            x: panel.filterControlsX
+            id: filterType
+            // Right-aligned and never narrower than its labels need.
+            width: Math.max(filter.width - panel.filterControlsX - panel.viewInset, fitWidth)
+            x: filter.width - panel.viewInset - width
             y: panel.controlTop
-            width: filter.width - panel.filterControlsX - panel.viewInset
             height: panel.theme.segmentHeight
             controller: panel.controller
             theme: panel.theme

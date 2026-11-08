@@ -16,14 +16,15 @@ Rectangle {
     // card's width is at least fitWidth, so that note ends inside it.
     property string longestNote: note
     readonly property real fitWidth: cardTitle.x + cardTitle.implicitWidth
-        + (longestNote === "" ? 0 : theme.cardNoteGap + noteMetrics.advanceWidth
-                                    + theme.cardNoteSpacing * longestNote.length)
+        + (longestNote === "" ? 0 : theme.cardNoteGap + noteMetrics.implicitWidth)
         + theme.cardTitleX
-    TextMetrics {
+    // The longest note laid out as the note lays it out, tracking and
+    // hinting included; never shown.
+    Text {
         id: noteMetrics
+        visible: false
         text: card.longestNote
-        font.pixelSize: card.theme.cardNoteSize
-        font.bold: card.theme.cardNoteBold
+        font: cardNote.font
     }
     radius: theme.cardRadius
     color: theme.plate

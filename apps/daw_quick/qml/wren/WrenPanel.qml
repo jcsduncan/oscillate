@@ -290,7 +290,12 @@ Rectangle {
                 color: panel.theme.inkDim
                 font.family: panel.theme.sans
                 font.pixelSize: panel.theme.bodySize
+                // The note gives way to a narrow card; its tooltip shows it
+                // whole.
                 elide: Text.ElideRight
+                readonly property bool tipShowsWhole: true
+                Accessible.name: text
+                Kit.HoverTip { theme: panel.theme }
             }
         }
 
