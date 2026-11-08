@@ -48,6 +48,22 @@ problem, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
    requirement IDs, any API or schema change, the tests you ran, and the
    real-time and licensing effects.
 
+## Bundles
+
+Each open issue carries one `bundle:` label naming the area it belongs to
+(`bundle:routing`, `bundle:live-editing` and so on). Work takes a bundle
+whole: every open issue with that label goes into one pull request that
+closes them all (`Closes #N` for each), split into sequential pull requests
+only when the change grows past about 1,500 lines. A new issue without a
+bundle gets `bundle:triage` (`.github/workflows/issue-bundle.yml`) until it
+is assigned one.
+
+```sh
+gh issue list --label bundle:routing --state open --limit 200
+```
+
+If the list reaches the limit, raise it: a bundle is taken whole.
+
 ## Commit messages
 
 Commits and pull request titles follow
@@ -106,9 +122,16 @@ A pull request to `main` runs these checks; they must pass before merging.
 `scripts/ci/changes.py` skips the build, Python and documentation jobs when
 a pull request changes none of their inputs; a skipped job counts as passed.
 
-- **Build and fast tests**: the Quick preset on Ubuntu 26.04, the fast
-  test tier without live devices, and the live/export parity gate
-  (`ctest --preset quick-parity`, [tests/README.md](tests/README.md#liveexport-parity-gate)).
+- **Build and fast tests** (the required check's name; it runs every tier
+  but `live`): the Quick preset on Ubuntu 26.04 is built once, then four
+  parallel jobs run the fast and slow tiers, split by the measured times in
+  `cmake/TestBudgets.cmake` (`scripts/ci/ctest_shards.py`), and a fifth runs
+  the live/export parity gate (`ctest --preset quick-parity`,
+  [tests/README.md](tests/README.md#liveexport-parity-gate)). The check's
+  summary lists the failing tests with their last output; each shard's
+  artifact holds the JUnit report and full logs. Tests listed in
+  `scripts/ci/quarantine.txt`, each with the open issue tracking its CI
+  failure, are left out until fixed.
 - **Core line coverage**: the `coverage` preset and
   `scripts/check-coverage.sh`, which fails below 90% line coverage of
   `src/` and `include/`; the report is uploaded to Codecov.

@@ -7,7 +7,6 @@
 #include <array>
 #include <atomic>
 #include <bit>
-#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -66,6 +65,9 @@ struct FakeJack {
   unsigned closes = 0;
   std::atomic<bool> active{false};
   bool xrun_at_deactivation = false;
+  // The device's clock: callbacks take no time unless a render advances it,
+  // however the host schedules the thread that runs them.
+  std::atomic<std::int64_t> clock_ns{0};
 
   static FakeJack& self(void* context) noexcept { return *static_cast<FakeJack*>(context); }
   static void* open(void* context, const char*) noexcept {
@@ -119,10 +121,14 @@ struct FakeJack {
   static void set_shutdown(void* context, void*, JackApi::Shutdown fn, void*) noexcept {
     self(context).shutdown = fn;
   }
+  static std::int64_t now(void* context) noexcept {
+    return self(context).clock_ns.load(std::memory_order_relaxed);
+  }
   const JackApi* api() noexcept {
     api_table = {this,       open,     close,         activate,    deactivate,
                  rate,       buffer,   register_port, port_buffer, set_process,
                  set_change, set_size, set_xrun,      set_shutdown};
+    api_table.now_ns = now;
     return &api_table;
   }
   void run(std::uint32_t frames) noexcept {
@@ -141,16 +147,18 @@ struct FakeJack {
   }
 };
 
+// Longer than a 64-frame period at 48 kHz (1.33 ms) and past the 150% bin.
+constexpr std::int64_t slow_render_ns = 5'000'000;
+
 struct Master {
   bool fail = false;
   bool slow = false;
+  // The device clock a slow render advances; set by begin().
+  std::atomic<std::int64_t>* clock_ns = nullptr;
   static bool render(void* context, std::span<StereoFrame> output, BlockContext block) noexcept {
     auto& master = *static_cast<Master*>(context);
-    if (master.slow) {
-      const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(5);
-      while (std::chrono::steady_clock::now() < deadline) {
-      }
-    }
+    if (master.slow)
+      master.clock_ns->fetch_add(slow_render_ns, std::memory_order_relaxed);
     for (std::size_t index = 0; index < output.size(); ++index) {
       const auto value = static_cast<float>(block.project_sample_position + index) / 16.0F;
       output[index] = {value, -value};
@@ -170,6 +178,7 @@ struct Health {
 auto begin(const fs::path& target, FakeJack& jack, Master& master, TransportCursor& transport,
            Health& health, std::uint64_t first, std::uint64_t frames, std::size_t ring = 128,
            std::uint32_t latency = 0) {
+  master.clock_ns = &jack.clock_ns;
   return JackRealtimeWavExport::begin(target, {48'000, WavFormat::float32, frames}, first, latency,
                                       ring, {&master, &Master::render}, transport,
                                       {48'000, jack.period_frames}, {&health, &Health::snapshot},

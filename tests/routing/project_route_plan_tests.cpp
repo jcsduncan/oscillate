@@ -1902,6 +1902,39 @@ void a_key_sounds_only_from_a_track_you_can_hear() {
                "a key at no gain keys nothing");
 }
 
+// A mute lane on the track or on any of its clips, audio or MIDI, drives the
+// channel's mute in place of the saved switch, for its keys too.
+void a_mute_lane_on_any_clip_drives_the_mute() {
+  constexpr double lane_unmuted = 0.0;
+  constexpr std::int64_t clip_ticks = 960;
+  const auto domain =
+      project::channel_control_domain(project::TrackControlTarget::Key::channel_mute);
+  auto state = snapshot();
+  auto& track = state.tracks[0];
+  track.muted = true;
+  const auto kick = track.id;
+  REQUIRE_TRUE(!routing::has_mute_automation(track), "a saved mute alone is the switch");
+  REQUIRE_TRUE(routing::silent_key_sources(state).contains(kick), "a saved mute silences keys");
+  project::MidiClip clip{id<project::ClipId>(93),
+                         project::MusicalInterval{{0}, {clip_ticks}},
+                         {clip_ticks},
+                         false,
+                         {}};
+  clip.automation.push_back(
+      {id<project::AutomationLaneId>(94),
+       project::TrackControlTarget{kick, project::TrackControlTarget::Key::channel_mute},
+       {project::AutomationRepresentation::physical, domain.semantic_key, domain.unit,
+        domain.minimum, domain.maximum, lane_unmuted, domain.discrete, domain.step_count,
+        domain.scale},
+       project::AutomationTimebase::musical,
+       {{id<project::AutomationPointId>(95), 0, lane_unmuted}},
+       1});
+  track.midi_clips.push_back(std::move(clip));
+  REQUIRE_TRUE(routing::has_mute_automation(track), "a MIDI clip's mute lane drives the mute");
+  REQUIRE_TRUE(!routing::silent_key_sources(state).contains(kick),
+               "a MIDI clip's mute lane, not the saved switch, decides the keys");
+}
+
 // A processor that does nothing, standing in for a prepared chain.
 class Stage final : public engine::ProcessorRuntime {
 public:
@@ -2247,6 +2280,7 @@ int main() {
     solo_projection_retains_routes_and_respects_explicit_mute();
     silent_tracks_are_muted_or_feed_only_muted_tracks_or_silent_keys();
     a_key_sounds_only_from_a_track_you_can_hear();
+    a_mute_lane_on_any_clip_drives_the_mute();
     channel_balance_preserves_center_unity();
     sidechain_send_binds_a_separate_input();
     vst3_sidechain_needs_exact_auxiliary_bus_receipt();

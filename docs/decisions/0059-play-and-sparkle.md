@@ -1,6 +1,6 @@
 # ADR-0059 — Play and sparkle: note effects, macros and freeze
 
-**Status:** Accepted; implemented (schema 1.43 contract, engines, playback and panels). **Date:** 25 October 2026.
+**Status:** Accepted; implemented (schema 1.43 contract, engines, playback and panels). Superseded in part by [ADR-0099](0099-bounce-moves-mute-lanes.md), where it says a bounced source under a mute lane keeps its keys: a bounce moves the source's mute lanes and keys to the copy. **Date:** 25 October 2026.
 **Builds on:** ADR-0034 (stepped native automation), ADR-0040 (native effect platform), ADR-0043 (one native insert path), ADR-0051 (arrangement automation), ADR-0058 (effect documents and links).
 
 ## Context

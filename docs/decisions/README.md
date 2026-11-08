@@ -66,7 +66,7 @@ never reused. 0070 was never assigned.
 | 0056 | [Snarl: a growl and wobble synth](0056-snarl-growl-synth.md) | Superseded by ADR-0057 |
 | 0057 | [Nova: the flagship wavetable synth](0057-nova-flagship-synth.md) | Accepted; platform, engine, panel, FX rack, arp and clip sequencer built; sample-based oscillators and table saving not built |
 | 0058 | [Pump: a drawn volume shaper, and documents for effects](0058-pump-volume-shaper.md) | Accepted; platform, engine, MIDI trigger and panel built; superseded by ADR-0097 for how keys follow a mute lane |
-| 0059 | [Play and sparkle: note effects, macros and freeze](0059-play-and-sparkle.md) | Accepted; implemented |
+| 0059 | [Play and sparkle: note effects, macros and freeze](0059-play-and-sparkle.md) | Superseded by ADR-0099 for what a bounce does with its source's mute lane; otherwise implemented |
 | 0060 | [Anvil: a drawn kick synth](0060-anvil-kick-synth.md) | Accepted; engine, presets, preview and panel built |
 | 0061 | [Performance tracing](0061-performance-tracing.md) | Accepted; implemented |
 | 0062 | [Denormals flushed at every render entry](0062-denormals-flushed.md) | Accepted; implemented |
@@ -103,5 +103,6 @@ never reused. 0070 was never assigned.
 | 0094 | [Sources switch at a primed block; no held path](0094-primed-source-switching.md) | Superseded in part by ADR-0098; otherwise implemented |
 | 0095 | [Projects from every released schema open, through chained forward migrations](0095-schema-migration-policy.md) | Accepted; hook and golden-manifest test built, no schema released yet |
 | 0096 | [MIDI clips keep notes trimmed off their left edge](0096-midi-clip-left-trim.md) | Accepted; implemented |
-| 0097 | [A key source's mute lane gates its keys](0097-mute-lanes-gate-keys.md) | Accepted; implemented |
+| 0097 | [A key source's mute lane gates its keys](0097-mute-lanes-gate-keys.md) | Superseded by ADR-0099 for what a bounce does with its source's mute lane; otherwise implemented |
 | 0098 | [Structural edits switch with a whole replacement source](0098-whole-replacement-switches.md) | Accepted; implemented |
+| 0099 | [A bounce moves its source's mute lanes to the bounce](0099-bounce-moves-mute-lanes.md) | Accepted; implemented |

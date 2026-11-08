@@ -153,17 +153,20 @@ if [[ $codec_enabled == ON ]]; then
   [[ -s "$fixture/master.mp3" ]]
 fi
 
-mkdir "$fixture/locked"
-cp "$fixture/master-1.wav" "$fixture/locked/master.wav"
-chmod 500 "$fixture/locked"
-if failed=$("$app" --open "$fixture/midi" --smoke --smoke-export-fail "$fixture/locked/master.wav" 1 2>&1); then
+# A folder already holding the export's name refuses the publish rename for
+# every user, root included (CI containers run as root, which ignores a
+# read-only folder's permissions). The failed export leaves it untouched.
+mkdir -p "$fixture/occupied/master.wav"
+cp "$fixture/master-1.wav" "$fixture/occupied/master.wav/kept.wav"
+if failed=$("$app" --open "$fixture/midi" --smoke --smoke-export-fail "$fixture/occupied/master.wav" 1 2>&1); then
   [[ $failed == *"Qt Quick WAV master failure preserved"* ]]
 else
   echo "$failed" >&2
   exit 1
 fi
-chmod 700 "$fixture/locked"
-cmp "$fixture/master-1.wav" "$fixture/locked/master.wav"
+[[ -d "$fixture/occupied/master.wav" ]]
+cmp "$fixture/master-1.wav" "$fixture/occupied/master.wav/kept.wav"
+[[ $(find "$fixture/occupied" -mindepth 1 | wc -l) -eq 2 ]]
 
 closing=$("$app" --open "$fixture/midi" --smoke --smoke-export-close "$fixture/closing.wav" 0)
 [[ $closing == *"Qt Quick WAV master finished before close"* ]]
