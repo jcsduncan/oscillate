@@ -48,9 +48,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      security-events: write
-      contents: read
-      actions: read
+      security-events: write # upload results to code scanning
+      contents: read # check out the repository
+      actions: read # read the workflow run for the analysis upload
     strategy:
       fail-fast: false
       matrix:
@@ -92,9 +92,9 @@ jobs:
     container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
     timeout-minutes: 240
     permissions:
-      security-events: write
-      contents: read
-      actions: read
+      security-events: write # upload results to code scanning
+      contents: read # check out the repository
+      actions: read # read the workflow run for the analysis upload
     env:
       OSCILLATE_BUILD_JOBS: 4
     steps:
