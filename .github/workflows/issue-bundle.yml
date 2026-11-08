@@ -1,0 +1,40 @@
+name: Issue bundle
+
+# Every open issue belongs to one work bundle (a `bundle:` label); a bundle is
+# taken on whole, as one pull request (CONTRIBUTING.md, "Bundles"). An issue
+# with no area bundle carries `bundle:triage`; once an area bundle is set,
+# `bundle:triage` comes off. Label changes made here use the job's token, so
+# they start no further run.
+on:
+  issues:
+    types: [opened, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-bundle-${{ github.event.issue.number }}
+
+jobs:
+  triage:
+    name: Keep the triage label in step with the bundle
+    if: github.event.issue.state == 'open'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write # add or remove bundle:triage
+    steps:
+      - name: Add or remove bundle:triage
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          labels=$(gh issue view "$NUMBER" --repo "$REPOSITORY" --json labels --jq '[.labels[].name]')
+          areas=$(jq '[.[] | select(startswith("bundle:") and . != "bundle:triage")] | length' <<<"$labels")
+          triage=$(jq 'any(.[]; . == "bundle:triage")' <<<"$labels")
+          if [ "$areas" -eq 0 ] && [ "$triage" = false ]; then
+            gh issue edit "$NUMBER" --repo "$REPOSITORY" --add-label "bundle:triage"
+          elif [ "$areas" -gt 0 ] && [ "$triage" = true ]; then
+            gh issue edit "$NUMBER" --repo "$REPOSITORY" --remove-label "bundle:triage"
+          fi
