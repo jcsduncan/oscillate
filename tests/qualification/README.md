@@ -103,6 +103,14 @@ adds an opt-in runner for one explicitly selected ALSA sink, paired `pw-top`
 node/driver error samples, local thresholds and a JSON evidence file. It never
 selects a physical output automatically; the release G7 gate remains open.
 
+## Reference projects
+
+`oscillate_reference_project` and `qualify_reference_projects.py` build the
+light and heavy reference projects and measure callback time, whole-process
+CPU and per-device cost at 64 and 128 frames, through the fake callback or a
+named PipeWire sink. See [reference projects](../../docs/performance/reference-projects.md).
+The main build adds these programs with `-DOSCILLATE_BUILD_QUALIFICATION=ON`.
+
 ## Desktop playback controller
 
 ```sh

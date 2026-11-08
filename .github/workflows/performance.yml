@@ -1,0 +1,104 @@
+name: Reference performance
+
+# The light and heavy reference projects (docs/performance/reference-projects.md)
+# at 64 and 128 frames through the paced fake callback: callback p50/p99/max,
+# whole-process CPU and a per-device table from the performance trace. Hosted
+# runners are shared machines, so these numbers track trends; release figures
+# come from the reference machine. Weekly on main, on demand, and on pull
+# requests that change the harness.
+on:
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to measure (empty measures the ref the run starts from)
+        required: false
+        default: ""
+      seconds:
+        description: Measured seconds per run
+        required: false
+        default: "20"
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/performance.yml
+      - tests/qualification/qualify_reference_projects.py
+      - tests/qualification/reference_project.cpp
+      - tests/qualification/CMakeLists.txt
+
+concurrency:
+  group: performance-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  reference:
+    name: Reference projects (fake callback)
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    timeout-minutes: 120
+    env:
+      BUILD_DIR: build/release
+      CCACHE_MAXSIZE: 1G
+      OSCILLATE_BUILD_JOBS: 4
+      SECONDS_PER_RUN: ${{ inputs.seconds || '20' }}
+    steps:
+      - name: Install Git for checkout and the VST3 SDK
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+            ca-certificates git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Install dependencies
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          scripts/ci/install-deps.sh ccache
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
+      - name: Fetch the pinned VST3 SDK
+        run: scripts/ci/fetch-vst3-sdk.sh "$RUNNER_TEMP/vst3sdk"
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-performance-${{ github.run_id }}
+          restore-keys: ccache-performance-
+      # The release preset, as on the reference machine, with the qualification
+      # programs added to the main build.
+      - name: Configure
+        run: >-
+          cmake --preset release
+          -DBUILD_TESTING=OFF
+          -DOSCILLATE_BUILD_QUALIFICATION=ON
+          -DOSCILLATE_BUILD_VST3_SCANNER=ON
+          -DOSCILLATE_VST3_SDK_ROOT="$RUNNER_TEMP/vst3sdk"
+      - name: Build the reference project player
+        run: scripts/build.sh "$BUILD_DIR" --target oscillate_reference_project
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: always() && inputs.ref == ''
+        with:
+          path: .ccache
+          key: ccache-performance-${{ github.run_id }}
+      - name: Measure
+        run: |
+          python3 -I tests/qualification/qualify_reference_projects.py \
+            --executable "$BUILD_DIR/tests/qualification/oscillate_reference_project" \
+            --output performance --seconds "$SECONDS_PER_RUN" --trace
+          cat performance/results.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: reference-performance
+          path: |
+            performance/results.*
+            performance/log-*.txt
+          if-no-files-found: ignore
+          retention-days: 90
