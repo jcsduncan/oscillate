@@ -33,9 +33,10 @@ using Json = nlohmann::json;
 using oscillate::test::require;
 using oscillate::test::take;
 
-const std::filesystem::path golden_dir{OSCILLATE_SCHEMA_GOLDEN_DIR};
+constexpr std::string_view golden_dir_text = OSCILLATE_SCHEMA_GOLDEN_DIR;
 constexpr std::string_view golden_prefix = "schema-";
 constexpr std::string_view golden_extension = ".json";
+constexpr std::string_view expected_suffix = ".expected";
 constexpr std::uint32_t project_sample_rate = 48'000;
 constexpr std::uint64_t project_revision = 2;
 constexpr double project_bpm = 120.0;
@@ -46,6 +47,30 @@ constexpr std::size_t generation_length = 32;
 
 std::string golden_name(SchemaVersion version) {
   return std::string(golden_prefix) + detail::schema_text(version) + std::string(golden_extension);
+}
+
+// The golden's essential content, written down when the golden is saved, so a
+// migration that drops tracks, clips, notes, effects or lanes fails.
+std::string expected_name(SchemaVersion version) {
+  return std::string(golden_prefix) + detail::schema_text(version) + std::string(expected_suffix) +
+         std::string(golden_extension);
+}
+
+Json content(const project::Snapshot& state) {
+  auto tracks = Json::array();
+  for (const auto& track : state.tracks) {
+    std::size_t notes = 0;
+    for (const auto& clip : track.midi_clips) {
+      notes += clip.notes.size();
+    }
+    tracks.push_back({{"name", track.name},
+                      {"audio_clips", track.clips.size()},
+                      {"midi_clips", track.midi_clips.size()},
+                      {"notes", notes},
+                      {"effects", track.effects.size()},
+                      {"automation_lanes", track.automation.size()}});
+  }
+  return {{"tracks", std::move(tracks)}, {"markers", state.markers.size()}};
 }
 
 std::string read_file(const std::filesystem::path& path) {
@@ -84,9 +109,11 @@ std::string with_schema(SchemaVersion version) {
 // The golden set is exactly the released schemas, and each one opens in the
 // current schema and saves bytes that reopen to the same bytes.
 void golden_manifests_open_and_round_trip() {
+  const std::filesystem::path golden_dir{golden_dir_text};
   std::set<std::string> expected;
   for (const auto version : detail::released_schemas) {
     expected.insert(golden_name(version));
+    expected.insert(expected_name(version));
   }
   std::set<std::string> present;
   for (const auto& entry : std::filesystem::directory_iterator(golden_dir)) {
@@ -94,10 +121,15 @@ void golden_manifests_open_and_round_trip() {
       present.insert(entry.path().filename().string());
     }
   }
-  require(present == expected, "one golden manifest per released schema, and no others");
+  require(present == expected,
+          "one golden manifest and its expected content per released schema, and no others");
 
-  for (const auto& name : expected) {
+  for (const auto version : detail::released_schemas) {
+    const auto name = golden_name(version);
     const auto opened = take(detail::decode_manifest(read_file(golden_dir / name)));
+    REQUIRE_EQ(content(opened.snapshot),
+               Json::parse(read_file(golden_dir / expected_name(version))),
+               name + " keeps its tracks, clips, notes, effects and lanes");
     const auto saved = encode(opened);
     const auto saved_json = Json::parse(saved);
     REQUIRE_EQ(saved_json["schema"]["minor"].get<std::uint32_t>(), current_schema.minor,
@@ -152,7 +184,8 @@ void pre_release_schema_is_refused() {
   if (!detail::released_schemas.empty()) {
     return;
   }
-  const SchemaVersion development{current_schema.major, current_schema.minor - 1};
+  static_assert(current_schema.minor > 0, "a development schema precedes the current one");
+  constexpr SchemaVersion development{current_schema.major, current_schema.minor - 1};
   const auto result = detail::decode_manifest(with_schema(development));
   require(!result, "a development schema does not open");
   REQUIRE_EQ(result.error().code, ErrorCode::unsupported, "a development schema is unsupported");
