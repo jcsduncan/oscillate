@@ -279,8 +279,8 @@ template <typename TrackRef>
   return true;
 }
 
-// An edit the routed graph can switch to without a hold: the same tracks in
-// the same order and unchanged sources (clips, built-in instruments, MIDI).
+// An edit the routed graph can switch to live: the same tracks, perhaps
+// reordered, with unchanged sources (clips, built-in instruments, MIDI).
 // Chains, routing, levels and sends may differ; the callback hands the
 // running state over at the switching block (ADR-0049, ADR-0050). A VST3
 // instrument is a chain stage, so it compares against the audible graph,
@@ -291,16 +291,18 @@ template <typename TrackRef>
   if (published.tracks.size() != candidate.tracks.size() ||
       source.tracks.size() != candidate.tracks.size())
     return false;
-  for (std::size_t index = 0; index < candidate.tracks.size(); ++index) {
-    const auto& next = candidate.tracks[index];
-    const auto& old = published.tracks[index];
-    const auto& sounding = source.tracks[index];
+  // Tracks are matched by identity: a reorder keeps every source, and graph
+  // publication refuses one that would change the routed source order.
+  for (const auto& next : candidate.tracks) {
+    const auto old = std::ranges::find(published.tracks, next.id, &project::Track::id);
+    const auto sounding = std::ranges::find(source.tracks, next.id, &project::Track::id);
+    if (old == published.tracks.end() || sounding == source.tracks.end())
+      return false;
     const auto& instrument =
-        std::holds_alternative<project::Vst3PluginInstance>(next.instrument_source) ? old
-                                                                                    : sounding;
-    if (old.id != next.id || sounding.id != next.id ||
-        instrument.instrument_source != next.instrument_source ||
-        sounding.midi_clips != next.midi_clips)
+        std::holds_alternative<project::Vst3PluginInstance>(next.instrument_source) ? *old
+                                                                                    : *sounding;
+    if (instrument.instrument_source != next.instrument_source ||
+        sounding->midi_clips != next.midi_clips)
       return false;
   }
   return true;
