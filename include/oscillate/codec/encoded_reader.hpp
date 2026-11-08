@@ -10,6 +10,7 @@
 #include <span>
 
 struct sf_private_tag;
+struct mpg123_handle_struct;
 
 namespace oscillate::codec {
 
@@ -30,6 +31,8 @@ struct SourceInfo {
 
 // Control/worker-only decoder. Virtual I/O keeps a private cursor over a
 // pinned regular file, so a caller's descriptor offset and path are untouched.
+// libsndfile decodes WAV, AIFF and FLAC; libmpg123 decodes MP3, scanning the
+// whole stream for its length.
 class EncodedReader {
 public:
   // Opaque virtual-I/O state. Exposed as a type only for the C callbacks.
@@ -49,9 +52,19 @@ public:
 private:
   EncodedReader() = default;
   void close() noexcept;
+  // Decodes up to `frames` frames at the decoder's position into scratch_;
+  // fewer only at the end of the stream.
+  [[nodiscard]] foundation::Result<std::size_t> decode(std::size_t frames);
+  [[nodiscard]] bool seek(std::uint64_t frame);
+  // Whether `frame` exists in the decoded stream.
+  [[nodiscard]] bool decodes_frame(std::uint64_t frame);
+  // The first frame that does not decode, from a length that may overstate it.
+  [[nodiscard]] std::uint64_t decodable_frames(std::uint64_t reported);
 
   std::unique_ptr<IoState> io_;
+  // One of the two is open.
   sf_private_tag* handle_ = nullptr;
+  mpg123_handle_struct* mp3_ = nullptr;
   SourceInfo info_{};
   // Worker-owned bounded decode scratch; reused across prefetch fills.
   std::array<float, 4096> scratch_{};

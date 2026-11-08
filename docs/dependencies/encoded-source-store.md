@@ -1,7 +1,7 @@
 # Managed encoded source staging
 
 The optional `OSCILLATE_BUILD_CODEC_ADAPTER=ON` build links the project store to
-the worker-only libsndfile adapter. `begin_encoded_stage` duplicates the caller's
+the worker-only codec adapter (libsndfile, and libmpg123 for MP3). `begin_encoded_stage` duplicates the caller's
 readable descriptor and the store's directory capabilities. Its move-only task
 copies the original bytes to a private `.stage-` file, checks that the input
 did not change during copying, flushes the staged file, hashes the bytes and
@@ -18,8 +18,9 @@ requires that receipt or an identical record from a committed generation.
 length, SHA-256, detected format and decoded media metadata before returning a
 caller-owned pinned descriptor. The existing narrow WAV staging and verification
 path remains in use for WAV sources. An MP3's frame count is its decodable
-length: without a Xing/Info header libsndfile estimates the length from the
-byte count, so the reader finds where decoding really ends.
+length: libmpg123 scans every frame on open, since a stream without a Xing/Info
+header does not state its length, and the reader then checks where decoding
+really ends.
 
 The default build remains WAV-only and returns `unsupported` for encoded
 staging and opening. With the optional codec adapter enabled, playback

@@ -34,7 +34,7 @@ Built-in instruments and the sampler render in the source bank, as before, and a
 - **`prepare_chain(saved, context, prior)`** prepares a chain:
   - Built-in stages come from `native_inserts::prepare_native_stage`.
   - VST3 stages come from a `Vst3Preparer` that the plugin host supplies, so neither the library nor export depends on VST3 code.
-  - Given the running chain, it carries over every stage whose saved identity (slot and processor) is unchanged, and prepares only new or changed stages. A kept plugin is never re-instantiated.
+  - Given the running chain, it carries over every stage whose saved identity (slot and processor) is unchanged, and prepares only new or changed stages. A kept plugin is not re-instantiated, except a stage a sidechain now keys that was prepared without its detector (see **Keyed stages**), and a VST3 effect after a tempo change ([ADR-0101](0101-vst3-live-edits.md)).
 - **`ChainRuntime`** runs the stages and keys the one a sidechain targets. It records each stage boundary's recent input, up to 8192 frames.
 - **Priming at a live switch.** Every fresh stage is primed from the input it would have heard: its lookahead plus a 2048-frame margin for envelopes and tails, replayed at earlier positions. A replaced or added plugin therefore starts with no gap. A plugin that has already run never takes earlier positions again.
 - **Exact time.** Time is kept exactly (ADR-0049) when one stage is added, removed or replaced and the stages that must be replayed accept it. A replacement must also hold no less latency than its predecessor. Otherwise the per-edge crossfade applies.

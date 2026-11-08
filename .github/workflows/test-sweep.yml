@@ -41,7 +41,7 @@ jobs:
       - name: Install dependencies (README list, optional features, ccache)
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          scripts/ci/install-deps.sh ccache libjack-jackd2-dev libsamplerate0-dev libsndfile1-dev libx11-dev
+          scripts/ci/install-deps.sh ccache libjack-jackd2-dev libsamplerate0-dev libsndfile1-dev libmpg123-dev libx11-dev
           echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
       - name: Fetch the pinned VST3 SDK
         run: scripts/ci/fetch-vst3-sdk.sh "$RUNNER_TEMP/vst3sdk"
