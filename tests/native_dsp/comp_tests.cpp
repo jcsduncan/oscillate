@@ -599,8 +599,9 @@ void a_comp_edit_goes_live_without_a_gap() {
   std::vector<double> out;
   for (std::uint64_t frame = 0; frame < 2 * bar; frame += 128) {
     if (frame == bar / 2) {
-      auto offered = player.offer_automation(after, after.tracks[0], {},
-                                             std::numeric_limits<std::uint64_t>::max());
+      const auto edited = take(engine::compile_midi_events(after));
+      auto offered = player.offer_plan(after, after.tracks[0], edited.instruments()[0], {},
+                                       std::numeric_limits<std::uint64_t>::max());
       REQUIRE_OK(offered, "the edit is offered to the running player");
     }
     buffer.assign(128, {});
@@ -608,7 +609,7 @@ void a_comp_edit_goes_live_without_a_gap() {
     for (const auto& sample : buffer)
       out.push_back(sample.left);
   }
-  REQUIRE_EQ(player.applied_automation_revision(), 2, "the player took the edit");
+  REQUIRE_EQ(player.applied_plan_revision(), 2, "the player took the edit");
   for (std::uint64_t window = 0; window + 1'000 <= 2 * bar; window += 1'000)
     REQUIRE_GT(peak(out, window, window + 1'000), 0.01,
                "sound in every millisecond window: no gap");

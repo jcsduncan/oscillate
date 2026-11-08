@@ -218,8 +218,8 @@ void native_automation_edits_apply_without_restarting_voices() {
                   std::to_string(control.status().active_graph_revision) + ", saved " +
                   std::to_string(session->snapshot().revision) + ", voices " +
                   std::to_string(runtime->observed_status().active_voices) + ", player " +
-                  std::to_string(source->synth_player(track)->applied_automation_revision()) +
-                  ", held " + std::to_string(control.held_boundary().has_value()) + ")");
+                  std::to_string(source->synth_player(track)->applied_plan_revision()) + ", held " +
+                  std::to_string(control.held_boundary().has_value()) + ")");
     };
     const auto point = take(session->parameter_automation().set_native_automation_point(
         track, "prism.filter.cutoff", 0, 500.0));
@@ -336,13 +336,12 @@ void native_automation_mailbox_retries_latest_saved_revision() {
                 .has_value(),
             "automation mailbox edit failed");
     auto adopted = take(model.adopt_authoritative_snapshot(session->snapshot()));
-    const auto offered = control.begin_edit(adopted, "rapid synth lane edit");
-    if (edit < 7)
-      REQUIRE_OK(offered, "bounded synth automation offer was rejected early");
-    else
-      require(!offered && offered.error().code == foundation::ErrorCode::resource_exhausted,
-              "full synth automation mailbox did not reject the latest offer");
+    // Past the mailbox's bound the newest edit waits, never refused.
+    REQUIRE_OK(control.begin_edit(adopted, "rapid synth lane edit"),
+               "a rapid synth lane edit was refused instead of queued");
   }
+  REQUIRE_EQ(control.status().application, app::PlaybackApplication::pending,
+             "the newest synth lane edit waits for the mailbox");
   REQUIRE_EQ(control.status().active_graph_revision, saved.revision,
              "an unacknowledged synth automation offer was reported active");
   counted_allocations = 0;
@@ -352,7 +351,7 @@ void native_automation_mailbox_retries_latest_saved_revision() {
   REQUIRE_EQ(first, audio::BlockResult::rendered,
              "full synth automation mailbox allocated in its callback");
   REQUIRE_EQ(counted_allocations, 0, "full synth automation mailbox allocated in its callback");
-  control.observe(); // Acknowledges offer 7 and retries the saved offer 8.
+  control.observe(); // Acknowledges offer 7 and offers the waiting offer 8.
   counted_allocations = 0;
   counting_allocations = true;
   const auto second = audio::render_transport_block(device, transport, true, stereo, samples);
@@ -364,7 +363,7 @@ void native_automation_mailbox_retries_latest_saved_revision() {
              "latest saved synth automation revision was not retried after acknowledgement");
   REQUIRE_EQ(control.status().active_graph_revision, session->snapshot().revision,
              "latest saved synth automation revision was not retried after acknowledgement");
-  REQUIRE_EQ(source->synth_player(saved.tracks.front().id)->applied_automation_revision(),
+  REQUIRE_EQ(source->synth_player(saved.tracks.front().id)->applied_plan_revision(),
              session->snapshot().revision,
              "latest saved synth automation revision was not retried after acknowledgement");
   control.unbind_live_source();
@@ -625,8 +624,8 @@ void comp_plays_ahead_and_takes_live_edits() {
   control.observe();
   REQUIRE_EQ(control.status().active_graph_revision, edited.snapshot->revision,
              "the edit is audible once the player adopts it");
-  REQUIRE_EQ(source->synth_player(track.id)->applied_automation_revision(),
-             edited.snapshot->revision, "the player acknowledged the exact revision");
+  REQUIRE_EQ(source->synth_player(track.id)->applied_plan_revision(), edited.snapshot->revision,
+             "the player acknowledged the exact revision");
   control.unbind_live_source();
 }
 

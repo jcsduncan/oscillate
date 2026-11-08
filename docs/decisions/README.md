@@ -31,7 +31,7 @@ never reused. 0070 was never assigned.
 | 0021 | [Stable send-gain automation binding](0021-send-gain-automation.md) | Implemented; focused live/offline qualification complete |
 | 0022 | [Custom Qt Quick UI for the DAW](0022-qt-quick-ui-direction.md) | Accepted for the production UI direction; module and packaging qualification open |
 | 0023 | [Unified insert chain and visible buses](0023-unified-insert-chain-and-bus-ui.md) | Accepted; implemented through ADR-0043 and ADR-0050 |
-| 0024 | [Live routed source handoff contract](0024-live-source-handoff-contract.md) | Implemented for audio-only clip move, trim, fade, split, duplication and deletion in Quick; wider source edits remain open |
+| 0024 | [Live routed source handoff contract](0024-live-source-handoff-contract.md) | Implemented for audio-only clip edits; superseded in part by ADR-0093 for MIDI |
 | 0025 | [Planned loop processor history](0025-planned-loop-processor-history.md) | Accepted; implemented |
 | 0026 | [Continuous warp stream and musical-time warp model](0026-continuous-warp-stream.md) | Accepted; points 4–8 implemented |
 | 0027 | [Prism: default native synth and native-synth platform](0027-prism-native-synth.md) | Accepted; implemented |
@@ -57,7 +57,7 @@ never reused. 0070 was never assigned.
 | 0047 | [The classic processors become engines](0047-classic-processors-as-engines.md) | Accepted and implemented; convolution remains its own kind |
 | 0048 | [Parallel real-time rendering](0048-parallel-audio-rendering.md) | Accepted and implemented |
 | 0049 | [Live graph switching and latency handover](0049-live-graph-switching.md) | Accepted and implemented; every chain switches live (ADR-0050) |
-| 0050 | [One chain per track](0050-one-chain-per-track.md) | Accepted and implemented; export has two VST3 renderers |
+| 0050 | [One chain per track](0050-one-chain-per-track.md) | Accepted and implemented; export has two VST3 renderers; superseded in part by ADR-0093 for MIDI while playing |
 | 0051 | [Automation drawn on the arrangement](0051-arrangement-automation.md) | Accepted and implemented; inspector forms to retire |
 | 0052 | [Constant-tempo and key analysis](0052-constant-tempo-and-key-analysis.md) | Accepted; implemented; downbeat rule in ADR-0053 |
 | 0053 | [The clip strip](0053-clip-strip.md) | Accepted; strip, analysis, downbeat, zoom, bars before bar 1 and docked clip editor built; arrangement warp markers and tempo lane not built |
@@ -99,4 +99,5 @@ never reused. 0070 was never assigned.
 | 0090 | [Export renders a graph the render_graph builder prepares](0090-render-graph-builder.md) | Accepted; implemented for built-in chains |
 | 0091 | [New projects are staged beside their folder and renamed into place](0091-staged-project-creation.md) | Accepted; implemented |
 | 0092 | [Native inserts read which keys sound from routing](0092-native-inserts-read-key-audibility.md) | Superseded by ADR-0094 for how key notes follow a mute lane; otherwise implemented |
+| 0093 | [Live MIDI edits and queued revisions](0093-live-instrument-edits-and-queued-revisions.md) | Accepted; implemented |
 | 0094 | [A key source's mute lane gates its keys](0094-mute-lanes-gate-keys.md) | Accepted; implemented |
