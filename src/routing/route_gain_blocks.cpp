@@ -165,7 +165,7 @@ Result PreparedRouteGainBlocks::prepare(
                                         .key_gain = silent ? 0.0F : 1.0F});
     }
     // A key from a source under a mute lane is silent wherever the lane mutes
-    // its channel (ADR-0094).
+    // its channel (ADR-0097).
     std::size_t history_bytes = 0;
     for (const auto& routed : route.sends) {
       const auto owner = std::ranges::find(snapshot.tracks, routed.track, &project::Track::id);

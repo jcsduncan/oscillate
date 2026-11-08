@@ -1,4 +1,4 @@
-# ADR-0094 — A key source's mute lane gates its keys
+# ADR-0097 — A key source's mute lane gates its keys
 
 **Status:** Accepted; implemented. **Date:** 8 November 2026.
 **Supersedes in part:** [ADR-0092](0092-native-inserts-read-key-audibility.md), where it says `key_note_onsets` filters notes by `keys_now` alone and that `native_inserts` uses nothing else from `routing`; [ADR-0058](0058-pump-volume-shaper.md), where it makes `routing::keys_now` the whole test for a sounding key.

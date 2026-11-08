@@ -1,6 +1,6 @@
 # ADR-0092 — Native inserts read which keys sound from routing
 
-**Status:** Superseded by [ADR-0094](0094-mute-lanes-gate-keys.md) where it says `key_note_onsets` filters notes by `keys_now` alone and that `native_inserts` uses nothing else from `routing`: a key source's mute lane also gates its keys. The rest is accepted and implemented. **Date:** 7 November 2026.
+**Status:** Superseded by [ADR-0097](0097-mute-lanes-gate-keys.md) where it says `key_note_onsets` filters notes by `keys_now` alone and that `native_inserts` uses nothing else from `routing`: a key source's mute lane also gates its keys. The rest is accepted and implemented. **Date:** 7 November 2026.
 **Supersedes in part:** [ADR-0043](0043-one-native-insert-path.md), where it lists what `native_inserts` depends on.
 
 ## Context

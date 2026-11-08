@@ -92,7 +92,7 @@ inline constexpr double mute_lane_threshold = 0.5;
 // source's mute and solo as the mixer applies them (effective_track_mutes),
 // except that a solo which keeps the keyed track keeps its key, so a soloed
 // track still ducks to its kick. A key source under a mute lane is not in
-// the set: its lane silences its key wherever it mutes the channel (ADR-0094),
+// the set: its lane silences its key wherever it mutes the channel (ADR-0097),
 // the audio key in PreparedRouteGainBlocks and the key notes through
 // KeyMuteLanes.
 [[nodiscard]] std::set<project::TrackId> silent_key_sources(const project::Snapshot& snapshot);

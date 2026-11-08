@@ -10,7 +10,7 @@
 
 namespace oscillate::routing {
 
-// The channel-mute lanes of the tracks that key an effect's notes (ADR-0094),
+// The channel-mute lanes of the tracks that key an effect's notes (ADR-0097),
 // prepared from one saved revision on the control side. A key note sounds
 // only where its track's lane leaves the channel unmuted, as the mixer's
 // channel gain and the audio key apply the same lane.

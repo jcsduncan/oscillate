@@ -55,7 +55,7 @@ private:
     float key_gain = 1.0F;
     // The gain of an edge without a send-gain lane.
     float saved_gain = 0.0F;
-    // A key from a source under a mute lane (ADR-0094) also takes its
+    // A key from a source under a mute lane (ADR-0097) also takes its
     // source channel's mute gain, delayed as the edge delays the key, so the
     // key is silent on exactly the audio the channel's mute silences. The
     // history runs and restarts with the edge's delay line: kept across a

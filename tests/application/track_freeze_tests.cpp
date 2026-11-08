@@ -428,7 +428,7 @@ void consolidating_past_the_clip_limits_is_refused() {
 
 // A source whose mute a lane drives keeps its keys after a bounce, so the
 // bounce does not key as well: the keyed effect hears one key, not two. The
-// source's keys follow its lane (ADR-0094): none while it mutes the source.
+// source's keys follow its lane (ADR-0097): none while it mutes the source.
 void a_bounced_source_under_a_mute_lane_keys_once() {
   constexpr auto mute = project::TrackControlTarget::Key::channel_mute;
   constexpr double lane_unmuted = 0.0;

@@ -202,6 +202,11 @@
     <file alias="ArrangementCreationLane.qml">qml/ArrangementCreationLane.qml</file>
     <file alias="NewTrackDropArea.qml">qml/NewTrackDropArea.qml</file>
     <file alias="TrackDeviceDrop.qml">qml/TrackDeviceDrop.qml</file>
+    <file alias="TrackBadge.qml">qml/TrackBadge.qml</file>
+    <file alias="TrackBusChevron.qml">qml/TrackBusChevron.qml</file>
+    <file alias="TrackDropSlot.qml">qml/TrackDropSlot.qml</file>
+    <file alias="TrackDragChip.qml">qml/TrackDragChip.qml</file>
+    <file alias="BusSumLane.qml">qml/BusSumLane.qml</file>
     <file alias="DeviceTrackDrop.qml">qml/DeviceTrackDrop.qml</file>
     <file alias="Vst3BrowserPanel.qml">qml/Vst3BrowserPanel.qml</file>
     <file alias="BrowserCatalogue.qml">qml/BrowserCatalogue.qml</file>

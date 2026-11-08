@@ -23,7 +23,7 @@ using foundation::Result;
 // key is live and audible under the mixer's mute and solo
 // (routing::keys_now), so a muted kick keys nothing, as its audio key does.
 // A key source's mute lane drops each note-on where it mutes the channel
-// (routing::KeyMuteLanes, ADR-0094). Notes a clip boundary restarts are not
+// (routing::KeyMuteLanes, ADR-0097). Notes a clip boundary restarts are not
 // new hits.
 Result<std::vector<native_dsp::effects::KeyNote>> key_note_onsets(const project::Snapshot& snapshot,
                                                                   project::InsertSlotId slot) {

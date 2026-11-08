@@ -252,7 +252,7 @@ void channel_level_binding_preserves_stereo_balance() {
   require(!routing::PreparedRouteGainBlocks::prepare(snapshot, missing, lanes, 4),
           "unrouted channel automation was silently omitted");
 }
-// ADR-0094: a sidechain key from a source under a mute lane carries the
+// ADR-0097: a sidechain key from a source under a mute lane carries the
 // source channel's mute gain, delayed as the edge delays the key, so it is
 // silent on exactly the audio the channel's mute silences.
 void a_mute_lane_gates_its_sources_key() {

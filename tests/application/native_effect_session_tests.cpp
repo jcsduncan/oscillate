@@ -305,7 +305,7 @@ void pump_hears_only_audible_keys() {
   require(!ducks(*pump_stage(pump), pump), "a key at no gain keys nothing");
 }
 
-// Issue #248, ADR-0094: a mute lane on the kick drops its notes wherever it
+// Issue #248, ADR-0097: a mute lane on the kick drops its notes wherever it
 // mutes the kick. The lane, not the kick's mute switch, decides.
 void pump_follows_its_keys_mute_lane() {
   constexpr auto mute = project::TrackControlTarget::Key::channel_mute;

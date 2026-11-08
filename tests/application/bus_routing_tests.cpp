@@ -110,12 +110,82 @@ void tracks_join_an_existing_bus_and_go_back() {
           "a selection of buses only is refused");
 }
 
+std::vector<project::TrackId> order_of(const application::ProjectSession& session) {
+  std::vector<project::TrackId> order;
+  for (const auto& track : session.snapshot().tracks)
+    order.push_back(track.id);
+  return order;
+}
+
+// A track list drop: the tracks move to the drop point and route to the bus
+// (or the master) there, as one undo step.
+void a_drop_routes_and_moves_in_one_step() {
+  Directory directory;
+  auto opened = application::ProjectSession::create(directory.path() / "song");
+  REQUIRE_OK(opened, "project creation failed");
+  auto& session = *opened.value();
+  const auto kick = named_track(session, "Kick");
+  const auto bass = named_track(session, "Bass");
+  const auto pad = named_track(session, "Pad");
+  const auto chords = named_track(session, "Chords");
+  const auto bus = session.routing().route_tracks_to_bus(std::vector{chords});
+  REQUIRE_OK(bus, "the Music bus was not made");
+  const auto music = bus.value();
+  const std::vector before_drop{kick, bass, pad, music, chords};
+  REQUIRE_EQ(order_of(session), before_drop, "the fixture's track order");
+  const auto revision = session.snapshot().revision;
+
+  // Onto the bus header: the last member.
+  REQUIRE_OK(session.routing().place_tracks(std::vector{pad}, music), "the drop into a bus failed");
+  REQUIRE_EQ(track_of(session, pad).main_output, music, "the dropped track feeds the bus");
+  REQUIRE_EQ(order_of(session), (std::vector{kick, bass, music, chords, pad}),
+             "the dropped track follows the bus's last member");
+  REQUIRE_EQ(session.snapshot().revision, revision + 1, "the drop is one revision");
+  REQUIRE_OK(session.history().undo(), "undo failed");
+  REQUIRE_EQ(order_of(session), before_drop, "one undo restores the order");
+  require(!track_of(session, pad).main_output, "one undo restores the routing");
+
+  // Into the bracket, above a member; several tracks keep their order.
+  REQUIRE_OK(session.routing().place_tracks(std::vector{pad, kick}, music, chords),
+             "a multi-track drop failed");
+  REQUIRE_EQ(order_of(session), (std::vector{bass, music, kick, pad, chords}),
+             "the dropped tracks sit above the member, in their saved order");
+  REQUIRE_EQ(track_of(session, kick).main_output, music, "every dropped track feeds the bus");
+  REQUIRE_EQ(track_of(session, pad).main_output, music, "every dropped track feeds the bus");
+
+  // Out of the bracket, above the bus: back to the master.
+  REQUIRE_OK(session.routing().place_tracks(std::vector{pad}, std::nullopt, music),
+             "the drop out of the bus failed");
+  require(!track_of(session, pad).main_output, "a drop outside every bus goes to the master");
+  REQUIRE_EQ(order_of(session), (std::vector{bass, pad, music, kick, chords}),
+             "the track sits where it was dropped");
+
+  // A drop where the track already is makes no undo step.
+  const auto settled = session.snapshot().revision;
+  REQUIRE_OK(session.routing().place_tracks(std::vector{pad}, std::nullopt, pad),
+             "a drop in place failed");
+  REQUIRE_EQ(session.snapshot().revision, settled, "a drop in place changes nothing");
+
+  // A bus moves on the master, but never into a bus, itself included.
+  const auto other = session.routing().route_tracks_to_bus(std::vector{bass});
+  REQUIRE_OK(other, "the second bus was not made");
+  require(!session.routing().place_tracks(std::vector{other.value()}, music).has_value(),
+          "a group bus dropped into a bus is refused");
+  require(!session.routing().place_tracks(std::vector{music}, music).has_value(),
+          "a bus dropped into itself is refused");
+  REQUIRE_OK(session.routing().place_tracks(std::vector{music}, std::nullopt),
+             "a bus moves to the end of the list");
+  REQUIRE_EQ(order_of(session).back(), music, "a bus moves to the end of the list");
+  require(!track_of(session, music).main_output, "the moved bus stays on the master");
+}
+
 } // namespace
 
 int main() {
   try {
     drums_go_to_a_new_bus_in_one_step();
     tracks_join_an_existing_bus_and_go_back();
+    a_drop_routes_and_moves_in_one_step();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return EXIT_FAILURE;

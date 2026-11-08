@@ -141,7 +141,7 @@ def main() -> int:
             playing.stdin.write(f"gain {send_match.group(1)} 1.5\n")
             playing.stdin.flush()
             time.sleep(0.9)
-            playing.stdin.write("fail-master-latency\n")
+            playing.stdin.write("fail-add-track\n")
             playing.stdin.flush()
             time.sleep(0.4)
             playing.stdin.write("retry\n")
@@ -153,9 +153,8 @@ def main() -> int:
             print(result.strip())
             if playing.returncode != 0 or "render_failures=0" not in result:
                 raise RuntimeError("routed player failed or reported a render failure")
-            holds = re.findall(r"hold sample=(\d+) generation=(\d+)", result)
-            if len(holds) != 4 or result.count("activated-from sample=") != 2:
-                raise RuntimeError("gain, failed build, retry and undo did not acknowledge holds")
+            if result.count("activated-by sample=") != 2:
+                raise RuntimeError("the gain edit and the undo did not both switch live")
             expected_failure = (
                 f"model={int(revision_match.group(1)) + 2} "
                 f"active={int(revision_match.group(1)) + 1} application=failed"

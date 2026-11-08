@@ -116,7 +116,6 @@ struct Live {
     const auto edited = control.begin_edit(applied, label);
     REQUIRE_OK(edited, std::string(label) + " was not accepted live: " +
                            (edited ? std::string() : edited.error().message));
-    require(!control.held_boundary().has_value(), std::string(label) + " held the graph");
     REQUIRE_GT(render(4), 0.0, std::string(label) + ": sound continues through the edit");
     control.observe();
     REQUIRE_EQ(control.status().active_graph_revision, applied.snapshot->revision,
@@ -242,7 +241,6 @@ void linked_effect_groups_edit_live() {
   REQUIRE_OK(live.control.begin_edit(first, "drag"), "the first drag goes live");
   auto second = take(live.model.apply(redraw(0.3)));
   REQUIRE_OK(live.control.begin_edit(second, "drag"), "the second drag supersedes it");
-  require(!live.control.held_boundary().has_value(), "no drag holds the graph");
   REQUIRE_GT(live.render(4), 0.0, "sound continues through the drags");
   live.control.observe();
   REQUIRE_EQ(live.control.status().active_graph_revision, second.snapshot->revision,

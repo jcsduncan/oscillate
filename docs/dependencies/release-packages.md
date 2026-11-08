@@ -13,7 +13,7 @@ Each release ships two Ubuntu 26.04 x86-64 packages, built by the
 | `Oscillate.AppDir.inventory.json` | The AppImage's payload: every file with hash and mode, and each copied ELF's Ubuntu package. |
 | `SHA256SUMS` | Checksums of everything above. |
 
-Release Please dispatches the workflow with the new tag. A manual run with a
+The release tag that Release Please pushes starts the workflow. A manual run with a
 `tag` input rebuilds that release's packages and replaces them. Pull requests
 run it when a packaging input changes (`packaging` in
 [`changes.py`](../../scripts/ci/changes.py)). It is not a required check.

@@ -26,7 +26,7 @@
 #include <utility>
 #include <vector>
 
-// Issue #248, ADR-0094: a key source's mute lane gates its keys. A lane
+// Issue #248, ADR-0097: a key source's mute lane gates its keys. A lane
 // mutes the kick for its middle bar of three; Pump, keyed by the kick's
 // notes or by its audio, ducks only on the kicks of the bars the lane leaves
 // audible, and export plays exactly what live playback plays.

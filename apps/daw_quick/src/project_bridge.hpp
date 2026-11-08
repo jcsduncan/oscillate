@@ -194,6 +194,10 @@ class ProjectBridge final : public QObject {
   Q_PROPERTY(QObject* racks READ racks CONSTANT)
   Q_PROPERTY(QObject* workspaceLayout READ workspace_layout CONSTANT)
   Q_PROPERTY(QVariantMap trackRowHeights READ track_row_heights NOTIFY trackRowHeightsChanged)
+  // The group buses folded in the track list: their members' rows hide and
+  // the bus lane shows their clips as one outline. Kept per project, with
+  // the row heights, outside the saved model.
+  Q_PROPERTY(QStringList collapsedBuses READ collapsed_buses NOTIFY collapsedBusesChanged)
   Q_PROPERTY(int timelineBars READ timeline_bars NOTIFY timelineChanged)
   // Bars before bar 1 (ADR-0053): the ruler numbers zero-based bar i as
   // i + 1 - leadBars, so they count up to 0 before bar 1.
@@ -348,6 +352,7 @@ public:
   [[nodiscard]] QObject* racks() const noexcept;
   [[nodiscard]] QObject* workspace_layout() const noexcept;
   [[nodiscard]] QVariantMap track_row_heights() const { return track_row_heights_; }
+  [[nodiscard]] QStringList collapsed_buses() const { return collapsed_buses_; }
   [[nodiscard]] int timeline_bars() const { return timeline_bars_; }
   [[nodiscard]] int lead_bars() const {
     return session_ ? static_cast<int>(session_->snapshot().lead_bars) : 0;
@@ -573,6 +578,11 @@ public:
   // `from` to `to` (normalised timeline positions) and `track_delta` rows,
   // deleted, or (MIDI clips on one track) merged into one. One undo step each.
   Q_INVOKABLE void move_selected_clips(double from, double to, int track_delta);
+  // A Ctrl-drag: copies of `clip_ids` land moved from `from` to `to` and
+  // `track_delta` rows, the originals stay, and the copies become the
+  // selection. One undo step, or nothing when any copy cannot land.
+  Q_INVOKABLE void copy_clips_to(const QStringList& clip_ids, double from, double to,
+                                 int track_delta);
   // The selected clips one beat later (+1) or earlier (-1), each on its own
   // track, as one undo step; refused as a whole when any clip would start
   // before bar 1.
@@ -653,6 +663,7 @@ public:
   Q_INVOKABLE double elapsed_seconds_at_bar(double zero_based_bar) const;
   Q_INVOKABLE void seek_to_sample(qulonglong sample);
   Q_INVOKABLE void set_track_row_height(const QString& track_id, int height);
+  Q_INVOKABLE void set_bus_collapsed(const QString& bus_id, bool collapsed);
   Q_INVOKABLE void collect_project_copy();
   Q_INVOKABLE void cancel_project_collection();
   // A window close waits for worker cancellation, playback retirement or export publication.
@@ -672,6 +683,7 @@ signals:
   void selectionChanged();
   void trackCreated(int index);
   void trackRowHeightsChanged();
+  void collapsedBusesChanged();
   void namedRevisionsChanged();
   void namedRevisionApplied();
   void collectionChanged();
@@ -898,6 +910,7 @@ private:
   std::map<QString, DeviceStripEntry> device_strips_;
   void clear_device_strips();
   QVariantMap track_row_heights_;
+  QStringList collapsed_buses_;
   std::unique_ptr<application::InstrumentPlayback> playback_;
   std::unique_ptr<RoutedPlayback> routed_playback_;
   // The monitor run, its preparation, the notes waiting for it, and which

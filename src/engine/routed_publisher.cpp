@@ -14,11 +14,6 @@ constexpr std::size_t callback_frame_cap = 8192;
 [[nodiscard]] foundation::Result<void> fail(foundation::ErrorCode code, const char* message) {
   return foundation::Result<void>::failure({code, message});
 }
-
-[[nodiscard]] bool same_context(BlockContext first, BlockContext second) noexcept {
-  return first.project_sample_position == second.project_sample_position &&
-         first.transport_generation == second.transport_generation;
-}
 } // namespace
 
 RoutedMixerPublisher::~RoutedMixerPublisher() = default;
@@ -59,22 +54,16 @@ RoutedMixerPublisher::publish(std::uint64_t revision, std::span<const RoutedNode
     return fail(foundation::ErrorCode::conflict,
                 "routed publication needs a new revision and empty handoff slots");
   auto* prior = active_.load(std::memory_order_acquire);
-  if (live &&
-      (prior == nullptr || revision <= prior->revision ||
-       hold_requested_.load(std::memory_order_acquire) || held_.load(std::memory_order_acquire)))
+  if (live && (prior == nullptr || revision <= prior->revision))
     return fail(foundation::ErrorCode::conflict,
-                "a live switch needs an active, unheld graph and a newer revision");
-  if (!live && prior != nullptr &&
-      (revision <= prior->revision || !held_.load(std::memory_order_acquire) ||
-       !hold_requested_.load(std::memory_order_acquire)))
+                "a live switch needs an active graph and a newer revision");
+  if (!live && prior != nullptr)
     return fail(foundation::ErrorCode::conflict,
-                "active routed mixer must be held for a newer revision");
+                "an active graph switches only live, never by replacement");
 
   try {
     auto prepared = live ? prepare_routed_mixer_live(nodes, edges, limits, *prior->mixer)
-                         : prepare_routed_mixer(nodes, edges, limits,
-                                                prior == nullptr ? nullptr : prior->mixer.get(),
-                                                prior == nullptr ? BlockContext{} : boundary_);
+                         : prepare_routed_mixer(nodes, edges, limits);
     if (!prepared)
       return foundation::Result<void>::failure(prepared.error());
     if (prior != nullptr &&
@@ -110,8 +99,7 @@ RoutedMixerPublisher::publish(std::uint64_t revision, std::span<const RoutedNode
 foundation::Result<void> RoutedMixerPublisher::prepare_source_overlay(std::uint64_t revision) {
   auto* prior = active_.load(std::memory_order_acquire);
   if (!prior || revision <= prior->revision || has_pending() ||
-      retired_.load(std::memory_order_acquire) != nullptr ||
-      hold_requested_.load(std::memory_order_acquire) || held_.load(std::memory_order_acquire))
+      retired_.load(std::memory_order_acquire) != nullptr)
     return fail(foundation::ErrorCode::conflict,
                 "Source overlay needs a settled graph and a new revision");
   try {
@@ -156,10 +144,9 @@ foundation::Result<void> RoutedMixerPublisher::prepare_overlay(
     std::optional<std::span<const RoutedEdgeControl>> edge_overlay) {
   auto* prior = active_.load(std::memory_order_acquire);
   if (!prior || revision <= prior->revision || has_pending() ||
-      retired_.load(std::memory_order_acquire) != nullptr ||
-      hold_requested_.load(std::memory_order_acquire) || held_.load(std::memory_order_acquire))
+      retired_.load(std::memory_order_acquire) != nullptr)
     return fail(foundation::ErrorCode::conflict,
-                "Mix overlay needs a settled graph without a dry insert and a new revision");
+                "Mix overlay needs a settled graph and a new revision");
   if (!prior->mixer->control_overlay_safe())
     return fail(foundation::ErrorCode::unsupported,
                 "Mix overlay has a revision-sensitive processor or an active tail");
@@ -255,28 +242,6 @@ void RoutedMixerPublisher::drain_live(const Plan& active) noexcept {
     }
   }
   live_tail_.store(tail, std::memory_order_release);
-}
-
-bool RoutedMixerPublisher::request_hold() noexcept {
-  if (active_.load(std::memory_order_acquire) == nullptr || has_pending() ||
-      retired_.load(std::memory_order_acquire) != nullptr ||
-      held_.load(std::memory_order_acquire) || hold_requested_.load(std::memory_order_acquire))
-    return false;
-  hold_requested_.store(true, std::memory_order_release);
-  return true;
-}
-
-std::optional<BlockContext> RoutedMixerPublisher::held_boundary() const noexcept {
-  if (!held_.load(std::memory_order_acquire))
-    return std::nullopt;
-  return boundary_;
-}
-
-bool RoutedMixerPublisher::cancel_hold() noexcept {
-  if (!hold_requested_.load(std::memory_order_acquire) || has_pending())
-    return false;
-  hold_requested_.store(false, std::memory_order_release);
-  return true;
 }
 
 std::size_t RoutedMixerPublisher::collect_retired() {
@@ -392,40 +357,6 @@ RoutedRenderStatus RoutedMixerPublisher::render_block(
       initial->mixer->graph_activated(initial->revision);
       active = initial;
     }
-  } else if (held_.load(std::memory_order_relaxed) ||
-             hold_requested_.load(std::memory_order_acquire)) {
-    if (!held_.load(std::memory_order_relaxed)) {
-      boundary_ = context;
-      held_.store(true, std::memory_order_release);
-    }
-    if (!same_context(context, boundary_)) {
-      silence(output);
-      return RoutedRenderStatus::invalid_block;
-    }
-    auto* candidate = pending_.load(std::memory_order_acquire);
-    if (candidate != nullptr && ((source_fill.fill_selected == nullptr &&
-                                  !valid_inputs(candidate, sources, output.size())) ||
-                                 !candidate->mixer->accepts_context(context, output.size()))) {
-      silence(output);
-      return RoutedRenderStatus::invalid_block;
-    }
-    if (candidate != nullptr && !fill_sources(candidate))
-      return RoutedRenderStatus::invalid_block;
-    auto* next = pending_.exchange(nullptr, std::memory_order_acq_rel);
-    if (next != nullptr) {
-      active->mixer->graph_deactivated(active->revision);
-      active_.store(next, std::memory_order_release);
-      next->mixer->graph_activated(next->revision);
-      retired_.store(active, std::memory_order_release);
-      active = next;
-      hold_requested_.store(false, std::memory_order_release);
-      held_.store(false, std::memory_order_release);
-    } else if (hold_requested_.load(std::memory_order_acquire)) {
-      silence(output);
-      return RoutedRenderStatus::holding;
-    } else {
-      held_.store(false, std::memory_order_release);
-    }
   } else if (auto* candidate = pending_.load(std::memory_order_acquire);
              candidate && candidate->live_switch) {
     // The new graph renders this block: no hold, no silent block. When its
@@ -435,7 +366,9 @@ RoutedRenderStatus RoutedMixerPublisher::render_block(
       // the active revision unchanged.
       pending_.store(nullptr, std::memory_order_release);
       retired_.store(candidate, std::memory_order_release);
-    } else if (candidate->mixer->accepts_context(context, output.size()) &&
+    } else if ((source_fill.fill_selected != nullptr ||
+                valid_inputs(candidate, sources, output.size())) &&
+               candidate->mixer->accepts_context(context, output.size()) &&
                fill_sources(candidate) &&
                candidate->mixer->adopt_live_state(*active->mixer, context)) {
       active->mixer->graph_deactivated(active->revision);
