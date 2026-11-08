@@ -42,59 +42,112 @@ using Result = foundation::Result<ProjectRoutePlan>;
          });
 }
 
+namespace {
+// The mixer's mute and solo rule over the saved tracks, in snapshot order.
+struct SoloState {
+  std::vector<bool> explicitly_muted;
+  // Empty when no track is soloed; else the tracks a solo keeps.
+  std::vector<bool> retained;
+};
+
+[[nodiscard]] SoloState solo_state(const project::Snapshot& snapshot) {
+  const auto& tracks = snapshot.tracks;
+  SoloState state{std::vector<bool>(tracks.size()), {}};
+  std::vector<std::size_t> solo_indices;
+  for (std::size_t index = 0; index < tracks.size(); ++index) {
+    // A mute lane drives the channel's mute through its node gain instead.
+    state.explicitly_muted[index] = tracks[index].muted && !has_mute_automation(tracks[index]);
+    if (tracks[index].soloed)
+      solo_indices.push_back(index);
+  }
+  if (solo_indices.empty())
+    return state;
+
+  // A track's audio goes to its main output (else the master) and its
+  // audible sends. A key is not audio: soloing the keyed track leaves its
+  // key's source silent, and soloing the source leaves the track it keys
+  // silent.
+  const auto feeds = [&](std::size_t source, std::size_t destination) {
+    const auto& track = tracks[source];
+    const auto id = tracks[destination].id;
+    return track.main_output == id ||
+           std::ranges::any_of(track.sends, [&](const project::SendRoute& send) {
+             return send.purpose == project::SendPurpose::audible && send.destination == id;
+           });
+  };
+  // Both traversals are bounded by the validated routing graph. Keeping
+  // descendants lets a soloed source reach returns and buses; keeping
+  // ancestors lets a soloed bus receive its inputs.
+  state.retained.assign(tracks.size(), false);
+  for (const bool upstream : {true, false}) {
+    std::vector<std::size_t> queue = solo_indices;
+    std::vector<bool> visited(tracks.size());
+    for (const auto index : queue)
+      visited[index] = true;
+    for (std::size_t cursor = 0; cursor < queue.size(); ++cursor) {
+      const auto current = queue[cursor];
+      for (std::size_t other = 0; other < tracks.size(); ++other) {
+        if (visited[other] || !(upstream ? feeds(other, current) : feeds(current, other)))
+          continue;
+        visited[other] = true;
+        queue.push_back(other);
+      }
+    }
+    for (std::size_t index = 0; index < visited.size(); ++index)
+      state.retained[index] = state.retained[index] || visited[index];
+  }
+  return state;
+}
+} // namespace
+
 std::vector<bool> effective_track_mutes(const project::Snapshot& snapshot,
                                         const ProjectRoutePlan& plan) {
-  std::map<engine::RoutingNodeId, std::size_t> index_by_node;
-  for (std::size_t index = 0; index < plan.track_nodes.size(); ++index) {
-    index_by_node.emplace(plan.track_nodes[index].node, index);
-  }
-  std::vector<bool> explicitly_muted(plan.track_nodes.size());
-  std::vector<bool> retained(plan.track_nodes.size());
-  std::vector<std::size_t> solo_indices;
+  const auto state = solo_state(snapshot);
+  std::vector<bool> muted(plan.track_nodes.size());
   for (std::size_t index = 0; index < plan.track_nodes.size(); ++index) {
     const auto track =
         std::ranges::find(snapshot.tracks, plan.track_nodes[index].track, &project::Track::id);
     if (track == snapshot.tracks.end())
       continue;
-    // A mute lane drives the channel's mute through its node gain instead.
-    explicitly_muted[index] = track->muted && !has_mute_automation(*track);
-    if (track->soloed)
-      solo_indices.push_back(index);
+    const auto saved = static_cast<std::size_t>(track - snapshot.tracks.begin());
+    muted[index] =
+        state.explicitly_muted[saved] || (!state.retained.empty() && !state.retained[saved]);
   }
-  if (solo_indices.empty())
-    return explicitly_muted;
-
-  // Both traversals are bounded by the validated routing graph. Keeping
-  // descendants lets a soloed source reach returns and buses; keeping
-  // ancestors lets a soloed bus receive its inputs.
-  for (const bool upstream : {true, false}) {
-    std::vector<std::size_t> queue = solo_indices;
-    std::vector<bool> visited(plan.track_nodes.size());
-    for (const auto index : queue)
-      visited[index] = true;
-    for (std::size_t cursor = 0; cursor < queue.size(); ++cursor) {
-      const auto node = plan.track_nodes[queue[cursor]].node;
-      for (const auto& edge : plan.edges) {
-        // A key is not audio: soloing the keyed track leaves its key's
-        // source silent (the key still taps it before mute), and soloing
-        // the source leaves the track it keys silent.
-        if (edge.kind == engine::RoutingEdgeKind::sidechain ||
-            (upstream ? edge.destination : edge.source) != node)
-          continue;
-        const auto found = index_by_node.find(upstream ? edge.source : edge.destination);
-        if (found != index_by_node.end() && !visited[found->second]) {
-          visited[found->second] = true;
-          queue.push_back(found->second);
-        }
-      }
-    }
-    for (std::size_t index = 0; index < visited.size(); ++index)
-      retained[index] = retained[index] || visited[index];
-  }
-  std::vector<bool> muted(plan.track_nodes.size());
-  for (std::size_t index = 0; index < muted.size(); ++index)
-    muted[index] = explicitly_muted[index] || !retained[index];
   return muted;
+}
+
+std::set<project::TrackId> silent_key_sources(const project::Snapshot& snapshot) {
+  const auto state = solo_state(snapshot);
+  const auto& tracks = snapshot.tracks;
+  const auto keys_retained = [&](const project::Track& source) {
+    return std::ranges::any_of(source.sends, [&](const project::SendRoute& send) {
+      if (send.purpose != project::SendPurpose::sidechain)
+        return false;
+      const auto keyed = std::ranges::find(tracks, send.destination, &project::Track::id);
+      return keyed != tracks.end() &&
+             state.retained[static_cast<std::size_t>(keyed - tracks.begin())];
+    });
+  };
+  std::set<project::TrackId> silent;
+  for (std::size_t index = 0; index < tracks.size(); ++index) {
+    const bool soloed_away =
+        !state.retained.empty() && !state.retained[index] && !keys_retained(tracks[index]);
+    if (state.explicitly_muted[index] || soloed_away)
+      silent.insert(tracks[index].id);
+  }
+  return silent;
+}
+
+bool keys_now(const project::Snapshot& snapshot, const std::set<project::TrackId>& silent,
+              const project::Track& source, const project::SendRoute& send) {
+  return live_sidechain(snapshot, send) && send.gain > 0.0 && !silent.contains(source.id);
+}
+
+float send_edge_gain(const std::set<project::TrackId>& silent_keys, const project::Track& source,
+                     const project::SendRoute& send) noexcept {
+  const bool silent_key =
+      send.purpose == project::SendPurpose::sidechain && silent_keys.contains(source.id);
+  return silent_key ? 0.0F : static_cast<float>(send.gain);
 }
 
 std::vector<bool> silent_track_nodes(const project::Snapshot& snapshot,
@@ -103,11 +156,15 @@ std::vector<bool> silent_track_nodes(const project::Snapshot& snapshot,
   std::map<engine::RoutingNodeId, std::size_t> index_by_node;
   for (std::size_t index = 0; index < plan.track_nodes.size(); ++index)
     index_by_node.emplace(plan.track_nodes[index].node, index);
+  // A track whose key sounds keeps rendering for it.
+  const auto silent_keys = silent_key_sources(snapshot);
   std::vector<bool> keys(plan.track_nodes.size());
   for (const auto& edge : plan.edges) {
     if (edge.kind != engine::RoutingEdgeKind::sidechain)
       continue;
-    if (const auto found = index_by_node.find(edge.source); found != index_by_node.end())
+    if (const auto found = index_by_node.find(edge.source);
+        found != index_by_node.end() &&
+        !silent_keys.contains(plan.track_nodes[found->second].track))
       keys[found->second] = true;
   }
   for (std::size_t index = 0; index < silent.size(); ++index)
@@ -237,6 +294,7 @@ project_edge_controls(const project::Snapshot& snapshot, const ProjectRoutePlan&
   result.reserve(plan.latency.edges.size());
   for (const auto& edge : plan.latency.edges)
     result.push_back({edge.id, edge.gain});
+  const auto silent_keys = silent_key_sources(snapshot);
   for (const auto& mapped : plan.sends) {
     const auto track = std::ranges::find(snapshot.tracks, mapped.track, &project::Track::id);
     if (track == snapshot.tracks.end())
@@ -250,7 +308,7 @@ project_edge_controls(const project::Snapshot& snapshot, const ProjectRoutePlan&
     if (!std::isfinite(send->gain) || send->gain < 0.0 || send->gain > 4.0)
       return foundation::Result<Controls>::failure(
           {foundation::ErrorCode::invalid_argument, "send overlay gain is invalid"});
-    edge->gain = static_cast<float>(send->gain);
+    edge->gain = send_edge_gain(silent_keys, *track, *send);
   }
   return foundation::Result<Controls>::success(std::move(result));
 }
@@ -429,6 +487,7 @@ Result ProjectRouteIdRegistry::compile(const project::Snapshot& snapshot,
     return fail(ErrorCode::resource_exhausted, "session routing ID space exhausted");
   }
 
+  const auto silent_keys = silent_key_sources(snapshot);
   auto tracks = tracks_;
   auto main_edges = main_edges_;
   auto send_edges = send_edges_;
@@ -477,7 +536,7 @@ Result ProjectRouteIdRegistry::compile(const project::Snapshot& snapshot,
         continue;
       const auto send_edge_id = stable_id(send_edges, send_id.bits(), next);
       plan.edges.push_back({send_edge_id, source, tracks.at(send->destination.bits()),
-                            static_cast<float>(send->gain),
+                            send_edge_gain(silent_keys, *track, *send),
                             send->purpose == project::SendPurpose::sidechain
                                 ? engine::RoutingEdgeKind::sidechain
                                 : engine::RoutingEdgeKind::main});

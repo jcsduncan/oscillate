@@ -751,8 +751,9 @@ void RoutedMixer::mix_node(std::size_t index, const NodeBlock& block,
   for (const auto edge_index : incoming_[index]) {
     auto& edge = edges_[edge_index];
     auto delayed = std::span(scratch).first(block.frames);
-    // A key is taken after the source's inserts, before its fader and mute,
-    // so muting or soloing away the source never silences what it keys.
+    // A key is taken after the source's inserts, before its fader and mute;
+    // its edge gain carries whether the key sounds (routing silences a muted
+    // source's key there).
     const auto& from = edge.kind == RoutingEdgeKind::sidechain
                            ? prefader_buffer(edge.source_index, block.slot)
                            : node_buffer(edge.source_index, block.slot);

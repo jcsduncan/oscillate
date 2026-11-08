@@ -1,6 +1,7 @@
 #include "oscillate/application/clip_playback.hpp"
 #include "oscillate/application/clip_prefetch_worker.hpp"
 #include "oscillate/application/instrument_playback.hpp"
+#include "oscillate/application/waveform_cache.hpp"
 #include "oscillate/engine/graph.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/test/audio_constants.hpp"
@@ -96,6 +97,23 @@ ManagedClip stage_clip(const fs::path& root, std::string_view file) {
   require(reopened.source_diagnostics.empty(), "reopened encoded asset has diagnostics");
   return {root, std::make_shared<const project::Snapshot>(std::move(reopened.snapshot)),
           snapshot.sources[0]};
+}
+
+// The waveform worker reads every frame the project record declares, so an
+// imported source must decode to exactly that length (an MP3 without a
+// Xing/Info header once reported an estimate longer than its audio).
+void waveform_builds_for_imported_source(std::string_view file) {
+  constexpr std::uint64_t generation = 1;
+  Directory temporary;
+  auto managed = stage_clip(temporary.path() / "project", file);
+  auto store = take(persistence::ProjectStore::open_reader(managed.root));
+  auto built = application::load_waveform_summary(store, nullptr, managed.source, generation);
+  REQUIRE_OK(built, "waveform build failed for an imported encoded source");
+  const auto& summary = built.value().summary;
+  REQUIRE_EQ(summary.frames, managed.source.frames, "waveform did not cover the whole source");
+  REQUIRE_EQ(summary.identity.generation, generation, "waveform lost its request generation");
+  REQUIRE_TRUE(!summary.identity.source_key.empty(), "waveform has no source key");
+  REQUIRE_TRUE(!summary.levels.empty(), "waveform has no levels");
 }
 
 void exercise_source(std::string_view file) {
@@ -296,6 +314,10 @@ int main() {
     exercise_source("sine.aiff");
     exercise_source("sine.flac");
     exercise_source("sine.mp3");
+    waveform_builds_for_imported_source("sine.aiff");
+    waveform_builds_for_imported_source("sine.flac");
+    waveform_builds_for_imported_source("sine.mp3");
+    waveform_builds_for_imported_source("sine_no_xing.mp3");
     external_encoded_source_prepares_only_verified_saved_bytes("sine.flac");
     external_encoded_source_prepares_only_verified_saved_bytes("sine.mp3");
     rejection_and_cancellation();

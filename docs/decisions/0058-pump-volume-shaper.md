@@ -26,6 +26,7 @@ Sharp attacks and releases must never click, and that protection belongs inside 
      - *Tempo* restarts the cycle on the song grid: 1/16 to 2 bars, straight, dotted or triplet.
      - *Kick Audio* restarts it on each kick detected in the sidechain, or in the input when there is no key. A lookahead of 0 to 20 ms (a latency) puts the duck on the kick.
      - *MIDI* restarts it on each note-on of the tracks keying Pump (the same sidechain send Kick Audio listens to). The notes come from the project's compiled MIDI plan, so the shape is read ahead: the duck lands on the note with no lookahead and no latency.
+     - Both keyed triggers hear only a key that sounds (`routing::keys_now`): its send is live with a gain above zero, and its track is not muted or silenced by another track's solo, by the mixer's own rule. A solo that keeps the keyed track keeps its key, so a soloed bass still ducks to its kick. A silent key carries no audio (its edge gain is zero) and no notes.
    - **Depth, Nudge (±20 ms), Mix and Output.**
    - **Band:** Full, or Lows Only below a Linkwitz–Riley crossover (40–400 Hz). The low and high bands sum to an allpass, so with no duck only phase changes.
    - **Anti-click, built in.** The gain runs through two cascaded one-poles: every drawn edge becomes an S-curve whose 10–90 % rise is the Anti-click time (0.5–10 ms, default 2 ms). The shape is read early by the smoother's own delay (2τ), so a drawn edge lands where it was drawn.
@@ -38,9 +39,9 @@ Sharp attacks and releases must never click, and that protection belongs inside 
      - the last cycle of the key (or input) as 256 peaks, aligned to the output;
      - the applied curve: the shape after depth, mix and anti-click, as it sounds.
 3. **Key notes for effects.**
-   - An `EffectEngine` with `key_notes` gets the note-on frames of the tracks keying its slot. They are sorted and unique, and notes a clip boundary restarts are left out.
+   - An `EffectEngine` with `key_notes` gets the note-on frames of the tracks keying its slot whose keys sound. They are sorted and unique, and notes a clip boundary restarts are left out.
    - `NativeEffectRuntime::offer_key_notes` hands them over through a lock-free mailbox. The kernel adopts them at a block start (`adopt_key_notes`) and is told each chunk's project frame (`locate`).
-   - `NativeEffectStage` compiles the notes when it is prepared. Every graph publish refreshes them on stages it keeps, so editing the kick track's notes while playing moves the duck without rebuilding Pump.
+   - `NativeEffectStage` compiles the notes when it is prepared. Every graph publish refreshes them on stages it keeps, and so do a mute, solo or key gain edit, so editing the kick track's notes or muting it while playing moves the duck without rebuilding Pump.
 4. **The panel's grid follows the meter.** Telemetry reports the cycle's length in beats of the song's meter.
 5. **Triggers that work on a drum bus.**
    - *Kick Audio* listens only between Detect Low and Detect High (24 dB/octave each side, 30–160 Hz by default), so hats and snares in a keyed drum bus never restart the cycle. *Listen* plays what the detector hears.

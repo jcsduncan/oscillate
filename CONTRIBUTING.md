@@ -130,7 +130,28 @@ An advisory **clang-tidy** job, not required for merging, runs the
 `.clang-tidy` checks on the translation units a pull request touches
 (`scripts/ci/tidy_changed.py`); `scripts/check-tidy.sh` checks the whole tree.
 
-The slow test tier runs nightly. Before a release, run the broad sweep:
+## Nightly and on-demand CI runs
+
+These run on `main` every night; none is required for merging.
+
+- **Nightly slow tier**: the slow tier and core line coverage (`nightly.yml`).
+- **Sanitizers** (`sanitizers.yml`): the `sanitize` preset with the VST3
+  host and the optional adapters runs every tier but `live` under
+  ASan/UBSan; the `tsan` preset runs the `engine` area (the audio worker
+  pool among it) and the routed playback cases. A failed run uploads the
+  sanitizer reports as an artifact.
+
+Run them on any branch from the command line, then follow the run:
+
+```sh
+gh workflow run sanitizers.yml --ref my-branch
+gh run watch "$(gh run list --workflow sanitizers.yml --branch my-branch --limit 1 --json databaseId --jq '.[0].databaseId')"
+```
+
+`--ref` runs the workflow as that branch defines it, with that branch's own
+build cache. A branch older than the workflow needs `main` merged in first.
+
+Before a release, run the broad sweep:
 GCC and Clang builds, the fast and slow tiers, clang-format, clang-tidy,
 ASan/UBSan, TSan where concurrency changed, and coverage
 ([AGENTS.md](AGENTS.md#commands)). A release needs evidence for each PRD

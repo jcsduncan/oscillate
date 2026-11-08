@@ -457,6 +457,10 @@ private:
   // Effects that read notes ahead and every live synth's Lock follow the
   // published snapshot. Control only.
   void follow_published_notes();
+  // Effects that read their keys' notes ahead (Pump's MIDI trigger) take
+  // the published snapshot's keys: a mute, solo or key gain changes which
+  // keys sound. Control only.
+  void refresh_effect_key_notes();
   // The control state a live switch replaced at publication, restored when
   // its candidate is withdrawn or discarded instead of adopted.
   struct LiveCandidate {

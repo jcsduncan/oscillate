@@ -61,7 +61,9 @@ signals:
 private:
   void poll();
   void start_next();
-  void consider(project::ClipId clip);
+  // Offers the song's key once the clip's key is known; an unanalysed clip
+  // is queued for analysis unless `analysed`, when it just found no key.
+  void consider(project::ClipId clip, bool analysed = false);
   void clear_hint();
 
   // A clip waiting for analysis, in the session it was dropped into.

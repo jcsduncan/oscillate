@@ -255,6 +255,12 @@ void bounce_and_flatten_keep_the_mix() {
   auto session = take(app::ProjectSession::create(root));
   const auto track = add_synth(*session, 57);
   done(session->tracks().set_track_level_pan(track, 0.8, 0.3), "channel");
+  // The track keys a compressor on another: the bounce keys it the same.
+  constexpr std::uint8_t keyed_note = 45;
+  const auto keyed = add_synth(*session, keyed_note);
+  const auto press =
+      take(session->effects().add_effect_engine(project::SignalPathId{keyed}, 0, "press"));
+  (void)take(session->routing().add_sidechain(track, keyed, press, 1.0));
   done(session->saving().save(), "save");
   const auto before = export_master(root, session->snapshot(), directory.path() / "before.wav");
   const auto tracks = session->snapshot().tracks.size();
@@ -277,6 +283,7 @@ void bounce_and_flatten_keep_the_mix() {
     REQUIRE_EQ(copy->clips.size(), 1, "the bounce is a new audio track below its muted source");
     REQUIRE_EQ(copy->level, 0.8, "the bounce is a new audio track below its muted source");
     REQUIRE_EQ(copy->pan, 0.3, "the bounce is a new audio track below its muted source");
+    REQUIRE_EQ(copy->sends.size(), 1, "the bounce keys what its muted source keyed");
   }
   const auto bounced = export_master(root, session->snapshot(), directory.path() / "bounce.wav");
   auto largest = largest_difference(before, bounced);
@@ -415,6 +422,35 @@ void consolidating_past_the_clip_limits_is_refused() {
 
 } // namespace
 
+// A source whose mute a lane drives keeps its keys after a bounce, so the
+// bounce does not key as well: the keyed effect hears one key, not two.
+void a_bounced_source_under_a_mute_lane_keys_once() {
+  Directory directory;
+  const auto root = directory.path() / "song";
+  auto session = take(app::ProjectSession::create(root));
+  const auto track = add_synth(*session, 57);
+  constexpr std::uint8_t keyed_note = 45;
+  const auto keyed = add_synth(*session, keyed_note);
+  const auto press =
+      take(session->effects().add_effect_engine(project::SignalPathId{keyed}, 0, "press"));
+  (void)take(session->routing().add_sidechain(track, keyed, press, 1.0));
+  (void)take(session->parameter_automation().set_channel_control_point(
+      track, project::TrackControlTarget::Key::channel_mute, 0, 0.0));
+  done(session->saving().save(), "save");
+
+  auto rendered = render(*session, track);
+  const auto audio = take(session->freeze().finish_track_bounce(
+      stage(*session, rendered), rendered.origin_revision(), track, rendered.first_frame(),
+      app::BounceMode::new_track));
+  const auto& state = session->snapshot();
+  const auto keys = [](const project::Track& item) {
+    return std::ranges::count(item.sends, project::SendPurpose::sidechain,
+                              &project::SendRoute::purpose);
+  };
+  REQUIRE_EQ(keys(find(state, track)), 1, "the source under a mute lane keeps its key");
+  REQUIRE_EQ(keys(find(state, audio)), 0, "the bounce of a source that keeps its key keys again");
+}
+
 int main() {
   try {
     consolidating_a_silent_tiny_loop_is_bounded();
@@ -423,6 +459,7 @@ int main() {
     frozen_tracks_export_what_they_played();
     a_stale_render_is_refused();
     bounce_and_flatten_keep_the_mix();
+    a_bounced_source_under_a_mute_lane_keys_once();
     consolidate_writes_clips_out();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';
