@@ -11,10 +11,6 @@ on:
     - cron: "0 7 * * 1"
   workflow_dispatch:
     inputs:
-      ref:
-        description: Branch, tag or commit to measure (empty measures the ref the run starts from)
-        required: false
-        default: ""
       seconds:
         description: Measured seconds per run
         required: false
@@ -57,7 +53,6 @@ jobs:
             ca-certificates git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref }}
           persist-credentials: false
       - name: Install dependencies
         run: |
@@ -83,7 +78,7 @@ jobs:
       - name: Build the reference project player
         run: scripts/build.sh "$BUILD_DIR" --target oscillate_reference_project
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: always() && inputs.ref == ''
+        if: always() && github.event_name != 'pull_request'
         with:
           path: .ccache
           key: ccache-performance-${{ github.run_id }}

@@ -674,8 +674,11 @@ void measure(const Options& options, const fs::path& root, const Vst3Parts& vst3
       throw std::runtime_error("cannot write the trace: " + written.error().message);
   }
 #if defined(OSCILLATE_QUALIFICATION_VST3)
-  if (vst3.instrument && !instruments.stop_after_join())
-    throw std::runtime_error("the VST3 instrument did not stop cleanly");
+  if (vst3.instrument && !instruments.stop_after_join()) {
+    const auto fault = control.processor_fault();
+    throw std::runtime_error("the VST3 instrument did not stop cleanly" +
+                             (fault ? ": " + fault->message : std::string()));
+  }
 #endif
 }
 

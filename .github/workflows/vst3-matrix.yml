@@ -9,11 +9,6 @@ on:
   schedule:
     - cron: "0 6 * * 1"
   workflow_dispatch:
-    inputs:
-      ref:
-        description: Branch, tag or commit to check (empty checks the ref the run starts from)
-        required: false
-        default: ""
   pull_request:
     branches: [main]
     paths:
@@ -51,7 +46,6 @@ jobs:
             ca-certificates git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref }}
           persist-credentials: false
       # Build dependencies, an X server for the editors, and the libraries the
       # plug-ins themselves load (JUCE, DPF, LSP and Cardinal runtimes).
@@ -85,7 +79,7 @@ jobs:
       - name: Build the probe
         run: scripts/build.sh "$BUILD_DIR" --target oscillate_vst3_matrix_probe
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: always() && inputs.ref == ''
+        if: always() && github.event_name != 'pull_request'
         with:
           path: .ccache
           key: ccache-qualification-${{ github.run_id }}
@@ -99,7 +93,7 @@ jobs:
               --work vst3-matrix --output vst3-matrix/result --editor
           cat vst3-matrix/result/matrix.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: always()
+        if: always() && github.event_name != 'pull_request'
         with:
           path: vst3-matrix/downloads
           key: vst3-matrix-${{ hashFiles('tests/qualification/vst3_matrix_plugins.json') }}

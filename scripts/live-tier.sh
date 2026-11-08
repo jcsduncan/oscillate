@@ -47,10 +47,20 @@ record() { # NAME COMMAND...: runs one check, logs it and keeps going.
 }
 : >"$out_dir/summary.txt"
 
+# A disposable sink, created first so a machine without a sound card (CI)
+# still has a default sink for the PipeWire smoke. It plays the reference
+# projects and lives as long as this pw-cli session, which ends with the script.
+coproc PWCLI { pw-cli >/dev/null 2>&1; }
+trap 'kill "$PWCLI_PID" 2>/dev/null || true' EXIT
+echo "create-node adapter { factory.name=support.null-audio-sink node.name=$sink \
+media.class=Audio/Sink audio.position=[ FL FR ] node.always-process=true \
+priority.session=-10000 }" >&"${PWCLI[1]}"
+sleep 1
+
 record pipewire-smoke ctest --test-dir "$build_dir" -R '^audio_io_pipewire_live$' --output-on-failure
 
 if [[ " ${targets[*]} " == *" oscillate_jack_live_smoke "* ]] && command -v jackd >/dev/null; then
-  jackd --no-realtime -n "$jack_server" -d dummy -r 48000 -p 64 >"$out_dir/jackd.log" 2>&1 &
+  jackd --no-realtime -n "$jack_server" -d dummy -r 48000 -p 128 >"$out_dir/jackd.log" 2>&1 &
   jackd_pid=$!
   sleep 2
   record jack-smoke env JACK_DEFAULT_SERVER="$jack_server" \
@@ -61,17 +71,8 @@ else
 fi
 
 record streaming-32track python3 -I tests/qualification/qualify_live_streaming_32track.py \
-  --executable "$build_dir/tests/qualification/oscillate_streaming_32track_rehearsal" \
-  --vst3-insert --vst3-instrument
+  --executable "$build_dir/tests/qualification/oscillate_streaming_32track_rehearsal"
 
-# A disposable sink for the reference projects: it lives as long as this
-# pw-cli session, which ends with the script.
-coproc PWCLI { pw-cli >/dev/null 2>&1; }
-trap 'kill "$PWCLI_PID" 2>/dev/null || true' EXIT
-echo "create-node adapter { factory.name=support.null-audio-sink node.name=$sink \
-media.class=Audio/Sink audio.position=[ FL FR ] node.always-process=true \
-priority.session=-10000 }" >&"${PWCLI[1]}"
-sleep 1
 record reference-live python3 -I tests/qualification/qualify_reference_projects.py \
   --executable "$build_dir/tests/qualification/oscillate_reference_project" \
   --output "$out_dir/reference" --seconds "$reference_seconds" --target-node "$sink"
