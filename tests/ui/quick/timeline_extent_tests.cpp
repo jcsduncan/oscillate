@@ -776,6 +776,81 @@ void clip_curve_x_follows_shared_tempo_map() {
           "reverse mixed-timebase curve x diverged from shared elapsed-to-musical conversion");
 }
 
+// The lanes a lane-count fixture saves: none, one on its clip, or that and
+// two on the track (level with two points, pan with one).
+enum class Lanes { none, clip, clip_and_track };
+
+// A track says how many automation lanes it holds, its own and its clips',
+// before any are shown: the projection counts them and the A button says
+// so in its tooltip and accessible description (issue #203).
+void lane_count_reads(Lanes lanes, int expected, const QString& text) {
+  QTemporaryDir directory;
+  require(directory.isValid(), "lane count directory unavailable");
+  const auto root = std::filesystem::path(directory.path().toStdString()) / "lane-count";
+  auto created = oscillate::application::ProjectSession::create(root);
+  require(created.has_value(), "lane count project creation failed");
+  auto& session = *created.value();
+  const auto source = std::filesystem::path(directory.path().toStdString()) / "source.wav";
+  write_source(source);
+  const int fd = ::open(source.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+  require(fd >= 0, "lane count WAV open failed");
+  const auto imported = session.imports().import_wav_audio(fd);
+  (void)::close(fd);
+  require(imported.has_value(), "lane count WAV import failed");
+  const auto track_id = session.snapshot().tracks.front().id;
+  const auto clip_id = session.snapshot().tracks.front().clips.front().id;
+  constexpr double clip_level = 0.5;
+  constexpr double clip_fraction = 0.5;
+  constexpr std::int64_t first_bar = 0;
+  constexpr std::int64_t second_bar = 2;
+  constexpr double level = 0.7;
+  constexpr double pan = 0.25;
+  using Key = oscillate::project::TrackControlTarget::Key;
+  if (lanes != Lanes::none) {
+    require(
+        session.automation()
+            .set_audio_clip_channel_level_point_at_fraction(clip_id, {clip_fraction}, clip_level)
+            .has_value(),
+        "clip lane point failed");
+  }
+  if (lanes == Lanes::clip_and_track) {
+    auto& automation = session.parameter_automation();
+    require(
+        automation.set_channel_control_point(track_id, Key::channel_level, first_bar, level)
+                .has_value() &&
+            automation.set_channel_control_point(track_id, Key::channel_level, second_bar, level)
+                .has_value() &&
+            automation.set_channel_control_point(track_id, Key::channel_pan, first_bar, pan)
+                .has_value(),
+        "track lane points failed");
+  }
+  oscillate::quick::ProjectBridge bridge(directory.path().toStdString());
+  bridge.set_project(std::move(created).value(), root);
+  require(bridge.tracks().front().toMap().value(QStringLiteral("automationLaneCount")).toInt() ==
+              expected,
+          "the track projects " + std::to_string(expected) + " automation lanes");
+  QQmlApplicationEngine engine;
+  engine.rootContext()->setContextProperty("projectBridge", &bridge);
+  engine.load(QUrl(QStringLiteral("qrc:/DawShell.qml")));
+  require(!engine.rootObjects().isEmpty(), "Quick shell did not load for the lane count");
+  auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().front());
+  require(window != nullptr, "Quick shell window unavailable for the lane count");
+  QCoreApplication::processEvents();
+  auto* button = find_item(window->contentItem(), QStringLiteral("trackAutomationButton"));
+  auto* mark = find_item(window->contentItem(), QStringLiteral("trackAutomationMark"));
+  require(button != nullptr && mark != nullptr, "the track's A button is missing");
+  require(button->property("laneText").toString() == text,
+          "the A button says \"" + button->property("laneText").toString().toStdString() +
+              "\", not \"" + text.toStdString() + "\"");
+  require(mark->isVisible() == (expected > 0), "the A button is marked only with lanes");
+}
+
+void automation_lane_count_marks_the_track() {
+  lane_count_reads(Lanes::none, 0, QStringLiteral("No automation"));
+  lane_count_reads(Lanes::clip, 1, QStringLiteral("1 automation lane"));
+  lane_count_reads(Lanes::clip_and_track, 3, QStringLiteral("3 automation lanes"));
+}
+
 void channel_graph_places_and_drags_saved_points() {
   QTemporaryDir directory;
   require(directory.isValid(), "channel graph temporary directory unavailable");
@@ -939,6 +1014,7 @@ int main(int argc, char** argv) {
     run();
     placeholder_inserts_above_itself();
     clip_curve_x_follows_shared_tempo_map();
+    automation_lane_count_marks_the_track();
     channel_graph_places_and_drags_saved_points();
     save_during_background_save_runs_after_it();
   } catch (const std::exception& error) {
