@@ -134,7 +134,9 @@ add_library(oscillate_native_effects effects/runtime.cpp effects/registry.cpp
                                             effects/tune.cpp effects/trim.cpp
                                             effects/signal.cpp effects/shape.cpp
                                             effects/press.cpp effects/ceiling.cpp
-                                            effects/strata.cpp)
+                                            effects/strata.cpp
+                                            # Edge's oversampler and guard (ADR-0108).
+                                            effects/edge.cpp effects/edge_dsp.cpp)
 add_library(oscillate::native_effects ALIAS oscillate_native_effects)
 target_include_directories(oscillate_native_effects PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../../include>
