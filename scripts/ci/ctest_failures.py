@@ -32,10 +32,10 @@ def readable(path):
     """The report's text, or None when it is missing or cut short (a cancelled shard)."""
     if not path.is_file():
         return None
-    text = path.read_text(encoding="utf-8")
     try:
+        text = path.read_text(encoding="utf-8")
         ElementTree.fromstring(text)
-    except ElementTree.ParseError:
+    except (UnicodeDecodeError, ElementTree.ParseError):
         return None
     return text
 

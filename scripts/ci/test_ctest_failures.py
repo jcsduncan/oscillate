@@ -61,6 +61,12 @@ class FailureTests(unittest.TestCase):
             complete.write_text(REPORT, encoding="utf-8")
             self.assertEqual(ctest_failures.readable(complete), REPORT)
 
+    def test_report_cut_inside_a_multibyte_character_is_unreadable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cut = Path(directory) / "junit.xml"
+            cut.write_bytes("<testsuite name=\"é\">".encode("utf-8")[:-3])
+            self.assertIsNone(ctest_failures.readable(cut))
+
     def test_clean_reports_say_so(self):
         clean = REPORT.split('  <testcase name="native_halo', maxsplit=1)[0] + "</testsuite>\n"
         self.assertEqual(ctest_failures.summary({"shard-1": clean}), "No test failed.\n")
