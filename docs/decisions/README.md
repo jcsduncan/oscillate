@@ -65,7 +65,7 @@ never reused. 0070 was never assigned.
 | 0055 | [Deck: a DJ mixer's three-band isolator](0055-deck-dj-isolator.md) | Accepted; implemented |
 | 0056 | [Snarl: a growl and wobble synth](0056-snarl-growl-synth.md) | Superseded by ADR-0057 |
 | 0057 | [Nova: the flagship wavetable synth](0057-nova-flagship-synth.md) | Accepted; platform, engine, panel, FX rack, arp and clip sequencer built; sample-based oscillators and table saving not built |
-| 0058 | [Pump: a drawn volume shaper, and documents for effects](0058-pump-volume-shaper.md) | Accepted; platform, engine, MIDI trigger and panel built |
+| 0058 | [Pump: a drawn volume shaper, and documents for effects](0058-pump-volume-shaper.md) | Accepted; platform, engine, MIDI trigger and panel built; superseded by ADR-0094 for how keys follow a mute lane |
 | 0059 | [Play and sparkle: note effects, macros and freeze](0059-play-and-sparkle.md) | Accepted; implemented |
 | 0060 | [Anvil: a drawn kick synth](0060-anvil-kick-synth.md) | Accepted; engine, presets, preview and panel built |
 | 0061 | [Performance tracing](0061-performance-tracing.md) | Accepted; implemented |

@@ -9,6 +9,7 @@
 namespace oscillate::routing {
 namespace {
 
+// Whether `prepared` is the channel-mute lane of one of `tracks`.
 [[nodiscard]] bool mute_lane_of(const automation_project::PreparedTargetAutomation& prepared,
                                 std::span<const project::TrackId> tracks) {
   const auto* control = std::get_if<project::TrackControlTarget>(&prepared.target());
@@ -18,6 +19,8 @@ namespace {
 
 } // namespace
 
+// Prepares the whole project's automation only when a key source has a mute
+// lane, and keeps just those lanes.
 foundation::Result<KeyMuteLanes> KeyMuteLanes::prepare(const project::Snapshot& snapshot,
                                                        std::span<const project::TrackId> tracks) {
   using R = foundation::Result<KeyMuteLanes>;
@@ -37,6 +40,7 @@ foundation::Result<KeyMuteLanes> KeyMuteLanes::prepare(const project::Snapshot& 
   return R::success(std::move(result));
 }
 
+// Evaluates the track's lane at one sample, as the mixer's channel gain does.
 foundation::Result<bool> KeyMuteLanes::mutes(project::TrackId track,
                                              timeline::SamplePosition sample) const {
   using R = foundation::Result<bool>;

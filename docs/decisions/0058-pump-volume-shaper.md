@@ -1,6 +1,6 @@
 # ADR-0058 — Pump: a drawn volume shaper, and documents for effects
 
-**Status:** Accepted; platform, engine, MIDI trigger and panel built. **Date:** 25 October 2026.
+**Status:** Accepted; platform, engine, MIDI trigger and panel built. Superseded in part by [ADR-0094](0094-mute-lanes-gate-keys.md) where it makes `routing::keys_now` the whole test for a sounding key: a key source's mute lane also gates its keys. **Date:** 25 October 2026.
 **Builds on:** ADR-0040 (native effect platform), ADR-0041 (Pocket), ADR-0043 (one native insert path), ADR-0057 (structured synth state).
 **Panel design:** [ui/pump-panel-mockup.html](../ui/pump-panel-mockup.html).
 

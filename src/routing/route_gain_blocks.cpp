@@ -30,11 +30,8 @@ using Result = foundation::Result<std::shared_ptr<PreparedRouteGainBlocks>>;
 // A mute glides to its lane's step over this long, so a toggle never clicks.
 constexpr double mute_glide_seconds = 0.005;
 
-// The mute gain one frame on: a glide toward silence where the lane mutes
-// and toward unity elsewhere, or the lane's value at once on a restart.
-[[nodiscard]] double next_mute_gain(double lane, double gain, double step, bool restart) noexcept {
-  const double target = mute_lane_mutes(lane) ? 0.0 : 1.0;
-  return restart ? target : gain + std::clamp(target - gain, -step, step);
+[[nodiscard]] double mute_glide_step(std::uint32_t sample_rate) noexcept {
+  return 1.0 / (mute_glide_seconds * static_cast<double>(sample_rate));
 }
 
 // A saved sidechain send whose target effect is switched off compiles to no
@@ -63,6 +60,8 @@ constexpr double mute_glide_seconds = 0.005;
 }
 } // namespace
 
+// Binds each send-gain and channel lane to its edge or node, then each key
+// from a source under a mute lane to that lane, all within the storage budget.
 Result PreparedRouteGainBlocks::prepare(
     const project::Snapshot& snapshot, const ProjectRoutePlan& route,
     std::span<const automation_project::PreparedTargetAutomation> targets, std::size_t max_frames) {
@@ -114,7 +113,8 @@ Result PreparedRouteGainBlocks::prepare(
           added.node_index = node_index;
           added.level = track->level;
           added.pan = track->pan;
-          added.mute_gain = track->muted ? 0.0 : 1.0;
+          added.mute = {.step = mute_glide_step(snapshot.sample_rate),
+                        .gain = track->muted ? 0.0 : 1.0};
           added.samples.resize(max_frames);
           result->node_bindings_.push_back(std::move(added));
           binding = std::prev(result->node_bindings_.end());
@@ -205,7 +205,8 @@ Result PreparedRouteGainBlocks::prepare(
       bound->mute_target = muting->mute_target;
       bound->mute_delay = planned->compensation_frames;
       bound->mute_values.resize(max_frames);
-      bound->mute_gain = owner->muted ? 0.0 : 1.0;
+      bound->mute = {.step = mute_glide_step(snapshot.sample_rate),
+                     .gain = owner->muted ? 0.0 : 1.0};
     }
     return Result::success(std::move(result));
   } catch (const std::bad_alloc&) {
@@ -213,6 +214,8 @@ Result PreparedRouteGainBlocks::prepare(
   }
 }
 
+// Evaluates every bound lane for one block: edges (with any key's mute
+// gate) and then channel nodes. False leaves `gains` empty.
 bool PreparedRouteGainBlocks::fill_block(engine::BlockContext context, std::size_t frames,
                                          engine::RoutedGainSpans& gains) noexcept {
   try {
@@ -233,8 +236,6 @@ bool PreparedRouteGainBlocks::fill_block(engine::BlockContext context, std::size
         return false;
       ticks_[index] = tick;
     }
-    // A seek or loop restarts each mute glide at its lane's value.
-    const double mute_step = 1.0 / (mute_glide_seconds * static_cast<double>(sample_rate_));
     for (auto& binding : edge_bindings_) {
       auto samples = std::span(binding.samples).first(frames);
       if (binding.target_index) {
@@ -250,8 +251,8 @@ bool PreparedRouteGainBlocks::fill_block(engine::BlockContext context, std::size
       } else {
         std::ranges::fill(samples, binding.saved_gain);
       }
-      if (binding.mute_target &&
-          !gate_by_mute(binding, first, samples, mute_step, context.state_generation()))
+      if (binding.mute_target && !gate_by_mute(binding, targets_[*binding.mute_target], first,
+                                               samples, context.state_generation()))
         return false;
       edge_spans_[binding.edge_index].values = samples;
     }
@@ -271,20 +272,19 @@ bool PreparedRouteGainBlocks::fill_block(engine::BlockContext context, std::size
           !evaluate(binding.pan_target, binding.pan_values, -1.0, 1.0) ||
           !evaluate(binding.mute_target, binding.mute_values, 0.0, 1.0))
         return false;
-      const bool restart = binding.mute_generation != context.state_generation();
-      binding.mute_generation = context.state_generation();
+      const bool restart = binding.mute.generation != context.state_generation();
+      binding.mute.generation = context.state_generation();
       for (std::size_t index = 0; index < frames; ++index) {
         const double level = binding.level_target ? binding.level_values[index] : binding.level;
         const double pan = binding.pan_target ? binding.pan_values[index] : binding.pan;
         if (binding.mute_target)
-          binding.mute_gain = next_mute_gain(binding.mute_values[index], binding.mute_gain,
-                                             mute_step, restart && index == 0);
+          binding.mute.advance(binding.mute_values[index], restart && index == 0);
         // Single precision, as the mixer's static channel gains are, so an
         // unmuted channel matches its unautomated gain bit for bit.
         const auto gain = static_cast<float>(level);
         const float left = pan > 0.0 ? static_cast<float>(1.0 - pan) : 1.0F;
         const float right = pan < 0.0 ? static_cast<float>(1.0 + pan) : 1.0F;
-        const auto mute = static_cast<float>(binding.mute_gain);
+        const auto mute = static_cast<float>(binding.mute.gain);
         binding.samples[index] = {gain * left * mute, gain * right * mute};
       }
       node_spans_[binding.node_index].values = std::span(binding.samples).first(frames);
@@ -299,12 +299,21 @@ bool PreparedRouteGainBlocks::fill_block(engine::BlockContext context, std::size
   }
 }
 
-bool PreparedRouteGainBlocks::gate_by_mute(EdgeBinding& binding, std::int64_t first,
-                                           std::span<float> samples, double mute_step,
-                                           std::uint64_t generation) const {
+// Moves the gain at most one step toward silence or unity, or straight to
+// the lane's value on a restart.
+void PreparedRouteGainBlocks::MuteGlide::advance(double lane, bool restart) noexcept {
+  const double target = mute_lane_mutes(lane) ? 0.0 : 1.0;
+  gain = restart ? target : gain + std::clamp(target - gain, -step, step);
+}
+
+// Evaluates the source's mute lane `mute_delay` frames back, glides the
+// key's own copy of the mute gain along it and multiplies it into `samples`.
+// False when the lane cannot be evaluated or leaves its domain.
+bool PreparedRouteGainBlocks::gate_by_mute(
+    EdgeBinding& binding, const automation_project::PreparedTargetAutomation& target,
+    std::int64_t first, std::span<float> samples, std::uint64_t generation) {
   const auto frames = samples.size();
   auto lane = std::span(binding.mute_values).first(frames);
-  const auto& target = targets_[*binding.mute_target];
   // The key heard now left its source `mute_delay` frames earlier; before
   // the project's start the lane holds its first value.
   const auto from = first - static_cast<std::int64_t>(binding.mute_delay);
@@ -318,14 +327,13 @@ bool PreparedRouteGainBlocks::gate_by_mute(EdgeBinding& binding, std::int64_t fi
   if (lead < frames &&
       !target.evaluate_block({from + static_cast<std::int64_t>(lead)}, lane.subspan(lead)))
     return false;
-  const bool restart = binding.mute_generation != generation;
-  binding.mute_generation = generation;
+  const bool restart = binding.mute.generation != generation;
+  binding.mute.generation = generation;
   for (std::size_t index = 0; index < frames; ++index) {
     if (!std::isfinite(lane[index]) || lane[index] < 0.0 || lane[index] > 1.0)
       return false;
-    binding.mute_gain =
-        next_mute_gain(lane[index], binding.mute_gain, mute_step, restart && index == 0);
-    samples[index] *= static_cast<float>(binding.mute_gain);
+    binding.mute.advance(lane[index], restart && index == 0);
+    samples[index] *= static_cast<float>(binding.mute.gain);
   }
   return true;
 }

@@ -34,6 +34,17 @@ public:
   [[nodiscard]] bool binds_edge_gain(engine::RoutingEdgeId edge) const noexcept override;
 
 private:
+  // A channel mute's gain, gliding to its lane's step over a few
+  // milliseconds so a toggle never clicks.
+  struct MuteGlide {
+    double step = 0.0; // The most the gain moves in one frame.
+    double gain = 1.0;
+    std::uint64_t generation = 0;
+    // Advances one frame on `lane`'s value; a new processing generation (a
+    // seek or loop) starts at the lane's value.
+    void advance(double lane, bool restart) noexcept;
+  };
+
   // One send edge's gain: its send-gain lane, else its saved gain.
   struct EdgeBinding {
     std::optional<std::size_t> target_index;
@@ -50,8 +61,7 @@ private:
     std::optional<std::size_t> mute_target{};
     std::uint32_t mute_delay = 0;
     std::vector<double> mute_values{};
-    double mute_gain = 1.0;
-    std::uint64_t mute_generation = 0;
+    MuteGlide mute{};
   };
   // One channel node's automated controls; an unautomated control keeps its
   // saved value. Mute steps glide over a short ramp so a toggle never clicks.
@@ -66,14 +76,14 @@ private:
     std::vector<double> pan_values;
     std::vector<double> mute_values;
     std::vector<engine::StereoFrame> samples;
-    double mute_gain = 1.0;
-    std::uint64_t mute_generation = 0;
+    MuteGlide mute{};
   };
 
   // Multiplies `samples` by the mute gain of the key's source lane.
-  [[nodiscard]] bool gate_by_mute(EdgeBinding& binding, std::int64_t first,
-                                  std::span<float> samples, double mute_step,
-                                  std::uint64_t generation) const;
+  [[nodiscard]] static bool gate_by_mute(EdgeBinding& binding,
+                                         const automation_project::PreparedTargetAutomation& target,
+                                         std::int64_t first, std::span<float> samples,
+                                         std::uint64_t generation);
 
   std::uint32_t sample_rate_ = 0;
   std::shared_ptr<const timeline::TempoMap> tempo_;
