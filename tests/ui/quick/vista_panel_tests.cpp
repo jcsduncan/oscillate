@@ -1,5 +1,6 @@
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
+#include "panel_fit_checks.hpp"
 
 #include "oscillate/engine/graph.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
@@ -152,6 +153,10 @@ void panel_covers_every_parameter() {
   InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
+  // The lower cards' readouts end inside their cards.
+  oscillate::test::panel_fit::require_inside(
+      *item(*panel, QStringLiteral("vistaKnobValue:vista.mono_freq")),
+      *item(*panel, QStringLiteral("vistaBassCard")), "the Mono Bass card");
   require(panel->root->implicitWidth() >= 1200 && panel->root->implicitHeight() >= 580,
           "panel has its designed size");
   for (const auto& p : table().parameters) {

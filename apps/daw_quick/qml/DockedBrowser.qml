@@ -75,9 +75,12 @@ Rectangle {
             Keys.onEscapePressed: { text = ""; focus = false }
         }
         Text {
+            objectName: "dockedBrowserSearchHint"
             x: Theme.searchTextInset; anchors.verticalCenter: parent.verticalCenter
+            width: dockedSearch.width
+            elide: Text.ElideRight
             visible: dockedSearch.text.length === 0
-            text: "Search: compressor, reverb, kick…"
+            text: "Search: reverb, kick…"
             color: Theme.textFaint
             font.pixelSize: Theme.typeLabel
         }

@@ -18,6 +18,12 @@ device chain in the dock below.*
 
 *The mixer view.*
 
+The shell screenshots are `oscillate_quick_screenshot` (tests/ui/quick) renders
+of its `--demo` project, playing (`--play-from`), at `QT_SCALE_FACTOR=2` and
+`--size 1760x1000`. Panel screenshots come from each panel test with its
+`<PANEL>_PANEL_SCREENSHOT_DIR` set, also at `QT_SCALE_FACTOR=2`. Both are saved
+as truecolour PNGs.
+
 ## Structure
 
 | Path | Responsibility |

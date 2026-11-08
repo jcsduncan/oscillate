@@ -1,5 +1,6 @@
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
+#include "panel_fit_checks.hpp"
 
 #include "oscillate/native_dsp/effects/dust.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
@@ -128,6 +129,7 @@ void panel_covers_every_parameter() {
   InMemoryNativeSynthAdapter adapter(defaults());
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
+  oscillate::test::panel_fit::require_knob_labels_apart(panel->root, "Dust");
   for (const auto& p : table().parameters) {
     const QString id = qs(p.id);
     require(id.startsWith(QStringLiteral("dust.")), "every id is Dust's: " + id.toStdString());

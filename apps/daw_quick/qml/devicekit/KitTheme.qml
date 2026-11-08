@@ -28,6 +28,8 @@ QtObject {
     // name their own token for a size with a particular job.
     // Type: from small print to display headings (pixel sizes).
     property int typeMicro: 9
+    // The least a header line may step down to so it fits its space.
+    property int typeFitFloor: 7
     property int typeCaption: 9
     property int typeSmall: 10
     property int typeBody: 11

@@ -9,6 +9,7 @@
 #include <QRegularExpression>
 #include <QString>
 
+#include <algorithm>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -23,6 +24,8 @@ namespace oscillate::test::panel_fit {
 // subtitle) without their glyphs meeting.
 inline constexpr double slack_px = 1.0;
 inline constexpr double overlap_px = 3.0;
+// The least room between two knob labels on one line.
+inline constexpr double knob_label_gap_px = 2.0;
 
 inline bool is_text_item(const QQuickItem& item) {
   return item.inherits("QQuickText") || item.inherits("QQuickTextEdit") ||
@@ -111,6 +114,52 @@ inline std::string describe(const QQuickItem& item) {
 // whole: the last resort for text of any length, such as a user's names.
 inline bool elides_with_tip(const QQuickItem& item) {
   return item.property("tipShowsWhole").toBool();
+}
+
+// The text draws clear of `other` (a header's preset browser, say): its
+// glyphs and the item share no part of the scene.
+inline void require_clear_of(const QQuickItem& text, const QQuickItem& other,
+                             const std::string& what) {
+  const QRectF both = painted(text).intersected(other.mapRectToScene(other.boundingRect()));
+  require(both.width() < overlap_px || both.height() < overlap_px,
+          describe(text) + " runs under " + what);
+}
+
+// The text draws inside `container` (its card, say), not across its edge.
+inline void require_inside(const QQuickItem& text, const QQuickItem& container,
+                           const std::string& what) {
+  const QRectF inner = painted(text).adjusted(slack_px, slack_px, -slack_px, -slack_px);
+  require(container.mapRectToScene(container.boundingRect()).contains(inner),
+          describe(text) + " runs past " + what);
+}
+
+// Knob labels on one line under root keep at least min_gap_px apart, so
+// two long names never read as one word.
+inline void require_knob_labels_apart(QQuickItem* root, const std::string& panel,
+                                      double min_gap_px = knob_label_gap_px) {
+  std::vector<QQuickItem*> items;
+  texts_in(root, items);
+  std::vector<QRectF> labels;
+  std::vector<const QQuickItem*> owners;
+  for (const QQuickItem* item : items) {
+    if (item->objectName().contains(QStringLiteral("KnobLabel:"))) {
+      labels.push_back(painted(*item));
+      owners.push_back(item);
+    }
+  }
+  std::string problems;
+  for (std::size_t i = 0; i < labels.size(); ++i) {
+    for (std::size_t j = i + 1; j < labels.size(); ++j) {
+      const QRectF& a = labels[i];
+      const QRectF& b = labels[j];
+      const bool same_line = a.top() < b.bottom() && b.top() < a.bottom();
+      const double gap = std::max(b.left() - a.right(), a.left() - b.right());
+      if (same_line && gap < min_gap_px) {
+        problems += "\n  " + describe(*owners[i]) + " meets " + describe(*owners[j]);
+      }
+    }
+  }
+  require(problems.empty(), panel + "'s knob labels run together:" + problems);
 }
 
 // No visible text under root is cut short (unless its tooltip shows it

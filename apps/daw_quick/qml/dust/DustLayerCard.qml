@@ -72,6 +72,8 @@ Item {
             x: card.pad + card.faderWidth + card.theme.spaceXs
             y: -card.theme.spaceXxs
             columns: 2
+            // Room between neighbouring labels, so two long ones never meet.
+            columnSpacing: card.theme.spaceSm
             Repeater {
                 model: card.knobIds
                 delegate: Kit.Knob {

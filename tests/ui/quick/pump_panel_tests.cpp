@@ -234,6 +234,12 @@ void panel_covers_every_parameter() {
   }
   require(item(*panel, QStringLiteral("pumpShape:0"))->property("on").toBool(),
           "Classic Pump is lit as the current shape");
+  // Morph's reading ends above the pattern steps rather than under them.
+  auto* morph = item(*panel, QStringLiteral("pumpKnobValue:pump.morph"));
+  auto* first_step = item(*panel, QStringLiteral("pumpStep:1"));
+  require(morph->mapToScene({0.0, morph->property("contentHeight").toDouble()}).y() <=
+              first_step->mapToScene({0.0, 0.0}).y(),
+          "Morph's value runs under the pattern steps");
 }
 
 void knobs_and_segments_edit_values() {

@@ -1,5 +1,6 @@
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
+#include "panel_fit_checks.hpp"
 
 #include "oscillate/native_dsp/effects/forge.hpp"
 #include "oscillate/native_dsp/synth/parameters.hpp"
@@ -208,6 +209,10 @@ void panel_covers_every_parameter() {
   }
   require(text_of(*panel, QStringLiteral("forgePresetName")) == QStringLiteral("Warm Tape"),
           "defaults are the Warm Tape");
+  // The subtitle ends before the preset browser rather than running under it.
+  oscillate::test::panel_fit::require_clear_of(
+      *item(*panel, QStringLiteral("forgeSubtitle")),
+      *item(*panel, QStringLiteral("forgePresetPrevious"))->parentItem(), "the preset browser");
   auto* view = item(*panel, QStringLiteral("forgeCurveView"));
   require(view->property("points").toList().size() == 129, "the forge previews the engine's curve");
   // The harmonics readout: symmetric tape has no even harmonics; the

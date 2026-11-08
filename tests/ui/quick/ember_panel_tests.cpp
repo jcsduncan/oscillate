@@ -13,6 +13,7 @@
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QRectF>
 #include <QTest>
 
 #include <cmath>
@@ -144,6 +145,15 @@ void panel_covers_every_parameter_and_edits() {
   auto panel = load_panel(controller);
   require(panel->root->implicitWidth() >= 1200 && panel->root->implicitHeight() >= 680,
           "panel has its designed size");
+  // The Circuit card's note sits whole inside the card, below its well.
+  auto* note = item(*panel, QStringLiteral("emberCircuitNote"));
+  auto* well = item(*panel, QStringLiteral("emberCircuitView"));
+  const auto card = note->parentItem()->mapRectToScene(note->parentItem()->boundingRect());
+  const auto note_area = note->mapRectToScene(
+      QRectF(0.0, 0.0, note->width(), note->property("implicitHeight").toDouble()));
+  require(card.contains(note_area), "the Circuit note runs past its card");
+  require(well->mapRectToScene(well->boundingRect()).bottom() <= note_area.top(),
+          "the Circuit well draws over its note");
 
   for (const auto& p : table().parameters) {
     const QString id = QString::fromUtf8(p.id.data(), static_cast<qsizetype>(p.id.size()));

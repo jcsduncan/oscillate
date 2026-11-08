@@ -79,7 +79,7 @@ KitTheme {
     // How much shorter than the wordmark its accent rule is.
     property real wordmarkRuleTrim: 10
     property real latencyGap: 7
-    property real latencySpacing: 2.4
+    property real latencySpacing: 1.6
     property real browserX: 250
     property real browserY: 5
     property real presetDisplayWidth: 540

@@ -79,7 +79,7 @@ KitTheme {
     property real headerHeight: 52
     property int wordmarkSize: 27
     property real wordmarkSpacing: 5
-    property real taglineSpacing: 2.2
+    property real taglineSpacing: 1.6
     // The preset browser.
     property real browserX: 300
     property real browserY: 5

@@ -1,6 +1,7 @@
 #include "device_strip_view.hpp"
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
+#include "panel_fit_checks.hpp"
 
 #include "oscillate/engine/graph.hpp"
 #include "oscillate/native_dsp/effects/ceiling.hpp"
@@ -183,6 +184,10 @@ void panel_covers_every_parameter() {
                   controller.display(QStringLiteral("ceiling.lookahead")) +
                   QStringLiteral(" LATENCY"),
           "the header names the latency");
+  // It ends before the preset browser rather than running under it.
+  oscillate::test::panel_fit::require_clear_of(
+      *item(*panel, QStringLiteral("ceilingLatency")),
+      *item(*panel, QStringLiteral("ceilingPresetPrevious"))->parentItem(), "the preset browser");
 }
 
 void controls_edit_and_the_ceiling_line_follows() {
