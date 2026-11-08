@@ -39,10 +39,10 @@ inline void marked(QQuickItem* root, const char* marker, std::vector<QQuickItem*
   }
 }
 
-inline bool inside(const QQuickItem& item, const QQuickItem& ancestor) {
+inline bool inside(const QQuickItem& item, const QQuickItem* ancestor) {
   for (const QQuickItem* parent = item.parentItem(); parent != nullptr;
        parent = parent->parentItem()) {
-    if (parent == &ancestor) {
+    if (parent == ancestor) {
       return true;
     }
   }
@@ -72,7 +72,7 @@ inline void require_device_header(QQuickItem* panel, const std::string& name,
   marked(panel, "deviceStatus", badges);
   require(badges.size() == 1,
           name + " has one status badge (found " + std::to_string(badges.size()) + ")");
-  require(inside(*badges.front(), header), name + "'s status badge sits in its header");
+  require(inside(*badges.front(), &header), name + "'s status badge sits in its header");
   const QQuickItem* brand = item_property(header, "brandItem");
   require(brand != nullptr && brand->width() > 0.0, name + "'s header shows its brand");
 
@@ -92,7 +92,7 @@ inline void require_device_header(QQuickItem* panel, const std::string& name,
     require(browser != nullptr, name + "'s header has its preset browser");
     QQuickItem* display = item_property(*browser, "display");
     require(display != nullptr, name + "'s preset browser has its display");
-    require(!inside(*readout, *display) && !scene_rect(*readout).intersects(scene_rect(*display)),
+    require(!inside(*readout, display) && !scene_rect(*readout).intersects(scene_rect(*display)),
             name + "'s readout sits in its own box, clear of the preset display");
   }
   theme->setProperty("lastTouched", before);

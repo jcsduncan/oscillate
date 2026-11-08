@@ -40,7 +40,7 @@ constexpr int first_source_row = 1;
 // The parameter chooser's first row is "+ Show another lane below"; two
 // steps down (over the first group heading) reach a parameter.
 constexpr int chooser_steps_to_parameter = 2;
-const QString kick_name = QStringLiteral("Kick");
+constexpr const char* kick_name = "Kick";
 
 struct Shell {
   quick::ProjectBridge& bridge;
@@ -432,7 +432,7 @@ void keyboard_drives_the_shell() {
   quick::ProjectBridge bridge(directory.path().toStdString());
   bridge.set_project(std::move(session), root);
   // Named as a kick, the synth offers "Duck the rest".
-  bridge.set_track_name(kick_id, kick_name);
+  bridge.set_track_name(kick_id, QString::fromLatin1(kick_name));
   QQmlApplicationEngine qml;
   qml.rootContext()->setContextProperty("projectBridge", &bridge);
   qml.load(QUrl(QStringLiteral("qrc:/DawShell.qml")));
