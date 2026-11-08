@@ -346,7 +346,7 @@ void screenshots_if_requested() {
     for (std::size_t position = 0; position < audio.size(); position += 256) {
       std::span<engine::StereoFrame> block(audio.data() + position,
                                            std::min<std::size_t>(256, audio.size() - position));
-      const synth::SynthTransport transport{0.0, 0.0, 0.0, 4.0};
+      const oscillate::native_dsp::Transport transport{0.0, 0.0, 0.0, 4.0};
       (void)runtime->process(block, {}, position, 1, transport, {});
       if (runtime->read_telemetry(frame)) {
         adapter.set_telemetry(frame);

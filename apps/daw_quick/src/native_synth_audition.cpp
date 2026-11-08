@@ -240,7 +240,7 @@ struct NativeSynthAudition::Stream {
     const auto notes = std::span(stream.block_notes.begin(), notes_end);
     const auto beat = static_cast<double>(block.project_sample_position) *
                       (120.0 / 60.0 / static_cast<double>(stream.sample_rate));
-    const native_dsp::synth::SynthTransport transport{
+    const native_dsp::Transport transport{
         beat, 120.0 / 60.0 / static_cast<double>(stream.sample_rate), beat / 4.0, 4.0};
     const auto result = stream.runtime->process(frames, notes, block.project_sample_position,
                                                 block.transport_generation, transport, {});

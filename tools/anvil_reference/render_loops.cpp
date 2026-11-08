@@ -115,7 +115,7 @@ std::vector<float> render(const synth::SynthEngine& engine, std::span<const doub
     std::ranges::stable_sort(events, {}, &engine::BlockMidiEvent::offset);
     std::ranges::fill(block, engine::StereoFrame{0.0F, 0.0F});
     const double first_beat = static_cast<double>(start) / beat;
-    const synth::SynthTransport transport{first_beat, 1.0 / beat, first_beat / 4.0, 4.0};
+    const native_dsp::Transport transport{first_beat, 1.0 / beat, first_beat / 4.0, 4.0};
     (void)runtime->process(std::span(block).first(frames), events, start, 1, transport, {});
     for (std::size_t i = 0; i < frames; ++i) {
       out.push_back(block[i].left);

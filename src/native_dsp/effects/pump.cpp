@@ -238,7 +238,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t frames_to_next_tick,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     const auto steps = static_cast<double>(frames_to_next_tick);
     trigger_ = static_cast<int>(choice(v[p::trigger]));
     detector_.set_threshold_db(v[p::threshold]);

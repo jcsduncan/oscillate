@@ -30,7 +30,7 @@ NativeEffectRuntime::create(const EffectEngine& engine, std::span<const double> 
       !(sample_rate >= 8'000.0 && sample_rate <= 384'000.0)) {
     return R::failure({ErrorCode::invalid_argument, "incomplete effect engine or bad rate"});
   }
-  if (!synth::ParameterControl::valid_values(*engine.descriptor, values)) {
+  if (!ParameterControl::valid_values(*engine.descriptor, values)) {
     return R::failure({ErrorCode::invalid_argument, "effect values do not match the engine"});
   }
   std::shared_ptr<const DocumentState> state;
@@ -130,7 +130,7 @@ EffectProcessStatus NativeEffectRuntime::process(std::span<engine::StereoFrame> 
                                                  std::span<const engine::StereoFrame> sidechain,
                                                  std::uint64_t project_frame,
                                                  std::uint64_t transport_generation,
-                                                 const SynthTransport& transport,
+                                                 const Transport& transport,
                                                  std::span<const ParameterLane> lanes) noexcept {
   // The engine's display name is a string literal, so it names the span;
   // the instance number tells two of the same engine apart.
@@ -163,7 +163,7 @@ EffectProcessStatus NativeEffectRuntime::process(std::span<engine::StereoFrame> 
     const auto phase = static_cast<std::uint32_t>(absolute % control_interval_frames);
     const std::uint32_t to_tick = control_interval_frames - phase;
     if (phase == 0 || force_tick) {
-      SynthTransport at_tick = transport;
+      Transport at_tick = transport;
       const double beats = transport.beats_per_frame * static_cast<double>(frame);
       at_tick.beat_at_block_start += beats;
       at_tick.bar_at_block_start += beats / transport.beats_per_bar;

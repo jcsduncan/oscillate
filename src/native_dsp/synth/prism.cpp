@@ -9,8 +9,8 @@
 #include "oscillate/native_dsp/synth/oscillator.hpp"
 #include "oscillate/native_dsp/synth/oversampler.hpp"
 #include "oscillate/native_dsp/synth/shaping.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
 #include "oscillate/native_dsp/synth/voice_pool.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 #include "prism_presets.hpp"
 #include "prism_table.hpp"
 
@@ -277,7 +277,7 @@ public:
   }
 
   void control(std::span<const double> values, std::uint32_t frames_to_next_tick,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     values_ = values;
     frames_to_tick_ = frames_to_next_tick;
     beats_per_second_ = transport.beats_per_frame > 0.0 ? transport.beats_per_frame * rate_ : 2.0;
@@ -1108,7 +1108,7 @@ private:
   int voice_mode_ = 0;
   std::uint32_t frames_to_tick_ = 0;
   double beats_per_second_ = 2.0;
-  SynthTransport transport_{};
+  Transport transport_{};
   bool tempo_known_ = false;
   std::array<LfoState, 2> global_lfo_{};
   NoiseSource phase_random_{};

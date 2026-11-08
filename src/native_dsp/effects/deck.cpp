@@ -114,7 +114,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t frames,
-               const SynthTransport&) noexcept override {
+               const Transport&) noexcept override {
     const bool jump = !primed_;
     const double steps = std::max<double>(1.0, frames);
     const double top = native_dsp::dsp::nyquist_guard * rate_;

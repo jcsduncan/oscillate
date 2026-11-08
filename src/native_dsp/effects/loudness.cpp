@@ -93,7 +93,7 @@ public:
     clear_statistics();
   }
 
-  void control(std::span<const double> v, std::uint32_t, const SynthTransport&) noexcept override {
+  void control(std::span<const double> v, std::uint32_t, const Transport&) noexcept override {
     // Switching Integrate either way starts the statistics afresh.
     const bool integrate = v[p::integrate] != 0.0;
     if (primed_ && integrate != integrating_) {

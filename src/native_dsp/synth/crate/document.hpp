@@ -47,7 +47,7 @@ struct Chop {
 
 inline constexpr std::int8_t no_chop = -1;
 
-struct CrateState final : SynthDocumentState {
+struct CrateState final : DocumentState {
   std::shared_ptr<const SampleData> sample;          // Null: nothing plays.
   std::string sample_key;                            // "builtin:<name>" or the managed sha256.
   std::vector<Chop> chops;                           // Time order.
@@ -58,9 +58,9 @@ struct CrateState final : SynthDocumentState {
 [[nodiscard]] foundation::Result<void>
 validate_document(const project::NativeSynthDocument& document);
 
-[[nodiscard]] foundation::Result<std::shared_ptr<const SynthDocumentState>>
+[[nodiscard]] foundation::Result<std::shared_ptr<const DocumentState>>
 prepare_document(const project::NativeSynthDocument& document, const SynthMedia& media,
-                 double sample_rate, const SynthDocumentState* previous);
+                 double sample_rate, const DocumentState* previous);
 
 [[nodiscard]] project::NativeSynthDocument preset_document(std::optional<std::size_t> preset);
 

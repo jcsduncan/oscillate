@@ -133,7 +133,7 @@ public:
     reset();
   }
 
-  void control(std::span<const double> v, std::uint32_t, const SynthTransport&) noexcept override {
+  void control(std::span<const double> v, std::uint32_t, const Transport&) noexcept override {
     const int view = as_int(v[p::view]);
     const int resolution = as_int(v[p::resolution]);
     const int smoothing = as_int(v[p::smoothing]);

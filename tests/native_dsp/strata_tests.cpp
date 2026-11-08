@@ -363,7 +363,7 @@ void the_callback_never_allocates() {
   counted_allocations = 0;
   counting_allocations = true;
   for (std::uint64_t block = 0; block < 2'000; ++block) {
-    const SynthTransport transport{0.0, 0.0, 0.0, 4.0};
+    const Transport transport{0.0, 0.0, 0.0, 4.0};
     (void)runtime->process(buffer, side, 4'096 + block * buffer.size(), block < 1'000 ? 1U : 2U,
                            transport, {});
   }

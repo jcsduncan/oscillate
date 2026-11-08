@@ -603,7 +603,7 @@ std::vector<std::vector<float>> real_telemetry(const std::vector<double>& values
       key[i] = {static_cast<float>(k), static_cast<float>(k)};
     }
     const double beat = static_cast<double>(position) * beats_per_frame;
-    const synth::SynthTransport transport{beat, beats_per_frame, beat / 4.0, 4.0};
+    const oscillate::native_dsp::Transport transport{beat, beats_per_frame, beat / 4.0, 4.0};
     require(runtime->process(block, key, position, 1, transport, {}) ==
                 effects::EffectProcessStatus::rendered,
             "Pump renders");

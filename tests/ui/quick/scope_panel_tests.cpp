@@ -521,7 +521,7 @@ std::vector<engine::StereoFrame> render(const synth::SynthEngine& engine,
     }
     const double beats_per_frame = bpm / 60.0 / rate;
     const double beat = static_cast<double>(position) * beats_per_frame;
-    const synth::SynthTransport transport{beat, beats_per_frame, beat / 4.0, 4.0};
+    const oscillate::native_dsp::Transport transport{beat, beats_per_frame, beat / 4.0, 4.0};
     require(runtime->process(block, block_events, position, 1, transport, {}).status ==
                 synth::SynthProcessStatus::rendered,
             "synth renders");
@@ -591,7 +591,7 @@ std::vector<std::vector<float>> real_telemetry(const std::vector<double>& values
                 m.key.begin() + static_cast<std::ptrdiff_t>(position + size));
     const double beats_per_frame = bpm / 60.0 / rate;
     const double beat = static_cast<double>(position) * beats_per_frame;
-    const synth::SynthTransport transport{beat, beats_per_frame, beat / 4.0, 4.0};
+    const oscillate::native_dsp::Transport transport{beat, beats_per_frame, beat / 4.0, 4.0};
     require(runtime->process(block, side, position, 1, transport, {}) ==
                 effects::EffectProcessStatus::rendered,
             "Scope renders");

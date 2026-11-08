@@ -253,7 +253,7 @@ public:
     reset_state();
   }
 
-  void control(std::span<const double> v, std::uint32_t, const SynthTransport&) noexcept override {
+  void control(std::span<const double> v, std::uint32_t, const Transport&) noexcept override {
     std::ranges::copy(v, values_.begin());
   }
 

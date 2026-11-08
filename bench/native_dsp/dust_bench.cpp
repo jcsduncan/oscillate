@@ -53,7 +53,7 @@ Cost run(const std::vector<double>& values, std::size_t block, const Stereo& inp
       }
       const double beats_per_frame = 120.0 / 60.0 / rate;
       const double beat = static_cast<double>(position) * beats_per_frame;
-      const SynthTransport transport{beat, beats_per_frame, beat / 4.0, 4.0};
+      const Transport transport{beat, beats_per_frame, beat / 4.0, 4.0};
       const auto start = std::chrono::steady_clock::now();
       (void)runtime->process(buffer, side, position, 1, transport, {});
       const std::chrono::duration<double> elapsed = std::chrono::steady_clock::now() - start;

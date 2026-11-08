@@ -28,7 +28,7 @@ namespace quick = oscillate::quick;
 class PreviewKernel final : public synth::SynthKernel {
 public:
   void control(std::span<const double>, std::uint32_t,
-               const synth::SynthTransport&) noexcept override {}
+               const oscillate::native_dsp::Transport&) noexcept override {}
   void note_on(const synth::NoteEvent& event) noexcept override {
     level_ += static_cast<float>(event.velocity) / 127.0F;
   }
@@ -225,7 +225,7 @@ NoteLedger ledger; // Touched only on the rendering (test) thread.
 class LedgerKernel final : public synth::SynthKernel {
 public:
   void control(std::span<const double>, std::uint32_t,
-               const synth::SynthTransport&) noexcept override {}
+               const oscillate::native_dsp::Transport&) noexcept override {}
   void note_on(const synth::NoteEvent& event) noexcept override {
     ++ledger.note_ons;
     ledger.sounding.push_back(event.note.low);

@@ -3,7 +3,7 @@
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/foundation/error.hpp"
 #include "oscillate/foundation/id.hpp"
-#include "oscillate/native_dsp/synth/parameter_control.hpp"
+#include "oscillate/native_dsp/parameter_control.hpp"
 #include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/project/model.hpp"
 #include "oscillate/timeline/timing.hpp"
@@ -26,8 +26,6 @@
 namespace oscillate::native_dsp::note_effects {
 
 using synth::EngineDescriptor;
-using synth::ParameterLane;
-
 // Events a stage may receive and return per block: what an instrument takes.
 inline constexpr std::size_t block_event_capacity = engine::HeldNotes::instrument_capacity;
 // Room a kernel keeps for the note-offs of the notes it is sounding, so a

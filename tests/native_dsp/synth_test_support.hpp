@@ -25,6 +25,7 @@
 namespace synth_test {
 
 using namespace oscillate;
+using namespace oscillate::native_dsp;
 using namespace oscillate::native_dsp::synth;
 
 using oscillate::test::require;
@@ -129,7 +130,7 @@ inline Rendered render(NativeSynthRuntime& runtime, std::vector<Event> events, s
     }
     const double beats_per_frame = bpm / 60.0 / rate;
     const double beat = static_cast<double>(position) * beats_per_frame;
-    const SynthTransport transport{beat, beats_per_frame, beat / 4.0, 4.0};
+    const Transport transport{beat, beats_per_frame, beat / 4.0, 4.0};
     block_pedals.clear();
     while (next_pedal < pedals.size() && pedals[next_pedal].frame < position + size) {
       const auto& p = pedals[next_pedal++];

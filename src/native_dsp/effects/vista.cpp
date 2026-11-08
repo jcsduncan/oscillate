@@ -151,7 +151,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t frames,
-               const SynthTransport&) noexcept override {
+               const Transport&) noexcept override {
     const double top = native_dsp::dsp::nyquist_guard * rate_;
     const double f1 = std::min(v[p::xover_1], top / (crossover_spacing * crossover_spacing));
     const double f2 =

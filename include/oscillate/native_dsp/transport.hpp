@@ -1,19 +1,25 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/runtime.hpp"
-#include "oscillate/timeline/timing.hpp"
-
 #include <array>
 #include <cstddef>
-#include <cstdint>
-#include <span>
 #include <string_view>
-#include <vector>
 
-// Tempo-synced divisions shared by every native engine. Note divisions are
-// lengths in quarter-note beats; bar divisions are whole bars of the
+// The musical position every native engine (synths, effects) sees at a
+// control tick, and the tempo-synced divisions they share. Note divisions
+// are lengths in quarter-note beats; bar divisions are whole bars of the
 // project's meter at the playhead, so "1 Bar" in 3/4 is three beats.
-namespace oscillate::native_dsp::synth {
+namespace oscillate::native_dsp {
+
+// Musical position for tempo-synced modulation. beats_per_frame == 0 means
+// no tempo is known and 120 BPM is assumed. Beats are quarter notes; bars
+// follow the project's meter (zero-based, continuous across meter changes),
+// and beats_per_bar is the bar length in quarter notes at the playhead.
+struct Transport {
+  double beat_at_block_start = 0.0;
+  double beats_per_frame = 0.0;
+  double bar_at_block_start = 0.0;
+  double beats_per_bar = 4.0;
+};
 
 inline constexpr std::size_t sync_division_count = 17;
 inline constexpr std::size_t first_bar_division = 13;
@@ -32,8 +38,7 @@ inline constexpr std::array<double, sync_division_count> sync_lengths{
 }
 
 // Quarter-note beats in one division under the transport's meter.
-[[nodiscard]] inline double sync_beats(std::size_t division,
-                                       const SynthTransport& transport) noexcept {
+[[nodiscard]] inline double sync_beats(std::size_t division, const Transport& transport) noexcept {
   const double length = sync_lengths[division];
   return sync_in_bars(division) ? length * transport.beats_per_bar : length;
 }
@@ -41,8 +46,7 @@ inline constexpr std::array<double, sync_division_count> sync_lengths{
 // Whole and fractional divisions elapsed at the block start: counted from
 // bar lines for bar divisions, so an LFO stays locked to the bar grid across
 // meter changes.
-[[nodiscard]] inline double sync_cycles(std::size_t division,
-                                        const SynthTransport& transport) noexcept {
+[[nodiscard]] inline double sync_cycles(std::size_t division, const Transport& transport) noexcept {
   const double length = sync_lengths[division];
   return sync_in_bars(division) ? transport.bar_at_block_start / length
                                 : transport.beat_at_block_start / length;
@@ -50,39 +54,19 @@ inline constexpr std::array<double, sync_division_count> sync_lengths{
 
 // Quarter-note beats per second: the transport's tempo, or 120 BPM when no
 // tempo is known.
-[[nodiscard]] inline double sync_beats_per_second(const SynthTransport& transport,
+[[nodiscard]] inline double sync_beats_per_second(const Transport& transport,
                                                   double rate) noexcept {
   return transport.beats_per_frame > 0.0 ? transport.beats_per_frame * rate : 2.0;
 }
 
-[[nodiscard]] inline double sync_seconds(std::size_t division, const SynthTransport& transport,
+[[nodiscard]] inline double sync_seconds(std::size_t division, const Transport& transport,
                                          double rate) noexcept {
   return sync_beats(division, transport) / sync_beats_per_second(transport, rate);
 }
 
-[[nodiscard]] inline double sync_hz(std::size_t division, const SynthTransport& transport,
+[[nodiscard]] inline double sync_hz(std::size_t division, const Transport& transport,
                                     double rate) noexcept {
   return 1.0 / sync_seconds(division, transport, rate);
 }
 
-// The meter as bar lines, for the audio callback: a copy of the meter map's
-// segments that answers "which bar, and how long is it" by binary search,
-// with no allocation and no error path.
-class BarGrid {
-public:
-  BarGrid() = default;
-  explicit BarGrid(const timeline::MeterMap& meter);
-  // Continuous, zero-based bar position and quarter-note beats per bar at a
-  // tick. Before the first segment, 4/4 from tick zero.
-  void locate(std::int64_t tick, double& bar, double& beats_per_bar) const noexcept;
-
-private:
-  struct Segment {
-    std::int64_t tick = 0;
-    double ticks_per_bar = 0.0;
-    double first_bar = 0.0;
-  };
-  std::vector<Segment> segments_;
-};
-
-} // namespace oscillate::native_dsp::synth
+} // namespace oscillate::native_dsp

@@ -31,6 +31,7 @@
 // p99 and worst time against its budget.
 namespace {
 using namespace oscillate;
+using namespace oscillate::native_dsp;
 using namespace oscillate::native_dsp::synth;
 
 constexpr double rate = 48'000.0;
@@ -137,7 +138,7 @@ struct Player {
     }
     const double beats_per_frame = bpm / seconds_per_minute / rate;
     const double beat = static_cast<double>(position) * beats_per_frame;
-    const SynthTransport transport{beat, beats_per_frame, beat / beats_per_bar, beats_per_bar};
+    const Transport transport{beat, beats_per_frame, beat / beats_per_bar, beats_per_bar};
     (void)runtime->process(buffer, due, {}, position, 1, transport, {});
   }
 };

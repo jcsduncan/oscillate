@@ -33,6 +33,7 @@ using oscillate::test::counting_allocations;
 
 namespace {
 using namespace oscillate;
+using namespace oscillate::native_dsp;
 using namespace oscillate::native_dsp::synth;
 
 using oscillate::test::require;
@@ -140,8 +141,8 @@ Rendered render(NativeSynthRuntime& runtime, std::vector<Event> events, std::siz
     while (next < events.size() && events[next].frame < position + size) {
       block_events.push_back(block_event(events[next++], position));
     }
-    SynthTransport transport{static_cast<double>(position) * bpm / 60.0 / 48'000.0,
-                             bpm / 60.0 / 48'000.0};
+    Transport transport{static_cast<double>(position) * bpm / 60.0 / 48'000.0,
+                        bpm / 60.0 / 48'000.0};
     const auto report = runtime.process(buffer, block_events, position, generation, transport, {});
     REQUIRE_EQ(report.status, SynthProcessStatus::rendered, "block renders");
     out.last = report.kernel;

@@ -1,7 +1,7 @@
 #include "relay_panel_model.hpp"
 
 #include "oscillate/native_dsp/effects/relay.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 
 #include <QString>
 
@@ -63,10 +63,10 @@ std::array<double, 2> relay_times(const synth::EngineDescriptor& engine,
   if (value(engine, values, "relay.sync") != 0.0) {
     const auto division =
         std::min(static_cast<std::size_t>(value(engine, values, "relay.division")),
-                 synth::sync_division_count - 1);
-    const double beats = synth::sync_in_bars(division)
-                             ? synth::sync_lengths[division] * beats_per_bar
-                             : synth::sync_lengths[division];
+                 native_dsp::sync_division_count - 1);
+    const double beats = native_dsp::sync_in_bars(division)
+                             ? native_dsp::sync_lengths[division] * beats_per_bar
+                             : native_dsp::sync_lengths[division];
     seconds = beats * 60.0 / std::max(1.0, bpm);
   }
   seconds = std::clamp(seconds, 1e-3, relay::max_seconds);

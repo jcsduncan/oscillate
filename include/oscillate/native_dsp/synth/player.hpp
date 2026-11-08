@@ -7,8 +7,8 @@
 #include "oscillate/native_dsp/note_effects/note_effect.hpp"
 #include "oscillate/native_dsp/synth/plan_mailbox.hpp"
 #include "oscillate/native_dsp/synth/runtime.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
 #include "oscillate/project/model.hpp"
+#include "oscillate/timeline/bar_grid.hpp"
 #include "oscillate/timeline/timing.hpp"
 
 #include <array>
@@ -152,7 +152,7 @@ private:
     std::uint64_t revision = 0;
     // The project's tempo and meter: a tempo change is a new plan.
     std::shared_ptr<const timeline::TempoMap> tempo;
-    BarGrid bars;
+    timeline::BarGrid bars;
     std::shared_ptr<const engine::InstrumentEvents> events;
     std::shared_ptr<const engine::NoteSpans> spans;
     std::uint64_t last_safe_sample = 0;

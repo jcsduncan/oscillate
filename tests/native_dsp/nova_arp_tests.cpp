@@ -37,6 +37,7 @@ using oscillate::test::counting_allocations;
 namespace {
 
 using namespace oscillate;
+using namespace oscillate::native_dsp;
 using namespace oscillate::native_dsp::synth;
 using namespace oscillate::native_dsp::synth::nova;
 
@@ -124,7 +125,7 @@ std::vector<Note> render(NoteGenerator& generator, Render job) {
       played.push_back({static_cast<std::uint32_t>(press.frame - frame), press.on,
                         NoteEvent{played_clip, {0, press.id}, press.key, press.velocity}});
     }
-    SynthTransport transport;
+    Transport transport;
     if (job.song.bpm > 0.0) {
       const double per_frame = job.song.beats_per_frame();
       transport.beat_at_block_start =

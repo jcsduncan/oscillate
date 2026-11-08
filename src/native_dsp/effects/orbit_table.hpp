@@ -1,7 +1,7 @@
 #pragma once
 
 #include "oscillate/native_dsp/synth/parameters.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 
 #include <array>
 #include <cstddef>
@@ -24,7 +24,7 @@ inline constexpr std::array off_on{"Off"sv, "On"sv};
 inline constexpr std::array voice_counts{"1"sv, "2"sv, "3"sv, "4"sv};
 inline constexpr std::array stage_counts{"2"sv, "4"sv, "6"sv, "8"sv, "12"sv};
 inline constexpr std::array<int, 5> stage_values{2, 4, 6, 8, 12};
-inline constexpr const auto& divisions = synth::sync_divisions;
+inline constexpr const auto& divisions = sync_divisions;
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
 inline constexpr double g = synth::effect_glide_seconds;

@@ -3,10 +3,10 @@
 #include "dsp/biquad.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
 #include "oscillate/native_dsp/effects/expanse.hpp"
-#include "oscillate/native_dsp/synth/parameter_control.hpp"
+#include "oscillate/native_dsp/parameter_control.hpp"
 #include "oscillate/native_dsp/synth/sample_stream.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
 #include "oscillate/native_dsp/synth/wren_breath.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 #include "wren_library.hpp"
 #include "wren_presets.hpp"
 #include "wren_table.hpp"
@@ -272,7 +272,7 @@ public:
   }
 
   void control(std::span<const double> values, std::uint32_t frames_to_next_tick,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     values_ = values;
     transport_ = transport;
     frames_since_tick_ = 0;
@@ -934,7 +934,7 @@ private:
   double room_target_ = 0.0;
   const detail::Library* library_ = nullptr;
   std::span<const double> values_{};
-  SynthTransport transport_{};
+  Transport transport_{};
   std::size_t frames_since_tick_ = 0;
   std::uint64_t clock_ = 0;
   bool poly_ = false;

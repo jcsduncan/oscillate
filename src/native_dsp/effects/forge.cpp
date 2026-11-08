@@ -221,7 +221,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t frames,
-               const SynthTransport&) noexcept override {
+               const Transport&) noexcept override {
     const int model = as_int(v[p::model]);
     if (!primed_) {
       model_ = model;

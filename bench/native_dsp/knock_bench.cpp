@@ -17,6 +17,7 @@
 // Run in an uninstrumented Release build; timing is not a CTest gate.
 namespace {
 using namespace oscillate;
+using namespace oscillate::native_dsp;
 using namespace oscillate::native_dsp::synth;
 
 std::vector<double> kit(std::string_view name) {

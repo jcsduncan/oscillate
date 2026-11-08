@@ -4,9 +4,9 @@
 #include "oscillate/media/audio_reader.hpp"
 #include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/project_binding.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/persistence/effect_preset.hpp"
+#include "oscillate/timeline/bar_grid.hpp"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -734,8 +734,8 @@ SessionNativeSynthAdapter::first_clip_window(std::int64_t bars) const {
   }
   if (first == nullptr)
     return std::nullopt;
-  // Bars as the synth player finds them (native_dsp::synth::BarGrid).
-  const native_dsp::synth::BarGrid grid(snapshot.meter);
+  // Bars as the synth player finds them (timeline::BarGrid).
+  const timeline::BarGrid grid(snapshot.meter);
   const auto quarter = static_cast<double>(timeline::ticks_per_quarter);
   double at = 0.0;
   double beats_per_bar = 0.0;

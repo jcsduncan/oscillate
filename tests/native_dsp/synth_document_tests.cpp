@@ -26,14 +26,13 @@ constexpr std::array<ParameterDescriptor, 1> probe_parameters{{
 constexpr EngineDescriptor probe_descriptor{"probe", "Probe", 1, probe_parameters, {}};
 
 // Level = a quarter per route, plus the first frame of a "table" media slot.
-struct ProbeState final : SynthDocumentState {
+struct ProbeState final : DocumentState {
   float level = 0.0F;
 };
 
 class ProbeKernel final : public SynthKernel {
 public:
-  void control(std::span<const double> values, std::uint32_t,
-               const SynthTransport&) noexcept override {
+  void control(std::span<const double> values, std::uint32_t, const Transport&) noexcept override {
     gain_ = static_cast<float>(values[0]);
   }
   void note_on(const NoteEvent&) noexcept override {}
@@ -47,7 +46,7 @@ public:
   }
   void reset() noexcept override {}
   [[nodiscard]] KernelStatus status() const noexcept override { return {}; }
-  void adopt_document(const SynthDocumentState& state) noexcept override {
+  void adopt_document(const DocumentState& state) noexcept override {
     state_ = static_cast<const ProbeState*>(&state);
   }
 
@@ -64,14 +63,14 @@ foundation::Result<void> validate_probe(const project::NativeSynthDocument& docu
   return foundation::Result<void>::success();
 }
 
-foundation::Result<std::shared_ptr<const SynthDocumentState>>
+foundation::Result<std::shared_ptr<const DocumentState>>
 prepare_probe(const project::NativeSynthDocument& document, const SynthMedia& media, double,
-              const SynthDocumentState*) {
+              const DocumentState*) {
   auto state = std::make_shared<ProbeState>();
   state->level = 0.25F * static_cast<float>(document.routes.size());
   for (const auto& entry : media)
     state->level += entry.asset->frames.front().left;
-  return foundation::Result<std::shared_ptr<const SynthDocumentState>>::success(std::move(state));
+  return foundation::Result<std::shared_ptr<const DocumentState>>::success(std::move(state));
 }
 
 // NOLINTNEXTLINE(bugprone-throwing-static-initialization): a throw fails the test at start-up.

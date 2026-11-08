@@ -11,10 +11,10 @@
 #include "oscillate/native_dsp/synth/oscillator.hpp"
 #include "oscillate/native_dsp/synth/oversampler.hpp"
 #include "oscillate/native_dsp/synth/shaping.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
 #include "oscillate/native_dsp/synth/vintage_effects.hpp"
 #include "oscillate/native_dsp/synth/vintage_filters.hpp"
 #include "oscillate/native_dsp/synth/voice_pool.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 
 #include <algorithm>
 #include <array>
@@ -218,7 +218,7 @@ public:
   }
 
   void control(std::span<const double> values, std::uint32_t frames_to_next_tick,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     values_ = values;
     frames_ = frames_to_next_tick;
     beats_per_second_ = transport.beats_per_frame > 0.0 ? transport.beats_per_frame * rate_ : 2.0;

@@ -31,6 +31,7 @@
 //                                        prints its cost block by block
 namespace {
 using namespace oscillate;
+using namespace oscillate::native_dsp;
 using namespace oscillate::native_dsp::synth;
 
 constexpr double rate = 48'000.0;
@@ -139,7 +140,7 @@ Result render(const Scene& scene, std::size_t block) {
     std::ranges::stable_sort(events, {}, &engine::BlockMidiEvent::offset);
     std::ranges::fill(buffer, engine::StereoFrame{0.0F, 0.0F});
     const double beat = static_cast<double>(start) / (rate * 60.0 / 124.0);
-    const SynthTransport transport{beat, 124.0 / 60.0 / rate, beat / 4.0, 4.0};
+    const Transport transport{beat, 124.0 / 60.0 / rate, beat / 4.0, 4.0};
     const auto began = std::chrono::steady_clock::now();
     (void)runtime->process(std::span(buffer).first(frames), events, start, 1, transport, {});
     result.block_ns.push_back(

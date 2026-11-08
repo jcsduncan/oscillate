@@ -1,4 +1,4 @@
-#include "oscillate/native_dsp/synth/parameter_control.hpp"
+#include "oscillate/native_dsp/parameter_control.hpp"
 
 #include "oscillate/foundation/trace.hpp"
 
@@ -9,16 +9,16 @@
 #include <span>
 #include <vector>
 
-namespace oscillate::native_dsp::synth {
+namespace oscillate::native_dsp {
 
 namespace {
 
 // The initial values sized to the descriptor (and the mailbox): extra values
 // are dropped and missing ones take their defaults, so every later read
 // stays inside both.
-std::vector<double> initial_values(const EngineDescriptor& descriptor,
+std::vector<double> initial_values(const synth::EngineDescriptor& descriptor,
                                    std::span<const double> values) {
-  const std::size_t count = std::min(descriptor.parameters.size(), max_engine_parameters);
+  const std::size_t count = std::min(descriptor.parameters.size(), synth::max_engine_parameters);
   std::vector<double> out(count);
   for (std::size_t i = 0; i < count; ++i)
     out[i] = i < values.size() ? values[i] : descriptor.parameters[i].default_value;
@@ -27,7 +27,7 @@ std::vector<double> initial_values(const EngineDescriptor& descriptor,
 
 } // namespace
 
-ParameterControl::ParameterControl(const EngineDescriptor& descriptor,
+ParameterControl::ParameterControl(const synth::EngineDescriptor& descriptor,
                                    std::span<const double> values, double sample_rate)
     : descriptor_(&descriptor), count_(0), sample_rate_(sample_rate),
       target_(initial_values(descriptor, values)) {
@@ -37,7 +37,7 @@ ParameterControl::ParameterControl(const EngineDescriptor& descriptor,
   effective_ = target_;
 }
 
-bool ParameterControl::valid_values(const EngineDescriptor& descriptor,
+bool ParameterControl::valid_values(const synth::EngineDescriptor& descriptor,
                                     std::span<const double> values) noexcept {
   if (values.size() != descriptor.parameters.size()) {
     return false;
@@ -165,18 +165,4 @@ std::span<const double> ParameterControl::tick(std::span<const ParameterLane> la
   return effective_;
 }
 
-bool TelemetryBuffer::read(std::vector<float>& out) {
-  if ((middle_.load(std::memory_order_acquire) & fresh) != 0) {
-    const auto previous = middle_.exchange(front_, std::memory_order_acq_rel);
-    front_ = static_cast<std::uint8_t>(previous & 3U);
-    any_ = true;
-  }
-  if (!any_) {
-    return false;
-  }
-  const auto& slot = frames_[front_];
-  out.assign(slot.values.begin(), slot.values.begin() + static_cast<std::ptrdiff_t>(slot.size));
-  return true;
-}
-
-} // namespace oscillate::native_dsp::synth
+} // namespace oscillate::native_dsp

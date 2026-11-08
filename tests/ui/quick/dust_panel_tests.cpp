@@ -353,7 +353,7 @@ std::vector<std::vector<float>> real_telemetry(const std::vector<double>& values
     const auto from = static_cast<std::ptrdiff_t>(position);
     block.assign(input.begin() + from, input.begin() + from + static_cast<std::ptrdiff_t>(size));
     const double beat = static_cast<double>(position) * beats_per_frame;
-    const synth::SynthTransport transport{beat, beats_per_frame, beat / 4.0, 4.0};
+    const oscillate::native_dsp::Transport transport{beat, beats_per_frame, beat / 4.0, 4.0};
     require(runtime->process(block, {}, position, 1, transport, {}) ==
                 effects::EffectProcessStatus::rendered,
             "Dust renders");

@@ -1,8 +1,9 @@
 #include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/runtime.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/tolerances.hpp"
+#include "oscillate/timeline/bar_grid.hpp"
 #include "oscillate/timeline/timing.hpp"
 
 #include <array>
@@ -21,6 +22,7 @@ namespace tolerance = oscillate::test::tolerance;
 
 namespace {
 using namespace oscillate;
+using namespace oscillate::native_dsp;
 using namespace oscillate::native_dsp::synth;
 
 using oscillate::test::require;
@@ -34,7 +36,7 @@ void bar_grid_follows_the_meter() {
   auto meter =
       timeline::MeterMap::create({{{0}, 4, 4}, {{8 * quarter}, 3, 4}, {{17 * quarter}, 6, 8}}, 1);
   REQUIRE_OK(meter, "meter map is valid");
-  const BarGrid grid(meter.value());
+  const timeline::BarGrid grid(meter.value());
   double bar = 0.0;
   double beats = 0.0;
   grid.locate(0, bar, beats);
@@ -57,7 +59,7 @@ void bar_grid_follows_the_meter() {
 }
 
 void bar_divisions_scale_with_the_meter() {
-  SynthTransport waltz;
+  Transport waltz;
   waltz.beats_per_bar = 3.0;
   waltz.bar_at_block_start = 2.5;
   waltz.beat_at_block_start = 7.5;
@@ -73,16 +75,16 @@ void bar_divisions_scale_with_the_meter() {
   require(near(sync_cycles(one_bar + 2, waltz), 2.5 / 4.0), "4 Bars cycles a quarter as fast");
   require(near(sync_cycles(quarter_note, waltz), 7.5), "beat LFOs count beats");
   require(near(sync_seconds(one_bar, waltz, 48'000.0), 1.5), "a 3/4 bar at 120 BPM is 1.5 s");
-  SynthTransport unknown;
+  Transport unknown;
   require(near(sync_seconds(one_bar, unknown, 48'000.0), 2.0),
           "with no tempo, 120 BPM in 4/4 is assumed");
 }
 
 // A kernel that records the transport each control tick receives.
-std::vector<SynthTransport> seen;
+std::vector<Transport> seen;
 class RecordingKernel final : public SynthKernel {
 public:
-  void control(std::span<const double>, std::uint32_t, const SynthTransport& t) noexcept override {
+  void control(std::span<const double>, std::uint32_t, const Transport& t) noexcept override {
     seen.push_back(t);
   }
   void note_on(const NoteEvent&) noexcept override {}
@@ -113,7 +115,7 @@ void runtime_advances_bars_between_ticks() {
   auto runtime = NativeSynthRuntime::create(test_engine, values, 48'000.0);
   REQUIRE_OK(runtime, "runtime is created");
   std::vector<engine::StereoFrame> buffer(64);
-  SynthTransport t;
+  Transport t;
   t.beat_at_block_start = 3.0;
   t.bar_at_block_start = 1.0;
   t.beats_per_bar = 3.0;

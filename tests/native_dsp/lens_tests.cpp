@@ -256,7 +256,7 @@ double rise_ms(double hz) {
       buffer[i] = {static_cast<float>(input.left[position + i]),
                    static_cast<float>(input.right[position + i])};
     }
-    (void)runtime->process(buffer, {}, position, 1, SynthTransport{0, 0, 0, 4}, {});
+    (void)runtime->process(buffer, {}, position, 1, Transport{0, 0, 0, 4}, {});
     std::vector<float> t;
     if (position >= 24'000 && runtime->read_telemetry(t) &&
         level_at(t, lens::telemetry::curve_a, hz) > db(0.5) - 3.0) {
