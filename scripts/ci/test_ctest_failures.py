@@ -64,7 +64,7 @@ class FailureTests(unittest.TestCase):
     def test_report_cut_inside_a_multibyte_character_is_unreadable(self):
         with tempfile.TemporaryDirectory() as directory:
             cut = Path(directory) / "junit.xml"
-            cut.write_bytes("<testsuite name=\"é\">".encode("utf-8")[:-3])
+            cut.write_bytes('<testsuite name="é">'.encode()[:-3])
             self.assertIsNone(ctest_failures.readable(cut))
 
     def test_clean_reports_say_so(self):
