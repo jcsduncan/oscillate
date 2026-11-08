@@ -150,6 +150,14 @@ struct JackOutput::Impl {
     state.store(OutputState::error, std::memory_order_release);
   }
 
+  [[nodiscard]] std::int64_t now_ns() const noexcept {
+    if (api.now_ns != nullptr)
+      return api.now_ns(api.context);
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+  }
+
   static int process(std::uint32_t frames, void* data) noexcept {
     auto& self = *static_cast<Impl*>(data);
     if (frames == 0) {
@@ -157,7 +165,7 @@ struct JackOutput::Impl {
         self.invalidate_block_size(frames);
       return 0;
     }
-    const auto callback_start = std::chrono::steady_clock::now();
+    const auto callback_start = self.now_ns();
     // Scoped: a driver may run the callback on a thread it borrowed.
     const foundation::RealtimeThreadScope realtime;
     thread_local const bool named = (foundation::trace::name_thread("audio callback"), true);
@@ -199,11 +207,7 @@ struct JackOutput::Impl {
     BlockTiming timing;
     if (rate != 0) {
       constexpr double nanoseconds = 1e9;
-      timing = {
-          std::chrono::duration_cast<std::chrono::nanoseconds>(callback_start.time_since_epoch())
-                  .count() +
-              static_cast<std::int64_t>(frames * nanoseconds / rate),
-          rate};
+      timing = {callback_start + static_cast<std::int64_t>(frames * nanoseconds / rate), rate};
     }
     self.telemetry.block_frames(frames);
     const auto result = [&] {
@@ -219,10 +223,9 @@ struct JackOutput::Impl {
       left[frame] = output[frame * 2];
       right[frame] = output[frame * 2 + 1];
     }
-    const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::steady_clock::now() - callback_start);
+    const auto elapsed = std::max<std::int64_t>(self.now_ns() - callback_start, 0);
     // Also the trace's audio.load counter and the UI's load meter.
-    self.telemetry.callback_duration({static_cast<std::uint64_t>(elapsed.count()), frames,
+    self.telemetry.callback_duration({static_cast<std::uint64_t>(elapsed), frames,
                                       self.server_rate.load(std::memory_order_relaxed)});
     return 0;
   }

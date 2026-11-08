@@ -15,10 +15,12 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -31,6 +33,34 @@ namespace {
 using namespace oscillate::audio_io;
 
 using oscillate::test::require;
+
+// A count one thread publishes and another sleeps on. The waiter blocks on a
+// condition variable, never in a spin or yield loop that would hand a shared
+// CPU back to the publisher one timeslice at a time.
+class PublishedCount {
+public:
+  explicit PublishedCount(std::uint64_t initial = 0) : value_(initial) {}
+  void publish(std::uint64_t value) {
+    {
+      const std::lock_guard lock(mutex_);
+      value_ = value;
+    }
+    changed_.notify_all();
+  }
+  void wait_for(std::uint64_t at_least) {
+    std::unique_lock lock(mutex_);
+    changed_.wait(lock, [&] { return value_ >= at_least; });
+  }
+  [[nodiscard]] std::uint64_t value() {
+    const std::lock_guard lock(mutex_);
+    return value_;
+  }
+
+private:
+  std::mutex mutex_;
+  std::condition_variable changed_;
+  std::uint64_t value_;
+};
 
 struct FakeRenderer {
   bool fail = false;
@@ -185,23 +215,32 @@ void transport_contract() {
   REQUIRE_EQ(after_rejection->transport_generation, 3,
              "failed seek preserves the prior completed position and clears no pending command");
 
+  // The control thread queues each seek against a running callback, then
+  // sleeps until the callback publishes the generation it started. Neither
+  // side spins or yields to the other, so the handshake also completes when
+  // both threads share one loaded CPU.
+  constexpr std::uint64_t concurrent_seeks = 1000;
+  constexpr std::uint64_t first_generation = 1;
+  constexpr std::uint64_t last_generation = first_generation + concurrent_seeks;
   TransportCursor concurrent;
-  std::atomic<std::uint64_t> observed_generation{0};
+  PublishedCount observed_generation(first_generation);
   std::thread callback([&] {
-    while (observed_generation.load(std::memory_order_acquire) < 1001) {
+    for (auto seen = first_generation; seen < last_generation;) {
       const auto next = concurrent.next_block(1);
-      if (next) {
-        observed_generation.store(next->transport_generation, std::memory_order_release);
+      if (next && next->transport_generation != seen) {
+        seen = next->transport_generation;
+        observed_generation.publish(seen);
       }
     }
   });
-  for (std::uint64_t index = 1; index <= 1000; ++index) {
-    while (!concurrent.request_seek(index)) {
-      std::this_thread::yield();
-    }
+  bool every_seek_queued = true;
+  for (std::uint64_t index = 1; index <= concurrent_seeks; ++index) {
+    every_seek_queued = concurrent.request_seek(index) && every_seek_queued;
+    observed_generation.wait_for(first_generation + index);
   }
   callback.join();
-  REQUIRE_EQ(observed_generation.load(std::memory_order_acquire), 1001,
+  require(every_seek_queued, "each seek is queued once the callback consumed the previous one");
+  REQUIRE_EQ(observed_generation.value(), last_generation,
              "concurrent seeks are consumed once and advance generation exactly once");
 }
 
@@ -870,70 +909,83 @@ void restart_in_place_keeps_position() {
 
 // The control thread queues and withdraws wraps against a running callback.
 // Every request is either withdrawn or applied exactly once, and an applied
-// wrap always lands on the boundary of the request that won.
+// wrap always lands on the boundary of the request that won. The control
+// thread reads the callback's position from the renderer and sleeps on the
+// renderer's wrap count, so neither thread spins or yields to the other and
+// the race also completes when both share one loaded CPU.
 void wrap_withdrawal_races_the_callback() {
+  constexpr int rounds = 20'000;
+  // Every third round waits for its wrap to apply; the others withdraw it.
+  constexpr int applied_round_period = 3;
+  constexpr std::uint64_t loop_length = 1'000;
+  constexpr int boundary_spread = 97;
+  constexpr std::uint64_t minimum_queued = 1'000;
+  constexpr std::size_t block_frames = 37;
   TransportCursor cursor(0);
   std::atomic<bool> stop{false};
-  std::atomic<std::uint64_t> observed{0};
+  PublishedCount observed;
   std::atomic<std::uint64_t> wrong{0};
   std::atomic<std::uint64_t> exact{0};
+  // The first sample after the last part the callback rendered.
+  std::atomic<std::uint64_t> rendered_end{0};
   std::jthread callback([&] {
-    std::array<oscillate::engine::StereoFrame, 37> scratch{};
-    std::array<float, 74> output{};
+    std::array<oscillate::engine::StereoFrame, block_frames> scratch{};
+    std::array<float, block_frames * 2> output{};
     struct Checker {
-      std::atomic<std::uint64_t>* observed;
+      PublishedCount* observed;
       std::atomic<std::uint64_t>* wrong;
       std::atomic<std::uint64_t>* exact;
+      std::atomic<std::uint64_t>* rendered_end;
       std::uint64_t expected = 0;
+      std::uint64_t wraps = 0;
       static bool render(void* context, std::span<oscillate::engine::StereoFrame> stereo,
                          oscillate::engine::BlockContext block) noexcept {
         auto& self = *static_cast<Checker*>(context);
         if (block.planned_loop_wrap) {
-          self.observed->fetch_add(1, std::memory_order_relaxed);
-          // Every wrap jumps back 1000 frames from its boundary: exactly at
-          // it, or (late) at the first block start after it.
-          if (block.project_sample_position + 1000 == self.expected)
+          // Every wrap jumps back one loop length from its boundary: exactly
+          // at it, or (late) at the first block start after it.
+          if (block.project_sample_position + loop_length == self.expected)
             self.exact->fetch_add(1, std::memory_order_relaxed);
-          else if (block.project_sample_position + 1000 > self.expected)
+          else if (block.project_sample_position + loop_length > self.expected)
             self.wrong->fetch_add(1, std::memory_order_relaxed);
+          // Test-only synchronisation: a real callback would not lock.
+          self.observed->publish(++self.wraps);
         } else if (block.project_sample_position != self.expected) {
           self.wrong->fetch_add(1, std::memory_order_relaxed);
         }
         self.expected = block.project_sample_position + stereo.size();
+        self.rendered_end->store(self.expected, std::memory_order_release);
         return true;
       }
-    } checker{&observed, &wrong, &exact};
+    } checker{&observed, &wrong, &exact, &rendered_end};
     const StereoRenderSource source{&checker, &Checker::render};
     while (!stop.load(std::memory_order_acquire))
       (void)render_transport_block(source, cursor, true, scratch, output);
   });
   std::uint64_t queued = 0;
   std::uint64_t withdrawn = 0;
-  for (int round = 0; round < 20'000; ++round) {
-    const auto at = cursor.completed_snapshot().next_sample;
-    const auto boundary = at + 1000 + static_cast<std::uint64_t>(round % 97);
-    if (!cursor.request_loop_wrap_at(boundary, boundary - 1000))
+  for (int round = 0; round < rounds; ++round) {
+    const auto at = rendered_end.load(std::memory_order_acquire);
+    const auto boundary = at + loop_length + static_cast<std::uint64_t>(round % boundary_spread);
+    if (!cursor.request_loop_wrap_at(boundary, boundary - loop_length))
       continue;
     ++queued;
-    if (round % 3 != 0) {
-      std::this_thread::yield();
+    if (round % applied_round_period != 0) {
       if (cursor.cancel_loop_wrap())
         ++withdrawn;
     } else {
-      while (cursor.loop_wrap_counts().applied + withdrawn < queued)
-        std::this_thread::yield();
+      observed.wait_for(queued - withdrawn);
     }
   }
-  while (cursor.loop_wrap_counts().applied + withdrawn < queued)
-    std::this_thread::yield();
+  observed.wait_for(queued - withdrawn);
   stop.store(true, std::memory_order_release);
   callback.join();
   const auto counts = cursor.loop_wrap_counts();
-  REQUIRE_GT(queued, 1000, "race test did not exercise both outcomes");
+  REQUIRE_GT(queued, minimum_queued, "race test did not exercise both outcomes");
   REQUIRE_GT(withdrawn, 0, "race test did not exercise both outcomes");
   REQUIRE_EQ(counts.applied + withdrawn, queued,
              "a wrap was applied twice, lost or both withdrawn and applied");
-  REQUIRE_EQ(observed.load(), counts.applied,
+  REQUIRE_EQ(observed.value(), counts.applied,
              "a wrap was applied twice, lost or both withdrawn and applied");
   REQUIRE_EQ(wrong.load(), 0,
              "an applied wrap did not land on its boundary, or a late wrap was not counted");
