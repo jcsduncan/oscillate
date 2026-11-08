@@ -1,7 +1,9 @@
 """Stage third-party notices and their machine-checkable inventory.
 
-The inventory records provenance, not a per-binary licence conclusion or a
-source/replacement offer. Packaging fails if evidence for a copied ELF is absent.
+The inventory records provenance, not a per-binary licence conclusion.
+Packaging fails if evidence for a copied ELF is absent. The full texts of the
+/usr/share/common-licenses files that copied packages' copyright files refer
+to are staged beside them, and every notice is joined into one NOTICES.txt.
 """
 
 from __future__ import annotations
@@ -13,6 +15,13 @@ import shutil
 from pathlib import Path
 
 INVENTORY_STATUS = "third-party notice inventory; not a licence conclusion"
+THIRD_PARTY_DIR = Path("usr/share/doc/oscillate/third-party")
+COMBINED_NOTICES = THIRD_PARTY_DIR / "NOTICES.txt"
+COMMON_LICENSES_DIR = THIRD_PARTY_DIR / "common-licenses"
+# Ubuntu copyright files cite full licence texts by path instead of quoting them.
+COMMON_LICENSES = Path("/usr/share/common-licenses")
+COMMON_LICENSE_REFERENCE = re.compile(r"/usr/share/common-licenses/([A-Za-z0-9][A-Za-z0-9.+_-]*)")
+SECTION_RULE = "=" * 78
 # Notices for third-party code compiled into the project's own executables.
 COMPILED_IN_NOTICES = {
     "nlohmann-json3-dev": Path("third_party/notices/nlohmann-json3-dev/copyright"),
@@ -67,6 +76,42 @@ def _copy_notice(source: Path, destination: Path) -> dict[str, str]:
     return {"path": str(destination), "sha256": sha256(destination)}
 
 
+def cited_common_licenses(text: str) -> set[str]:
+    """The common-licenses names a copyright text cites, as written."""
+    return {cited.rstrip(".") for cited in COMMON_LICENSE_REFERENCE.findall(text)}
+
+
+def combined_text(stage_root: Path, inventory: dict[str, object]) -> str:
+    """Every staged notice in one text: project, runtime, Ubuntu packages, licences."""
+    sections = [
+        (f"{item['component']} (compiled into Oscillate or its package)", item["path"])
+        for item in inventory["project_notices"]
+    ]
+    sections += [
+        (f"{item['component']} (linked statically into the AppImage runtime)", item["path"])
+        for item in inventory["runtime_static_notices"]
+    ]
+    sections += [
+        (f"Ubuntu package {package} {evidence['version']}", evidence["notice_path"])
+        for package, evidence in sorted(inventory["copied_library_packages"].items())
+    ]
+    sections += [
+        (
+            f"{COMMON_LICENSES / item['name']} (cited by the Ubuntu copyright files above)",
+            item["path"],
+        )
+        for item in inventory["common_licenses"]
+    ]
+    parts = [
+        "Third-party notices for this Oscillate package. The individual files are in\n"
+        f"/{THIRD_PARTY_DIR}/, indexed by inventory.json.\n"
+    ]
+    for title, path in sections:
+        text = (stage_root / str(path)).read_text(encoding="utf-8", errors="replace")
+        parts.append(f"{SECTION_RULE}\n{title}\n{SECTION_RULE}\n\n{text.rstrip()}\n")
+    return "\n".join(parts)
+
+
 def stage_notices(
     stage_root: Path,
     source_root: Path,
@@ -75,6 +120,7 @@ def stage_notices(
     runtime_enabled: bool = False,
     copied_elfs: list[dict[str, object]] | None = None,
     system_dependencies: str | None = None,
+    common_licenses: Path = COMMON_LICENSES,
 ) -> dict[str, object]:
     """Stage notices and a machine-checkable file-to-notice mapping.
 
@@ -169,6 +215,28 @@ def stage_notices(
             }
         )
 
+    # A cited name can be a symlink (GPL -> GPL-3); stage each text once.
+    cited_as: dict[str, set[str]] = {}
+    for evidence in packages.values():
+        text = (stage_root / evidence["notice_path"]).read_text(encoding="utf-8", errors="replace")
+        for cited in cited_common_licenses(text):
+            source = common_licenses / cited
+            if not source.is_file():
+                raise ValueError(f"copyright cites a missing licence text: {source}")
+            cited_as.setdefault(source.resolve().name, set()).add(cited)
+    licence_texts = []
+    for name, names in sorted(cited_as.items()):
+        destination = stage_root / COMMON_LICENSES_DIR / f"{name}.txt"
+        copied = _copy_notice(common_licenses / name, destination)
+        licence_texts.append(
+            {
+                "name": name,
+                "cited_as": sorted(names),
+                "path": str(destination.relative_to(stage_root)),
+                "sha256": copied["sha256"],
+            }
+        )
+
     inventory: dict[str, object] = {
         "schema": 1,
         "status": INVENTORY_STATUS,
@@ -176,21 +244,23 @@ def stage_notices(
         "runtime_static_notices": runtime_static_notices,
         "copied_elfs": copied_files,
         "copied_library_packages": dict(sorted(packages.items())),
+        "common_licenses": licence_texts,
         "system_dependencies": system_dependencies,
         "open_gates": [
             "Starter-sound content grant is unset",
-            "Per-binary licence/SPDX and matching source/offer review is incomplete",
+            "Per-binary licence/SPDX review is incomplete",
             "LGPL library replacement and clean-host testing are incomplete",
         ]
         + (
-            [
-                "AppImage runtime dependency versions/build, corresponding source, and LGPL "
-                "replacement remain unproven"
-            ]
+            ["AppImage runtime dependency versions/build and libfuse replacement remain unproven"]
             if runtime_enabled
             else []
         ),
     }
+    combined = stage_root / COMBINED_NOTICES
+    combined.write_text(combined_text(stage_root, inventory), encoding="utf-8")
+    combined.chmod(0o644)
+    inventory["combined_notices"] = {"path": str(COMBINED_NOTICES), "sha256": sha256(combined)}
     inventory_path = doc_root / "inventory.json"
     inventory_path.write_text(json.dumps(inventory, indent=2, sort_keys=True) + "\n")
     inventory_path.chmod(0o644)
@@ -291,4 +361,33 @@ def verify_notices(
         elf = stage_root / relative
         if not elf.is_file() or elf.is_symlink() or sha256(elf) != item["sha256"]:
             raise ValueError(f"missing or changed copied ELF: {relative}")
+    cited: set[str] = set()
+    for evidence in packages.values():
+        cited |= cited_common_licenses(
+            (stage_root / evidence["notice_path"]).read_text(encoding="utf-8", errors="replace")
+        )
+    licence_texts = {item["name"]: item for item in inventory["common_licenses"]}
+    staged_as = {name for item in licence_texts.values() for name in item["cited_as"]}
+    if cited != staged_as:
+        raise ValueError(f"cited common licence texts differ: {sorted(cited ^ staged_as)}")
+    for name, item in licence_texts.items():
+        relative = Path(item["path"])
+        notice = stage_root / relative
+        if (
+            relative != COMMON_LICENSES_DIR / f"{name}.txt"
+            or not notice.is_file()
+            or notice.is_symlink()
+            or sha256(notice) != item["sha256"]
+        ):
+            raise ValueError(f"missing or changed common licence text: {name}")
+    combined = stage_root / COMBINED_NOTICES
+    expected = combined_text(stage_root, inventory)
+    if (
+        inventory["combined_notices"]["path"] != str(COMBINED_NOTICES)
+        or not combined.is_file()
+        or combined.is_symlink()
+        or combined.read_bytes() != expected.encode()
+        or sha256(combined) != inventory["combined_notices"]["sha256"]
+    ):
+        raise ValueError("NOTICES.txt does not match the staged notices")
     return inventory

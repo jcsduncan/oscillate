@@ -3,7 +3,8 @@
 
 appimagetool and the runtime are pinned by SHA-256. The image is extracted
 again and its payload, notices and SBOM are checked against the AppDir
-inventory before the image is published.
+inventory before the image is published. The image's third-party notices and
+source offer are copied beside it as release assets.
 """
 
 from __future__ import annotations
@@ -22,9 +23,10 @@ from pathlib import Path
 
 # Run as `python3 -I`, which leaves the script's directory off the path.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from package_notices import verify_notices
+from package_notices import COMBINED_NOTICES, verify_notices
 from package_profiles import APPIMAGETOOL, SOURCE_ROOT, TYPE2_RUNTIME
 from package_sbom import verify_sbom
+from package_sources import OFFER_TEXT, verify_offer
 
 APPDIR_STATUS = "oscillate AppDir inventory"
 RECORD_STATUS = "oscillate AppImage inventory"
@@ -107,6 +109,15 @@ def fetch_input(pinned: dict[str, str], destination: Path) -> Path:
     return destination
 
 
+def bundled_packages(inventory: dict[str, object]) -> set[str]:
+    """The Ubuntu packages (without architecture) the AppDir copies files from."""
+    return {
+        str(item["package"]).split(":", 1)[0]
+        for item in inventory["elf_files"]
+        if item["kind"] != "project"
+    }
+
+
 def image_name(version: str) -> str:
     return f"Oscillate-{version}-x86_64.AppImage"
 
@@ -183,8 +194,14 @@ def build(
             runtime_enabled=True,
         )
         verify_sbom(extracted)
+        verify_offer(extracted, bundled_packages(inventory))
         image_sha = digest(candidate)
         output.parent.mkdir(parents=True, exist_ok=True)
+        assets = {}
+        for kind, relative in (("notices", COMBINED_NOTICES), ("source_offer", OFFER_TEXT)):
+            asset = output.with_name(f"{output.name}.{relative.name}")
+            shutil.copyfile(extracted / relative, asset)
+            assets[kind] = {"file": asset.name, "sha256": digest(asset)}
         os.replace(candidate, output)
     record = {
         "status": RECORD_STATUS,
@@ -204,6 +221,7 @@ def build(
             "appimagetool_md5_slot": list(RUNTIME_MD5_SLOT),
         },
         "source_date_epoch": 0,
+        "release_assets": assets,
     }
     record_path = output.with_name(f"{output.name}.inventory.json")
     record_path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")

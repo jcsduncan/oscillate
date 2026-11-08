@@ -10,10 +10,12 @@ The current copied AppDir MP3 path is
 libsndfile MP3 format; it does not contain a separate MP3 encoder. The
 [machine-readable component ledger](mp3-ubuntu-codec-ledger.json) records
 the three copied libraries, binary package/source names, exact versions,
-ELF SHA-256, notice SHA-256 and the LAME source evidence. The
-[release AppImage](release-packages.md) is built without the codec adapter,
-and AppDir staging refuses `libmp3lame.so.0` until G8 decides. The native
-`.deb` copies no codec; it depends on Ubuntu's system libraries.
+ELF SHA-256, notice SHA-256 and the LAME source evidence. Under the G8
+decision ([#93](https://github.com/jcsduncan/oscillate/issues/93)) the
+[release AppImage](release-packages.md) bundles them, with Ubuntu's
+`copyright` notice and a written source offer linking the exact LAME source
+version. The native `.deb` copies no codec; it depends on Ubuntu's system
+libraries.
 
 The staged `libmp3lame.so.0` SHA-256
 `e0676e6702b0095212724f2d298685d189dc3b54845c90cb1db1bd2970c29ed2`

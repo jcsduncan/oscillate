@@ -1,8 +1,8 @@
 name: Packaging
 
 # Builds the .deb and the AppImage (docs/dependencies/release-packages.md),
-# installs, launches and removes each in a clean container, and attaches them
-# to the GitHub release. Release Please dispatches this workflow with the new
+# installs, launches and removes each in a clean container, and attaches them,
+# with the AppImage's notices and source offer, to the GitHub release. Release Please dispatches this workflow with the new
 # tag; a manual run with a tag rebuilds and re-attaches that release's
 # packages. Pull requests build it only when a packaging input changes.
 
@@ -125,6 +125,10 @@ jobs:
           python3 -I scripts/build-appimage.py --appdir build/appdir/Oscillate.AppDir \
             --inventory build/appdir/Oscillate.AppDir.inventory.json --output-dir build/packages
           cp build/appdir/Oscillate.AppDir.inventory.json build/packages/
+      # The source offer's Launchpad and upstream links must answer.
+      - name: Check the source offer's links
+        if: matrix.form == 'appimage'
+        run: python3 -I scripts/package_sources.py check-urls --appdir build/appdir/Oscillate.AppDir
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: packages-${{ matrix.form }}
