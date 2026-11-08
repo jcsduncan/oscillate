@@ -230,13 +230,24 @@ void KeyReviewController::poll() {
     publish();
     return;
   }
+  // The same result again stores nothing, so there is no new revision to signal.
+  const bool revision_changed = session_->snapshot().revision != origin_revision_;
   cache_hit_ = result.cache_hit;
   cache_degraded_ = cache_degraded_ || !result.cache_warning.empty();
   state_ = QStringLiteral("ready");
-  message_ = cache_degraded_ ? QStringLiteral("Suggestions ready; cache unavailable")
-                             : QStringLiteral("Suggestion stored in project. Save to keep it.");
+  if (cache_degraded_) {
+    message_ = QStringLiteral("Suggestions ready; cache unavailable");
+  } else if (revision_changed) {
+    message_ = QStringLiteral("Suggestion stored in project. Save to keep it.");
+  } else if (session_->saving().has_unsaved_changes()) {
+    message_ = QStringLiteral("Suggestions unchanged. Save project changes.");
+  } else {
+    message_ = QStringLiteral("Suggestions unchanged.");
+  }
   publish();
-  emit projectRevisionChanged();
+  if (revision_changed) {
+    emit projectRevisionChanged();
+  }
 }
 
 void KeyReviewController::set_correction(int tonic, int mode) {

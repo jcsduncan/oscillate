@@ -127,6 +127,14 @@ SourceAnalysisService::accept_source_key_analysis(project::SourceId source_id,
     }
     compatible.push_back({converted.value(), relation});
   }
+  // The same result again (a cache hit, say) is already stored: no revision.
+  const auto stored = std::ranges::find(snapshot().source_key_reviews, source_id,
+                                        &project::SourceKeyReview::source);
+  if (origin_revision == snapshot().revision && stored != snapshot().source_key_reviews.end() &&
+      stored->detected == detected && stored->confidence == estimate.confidence &&
+      stored->compatible == compatible) {
+    return Result::success();
+  }
   auto applied = model().apply({project::ApplySourceKeyAnalysis{
       origin_revision, source_id, source->sha256, source->sample_rate, source->frames, detected,
       estimate.confidence, std::move(compatible)}});

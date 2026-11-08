@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <fcntl.h>
 #include <filesystem>
@@ -75,6 +76,27 @@ void lossy_mp3() {
   }
   REQUIRE_GT(peak, 0.08F, "MP3 sine peak outside lossy tolerance");
   REQUIRE_LT(peak, 0.20F, "MP3 sine peak outside lossy tolerance");
+}
+
+// An MP3 without a Xing/Info header, behind an ID3 tag: libsndfile estimates
+// 11,736 frames from its size, but only ten 1,152-frame MPEG frames decode
+// (FFmpeg decodes the same 11,520).
+constexpr std::uint64_t headerless_mp3_frames = 11'520;
+
+void mp3_without_length_header() {
+  auto opened = EncodedReader::open(fixture("sine_no_xing.mp3"));
+  REQUIRE_OK(opened, "headerless MP3 fixture failed to open");
+  auto reader = std::move(opened).value();
+  REQUIRE_EQ(reader.info().format, EncodedFormat::mp3, "headerless MP3 metadata invalid");
+  REQUIRE_EQ(reader.info().frames, headerless_mp3_frames,
+             "headerless MP3 length is not its decodable length");
+  std::vector<StereoFrame> whole(headerless_mp3_frames);
+  auto decoded = reader.read_at(0, whole);
+  REQUIRE_TRUE(decoded, "headerless MP3 decode failed");
+  REQUIRE_EQ(decoded.value(), headerless_mp3_frames, "headerless MP3 ended before its length");
+  std::array<StereoFrame, 1> last{};
+  REQUIRE_EQ(reader.read_at(headerless_mp3_frames - 1, last).value(), last.size(),
+             "headerless MP3 last frame did not decode after a seek");
 }
 
 void partition_and_seek_consistency() {
@@ -182,6 +204,7 @@ int main() {
     exact_lossless(EncodedFormat::aiff, "sine.aiff");
     exact_lossless(EncodedFormat::flac, "sine.flac");
     lossy_mp3();
+    mp3_without_length_header();
     partition_and_seek_consistency();
     stereo_wav_and_unsupported_container();
     pinned_descriptor_and_invalid_inputs();
