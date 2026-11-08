@@ -397,7 +397,7 @@ bool RoutedPlayback::render(void* context, std::span<engine::StereoFrame> output
     RoutedSourceFill& fill;
     std::uint64_t exact_revision = 0;
   } fill_context{lease, run.workers_.get(), nullptr, *run.source_fill_,
-                 run.source_overlay_revision_.load(std::memory_order_acquire)};
+                 run.source_exact_revision_.load(std::memory_order_acquire)};
   const std::span<const std::span<const engine::StereoFrame>> unused{};
   const auto result = run.control_->render_block(
       unused, output, block,
@@ -420,7 +420,6 @@ bool RoutedPlayback::render(void* context, std::span<engine::StereoFrame> output
   if (result == engine::RoutedRenderStatus::rendered && fill_context.used != nullptr)
     fill_context.used->note_rendered_frames(output.size());
   return result == engine::RoutedRenderStatus::rendered ||
-         result == engine::RoutedRenderStatus::holding ||
          (result == engine::RoutedRenderStatus::invalid_block && fill_context.used != nullptr &&
           fill_context.used->streaming_hold());
 }
@@ -594,48 +593,45 @@ application::RevisionStatus RoutedPlayback::status() {
       source_candidate_ = std::move(prepared).value();
     }
   }
-  if (source_capture_ && synth_switch_policy_ && !source_hold_requested_ && !source_staged_ &&
-      !edit_awaiting_activation_ &&
+  if (source_capture_ && synth_switch_policy_ && !source_staged_ && !edit_awaiting_activation_ &&
       std::chrono::steady_clock::now() >= synth_switch_policy_->deadline)
     fail_source_handoff({foundation::ErrorCode::unavailable,
                          "Native synth switch found no note-free release boundary within ten "
                          "seconds; saved choice is not audible"});
-  if (source_capture_ && source_candidate_ && !source_hold_requested_ &&
-      !edit_awaiting_activation_ && !source_cancel_pending_) {
+  if (source_capture_ && source_candidate_ && !source_staged_ && !edit_awaiting_activation_ &&
+      !source_cancel_pending_) {
     const auto cursor = cursor_.completed_snapshot();
     // The old mixer must render once in a new transport generation before its
-    // history can be reused at a held graph boundary.
+    // history can be handed over.
     if ((!resumed_boundary_ || cursor.generation != resumed_boundary_->generation ||
          cursor.next_sample != resumed_boundary_->next_sample) &&
-        (!synth_switch_policy_ || synth_switch_quiet_at(cursor.next_sample))) {
+        (!synth_switch_policy_ ||
+         synth_switch_quiet_over(cursor.next_sample,
+                                 std::uint64_t{requested_buffer_frames_} * synth_switch_blocks))) {
       resumed_boundary_.reset();
       const auto ready = source_candidate_->prime_handoff_window(
           cursor.generation, cursor.next_sample, requested_buffer_frames_);
       if (ready == media::HandoffWindowStatus::ready) {
-        if (source_capture_->source_overlay_eligible && !loop_) {
-          if (source_selection_->stage_candidate(
-                  {source_capture_->snapshot->revision, source_candidate_})) {
-            source_staged_ = true;
-            source_overlay_revision_.store(source_capture_->snapshot->revision,
-                                           std::memory_order_release);
-            auto offered = control_->publish_captured_source_overlay(*source_capture_);
-            if (!offered) {
-              source_overlay_revision_.store(0, std::memory_order_release);
-              fail_source_handoff(offered.error());
-            } else {
-              edit_awaiting_activation_ = true;
-            }
+        // The callback fills the staged source exactly: a block it cannot
+        // fill completely plays the old source and graph instead.
+        if (source_selection_->stage_candidate(
+                {source_capture_->snapshot->revision, source_candidate_})) {
+          source_staged_ = true;
+          source_exact_revision_.store(source_capture_->snapshot->revision,
+                                       std::memory_order_release);
+          auto offered = source_capture_->source_overlay_eligible && !loop_
+                             ? control_->publish_captured_source_overlay(*source_capture_)
+                             : control_->publish_captured_source(*source_capture_);
+          if (!offered) {
+            source_exact_revision_.store(0, std::memory_order_release);
+            fail_source_handoff(offered.error());
+          } else {
+            edit_awaiting_activation_ = true;
           }
-        } else {
-          auto held = control_->request_captured_source_hold(*source_capture_);
-          if (!held)
-            fail_source_handoff(held.error());
-          else
-            source_hold_requested_ = true;
         }
       } else if (ready == media::HandoffWindowStatus::missed ||
                  ready == media::HandoffWindowStatus::invalid) {
-        if (source_retry_count_ < 3) {
+        if (source_retry_count_ < max_source_primes) {
           ++source_retry_count_;
           retire_source(std::move(source_candidate_));
           auto restarted = start_source_preparation();
@@ -648,39 +644,28 @@ application::RevisionStatus RoutedPlayback::status() {
       }
     }
   }
-  if (source_hold_requested_ && source_capture_ && source_candidate_) {
-    if (const auto boundary = control_->held_boundary()) {
-      if (synth_switch_policy_ && !synth_switch_quiet_at(boundary->project_sample_position)) {
-        fail_source_handoff({foundation::ErrorCode::conflict,
-                             "Native synth note began during the held source "
-                             "transition; saved choice is not audible"});
-        return control_->status();
-      }
-      const auto ready = source_candidate_->prime_handoff_window(boundary->transport_generation,
-                                                                 boundary->project_sample_position,
-                                                                 requested_buffer_frames_);
-      if (ready != media::HandoffWindowStatus::ready) {
-        fail_source_handoff({foundation::ErrorCode::unavailable,
-                             "Prepared routed source is not ready at the held audio boundary"});
-      } else if (source_selection_->stage_candidate(
-                     {source_capture_->snapshot->revision, source_candidate_})) {
-        source_staged_ = true;
-        auto published = control_->publish_held_with_source();
-        source_hold_requested_ = false;
-        edit_awaiting_activation_ = published.has_value();
-        if (!published)
-          fail_source_handoff(published.error());
-      }
-    }
-  }
-  if (edit_pending_ && !source_capture_ && !edit_awaiting_activation_ &&
-      control_->held_boundary()) {
-    auto published = control_->publish_held();
-    edit_awaiting_activation_ = published.has_value();
-#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
-#endif
-    if (!published)
+  // A published source switch whose source never filled its block was
+  // withdrawn, and the old graph played on: prime a fresh source at a later
+  // block, a bounded number of times.
+  if (source_capture_ && edit_awaiting_activation_ && source_staged_ &&
+      control_->status().model_revision == source_capture_->snapshot->revision &&
+      control_->status().application == application::PlaybackApplication::failed &&
+      source_selection_->cancel_candidate(source_capture_->snapshot->revision)) {
+    source_exact_revision_.store(0, std::memory_order_release);
+    source_staged_ = false;
+    edit_awaiting_activation_ = false;
+    retire_source(std::move(source_candidate_));
+    const bool again = source_retry_count_ < max_source_primes &&
+                       control_->restart_captured_source(*source_capture_).has_value();
+    if (again) {
+      ++source_retry_count_;
+      if (auto restarted = start_source_preparation(); !restarted)
+        fail_source_handoff(restarted.error());
+    } else {
       edit_pending_ = false;
+      synth_switch_policy_.reset();
+      source_capture_.reset();
+    }
   }
   control_->observe();
   collect_source_retirements();
@@ -689,7 +674,7 @@ application::RevisionStatus RoutedPlayback::status() {
       source_selection_->promote_candidate(source_capture_->snapshot->revision)) {
     source_ = std::move(source_candidate_);
     control_->bind_live_source(*source_);
-    source_overlay_revision_.store(0, std::memory_order_release);
+    source_exact_revision_.store(0, std::memory_order_release);
     source_capture_.reset();
     synth_switch_policy_.reset();
     source_staged_ = false;
@@ -924,11 +909,8 @@ void RoutedPlayback::collect_source_retirements() {
 }
 
 void RoutedPlayback::fail_source_handoff(const foundation::Error& error) {
-  if (source_hold_requested_ && source_capture_)
-    (void)control_->cancel_captured_source_hold(error);
-  else if (!source_staged_ && source_capture_)
+  if (!source_staged_ && source_capture_)
     (void)control_->fail_captured_source_edit(*source_capture_, error);
-  source_hold_requested_ = false;
   edit_pending_ = false;
   edit_awaiting_activation_ = false;
   synth_switch_policy_.reset();
@@ -940,6 +922,33 @@ void RoutedPlayback::fail_source_handoff(const foundation::Error& error) {
   }
   retire_source(std::move(source_candidate_));
   source_capture_.reset();
+}
+
+bool RoutedPlayback::synth_switch_quiet_over(std::uint64_t sample,
+                                             std::uint64_t frames) const noexcept {
+  if (!synth_switch_quiet_at(sample))
+    return false;
+  if (!synth_switch_policy_)
+    return true;
+  // No note may start before the switch can have taken over either.
+  const auto end =
+      frames > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) - sample
+          ? std::numeric_limits<std::int64_t>::max()
+          : static_cast<std::int64_t>(sample + frames);
+  for (const auto& [track, tail] : synth_switch_policy_->release_tails) {
+    (void)tail;
+    const auto found = std::ranges::find(synth_switch_policy_->old_notes.instruments(), track,
+                                         &engine::InstrumentEvents::track);
+    if (found == synth_switch_policy_->old_notes.instruments().end())
+      return false;
+    if (std::ranges::any_of(found->events(), [&](const engine::ScheduledMidiEvent& event) {
+          return event.kind == engine::MidiEventKind::note_on &&
+                 event.sample.value >= static_cast<std::int64_t>(sample) &&
+                 event.sample.value < end;
+        }))
+      return false;
+  }
+  return true;
 }
 
 bool RoutedPlayback::synth_switch_quiet_at(std::uint64_t sample) const noexcept {

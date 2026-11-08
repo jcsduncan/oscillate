@@ -147,7 +147,7 @@ private:
   bool dropping_ = false;
 };
 
-enum class EditPhase : std::uint8_t { idle, awaiting_hold, awaiting_activation };
+enum class EditPhase : std::uint8_t { idle, awaiting_activation };
 
 double parse_gain(std::string_view text) {
   double value = 0.0;
@@ -229,7 +229,6 @@ int run(int argc, char** argv) {
   std::cout.flush();
   CommandInput input;
   EditPhase phase = EditPhase::idle;
-  engine::BlockContext held{};
   auto save_edit = [&](project::AppliedRevision applied, std::string_view label) {
     const auto outcome = take(store.save(*applied.snapshot, persistence::SaveKind::explicit_save));
     if (outcome.status != persistence::SaveStatus::committed)
@@ -237,8 +236,12 @@ int run(int argc, char** argv) {
     const auto reopened = take(store.load_current());
     if (reopened.snapshot.revision != applied.snapshot->revision)
       throw std::runtime_error("saved routed edit reopened at the wrong revision");
-    take(control.begin_edit(applied, label));
-    phase = EditPhase::awaiting_hold;
+    // An edit switches live at a block boundary or is refused at once; the
+    // transport never holds for it.
+    const auto begun = control.begin_edit(applied, label);
+    if (!begun)
+      std::cerr << "Routed graph build: " << begun.error().message << '\n';
+    phase = begun ? EditPhase::awaiting_activation : EditPhase::idle;
     report(control, transport, output.status(), source.get());
   };
   auto command = [&](std::string_view line) {
@@ -251,8 +254,10 @@ int run(int argc, char** argv) {
       if (phase != EditPhase::idle)
         throw std::runtime_error("wait for the pending routed edit to finish");
       if (line == "retry") {
-        take(control.retry());
-        phase = EditPhase::awaiting_hold;
+        const auto retried = control.retry();
+        if (!retried)
+          std::cerr << "Routed graph build: " << retried.error().message << '\n';
+        phase = retried ? EditPhase::awaiting_activation : EditPhase::idle;
         report(control, transport, output.status(), source.get());
         return;
       }
@@ -297,29 +302,16 @@ int run(int argc, char** argv) {
     if (status.state == audio::OutputState::disconnected ||
         status.state == audio::OutputState::error || source->status().worker_failed)
       break;
-    if (phase == EditPhase::awaiting_hold) {
-      if (const auto boundary = control.held_boundary()) {
-        const auto completed = transport.completed_snapshot();
-        if (completed.next_sample != boundary->project_sample_position ||
-            completed.generation != boundary->transport_generation)
-          throw std::runtime_error("routed callback hold diverged from the transport cursor");
-        held = *boundary;
-        std::cout << "hold sample=" << held.project_sample_position
-                  << " generation=" << held.transport_generation << '\n';
-        auto published = control.publish_held();
-        if (!published) {
-          phase = EditPhase::idle;
-          std::cerr << "Routed graph build: " << published.error().message << '\n';
-          report(control, transport, output.status(), source.get());
-        } else {
-          phase = EditPhase::awaiting_activation;
-        }
-      }
-    } else if (phase == EditPhase::awaiting_activation &&
-               control.status().application == app::PlaybackApplication::active) {
+    if (phase == EditPhase::awaiting_activation &&
+        control.status().application == app::PlaybackApplication::active) {
       phase = EditPhase::idle;
-      std::cout << "activated-from sample=" << held.project_sample_position
-                << " generation=" << held.transport_generation << '\n';
+      const auto completed = transport.completed_snapshot();
+      std::cout << "activated-by sample=" << completed.next_sample
+                << " generation=" << completed.generation << '\n';
+      report(control, transport, status, source.get());
+    } else if (phase == EditPhase::awaiting_activation &&
+               control.status().application == app::PlaybackApplication::failed) {
+      phase = EditPhase::idle; // Withdrawn: the old graph played on.
       report(control, transport, status, source.get());
     }
     input.poll_lines(command);

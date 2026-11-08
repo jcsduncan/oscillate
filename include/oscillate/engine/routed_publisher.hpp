@@ -13,15 +13,16 @@
 
 namespace oscillate::engine {
 
-enum class RoutedRenderStatus : std::uint8_t { rendered, holding, no_graph, invalid_block };
+enum class RoutedRenderStatus : std::uint8_t { rendered, no_graph, invalid_block };
 
 // The callback fills already-sized source spans only after the publisher has
 // decided that this block will render. A false result must leave source cursors
 // unchanged; the publisher writes silence and does not publish a new graph.
 struct RoutedSourceFill {
   void* context = nullptr;
-  // Identifies the graph whose source buffers will be consumed. During a held
-  // handoff this is the candidate revision, before it becomes active.
+  // Identifies the graph whose source buffers will be consumed: a live
+  // switch's candidate revision on the block that tries it, before it
+  // becomes active.
   bool (*fill)(void*, std::uint64_t, BlockContext, std::size_t) noexcept = nullptr;
   // A revision-aware adapter may supply a different preallocated source bank
   // for the candidate graph. The returned spans must remain valid through
@@ -57,9 +58,8 @@ public:
   RoutedMixerPublisher& operator=(const RoutedMixerPublisher&) = delete;
   ~RoutedMixerPublisher(); // only after the callback has joined
 
-  // Initial publication needs no hold. An active graph requires request_hold()
-  // and a callback acknowledgement. The transport owner must keep the project
-  // cursor at held_boundary() during the hold, including silent device blocks.
+  // The initial publication, before any graph is active. Every later graph
+  // switches live (prepare_and_publish_live) or as an overlay.
   [[nodiscard]] foundation::Result<void>
   prepare_and_publish(std::uint64_t revision, std::span<const RoutedNode> nodes,
                       std::span<const RoutingEdge> edges, RoutedMixerLimits limits,
@@ -102,9 +102,6 @@ public:
   [[nodiscard]] bool push_live_edge_gain(RoutingEdgeId edge, float gain) noexcept;
   // Observation and lifecycle calls below are also control-thread only and
   // must be serialized with preparation; callback readers use render_block.
-  [[nodiscard]] bool request_hold() noexcept;
-  [[nodiscard]] std::optional<BlockContext> held_boundary() const noexcept;
-  [[nodiscard]] bool cancel_hold() noexcept;
   [[nodiscard]] std::size_t collect_retired();
   // Asks the callback to withdraw the pending candidate, for one that can
   // never be adopted (a live switch whose max_frames is below every device
@@ -134,8 +131,7 @@ public:
   active_node_meter(RoutingNodeId node) const noexcept;
 
   // Callback only. Sources use the active plan's topological order. This first
-  // contract rejects new plans that change that order. A holding block is
-  // bounded silence and does not advance the project cursor. An adapter block
+  // contract rejects new plans that change that order. An adapter block
   // over 8192 frames is left untouched for the caller to silence or discard.
   // Workers, when given, mix the graph's levels in parallel (ADR-0048).
   [[nodiscard]] RoutedRenderStatus
@@ -189,11 +185,8 @@ private:
   std::atomic<Plan*> active_{nullptr};
   std::atomic<Plan*> pending_{nullptr};
   std::atomic<Plan*> retired_{nullptr};
-  std::atomic<bool> hold_requested_{false};
-  std::atomic<bool> held_{false};
   std::atomic<bool> withdraw_requested_{false};
   std::atomic<std::uint64_t> live_passed_blocks_{0}; // callback writes, control reads
-  BlockContext boundary_{0, 0}; // callback writes, control reads after held_ acquire
   // Single-producer (control), single-consumer (callback) live controls.
   std::array<LiveControl, live_capacity> live_{};
   std::atomic<std::size_t> live_head_{0};

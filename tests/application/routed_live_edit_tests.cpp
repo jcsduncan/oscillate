@@ -224,7 +224,6 @@ struct Run {
     const auto begun = control.begin_edit(applied, label);
     REQUIRE_OK(begun, std::string(label) + " was refused while playing: " +
                           (begun ? std::string() : begun.error().message));
-    require(!control.held_boundary().has_value(), std::string(label) + " held the graph");
     REQUIRE_NE(control.status().application, app::PlaybackApplication::failed,
                std::string(label) + " was reported failed");
     return applied.snapshot->revision;

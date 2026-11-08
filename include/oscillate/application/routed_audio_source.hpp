@@ -143,6 +143,9 @@ public:
   // Control only. The player retains its runtime and voices while a prepared
   // native automation plan is offered to the callback.
   [[nodiscard]] native_dsp::synth::NativeSynthPlayer* synth_player(project::TrackId track) noexcept;
+  // Control only: the same player, shared, for a replacement source to keep.
+  [[nodiscard]] std::shared_ptr<native_dsp::synth::NativeSynthPlayer>
+  shared_synth_player(project::TrackId track) const;
   // Control only: every synth player re-offers the notes its engine follows
   // (Kick & Bass Lock, ADR-0072) from `snapshot`. A player that fails keeps
   // the notes it had.
@@ -192,9 +195,11 @@ private:
     std::size_t index;
     std::vector<engine::StereoFrame> scratch;
   };
+  // A replacement source may share a player with the source it replaces;
+  // only one of them renders it in any block.
   struct SynthSlot {
     std::size_t slot_index;
-    native_dsp::synth::NativeSynthPlayer player;
+    std::shared_ptr<native_dsp::synth::NativeSynthPlayer> player;
   };
   // Indices into clips_ and synths_ that render into one slot.
   struct SlotWork {
@@ -214,7 +219,8 @@ private:
   prepare_with_layout(const std::filesystem::path& root, const project::Snapshot& snapshot,
                       RoutedPlaybackControl& control,
                       std::span<const routing::ProjectRouteSource> layout,
-                      std::span<const engine::RoutingNodeId> order, std::size_t max_frames,
+                      std::span<const engine::RoutingNodeId> order,
+                      std::span<const KeptPlayer> kept, std::size_t max_frames,
                       std::size_t buffer_frame_budget, const std::atomic<bool>* worker_permit,
                       const std::stop_token& stop, std::uint64_t first_sample,
                       std::uint64_t first_generation, const audio_io::TransportCursor* live_cursor);
@@ -227,9 +233,13 @@ private:
                              bool require_complete, engine::AudioWorkerPool* workers) noexcept;
   bool fill_slots(engine::BlockContext block, std::size_t frames, bool require_complete,
                   engine::AudioWorkerPool* workers) noexcept;
+  // What one fill_slot() pass renders. A complete (exact) fill streams
+  // every slot's clips before any synth renders, so a block that fails for
+  // a missing clip frame has advanced no player the replaced source shares.
+  enum class SlotPart : std::uint8_t { all, clips, synths };
   // One slot's block: may run on any audio worker, never beside itself.
   bool fill_slot(std::size_t index, engine::BlockContext block, std::size_t frames,
-                 bool require_complete, engine::AudioWorkerPool* workers) noexcept;
+                 bool require_complete, SlotPart part, engine::AudioWorkerPool* workers) noexcept;
   void worker_loop() noexcept;
   [[nodiscard]] bool fill_lead(FillRequest request);
   [[nodiscard]] bool fill_one(Clip& clip, FillRequest request);

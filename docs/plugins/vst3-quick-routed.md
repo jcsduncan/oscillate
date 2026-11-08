@@ -27,7 +27,7 @@ The fake-output contract saves and reopens a project with the synthetic gain
 effect, then checks its audible first block at both requested buffer sizes. It
 also checks missing/changed/class-mismatched inserts, a processing fault and
 the scanner-off path. The existing routed controller fixture covers runtime
-reuse through compatible held graph edits and callback allocation. Quick
+reuse through compatible live graph edits and callback allocation. Quick
 currently applies later project edits by Stop/Play, so it does not yet publish
 live plugin graph edits. Physical PipeWire/plugin compatibility and offline
 VST3 export remain separate qualification work.

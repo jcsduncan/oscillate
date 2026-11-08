@@ -288,10 +288,9 @@ void two_source_live_route(const plugins::ScanResult& scanned, std::size_t frame
       !app::RoutedAudioSource::prepare(directory.path(), *third_model.snapshot(), source_gate, 128),
       "third unbound MIDI track borrowed another source's graph or source-bank binding");
   // The older active graph remains honest when a source schedule changes.
-  require(control.begin_edit(third, "unbound MIDI source") &&
+  require(!control.begin_edit(third, "unbound MIDI source") &&
               control.render_block(inputs, output, {2 * frames, 1}) ==
-                  engine::RoutedRenderStatus::holding &&
-              !control.publish_held() &&
+                  engine::RoutedRenderStatus::rendered &&
               control.status().active_graph_revision == revised.snapshot->revision &&
               control.status().application == app::PlaybackApplication::failed,
           "unsupported live source layout claimed to be audible");

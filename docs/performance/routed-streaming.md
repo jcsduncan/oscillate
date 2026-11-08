@@ -35,4 +35,4 @@ cmake --build build/release --target oscillate_application_routed_device_tests
 ./build/release/tests/application/oscillate_application_routed_device_tests --bench
 ```
 
-At 48 kHz, one managed WAV source, group bus and return send, 1,000 paced blocks: 64 frames averaged **3.469 µs/block**, 128 frames **6.465 µs/block**. Both runs reported zero callback allocations, render failures and missing source frames. Fake-device tests additionally cover a paused worker, a visible 64-frame underrun, exact seek resume after generation change, seek during graph hold, and seeking a 31-second clip past the old in-memory cap.
+At 48 kHz, one managed WAV source, group bus and return send, 1,000 paced blocks: 64 frames averaged **3.469 µs/block**, 128 frames **6.465 µs/block**. Both runs reported zero callback allocations, render failures and missing source frames. Fake-device tests additionally cover a paused worker, a visible 64-frame underrun, exact seek resume after generation change, seek after a live graph switch, and seeking a 31-second clip past the old in-memory cap.

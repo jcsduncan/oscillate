@@ -117,7 +117,7 @@ are staged before activation and flushed before the first audible block.
 Replacement while playing, dynamic latency, arbitrary native/VST3 chains and
 a custom plugin editor remain outstanding.
 Removing or bypassing a sole active zero-latency native EQ, compressor or reverb from an audio/bus path
-can publish at a held boundary while the old stage drains a bounded tail into
+switches live at a block boundary while the old stage drains a bounded tail into
 the now-dry path. Bypass preserves the saved slot and settings. A second insert
 change while that tail is active can start a new zero-latency processor on the
 same route; the draining tail and new processor sum independently. Limiter

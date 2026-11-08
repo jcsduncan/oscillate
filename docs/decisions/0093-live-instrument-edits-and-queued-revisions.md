@@ -29,4 +29,4 @@ An edit offered while a graph switch, a player offer or a VST3 parameter is stil
 
 - Note add, move and delete, MIDI clip add, duplicate, move and delete, and mutes switch at one block boundary with no hold, no silent block and no click. `tests/application/routed_live_edit_tests.cpp` checks each against a fresh render of the edited song, sample for sample.
 - A plan copies its track's events; an edit re-compiles the project's MIDI on the control thread.
-- MIDI edits on a VST3 instrument track, and on a track whose MIDI clips carry a lane for anything other than its player, still take the graph path.
+- MIDI edits on a VST3 instrument track, and on a track whose MIDI clips carry a lane for anything other than its player, are refused while playing ([ADR-0094](0094-primed-source-switching.md)).
