@@ -216,6 +216,8 @@ KitTheme {
     readonly property int clipGripInset: 16
     readonly property real clipGripSelectedOpacity: 0.35
     readonly property int clipTrimMinClipWidth: 12
+    // The plus a clip carries while a Ctrl-drag copies it.
+    readonly property int clipCopyBadgeSize: 14
     // The playhead, the master row and the elapsed-time ruler.
     readonly property int playheadGlowWidth: 8
     readonly property real playheadGlowAlpha: 0.12

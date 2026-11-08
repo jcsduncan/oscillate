@@ -206,6 +206,13 @@ Rectangle {
             clipsSelected([clipId])
         }
     }
+    // A Ctrl-drag copies rather than moves: the dragged clips show a copy
+    // badge and their originals stay drawn where they are.
+    property bool copyDragging: false
+    // The row of a track, by id, or -1.
+    function rowOfTrack(trackId) {
+        return bridge.tracks.findIndex(track => track.id === trackId)
+    }
     // A selected group follows the clip being dragged: by groupDelta of the
     // timeline and groupRows rows.
     property bool groupDragging: false
@@ -956,7 +963,7 @@ Rectangle {
                         }
                         activeFocusOnTab: modelData.kind === "midi" || (modelData.kind === "audio" && arrangement.bridge.audioEditEnabled)
                         Accessible.role: Accessible.ListItem
-                        Accessible.name: modelData.kind === "audio" ? "Audio clip. Drag to move, Shift-click to add to the selection, Shift+Alt-drag to slip source audio, drag edges to trim. Arrow keys move one beat." + (modelData.waveformCacheDegraded ? " Waveform cache unavailable; preview remains usable." : "") : modelData.loop ? "Looping MIDI clip. Drag to move on the grid (Alt for free) or drag the right edge to repeat its pattern; turn Loop off to set its length instead." : "MIDI clip. Drag to move on the grid (Alt for free) or drag the right edge to lengthen or shorten it; notes after the end are kept. Turn Loop on to repeat it."
+                        Accessible.name: modelData.kind === "audio" ? "Audio clip. Drag to move, Ctrl-drag to copy, Shift-click to add to the selection, Shift+Alt-drag to slip source audio, drag edges to trim. Arrow keys move one beat." + (modelData.waveformCacheDegraded ? " Waveform cache unavailable; preview remains usable." : "") : modelData.loop ? "Looping MIDI clip. Drag to move on the grid (Alt for free), Ctrl-drag to copy, or drag the right edge to repeat its pattern; turn Loop off to set its length instead." : "MIDI clip. Drag to move on the grid (Alt for free), Ctrl-drag to copy, or drag the right edge to lengthen or shorten it; notes after the end are kept. Turn Loop on to repeat it."
                         // With other clips selected (a group, or a clip this
                         // one is not), the arrow keys move the selection.
                         function nudge(direction) {
@@ -973,6 +980,9 @@ Rectangle {
                         // A selected clip following the group being dragged.
                         readonly property bool following: arrangement.groupDragging && !gestureActive
                             && arrangement.clipIsSelected(modelData.id)
+                        // Carried by a Ctrl-drag: the card draws the copy at the
+                        // drop and an outline keeps the original in place.
+                        readonly property bool copying: arrangement.copyDragging && (gestureActive || following)
                         x: arrangement.width * ((previewStart + (following ? arrangement.groupDelta : 0))
                             * arrangement.bridge.timelineBars - arrangement.viewStartBar) / arrangement.visibleBars + Theme.spaceXxs
                         y: Theme.spaceSm + rowShift + (following ? arrangement.rowShiftFor(arrangementRow.index, arrangement.groupRows) : 0)
@@ -1059,6 +1069,41 @@ Rectangle {
                                 : picked ? arrangement.mainTextColor
                                 : arrangement.tint(clipCard.clipColor, Theme.clipEdgeAlpha)
                             border.width: picked ? Theme.strokeBold : Theme.hairline
+                        }
+                        // The original, left in place under a Ctrl-drag: an
+                        // outline at the clip's saved position and row.
+                        Rectangle {
+                            objectName: "clipCopyOrigin"
+                            visible: clipCard.copying
+                            z: -3
+                            x: arrangement.projectDeltaToScreen(clipCard.modelData.start - clipCard.previewStart
+                                - (clipCard.following ? arrangement.groupDelta : 0))
+                            y: Theme.spaceSm - clipCard.y
+                            width: clipCard.width
+                            height: clipCard.height
+                            radius: Theme.radiusLg
+                            color: arrangement.tint(clipCard.clipColor, Theme.clipBodyWashAlpha)
+                            border.color: clipCard.clipColor
+                            border.width: Theme.hairline
+                        }
+                        // The copy being dropped carries a plus.
+                        Rectangle {
+                            objectName: "clipCopyBadge"
+                            visible: clipCard.copying
+                            z: 3
+                            x: Math.max(clipCard.shownFrom, 0) + Theme.spaceXs
+                            y: Theme.spaceXs
+                            width: Theme.clipCopyBadgeSize
+                            height: Theme.clipCopyBadgeSize
+                            radius: width / 2
+                            color: arrangement.accentColor
+                            Text {
+                                anchors.centerIn: parent
+                                text: "+"
+                                color: arrangement.mainTextColor
+                                font.pixelSize: Theme.typeLabel
+                                font.bold: true
+                            }
                         }
                         Rectangle {
                             objectName: "clipColorCap"
@@ -1406,17 +1451,22 @@ Rectangle {
                             anchors.fill: parent
                             enabled: modelData.kind === "midi"
                             acceptedButtons: Qt.LeftButton
-                            cursorShape: Qt.OpenHandCursor
+                            cursorShape: arrangement.copyDragging && pressed ? Qt.DragCopyCursor : Qt.OpenHandCursor
                             property real initialX: 0
                             property real initialStart: 0
-                            // Shift/Ctrl-click only picks; a press on a clip of
-                            // the selected group drags the whole group.
+                            // Shift-click only picks; a press on a clip of the
+                            // selected group drags the whole group. Ctrl-drag
+                            // copies (the clip, or the group it belongs to);
+                            // a Ctrl-click without a drag picks, as Shift does.
                             property bool toggling: false
+                            property bool copyPress: false
                             property bool grouped: false
                             property bool moved: false
                             onPressed: mouse => {
-                                toggling = (mouse.modifiers & (Qt.ShiftModifier | Qt.ControlModifier)) !== 0
-                                arrangement.pickClip(modelData.id, mouse.modifiers)
+                                toggling = (mouse.modifiers & Qt.ShiftModifier) !== 0
+                                copyPress = !toggling && (mouse.modifiers & Qt.ControlModifier) !== 0
+                                if (!copyPress)
+                                    arrangement.pickClip(modelData.id, mouse.modifiers)
                                 if (toggling)
                                     return
                                 parent.forceActiveFocus()
@@ -1426,9 +1476,12 @@ Rectangle {
                                 moved = false
                                 if (grouped)
                                     arrangement.beginGroupDrag()
+                                arrangement.copyDragging = copyPress
                                 parent.gestureActive = true
                             }
                             onPositionChanged: mouse => {
+                                if (pressed && !toggling)
+                                    arrangement.copyDragging = (mouse.modifiers & Qt.ControlModifier) !== 0
                                 if (pressed && !toggling && grouped) {
                                     const deltaX = mapToItem(arrangement, mouse.x, mouse.y).x - initialX
                                     let nextStart = initialStart + arrangement.screenDeltaToProject(deltaX)
@@ -1468,6 +1521,7 @@ Rectangle {
                                     }
                                     parent.rowShift = shift
                                     parent.targetTrackId = target
+                                    moved = moved || Math.abs(deltaX) >= arrangement.clickSlop || target.length > 0
                                 }
                             }
                             onReleased: {
@@ -1477,7 +1531,11 @@ Rectangle {
                                 }
                                 const target = parent.previewStart
                                 const destination = parent.targetTrackId
-                                const rows = arrangement.groupRows
+                                const rows = grouped ? arrangement.groupRows
+                                    : destination.length > 0 ? arrangement.rowOfTrack(destination) - arrangementRow.index : 0
+                                const copying = arrangement.copyDragging
+                                const group = grouped
+                                arrangement.copyDragging = false
                                 parent.gestureActive = false
                                 clipCard.resetPreview()
                                 parent.rowShift = 0
@@ -1485,14 +1543,21 @@ Rectangle {
                                 if (grouped) {
                                     grouped = false
                                     arrangement.endGroupDrag()
-                                    if (moved)
-                                        arrangement.bridge.move_selected_clips(initialStart, target, rows)
-                                    else
-                                        arrangement.clipsSelected([modelData.id])
-                                } else if (destination.length > 0)
+                                }
+                                if (copyPress && !moved)
+                                    arrangement.pickClip(modelData.id, Qt.ControlModifier)
+                                else if (copying && moved)
+                                    arrangement.bridge.copy_clips_to(group ? arrangement.bridge.selectedClipIds : [modelData.id],
+                                                                     initialStart, target, rows)
+                                else if (group && moved)
+                                    arrangement.bridge.move_selected_clips(initialStart, target, rows)
+                                else if (group)
+                                    arrangement.clipsSelected([modelData.id])
+                                else if (destination.length > 0)
                                     arrangement.bridge.move_midi_clip_to_track(modelData.id, destination, target)
                                 else if (Math.abs(arrangement.projectDeltaToScreen(target - initialStart)) >= arrangement.clickSlop)
                                     arrangement.bridge.move_midi_clip(modelData.id, target)
+                                copyPress = false
                             }
                             onDoubleClicked: {
                                 arrangement.trackSelected(arrangementRow.index)
@@ -1504,6 +1569,8 @@ Rectangle {
                                 parent.rowShift = 0
                                 parent.targetTrackId = ""
                                 toggling = false
+                                copyPress = false
+                                arrangement.copyDragging = false
                                 if (grouped)
                                     arrangement.endGroupDrag()
                                 grouped = false
@@ -1583,22 +1650,27 @@ Rectangle {
                             anchors.fill: parent
                             anchors.leftMargin: clipCard.width >= Theme.clipTrimMinClipWidth ? clipCard.trimWidth : 0
                             anchors.rightMargin: clipCard.width >= Theme.clipTrimMinClipWidth ? clipCard.trimWidth : 0
-                            cursorShape: slipGesture ? Qt.SizeHorCursor : Qt.OpenHandCursor
+                            cursorShape: slipGesture ? Qt.SizeHorCursor
+                                : arrangement.copyDragging && pressed ? Qt.DragCopyCursor : Qt.OpenHandCursor
                             property real initialX: 0
                             property real initialStart: 0
                             property bool slipGesture: false
                             property real slipDeltaFrames: 0
-                            // As for MIDI clips: Shift/Ctrl-click picks, a press on
-                            // the selected group drags it; Shift+Alt slips.
+                            // As for MIDI clips: Shift-click picks, a press on the
+                            // selected group drags it, Ctrl-drag copies (a
+                            // Ctrl-click picks); Shift+Alt slips.
                             property bool toggling: false
+                            property bool copyPress: false
                             property bool grouped: false
                             property bool moved: false
                             onPressed: mouse => {
                                 const shift = (mouse.modifiers & Qt.ShiftModifier) !== 0;
                                 const alt = (mouse.modifiers & Qt.AltModifier) !== 0;
                                 slipGesture = shift && alt;
-                                toggling = !slipGesture && (mouse.modifiers & (Qt.ShiftModifier | Qt.ControlModifier)) !== 0;
-                                arrangement.pickClip(modelData.id, slipGesture ? 0 : mouse.modifiers);
+                                toggling = !slipGesture && shift;
+                                copyPress = !slipGesture && !shift && (mouse.modifiers & Qt.ControlModifier) !== 0;
+                                if (!copyPress)
+                                    arrangement.pickClip(modelData.id, slipGesture ? 0 : mouse.modifiers);
                                 if (toggling)
                                     return;
                                 if (slipGesture)
@@ -1611,9 +1683,12 @@ Rectangle {
                                 if (grouped)
                                     arrangement.beginGroupDrag();
                                 slipDeltaFrames = 0;
+                                arrangement.copyDragging = copyPress;
                                 parent.gestureActive = true;
                             }
                             onPositionChanged: mouse => {
+                                if (pressed && !toggling && !slipGesture)
+                                    arrangement.copyDragging = (mouse.modifiers & Qt.ControlModifier) !== 0;
                                 if (pressed && !toggling) {
                                     const deltaX = mapToItem(arrangement, mouse.x, mouse.y).x - initialX;
                                     if (grouped) {
@@ -1661,6 +1736,7 @@ Rectangle {
                                         }
                                         parent.rowShift = shift;
                                         parent.targetTrackId = target;
+                                        moved = moved || Math.abs(deltaX) >= arrangement.clickSlop || target.length > 0;
                                     }
                                 }
                             }
@@ -1673,16 +1749,29 @@ Rectangle {
                                 const slip = slipGesture;
                                 const delta = slipDeltaFrames;
                                 const destination = parent.targetTrackId;
-                                const rows = arrangement.groupRows;
+                                const rows = grouped ? arrangement.groupRows
+                                    : destination.length > 0 ? arrangement.rowOfTrack(destination) - arrangementRow.index : 0;
+                                const copying = arrangement.copyDragging;
+                                const picking = copyPress && !moved;
+                                arrangement.copyDragging = false;
+                                copyPress = false;
                                 parent.gestureActive = false;
                                 clipCard.resetPreview();
                                 parent.rowShift = 0;
                                 parent.targetTrackId = "";
                                 slipGesture = false;
                                 slipDeltaFrames = 0;
+                                const group = grouped;
                                 if (grouped) {
                                     grouped = false;
                                     arrangement.endGroupDrag();
+                                }
+                                if (picking)
+                                    arrangement.pickClip(modelData.id, Qt.ControlModifier);
+                                else if (!slip && copying && moved)
+                                    arrangement.bridge.copy_clips_to(group ? arrangement.bridge.selectedClipIds : [modelData.id],
+                                                                     initialStart, target, rows);
+                                else if (group) {
                                     if (moved)
                                         arrangement.bridge.move_selected_clips(initialStart, target, rows);
                                     else
@@ -1703,6 +1792,8 @@ Rectangle {
                                 slipGesture = false;
                                 slipDeltaFrames = 0;
                                 toggling = false;
+                                copyPress = false;
+                                arrangement.copyDragging = false;
                                 if (grouped)
                                     arrangement.endGroupDrag();
                                 grouped = false;

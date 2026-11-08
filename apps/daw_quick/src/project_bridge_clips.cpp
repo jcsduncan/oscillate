@@ -1066,6 +1066,41 @@ void ProjectBridge::move_selected_clips(double from, double to, int track_delta)
   set_status(QStringLiteral("%1 clips moved").arg(static_cast<qulonglong>(clips.size())));
 }
 
+void ProjectBridge::copy_clips_to(const QStringList& clip_ids, double from, double to,
+                                  int track_delta) {
+  if (!audio_edit_enabled()) {
+    set_status(QStringLiteral("Finish active project work before copying clips"));
+    return;
+  }
+  const auto clips = parse_ids<project::ClipId>(clip_ids);
+  if (clips.empty() || !std::isfinite(from) || !std::isfinite(to) || timeline_bars_ < 1) {
+    set_status(QStringLiteral("Select clips to copy"));
+    return;
+  }
+  const auto bars = static_cast<double>(timeline_bars_);
+  const auto& snapshot = session_->snapshot();
+  const auto start = tick_at_bars(snapshot, std::clamp(from * bars, 0.0, bars));
+  const auto end = tick_at_bars(snapshot, std::clamp(to * bars, 0.0, bars));
+  if (!start || !end) {
+    set_status(QStringLiteral("Copy rejected: that position is outside the meter"));
+    return;
+  }
+  const auto copied = session_->clipboard().copy_clips_by(
+      clips, end.value().value - start.value().value, track_delta);
+  if (!copied) {
+    set_status(
+        QStringLiteral("Copy rejected: %1").arg(QString::fromStdString(copied.error().message)));
+    return;
+  }
+  QStringList ids;
+  for (const auto& id : copied.value())
+    ids.push_back(QString::fromStdString(id.to_string()));
+  set_selected_clip_ids(ids);
+  refresh();
+  submit_audio_clip_edit();
+  set_status(QStringLiteral("%1 clips copied").arg(ids.size()));
+}
+
 void ProjectBridge::nudge_selected_clips(int beat_direction) {
   if (!audio_edit_enabled()) {
     set_status(QStringLiteral("Finish active project work before moving clips"));
