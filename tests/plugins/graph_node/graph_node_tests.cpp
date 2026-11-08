@@ -1090,19 +1090,16 @@ void routed_manual_graph_identity(const plugins::ScanResult& scan) {
              "initial routed publication did not activate the VST3 slot");
   REQUIRE_EQ(node.manual_events->active_graph().graph_revision, 1,
              "initial routed publication did not activate the VST3 slot");
-  REQUIRE_TRUE(publisher.request_hold(), "routed graph failed to hold the block boundary");
-  REQUIRE_EQ(publisher.render_block(inputs, output, {64, 1}), engine::RoutedRenderStatus::holding,
-             "routed graph failed to hold the block boundary");
-  REQUIRE_OK(publisher.prepare_and_publish(2, nodes, edges, limits),
-             "held routed graph admitted an unpublished revision");
+  REQUIRE_OK(publisher.prepare_and_publish_live(2, nodes, edges, limits),
+             "pending routed graph admitted an unpublished revision");
   REQUIRE_EQ(node.manual_events->active_graph().graph_revision, 1,
-             "held routed graph admitted an unpublished revision");
+             "pending routed graph admitted an unpublished revision");
   REQUIRE_EQ(node.manual_events->submit({.graph_revision = 2,
                                          .instance_id = 2,
                                          .compatibility_key = node.request.compatibility_key},
                                         2, {101, 0, 0.5}),
              plugins::Vst3ManualEventStatus::stale_instance,
-             "held routed graph admitted an unpublished revision");
+             "pending routed graph admitted an unpublished revision");
   counted_allocations = 0;
   counting_allocations = true;
   const auto switched = publisher.render_block(inputs, output, {64, 1});
@@ -1147,12 +1144,9 @@ void routed_manual_graph_identity(const plugins::ScanResult& scan) {
       std::shared_ptr<engine::ProcessorRuntime>(replacement.request.create_runtime());
   REQUIRE_TRUE(replacement.ready(), "routed replacement VST3 runtime did not prepare");
   REQUIRE_NE(replacement_owner, nullptr, "routed replacement VST3 runtime did not prepare");
-  REQUIRE_TRUE(publisher.request_hold(), "routed replacement did not hold");
-  REQUIRE_EQ(publisher.render_block(inputs, output, {192, 1}), engine::RoutedRenderStatus::holding,
-             "routed replacement did not hold");
   nodes[1].processor = std::move(replacement_owner);
   nodes[1].replacement = engine::RoutedTailReplacement{owner, 1};
-  REQUIRE_OK(publisher.prepare_and_publish(3, nodes, edges, limits),
+  REQUIRE_OK(publisher.prepare_and_publish_live(3, nodes, edges, limits),
              "routed replacement became active before callback switch");
   REQUIRE_EQ(replacement.manual_events->active_graph().graph_revision, 0,
              "routed replacement became active before callback switch");
@@ -1232,8 +1226,6 @@ void routed_control_overlay_rebinds_manual_slot(const plugins::ScanResult& scan,
              "quiescent VST3 manual slot could not stage a revision-only overlay");
   REQUIRE_OK(publisher.prepare_control_overlay(2, controls),
              "quiescent VST3 manual slot could not stage a revision-only overlay");
-  REQUIRE_TRUE(!publisher.request_hold(),
-               "quiescent VST3 manual slot could not stage a revision-only overlay");
   counted_allocations = 0;
   counting_allocations = true;
   const auto switched = publisher.render_block(inputs, block, {2 * frames, 1});

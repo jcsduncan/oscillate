@@ -26,6 +26,11 @@ Rectangle {
     required property int elapsedRulerHeight
     required property var rowLayout
     required property real rowsContentHeight
+    // The workspace's layout ({rows, returnsTop, gapTop, height}), the same
+    // without a drop slot open, and the drag's target (or null).
+    required property var trackLayout
+    required property var baseTrackLayout
+    required property var trackDrop
     // Track id → {open, keys}: the automation lanes shown under each track.
     required property var automationView
     required property bool automationDrawMode
@@ -37,7 +42,6 @@ Rectangle {
     required property color accentColor
     // The shell's kit theme (devicekit/ShellTheme): track colours and type.
     required property var theme
-    property int dragSourceIndex: -1
     // True once the first rows are laid out: later rows are new tracks.
     property bool rowsSettled: false
     Component.onCompleted: Qt.callLater(() => trackPanel.rowsSettled = true)
@@ -68,11 +72,15 @@ Rectangle {
             if (at < 0)
                 trackSelected(index)
         } else if ((modifiers & Qt.ShiftModifier) && (selectionAnchor >= 0 || selectedTrack >= 0)) {
-            const from = selectionAnchor >= 0 ? selectionAnchor : selectedTrack
-            const ids = []
-            for (let i = Math.min(from, index); i <= Math.max(from, index); ++i)
-                ids.push(trackIdAt(i))
-            selectedTrackIds = ids.filter(i => i !== "")
+            // A run as the list shows it, top down.
+            const tracks = bridge.tracks
+            const from = tracks[selectionAnchor >= 0 ? selectionAnchor : selectedTrack]
+            const to = tracks[index]
+            const low = Math.min(from ? from.displayIndex : to.displayIndex, to.displayIndex)
+            const high = Math.max(from ? from.displayIndex : to.displayIndex, to.displayIndex)
+            selectedTrackIds = tracks.filter(track => track.displayIndex >= low && track.displayIndex <= high)
+                .sort((a, b) => a.displayIndex - b.displayIndex)
+                .map(track => track.id)
             trackSelected(index)
         } else {
             selectedTrackIds = [id]
@@ -123,17 +131,116 @@ Rectangle {
         colourPopover.visible = true
         colourPopover.forceActiveFocus()
     }
-    property int dragTargetIndex: -1
+    // A header drag: the tracks it moves (the selection when the dragged
+    // row is in it), the row pressed, and the pointer in the list's frame.
+    property var dragIds: []
+    property string dragLeadId: ""
+    property real dragPointerX: -1
     property real dragPointerY: -1
-
-    function targetIndexAtY(contentY) {
-        if (rowLayout.length === 0)
-            return -1
-        for (let index = 0; index < rowLayout.length; ++index) {
-            if (contentY < rowLayout[index].bottom)
-                return index
+    readonly property bool dragging: dragIds.length > 0
+    // A row's upper half drops above it, the lower half below.
+    readonly property real rowMiddle: 0.5
+    function trackWithId(id) {
+        return bridge.tracks.find(track => track.id === id) || null
+    }
+    function busColorOf(busId) {
+        const tracks = bridge.tracks
+        const index = tracks.findIndex(track => track.id === busId)
+        return index >= 0 ? theme.trackColor(tracks[index], index) : accentColor
+    }
+    // "Music bus" for a bus named Music; a name with "bus" in it stays.
+    function busLabel(name) {
+        return /\bbus\b/i.test(name) ? name : name + " bus"
+    }
+    // Where a drop at `contentY` (the scrolled list, slot open) lands: in a
+    // group bus's bracket (busId; beforeId is the member it goes above, or
+    // empty for the bracket's end; the bus header itself takes it as the
+    // last member) or on the master (busId empty; beforeId the row it goes
+    // above, or empty for the end). The top of a bus header and the bottom
+    // of its last member drop outside the bracket.
+    function dropAt(contentY) {
+        const slot = trackLayout.gapTop
+        let at = contentY
+        if (slot >= 0 && at >= slot) {
+            if (at < slot + Theme.trackDropSlotHeight)
+                return trackDrop
+            at -= Theme.trackDropSlotHeight
         }
-        return rowLayout.length - 1
+        const tracks = bridge.tracks
+        const rows = baseTrackLayout.rows
+        const order = []
+        tracks.forEach((track, index) => {
+            if (track.kind !== "return" && rows[index] && !rows[index].hidden)
+                order.push(index)
+        })
+        order.sort((a, b) => rows[a].top - rows[b].top)
+        function topLevelAfter(position) {
+            for (let next = position + 1; next < order.length; ++next) {
+                if (tracks[order[next]].busId === "")
+                    return tracks[order[next]].id
+            }
+            return ""
+        }
+        const edge = Theme.trackDropEdgeFraction
+        // A bus never goes inside a bus (itself included): to a dragged bus
+        // another bus's header is a row on the master like any other.
+        const movingBus = dragIds.some(id => {
+            const track = trackWithId(id)
+            return track !== null && isBus(track)
+        })
+        let target = { busId: "", beforeId: "" }
+        for (let position = 0; position < order.length; ++position) {
+            const track = tracks[order[position]]
+            const row = rows[order[position]]
+            if (at < row.top || at >= row.bottom)
+                continue
+            const fraction = (at - row.top) / Math.max(1, row.bottom - row.top)
+            if (track.kind === "group" && movingBus) {
+                target = { busId: "", beforeId: fraction < rowMiddle ? track.id : topLevelAfter(position) }
+            } else if (track.kind === "group") {
+                target = fraction < edge ? { busId: "", beforeId: track.id } : { busId: track.id, beforeId: "" }
+            } else if (track.busId !== "") {
+                const following = position + 1 < order.length ? tracks[order[position + 1]] : null
+                if (track.lastMember && fraction >= 1 - edge)
+                    target = { busId: "", beforeId: topLevelAfter(position) }
+                else
+                    target = { busId: track.busId, beforeId: fraction < rowMiddle ? track.id
+                               : following && following.busId === track.busId ? following.id : "" }
+            } else {
+                target = { busId: "", beforeId: fraction < rowMiddle ? track.id : topLevelAfter(position) }
+            }
+            break
+        }
+        const bus = trackWithId(target.busId)
+        return { ids: dragIds, busId: target.busId, beforeId: target.beforeId,
+                 refused: target.busId !== "" && movingBus,
+                 busName: bus ? bus.name : "" }
+    }
+    function beginDrag(track) {
+        const several = selectedTrackIds.length > 1 && selectedTrackIds.includes(track.id)
+        dragLeadId = track.id
+        dragIds = (several ? selectedTrackIds : [track.id]).filter(id => {
+            const chosen = trackWithId(id)
+            return chosen !== null && chosen.kind !== "return"
+        })
+    }
+    // A drop routes and moves the tracks as one undo step; the dragged row
+    // stays selected.
+    function finishDrag(commit) {
+        const drop = trackDrop
+        const ids = dragIds
+        const lead = dragLeadId
+        dragIds = []
+        dragLeadId = ""
+        dragPointerX = -1
+        dragPointerY = -1
+        trackDropMoved(null)
+        if (!commit || !drop || ids.length === 0)
+            return
+        bridge.trackCommands.place_tracks(ids, drop.busId, drop.beforeId)
+        const index = bridge.tracks.findIndex(track => track.id === lead)
+        if (index >= 0)
+            trackSelected(index)
     }
 
     // A parameter key's name on a track, with its group unless a mixer one.
@@ -152,9 +259,13 @@ Rectangle {
         return key
     }
 
-    function updateDragTarget() {
-        if (dragSourceIndex >= 0 && dragPointerY >= 0)
-            dragTargetIndex = targetIndexAtY(trackList.contentY + dragPointerY)
+    function updateDrop() {
+        if (!dragging || dragPointerY < 0)
+            return
+        const drop = dropAt(trackList.contentY + dragPointerY)
+        if (!trackDrop || drop.busId !== trackDrop.busId || drop.beforeId !== trackDrop.beforeId
+                || drop.refused !== trackDrop.refused)
+            trackDropMoved(drop)
     }
 
     // What a track is and what it plays, in a few words.
@@ -168,7 +279,32 @@ Rectangle {
         }
         if (track.kind === "audio")
             return "Audio · " + clips
-        return (track.kind === "group" ? "Group" : "Return") + " → " + track.mainDestinationName
+        if (track.kind === "group")
+            return memberCountText(track) + " → " + track.mainDestinationName
+        return track.fedBy.length > 0 ? "Return · fed by " + track.fedBy.join(", ") : "Return · no sends yet"
+    }
+    function memberCountText(track) {
+        return track.memberCount + (track.memberCount === 1 ? " track" : " tracks")
+    }
+    // A pill per return this track's sends feed, in the return's colour.
+    function sendPills(track) {
+        if (track.kind === "return")
+            return []
+        const tracks = bridge.tracks
+        const pills = []
+        for (const send of track.sends || []) {
+            if (send.purpose !== "audible" || !(send.gain > 0))
+                continue
+            const index = tracks.findIndex(other => other.id === send.destinationId)
+            if (index >= 0 && tracks[index].kind === "return")
+                pills.push({ label: "↗ " + tracks[index].name, color: theme.trackColor(tracks[index], index) })
+        }
+        return pills
+    }
+    // A return's first effect, for its badge.
+    function returnEffect(index) {
+        const chain = bridge.insertChains[index]
+        return chain && chain.effects && chain.effects.length > 0 ? chain.effects[0].name : ""
     }
 
     // One send knob per return track (the first two, A and B), each in its
@@ -201,7 +337,7 @@ Rectangle {
     }
 
     signal trackSelected(int index)
-    signal trackMoveRequested(string trackId, int toIndex)
+    signal trackDropMoved(var drop)
     signal scrollPositionChanged(real contentY)
     // Scrolls the rows (and so the arrangement beside them) by pixels.
     function scrollBy(pixels) {
@@ -402,7 +538,7 @@ Rectangle {
             readonly property real edgeMargin: 30
             readonly property real scrollStep: 12
             repeat: true
-            running: trackPanel.dragSourceIndex >= 0
+            running: trackPanel.dragging
             onTriggered: {
                 const margin = edgeMargin
                 let delta = 0
@@ -412,7 +548,7 @@ Rectangle {
                     delta = scrollStep
                 const limit = Math.max(0, trackList.contentHeight - trackList.height)
                 trackList.contentY = Math.max(0, Math.min(limit, trackList.contentY + delta))
-                trackPanel.updateDragTarget()
+                trackPanel.updateDrop()
             }
         }
         Repeater {
@@ -426,16 +562,30 @@ Rectangle {
                     || (trackPanel.selectedTrackIds.length > 1
                         && trackPanel.selectedTrackIds.includes(trackRow.modelData.id))
                 readonly property var sends: trackPanel.sendKnobs(modelData, index)
+                // Bus nesting (TrackRoutingView::Nesting): a group bus heads
+                // its members, which sit indented under it on its rail.
+                readonly property var layoutEntry: trackPanel.rowLayout[trackRow.index] || null
+                readonly property bool isGroup: modelData.kind === "group"
+                readonly property bool isReturn: modelData.kind === "return"
+                readonly property bool nested: modelData.busId !== undefined && modelData.busId !== ""
+                readonly property color busColor: nested ? trackPanel.busColorOf(modelData.busId) : trackColor
+                readonly property bool collapsed: isGroup && trackPanel.bridge.collapsedBuses.includes(modelData.id)
+                readonly property int contentShift: isGroup ? Theme.trackBusContentShift
+                                                            : nested ? Theme.trackMemberIndent : 0
+                readonly property bool ghosted: trackPanel.dragIds.includes(modelData.id)
+                // The rail lights while a drag would drop into this bus.
+                readonly property bool railGlowing: nested && trackPanel.trackDrop !== null
+                    && !trackPanel.trackDrop.refused && trackPanel.trackDrop.busId === modelData.busId
+                readonly property var pills: trackPanel.sendPills(modelData)
+                readonly property string effectName: isReturn ? trackPanel.returnEffect(index) : ""
+                visible: !(layoutEntry && layoutEntry.hidden)
                 x: 0
-                y: trackPanel.rowLayout[trackRow.index]
-                    ? trackPanel.rowLayout[trackRow.index].top : trackRow.index * Theme.trackRowHeight
+                y: layoutEntry ? layoutEntry.top : trackRow.index * Theme.trackRowHeight
                 width: trackPanel.width
-                height: trackPanel.rowLayout[trackRow.index]
-                    ? trackPanel.rowLayout[trackRow.index].height : Theme.trackRowHeight
+                height: layoutEntry ? layoutEntry.height : Theme.trackRowHeight
                 objectName: "trackRow"
-                color: trackPanel.dragTargetIndex === trackRow.index
-                    && trackPanel.dragSourceIndex !== trackRow.index ? Theme.trackRowDropTarget
-                    : selected ? trackPanel.theme.selection : trackPanel.panelColor
+                color: selected ? trackPanel.theme.selection
+                    : isReturn ? Theme.trackReturnGround : trackPanel.panelColor
                 Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.fast } }
                 // A track added after the panel opened fades in.
                 NumberAnimation on opacity {
@@ -456,13 +606,56 @@ Rectangle {
                 Accessible.description: trackPanel.trackSummary(trackRow.modelData)
                 Keys.onReturnPressed: trackPanel.trackSelected(trackRow.index)
                 Keys.onSpacePressed: trackPanel.trackSelected(trackRow.index)
+                // A bus's header carries its colour lightly; its members fainter.
+                Rectangle {
+                    objectName: "trackBusTint"
+                    visible: trackRow.isGroup || trackRow.nested
+                    anchors.fill: parent
+                    color: Qt.rgba(trackRow.busColor.r, trackRow.busColor.g, trackRow.busColor.b,
+                                   trackRow.isGroup ? Theme.trackBusHeaderTintAlpha : Theme.trackMemberTintAlpha)
+                }
                 Rectangle {
                     objectName: "trackColorBar"
+                    visible: !trackRow.nested
                     x: 0
-                    width: Theme.trackColorBarWidth
+                    width: trackRow.isGroup ? Theme.trackBusBarWidth : Theme.trackColorBarWidth
                     height: parent.height
                     color: trackRow.trackColor
                     opacity: trackRow.modelData.muted ? Theme.trackMutedOpacity : 1
+                }
+                // A member's rail, joining it to its bus; it ends just short
+                // of the last member's bottom.
+                Rectangle {
+                    objectName: "trackBusRailGlow"
+                    visible: trackRow.railGlowing
+                    x: Theme.trackBusRailX + (Theme.trackBusRailWidth - Theme.trackBusRailGlowWidth) / 2
+                    width: Theme.trackBusRailGlowWidth
+                    height: busRail.height
+                    radius: width / 2
+                    color: Qt.rgba(trackRow.busColor.r, trackRow.busColor.g, trackRow.busColor.b,
+                                   Theme.trackBusRailGlowAlpha)
+                }
+                Rectangle {
+                    id: busRail
+                    objectName: "trackBusRail"
+                    visible: trackRow.nested
+                    x: Theme.trackBusRailX
+                    width: Theme.trackBusRailWidth
+                    height: parent.height - (trackRow.modelData.lastMember ? Theme.trackBusRailEndGap : 0)
+                    radius: trackRow.modelData.lastMember ? Theme.trackBusRailRadius : 0
+                    color: trackRow.busColor
+                }
+                TrackBusChevron {
+                    objectName: "trackBusChevron"
+                    visible: trackRow.isGroup
+                    z: 6
+                    x: Theme.trackBusChevronX
+                    y: trackName.y + (trackName.height - height) / 2
+                    collapsed: trackRow.collapsed
+                    busName: trackRow.modelData.name
+                    lineColor: trackPanel.mainTextColor
+                    accentColor: trackPanel.accentColor
+                    onToggled: trackPanel.bridge.set_bus_collapsed(trackRow.modelData.id, !trackRow.collapsed)
                 }
                 // Frozen (ADR-0059): an icy wash and a badge; the render plays.
                 readonly property bool frozen: trackRow.modelData.frozen === true
@@ -569,13 +762,17 @@ Rectangle {
                     id: colourSwatch
                     objectName: "trackColourSwatch"
                     z: 6
-                    x: Theme.trackSwatchX
+                    // Buses show an outlined swatch, tracks a filled one.
+                    readonly property bool outlined: trackRow.isGroup || trackRow.isReturn
+                    x: Theme.trackSwatchX + trackRow.contentShift
                     y: trackRow.tall ? Theme.trackSwatchTallY : Theme.trackSwatchY
                     width: Theme.trackSwatchSize
                     height: Theme.trackSwatchSize
                     radius: Theme.radiusSm
-                    color: trackRow.trackColor
-                    border.color: swatchArea.containsMouse || activeFocus ? trackPanel.mainTextColor : Theme.canvas
+                    color: outlined ? "transparent" : trackRow.trackColor
+                    border.width: outlined ? Theme.trackBusSwatchBorder : Theme.hairline
+                    border.color: swatchArea.containsMouse || activeFocus ? trackPanel.mainTextColor
+                        : outlined ? trackRow.trackColor : Theme.canvas
                     activeFocusOnTab: true
                     Accessible.role: Accessible.Button
                     Accessible.name: "Colour of " + trackRow.modelData.name
@@ -601,14 +798,27 @@ Rectangle {
                 Text {
                     id: trackName
                     objectName: "trackName"
-                    x: Theme.trackNameX
+                    x: Theme.trackNameX + trackRow.contentShift
                     y: trackRow.tall ? Theme.trackNameTallY : Theme.trackNameY
-                    width: Math.max(0, parent.width - Theme.trackNameRightReserve - (duckHint.visible ? duckHint.width + Theme.spaceSm : 0))
+                    width: Math.max(0, parent.width - Theme.trackNameRightReserve - trackRow.contentShift
+                                    - (duckHint.visible ? duckHint.width + Theme.spaceSm : 0)
+                                    - (effectBadge.visible ? effectBadge.width + Theme.spaceXs : 0))
                     text: trackRow.modelData.name
                     elide: Text.ElideRight
                     color: trackPanel.mainTextColor
                     font.pixelSize: Theme.typeEmphasis
-                    font.weight: Font.DemiBold
+                    font.weight: trackRow.isGroup ? Font.Bold : Font.DemiBold
+                }
+                // A return's effect, as a badge after its name.
+                TrackBadge {
+                    id: effectBadge
+                    objectName: "trackReturnEffect"
+                    visible: trackRow.effectName !== ""
+                    z: 6
+                    x: trackName.x + Math.min(trackName.implicitWidth, trackName.width) + Theme.spaceXs
+                    y: trackName.y + (trackName.height - height) / 2
+                    text: trackRow.effectName
+                    tone: trackRow.trackColor
                 }
                 // A kick that keys nothing yet offers to duck the rest, on
                 // hover or selection only, so it never nags.
@@ -720,15 +930,56 @@ Rectangle {
                         onClicked: chooser.openFor(trackRow.modelData.id, -1, trackRow.y + Theme.trackChooserMenuOffset)
                     }
                 }
-                Text {
+                // What it is: a bus's member count, a return's feeders, and
+                // pills for the returns a track's sends feed.
+                Row {
+                    id: summaryLine
+                    objectName: "trackSummaryLine"
                     visible: !trackRow.automationOpen
-                    x: Theme.trackSummaryX
+                    // Members step in; the line stops short of the row's buttons.
+                    x: Theme.trackSummaryX + (trackRow.nested ? Theme.trackMemberIndent : 0)
                     y: trackRow.tall ? Theme.trackSummaryTallY : Theme.trackSummaryY
-                    width: Math.max(0, parent.width - Theme.trackDetailRightReserve)
-                    elide: Text.ElideRight
-                    text: trackPanel.trackSummary(trackRow.modelData)
-                    color: trackPanel.dimTextColor
-                    font.pixelSize: Theme.typeBody
+                    width: Math.max(0, trackRow.width - Theme.trackAutomationButtonRight - Theme.spaceXs - x)
+                    spacing: Theme.spaceXs
+                    TrackBadge {
+                        id: memberBadge
+                        objectName: "trackBusBadge"
+                        visible: trackRow.isGroup
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: trackPanel.memberCountText(trackRow.modelData)
+                        tone: trackRow.trackColor
+                    }
+                    Text {
+                        objectName: "trackSummary"
+                        readonly property real room: summaryLine.width
+                            - (memberBadge.visible ? memberBadge.width + summaryLine.spacing : 0)
+                            - (pillRow.visible ? pillRow.width + summaryLine.spacing : 0)
+                        visible: !pillRow.visible || room >= Theme.trackSummaryMinWidth
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.max(0, room)
+                        elide: Text.ElideRight
+                        text: trackRow.isGroup ? "→ " + trackRow.modelData.mainDestinationName
+                                               : trackPanel.trackSummary(trackRow.modelData)
+                        color: trackPanel.dimTextColor
+                        font.pixelSize: Theme.typeBody
+                    }
+                    Row {
+                        id: pillRow
+                        objectName: "trackSendPills"
+                        visible: trackRow.pills.length > 0
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: Theme.spaceXs
+                        Repeater {
+                            model: trackRow.pills
+                            delegate: TrackBadge {
+                                required property var modelData
+                                objectName: "trackSendPill"
+                                text: modelData.label
+                                tone: modelData.color
+                                outlined: true
+                            }
+                        }
+                    }
                 }
                 Rectangle {
                     anchors.bottom: parent.bottom
@@ -746,7 +997,8 @@ Rectangle {
                     // appears only while dragging the track to a new place.
                     cursorShape: dragging ? Qt.ClosedHandCursor : Qt.ArrowCursor
                     property real pressY: 0
-                    // A press that moves this far drags the row to reorder.
+                    // A press that moves this far drags the row: into a bus,
+                    // out to the master, or to another place.
                     readonly property real dragThreshold: 8
                     property bool dragging: false
                     onPressed: function(mouse) {
@@ -770,32 +1022,27 @@ Rectangle {
                             return
                         const contentY = mapToItem(trackList.contentItem, mouse.x, mouse.y).y
                         trackPanel.dragPointerY = mapToItem(trackList, mouse.x, mouse.y).y
+                        trackPanel.dragPointerX = mapToItem(trackPanel, mouse.x, mouse.y).x
                         if (!dragging && Math.abs(contentY - pressY) >= dragThreshold) {
                             dragging = true
-                            trackPanel.dragSourceIndex = trackRow.index
+                            trackPanel.beginDrag(trackRow.modelData)
                         }
                         if (dragging)
-                            trackPanel.updateDragTarget()
+                            trackPanel.updateDrop()
                     }
                     onReleased: function(mouse) {
                         if (mouse.button === Qt.RightButton)
                             return
-                        const destination = trackPanel.dragTargetIndex
                         const wasDragging = dragging
                         dragging = false
-                        trackPanel.dragSourceIndex = -1
-                        trackPanel.dragTargetIndex = -1
-                        trackPanel.dragPointerY = -1
-                        if (wasDragging && destination >= 0 && destination !== trackRow.index)
-                            trackPanel.trackMoveRequested(trackRow.modelData.id, destination)
-                        else if (!wasDragging)
+                        if (wasDragging)
+                            trackPanel.finishDrag(true)
+                        else
                             trackPanel.selectTrack(trackRow.index, mouse.modifiers)
                     }
                     onCanceled: {
                         dragging = false
-                        trackPanel.dragSourceIndex = -1
-                        trackPanel.dragTargetIndex = -1
-                        trackPanel.dragPointerY = -1
+                        trackPanel.finishDrag(false)
                     }
                 }
                 // A/B sends show once a row is opened out; M and S sit at the
@@ -1054,6 +1301,15 @@ Rectangle {
                         onDoubleClicked: trackPanel.resizeCommitted(trackRow.modelData.id, Theme.trackRowHeight)
                     }
                 }
+                // Dragged: the row fades where it was until it lands.
+                Rectangle {
+                    objectName: "trackDragGhost"
+                    visible: trackRow.ghosted
+                    z: 8
+                    anchors.fill: parent
+                    color: Qt.rgba(trackPanel.panelColor.r, trackPanel.panelColor.g, trackPanel.panelColor.b,
+                                   1 - Theme.trackDragGhostOpacity)
+                }
                 // A browser card dropped here swaps the instrument or adds
                 // the effect to this track's chain.
                 TrackDeviceDrop {
@@ -1276,19 +1532,59 @@ Rectangle {
                 }
             }
         }
-        Rectangle {
-            visible: trackPanel.dragTargetIndex >= 0
-                && trackPanel.dragTargetIndex !== trackPanel.dragSourceIndex
-            x: Theme.spaceMd
-            y: visible ? (trackPanel.dragTargetIndex < trackPanel.dragSourceIndex
-                ? trackPanel.rowLayout[trackPanel.dragTargetIndex].top
-                : trackPanel.rowLayout[trackPanel.dragTargetIndex].bottom) - Theme.trackDropLineHeight / 2 : 0
-            width: trackPanel.width - Theme.spaceXl
-            height: Theme.trackDropLineHeight
-            radius: Theme.hairline
-            z: 6
-            color: trackPanel.accentColor
+        // The returns' section, under the tracks.
+        Item {
+            objectName: "trackReturnsLabel"
+            visible: trackPanel.trackLayout.returnsTop >= 0
+            y: Math.max(0, trackPanel.trackLayout.returnsTop)
+            width: trackPanel.width
+            height: Theme.trackReturnsLabelHeight
+            Rectangle {
+                width: parent.width
+                height: Theme.hairline
+                color: Theme.lineStrong
+            }
+            Text {
+                x: Theme.trackSummaryX
+                anchors.verticalCenter: parent.verticalCenter
+                text: "RETURNS"
+                color: trackPanel.dimTextColor
+                font.pixelSize: Theme.typeCaption
+                font.bold: true
+                font.letterSpacing: Theme.capsLetterSpacing
+            }
         }
+        // The slot a dragged header would drop into.
+        TrackDropSlot {
+            objectName: "trackDropSlot"
+            readonly property var drop: trackPanel.trackDrop
+            visible: trackPanel.trackLayout.gapTop >= 0 && drop !== null
+            y: Math.max(0, trackPanel.trackLayout.gapTop)
+            width: trackPanel.width
+            height: Theme.trackDropSlotHeight
+            nested: drop !== null && drop.busId !== ""
+            tone: nested ? trackPanel.busColorOf(drop.busId) : trackPanel.accentColor
+            text: nested ? "Drop here to route into " + drop.busName : "Drop here to route to the master"
+        }
+    }
+    // The dragged header's chip: what moves and where it would land.
+    TrackDragChip {
+        objectName: "trackDragChip"
+        readonly property var drop: trackPanel.trackDrop
+        readonly property var lead: trackPanel.trackWithId(trackPanel.dragLeadId)
+        visible: trackPanel.dragging && drop !== null
+        z: 50
+        x: Math.max(Theme.spaceXs, Math.min(trackPanel.width - width - Theme.spaceXs,
+                                            trackPanel.dragPointerX + Theme.trackDragChipOffset))
+        y: trackList.y + trackPanel.dragPointerY + Theme.trackDragChipOffset
+        maxWidth: trackPanel.width - 2 * Theme.spaceXs
+        swatch: lead ? trackPanel.theme.trackColor(lead, trackPanel.bridge.tracks.indexOf(lead)) : trackPanel.accentColor
+        subject: trackPanel.dragIds.length > 1 ? trackPanel.dragIds.length + " tracks" : lead ? lead.name : ""
+        destination: drop === null ? "" : drop.refused ? "Buses stay on the master"
+            : drop.busId !== "" ? trackPanel.busLabel(drop.busName) : "Master"
+        tone: drop === null ? trackPanel.mainTextColor : drop.refused ? Theme.amber
+            : drop.busId !== "" ? trackPanel.busColorOf(drop.busId) : trackPanel.mainTextColor
+        textColor: trackPanel.mainTextColor
     }
     // An instrument dropped under the last track makes a new one.
     DeviceTrackDrop {

@@ -1453,7 +1453,7 @@ void live_clip_preparation_survives_pause_and_seek() {
   (void)run->stop_and_retire();
 }
 
-void pause_waits_for_live_source_graph_handoff() {
+void pause_waits_for_live_source_switch() {
   Directory directory;
   const auto root = directory.path() / "pause-during-source-handoff";
   const auto wav = make_wav(directory.path());
@@ -1463,10 +1463,10 @@ void pause_waits_for_live_source_graph_handoff() {
   (void)take(session->imports().import_wav_audio(fd));
   (void)::close(fd);
   const auto clip = session->snapshot().tracks.front().clips.front().id;
-  // Fade changes remain on the held-publication path. This fixture covers
-  // its pause/seek guard while source-only moves and trims use the overlay.
+  // A fade change replaces the source (it is no source-only overlay): the
+  // primed replacement switches in live at the block it was primed for.
   require(session->audio_clips().duplicate_audio_clip_after(clip).has_value(),
-          "source hold fixture could not add its second clip");
+          "source switch fixture could not add its second clip");
   auto evidence = std::make_shared<SteppedEvidence>();
   app::PlaybackOutputFactory factory = [evidence](audio::StereoRenderSource source,
                                                   audio::TransportCursor& cursor) {
@@ -1480,7 +1480,7 @@ void pause_waits_for_live_source_graph_handoff() {
   require(session->audio_clips().set_audio_clip_fades(
               clip, {0.25, 0.0, project::FadeCurve::linear, project::FadeCurve::linear}) &&
               run->submit_revision(session->snapshot()),
-          "source handoff pause fixture did not accept the clip fade");
+          "source switch pause fixture did not accept the clip fade");
   oscillate::test::wait_until(
       [&] {
         (void)run->status();
@@ -1489,35 +1489,126 @@ void pause_waits_for_live_source_graph_handoff() {
       "the routed run reached the awaited state");
   require(run->graph_handoff_in_progress() && !run->pause() && !run->paused() &&
               run->output_status().state == audio::OutputState::streaming,
-          "pause stopped output while the graph hold was requested");
+          "pause stopped output while the source switch was published");
   evidence->permit(1);
   evidence->await_blocks(2);
-  const auto pending = run->status();
-  require(pending.application != app::PlaybackApplication::failed &&
-              run->graph_handoff_in_progress() && !run->pause() && !run->paused(),
-          "pause crossed an acknowledged source graph hold");
-  evidence->permit(1);
-  evidence->await_blocks(3);
   const auto active = run->status();
+  {
+    std::lock_guard lock(evidence->mutex);
+    require(evidence->frozen_silent_blocks == 0, "the source switch held a block");
+  }
   require(active.active_graph_revision == session->snapshot().revision &&
               !run->graph_handoff_in_progress() && run->pause() && run->seek_paused(256) &&
               run->resume(),
-          "source graph handoff did not settle before pause and seek");
+          "source switch did not settle at its primed block before pause and seek");
   evidence->permit(1);
-  evidence->await_blocks(4);
+  evidence->await_blocks(3);
   require(run->completed_sample() >= 256 &&
               run->output_status().state == audio::OutputState::streaming,
-          "source playback did not restart after the settled graph handoff");
+          "source playback did not restart after the settled source switch");
   (void)run->stop_and_retire();
 }
 
-void pause_waits_for_rejected_graph_to_release_held_boundary() {
+// An audio clip edit in a song with a built-in synth replaces the source,
+// and the synth's running player carries over into the replacement with its
+// voice (ADR-0094). The audio is silent, so the output is the synth alone: a
+// fresh player would drop the held note, and a held block would be silent.
+void audio_edit_beside_a_synth_keeps_its_voice() {
+  constexpr std::uint32_t frames = 64;
+  constexpr std::size_t settle_blocks = 8;
+  constexpr std::size_t steady_blocks = 8;
+  constexpr std::size_t after_blocks = 8;
+  constexpr std::size_t max_switch_blocks = 256;
+  constexpr double click_ratio = 2.0;
+  constexpr std::int64_t held_note_ticks = 4 * oscillate::timeline::ticks_per_quarter;
+  constexpr std::uint8_t held_key = 60;
   Directory directory;
-  const auto root = directory.path() / "rejected-graph-pause";
+  const auto root = directory.path() / "audio-edit-beside-synth";
+  const auto wav = make_wav(directory.path(), "silent.wav", 0);
+  auto session = take(app::ProjectSession::create(root));
+  const int fd = ::open(wav.c_str(), O_RDONLY | O_CLOEXEC);
+  require(fd >= 0, "silent audio fixture could not open WAV");
+  (void)take(session->imports().import_wav_audio(fd));
+  (void)::close(fd);
+  const auto clip = session->snapshot().tracks.front().clips.front().id;
+  const auto synth = take(session->instruments().add_synth_track());
+  require(session->midi_clips().add_midi_clip(synth, {0}).has_value(),
+          "synth MIDI clip setup failed");
+  const auto midi = std::ranges::find(session->snapshot().tracks, synth, &project::Track::id)
+                        ->midi_clips.front()
+                        .id;
+  // A bar-long note, held through the whole run.
+  require(
+      session->notes().add_note_with_duration(midi, {0}, {held_note_ticks}, held_key).has_value() &&
+          session->saving().save().has_value(),
+      "synth held note setup failed");
+  auto evidence = std::make_shared<SteppedEvidence>();
+  evidence->count_allocations = true;
+  app::PlaybackOutputFactory factory = [evidence](audio::StereoRenderSource source,
+                                                  audio::TransportCursor& cursor) {
+    return std::make_unique<SteppedOutput>(source, cursor, evidence);
+  };
+  auto run = take(quick::RoutedPlayback::prepare_and_start(root, session->snapshot(),
+                                                           take(session->reserve_playback_start()),
+                                                           factory, std::nullopt, frames));
+  std::size_t blocks = settle_blocks + steady_blocks;
+  evidence->permit(blocks);
+  evidence->await_blocks(blocks);
+  require(session->audio_clips()
+                  .set_audio_clip_fades(
+                      clip, {0.25, 0.0, project::FadeCurve::linear, project::FadeCurve::linear})
+                  .has_value() &&
+              run->submit_revision(session->snapshot()).has_value(),
+          "the audio clip fade beside a synth was refused while playing");
+  const auto edited = session->snapshot().revision;
+  bool activated = false;
+  for (std::size_t attempt = 0; attempt < max_switch_blocks && !activated; ++attempt) {
+    std::this_thread::sleep_for(worker_step_pause);
+    (void)run->status();
+    evidence->permit(1);
+    evidence->await_blocks(++blocks);
+    const auto status = run->status();
+    if (status.application == app::PlaybackApplication::failed)
+      throw std::runtime_error("audio edit beside a synth failed: " +
+                               (status.failure ? status.failure->message : "unknown"));
+    activated = status.active_graph_revision == edited && !run->edit_pending();
+  }
+  require(activated, "the audio clip fade beside a synth did not switch live");
+  blocks += after_blocks;
+  evidence->permit(after_blocks);
+  evidence->await_blocks(blocks);
+  (void)run->stop_and_retire();
+  std::lock_guard lock(evidence->mutex);
+  require(evidence->frozen_silent_blocks == 0 && evidence->callback_allocation_count == 0,
+          "the source switch beside a synth held a block or allocated");
+  // Left channel; the steady window is the held note before the edit.
+  std::vector<float> left;
+  for (std::size_t index = 0; index < evidence->samples.size(); index += 2)
+    left.push_back(evidence->samples[index]);
+  require(left.size() == blocks * frames, "a block was lost around the source switch");
+  double steady = 0.0;
+  for (std::size_t index = settle_blocks * frames + 1;
+       index < (settle_blocks + steady_blocks) * frames; ++index)
+    steady = std::max(steady, std::fabs(static_cast<double>(left[index]) - left[index - 1]));
+  for (std::size_t block = settle_blocks; block < blocks; ++block) {
+    const auto window = std::span(left).subspan(block * frames, frames);
+    require(std::ranges::any_of(window, [](float value) { return value != 0.0F; }),
+            "the synth's held note was dropped at the source switch");
+  }
+  for (std::size_t index = (settle_blocks + steady_blocks) * frames; index < left.size(); ++index)
+    require(std::fabs(static_cast<double>(left[index]) - left[index - 1]) <= click_ratio * steady,
+            "the synth's output jumped at the source switch");
+}
+
+// An edit that cannot switch while playing (a track removed) is refused at
+// once: the old graph plays on and the transport is free to pause and seek.
+void refused_edit_never_holds_the_transport() {
+  Directory directory;
+  const auto root = directory.path() / "refused-edit-pause";
   const auto wav = make_wav(directory.path());
   auto session = take(app::ProjectSession::create(root));
   const int fd = ::open(wav.c_str(), O_RDONLY | O_CLOEXEC);
-  require(fd >= 0, "rejected graph pause fixture could not open WAV");
+  require(fd >= 0, "refused edit fixture could not open WAV");
   const auto track = take(session->imports().import_wav_audio(fd));
   (void)::close(fd);
   auto evidence = std::make_shared<SteppedEvidence>();
@@ -1531,27 +1622,19 @@ void pause_waits_for_rejected_graph_to_release_held_boundary() {
   evidence->permit(1);
   evidence->await_blocks(1);
   const auto active_revision = run->status().active_graph_revision;
-  require(session->tracks().remove_track(track) && run->submit_revision(session->snapshot()) &&
-              run->graph_handoff_in_progress(),
-          "rejected graph pause fixture did not request a hold");
-  evidence->permit(1);
-  evidence->await_blocks(2);
+  require(session->tracks().remove_track(track) && !run->submit_revision(session->snapshot()) &&
+              !run->graph_handoff_in_progress(),
+          "a track removal while playing was not refused at once");
   const auto failed = run->status();
   require(failed.application == app::PlaybackApplication::failed &&
-              failed.active_graph_revision == active_revision && run->graph_handoff_in_progress() &&
-              !run->pause() && !run->paused(),
-          "pause crossed a failed graph's unreleased held boundary");
+              failed.active_graph_revision == active_revision && run->pause() &&
+              run->seek_paused(256) && run->resume(),
+          "a refused edit held the transport");
   evidence->permit(1);
-  evidence->await_blocks(3);
-  (void)run->status();
-  require(!run->graph_handoff_in_progress() && run->pause() && run->seek_paused(256) &&
-              run->resume(),
-          "rejected graph did not release its hold before transport restart");
-  evidence->permit(1);
-  evidence->await_blocks(4);
+  evidence->await_blocks(2);
   require(run->completed_sample() >= 256 &&
               run->output_status().state == audio::OutputState::streaming,
-          "prior graph did not play after failed edit and transport restart");
+          "prior graph did not play after a refused edit and transport restart");
   (void)run->stop_and_retire();
 }
 
@@ -4145,8 +4228,9 @@ void run_native_graph() {
   multi_track_clip_overlay_preserves_native_processing(128, true);
   failed_live_clip_preparation_keeps_old_audio_audible();
   live_clip_preparation_survives_pause_and_seek();
-  pause_waits_for_live_source_graph_handoff();
-  pause_waits_for_rejected_graph_to_release_held_boundary();
+  pause_waits_for_live_source_switch();
+  audio_edit_beside_a_synth_keeps_its_voice();
+  refused_edit_never_holds_the_transport();
   unsupported_shape_and_device_failure_release_reservation();
 }
 
