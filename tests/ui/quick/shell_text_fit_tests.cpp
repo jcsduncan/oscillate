@@ -17,6 +17,7 @@
 #include <QTest>
 #include <QVariant>
 
+#include <cmath>
 #include <exception>
 #include <filesystem>
 #include <iostream>
@@ -116,14 +117,14 @@ public:
   [[nodiscard]] QQuickItem* root() const { return window_->contentItem(); }
   [[nodiscard]] QQuickItem* wait_for(const QString& name) const {
     QQuickItem* found = nullptr;
-    QTest::qWaitFor(
+    const bool shown = QTest::qWaitFor(
         [&] {
           QCoreApplication::processEvents();
           found = find_item(root(), name);
           return found != nullptr;
         },
         settle_timeout_ms);
-    require(found != nullptr, "the shell shows " + name.toStdString());
+    require(shown && found != nullptr, "the shell shows " + name.toStdString());
     return found;
   }
   void select_track(int track) const {
@@ -173,9 +174,10 @@ void ruler_labels_clear_flags_and_tools(const Shell& shell) {
 
 // A chord clip names its chords along its foot, below every note.
 void chord_names_clear_notes(const Shell& shell) {
-  shell.wait_for(QStringLiteral("arrangementChordName"));
+  const auto* first_chord = shell.wait_for(QStringLiteral("arrangementChordName"));
   QList<QQuickItem*> chords;
   find_items(shell.root(), QStringLiteral("arrangementChordName"), chords);
+  require(chords.contains(first_chord), "the chord names are found where they show");
   for (const auto* chord : chords) {
     const auto top = chord->mapToScene({0.0, 0.0}).y();
     QList<QQuickItem*> notes;
@@ -191,9 +193,10 @@ void chord_names_clear_notes(const Shell& shell) {
 
 // The Chords chain's strip knobs show their labels whole.
 void strip_labels_whole(const Shell& shell) {
-  shell.wait_for(QStringLiteral("insertEffectCard"));
+  auto* card = shell.wait_for(QStringLiteral("insertEffectCard"));
   QList<QQuickItem*> labels;
   find_prefixed(shell.root(), QStringLiteral("stripKnobLabel:"), labels);
+  require(card->isVisible(), "the chain shows its effect strips");
   require(!labels.isEmpty(), "the chain shows strip knobs");
   for (const auto* label : labels)
     require_whole(label, label->objectName().toStdString());
@@ -209,18 +212,32 @@ void piano_roll_hint_after_buttons(const Shell& shell) {
   require_whole(hint, "the piano roll's hint");
 }
 
-// The toolbar's position readout holds a three-digit bar whole.
-void position_readout_holds_three_digits(const Shell& shell, quick::ProjectBridge& bridge) {
-  bridge.seek_to_bar(far_bar);
-  auto* value = shell.wait_for(QStringLiteral("positionValue"));
-  QTest::qWaitFor(
+// Seeks to a zero-based bar and waits for the position readout to show the
+// bar number; false if it never does.
+bool seek_and_show(quick::ProjectBridge& bridge, QQuickItem* value, double bar,
+                   const QString& shown) {
+  bridge.seek_to_bar(bar);
+  return QTest::qWaitFor(
       [&] {
         QCoreApplication::processEvents();
-        return value->property("text").toString().startsWith(QStringLiteral("99 "));
+        return value->property("text").toString().startsWith(shown);
       },
       settle_timeout_ms);
-  require(value->property("text").toString().startsWith(QStringLiteral("99 ")),
+}
+
+// The toolbar's position readout holds a three-digit bar whole, and the key
+// readout beside it stays put as the bar number grows.
+void position_readout_holds_three_digits(const Shell& shell, quick::ProjectBridge& bridge) {
+  auto* value = shell.wait_for(QStringLiteral("positionValue"));
+  auto* key = shell.wait_for(QStringLiteral("keyReadout"));
+  require(seek_and_show(bridge, value, 0.0, QStringLiteral("1 ")),
+          "the position readout follows a seek to bar 1: \"" + text_of(value) + "\"");
+  const auto key_x = key->mapToScene({0.0, 0.0}).x();
+  require(seek_and_show(bridge, value, far_bar, QStringLiteral("99 ")),
           "the position readout follows a seek to bar 99: \"" + text_of(value) + "\"");
+  const auto far_key_x = key->mapToScene({0.0, 0.0}).x();
+  require(std::abs(far_key_x - key_x) <= layout_slack_px,
+          "the key readout shifts when the position changes");
   auto* readout = shell.wait_for(QStringLiteral("positionReadout"));
   require(value->mapToScene({value->property("implicitWidth").toDouble(), 0.0}).x() <=
               readout->mapToScene({readout->width(), 0.0}).x() + layout_slack_px,
