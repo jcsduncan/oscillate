@@ -6,6 +6,8 @@
 #include <iterator>
 #include <limits>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -22,6 +24,9 @@ constexpr std::uint64_t render_slice_mask = 0xFF'FFULL;
 
 using foundation::ErrorCode;
 using Span = std::pair<std::uint64_t, std::uint64_t>;
+
+constexpr std::string_view overlapping_envelopes =
+    "Clips with channel envelopes overlap; the render cannot keep them";
 
 // Lanes a frozen track keeps: what happens after its render (the channel and
 // its sends). Everything before the fader is in the render.
@@ -102,9 +107,14 @@ foundation::Result<std::optional<Span>> after_render_clip_span(const Track& trac
     return R::failure(clips.error());
   if (clips.value().empty())
     return R::success(std::nullopt);
-  Span span = clips.value().front().span;
-  for (const auto& clip : clips.value())
-    span.second = std::max(span.second, clip.span.second);
+  // Sorted by start, so each clip need only start after the ones before end.
+  const auto& laned = clips.value();
+  Span span = laned.front().span;
+  for (std::size_t index = 1; index < laned.size(); ++index) {
+    if (laned[index].span.first < span.second)
+      return R::failure({ErrorCode::conflict, std::string(overlapping_envelopes)});
+    span.second = std::max(span.second, laned[index].span.second);
+  }
   return R::success(span);
 }
 
@@ -138,8 +148,7 @@ render_slices(const Track& track, const timeline::TempoMap& tempo, std::uint32_t
       return R::failure(
           {ErrorCode::conflict, "A clip's channel envelope crosses the edge of the render"});
     if (begin < cursor)
-      return R::failure({ErrorCode::conflict,
-                         "Clips with channel envelopes overlap; the render cannot keep them"});
+      return R::failure({ErrorCode::conflict, std::string(overlapping_envelopes)});
     plain(begin);
     RenderSlice slice{
         {{static_cast<std::int64_t>(begin - first)}, {static_cast<std::int64_t>(end - first)}},
