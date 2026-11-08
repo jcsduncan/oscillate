@@ -2723,6 +2723,10 @@ void RoutedPlaybackControl::observe() {
   // switch has settled; it may wait again for another.
   // Only the revision that waited, while it is still the current, pending one.
   const auto status = revisions_.snapshot();
+  if (deferred_revision_ && (*deferred_revision_ != model_.snapshot()->revision ||
+                             status.model_revision != *deferred_revision_ ||
+                             status.application != PlaybackApplication::pending))
+    deferred_revision_.reset(); // Superseded or failed: nothing waits any more.
   if (deferred_revision_ && *deferred_revision_ == model_.snapshot()->revision &&
       status.model_revision == *deferred_revision_ &&
       status.application == PlaybackApplication::pending && !awaiting_ &&

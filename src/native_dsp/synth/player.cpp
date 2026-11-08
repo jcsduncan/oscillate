@@ -345,15 +345,12 @@ Result<NativeSynthPlayer::PreparedPlan> NativeSynthPlayer::prepare_plan(
   }
 }
 
-void NativeSynthPlayer::commit_plan(PreparedPlan plan, const project::Snapshot& snapshot) noexcept {
-  // has_room() was true, so the mailbox's reserved storage takes the plan.
+void NativeSynthPlayer::commit_plan(PreparedPlan plan, const project::Snapshot& snapshot) {
+  // has_room() was true, so the mailbox's reserved storage takes the plan
+  // without reallocating.
   plans_->offer(std::move(plan.plan_), plan.revision_);
   // Lock follows this track's own switch too; a failure keeps the notes it had.
-  try {
-    (void)refresh_lock(snapshot);
-  } catch (const std::bad_alloc&) {
-    return;
-  }
+  (void)refresh_lock(snapshot);
 }
 
 Result<void> NativeSynthPlayer::offer_plan(

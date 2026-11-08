@@ -74,7 +74,7 @@ public:
                const engine::InstrumentEvents& events,
                std::span<const automation_project::PreparedTargetAutomation> automation,
                std::uint64_t last_safe_automation_sample) const;
-  void commit_plan(PreparedPlan plan, const project::Snapshot& snapshot) noexcept;
+  void commit_plan(PreparedPlan plan, const project::Snapshot& snapshot);
   // The newest offered revision a rendered block has used.
   [[nodiscard]] std::uint64_t applied_plan_revision() const noexcept;
   // Control only: whether offer_plan() has room now. False until the
