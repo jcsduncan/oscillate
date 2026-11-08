@@ -27,7 +27,7 @@ The held path switched a graph by freezing the transport: the callback rendered 
 - `RoutedMixerPublisher` loses `request_hold`, `held_boundary`, `cancel_hold` and `RoutedRenderStatus::holding`. `prepare_and_publish` publishes only the initial graph. A live switch also checks the caller's source layout before adopting a candidate.
 - `RoutedPlaybackControl` loses `publish_held`, `publish_held_with_source`, `request_captured_source_hold`, `cancel_captured_source_hold` and `set_live_switching`.
 - An edit that no live path takes is refused at once, with its reason (`live_refusal`). The old graph plays on with no silent block, and the edit is saved for the next Play. These edits are:
-  - adding, removing or reordering tracks;
+  - adding or removing tracks, or a reorder that changes the routed source order;
   - a tempo or meter change;
   - new or changed source media;
   - a change of instrument;
