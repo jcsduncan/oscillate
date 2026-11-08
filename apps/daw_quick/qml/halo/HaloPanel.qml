@@ -495,7 +495,7 @@ Rectangle {
                 parameterId: "halo.filter.keytrack"
                 accent: panel.theme.amber
                 inactive: !filter.active
-                label: "Key Track"
+                label: "Keytrack"
             }
             Cell {
                 parameterId: "halo.filter.velocity"
