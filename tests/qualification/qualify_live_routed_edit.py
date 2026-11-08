@@ -141,7 +141,7 @@ def main() -> int:
             playing.stdin.write(f"gain {send_match.group(1)} 1.5\n")
             playing.stdin.flush()
             time.sleep(0.9)
-            playing.stdin.write("fail-master-latency\n")
+            playing.stdin.write("fail-add-track\n")
             playing.stdin.flush()
             time.sleep(0.4)
             playing.stdin.write("retry\n")

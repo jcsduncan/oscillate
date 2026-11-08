@@ -2,8 +2,6 @@
 
 #include <oscillate/application/routed_audio_source.hpp>
 #include <oscillate/audio_io/pipewire_output.hpp>
-#include <oscillate/native_dsp/effects/effect.hpp>
-#include <oscillate/native_inserts/effect_binding.hpp>
 #include <oscillate/persistence/store.hpp>
 #include <oscillate/project/model.hpp>
 
@@ -221,7 +219,7 @@ int run(int argc, char** argv) {
     throw std::runtime_error(
         "PipeWire stream did not negotiate the project rate and bounded block");
   allowed.store(true, std::memory_order_release);
-  std::cout << "ready: gain SEND_ID VALUE | fail-master-latency | retry | undo | status\n";
+  std::cout << "ready: gain SEND_ID VALUE | fail-add-track | retry | undo | status\n";
   for (const auto& track : snapshot->tracks) {
     for (const auto& send : track.sends)
       std::cout << "send=" << send.id.to_string() << " gain=" << send.gain << '\n';
@@ -265,16 +263,13 @@ int run(int argc, char** argv) {
         save_edit(take(model.undo()), "undo");
         return;
       }
-      if (line == "fail-master-latency") {
-        // Ceiling's lookahead changes the master path latency, which a
-        // playing graph cannot adopt: the edit is saved but not audible.
-        const auto* ceiling = native_dsp::effects::find_engine("ceiling");
-        if (ceiling == nullptr)
-          throw std::runtime_error("Ceiling is not registered");
-        save_edit(take(model.apply({project::AddNativeEffect{
-                      project::MasterSignalPath{}, 0,
-                      take(native_inserts::native_effect_patch_for_preset(*ceiling, {}))}})),
-                  "latency-changing master effect");
+      if (line == "fail-add-track") {
+        // Adding a track cannot switch while playing: the edit is saved but
+        // refused at once, and the old graph plays on.
+        constexpr foundation::IdBits added_track{0, 0x7ac4};
+        save_edit(
+            take(model.apply({project::AddTrack{take(project::TrackId::from_bits(added_track))}})),
+            "track added while playing");
         return;
       }
       std::istringstream words{std::string(line)};
@@ -284,7 +279,7 @@ int run(int argc, char** argv) {
       std::string extra;
       if (!(words >> action >> id_text >> gain_text) || words >> extra || action != "gain")
         throw std::runtime_error(
-            "expected gain SEND_ID VALUE, fail-master-latency, retry, undo or status");
+            "expected gain SEND_ID VALUE, fail-add-track, retry, undo or status");
       const auto send = take(project::SendId::parse(id_text));
       save_edit(take(model.apply({project::SetSendGain{send, parse_gain(gain_text)}})),
                 "send gain");
