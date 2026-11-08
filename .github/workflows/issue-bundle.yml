@@ -1,0 +1,30 @@
+name: Issue bundle
+
+# Every open issue belongs to one work bundle (a `bundle:` label); a bundle is
+# taken on whole, as one pull request (CONTRIBUTING.md, "Bundles"). A new or
+# reopened issue without one gets `bundle:triage` until it is assigned.
+on:
+  issues:
+    types: [opened, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  triage:
+    name: Mark unbundled issues for triage
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write # add the triage label
+    steps:
+      - name: Add bundle:triage when no bundle label is set
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          labels=$(gh issue view "$NUMBER" --repo "$REPOSITORY" --json labels --jq '[.labels[].name | select(startswith("bundle:"))] | length')
+          if [ "$labels" -eq 0 ]; then
+            gh issue edit "$NUMBER" --repo "$REPOSITORY" --add-label "bundle:triage"
+          fi
