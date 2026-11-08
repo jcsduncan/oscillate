@@ -10,9 +10,10 @@ repository at `https://jcsduncan.github.io/oscillate/apt`. Add its key and
 source once, then install:
 
 ```sh
-sudo install -d -m 0755 /etc/apt/keyrings
-curl -fsSL https://jcsduncan.github.io/oscillate/apt/oscillate-archive-keyring.gpg \
-  | sudo tee /etc/apt/keyrings/oscillate-archive-keyring.gpg > /dev/null
+sudo apt install curl
+curl -fsSLo /tmp/oscillate-archive-keyring.gpg \
+  https://jcsduncan.github.io/oscillate/apt/oscillate-archive-keyring.gpg
+sudo install -D -m 0644 /tmp/oscillate-archive-keyring.gpg /etc/apt/keyrings/oscillate-archive-keyring.gpg
 echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/oscillate-archive-keyring.gpg] https://jcsduncan.github.io/oscillate/apt resolute main" \
   | sudo tee /etc/apt/sources.list.d/oscillate.list
 sudo apt update
@@ -42,8 +43,8 @@ Download `Oscillate-<version>-x86_64.AppImage` from the
 executable and run it:
 
 ```sh
-chmod +x Oscillate-*-x86_64.AppImage
-./Oscillate-*-x86_64.AppImage
+chmod +x Oscillate-<version>-x86_64.AppImage
+./Oscillate-<version>-x86_64.AppImage
 ```
 
 ## How the repository is published
@@ -63,4 +64,5 @@ final job follows the instructions above in a clean `ubuntu:26.04` container.
 The archive key is a dedicated ed25519 signing key that expires after two
 years; the next Pages run after the secret changes publishes the new or
 extended key. Installed systems keep the keyring they downloaded, so after a
-key change run the `curl` line above again before `sudo apt update`.
+key change run the `curl` and `install` lines above again before
+`sudo apt update`.

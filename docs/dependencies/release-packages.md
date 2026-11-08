@@ -21,7 +21,9 @@ run it when a packaging input changes (`packaging` in
 [`changes.py`](../../scripts/ci/changes.py)). It is not a required check.
 
 Once the packages are attached, the workflow starts the Pages workflow,
-which adds the `.deb` to the signed [apt repository](../install.md).
+which rebuilds the signed [apt repository](../install.md) from the `.deb` of
+the newest three releases. Pages publishes no repository while the
+`APT_GPG_PRIVATE_KEY` secret is unset.
 
 ## Features in each package
 

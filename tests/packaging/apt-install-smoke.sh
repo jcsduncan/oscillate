@@ -17,8 +17,8 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends ca-certificates curl
 
-install -d -m 0755 /etc/apt/keyrings
-curl -fsSL "$url/oscillate-archive-keyring.gpg" | tee "$keyring" >/dev/null
+curl -fsSLo /tmp/oscillate-archive-keyring.gpg "$url/oscillate-archive-keyring.gpg"
+install -D -m 0644 /tmp/oscillate-archive-keyring.gpg "$keyring"
 echo "deb [arch=amd64 signed-by=$keyring] $url resolute main" |
   tee /etc/apt/sources.list.d/oscillate.list >/dev/null
 # apt refuses a repository whose InRelease the key does not verify.
