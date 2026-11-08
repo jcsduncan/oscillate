@@ -1,4 +1,5 @@
 #include "oscillate/test/check.hpp"
+#include "oscillate/test/wait.hpp"
 
 #include <QByteArray>
 #include <QGuiApplication>
@@ -255,7 +256,12 @@ void cache_panel_confirms_forgetting() {
   QTest::keyClick(&host.window, Qt::Key_Return);
   require(confirm->isVisible(), "Return on Forget did not ask");
   controls->setProperty("projects", controls->property("projects").toList().mid(0, 1));
-  QCoreApplication::processEvents();
+  oscillate::test::wait_until(
+      [&] {
+        QCoreApplication::processEvents();
+        return host.view->property("confirmPath").toString().isEmpty();
+      },
+      "the question was dropped with its project");
   require(!confirm->isVisible() && host.view->property("confirmPath").toString().isEmpty(),
           "the question outlived its project");
 }

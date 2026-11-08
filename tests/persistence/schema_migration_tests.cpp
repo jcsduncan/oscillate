@@ -296,7 +296,9 @@ void pre_upgrade_generation_survives_pruning() {
   {
     // A revision whose durability is uncertain stops the save before CURRENT
     // moves past the generation it protects.
-    auto uncertain = take(ProjectStore::open_writer(root, false, [](SaveStage stage) {
+    bool revision_flush_failed = false;
+    auto uncertain = take(ProjectStore::open_writer(root, false, [&](SaveStage stage) {
+      revision_flush_failed |= stage == SaveStage::revision_directory_flush_failed;
       return stage == SaveStage::revision_directory_flush_failed;
     }));
     REQUIRE_FALSE(uncertain.save(project_state(pre_upgrade_revision + 1), SaveKind::explicit_save)
@@ -304,6 +306,9 @@ void pre_upgrade_generation_survives_pruning() {
                   "a save went ahead with an uncertain pre-upgrade revision");
     REQUIRE_EQ(take(uncertain.load_current()).generation, pre_upgrade,
                "CURRENT moved past the pre-upgrade generation");
+    REQUIRE_TRUE(revision_flush_failed, "the save did not reach the revision flush");
+    REQUIRE_EQ(take(uncertain.list_named_revisions()).revisions.size(), std::size_t{1},
+               "the uncertain revision was not published");
   }
   auto writer = take(ProjectStore::open_writer(root, false));
   REQUIRE_EQ(take(writer.load_current()).migrated_from, std::optional<std::string>(schema),

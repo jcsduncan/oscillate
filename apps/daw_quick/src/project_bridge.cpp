@@ -1791,6 +1791,9 @@ void ProjectBridge::save_copy(const QString& copy_name) {
   const auto destination = lifecycle_->copy_destination(copy_name);
   if (!destination)
     return;
+  // An open plug-in editor's state belongs in the copy, not only the original.
+  if (!vst3_editor_->commit_native_editor())
+    return;
   finish_in_flight_saves();
   if (const auto failure = collection_->save_copy(*session_, waveform_root_, *destination))
     set_status(*failure);

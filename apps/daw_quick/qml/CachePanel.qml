@@ -38,7 +38,7 @@ Rectangle {
         return controls.projects.find(project => project.path === path) || null
     }
     // A project that leaves the list takes its question with it.
-    onConfirmProjectChanged: if (confirmProject === null) confirmPath = ""
+    onConfirmProjectChanged: if (confirmProject === null && confirmPath !== "") Qt.callLater(cancelForget)
     function askForget(path) { confirmPath = path }
     function cancelForget() { confirmPath = "" }
     function confirmForget() {
