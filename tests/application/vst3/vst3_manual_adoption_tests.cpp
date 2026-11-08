@@ -397,11 +397,6 @@ void two_successive_edits(const plugins::ScanResult& scanned, Kind kind, std::ui
   // on the acknowledged edit rather than imply the undo is live.
   REQUIRE_OK(rig.session->history().undo(), "manual edit undo failed");
   const auto mirrored = take(rig.mirror->adopt_authoritative_snapshot(rig.session->snapshot()));
-  const auto holding = [&] {
-    const engine::BlockContext context{4 * static_cast<std::uint64_t>(frames), 1};
-    return rig.control->render_block(rig.inputs, rig.output, context) ==
-           engine::RoutedRenderStatus::holding;
-  };
   const auto undo_edit = rig.control->begin_edit(mirrored, "undo");
   if (kind == Kind::effect) {
     REQUIRE_OK(undo_edit, "undo state change did not switch live");
@@ -414,8 +409,8 @@ void two_successive_edits(const plugins::ScanResult& scanned, Kind kind, std::ui
     REQUIRE_OK(rig.session->saving().save(), "undone manual intent did not save");
     return;
   }
-  require(!undo_edit || (holding() && !rig.control->publish_held()),
-          "undo state change published over the active plugin");
+  // Refused at once: the old graph plays on, with no held block.
+  require(!undo_edit, "undo state change published over the active plugin");
   require(rig.control->status().active_graph_revision == opened + 2 &&
               rig.control->status().application == application::PlaybackApplication::failed &&
               rig.render(4) && rig.audible(rig.expected(0.75)) && !rig.binding(),

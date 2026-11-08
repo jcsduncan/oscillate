@@ -269,7 +269,6 @@ void unadoptable_live_switch_is_withdrawn_and_next_edit_publishes() {
   const auto stuck = take(state.apply({project::AddNativeEffect{track, 0, press_patch({})}}));
   bank.refused = stuck.snapshot->revision;
   REQUIRE_OK(control.begin_edit(stuck, "add Press"), "the live switch was not published");
-  REQUIRE_TRUE(!control.held_boundary(), "the edit did not take the live path");
   for (std::uint64_t passed = 0; passed < app::live_candidate_passed_block_limit; ++passed) {
     REQUIRE_EQ(control.status().application, app::PlaybackApplication::pending,
                "the candidate was settled before its bounded wait ran out");
@@ -388,7 +387,6 @@ void live_route_gain_edit_and_failed_model_divergence() {
              "gain edit did not start pending callback handoff");
   REQUIRE_EQ(control.status().application, app::PlaybackApplication::pending,
              "gain edit did not start pending callback handoff");
-  REQUIRE_TRUE(!control.held_boundary(), "gain edit did not start pending callback handoff");
   counting_allocations = true;
   const auto switched = control.render_block(inputs, output, {4, 1});
   counting_allocations = false;
@@ -396,8 +394,6 @@ void live_route_gain_edit_and_failed_model_divergence() {
              "live send gain inserted silence, allocated or missed its ramp");
   REQUIRE_EQ(counted_allocations, 0,
              "live send gain inserted silence, allocated or missed its ramp");
-  REQUIRE_TRUE(!control.held_boundary(),
-               "live send gain inserted silence, allocated or missed its ramp");
   REQUIRE_LT(std::abs(output[0].left - 1.75390625F), tolerance::float_round_trip_f,
              "live send gain inserted silence, allocated or missed its ramp");
   control.observe();
@@ -451,7 +447,6 @@ void live_send_gain_uses_existing_route_without_hold(std::size_t frames) {
   const auto revised = take(state.apply({project::SetSendGain{send, 0.5}}));
   REQUIRE_TRUE(control.begin_edit(revised, "send gain"),
                "live send gain was not admitted without a hold");
-  REQUIRE_TRUE(!control.held_boundary(), "live send gain was not admitted without a hold");
   counted_allocations = 0;
   counting_allocations = true;
   const auto rendered = control.render_block(inputs, block, {frames, 1});
@@ -478,8 +473,6 @@ void live_send_gain_uses_existing_route_without_hold(std::size_t frames) {
   REQUIRE_EQ(control.render_block(inputs, block, {2 * frames, 1}),
              engine::RoutedRenderStatus::rendered,
              "changed send endpoint bypassed the guarded route publication");
-  REQUIRE_TRUE(!control.held_boundary(),
-               "changed send endpoint bypassed the guarded route publication");
   REQUIRE_EQ(control.status().active_graph_revision, revised.snapshot->revision,
              "changed send endpoint bypassed the guarded route publication");
 }
@@ -516,7 +509,6 @@ void automated_send_gain_refuses_live_overlay() {
   // The static gain overlay would drop the lane: the edit instead rebuilds the
   // graph, switching live with its automation intact.
   require(control.begin_edit(revised, "automated send gain").has_value() &&
-              !control.held_boundary() &&
               control.render_block(inputs, output, {64, 1}) == engine::RoutedRenderStatus::rendered,
           "automated send gain incorrectly used the static live overlay");
   control.observe();
@@ -545,7 +537,6 @@ void live_send_automation_survives_graph_handoff() {
                           project::AddSendRoute{audio, {send, returns, 0.25}},
                           project::AddAutomationLane{audio, lane}}));
   app::RoutedPlaybackControl control(state, limits());
-  control.set_live_switching(false); // covers held switching
   REQUIRE_OK(control.submit_current(), "send automation graph failed to prepare");
   std::array<engine::StereoFrame, 4> one{}, output{};
   one.fill({1.0F, -1.0F});
@@ -566,10 +557,7 @@ void live_send_automation_survives_graph_handoff() {
   ++lane.settings_generation;
   const auto edit = take(state.apply({project::ReplaceAutomationLane{lane_id, lane}}));
   REQUIRE_OK(control.begin_edit(edit, "send automation"),
-             "send automation graph revision did not hold and publish");
-  REQUIRE_EQ(control.render_block(inputs, output, {4, 1}), engine::RoutedRenderStatus::holding,
-             "send automation graph revision did not hold and publish");
-  REQUIRE_OK(control.publish_held(), "send automation graph revision did not hold and publish");
+             "send automation graph revision did not switch live");
   counting_allocations = true;
   rendered = control.render_block(inputs, output, {4, 1});
   counting_allocations = false;
@@ -637,7 +625,6 @@ void initial_master_chain_keeps_history_through_route_edit() {
   REQUIRE_EQ(switched, engine::RoutedRenderStatus::rendered,
              "live send change interrupted the stateful master chain");
   REQUIRE_EQ(counted_allocations, 0, "live send change interrupted the stateful master chain");
-  REQUIRE_TRUE(!control.held_boundary(), "live send change interrupted the stateful master chain");
   for (std::size_t frame = 0; frame < output.size(); ++frame)
     require(std::fabs(output[frame].left - expected[frame].left) < 0.000001F &&
                 std::fabs(output[frame].right - expected[frame].right) < 0.000001F,
@@ -652,7 +639,6 @@ void source_layout_change_is_rejected_without_misrouting() {
   (void)take(
       state.apply({project::AddTrack{a}, project::AddTrack{bus, project::TrackKind::group_bus}}));
   app::RoutedPlaybackControl control(state, limits());
-  control.set_live_switching(false); // covers held switching
   REQUIRE_OK(control.submit_current(), "layout fixture did not prepare");
   std::array<engine::StereoFrame, 4> signal{}, output{};
   signal.fill({0.25F, -0.25F});
@@ -662,12 +648,10 @@ void source_layout_change_is_rejected_without_misrouting() {
              "layout fixture did not activate");
   control.observe();
   auto changed = take(state.apply({project::AddTrack{id<project::TrackId>(4)}}));
-  REQUIRE_OK(control.begin_edit(changed, "add audio track"), "layout edit was not held");
-  REQUIRE_EQ(control.render_block(inputs, output, {4, 1}), engine::RoutedRenderStatus::holding,
-             "layout edit was not held");
-  auto failed = control.publish_held();
+  // A new track cannot switch while playing: refused at once, no held block.
+  auto failed = control.begin_edit(changed, "add audio track");
   REQUIRE_TRUE(!failed, "new source layout was silently applied to old ordered spans");
-  REQUIRE_EQ(failed.error().code, foundation::ErrorCode::conflict,
+  REQUIRE_EQ(failed.error().code, foundation::ErrorCode::unsupported,
              "new source layout was silently applied to old ordered spans");
   REQUIRE_EQ(control.status().application, app::PlaybackApplication::failed,
              "new source layout was silently applied to old ordered spans");
@@ -964,7 +948,6 @@ void live_insert_without_vst3_host_keeps_prior_graph() {
   const auto track = id<project::TrackId>(2);
   (void)take(state.apply({project::AddTrack{track}}));
   app::RoutedPlaybackControl control(state, limits());
-  control.set_live_switching(false); // covers held switching
   REQUIRE_OK(control.submit_current(), "empty live route was not prepared");
   std::array<engine::StereoFrame, 4> signal{}, output{};
   signal.fill({0.25F, -0.25F});
@@ -976,11 +959,7 @@ void live_insert_without_vst3_host_keeps_prior_graph() {
   const auto old_revision = control.status().active_graph_revision;
   const auto changed =
       take(state.apply({project::InsertVst3Plugin{track, 0, saved_fixture_insert()}}));
-  REQUIRE_OK(control.begin_edit(changed, "insert effect"),
-             "VST3 insert without a host activated or discarded prior audio");
-  REQUIRE_EQ(control.render_block(inputs, output, {4, 1}), engine::RoutedRenderStatus::holding,
-             "VST3 insert without a host activated or discarded prior audio");
-  REQUIRE_TRUE(!control.publish_held(),
+  REQUIRE_TRUE(!control.begin_edit(changed, "insert effect"),
                "VST3 insert without a host activated or discarded prior audio");
   REQUIRE_EQ(control.status().active_graph_revision, old_revision,
              "VST3 insert without a host activated or discarded prior audio");
@@ -1111,7 +1090,6 @@ void instrument_two_serial_effects_keep_order_and_history(std::size_t block_fram
   bounded.max_history_bytes *= block_frames / 64;
   TwoInstrumentEffects provider(source.id, first.id, second.id);
   app::RoutedPlaybackControl control(state, bounded, &provider);
-  control.set_live_switching(false); // covers held switching
   require(control.submit_current() && control.master_output_latency_frames() == 18 &&
               provider.preparations == std::array<std::size_t, 3>{1, 1, 1},
           "instrument and two effects did not publish one compensated serial path");
@@ -1139,26 +1117,22 @@ void instrument_two_serial_effects_keep_order_and_history(std::size_t block_fram
              "instrument serial graph revision did not activate");
   const auto revised = take(state.apply({project::SetSendGain{send, 0.25}}));
   REQUIRE_TRUE(control.begin_edit(revised, "send gain"),
-               "instrument serial path could not publish held route edit");
-  REQUIRE_EQ(control.render_block(inputs, std::span(output).first(block_frames), {block_frames, 1}),
-             engine::RoutedRenderStatus::holding,
-             "instrument serial path could not publish held route edit");
-  REQUIRE_TRUE(control.publish_held(), "instrument serial path could not publish held route edit");
+               "instrument serial path could not publish a live route edit");
   counted_allocations = 0;
   counting_allocations = true;
   const auto resumed =
       control.render_block(inputs, std::span(output).first(block_frames), {block_frames, 1});
   counting_allocations = false;
   REQUIRE_EQ(resumed, engine::RoutedRenderStatus::rendered,
-             "held instrument route edit reset a processor or allocated");
-  REQUIRE_EQ(counted_allocations, 0, "held instrument route edit reset a processor or allocated");
+             "live instrument route edit reset a processor or allocated");
+  REQUIRE_EQ(counted_allocations, 0, "live instrument route edit reset a processor or allocated");
   REQUIRE_EQ(provider.source.lock(), source_owner,
-             "held instrument route edit reset a processor or allocated");
+             "live instrument route edit reset a processor or allocated");
   REQUIRE_EQ(provider.effects[0].lock(), first_owner,
-             "held instrument route edit reset a processor or allocated");
+             "live instrument route edit reset a processor or allocated");
   REQUIRE_EQ(provider.effects[1].lock(), second_owner,
-             "held instrument route edit reset a processor or allocated");
-  REQUIRE_EQ(source_owner->blocks, 2, "held instrument route edit reset a processor or allocated");
+             "live instrument route edit reset a processor or allocated");
+  REQUIRE_EQ(source_owner->blocks, 2, "live instrument route edit reset a processor or allocated");
 }
 
 class TwoSourceEffects final : public app::TrackInsertProvider {
@@ -1241,7 +1215,6 @@ void two_instrument_effect_paths_keep_independent_state(std::size_t block_frames
   TwoSourceEffects refused({first_source.id, second_source.id, first_effect.id, second_effect.id});
   refused.reject_second_effect = true;
   app::RoutedPlaybackControl rejected(state, bounded, &refused);
-  rejected.set_live_switching(false); // covers held switching
   require(!rejected.submit_current() &&
               refused.preparations == std::array<std::size_t, 4>{1, 1, 1, 1} &&
               refused.sources[0].expired() && refused.sources[1].expired() &&
@@ -1250,7 +1223,6 @@ void two_instrument_effect_paths_keep_independent_state(std::size_t block_frames
           "failed second effect preparation retained or published half a paired graph");
   TwoSourceEffects provider({first_source.id, second_source.id, first_effect.id, second_effect.id});
   app::RoutedPlaybackControl control(state, bounded, &provider);
-  control.set_live_switching(false); // covers held switching
   require(control.submit_current() && control.master_output_latency_frames() == 11 &&
               provider.preparations == std::array<std::size_t, 4>{1, 1, 1, 1},
           "two source/effect paths did not prepare independently with PDC");
@@ -1285,37 +1257,32 @@ void two_instrument_effect_paths_keep_independent_state(std::size_t block_frames
              "paired source/effect graph revision was not acknowledged");
   const auto revised = take(state.apply({project::SetSendGain{send, 0.25}}));
   REQUIRE_TRUE(control.begin_edit(revised, "paired route gain"),
-               "paired source/effect paths could not publish a held routing edit");
-  REQUIRE_EQ(control.render_block(inputs, std::span(output).first(block_frames), {block_frames, 1}),
-             engine::RoutedRenderStatus::holding,
-             "paired source/effect paths could not publish a held routing edit");
-  REQUIRE_TRUE(control.publish_held(),
-               "paired source/effect paths could not publish a held routing edit");
+               "paired source/effect paths could not publish a live routing edit");
   counted_allocations = 0;
   counting_allocations = true;
   const auto resumed =
       control.render_block(inputs, std::span(output).first(block_frames), {block_frames, 1});
   counting_allocations = false;
   REQUIRE_EQ(resumed, engine::RoutedRenderStatus::rendered,
-             "held paired-route edit rebuilt a processor, lost history or allocated");
+             "live paired-route edit rebuilt a processor, lost history or allocated");
   REQUIRE_EQ(counted_allocations, 0,
-             "held paired-route edit rebuilt a processor, lost history or allocated");
+             "live paired-route edit rebuilt a processor, lost history or allocated");
   REQUIRE_EQ(provider.sources[0].lock(), first_source_owner,
-             "held paired-route edit rebuilt a processor, lost history or allocated");
+             "live paired-route edit rebuilt a processor, lost history or allocated");
   REQUIRE_EQ(provider.sources[1].lock(), second_source_owner,
-             "held paired-route edit rebuilt a processor, lost history or allocated");
+             "live paired-route edit rebuilt a processor, lost history or allocated");
   REQUIRE_EQ(provider.effects[0].lock(), first_effect_owner,
-             "held paired-route edit rebuilt a processor, lost history or allocated");
+             "live paired-route edit rebuilt a processor, lost history or allocated");
   REQUIRE_EQ(provider.effects[1].lock(), second_effect_owner,
-             "held paired-route edit rebuilt a processor, lost history or allocated");
+             "live paired-route edit rebuilt a processor, lost history or allocated");
   REQUIRE_EQ(first_source_owner->blocks, 2,
-             "held paired-route edit rebuilt a processor, lost history or allocated");
+             "live paired-route edit rebuilt a processor, lost history or allocated");
   REQUIRE_EQ(second_source_owner->blocks, 2,
-             "held paired-route edit rebuilt a processor, lost history or allocated");
+             "live paired-route edit rebuilt a processor, lost history or allocated");
   near(output[11], 0.875F); // First path sends another 0.5 * 0.25 after its effect.
   control.observe();
   REQUIRE_EQ(control.status().active_graph_revision, revised.snapshot->revision,
-             "held paired-route edit did not activate the saved revision");
+             "live paired-route edit did not activate the saved revision");
   provider.faults[1]->store(true, std::memory_order_release);
   counted_allocations = 0;
   counting_allocations = true;
@@ -1333,12 +1300,9 @@ void two_instrument_effect_paths_keep_independent_state(std::size_t block_frames
   provider.faults[1]->store(false, std::memory_order_release);
   const auto third = take(state.apply(
       {project::AddTrack{id<project::TrackId>(2'459), project::TrackKind::instrument}}));
-  REQUIRE_TRUE(control.begin_edit(third, "third path"),
+  // A new track cannot switch while playing: refused at once.
+  REQUIRE_TRUE(!control.begin_edit(third, "third path"),
                "third instrument path displaced active paired graph");
-  REQUIRE_EQ(
-      control.render_block(inputs, std::span(output).first(block_frames), {3 * block_frames, 1}),
-      engine::RoutedRenderStatus::holding, "third instrument path displaced active paired graph");
-  REQUIRE_TRUE(!control.publish_held(), "third instrument path displaced active paired graph");
   REQUIRE_EQ(control.status().active_graph_revision, revised.snapshot->revision,
              "third instrument path displaced active paired graph");
 }
@@ -1367,7 +1331,6 @@ void mixed_instrument_and_effect_preserves_both_nodes(bool effect_first) {
   MixedRoleProvider provider({.instrument = second.id, .effect = first.id});
   provider.reject_effect = true;
   app::RoutedPlaybackControl control(state, limits(), &provider);
-  control.set_live_switching(false); // covers held switching
   const auto failed = control.submit_current();
   REQUIRE_TRUE(!failed,
                "failed mixed preparation retained an instrument or published a partial graph");
@@ -1410,30 +1373,27 @@ void mixed_instrument_and_effect_preserves_both_nodes(bool effect_first) {
 
   const auto revised = take(state.apply({project::SetSendGain{send, 0.25}}));
   REQUIRE_TRUE(control.begin_edit(revised, "route edit"),
-               "mixed route could not publish a held routing revision");
-  REQUIRE_EQ(control.render_block(inputs, output, {64, 1}), engine::RoutedRenderStatus::holding,
-             "mixed route could not publish a held routing revision");
-  REQUIRE_TRUE(control.publish_held(), "mixed route could not publish a held routing revision");
+               "mixed route could not publish a live routing revision");
   counted_allocations = 0;
   counting_allocations = true;
   const auto resumed = control.render_block(inputs, output, {64, 1});
   counting_allocations = false;
   REQUIRE_EQ(resumed, engine::RoutedRenderStatus::rendered,
-             "held mixed route reset a processor or allocated on callback");
-  REQUIRE_EQ(counted_allocations, 0, "held mixed route reset a processor or allocated on callback");
+             "live mixed route reset a processor or allocated on callback");
+  REQUIRE_EQ(counted_allocations, 0, "live mixed route reset a processor or allocated on callback");
   REQUIRE_EQ(provider.instrument_owner.lock(), instrument_owner,
-             "held mixed route reset a processor or allocated on callback");
+             "live mixed route reset a processor or allocated on callback");
   REQUIRE_EQ(provider.effect_owner.lock(), effect_owner,
-             "held mixed route reset a processor or allocated on callback");
+             "live mixed route reset a processor or allocated on callback");
   REQUIRE_EQ(provider.instrument_preparations, (effect_first ? 1U : 2U),
-             "held mixed route reset a processor or allocated on callback");
+             "live mixed route reset a processor or allocated on callback");
   REQUIRE_EQ(provider.effect_preparations, 2,
-             "held mixed route reset a processor or allocated on callback");
+             "live mixed route reset a processor or allocated on callback");
   REQUIRE_EQ(instrument_owner->blocks, 2,
-             "held mixed route reset a processor or allocated on callback");
+             "live mixed route reset a processor or allocated on callback");
   control.observe();
   REQUIRE_EQ(control.status().active_graph_revision, revised.snapshot->revision,
-             "held mixed route revision did not activate");
+             "live mixed route revision did not activate");
 
   provider.effect_fault->store(true, std::memory_order_release);
   REQUIRE_TRUE(control.processor_fault(audio),
@@ -1446,10 +1406,7 @@ void mixed_instrument_and_effect_preserves_both_nodes(bool effect_first) {
   // A new effect state prepares a new instance; the instrument keeps running.
   const auto changed = take(state.apply({project::SetVst3ComponentState{first.id, {9, 8}}}));
   REQUIRE_TRUE(control.begin_edit(changed, "effect state"),
-               "held effect state change did not publish");
-  REQUIRE_EQ(control.render_block(inputs, output, {128, 1}), engine::RoutedRenderStatus::holding,
-             "held effect state change did not publish");
-  REQUIRE_TRUE(control.publish_held(), "held effect state change did not publish");
+               "live effect state change did not publish");
   counted_allocations = 0;
   counting_allocations = true;
   const auto replaced = control.render_block(inputs, output, {128, 1});
@@ -1481,7 +1438,6 @@ void synth_track_native_effect_processes_source_without_allocations() {
       {project::AddTrack{track, project::TrackKind::instrument},
        project::SetNativeInstrumentPatch{track, project::NativeInstrumentPatch{"prism", 1, {}}}}));
   app::RoutedPlaybackControl control(state, limits());
-  control.set_live_switching(false); // covers held switching
   const auto submitted = control.submit_current();
   REQUIRE_OK(submitted, submitted ? "" : submitted.error().message);
   const std::array<native_dsp::EqBandSettings, 1> settings{
@@ -1506,9 +1462,6 @@ void synth_track_native_effect_processes_source_without_allocations() {
       take(state.apply({project::AddNativeEffect{track, 0, shape_patch(low_pass_1k)}}));
   REQUIRE_TRUE(control.begin_edit(first, "add first synth EQ"),
                "synth first native-stage addition did not publish");
-  REQUIRE_EQ(control.render_block(inputs, output, {64, 1}), engine::RoutedRenderStatus::holding,
-             "synth first native-stage addition did not publish");
-  REQUIRE_TRUE(control.publish_held(), "synth first native-stage addition did not publish");
   signal.fill({});
   signal.front() = {0.5F, -0.5F};
   expected = signal;
@@ -1529,9 +1482,6 @@ void synth_track_native_effect_processes_source_without_allocations() {
   const auto added = take(state.apply({project::AddNativeEffect{track, 1, press_patch(unity)}}));
   REQUIRE_TRUE(control.begin_edit(added, "add synth compressor"),
                "synth final-stage addition did not publish");
-  REQUIRE_EQ(control.render_block(inputs, output, {128, 1}), engine::RoutedRenderStatus::holding,
-             "synth final-stage addition did not publish");
-  REQUIRE_TRUE(control.publish_held(), "synth final-stage addition did not publish");
   signal.fill({});
   signal.front() = {0.5F, -0.5F};
   expected = signal;
@@ -1552,9 +1502,6 @@ void synth_track_native_effect_processes_source_without_allocations() {
   const auto removed_final = take(state.apply({project::RemoveEffectInsert{track, final_slot}}));
   REQUIRE_TRUE(control.begin_edit(removed_final, "remove synth final compressor"),
                "synth final-stage removal did not publish");
-  REQUIRE_EQ(control.render_block(inputs, output, {192, 1}), engine::RoutedRenderStatus::holding,
-             "synth final-stage removal did not publish");
-  REQUIRE_TRUE(control.publish_held(), "synth final-stage removal did not publish");
   expected = signal;
   oracle.process(expected, {192, 1});
   counted_allocations = 0;
@@ -1571,9 +1518,6 @@ void synth_track_native_effect_processes_source_without_allocations() {
   const auto removed_first = take(state.apply({project::RemoveEffectInsert{track, first_slot}}));
   REQUIRE_TRUE(control.begin_edit(removed_first, "remove first synth EQ"),
                "synth first-stage removal did not publish");
-  REQUIRE_EQ(control.render_block(inputs, output, {256, 1}), engine::RoutedRenderStatus::holding,
-             "synth first-stage removal did not publish");
-  REQUIRE_TRUE(control.publish_held(), "synth first-stage removal did not publish");
   expected.fill({});
   oracle.process(expected, {256, 1});
   for (std::size_t frame = 0; frame < expected.size(); ++frame) {
@@ -1616,7 +1560,6 @@ void two_verified_effects_align_and_survive_revisions(std::size_t block_frames) 
   TwoBoundEffects provider(first.id, second.id);
   provider.reject_second = true;
   app::RoutedPlaybackControl control(state, bounded, &provider);
-  control.set_live_switching(false); // covers held switching
   const auto failed_initial = control.submit_current();
   REQUIRE_TRUE(!failed_initial,
                "failed second preparation published a graph or retained a first owner");
@@ -1667,10 +1610,7 @@ void two_verified_effects_align_and_survive_revisions(std::size_t block_frames) 
 
   const auto revised = take(state.apply({project::SetSendGain{send, 0.5}}));
   REQUIRE_OK(control.begin_edit(revised, "send gain"),
-             "two-effect held graph update did not publish");
-  REQUIRE_EQ(control.render_block(inputs, std::span(output).first(block_frames), {block_frames, 1}),
-             engine::RoutedRenderStatus::holding, "two-effect held graph update did not publish");
-  REQUIRE_OK(control.publish_held(), "two-effect held graph update did not publish");
+             "two-effect live graph update did not publish");
   first_signal.fill({});
   second_signal.fill({});
   counted_allocations = 0;
@@ -1679,15 +1619,15 @@ void two_verified_effects_align_and_survive_revisions(std::size_t block_frames) 
       control.render_block(inputs, std::span(output).first(block_frames), {block_frames, 1});
   counting_allocations = false;
   REQUIRE_EQ(switched, engine::RoutedRenderStatus::rendered,
-             "held graph edit recreated an effect or allocated on callback");
+             "live graph edit recreated an effect or allocated on callback");
   REQUIRE_EQ(counted_allocations, 0,
-             "held graph edit recreated an effect or allocated on callback");
+             "live graph edit recreated an effect or allocated on callback");
   REQUIRE_EQ(provider.preparations, (std::array<std::size_t, 2>{2, 2}),
-             "held graph edit recreated an effect or allocated on callback");
+             "live graph edit recreated an effect or allocated on callback");
   REQUIRE_EQ(provider.owners[0].lock(), first_owner,
-             "held graph edit recreated an effect or allocated on callback");
+             "live graph edit recreated an effect or allocated on callback");
   REQUIRE_EQ(provider.owners[1].lock(), second_owner,
-             "held graph edit recreated an effect or allocated on callback");
+             "live graph edit recreated an effect or allocated on callback");
   near(output[10], 1.0F); // Prior-block tails retain both runtimes across publication.
   control.observe();
   REQUIRE_EQ(control.status().active_graph_revision, revised.snapshot->revision,
@@ -1696,12 +1636,7 @@ void two_verified_effects_align_and_survive_revisions(std::size_t block_frames) 
   // A new state prepares a new second instance; the first keeps running.
   const auto changed = take(state.apply({project::SetVst3ComponentState{second.id, {9, 8, 7, 6}}}));
   REQUIRE_OK(control.begin_edit(changed, "second effect state"),
-             "changed second state did not publish at the held boundary");
-  REQUIRE_EQ(
-      control.render_block(inputs, std::span(output).first(block_frames), {block_frames * 2, 1}),
-      engine::RoutedRenderStatus::holding,
-      "changed second state did not publish at the held boundary");
-  REQUIRE_OK(control.publish_held(), "changed second state did not publish at the held boundary");
+             "changed second state did not switch live");
   first_signal[0] = {1.0F, -1.0F};
   second_signal[0] = {1.0F, -1.0F};
   counted_allocations = 0;
@@ -1728,13 +1663,11 @@ void two_verified_effects_align_and_survive_revisions(std::size_t block_frames) 
 
   // Removing the first effect while playing switches live: the track plays
   // dry and its compensation grows by the removed seven frames.
-  control.set_live_switching(true);
   first_signal.fill({});
   second_signal.fill({});
   const auto removed = take(state.apply({project::RemoveVst3Plugin{first.id}}));
   REQUIRE_OK(control.begin_edit(removed, "remove first effect"),
              "live effect removal requested a hold");
-  REQUIRE_TRUE(!control.held_boundary(), "live effect removal requested a hold");
   counted_allocations = 0;
   counting_allocations = true;
   const auto switched_out =
@@ -1805,7 +1738,6 @@ void serial_effects_preserve_order_state_and_failed_graph(std::size_t block_fram
   SerialAffineProvider provider(first.id, second.id);
   provider.reject_second = true;
   app::RoutedPlaybackControl control(state, bounded, &provider);
-  control.set_live_switching(false); // covers held switching
   require(!control.submit_current() && provider.preparations == std::array<std::size_t, 2>{1, 1} &&
               provider.owners[0].expired() && control.status().active_graph_revision == 0,
           "failed second serial binding leaked the first owner or published a partial chain");
@@ -1842,12 +1774,7 @@ void serial_effects_preserve_order_state_and_failed_graph(std::size_t block_fram
 
   const auto revised = take(state.apply({project::SetSendGain{send, 0.5}}));
   REQUIRE_OK(control.begin_edit(revised, "send gain"),
-             "serial chain could not publish a routing-only edit at a held boundary");
-  REQUIRE_EQ(control.render_block(inputs, std::span(output).first(block_frames), {block_frames, 1}),
-             engine::RoutedRenderStatus::holding,
-             "serial chain could not publish a routing-only edit at a held boundary");
-  REQUIRE_OK(control.publish_held(),
-             "serial chain could not publish a routing-only edit at a held boundary");
+             "serial chain could not publish a live routing-only edit");
   wet_signal.fill({});
   dry_signal.fill({});
   counted_allocations = 0;
@@ -1856,23 +1783,23 @@ void serial_effects_preserve_order_state_and_failed_graph(std::size_t block_fram
       control.render_block(inputs, std::span(output).first(block_frames), {block_frames, 1});
   counting_allocations = false;
   REQUIRE_EQ(switched, engine::RoutedRenderStatus::rendered,
-             "held route edit replaced a serial stage or allocated on callback");
+             "live route edit replaced a serial stage or allocated on callback");
   REQUIRE_EQ(counted_allocations, 0,
-             "held route edit replaced a serial stage or allocated on callback");
+             "live route edit replaced a serial stage or allocated on callback");
   REQUIRE_EQ(provider.preparations, (std::array<std::size_t, 2>{2, 2}),
-             "held route edit replaced a serial stage or allocated on callback");
+             "live route edit replaced a serial stage or allocated on callback");
   REQUIRE_EQ(provider.owners[0].lock(), first_owner,
-             "held route edit replaced a serial stage or allocated on callback");
+             "live route edit replaced a serial stage or allocated on callback");
   REQUIRE_EQ(provider.owners[1].lock(), second_owner,
-             "held route edit replaced a serial stage or allocated on callback");
+             "live route edit replaced a serial stage or allocated on callback");
   REQUIRE_EQ(first_owner->blocks(), 2,
-             "held route edit replaced a serial stage or allocated on callback");
+             "live route edit replaced a serial stage or allocated on callback");
   REQUIRE_EQ(second_owner->blocks(), 2,
-             "held route edit replaced a serial stage or allocated on callback");
+             "live route edit replaced a serial stage or allocated on callback");
   near(output[17], 12.75F); // Prior block's final wet sample through main and 0.5 send.
   control.observe();
   REQUIRE_EQ(control.status().active_graph_revision, revised.snapshot->revision,
-             "held serial graph did not become active");
+             "live serial graph did not become active");
 
   auto saved_reorder = *state.snapshot();
   std::ranges::swap(saved_reorder.tracks[0].effects[0], saved_reorder.tracks[0].effects[1]);
@@ -1882,11 +1809,8 @@ void serial_effects_preserve_order_state_and_failed_graph(std::size_t block_fram
   REQUIRE_EQ(reordered.snapshot->tracks[0].effects[1].id, first_slot,
              "saved reorder lost stable insert slot IDs");
   // Both instances are kept, reordered, with their running state.
-  require(control.begin_edit(reordered, "reorder serial effects").has_value() &&
-              control.render_block(inputs, std::span(output).first(block_frames),
-                                   {2 * block_frames, 1}) == engine::RoutedRenderStatus::holding &&
-              control.publish_held().has_value(),
-          "serial reorder did not publish at the held boundary");
+  REQUIRE_OK(control.begin_edit(reordered, "reorder serial effects"),
+             "serial reorder did not switch live");
   wet_signal[0] = {0.25F, -0.25F};
   dry_signal[0] = {1.0F, -1.0F};
   counted_allocations = 0;
@@ -1938,7 +1862,6 @@ void verified_track_insert_and_parallel_pdc(std::size_t block_frames) {
   BoundInsertFixture provider;
   provider.expected_max_frames = static_cast<std::uint32_t>(block_frames);
   app::RoutedPlaybackControl control(state, bounded, &provider);
-  control.set_live_switching(false); // covers held switching
   require(control.submit_current().has_value() && provider.preparations == 1 &&
               control.source_layout().size() == 2,
           "verified single insert did not prepare exactly once");
@@ -1965,10 +1888,6 @@ void verified_track_insert_and_parallel_pdc(std::size_t block_frames) {
   auto revised = take(state.apply({project::AddSendRoute{processed, {send, returns, 0.5}}}));
   REQUIRE_OK(control.begin_edit(revised, "add send"),
              "topology edit did not prepare with the same insert owner");
-  REQUIRE_EQ(control.render_block(inputs, std::span(output).first(block_frames), {block_frames, 1}),
-             engine::RoutedRenderStatus::holding,
-             "topology edit did not prepare with the same insert owner");
-  REQUIRE_OK(control.publish_held(), "topology edit did not prepare with the same insert owner");
   processed_signal.fill({});
   dry_signal.fill({});
   counting_allocations = true;
@@ -1976,24 +1895,20 @@ void verified_track_insert_and_parallel_pdc(std::size_t block_frames) {
       control.render_block(inputs, std::span(output).first(block_frames), {block_frames, 1});
   counting_allocations = false;
   REQUIRE_EQ(switched, engine::RoutedRenderStatus::rendered,
-             "held topology edit recreated the plugin or allocated on callback");
+             "live topology edit recreated the plugin or allocated on callback");
   REQUIRE_EQ(counted_allocations, 0,
-             "held topology edit recreated the plugin or allocated on callback");
+             "live topology edit recreated the plugin or allocated on callback");
   REQUIRE_EQ(provider.preparations, 1,
-             "held topology edit recreated the plugin or allocated on callback");
+             "live topology edit recreated the plugin or allocated on callback");
   near(output[6], 0.75F); // Tail from the prior block, direct plus half-gain send.
   control.observe();
   REQUIRE_EQ(control.status().active_graph_revision, revised.snapshot->revision,
              "revised insert route was not active");
 
   auto changed = take(state.apply({project::SetVst3Missing{plugin.id, true}}));
-  REQUIRE_OK(control.begin_edit(changed, "plugin missing"),
-             "saved missing-plugin edit was not held");
-  REQUIRE_EQ(
-      control.render_block(inputs, std::span(output).first(block_frames), {block_frames * 2, 1}),
-      engine::RoutedRenderStatus::holding, "saved missing-plugin edit was not held");
-  // The missing plugin is prepared again and refused; the old instance plays on.
-  const auto failed = control.publish_held();
+  // The missing plugin is prepared again and refused at once; the old
+  // instance plays on.
+  const auto failed = control.begin_edit(changed, "plugin missing");
   REQUIRE_TRUE(!failed, "missing-plugin model edit was silently activated or discarded");
   REQUIRE_EQ(control.status().application, app::PlaybackApplication::failed,
              "missing-plugin model edit was silently activated or discarded");
@@ -2044,11 +1959,10 @@ void missing_insert_provider_does_not_publish() {
              "invalid block limit reached the plugin provider before validation");
 }
 
-void pending_supersession_and_hold_validation() {
+void pending_supersession_and_refusal() {
   Gate gate;
   auto state = model(gate);
   app::RoutedPlaybackControl control(state, limits());
-  control.set_live_switching(false); // covers held switching
   auto first = take(state.apply({project::AddTrack{id<project::TrackId>(2)}}));
   REQUIRE_OK(control.submit_current(),
              "initial project refresh or duplicate publication guard failed");
@@ -2064,63 +1978,58 @@ void pending_supersession_and_hold_validation() {
              "the queued edit's revision was not accepted");
   REQUIRE_EQ(control.status().application, app::PlaybackApplication::pending,
              "the queued edit was not reported pending");
-  REQUIRE_TRUE(!control.publish_held(), "a queued edit published before the first graph");
+  REQUIRE_TRUE(control.graph_handoff_in_progress(), "the queued edit was not reported pending");
   std::array<std::span<const engine::StereoFrame>, 2> inputs{};
   std::array<engine::StereoFrame, 4> output{};
   REQUIRE_EQ(control.render_block(inputs, output, {0, 1}), engine::RoutedRenderStatus::rendered,
              "older pending graph did not activate");
-  control.observe(); // The first graph is active; the queued edit applies now.
+  // The first graph is active; the queued edit applies now. A new track
+  // cannot switch while playing, so it is refused at once.
+  control.observe();
   REQUIRE_EQ(control.status().active_graph_revision, first.snapshot->revision,
              "older pending graph did not activate");
-  REQUIRE_EQ(control.render_block(inputs, output, {4, 1}), engine::RoutedRenderStatus::holding,
-             "the queued source-layout edit did not request its switch");
-  REQUIRE_TRUE(!control.publish_held().has_value(), "a source-layout edit was silently accepted");
   REQUIRE_EQ(control.status().application, app::PlaybackApplication::failed,
              "a source-layout edit was not reported failed");
+  REQUIRE_TRUE(!control.graph_handoff_in_progress(), "a refused edit left a handoff pending");
   REQUIRE_EQ(control.render_block(inputs, output, {4, 1}), engine::RoutedRenderStatus::rendered,
-             "the failed edit did not resume the original graph");
-  REQUIRE_OK(control.retry(),
-             "failed source-layout edit was not retryable or was silently accepted");
-  REQUIRE_EQ(control.render_block(inputs, output, {8, 1}), engine::RoutedRenderStatus::holding,
-             "failed source-layout edit was not retryable or was silently accepted");
-  REQUIRE_TRUE(!control.publish_held().has_value(),
+             "the failed edit interrupted the original graph");
+  REQUIRE_TRUE(!control.retry(),
                "failed source-layout edit was not retryable or was silently accepted");
   REQUIRE_EQ(control.render_block(inputs, output, {8, 1}), engine::RoutedRenderStatus::rendered,
-             "retry failure did not resume the original graph");
+             "retry failure interrupted the original graph");
   REQUIRE_EQ(control.status().application, app::PlaybackApplication::failed,
-             "retry failure did not resume the original graph");
+             "retry failure did not stay visibly failed");
+  REQUIRE_EQ(control.status().active_graph_revision, first.snapshot->revision,
+             "retry failure replaced the original graph");
 }
 
-void changed_model_during_hold_is_reported() {
+void later_edit_after_a_refusal_is_reported() {
   Gate gate;
   auto state = model(gate);
   (void)take(state.apply({project::AddTrack{id<project::TrackId>(2)}}));
   app::RoutedPlaybackControl control(state, limits());
-  control.set_live_switching(false); // covers held switching
-  REQUIRE_OK(control.submit_current(), "hold fixture failed to publish");
+  REQUIRE_OK(control.submit_current(), "refusal fixture failed to publish");
   std::array<std::span<const engine::StereoFrame>, 2> inputs{};
   std::array<engine::StereoFrame, 4> output{};
   REQUIRE_EQ(control.render_block(inputs, output, {0, 1}), engine::RoutedRenderStatus::rendered,
-             "hold fixture did not activate");
+             "refusal fixture did not activate");
   control.observe();
+  const auto active = control.status().active_graph_revision;
   auto first = take(state.apply({project::AddTrack{id<project::TrackId>(3)}}));
-  REQUIRE_OK(control.begin_edit(first, "first add"), "unacknowledged callback hold was accepted");
-  REQUIRE_TRUE(!control.publish_held(), "unacknowledged callback hold was accepted");
-  REQUIRE_EQ(control.render_block(inputs, output, {4, 1}), engine::RoutedRenderStatus::holding,
-             "callback did not acknowledge hold");
+  REQUIRE_TRUE(!control.begin_edit(first, "first add"), "a track addition switched while playing");
   auto later = take(state.apply({project::AddTrack{id<project::TrackId>(4)}}));
-  auto failed = control.publish_held();
-  REQUIRE_TRUE(!failed, "stale graph prep did not retain latest model and old active playback");
-  REQUIRE_EQ(failed.error().code, foundation::ErrorCode::conflict,
-             "stale graph prep did not retain latest model and old active playback");
+  auto failed = control.begin_edit(later, "later add");
+  REQUIRE_TRUE(!failed, "a later refused edit did not retain latest model and old playback");
+  REQUIRE_EQ(failed.error().code, foundation::ErrorCode::unsupported,
+             "a later refused edit did not retain latest model and old playback");
   REQUIRE_EQ(control.status().model_revision, later.snapshot->revision,
-             "stale graph prep did not retain latest model and old active playback");
-  REQUIRE_LT(control.status().active_graph_revision, later.snapshot->revision,
-             "stale graph prep did not retain latest model and old active playback");
+             "a later refused edit did not retain latest model and old playback");
+  REQUIRE_EQ(control.status().active_graph_revision, active,
+             "a later refused edit did not retain latest model and old playback");
   REQUIRE_EQ(control.status().application, app::PlaybackApplication::failed,
-             "stale graph prep did not retain latest model and old active playback");
+             "a later refused edit did not retain latest model and old playback");
   REQUIRE_EQ(control.render_block(inputs, output, {4, 1}), engine::RoutedRenderStatus::rendered,
-             "stale graph prep did not retain latest model and old active playback");
+             "a later refused edit did not retain latest model and old playback");
 }
 
 void constrained_publication_preserves_failed_revision() {
@@ -2185,7 +2094,6 @@ void terminal_limiter_alignment_and_tail(std::size_t frames) {
              "unrelated route edit did not begin with a live limiter");
   set_source(inputs, control.source_layout(), direct, silence);
   set_source(inputs, control.source_layout(), through_bus, silence);
-  require(!control.held_boundary(), "terminal limiter send gain requested a hold");
   counting_allocations = true;
   const auto switched = control.render_block(inputs, output, {frames, 1});
   counting_allocations = false;
@@ -2294,7 +2202,6 @@ void separate_native_track_chains_preserve_independent_history() {
   auto bounded = limits();
   bounded.max_frames = 64;
   app::RoutedPlaybackControl control(state, bounded);
-  control.set_live_switching(false); // covers held switching
   auto prepared = control.submit_current();
   if (!prepared)
     throw std::runtime_error("separate native track chains: " + prepared.error().message);
@@ -2348,10 +2255,6 @@ void separate_native_track_chains_preserve_independent_history() {
   const auto reordered = take(state.apply({project::MoveTrack{first_track, 1}}));
   REQUIRE_OK(control.begin_edit(reordered, "reorder native tracks"),
              "reordering native tracks lost their prepared processor bindings");
-  REQUIRE_EQ(control.render_block(inputs, output, {128, 1}), engine::RoutedRenderStatus::holding,
-             "reordering native tracks lost their prepared processor bindings");
-  REQUIRE_OK(control.publish_held(),
-             "reordering native tracks lost their prepared processor bindings");
   REQUIRE_EQ(control.render_block(inputs, output, {128, 1}), engine::RoutedRenderStatus::rendered,
              "reordered native tracks did not render");
   for (const auto& frame : output)
@@ -2375,7 +2278,6 @@ void native_group_eq_processes_routed_sum_and_retains_state() {
        project::AddSendRoute{audio, {send, returns, 0.25}},
        project::AddNativeEffect{group, 0, shape_patch(high_pass_100)}}));
   app::RoutedPlaybackControl control(state, limits());
-  control.set_live_switching(false); // covers held switching
   REQUIRE_OK(control.submit_current(), "saved group EQ did not publish");
   std::array<engine::StereoFrame, 64> signal{}, output{};
   std::array<std::span<const engine::StereoFrame>, 4> inputs{};
@@ -2395,7 +2297,6 @@ void native_group_eq_processes_routed_sum_and_retains_state() {
   signal.fill({});
   REQUIRE_OK(control.begin_edit(revised, "bus EQ send change"),
              "compatible group EQ send edit was not admitted");
-  REQUIRE_TRUE(!control.held_boundary(), "compatible group EQ send edit was not admitted");
   REQUIRE_EQ(control.render_block(inputs, output, {64, 1}), engine::RoutedRenderStatus::rendered,
              "group EQ did not survive live send publication");
   for (const auto frame : output)
@@ -2407,9 +2308,6 @@ void native_group_eq_processes_routed_sum_and_retains_state() {
   const auto bypass = take(state.apply({project::SetEffectInsertEnabled{group, slot, false}}));
   REQUIRE_OK(control.begin_edit(bypass, "bus EQ bypass"),
              "active group EQ bypass did not publish with a draining tail");
-  REQUIRE_EQ(control.render_block(inputs, output, {128, 1}), engine::RoutedRenderStatus::holding,
-             "active group EQ bypass did not publish with a draining tail");
-  REQUIRE_OK(control.publish_held(), "active group EQ bypass did not publish with a draining tail");
   counted_allocations = 0;
   counting_allocations = true;
   const auto drained = control.render_block(inputs, output, {128, 1});
@@ -2479,7 +2377,6 @@ void mixed_native_vst3_keeps_order_and_state(std::size_t block_frames, bool nati
   provider.expected_max_frames = static_cast<std::uint32_t>(block_frames);
   provider.nonlinear = true;
   app::RoutedPlaybackControl control(state, bounded, &provider);
-  control.set_live_switching(false); // covers held switching
   auto prepared = control.submit_current();
   if (!prepared)
     throw std::runtime_error("mixed prepare: " + prepared.error().message);
@@ -2552,11 +2449,7 @@ void mixed_native_vst3_keeps_order_and_state(std::size_t block_frames, bool nati
   control.observe();
   const auto revised = take(state.apply({project::SetSendGain{send, 0.5}}));
   REQUIRE_OK(control.begin_edit(revised, "mixed route send gain"),
-             "mixed route could not publish a held routing edit");
-  REQUIRE_EQ(control.render_block(inputs, std::span(output).first(block_frames), {block_frames, 1}),
-             engine::RoutedRenderStatus::holding,
-             "mixed route could not publish a held routing edit");
-  REQUIRE_OK(control.publish_held(), "mixed route could not publish a held routing edit");
+             "mixed route could not publish a live routing edit");
   signal.fill({});
   dry_signal.fill({});
   counted_allocations = 0;
@@ -2565,14 +2458,14 @@ void mixed_native_vst3_keeps_order_and_state(std::size_t block_frames, bool nati
       control.render_block(inputs, std::span(output).first(block_frames), {block_frames, 1});
   counting_allocations = false;
   REQUIRE_EQ(switched, engine::RoutedRenderStatus::rendered,
-             "mixed route held edit replaced its plugin or changed PDC");
-  REQUIRE_EQ(counted_allocations, 0, "mixed route held edit replaced its plugin or changed PDC");
-  REQUIRE_EQ(provider.preparations, 1, "mixed route held edit replaced its plugin or changed PDC");
+             "mixed route live edit replaced its plugin or changed PDC");
+  REQUIRE_EQ(counted_allocations, 0, "mixed route live edit replaced its plugin or changed PDC");
+  REQUIRE_EQ(provider.preparations, 1, "mixed route live edit replaced its plugin or changed PDC");
   REQUIRE_EQ(control.master_output_latency_frames(), 7,
-             "mixed route held edit replaced its plugin or changed PDC");
+             "mixed route live edit replaced its plugin or changed PDC");
   for (std::size_t frame = 0; frame < block_frames; ++frame) {
     REQUIRE_LT(std::fabs(output[frame].left - second_expected[frame].left * 1.5F), 0.00001F,
-               "mixed route lost native or plugin history across held publication");
+               "mixed route lost native or plugin history across live publication");
   }
   control.observe();
   auto reversed = *state.snapshot();
@@ -2580,11 +2473,8 @@ void mixed_native_vst3_keeps_order_and_state(std::size_t block_frames, bool nati
   const auto changed = take(state.restore_snapshot(std::move(reversed)));
   // Reversing the chain keeps both running stages; the plugin is not prepared again.
   require(control.begin_edit(changed, "reverse mixed chain").has_value() &&
-              control.render_block(inputs, std::span(output).first(block_frames),
-                                   {2 * block_frames, 1}) == engine::RoutedRenderStatus::holding &&
-              control.publish_held().has_value() &&
               changed.snapshot->tracks[0].effects[native_first ? 1 : 0].id == native_slot,
-          "mixed reorder did not publish at the held boundary");
+          "mixed reorder did not switch live");
   counted_allocations = 0;
   counting_allocations = true;
   const auto reversed_block =
@@ -2618,7 +2508,6 @@ void live_earlier_stage_removal_keeps_later_stage() {
   const auto earlier = state.snapshot()->tracks.front().effects.front().id;
   const auto compressor = state.snapshot()->tracks.front().effects.back().id;
   app::RoutedPlaybackControl control(state, limits());
-  control.set_live_switching(false); // covers held switching
   REQUIRE_OK(control.submit_current(), "earlier-stage fixture did not prepare");
   std::array<engine::StereoFrame, 64> input{}, output{};
   input.fill({0.5F, -0.5F});
@@ -2638,12 +2527,8 @@ void live_earlier_stage_removal_keeps_later_stage() {
   };
   REQUIRE_GT(reduction(), 0.0F, "the compressor did not engage before the edit");
   const auto removed = take(state.apply({project::RemoveEffectInsert{audio, earlier}}));
-  REQUIRE_OK(control.begin_edit(removed, "remove earlier stage"),
-             "earlier-stage removal did not reach a held boundary");
-  REQUIRE_EQ(control.render_block(inputs, output, {64, 1}), engine::RoutedRenderStatus::holding,
-             "earlier-stage removal did not reach a held boundary");
-  const auto published = control.publish_held();
-  REQUIRE_OK(published, "earlier-stage removal did not publish: " +
+  const auto published = control.begin_edit(removed, "remove earlier stage");
+  REQUIRE_OK(published, "earlier-stage removal did not switch live: " +
                             (published ? std::string() : published.error().message));
   input.fill({});
   REQUIRE_EQ(control.render_block(inputs, output, {64, 1}), engine::RoutedRenderStatus::rendered,
@@ -2676,7 +2561,6 @@ void native_eq_compressor_chain_keeps_order_and_history(std::size_t block_frames
   bounded.max_frames = block_frames;
   bounded.max_buffer_bytes = 6ULL * block_frames * sizeof(engine::StereoFrame);
   app::RoutedPlaybackControl control(state, bounded);
-  control.set_live_switching(false); // covers held switching
   REQUIRE_OK(control.submit_current(), "ordered native route did not prepare");
   const std::array<native_dsp::EqBandSettings, 1> eq_settings{
       {{native_dsp::EqBandKind::high_pass, 100.0, 0.707, 0.0}}};
@@ -2706,7 +2590,6 @@ void native_eq_compressor_chain_keeps_order_and_history(std::size_t block_frames
   signal.fill({});
   REQUIRE_OK(control.begin_edit(revised, "native chain send gain"),
              "native chain send gain was not admitted live");
-  REQUIRE_TRUE(!control.held_boundary(), "native chain send gain was not admitted live");
   oracle.fill({});
   eq.process(std::span(oracle).first(block_frames), {block_frames, 1});
   compressor.process(std::span(oracle).first(block_frames), {block_frames, 1});
@@ -2724,13 +2607,9 @@ void native_eq_compressor_chain_keeps_order_and_history(std::size_t block_frames
   }
   control.observe();
   const auto reordered = take(state.apply({project::MoveEffectInsert{audio, compressor_slot, 0}}));
-  // A reorder switches live at a held boundary; both stages keep running.
-  require(control.begin_edit(reordered, "native chain reorder").has_value() &&
-              control.render_block(inputs, std::span(output).first(block_frames),
-                                   {2 * block_frames, 1}) == engine::RoutedRenderStatus::holding,
-          "native chain reorder did not reach a held boundary");
-  const auto published = control.publish_held();
-  REQUIRE_OK(published, "native chain reorder did not publish: " +
+  // A reorder switches live; both stages keep running.
+  const auto published = control.begin_edit(reordered, "native chain reorder");
+  REQUIRE_OK(published, "native chain reorder did not switch live: " +
                             (published ? std::string() : published.error().message));
   REQUIRE_EQ(
       control.render_block(inputs, std::span(output).first(block_frames), {2 * block_frames, 1}),
@@ -2793,7 +2672,6 @@ void native_sidechain_send_matches_the_independent_compressor(std::size_t block_
   const auto revised = take(state.apply({project::SetSendGain{id<project::SendId>(4'503), 0.5}}));
   REQUIRE_OK(control.begin_edit(revised, "sidechain detector gain"),
              "sidechain gain edit was not admitted live");
-  REQUIRE_TRUE(!control.held_boundary(), "sidechain gain edit was not admitted live");
   std::array<engine::StereoFrame, 128> half_key{};
   for (std::size_t frame = 0; frame < block_frames; ++frame) {
     const auto fraction = static_cast<float>(std::min<std::size_t>(frame + 1, 64)) / 64.0F;
@@ -2895,7 +2773,6 @@ void vst3_sidechain_uses_verified_detector_and_keeps_prior_graph(std::size_t blo
   auto live_state = make_state(live_gate, true);
   StereoAuxProvider connected(true);
   app::RoutedPlaybackControl live(live_state, bounded, &connected);
-  live.set_live_switching(false); // covers held switching
   REQUIRE_OK(live.submit_current(), "initial verified VST3 detector graph failed");
   auto [first_status, first] = render(live, target, detector, 0);
   REQUIRE_EQ(first_status, engine::RoutedRenderStatus::rendered,
@@ -2907,13 +2784,9 @@ void vst3_sidechain_uses_verified_detector_and_keeps_prior_graph(std::size_t blo
       take(live_state.apply({project::SetSendGain{id<project::SendId>(8'303), 0.5}}));
   REQUIRE_OK(live.begin_edit(changed, "VST3 detector send gain"),
              "verified detector route gain edit was rejected");
-  auto [holding, _] = render(live, target, detector, block_frames);
-  REQUIRE_EQ(holding, engine::RoutedRenderStatus::holding,
-             "detector gain edit did not publish at a held boundary");
-  REQUIRE_OK(live.publish_held(), "detector gain edit did not publish at a held boundary");
   auto [resumed, second] = render(live, target, detector, block_frames);
   REQUIRE_EQ(resumed, engine::RoutedRenderStatus::rendered,
-             "detector gain edit did not resume playback");
+             "detector gain edit did not switch live");
   for (const auto& frame : std::span(second).first(block_frames))
     near(frame, 1.4F);
   live.observe();
@@ -2924,7 +2797,6 @@ void vst3_sidechain_uses_verified_detector_and_keeps_prior_graph(std::size_t blo
   auto missing_state = make_state(missing_gate, true);
   StereoAuxProvider unqualified(false);
   app::RoutedPlaybackControl missing(missing_state, bounded, &unqualified);
-  missing.set_live_switching(false); // covers held switching
   require(!missing.submit_current() &&
               missing_state.snapshot()->tracks[1].sends.front().target_insert ==
                   missing_state.snapshot()->tracks[0].effects.front().id,
@@ -2933,7 +2805,6 @@ void vst3_sidechain_uses_verified_detector_and_keeps_prior_graph(std::size_t blo
   Gate prior_gate;
   auto prior_state = make_state(prior_gate, false);
   app::RoutedPlaybackControl prior(prior_state, bounded, &unqualified);
-  prior.set_live_switching(false); // covers held switching
   REQUIRE_OK(prior.submit_current(), "prior unconnected VST3 graph did not prepare");
   auto [prior_status, prior_audio] = render(prior, target, detector, 0);
   REQUIRE_EQ(prior_status, engine::RoutedRenderStatus::rendered,
@@ -2946,12 +2817,8 @@ void vst3_sidechain_uses_verified_detector_and_keeps_prior_graph(std::size_t blo
       detector,
       {id<project::SendId>(8'303), target, 1.0, project::SendPurpose::sidechain,
        prior_state.snapshot()->tracks[0].effects.front().id}}}));
-  REQUIRE_OK(prior.begin_edit(added, "connect VST3 detector"),
-             "saved VST3 detector edit was lost before preflight");
-  auto [pending, ignored] = render(prior, target, detector, block_frames);
-  REQUIRE_EQ(pending, engine::RoutedRenderStatus::holding,
-             "dynamic unqualified detector edit replaced the active graph or lost saved intent");
-  REQUIRE_TRUE(!prior.publish_held(),
+  // The unqualified detector cannot be prepared: refused at once.
+  REQUIRE_TRUE(!prior.begin_edit(added, "connect VST3 detector"),
                "dynamic unqualified detector edit replaced the active graph or lost saved intent");
   REQUIRE_EQ(prior.status().application, app::PlaybackApplication::failed,
              "dynamic unqualified detector edit replaced the active graph or lost saved intent");
@@ -3003,8 +2870,6 @@ void saved_bypassed_vst3_effect_is_dry_and_enables_live() {
   const auto enabled = take(state.apply({project::SetEffectInsertEnabled{audio, slot, true}}));
   REQUIRE_OK(control.begin_edit(enabled, "enable saved VST3 effect"),
              "enabling a bypassed VST3 effect held, did not prepare it or lost its saved state");
-  REQUIRE_TRUE(!control.held_boundary(),
-               "enabling a bypassed VST3 effect held, did not prepare it or lost its saved state");
   REQUIRE_EQ(provider.preparations, 1,
              "enabling a bypassed VST3 effect held, did not prepare it or lost its saved state");
   REQUIRE_EQ(enabled.snapshot->tracks[0].effects[0].id, slot,
@@ -3058,8 +2923,6 @@ void live_vst3_effect_addition_keeps_source_without_silence(std::size_t frames) 
       take(state.apply({project::InsertVst3Plugin{track, 0, saved_fixture_insert()}}));
   REQUIRE_OK(control.begin_edit(applied, "add VST3 effect"),
              "VST3 addition held, was not prepared or was claimed audible before its switch");
-  REQUIRE_TRUE(!control.held_boundary(),
-               "VST3 addition held, was not prepared or was claimed audible before its switch");
   REQUIRE_EQ(provider.preparations, 1,
              "VST3 addition held, was not prepared or was claimed audible before its switch");
   REQUIRE_EQ(control.status().application, app::PlaybackApplication::pending,
@@ -3088,7 +2951,6 @@ void live_vst3_effect_addition_keeps_source_without_silence(std::size_t frames) 
   provider.fault->store(false, std::memory_order_release);
   const auto level = take(state.apply({project::SetTrackLevelPan{track, 0.5, 0.0}}));
   REQUIRE_OK(control.begin_edit(level, "later track level"), "later level edit held the graph");
-  REQUIRE_TRUE(!control.held_boundary(), "later level edit held the graph");
   for (std::uint64_t position = 2 * frames; position < 2 * frames + 512; position += frames)
     REQUIRE_EQ(control.render_block(inputs, std::span(output).first(frames), {position, 1}),
                engine::RoutedRenderStatus::rendered, "later level edit did not keep playing");
@@ -3133,8 +2995,6 @@ void live_vst3_effect_removal_drains_old_instance(std::size_t frames, bool bound
   const auto removed = take(state.apply({project::RemoveEffectInsert{track, slot}}));
   REQUIRE_OK(control.begin_edit(removed, "remove VST3 effect"),
              "VST3 removal held or was claimed audible before its switch");
-  REQUIRE_TRUE(!control.held_boundary(),
-               "VST3 removal held or was claimed audible before its switch");
   REQUIRE_EQ(control.status().application, app::PlaybackApplication::pending,
              "VST3 removal held or was claimed audible before its switch");
   const std::uint64_t ring = bounded_tail ? 100 : 4ULL * 48'000;
@@ -3196,8 +3056,6 @@ void failed_live_vst3_preparation_keeps_old_graph() {
       take(state.apply({project::InsertVst3Plugin{track, 0, saved_fixture_insert()}}));
   const auto refused = control.begin_edit(applied, "add unavailable VST3");
   REQUIRE_TRUE(!refused, "provider failure lost the saved edit, held or silently activated it");
-  REQUIRE_TRUE(!control.held_boundary(),
-               "provider failure lost the saved edit, held or silently activated it");
   REQUIRE_EQ(control.status().application, app::PlaybackApplication::failed,
              "provider failure lost the saved edit, held or silently activated it");
   REQUIRE_EQ(control.status().model_revision, applied.snapshot->revision,
@@ -3220,7 +3078,6 @@ void failed_live_vst3_preparation_keeps_old_graph() {
     near(frame, 0.25F);
   provider.unavailable = false;
   REQUIRE_OK(control.retry(), "retried VST3 addition did not switch live");
-  REQUIRE_TRUE(!control.held_boundary(), "retried VST3 addition did not switch live");
   REQUIRE_EQ(control.render_block(inputs, output, {128, 1}), engine::RoutedRenderStatus::rendered,
              "retried VST3 addition did not switch live");
   near(output[0], 0.125F);
@@ -3261,7 +3118,6 @@ void latent_vst3_addition_realigns_parallel_pdc(std::size_t frames) {
   const auto added = take(state.apply({project::InsertVst3Plugin{wet, 0, saved_fixture_insert()}}));
   REQUIRE_OK(control.begin_edit(added, "add latent VST3"),
              "latent VST3 addition held or was not prepared");
-  REQUIRE_TRUE(!control.held_boundary(), "latent VST3 addition held or was not prepared");
   REQUIRE_EQ(provider.preparations, 1, "latent VST3 addition held or was not prepared");
   wet_block.fill({});
   dry_block.fill({});
@@ -3319,8 +3175,6 @@ void live_vst3_state_edit_prepares_new_instance() {
   const auto changed = take(state.apply({project::SetVst3ComponentState{plugin.id, {9, 8, 7}}}));
   REQUIRE_OK(control.begin_edit(changed, "VST3 state"),
              "VST3 state edit held, was not prepared or was claimed audible early");
-  REQUIRE_TRUE(!control.held_boundary(),
-               "VST3 state edit held, was not prepared or was claimed audible early");
   REQUIRE_EQ(provider.preparations, 2,
              "VST3 state edit held, was not prepared or was claimed audible early");
   REQUIRE_EQ(control.status().application, app::PlaybackApplication::pending,
@@ -3375,7 +3229,6 @@ void live_vst3_bypass_switches_to_dry_path() {
   control.observe();
   const auto bypassed = take(state.apply({project::SetEffectInsertEnabled{audio, slot, false}}));
   REQUIRE_OK(control.begin_edit(bypassed, "bypass VST3 effect"), "VST3 bypass held the graph");
-  REQUIRE_TRUE(!control.held_boundary(), "VST3 bypass held the graph");
   counted_allocations = 0;
   counting_allocations = true;
   const auto switched = control.render_block(inputs, output, {64, 1});
@@ -3427,8 +3280,6 @@ void live_vst3_edit_spanning_two_tracks_switches_live() {
                                          project::InsertVst3Plugin{second_track, 0, second}}));
   REQUIRE_OK(control.begin_edit(applied, "add two VST3 effects"),
              "two-track VST3 edit held or did not prepare both effects");
-  REQUIRE_TRUE(!control.held_boundary(),
-               "two-track VST3 edit held or did not prepare both effects");
   REQUIRE_EQ(provider.preparations, 2, "two-track VST3 edit held or did not prepare both effects");
   counted_allocations = 0;
   counting_allocations = true;
@@ -3447,7 +3298,7 @@ void live_vst3_edit_spanning_two_tracks_switches_live() {
   REQUIRE_TRUE(!control.processor_fault(second_track), "two-track VST3 edit did not become active");
 }
 
-void captured_audio_edit_keeps_old_graph_until_explicit_hold() {
+void captured_audio_edit_keeps_old_graph_until_its_switch() {
   Gate gate;
   auto state = model(gate);
   const auto track = id<project::TrackId>(9'001);
@@ -3460,7 +3311,6 @@ void captured_audio_edit_keeps_old_graph_until_explicit_hold() {
        project::AddClip{
            track, project::Clip{clip, source, {{0}, {64}}, project::ElapsedInterval{{0}, {64}}}}}));
   app::RoutedPlaybackControl control(state, limits());
-  control.set_live_switching(false); // covers held switching
   REQUIRE_OK(control.submit_current(), "audio-only capture fixture did not prepare");
   std::array<engine::StereoFrame, 4> signal{}, output{};
   signal.fill({0.25F, -0.25F});
@@ -3473,47 +3323,50 @@ void captured_audio_edit_keeps_old_graph_until_explicit_hold() {
   auto moved =
       take(state.apply({project::SetClipPlacement{clip, project::ElapsedInterval{{8}, {72}}}}));
   auto captured = control.capture_source_edit(moved, "move audio clip");
-  REQUIRE_OK(captured,
-             "capture requested a hold, changed the active graph or lost its immutable inputs");
+  REQUIRE_OK(captured, "capture changed the active graph or lost its immutable inputs");
   REQUIRE_EQ(captured.value().snapshot, moved.snapshot,
-             "capture requested a hold, changed the active graph or lost its immutable inputs");
+             "capture changed the active graph or lost its immutable inputs");
   REQUIRE_EQ(captured.value().active_graph_revision, active_revision,
-             "capture requested a hold, changed the active graph or lost its immutable inputs");
+             "capture changed the active graph or lost its immutable inputs");
   REQUIRE_EQ(captured.value().max_frames, control.max_frames(),
-             "capture requested a hold, changed the active graph or lost its immutable inputs");
+             "capture changed the active graph or lost its immutable inputs");
   REQUIRE_EQ(captured.value().source_layout.size(), control.source_layout().size(),
-             "capture requested a hold, changed the active graph or lost its immutable inputs");
+             "capture changed the active graph or lost its immutable inputs");
   REQUIRE_EQ(captured.value().topological_order.size(), control.topological_order().size(),
-             "capture requested a hold, changed the active graph or lost its immutable inputs");
+             "capture changed the active graph or lost its immutable inputs");
   REQUIRE_EQ(control.status().application, app::PlaybackApplication::pending,
-             "capture requested a hold, changed the active graph or lost its immutable inputs");
+             "capture changed the active graph or lost its immutable inputs");
   REQUIRE_EQ(control.status().model_revision, moved.snapshot->revision,
-             "capture requested a hold, changed the active graph or lost its immutable inputs");
+             "capture changed the active graph or lost its immutable inputs");
   REQUIRE_EQ(control.status().active_graph_revision, active_revision,
-             "capture requested a hold, changed the active graph or lost its immutable inputs");
-  REQUIRE_TRUE(!control.held_boundary(),
-               "capture requested a hold, changed the active graph or lost its immutable inputs");
+             "capture changed the active graph or lost its immutable inputs");
   REQUIRE_EQ(control.render_block(inputs, output, {4, 1}), engine::RoutedRenderStatus::rendered,
-             "capture requested a hold, changed the active graph or lost its immutable inputs");
+             "capture changed the active graph or lost its immutable inputs");
   near(output[0], 0.25F);
-  REQUIRE_OK(control.request_captured_source_hold(captured.value()),
-             "prepared source capture did not request a bounded held boundary");
-  REQUIRE_EQ(control.render_block(inputs, output, {8, 1}), engine::RoutedRenderStatus::holding,
-             "prepared source capture did not request a bounded held boundary");
-  REQUIRE_OK(control.held_boundary(),
-             "prepared source capture did not request a bounded held boundary");
-  const auto blocked = control.publish_held();
-  REQUIRE_TRUE(!blocked, "unwired source switching activated a graph or lost the old audible path");
-  REQUIRE_EQ(blocked.error().code, foundation::ErrorCode::unsupported,
-             "unwired source switching activated a graph or lost the old audible path");
-  REQUIRE_EQ(control.render_block(inputs, output, {8, 1}), engine::RoutedRenderStatus::rendered,
-             "unwired source switching activated a graph or lost the old audible path");
-  REQUIRE_EQ(control.status().model_revision, moved.snapshot->revision,
-             "unwired source switching activated a graph or lost the old audible path");
+  // Only a withdrawn (failed) capture can be primed again.
+  REQUIRE_TRUE(!control.restart_captured_source(captured.value()),
+               "a pending source capture was re-armed");
+  // The caller has staged the primed source: the switch publishes live, and
+  // the old graph plays until the callback adopts it at its next block.
+  REQUIRE_OK(control.publish_captured_source(captured.value()),
+             "prepared source capture did not publish a live switch");
+  REQUIRE_TRUE(control.graph_handoff_in_progress(),
+               "prepared source capture did not publish a live switch");
   REQUIRE_EQ(control.status().active_graph_revision, active_revision,
-             "unwired source switching activated a graph or lost the old audible path");
-  REQUIRE_EQ(control.status().application, app::PlaybackApplication::failed,
-             "unwired source switching activated a graph or lost the old audible path");
+             "the source switch was reported audible before the callback adopted it");
+  REQUIRE_TRUE(!control.publish_captured_source(captured.value()),
+               "a source capture published twice");
+  REQUIRE_EQ(control.render_block(inputs, output, {8, 1}), engine::RoutedRenderStatus::rendered,
+             "the source switch inserted a held or silent block");
+  near(output[0], 0.25F);
+  control.observe();
+  REQUIRE_EQ(control.status().model_revision, moved.snapshot->revision,
+             "the source switch did not become active at its block");
+  REQUIRE_EQ(control.status().active_graph_revision, moved.snapshot->revision,
+             "the source switch did not become active at its block");
+  REQUIRE_EQ(control.status().application, app::PlaybackApplication::active,
+             "the source switch did not become active at its block");
+  REQUIRE_TRUE(!control.graph_handoff_in_progress(), "the adopted source switch stayed pending");
 }
 
 void exact_split_is_source_only_but_arbitrary_add_is_not() {
@@ -3559,7 +3412,7 @@ void exact_split_is_source_only_but_arbitrary_add_is_not() {
              "arbitrary clip insertion entered exact-split source-only handoff");
 }
 
-void captured_audio_edit_failure_and_supersession_do_not_hold() {
+void captured_audio_edit_failure_and_supersession_never_publish() {
   Gate gate;
   auto state = model(gate);
   const auto track = id<project::TrackId>(9'011);
@@ -3587,35 +3440,35 @@ void captured_audio_edit_failure_and_supersession_do_not_hold() {
   auto second =
       take(state.apply({project::SetClipSourceRange{clip, project::SourceRange{{8}, {72}}}}));
   auto captured_second = take(control.capture_source_edit(second, "trim clip"));
-  REQUIRE_TRUE(!control.request_captured_source_hold(captured_first),
-               "stale worker capture changed the current revision or held playback");
+  REQUIRE_TRUE(!control.publish_captured_source(captured_first),
+               "stale worker capture changed the current revision or published");
   REQUIRE_TRUE(!control.fail_captured_source_edit(
                    captured_first, {foundation::ErrorCode::io_failure, "obsolete worker failed"}),
-               "stale worker capture changed the current revision or held playback");
+               "stale worker capture changed the current revision or published");
   REQUIRE_EQ(control.status().model_revision, second.snapshot->revision,
-             "stale worker capture changed the current revision or held playback");
+             "stale worker capture changed the current revision or published");
   REQUIRE_EQ(control.status().application, app::PlaybackApplication::pending,
-             "stale worker capture changed the current revision or held playback");
+             "stale worker capture changed the current revision or published");
   REQUIRE_EQ(control.render_block(inputs, output, {4, 1}), engine::RoutedRenderStatus::rendered,
-             "stale worker capture changed the current revision or held playback");
+             "stale worker capture changed the current revision or published");
   auto failed = control.fail_captured_source_edit(
       captured_second, {foundation::ErrorCode::io_failure, "candidate media unavailable"});
-  REQUIRE_TRUE(!failed, "failed source preparation requested a hold or hid the saved/active split");
+  REQUIRE_TRUE(!failed, "failed source preparation published or hid the saved/active split");
   REQUIRE_EQ(failed.error().code, foundation::ErrorCode::io_failure,
-             "failed source preparation requested a hold or hid the saved/active split");
+             "failed source preparation published or hid the saved/active split");
   REQUIRE_EQ(control.status().model_revision, second.snapshot->revision,
-             "failed source preparation requested a hold or hid the saved/active split");
+             "failed source preparation published or hid the saved/active split");
   REQUIRE_EQ(control.status().active_graph_revision, old_revision,
-             "failed source preparation requested a hold or hid the saved/active split");
+             "failed source preparation published or hid the saved/active split");
   REQUIRE_EQ(control.status().application, app::PlaybackApplication::failed,
-             "failed source preparation requested a hold or hid the saved/active split");
-  REQUIRE_TRUE(!control.request_captured_source_hold(captured_second),
-               "failed source preparation requested a hold or hid the saved/active split");
+             "failed source preparation published or hid the saved/active split");
+  REQUIRE_TRUE(!control.publish_captured_source(captured_second),
+               "failed source preparation published or hid the saved/active split");
   REQUIRE_EQ(control.render_block(inputs, output, {8, 1}), engine::RoutedRenderStatus::rendered,
-             "failed source preparation requested a hold or hid the saved/active split");
+             "failed source preparation published or hid the saved/active split");
 }
 
-void captured_audio_edit_rejects_synth_graph_before_hold() {
+void captured_audio_edit_switches_beside_an_unchanged_synth() {
   Gate gate;
   auto state = model(gate);
   const auto audio = id<project::TrackId>(9'021);
@@ -3643,20 +3496,26 @@ void captured_audio_edit_rejects_synth_graph_before_hold() {
   const auto active = control.status().active_graph_revision;
   auto moved =
       take(state.apply({project::SetClipPlacement{clip, project::ElapsedInterval{{8}, {72}}}}));
-  auto refused = control.capture_source_edit(moved, "move with active synth");
-  REQUIRE_TRUE(!refused, "audio edit capture reset or held an instrument-bearing graph");
-  REQUIRE_EQ(refused.error().code, foundation::ErrorCode::unsupported,
-             "audio edit capture reset or held an instrument-bearing graph");
-  REQUIRE_EQ(control.status().model_revision, moved.snapshot->revision,
-             "audio edit capture reset or held an instrument-bearing graph");
-  REQUIRE_EQ(control.status().active_graph_revision, active,
-             "audio edit capture reset or held an instrument-bearing graph");
-  REQUIRE_EQ(control.status().application, app::PlaybackApplication::failed,
-             "audio edit capture reset or held an instrument-bearing graph");
-  REQUIRE_TRUE(!control.held_boundary(),
-               "audio edit capture reset or held an instrument-bearing graph");
+  // The synth track is unchanged, so the audio edit switches its source live
+  // and the synth plays on (its player carries over to the new source).
+  auto captured = control.capture_source_edit(moved, "move with active synth");
+  REQUIRE_OK(captured, "an audio edit beside an unchanged synth was refused");
+  REQUIRE_TRUE(!captured.value().source_overlay_eligible,
+               "an instrument-bearing graph took the audio-only source overlay");
+  REQUIRE_EQ(control.status().application, app::PlaybackApplication::pending,
+             "an audio edit beside an unchanged synth was not pending");
   REQUIRE_EQ(control.render_block(inputs, output, {4, 1}), engine::RoutedRenderStatus::rendered,
-             "audio edit capture reset or held an instrument-bearing graph");
+             "capture interrupted the instrument-bearing graph");
+  near(output[0], 0.25F);
+  REQUIRE_OK(control.publish_captured_source(captured.value()),
+             "an audio edit beside an unchanged synth did not publish live");
+  REQUIRE_EQ(control.render_block(inputs, output, {8, 1}), engine::RoutedRenderStatus::rendered,
+             "the source switch beside a synth held or silenced a block");
+  near(output[0], 0.25F);
+  control.observe();
+  REQUIRE_EQ(control.status().active_graph_revision, moved.snapshot->revision,
+             "the source switch beside a synth did not become active");
+  REQUIRE_LT(active, moved.snapshot->revision, "the source switch beside a synth did not advance");
 }
 } // namespace
 
@@ -3781,10 +3640,10 @@ int main(int argc, char** argv) {
           {"live_vst3_edit_spanning_two_tracks_switches_live",
            live_vst3_edit_spanning_two_tracks_switches_live},
           {"missing_insert_provider_does_not_publish", missing_insert_provider_does_not_publish},
-          {"pending_supersession_and_hold_validation", pending_supersession_and_hold_validation},
+          {"pending_supersession_and_refusal", pending_supersession_and_refusal},
           {"unadoptable_live_switch_is_withdrawn_and_next_edit_publishes",
            unadoptable_live_switch_is_withdrawn_and_next_edit_publishes},
-          {"changed_model_during_hold_is_reported", changed_model_during_hold_is_reported},
+          {"later_edit_after_a_refusal_is_reported", later_edit_after_a_refusal_is_reported},
           {"constrained_publication_preserves_failed_revision",
            constrained_publication_preserves_failed_revision},
           {"terminal_limiter_alignment_and_tail",
@@ -3794,13 +3653,13 @@ int main(int argc, char** argv) {
            }},
           {"terminal_output_latency_is_separate_from_edge_compensation",
            terminal_output_latency_is_separate_from_edge_compensation},
-          {"captured_audio_edit_keeps_old_graph_until_explicit_hold",
-           captured_audio_edit_keeps_old_graph_until_explicit_hold},
+          {"captured_audio_edit_keeps_old_graph_until_its_switch",
+           captured_audio_edit_keeps_old_graph_until_its_switch},
           {"exact_split_is_source_only_but_arbitrary_add_is_not",
            exact_split_is_source_only_but_arbitrary_add_is_not},
-          {"captured_audio_edit_failure_and_supersession_do_not_hold",
-           captured_audio_edit_failure_and_supersession_do_not_hold},
-          {"captured_audio_edit_rejects_synth_graph_before_hold",
-           captured_audio_edit_rejects_synth_graph_before_hold},
+          {"captured_audio_edit_failure_and_supersession_never_publish",
+           captured_audio_edit_failure_and_supersession_never_publish},
+          {"captured_audio_edit_switches_beside_an_unchanged_synth",
+           captured_audio_edit_switches_beside_an_unchanged_synth},
       });
 }

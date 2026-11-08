@@ -2,8 +2,6 @@
 
 #include <oscillate/application/routed_audio_source.hpp>
 #include <oscillate/audio_io/pipewire_output.hpp>
-#include <oscillate/native_dsp/effects/effect.hpp>
-#include <oscillate/native_inserts/effect_binding.hpp>
 #include <oscillate/persistence/store.hpp>
 #include <oscillate/project/model.hpp>
 
@@ -147,7 +145,7 @@ private:
   bool dropping_ = false;
 };
 
-enum class EditPhase : std::uint8_t { idle, awaiting_hold, awaiting_activation };
+enum class EditPhase : std::uint8_t { idle, awaiting_activation };
 
 double parse_gain(std::string_view text) {
   double value = 0.0;
@@ -221,7 +219,7 @@ int run(int argc, char** argv) {
     throw std::runtime_error(
         "PipeWire stream did not negotiate the project rate and bounded block");
   allowed.store(true, std::memory_order_release);
-  std::cout << "ready: gain SEND_ID VALUE | fail-master-latency | retry | undo | status\n";
+  std::cout << "ready: gain SEND_ID VALUE | fail-add-track | retry | undo | status\n";
   for (const auto& track : snapshot->tracks) {
     for (const auto& send : track.sends)
       std::cout << "send=" << send.id.to_string() << " gain=" << send.gain << '\n';
@@ -229,7 +227,6 @@ int run(int argc, char** argv) {
   std::cout.flush();
   CommandInput input;
   EditPhase phase = EditPhase::idle;
-  engine::BlockContext held{};
   auto save_edit = [&](project::AppliedRevision applied, std::string_view label) {
     const auto outcome = take(store.save(*applied.snapshot, persistence::SaveKind::explicit_save));
     if (outcome.status != persistence::SaveStatus::committed)
@@ -237,8 +234,12 @@ int run(int argc, char** argv) {
     const auto reopened = take(store.load_current());
     if (reopened.snapshot.revision != applied.snapshot->revision)
       throw std::runtime_error("saved routed edit reopened at the wrong revision");
-    take(control.begin_edit(applied, label));
-    phase = EditPhase::awaiting_hold;
+    // An edit switches live at a block boundary or is refused at once; the
+    // transport never holds for it.
+    const auto begun = control.begin_edit(applied, label);
+    if (!begun)
+      std::cerr << "Routed graph build: " << begun.error().message << '\n';
+    phase = begun ? EditPhase::awaiting_activation : EditPhase::idle;
     report(control, transport, output.status(), source.get());
   };
   auto command = [&](std::string_view line) {
@@ -251,8 +252,10 @@ int run(int argc, char** argv) {
       if (phase != EditPhase::idle)
         throw std::runtime_error("wait for the pending routed edit to finish");
       if (line == "retry") {
-        take(control.retry());
-        phase = EditPhase::awaiting_hold;
+        const auto retried = control.retry();
+        if (!retried)
+          std::cerr << "Routed graph build: " << retried.error().message << '\n';
+        phase = retried ? EditPhase::awaiting_activation : EditPhase::idle;
         report(control, transport, output.status(), source.get());
         return;
       }
@@ -260,16 +263,13 @@ int run(int argc, char** argv) {
         save_edit(take(model.undo()), "undo");
         return;
       }
-      if (line == "fail-master-latency") {
-        // Ceiling's lookahead changes the master path latency, which a
-        // playing graph cannot adopt: the edit is saved but not audible.
-        const auto* ceiling = native_dsp::effects::find_engine("ceiling");
-        if (ceiling == nullptr)
-          throw std::runtime_error("Ceiling is not registered");
-        save_edit(take(model.apply({project::AddNativeEffect{
-                      project::MasterSignalPath{}, 0,
-                      take(native_inserts::native_effect_patch_for_preset(*ceiling, {}))}})),
-                  "latency-changing master effect");
+      if (line == "fail-add-track") {
+        // Adding a track cannot switch while playing: the edit is saved but
+        // refused at once, and the old graph plays on.
+        constexpr foundation::IdBits added_track{0, 0x7ac4};
+        save_edit(
+            take(model.apply({project::AddTrack{take(project::TrackId::from_bits(added_track))}})),
+            "track added while playing");
         return;
       }
       std::istringstream words{std::string(line)};
@@ -279,7 +279,7 @@ int run(int argc, char** argv) {
       std::string extra;
       if (!(words >> action >> id_text >> gain_text) || words >> extra || action != "gain")
         throw std::runtime_error(
-            "expected gain SEND_ID VALUE, fail-master-latency, retry, undo or status");
+            "expected gain SEND_ID VALUE, fail-add-track, retry, undo or status");
       const auto send = take(project::SendId::parse(id_text));
       save_edit(take(model.apply({project::SetSendGain{send, parse_gain(gain_text)}})),
                 "send gain");
@@ -297,29 +297,16 @@ int run(int argc, char** argv) {
     if (status.state == audio::OutputState::disconnected ||
         status.state == audio::OutputState::error || source->status().worker_failed)
       break;
-    if (phase == EditPhase::awaiting_hold) {
-      if (const auto boundary = control.held_boundary()) {
-        const auto completed = transport.completed_snapshot();
-        if (completed.next_sample != boundary->project_sample_position ||
-            completed.generation != boundary->transport_generation)
-          throw std::runtime_error("routed callback hold diverged from the transport cursor");
-        held = *boundary;
-        std::cout << "hold sample=" << held.project_sample_position
-                  << " generation=" << held.transport_generation << '\n';
-        auto published = control.publish_held();
-        if (!published) {
-          phase = EditPhase::idle;
-          std::cerr << "Routed graph build: " << published.error().message << '\n';
-          report(control, transport, output.status(), source.get());
-        } else {
-          phase = EditPhase::awaiting_activation;
-        }
-      }
-    } else if (phase == EditPhase::awaiting_activation &&
-               control.status().application == app::PlaybackApplication::active) {
+    if (phase == EditPhase::awaiting_activation &&
+        control.status().application == app::PlaybackApplication::active) {
       phase = EditPhase::idle;
-      std::cout << "activated-from sample=" << held.project_sample_position
-                << " generation=" << held.transport_generation << '\n';
+      const auto completed = transport.completed_snapshot();
+      std::cout << "activated-by sample=" << completed.next_sample
+                << " generation=" << completed.generation << '\n';
+      report(control, transport, status, source.get());
+    } else if (phase == EditPhase::awaiting_activation &&
+               control.status().application == app::PlaybackApplication::failed) {
+      phase = EditPhase::idle; // Withdrawn: the old graph played on.
       report(control, transport, status, source.get());
     }
     input.poll_lines(command);

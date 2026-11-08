@@ -116,6 +116,14 @@ public:
           std::uint32_t max_frames) = 0;
 };
 
+// A running built-in instrument's player that a source edit leaves alone:
+// the replacement source plays it on from the block it takes over, voices
+// and all.
+struct KeptPlayer {
+  project::TrackId track;
+  std::shared_ptr<native_dsp::synth::NativeSynthPlayer> player;
+};
+
 // Immutable control-side capture for preparing a source-owned edit on
 // a worker. It owns the accepted project snapshot and copies the active source
 // layout/order so preparation need not read mutable control state.
@@ -127,6 +135,7 @@ struct RoutedSourcePreparationCapture {
   std::uint64_t active_graph_revision = 0;
   bool native_synth_switch = false;
   bool source_overlay_eligible = false;
+  std::vector<KeptPlayer> kept_players;
 };
 
 // Callback blocks (not frames) the playing graph may render while a live
@@ -140,8 +149,8 @@ inline constexpr std::uint64_t live_candidate_passed_block_limit = 64;
 // Headless live-routing seam. The caller renders one source span per prepared
 // topological node; source_layout() identifies external source slots. A bound
 // MIDI instrument generates its own frames on its instrument-track node.
-// The caller also owns a cursor that MUST remain at held_boundary() while a
-// hold is active. Device adapters do not implement that cursor contract yet.
+// Every edit switches at a block boundary without a hold; the transport never
+// stops for one (ADR-0094).
 // All control calls are serialized off the callback; render_block is callback-only.
 // Bounds the last callback sample for the shared musical-time evaluator, for
 // every live automation plan (synths, effects). Compute off the callback so
@@ -160,8 +169,8 @@ public:
   RoutedPlaybackControl(const RoutedPlaybackControl&) = delete;
   RoutedPlaybackControl& operator=(const RoutedPlaybackControl&) = delete;
 
-  // Initial publication. A newer edit calls begin_edit followed by
-  // publish_held after the callback acknowledges the hold.
+  // Initial publication. A newer edit calls begin_edit, or for a source
+  // edit capture_source_edit and then publish_captured_source.
   [[nodiscard]] foundation::Result<void> submit_current();
   // Bind the source bank after initial preparation and before starting audio.
   // It remains owned by the playback run until this control is destroyed.
@@ -186,15 +195,23 @@ public:
   [[nodiscard]] foundation::Result<void> reject_edit(const project::AppliedRevision& applied,
                                                      std::string_view command_label,
                                                      foundation::Error error);
-  // Capture accepts the saved revision but does not request a callback hold.
-  // Only unchanged graphs with audio clip edits (placement, trim, fades,
-  // saved warp/pitch processing) or one exact native-synth engine switch are
-  // eligible. Sources and track layout stay fixed. Preparation runs off the UI/audio threads,
-  // then verifies exact held-sample readiness before requesting a hold.
+  // Capture accepts the saved revision. Only unchanged graphs with audio clip
+  // edits (placement, trim, fades, saved warp/pitch processing) or one exact
+  // native-synth engine switch are eligible; every instrument the edit leaves
+  // alone is kept (kept_players). Sources and track layout stay fixed. A
+  // worker prepares the replacement source and primes it for a future block.
   [[nodiscard]] foundation::Result<RoutedSourcePreparationCapture>
   capture_source_edit(const project::AppliedRevision& applied, std::string_view command_label);
+  // The caller has staged the primed replacement source for the capture's
+  // revision. Publishes the graph that reads it as a live switch: the
+  // callback adopts both at the first block the source fills completely,
+  // and the old graph and source play until then (ADR-0094).
   [[nodiscard]] foundation::Result<void>
-  request_captured_source_hold(const RoutedSourcePreparationCapture& capture);
+  publish_captured_source(const RoutedSourcePreparationCapture& capture);
+  // The capture's published switch was withdrawn (its source never filled):
+  // the revision is pending again for a freshly primed source.
+  [[nodiscard]] foundation::Result<void>
+  restart_captured_source(const RoutedSourcePreparationCapture& capture);
   // Source-only, no-hold publication for one managed dry WAV clip move/trim.
   // Caller stages a separately prepared exact candidate before offering it.
   [[nodiscard]] foundation::Result<void>
@@ -202,10 +219,6 @@ public:
   [[nodiscard]] foundation::Result<void>
   fail_captured_source_edit(const RoutedSourcePreparationCapture& capture, foundation::Error error);
   [[nodiscard]] bool can_capture_source_edit(const project::Snapshot& candidate) const;
-  [[nodiscard]] foundation::Result<void> publish_held();
-  // Caller has staged a revision-matched, exact-boundary-ready source bank.
-  [[nodiscard]] foundation::Result<void> publish_held_with_source();
-  [[nodiscard]] foundation::Result<void> cancel_captured_source_hold(foundation::Error error);
   [[nodiscard]] foundation::Result<void> retry();
   // Also withdraws a live switch's candidate the callback has passed over for
   // live_candidate_passed_block_limit blocks: the old graph plays on, the
@@ -232,7 +245,7 @@ public:
   // Control side only: this exact saved source owns a prepared graph path.
   [[nodiscard]] bool has_bound_instrument_track(project::TrackId track) const noexcept;
   // Control-thread lookup for the exact saved effect in the callback-accepted
-  // graph. A pending/failed model edit, held graph, retired slot, instrument
+  // graph. A pending/failed model edit, pending graph, retired slot, instrument
   // source, or mismatched owner/slot/plugin/revision has no binding.
   [[nodiscard]] std::optional<ActiveVst3EffectManualEvents>
   active_vst3_effect_manual_events(project::TrackId track, project::InsertSlotId insert,
@@ -240,7 +253,7 @@ public:
                                    std::uint64_t graph_revision) const;
   // The saved instrument source must still match the callback-accepted graph.
   // A provider exposes this binding only after independent fixed-latency
-  // qualification; an unqualified, held or retired slot has no binding.
+  // qualification; an unqualified or retired slot has no binding.
   [[nodiscard]] std::optional<ActiveVst3InstrumentManualEvents>
   active_vst3_instrument_manual_events(project::TrackId track, project::PluginInstanceId plugin,
                                        std::uint64_t graph_revision) const;
@@ -351,19 +364,12 @@ public:
   [[nodiscard]] std::shared_ptr<const project::Snapshot> current_snapshot() const noexcept {
     return model_.snapshot();
   }
-  [[nodiscard]] std::optional<engine::BlockContext> held_boundary() const noexcept {
-    return publisher_.held_boundary();
-  }
-  // Control sequencer only. A transport restart cannot cross a graph hold or
-  // pending publication because its boundary belongs to the old generation.
+  // Control sequencer only. A transport restart cannot cross a pending
+  // publication because its boundary belongs to the old generation.
   [[nodiscard]] bool graph_handoff_in_progress() const noexcept {
-    return awaiting_ != nullptr || publisher_.has_pending() ||
-           publisher_.held_boundary().has_value() || pending_manual_.has_value() ||
+    return publisher_.has_pending() || pending_manual_.has_value() ||
            deferred_revision_.has_value();
   }
-  // Control side. Off, every structural edit takes the held path (a silent
-  // block while the new graph is prepared), as before live switching.
-  void set_live_switching(bool enabled) noexcept { live_switching_ = enabled; }
   [[nodiscard]] engine::RoutedRenderStatus
   render_block(std::span<const std::span<const engine::StereoFrame>> sources,
                std::span<engine::StereoFrame> output, engine::BlockContext context) noexcept {
@@ -378,9 +384,6 @@ public:
   }
 
 private:
-  // Set while build_and_publish() prepares a live (unheld) switch.
-  bool publish_live_ = false;
-  bool live_switching_ = true;
   [[nodiscard]] native_inserts::NativeEffectStage*
   active_effect_stage(std::optional<project::TrackId> track,
                       project::InsertSlotId insert) const noexcept;
@@ -453,8 +456,12 @@ private:
   // stage without a rebuild (ADR-0043).
   [[nodiscard]] foundation::Result<bool>
   try_queue_live_effect_automation(std::shared_ptr<const project::Snapshot> snapshot);
+  // The initial graph, or a live switch to `prepared_snapshot`'s. With
+  // `replaces_source`, a staged replacement source carries its audio clips
+  // or instrument change.
   [[nodiscard]] foundation::Result<void>
-  build_and_publish(std::shared_ptr<const project::Snapshot> prepared_snapshot);
+  build_and_publish(std::shared_ptr<const project::Snapshot> prepared_snapshot,
+                    bool replaces_source = false);
   // Kick & Bass Lock (ADR-0072): every live synth re-reads the notes it
   // follows from the published snapshot, so a bass edit or the other
   // track's Lock switch reaches a kept player; and hears its key. Control
@@ -475,6 +482,7 @@ private:
     std::uint64_t passed_at_publication = 0;
     bool withdrawing = false;
     std::shared_ptr<const project::Snapshot> published_snapshot;
+    std::shared_ptr<const project::Snapshot> source_snapshot;
     std::optional<routing::ProjectRoutePlan> route_plan;
     std::shared_ptr<native_dsp::ConvolutionRuntime> convolution;
     std::vector<ActiveChain> chains;
@@ -513,9 +521,7 @@ private:
   std::optional<std::uint64_t> deferred_revision_;
   std::uint32_t master_output_latency_frames_ = 0;
   bool prepared_limiter_ = false;
-  std::shared_ptr<const project::Snapshot> awaiting_;
   std::shared_ptr<const project::Snapshot> preparing_source_;
-  bool awaiting_source_replacement_ = false;
   std::vector<routing::ProjectRouteSource> sources_;
   std::vector<engine::RoutingNodeId> topological_order_;
   std::optional<routing::ProjectRoutePlan> initial_route_plan_;
