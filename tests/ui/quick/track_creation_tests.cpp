@@ -725,16 +725,14 @@ void paired_vst3_browser_insertion() {
                 15'000) &&
                 bridge.playback_active(),
             "browser did not save second source while playback continued");
-    require(QTest::qWaitFor([&] { return bridge.playback_revision_inactive(); }, 15'000),
-            "asymmetric source/effect pair was incorrectly reported audible");
+    // A track added while playing switches in live (ADR-0098).
+    require(QTest::qWaitFor([&] { return bridge.routed_graph_current(); }, 15'000),
+            "a source track added while playing did not switch in live");
     window->setProperty("selectedTrack", 1);
     browser->setProperty("showInstruments", false);
     QCoreApplication::processEvents();
-    require(browser->property("trackEligible").toBool() &&
-                browser->property("savedInsertState")
-                    .toString()
-                    .contains(QStringLiteral("saved, not yet audible")),
-            "second source target or saved versus audible browser status is wrong");
+    require(browser->property("trackEligible").toBool(),
+            "the added source track was not an effect target");
     const auto second_id = bridge.tracks()[1].toMap().value(QStringLiteral("id")).toString();
     const auto before_second_effect = bridge.revision();
     bridge.vst3_browser()->insert_vst3_effect(effect.value(QStringLiteral("index")).toInt(),
@@ -748,10 +746,9 @@ void paired_vst3_browser_insertion() {
                 15'000) &&
                 bridge.playback_active(),
             "browser did not save second source effect while playback continued");
-    // Its track joined while playing, so it plays from the next Play too.
-    require(QTest::qWaitFor([&] { return bridge.playback_revision_inactive(); }, 15'000) &&
+    require(QTest::qWaitFor([&] { return bridge.routed_graph_current(); }, 15'000) &&
                 bridge.playback_active(),
-            "an effect on a not-yet-audible track was reported live");
+            "an effect on the added track did not switch in live");
     // A chain takes any number of effects (ADR-0050).
     const auto full_revision = bridge.revision();
     bridge.vst3_browser()->insert_vst3_effect(effect.value(QStringLiteral("index")).toInt(),

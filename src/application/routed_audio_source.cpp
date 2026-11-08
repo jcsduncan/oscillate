@@ -81,7 +81,7 @@ RoutedAudioSource::prepare(const std::filesystem::path& root, const project::Sna
     return fail(ErrorCode::invalid_argument, "Routed source has no matching prepared graph");
   }
   return prepare_with_layout(root, snapshot, control, control.source_layout(),
-                             control.topological_order(), {}, control.max_frames(),
+                             control.topological_order(), {}, false, control.max_frames(),
                              buffer_frame_budget, worker_permit, stop, first_sample, 1, nullptr);
 }
 
@@ -94,15 +94,15 @@ Result<std::unique_ptr<RoutedAudioSource>> RoutedAudioSource::prepare(
       capture.snapshot->revision <= capture.active_graph_revision)
     return fail(ErrorCode::invalid_argument, "Routed source capture has no matching revision");
   return prepare_with_layout(root, *capture.snapshot, control, capture.source_layout,
-                             capture.topological_order, capture.kept_players, capture.max_frames,
-                             buffer_frame_budget, worker_permit, stop, first_sample,
-                             first_generation, live_cursor);
+                             capture.topological_order, capture.kept_players, capture.structural,
+                             capture.max_frames, buffer_frame_budget, worker_permit, stop,
+                             first_sample, first_generation, live_cursor);
 }
 
 Result<std::unique_ptr<RoutedAudioSource>> RoutedAudioSource::prepare_with_layout(
     const std::filesystem::path& root, const project::Snapshot& snapshot,
     RoutedPlaybackControl& control, std::span<const routing::ProjectRouteSource> layout,
-    std::span<const engine::RoutingNodeId> order, std::span<const KeptPlayer> kept,
+    std::span<const engine::RoutingNodeId> order, std::span<const KeptPlayer> kept, bool structural,
     std::size_t max_frames, std::size_t buffer_frame_budget, const std::atomic<bool>* worker_permit,
     const std::stop_token& stop,
     // Project sample and transport generation are separate coordinates.
@@ -214,9 +214,13 @@ Result<std::unique_ptr<RoutedAudioSource>> RoutedAudioSource::prepare_with_layou
         (has_bound_synth || std::ranges::any_of(kept, [&track](const KeptPlayer& player) {
            return player.track == track.id && player.retiring;
          }));
+    // A structural switch prepares a VST3 instrument's stage with its graph,
+    // which verifies it before the switch can take over (ADR-0098).
+    const bool graph_bound =
+        structural && std::holds_alternative<project::Vst3PluginInstance>(track.instrument_source);
     if (track.kind == project::TrackKind::instrument &&
         !std::holds_alternative<project::NativeInstrumentPatch>(track.instrument_source) &&
-        !track.midi_clips.empty() && !silent_placeholder &&
+        !track.midi_clips.empty() && !silent_placeholder && !graph_bound &&
         !control.has_bound_instrument_track(track.id)) {
       return fail(ErrorCode::unsupported,
                   "Routed managed-audio source requires a verified bound MIDI instrument");

@@ -226,7 +226,7 @@ private:
                       RoutedPlaybackControl& control,
                       std::span<const routing::ProjectRouteSource> layout,
                       std::span<const engine::RoutingNodeId> order,
-                      std::span<const KeptPlayer> kept, std::size_t max_frames,
+                      std::span<const KeptPlayer> kept, bool structural, std::size_t max_frames,
                       std::size_t buffer_frame_budget, const std::atomic<bool>* worker_permit,
                       const std::stop_token& stop, std::uint64_t first_sample,
                       std::uint64_t first_generation, const audio_io::TransportCursor* live_cursor);
