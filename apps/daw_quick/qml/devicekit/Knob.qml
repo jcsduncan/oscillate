@@ -112,13 +112,14 @@ Item {
     readonly property real labelWidth: theme.knobCaptions ? labelMetrics.advanceWidth : 0
     implicitWidth: Math.max(diameter + theme.knobWidthPad, theme.knobMinWidth,
                             Math.ceil(labelWidth) - 2 * theme.knobCaptionInset)
-    TextMetrics {
+    // The label laid out as the caption lays it out, hinting included (a
+    // TextMetrics advance can fall a pixel short of it); never shown.
+    Text {
         id: labelMetrics
+        readonly property real advanceWidth: implicitWidth
+        visible: false
         text: caption.labelText
-        font.family: caption.labelFont.family
-        font.pixelSize: caption.labelFont.pixelSize
-        font.bold: caption.labelFont.bold
-        font.letterSpacing: caption.labelFont.letterSpacing
+        font: caption.labelFont
     }
     implicitHeight: diameter + theme.knobHeightPad + (readout ? theme.knobReadoutPad : 0)
     objectName: theme.prefix + "Knob:" + parameterId

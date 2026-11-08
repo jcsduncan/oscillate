@@ -640,11 +640,13 @@ Rectangle {
         id: ottCard
         theme: panel.theme
         title: "OTT"
-        note: panel.ott ? "DRIVING THREE BANDS" : "CLICK TO DRIVE THE BANDS"
+        note: panel.ott ? "DRIVING THREE BANDS" : offNote
+        longestNote: offNote
+        readonly property string offNote: "CLICK TO DRIVE THE BANDS"
         noteColor: panel.ott ? panel.theme.accent : panel.theme.inkFaint
         x: bandCard.x + bandCard.width + panel.gap
         y: panel.rowY
-        width: panel.theme.ottCardWidth
+        width: Math.max(panel.theme.ottCardWidth, Math.ceil(fitWidth))
         height: panel.rowHeight
         opacity: panel.ott ? 1 : panel.theme.ottIdleOpacity
         Kit.Knob {
