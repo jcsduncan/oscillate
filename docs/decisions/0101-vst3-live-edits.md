@@ -17,7 +17,7 @@ The instrument runtime renders from one plan per saved revision: its compiled MI
 - **Pedals follow** as in ADR-0093.
 - **Bounds.** A plan may not need more lanes than the instrument's event budget was sized for. It may not bring a track's first pedals either. Either edit fails visibly.
 
-`PreparedTrackInsert` carries `offer_events` and `applied_events_revision`. A MIDI edit confined to a VST3 instrument track's notes, pedals and clip placement goes to the running instrument as a plan for its next block, in the same edit as any built-in players it changes. When a clip carries a lane, the edit is structural (ADR-0098): the plan is staged and adopted when the switching graph activates.
+`PreparedTrackInsert` carries `prepare_events`, which builds and checks a plan and returns a commit that cannot fail, and `applied_events_revision`. An edit reaches every instrument it changes or none. A MIDI edit confined to a VST3 instrument track's notes, pedals and clip placement goes to the running instrument as a plan for its next block, in the same edit as any built-in players it changes. When a clip carries a lane, the edit is structural (ADR-0098): the plan is staged and adopted when the switching graph activates.
 
 ### Tempo and meter changes
 A structural switch stages a new plan, with the new tempo, for every VST3 instrument that plays on. A VST3 effect is prepared afresh (`ChainContext::fresh_vst3_effects`), and its predecessor rings out on its drain beside it. Lookahead and delay compensation hand over as for any changed stage (ADR-0049).

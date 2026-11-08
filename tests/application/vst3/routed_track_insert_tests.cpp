@@ -198,9 +198,8 @@ void latency_change_replaces_the_plugin_live(const plugins::ScanResult& scanned,
   const auto wet = id<project::TrackId>(2);
   const auto dry = id<project::TrackId>(3);
   const auto effect = saved(scanned, -short_gain);
-  (void)take(
-      state.apply({project::AddTrack{wet}, project::AddTrack{dry},
-                   project::InsertVst3Plugin{wet, 0, effect}}));
+  (void)take(state.apply(
+      {project::AddTrack{wet}, project::AddTrack{dry}, project::InsertVst3Plugin{wet, 0, effect}}));
   const engine::RoutedMixerLimits limits{
       .latency = {1, compensation_frames},
       .max_frames = block_frames,

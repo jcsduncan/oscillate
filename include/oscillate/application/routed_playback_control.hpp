@@ -67,9 +67,11 @@ struct PreparedTrackInsert {
   std::function<std::optional<std::uint64_t>()> prepared_export_end{};
   // An instrument's MIDI, tempo and lanes from a newer snapshot (ADR-0101),
   // for its next block or, with `at_switch`, for the block the live graph
-  // switch of the snapshot's revision takes over; and the newest revision a
-  // rendered block has used. Absent for effects.
-  std::function<foundation::Result<void>(const project::Snapshot&, bool at_switch)> offer_events{};
+  // switch of the snapshot's revision takes over: built, checked and given
+  // room, then put in by the returned commit, which cannot fail. And the
+  // newest revision a rendered block has used. Absent for effects.
+  std::function<foundation::Result<std::function<void()>>(const project::Snapshot&, bool at_switch)>
+      prepare_events{};
   std::function<std::uint64_t()> applied_events_revision{};
   // Set only from a loaded effect host whose exact stereo auxiliary input was
   // activated. Saved sends and scan metadata cannot assert this capability.

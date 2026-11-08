@@ -1443,7 +1443,7 @@ RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot
     }
     // A VST3 instrument that plays on takes its new MIDI and tempo there too.
     for (const auto& record : vst3_next) {
-      if (record.slot || !record.track || !record.prepared.offer_events ||
+      if (record.slot || !record.track || !record.prepared.prepare_events ||
           std::ranges::none_of(vst3_stages_, [&record](const Vst3Stage& running) {
             return running.prepared.processor == record.prepared.processor;
           }))
@@ -1454,8 +1454,10 @@ RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot
       if (before == published_snapshot_->tracks.end() || after == snapshot.tracks.end() ||
           (!retimed && before->midi_clips == after->midi_clips))
         continue;
-      if (auto staged = record.prepared.offer_events(snapshot, true); !staged)
+      auto staged = record.prepared.prepare_events(snapshot, true);
+      if (!staged)
         return fail(snapshot.revision, staged.error());
+      staged.value()();
     }
   }
   auto published =
@@ -1875,7 +1877,7 @@ RoutedPlaybackControl::try_queue_live_players(std::shared_ptr<const project::Sna
     const auto stage = std::ranges::find_if(vst3_stages_, [track](const Vst3Stage& record) {
       return record.track == track->id && !record.slot;
     });
-    if (stage == vst3_stages_.end() || !stage->prepared.offer_events ||
+    if (stage == vst3_stages_.end() || !stage->prepared.prepare_events ||
         !stage->prepared.applied_events_revision)
       return Result<bool>::success(false);
     stages.push_back(&*stage);
@@ -1926,22 +1928,28 @@ RoutedPlaybackControl::try_queue_live_players(std::shared_ptr<const project::Sna
     return Result<bool>::failure(
         {ErrorCode::resource_exhausted, "Live instrument edit ran out of memory"});
   }
+  // The same for VST3 instruments: every plan is built and given room before
+  // any instrument gets one.
+  std::vector<std::function<void()>> commits;
   std::vector<std::function<std::uint64_t()>> probes;
   std::vector<project::TrackId> plugin_tracks;
   try {
+    commits.reserve(stages.size());
     probes.reserve(stages.size());
     plugin_tracks.reserve(stages.size());
-    for (const auto* stage : stages) {
-      if (auto offered = stage->prepared.offer_events(*snapshot, false); !offered) {
+    for (std::size_t index = 0; index < stages.size(); ++index) {
+      auto commit = stages[index]->prepared.prepare_events(*snapshot, false);
+      if (!commit) {
         // A full mailbox applies the newest revision once the callback moves on.
-        if (offered.error().code == ErrorCode::resource_exhausted && plugin_tracks.empty()) {
+        if (commit.error().code == ErrorCode::resource_exhausted) {
           deferred_revision_ = snapshot->revision;
           return Result<bool>::success(true);
         }
-        return Result<bool>::failure(offered.error());
+        return Result<bool>::failure(commit.error());
       }
-      probes.push_back(stage->prepared.applied_events_revision);
-      plugin_tracks.push_back(*stage->track);
+      commits.push_back(std::move(commit).value());
+      probes.push_back(stages[index]->prepared.applied_events_revision);
+      plugin_tracks.push_back(plugins[index]->id);
     }
   } catch (const std::bad_alloc&) {
     return Result<bool>::failure(
@@ -1952,6 +1960,8 @@ RoutedPlaybackControl::try_queue_live_players(std::shared_ptr<const project::Sna
   pending.runtime = players.empty() ? nullptr : players.front();
   for (std::size_t index = 0; index < players.size(); ++index)
     players[index]->commit_plan(std::move(plans[index]), *pending.snapshot);
+  for (auto& commit : commits)
+    commit();
   pending_players_ = std::move(players);
   pending_vst3_ = std::move(probes);
   pending_vst3_tracks_ = std::move(plugin_tracks);

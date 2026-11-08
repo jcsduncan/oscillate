@@ -179,21 +179,26 @@ public:
   // Control only: the plan for `snapshot`, for the next block or, with
   // `at_switch`, for the block the graph of the snapshot's revision takes
   // over (graph_activated).
-  [[nodiscard]] Result<void> offer(const project::Snapshot& snapshot, bool at_switch) {
+  // Builds and checks the plan and makes room for it; the returned plan
+  // goes in by commit(), which cannot fail, so one edit reaches several
+  // instruments or none.
+  [[nodiscard]] Result<std::unique_ptr<Plan>> prepare_offer(const project::Snapshot& snapshot,
+                                                            bool at_switch) {
+    using Prepared = Result<std::unique_ptr<Plan>>;
     // A switch withdrawn before it took over stages the same revision again.
     if (at_switch ? plans_->stale_for_stage(snapshot.revision) : plans_->stale(snapshot.revision))
-      return Result<void>::failure({ErrorCode::conflict, "VST3 instrument plan is stale"});
+      return Prepared::failure({ErrorCode::conflict, "VST3 instrument plan is stale"});
     if (!plans_->make_room())
-      return Result<void>::failure(
+      return Prepared::failure(
           {ErrorCode::resource_exhausted, "VST3 instrument plan mailbox is full"});
-    auto plan = make_plan(snapshot);
-    if (!plan)
-      return Result<void>::failure(plan.error());
+    return make_plan(snapshot);
+  }
+  void commit(std::unique_ptr<Plan> plan, bool at_switch) {
+    const auto revision = plan->revision;
     if (at_switch)
-      plans_->stage(std::move(plan).value(), snapshot.revision);
+      plans_->stage(std::move(plan), revision);
     else
-      plans_->offer(std::move(plan).value(), snapshot.revision);
-    return Result<void>::success();
+      plans_->offer(std::move(plan), revision);
   }
 
   [[nodiscard]] std::uint64_t applied_revision() const noexcept {
@@ -814,11 +819,24 @@ Vst3InstrumentTrackProvider::prepare(const project::Snapshot& snapshot,
         return bound->prepared_export_end();
       return std::optional<std::uint64_t>{};
     };
-    prepared.offer_events = [weak = std::weak_ptr<Vst3InstrumentRuntime>(runtime)](
-                                const project::Snapshot& next, bool at_switch) {
-      if (const auto bound = weak.lock())
-        return bound->offer(next, at_switch);
-      return Result<void>::failure({ErrorCode::unavailable, "VST3 instrument has retired"});
+    prepared.prepare_events = [weak = std::weak_ptr<Vst3InstrumentRuntime>(runtime)](
+                                  const project::Snapshot& next, bool at_switch) {
+      using Prepared = Result<std::function<void()>>;
+      const auto bound = weak.lock();
+      if (!bound)
+        return Prepared::failure({ErrorCode::unavailable, "VST3 instrument has retired"});
+      auto plan = bound->prepare_offer(next, at_switch);
+      if (!plan)
+        return Prepared::failure(plan.error());
+      try {
+        auto held =
+            std::make_shared<std::unique_ptr<Vst3InstrumentRuntime::Plan>>(std::move(plan).value());
+        return Prepared::success(
+            [bound, held, at_switch] { bound->commit(std::move(*held), at_switch); });
+      } catch (const std::bad_alloc&) {
+        return Prepared::failure(
+            {ErrorCode::resource_exhausted, "VST3 instrument plan allocation failed"});
+      }
     };
     prepared.applied_events_revision = [weak = std::weak_ptr<Vst3InstrumentRuntime>(runtime)] {
       const auto bound = weak.lock();

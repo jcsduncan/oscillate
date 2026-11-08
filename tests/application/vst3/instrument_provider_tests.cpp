@@ -381,8 +381,8 @@ void live_instrument_removal_releases_its_note(const plugins::ScanResult& scanne
     // The switching block releases the note: its tail, then silence.
     for (std::uint32_t frame = 0; frame < frames; ++frame) {
       const auto remaining = block == 1 && frame < tail_frames ? tail_frames - frame : 0U;
-      near(output[frame], held_level * static_cast<float>(remaining) /
-                              static_cast<float>(tail_frames));
+      near(output[frame],
+           held_level * static_cast<float>(remaining) / static_cast<float>(tail_frames));
     }
     control.observe();
   }
