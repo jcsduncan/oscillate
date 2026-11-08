@@ -64,6 +64,15 @@ int edit_arrangement_automation(oscillate::quick::ProjectBridge& bridge, QQuickW
     std::cerr << "Arrangement automation smoke: window never became active\n";
     return 1;
   }
+  // A track without lanes shows a plain A button.
+  const auto automation_marked = [&] {
+    auto* mark = find_item(window->contentItem(), QStringLiteral("trackAutomationMark"));
+    return mark != nullptr && mark->isVisible();
+  };
+  if (automation_marked()) {
+    std::cerr << "Arrangement automation smoke: a track with no lanes is marked as automated\n";
+    return 1;
+  }
   QTest::keyClick(window, Qt::Key_A);
   QCoreApplication::processEvents();
   auto* lane = find_item(window->contentItem(), QStringLiteral("arrangementAutomationOverlay"));
@@ -189,6 +198,12 @@ int edit_arrangement_automation(oscillate::quick::ProjectBridge& bridge, QQuickW
   QCoreApplication::processEvents();
   if (find_item(window->contentItem(), QStringLiteral("arrangementAutomationOverlay"))) {
     std::cerr << "Arrangement automation smoke: A did not hide the overlay\n";
+    return 1;
+  }
+  // With its lanes hidden, the track still says it holds automation.
+  if (!automation_marked()) {
+    std::cerr << "Arrangement automation smoke: the A button does not mark a track that holds "
+                 "automation\n";
     return 1;
   }
   std::cout

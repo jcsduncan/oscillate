@@ -196,6 +196,46 @@ void catalogue_has_a_card_per_engine() {
           "Press is listed as a compressor under Dynamics");
 }
 
+// An empty project opens the docked browser on Instruments, the first step:
+// with no track, an effect could only reach the master.
+void empty_project_opens_on_instruments() {
+  QTemporaryDir directory;
+  require(directory.isValid(), "scratch directory unavailable");
+  const auto root = std::filesystem::path(directory.path().toStdString()) / "empty";
+  auto session = app::ProjectSession::create(root);
+  require(session.has_value(), "project creation failed");
+  require(session.value()->snapshot().tracks.empty(), "the new project has no tracks");
+  quick::ProjectBridge bridge(directory.path().toStdString());
+  bridge.set_project(std::move(session).value(), root);
+
+  QQmlApplicationEngine qml;
+  qml.rootContext()->setContextProperty("projectBridge", &bridge);
+  qml.load(QUrl(QStringLiteral("qrc:/DawShell.qml")));
+  require(!qml.rootObjects().isEmpty(), "DAW shell did not load");
+  auto* window = qobject_cast<QQuickWindow*>(qml.rootObjects().front());
+  require(window != nullptr, "DAW shell has no window");
+  window->resize(1600, 1000);
+  QCoreApplication::processEvents();
+  auto* docked = find_item(window->contentItem(), QStringLiteral("dockedBrowser"));
+  require(docked != nullptr && docked->isVisible(), "the shell shows its docked browser");
+  auto* catalogue = docked->findChild<QObject*>(QStringLiteral("browserCatalogue"));
+  require(catalogue != nullptr, "the docked browser has its catalogue");
+  require(catalogue->property("category").toString() == QStringLiteral("Instruments"),
+          "an empty project's browser opens on Instruments, not " +
+              catalogue->property("category").toString().toStdString());
+  // The full browser, opened on the built-ins, agrees.
+  window->setProperty("pluginBrowserOpen", true);
+  QCoreApplication::processEvents();
+  auto* full = find_item(window->contentItem(), QStringLiteral("vst3BrowserPanel"));
+  require(full != nullptr && full->isVisible(), "the full browser opens");
+  full->setProperty("showBuiltIns", true);
+  QCoreApplication::processEvents();
+  auto* full_catalogue = full->findChild<QObject*>(QStringLiteral("browserCatalogue"));
+  require(full_catalogue != nullptr &&
+              full_catalogue->property("category").toString() == QStringLiteral("Instruments"),
+          "an empty project's full browser opens on Instruments too");
+}
+
 void shell_browser_creates_and_adds() {
   QTemporaryDir directory;
   require(directory.isValid(), "scratch directory unavailable");
@@ -551,6 +591,7 @@ int main(int argc, char** argv) {
   QGuiApplication application(argc, argv);
   try {
     catalogue_has_a_card_per_engine();
+    empty_project_opens_on_instruments();
     shell_browser_creates_and_adds();
     drops_and_docked_menu_target_tracks();
   } catch (const std::exception& error) {

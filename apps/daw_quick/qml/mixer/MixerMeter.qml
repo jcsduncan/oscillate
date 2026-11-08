@@ -1,8 +1,11 @@
 import QtQuick
 import "../shell"
+import "MixerDb.js" as Db
 
-// One channel's peak meter on the fader's -60..+12 dB scale. Hidden fill
-// when there is no reading (`valid` false), never a fabricated level.
+// One channel's peak meter on the strip's decibel scale (MixerDb.js), with
+// `inset` left at each end as the fader and scale leave it, so a reading
+// sits level with the scale's mark. Hidden fill when there is no reading
+// (`valid` false), never a fabricated level.
 Item {
     id: meter
     property real peak: 0
@@ -10,9 +13,8 @@ Item {
     property real hold: 0
     property bool valid: false
     property bool clipped: false
-    // The scale's floor and its span up to +12 dB.
-    readonly property real floorDb: -60
-    readonly property real spanDb: 72
+    // Room left above and below the scale (the fader cap's half-height).
+    property real inset: 0
     // A held peak this high (a scale position) shows in the clip colour.
     readonly property real holdHotAbove: 0.9
     // The meter's look.
@@ -30,45 +32,52 @@ Item {
     readonly property real clipHeight: 3
     readonly property real clipRadius: 1
     implicitWidth: meterWidth
-    function position(level) { return level <= 0 ? 0 : Math.max(0, Math.min(1, (20 * Math.log10(level) - floorDb) / spanDb)) }
+    function position(level) { return Db.positionOf(level) }
     readonly property real fill: valid ? position(peak) : 0
     readonly property real held: valid ? position(hold) : 0
     Accessible.role: Accessible.Indicator
-    Accessible.name: valid ? (peak <= 0 ? "Silent" : (20 * Math.log10(peak)).toFixed(1) + " dB peak")
+    Accessible.name: valid ? (peak <= 0 ? "Silent" : Db.toDb(peak).toFixed(1) + " dB peak")
                            : "No reading"
-    Rectangle {
-        anchors.fill: parent
-        radius: Theme.radiusSm
-        color: meter.wellColor
-    }
-    Rectangle {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        height: parent.height * meter.fill
-        radius: Theme.radiusSm
-        gradient: Gradient {
-            GradientStop { position: 0; color: meter.overColor }
-            GradientStop { position: meter.hotStop; color: meter.hotColor }
-            GradientStop { position: meter.safeStop; color: meter.safeColor }
-            GradientStop { position: 1; color: meter.floorColor }
+    Item {
+        id: column
+        objectName: "mixerMeterColumn"
+        y: meter.inset
+        width: parent.width
+        height: parent.height - 2 * meter.inset
+        Rectangle {
+            anchors.fill: parent
+            radius: Theme.radiusSm
+            color: meter.wellColor
         }
-    }
-    Rectangle {
-        visible: meter.held > 0
-        anchors.left: parent.left
-        anchors.right: parent.right
-        y: parent.height * (1 - meter.held)
-        height: Theme.strokeBold
-        color: meter.held > meter.holdHotAbove ? meter.overColor : meter.holdColor
-        opacity: meter.holdOpacity
-    }
-    Rectangle {
-        visible: meter.clipped
-        anchors.left: parent.left
-        anchors.right: parent.right
-        height: meter.clipHeight
-        radius: meter.clipRadius
-        color: meter.overColor
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: parent.height * meter.fill
+            radius: Theme.radiusSm
+            gradient: Gradient {
+                GradientStop { position: 0; color: meter.overColor }
+                GradientStop { position: meter.hotStop; color: meter.hotColor }
+                GradientStop { position: meter.safeStop; color: meter.safeColor }
+                GradientStop { position: 1; color: meter.floorColor }
+            }
+        }
+        Rectangle {
+            visible: meter.held > 0
+            anchors.left: parent.left
+            anchors.right: parent.right
+            y: parent.height * (1 - meter.held)
+            height: Theme.strokeBold
+            color: meter.held > meter.holdHotAbove ? meter.overColor : meter.holdColor
+            opacity: meter.holdOpacity
+        }
+        Rectangle {
+            visible: meter.clipped
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: meter.clipHeight
+            radius: meter.clipRadius
+            color: meter.overColor
+        }
     }
 }

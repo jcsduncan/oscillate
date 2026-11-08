@@ -39,15 +39,16 @@ cannot be made from a build configured differently.
 | VST3 instruments and effects (pinned SDK `v3.8.1_build_84`, out-of-process scanner) | yes | yes |
 | JACK output and real-time export | yes | yes |
 | Source and export sample-rate conversion (libsamplerate) | yes | yes |
-| AIFF, FLAC and MP3 import and export (libsndfile) | yes | yes |
+| AIFF, FLAC and MP3 import and export (libsndfile, libmpg123) | yes | yes |
 | Convolution reverb | **no** | **no** |
 
 - **Codecs.** The codec adapter links Ubuntu's libsndfile, which links
   LAME (`libmp3lame.so.0`) for MP3 export and mpg123, FLAC, Ogg, Vorbis and
-  Opus for the rest. The AppImage bundles all of them, with their notices and
-  a source offer ([MP3 and FLAC gate](mp3-flac-redistribution-gate.md)). The
-  `.deb` copies no codec: it depends on Ubuntu's `libsndfile1`, which brings
-  its own codec packages.
+  Opus for the rest, and links mpg123 (`libmpg123.so.0`) itself for MP3
+  import. The AppImage bundles all of them, with their notices and a source
+  offer ([MP3 and FLAC gate](mp3-flac-redistribution-gate.md)). The `.deb`
+  copies no codec: it depends on Ubuntu's `libsndfile1`, which brings its own
+  codec packages, and `libmpg123-0t64`.
 - **Convolution reverb.** [ADR-0020](../decisions/0020-convolution-reverb.md)
   keeps the convolution core out of release builds until its graph admission
   and multi-instance policy are qualified.

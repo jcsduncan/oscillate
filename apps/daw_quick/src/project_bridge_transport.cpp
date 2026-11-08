@@ -1157,7 +1157,10 @@ bool ProjectBridge::request_close() {
     set_status(QStringLiteral("Finishing autosave before closing"));
     return false;
   }
-  if (!vst3_editor_->commit_native_editor())
+  if (!plugin_state_saved([this] {
+        if (request_close())
+          emit readyToClose();
+      }))
     return false;
   vst3_editor_->discard_vst3_insert_editor();
   if (managed_media_busy()) {

@@ -18,7 +18,7 @@ HELPER_RELATIVE = Path("apps/daw_quick/oscillate_vst3_scan_helper")
 
 # Switches every package shares: a static Release Quick build with no test
 # hooks or local runtime paths, the VST3 host, JACK output, both
-# libsamplerate converters and the libsndfile codec adapter.
+# libsamplerate converters and the libsndfile and libmpg123 codec adapter.
 COMMON_SWITCHES = {
     "BUILD_TESTING": "OFF",
     "CMAKE_BUILD_TYPE": "Release",
@@ -40,7 +40,7 @@ FEATURES = {
     "JACK_FOUND": "JACK output and real-time export",
     "OSCILLATE_BUILD_EXPORT_RESAMPLER": "Export sample-rate conversion (libsamplerate)",
     "OSCILLATE_BUILD_SOURCE_RESAMPLER": "Source sample-rate conversion (libsamplerate)",
-    "OSCILLATE_BUILD_CODEC_ADAPTER": "AIFF, FLAC and MP3 import and export (libsndfile)",
+    "OSCILLATE_BUILD_CODEC_ADAPTER": "AIFF, FLAC and MP3 import and export (libsndfile, libmpg123)",
     "OSCILLATE_BUILD_CONVOLUTION_DSP": "Convolution reverb",
 }
 
@@ -70,6 +70,7 @@ DEB_DEPENDS = (
     "libc6",
     "libgcc-s1",
     "libjack-jackd2-0 | libjack-0.125",
+    "libmpg123-0t64",
     "libpipewire-0.3-0t64",
     "libqt6core6t64",
     "libqt6gui6",

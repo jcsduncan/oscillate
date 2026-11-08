@@ -23,8 +23,9 @@
 #include <string>
 
 // The project-lifecycle views against fakes shaped like their controllers:
-// the welcome screen's default name, Save a copy, and forgetting a project's
-// cache with a confirmation.
+// the welcome screen's default name, Save a copy, forgetting a project's
+// cache with a confirmation, and the choice a project change stopped by an
+// unsaved plug-in state offers.
 namespace {
 
 using oscillate::test::require;
@@ -65,6 +66,7 @@ QtObject {
     property var recoveryChoice: ({ active: false, projectName: "", currentIssue: "",
                                     autosaveIssue: "", hasCurrent: false, options: [] })
     property string status: ""
+    property string pluginStateProblem: ""
     property string suggestedProjectName: "Untitled Project 2"
     property var commandPalette: ({ reducedMotion: false })
     property string log: ""
@@ -78,6 +80,8 @@ QtObject {
     function rename_project(path, name) {}
     function choose_recovery(generation, kind) {}
     function cancel_recovery() {}
+    function continue_without_plugin_state() { log += "continue;"; pluginStateProblem = "" }
+    function cancel_project_change() { log += "cancel;"; pluginStateProblem = "" }
 }
 )QML";
 
@@ -266,6 +270,47 @@ void cache_panel_confirms_forgetting() {
           "the question outlived its project");
 }
 
+// Hidden until a project change is stopped; then it shows why, Stay (also
+// Escape) drops the change and Go on without it runs it.
+void plugin_state_problem_offers_the_choice() {
+  QQmlEngine engine;
+  auto host_object = make_fake(engine, fake_host, QStringLiteral("FakeHost.qml"));
+  auto bridge = make_fake(engine, fake_bridge, QStringLiteral("FakeBridge.qml"));
+  ViewHost host(engine, QStringLiteral("qrc:/PluginStateProblemPanel.qml"),
+                {{QStringLiteral("host"), QVariant::fromValue(host_object.get())},
+                 {QStringLiteral("bridge"), QVariant::fromValue(bridge.get())}});
+  require(!host.view->isVisible(), "the choice shows without a stopped change");
+  const QString problem =
+      QStringLiteral("Nothing changed: the open plug-in's latest state could not be saved. "
+                     "VST3 editor state could not be captured: getState failed");
+  const auto stop_a_change = [&] {
+    bridge->setProperty("pluginStateProblem", problem);
+    QCoreApplication::processEvents();
+    require(host.view->isVisible(), "a stopped project change offers no choice");
+  };
+  stop_a_change();
+  require(named(host.view, QStringLiteral("pluginStateProblemMessage"))->property("text") ==
+              problem,
+          "the choice does not say why the change stopped");
+  host.click(named(host.view, QStringLiteral("pluginStateKeepButton")));
+  require(bridge->property("log").toString() == QStringLiteral("cancel;") &&
+              !host.view->isVisible(),
+          "Stay did not drop the change");
+
+  stop_a_change();
+  host.click(named(host.view, QStringLiteral("pluginStateContinueButton")));
+  require(bridge->property("log").toString() == QStringLiteral("cancel;continue;") &&
+              !host.view->isVisible(),
+          "Go on without it did not run the change");
+
+  stop_a_change();
+  require(named(host.view, QStringLiteral("pluginStateKeepButton"))->hasActiveFocus(),
+          "Stay does not take the keyboard");
+  QTest::keyClick(&host.window, Qt::Key_Escape);
+  require(bridge->property("log").toString() == QStringLiteral("cancel;continue;cancel;"),
+          "Escape did not stay");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -278,6 +323,7 @@ int main(int argc, char** argv) {
     welcome_offers_the_first_free_name();
     save_copy_panel_sends_the_name();
     cache_panel_confirms_forgetting();
+    plugin_state_problem_offers_the_choice();
     require(qml_warnings.isEmpty(), "the project-lifecycle views logged QML warnings");
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

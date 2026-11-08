@@ -373,6 +373,7 @@ Rectangle {
             MixerMeter {
                 objectName: "mixerMeterL:" + strip.data_.id
                 height: parent.height
+                inset: fader.travelInset
                 peak: strip.meterValid ? strip.meter.leftPeak : 0
                 hold: strip.meterValid ? strip.meter.leftHold : 0
                 valid: strip.meterValid
@@ -381,10 +382,16 @@ Rectangle {
             MixerMeter {
                 objectName: "mixerMeterR:" + strip.data_.id
                 height: parent.height
+                inset: fader.travelInset
                 peak: strip.meterValid ? strip.meter.rightPeak : 0
                 hold: strip.meterValid ? strip.meter.rightHold : 0
                 valid: strip.meterValid
                 clipped: strip.meterValid && strip.meter.clipped
+            }
+            MixerScale {
+                objectName: "mixerScale:" + strip.data_.id
+                height: parent.height
+                inset: fader.travelInset
             }
             MixerFader {
                 id: fader
