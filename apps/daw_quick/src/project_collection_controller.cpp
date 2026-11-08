@@ -45,20 +45,36 @@ std::optional<QString> ProjectCollectionController::collect(application::Project
     if (error)
       return QStringLiteral("Could not inspect project library: %1")
           .arg(QString::fromStdString(error.message()));
-    start(source, destination, session.snapshot().revision);
+    start(source, destination, session.snapshot().revision, false);
     return std::nullopt;
   }
   return QStringLiteral("Project library has no available collected-copy name");
 }
 
+std::optional<QString>
+ProjectCollectionController::save_copy(application::ProjectSession& session,
+                                       const std::filesystem::path& source,
+                                       const std::filesystem::path& destination) {
+  if (busy())
+    return QStringLiteral("Finish active project work before saving a copy");
+  const auto saved = session.saving().save();
+  if (!saved)
+    return QStringLiteral("Save before copying failed: %1")
+        .arg(QString::fromStdString(saved.error().message));
+  start(source, destination, session.snapshot().revision, true);
+  return std::nullopt;
+}
+
 void ProjectCollectionController::start(std::filesystem::path source,
                                         std::filesystem::path destination,
-                                        std::uint64_t expected_revision) {
+                                        std::uint64_t expected_revision, bool save_as) {
   if (state_)
     return;
   auto state = std::make_unique<State>();
+  state->source = source;
   state->destination = destination;
   state->captured_revision = expected_revision;
+  state->save_as = save_as;
   State* completion = state.get();
   state->worker =
       std::jthread([completion, source = std::move(source), destination = std::move(destination),
@@ -74,7 +90,9 @@ void ProjectCollectionController::start(std::filesystem::path source,
         completion->result.emplace(std::move(result));
       });
   state_ = std::move(state);
-  status_ = QStringLiteral("Collecting the last saved project and verifying all media");
+  status_ = save_as ? QStringLiteral("Saving a copy as %1")
+                          .arg(QString::fromStdString(state_->destination.filename().string()))
+                    : QStringLiteral("Collecting the last saved project and verifying all media");
   timer_.start();
   emit changed();
 }
@@ -112,18 +130,29 @@ void ProjectCollectionController::poll() {
       return;
     completed.emplace(std::move(*state_->result));
   }
+  const auto source = state_->source;
   const auto destination = state_->destination;
   const auto captured_revision = state_->captured_revision;
+  const bool save_as = state_->save_as;
   state_.reset();
   timer_.stop();
   const bool success = completed->has_value();
-  status_ = success ? QStringLiteral("Collected project ready: %1 (from saved revision %2)")
-                          .arg(QString::fromStdString(destination.filename().string()))
-                          .arg(static_cast<qulonglong>(captured_revision))
-                    : QStringLiteral("Collection failed: %1")
-                          .arg(QString::fromStdString(completed->error().message));
+  const auto name = QString::fromStdString(destination.filename().string());
+  if (save_as)
+    status_ = success ? QStringLiteral("Saved a copy as %1").arg(name)
+                      : QStringLiteral("Could not save a copy: %1")
+                            .arg(QString::fromStdString(completed->error().message));
+  else
+    status_ = success ? QStringLiteral("Collected project ready: %1 (from saved revision %2)")
+                            .arg(name)
+                            .arg(static_cast<qulonglong>(captured_revision))
+                      : QStringLiteral("Collection failed: %1")
+                            .arg(QString::fromStdString(completed->error().message));
   emit changed();
   emit finished(success);
+  if (success && save_as)
+    emit copySaved(QString::fromStdString(destination.string()),
+                   QString::fromStdString(source.string()));
 }
 
 } // namespace oscillate::quick

@@ -53,7 +53,8 @@ oscillate_add_test_executable(oscillate_presentation_schema_tests SOURCES presen
   TEST persistence_presentation_schema)
 
 oscillate_add_test_executable(oscillate_schema_migration_tests SOURCES schema_migration_tests.cpp
-  LIBS oscillate::persistence nlohmann_json::nlohmann_json OpenSSL::Crypto
+  LIBS oscillate::persistence oscillate::foundation_digest nlohmann_json::nlohmann_json
+    OpenSSL::Crypto
   INCLUDES ${CMAKE_CURRENT_LIST_DIR}/../../src/persistence
   DEFINITIONS OSCILLATE_SCHEMA_GOLDEN_DIR="${CMAKE_CURRENT_LIST_DIR}/golden"
   TEST persistence_schema_migration)

@@ -48,6 +48,9 @@ public:
   Q_INVOKABLE void set_budget_mib(int mib);
   Q_INVOKABLE void clear_current();
   Q_INVOKABLE void clear_all();
+  // Clears a registered project's cache and drops it from the registry; the
+  // status reports the space freed. Not the open project.
+  Q_INVOKABLE void forget_project(const QString& path);
 
 signals:
   void changed();

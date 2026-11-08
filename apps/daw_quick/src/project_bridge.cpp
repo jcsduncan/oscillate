@@ -614,6 +614,20 @@ void ProjectBridge::create_job_controllers() {
       refresh_available_projects();
     set_status(collection_->status());
   });
+  // A saved copy opens, unless another project was opened meanwhile.
+  connect(
+      collection_.get(), &ProjectCollectionController::copySaved, this,
+      [this](const QString& destination, const QString& source) {
+        if (!session_ || QString::fromStdString(waveform_root_.string()) != source)
+          return;
+        lifecycle_->open_project(QUrl::fromLocalFile(destination));
+        const auto copy = std::filesystem::path(destination.toStdString());
+        if (project_name_ == QString::fromStdString(copy.filename().string()))
+          set_status(collection_->status());
+        else
+          set_status(
+              QStringLiteral("Saved a copy at %1; it did not open: %2").arg(destination, status_));
+      });
   connect(managed_media_.get(), &ManagedMediaController::started, this, [this] {
     emit playbackChanged();
     imports_->notify();
@@ -1768,6 +1782,23 @@ void ProjectBridge::collect_project_copy() {
 
 void ProjectBridge::cancel_project_collection() { collection_->cancel(); }
 
+void ProjectBridge::save_copy(const QString& copy_name) {
+  if (!session_ || waveform_root_.empty() || collection_->busy() || !jobs_idle() ||
+      vst3_browser_busy()) {
+    set_status(QStringLiteral("Finish active project work before saving a copy"));
+    return;
+  }
+  const auto destination = lifecycle_->copy_destination(copy_name);
+  if (!destination)
+    return;
+  // An open plug-in editor's state belongs in the copy, not only the original.
+  if (!vst3_editor_->commit_native_editor())
+    return;
+  finish_in_flight_saves();
+  if (const auto failure = collection_->save_copy(*session_, waveform_root_, *destination))
+    set_status(*failure);
+}
+
 void ProjectBridge::refresh_available_projects() { lifecycle_->refresh_available_projects(); }
 void ProjectBridge::remember_project(const QString& path) { lifecycle_->remember_project(path); }
 bool ProjectBridge::save_current_project_if_dirty() {
@@ -1776,6 +1807,7 @@ bool ProjectBridge::save_current_project_if_dirty() {
 void ProjectBridge::create_default_project(const QString& name) {
   lifecycle_->create_default_project(name);
 }
+QString ProjectBridge::suggested_copy_name() const { return lifecycle_->suggested_copy_name(); }
 void ProjectBridge::open_project(const QUrl& folder) { lifecycle_->open_project(folder); }
 void ProjectBridge::choose_open_project() { lifecycle_->choose_open_project(); }
 void ProjectBridge::open_listed(const QString& path) { lifecycle_->open_listed(path); }

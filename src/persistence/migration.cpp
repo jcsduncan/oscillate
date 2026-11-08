@@ -1,6 +1,7 @@
 #include "migration.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <utility>
 
 namespace oscillate::persistence::detail {
@@ -12,6 +13,9 @@ using Result = foundation::Result<Json>;
 
 // One entry per schema change after the first released schema (ADR-0095).
 constexpr std::array<MigrationStep, 0> built_in_steps{};
+
+// The chain a test installed, or null for the built-in one.
+std::atomic<const ScopedMigrationChain::Chain*> installed_chain{nullptr};
 
 } // namespace
 
@@ -53,8 +57,21 @@ Result migrate_manifest(Json manifest, SchemaVersion from, SchemaVersion current
 }
 
 Result migrate_manifest(Json manifest, SchemaVersion from) {
+  if (const auto* chain = installed_chain.load(std::memory_order_acquire)) {
+    return migrate_manifest(std::move(manifest), from, current_schema, chain->released,
+                            chain->steps);
+  }
   return migrate_manifest(std::move(manifest), from, current_schema, released_schemas,
                           migration_steps());
+}
+
+ScopedMigrationChain::ScopedMigrationChain(std::span<const SchemaVersion> released,
+                                           std::span<const MigrationStep> steps) noexcept
+    : chain_{released, steps},
+      previous_(installed_chain.exchange(&chain_, std::memory_order_acq_rel)) {}
+
+ScopedMigrationChain::~ScopedMigrationChain() {
+  installed_chain.store(previous_, std::memory_order_release);
 }
 
 } // namespace oscillate::persistence::detail

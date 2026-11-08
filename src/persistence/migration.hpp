@@ -49,8 +49,32 @@ struct MigrationStep {
 migrate_manifest(nlohmann::json manifest, SchemaVersion from, SchemaVersion current,
                  std::span<const SchemaVersion> released, std::span<const MigrationStep> steps);
 
-// The same, with this build's schema, releases and chain.
+// The same, with this build's schema, releases and chain, or the chain a
+// ScopedMigrationChain installed.
 [[nodiscard]] foundation::Result<nlohmann::json> migrate_manifest(nlohmann::json manifest,
                                                                   SchemaVersion from);
+
+// Tests only: loading uses `released` and `steps` instead of the built-in
+// lists while this guard lives, so a project saved in a synthetic older schema
+// opens through the real store. Guards nest; the spans must outlive the guard.
+class ScopedMigrationChain {
+public:
+  ScopedMigrationChain(std::span<const SchemaVersion> released,
+                       std::span<const MigrationStep> steps) noexcept;
+  ~ScopedMigrationChain();
+  ScopedMigrationChain(const ScopedMigrationChain&) = delete;
+  ScopedMigrationChain& operator=(const ScopedMigrationChain&) = delete;
+  ScopedMigrationChain(ScopedMigrationChain&&) = delete;
+  ScopedMigrationChain& operator=(ScopedMigrationChain&&) = delete;
+
+  struct Chain {
+    std::span<const SchemaVersion> released;
+    std::span<const MigrationStep> steps;
+  };
+
+private:
+  Chain chain_;
+  const Chain* previous_;
+};
 
 } // namespace oscillate::persistence::detail
