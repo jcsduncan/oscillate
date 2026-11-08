@@ -62,7 +62,6 @@ struct TrackBytes {
     append(body, event);
     return *this;
   }
-  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): delta first, as in the file.
   TrackBytes& meta(std::uint32_t delta, std::uint8_t type, const Bytes& data) {
     vlq(body, delta);
     append(body, {0xFF, type});

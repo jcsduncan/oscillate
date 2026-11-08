@@ -240,7 +240,7 @@ void envelope_decays_each_slice() {
 
 void transpose_shifts_pitch() {
   // One slice of a 440 Hz tone transposed up an octave must read at 880 Hz.
-  std::vector<float> tone(rate * 2);
+  std::vector<float> tone(static_cast<std::size_t>(rate) * 2);
   for (std::size_t index = 0; index < tone.size(); ++index)
     tone[index] = static_cast<float>(
         0.5 * std::sin(2.0 * std::numbers::pi * 440.0 * static_cast<double>(index) / rate));
@@ -298,6 +298,7 @@ void partition_and_seek_are_invariant() {
 }
 
 void rejects_invalid_settings_and_does_not_allocate() {
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange): an invalid tier on purpose.
   require(!warp::create_beats_stream({rate, 8'192}, static_cast<warp::QualityTier>(255), {}),
           "invalid Beats quality tier accepted");
   const auto invalid = [](warp::BeatsSettings settings) {

@@ -39,6 +39,7 @@ std::vector<std::string> labels(const application::ProjectSession& session) {
   const auto undo = session.history().undo_steps();
   const auto redo = session.history().redo_steps();
   std::vector<std::string> result;
+  result.reserve(undo.size() + redo.size());
   for (const auto& step : undo)
     result.push_back(application::describe_change(*step.before, *step.after));
   for (const auto& step : redo)
@@ -101,8 +102,10 @@ void gestures_across_tracks_read_as_one_action() {
   Directory directory;
   auto session = take(application::ProjectSession::create(directory.path() / "song"));
   const auto kick = take(session->instruments().add_synth_track());
+  constexpr int target_count = 3;
   std::vector<project::TrackId> targets;
-  for (int i = 0; i < 3; ++i)
+  targets.reserve(target_count);
+  for (int i = 0; i < target_count; ++i)
     targets.push_back(take(session->instruments().add_synth_track()));
   const project::Snapshot copy = session->snapshot();
   (void)take(session->effects().duck_tracks_to(kick, targets));
@@ -120,6 +123,7 @@ void nothing_changed_still_has_a_label() {
 
 } // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): an uncaught exception is the test's failure report.
 int main() {
   steps_are_named_by_what_they_changed();
   gestures_across_tracks_read_as_one_action();

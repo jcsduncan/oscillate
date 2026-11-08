@@ -128,16 +128,19 @@ public:
   Steinberg::tresult PLUGIN_API setIoMode(Steinberg::Vst::IoMode) override {
     return Steinberg::kResultOk;
   }
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): IComponent's signature.
   Steinberg::int32 PLUGIN_API getBusCount(Steinberg::Vst::MediaType type,
                                           Steinberg::Vst::BusDirection direction) override {
     if (type != Steinberg::Vst::kAudio)
       return 0;
     return fixture_sidechain && direction == Steinberg::Vst::kInput ? 2 : 1;
   }
+  // NOLINTBEGIN(bugprone-easily-swappable-parameters): IComponent's signature.
   Steinberg::tresult PLUGIN_API getBusInfo(Steinberg::Vst::MediaType,
                                            Steinberg::Vst::BusDirection direction,
                                            Steinberg::int32 index,
                                            Steinberg::Vst::BusInfo& info) override {
+    // NOLINTEND(bugprone-easily-swappable-parameters)
     info = {};
     info.mediaType = Steinberg::Vst::kAudio;
     info.direction = direction;
@@ -427,7 +430,6 @@ public:
     return normalized_;
   }
   // The SDK fixes this convertible parameter order.
-  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   Steinberg::tresult PLUGIN_API setParamNormalized(Steinberg::Vst::ParamID id,
                                                    Steinberg::Vst::ParamValue value) override {
     if (fail_mode("controller-value") || id != 101)

@@ -178,17 +178,13 @@ private:
   void start_export_task(application::MasterExportTask task, const QString& format_name,
                          const std::filesystem::path& target);
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
-  void start_vst3_effect_export_task(application::StoppedSnapshotExportTask task,
+  void start_vst3_master_export_task(application::StoppedSnapshotExportTask task,
                                      exporting::MasterOutputOptions options);
-  void start_vst3_instrument_export_task(application::StoppedSnapshotExportTask task,
-                                         std::filesystem::path bundle,
-                                         exporting::MasterOutputOptions options,
-                                         bool with_managed_audio);
-  void start_vst3_instrument_stem_export_task(application::StoppedSnapshotExportTask task,
-                                              project::TrackId source_track,
-                                              exporting::MasterRenderOptions options,
-                                              bool with_managed_audio,
-                                              std::filesystem::path bundle);
+  void start_vst3_stems_export_task(application::StoppedSnapshotExportTask task,
+                                    exporting::StemRenderOptions options);
+  void start_vst3_stem_export_task(application::StoppedSnapshotExportTask task,
+                                   project::TrackId source_track,
+                                   exporting::MasterRenderOptions options);
 #endif
   void poll();
 

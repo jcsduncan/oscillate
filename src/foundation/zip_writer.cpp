@@ -103,9 +103,7 @@ std::uint32_t crc32(std::span<const std::byte> bytes, std::uint32_t previous) no
   return ~crc;
 }
 
-Writer::Writer(int fd, // NOLINT(bugprone-easily-swappable-parameters)
-               std::int64_t unix_seconds)
-    : fd_(fd) {
+Writer::Writer(int fd, std::int64_t unix_seconds) : fd_(fd) {
   const auto value = static_cast<std::time_t>(unix_seconds);
   std::tm utc{};
   if (::gmtime_r(&value, &utc) == nullptr || utc.tm_year + tm_epoch_year < dos_epoch_year) {

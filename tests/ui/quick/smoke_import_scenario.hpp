@@ -3,6 +3,7 @@
 #include <QString>
 #include <QtTypes>
 
+#include <cstdint>
 #include <filesystem>
 
 class QApplication;
@@ -15,7 +16,7 @@ class ProjectBridge;
 
 namespace quick_smoke {
 
-enum class ImportScenario { none, success, failure, stale, close, undo };
+enum class ImportScenario : std::uint8_t { none, success, failure, stale, close, undo };
 
 // Shared item lookup for the smoke shell and its import scenario.
 qsizetype count_visible_items(const QQuickItem* item, const QString& name);

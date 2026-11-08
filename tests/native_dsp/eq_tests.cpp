@@ -247,6 +247,8 @@ void pass_stages_are_butterworth() {
                  0.1 * static_cast<double>(count),
                  "an octave past the corner falls by the slope at " + label + ": " +
                      std::to_string(*eq_magnitude_db(prepared, octave)));
+      // The sweep grid is the test input.
+      // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
       for (double hz = 20.0; hz < 20'000.0; hz *= 1.01) {
         REQUIRE_LT(*eq_magnitude_db(prepared, hz), 1e-6, "maximally flat: no bump at " + label);
       }

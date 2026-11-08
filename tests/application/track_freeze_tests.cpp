@@ -200,7 +200,7 @@ void frozen_tracks_export_what_they_played() {
 
   // The view runs no devices of a frozen track.
   const auto view = project::frozen_playback_view(session->snapshot());
-  REQUIRE_OK(view, "a frozen project has a view");
+  REQUIRE_TRUE(view, "a frozen project has a view");
   for (const auto id : {lead, bass}) {
     const auto& played = find(*view, id);
     REQUIRE_EQ(played.kind, project::TrackKind::audio, "a frozen track plays only its render");
@@ -341,6 +341,7 @@ void consolidate_writes_clips_out() {
   REQUIRE_TRUE(!merged.loop, "the clip spans both, unlooped");
   REQUIRE_EQ(merged.pattern_length.value, placed->end.value, "the clip spans both, unlooped");
   std::vector<std::pair<std::int64_t, int>> notes;
+  notes.reserve(merged.notes.size());
   for (const auto& note : merged.notes)
     notes.emplace_back(note.start.value, note.key);
   const std::vector<std::pair<std::int64_t, int>> expected{{0, 60}, {bar, 60}, {2 * bar, 64}};

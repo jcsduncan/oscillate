@@ -397,9 +397,7 @@ std::string build_report(const Marker& marker, const std::optional<std::string>&
 
 } // namespace
 
-std::filesystem::path
-default_directory(const char* xdg_state_home, // NOLINT(bugprone-easily-swappable-parameters)
-                  const char* home) {
+std::filesystem::path default_directory(const char* xdg_state_home, const char* home) {
   const auto absolute = [](const char* text) {
     return text != nullptr && text[0] == '/' ? std::filesystem::path(text)
                                              : std::filesystem::path{};

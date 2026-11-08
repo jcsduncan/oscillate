@@ -226,7 +226,7 @@ void drift_stays_within_its_amount() {
   set(patch, "nova.analogue.age", 0.0);
   set(patch, "nova.analogue.drift.amount", 1.0);
   set(patch, "nova.analogue.drift.rate", 1.0);
-  constexpr std::size_t frames = 4 * 48'000;
+  constexpr std::size_t frames = std::size_t{4} * 48'000;
   constexpr std::size_t window = 4'800;
   const auto out = play(patch, note(0, frames, 69, 1), frames);
   double lowest = 0.0, highest = 0.0;
@@ -425,7 +425,7 @@ void flutter_jitters_within_its_maximum() {
   auto patch = sine_patch();
   set(patch, "nova.analogue.age", 0.0);
   set(patch, "nova.analogue.flutter.amount", 1.0);
-  constexpr std::size_t frames = 2 * 48'000;
+  constexpr std::size_t frames = std::size_t{2} * 48'000;
   constexpr std::size_t window = 960; // 20 ms: shorter than a 12 Hz wobble.
   const auto events = note(0, frames, 69, 1);
   const auto out = play(patch, events, frames);

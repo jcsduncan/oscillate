@@ -87,7 +87,7 @@ engine::BlockMidiEvent block_event(const Event& e, std::uint64_t block_start) {
 }
 
 std::vector<Event> sorted(std::vector<Event> events) {
-  std::stable_sort(events.begin(), events.end(), [](const Event& a, const Event& b) {
+  std::ranges::stable_sort(events, [](const Event& a, const Event& b) {
     if (a.frame != b.frame) {
       return a.frame < b.frame;
     }
@@ -154,11 +154,11 @@ Rendered render(NativeSynthRuntime& runtime, std::vector<Event> events, std::siz
   return out;
 }
 
-double measured_hz(const std::vector<double>& x, std::size_t from, std::size_t to, double rate) {
+double measured_hz(const std::vector<double>& x, std::size_t begin, std::size_t end, double rate) {
   double first = -1.0;
   double last = -1.0;
   int crossings = 0;
-  for (std::size_t i = from + 1; i < to; ++i) {
+  for (std::size_t i = begin + 1; i < end; ++i) {
     if (x[i - 1] < 0.0 && x[i] >= 0.0) {
       const double t = static_cast<double>(i - 1) + x[i - 1] / (x[i - 1] - x[i]);
       if (first < 0.0) {
@@ -196,6 +196,8 @@ void descriptor_and_presets_validate() {
     require(parameter.id.starts_with("prism."), "ids are namespaced");
     if (parameter.scale == ParameterScale::linear ||
         parameter.scale == ParameterScale::logarithmic) {
+      // The sweep grid is the test input.
+      // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
       for (double n = 0.0; n <= 1.0; n += 0.125) {
         const double value = from_normalised(parameter, n);
         REQUIRE_LT(std::fabs(to_normalised(parameter, value) - n), tolerance::double_accumulation,
@@ -290,8 +292,9 @@ std::vector<Event> busy_sequence() {
   for (std::uint64_t bar = 0; bar < 4; ++bar) {
     for (std::uint8_t key : {std::uint8_t{48}, std::uint8_t{55}, std::uint8_t{60}, std::uint8_t{64},
                              std::uint8_t{67}}) {
-      auto n = note(bar * 12'000 + key * 13, 9'000, static_cast<std::uint8_t>(key + bar), id++,
-                    static_cast<std::uint8_t>(40 + key));
+      auto n =
+          note(bar * 12'000 + static_cast<std::uint64_t>(key) * 13, 9'000,
+               static_cast<std::uint8_t>(key + bar), id++, static_cast<std::uint8_t>(40 + key));
       events.insert(events.end(), n.begin(), n.end());
     }
   }
@@ -332,7 +335,7 @@ void voice_stealing_is_bounded_and_declicked() {
   REQUIRE_EQ(out.last.active_voices, prism::voice_limit, "polyphony is bounded at 16");
   REQUIRE_EQ(out.last.voice_steals, 1, "one voice was stolen");
 
-  const std::size_t steal = 16 * 480;
+  const std::size_t steal = std::size_t{16} * 480;
   double steady = 0.0;
   double around = 0.0;
   for (std::size_t i = steal - 2'000; i < steal - 50; ++i) {
@@ -355,7 +358,7 @@ void seek_resets_voices_without_a_step() {
   double largest = 0.0;
   KernelStatus status{};
   for (std::uint64_t block = 0; block < 100; ++block) {
-    std::fill(buffer.begin(), buffer.end(), engine::StereoFrame{0.0F, 0.0F});
+    std::ranges::fill(buffer, engine::StereoFrame{0.0F, 0.0F});
     const std::uint64_t generation = block < 50 ? 1 : 2; // Seek at block 50.
     const auto report = runtime->process(buffer, block == 0 ? events : decltype(events){},
                                          block * 256, generation, {}, {});
@@ -631,8 +634,10 @@ void full_load_process_does_not_allocate() {
   values[index("prism.filter.mode")] = 8;
   auto runtime = make_runtime(values);
   std::vector<engine::StereoFrame> buffer(128);
+  constexpr std::uint8_t chord_notes = 20;
   std::vector<engine::BlockMidiEvent> chord;
-  for (std::uint8_t i = 0; i < 20; ++i) {
+  chord.reserve(chord_notes);
+  for (std::uint8_t i = 0; i < chord_notes; ++i) {
     chord.push_back(block_event(
         {0, engine::MidiEventKind::note_on, static_cast<std::uint8_t>(40 + i), 100, i + 1u}, 0));
   }

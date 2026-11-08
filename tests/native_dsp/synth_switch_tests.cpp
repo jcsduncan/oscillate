@@ -68,9 +68,9 @@ std::vector<double> render_switch(const SynthEngine& engine, std::size_t paramet
   return out;
 }
 
-double peak_curvature(const std::vector<double>& x, std::size_t from, std::size_t to) {
+double peak_curvature(const std::vector<double>& x, std::size_t begin, std::size_t end) {
   double peak = 0.0;
-  for (std::size_t i = std::max<std::size_t>(from, 1); i + 1 < to; ++i) {
+  for (std::size_t i = std::max<std::size_t>(begin, 1); i + 1 < end; ++i) {
     peak = std::max(peak, std::fabs(x[i + 1] - 2.0 * x[i] + x[i - 1]));
   }
   return peak;
@@ -78,6 +78,7 @@ double peak_curvature(const std::vector<double>& x, std::size_t from, std::size_
 
 } // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): an uncaught exception is the test's failure report.
 int main() {
   const bool report_only = std::getenv("SWITCH_REPORT") != nullptr;
   int failures = 0;

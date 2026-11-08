@@ -111,11 +111,11 @@ inline std::vector<double> echo_density(const std::vector<double>& h, std::size_
 }
 
 inline double correlation(const std::vector<double>& a, const std::vector<double>& b,
-                          std::size_t from, std::size_t to) {
+                          std::size_t begin, std::size_t end) {
   double ab = 0.0;
   double aa = 0.0;
   double bb = 0.0;
-  for (std::size_t i = from; i < to; ++i) {
+  for (std::size_t i = begin; i < end; ++i) {
     ab += a[i] * b[i];
     aa += a[i] * a[i];
     bb += b[i] * b[i];
@@ -124,12 +124,12 @@ inline double correlation(const std::vector<double>& a, const std::vector<double
 }
 
 // Welch-averaged power spectrum of a span, in dB per bin (4096-point Hann).
-inline std::vector<double> welch_db(const std::vector<double>& x, std::size_t from,
-                                    std::size_t to) {
+inline std::vector<double> welch_db(const std::vector<double>& x, std::size_t begin,
+                                    std::size_t end) {
   constexpr std::size_t n = 4'096;
   std::vector<double> power(n / 2, 0.0);
   std::size_t segments = 0;
-  for (std::size_t start = from; start + n <= to; start += n / 2) {
+  for (std::size_t start = begin; start + n <= end; start += n / 2) {
     std::vector<std::complex<double>> window(n);
     for (std::size_t i = 0; i < n; ++i) {
       const double hann =

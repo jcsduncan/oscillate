@@ -88,11 +88,11 @@ inline Rendered render(NativeSynthRuntime& runtime, std::vector<Event> events, s
                        std::size_t block = 128, double rate = oscillate::test::sample_rate_48k_hz,
                        double bpm = 120.0, std::vector<PedalEvent> pedals = {},
                        std::uint64_t generation = 1) {
-  std::stable_sort(pedals.begin(), pedals.end(),
-                   [](const PedalEvent& a, const PedalEvent& b) { return a.frame < b.frame; });
+  std::ranges::stable_sort(
+      pedals, [](const PedalEvent& a, const PedalEvent& b) { return a.frame < b.frame; });
   std::size_t next_pedal = 0;
   std::vector<engine::BlockPedalEvent> block_pedals;
-  std::stable_sort(events.begin(), events.end(), [](const Event& a, const Event& b) {
+  std::ranges::stable_sort(events, [](const Event& a, const Event& b) {
     if (a.frame != b.frame) {
       return a.frame < b.frame;
     }
@@ -151,12 +151,12 @@ inline Rendered render(NativeSynthRuntime& runtime, std::vector<Event> events, s
   return out;
 }
 
-inline double measured_hz(const std::vector<double>& x, std::size_t from, std::size_t to,
+inline double measured_hz(const std::vector<double>& x, std::size_t begin, std::size_t end,
                           double rate) {
   double first = -1.0;
   double last = -1.0;
   int crossings = 0;
-  for (std::size_t i = from + 1; i < to; ++i) {
+  for (std::size_t i = begin + 1; i < end; ++i) {
     if (x[i - 1] < 0.0 && x[i] >= 0.0) {
       const double t = static_cast<double>(i - 1) + x[i - 1] / (x[i - 1] - x[i]);
       if (first < 0.0) {

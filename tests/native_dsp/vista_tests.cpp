@@ -146,11 +146,11 @@ void mono_bass_follows_the_linkwitz_riley_slope() {
   }
 }
 
-double correlation(const Stereo& s, std::size_t from, std::size_t to) {
+double correlation(const Stereo& s, std::size_t begin, std::size_t end) {
   double lr = 0.0;
   double ll = 0.0;
   double rr = 0.0;
-  for (std::size_t i = from; i < to; ++i) {
+  for (std::size_t i = begin; i < end; ++i) {
     lr += s.left[i] * s.right[i];
     ll += s.left[i] * s.left[i];
     rr += s.right[i] * s.right[i];

@@ -55,7 +55,7 @@ const synth::EngineDescriptor& table() { return *nova().descriptor; }
 
 std::size_t index_of(std::string_view id) {
   const auto index = synth::find_parameter(table(), id);
-  REQUIRE_OK(index, "Nova has " + std::string(id));
+  REQUIRE_TRUE(index, "Nova has " + std::string(id));
   return *index;
 }
 
@@ -298,7 +298,7 @@ void morph_rules() {
   auto second = init;
   second.document.routes = {{5, "lfo.1", "", "nova.filter.1.cutoff"}};
   second.values[amount(5)] = 0.2;
-  const auto third = init;
+  const auto& third = init;
   const std::vector<morph::Part> routed{{&first, 0.5}, {&second, 0.3}, {&third, 0.2}};
   const auto routes = take(morph::morph(table(), routed, init, {}));
   REQUIRE_EQ(routes.document.routes, first.document.routes, "routes are the heaviest's");
@@ -399,6 +399,7 @@ void cache_hits_and_invalidates() {
   // Keys follow the sound: editing one sound misses only it.
   std::vector<map::Sound> library{factory("Init"), factory("Pluck"), factory("Warm Pad")};
   std::vector<std::uint64_t> keys;
+  keys.reserve(library.size());
   for (const auto& sound : library)
     keys.push_back(take(map::sound_key(nova(), sound, map::Register::other)));
   REQUIRE_NE(keys[0], keys[1], "different sounds, different keys");
@@ -417,8 +418,10 @@ void cache_hits_and_invalidates() {
   REQUIRE_EQ(misses, 1, "an edited sound is the only one listened to again");
 
   // Robust placement: one outlier does not crowd the rest.
+  constexpr int sky_sounds = 20;
   std::vector<map::Features> sky_library;
-  for (int i = 0; i < 20; ++i)
+  sky_library.reserve(sky_sounds);
+  for (int i = 0; i < sky_sounds; ++i)
     sky_library.push_back({0.4 + 0.01 * i, 0.3 + 0.01 * i, 0.0, 0.0, true});
   sky_library.push_back({1.0, 1.0, 0.0, 0.0, true});
   const map::Sky sky(sky_library);

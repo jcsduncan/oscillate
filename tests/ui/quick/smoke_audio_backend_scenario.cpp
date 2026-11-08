@@ -22,7 +22,7 @@ namespace app = oscillate::application;
 void run_audio_backend(QApplication& app, QQmlApplicationEngine& engine,
                        oscillate::quick::ProjectBridge& bridge,
                        const std::shared_ptr<SmokeDeviceState>& device_state,
-                       oscillate::application::PlaybackOutputFactory jack_output_factory,
+                       const oscillate::application::PlaybackOutputFactory& jack_output_factory,
                        AudioBackendVisibleCount visible_count) {
   auto* probe = new QTimer(&app);
   probe->setInterval(20);

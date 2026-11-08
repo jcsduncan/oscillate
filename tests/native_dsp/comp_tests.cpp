@@ -59,9 +59,11 @@ const timeline::TempoMap& tempo() {
 }
 
 // Chords as held notes (MIDI keys): the bass first.
+// NOLINTBEGIN(bugprone-throwing-static-initialization): a throw fails the test at start-up.
 const std::vector<int> am7{45, 55, 60, 64};   // A2 G3 C4 E4
 const std::vector<int> dm7{50, 57, 60, 65};   // D3 A3 C4 F4
 const std::vector<int> fmaj7{41, 57, 60, 64}; // F2 A3 C4 E4
+// NOLINTEND(bugprone-throwing-static-initialization)
 
 using Values = std::initializer_list<std::pair<std::string_view, double>>;
 
@@ -116,6 +118,7 @@ bool event_less(const engine::BlockMidiEvent& x, const engine::BlockMidiEvent& y
 // The held notes as a compiled plan schedules them, for the lookahead.
 std::vector<engine::ScheduledMidiEvent> scheduled(const std::vector<Note>& input) {
   std::vector<engine::ScheduledMidiEvent> events;
+  events.reserve(input.size());
   for (const auto& note : input)
     events.push_back({{static_cast<std::int64_t>(note.frame)},
                       take(project::ClipId::from_bits(note.clip)),
@@ -180,12 +183,12 @@ std::vector<Note> run_split(const std::vector<double>& dense, const std::vector<
 }
 
 // `keys` held from `from` to `to`, note ids from `first_id`.
-std::vector<Note> chord(const std::vector<int>& keys, std::uint64_t from, std::uint64_t to,
+std::vector<Note> chord(const std::vector<int>& keys, std::uint64_t begin, std::uint64_t end,
                         std::uint64_t first_id) {
   std::vector<Note> notes;
   for (std::size_t i = 0; i < keys.size(); ++i) {
-    notes.push_back({from, true, keys[i], 90, played_clip, {0, first_id + i}});
-    notes.push_back({to, false, keys[i], 0, played_clip, {0, first_id + i}});
+    notes.push_back({begin, true, keys[i], 90, played_clip, {0, first_id + i}});
+    notes.push_back({end, false, keys[i], 0, played_clip, {0, first_id + i}});
   }
   return notes;
 }
@@ -540,9 +543,9 @@ project::Snapshot comp_project(const std::vector<std::vector<int>>& chords, int 
 // Below this a released note has died away (the release is exponential).
 constexpr double silent = 1e-9;
 
-double peak(const std::vector<double>& x, std::size_t from, std::size_t to) {
+double peak(const std::vector<double>& x, std::size_t begin, std::size_t end) {
   double level = 0.0;
-  for (std::size_t i = from; i < to && i < x.size(); ++i)
+  for (std::size_t i = begin; i < end && i < x.size(); ++i)
     level = std::max(level, std::abs(x[i]));
   return level;
 }

@@ -176,8 +176,8 @@ void the_cut_lands_on_time_with_lookahead() {
       std::size_t count = 0;
       for (std::size_t i = onset + 4'800; i + lag + period < second && i < onset + 19'200;
            i += period) {
-        const auto shifted =
-            static_cast<std::size_t>(static_cast<std::ptrdiff_t>(i) - offset_ms * 48);
+        const auto shifted = static_cast<std::size_t>(static_cast<std::ptrdiff_t>(i) -
+                                                      static_cast<std::ptrdiff_t>(offset_ms) * 48);
         const double law = unmask_law(envelope_db[shifted], bass_db, 9.0, 3.0);
         const double cut = bass_db - db(std::sqrt(2.0) * rms(out.left, i + lag, i + lag + period));
         error += (cut - law) * (cut - law);
@@ -225,9 +225,10 @@ void release_and_follow_shape_the_recovery() {
     const auto out = pocket_bass(values, b, kick);
     const auto period = static_cast<std::size_t>(rate / hz);
     double ms = -1.0;
-    for (std::size_t i = second / 2; i + period < second; i += period / 4) {
+    const std::size_t middle = second / 2;
+    for (std::size_t i = middle; i + period < second; i += period / 4) {
       if (db(0.3) - db(std::sqrt(2.0) * rms(out.left, i, i + period)) < 3.0) {
-        ms = static_cast<double>(i - second / 2) / 48.0;
+        ms = static_cast<double>(i - middle) / 48.0;
         break;
       }
     }
@@ -421,28 +422,29 @@ std::vector<std::array<double, pocket::bands>> pocket_bands(const std::vector<do
 
 // Energy in [from, to) after a fourth-order high-pass run over the whole
 // signal, so no window leaks the bass into it.
-double highpass_energy(const std::vector<double>& x, std::size_t from, std::size_t to, double hz) {
+double highpass_energy(const std::vector<double>& x, std::size_t begin, std::size_t end,
+                       double hz) {
   const auto c =
       synth::make_filter_coefficients(synth::FilterMode::highpass_24, hz / rate, 0.0, 1.0);
   synth::MultimodeFilter filter;
   double e = 0.0;
-  for (std::size_t i = 0; i < to; ++i) {
+  for (std::size_t i = 0; i < end; ++i) {
     const double y = filter.process(x[i], c);
-    if (i >= from) {
+    if (i >= begin) {
       e += y * y;
     }
   }
   return e;
 }
 
-double lowpass_energy(const std::vector<double>& x, std::size_t from, std::size_t to) {
+double lowpass_energy(const std::vector<double>& x, std::size_t begin, std::size_t end) {
   const auto c =
       synth::make_filter_coefficients(synth::FilterMode::lowpass_24, 250.0 / rate, 0.0, 1.0);
   synth::MultimodeFilter filter;
   double e = 0.0;
-  for (std::size_t i = 0; i < to; ++i) {
+  for (std::size_t i = 0; i < end; ++i) {
     const double y = filter.process(x[i], c);
-    if (i >= from) {
+    if (i >= begin) {
       e += y * y;
     }
   }
@@ -450,18 +452,18 @@ double lowpass_energy(const std::vector<double>& x, std::size_t from, std::size_
 }
 
 double lowpass_correlation(const std::vector<double>& a, const std::vector<double>& b,
-                           std::size_t from, std::size_t to) {
+                           std::size_t begin, std::size_t end) {
   const auto c =
       synth::make_filter_coefficients(synth::FilterMode::lowpass_24, 250.0 / rate, 0.0, 1.0);
   synth::MultimodeFilter fa;
   synth::MultimodeFilter fb;
-  std::vector<double> la(to);
-  std::vector<double> lb(to);
-  for (std::size_t i = 0; i < to; ++i) {
+  std::vector<double> la(end);
+  std::vector<double> lb(end);
+  for (std::size_t i = 0; i < end; ++i) {
     la[i] = fa.process(a[i], c);
     lb[i] = fb.process(b[i], c);
   }
-  return correlation(la, lb, from, to);
+  return correlation(la, lb, begin, end);
 }
 
 // One kick and bass pair's measurements. Pairs are measured on worker
@@ -608,6 +610,7 @@ void real_kicks_come_out_of_the_bass(double lookahead_choice = 0.0, bool survey 
   std::vector<std::thread> workers;
   const std::size_t threads =
       std::clamp<std::size_t>(std::thread::hardware_concurrency(), 1, kits.size());
+  workers.reserve(threads);
   for (std::size_t t = 0; t < threads; ++t) {
     workers.emplace_back([&] {
       for (std::size_t i = next++; i < kits.size(); i = next++) {
@@ -685,7 +688,7 @@ void real_kicks_come_out_of_the_bass(double lookahead_choice = 0.0, bool survey 
       }
     }
   }
-  std::sort(clarity.begin(), clarity.end());
+  std::ranges::sort(clarity);
   if (survey) {
     std::cout << "  lookahead choice " << lookahead_choice << ": clarity min " << clarity.front()
               << ", 5% " << clarity[clarity.size() / 20] << ", median "
@@ -720,7 +723,7 @@ void a_fast_pattern_stays_steady() {
     cuts.push_back(db(rms(b.left, onsets[h], onsets[h] + 4'000) /
                       rms(out.left, onsets[h], onsets[h] + 4'000)));
   }
-  const auto [low, high] = std::minmax_element(cuts.begin(), cuts.end());
+  const auto [low, high] = std::ranges::minmax_element(cuts);
   REQUIRE_LT(*high - *low, 1.0,
              "every hit of a fast pattern gets the same cut: " + std::to_string(*high - *low) +
                  " dB spread");
@@ -801,6 +804,7 @@ void presets_match_golden_fingerprints() {
 
 } // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): an uncaught exception is the test's failure report.
 int main(int argc, char** argv) {
   if (std::getenv("SURVEY") != nullptr) {
     for (const double choice : {0.0, 3.0}) {

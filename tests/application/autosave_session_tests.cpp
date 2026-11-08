@@ -127,6 +127,7 @@ void interrupted_autosave_keeps_current() {
 }
 } // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): an uncaught exception is the test's failure report.
 int main() {
   background_snapshot_and_explicit_save_race();
   interrupted_autosave_keeps_current();

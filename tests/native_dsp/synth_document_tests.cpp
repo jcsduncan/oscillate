@@ -74,6 +74,7 @@ prepare_probe(const project::NativeSynthDocument& document, const SynthMedia& me
   return foundation::Result<std::shared_ptr<const SynthDocumentState>>::success(std::move(state));
 }
 
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): a throw fails the test at start-up.
 const SynthEngine probe_engine{
     &probe_descriptor,
     [](double) -> std::unique_ptr<SynthKernel> { return std::make_unique<ProbeKernel>(); },

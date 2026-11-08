@@ -30,7 +30,7 @@ struct WavLayout {
   std::uint32_t sample_rate;
   std::uint16_t channels;
   std::uint16_t bits_per_sample;
-  WavEncoding encoding;
+  WavEncoding encoding = WavEncoding::pcm;
 
   [[nodiscard]] constexpr std::uint16_t block_align() const noexcept {
     return static_cast<std::uint16_t>(channels * (bits_per_sample / bits_per_byte));

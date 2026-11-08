@@ -163,7 +163,7 @@ void sines_read_their_level() {
 // window's resolution: sines stay exact, noise reads more. So each
 // resolution is flat from where it resolves a third of an octave.
 void pink_noise_is_flat_and_tilt_is_exact() {
-  const auto input = pink(12 * 48'000);
+  const auto input = pink(std::size_t{12} * 48'000);
   std::vector<float> balanced;
   // Tolerances allow for the estimate itself: twelve seconds of noise in a
   // 9 Hz band at 40 Hz is only about a hundred independent measurements.
@@ -224,10 +224,12 @@ double dip_db(const std::vector<float>& t, double a, double b) {
 void close_low_tones_resolve() {
   auto values = untilted();
   values[at("lens.smoothing")] = 0.0;
-  const auto pair = add(sine(40.0, 0.3, 2 * 48'000), sine(52.0, 0.3, 2 * 48'000));
+  const auto pair =
+      add(sine(40.0, 0.3, std::size_t{2} * 48'000), sine(52.0, 0.3, std::size_t{2} * 48'000));
   const double balanced = dip_db(analyse(values, pair), 40.0, 52.0);
   values[at("lens.resolution")] = 2.0; // Precise
-  const auto close = add(sine(30.0, 0.3, 3 * 48'000), sine(36.0, 0.3, 3 * 48'000));
+  const auto close =
+      add(sine(30.0, 0.3, std::size_t{3} * 48'000), sine(36.0, 0.3, std::size_t{3} * 48'000));
   const double precise = dip_db(analyse(values, close), 30.0, 36.0);
   std::cout << "  resolution: 40/52 Hz dip " << balanced << " dB (Balanced), 30/36 Hz dip "
             << precise << " dB (Precise)\n";
@@ -277,7 +279,7 @@ void peak_hold_holds_and_decays() {
   values[at("lens.average")] = 0.0;
   values[at("lens.hold_decay")] = 12.0;
   auto runtime = make_effect(lens::engine(), values);
-  auto input = sine(on_point(1'000.0), 0.5, 2 * 48'000);
+  auto input = sine(on_point(1'000.0), 0.5, std::size_t{2} * 48'000);
   std::fill(input.left.begin() + 48'000, input.left.end(), 0.0);
   std::fill(input.right.begin() + 48'000, input.right.end(), 0.0);
   (void)process(*runtime, slice(input, 0, 48'000));
@@ -285,7 +287,7 @@ void peak_hold_holds_and_decays() {
   require(runtime->read_telemetry(t), "telemetry");
   const double held = level_at(t, lens::telemetry::hold, 1'000.0);
   REQUIRE_LT(std::fabs(held - db(0.5)), 0.15, "the hold catches the peak");
-  (void)process(*runtime, slice(input, 48'000, 2 * 48'000), {}, 48'000);
+  (void)process(*runtime, slice(input, 48'000, std::size_t{2} * 48'000), {}, 48'000);
   require(runtime->read_telemetry(t), "telemetry");
   const double later = level_at(t, lens::telemetry::hold, 1'000.0);
   std::cout << "  peak hold fell " << held - later << " dB in 1 s at 12 dB/s\n";
@@ -298,8 +300,8 @@ void views_and_overlay_read_true() {
   // A left-only sine: left reads it, mid and side half of it.
   // Two seconds: the Medium average (300 ms) settles well within it.
   const double hz = on_point(300.0);
-  auto input = sine(hz, 0.5, 2 * 48'000);
-  std::fill(input.right.begin(), input.right.end(), 0.0);
+  auto input = sine(hz, 0.5, std::size_t{2} * 48'000);
+  std::ranges::fill(input.right, 0.0);
   for (const auto& [view, expected] :
        std::vector<std::pair<double, double>>{{2.0, db(0.5)}, {0.0, db(0.25)}, {1.0, db(0.25)}}) {
     auto values = untilted();
@@ -319,7 +321,7 @@ void views_and_overlay_read_true() {
   REQUIRE_LT(level_at(t, lens::telemetry::curve_b, hz), -100.0,
              "Left / Right puts the right channel second");
   const double side_hz = on_point(80.0);
-  const auto side = sine(side_hz, 0.2, 2 * 48'000);
+  const auto side = sine(side_hz, 0.2, std::size_t{2} * 48'000);
   auto overlay = untilted();
   overlay[at("lens.overlay")] = 1.0;
   const auto o = analyse(overlay, input, 48'000.0, &side);
@@ -330,8 +332,9 @@ void views_and_overlay_read_true() {
 }
 
 void resonances_are_found() {
-  const auto input = add(add(sine(80.0, 0.4, 2 * 48'000), sine(440.0, 0.2, 2 * 48'000)),
-                         sine(3'000.0, 0.1, 2 * 48'000));
+  const auto input =
+      add(add(sine(80.0, 0.4, std::size_t{2} * 48'000), sine(440.0, 0.2, std::size_t{2} * 48'000)),
+          sine(3'000.0, 0.1, std::size_t{2} * 48'000));
   auto values = untilted();
   values[at("lens.smoothing")] = 0.0;
   const auto t = analyse(values, input);
@@ -354,10 +357,10 @@ void infinite_average_and_freeze() {
   values[at("lens.smoothing")] = 3.0;
   // Infinite: two seconds of noise then two of silence average to half
   // the power of the noise alone.
-  auto input = pink(4 * 48'000, 3);
-  std::fill(input.left.begin() + 2 * 48'000, input.left.end(), 0.0);
-  std::fill(input.right.begin() + 2 * 48'000, input.right.end(), 0.0);
-  const auto burst = slice(input, 0, 2 * 48'000);
+  auto input = pink(std::size_t{4} * 48'000, 3);
+  std::fill(input.left.begin() + std::ptrdiff_t{2} * 48'000, input.left.end(), 0.0);
+  std::fill(input.right.begin() + std::ptrdiff_t{2} * 48'000, input.right.end(), 0.0);
+  const auto burst = slice(input, 0, std::size_t{2} * 48'000);
   const auto half = analyse(values, input);
   const auto full = analyse(values, burst);
   const auto j = point_near(1'000.0);
@@ -371,7 +374,7 @@ void infinite_average_and_freeze() {
   auto frozen = values;
   frozen[at("lens.freeze")] = 1.0;
   require(runtime->offer_values(frozen, 1), "freeze offered");
-  (void)process(*runtime, sine(5'000.0, 0.9, 48'000), {}, 2 * 48'000);
+  (void)process(*runtime, sine(5'000.0, 0.9, 48'000), {}, std::uint64_t{2} * 48'000);
   std::vector<float> after;
   (void)runtime->read_telemetry(after);
   require(std::equal(before.begin(),

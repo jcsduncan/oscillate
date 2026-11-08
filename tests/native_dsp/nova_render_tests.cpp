@@ -181,6 +181,7 @@ const Expected& entry(std::string_view preset) {
 
 } // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): an uncaught exception is the test's failure report.
 int main(int argc, char** argv) {
   if (argc == 2 && std::string_view(argv[1]) == "--print")
     return print();

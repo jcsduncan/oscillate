@@ -108,13 +108,13 @@ application::RecordedNote played(std::int64_t start, std::int64_t length, std::u
 void a_take_makes_and_grows_its_clip() {
   Song song;
   auto& session = song.session;
-  const auto track = *song.track;
+  const auto track = oscillate::test::take(song.track);
   constexpr std::uint64_t gesture = 77;
   const std::vector first{played(bar + quarter, eighth, 60)};
   auto made = session->notes().record_notes(track, first, std::nullopt, gesture);
   REQUIRE_TRUE(made, "the first note makes a clip");
   REQUIRE_TRUE(made.value(), "the first note makes a clip");
-  const auto take = *made.value();
+  const auto take = oscillate::test::take(made.value());
   {
     const auto& clips = track_of(*session, track).midi_clips;
     REQUIRE_EQ(clips.size(), 1, "one clip");
@@ -150,7 +150,7 @@ void a_take_makes_and_grows_its_clip() {
 void a_take_overdubs_a_looping_clip() {
   Song song;
   auto& session = song.session;
-  const auto track = *song.track;
+  const auto track = oscillate::test::take(song.track);
   REQUIRE_OK(session->midi_clips().add_midi_clip(track, {0}), "clip failed");
   const auto clip = track_of(*session, track).midi_clips.front().id;
   REQUIRE_OK(session->midi_clips().set_midi_clip_loop(clip, true), "a one-bar loop over four bars");
@@ -181,14 +181,14 @@ void a_take_overdubs_a_looping_clip() {
 void a_take_stops_at_the_next_clip() {
   Song song;
   auto& session = song.session;
-  const auto track = *song.track;
+  const auto track = oscillate::test::take(song.track);
   REQUIRE_OK(session->midi_clips().add_midi_clip(track, {2 * bar}), "clip failed");
   const std::vector held{played(quarter, 6 * quarter, 60)};
   auto made = session->notes().record_notes(track, held, std::nullopt, 9);
   REQUIRE_TRUE(made, "a clip is made before the other");
   REQUIRE_TRUE(made.value(), "a clip is made before the other");
   for (const auto& clip : track_of(*session, track).midi_clips) {
-    if (clip.id != *made.value())
+    if (clip.id != oscillate::test::take(made.value()))
       continue;
     const auto& span = std::get<project::MusicalInterval>(clip.placement);
     REQUIRE_EQ(span.start.value, 0, "it ends where the next clip starts");
