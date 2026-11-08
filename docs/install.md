@@ -62,4 +62,5 @@ final job follows the instructions above in a clean `ubuntu:26.04` container.
 
 The archive key is a dedicated ed25519 signing key that expires after two
 years; the next Pages run after the secret changes publishes the new or
-extended key.
+extended key. Installed systems keep the keyring they downloaded, so after a
+key change run the `curl` line above again before `sudo apt update`.
