@@ -455,9 +455,10 @@ function(oscillate_verify_test_labels directory)
     endif()
     math(EXPR timeout "${budget} * ${OSCILLATE_TEST_TIMEOUT_SCALE}")
     get_test_property(${test} OSCILLATE_DSP_OPTIMISED DIRECTORY "${directory}" dsp_optimised)
-    if(dsp_optimised AND NOT OSCILLATE_DSP_OPTIMISED_IN_DEBUG
-       AND CMAKE_BUILD_TYPE STREQUAL "Debug")
-      math(EXPR timeout "${timeout} * ${OSCILLATE_TEST_UNOPTIMISED_DSP_SCALE}")
+    if(dsp_optimised AND NOT OSCILLATE_DSP_OPTIMISED_IN_DEBUG)
+      # Only the Debug configuration builds these programs at -O0 here.
+      math(EXPR unoptimised "${timeout} * ${OSCILLATE_TEST_UNOPTIMISED_DSP_SCALE}")
+      set(timeout "$<IF:$<CONFIG:Debug>,${unoptimised},${timeout}>")
     endif()
     set_tests_properties(${test} DIRECTORY "${directory}" PROPERTIES TIMEOUT ${timeout})
   endforeach()
