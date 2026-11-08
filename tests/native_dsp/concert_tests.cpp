@@ -332,7 +332,7 @@ void pedals_hold_and_release() {
   constexpr std::size_t pedal_up = 24'000;
   constexpr std::size_t length = 36'000;
   const auto difference = [&](std::string_view noise) {
-    auto quiet = values;
+    const auto& quiet = values;
     auto loud = values;
     loud[at(noise)] = 1.0;
     const std::vector<PedalEvent> pedals{{0, MidiPedal::sustain, 1.0},

@@ -107,7 +107,7 @@ struct Selection {
 
 [[nodiscard]] std::vector<std::uint8_t> read_state_file(const fs::path& path) {
   std::ifstream input(path, std::ios::binary | std::ios::ate);
-  if (!input || input.tellg() < 0 || input.tellg() > 4 * 1024 * 1024)
+  if (!input || input.tellg() < 0 || input.tellg() > std::streamoff{4} * 1024 * 1024)
     throw std::runtime_error("state file is unavailable or exceeds 4 MiB");
   const auto size = static_cast<std::size_t>(input.tellg());
   input.seekg(0);
@@ -146,7 +146,7 @@ void verify_expected_identity(const Selection& selected, const vst::Vst3StatePai
     throw std::runtime_error("controller state differs from expected saved bytes");
 }
 
-enum class Signal { impulse, sustained };
+enum class Signal : std::uint8_t { impulse, sustained };
 
 struct Run {
   std::uint32_t frames = 0;

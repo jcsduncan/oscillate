@@ -46,7 +46,6 @@ namespace {
 }
 
 // Parameter order is fixed by libsndfile's C callback ABI.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 [[nodiscard]] sf_count_t seek_file(sf_count_t offset, int whence, void* opaque) noexcept {
   auto& io = *static_cast<EncodedReader::IoState*>(opaque);
   sf_count_t base = 0;

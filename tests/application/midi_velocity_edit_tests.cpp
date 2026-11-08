@@ -35,8 +35,9 @@ template <typename Id> Id id(std::uint64_t value) { return Id::from_bits({0, val
 
 std::vector<MidiNote> row(int count, std::uint8_t velocity) {
   std::vector<MidiNote> notes;
+  notes.reserve(static_cast<std::size_t>(count));
   for (int i = 0; i < count; ++i) {
-    notes.push_back({id<NoteId>(static_cast<std::uint64_t>(i + 1)),
+    notes.push_back({id<NoteId>(static_cast<std::uint64_t>(i) + 1),
                      {i * q / 4},
                      {i * q / 4 + q / 8},
                      static_cast<std::uint8_t>(60 + i % 12),
@@ -47,6 +48,7 @@ std::vector<MidiNote> row(int count, std::uint8_t velocity) {
 
 std::vector<NoteId> ids(const std::vector<MidiNote>& notes) {
   std::vector<NoteId> out;
+  out.reserve(notes.size());
   for (const auto& note : notes)
     out.push_back(note.id);
   return out;

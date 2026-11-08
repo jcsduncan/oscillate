@@ -1007,9 +1007,11 @@ void metronome_clicks_on_the_beats() {
   REQUIRE_GE(accented, 88, "1 kHz clicks, 1.5 kHz accents");
   REQUIRE_LE(accented, 90, "1 kHz clicks, 1.5 kHz accents");
   // 120 BPM: a beat every 24000 frames, the bar's first accented.
+  constexpr std::uint64_t beat_count = 8;
   std::vector<ClickBeat> beats;
+  beats.reserve(beat_count);
   constexpr std::uint64_t beat = 24'000;
-  for (std::uint64_t index = 0; index < 8; ++index)
+  for (std::uint64_t index = 0; index < beat_count; ++index)
     beats.push_back({index * beat, index % 4 == 0});
   Metronome metronome;
   metronome.publish(beats, rate);
@@ -1062,7 +1064,7 @@ void count_in_holds_the_transport() {
   require(metronome.counting_in(), "a count-in is pending");
   const StereoRenderSource source{nullptr, &SilentRenderer::render};
   std::array<oscillate::engine::StereoFrame, 1'500> scratch{};
-  std::vector<float> output(1'500 * 2);
+  std::vector<float> output(std::size_t{1'500} * 2);
   require(!transport.audible_point(), "nothing is audible before a block renders");
   constexpr std::int64_t heard = 5'000'000'000;
   std::vector<float> heardout;

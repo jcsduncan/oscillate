@@ -107,7 +107,6 @@ public:
   }
 
   // SDK IBStream fixes this ABI parameter order and the integral parameter types.
-  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   Steinberg::tresult PLUGIN_API seek(Steinberg::int64 distance, Steinberg::int32 mode,
                                      Steinberg::int64* result) override {
     Steinberg::int64 base = 0;
@@ -212,7 +211,6 @@ public:
     return static_cast<Steinberg::int32>(points_.size());
   }
   // The VST3 interface fixes this parameter order and these convertible types.
-  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   Steinberg::tresult PLUGIN_API getPoint(Steinberg::int32 index, Steinberg::int32& offset,
                                          Steinberg::Vst::ParamValue& value) override {
     if (index < 0 || static_cast<std::size_t>(index) >= points_.size())

@@ -91,7 +91,7 @@ std::string automated_parameter(const effects::EffectEngine& engine) {
   return {};
 }
 
-enum class Placement { track, master, keyed };
+enum class Placement : std::uint8_t { track, master, keyed };
 
 std::vector<float> export_nulls_against_live(const effects::EffectEngine& effect,
                                              Placement placement) {

@@ -155,6 +155,7 @@ void tools_edit_in_one_step() {
 
 } // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): an uncaught exception is the test's failure report.
 int main(int argc, char** argv) {
   QCoreApplication app(argc, argv);
   tools_edit_in_one_step();

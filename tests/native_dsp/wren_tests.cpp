@@ -190,9 +190,9 @@ double rms(const std::vector<double>& x, std::size_t from, std::size_t length) {
 
 double db(double ratio) { return decibels * std::log10(ratio); }
 
-double max_step(const std::vector<double>& x, std::size_t from, std::size_t to) {
+double max_step(const std::vector<double>& x, std::size_t begin, std::size_t end) {
   double most = 0.0;
-  for (std::size_t i = std::max<std::size_t>(from, 1); i < to && i < x.size(); ++i) {
+  for (std::size_t i = std::max<std::size_t>(begin, 1); i < end && i < x.size(); ++i) {
     most = std::max(most, std::fabs(x[i] - x[i - 1]));
   }
   return most;
@@ -606,8 +606,8 @@ void loops_hold_a_note_beyond_its_recording() {
   const double reference = rms(x, reference_from, frames_of(steady_seconds));
   const double reference_step =
       max_step(x, reference_from, reference_from + frames_of(steady_seconds));
-  for (std::size_t from = reference_from; from + frames_of(piece_seconds) < frames_of(held_seconds);
-       from += frames_of(piece_seconds)) {
+  const std::size_t piece = frames_of(piece_seconds);
+  for (std::size_t from = reference_from; from + piece < frames_of(held_seconds); from += piece) {
     REQUIRE_LT(std::fabs(db(rms(x, from, frames_of(piece_seconds)) / reference)),
                level_tolerance_db,
                "the held note keeps its level at " +

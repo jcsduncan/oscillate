@@ -547,7 +547,7 @@ void preview_connected_effect(const plugins::ScanResult& scan, std::uint32_t fra
   REQUIRE_EQ(slot.submit(identity, 2, {101, 0, 0.75}), plugins::Vst3ManualEventStatus::accepted,
              "effect final gesture did not supersede pending preview");
   output.assign(frames_per_block, {1.0F, 1.0F});
-  REQUIRE_TRUE(graph.render_block(output, {2 * frames_per_block, 1}),
+  REQUIRE_TRUE(graph.render_block(output, {std::uint64_t{2} * frames_per_block, 1}),
                "effect final commit failed to dominate stale preview");
   REQUIRE_LT(std::fabs(output.front().left - 3.0F), 0.00001F,
              "effect final commit failed to dominate stale preview");
@@ -557,7 +557,7 @@ void preview_connected_effect(const plugins::ScanResult& scan, std::uint32_t fra
              "effect final commit failed to dominate stale preview");
   REQUIRE_OK(slot.collect(), "effect final preview receipt did not collect");
   output.assign(frames_per_block, {1.0F, 1.0F});
-  REQUIRE_TRUE(graph.render_block(output, {3 * frames_per_block, 1}),
+  REQUIRE_TRUE(graph.render_block(output, {std::uint64_t{3} * frames_per_block, 1}),
                "effect stale preview replayed after final commit");
   REQUIRE_LT(std::fabs(output.front().left - 3.0F), 0.00001F,
              "effect stale preview replayed after final commit");
@@ -570,7 +570,7 @@ void preview_connected_effect(const plugins::ScanResult& scan, std::uint32_t fra
   REQUIRE_EQ(graph.publish(plan(2, replacement, graph.active_plan())),
              engine::PublishStatus::accepted, "effect replacement preview graph did not publish");
   output.assign(frames_per_block, {1.0F, 1.0F});
-  REQUIRE_TRUE(graph.render_block(output, {4 * frames_per_block, 1}),
+  REQUIRE_TRUE(graph.render_block(output, {std::uint64_t{4} * frames_per_block, 1}),
                "retired effect graph still accepted a preview");
   REQUIRE_EQ(slot.active_graph().graph_revision, 0,
              "retired effect graph still accepted a preview");
@@ -619,7 +619,7 @@ void queued_native_gesture_preserves_newer_preview(const plugins::ScanResult& sc
   REQUIRE_EQ(preview(0.25, 3), plugins::Vst3ManualEventStatus::accepted,
              "later held drag could not stage");
   output.assign(frames_per_block, {1.0F, 1.0F});
-  REQUIRE_TRUE(graph.render_block(output, {2 * frames_per_block, 1}),
+  REQUIRE_TRUE(graph.render_block(output, {std::uint64_t{2} * frames_per_block, 1}),
                "queued older completion refused a previously heard held drag");
   REQUIRE_LT(std::fabs(output.front().left - 1.0F), 0.00001F,
              "queued older completion refused a previously heard held drag");
@@ -628,7 +628,7 @@ void queued_native_gesture_preserves_newer_preview(const plugins::ScanResult& sc
   output.assign(frames_per_block, {1.0F, 1.0F});
   counted_allocations = 0;
   counting_allocations = true;
-  const auto second_rendered = graph.render_block(output, {3 * frames_per_block, 1});
+  const auto second_rendered = graph.render_block(output, {std::uint64_t{3} * frames_per_block, 1});
   counting_allocations = false;
   REQUIRE_TRUE(second_rendered, "queued committed event failed to render before held drag");
   REQUIRE_EQ(counted_allocations, 0, "queued committed event failed to render before held drag");
@@ -638,7 +638,7 @@ void queued_native_gesture_preserves_newer_preview(const plugins::ScanResult& sc
   output.assign(frames_per_block, {1.0F, 1.0F});
   counted_allocations = 0;
   counting_allocations = true;
-  const auto third_rendered = graph.render_block(output, {4 * frames_per_block, 1});
+  const auto third_rendered = graph.render_block(output, {std::uint64_t{4} * frames_per_block, 1});
   counting_allocations = false;
   REQUIRE_TRUE(third_rendered, "newer held drag was erased by older completed gesture");
   REQUIRE_EQ(counted_allocations, 0, "newer held drag was erased by older completed gesture");
@@ -650,13 +650,13 @@ void queued_native_gesture_preserves_newer_preview(const plugins::ScanResult& sc
   REQUIRE_EQ(submit(4, 0.5, 4), plugins::Vst3ManualEventStatus::accepted,
              "same-gesture completion failed to retire its transient preview");
   output.assign(frames_per_block, {1.0F, 1.0F});
-  REQUIRE_TRUE(graph.render_block(output, {5 * frames_per_block, 1}),
+  REQUIRE_TRUE(graph.render_block(output, {std::uint64_t{5} * frames_per_block, 1}),
                "same-gesture committed value was not applied");
   REQUIRE_OK(slot.collect(), "same-gesture committed value was not applied");
   REQUIRE_LT(std::fabs(output.front().left - 2.0F), 0.00001F,
              "same-gesture committed value was not applied");
   output.assign(frames_per_block, {1.0F, 1.0F});
-  REQUIRE_TRUE(graph.render_block(output, {6 * frames_per_block, 1}),
+  REQUIRE_TRUE(graph.render_block(output, {std::uint64_t{6} * frames_per_block, 1}),
                "same-gesture stale preview replayed after receipt");
   REQUIRE_LT(std::fabs(output.front().left - 2.0F), 0.00001F,
              "same-gesture stale preview replayed after receipt");
@@ -1150,7 +1150,7 @@ void routed_manual_graph_identity(const plugins::ScanResult& scan) {
   REQUIRE_TRUE(publisher.request_hold(), "routed replacement did not hold");
   REQUIRE_EQ(publisher.render_block(inputs, output, {192, 1}), engine::RoutedRenderStatus::holding,
              "routed replacement did not hold");
-  nodes[1].processor = replacement_owner;
+  nodes[1].processor = std::move(replacement_owner);
   nodes[1].replacement = engine::RoutedTailReplacement{owner, 1};
   REQUIRE_OK(publisher.prepare_and_publish(3, nodes, edges, limits),
              "routed replacement became active before callback switch");

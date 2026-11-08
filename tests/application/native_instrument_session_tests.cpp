@@ -39,7 +39,7 @@ public:
 
 const synth::EngineDescriptor& prism() { return *synth::default_engine().descriptor; }
 
-std::size_t index(std::string_view id) { return *synth::find_parameter(prism(), id); }
+std::size_t index(std::string_view id) { return take(synth::find_parameter(prism(), id)); }
 
 std::size_t preset(std::string_view name) {
   for (std::size_t i = 0; i < prism().presets.size(); ++i) {

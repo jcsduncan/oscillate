@@ -319,7 +319,7 @@ void builds_quickly() {
 }
 
 bool snake_case(std::string_view name) {
-  return !name.empty() && std::all_of(name.begin(), name.end(), [](char c) {
+  return !name.empty() && std::ranges::all_of(name, [](char c) {
     return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';
   });
 }

@@ -130,6 +130,8 @@ void blep_tables_are_band_limited_residuals() {
   const auto& tables = BlepTables::instance();
   REQUIRE_LT(std::fabs(tables.step(0.0) + 0.5), tolerance::float_round_trip,
              "step residual is -1/2 at the edge");
+  // The sweep grid is the test input.
+  // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
   for (double t = 0.05; t < blep_half_width; t += 0.37) {
     REQUIRE_LT(std::fabs(tables.step(t) + tables.step(-t)), tolerance::float_round_trip,
                "step residual is odd");
@@ -597,6 +599,8 @@ void noise_is_white_or_pink() {
 
 void soft_clip_is_bounded_and_smooth() {
   double previous = soft_clip(-10.0);
+  // The sweep grid is the test input.
+  // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
   for (double x = -10.0; x <= 10.0; x += 0.001) {
     const double y = soft_clip(x);
     REQUIRE_GE(y, -1.0, "soft clip is bounded");

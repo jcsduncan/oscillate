@@ -668,8 +668,8 @@ void skipped_muted_nodes_do_no_work_and_change_nothing() {
     const std::array<RoutingEdge, 3> edges{
         {{11, 1, 3}, {12, 2, 3}, {13, 4, 2, 1.0F, RoutingEdgeKind::sidechain}}};
     auto bounded = limits(4, 3);
-    bounded.max_buffer_bytes += 2 * 64 * sizeof(StereoFrame); // detector and key tap
-    bounded.max_history_bytes += 64 * sizeof(StereoFrame);    // the key's input delay
+    bounded.max_buffer_bytes += std::size_t{2} * 64 * sizeof(StereoFrame); // detector and key tap
+    bounded.max_history_bytes += 64 * sizeof(StereoFrame);                 // the key's input delay
     bounded.skip_muted_nodes = skip;
     auto mixer = take(prepare_routed_mixer(nodes, edges, bounded));
     std::array<StereoFrame, 64> input{};
@@ -744,8 +744,8 @@ void pipelined_steps_match_block_by_block_mixing() {
                                           {16, 3, 4, 1.0F, RoutingEdgeKind::sidechain}}};
   auto bounded = limits(6, 6, 8);
   bounded.latency.master = 6;
-  bounded.max_buffer_bytes += 2 * 64 * sizeof(StereoFrame); // detector and key tap
-  bounded.max_history_bytes += 64 * sizeof(StereoFrame);    // the key's input delay
+  bounded.max_buffer_bytes += std::size_t{2} * 64 * sizeof(StereoFrame); // detector and key tap
+  bounded.max_history_bytes += 64 * sizeof(StereoFrame);                 // the key's input delay
   constexpr std::array<std::size_t, 5> block_sizes{64, 64, 17, 64, 37};
   const auto source_at = [](std::size_t node, std::uint64_t frame) {
     const auto phase = static_cast<float>(frame) * (0.031F + 0.017F * static_cast<float>(node));
@@ -1032,7 +1032,7 @@ void sidechain_is_separate_aligned_and_allocation_free() {
   const std::array<RoutingEdge, 2> edges{
       {{11, 1, 3}, {12, 2, 3, 1.0F, RoutingEdgeKind::sidechain}}};
   auto bounded = limits(3, 2, 1);
-  bounded.max_buffer_bytes += 2 * 64 * sizeof(StereoFrame); // detector and source tap
+  bounded.max_buffer_bytes += std::size_t{2} * 64 * sizeof(StereoFrame); // detector and source tap
   bounded.max_history_bytes += 2 * sizeof(StereoFrame);
   auto mixer = take(prepare_routed_mixer(nodes, edges, bounded));
   auto short_budget = bounded;
@@ -1086,7 +1086,8 @@ void sidechain_is_separate_aligned_and_allocation_free() {
       {{21, 2, 3, 1.0F, RoutingEdgeKind::sidechain}, {22, 3, 1}, {23, 2, 1, 0.0F}}};
   auto direct_limits = limits(3, 4, 1);
   direct_limits.latency.master = 1;
-  direct_limits.max_buffer_bytes += 2 * 64 * sizeof(StereoFrame); // detector and source tap
+  direct_limits.max_buffer_bytes +=
+      std::size_t{2} * 64 * sizeof(StereoFrame); // detector and source tap
   auto direct = take(prepare_routed_mixer(direct_target, direct_edges, direct_limits));
   const auto planned_target = std::ranges::find(direct->plan().nodes, 3, &PlannedNodeLatency::id);
   REQUIRE_NE(planned_target, direct->plan().nodes.end(),

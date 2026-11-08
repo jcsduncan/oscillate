@@ -129,6 +129,7 @@ void prepared_effect_tail_follows_group_and_send_routes() {
       std::ranges::find(receipt.nodes, source, &app::PreparedRouteTailReceipt::NodeTail::node);
   require(source_tail != receipt.nodes.end() && source_tail->frames == 8);
   std::vector<oscillate::exporting::RealtimeNodeTail> tails;
+  tails.reserve(receipt.nodes.size());
   for (const auto& node : receipt.nodes)
     tails.push_back({node.node, node.frames});
   auto planned = oscillate::exporting::plan_realtime_tail_frames(receipt.route, receipt.master,
@@ -245,11 +246,12 @@ void native_prepared_tails_match_export_drain_policy() {
   require(master_tail != receipt.nodes.end() && master_tail->frames.value_or(0) > 0);
   REQUIRE_GT(control.master_output_latency_frames(), 0); // Output latency is separate.
   std::vector<oscillate::exporting::RealtimeNodeTail> tails;
+  tails.reserve(receipt.nodes.size());
   for (const auto& node : receipt.nodes)
     tails.push_back({node.node, node.frames});
   const auto planned = oscillate::exporting::plan_realtime_tail_frames(
       receipt.route, receipt.master, tails, 480'000);
-  require(planned && planned.value() == eq_tail + *master_tail->frames);
+  require(planned && planned.value() == eq_tail + master_tail->frames.value_or(0));
 }
 
 void bypassed_master_vst3_is_not_a_live_stage() {
@@ -274,6 +276,7 @@ void bypassed_master_vst3_is_not_a_live_stage() {
 
 } // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): an uncaught exception is the test's failure report.
 int main() {
   prepared_effect_tail_follows_group_and_send_routes();
   unqualified_or_unknown_plugin_tail_fails_closed();

@@ -324,20 +324,15 @@ template <typename C> [[nodiscard]] std::string error_suffix(const C& condition)
 }
 
 template <typename C>
-void require_true(const C& condition, std::string_view text, const std::source_location& where,
-                  std::string_view message = {}) {
-  if (!static_cast<bool>(condition)) {
-    fail("REQUIRE_TRUE(" + std::string(text) + ") failed" + error_suffix(condition), message,
-         where);
-  }
+[[noreturn]] void fail_true(const C& condition, std::string_view text,
+                            const std::source_location& where, std::string_view message = {}) {
+  fail("REQUIRE_TRUE(" + std::string(text) + ") failed" + error_suffix(condition), message, where);
 }
 
 template <typename C>
-void require_false(const C& condition, std::string_view text, const std::source_location& where,
-                   std::string_view message = {}) {
-  if (static_cast<bool>(condition)) {
-    fail("REQUIRE_FALSE(" + std::string(text) + ") failed", message, where);
-  }
+[[noreturn]] void fail_false(const C& /*condition*/, std::string_view text,
+                             const std::source_location& where, std::string_view message = {}) {
+  fail("REQUIRE_FALSE(" + std::string(text) + ") failed", message, where);
 }
 
 [[nodiscard]] inline std::string describe_error(const foundation::Error& error) {
@@ -379,6 +374,16 @@ template <typename T>
   return std::move(result).value();
 }
 
+// The value of an engaged optional; an empty one fails where it was taken.
+template <typename T>
+[[nodiscard]] T take(std::optional<T> value,
+                     std::source_location where = std::source_location::current()) {
+  if (!value) {
+    detail::fail("take() of an empty optional", {}, where);
+  }
+  return *std::move(value);
+}
+
 inline void take(foundation::Result<void> result,
                  std::source_location where = std::source_location::current()) {
   if (!result) {
@@ -390,12 +395,22 @@ inline void take(foundation::Result<void> result,
 
 #define OSCILLATE_TEST_HERE() ::std::source_location::current()
 
+// The branch sits at the call, so static analysis sees that code after
+// REQUIRE_TRUE(maybe) runs only with `maybe` engaged.
 #define REQUIRE_TRUE(condition, ...)                                                               \
-  ::oscillate::test::detail::require_true((condition), #condition,                                 \
-                                          OSCILLATE_TEST_HERE() __VA_OPT__(, ) __VA_ARGS__)
+  do {                                                                                             \
+    const auto& oscillate_test_condition = (condition);                                            \
+    if (!static_cast<bool>(oscillate_test_condition))                                              \
+      ::oscillate::test::detail::fail_true(oscillate_test_condition, #condition,                   \
+                                           OSCILLATE_TEST_HERE() __VA_OPT__(, ) __VA_ARGS__);      \
+  } while (false)
 #define REQUIRE_FALSE(condition, ...)                                                              \
-  ::oscillate::test::detail::require_false((condition), #condition,                                \
-                                           OSCILLATE_TEST_HERE() __VA_OPT__(, ) __VA_ARGS__)
+  do {                                                                                             \
+    const auto& oscillate_test_condition = (condition);                                            \
+    if (static_cast<bool>(oscillate_test_condition))                                               \
+      ::oscillate::test::detail::fail_false(oscillate_test_condition, #condition,                  \
+                                            OSCILLATE_TEST_HERE() __VA_OPT__(, ) __VA_ARGS__);     \
+  } while (false)
 #define REQUIRE_EQ(actual, expected, ...)                                                          \
   ::oscillate::test::detail::require_eq((actual), (expected), #actual, #expected,                  \
                                         OSCILLATE_TEST_HERE() __VA_OPT__(, ) __VA_ARGS__)

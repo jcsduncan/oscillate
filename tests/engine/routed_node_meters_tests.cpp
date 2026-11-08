@@ -63,7 +63,7 @@ void window_peak_and_rms_match_hand_values() {
   REQUIRE_EQ(partial->left_peak, 0.0F, "an incomplete window was published as a level");
   REQUIRE_EQ(partial->left_rms, 0.0F, "an incomplete window was published as a level");
   counting_allocations = true;
-  feed(meters, 0, mixed, 7 * 128, 1, 1);
+  feed(meters, 0, mixed, std::uint64_t{7} * 128, 1, 1);
   feed(meters, 1, full, 0, 1, 8);
   counting_allocations = false;
   const auto first = meters.latest(0);
