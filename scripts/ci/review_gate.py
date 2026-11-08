@@ -44,6 +44,10 @@ CODERABBIT_LOGIN = "coderabbitai[bot]"
 REVIEW_COMPLETED = "Review completed"
 CARRIED_FORWARD = ("Prior review carried forward", "No files to review")
 LIMIT_NOTICE = re.compile(r"Rate Limit Exceeded|Review paused|Reviews paused", re.IGNORECASE)
+# Each status's target URL records when its evaluation began.
+EVALUATED_KEY = "evaluated"
+EVALUATED = re.compile(EVALUATED_KEY + r"=([0-9T:.+-]+)")
+EVALUATION_FAILED = "The gate could not be evaluated; the next run retries"
 RELEASE_BRANCH_PREFIX = "release-please--"
 GREEN_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
 SUCCESS, PENDING, FAILURE = "success", "pending", "failure"
@@ -152,17 +156,23 @@ def review_verdict(pull: dict, source: Source) -> Verdict | None:
                 f"({head_run.get('conclusion')}: {first_line(summary(head_run))})",
             )
         earlier = [commit for commit in source.commits(pull["number"]) if commit != sha]
-        if not any(
-            completed_review(run)
+        reviews = [
+            run
             for commit in earlier
             for run in coderabbit_runs(source.check_runs(commit))
-        ):
+            if completed_review(run)
+        ]
+        if not reviews:
             return Verdict(
                 FAILURE,
                 f"CodeRabbit carried a review forward to {sha[:SHORT_SHA]}, "
                 "but no earlier commit has a completed review",
             )
-    reviewed_at = parse_time(head_run["completed_at"])
+        # A notice after the review that was carried forward counts, even
+        # when it came before the head's own check run.
+        reviewed_at = max(parse_time(run["completed_at"]) for run in reviews)
+    else:
+        reviewed_at = parse_time(head_run["completed_at"])
     for comment in source.issue_comments(pull["number"]):
         if (
             (comment.get("user") or {}).get("login") == CODERABBIT_LOGIN
@@ -308,10 +318,19 @@ class GitHub:
             "state": verdict.state,
             "context": GATE_CONTEXT,
             "description": clip(verdict.description),
+            "target_url": target_url,
         }
-        if target_url:
-            payload["target_url"] = target_url
         self.request(f"/repos/{self.repository}/statuses/{sha}", payload)
+
+
+def evaluated_at(status: dict | None) -> datetime.datetime | None:
+    """When the evaluation behind a gate status began (from its target URL)."""
+    match = EVALUATED.search((status or {}).get("target_url") or "")
+    return parse_time(match.group(1)) if match else None
+
+
+def stamped(target_url: str, started: datetime.datetime) -> str:
+    return f"{target_url}#{EVALUATED_KEY}={started.isoformat()}"
 
 
 def gate_status(statuses: list[dict]) -> dict | None:
@@ -328,12 +347,26 @@ def unchanged(current: dict | None, verdict: Verdict) -> bool:
     )
 
 
+def publish(github: GitHub, sha: str, verdict: Verdict, target_url: str, started) -> None:
+    """Set the status unless it repeats the current one or a run that began
+    later already set it: runs for one pull request may finish out of order,
+    and a stale success must never replace a newer verdict."""
+    current = gate_status(github.statuses(sha))
+    newer = evaluated_at(current)
+    if unchanged(current, verdict) or (newer and newer > started):
+        return
+    github.set_status(sha, verdict, stamped(target_url, started))
+
+
 def update(numbers: list[int], github: GitHub, target_url: str, dry_run: bool) -> int:
     """Evaluate and set each pull request's gate. An API, network or
-    response error on one pull request is reported and the rest still update;
-    the exit code is 1."""
+    response error on one pull request is reported, its gate drops to
+    pending so no earlier success stands, and the rest still update; the
+    exit code is 1."""
     failed = False
     for number in sorted(set(numbers)):
+        started = datetime.datetime.now(datetime.UTC)
+        sha = None
         try:
             pull = github.pull(number)
             if pull["state"] != "open":
@@ -341,13 +374,21 @@ def update(numbers: list[int], github: GitHub, target_url: str, dry_run: bool) -
             sha = pull["head"]["sha"]
             verdict = evaluate(pull, github)
             print(f"#{number} {sha[:SHORT_SHA]}: {verdict.state}: {verdict.description}")
-            if dry_run or unchanged(gate_status(github.statuses(sha)), verdict):
-                continue
-            github.set_status(sha, verdict, target_url)
+            if not dry_run:
+                publish(github, sha, verdict, target_url, started)
         except (OSError, ValueError, RuntimeError) as error:
             print(f"::error::#{number}: {error}")
             failed = True
+            if sha and not dry_run:
+                withdraw(github, sha, target_url, started)
     return 1 if failed else 0
+
+
+def withdraw(github: GitHub, sha: str, target_url: str, started) -> None:
+    try:
+        github.set_status(sha, Verdict(PENDING, EVALUATION_FAILED), stamped(target_url, started))
+    except (OSError, ValueError) as error:
+        print(f"::error::{sha[:SHORT_SHA]}: could not withdraw the gate: {error}")
 
 
 def main(argv: list[str]) -> int:
@@ -367,7 +408,9 @@ def main(argv: list[str]) -> int:
         numbers = args.pr
     run_id = os.environ.get("GITHUB_RUN_ID")
     server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
-    target_url = f"{server}/{github.repository}/actions/runs/{run_id}" if run_id else ""
+    target_url = f"{server}/{github.repository}"
+    if run_id:
+        target_url += f"/actions/runs/{run_id}"
 
     return update(numbers, github, target_url, args.dry_run)
 

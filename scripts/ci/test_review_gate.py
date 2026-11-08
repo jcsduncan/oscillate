@@ -1,5 +1,6 @@
 """Unit tests for review_gate.py."""
 
+import datetime
 import pathlib
 import re
 import unittest
@@ -15,6 +16,7 @@ EARLIER = "b" * 40
 REVIEWED_AT = "2026-11-08T10:00:00Z"
 BEFORE_REVIEW = "2026-11-08T09:00:00Z"
 AFTER_REVIEW = "2026-11-08T11:00:00Z"
+LATER_STILL = "2026-11-08T12:00:00Z"
 STARTED_FIRST = "2026-11-08T08:00:00Z"
 STARTED_LATER = "2026-11-08T09:30:00Z"
 WORKFLOW = pathlib.Path(__file__).resolve().parents[2] / ".github/workflows/review-gate.yml"
@@ -28,14 +30,21 @@ def pull(ref="fix/thing", head_repo=REPOSITORY):
     }
 
 
-def run(name, status="completed", conclusion="success", text="", started=STARTED_FIRST):
+def run(
+    name,
+    status="completed",
+    conclusion="success",
+    text="",
+    started=STARTED_FIRST,
+    completed=REVIEWED_AT,
+):
     return {
         "name": name,
         "status": status,
         "conclusion": conclusion if status == "completed" else None,
         "output": {"summary": text},
         "started_at": started,
-        "completed_at": REVIEWED_AT if status == "completed" else None,
+        "completed_at": completed if status == "completed" else None,
     }
 
 
@@ -100,6 +109,14 @@ class ReviewTests(unittest.TestCase):
         for text in review_gate.CARRIED_FORWARD:
             source = FakeSource([coderabbit(text=text)], earlier_runs=[coderabbit()])
             self.assertEqual(self.state(source), review_gate.SUCCESS, text)
+
+    def test_notice_between_the_carried_review_and_the_head_fails(self):
+        source = FakeSource(
+            [coderabbit(text=review_gate.CARRIED_FORWARD[0], completed=LATER_STILL)],
+            earlier_runs=[coderabbit()],
+            comments=[comment("Rate Limit Exceeded", updated=AFTER_REVIEW)],
+        )
+        self.assertEqual(self.state(source), review_gate.FAILURE)
 
     def test_carried_forward_without_an_earlier_review_fails(self):
         source = FakeSource(
@@ -251,32 +268,81 @@ class StatusTests(unittest.TestCase):
 
 
 class UpdatingGitHub(FakeSource):
-    """Fails to read one pull request and records the statuses it sets."""
+    """Fails to read one pull request, gets a malformed response for another,
+    and records the statuses it sets."""
 
-    def __init__(self, broken, malformed):
-        super().__init__([coderabbit()])
+    def __init__(self, broken, malformed, current=None):
+        super().__init__()
         self.broken = broken
         self.malformed = malformed
-        self.set = []
+        self.current = current
+        self.set = {}
+
+    @staticmethod
+    def head(number):
+        return f"{number:040d}"
 
     def pull(self, number):
         if number == self.broken:
             raise urllib.error.URLError("server error")
-        if number == self.malformed:
+        head = {**pull()["head"], "sha": self.head(number)}
+        return {**pull(), "number": number, "state": "open", "head": head}
+
+    def check_runs(self, sha):
+        if sha == self.head(self.malformed):
             raise ValueError("invalid JSON")
-        return {**pull(), "number": number, "state": "open"}
+        return [coderabbit()]
+
+    def statuses(self, sha):
+        return [self.current] if self.current else []
 
     def set_status(self, sha, verdict, target_url):
-        self.set.append(verdict.state)
+        self.set[sha] = (verdict.state, target_url)
+
+
+def gate(evaluated):
+    return {
+        "context": review_gate.GATE_CONTEXT,
+        "state": review_gate.FAILURE,
+        "description": "1 unresolved review thread(s)",
+        "target_url": review_gate.stamped("https://github.com/run", evaluated),
+    }
 
 
 class UpdateTests(unittest.TestCase):
-    def test_api_error_on_one_pull_still_updates_the_others(self):
+    NOW = datetime.datetime(2026, 11, 8, 10, tzinfo=datetime.UTC)
+    MINUTE = datetime.timedelta(minutes=1)
+    SUCCESS = review_gate.Verdict(review_gate.SUCCESS, "ok")
+
+    def test_error_on_one_pull_still_updates_the_others(self):
         github = UpdatingGitHub(broken=NUMBER, malformed=NUMBER + 1)
         numbers = [NUMBER, NUMBER + 1, NUMBER + 2]
         result = review_gate.update(numbers, github, "", dry_run=False)
         self.assertEqual(result, 1)
-        self.assertEqual(github.set, [review_gate.SUCCESS])
+        states = {sha: state for sha, (state, _) in github.set.items()}
+        self.assertEqual(
+            states,
+            {
+                github.head(NUMBER + 1): review_gate.PENDING,
+                github.head(NUMBER + 2): review_gate.SUCCESS,
+            },
+        )
+
+    def test_status_records_when_its_evaluation_began(self):
+        github = UpdatingGitHub(broken=None, malformed=None)
+        review_gate.publish(github, HEAD, self.SUCCESS, "https://github.com/run", self.NOW)
+        _, url = github.set[HEAD]
+        self.assertEqual(review_gate.evaluated_at({"target_url": url}), self.NOW)
+
+    def test_stale_evaluation_does_not_replace_a_newer_status(self):
+        github = UpdatingGitHub(None, None, current=gate(self.NOW + self.MINUTE))
+        review_gate.publish(github, HEAD, self.SUCCESS, "", self.NOW)
+        self.assertEqual(github.set, {})
+
+    def test_newer_evaluation_replaces_an_older_status(self):
+        github = UpdatingGitHub(None, None, current=gate(self.NOW - self.MINUTE))
+        review_gate.publish(github, HEAD, self.SUCCESS, "", self.NOW)
+        self.assertEqual(github.set[HEAD][0], review_gate.SUCCESS)
 
 
 if __name__ == "__main__":
