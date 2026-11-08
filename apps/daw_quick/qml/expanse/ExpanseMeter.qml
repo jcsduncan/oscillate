@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // A horizontal level meter lit like a band of aurora, -60 to 0 dBFS.
 Item {
@@ -17,7 +18,7 @@ Item {
     implicitHeight: theme.meterHeight
     Accessible.role: Accessible.ProgressBar
     Accessible.name: label + " level"
-    Accessible.description: live ? Math.round(db) + " dB" : "Not playing"
+    Accessible.description: live ? Format.decibels(db) : "Not playing"
 
     Text {
         id: name
@@ -66,7 +67,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         width: meter.theme.meterValueWidth
         horizontalAlignment: Text.AlignRight
-        text: meter.live && meter.db > -119 ? Math.round(meter.db) + " dB" : "—"
+        text: meter.live && meter.db > -119 ? Format.decibels(meter.db) : "—"
         color: meter.live ? meter.theme.ink : meter.theme.inkFaint
         font.family: meter.theme.mono
         font.pixelSize: meter.theme.typeSmall

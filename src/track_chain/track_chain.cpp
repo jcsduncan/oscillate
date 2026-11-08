@@ -5,6 +5,7 @@
 #include <functional>
 #include <limits>
 #include <new>
+#include <span>
 #include <stdexcept>
 #include <utility>
 
@@ -187,9 +188,12 @@ std::size_t ChainRuntime::continue_latency_of(engine::ProcessorRuntime* prior,
     const auto first = index;
     while (index < stages_.size() && !kept_at(index))
       ++index;
+    // A fresh run starts the chain or follows a kept stage.
     std::size_t source = 0;
-    if (first != 0)
-      source = *kept_at(first - 1) + 1;
+    if (first != 0) {
+      const auto before = kept_at(first - 1);
+      source = before ? *before + 1 : 0;
+    }
     // A stage that cannot take earlier positions is not primed: it starts
     // from the live input, and only replayable runs get history.
     if (std::all_of(replayable_.begin() + static_cast<std::ptrdiff_t>(first),
@@ -347,7 +351,9 @@ foundation::Result<PreparedChain> prepare_chain(std::span<const SavedStage> save
   try {
     PreparedChain chain;
     chain.stages.reserve(saved.size());
-    std::vector<bool> taken(prior ? prior->stages.size() : 0, false);
+    const auto prior_stages =
+        prior != nullptr ? std::span<const Stage>(prior->stages) : std::span<const Stage>{};
+    std::vector<bool> taken(prior_stages.size(), false);
     std::vector<bool> fresh;
     fresh.reserve(saved.size());
     std::uint64_t latency = 0;
@@ -358,15 +364,15 @@ foundation::Result<PreparedChain> prepare_chain(std::span<const SavedStage> save
       // detector, which a plugin activates only when keyed at preparation.
       const auto keyed = context.detector_slot && stage.slot == context.detector_slot;
       for (std::size_t index = 0; index < taken.size(); ++index) {
-        if (!taken[index] && prior->stages[index].saved == stage &&
-            (!keyed || prior->stages[index].detector)) {
+        if (!taken[index] && prior_stages[index].saved == stage &&
+            (!keyed || prior_stages[index].detector)) {
           kept = index;
           break;
         }
       }
       if (kept) {
         taken[*kept] = true;
-        chain.stages.push_back(prior->stages[*kept]);
+        chain.stages.push_back(prior_stages[*kept]);
         fresh.push_back(false);
       } else {
         auto prepared = prepare_stage(stage, context);

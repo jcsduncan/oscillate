@@ -305,7 +305,12 @@ private:
   [[nodiscard]] std::optional<project::ClayTake> macro_result(
       const std::function<std::vector<clay_dsp::NoteEdit>(std::span<const clay_dsp::NoteEdit>,
                                                           std::span<const std::uint32_t>)>& run);
-  void audition_span(double from_frame, double to_frame);
+  // Source frames [from, to) to audition.
+  struct FrameSpan {
+    double from = 0.0;
+    double to = 0.0;
+  };
+  void audition_span(FrameSpan frames);
 
   Session session_;
   CanEdit can_edit_;

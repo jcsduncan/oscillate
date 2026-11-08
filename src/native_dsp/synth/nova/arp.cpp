@@ -179,8 +179,7 @@ constexpr std::int64_t largest_reported_step = (std::int64_t{1} << 24) - 1;
   next.scale = std::min(next.scale, arp_scales.size() - 1);
   next.root %= static_cast<std::uint32_t>(semitones);
   next.seed = std::min(next.seed, static_cast<std::uint32_t>(arp_max_seed));
-  if (std::find(arp_variation_bars.begin(), arp_variation_bars.end(), next.variation) ==
-      arp_variation_bars.end()) {
+  if (std::ranges::find(arp_variation_bars, next.variation) == arp_variation_bars.end()) {
     next.variation = 0;
   }
   next.strum = clamp_finite(next.strum, 0.0, 1.0, arp_default_strum);
@@ -1027,8 +1026,10 @@ void SequencerStage::apply(const GeneratedNote& note, std::uint32_t frame,
       if (triggers_[clip]++ == 0) {
         start(clip, quantise(block.axis.beat_at(frame)), true);
       }
-    } else if (triggers_[clip] > 0 && --triggers_[clip] == 0) {
-      stop(clip, frame, block.axis, out);
+    } else if (triggers_[clip] > 0) {
+      --triggers_[clip];
+      if (triggers_[clip] == 0)
+        stop(clip, frame, block.axis, out);
     }
     return;
   }
@@ -1241,7 +1242,7 @@ NoteGenerator::State::prepare_input(std::span<const GeneratedNote> played, bool 
   // those released on that very frame.
   std::size_t count = 0;
   for (const auto& note : held.notes()) {
-    const bool released = std::any_of(played.begin(), played.end(), [&](const auto& event) {
+    const bool released = std::ranges::any_of(played, [&](const auto& event) {
       return event.offset == 0 && !event.on && same_note(event.note, note);
     });
     if (!released && count < input.size()) {
@@ -1454,8 +1455,9 @@ SequencerClips compile_sequencer_clips(const project::NativeSynthDocument& docum
   for (std::size_t clip = 0; clip < sequencer_clips; ++clip) {
     const std::string id = "clip." + std::to_string(clip + 1);
     const auto found =
-        std::find_if(document.sequences.begin(), document.sequences.end(),
-                     [&](const project::NativeSequence& sequence) { return sequence.id == id; });
+        std::ranges::find_if(document.sequences, [&](const project::NativeSequence& sequence) {
+          return sequence.id == id;
+        });
     if (found == document.sequences.end()) {
       continue; // One empty bar.
     }
@@ -1475,7 +1477,7 @@ SequencerClips compile_sequencer_clips(const project::NativeSynthDocument& docum
       }
       notes.push_back({start, duration, note.key, std::clamp<std::uint8_t>(note.velocity, 1, 127)});
     }
-    std::stable_sort(notes.begin(), notes.end(), [](const auto& a, const auto& b) {
+    std::ranges::stable_sort(notes, [](const auto& a, const auto& b) {
       return a.start_beats < b.start_beats || (a.start_beats == b.start_beats && a.key < b.key);
     });
   }

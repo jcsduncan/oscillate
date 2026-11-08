@@ -66,7 +66,9 @@ void DropVoice::start(const DropShape& drop, const SurfaceShape& surface, double
   life = static_cast<std::uint32_t>(std::ceil(voice_life_tau * longest * rate));
 }
 
-void Rain::prepare(double rate, double reference) {
+void Rain::prepare(LayerFormat format) {
+  const double rate = format.rate;
+  const double reference = format.reference;
   rate_ = rate;
   reference_ = reference;
   // Each surface's drops: their expected power at the default Intensity
@@ -100,7 +102,9 @@ void Rain::reset() noexcept {
   swell_.reset();
 }
 
-void Rain::set(std::span<const double> v, double tone, double width) noexcept {
+void Rain::set(std::span<const double> v, LayerShape layer) noexcept {
+  const double tone = layer.tone;
+  const double width = layer.width;
   const auto surface = choice_of(v[p::rain_surface], rain_surfaces.size());
   intensity_ = v[p::rain_intensity];
   tone_ = tone;

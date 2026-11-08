@@ -96,6 +96,9 @@ foundation::Result<void> ClipboardService::copy_clips(std::span<const project::C
     origin = origin ? std::min(*origin, start.value()) : start.value();
     copied.clips.push_back({item.row, std::move(item.clip), start.value(), item.track});
   }
+  // `found` holds every requested clip and there is at least one.
+  if (!first_row || !origin)
+    return Result::failure({foundation::ErrorCode::internal, "No clip was copied"});
   for (auto& entry : copied.clips)
     entry.track_offset -= *first_row;
   copied.clips_origin = *origin;
@@ -215,6 +218,11 @@ ClipboardService::duplicate_clips(std::span<const project::ClipId> clips) {
     if (std::ranges::any_of(track.clips, [&](const auto& clip) { return selected(clip.id); }) ||
         std::ranges::any_of(track.midi_clips, [&](const auto& clip) { return selected(clip.id); }))
       top = row;
+  }
+  // The copy succeeded, so a selected clip sits on some row and has an end.
+  if (!top || !end) {
+    clipboard_ = saved;
+    return Result::failure({foundation::ErrorCode::internal, "No copied clip to duplicate"});
   }
   auto pasted = paste_clips(state.tracks[*top].id, *end);
   clipboard_ = saved;
@@ -382,7 +390,7 @@ ClipboardService::duplicate_notes(project::ClipId clip, std::span<const project:
       end = end ? std::max(*end, note.end) : note.end;
     }
   }
-  if (!start)
+  if (!start || !end)
     return Result::failure({foundation::ErrorCode::not_found, "No notes to duplicate"});
   auto copied = copy_notes(clip, notes);
   if (!copied) {

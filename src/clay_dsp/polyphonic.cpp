@@ -92,7 +92,7 @@ struct Spectra {
     long_window.analyse(mono, centre);
     for (auto* pair : {&short_window, &long_window}) {
       const auto magnitude = pair->magnitude();
-      const double loudest = *std::max_element(magnitude.begin(), magnitude.end());
+      const double loudest = *std::ranges::max_element(magnitude);
       pair->peaks(loudest * db_to_ratio(peak_floor_db),
                   pair == &short_window ? short_peaks : long_peaks);
     }
@@ -501,7 +501,7 @@ bool detect_polyphonic(const Context& context, std::int64_t hop, std::vector<Not
   const auto hop_count = static_cast<std::size_t>(length / hop + 1);
   Spectra spectra(rate);
   Estimator estimator(*context.options, rate);
-  NoteSets sets(rate, context.options->minimum_hz, context.options->maximum_hz);
+  NoteSets sets(rate, *context.options);
 
   // Every hop: its peaks (the long window's below merged_below_hz, the short
   // one's above) and the note set that best explains it on its own.
@@ -526,7 +526,7 @@ bool detect_polyphonic(const Context& context, std::int64_t hop, std::vector<Not
     seeds.clear();
     for (const auto& e : estimates)
       seeds.push_back(e.f0);
-    sets.choose(merged, seeds, {}, picked[k]);
+    sets.choose(merged, {.seeds = seeds, .previous = {}}, picked[k]);
   }
 
   // Segments run from onset to onset. Each one's notes are chosen once, by a
@@ -544,9 +544,9 @@ bool detect_polyphonic(const Context& context, std::int64_t hop, std::vector<Not
     return false;
   }
   std::ranges::sort(onsets);
-  onsets.erase(std::unique(onsets.begin(), onsets.end(),
-                           [&](std::int64_t a, std::int64_t b) { return b / hop == a / hop; }),
-               onsets.end());
+  const auto same_hop = std::ranges::unique(
+      onsets, [&](std::int64_t a, std::int64_t b) { return b / hop == a / hop; });
+  onsets.erase(same_hop.begin(), same_hop.end());
   // Settled: the long window has left the attack and its thump.
   const auto settle = static_cast<std::size_t>(
       std::ceil(static_cast<double>(spectra.long_window.size()) / static_cast<double>(hop)));
@@ -661,6 +661,7 @@ bool detect_polyphonic(const Context& context, std::int64_t hop, std::vector<Not
         // An entry must add energy the sounding notes do not explain (a
         // subharmonic of them adds none).
         std::vector<double> sounding;
+        sounding.reserve(active.size());
         for (const auto& n : active)
           sounding.push_back(n.pitch);
         if (sets.fresh(frames[k], c.f0, sounding) < entry_share)

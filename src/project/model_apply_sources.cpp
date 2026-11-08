@@ -199,8 +199,10 @@ Result<void> apply_command(ApplyContext& context, const RelinkSource& command) {
     return Result<void>::failure(conflict("stale external source link"));
   if (command.replacement_path == found->external_link.value().last_known_path)
     return Result<void>::failure(invalid("external source link is unchanged"));
+  auto link = found->external_link.value();
+  link.last_known_path = command.replacement_path;
   auto replacement = *found;
-  replacement.external_link.value().last_known_path = command.replacement_path;
+  replacement.external_link = std::move(link);
   auto valid = validate_source(replacement);
   if (!valid)
     return valid;

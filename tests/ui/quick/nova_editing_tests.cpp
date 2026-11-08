@@ -270,6 +270,8 @@ void typing_a_value() {
   InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
+  // The knob and the typed entry are named at every call.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   const auto type = [&](const QString& id, const QString& entry, bool enter) {
     click(*panel, centre(item(*panel, QStringLiteral("novaKnobValue:") + id)));
     auto* field = item(*panel, QStringLiteral("novaKnobField:") + id);
@@ -346,9 +348,8 @@ void counts_have_no_sign() {
   require(text_of(*panel, QStringLiteral("novaKnobValue:nova.osc.a.unison.voices")) ==
               QStringLiteral("1"),
           "unison voices are a count");
-  require(text_of(*panel, QStringLiteral("novaKnobValue:nova.osc.a.octave")) ==
-              QStringLiteral("+0"),
-          "an octave offset keeps its sign");
+  require(text_of(*panel, QStringLiteral("novaKnobValue:nova.osc.a.octave")) == QStringLiteral("0"),
+          "an octave offset at zero has no sign");
   panel->root->setProperty("page", 4);
   settle();
   require(text_of(*panel, QStringLiteral("novaKnobValue:nova.global.polyphony")) ==

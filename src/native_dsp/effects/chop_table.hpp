@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Data tables keep one entry per row; clang-format would split them.
@@ -22,7 +23,7 @@ using namespace std::string_view_literals;
 // Gate shapes the level step by step; Repeat stutters the steps that have
 // a repeat and passes the rest; Gate + repeat does both.
 inline constexpr std::array modes{"Gate"sv, "Repeat"sv, "Gate + repeat"sv};
-enum Mode : int { gate, repeat, gate_repeat };
+enum Mode : std::uint8_t { gate, repeat, gate_repeat };
 inline constexpr std::array step_counts{"16"sv, "32"sv};
 inline constexpr std::array<std::size_t, 2> step_count_values{16, 32};
 static_assert(step_count_values.back() == chop::max_steps);
@@ -34,7 +35,7 @@ inline constexpr std::array<double, 3> division_beats{0.5, 0.25, 0.125};
 // ratchet), ratchet (hits inside the step), repeat (0 off; 1 to 3 replay
 // the step's first half, quarter or eighth 2, 4 or 8 times) and chance.
 inline constexpr std::size_t step_fields = 5;
-enum StepField : std::size_t { level, length, ratchet, repeat_count, chance };
+enum StepField : std::uint8_t { level, length, ratchet, repeat_count, chance };
 inline constexpr std::size_t max_ratchet = 4;
 inline constexpr std::size_t max_repeat = 3;
 inline constexpr std::size_t max_repeats_per_step = std::size_t{1} << max_repeat;

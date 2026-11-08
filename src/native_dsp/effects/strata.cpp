@@ -165,9 +165,9 @@ public:
     }
   }
   void reset() noexcept {
-    std::fill(history_.begin(), history_.end(), std::complex<double>{});
+    std::ranges::fill(history_, std::complex<double>{});
     for (auto& o : out_) {
-      std::fill(o.begin(), o.end(), std::complex<double>{});
+      std::ranges::fill(o, std::complex<double>{});
     }
     position_ = 0;
   }
@@ -192,7 +192,7 @@ private:
     if (dirty_) {
       design();
     }
-    std::copy(history_.begin(), history_.end(), work_.begin());
+    std::ranges::copy(history_, work_.begin());
     fft_.forward(work_);
     for (std::size_t k = 0; k < layout_.bands; ++k) {
       for (std::size_t i = 0; i < size_; ++i) {
@@ -368,7 +368,7 @@ public:
                                                     static_cast<double>(spectrum_size));
     }
     const double bin_hz = sample_rate / static_cast<double>(spectrum_size);
-    const auto top = static_cast<double>(spectrum_size / 2);
+    const auto top = static_cast<double>(spectrum_size) / 2.0;
     for (std::size_t i = 0; i < display_bands; ++i) {
       const auto n = static_cast<double>(display_bands);
       const double lo = display_low_hz * std::pow(display_span, static_cast<double>(i) / n);
@@ -787,7 +787,7 @@ Layout layout_for(std::span<const double> v, double sample_rate) noexcept {
   std::array<double, max_crossovers> wanted{};
   if (layout.ott) {
     layout.bands = ott_bands;
-    std::copy(ott_crossovers.begin(), ott_crossovers.end(), wanted.begin());
+    std::ranges::copy(ott_crossovers, wanted.begin());
   } else {
     layout.bands = static_cast<std::size_t>(
                        std::clamp(whole(v[p::bands]), 0, static_cast<int>(max_bands) - 1)) +

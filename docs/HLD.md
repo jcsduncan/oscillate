@@ -41,7 +41,7 @@ The process contains the UI, model, engine, and default plugin host. Plugin scan
 
 | Module | Owns | May depend on |
 | --- | --- | --- |
-| `foundation` | IDs, errors, bounded value types, diagnostics interfaces, the performance tracer | C++ standard library |
+| `foundation` | IDs, errors, bounded value types, display value text (the one number formatter every panel uses), diagnostics interfaces, the performance tracer | C++ standard library |
 | `timeline` | Beat/sample time, tempo and meter maps, conversions | `foundation` |
 | `automation` | Automation curve evaluation | `timeline` |
 | `project` | Tracks, clips, routing intent, commands, undo, versioned state | `foundation`, `timeline` |
@@ -63,7 +63,7 @@ The process contains the UI, model, engine, and default plugin host. Plugin scan
 | `track_chain` | One chain per track: instrument then inserts, prepared for live playback and export ([ADR-0050](decisions/0050-one-chain-per-track.md)) | `project`, `engine`, `routing`, `native_inserts` |
 | `persistence` | Manifest codec, committed asset references, generations, recovery | `project`, `media`, `codec` |
 | `source_prep` | Bounded control/worker decode of integrity-checked managed audio, for synth media slots and export | `engine`, `persistence`, `media`, `project` |
-| `render_graph` | The offline graph builder ([ADR-0090](decisions/0090-render-graph-builder.md)): which saved inserts an offline render admits, and a snapshot's track chains (through `track_chain`), routed mixer (through `routing::graph_nodes`, as live playback builds it), master chain and built-in instruments, prepared for export | `project`, `engine`, `routing`, `automation_project`, `timeline`, `native_dsp`, `native_inserts`, `track_chain`, `source_prep`, `persistence` |
+| `render_graph` | The offline graph builder ([ADR-0090](decisions/0090-render-graph-builder.md)): which saved inserts an offline render admits, and a snapshot's track chains (through `track_chain`), routed mixer (through `routing::graph_nodes`, as live playback builds it), master chain and built-in instruments, prepared for export; VST3 stages come from a preparer the plugin host supplies | `project`, `engine`, `routing`, `automation_project`, `timeline`, `native_dsp`, `native_inserts`, `track_chain`, `source_prep`, `persistence` |
 | `export` | Offline render of the graph `render_graph` prepares, JACK real-time capture and format writers | `engine`, `routing`, `project`, `media`, `source_prep`, `persistence`, `processing`, `audio_io`, `render_graph`, the `native_dsp` loudness and true-peak meters |
 | `application` | Command dispatch, revisioned read models, recording, plugin browser/scan status, lifecycle services; the VST3 adapters that bind plugin hosts to routed playback, the session and offline export (`src/application/vst3`) | all modules above |
 | `plugin_ui` (`src/app/plugin_ui`) | UI-thread VST3 run loop (`qt_vst3_run_loop`), editor attachment and X11 embedding | `plugins`, Qt |
@@ -176,7 +176,7 @@ The runtime shares the synths' parameter control, lanes and telemetry. Its real-
 
 The project is a directory with a human-readable versioned manifest, managed `assets/`, `state/` generations including autosaves and named revisions, and disposable `cache/`. The manifest references stable IDs and content hashes rather than raw path identity. Large plugin states may be separate bounded blobs referenced by hash. The current greenfield codec accepts only its current schema and rejects unknown fields or unsupported versions without rewriting data.
 
-A save writes a complete new generation to a temporary location, flushes files and directory metadata, then atomically advances a small current-generation pointer. Startup chooses the last complete generation. Autosave and named revisions refer to complete generations. Before the first public beta, only the current development schema is accepted. Once a project schema has shipped publicly, migration starts from a backed-up generation, validates the result, and keeps rollback data. Recovery presents the last saved state and latest valid autosave separately. The detailed on-disk protocol and failure matrix are fixed in the persistence specification before file-writing code is merged.
+A save writes a complete new generation to a temporary location, flushes files and directory metadata, then atomically advances a small current-generation pointer. A new project is first saved in a hidden sibling folder and renamed into place only once that save is durable, so an interrupted creation never leaves a half project under the chosen name. Startup chooses the last complete generation. Autosave and named revisions refer to complete generations. Before the first public beta, only the current development schema is accepted. Once a project schema has shipped publicly, migration starts from a backed-up generation, validates the result, and keeps rollback data. Recovery presents the last saved state and latest valid autosave separately. The detailed on-disk protocol and failure matrix are fixed in the persistence specification before file-writing code is merged.
 
 ## 10. UI, export, and diagnostics
 

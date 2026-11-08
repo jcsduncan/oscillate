@@ -64,7 +64,7 @@ std::vector<NativeEffectPlace> link_partners(const project::Snapshot& snapshot,
   for (auto& place : native_effects(snapshot)) {
     if (place.slot != self && place.patch->engine == patch.engine &&
         place.patch->link == patch.link)
-      partners.push_back(std::move(place));
+      partners.push_back(place);
   }
   return partners;
 }
@@ -84,7 +84,7 @@ std::vector<project::Operation> with_partners(const project::Snapshot& snapshot,
     operations.emplace_back(project::SetNativeEffectSettings{partner.path, partner.slot, copy});
   }
   operations.emplace(operations.begin(),
-                     project::SetNativeEffectSettings{std::move(path), slot, std::move(patch)});
+                     project::SetNativeEffectSettings{path, slot, std::move(patch)});
   return operations;
 }
 
@@ -115,7 +115,7 @@ EffectService::add_effect_engine(project::SignalPathId path, std::size_t index,
   auto patch = native_inserts::native_effect_patch_for_preset(*found, preset);
   if (!patch)
     return Result::failure(patch.error());
-  return add_native_effect(std::move(path), index, std::move(patch).value());
+  return add_native_effect(path, index, std::move(patch).value());
 }
 
 foundation::Result<std::vector<double>>
@@ -146,7 +146,7 @@ EffectService::set_native_effect_values(project::SignalPathId path, project::Ins
     return Result::success();
   patch.value().link = found.value().patch->link;
   auto applied = model().apply(
-      {project::SetNativeEffectSettings{std::move(path), slot, std::move(patch).value()}}, gesture);
+      {project::SetNativeEffectSettings{path, slot, std::move(patch).value()}}, gesture);
   return applied ? Result::success() : Result::failure(applied.error());
 }
 
@@ -166,8 +166,8 @@ EffectService::set_native_effect_preset(project::SignalPathId path, project::Ins
     return Result::success();
   // The preset's values are this instance's; its shape is the group's.
   patch.value().link = found.value().patch->link;
-  auto applied = model().apply(
-      with_partners(snapshot(), std::move(path), slot, std::move(patch).value()), gesture);
+  auto applied =
+      model().apply(with_partners(snapshot(), path, slot, std::move(patch).value()), gesture);
   return applied ? Result::success() : Result::failure(applied.error());
 }
 
@@ -198,8 +198,7 @@ EffectService::set_native_effect_document(project::SignalPathId path, project::I
   patch.document = std::move(document);
   if (auto resolved = native_inserts::resolve_native_effect(patch); !resolved)
     return Result::failure(resolved.error());
-  auto applied =
-      model().apply(with_partners(snapshot(), std::move(path), slot, std::move(patch)), gesture);
+  auto applied = model().apply(with_partners(snapshot(), path, slot, std::move(patch)), gesture);
   return applied ? Result::success() : Result::failure(applied.error());
 }
 
@@ -221,8 +220,8 @@ foundation::Result<void> EffectService::set_native_effect_state(
       patch.value().document == found.value().patch->document)
     return Result::success();
   patch.value().link = found.value().patch->link;
-  auto applied = model().apply(
-      with_partners(snapshot(), std::move(path), slot, std::move(patch).value()), gesture);
+  auto applied =
+      model().apply(with_partners(snapshot(), path, slot, std::move(patch).value()), gesture);
   return applied ? Result::success() : Result::failure(applied.error());
 }
 
@@ -256,7 +255,7 @@ EffectService::link_native_effects(std::span<const project::InsertSlotId> slots)
     patch.document = first.document;
     operations.emplace_back(project::SetNativeEffectSettings{member.path, member.slot, patch});
   }
-  auto applied = model().apply(std::move(operations));
+  auto applied = model().apply(operations);
   return applied ? Result::success() : Result::failure(applied.error());
 }
 
@@ -271,7 +270,7 @@ foundation::Result<void> EffectService::unlink_native_effect(project::SignalPath
   auto patch = *found.value().patch;
   patch.link.clear();
   std::vector<project::Operation> operations{
-      project::SetNativeEffectSettings{std::move(path), slot, std::move(patch)}};
+      project::SetNativeEffectSettings{path, slot, std::move(patch)}};
   // A group of one is no group.
   const auto partners = link_partners(snapshot(), *found.value().patch, slot);
   if (partners.size() == 1) {
@@ -280,7 +279,7 @@ foundation::Result<void> EffectService::unlink_native_effect(project::SignalPath
     operations.emplace_back(
         project::SetNativeEffectSettings{partners.front().path, partners.front().slot, last});
   }
-  auto applied = model().apply(std::move(operations));
+  auto applied = model().apply(operations);
   return applied ? Result::success() : Result::failure(applied.error());
 }
 
@@ -384,7 +383,7 @@ EffectService::duck_tracks_to(project::TrackId source, std::span<const project::
     operations.emplace_back(project::AddSendRoute{
         source, {id.value(), member.track, 1.0, project::SendPurpose::sidechain, member.slot}});
   }
-  auto applied = model().apply(std::move(operations));
+  auto applied = model().apply(operations);
   if (!applied)
     return Result::failure(applied.error());
   return Result::success(members.size());
@@ -607,11 +606,11 @@ EffectService::apply_effect_edits(std::span<const EffectEdit> edits) {
     if (!patch)
       return R::failure(patch.error());
     patch.value().link = base.link;
-    if (edit.slot) {
-      slots.push_back(*edit.slot);
+    if (const auto slot = edit.slot) {
+      slots.push_back(*slot);
       if (!(patch.value().parameters == base.parameters))
         operations.emplace_back(
-            project::SetNativeEffectSettings{edit.path, *edit.slot, std::move(patch).value()});
+            project::SetNativeEffectSettings{edit.path, *slot, std::move(patch).value()});
       continue;
     }
     auto entry =
@@ -634,7 +633,7 @@ EffectService::apply_effect_edits(std::span<const EffectEdit> edits) {
   }
   if (operations.empty())
     return R::success(std::move(slots));
-  auto applied = model().apply(std::move(operations));
+  auto applied = model().apply(operations);
   if (!applied)
     return R::failure(applied.error());
   return R::success(std::move(slots));

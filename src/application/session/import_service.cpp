@@ -139,9 +139,9 @@ foundation::Result<WavAudioImportTask> ImportService::begin_wav_audio_import(int
 foundation::Result<project::TrackId>
 ImportService::finish_wav_audio_import(PreparedWavAudioImport&& prepared,
                                        std::optional<std::size_t> insert_index,
-                                       std::string clip_name) {
+                                       const std::string& clip_name) {
   return finish_audio_import(std::move(prepared.stage_), prepared.origin_revision_, prepared.track_,
-                             prepared.clip_, false, insert_index, std::move(clip_name));
+                             prepared.clip_, false, insert_index, clip_name);
 }
 
 foundation::Result<EncodedAudioImportTask> ImportService::begin_encoded_audio_import(int input_fd) {
@@ -166,9 +166,9 @@ foundation::Result<EncodedAudioImportTask> ImportService::begin_encoded_audio_im
 foundation::Result<project::TrackId>
 ImportService::finish_encoded_audio_import(PreparedEncodedAudioImport&& prepared,
                                            std::optional<std::size_t> insert_index,
-                                           std::string clip_name) {
+                                           const std::string& clip_name) {
   return finish_audio_import(std::move(prepared.stage_), prepared.origin_revision_, prepared.track_,
-                             prepared.clip_, true, insert_index, std::move(clip_name));
+                             prepared.clip_, true, insert_index, clip_name);
 }
 
 foundation::Result<ExternalSourceRelinkTask>
@@ -234,7 +234,8 @@ ImportService::finish_external_source_relink(PreparedExternalSourceRelink&& prep
 foundation::Result<project::TrackId>
 ImportService::finish_audio_import(persistence::StagedWav&& stage, std::uint64_t origin_revision,
                                    project::TrackId track, project::ClipId clip_id, bool encoded,
-                                   std::optional<std::size_t> insert_index, std::string clip_name) {
+                                   std::optional<std::size_t> insert_index,
+                                   const std::string& clip_name) {
   if (state_.repair_state)
     return foundation::Result<project::TrackId>::failure(repair_in_progress());
   if (origin_revision != snapshot().revision || track.bits().low != next_track_number() ||

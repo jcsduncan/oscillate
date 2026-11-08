@@ -294,11 +294,12 @@ public:
     }
     if (values[p::air] != air_db_ || !primed_) {
       air_db_ = values[p::air];
-      air_shelf_.set(dsp::rbj_shelf(true, db_to_gain(air_db_), air_hz, rate_));
+      air_shelf_.set(dsp::rbj_shelf(true, db_to_gain(air_db_), {.hz = air_hz, .rate = rate_}));
     }
     if (values[p::warmth] != warmth_db_ || !primed_) {
       warmth_db_ = values[p::warmth];
-      warmth_shelf_.set(dsp::rbj_shelf(false, db_to_gain(warmth_db_), warmth_hz, rate_));
+      warmth_shelf_.set(
+          dsp::rbj_shelf(false, db_to_gain(warmth_db_), {.hz = warmth_hz, .rate = rate_}));
     }
     // Space: the hall runs while its mix is above zero or gliding there.
     const double space = values[p::space];
@@ -927,6 +928,7 @@ private:
   const std::vector<SincTable>& tables_;
   std::unique_ptr<effects::EffectKernel> room_;
   std::vector<double> room_values_;
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): Expanse always has its mix control.
   std::size_t room_mix_ = *find_parameter(*effects::expanse::engine().descriptor, "expanse.mix");
   bool room_running_ = false;
   double room_target_ = 0.0;

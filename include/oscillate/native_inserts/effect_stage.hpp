@@ -12,6 +12,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <span>
@@ -24,6 +25,13 @@
 // are identical.
 namespace oscillate::native_inserts {
 
+// The largest block a stage processes, and the last sample its automation
+// may reach.
+struct EffectStageLimits {
+  std::size_t max_frames = 0;
+  std::uint64_t last_safe_automation_sample = std::numeric_limits<std::uint64_t>::max();
+};
+
 class NativeEffectStage final : public engine::SidechainProcessorRuntime {
 public:
   // Control only. Lanes targeting `slot` are taken from `automation` (none
@@ -33,7 +41,7 @@ public:
   create(const project::Snapshot& snapshot, std::optional<project::InsertSlotId> slot,
          const project::NativeEffectPatch& patch,
          std::span<const automation_project::PreparedTargetAutomation> automation,
-         std::size_t max_frames, std::uint64_t last_safe_automation_sample);
+         EffectStageLimits limits);
 
   void process(std::span<engine::StereoFrame> stereo,
                engine::BlockContext context) noexcept override;

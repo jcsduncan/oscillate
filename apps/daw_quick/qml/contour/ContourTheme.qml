@@ -30,9 +30,6 @@ KitTheme {
     segmentRadius: 3
     segmentRadiusVertical: 3
     segmentFillAcross: false
-    segmentRule: "none"
-    segmentLed: true
-    segmentLedX: 5
     segmentLetterSpacing: 0.8
     dropdownBold: true
     arrowWidth: 26
@@ -173,15 +170,12 @@ KitTheme {
         ctx.stroke()
     }
 
-    // Segment keys: lit when chosen, brighter under the pointer.
-    property real segmentOnAlpha: 0.12
-    property real segmentOnEdgeAlpha: 0.75
+    // Segment tiles brighten under the pointer.
     function segmentFill(tile, stop) {
-        return tile.on ? Qt.rgba(tile.accent.r, tile.accent.g, tile.accent.b, segmentOnAlpha)
-                       : tile.hovered ? buttonHi : button
+        return tile.hovered ? buttonHi : button
     }
     function segmentEdge(tile) {
-        return tile.on ? Qt.rgba(tile.accent.r, tile.accent.g, tile.accent.b, segmentOnEdgeAlpha) : knobRing
+        return tile.on ? tile.accent : knobRing
     }
 
     // Dropdown: the well brightens under the pointer.

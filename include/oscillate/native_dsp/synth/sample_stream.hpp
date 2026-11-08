@@ -32,6 +32,7 @@ namespace oscillate::native_dsp::synth::sample_stream {
 // The whole of `text` as a number; false for anything else.
 template <class T> [[nodiscard]] bool parse_number(std::string_view text, T& out) {
   const auto* end = text.data() + text.size();
+  // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage): from_chars reads [data, end).
   const auto [last, error] = std::from_chars(text.data(), end, out);
   return error == std::errc{} && last == end;
 }

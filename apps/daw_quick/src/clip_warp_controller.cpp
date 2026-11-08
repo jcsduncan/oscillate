@@ -116,7 +116,7 @@ public:
   };
 
   explicit WarpOnsetWorker(ClipWarpController::OnsetAnalyzer analyzer)
-      : thread_([shared = shared_, analyzer = std::move(analyzer)](std::stop_token stopped) {
+      : thread_([shared = shared_, analyzer = std::move(analyzer)](const std::stop_token& stopped) {
           while (!stopped.stop_requested()) {
             std::optional<Request> request;
             {
@@ -647,8 +647,9 @@ void ClipWarpController::move_marker(int index, double fraction) {
   const auto output =
       static_cast<std::uint64_t>(std::llround(fraction * static_cast<double>(frames)));
   edit(QStringLiteral("Warp marker moved"),
-       application::move_warp_marker(current->snapshot, current->clip.id,
-                                     static_cast<std::size_t>(index), output));
+       application::move_warp_marker(
+           current->snapshot, current->clip.id,
+           {.index = static_cast<std::size_t>(index), .output_frame = output}));
 }
 
 void ClipWarpController::remove_marker(int index) {
@@ -902,12 +903,13 @@ void ClipWarpController::apply_proposal() {
     return;
   }
   auto* project = editable_session();
-  if (!project)
+  if (!project || !proposal_)
     return;
-  auto proposal = std::exchange(proposal_, std::nullopt);
+  auto proposal = std::move(*proposal_);
+  proposal_.reset();
   const auto applied =
-      project->warp().apply_audio_clip_warp(current->clip.id, proposal->value.settings_generation,
-                                            proposal->value.placement, proposal->value.processing);
+      project->warp().apply_audio_clip_warp(current->clip.id, proposal.value.settings_generation,
+                                            proposal.value.placement, proposal.value.processing);
   if (!applied) {
     report_(QStringLiteral("Warp: %1").arg(QString::fromStdString(applied.error().message)));
     rebuild();
@@ -915,8 +917,8 @@ void ClipWarpController::apply_proposal() {
   }
   commit_();
   report_(QStringLiteral("%1 applied · revision %2")
-              .arg(proposal->kind == QStringLiteral("auto-warp") ? QStringLiteral("Auto-warp")
-                                                                 : QStringLiteral("Tempo conform"))
+              .arg(proposal.kind == QStringLiteral("auto-warp") ? QStringLiteral("Auto-warp")
+                                                                : QStringLiteral("Tempo conform"))
               .arg(project->snapshot().revision));
   rebuild();
 }

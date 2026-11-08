@@ -116,7 +116,7 @@ public:
   }
 
   void reset() noexcept override {
-    std::fill(ring_.begin(), ring_.end(), 0.0);
+    std::ranges::fill(ring_, 0.0);
     write_ = 0;
     since_hop_ = 0;
     hops_ = 0;

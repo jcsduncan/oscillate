@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The masking map: Pocket's 24 bands on a log frequency axis (30 Hz to
 // 8 kHz) and a dBFS scale. The kick is amber, the bass cyan, each with a
@@ -21,6 +22,10 @@ Item {
     property var heldBass: []
 
     readonly property int revision: controller.revision
+    // Levels at or below this read as silence; bare levels have one decimal.
+    readonly property real silentDb: -99
+    readonly property int levelDecimals: 1
+    readonly property real hertzPerKilohertz: 1000
     readonly property real focusLow: revision >= 0 ? controller.value("pocket.focus_low") : 30
     readonly property real focusHigh: revision >= 0 ? controller.value("pocket.focus_high") : 250
     readonly property bool monoOn: revision >= 0 && controller.choice("pocket.mono_sub") === 1
@@ -60,10 +65,10 @@ Item {
         return py + ph * (topDb - Math.max(bottomDb, Math.min(topDb, db))) / (topDb - bottomDb)
     }
     function hzText(hz) {
-        return hz >= 1000 ? (hz / 1000).toFixed(hz >= 10000 ? 0 : 1) + " kHz" : Math.round(hz) + " Hz"
+        return Format.hertz(hz)
     }
     function dbText(db) {
-        return db <= -99 ? "−∞" : (db >= 0 ? "+" : "−") + Math.abs(db).toFixed(1)
+        return Format.signed_number(db <= silentDb ? -Infinity : db, levelDecimals)
     }
     // Where a focus edge may go: its own range, a third of an octave from
     // the other edge.
@@ -146,7 +151,8 @@ Item {
                 ctx.lineTo(x, bottom)
                 ctx.stroke()
                 ctx.fillStyle = strong ? t.inkDim : t.inkFaint
-                ctx.fillText(hz >= 1000 ? hz / 1000 + "k" : String(hz), x, bottom + t.axisLabelGap)
+                ctx.fillText(hz >= map.hertzPerKilohertz ? Format.number(hz / map.hertzPerKilohertz, 0) + "k"
+                                                         : Format.number(hz, 0), x, bottom + t.axisLabelGap)
             }
             ctx.textAlign = "right"
             ctx.textBaseline = "middle"
@@ -158,7 +164,7 @@ Item {
                 ctx.lineTo(right, y)
                 ctx.stroke()
                 ctx.fillStyle = t.inkFaint
-                ctx.fillText(db === 0 ? "0" : String(db), left - t.axisLabelGap, y)
+                ctx.fillText(Format.number(db, 0), left - t.axisLabelGap, y)
             }
 
             const n = Math.min(map.kick.length, map.bass.length)
@@ -324,7 +330,7 @@ Item {
         property string text: shown
             ? map.hzText(map.bandHz(band)) + "   KICK " + map.dbText(map.kick[band])
               + "   BASS " + map.dbText(map.bass[band])
-              + "   CUT " + (band < map.cut.length && map.cut[band] >= 0.05 ? "−" + map.cut[band].toFixed(1) + " dB" : "—")
+              + "   CUT " + (band < map.cut.length && map.cut[band] >= 0.05 ? Format.decibels(-map.cut[band]) : "—")
             : ""
         visible: shown
         z: 5

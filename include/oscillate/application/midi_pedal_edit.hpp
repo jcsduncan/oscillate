@@ -39,16 +39,20 @@ paint_pedal(std::span<const project::MidiPedalPoint> points, std::int64_t start,
 
 // Lifts the span containing `tick`; unchanged when the pedal is up there.
 [[nodiscard]] std::vector<project::MidiPedalPoint>
-remove_pedal_span(std::span<const project::MidiPedalPoint> points, std::int64_t tick,
+remove_pedal_span(std::span<const project::MidiPedalPoint> points, timeline::TickPosition tick,
                   std::int64_t pattern_length);
 
 // Legato pedalling: for each chord (distinct note starts), press `repress`
 // ticks after it lands and lift exactly as the next chord lands, so each
 // harmony rings without blurring into the next. The last chord holds to the
 // pattern's end.
+struct ChordPedalling {
+  std::int64_t repress = 0;
+  double depth = 1.0;
+};
 [[nodiscard]] std::vector<project::MidiPedalPoint>
 pedal_per_chord(std::span<const project::MidiNote> notes, std::int64_t pattern_length,
-                std::int64_t repress, double depth = 1.0);
+                ChordPedalling pedalling);
 
 // When a note actually stops sounding: its own end, or, if the sustain pedal
 // is down (half or more) as it is released, the lift; or, if sostenuto went

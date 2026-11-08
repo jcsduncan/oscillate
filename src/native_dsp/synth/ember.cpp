@@ -328,7 +328,7 @@ public:
         x.left += h;
         x.right += h;
       }
-      declick_.add(x.left, x.right);
+      declick_.add(x);
       x = hpf_.process(x);
       auto ensembled = ensemble_.process(x.left, x.right);
       auto chorused = chorus_.process(ensembled.left, ensembled.right);

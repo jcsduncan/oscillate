@@ -51,15 +51,19 @@ double Striker::push(double surface, double dt) noexcept {
   return force;
 }
 
-double rigid_contact_stiffness(double mass, double exponent, double speed,
-                               double seconds) noexcept {
+double rigid_contact_stiffness(RigidStrike strike, double seconds) noexcept {
+  const double mass = strike.mass;
+  const double exponent = strike.exponent;
+  const double speed = strike.speed;
   const double q = exponent + 1.0;
   const double x_max = seconds * speed / (2.0 * contact_integral(exponent));
   return q * mass * speed * speed / (2.0 * std::pow(x_max, q));
 }
 
-double rigid_contact_seconds(double mass, double stiffness, double exponent,
-                             double speed) noexcept {
+double rigid_contact_seconds(RigidStrike strike, double stiffness) noexcept {
+  const double mass = strike.mass;
+  const double exponent = strike.exponent;
+  const double speed = strike.speed;
   const double q = exponent + 1.0;
   const double x_max = std::pow(q * mass * speed * speed / (2.0 * stiffness), 1.0 / q);
   return 2.0 * x_max / speed * contact_integral(exponent);
@@ -81,8 +85,8 @@ void ModalBank::prepare(std::size_t capacity, double sample_rate, int substeps) 
 }
 
 void ModalBank::clear() noexcept {
-  std::fill(q_.begin(), q_.end(), 0.0F);
-  std::fill(p_.begin(), p_.end(), 0.0F);
+  std::ranges::fill(q_, 0.0F);
+  std::ranges::fill(p_, 0.0F);
   count_ = 0;
   factor_ = 1.0;
 }

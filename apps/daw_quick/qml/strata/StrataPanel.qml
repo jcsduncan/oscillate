@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Strata device panel (ADR-0082): multiband dynamics. The spectrum leads, with a tab per band
@@ -150,14 +151,6 @@ Rectangle {
         controller.set_values(values)
     }
 
-    function signed(value, digits) {
-        const text = Math.abs(value).toFixed(digits)
-        const tiny = 0.5 * Math.pow(10, -digits)
-        return value < -tiny ? "−" + text : value > tiny ? "+" + text : text
-    }
-    function hzText(hz) {
-        return hz >= 1000 ? (hz / 1000).toFixed(hz >= 10000 ? 1 : 2) + " kHz" : Math.round(hz) + " Hz"
-    }
 
     component Caption: Text {
         color: panel.theme.inkFaint
@@ -339,7 +332,7 @@ Rectangle {
                 objectName: "strataLatency"
                 anchors.verticalCenter: parent.verticalCenter
                 readonly property real ms: panel.playing ? panel.live.latency_ms : -1
-                text: ms >= 0 ? (ms < 0.05 ? "0 MS LATENCY" : ms.toFixed(1) + " MS LATENCY")
+                text: ms >= 0 ? Format.milliseconds(ms) + " LATENCY"
                               : "LATENCY WHEN PLAYING"
                 color: panel.theme.inkFaint
                 font.family: panel.theme.mono
@@ -541,7 +534,7 @@ Rectangle {
         id: transferCard
         theme: panel.theme
         title: "TRANSFER · " + (panel.bandCount === 1 ? "FULL" : panel.bandNames[panel.selected])
-        note: panel.hzText(spectrum.edgeLow(panel.selected)) + " – " + panel.hzText(spectrum.edgeHigh(panel.selected))
+        note: Format.hertz(spectrum.edgeLow(panel.selected)) + " – " + Format.hertz(spectrum.edgeHigh(panel.selected))
         noteColor: panel.bandTone
         x: panel.margin
         y: panel.rowY
@@ -700,7 +693,7 @@ Rectangle {
         theme: panel.theme
         title: "GLOBAL"
         note: panel.playing && Math.abs(panel.live.auto_gain_db) > 0.05
-            ? "AUTO " + panel.signed(panel.live.auto_gain_db, 1) + " DB" : ""
+            ? "AUTO " + Format.signed_decibels(panel.live.auto_gain_db) : ""
         noteColor: panel.theme.live
         x: ottCard.x + ottCard.width + panel.gap
         y: panel.rowY
@@ -748,7 +741,7 @@ Rectangle {
                     objectName: "strataLearnProgress"
                     anchors.verticalCenter: parent.verticalCenter
                     visible: panel.revision >= 0 && panel.controller.choice("strata.learn") === 1
-                    text: panel.playing ? "LISTENING " + Math.round(100 * panel.live.learn_progress) + "%"
+                    text: panel.playing ? "LISTENING " + Format.fraction(panel.live.learn_progress)
                                         : "PLAY TO LISTEN"
                     color: panel.theme.key
                     font.family: panel.theme.mono
@@ -758,8 +751,8 @@ Rectangle {
             Text {
                 objectName: "strataPeaks"
                 text: panel.playing
-                    ? "IN " + panel.signed(Math.max(panel.live.input_peak[0], panel.live.input_peak[1]), 1)
-                      + "  OUT " + panel.signed(Math.max(panel.live.output_peak[0], panel.live.output_peak[1]), 1)
+                    ? "IN " + Format.signed_decibels(Math.max(panel.live.input_peak[0], panel.live.input_peak[1]))
+                      + "  OUT " + Format.signed_decibels(Math.max(panel.live.output_peak[0], panel.live.output_peak[1]))
                     : "IN —  OUT —"
                 color: panel.theme.inkDim
                 font.family: panel.theme.mono

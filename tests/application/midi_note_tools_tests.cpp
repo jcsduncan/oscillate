@@ -78,8 +78,8 @@ void scales_snap_and_transpose() {
   REQUIRE_EQ(application::snap_to_scale(64, c_major), 64, "an in-key note stays");
   REQUIRE_EQ(application::snap_to_scale(127, c_major), 127, "the top G stays");
   // E up two degrees is G; down three is B below.
-  REQUIRE_EQ(application::transpose_in_scale(64, 2, c_major), 67, "E + 2 degrees = G");
-  REQUIRE_EQ(application::transpose_in_scale(64, -3, c_major), 59, "E - 3 degrees = B");
+  REQUIRE_EQ(application::transpose_in_scale(64, c_major, 2), 67, "E + 2 degrees = G");
+  REQUIRE_EQ(application::transpose_in_scale(64, c_major, -3), 59, "E - 3 degrees = B");
   REQUIRE_EQ(application::scale_degrees_between(60, 72, c_major), 7, "an octave is 7 degrees");
   REQUIRE_EQ(application::scale_degrees_between(67, 64, c_major), -2, "G down to E is 2 degrees");
 }
@@ -168,39 +168,43 @@ void quantise_strength_swing_and_song_grid() {
   const std::vector<project::MidiNote> notes{note(1, 130'000'000, sixteenth, 60),
                                              note(2, 700'000'000, sixteenth, 62)};
   const auto all = ids(notes);
-  auto full = application::quantize_notes(notes, all, {sixteenth, 1.0, 0.5, false}, 0, bar);
+  auto full = application::quantize_notes(notes, all, {sixteenth, 1.0, 0.5, false},
+                                          {.clip_start = 0, .pattern_length = bar});
   REQUIRE_TRUE(full, "130M goes to the 16th");
   REQUIRE_EQ(find(full.value(), 1).start.value, sixteenth, "130M goes to the 16th");
   REQUIRE_EQ(find(full.value(), 2).start.value, 720'000'000, "700M goes to 720M");
-  auto half = application::quantize_notes(notes, all, {sixteenth, 0.5, 0.5, false}, 0, bar);
+  auto half = application::quantize_notes(notes, all, {sixteenth, 0.5, 0.5, false},
+                                          {.clip_start = 0, .pattern_length = bar});
   REQUIRE_TRUE(half, "half strength goes half way");
   REQUIRE_EQ(find(half.value(), 1).start.value, 185'000'000, "half strength goes half way");
   // 75% swing on 8ths puts every second 8th three quarters through the beat.
-  auto swung = application::quantize_notes(notes, all, {eighth, 1.0, 0.75, false}, 0, bar);
+  auto swung = application::quantize_notes(notes, all, {eighth, 1.0, 0.75, false},
+                                           {.clip_start = 0, .pattern_length = bar});
   REQUIRE_TRUE(swung, "the swung 8th");
   REQUIRE_EQ(find(swung.value(), 2).start.value, 720'000'000, "the swung 8th");
   REQUIRE_EQ(find(swung.value(), 1).start.value, 0, "the downbeat stays straight");
   // The grid is the song's: a clip starting on the off-16th lands its
   // first note on the song's 8th, half way between lines going later.
   const std::vector<project::MidiNote> offset{note(1, 0, sixteenth, 60)};
-  auto song =
-      application::quantize_notes(offset, ids(offset), {eighth, 1.0, 0.5, false}, sixteenth, bar);
+  auto song = application::quantize_notes(offset, ids(offset), {eighth, 1.0, 0.5, false},
+                                          {.clip_start = sixteenth, .pattern_length = bar});
   REQUIRE_TRUE(song, "a tie goes to the later line");
   REQUIRE_EQ(song.value().front().start.value, sixteenth, "a tie goes to the later line");
   // Ends quantise too when asked.
   const std::vector<project::MidiNote> long_note{note(1, 0, 300'000'000, 60)};
-  auto ends =
-      application::quantize_notes(long_note, ids(long_note), {sixteenth, 1.0, 0.5, true}, 0, bar);
+  auto ends = application::quantize_notes(long_note, ids(long_note), {sixteenth, 1.0, 0.5, true},
+                                          {.clip_start = 0, .pattern_length = bar});
   REQUIRE_TRUE(ends, "the end snaps to the grid");
   REQUIRE_EQ(ends.value().front().end.value, sixteenth, "the end snaps to the grid");
   const std::vector<project::MidiNote> crowded{note(1, 10, sixteenth, 60),
                                                note(2, 20, sixteenth, 60)};
-  require(!application::quantize_notes(crowded, ids(crowded), {sixteenth, 1.0, 0.5, false}, 0, bar),
+  require(!application::quantize_notes(crowded, ids(crowded), {sixteenth, 1.0, 0.5, false},
+                                       {.clip_start = 0, .pattern_length = bar}),
           "two notes landing together are refused");
   // Notes kept after the pattern's end stay.
   const std::vector<project::MidiNote> silent{note(1, bar + 7, sixteenth, 60)};
-  auto kept =
-      application::quantize_notes(silent, ids(silent), {sixteenth, 1.0, 0.5, false}, 0, bar);
+  auto kept = application::quantize_notes(silent, ids(silent), {sixteenth, 1.0, 0.5, false},
+                                          {.clip_start = 0, .pattern_length = bar});
   REQUIRE_TRUE(kept, "silent notes stay");
   REQUIRE_TRUE(kept.value().empty(), "silent notes stay");
 }
@@ -218,31 +222,35 @@ void grooves_move_and_accent() {
                                              note(2, sixteenth, sixteenth, 42),
                                              note(3, 2 * sixteenth, sixteenth, 42)};
   // 75% swing on 16ths: the off-16th moves half a 16th late.
-  auto swung = application::apply_groove(notes, ids(notes), named("Swing 16ths 75%"), {}, 0, bar);
+  auto swung = application::apply_groove(notes, ids(notes), named("Swing 16ths 75%"), {},
+                                         {.clip_start = 0, .pattern_length = bar});
   REQUIRE_TRUE(swung, "only the off-16th moves");
   REQUIRE_EQ(swung.value().size(), 1, "only the off-16th moves");
   REQUIRE_EQ(find(swung.value(), 2).start.value, sixteenth + sixteenth / 2, "half a 16th late");
   // Half the timing amount moves half as far.
-  auto gentle = application::apply_groove(notes, ids(notes), named("Swing 16ths 75%"),
-                                          {1.0, 0.5, 1.0}, 0, bar);
+  auto gentle =
+      application::apply_groove(notes, ids(notes), named("Swing 16ths 75%"), {1.0, 0.5, 1.0},
+                                {.clip_start = 0, .pattern_length = bar});
   REQUIRE_TRUE(gentle, "half timing");
   REQUIRE_EQ(find(gentle.value(), 2).start.value, sixteenth + sixteenth / 4, "half timing");
   // MPC accents: the "e" plays at 78% of its velocity.
   auto accented =
-      application::apply_groove(notes, ids(notes), named("MPC 16ths 54%"), {1.0, 0.0, 1.0}, 0, bar);
+      application::apply_groove(notes, ids(notes), named("MPC 16ths 54%"), {1.0, 0.0, 1.0},
+                                {.clip_start = 0, .pattern_length = bar});
   REQUIRE_TRUE(accented, "the e is softer");
   REQUIRE_EQ(find(accented.value(), 2).velocity, 78, "the e is softer");
   REQUIRE_EQ(find(accented.value(), 3).velocity, 90, "the and is a little softer");
   // Quantise pulls an early hit onto the groove's grid first.
   const std::vector<project::MidiNote> early{note(1, sixteenth - 1'000'000, sixteenth, 42)};
-  auto pulled = application::apply_groove(early, ids(early), named("Swing 16ths 75%"),
-                                          {1.0, 1.0, 0.0}, 0, bar);
+  auto pulled =
+      application::apply_groove(early, ids(early), named("Swing 16ths 75%"), {1.0, 1.0, 0.0},
+                                {.clip_start = 0, .pattern_length = bar});
   REQUIRE_TRUE(pulled, "quantise then swing");
   REQUIRE_EQ(pulled.value().front().start.value, sixteenth + sixteenth / 2, "quantise then swing");
   // The groove runs on the song's grid: a clip at bar 2 lines up the same.
   const std::vector<project::MidiNote> later{note(1, sixteenth, sixteenth, 42)};
-  auto shifted =
-      application::apply_groove(later, ids(later), named("Swing 16ths 75%"), {}, bar, bar);
+  auto shifted = application::apply_groove(later, ids(later), named("Swing 16ths 75%"), {},
+                                           {.clip_start = bar, .pattern_length = bar});
   REQUIRE_TRUE(shifted, "a clip on a bar line grooves alike");
   REQUIRE_EQ(shifted.value().front().start.value, sixteenth + sixteenth / 2,
              "a clip on a bar line grooves alike");
@@ -300,7 +308,7 @@ void session_applies_one_step_edits() {
   const std::vector<project::MidiNote> changed{moved};
   const std::vector<project::MidiNote> added{note(99, 0, sixteenth, 64),
                                              note(99, 0, sixteenth, 67)};
-  auto created = session->notes().apply_note_edit(clip, changed, added);
+  auto created = session->notes().apply_note_edit(clip, {.changed = changed, .added = added});
   REQUIRE_TRUE(created, "the edit applies and names the new notes");
   REQUIRE_EQ(created.value().size(), 2, "the edit applies and names the new notes");
   REQUIRE_EQ(session->snapshot().revision, before + 1, "one revision");
@@ -309,10 +317,11 @@ void session_applies_one_step_edits() {
   REQUIRE_NE(created.value()[0], note_id(99), "new notes get fresh ids");
   // A clash changes nothing.
   const std::vector<project::MidiNote> clash{note(98, eighth, sixteenth, 60)};
-  require(!session->notes().apply_note_edit(clip, {}, clash),
+  require(!session->notes().apply_note_edit(clip, {.changed = {}, .added = clash}),
           "a new note on an old one is refused");
   REQUIRE_EQ(session->snapshot().revision, before + 1, "a refused edit changes nothing");
-  require(!session->notes().apply_note_edit(clip, std::vector{note(12345, 0, sixteenth, 70)}),
+  const std::vector unknown{note(12345, 0, sixteenth, 70)};
+  require(!session->notes().apply_note_edit(clip, {.changed = unknown, .added = {}}),
           "an unknown note is refused");
   REQUIRE_OK(session->history().undo(), "one undo removes the whole edit");
   REQUIRE_EQ(clip_of().notes.size(), 2, "one undo removes the whole edit");

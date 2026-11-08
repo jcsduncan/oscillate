@@ -145,7 +145,7 @@ public:
   [[nodiscard]] Vec at(double u) const noexcept {
     u = orbit_ ? u - std::floor(u) : std::clamp(u, 0.0, 1.0);
     const double target = u * length();
-    const auto it = std::lower_bound(arc_.begin(), arc_.end(), target);
+    const auto it = std::ranges::lower_bound(arc_, target);
     const auto hi =
         static_cast<std::size_t>(std::clamp<std::ptrdiff_t>(it - arc_.begin(), 1, path_samples));
     const std::size_t lo = hi - 1;
@@ -503,9 +503,7 @@ private:
     }
     case t::once: {
       const auto end = static_cast<std::int64_t>(frame_ + frames);
-      const auto after =
-          std::upper_bound(notes_.begin(), notes_.end(), end,
-                           [](std::int64_t f, const KeyNote& n) { return f < n.frame; });
+      const auto after = std::ranges::upper_bound(notes_, end, {}, &KeyNote::frame);
       if (after == notes_.begin()) {
         in_pass_ = false;
         return 0.0;

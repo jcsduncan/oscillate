@@ -69,7 +69,7 @@ inline constexpr std::array off_on{"Off"sv, "On"sv};
 namespace arp {
 inline constexpr std::array modes{"Up"sv,        "Down"sv,   "Up-Down"sv, "Down-Up"sv,
                                   "As Played"sv, "Random"sv, "Chord"sv};
-enum Mode : int { up, down, up_down, down_up, as_played, random, chord };
+enum Mode : std::uint8_t { up, down, up_down, down_up, as_played, random, chord };
 inline constexpr std::array velocities{"As Played"sv, "Fixed"sv};
 inline constexpr std::array<synth::ParameterDescriptor, 11> parameters{{
     {"arp.mode", "Mode", "Pattern", "", S::choice, 0, last(modes.size()), up, modes, T::live, 0},
@@ -139,7 +139,7 @@ inline constexpr std::array<synth::ParameterDescriptor, 7> parameters{{
 // Scale.
 namespace scale {
 inline constexpr std::array snaps{"Nearest"sv, "Up"sv, "Down"sv};
-enum Snap : int { nearest, up, down };
+enum Snap : std::uint8_t { nearest, up, down };
 inline constexpr std::array<synth::ParameterDescriptor, 5> parameters{{
     {"scale.root", "Root", "Scale", "", S::choice, 0, last(roots.size()), 0, roots, T::live, 0},
     {"scale.scale", "Scale", "Scale", "", S::choice, 0, last(scales.size()), major_scale, scales,
@@ -159,23 +159,23 @@ namespace comp {
 inline constexpr int steps = note_effects::comp_steps_per_bar;
 inline constexpr int max_length = 32;
 inline constexpr std::array hits{"Off"sv, "Ghost"sv, "On"sv};
-enum Hit : int { off, ghost, on };
+enum Hit : std::uint8_t { off, ghost, on };
 inline constexpr std::array pushes{"1/16"sv, "1/8"sv, "1/8D"sv};
-enum Push : int { push_sixteenth, push_eighth, push_dotted_eighth };
+enum Push : std::uint8_t { push_sixteenth, push_eighth, push_dotted_eighth };
 // The push amounts, in 16ths.
 inline constexpr std::array<int, pushes.size()> push_sixteenths{1, 2, 3};
 // The longest push is as far as note effects see ahead.
 static_assert(push_sixteenths.back() * division_ticks[sixteenth] ==
               note_effects::note_lookahead_ticks);
 inline constexpr std::array grooves{"Straight"sv, "56%"sv, "58%"sv, "62%"sv, "66%"sv};
-enum Groove : int { straight, groove_56, groove_58, groove_62, groove_66 };
+enum Groove : std::uint8_t { straight, groove_56, groove_58, groove_62, groove_66 };
 // Where the second 16th of each pair falls, as a share of the 8th.
 inline constexpr std::array<double, grooves.size()> groove_swing{0.5, 0.56, 0.58, 0.62, 0.66};
 // Motion (ADR-0084): small changes that keep a looped rhythm moving, each
 // tied to the song position so live playback and an applied rhythm agree.
 // The phrase the changes are measured in.
 inline constexpr std::array phrases{"4 bars"sv, "8 bars"sv, "16 bars"sv};
-enum Phrase : int { phrase_4, phrase_8, phrase_16 };
+enum Phrase : std::uint8_t { phrase_4, phrase_8, phrase_16 };
 inline constexpr auto phrase_bars = note_effects::comp_phrase_bars;
 static_assert(phrase_bars.size() == phrases.size());
 inline constexpr std::array switches{"Off"sv, "On"sv};

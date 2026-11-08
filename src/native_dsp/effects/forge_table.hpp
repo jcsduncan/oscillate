@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Forge v1: an oversampled, antialiased saturator (ADR-0040). Defaults are
@@ -17,7 +18,7 @@ using namespace std::string_view_literals;
 
 inline constexpr std::array models{"Tape"sv, "Tube"sv, "Transistor"sv, "Diode"sv,
                                    "Clip"sv, "Fold"sv, "Sine Fold"sv,  "Rectify"sv};
-enum Model : int { tape, tube, transistor, diode, clip, fold, sine_fold, rectify };
+enum Model : std::uint8_t { tape, tube, transistor, diode, clip, fold, sine_fold, rectify };
 inline constexpr std::array off_on{"Off"sv, "On"sv};
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }

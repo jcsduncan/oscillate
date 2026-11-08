@@ -421,7 +421,7 @@ Rectangle {
                                 parameterId: Contract.fxParam(strip.uid, 4 * band.index + 3)
                                 size: "sm"
                                 label: "Q"
-                                formatter: p => Contract.eqQ(p).toFixed(2)
+                                formatter: p => Contract.number(Contract.eqQ(p))
                             }
                         }
                     }

@@ -195,8 +195,9 @@ Result<std::string> read_bounded(int parent, const char* name, std::size_t max_s
   return Result<std::string>::success(std::move(bytes));
 }
 
-constexpr std::size_t random_name_bytes = 16;
+} // namespace
 
+namespace detail {
 bool hex_name(std::string_view value) {
   return foundation::is_lowercase_hex(value, random_name_bytes * foundation::hex_digits_per_byte);
 }
@@ -214,6 +215,12 @@ Result<std::string> random_name() {
   }
   return Result<std::string>::success(foundation::to_hex(std::span(bytes)));
 }
+} // namespace detail
+
+namespace {
+using detail::hex_name;
+using detail::random_name;
+using detail::random_name_bytes;
 
 Result<void> write_sync_file(int parent, const std::string& name, std::string_view bytes) {
   return foundation::write_new_synced(

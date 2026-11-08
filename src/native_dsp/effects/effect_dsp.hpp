@@ -29,7 +29,7 @@ public:
     write_ = 0;
   }
   void reset() noexcept {
-    std::fill(buffer_.begin(), buffer_.end(), 0.0);
+    std::ranges::fill(buffer_, 0.0);
     write_ = 0;
   }
   void write(double x) noexcept {

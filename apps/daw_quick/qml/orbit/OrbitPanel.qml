@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Orbit device panel: a night-sky modulation card. Seven mode tabs pick
@@ -160,10 +161,10 @@ Rectangle {
     }
     function formatSweep(value) {
         if (mode === 4)
-            return value >= 1000 ? (value / 1000).toFixed(2) + " kHz" : Math.round(value) + " Hz"
+            return Format.hertz(value)
         if (mode === 6)
-            return Math.round(value * 100) + "%"
-        return value.toFixed(value < 10 ? 2 : 1) + " ms"
+            return Format.fraction(value)
+        return Format.milliseconds(value)
     }
     function sweepCaption() {
         if (mode === 4)
@@ -632,7 +633,7 @@ Rectangle {
             anchors.bottomMargin: panel.theme.skyInsetY
             text: panel.mode === 1 ? "THREE TAPS · 120° APART"
                 : panel.mode === 2 ? "L AND R SWEEP IN ANTI-PHASE"
-                : "DEPTH " + Math.round(panel.depth * 100) + "% · STEREO " + Math.round(panel.stereo) + "°"
+                : "DEPTH " + Format.fraction(panel.depth) + " · STEREO " + Format.degrees(panel.stereo)
         }
     }
 

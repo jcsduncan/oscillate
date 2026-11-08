@@ -128,7 +128,7 @@ cached_warp_analysis(media::CacheStore* cache, const WarpRenderRequest& request,
 // Worker-only: makes sure the project's cache holds the request's analysis.
 [[nodiscard]] foundation::Result<void>
 prepare_warp_analysis(const std::filesystem::path& project_root, const WarpRenderRequest& request,
-                      std::atomic<double>* progress = nullptr, std::stop_token stop = {});
+                      std::atomic<double>* progress = nullptr, const std::stop_token& stop = {});
 // Whether `cache` holds the request's analysis (or it needs none).
 [[nodiscard]] bool warp_analysis_ready(const media::CacheStore& cache,
                                        const WarpRenderRequest& request);

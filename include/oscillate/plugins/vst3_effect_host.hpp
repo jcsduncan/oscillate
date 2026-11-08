@@ -116,27 +116,18 @@ enum class Vst3EditorProbe : std::uint8_t {
 };
 
 struct Vst3StereoBlock {
-  Vst3StereoBlock(std::span<float> in_left = {}, std::span<float> in_right = {},
-                  std::span<float> out_left = {}, std::span<float> out_right = {},
-                  std::int64_t position = 0, double quarter = 0.0, double bpm = 120.0,
-                  bool transport_playing = true, std::span<const float> detector_left = {},
-                  std::span<const float> detector_right = {}) noexcept
-      : input_left(in_left), input_right(in_right), output_left(out_left), output_right(out_right),
-        project_sample(position), quarter_position(quarter), tempo_bpm(bpm),
-        playing(transport_playing), sidechain_left(detector_left), sidechain_right(detector_right) {
-  }
-  std::span<float> input_left;
-  std::span<float> input_right;
-  std::span<float> output_left;
-  std::span<float> output_right;
+  std::span<float> input_left{};
+  std::span<float> input_right{};
+  std::span<float> output_left{};
+  std::span<float> output_right{};
   // The graph owner supplies these at the block boundary. Defaults support
   // isolated host probes; project renderers must use the authoritative map.
   std::int64_t project_sample = 0;
   double quarter_position = 0.0;
   double tempo_bpm = 120.0;
   bool playing = true;
-  std::span<const float> sidechain_left;
-  std::span<const float> sidechain_right;
+  std::span<const float> sidechain_left{};
+  std::span<const float> sidechain_right{};
 };
 
 enum class Vst3NoteKind : std::uint8_t { on, off };

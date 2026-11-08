@@ -441,7 +441,7 @@ Cache& cache() {
 std::span<const std::string_view> builtin_noise_names() noexcept { return names; }
 
 std::shared_ptr<const NoiseSample> builtin_noise(std::string_view name) {
-  const auto found = std::find(names.begin(), names.end(), name);
+  const auto found = std::ranges::find(names, name);
   if (found == names.end()) {
     return nullptr;
   }
@@ -468,7 +468,7 @@ foundation::Result<std::shared_ptr<const NoiseSample>> build_noise(const SynthMe
     return NoiseResult::failure(
         Error{ErrorCode::invalid_argument, "noise '" + name + "' is empty"});
   }
-  const bool finite = std::all_of(asset.frames.begin(), asset.frames.end(), [](const auto& frame) {
+  const bool finite = std::ranges::all_of(asset.frames, [](const auto& frame) {
     return std::isfinite(frame.left) && std::isfinite(frame.right);
   });
   if (!finite) {

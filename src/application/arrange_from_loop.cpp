@@ -289,8 +289,14 @@ struct Span {
   return found == sections.end() ? nullptr : &*found;
 }
 
-[[nodiscard]] bool plays_through(const TrackPart& part, std::int64_t from, std::int64_t to) {
-  for (auto bar = from; bar < to; ++bar)
+// Bars [from, to).
+struct Bars {
+  std::int64_t from = 0;
+  std::int64_t to = 0;
+};
+
+[[nodiscard]] bool plays_through(const TrackPart& part, Bars bars) {
+  for (auto bar = bars.from; bar < bars.to; ++bar)
     if (!part.plays[static_cast<std::size_t>(bar)])
       return false;
   return true;
@@ -328,10 +334,9 @@ struct Span {
   return bars;
 }
 
-[[nodiscard]] bool has_event(const std::set<std::int64_t>& events, std::int64_t from,
-                             std::int64_t to) {
-  const auto found = events.lower_bound(from);
-  return found != events.end() && *found < to;
+[[nodiscard]] bool has_event(const std::set<std::int64_t>& events, Bars bars) {
+  const auto found = events.lower_bound(bars.from);
+  return found != events.end() && *found < bars.to;
 }
 
 // The part a fill plays on at a bar: percussion first, then hats, a stab, the bass.
@@ -363,7 +368,7 @@ void add_fill(Plan& plan, std::int64_t bar, std::string reason) {
     return bar >= static_cast<double>(from) && bar < static_cast<double>(to);
   };
   for (auto& part : plan.parts) {
-    if (part.role == Role::kick || !plays_through(part, from, to))
+    if (part.role == Role::kick || !plays_through(part, {.from = from, .to = to}))
       continue;
     if (is_edge(section.kind) && !is_beat(part.role))
       continue;
@@ -387,7 +392,8 @@ void add_fill(Plan& plan, std::int64_t bar, std::string reason) {
   return candidates;
 }
 
-void drop_out(Plan& plan, TrackPart& part, std::int64_t from, std::int64_t to, std::string why) {
+void drop_out(Plan& plan, TrackPart& part, Bars bars, const std::string& why) {
+  const auto [from, to] = bars;
   for (auto bar = from; bar < to; ++bar)
     part.plays[static_cast<std::size_t>(bar)] = false;
   plan.decisions.push_back({from, finding_of(plan, part.track).name + " sits out " +
@@ -717,13 +723,13 @@ Result<Plan> plan(const project::Snapshot& snapshot, Options options) {
       auto first = build->start_bar;
       while (first < end && !plays_at(part, first))
         ++first;
-      if (first < end && plays_through(part, first, end))
+      if (first < end && plays_through(part, {.from = first, .to = end}))
         result.sweeps.push_back({part.track, false, first, end, sweep_closed_hz, sweep_open_hz,
                                  "Opens across the build"});
     }
     if (breakdown != nullptr && drop != nullptr) {
       const auto from = std::max(breakdown->start_bar, drop->start_bar - high_pass_bars);
-      if (from < drop->start_bar && plays_through(part, from, drop->start_bar))
+      if (from < drop->start_bar && plays_through(part, {.from = from, .to = drop->start_bar}))
         result.sweeps.push_back({part.track, true, from, drop->start_bar, high_pass_start_hz,
                                  high_pass_end_hz, "Thins out into the drop"});
     }
@@ -816,14 +822,15 @@ Result<Plan> plan(const project::Snapshot& snapshot, Options options) {
       if (candidates.empty())
         continue;
       auto* part = candidates[dice.pick(candidates.size())];
-      drop_out(result, *part, block + phrase_bars, block + change_bars, " for variation");
+      drop_out(result, *part, {.from = block + phrase_bars, .to = block + change_bars},
+               " for variation");
     }
   }
 
   // Something new every 16 bars: where a block has nothing, add a move.
   for (auto block = change_bars; block < length; block += change_bars) {
     const auto end = std::min(block + change_bars, length);
-    if (has_event(event_bars(result), block, end)) {
+    if (has_event(event_bars(result), {.from = block, .to = end})) {
       result.checks.push_back({block, CheckStatus::held, "Changes on its own"});
       continue;
     }
@@ -832,7 +839,7 @@ Result<Plan> plan(const project::Snapshot& snapshot, Options options) {
     if (!candidates.empty()) {
       auto* part = candidates[dice.pick(candidates.size())];
       const auto name = finding_of(result, part->track).name;
-      drop_out(result, *part, block + phrase_bars, end, " to keep it moving");
+      drop_out(result, *part, {.from = block + phrase_bars, .to = end}, " to keep it moving");
       result.checks.push_back({block, CheckStatus::added, name + " sits out 8 bars"});
       continue;
     }

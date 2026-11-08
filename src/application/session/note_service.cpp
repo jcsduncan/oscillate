@@ -130,7 +130,7 @@ foundation::Result<void> NoteService::set_note_velocities(
   }
   if (operations.empty())
     return foundation::Result<void>::success();
-  auto applied = model().apply(std::move(operations));
+  auto applied = model().apply(operations);
   return applied ? foundation::Result<void>::success()
                  : foundation::Result<void>::failure(applied.error());
 }
@@ -190,7 +190,7 @@ foundation::Result<void> NoteService::remove_notes(project::ClipId clip,
   }
   if (operations.empty())
     return foundation::Result<void>::success();
-  auto applied = model().apply(std::move(operations));
+  auto applied = model().apply(operations);
   return applied ? foundation::Result<void>::success()
                  : foundation::Result<void>::failure(applied.error());
 }
@@ -237,9 +237,10 @@ foundation::Result<void> NoteService::move_notes(project::ClipId clip,
           {foundation::ErrorCode::conflict, "MIDI note destination is occupied"});
   }
   std::vector<project::Operation> operations;
+  operations.reserve(moved.size());
   for (const auto& note : moved)
     operations.emplace_back(project::SetMidiNote{clip, note});
-  auto applied = model().apply(std::move(operations));
+  auto applied = model().apply(operations);
   return applied ? foundation::Result<void>::success()
                  : foundation::Result<void>::failure(applied.error());
 }
@@ -316,7 +317,7 @@ NoteService::copy_notes_by(project::ClipId clip, std::span<const project::NoteId
     created.push_back(copy.id);
     operations.emplace_back(project::AddMidiNote{clip, copy});
   }
-  auto applied = model().apply(std::move(operations));
+  auto applied = model().apply(operations);
   return applied ? Result::success(std::move(created)) : Result::failure(applied.error());
 }
 
@@ -387,13 +388,14 @@ NoteService::apply_comp_rhythm(project::ClipId clip,
   }
   if (operations.empty())
     return Result<void>::failure({ErrorCode::invalid_argument, "The rhythm changes nothing there"});
-  auto applied = model().apply(std::move(operations));
+  auto applied = model().apply(operations);
   return applied ? Result<void>::success() : Result<void>::failure(applied.error());
 }
 
-foundation::Result<std::vector<project::NoteId>>
-NoteService::apply_note_edit(project::ClipId clip, std::span<const project::MidiNote> changed,
-                             std::span<const project::MidiNote> added) {
+foundation::Result<std::vector<project::NoteId>> NoteService::apply_note_edit(project::ClipId clip,
+                                                                              NoteChanges changes) {
+  const auto changed = changes.changed;
+  const auto added = changes.added;
   using Result = foundation::Result<std::vector<project::NoteId>>;
   const project::MidiClip* found = nullptr;
   for (const auto& track : snapshot().tracks) {
@@ -453,7 +455,7 @@ NoteService::apply_note_edit(project::ClipId clip, std::span<const project::Midi
   }
   if (operations.empty())
     return Result::success(std::move(created));
-  auto applied = model().apply(std::move(operations));
+  auto applied = model().apply(operations);
   return applied ? Result::success(std::move(created)) : Result::failure(applied.error());
 }
 
@@ -668,8 +670,7 @@ NoteService::record_notes(project::TrackId track, std::span<const RecordedNote> 
   }
   if (operations.empty())
     return Result::success(take_id);
-  auto applied =
-      model().apply(std::move(operations), gesture == 0 ? std::nullopt : std::optional{gesture});
+  auto applied = model().apply(operations, gesture == 0 ? std::nullopt : std::optional{gesture});
   if (!applied)
     return Result::failure(applied.error());
   return Result::success(take_id);

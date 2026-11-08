@@ -141,9 +141,11 @@ inline constexpr std::uint8_t pulse_velocity = 76;
 // A bass line under the chords' basses: held, on the off-beat 8ths (house),
 // or rolling 16ths that leave each beat to the kick (trance).
 enum class BassStyle : std::uint8_t { held, offbeat, rolling };
-[[nodiscard]] std::vector<project::MidiNote> bass_line(std::span<const ChordRegion> lane,
-                                                       BassStyle style,
-                                                       std::uint8_t lowest = open_bass_lowest,
-                                                       std::uint8_t velocity = written_velocity);
+struct BassLineOptions {
+  std::uint8_t lowest = open_bass_lowest;
+  std::uint8_t velocity = written_velocity;
+};
+[[nodiscard]] std::vector<project::MidiNote>
+bass_line(std::span<const ChordRegion> lane, BassStyle style, BassLineOptions options = {});
 
 } // namespace oscillate::harmony

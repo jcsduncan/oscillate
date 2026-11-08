@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Trim v1: a utility (ADR-0042). At its defaults it is bit-exact. Ids are
@@ -15,10 +16,10 @@ using T = synth::ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array laws{"0 dB (Balance)"sv, "-3 dB"sv, "-4.5 dB"sv, "-6 dB"sv};
-enum Law : int { balance, constant_power, compromise, linear };
+enum Law : std::uint8_t { balance, constant_power, compromise, linear };
 inline constexpr std::array polarities{"None"sv, "Left"sv, "Right"sv, "Both"sv};
 inline constexpr std::array solos{"Off"sv, "Left"sv, "Right"sv, "Mid"sv, "Side"sv};
-enum Solo : int { none, left, right, mid, side };
+enum Solo : std::uint8_t { none, left, right, mid, side };
 inline constexpr std::array off_on{"Off"sv, "On"sv};
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }

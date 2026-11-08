@@ -166,7 +166,9 @@ Window {
     onSelectedTrackDataChanged: projectBridge.selectedTrackId = selectedTrackData ? selectedTrackData.id : ""
     // Text entry keeps every key; bare-key shortcuts also stand aside while
     // an editor overlay, the browser or the device dock has the keyboard, so
-    // a focused knob's Delete or arrow keys never edit the arrangement.
+    // a focused knob's Delete or arrow keys never edit the arrangement. The
+    // piano roll itself (focused by a click on its grid) is the exception:
+    // Space, Delete and the other bare keys still work there.
     readonly property bool textFocus: activeFocusItem !== null
         && typeof activeFocusItem.cursorPosition === "number"
     function focusInside(container) {
@@ -180,7 +182,7 @@ Window {
         && projectBridge.nativeSynthController === null
         && projectBridge.nativeEffectController === null
         && !pluginBrowserOpen && !shortcutsOpen && !commandPalette.open
-        && !focusInside(deviceDock)
+        && (!focusInside(deviceDock) || deviceDock.notesRollFocused)
     // Selected notes or clips duplicate in place; with neither, the track.
     function duplicateSelection() {
         if (projectBridge.selectedNoteIds.length > 0 || projectBridge.selectedClipIds.length > 0)
@@ -393,6 +395,18 @@ Window {
         onActivated: {
             projectBridge.merge_selected_clips()
             shell.selectClips(projectBridge.selectedClipIds)
+        }
+    }
+    Shortcut {
+        // Every clip on every track. The piano roll keeps its own Ctrl+A
+        // while it has the keyboard.
+        sequences: [StandardKey.SelectAll]
+        enabled: shell.bareKeysAllowed && shell.currentView === "arrange"
+                 && !deviceDock.notesHaveKeyboard
+        onActivated: {
+            // The notes let go first, so Delete then removes the clips.
+            deviceDock.clearNoteSelection()
+            workspace.selectAllClips()
         }
     }
     Shortcut {

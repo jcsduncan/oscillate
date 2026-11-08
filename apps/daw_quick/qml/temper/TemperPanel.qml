@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Temper device panel (ADR-0064): a resonance suppressor with dynamic
@@ -89,13 +90,9 @@ Rectangle {
 
     // ---- Formatting ------------------------------------------------------------------
 
-    function signed(value, digits) {
-        const text = Math.abs(value).toFixed(digits)
-        const tiny = 0.5 * Math.pow(10, -digits)
-        return value < -tiny ? "−" + text : value > tiny ? "+" + text : text
-    }
-    function dbText(db) {
-        return db <= floorDb ? "−∞" : signed(db, 1)
+    // A level, −∞ at the floor.
+    function levelText(db) {
+        return Format.signed_quantity(db <= floorDb ? -Infinity : db, "dBFS")
     }
     function readoutName(id) {
         if (id === "")
@@ -296,7 +293,7 @@ Rectangle {
             id: phaseSegment
             x: modeSegment.x + modeSegment.width + panel.theme.spaceLg
             y: panel.theme.headerControlY
-            width: panel.theme.phaseWidth
+            width: Math.max(panel.theme.phaseWidth, Math.ceil(fitWidth))
             height: panel.theme.segmentHeight
             controller: panel.controller
             theme: panel.theme
@@ -315,7 +312,7 @@ Rectangle {
             Text {
                 objectName: "temperLatency"
                 anchors.centerIn: parent
-                text: panel.playing ? Number(panel.live.latency_ms).toFixed(1) + " ms" : "— ms"
+                text: panel.playing ? Format.milliseconds(Number(panel.live.latency_ms)) : "— ms"
                 color: panel.theme.inkDim
                 font.family: panel.theme.mono
                 font.pixelSize: panel.theme.typeSmall
@@ -501,7 +498,7 @@ Rectangle {
             Text {
                 objectName: "temperBandNow"
                 text: panel.playing && panel.selectedOn && panel.live.band_gain
-                    ? panel.signed(Number(panel.live.band_gain[panel.selected]), 1) + " dB" : "—"
+                    ? Format.signed_decibels(Number(panel.live.band_gain[panel.selected])) : "—"
                 color: panel.selectedOn ? panel.theme.bands[panel.selected] : panel.theme.inkFaint
                 font.family: panel.theme.mono
                 font.pixelSize: panel.theme.typeHeading
@@ -509,7 +506,7 @@ Rectangle {
             Text {
                 objectName: "temperBandLevel"
                 text: panel.playing && panel.selectedOn && panel.live.band_level
-                    ? "level " + panel.dbText(Number(panel.live.band_level[panel.selected])) + " dBFS" : ""
+                    ? "level " + panel.levelText(Number(panel.live.band_level[panel.selected])) : ""
                 color: panel.theme.inkDim
                 font.family: panel.theme.mono
                 font.pixelSize: panel.theme.typeCaption
@@ -567,7 +564,7 @@ Rectangle {
         id: suppressCard
         theme: panel.theme
         title: "SUPPRESS"
-        note: panel.playing ? "−" + Number(panel.live.max_cut).toFixed(1) + " DB" : ""
+        note: panel.playing ? Format.decibels(-Number(panel.live.max_cut)) : ""
         noteColor: panel.theme.cut
         x: panel.margin
         y: panel.cardsY

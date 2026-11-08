@@ -1,4 +1,5 @@
 import QtQuick
+import Oscillate.Format
 
 // What the LFO moves and how far: the swept range (delay in ms, the
 // phaser's centre in Hz on a log axis, or the tremolo's gain) with each
@@ -62,10 +63,10 @@ Canvas {
     function format(value) {
         const unit = range.unit
         if (unit === "Hz")
-            return value >= 1000 ? (value / 1000).toFixed(2) + " kHz" : Math.round(value) + " Hz"
+            return Format.hertz(value)
         if (unit === "%")
-            return Math.round(value * 100) + "%"
-        return value.toFixed(value < 10 ? 2 : 1) + " ms"
+            return Format.fraction(value)
+        return Format.milliseconds(value)
     }
     function wave(phase) {
         const p = phase - Math.floor(phase)
@@ -110,8 +111,8 @@ Canvas {
             const tx = x(tick)
             ctx.fillRect(tx, trackY + tickTop, t.hairline, tickLength)
             const text = range.unit === "Hz" ? (tick >= 1000 ? tick / 1000 + "k" : "" + tick)
-                       : range.unit === "%" ? Math.round(tick * 100) + "%"
-                       : (Math.round(tick * 10) / 10) + " ms"
+                       : range.unit === "%" ? Format.fraction(tick)
+                       : Format.milliseconds(tick)
             const tw = ctx.measureText(text).width
             ctx.fillText(text, Math.max(pad, Math.min(w - pad - tw, tx - tw / 2)), trackY + tickLabelY)
         }

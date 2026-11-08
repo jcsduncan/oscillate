@@ -1,4 +1,5 @@
 import QtQuick
+import Oscillate.Format
 
 // The forge itself: the static transfer curve, input along the bottom and
 // output up the side, drawn as molten metal whose colour and glow follow the
@@ -307,7 +308,7 @@ Item {
                     ctx.lineTo(hx + sideWidth, py)
                     ctx.stroke()
                     ctx.fillStyle = t.inkFaint
-                    ctx.fillText(db.toString(), hx - view.markLabelOffset, py + view.markLabelOffset)
+                    ctx.fillText(Format.number(db, 0), hx - view.markLabelOffset, py + view.markLabelOffset)
                 }
                 const bars = view.harmonics
                 const slot = sideWidth / bars.length
@@ -355,7 +356,7 @@ Item {
         y: view.theme.spaceMd
         text: view.live
             ? "LIVE · INPUT PEAK " + (view.inputPeak > 0.00001
-                                      ? (20 * Math.log(view.inputPeak) / Math.LN10).toFixed(1) + " dBFS"
+                                      ? Format.quantity(20 * Math.log(view.inputPeak) / Math.LN10, "dBFS")
                                       : "SILENT")
             : "TRANSFER CURVE · " + view.modelName.toUpperCase()
         color: view.live ? view.theme.amber : view.theme.inkFaint

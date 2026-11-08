@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The bar meter: momentary and short-term loudness on the EBU scale, in LU
 // relative to the target (EBU +9: -18 to +9 LU; EBU +18: -36 to +18 LU),
@@ -95,7 +96,7 @@ Item {
                 width: meter.scaleX - meter.theme.spaceMd
                 y: meter.luY(tick.lu) - meter.theme.scaleLabelLift
                 horizontalAlignment: Text.AlignRight
-                text: tick.lu > 0 ? "+" + tick.lu : tick.lu === 0 ? "0" : "−" + (-tick.lu)
+                text: Format.signed_number(tick.lu, 0)
                 color: tick.lu === 0 ? meter.theme.accent : meter.theme.inkFaint
                 font.family: meter.theme.mono
                 font.pixelSize: meter.theme.typeCaption
@@ -182,8 +183,7 @@ Item {
             Text {
                 x: meter.peakX + 2 * meter.peakWidth + meter.peakSpacing + meter.theme.spaceSm
                 y: meter.peakY(peakTick.modelData) - meter.theme.scaleLabelLift
-                text: peakTick.modelData > 0 ? "+" + peakTick.modelData
-                    : peakTick.modelData === 0 ? "0" : "−" + (-peakTick.modelData)
+                text: Format.signed_number(peakTick.modelData, 0)
                 color: meter.theme.inkFaint
                 font.family: meter.theme.mono
                 font.pixelSize: meter.theme.typeCaption

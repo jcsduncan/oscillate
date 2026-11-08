@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 import "../shell" as Shell
 import "AnvilMath.js" as AnvilMath
@@ -74,10 +75,10 @@ Kit.CurveEditor {
             const hz = AnvilMath.hzOfY(v)
             return AnvilMath.hzText(hz) + " · " + AnvilMath.noteOf(hz).name
         }
-        return Math.round(v * 100) + " %"
+        return Format.fraction(v)
     }
     function timeText(t) {
-        return kickSeconds > 0 ? Math.round(t * kickSeconds * 1000) + " ms" : Math.round(t * 100) + " %"
+        return kickSeconds > 0 ? Format.seconds(t * kickSeconds) : Format.fraction(t)
     }
 
     // The grid, the axis and the kick behind; repainted on a new render.
@@ -88,13 +89,14 @@ Kit.CurveEditor {
         ctx.font = t.typeCaption + "px '" + t.mono + "'"
         const rows = editor.pitch
             ? editor.pitchRowsHz.map(hz => [AnvilMath.yOfHz(hz), AnvilMath.hzText(hz)])
-            : editor.levelRows.map(v => [v, Math.round(v * 100) + "%"])
+            : editor.levelRows.map(v => [v, Format.fraction(v)])
+        // Labels are drawn last, over the kick, each on its plate.
+        const labels = []
         for (const row of rows) {
             const y = Math.round(editor.py(row[0]))
             ctx.fillStyle = t.grid
             ctx.fillRect(L, y, R - L, t.hairline)
-            ctx.fillStyle = t.inkFaint
-            ctx.fillText(row[1], editor.axisLabelX, y + editor.axisLabelDrop)
+            labels.push([row[1], editor.axisLabelX, y + editor.axisLabelDrop])
         }
         if (editor.kickSeconds > 0) {
             const ms = editor.kickSeconds * 1000
@@ -104,8 +106,7 @@ Kit.CurveEditor {
                 const x = Math.round(editor.px(at / ms))
                 ctx.fillStyle = t.grid
                 ctx.fillRect(x, T, t.hairline, B - T)
-                ctx.fillStyle = t.inkFaint
-                ctx.fillText(at + " ms", x + editor.timeLabelGap, editor.height - editor.timeLabelRise)
+                labels.push([Format.milliseconds(at), x + editor.timeLabelGap, editor.height - editor.timeLabelRise])
             }
         }
         // The kick as peaks, symmetric about the middle.
@@ -130,6 +131,14 @@ Kit.CurveEditor {
             ctx.strokeStyle = Qt.rgba(t.wave.r, t.wave.g, t.wave.b, t.waveEdgeAlpha)
             ctx.lineWidth = t.waveEdgeWidth
             ctx.stroke()
+        }
+        const pad = t.labelPlatePad
+        for (const label of labels) {
+            const width = ctx.measureText(label[0]).width
+            ctx.fillStyle = Qt.rgba(t.well.r, t.well.g, t.well.b, t.labelPlateAlpha)
+            ctx.fillRect(label[1] - pad, label[2] - t.typeCaption, width + 2 * pad, t.typeCaption + 2 * pad)
+            ctx.fillStyle = t.inkFaint
+            ctx.fillText(label[0], label[1], label[2])
         }
     }
     // The ghost, the curve, its points and bend rings.
@@ -162,7 +171,7 @@ Kit.CurveEditor {
     }
     onPointerLeft: editor.hoverText = ""
     onRingBent: (index, fraction) => {
-        editor.panel.touch("BEND", Math.round(fraction * 100) + " % at the midpoint")
+        editor.panel.touch("BEND", Format.fraction(fraction) + " at the midpoint")
     }
     onPointMoved: index => {
         const point = editor.points[index]

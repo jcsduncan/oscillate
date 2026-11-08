@@ -6,16 +6,18 @@
 // name ends in ":bass"; "|<Chop preset>" after it puts Chop (ADR-0075) on
 // the track with that preset. With none, the five Analogue presets play
 // their own parts.
+//   oscillate_nova_audition --pads <output directory> <lead.mid>
+// renders the pad audition set under a flute lead (pads.hpp).
+#include "audition.hpp"
+#include "pads.hpp"
+
 #include "oscillate/application/project_session.hpp"
-#include "oscillate/export/offline_master.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
 #include "oscillate/native_dsp/synth/parameters.hpp"
-#include "oscillate/persistence/store.hpp"
 
 #include <algorithm>
 #include <cstdint>
-#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <map>
@@ -28,41 +30,10 @@
 namespace {
 namespace fs = std::filesystem;
 using namespace oscillate;
-
-[[noreturn]] void fail(const std::string& message) {
-  std::cerr << "nova audition: " << message << '\n';
-  std::exit(1);
-}
-template <class R> auto take(R result) {
-  if (!result)
-    fail(result.error().message);
-  return std::move(result).value();
-}
-template <class R> void done(R result) {
-  if (!result)
-    fail(result.error().message);
-}
-
-class Gate final : public project::TransportGate {
-public:
-  class Lease final : public project::StoppedTransportLease {};
-  foundation::Result<std::unique_ptr<project::StoppedTransportLease>> acquire_stopped() override {
-    return foundation::Result<std::unique_ptr<project::StoppedTransportLease>>::success(
-        std::make_unique<Lease>());
-  }
-};
-
-void render(const application::ProjectSession& session, const fs::path& root,
-            const fs::path& output) {
-  Gate gate;
-  auto store = take(persistence::ProjectStore::open_reader(root));
-  const auto& snapshot = session.snapshot();
-  auto authority = take(exporting::StoppedExportAuthority::acquire(snapshot, gate));
-  exporting::MasterRenderOptions options{output, exporting::WavFormat::pcm24};
-  options.trim_silent_tail = true;
-  take(exporting::render_wav_master(snapshot, store, std::move(authority), options));
-  std::cout << "  " << output.string() << '\n';
-}
+using tools::audition::done;
+using tools::audition::fail;
+using tools::audition::render;
+using tools::audition::take;
 
 constexpr std::int64_t quarter = timeline::ticks_per_quarter;
 constexpr int bars = 8;
@@ -164,7 +135,14 @@ void set_value(application::ProjectSession& session, project::TrackId track, std
 
 int main(int argc, char** argv) {
   if (argc < 2)
-    fail("usage: oscillate_nova_audition <output directory>");
+    fail("usage: oscillate_nova_audition <output directory> [preset...] | --pads <output "
+         "directory> <lead.mid>");
+  if (std::string_view(argv[1]) == tools::pads::flag) {
+    if (argc != 4)
+      fail("usage: oscillate_nova_audition --pads <output directory> <lead.mid>");
+    tools::pads::render_set(argv[2], argv[3]);
+    return 0;
+  }
   const fs::path out = argv[1];
   fs::create_directories(out);
   // Each part's optional Chop preset, by part index.

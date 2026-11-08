@@ -104,8 +104,8 @@ public:
       low_cut_[c].reset();
       high_cut_[c].reset();
     }
-    std::fill(spectra_left_.begin(), spectra_left_.end(), Complex{});
-    std::fill(spectra_right_.begin(), spectra_right_.end(), Complex{});
+    std::ranges::fill(spectra_left_, Complex{});
+    std::ranges::fill(spectra_right_, Complex{});
     position_ = 0;
     history_position_ = 0;
     newest_ = 0;
@@ -198,7 +198,7 @@ private:
     std::vector<Complex> buffer(n);
     for (std::size_t p = 0; p < partitions_; ++p) {
       const std::size_t offset = (p + 1) * block_;
-      std::fill(buffer.begin(), buffer.end(), Complex{});
+      std::ranges::fill(buffer, Complex{});
       for (std::size_t t = 0; t < block_ && offset + t < length_; ++t) {
         buffer[t] = Complex{ir[0][offset + t] * scale, ir[1][offset + t] * scale};
       }
@@ -284,7 +284,7 @@ private:
       left[k] = 0.5 * (work_[k] + mirror);
       right[k] = Complex{0.0, -0.5} * (work_[k] - mirror);
     }
-    std::fill(work_.begin(), work_.end(), Complex{});
+    std::ranges::fill(work_, Complex{});
     for (std::size_t p = 0; p < partitions_; ++p) {
       const std::size_t slot = (newest_ + p) % partitions_;
       const Complex* xl = &spectra_left_[slot * n];

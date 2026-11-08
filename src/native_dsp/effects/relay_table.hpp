@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Relay v1: a delay (ADR-0040). Defaults are the "Quarter Echo" preset. Ids
@@ -16,9 +17,9 @@ using T = synth::ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array characters{"Digital"sv, "Tape"sv, "Analog"sv};
-enum Character : int { digital, tape, analog };
+enum Character : std::uint8_t { digital, tape, analog };
 inline constexpr std::array routings{"Stereo"sv, "Ping-Pong"sv, "Mono"sv};
-enum Routing : int { stereo, ping_pong, mono };
+enum Routing : std::uint8_t { stereo, ping_pong, mono };
 inline constexpr std::array off_on{"Off"sv, "On"sv};
 inline constexpr const auto& divisions = synth::sync_divisions;
 

@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Relay device panel: a vintage tape-echo machine in cream enamel with
@@ -384,7 +385,7 @@ Rectangle {
                 }
                 Caption {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "DIVISION · " + panel.relay.tempo.toFixed(0) + " BPM"
+                    text: "DIVISION · " + Format.number(panel.relay.tempo, 0) + " BPM"
                 }
             }
         }

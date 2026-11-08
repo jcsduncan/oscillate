@@ -1,4 +1,5 @@
 import QtQuick
+import Oscillate.Format
 
 // A vertical level meter cut into the steel: RMS in dBFS from -48 to +6,
 // the bar glowing from copper to white-hot near full scale.
@@ -11,6 +12,8 @@ Item {
     property bool live: false
     readonly property real floorDb: -48
     readonly property real topDb: 6
+    // The bare reading under the meter: one decimal.
+    readonly property int levelDecimals: 1
     readonly property real db: level > 0.000001 ? 20 * Math.log(level) / Math.LN10 : -120
     readonly property real fraction: live ? Math.max(0, Math.min(1, (db - floorDb) / (topDb - floorDb))) : 0
 
@@ -19,7 +22,7 @@ Item {
     implicitHeight: theme.meterHeight
     Accessible.role: Accessible.Indicator
     Accessible.name: label + " level"
-    Accessible.description: live ? db.toFixed(1) + " dBFS" : "Silent"
+    Accessible.description: live ? Format.quantity(db, "dBFS") : "Silent"
 
     Rectangle {
         id: track
@@ -61,7 +64,7 @@ Item {
             x: track.x + track.width + meter.theme.meterScaleGap
             y: track.y + (track.height - meter.theme.meterBarInset)
                 * (1 - (modelData - meter.floorDb) / (meter.topDb - meter.floorDb)) - meter.theme.meterScaleLift
-            text: modelData === 0 ? "0" : modelData.toString()
+            text: Format.number(modelData, 0)
             color: meter.theme.inkFaint
             font.family: meter.theme.mono
             font.pixelSize: meter.theme.scaleTextSize
@@ -82,7 +85,7 @@ Item {
         y: track.height + meter.theme.meterValueY
         width: parent.width
         horizontalAlignment: Text.AlignHCenter
-        text: meter.live && meter.db > -100 ? meter.db.toFixed(1) : "—"
+        text: meter.live && meter.db > -100 ? Format.number(meter.db, meter.levelDecimals) : "—"
         color: meter.live ? meter.theme.molten : meter.theme.inkFaint
         font.family: meter.theme.mono
         font.pixelSize: meter.theme.typeCaption

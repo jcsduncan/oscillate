@@ -172,6 +172,8 @@ struct Reading {
 
 // A frame with these readings and histories whose last `filled` values are
 // `value` plus their index (so appended values can be recognised).
+// The arguments are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<float> frame_of(const Reading& r, std::size_t filled = 0, float value = -15.0F) {
   namespace t = loudness::telemetry;
   std::vector<float> frame(t::size, -200.0F);
@@ -286,7 +288,7 @@ void readings_decode_and_silence_shows_as_dashes() {
           "momentary and its maximum");
   require(text_of(*panel, QStringLiteral("loudnessRange")) == QStringLiteral("5.3"), "the range");
   require(text_of(*panel, QStringLiteral("loudnessTruePeak")) == QStringLiteral("−1.6") &&
-              text_of(*panel, QStringLiteral("loudnessTruePeakSub")) == QStringLiteral("3 S −2.0"),
+              text_of(*panel, QStringLiteral("loudnessTruePeakSub")) == QStringLiteral("3 s −2.0"),
           "true peak, overall and recent");
   require(text_of(*panel, QStringLiteral("loudnessPsr")) == QStringLiteral("12.2") &&
               text_of(*panel, QStringLiteral("loudnessPlr")) == QStringLiteral("13.0"),
@@ -512,7 +514,7 @@ std::vector<engine::StereoFrame> render(const synth::SynthEngine& engine,
     events.push_back({stop, engine::MidiEventKind::note_off, n.key, 0, id});
     ++id;
   }
-  std::stable_sort(events.begin(), events.end(), [](const Event& a, const Event& b) {
+  std::ranges::stable_sort(events, [](const Event& a, const Event& b) {
     return a.frame != b.frame ? a.frame < b.frame : a.kind < b.kind;
   });
   std::vector<engine::StereoFrame> out(frames, {0.0F, 0.0F});
@@ -540,7 +542,7 @@ std::vector<engine::StereoFrame> render(const synth::SynthEngine& engine,
     require(runtime->process(block, block_events, position, 1, transport, {}).status ==
                 synth::SynthProcessStatus::rendered,
             "synth renders");
-    std::copy(block.begin(), block.end(), out.begin() + static_cast<std::ptrdiff_t>(position));
+    std::ranges::copy(block, out.begin() + static_cast<std::ptrdiff_t>(position));
   }
   return out;
 }
@@ -610,6 +612,8 @@ std::vector<engine::StereoFrame> music(std::size_t frames) {
 
 // The real Loudness meter over `audio` at `gain`, a telemetry frame every
 // second (the panel counts what is new from the meter's duration).
+// The arguments are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<std::vector<float>> real_telemetry(const std::vector<double>& values,
                                                const std::vector<engine::StereoFrame>& audio,
                                                float gain, std::size_t stop) {

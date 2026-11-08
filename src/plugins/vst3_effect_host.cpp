@@ -963,7 +963,7 @@ std::optional<std::uint32_t> Vst3EffectHost::map_midi_controller(std::int16_t co
     if (mapping) {
       try {
         mapping->release();
-      } catch (...) {
+      } catch (...) { // NOLINT(bugprone-empty-catch): the mapping already failed.
       }
     }
     return std::nullopt;
@@ -1180,11 +1180,14 @@ bool Vst3EffectHost::restore_state_pair(const Vst3StatePair& state, std::string&
   if (!state.controller_state)
     return true;
   BoundedStream stream(*state.controller_state, host.config.max_state_bytes);
+  bool accepted = false;
   try {
-    if (host.controller->setState(&stream) == Steinberg::kResultOk && !stream.failed())
-      return true;
+    accepted = host.controller->setState(&stream) == Steinberg::kResultOk && !stream.failed();
   } catch (...) {
+    accepted = false;
   }
+  if (accepted)
+    return true;
   host.faulted = true;
   error = "VST3 controller rejected its independent state";
   return false;

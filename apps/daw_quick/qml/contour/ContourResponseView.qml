@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The hero display: the filter's response measured from the real effect,
 // drawn on a phosphor screen from 20 Hz to 20 kHz and +24 to -48 dB. While
@@ -226,7 +227,7 @@ Rectangle {
             required property var modelData
             x: view.plotX - implicitWidth - view.theme.spaceSm
             y: view.yOf(modelData) - implicitHeight / 2
-            text: modelData > 0 ? "+" + modelData : modelData
+            text: Format.signed_number(modelData, 0)
             color: modelData === 0 ? view.theme.accentDim : view.theme.inkFaint
             font.family: view.theme.mono
             font.pixelSize: view.theme.typeCaption
@@ -282,9 +283,7 @@ Rectangle {
         x: Math.max(view.plotX, Math.min(view.xOf(view.liveOn ? view.live.cutoff_hz : view.restingLiveHz) + view.theme.spaceSm,
                                          view.plotX + view.plotW - implicitWidth))
         y: view.plotY + view.theme.spaceXs
-        text: "LIVE " + (view.liveOn ? (view.live.cutoff_hz >= 1000
-                                        ? (view.live.cutoff_hz / 1000).toFixed(2) + " kHz"
-                                        : Math.round(view.live.cutoff_hz) + " Hz") : "")
+        text: "LIVE " + (view.liveOn ? Format.hertz(view.live.cutoff_hz) : "")
         color: view.theme.liveTrace
         font.family: view.theme.mono
         font.pixelSize: view.theme.typeCaption

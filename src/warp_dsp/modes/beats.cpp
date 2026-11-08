@@ -1,6 +1,7 @@
 #include "../core/bandlimited_kernel.hpp"
 #include "../core/bandlimited_read.hpp"
 #include "../core/source_window.hpp"
+#include "oscillate/foundation/stereo_span.hpp"
 #include "oscillate/warp_dsp/stream.hpp"
 
 #include <algorithm>
@@ -87,7 +88,8 @@ public:
       }
       const auto frames = static_cast<std::size_t>(
           std::min<std::uint64_t>({event_.end - next_, requested - written, chunk_frames}));
-      if (!render_chunk(left.subspan(written, frames), right.subspan(written, frames))) {
+      if (!render_chunk(
+              {.left = left.subspan(written, frames), .right = right.subspan(written, frames)})) {
         status_ = StreamStatus::source_failed;
         break;
       }
@@ -233,9 +235,9 @@ private:
 
   // Renders runs of contiguous read positions; a loop wrap starts a new run so
   // every run fits the preallocated windows.
-  // Channels are positional (left, right) like every planar stereo API here.
-  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-  bool render_chunk(std::span<float> left, std::span<float> right) noexcept {
+  bool render_chunk(foundation::StereoSpan<float> out) noexcept {
+    const auto left = out.left;
+    const auto right = out.right;
     const auto frames = left.size();
     std::array<Voice, chunk_frames> voices{};
     std::array<Voice, chunk_frames> tails{};
