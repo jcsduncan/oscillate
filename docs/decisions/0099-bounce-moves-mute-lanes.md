@@ -1,7 +1,7 @@
 # ADR-0099 — A bounce moves its source's mute lanes to the bounce
 
 **Status:** Accepted; implemented. **Date:** 8 November 2026.
-**Supersedes in part:** [ADR-0097](0097-mute-lanes-gate-keys.md), where it says a bounced source keeps its mute lane and its keys and the bounced copy takes no keys.
+**Supersedes in part:** [ADR-0097](0097-mute-lanes-gate-keys.md) and [ADR-0059](0059-play-and-sparkle.md), where they say a bounced source keeps its mute lane and its keys and the bounced copy takes no keys.
 
 ## Context
 

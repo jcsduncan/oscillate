@@ -1,6 +1,6 @@
 # ADR-0059 — Play and sparkle: note effects, macros and freeze
 
-**Status:** Accepted; implemented (schema 1.43 contract, engines, playback and panels). **Date:** 25 October 2026.
+**Status:** Accepted; implemented (schema 1.43 contract, engines, playback and panels). Superseded in part by [ADR-0099](0099-bounce-moves-mute-lanes.md), where it says a bounced source under a mute lane keeps its keys: a bounce moves the source's mute lanes and keys to the copy. **Date:** 25 October 2026.
 **Builds on:** ADR-0034 (stepped native automation), ADR-0040 (native effect platform), ADR-0043 (one native insert path), ADR-0051 (arrangement automation), ADR-0058 (effect documents and links).
 
 ## Context
@@ -73,7 +73,7 @@ This ADR fixes that persisted contract (schema 1.43) before the engines, playbac
    - **Direct path:** the direct (unrouted) path never plays a frozen project.
    - **Tested:** a project with a frozen key and a frozen keyed track exports what it exported unfrozen, to 1e-6.
 3. **Bounce and Flatten.** `finish_track_bounce(staged, origin_revision, track, first_frame, mode)` is one undo step, then a save. A render is refused as stale once anything audible has changed since it began.
-   - **Bounce** (`new_track`) adds an audio track below the source playing the render, with the source's channel, routing, sends and channel lanes, and mutes the source. The copy takes the source's keys too, since a muted track keys nothing. The source's track mute lane moves to the copy, and its clips' mute lanes, already in the render, are removed, so its saved mute silences it ([ADR-0099](0099-bounce-moves-mute-lanes.md)).
+   - **Bounce** (`new_track`) adds an audio track below the source playing the render, with the source's channel, routing, sends and channel lanes, and mutes the source. The copy takes the source's keys too, since a muted track keys nothing; a source whose mute a lane drives keeps its keys, and the copy takes none.
    - **Flatten** puts that audio track in the source's place with all of its sends, mute and solo, removes other tracks' keys into the source's inserts, and removes the source.
    - **Tested:** both export what the source played.
 4. **Consolidate.** `consolidate_midi_clips(track, start, end)` turns a track's bar-placed MIDI clips overlapping the range into one unlooped clip spanning them all, as one undo step.

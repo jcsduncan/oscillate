@@ -471,7 +471,10 @@ void a_bounced_source_under_a_mute_lane_falls_silent() {
       2 * static_cast<std::size_t>(
               take(saved.tempo.tick_to_sample({muted_bar * bar}, saved.sample_rate)).value) +
       2 * past_the_glide;
-  const auto muted_to = muted_from + 2 * static_cast<std::size_t>(saved.sample_rate);
+  // A quarter of a second of the bar-3 note, inside its render.
+  constexpr std::size_t quarters_per_second = 4;
+  const auto muted_to =
+      muted_from + 2 * static_cast<std::size_t>(saved.sample_rate) / quarters_per_second;
   const auto file = read_float_wav(fs::path{"/proc/self/fd"} / std::to_string(rendered.fd()));
   const auto render_from = muted_from - 2 * static_cast<std::size_t>(rendered.first_frame());
   REQUIRE_GE(file.size(), render_from + (muted_to - muted_from), "the render covers bar 3");
