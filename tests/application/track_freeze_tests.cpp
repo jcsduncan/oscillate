@@ -15,11 +15,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <fcntl.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <memory>
+#include <numbers>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -519,6 +521,98 @@ void a_bounced_source_under_a_mute_lane_falls_silent() {
                "one undo gives the source its lane back");
 }
 
+// A clip's channel envelope overrides the track's lane while the clip plays.
+// A render is taken before the channel, and the bounce, the freeze and the
+// flatten play it in slices that carry the clip's envelope at the clip's own
+// place, so all three export what the source did (ADR-0102). The source keys
+// a compressor before its fader, so the key hears no envelope either.
+void a_clip_envelope_keeps_its_precedence_through_a_render() {
+  constexpr auto level = project::TrackControlTarget::Key::channel_level;
+  constexpr std::uint32_t rate = 48'000;
+  constexpr std::uint16_t stereo = 2;
+  constexpr std::size_t seconds = 3;
+  constexpr double tone_hz = 220.0;
+  constexpr float tone_peak = 0.5F;
+  constexpr double two_pi = 2.0 * std::numbers::pi;
+  constexpr double track_lane_level = 0.5;
+  constexpr double clip_start_level = 1.5;
+  constexpr double clip_end_level = 0.25;
+  constexpr std::int64_t clip_end_bar = 1;
+  constexpr std::uint8_t keyed_note = 45;
+  constexpr double audible = 1e-3;
+  constexpr double same_mix = 1e-6;
+  Directory directory;
+  const auto root = directory.path() / "song";
+  auto session = take(app::ProjectSession::create(root));
+  std::vector<float> tone(std::size_t{stereo} * rate * seconds);
+  for (std::size_t frame = 0; frame < tone.size() / stereo; ++frame) {
+    const auto value =
+        tone_peak *
+        static_cast<float>(std::sin(two_pi * tone_hz * static_cast<double>(frame) / rate));
+    tone[stereo * frame] = value;
+    tone[stereo * frame + 1] = value;
+  }
+  const auto wav = directory.path() / "tone.wav";
+  oscillate::test::write_wav_float(wav, rate, stereo, tone);
+  const int fd = ::open(wav.c_str(), O_RDONLY | O_CLOEXEC);
+  REQUIRE_GE(fd, 0, "the tone opens");
+  const auto track = take(session->imports().import_wav_audio(fd));
+  (void)::close(fd);
+  const auto clip = find(session->snapshot(), track).clips.front().id;
+  (void)take(
+      session->parameter_automation().set_channel_control_point(track, level, 0, track_lane_level));
+  (void)take(session->automation().set_audio_clip_channel_level_point(clip, 0, clip_start_level));
+  (void)take(
+      session->automation().set_audio_clip_channel_level_point(clip, clip_end_bar, clip_end_level));
+  const auto keyed = add_synth(*session, keyed_note);
+  const auto press =
+      take(session->effects().add_effect_engine(project::SignalPathId{keyed}, 0, "press"));
+  (void)take(session->routing().add_sidechain(track, keyed, press, 1.0));
+  done(session->saving().save(), "save");
+  const auto before = export_master(root, session->snapshot(), directory.path() / "before.wav");
+  REQUIRE_GT(peak(before), audible, "the mix is audible");
+  const auto nulls = [&](std::string_view what) {
+    const auto after =
+        export_master(root, session->snapshot(), directory.path() / (std::string(what) + ".wav"));
+    const auto largest = largest_difference(before, after);
+    std::cout << what << " under a clip envelope: largest difference " << largest << '\n';
+    REQUIRE_LT(largest, same_mix, std::string(what) + " keeps the clip envelope's precedence");
+  };
+  const auto carries_envelope = [](const project::Track& item) {
+    return std::ranges::any_of(item.clips,
+                               [](const project::Clip& part) { return !part.automation.empty(); });
+  };
+
+  auto rendered = render(*session, track);
+  const auto audio = take(session->freeze().finish_track_bounce(
+      stage(*session, rendered), rendered.origin_revision(), track, rendered.first_frame(),
+      app::BounceMode::new_track));
+  REQUIRE_TRUE(carries_envelope(find(session->snapshot(), audio)),
+               "the bounce carries the clip's envelope");
+  nulls("bounce");
+  done(session->history().undo(), "undo the bounce");
+
+  freeze(*session, track);
+  const auto view = project::frozen_playback_view(session->snapshot());
+  REQUIRE_TRUE(view && carries_envelope(find(*view, track)),
+               "the frozen view carries the clip's envelope");
+  nulls("freeze");
+  done(session->freeze().unfreeze_track(track), "unfreeze");
+
+  // A range that cuts the clip cannot place its envelope.
+  constexpr std::pair<std::uint64_t, std::uint64_t> inside_the_clip{0, rate};
+  REQUIRE_TRUE(!take(session->freeze().begin_track_render(track, inside_the_clip)).run(),
+               "a range that cuts a clip's envelope is refused");
+
+  rendered = render(*session, track);
+  const auto flat = take(session->freeze().finish_track_bounce(
+      stage(*session, rendered), rendered.origin_revision(), track, rendered.first_frame(),
+      app::BounceMode::flatten));
+  REQUIRE_TRUE(carries_envelope(find(session->snapshot(), flat)),
+               "the flattened track carries the clip's envelope");
+  nulls("flatten");
+}
+
 int main() {
   try {
     consolidating_a_silent_tiny_loop_is_bounded();
@@ -528,6 +622,7 @@ int main() {
     a_stale_render_is_refused();
     bounce_and_flatten_keep_the_mix();
     a_bounced_source_under_a_mute_lane_falls_silent();
+    a_clip_envelope_keeps_its_precedence_through_a_render();
     consolidate_writes_clips_out();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';

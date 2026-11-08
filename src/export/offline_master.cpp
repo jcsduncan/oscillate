@@ -64,6 +64,9 @@ struct RenderControls {
   // Mix Check's taps (render_master_taps): no file is written, the render is
   // routed, and every source track's block and the master go to the taps.
   const RenderTaps* taps = nullptr;
+  // Frames a track render covers even where the track is silent: where its
+  // clips' channel lanes play over the render (ADR-0102).
+  std::optional<std::pair<std::uint64_t, std::uint64_t>> cover = std::nullopt;
 };
 
 struct OpenSource {
@@ -685,6 +688,14 @@ using WriterOptions = MasterOutputOptions;
         return foundation::Result<PublishOutcome>::failure(
             {foundation::ErrorCode::unsupported, "The track has nothing to render"});
       content_first = *solo_first;
+      if (controls->cover) {
+        const auto [first, last] = *controls->cover;
+        if (last > std::numeric_limits<std::uint64_t>::max() - leading_latency_frames)
+          return foundation::Result<PublishOutcome>::failure(
+              {foundation::ErrorCode::invalid_argument, "The render range is too long"});
+        content_first = std::min(content_first, first);
+        total_frames = std::max(total_frames, last + leading_latency_frames);
+      }
     }
     if (content_first >= total_frames - leading_latency_frames)
       return foundation::Result<PublishOutcome>::failure(
@@ -1602,17 +1613,35 @@ foundation::Result<TrackRender> render_track(const project::Snapshot& snapshot,
   target->pan = 0.0;
   target->main_output.reset();
   target->sends.clear();
-  std::erase_if(target->automation, [](const project::AutomationLane& lane) {
-    const auto* control = std::get_if<project::TrackControlTarget>(&lane.target);
-    return (control != nullptr && project::is_channel_control(control->key)) ||
-           std::holds_alternative<project::SendGainTarget>(lane.target);
-  });
+  // A render is before the channel, so the channel lanes of its clips are
+  // left out too; they play over the render's slices (ADR-0102). The render
+  // covers every clip that carries them, or refuses a range they cross.
+  std::optional<std::pair<std::uint64_t, std::uint64_t>> cover;
+  if (options.range) {
+    const auto [first, last] = *options.range;
+    if (last <= first)
+      return R::failure({foundation::ErrorCode::invalid_argument, "The render range is empty"});
+    auto slices =
+        project::render_slices(*target, view.tempo, view.sample_rate, first, last - first);
+    if (!slices)
+      return R::failure(slices.error());
+  } else {
+    auto span = project::after_render_clip_span(*target, view.tempo, view.sample_rate);
+    if (!span)
+      return R::failure(span.error());
+    cover = span.value();
+  }
+  std::erase_if(target->automation, project::plays_after_render);
+  for (auto& clip : target->clips)
+    std::erase_if(clip.automation, project::plays_after_render);
+  for (auto& clip : target->midi_clips)
+    std::erase_if(clip.automation, project::plays_after_render);
   view.master_effects.clear();
   view.master_level = 1.0;
   auto detector_buses = stem_detector_buses(view);
   if (!detector_buses)
     return R::failure(detector_buses.error());
-  RenderControls controls{true, options.range, options.progress, 0};
+  RenderControls controls{true, options.range, options.progress, 0, nullptr, cover};
   auto rendered =
       render_master_impl(view, store, MasterRenderOptions{options.target}, {}, options.track, 0,
                          nullptr, nullptr, detector_buses.value(), &controls);
