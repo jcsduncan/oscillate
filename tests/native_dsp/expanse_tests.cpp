@@ -327,7 +327,7 @@ void a_reset_plays_as_new() {
   const auto input = noise(level, frames);
   const auto run = [&](effects::EffectKernel& kernel, const std::vector<double>& settings) {
     std::vector<double> out;
-    std::vector<engine::StereoFrame> tick(oscillate::native_dsp::synth::control_interval_frames);
+    std::vector<engine::StereoFrame> tick(oscillate::native_dsp::control_interval_frames);
     for (std::size_t at_frame = 0; at_frame < frames; at_frame += tick.size()) {
       const std::size_t n = std::min(tick.size(), frames - at_frame);
       kernel.control(settings, static_cast<std::uint32_t>(n), {});

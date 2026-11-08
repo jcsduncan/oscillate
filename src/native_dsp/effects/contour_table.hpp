@@ -1,7 +1,7 @@
 #pragma once
 
 #include "oscillate/native_dsp/synth/parameters.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 
 #include <array>
 #include <cstddef>
@@ -37,7 +37,7 @@ inline constexpr std::array lfo_shapes{"Sine"sv,     "Triangle"sv, "Saw Up"sv,
                                        "Saw Down"sv, "Square"sv,   "S&H"sv};
 inline constexpr std::array off_on{"Off"sv, "On"sv};
 inline constexpr std::array sources{"Input"sv, "Sidechain"sv};
-inline constexpr const auto& divisions = synth::sync_divisions;
+inline constexpr const auto& divisions = sync_divisions;
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
 inline constexpr double g = synth::effect_glide_seconds;

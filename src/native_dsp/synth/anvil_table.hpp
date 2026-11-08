@@ -2,7 +2,7 @@
 
 #include "oscillate/native_dsp/synth/lock.hpp"
 #include "oscillate/native_dsp/synth/parameters.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 
 #include <array>
 #include <cstddef>

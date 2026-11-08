@@ -117,7 +117,7 @@ public:
   }
 
   void control(std::span<const double> values, std::uint32_t frames_to_next_tick,
-               const SynthTransport&) noexcept override {
+               const Transport&) noexcept override {
     values_ = values;
     frames_ = frames_to_next_tick;
     for (std::size_t pad = 0; pad < pad_count; ++pad) {

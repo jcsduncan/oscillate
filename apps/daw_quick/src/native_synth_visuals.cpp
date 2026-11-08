@@ -8,9 +8,9 @@
 #include "oscillate/native_dsp/synth/grain_dsp.hpp"
 #include "oscillate/native_dsp/synth/modulation.hpp"
 #include "oscillate/native_dsp/synth/shaping.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
 #include "oscillate/native_dsp/synth/vintage_filters.hpp"
 #include "oscillate/native_dsp/synth/wavetable.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 
 #include <algorithm>
 #include <array>
@@ -767,11 +767,10 @@ std::vector<GrainPreview> drift_grain_cloud(const native_dsp::synth::EngineDescr
   const bool synced = get("drift.sync") > 0.5;
   // Synced divisions are drawn at 120 BPM in 4/4 (the engine's no-tempo
   // default), from the shared division table.
-  const auto division_index = static_cast<std::size_t>(
-      std::clamp(get("drift.sync.division"), 0.0,
-                 static_cast<double>(native_dsp::synth::sync_division_count - 1)));
-  const double division_seconds = native_dsp::synth::sync_seconds(
-      division_index, native_dsp::synth::SynthTransport{}, 48'000.0);
+  const auto division_index = static_cast<std::size_t>(std::clamp(
+      get("drift.sync.division"), 0.0, static_cast<double>(native_dsp::sync_division_count - 1)));
+  const double division_seconds =
+      native_dsp::sync_seconds(division_index, native_dsp::Transport{}, 48'000.0);
   const double lag = std::max(0.0, get("drift.grain.position"));
   const double scan = get("drift.grain.scan");
   const double spray = get("drift.grain.spray") + 0.5 * blur;

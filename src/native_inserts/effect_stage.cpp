@@ -127,7 +127,7 @@ Result<std::unique_ptr<NativeEffectStage::AutomationPlan>> NativeEffectStage::ma
   auto plan = std::make_unique<AutomationPlan>();
   plan->revision = snapshot.revision;
   plan->tempo = std::make_shared<const timeline::TempoMap>(snapshot.tempo);
-  plan->bars = native_dsp::synth::BarGrid(snapshot.meter);
+  plan->bars = timeline::BarGrid(snapshot.meter);
   plan->last_safe_sample = last_safe_automation_sample;
   for (const auto& prepared : automation) {
     const auto* target = std::get_if<project::NativeEffectParameterTarget>(&prepared.target());
@@ -214,7 +214,7 @@ void NativeEffectStage::render(std::span<engine::StereoFrame> stereo,
   const auto first = context.project_sample_position;
   const auto frames = stereo.size();
   auto* plan = automation_mailbox_->current();
-  std::span<const native_dsp::synth::ParameterLane> lanes;
+  std::span<const native_dsp::ParameterLane> lanes;
   // Beyond the plan's safe range the panel values play on unautomated (an
   // insert passes audio rather than going silent), counted as a rejection so
   // the guard reports the block that missed its automation.
@@ -237,7 +237,7 @@ void NativeEffectStage::render(std::span<engine::StereoFrame> stereo,
       rejected_.fetch_add(1, std::memory_order_relaxed);
   }
   // Musical position for tempo-synced effects, at the block start.
-  native_dsp::synth::SynthTransport transport;
+  native_dsp::Transport transport;
   timeline::TickPosition tick{};
   double bpm = 0.0;
   const timeline::SamplePosition at{static_cast<std::int64_t>(first)};

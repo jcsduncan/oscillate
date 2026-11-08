@@ -290,7 +290,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t frames,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     path_.set(v);
     transport_ = transport;
     run_ = static_cast<int>(v[p::run]);
@@ -602,7 +602,7 @@ private:
   dsp::Delay dry_right_;
   std::array<std::pair<double, double>, control_interval_frames> dry_{};
   Path path_;
-  SynthTransport transport_{};
+  Transport transport_{};
   std::span<const KeyNote> notes_{};
   std::uint64_t frame_ = 0;
   double free_seconds_ = 0.0;

@@ -23,8 +23,8 @@ int main() {
             buffer[i] = {static_cast<float>(input.left[position + i]),
                          static_cast<float>(input.right[position + i])};
           }
-          const SynthTransport transport{static_cast<double>(position) / 24'000.0, 1.0 / 24'000.0,
-                                         static_cast<double>(position) / 96'000.0, 4.0};
+          const Transport transport{static_cast<double>(position) / 24'000.0, 1.0 / 24'000.0,
+                                    static_cast<double>(position) / 96'000.0, 4.0};
           (void)runtime->process(buffer, std::span(buffer).first(0), position, 1, transport, {});
         }
         const std::chrono::duration<double> elapsed = std::chrono::steady_clock::now() - start;

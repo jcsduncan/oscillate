@@ -116,7 +116,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t frames_to_next_tick,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     const auto steps = static_cast<double>(frames_to_next_tick);
     read_values(v);
     depth_.to(v[p::depth], steps, !primed_);
@@ -469,7 +469,7 @@ private:
   bool primed_ = false;
 
   // The song position: the anchor's frame and beat and the tempo since.
-  SynthTransport pending_{};
+  Transport pending_{};
   bool pending_valid_ = false;
   bool anchored_ = false;
   bool tempo_known_ = false;

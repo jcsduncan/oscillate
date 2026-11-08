@@ -155,7 +155,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t frames,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     const bool jump = !primed_;
     const double steps = std::max(1.0, static_cast<double>(frames));
     const auto seed = static_cast<std::uint64_t>(v[p::mix_seed]);
@@ -298,7 +298,7 @@ private:
   }
 
   // The rain's room runs while the rain sounds and until its tail ends.
-  void control_room(std::uint32_t frames, const SynthTransport& transport) noexcept {
+  void control_room(std::uint32_t frames, const Transport& transport) noexcept {
     const bool rain = layers_[static_cast<std::size_t>(Layer::rain)].active;
     if (rain) {
       room_left_ = room_tail_;

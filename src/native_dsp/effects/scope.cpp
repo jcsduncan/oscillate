@@ -64,7 +64,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     const bool sync = v[p::sync] != 0.0 && transport.beats_per_frame > 0.0;
     const auto length = static_cast<std::size_t>(v[p::length]);
     if (sync) {

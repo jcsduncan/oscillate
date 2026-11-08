@@ -1085,7 +1085,7 @@ void swung_hits_survive_any_block_split_and_reset() {
       }
       std::ranges::fill(buffer, engine::StereoFrame{0.0F, 0.0F});
       const double beat = static_cast<double>(position) * beats_per_frame;
-      const SynthTransport transport{beat, beats_per_frame, beat / 4.0, 4.0};
+      const Transport transport{beat, beats_per_frame, beat / 4.0, 4.0};
       const std::uint64_t generation = seek && position > note_frame ? 2 : 1;
       const auto report = runtime->process(buffer, events, position, generation, transport, {});
       REQUIRE_EQ(report.status, SynthProcessStatus::rendered, "block renders");

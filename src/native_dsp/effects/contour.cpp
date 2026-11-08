@@ -8,9 +8,9 @@
 #include "oscillate/native_dsp/synth/modulation.hpp"
 #include "oscillate/native_dsp/synth/oversampler.hpp"
 #include "oscillate/native_dsp/synth/shaping.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
 #include "oscillate/native_dsp/synth/vintage_effects.hpp"
 #include "oscillate/native_dsp/synth/vintage_filters.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 
 #include <algorithm>
 #include <array>
@@ -140,7 +140,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t frames,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     const int model = as_int(v[p::model]);
     if (!primed_) {
       model_ = model;
@@ -172,7 +172,7 @@ public:
     }
     const double offset = v[p::lfo_stereo] / 360.0;
     if (v[p::lfo_sync] != 0.0 && transport.beats_per_frame > 0.0) {
-      cycles_ = synth::sync_cycles(static_cast<std::size_t>(v[p::lfo_division]), transport);
+      cycles_ = sync_cycles(static_cast<std::size_t>(v[p::lfo_division]), transport);
     } else {
       cycles_ += v[p::lfo_rate] / control_rate_;
     }

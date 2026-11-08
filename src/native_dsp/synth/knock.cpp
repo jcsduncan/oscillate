@@ -4,11 +4,11 @@
 #include "knock_presets.hpp"
 #include "knock_table.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
+#include "oscillate/native_dsp/parameter_control.hpp"
 #include "oscillate/native_dsp/synth/knock_striker.hpp"
 #include "oscillate/native_dsp/synth/modal_dsp.hpp"
-#include "oscillate/native_dsp/synth/parameter_control.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
 #include "oscillate/native_dsp/synth/voice_pool.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 
 #include <algorithm>
 #include <array>
@@ -785,7 +785,7 @@ public:
   void project_key(std::optional<project::MusicalKey> key) noexcept override { key_ = key; }
 
   void control(std::span<const double> values, std::uint32_t frames_to_next_tick,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     values_ = keyed(values);
     frames_ = frames_to_next_tick;
     transport_ = transport;
@@ -923,7 +923,7 @@ private:
   };
 
   // Quarter notes per frame: the transport's tempo, or 120 BPM when none is
-  // known (as SynthTransport defines).
+  // known (as Transport defines).
   [[nodiscard]] double beats_per_frame() const noexcept {
     return sync_beats_per_second(transport_, rate_) / rate_;
   }
@@ -976,8 +976,8 @@ private:
       return rng.bipolar() * depth;
     }
     case knock_table::orbit: {
-      const double bar = transport_.beats_per_bar > 0.0 ? transport_.beats_per_bar
-                                                        : SynthTransport{}.beats_per_bar;
+      const double bar =
+          transport_.beats_per_bar > 0.0 ? transport_.beats_per_bar : Transport{}.beats_per_bar;
       const double bars =
           knock_table::orbit_bars[choice(values_[gl::orbit], knock_table::orbit_bars.size())];
       return depth * std::sin(two_pi * beat / (bars * bar));
@@ -1585,7 +1585,7 @@ private:
   std::array<double, pad_count> place_{};
   // The transport at the last control tick, frames rendered since, and
   // frames rendered since the kernel was made: swung hits wait on it.
-  SynthTransport transport_{};
+  Transport transport_{};
   std::size_t frames_since_tick_ = 0;
   std::uint64_t clock_ = 0;
   std::array<PendingHit, max_pending_hits> pending_{};

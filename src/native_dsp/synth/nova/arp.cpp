@@ -1295,8 +1295,8 @@ void NoteGenerator::State::release_passed(arp_detail::Emitter& out) noexcept {
 }
 
 std::size_t
-NoteGenerator::State::process(std::span<const GeneratedNote> played,
-                              const SynthTransport& transport, std::uint32_t frames,
+NoteGenerator::State::process(std::span<const GeneratedNote> played, const Transport& transport,
+                              std::uint32_t frames,
                               std::span<GeneratedNote, max_generated_notes> out) noexcept {
   arp_detail::Emitter emit(out);
   // The sequencer's notes reach the voices only when the arp is off; when
@@ -1547,7 +1547,7 @@ bool NoteGenerator::active() const noexcept {
 }
 
 std::size_t NoteGenerator::process(std::span<const GeneratedNote> played,
-                                   const SynthTransport& transport, std::uint32_t frames,
+                                   const Transport& transport, std::uint32_t frames,
                                    std::span<GeneratedNote, max_generated_notes> out) noexcept {
   if (!state_) {
     const std::size_t count = std::min(played.size(), out.size());

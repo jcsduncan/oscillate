@@ -353,8 +353,8 @@ Result<std::vector<engine::StereoFrame>> render(const native_dsp::synth::SynthEn
     add(0, engine::MidiEventKind::note_on);
     add(held, engine::MidiEventKind::note_off);
     const double beat = static_cast<double>(start) * beats_per_frame;
-    const native_dsp::synth::SynthTransport transport{
-        beat, beats_per_frame, beat / phrase_beats_per_bar, phrase_beats_per_bar};
+    const native_dsp::Transport transport{beat, beats_per_frame, beat / phrase_beats_per_bar,
+                                          phrase_beats_per_bar};
     const auto report = runtime.process(std::span(output).subspan(start, frames), events, start,
                                         phrase_generation, transport, {});
     if (report.status != native_dsp::synth::SynthProcessStatus::rendered)

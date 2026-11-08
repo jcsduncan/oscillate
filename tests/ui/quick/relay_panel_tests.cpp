@@ -102,7 +102,7 @@ Rendered render(const std::vector<double>& values, std::size_t frames, double bp
     }
     const double bpf = bpm / 60.0 / rate;
     const double beat = static_cast<double>(position) * bpf;
-    const synth::SynthTransport transport{beat, bpf, beat / 4.0, 4.0};
+    const oscillate::native_dsp::Transport transport{beat, bpf, beat / 4.0, 4.0};
     require(runtime->process(buffer, {}, position, 1, transport, {}) ==
                 effects::EffectProcessStatus::rendered,
             "relay renders");

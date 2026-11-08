@@ -5,7 +5,7 @@
 #include "orbit_table.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
 #include "oscillate/native_dsp/synth/crossfade.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 
 #include <algorithm>
 #include <array>
@@ -89,7 +89,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t frames,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     const int mode = as_int(v[p::mode]);
     if (!primed_) {
       mode_ = mode;
@@ -104,8 +104,8 @@ public:
     stages_ = orbit_table::stage_values[static_cast<std::size_t>(as_int(v[p::stages]))];
     if (v[p::sync] != 0.0 && transport.beats_per_frame > 0.0) {
       const auto division = static_cast<std::size_t>(v[p::division]);
-      phase_ = dsp::wrap(synth::sync_cycles(division, transport));
-      increment_ = transport.beats_per_frame / synth::sync_beats(division, transport);
+      phase_ = dsp::wrap(sync_cycles(division, transport));
+      increment_ = transport.beats_per_frame / sync_beats(division, transport);
     } else {
       increment_ = v[p::rate] / rate_;
     }

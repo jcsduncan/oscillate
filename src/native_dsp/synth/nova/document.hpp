@@ -18,7 +18,7 @@
 // kernel reads that the flat parameters cannot hold, built on control.
 namespace oscillate::native_dsp::synth::nova {
 
-struct NovaState final : SynthDocumentState {
+struct NovaState final : DocumentState {
   std::vector<CompiledRoute> routes;
   std::array<CurveShape, lfo_count> lfo_shapes{};
   // Remap warp curves per oscillator and warp slot; null when absent (the
@@ -42,8 +42,8 @@ struct NovaState final : SynthDocumentState {
 [[nodiscard]] foundation::Result<void>
 validate_document(const project::NativeSynthDocument& document);
 
-[[nodiscard]] foundation::Result<std::shared_ptr<const SynthDocumentState>>
+[[nodiscard]] foundation::Result<std::shared_ptr<const DocumentState>>
 prepare_document(const project::NativeSynthDocument& document, const SynthMedia& media,
-                 double sample_rate, const SynthDocumentState* previous);
+                 double sample_rate, const DocumentState* previous);
 
 } // namespace oscillate::native_dsp::synth::nova

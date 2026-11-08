@@ -192,7 +192,7 @@ struct CurveCursor {
 
 // The compiled document: the three body curves and the user's transient,
 // resampled to the engine's rate and summed to mono.
-struct AnvilState final : SynthDocumentState {
+struct AnvilState final : DocumentState {
   Curve pitch;
   Curve amp;
   Curve drive;
@@ -289,10 +289,10 @@ Result<void> validate_document(const project::NativeSynthDocument& document) {
   return R::success();
 }
 
-Result<std::shared_ptr<const SynthDocumentState>>
+Result<std::shared_ptr<const DocumentState>>
 prepare_document(const project::NativeSynthDocument& document, const SynthMedia& media,
-                 double sample_rate, const SynthDocumentState* previous) {
-  using R = Result<std::shared_ptr<const SynthDocumentState>>;
+                 double sample_rate, const DocumentState* previous) {
+  using R = Result<std::shared_ptr<const DocumentState>>;
   if (auto valid = validate_document(document); !valid)
     return R::failure(valid.error());
   auto state = std::make_shared<AnvilState>();
@@ -331,7 +331,7 @@ prepare_document(const project::NativeSynthDocument& document, const SynthMedia&
     }
     state->click_sha = reference.sha256;
   }
-  return R::success(std::shared_ptr<const SynthDocumentState>(std::move(state)));
+  return R::success(std::shared_ptr<const DocumentState>(std::move(state)));
 }
 
 project::NativeSynthDocument preset_document(std::optional<std::size_t> preset) {
@@ -461,7 +461,7 @@ struct OnePoleAt {
 // value at the transport's tempo (tempo_sync's default when unknown), or the
 // note's own length when known (else Length), always within the shortest
 // and longest hit.
-[[nodiscard]] double hit_seconds(std::span<const double> v, const SynthTransport& transport,
+[[nodiscard]] double hit_seconds(std::span<const double> v, const Transport& transport,
                                  std::uint32_t note_frames, double rate) noexcept {
   double seconds = v[p::length] * 1e-3;
   const auto mode = choice(v[p::length_mode]);
@@ -477,10 +477,9 @@ struct OnePoleAt {
 
 // A transport at a steady tempo in 4/4, for work off the callback that
 // knows only the tempo (0: unknown).
-[[nodiscard]] SynthTransport steady(double bpm, double rate) noexcept {
+[[nodiscard]] Transport steady(double bpm, double rate) noexcept {
   constexpr double seconds_per_minute = 60.0;
-  return {0.0, bpm > 0.0 ? bpm / seconds_per_minute / rate : 0.0, 0.0,
-          SynthTransport{}.beats_per_bar};
+  return {0.0, bpm > 0.0 ? bpm / seconds_per_minute / rate : 0.0, 0.0, Transport{}.beats_per_bar};
 }
 
 // One hit: the body (synthesised at 4x and decimated), the click and the sub.
@@ -552,7 +551,7 @@ public:
     clear();
   }
 
-  void adopt_document(const SynthDocumentState& state) noexcept override {
+  void adopt_document(const DocumentState& state) noexcept override {
     state_ = &static_cast<const AnvilState&>(state);
     drawn_tail_ = state_->tail_hz;
   }
@@ -561,7 +560,7 @@ public:
   void locate(std::uint64_t project_frame) noexcept override { frame_ = project_frame; }
 
   void control(std::span<const double> v, std::uint32_t frames_to_next_tick,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     values_ = v;
     // Only Bass note retunes; Keep tone pairs without touching the tail.
     lock_retunes_ = choice(v[p::lock]) == static_cast<std::size_t>(lock_kick_bass_note);
@@ -677,7 +676,7 @@ public:
     }
     if (note_mode_) {
       if (event.frames > 0)
-        hit.frames = hit_seconds(v, SynthTransport{}, event.frames, rate_) * rate_;
+        hit.frames = hit_seconds(v, Transport{}, event.frames, rate_) * rate_;
       hit.gated = event.frames == 0;
       hit.clip = event.clip;
       hit.note = event.note;
@@ -1335,7 +1334,7 @@ Preview render_preview(std::span<const double> values, const project::NativeSynt
   AnvilKernel kernel(rate);
   const SynthMedia none;
   auto state = prepare_document(document, media != nullptr ? *media : none, rate, nullptr);
-  std::shared_ptr<const SynthDocumentState> held;
+  std::shared_ptr<const DocumentState> held;
   if (state) {
     held = state.value();
     kernel.adopt_document(*held);
@@ -1348,7 +1347,7 @@ Preview render_preview(std::span<const double> values, const project::NativeSynt
   preview.rumble.reserve(total);
   kernel.tap_rumble(&preview.rumble);
   std::vector<engine::StereoFrame> block(control_interval_frames);
-  const SynthTransport transport = steady(std::clamp(bpm, 20.0, 999.0), rate);
+  const Transport transport = steady(std::clamp(bpm, 20.0, 999.0), rate);
   double peak = 0.0;
   for (std::size_t frame = 0; frame < total; frame += control_interval_frames) {
     const std::size_t count = std::min<std::size_t>(control_interval_frames, total - frame);

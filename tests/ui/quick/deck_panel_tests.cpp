@@ -245,8 +245,8 @@ std::vector<std::vector<float>> real_telemetry(const std::vector<double>& values
       block[i] = loop_frame(position + i, noise);
     }
     const double beat = static_cast<double>(position) * beats_per_frame;
-    const synth::SynthTransport transport{beat, beats_per_frame, beat / beats_per_bar,
-                                          beats_per_bar};
+    const oscillate::native_dsp::Transport transport{beat, beats_per_frame, beat / beats_per_bar,
+                                                     beats_per_bar};
     require(runtime->process(block, {}, position, 1, transport, {}) ==
                 effects::EffectProcessStatus::rendered,
             "Deck renders");

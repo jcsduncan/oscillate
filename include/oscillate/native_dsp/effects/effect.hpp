@@ -2,9 +2,11 @@
 
 #include "oscillate/engine/graph.hpp"
 #include "oscillate/foundation/error.hpp"
-#include "oscillate/native_dsp/synth/parameter_control.hpp"
+#include "oscillate/native_dsp/document_state.hpp"
+#include "oscillate/native_dsp/parameter_control.hpp"
 #include "oscillate/native_dsp/synth/parameters.hpp"
-#include "oscillate/native_dsp/synth/runtime.hpp"
+#include "oscillate/native_dsp/telemetry.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 #include "oscillate/project/model.hpp"
 
 #include <atomic>
@@ -18,17 +20,12 @@
 #include <vector>
 
 // The native effect platform (ADR-0040): every effect is a versioned
-// parameter table plus a DSP kernel, run by one generic runtime that shares
-// the synths' parameter control, stepped lanes and telemetry.
+// parameter table plus a DSP kernel, run by one generic runtime on the
+// neutral native_dsp parameter control, stepped lanes, telemetry and
+// transport that synths use too.
 namespace oscillate::native_dsp::effects {
 
-using synth::control_interval_frames;
 using synth::EngineDescriptor;
-using synth::ParameterLane;
-using synth::SynthTransport;
-// An effect's compiled document (ADR-0058), as for synths: immutable, built
-// on control, read by its kernel on the callback.
-using DocumentState = synth::SynthDocumentState;
 
 // A note-on of a track keying an effect (EffectEngine::key_notes), at its
 // project frame.
@@ -47,7 +44,7 @@ public:
   // At each control tick: effective plain values in table order, frames to
   // the next tick, and the musical position at the tick.
   virtual void control(std::span<const double> values, std::uint32_t frames_to_next_tick,
-                       const SynthTransport& transport) noexcept = 0;
+                       const Transport& transport) noexcept = 0;
   // In place. frames never span a control tick. sidechain is empty unless
   // the engine takes one and the route supplies it.
   virtual void process(std::span<engine::StereoFrame> audio,
@@ -135,7 +132,7 @@ public:
   [[nodiscard]] EffectProcessStatus
   process(std::span<engine::StereoFrame> audio, std::span<const engine::StereoFrame> sidechain,
           std::uint64_t project_frame, std::uint64_t transport_generation,
-          const SynthTransport& transport, std::span<const ParameterLane> lanes) noexcept;
+          const Transport& transport, std::span<const ParameterLane> lanes) noexcept;
 
   // Control only (ADR-0027 semantics): adopted at the next block, panel
   // jumps glide over each parameter's glide time.
@@ -188,8 +185,8 @@ private:
 
   EffectEngine engine_;
   std::unique_ptr<EffectKernel> kernel_;
-  synth::ParameterControl control_;
-  std::unique_ptr<synth::TelemetryBuffer> telemetry_ = std::make_unique<synth::TelemetryBuffer>();
+  ParameterControl control_;
+  std::unique_ptr<TelemetryBuffer> telemetry_ = std::make_unique<TelemetryBuffer>();
   project::NativeSynthDocument document_;                 // Control only.
   std::vector<std::unique_ptr<DocumentOffer>> documents_; // Control only.
   std::unique_ptr<DocumentMailbox> document_mailbox_ = std::make_unique<DocumentMailbox>();

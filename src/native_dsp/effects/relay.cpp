@@ -3,7 +3,7 @@
 #include "effect_dsp.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
 #include "oscillate/native_dsp/synth/filter.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 #include "relay_presets.hpp"
 #include "relay_table.hpp"
 
@@ -176,12 +176,12 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t frames,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     character_ = as_int(v[p::character]);
     routing_ = as_int(v[p::routing]);
     double seconds = v[p::time] * 1e-3;
     if (v[p::sync] != 0.0) {
-      seconds = synth::sync_seconds(static_cast<std::size_t>(v[p::division]), transport, rate_);
+      seconds = sync_seconds(static_cast<std::size_t>(v[p::division]), transport, rate_);
     }
     seconds = std::clamp(seconds, 1e-3, max_seconds);
     target_[0] = seconds * rate_;
@@ -450,8 +450,8 @@ std::uint64_t tail_frames(std::span<const double> v, double sample_rate) {
   double seconds = v[p::time] * 1e-3;
   if (v[p::sync] != 0.0) {
     const auto division = static_cast<std::size_t>(v[p::division]);
-    const double beats = synth::sync_in_bars(division) ? synth::sync_lengths[division] * 4.0
-                                                       : synth::sync_lengths[division];
+    const double beats =
+        sync_in_bars(division) ? sync_lengths[division] * 4.0 : sync_lengths[division];
     seconds = beats * 2.0;
   }
   seconds = std::clamp(seconds, 1e-3, max_seconds) * (1.0 + std::max(0.0, v[p::offset]));

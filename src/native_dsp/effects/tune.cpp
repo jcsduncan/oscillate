@@ -91,7 +91,7 @@ public:
     reset();
   }
 
-  void control(std::span<const double> v, std::uint32_t, const SynthTransport&) noexcept override {
+  void control(std::span<const double> v, std::uint32_t, const Transport&) noexcept override {
     mode_ = static_cast<int>(v[p::mode]);
     reference_ = v[p::reference];
   }

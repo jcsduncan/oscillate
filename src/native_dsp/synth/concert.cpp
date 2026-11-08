@@ -255,7 +255,7 @@ public:
   }
 
   void control(std::span<const double> values, std::uint32_t frames_to_next_tick,
-               const SynthTransport& /*transport*/) noexcept override {
+               const Transport& /*transport*/) noexcept override {
     values_ = values;
     if (active_notes_ == 0 && active_shots_ == 0) {
       if (const auto* latest = detail::current(); latest != library_ && latest != nullptr) {

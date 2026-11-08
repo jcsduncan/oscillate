@@ -360,7 +360,7 @@ std::vector<std::vector<float>> real_telemetry(const std::vector<double>& values
     block.assign(size, {0.0F, 0.0F});
     const double beats_per_frame = 2.0 / rate;
     const double beat = static_cast<double>(position) * beats_per_frame;
-    const synth::SynthTransport transport{beat, beats_per_frame, beat / 4.0, 4.0};
+    const oscillate::native_dsp::Transport transport{beat, beats_per_frame, beat / 4.0, 4.0};
     require(runtime->process(block, {}, position, 1, transport, {}) ==
                 effects::EffectProcessStatus::rendered,
             "Signal renders");

@@ -54,7 +54,7 @@ std::vector<double> contour_response(const native_dsp::synth::EngineDescriptor& 
   }
   std::vector<std::complex<double>> response(length);
   std::vector<engine::StereoFrame> block(512);
-  const synth::SynthTransport transport{0.0, 0.0, 0.0, 4.0};
+  const native_dsp::Transport transport{0.0, 0.0, 0.0, 4.0};
   for (std::size_t start = 0; start < length; start += block.size()) {
     std::ranges::fill(block, engine::StereoFrame{0.0F, 0.0F});
     if (start == 0) {

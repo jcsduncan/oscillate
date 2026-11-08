@@ -9,11 +9,11 @@
 #include "oscillate/native_dsp/synth/grain_dsp.hpp"
 #include "oscillate/native_dsp/synth/modulation.hpp"
 #include "oscillate/native_dsp/synth/shaping.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
 #include "oscillate/native_dsp/synth/vintage_effects.hpp"
 #include "oscillate/native_dsp/synth/voice_pool.hpp"
 #include "oscillate/native_dsp/synth/wavetable.hpp"
 #include "oscillate/native_dsp/synth/wavetable_oscillator.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 
 #include <algorithm>
 #include <array>
@@ -193,7 +193,7 @@ public:
   }
 
   void control(std::span<const double> values, std::uint32_t frames_to_next_tick,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     values_ = values;
     frames_ = frames_to_next_tick;
     beats_per_frame_ = transport.beats_per_frame > 0.0 ? transport.beats_per_frame : 2.0 / rate_;
@@ -339,8 +339,7 @@ public:
   }
 
 private:
-  [[nodiscard]] double run_lfo(Lfo& lfo, std::size_t base,
-                               const SynthTransport& transport) noexcept {
+  [[nodiscard]] double run_lfo(Lfo& lfo, std::size_t base, const Transport& transport) noexcept {
     const auto& v = values_;
     lfo.set_shape(lfo_shape(as_int(v[base])));
     const auto division = static_cast<std::size_t>(v[base + p::lfo_division]);
@@ -546,7 +545,7 @@ private:
   std::span<const double> values_{};
   std::uint32_t frames_ = 0;
   double beats_per_frame_ = 0.0;
-  SynthTransport transport_{};
+  Transport transport_{};
   Lfo lfo1_{};
   Lfo lfo2_{};
   double lfo1_value_ = 0.0;

@@ -180,7 +180,7 @@ public:
         eq_(std::in_place, prepared), cascade_(canonical(initial)), wanted_(initial),
         input_spectrum_(sample_rate), output_spectrum_(sample_rate) {}
 
-  void control(std::span<const double> v, std::uint32_t, const SynthTransport&) noexcept override {
+  void control(std::span<const double> v, std::uint32_t, const Transport&) noexcept override {
     for (std::size_t b = 0; b < bands; ++b) {
       wanted_[b] = band_stages(v, b, sample_rate_);
     }
