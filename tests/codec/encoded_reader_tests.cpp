@@ -78,10 +78,18 @@ void lossy_mp3() {
   REQUIRE_LT(peak, 0.20F, "MP3 sine peak outside lossy tolerance");
 }
 
-// An MP3 without a Xing/Info header, behind an ID3 tag: libsndfile estimates
-// 11,736 frames from its size, but only ten 1,152-frame MPEG frames decode
-// (FFmpeg decodes the same 11,520).
+// An MP3 without a Xing/Info header, behind an ID3 tag: a length estimated
+// from its size counts the tag as audio (11,736 frames), but only ten
+// 1,152-frame MPEG frames decode (FFmpeg decodes the same 11,520).
 constexpr std::uint64_t headerless_mp3_frames = 11'520;
+// A variable-bitrate MP3 without a Xing/Info header: 0.1 s of loud noise
+// encoded at a high bitrate, then 1.9 s of silence at a low one. A length
+// estimated from the size and the first frame's bitrate is 15,408 frames;
+// all 85 1,152-frame MPEG frames decode (FFmpeg decodes the same 97,920).
+constexpr std::uint64_t vbr_mp3_frames = 97'920;
+constexpr std::uint64_t vbr_mp3_estimated_frames = 15'408;
+constexpr std::size_t vbr_mp3_noise_frames = 4'800;
+constexpr float vbr_mp3_noise_floor = 0.1F;
 
 void mp3_without_length_header() {
   auto opened = EncodedReader::open(fixture("sine_no_xing.mp3"));
@@ -97,6 +105,31 @@ void mp3_without_length_header() {
   std::array<StereoFrame, 1> last{};
   REQUIRE_EQ(reader.read_at(headerless_mp3_frames - 1, last).value(), last.size(),
              "headerless MP3 last frame did not decode after a seek");
+}
+
+void vbr_mp3_without_length_header() {
+  auto opened = EncodedReader::open(fixture("vbr_no_xing.mp3"));
+  REQUIRE_OK(opened, "headerless VBR MP3 fixture failed to open");
+  auto reader = std::move(opened).value();
+  REQUIRE_EQ(reader.info().format, EncodedFormat::mp3, "headerless VBR MP3 metadata invalid");
+  REQUIRE_EQ(reader.info().frames, vbr_mp3_frames,
+             "headerless VBR MP3 length is not its whole stream");
+  std::vector<StereoFrame> whole(vbr_mp3_frames + 1);
+  auto decoded = reader.read_at(0, whole);
+  REQUIRE_TRUE(decoded, "headerless VBR MP3 decode failed");
+  REQUIRE_EQ(decoded.value(), vbr_mp3_frames, "headerless VBR MP3 import was cut short");
+  float noise_peak = 0.0F;
+  for (const auto frame : std::span(whole).first(vbr_mp3_noise_frames))
+    noise_peak = std::max(noise_peak, std::abs(frame.left));
+  REQUIRE_GT(noise_peak, vbr_mp3_noise_floor, "headerless VBR MP3 lost its opening noise");
+  // Past where an estimate would have stopped, and at the very end.
+  std::array<StereoFrame, 1> one{};
+  REQUIRE_EQ(reader.read_at(vbr_mp3_estimated_frames, one).value(), one.size(),
+             "headerless VBR MP3 stopped at the estimated length");
+  REQUIRE_EQ(reader.read_at(vbr_mp3_frames - 1, one).value(), one.size(),
+             "headerless VBR MP3 last frame did not decode after a seek");
+  REQUIRE_EQ(reader.read_at(vbr_mp3_frames, one).value(), 0,
+             "headerless VBR MP3 read past its end");
 }
 
 void partition_and_seek_consistency() {
@@ -205,6 +238,7 @@ int main() {
     exact_lossless(EncodedFormat::flac, "sine.flac");
     lossy_mp3();
     mp3_without_length_header();
+    vbr_mp3_without_length_header();
     partition_and_seek_consistency();
     stereo_wav_and_unsupported_container();
     pinned_descriptor_and_invalid_inputs();

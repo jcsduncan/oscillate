@@ -99,7 +99,7 @@ class PackageBuildCheckTests(unittest.TestCase):
             package_version("", RELEASE_TAG, None)
 
     def test_readme_lists_included_and_excluded_features(self):
-        codec_line = "  - AIFF, FLAC and MP3 import and export (libsndfile)\n"
+        codec_line = "  - AIFF, FLAC and MP3 import and export (libsndfile, libmpg123)\n"
         for profile in PROFILES.values():
             with self.subTest(profile=profile.name):
                 readme = feature_readme(profile, PROJECT_VERSION)

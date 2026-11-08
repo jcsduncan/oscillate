@@ -85,7 +85,7 @@ compiler jobs (`OSCILLATE_BUILD_JOBS` overrides).
 
 | Feature | Packages | CMake options |
 | --- | --- | --- |
-| AIFF, FLAC, MP3 | `libsndfile1-dev` | `-DOSCILLATE_BUILD_CODEC_ADAPTER=ON` |
+| AIFF, FLAC, MP3 | `libsndfile1-dev libmpg123-dev` | `-DOSCILLATE_BUILD_CODEC_ADAPTER=ON` |
 | VST3 host | pinned SDK ([setup](docs/dependencies/local-development.md)) | `-DOSCILLATE_BUILD_VST3_SCANNER=ON -DOSCILLATE_VST3_SDK_ROOT=<path>` |
 | JACK output | `libjack-jackd2-dev` | detected automatically; `-DOSCILLATE_REQUIRE_JACK=ON` makes it mandatory |
 | Resampling | `libsamplerate0-dev` | `-DOSCILLATE_BUILD_EXPORT_RESAMPLER=ON`, `-DOSCILLATE_BUILD_SOURCE_RESAMPLER=ON` |
