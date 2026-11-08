@@ -9,7 +9,6 @@
 
 #include "oscillate/foundation/trace.hpp"
 #include "oscillate/foundation/value_text.hpp"
-#include "oscillate/native_dsp/dsp/math.hpp"
 #include "oscillate/native_dsp/effects/ceiling.hpp"
 #include "oscillate/native_dsp/effects/chop.hpp"
 #include "oscillate/native_dsp/effects/contour.hpp"
@@ -1769,30 +1768,12 @@ QVariantList NativeSynthDeviceController::forge_curve(int points) const {
 
 QVariantList NativeSynthDeviceController::edge_transfer(double from_db, double to_db,
                                                         int points) const {
-  namespace edge = native_dsp::effects::edge;
-  constexpr int most_points = 1'024;
-  if (engine_.id != edge::engine().descriptor->id || points < 2 || !(to_db > from_db)) {
-    return {};
-  }
-  const double shape = value(QStringLiteral("edge.shape"));
-  const int count = std::min(points, most_points);
-  QVariantList result;
-  for (int i = 0; i < count; ++i) {
-    const double db = from_db + (to_db - from_db) * static_cast<double>(i) / (count - 1);
-    const double out = edge::clip(native_dsp::dsp::db_to_gain(db), shape);
-    result.append(native_dsp::dsp::gain_to_db(out));
-  }
-  return result;
+  return list(quick::edge_transfer(engine_, values_, from_db, to_db,
+                                   static_cast<std::size_t>(std::clamp(points, 0, 1'024))));
 }
 
 double NativeSynthDeviceController::edge_latency_ms(double sample_rate) const {
-  namespace edge = native_dsp::effects::edge;
-  constexpr double milliseconds_per_second = 1'000.0;
-  if (engine_.id != edge::engine().descriptor->id || !(sample_rate > 0.0)) {
-    return 0.0;
-  }
-  return static_cast<double>(edge::engine().latency_frames(values_, sample_rate)) / sample_rate *
-         milliseconds_per_second;
+  return quick::edge_latency_ms(engine_, values_, sample_rate);
 }
 
 double NativeSynthDeviceController::forge_makeup_db() const {

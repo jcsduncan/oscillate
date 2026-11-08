@@ -35,9 +35,6 @@ constexpr std::size_t compare = index_of("edge.compare");
 constexpr std::size_t match = index_of("edge.match");
 } // namespace p
 
-// The ceiling is 0 dBFS; the guard holds the output this far under it so
-// the float rounding of the gained output stays under it too.
-constexpr double guard_margin_db = 0.01;
 // Meters hold their peaks 1 s, falling 60 dB over it; the transfer dot
 // follows faster.
 constexpr double hold_seconds = 1.0;
@@ -87,7 +84,7 @@ public:
     for (auto& channel : channels_) {
       channel.resampler.prepare(design);
     }
-    guard_.prepare(sample_rate, native_dsp::dsp::db_to_gain(-guard_margin_db));
+    guard_.prepare(sample_rate);
     latency_ = design.latency + guard_.delay();
     aligned_.assign(static_cast<std::size_t>(latency_) + 1, Aligned{});
     const double step = 1.0 / (native_dsp::dsp::switch_fade_seconds * sample_rate);
@@ -143,7 +140,7 @@ public:
 
       const std::array<double, 2> out{y[0] * output_gain, y[1] * output_gain};
       meter_output(out);
-      match(out, dry.raw);
+      match(dry, out);
 
       const double delta = delta_.next();
       const double compare = compare_.next();
@@ -173,8 +170,9 @@ public:
     }
     magnitude_.reset();
     guard_.reset();
-    std::fill(aligned_.begin(), aligned_.end(), Aligned{});
+    std::ranges::fill(aligned_, Aligned{});
     aligned_position_ = 0;
+    previous_top_ = {};
     input_peak_ = {};
     output_peak_ = {};
     dot_ = 0.0;
@@ -306,7 +304,9 @@ private:
     }
   }
 
-  void match(const std::array<double, 2>& out, const std::array<double, 2>& raw) noexcept {
+  // The output's power against the raw aligned input's.
+  void match(const Aligned& dry, const std::array<double, 2>& out) noexcept {
+    const auto& raw = dry.raw;
     const double out_power = 0.5 * (out[0] * out[0] + out[1] * out[1]);
     const double in_power = 0.5 * (raw[0] * raw[0] + raw[1] * raw[1]);
     out_power_ += match_coefficient_ * (out_power - out_power_);

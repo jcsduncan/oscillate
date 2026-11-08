@@ -51,7 +51,6 @@ using oscillate::test::require;
 
 constexpr double rate = 48'000.0;
 constexpr int wait_ms = 1'000;
-constexpr double milliseconds_per_second = 1'000.0;
 
 const synth::EngineDescriptor& table() { return *edge::engine().descriptor; }
 int preset_index(std::string_view name) {
@@ -291,10 +290,12 @@ void the_curve_is_the_engines() {
                 oscillate::test::tolerance::double_accumulation,
             "a hard clip at shape 0, point " + std::to_string(i));
   }
-  require(controller.edge_latency_ms(rate) ==
-              static_cast<double>(edge::engine().latency_frames(values, rate)) / rate *
-                  milliseconds_per_second,
-          "the latency in milliseconds");
+  // Default is 8x linear phase: 92 frames of filters and 55 of guard, 147
+  // frames at 48 kHz.
+  constexpr double default_latency_ms = 147.0 / 48.0;
+  require(std::fabs(controller.edge_latency_ms(rate) - default_latency_ms) <
+              oscillate::test::tolerance::double_rounding,
+          "the latency in milliseconds: " + std::to_string(controller.edge_latency_ms(rate)));
   auto panel = load_panel(controller);
   require(item(*panel, QStringLiteral("edgeTransfer"))->property("curve").toList().size() > 1,
           "the panel draws it");

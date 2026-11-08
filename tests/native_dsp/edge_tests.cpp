@@ -71,6 +71,8 @@ constexpr double mid_shape = 0.5;
 
 std::vector<double> defaults() { return preset(table(), "Default"); }
 
+// Called with the named factor and filter indices below.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<double> with(std::size_t oversampling, std::size_t filters, double shape) {
   auto v = defaults();
   v[at("edge.oversampling")] = static_cast<double>(oversampling);
@@ -184,12 +186,14 @@ void descriptor_registry_and_presets() {
 void shape_zero_is_a_hard_clip() {
   constexpr std::size_t points = 4'001;
   constexpr double span = 8.0;
-  constexpr double shape_step = 0.125;
+  constexpr std::size_t shapes = 8;
+  constexpr double shape_step = 1.0 / shapes;
   for (std::size_t i = 0; i < points; ++i) {
     const double x = -span + 2.0 * span * static_cast<double>(i) / (points - 1);
     REQUIRE_EQ(edge::clip(x, 0.0), std::clamp(x, -ceiling, ceiling), "shape 0 is a clamp");
   }
-  for (double shape = 0.0; shape <= 1.0; shape += shape_step) {
+  for (std::size_t s = 0; s <= shapes; ++s) {
+    const double shape = static_cast<double>(s) * shape_step;
     double previous = -ceiling;
     for (std::size_t i = 0; i < points; ++i) {
       const double x = -span + 2.0 * span * static_cast<double>(i) / (points - 1);
@@ -510,6 +514,21 @@ void presets_stay_restrained() {
   }
 }
 
+// A seek (a new transport generation) clears every history: linked at 16x,
+// the audio after it is what a fresh Edge plays from the same point.
+void a_seek_starts_clean() {
+  constexpr double hot = 2.0;
+  const auto before = kit(static_cast<std::size_t>(half_second), hot);
+  const auto after = scaled(noise(1.0, static_cast<std::size_t>(half_second), true, 99), hot);
+  const auto v = with(x16, linear_phase, mid_shape);
+  auto seeked = make_effect(engine(), v, rate);
+  (void)process(*seeked, before);
+  const auto resumed = process(*seeked, after, {.generation = 2});
+  const auto fresh = render(v, after);
+  require(resumed.left == fresh.left && resumed.right == fresh.right,
+          "after a seek Edge plays as a fresh one");
+}
+
 void the_callback_never_allocates() {
   const auto values = preset(table(), "Master");
   auto runtime = make_effect(engine(), values, rate);
@@ -586,6 +605,7 @@ int main(int argc, char** argv) {
           {"export_equals_live", [] { export_equals_live(); }},
           {"hostile_input_stays_finite", [] { hostile_input_stays_finite(); }},
           {"presets_stay_restrained", [] { presets_stay_restrained(); }},
+          {"a_seek_starts_clean", [] { a_seek_starts_clean(); }},
           {"the_callback_never_allocates", [] { the_callback_never_allocates(); }},
           {"telemetry_feeds_the_panel", [] { telemetry_feeds_the_panel(); }},
       });

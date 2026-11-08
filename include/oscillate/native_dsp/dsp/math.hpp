@@ -70,6 +70,7 @@ inline constexpr double silent_db = -200.0;
 
 // The Kaiser window of shape `beta` at `offset` from its centre, of half
 // width `half_width`: 1 at the centre, 0 outside.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): named at every call, as hann's are.
 [[nodiscard]] inline double kaiser(double offset, double half_width, double beta) noexcept {
   const double ratio = offset / half_width;
   if (!(ratio > -1.0 && ratio < 1.0)) {

@@ -39,7 +39,8 @@ Rectangle {
     readonly property real outPeak: playing ? Math.max(live.output_peak[0], live.output_peak[1]) : silentDb
     readonly property real clippedDb: playing ? live.clipped : 0
     readonly property var history: playing ? live.history : []
-    readonly property var curve: revision >= 0 ? controller.edge_transfer(-24, 12, curvePoints) : []
+    readonly property var curve: revision >= 0
+        ? controller.edge_transfer(transfer.inMin, transfer.inMax, curvePoints) : []
     readonly property real latencyMs: playing ? live.latency_ms
         : (revision >= 0 ? controller.edge_latency_ms(nominalRate) : 0)
     readonly property string factorText: revision >= 0
@@ -257,6 +258,7 @@ Rectangle {
         width: panel.theme.transferWidth
         height: panel.bodyHeight
         EdgeTransfer {
+            id: transfer
             objectName: "edgeTransfer"
             x: panel.theme.cardInset
             y: panel.theme.cardContentY
@@ -276,7 +278,7 @@ Rectangle {
             width: transferCard.width - 2 * panel.theme.cardInset
             height: panel.theme.historyHeight
             spacing: panel.theme.historyGap
-            readonly property int beats: 16
+            readonly property int beats: panel.theme.historyBeats
             readonly property real barWidth: (width - spacing * (beats - 1)) / beats
             Repeater {
                 model: historyRow.beats
@@ -494,7 +496,7 @@ Rectangle {
 
     Timer {
         objectName: "edgeTelemetryPoll"
-        interval: panel.playing ? 33 : 250
+        interval: panel.playing ? panel.theme.pollPlayingMs : panel.theme.pollIdleMs
         repeat: true
         running: panel.visible
         onTriggered: panel.poll()

@@ -49,6 +49,11 @@ KitTheme {
     property real dashOn: 4
     property real dashOff: 4
     property real unityDashOn: 2
+    // Beats in the clip history: edge::history_beats, the telemetry's count.
+    property int historyBeats: 16
+    // Telemetry polls while playing (about 30 a second) and while idle.
+    property int pollPlayingMs: 33
+    property int pollIdleMs: 250
     // A beat with less clipping than this draws muted.
     property real historyLitDb: 1.0
     property color historyQuiet: "#3a4254"

@@ -537,6 +537,7 @@ oscillate_add_case_tests(native_edge_contract oscillate_edge_tests
   export_equals_live
   hostile_input_stays_finite
   presets_stay_restrained
+  a_seek_starts_clean
   the_callback_never_allocates
   telemetry_feeds_the_panel)
 

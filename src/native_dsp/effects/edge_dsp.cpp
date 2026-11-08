@@ -40,10 +40,12 @@ constexpr std::array<FilterSpec, edge_table::filters.size()> filter_specs{{
 // midpoint.
 constexpr double antialias_epsilon = 1e-6;
 
-// The guard's attack (its averaging), release and what it holds under the
-// ceiling for the float rounding of its output.
+// The guard's attack (its averaging) and release, and how far under the
+// 0 dBFS ceiling it holds the output so the output's float rounding stays
+// under it too.
 constexpr double guard_attack_seconds = 0.0005;
 constexpr double guard_release_seconds = 0.05;
+constexpr double guard_margin_db = 0.01;
 
 [[nodiscard]] double kaiser_beta(double stopband_db) noexcept {
   return kaiser_beta_slope * (stopband_db - kaiser_beta_offset_db);
@@ -114,7 +116,7 @@ Design build(std::uint32_t factor, const FilterSpec& spec) {
   // its centre (2K + 1 samples at its high rate) each way.
   std::uint64_t half_samples = 0;
   for (std::size_t s = 0; s < d.stages; ++s) {
-    const std::uint64_t per_sample = 2U * (factor >> (s + 1));
+    const std::uint64_t per_sample = std::uint64_t{2} * (factor >> (s + 1));
     half_samples += per_sample * (2 * d.halfbands[s].centre + 1); // up
     const bool top = s + 1 == d.stages;
     if (top && d.antialiased) {
@@ -281,11 +283,11 @@ std::uint32_t TruePeakGuard::delay_at(double sample_rate) noexcept {
   return window + static_cast<std::uint32_t>(2 * radius) - 1;
 }
 
-void TruePeakGuard::prepare(double sample_rate, double ceiling) {
+void TruePeakGuard::prepare(double sample_rate) {
   window_ =
       static_cast<std::uint32_t>(std::max(1.0, std::round(guard_attack_seconds * sample_rate)));
   delay_ = delay_at(sample_rate);
-  ceiling_ = ceiling;
+  ceiling_ = native_dsp::dsp::db_to_gain(-guard_margin_db);
   release_ = std::exp(-1.0 / (guard_release_seconds * sample_rate));
   magnitudes_.resize(radius + 1);
   // The hold spans the averaging and the interpolation on both sides.
@@ -302,10 +304,10 @@ void TruePeakGuard::reset() noexcept {
   magnitudes_.reset();
   head_ = 0;
   count_ = 0;
-  std::fill(attack_.begin(), attack_.end(), 1.0);
+  std::ranges::fill(attack_, 1.0);
   attack_position_ = 0;
   attack_sum_ = static_cast<double>(window_);
-  std::fill(delayed_.begin(), delayed_.end(), std::array<double, 2>{0.0, 0.0});
+  std::ranges::fill(delayed_, std::array<double, 2>{0.0, 0.0});
   delayed_position_ = 0;
   frame_ = 0;
   envelope_ = 1.0;
