@@ -12,7 +12,7 @@ Open work is tracked in [issues](https://github.com/jcsduncan/oscillate/issues).
 3. Keep public APIs small and versioned where persisted or used across components. Code belongs in `include/oscillate/<module>/`, `src/<module>/` and matching `tests/<module>/`. Give each component its own CMake target, declared with `oscillate_add_library` (its dependencies as `PUBLIC`/`PRIVATE`), which applies `oscillate_target_defaults`; features and third-party lookups live in `cmake/Features.cmake`.
 4. Do not implement a deferred PRD feature under a different name. Do not present a scaffold, mock or synthetic plugin as a completed DAW workflow.
 5. Keep production app entry points to startup and composition. Put UI scenario drivers in `tests/`, with a separate test executable. Add UI workflows to feature-owned adapters and QML components; do not extend the central Quick facade or shell with another large feature block.
-6. The project is greenfield until its first public beta: the codec reads only the current schema. Do not add migrations or legacy paths for development schemas.
+6. The project is greenfield until its first public beta: the codec reads only the current schema. Do not add migrations or legacy paths for development schemas. From the first public beta, every schema change adds a forward migration and the released schemas' golden manifests ([ADR-0095](docs/decisions/0095-schema-migration-policy.md)).
 
 ## Real-time and data-integrity rules
 

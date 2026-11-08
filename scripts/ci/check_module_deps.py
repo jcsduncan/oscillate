@@ -9,6 +9,10 @@ targets, the modules in every_module, and the modules or oscillate::<target>
 entries in its allowed list. Anything else fails, unless an exception names
 that module and target with its issue. An exception that no link needs fails
 too, so the list shrinks as the violations are fixed.
+
+The composition root (the app, apps/daw_quick) may link any target a module
+defines. Nothing under src/ may link the composition root: no module may name
+a library target that the root's CMakeLists.txt files create.
 """
 
 import json
@@ -26,6 +30,8 @@ LINE_COMMENT = re.compile(r"#[^\n]*")
 ALIAS = re.compile(r"add_library\(\s*oscillate::(\w+)\s+ALIAS\b")
 ADD_LIBRARY = re.compile(r"\boscillate_add_library\(\s*(\w+)")
 LINK = re.compile(r"\boscillate::(\w+)")
+ROOT_LIBRARY = re.compile(r"\badd_library\(\s*([A-Za-z_]\w*)")
+ROOT_FUNCTION = re.compile(r"\bfunction\(\s*(\w+)\s+(\w+)[^)]*\)(.*?)\bendfunction\(", re.DOTALL)
 
 
 def strip_comments(text):
@@ -54,6 +60,73 @@ def owning_module(relative, modules):
     return max(candidates)[1] if candidates else None
 
 
+def root_libraries(texts):
+    """Library targets the composition root's CMakeLists.txt files create by name.
+
+    That covers add_library with a literal name, and calls, in any root file, to
+    a root function whose add_library names its target from its first
+    parameter, with any suffix (`${target}_resources`).
+    """
+    texts = [strip_comments(text) for text in texts]
+    names = set()
+    suffixes = {}
+    for text in texts:
+        names.update(ROOT_LIBRARY.findall(text))
+        for function, parameter, body in ROOT_FUNCTION.findall(text):
+            made = re.findall(rf"\badd_library\(\s*\${{{re.escape(parameter)}}}(\w*)", body)
+            if made:
+                suffixes.setdefault(function, set()).update(made)
+    for function, endings in suffixes.items():
+        call = re.compile(rf"^\s*{re.escape(function)}\(\s*([A-Za-z_]\w*)", re.MULTILINE)
+        for text in texts:
+            for target in call.findall(text):
+                names.update(target + ending for ending in endings)
+    return names
+
+
+def scan_root(root, composition_root):
+    """Read the composition root's CMakeLists.txt files.
+
+    Returns ([(target, file, line)] it links, library targets it creates).
+    """
+    links = []
+    texts = []
+    for listfile in sorted((root / composition_root["path"]).rglob("CMakeLists.txt")):
+        relative = listfile.relative_to(root).as_posix()
+        text = listfile.read_text(encoding="utf-8")
+        _, linked = parse(text)
+        links.extend((target, relative, line) for target, line in linked)
+        texts.append(text)
+    return links, root_libraries(texts)
+
+
+def root_link_problems(root, table, owners):
+    """Links the composition root may not make, and links to it from src/."""
+    composition_root = table["composition_root"]
+    name = composition_root["name"]
+    links, libraries = scan_root(root, composition_root)
+    found = [
+        f"{path}:{line}: {name} links `{TARGET_PREFIX}{target}`, which no module defines"
+        for target, path, line in links
+        if target not in owners
+    ]
+    if not libraries:
+        return found
+    pattern = re.compile(
+        r"(?<![\w:$])(" + "|".join(map(re.escape, sorted(libraries))) + r")(?![\w:])"
+    )
+    for listfile in sorted((root / SOURCE_ROOT).rglob("CMakeLists.txt")):
+        relative = listfile.relative_to(root).as_posix()
+        text = strip_comments(listfile.read_text(encoding="utf-8"))
+        for number, line in enumerate(text.splitlines(), start=1):
+            found.extend(
+                f"{relative}:{number}: `{target}` belongs to the composition root ({name}), "
+                "which nothing may link; see docs/HLD.md section 3"
+                for target in pattern.findall(line)
+            )
+    return found
+
+
 def scan(root, modules):
     """Read every CMakeLists.txt under src/.
 
@@ -78,7 +151,10 @@ def scan(root, modules):
 def table_problems(table, owners):
     """Entries in the table that name no module or target."""
     modules = table["modules"]
-    found = [
+    found = []
+    if table["composition_root"]["name"] in modules:
+        found.append(f"composition root `{table['composition_root']['name']}` is also a module")
+    found += [
         f"every_module: unknown module `{name}`"
         for name in table["every_module"]
         if name not in modules
@@ -143,7 +219,12 @@ def link_problems(table, owners, links):
 
 def check(root, table):
     owners, links, found = scan(root, table["modules"])
-    return found + table_problems(table, owners) + link_problems(table, owners, links)
+    return (
+        found
+        + table_problems(table, owners)
+        + link_problems(table, owners, links)
+        + root_link_problems(root, table, owners)
+    )
 
 
 def main():
@@ -155,7 +236,8 @@ def main():
     if not found:
         print(
             f"module dependencies: {len(table['modules'])} modules within the table, "
-            f"{len(table['exceptions'])} known exceptions"
+            f"{len(table['exceptions'])} known exceptions, "
+            f"composition root {table['composition_root']['path']}"
         )
     sys.exit(1 if found else 0)
 
