@@ -215,7 +215,7 @@ std::vector<clay_dsp::TargetNote> follow_targets(const project::Snapshot& snapsh
     // repeat walks at least one note, so the walk budget below bounds it.
     if (musical == nullptr || pattern <= 0 ||
         std::ranges::none_of(clip.notes,
-                             [pattern](const auto& note) { return note.start.value < pattern; }))
+                             [&clip](const auto& note) { return project::note_plays(clip, note); }))
       continue;
     const auto clip_start = musical->start.value;
     const auto clip_end = musical->end.value;
@@ -231,7 +231,7 @@ std::vector<clay_dsp::TargetNote> follow_targets(const project::Snapshot& snapsh
       // note crossing its end is cut there.
       const auto pattern_end = std::min(origin + pattern, clip_end);
       for (const auto& note : clip.notes) {
-        if (note.start.value >= pattern)
+        if (!project::note_plays(clip, note))
           continue;
         const auto note_start = origin + note.start.value;
         if (note_start >= pattern_end)

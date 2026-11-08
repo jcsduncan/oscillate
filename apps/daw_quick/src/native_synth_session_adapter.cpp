@@ -763,7 +763,7 @@ SessionNativeSynthAdapter::first_clip_window(std::int64_t bars) const {
     if (base >= limit)
       break;
     for (const auto& note : first->notes) {
-      if (repeats && note.start.value >= pattern)
+      if (!project::note_plays(*first, note))
         continue;
       const std::int64_t start = base + note.start.value;
       if (start >= limit)

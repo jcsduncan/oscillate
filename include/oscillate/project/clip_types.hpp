@@ -216,7 +216,9 @@ struct MidiPedalLane {
 // points, repeated when `loop` is on, until the placement ends. Notes and
 // points at or after the pattern's end are kept but silent (a note crossing
 // it is cut there), so shortening a clip and lengthening it again restores
-// them, as in Live.
+// them, as in Live. Likewise, notes and points before tick 0 (a clip
+// trimmed from its left edge, ADR-0096) are kept but silent; the last pedal
+// point before tick 0 holds its value from the pattern's start.
 struct MidiClip {
   ClipId id;
   Placement placement;
@@ -236,5 +238,11 @@ struct MidiClip {
         pedals(std::move(pedal_lanes)) {}
   bool operator==(const MidiClip&) const = default;
 };
+
+// Whether a note plays: it starts inside the pattern, not before tick 0
+// (trimmed off the left edge) or at or after the pattern's end.
+[[nodiscard]] constexpr bool note_plays(const MidiClip& clip, const MidiNote& note) noexcept {
+  return note.start.value >= 0 && note.start < clip.pattern_length;
+}
 
 } // namespace oscillate::project

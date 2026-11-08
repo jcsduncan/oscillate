@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <iterator>
 #include <optional>
 #include <ranges>
 #include <string>
@@ -308,8 +309,13 @@ void ProjectBridge::refresh() {
     for (const auto& clip : track.midi_clips) {
       auto projected = clip_projection(snapshot, clip.id, clip.placement, QStringLiteral("midi"),
                                        timeline_bars_);
+      // Notes trimmed off the clip's left edge are kept but neither drawn
+      // nor edited until the edge is dragged back over them.
+      std::vector<project::MidiNote> shown;
+      std::ranges::copy_if(clip.notes, std::back_inserter(shown),
+                           [](const project::MidiNote& note) { return note.start.value >= 0; });
       QVariantList notes;
-      for (const auto& note : clip.notes) {
+      for (const auto& note : shown) {
         notes.push_back(QVariantMap{
             {"id", QString::fromStdString(note.id.to_string())},
             {"step", static_cast<int>(note.start.value / (timeline::ticks_per_quarter / 4))},
@@ -324,7 +330,7 @@ void ProjectBridge::refresh() {
       // The chords the notes make (ADR-0084), named on the clip.
       QVariantList chords;
       const auto chord_key = snapshot.key.value_or(HarmonyController::fallback_key);
-      for (const auto& region : harmony::recognise(clip.notes, clip.pattern_length))
+      for (const auto& region : harmony::recognise(shown, clip.pattern_length))
         chords.push_back(QVariantMap{
             {"startTicks", static_cast<qlonglong>(region.position.value)},
             {"endTicks", static_cast<qlonglong>(region.position.value + region.length_ticks)},

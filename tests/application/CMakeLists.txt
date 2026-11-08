@@ -394,6 +394,11 @@ oscillate_add_test_executable(oscillate_application_arrangement_basics_tests SOU
   LIBS oscillate::application
   TEST application_arrangement_basics)
 
+# ADR-0096: a MIDI clip's left edge trims, keeping its notes in place.
+oscillate_add_test_executable(oscillate_application_midi_clip_trim_tests SOURCES midi_clip_trim_tests.cpp
+  LIBS oscillate::application oscillate::engine
+  TEST application_midi_clip_trim)
+
 oscillate_add_test_executable(oscillate_application_routed_effect_live_tests SOURCES routed_effect_live_tests.cpp
   LIBS oscillate::application oscillate::native_effects
   TEST application_routed_effect_live)

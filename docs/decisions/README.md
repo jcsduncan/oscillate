@@ -102,4 +102,5 @@ never reused. 0070 was never assigned.
 | 0093 | [Live MIDI edits and queued revisions](0093-live-instrument-edits-and-queued-revisions.md) | Accepted; implemented |
 | 0094 | [Sources switch at a primed block; no held path](0094-primed-source-switching.md) | Accepted; implemented |
 | 0095 | [Projects from every released schema open, through chained forward migrations](0095-schema-migration-policy.md) | Accepted; hook and golden-manifest test built, no schema released yet |
+| 0096 | [MIDI clips keep notes trimmed off their left edge](0096-midi-clip-left-trim.md) | Accepted; implemented |
 | 0097 | [A key source's mute lane gates its keys](0097-mute-lanes-gate-keys.md) | Accepted; implemented |

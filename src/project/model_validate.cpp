@@ -559,7 +559,8 @@ struct RenderedInterval {
       clip.notes.size() > max_midi_notes_per_clip) {
     return Result<void>::failure(invalid("invalid MIDI clip pattern, generation or note count"));
   }
-  // Only the pattern plays; points after its end are kept but silent.
+  // Only the pattern plays; points after its end are kept but silent. Points
+  // before tick 0 bound the one value each repeat starts from.
   std::size_t pedal_points = 0;
   for (const auto& lane : clip.pedals) {
     pedal_points += static_cast<std::size_t>(
@@ -572,7 +573,7 @@ struct RenderedInterval {
   std::vector<const MidiNote*> audible;
   audible.reserve(clip.notes.size());
   for (const auto& note : clip.notes) {
-    if (note.start < clip.pattern_length) {
+    if (note_plays(clip, note)) {
       audible.push_back(&note);
     }
   }
@@ -670,10 +671,11 @@ struct RenderedInterval {
     if (lane.points.empty() || lane.points.size() > max_midi_pedal_points_per_lane) {
       return Result<void>::failure(invalid("invalid MIDI pedal point count"));
     }
-    std::int64_t previous = -1;
+    // Points before tick 0 are kept from a left trim (see MidiClip).
+    std::optional<std::int64_t> previous;
     for (const auto& point : lane.points) {
-      if (point.position.value <= previous || !std::isfinite(point.value) || point.value < 0.0 ||
-          point.value > 1.0) {
+      if ((previous && point.position.value <= *previous) || !std::isfinite(point.value) ||
+          point.value < 0.0 || point.value > 1.0) {
         return Result<void>::failure(invalid("invalid MIDI pedal point"));
       }
       previous = point.position.value;
@@ -976,8 +978,9 @@ struct RenderedInterval {
         if (!note_ids.insert(note.id).second) {
           return Result<void>::failure(conflict("duplicate MIDI note " + note.id.to_string()));
         }
-        // A note may lie past the pattern's end (kept, silent; see MidiClip).
-        if (note.start.value < 0 || note.end <= note.start || note.key > foundation::max_midi_key ||
+        // A note may lie before tick 0 or past the pattern's end (kept,
+        // silent; see MidiClip).
+        if (note.end <= note.start || note.key > foundation::max_midi_key ||
             note.velocity < foundation::min_note_velocity ||
             note.velocity > foundation::max_note_velocity) {
           return Result<void>::failure(invalid("invalid MIDI note " + note.id.to_string()));
