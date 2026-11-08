@@ -224,8 +224,10 @@ void transport_contract() {
   constexpr std::uint64_t last_generation = first_generation + concurrent_seeks;
   TransportCursor concurrent;
   PublishedCount observed_generation(first_generation);
+  std::atomic<bool> stop{false};
   std::thread callback([&] {
-    for (auto seen = first_generation; seen < last_generation;) {
+    for (auto seen = first_generation;
+         seen < last_generation && !stop.load(std::memory_order_acquire);) {
       const auto next = concurrent.next_block(1);
       if (next && next->transport_generation != seen) {
         seen = next->transport_generation;
@@ -235,9 +237,14 @@ void transport_contract() {
   });
   bool every_seek_queued = true;
   for (std::uint64_t index = 1; index <= concurrent_seeks; ++index) {
-    every_seek_queued = concurrent.request_seek(index) && every_seek_queued;
+    // A rejected seek starts no generation to wait for: stop the callback.
+    if (!concurrent.request_seek(index)) {
+      every_seek_queued = false;
+      break;
+    }
     observed_generation.wait_for(first_generation + index);
   }
+  stop.store(true, std::memory_order_release);
   callback.join();
   require(every_seek_queued, "each seek is queued once the callback consumed the previous one");
   REQUIRE_EQ(observed_generation.value(), last_generation,
