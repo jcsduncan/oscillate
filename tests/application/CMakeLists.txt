@@ -300,6 +300,21 @@ oscillate_add_test_executable(oscillate_application_routed_synth_tests SOURCES r
   LIBS oscillate::application
   TEST application_routed_synth)
 
+oscillate_add_test_executable(oscillate_application_routed_live_edit_tests
+  SOURCES routed_live_edit_tests.cpp
+  LIBS oscillate::application)
+oscillate_add_case_tests(application_routed_live_edit oscillate_application_routed_live_edit_tests
+  CASES
+  note_add_is_heard_from_its_block
+  note_move_plays_at_its_new_place
+  note_delete_releases_the_sounding_note
+  clip_duplicate_plays_its_copy
+  clip_move_plays_at_its_new_place
+  clip_delete_releases_its_sounding_note
+  track_mute_fades_without_a_gap
+  rapid_edits_coalesce_onto_the_newest_revision
+  an_edit_waiting_behind_a_note_edit_applies_next)
+
 oscillate_add_test_executable(oscillate_application_export_tail_trim_tests SOURCES export_tail_trim_tests.cpp
   LIBS oscillate::application
   TEST application_export_tail_trim TIER slow)

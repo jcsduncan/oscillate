@@ -53,15 +53,23 @@ public:
     }
   }
 
-  // Control only. The exact track's new evaluator is built off callback and
-  // offered without replacing the runtime, MIDI plan, or sounding voices.
-  // The plan also carries the track's note effect values and switches, so
-  // an edit to them that keeps the chain's slots goes live here too.
+  // Control only. An edit made while playing: the track's notes, pedals,
+  // automation lanes and note effect values and switches from `snapshot`,
+  // built off the callback and offered without replacing the runtime or its
+  // voices. The callback adopts the plan at its next block. A sounding note
+  // the new plan still holds keeps playing to its new end; one it no longer
+  // holds is released at that block's start; a pedal the edit changed takes
+  // its new value there. The note effects must keep their chain's slots.
   [[nodiscard]] foundation::Result<void>
-  offer_automation(const project::Snapshot& snapshot, const project::Track& track,
-                   std::span<const automation_project::PreparedTargetAutomation> automation,
-                   std::uint64_t last_safe_automation_sample);
-  [[nodiscard]] std::uint64_t applied_automation_revision() const noexcept;
+  offer_plan(const project::Snapshot& snapshot, const project::Track& track,
+             const engine::InstrumentEvents& events,
+             std::span<const automation_project::PreparedTargetAutomation> automation,
+             std::uint64_t last_safe_automation_sample);
+  // The newest offered revision a rendered block has used.
+  [[nodiscard]] std::uint64_t applied_plan_revision() const noexcept;
+  // Control only: whether offer_plan() has room now. False until the
+  // callback has moved past enough earlier offers.
+  [[nodiscard]] bool has_room() { return plans_->make_room(); }
 
   // Control only: Kick & Bass Lock (ADR-0072). Compiles the notes this
   // track's engine follows from the snapshot and offers them to the
@@ -100,8 +108,11 @@ public:
 private:
   explicit NativeSynthPlayer(project::TrackId track) : track_(track) {}
 
-  struct AutomationPlan {
+  // Everything a saved revision gives the player: swapped whole at a block.
+  struct Plan {
     std::uint64_t revision = 0;
+    std::shared_ptr<const engine::InstrumentEvents> events;
+    std::shared_ptr<const engine::NoteSpans> spans;
     std::uint64_t last_safe_sample = 0;
     std::vector<std::shared_ptr<const automation_project::PreparedTargetAutomation>> evaluators;
     std::vector<std::uint32_t> parameters;
@@ -117,22 +128,24 @@ private:
     std::vector<std::vector<ParameterLane>> note_lanes;
     std::vector<note_effects::StageControls> note_controls;
   };
-  [[nodiscard]] foundation::Result<std::unique_ptr<AutomationPlan>>
-  make_automation_plan(const project::Snapshot& snapshot, const project::Track& track,
-                       std::span<const automation_project::PreparedTargetAutomation> automation,
-                       std::uint64_t last_safe_automation_sample) const;
+  [[nodiscard]] foundation::Result<std::unique_ptr<Plan>>
+  make_plan(const project::Snapshot& snapshot, const project::Track& track,
+            const engine::InstrumentEvents& events,
+            std::span<const automation_project::PreparedTargetAutomation> automation,
+            std::uint64_t last_safe_automation_sample) const;
 
   project::TrackId track_;
   std::uint32_t sample_rate_ = 0;
   std::size_t max_frames_ = 0;
-  std::shared_ptr<const engine::InstrumentEvents> events_;
   std::shared_ptr<NativeSynthRuntime> runtime_;
   std::shared_ptr<const timeline::TempoMap> tempo_;
   BarGrid bars_;
   std::vector<double> values_;
   // Boxed: the player moves, its atomics cannot.
-  std::unique_ptr<PlanMailbox<AutomationPlan>> automation_mailbox_ =
-      std::make_unique<PlanMailbox<AutomationPlan>>();
+  std::unique_ptr<PlanMailbox<Plan>> plans_ = std::make_unique<PlanMailbox<Plan>>();
+  // Callback only: the events the last rendered block used, so the first
+  // block of a new plan can hand its sounding notes over.
+  const engine::InstrumentEvents* rendered_events_ = nullptr;
   std::vector<engine::BlockMidiEvent> block_events_;
   std::unique_ptr<engine::HeldNotes> held_ = std::make_unique<engine::HeldNotes>();
   // Live notes: a single-producer ring from control to the callback, and the

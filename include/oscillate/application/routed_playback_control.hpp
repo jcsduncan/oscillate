@@ -176,6 +176,9 @@ public:
   // A pure pause or planned loop wrap must not call this method.
   [[nodiscard]] foundation::Result<void>
   seek_convolution_after_quiesce(audio_io::TransportCursor& cursor, std::uint64_t first_sample);
+  // Offers the model's newest saved revision to playback. One made while an
+  // earlier switch is still settling is accepted and waits; observe() then
+  // applies the newest revision, so a burst of edits coalesces onto its last.
   [[nodiscard]] foundation::Result<void> begin_edit(const project::AppliedRevision& applied,
                                                     std::string_view command_label);
   // Accepts the saved revision as failed for `error`, found before any graph
@@ -355,7 +358,7 @@ public:
   // pending publication because its boundary belongs to the old generation.
   [[nodiscard]] bool graph_handoff_in_progress() const noexcept {
     return awaiting_ != nullptr || publisher_.has_pending() ||
-           publisher_.held_boundary().has_value() || pending_manual_.has_value();
+           publisher_.held_boundary().has_value() || pending_manual_.has_value() || deferred_;
   }
   // Control side. Off, every structural edit takes the held path (a silent
   // block while the new graph is prepared), as before live switching.
@@ -438,10 +441,13 @@ private:
   try_queue_live_master_native(std::shared_ptr<const project::Snapshot> snapshot);
   [[nodiscard]] foundation::Result<bool>
   try_queue_live_synth(std::shared_ptr<const project::Snapshot> snapshot);
+  // Built-in instrument tracks' notes, lanes and note effects, offered to
+  // their running players as one plan each (ADR-0093).
   [[nodiscard]] foundation::Result<bool>
-  try_queue_live_synth_automation(std::shared_ptr<const project::Snapshot> snapshot);
-  [[nodiscard]] foundation::Result<bool>
-  try_queue_live_note_effects(std::shared_ptr<const project::Snapshot> snapshot);
+  try_queue_live_players(std::shared_ptr<const project::Snapshot> snapshot);
+  // Applies the model's newest saved revision by the first path that takes
+  // it, or defers it while an earlier switch is still settling.
+  [[nodiscard]] foundation::Result<void> apply_current();
   // An isolated lane edit on one built-in effect slot, offered to its running
   // stage without a rebuild (ADR-0043).
   [[nodiscard]] foundation::Result<bool>
@@ -498,7 +504,12 @@ private:
   std::optional<PendingManualRevision> pending_manual_;
   std::optional<LiveCandidate> live_candidate_;
   RoutedAudioSource* live_source_ = nullptr;
-  bool retry_live_after_ack_ = false;
+  // The players a pending instrument edit was offered to (its runtime is the
+  // first); the revision is applied when all have rendered it.
+  std::vector<native_dsp::synth::NativeSynthPlayer*> pending_players_;
+  // The newest saved revision waits for an earlier switch to settle;
+  // observe() applies it then.
+  bool deferred_ = false;
   std::uint32_t master_output_latency_frames_ = 0;
   bool prepared_limiter_ = false;
   std::shared_ptr<const project::Snapshot> awaiting_;

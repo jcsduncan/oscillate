@@ -192,7 +192,6 @@ NativeSynthPlayer::prepare(const project::Snapshot& snapshot, const project::Tra
   NativeSynthPlayer player(track.id);
   player.sample_rate_ = snapshot.sample_rate;
   player.max_frames_ = max_frames;
-  player.events_ = std::make_shared<const engine::InstrumentEvents>(events);
   player.runtime_ = std::shared_ptr<NativeSynthRuntime>(std::move(runtime).value());
   player.tempo_ = std::make_shared<const timeline::TempoMap>(snapshot.tempo);
   player.bars_ = BarGrid(snapshot.meter);
@@ -211,26 +210,29 @@ NativeSynthPlayer::prepare(const project::Snapshot& snapshot, const project::Tra
     player.note_ahead_.resize(note_effects::ahead_event_capacity);
     player.tail_frames_ += note_tail_frames(snapshot, track);
   }
-  auto plan = player.make_automation_plan(snapshot, track, automation, last_safe_automation_sample);
+  auto plan = player.make_plan(snapshot, track, events, automation, last_safe_automation_sample);
   if (!plan)
     return fail(plan.error().code, plan.error().message);
-  player.automation_mailbox_->install(std::move(plan).value(), snapshot.revision);
+  player.plans_->install(std::move(plan).value(), snapshot.revision);
   if (auto lock = player.refresh_lock(snapshot); !lock)
     return fail(lock.error().code, lock.error().message);
   return Result<NativeSynthPlayer>::success(std::move(player));
 }
 
-Result<std::unique_ptr<NativeSynthPlayer::AutomationPlan>> NativeSynthPlayer::make_automation_plan(
+Result<std::unique_ptr<NativeSynthPlayer::Plan>> NativeSynthPlayer::make_plan(
     const project::Snapshot& snapshot, const project::Track& track,
+    const engine::InstrumentEvents& events,
     std::span<const automation_project::PreparedTargetAutomation> automation,
     std::uint64_t last_safe_automation_sample) const {
   const auto* patch = std::get_if<project::NativeInstrumentPatch>(&track.instrument_source);
   if (snapshot.revision == 0 || snapshot.sample_rate != sample_rate_ || track.id != track_ ||
-      !patch || patch->engine != runtime_->engine().descriptor->id)
-    return Result<std::unique_ptr<AutomationPlan>>::failure(
-        {ErrorCode::conflict, "Synth automation plan does not match the running source"});
-  auto plan = std::make_unique<AutomationPlan>();
+      events.track() != track_ || !patch || patch->engine != runtime_->engine().descriptor->id)
+    return Result<std::unique_ptr<Plan>>::failure(
+        {ErrorCode::conflict, "Synth plan does not match the running source"});
+  auto plan = std::make_unique<Plan>();
   plan->revision = snapshot.revision;
+  plan->events = std::make_shared<const engine::InstrumentEvents>(events);
+  plan->spans = std::make_shared<const engine::NoteSpans>(events);
   plan->last_safe_sample = last_safe_automation_sample;
   const auto matches_engine = [&](const project::AutomationLane& lane) {
     const auto* native = std::get_if<project::NativeParameterTarget>(&lane.target);
@@ -246,13 +248,13 @@ Result<std::unique_ptr<NativeSynthPlayer::AutomationPlan>> NativeSynthPlayer::ma
   };
   for (const auto& lane : track.automation) {
     if (!matches_engine(lane))
-      return Result<std::unique_ptr<AutomationPlan>>::failure(
+      return Result<std::unique_ptr<Plan>>::failure(
           {ErrorCode::invalid_argument, "Synth automation lane does not match its parameter"});
   }
   for (const auto& midi_clip : track.midi_clips) {
     for (const auto& lane : midi_clip.automation) {
       if (!matches_engine(lane))
-        return Result<std::unique_ptr<AutomationPlan>>::failure(
+        return Result<std::unique_ptr<Plan>>::failure(
             {ErrorCode::invalid_argument, "Synth automation lane does not match its parameter"});
     }
   }
@@ -261,11 +263,11 @@ Result<std::unique_ptr<NativeSynthPlayer::AutomationPlan>> NativeSynthPlayer::ma
     if (!target || target->track != track.id)
       continue;
     if (prepared.snapshot_revision() != snapshot.revision)
-      return Result<std::unique_ptr<AutomationPlan>>::failure(
+      return Result<std::unique_ptr<Plan>>::failure(
           {ErrorCode::conflict, "Synth automation plan revision is stale"});
     auto index = native_parameter_index(runtime_->engine(), target->parameter_id);
     if (!index)
-      return Result<std::unique_ptr<AutomationPlan>>::failure(index.error());
+      return Result<std::unique_ptr<Plan>>::failure(index.error());
     plan->evaluators.push_back(
         std::make_shared<const automation_project::PreparedTargetAutomation>(prepared));
     plan->parameters.push_back(static_cast<std::uint32_t>(index.value()));
@@ -274,14 +276,14 @@ Result<std::unique_ptr<NativeSynthPlayer::AutomationPlan>> NativeSynthPlayer::ma
   plan->lanes.resize(plan->evaluators.size());
   if (note_effects_) {
     if (!note_effects_->same_layout(track.note_effects))
-      return Result<std::unique_ptr<AutomationPlan>>::failure(
+      return Result<std::unique_ptr<Plan>>::failure(
           {ErrorCode::conflict, "Note effects do not match the running chain"});
     const auto stages = note_effects_->size();
     plan->note_values.reserve(stages);
     for (const auto& insert : track.note_effects) {
       auto resolved = note_effects::resolve_note_effect(insert);
       if (!resolved)
-        return Result<std::unique_ptr<AutomationPlan>>::failure(resolved.error());
+        return Result<std::unique_ptr<Plan>>::failure(resolved.error());
       plan->note_values.push_back(std::move(resolved.value().values));
     }
     // Lanes of note effect parameters (a macro mapped to one, ADR-0059).
@@ -295,13 +297,13 @@ Result<std::unique_ptr<NativeSynthPlayer::AutomationPlan>> NativeSynthPlayer::ma
       if (stage == track.note_effects.end())
         continue;
       if (prepared.snapshot_revision() != snapshot.revision)
-        return Result<std::unique_ptr<AutomationPlan>>::failure(
+        return Result<std::unique_ptr<Plan>>::failure(
             {ErrorCode::conflict, "Note effect automation plan revision is stale"});
       const auto index = static_cast<std::size_t>(stage - track.note_effects.begin());
       auto parameter = note_effects::note_effect_parameter_index(note_effects_->engine(index),
                                                                  target->parameter_id);
       if (!parameter)
-        return Result<std::unique_ptr<AutomationPlan>>::failure(parameter.error());
+        return Result<std::unique_ptr<Plan>>::failure(parameter.error());
       plan->note_evaluators.push_back(
           std::make_shared<const automation_project::PreparedTargetAutomation>(prepared));
       bindings.emplace_back(index, static_cast<std::uint32_t>(parameter.value()));
@@ -316,39 +318,39 @@ Result<std::unique_ptr<NativeSynthPlayer::AutomationPlan>> NativeSynthPlayer::ma
       plan->note_controls.push_back(
           {track.note_effects[stage].enabled, plan->note_values[stage], plan->note_lanes[stage]});
   }
-  return Result<std::unique_ptr<AutomationPlan>>::success(std::move(plan));
+  return Result<std::unique_ptr<Plan>>::success(std::move(plan));
 }
 
-Result<void> NativeSynthPlayer::offer_automation(
+Result<void> NativeSynthPlayer::offer_plan(
     const project::Snapshot& snapshot, const project::Track& track,
+    const engine::InstrumentEvents& events,
     std::span<const automation_project::PreparedTargetAutomation> automation,
     std::uint64_t last_safe_automation_sample) {
-  if (automation_mailbox_->stale(snapshot.revision))
-    return Result<void>::failure({ErrorCode::conflict, "Synth automation revision is stale"});
-  if (!automation_mailbox_->make_room())
-    return Result<void>::failure(
-        {ErrorCode::resource_exhausted,
-         "Live synth automation mailbox is full; retry after the callback"});
+  if (plans_->stale(snapshot.revision))
+    return Result<void>::failure({ErrorCode::conflict, "Synth plan revision is stale"});
+  if (!plans_->make_room())
+    return Result<void>::failure({ErrorCode::resource_exhausted,
+                                  "Live synth plan mailbox is full; retry after the callback"});
   try {
-    auto plan = make_automation_plan(snapshot, track, automation, last_safe_automation_sample);
+    auto plan = make_plan(snapshot, track, events, automation, last_safe_automation_sample);
     if (!plan)
       return Result<void>::failure(plan.error());
-    automation_mailbox_->offer(std::move(plan).value(), snapshot.revision);
+    plans_->offer(std::move(plan).value(), snapshot.revision);
     // Lock follows this track's own switch too; a failure keeps the notes it had.
     (void)refresh_lock(snapshot);
     return Result<void>::success();
   } catch (const std::bad_alloc&) {
     return Result<void>::failure(
-        {ErrorCode::resource_exhausted, "Cannot prepare live synth automation"});
+        {ErrorCode::resource_exhausted, "Cannot prepare a live synth plan"});
   }
 }
 
-std::uint64_t NativeSynthPlayer::applied_automation_revision() const noexcept {
-  return automation_mailbox_->applied_revision();
+std::uint64_t NativeSynthPlayer::applied_plan_revision() const noexcept {
+  return plans_->applied_revision();
 }
 
 bool NativeSynthPlayer::automated() const noexcept {
-  const auto* plan = automation_mailbox_->current();
+  const auto* plan = plans_->current();
   return plan && !plan->evaluators.empty();
 }
 
@@ -363,11 +365,17 @@ Result<void> NativeSynthPlayer::prepare_export_end(std::uint64_t end) {
         {ErrorCode::unsupported,
          "Native synth export needs a finite end and fixed release settings"});
   }
+  // Before the first callback, the installed plan is the only one.
+  auto* plan = plans_->current();
+  if (plan == nullptr || rendered_)
+    return Result<void>::failure(
+        {ErrorCode::conflict, "Synth export end needs a player that has not rendered"});
+  const auto& events = *plan->events;
   using Identity = std::pair<project::ClipId, project::NoteId>;
   std::map<Identity, std::pair<engine::ScheduledMidiEvent, std::size_t>> held;
   std::vector<engine::ScheduledMidiEvent> cut;
-  cut.reserve(events_->events().size());
-  for (const auto& event : events_->events()) {
+  cut.reserve(events.events().size());
+  for (const auto& event : events.events()) {
     const auto at = static_cast<std::uint64_t>(event.sample.value);
     if (at > end || (at == end && event.kind == engine::MidiEventKind::note_on))
       break;
@@ -420,8 +428,10 @@ Result<void> NativeSynthPlayer::prepare_export_end(std::uint64_t end) {
       return Result<void>::failure({ErrorCode::resource_exhausted,
                                     "Native synth export cut exceeds callback MIDI capacity"});
   }
-  events_ = std::make_shared<const engine::InstrumentEvents>(
-      track_, std::move(cut), events_->pedals_until(static_cast<std::int64_t>(end)));
+  auto exported = std::make_shared<const engine::InstrumentEvents>(
+      track_, std::move(cut), events.pedals_until(static_cast<std::int64_t>(end)));
+  plan->spans = std::make_shared<const engine::NoteSpans>(*exported);
+  plan->events = std::move(exported);
   export_end_ = end;
   return Result<void>::success();
 }
@@ -436,30 +446,34 @@ bool NativeSynthPlayer::render(std::span<engine::StereoFrame> output, std::uint6
     return false;
   }
   const timeline::SamplePosition first{static_cast<std::int64_t>(project_frame)};
+  auto* plan = plans_->current();
+  if (!plan)
+    return false;
+  const auto& events = *plan->events;
+  // A seek or loop resets the voices, live ones included.
+  const bool restarted = !rendered_ || transport_generation != rendered_generation_;
+  // An edit made while playing: this block is the new plan's first, and the
+  // voices sounding now hand over to it (released where it has no note).
+  const auto* replaced = !restarted && rendered_events_ != &events ? rendered_events_ : nullptr;
   // Notes held across a planned loop wrap are released at the wrap.
   const auto copied =
-      held_->copy_block(*events_, first, static_cast<std::uint32_t>(frames), transport_generation,
-                        std::span(block_events_).first(engine::HeldNotes::block_capacity));
+      held_->copy_block(events, first, static_cast<std::uint32_t>(frames), transport_generation,
+                        std::span(block_events_).first(engine::HeldNotes::block_capacity),
+                        replaced != nullptr ? plan->spans.get() : nullptr);
   if (copied.status != engine::BlockMidiStatus::ready) {
     return false;
   }
-  // A seek or loop resets the voices, live ones included.
-  const bool restarted = !rendered_ || transport_generation != rendered_generation_;
   if (rendered_ && transport_generation != rendered_generation_)
     live_->sounding.fill(0);
   const auto event_count = merge_live_notes(copied.count);
   // After a seek or loop (and on the first block) the runtime starts with
   // every pedal up, so pedals held at the playhead are sent again first:
   // live playback and export chase alike (ADR-0035).
-  const auto pedals = events_->copy_pedals(
-      first, static_cast<std::uint32_t>(frames),
-      !rendered_ || transport_generation != rendered_generation_, block_pedals_);
+  const auto pedals = events.copy_pedals(first, static_cast<std::uint32_t>(frames), restarted,
+                                         block_pedals_, replaced);
   if (pedals.status != engine::BlockMidiStatus::ready) {
     return false;
   }
-  auto* plan = automation_mailbox_->current();
-  if (!plan)
-    return false;
   if (!plan->evaluators.empty() && (project_frame > plan->last_safe_sample ||
                                     frames - 1 > plan->last_safe_sample - project_frame)) {
     return false;
@@ -488,7 +502,7 @@ bool NativeSynthPlayer::render(std::span<engine::StereoFrame> output, std::uint6
       return false;
     if (restarted)
       note_effects_->reset();
-    const auto ahead = note_effects::copy_ahead(events_->events(), clock, note_ahead_);
+    const auto ahead = note_effects::copy_ahead(events.events(), clock, note_ahead_);
     notes = note_effects_->process(block_events_, event_count, note_scratch_, clock,
                                    plan->note_controls, std::span(note_ahead_).first(ahead));
   }
@@ -512,7 +526,8 @@ bool NativeSynthPlayer::render(std::span<engine::StereoFrame> output, std::uint6
   commit_live_notes();
   rendered_ = true;
   rendered_generation_ = transport_generation;
-  automation_mailbox_->applied(plan->revision);
+  rendered_events_ = &events;
+  plans_->applied(plan->revision);
   return true;
 }
 

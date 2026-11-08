@@ -462,6 +462,76 @@ void held_notes_release_at_a_loop_wrap() {
   REQUIRE_EQ(total, 2, "continuous playback adds nothing");
 }
 
+// A plan replaced while playing (an edit) hands its sounding notes over at
+// the block it takes effect: a note the new plan still holds keeps its voice
+// and ends at its new note-off; any other is released at offset 0; a pedal
+// the edit removed comes up there.
+void a_replacing_plan_hands_held_notes_over() {
+  constexpr std::int64_t block_samples = 1'000;
+  constexpr std::int64_t switch_sample = 36'000;
+  constexpr std::int64_t old_end = 72'000;
+  constexpr std::int64_t new_end = 60'000;
+  constexpr std::uint8_t kept_key = 36;
+  constexpr std::uint8_t removed_key = 40;
+  constexpr std::uint8_t velocity = 100;
+  const auto event = [](std::int64_t sample, std::uint64_t note, MidiEventKind kind,
+                        std::uint8_t key) {
+    return ScheduledMidiEvent{
+        {sample}, id<ClipId>(3), id<NoteId>(note),
+        kind,     key,           kind == MidiEventKind::note_on ? velocity : std::uint8_t{0},
+        false};
+  };
+  const ScheduledPedalEvent sustain{{0}, id<ClipId>(3), MidiPedal::sustain, 1.0};
+  const InstrumentEvents before(id<TrackId>(2),
+                                {event(0, 4, MidiEventKind::note_on, kept_key),
+                                 event(0, 5, MidiEventKind::note_on, removed_key),
+                                 event(old_end, 4, MidiEventKind::note_off, kept_key),
+                                 event(old_end, 5, MidiEventKind::note_off, removed_key)},
+                                {sustain});
+  const InstrumentEvents after(id<TrackId>(2),
+                               {event(0, 4, MidiEventKind::note_on, kept_key),
+                                event(new_end, 4, MidiEventKind::note_off, kept_key)});
+  const NoteSpans spans(after);
+  HeldNotes held;
+  std::vector<BlockMidiEvent> block(HeldNotes::block_capacity);
+  for (std::int64_t sample = 0; sample < switch_sample; sample += block_samples)
+    REQUIRE_EQ(held.copy_block(before, {sample}, block_samples, 1, block).status,
+               BlockMidiStatus::ready, "the old plan plays");
+  const auto switched = held.copy_block(after, {switch_sample}, block_samples, 1, block, &spans);
+  REQUIRE_EQ(switched.count, 1, "only the removed note is released at the switch");
+  require(block[0].kind == MidiEventKind::note_off && block[0].offset == 0 &&
+              block[0].key == removed_key,
+          "only the removed note is released at the switch");
+  std::size_t kept_offs = 0;
+  for (std::int64_t sample = switch_sample + block_samples; sample < old_end + block_samples;
+       sample += block_samples) {
+    const auto copied = held.copy_block(after, {sample}, block_samples, 1, block);
+    for (std::size_t i = 0; i < copied.count; ++i) {
+      require(block[i].kind == MidiEventKind::note_off && block[i].key == kept_key &&
+                  sample + block[i].offset == new_end,
+              "the kept note ends at its new note-off");
+      ++kept_offs;
+    }
+  }
+  REQUIRE_EQ(kept_offs, 1, "the kept note ends at its new note-off");
+  // A note is held only under its own key, and only once it has started.
+  BlockMidiEvent kept{
+      0, id<ClipId>(3).bits(), id<NoteId>(4).bits(), MidiEventKind::note_on, kept_key, velocity};
+  require(spans.holds(kept, switch_sample) && !spans.holds(kept, 0) &&
+              !spans.holds(kept, new_end + 1),
+          "a note is held between its note-on and note-off");
+  kept.key = removed_key;
+  require(!spans.holds(kept, switch_sample), "a note under another key is not held");
+  // The sustain the edit removed is lifted at the switch.
+  std::vector<BlockPedalEvent> pedals(max_pedal_events_per_block + midi_pedal_count);
+  const auto lifted = after.copy_pedals({switch_sample}, block_samples, false, pedals, &before);
+  REQUIRE_EQ(lifted.count, 1, "the removed sustain is lifted at the switch");
+  require(pedals[0].offset == 0 && pedals[0].pedal == MidiPedal::sustain && pedals[0].value == 0.0F,
+          "the removed sustain is lifted at the switch");
+  REQUIRE_EQ(before.copy_pedals({switch_sample}, block_samples, false, pedals, &before).count, 0,
+             "an unchanged pedal is not sent again");
+}
+
 // The compiler refuses a plan with more notes sounding at once than
 // HeldNotes tracks, even when no 8192-sample window is too dense.
 void concurrent_notes_are_bounded() {
@@ -522,6 +592,7 @@ void every_held_note_releases_at_a_wrap() {
 int main() {
   try {
     held_notes_release_at_a_loop_wrap();
+    a_replacing_plan_hands_held_notes_over();
     concurrent_notes_are_bounded();
     every_held_note_releases_at_a_wrap();
     looping_order_and_half_open_blocks();
