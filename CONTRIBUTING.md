@@ -202,6 +202,19 @@ The **Test sweep** (`test-sweep.yml`) runs only on demand: every tier but
 `live` on the Quick preset with the VST3 host and the optional adapters.
 Its optional `tests` input narrows it with a `ctest -R` regex.
 
+Three qualification workflows run every Monday on `main`, on demand, and on
+pull requests that change their harness:
+
+- **Live tier** (`live-tier.yml`): `scripts/live-tier.sh` on a PipeWire
+  daemon with disposable null sinks and a JACK dummy server
+  ([live tier](docs/qualification/live-tier.md)).
+- **VST3 matrix** (`vst3-matrix.yml`): the
+  [compatibility matrix](docs/qualification/vst3-compatibility-matrix.md)
+  over pinned free plug-ins.
+- **Reference performance** (`performance.yml`): the light and heavy
+  [reference projects](docs/performance/reference-projects.md) through the
+  fake callback.
+
 Run any of them on a branch from the command line, then follow the run:
 
 ```sh
