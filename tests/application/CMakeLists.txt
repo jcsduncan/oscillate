@@ -227,16 +227,16 @@ oscillate_add_case_tests(application_routed_playback oscillate_application_route
   live_vst3_bypass_switches_to_dry_path
   live_vst3_edit_spanning_two_tracks_switches_live
   missing_insert_provider_does_not_publish
-  pending_supersession_and_hold_validation
+  pending_supersession_and_refusal
   unadoptable_live_switch_is_withdrawn_and_next_edit_publishes
-  changed_model_during_hold_is_reported
+  later_edit_after_a_refusal_is_reported
   constrained_publication_preserves_failed_revision
   terminal_limiter_alignment_and_tail
   terminal_output_latency_is_separate_from_edge_compensation
-  captured_audio_edit_keeps_old_graph_until_explicit_hold
+  captured_audio_edit_keeps_old_graph_until_its_switch
   exact_split_is_source_only_but_arbitrary_add_is_not
-  captured_audio_edit_failure_and_supersession_do_not_hold
-  captured_audio_edit_rejects_synth_graph_before_hold)
+  captured_audio_edit_failure_and_supersession_never_publish
+  captured_audio_edit_switches_beside_an_unchanged_synth)
 
 oscillate_add_test_executable(oscillate_application_prepared_tail_tests SOURCES prepared_route_tail_tests.cpp
   LIBS oscillate::application oscillate::export
@@ -455,3 +455,8 @@ foreach(comp_case a_pattern_keeps_the_musicians_settings applied_rhythm_plays_wh
   oscillate_add_test(NAME application_comp_session_${comp_case}
     COMMAND oscillate_application_comp_session_tests ${comp_case})
 endforeach()
+
+# UQ-14: a Ctrl-drag copies clips to the drop.
+oscillate_add_test_executable(oscillate_application_clip_copy_drag_tests SOURCES clip_copy_drag_tests.cpp
+  LIBS oscillate::application
+  TEST application_clip_copy_drag)

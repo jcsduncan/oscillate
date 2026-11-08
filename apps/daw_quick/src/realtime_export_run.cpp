@@ -216,7 +216,6 @@ bool RealtimeExportRun::render(void* context, std::span<engine::StereoFrame> out
   if (result == engine::RoutedRenderStatus::rendered && fill_context.used != nullptr)
     fill_context.used->note_rendered_frames(output.size());
   return result == engine::RoutedRenderStatus::rendered ||
-         result == engine::RoutedRenderStatus::holding ||
          (result == engine::RoutedRenderStatus::invalid_block && fill_context.used != nullptr &&
           fill_context.used->streaming_hold());
 }

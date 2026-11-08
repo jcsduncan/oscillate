@@ -43,14 +43,22 @@ RoutedMixerLimits limits(std::size_t nodes, std::size_t edges, std::uint32_t del
           edges * (static_cast<std::uint64_t>(delay) + 1) * sizeof(StereoFrame)};
 }
 
+// The fixtures' block, as limits() sizes it.
+constexpr std::uint64_t fixture_block_frames = 64;
+// Blocks a live latency change takes to settle: each changed delay
+// crossfades from its old reading to its new one (ADR-0049).
+constexpr std::uint64_t crossfade_blocks =
+    (DelayCompensationRuntime::crossfade_frames + fixture_block_frames - 1) / fixture_block_frames;
+
 void pdc_transition_and_failures() {
   std::array<RoutedNode, 3> nodes{{{{1, 0}, {}}, {{2, 8}, {}}, {{3, 0}, {}}}};
   const std::array<RoutingEdge, 2> edges{{{11, 1, 3}, {12, 2, 3}}};
   RoutedMixerPublisher publisher;
+  REQUIRE_TRUE(!publisher.prepare_and_publish_live(1, nodes, edges, limits(3, 2)),
+               "a live switch was admitted with no active graph");
   REQUIRE_OK(publisher.prepare_and_publish(1, nodes, edges, limits(3, 2)),
              "initial plan publication contract failed");
   REQUIRE_TRUE(publisher.has_pending(), "initial plan publication contract failed");
-  REQUIRE_TRUE(!publisher.request_hold(), "initial plan publication contract failed");
   std::array<StereoFrame, 64> fast{}, slow{}, output{};
   fast[48] = {0.5F, -0.25F};
   fast[56] = {1.0F, -0.5F};
@@ -60,68 +68,54 @@ void pdc_transition_and_failures() {
              "initial routed render or impulse alignment failed");
   REQUIRE_EQ(publisher.active_revision(), 1, "initial routed render or impulse alignment failed");
   REQUIRE_EQ(output[56].left, 1.0F, "initial routed render or impulse alignment failed");
-
-  REQUIRE_TRUE(publisher.request_hold(), "control prepared against a running mixer");
-  REQUIRE_TRUE(!publisher.held_boundary(), "control prepared against a running mixer");
   REQUIRE_TRUE(!publisher.prepare_and_publish(2, nodes, edges, limits(3, 2)),
-               "control prepared against a running mixer");
-  output.fill({9.0F, 9.0F});
-  counting_allocations = true;
-  const auto held = publisher.render_block(input, output, {64, 1});
-  counting_allocations = false;
-  const auto boundary = publisher.held_boundary();
-  REQUIRE_EQ(held, RoutedRenderStatus::holding,
-             "hold did not acknowledge and silence at the boundary");
-  REQUIRE_EQ(counted_allocations, 0, "hold did not acknowledge and silence at the boundary");
-  REQUIRE_EQ(output[0].left, 0.0F, "hold did not acknowledge and silence at the boundary");
-  REQUIRE_OK(boundary, "hold did not acknowledge and silence at the boundary");
-  REQUIRE_EQ(boundary->project_sample_position, 64,
-             "hold did not acknowledge and silence at the boundary");
-  REQUIRE_EQ(publisher.active_revision(), 1,
-             "hold did not acknowledge and silence at the boundary");
+               "an active graph was replaced other than by a live switch");
+  REQUIRE_TRUE(!publisher.has_pending(),
+               "an active graph was replaced other than by a live switch");
 
   nodes[1].routing.processor_latency_frames = 16;
-  auto over_budget = publisher.prepare_and_publish(2, nodes, edges, limits(3, 2, 4));
+  auto over_budget = publisher.prepare_and_publish_live(2, nodes, edges, limits(3, 2, 4));
   REQUIRE_TRUE(!over_budget, "over-budget preparation displaced valid graph");
   REQUIRE_EQ(publisher.active_revision(), 1, "over-budget preparation displaced valid graph");
   REQUIRE_TRUE(!publisher.has_pending(), "over-budget preparation displaced valid graph");
-  auto grown = publisher.prepare_and_publish(2, nodes, edges, limits(3, 2));
+  auto grown = publisher.prepare_and_publish_live(2, nodes, edges, limits(3, 2));
   REQUIRE_OK(grown, "primed update was not pending");
   REQUIRE_TRUE(publisher.has_pending(), "primed update was not pending");
-  REQUIRE_TRUE(!publisher.cancel_hold(), "primed update was not pending");
   fast.fill({});
   slow.fill({});
-  fast[0] = {0.25F, -0.125F};
-  slow[16] = {0.25F, -0.125F};
+  // The switch takes the next block: no silent block, and the transport
+  // moves on.
   counting_allocations = true;
   const auto switched = publisher.render_block(input, output, {64, 1});
   counting_allocations = false;
   REQUIRE_EQ(switched, RoutedRenderStatus::rendered,
-             "latency transition lost impulse alignment or allocated on callback");
-  REQUIRE_EQ(counted_allocations, 0,
-             "latency transition lost impulse alignment or allocated on callback");
+             "latency transition held a block or allocated on callback");
+  REQUIRE_EQ(counted_allocations, 0, "latency transition held a block or allocated on callback");
   REQUIRE_EQ(publisher.active_revision(), 2,
-             "latency transition lost impulse alignment or allocated on callback");
-  REQUIRE_EQ(output[0].left, 0.5F,
-             "latency transition lost impulse alignment or allocated on callback");
-  REQUIRE_EQ(output[16].left, 0.5F,
-             "latency transition lost impulse alignment or allocated on callback");
+             "latency transition held a block or allocated on callback");
   REQUIRE_EQ(publisher.collect_retired(), 1, "old mixer was not reclaimed on control");
   REQUIRE_EQ(publisher.collect_retired(), 0, "old mixer was not reclaimed on control");
+  // Once the changed delay has crossfaded, both paths align at 16 frames.
+  std::uint64_t position = 2 * fixture_block_frames;
+  for (std::uint64_t block = 0; block < crossfade_blocks; ++block, position += fixture_block_frames)
+    REQUIRE_EQ(publisher.render_block(input, output, {position, 1}), RoutedRenderStatus::rendered,
+               "latency transition did not settle");
+  fast[0] = {0.25F, -0.125F};
+  slow[16] = {0.25F, -0.125F};
+  REQUIRE_EQ(publisher.render_block(input, output, {position, 1}), RoutedRenderStatus::rendered,
+             "latency transition lost impulse alignment");
+  REQUIRE_EQ(output[0].left, 0.0F, "latency transition lost impulse alignment");
+  REQUIRE_EQ(output[16].left, 0.5F, "latency transition lost impulse alignment");
+  position += 64;
 
-  REQUIRE_TRUE(publisher.request_hold(), "second hold did not acknowledge");
-  REQUIRE_EQ(publisher.render_block(input, output, {128, 1}), RoutedRenderStatus::holding,
-             "second hold did not acknowledge");
   nodes[1].routing.processor_latency_frames = 32;
-  REQUIRE_TRUE(!publisher.prepare_and_publish(3, nodes, edges, limits(3, 2, 4)),
+  REQUIRE_TRUE(!publisher.prepare_and_publish_live(3, nodes, edges, limits(3, 2, 4)),
                "failed second edit displaced valid graph");
   REQUIRE_EQ(publisher.active_revision(), 2, "failed second edit displaced valid graph");
-  REQUIRE_TRUE(publisher.cancel_hold(),
-               "failed edit did not resume old graph at same project position");
-  REQUIRE_EQ(publisher.render_block(input, output, {128, 1}), RoutedRenderStatus::rendered,
-             "failed edit did not resume old graph at same project position");
-  REQUIRE_EQ(publisher.active_revision(), 2,
-             "failed edit did not resume old graph at same project position");
+  REQUIRE_TRUE(!publisher.has_pending(), "failed second edit displaced valid graph");
+  REQUIRE_EQ(publisher.render_block(input, output, {position, 1}), RoutedRenderStatus::rendered,
+             "failed edit did not keep the old graph playing");
+  REQUIRE_EQ(publisher.active_revision(), 2, "failed edit did not keep the old graph playing");
 }
 
 class Tail final : public ProcessorRuntime {
@@ -152,7 +146,9 @@ private:
   std::size_t cursor_ = 0;
 };
 
-void held_new_route_uses_source_history() {
+// A route added by a live switch starts its compensating delay from its
+// source's recent output, so a sample sent before the switch arrives on time.
+void live_new_route_uses_source_history() {
   const std::array<RoutedNode, 3> nodes{
       {{{1, 0}, {}}, {{2, 8}, std::make_shared<EightFrameTail>()}, {{3, 0}, {}}}};
   const std::array<RoutingEdge, 2> original{{{11, 1, 2}, {12, 2, 3}}};
@@ -170,22 +166,15 @@ void held_new_route_uses_source_history() {
   REQUIRE_EQ(publisher.render_block(inputs, output, {0, 1}), RoutedRenderStatus::rendered,
              "opt-in initial graph did not retain the pre-boundary impulse");
   REQUIRE_EQ(output[63].left, 0.0F, "opt-in initial graph did not retain the pre-boundary impulse");
-  REQUIRE_TRUE(publisher.request_hold(), "new-route handoff did not hold the block boundary");
-  REQUIRE_EQ(publisher.render_block(inputs, output, {64, 1}), RoutedRenderStatus::holding,
-             "new-route handoff did not hold the block boundary");
-  const auto boundary = publisher.held_boundary();
-  REQUIRE_TRUE(boundary, "new-route handoff did not hold the exact block boundary");
-  REQUIRE_EQ(boundary->project_sample_position, 64,
-             "new-route handoff did not hold the exact block boundary");
   auto under_budget = added_limits;
   --under_budget.max_source_history_bytes;
-  REQUIRE_TRUE(!publisher.prepare_and_publish(2, nodes, added, under_budget),
+  REQUIRE_TRUE(!publisher.prepare_and_publish_live(2, nodes, added, under_budget),
                "over-budget new route displaced the active graph");
   REQUIRE_EQ(publisher.active_revision(), 1, "over-budget new route displaced the active graph");
   REQUIRE_TRUE(!publisher.has_pending(), "over-budget new route displaced the active graph");
-  REQUIRE_OK(publisher.prepare_and_publish(2, nodes, added, added_limits),
-             "new compensated edge could not prime at held boundary");
-  REQUIRE_TRUE(publisher.has_pending(), "new compensated edge could not prime at held boundary");
+  REQUIRE_OK(publisher.prepare_and_publish_live(2, nodes, added, added_limits),
+             "new compensated edge could not prime at the switch");
+  REQUIRE_TRUE(publisher.has_pending(), "new compensated edge could not prime at the switch");
   source.fill({});
   counted_allocations = 0;
   counting_allocations = true;
@@ -341,11 +330,9 @@ void source_overlay_keeps_old_audio_until_candidate_ready(std::size_t frames) {
   REQUIRE_EQ(probe.old_frames, frames, "source overlay initial audio was not audible");
   REQUIRE_EQ(master->activations, 1, "source overlay initial audio was not audible");
   REQUIRE_OK(publisher.prepare_source_overlay(2),
-             "source overlay did not reserve one no-hold publication slot");
-  REQUIRE_TRUE(!publisher.request_hold(),
-               "source overlay did not reserve one no-hold publication slot");
+             "source overlay did not reserve one publication slot");
   REQUIRE_TRUE(!publisher.prepare_source_overlay(3),
-               "source overlay did not reserve one no-hold publication slot");
+               "source overlay did not reserve one publication slot");
   counted_allocations = 0;
   counting_allocations = true;
   const auto fallback = publisher.render_block(empty, block, {frames, 1}, fill);
@@ -431,13 +418,10 @@ void control_overlay_reuses_route_without_silent_blocks(std::size_t frames) {
   std::array<RoutedNodeControl, 3> controls{
       {{1, true, {1.0F, 1.0F}}, {2, false, {1.0F, 1.0F}}, {3, false, {1.0F, 1.0F}}}};
   REQUIRE_TRUE(!publisher.prepare_control_overlay(2, std::span(controls).first(2)),
-               "control overlay admitted an incomplete mask or required a hold");
+               "control overlay admitted an incomplete mask");
   REQUIRE_OK(publisher.prepare_control_overlay(2, controls),
-             "control overlay admitted an incomplete mask or required a hold");
-  REQUIRE_TRUE(publisher.has_pending(),
-               "control overlay admitted an incomplete mask or required a hold");
-  REQUIRE_TRUE(!publisher.request_hold(),
-               "control overlay admitted an incomplete mask or required a hold");
+             "control overlay admitted an incomplete mask");
+  REQUIRE_TRUE(publisher.has_pending(), "control overlay admitted an incomplete mask");
   counted_allocations = 0;
   counting_allocations = true;
   const auto muted = publisher.render_block(empty, block, {frames, 1}, fill);
@@ -505,8 +489,7 @@ void control_overlay_can_publish_an_unchanged_projection(std::size_t frames) {
   const std::array<RoutedNodeControl, 2> controls{
       {{1, false, {1.0F, 1.0F}}, {3, false, {1.0F, 1.0F}}}};
   REQUIRE_OK(publisher.prepare_control_overlay(2, controls),
-             "unchanged control projection required a held rebuild");
-  REQUIRE_TRUE(!publisher.request_hold(), "unchanged control projection required a held rebuild");
+             "unchanged control projection did not publish as an overlay");
   counted_allocations = 0;
   counting_allocations = true;
   const auto changed = publisher.render_block(inputs, block, {frames, 1});
@@ -693,11 +676,9 @@ void edge_overlay_ramps_send_without_losing_delay_history(std::size_t frames) {
              "send overlay baseline did not align direct and return paths");
   const std::array<RoutedEdgeControl, 3> changed{{{11, 1.0F}, {12, 0.5F}, {13, 1.0F}}};
   REQUIRE_TRUE(!publisher.prepare_edge_overlay(2, std::span(changed).first(2)),
-               "send overlay accepted an incomplete mask or required a hold");
+               "send overlay accepted an incomplete mask");
   REQUIRE_TRUE(publisher.prepare_edge_overlay(2, changed),
-               "send overlay accepted an incomplete mask or required a hold");
-  REQUIRE_TRUE(!publisher.request_hold(),
-               "send overlay accepted an incomplete mask or required a hold");
+               "send overlay accepted an incomplete mask");
   counted_allocations = 0;
   counting_allocations = true;
   const auto status = publisher.render_block(inputs, block, {frames, 1});
@@ -780,13 +761,9 @@ void replacement_drains_only_selected_predecessor_stage() {
              "selected-stage predecessor did not retain the impulse");
   REQUIRE_EQ(wrapper_calls, 1, "selected-stage predecessor did not retain the impulse");
   REQUIRE_EQ(output[3].left, 0.0F, "selected-stage predecessor did not retain the impulse");
-  REQUIRE_TRUE(publisher.request_hold(),
-               "selected-stage replacement did not reach the held boundary");
-  REQUIRE_EQ(publisher.render_block(inputs, output, {4, 1}), RoutedRenderStatus::holding,
-             "selected-stage replacement did not reach the held boundary");
   nodes[0].processor = std::make_shared<Double>();
   nodes[0].replacement = RoutedTailReplacement{predecessor, 8, tail};
-  REQUIRE_OK(publisher.prepare_and_publish(2, nodes, {}, limits(1, 0, 0)),
+  REQUIRE_OK(publisher.prepare_and_publish_live(2, nodes, {}, limits(1, 0, 0)),
              "selected-stage replacement did not prepare");
   source.fill({});
   counted_allocations = 0;
@@ -826,34 +803,27 @@ void bounded_replacement_drains_across_routing_revisions() {
   REQUIRE_EQ(publisher.render_block(input, output, {0, 1}), RoutedRenderStatus::rendered,
              "predecessor did not retain the independent impulse");
   REQUIRE_EQ(output[3].left, 0.0F, "predecessor did not retain the independent impulse");
-  REQUIRE_TRUE(publisher.request_hold(), "replacement did not receive a quiescent boundary");
-  REQUIRE_EQ(publisher.render_block(input, output, {4, 1}), RoutedRenderStatus::holding,
-             "replacement did not receive a quiescent boundary");
 
   auto successor = std::make_shared<Double>();
   nodes[0].replacement = RoutedTailReplacement{predecessor, 8};
-  require(!publisher.prepare_and_publish(2, nodes, {}, limits(1, 0, 0)),
+  require(!publisher.prepare_and_publish_live(2, nodes, {}, limits(1, 0, 0)),
           "unchanged owner accepted a replacement declaration");
   nodes[0].processor = successor;
   nodes[0].replacement = RoutedTailReplacement{predecessor, 8, successor};
-  require(!publisher.prepare_and_publish(2, nodes, {}, limits(1, 0, 0)),
+  require(!publisher.prepare_and_publish_live(2, nodes, {}, limits(1, 0, 0)),
           "active successor was accepted as its own draining stage");
   nodes[0].replacement = RoutedTailReplacement{std::make_shared<Double>(), 8};
-  REQUIRE_TRUE(!publisher.prepare_and_publish(2, nodes, {}, limits(1, 0, 0)),
+  REQUIRE_TRUE(!publisher.prepare_and_publish_live(2, nodes, {}, limits(1, 0, 0)),
                "unrelated predecessor owner was accepted");
   REQUIRE_EQ(publisher.active_revision(), 1, "unrelated predecessor owner was accepted");
   nodes[0].replacement = RoutedTailReplacement{predecessor, 0};
-  require(!publisher.prepare_and_publish(2, nodes, {}, limits(1, 0, 0)),
+  require(!publisher.prepare_and_publish_live(2, nodes, {}, limits(1, 0, 0)),
           "zero-length drain was accepted");
   nodes[0].replacement = RoutedTailReplacement{predecessor, routed_tail_frame_cap + 1};
-  require(!publisher.prepare_and_publish(2, nodes, {}, limits(1, 0, 0)),
+  require(!publisher.prepare_and_publish_live(2, nodes, {}, limits(1, 0, 0)),
           "unbounded drain was accepted");
-  nodes[0].routing.processor_latency_frames = 1;
   nodes[0].replacement = RoutedTailReplacement{predecessor, 8};
-  require(!publisher.prepare_and_publish(2, nodes, {}, limits(1, 0, 0)),
-          "latency-changing replacement was accepted without an alignment policy");
-  nodes[0].routing.processor_latency_frames = 0;
-  REQUIRE_OK(publisher.prepare_and_publish(2, nodes, {}, limits(1, 0, 0)),
+  REQUIRE_OK(publisher.prepare_and_publish_live(2, nodes, {}, limits(1, 0, 0)),
              "bounded replacement did not prepare after failed attempts");
   nodes[0].replacement.reset();
   predecessor.reset();
@@ -873,12 +843,9 @@ void bounded_replacement_drains_across_routing_revisions() {
   REQUIRE_TRUE(!predecessor_lifetime.expired(),
                "predecessor tail owner was reclaimed before its declared drain");
 
-  REQUIRE_TRUE(publisher.request_hold(), "routing edit did not hold while old tail remained");
-  REQUIRE_EQ(publisher.render_block(input, output, {8, 1}), RoutedRenderStatus::holding,
-             "routing edit did not hold while old tail remained");
   nodes[0].processor = successor;
   nodes[0].replacement.reset();
-  REQUIRE_OK(publisher.prepare_and_publish(3, nodes, {}, limits(1, 0, 0)),
+  REQUIRE_OK(publisher.prepare_and_publish_live(3, nodes, {}, limits(1, 0, 0)),
              "routing-only edit lost active tail handoff");
   counting_allocations = true;
   const auto continued = publisher.render_block(input, output, {8, 1});
@@ -902,11 +869,7 @@ void bounded_replacement_drains_across_routing_revisions() {
       !predecessor_lifetime.expired(),
       "drained owner was destroyed by the prior plan while current plan still referred to it");
 
-  REQUIRE_TRUE(publisher.request_hold(),
-               "completed predecessor tail was not retired off the callback");
-  REQUIRE_EQ(publisher.render_block(input, output, {12, 1}), RoutedRenderStatus::holding,
-             "completed predecessor tail was not retired off the callback");
-  REQUIRE_OK(publisher.prepare_and_publish(4, nodes, {}, limits(1, 0, 0)),
+  REQUIRE_OK(publisher.prepare_and_publish_live(4, nodes, {}, limits(1, 0, 0)),
              "completed predecessor tail was not retired off the callback");
   REQUIRE_EQ(publisher.render_block(input, output, {12, 1}), RoutedRenderStatus::rendered,
              "completed predecessor tail was not retired off the callback");
@@ -915,13 +878,9 @@ void bounded_replacement_drains_across_routing_revisions() {
   REQUIRE_TRUE(predecessor_lifetime.expired(),
                "completed predecessor tail was not retired off the callback");
 
-  REQUIRE_TRUE(publisher.request_hold(),
-               "completed drain did not permit another bounded replacement");
-  REQUIRE_EQ(publisher.render_block(input, output, {16, 1}), RoutedRenderStatus::holding,
-             "completed drain did not permit another bounded replacement");
   nodes[0].processor = std::make_shared<Double>();
   nodes[0].replacement = RoutedTailReplacement{successor, 8};
-  REQUIRE_OK(publisher.prepare_and_publish(5, nodes, {}, limits(1, 0, 0)),
+  REQUIRE_OK(publisher.prepare_and_publish_live(5, nodes, {}, limits(1, 0, 0)),
              "completed drain blocked the next replacement");
   REQUIRE_EQ(publisher.render_block(input, output, {16, 1}), RoutedRenderStatus::rendered,
              "completed drain blocked the next replacement");
@@ -947,15 +906,12 @@ void tail_reuse_and_changed_owner_rejection() {
   REQUIRE_EQ(publisher.render_block(first, output, {0, 1}), RoutedRenderStatus::rendered,
              "tail fixture did not hold its impulse");
   REQUIRE_EQ(output[3].left, 0.0F, "tail fixture did not hold its impulse");
-  REQUIRE_TRUE(publisher.request_hold(), "tail graph hold failed");
-  REQUIRE_EQ(publisher.render_block(first, output, {4, 1}), RoutedRenderStatus::holding,
-             "tail graph hold failed");
   nodes[0].processor = std::make_shared<Tail>();
-  REQUIRE_TRUE(!publisher.prepare_and_publish(2, nodes, {}, limits(1, 0, 0)),
+  REQUIRE_TRUE(!publisher.prepare_and_publish_live(2, nodes, {}, limits(1, 0, 0)),
                "changed processor owner was silently activated");
   REQUIRE_EQ(publisher.active_revision(), 1, "changed processor owner was silently activated");
   nodes[0].processor = tail;
-  REQUIRE_OK(publisher.prepare_and_publish(2, nodes, {}, limits(1, 0, 0)),
+  REQUIRE_OK(publisher.prepare_and_publish_live(2, nodes, {}, limits(1, 0, 0)),
              "compatible tail graph did not prepare");
   const std::array<std::span<const StereoFrame>, 1> empty{{}};
   REQUIRE_EQ(publisher.render_block(empty, output, {4, 1}), RoutedRenderStatus::rendered,
@@ -976,24 +932,17 @@ void source_order_and_cursor_rejection() {
   const std::array<std::span<const StereoFrame>, 3> silence{{{}, {}, {}}};
   REQUIRE_EQ(publisher.render_block(silence, output, {0, 1}), RoutedRenderStatus::rendered,
              "order fixture did not render");
-  REQUIRE_TRUE(publisher.request_hold(), "order fixture did not hold");
-  REQUIRE_EQ(publisher.render_block(silence, output, {4, 1}), RoutedRenderStatus::holding,
-             "order fixture did not hold");
-  REQUIRE_TRUE(!publisher.prepare_and_publish(2, nodes, reordered, limits(3, 2, 0)),
+  REQUIRE_TRUE(!publisher.prepare_and_publish_live(2, nodes, reordered, limits(3, 2, 0)),
                "new source order was published without named inputs");
   REQUIRE_EQ(publisher.active_revision(), 1, "new source order was published without named inputs");
-  const auto advanced = publisher.render_block(silence, output, {5, 1});
-  const auto boundary = publisher.held_boundary();
-  REQUIRE_EQ(advanced, RoutedRenderStatus::invalid_block,
-             "advanced cursor was accepted during a hold");
-  REQUIRE_OK(boundary, "advanced cursor was accepted during a hold");
-  REQUIRE_EQ(boundary->project_sample_position, 4, "advanced cursor was accepted during a hold");
-  REQUIRE_TRUE(publisher.cancel_hold(), "old graph could not resume after rejected order change");
+  REQUIRE_TRUE(!publisher.has_pending(), "new source order was published without named inputs");
+  REQUIRE_EQ(publisher.render_block(silence, output, {5, 1}), RoutedRenderStatus::invalid_block,
+             "a cursor that skipped samples was accepted");
   REQUIRE_EQ(publisher.render_block(silence, output, {4, 1}), RoutedRenderStatus::rendered,
              "old graph could not resume after rejected order change");
 }
 
-void source_fill_linearizes_with_hold_and_publication() {
+void source_fill_linearizes_with_live_publication() {
   const std::array<RoutedNode, 1> nodes{{{{3, 0}, {}}}};
   RoutedMixerPublisher publisher;
   REQUIRE_OK(publisher.prepare_and_publish(1, nodes, {}, limits(1, 0, 0)),
@@ -1026,14 +975,8 @@ void source_fill_linearizes_with_hold_and_publication() {
   REQUIRE_EQ(probe.calls, 1, "initial graph did not fill one source block");
   REQUIRE_EQ(probe.consumed, 4, "initial graph did not fill one source block");
   REQUIRE_EQ(probe.last_revision, 1, "initial graph did not fill one source block");
-  REQUIRE_TRUE(publisher.request_hold(),
-               "publisher consumed source frames while acknowledging hold");
-  REQUIRE_EQ(publisher.render_block(sources, output, {4, 1}, fill), RoutedRenderStatus::holding,
-             "publisher consumed source frames while acknowledging hold");
-  REQUIRE_EQ(probe.calls, 1, "publisher consumed source frames while acknowledging hold");
-  REQUIRE_EQ(probe.consumed, 4, "publisher consumed source frames while acknowledging hold");
-  REQUIRE_OK(publisher.prepare_and_publish(2, nodes, {}, limits(1, 0, 0)),
-             "source-fill successor did not prepare at held boundary");
+  REQUIRE_OK(publisher.prepare_and_publish_live(2, nodes, {}, limits(1, 0, 0)),
+             "source-fill successor did not prepare");
   probe.fail = true;
   counting_allocations = true;
   const auto failed = publisher.render_block(sources, output, {4, 1}, fill);
@@ -1045,38 +988,35 @@ void source_fill_linearizes_with_hold_and_publication() {
              "failed fill advanced source or activated pending graph");
   REQUIRE_TRUE(publisher.has_pending(), "failed fill advanced source or activated pending graph");
   REQUIRE_EQ(probe.consumed, 4, "failed fill advanced source or activated pending graph");
-  REQUIRE_EQ(probe.last_revision, 2, "failed fill advanced source or activated pending graph");
+  // The candidate was tried first, then the old graph's own source.
+  REQUIRE_EQ(probe.calls, 3, "failed fill advanced source or activated pending graph");
+  REQUIRE_EQ(probe.last_revision, 1, "failed fill advanced source or activated pending graph");
   REQUIRE_EQ(output[0].left, 0.0F, "failed fill advanced source or activated pending graph");
   probe.fail = false;
   counting_allocations = true;
   const auto switched = publisher.render_block(sources, output, {4, 1}, fill);
   counting_allocations = false;
   REQUIRE_EQ(switched, RoutedRenderStatus::rendered,
-             "pending publication did not select candidate source content at held boundary");
+             "pending publication did not select candidate source content at the switch");
   REQUIRE_EQ(counted_allocations, 0,
-             "pending publication did not select candidate source content at held boundary");
+             "pending publication did not select candidate source content at the switch");
   REQUIRE_EQ(publisher.active_revision(), 2,
-             "pending publication did not select candidate source content at held boundary");
-  REQUIRE_EQ(probe.calls, 3,
-             "pending publication did not select candidate source content at held boundary");
+             "pending publication did not select candidate source content at the switch");
+  REQUIRE_EQ(probe.calls, 4,
+             "pending publication did not select candidate source content at the switch");
   REQUIRE_EQ(probe.consumed, 8,
-             "pending publication did not select candidate source content at held boundary");
+             "pending publication did not select candidate source content at the switch");
   REQUIRE_EQ(probe.last_revision, 2,
-             "pending publication did not select candidate source content at held boundary");
+             "pending publication did not select candidate source content at the switch");
   REQUIRE_EQ(output[0].left, 2.5F,
-             "pending publication did not select candidate source content at held boundary");
+             "pending publication did not select candidate source content at the switch");
   REQUIRE_EQ(publisher.collect_retired(), 1,
-             "cancelled hold did not resume the same source position");
-  REQUIRE_TRUE(publisher.request_hold(), "cancelled hold did not resume the same source position");
-  REQUIRE_EQ(publisher.render_block(sources, output, {8, 1}, fill), RoutedRenderStatus::holding,
-             "cancelled hold did not resume the same source position");
-  REQUIRE_EQ(probe.consumed, 8, "cancelled hold did not resume the same source position");
-  REQUIRE_TRUE(publisher.cancel_hold(), "cancelled hold did not resume the same source position");
+             "the next block did not continue the same source position");
   REQUIRE_EQ(publisher.render_block(sources, output, {8, 1}, fill), RoutedRenderStatus::rendered,
-             "cancelled hold did not resume the same source position");
-  REQUIRE_EQ(probe.consumed, 12, "cancelled hold did not resume the same source position");
-  REQUIRE_EQ(probe.last_revision, 2, "cancelled hold did not resume the same source position");
-  REQUIRE_EQ(output[0].left, 4.5F, "cancelled hold did not resume the same source position");
+             "the next block did not continue the same source position");
+  REQUIRE_EQ(probe.consumed, 12, "the next block did not continue the same source position");
+  REQUIRE_EQ(probe.last_revision, 2, "the next block did not continue the same source position");
+  REQUIRE_EQ(output[0].left, 4.5F, "the next block did not continue the same source position");
 
   const auto calls_before_invalid = probe.calls;
   REQUIRE_EQ(publisher.render_block(sources, output, {13, 1}, fill),
@@ -1134,24 +1074,21 @@ void revision_selects_matching_source_bank() {
              "initial revision did not choose its source bank");
   REQUIRE_EQ(output[0].left, 0.25F, "initial revision did not choose its source bank");
   REQUIRE_EQ(probe.selected_revision, 1, "initial revision did not choose its source bank");
-  REQUIRE_TRUE(publisher.request_hold(), "candidate source-bank graph did not hold and prepare");
-  REQUIRE_EQ(publisher.render_block(old_bank, output, {4, 1}, fill), RoutedRenderStatus::holding,
-             "candidate source-bank graph did not hold and prepare");
-  REQUIRE_OK(publisher.prepare_and_publish(2, nodes, {}, limits(1, 0, 0)),
-             "candidate source-bank graph did not hold and prepare");
-  REQUIRE_EQ(publisher.render_block(old_bank, output, {4, 1}, fill),
-             RoutedRenderStatus::invalid_block,
-             "unready candidate bank activated or consumed the old source");
+  REQUIRE_OK(publisher.prepare_and_publish_live(2, nodes, {}, limits(1, 0, 0)),
+             "candidate source-bank graph did not prepare");
+  // An unready candidate waits: the old graph plays its own bank meanwhile.
+  REQUIRE_EQ(publisher.render_block(old_bank, output, {4, 1}, fill), RoutedRenderStatus::rendered,
+             "unready candidate bank activated or silenced the old source");
   REQUIRE_EQ(publisher.active_revision(), 1,
-             "unready candidate bank activated or consumed the old source");
+             "unready candidate bank activated or silenced the old source");
   REQUIRE_TRUE(publisher.has_pending(),
-               "unready candidate bank activated or consumed the old source");
-  REQUIRE_EQ(output[0].left, 0.0F, "unready candidate bank activated or consumed the old source");
-  REQUIRE_EQ(probe.selected_revision, 2,
-             "unready candidate bank activated or consumed the old source");
+               "unready candidate bank activated or silenced the old source");
+  REQUIRE_EQ(output[0].left, 0.25F, "unready candidate bank activated or silenced the old source");
+  REQUIRE_EQ(probe.selected_revision, 1,
+             "unready candidate bank activated or silenced the old source");
   probe.candidate_ready = true;
   counting_allocations = true;
-  const auto switched = publisher.render_block(old_bank, output, {4, 1}, fill);
+  const auto switched = publisher.render_block(old_bank, output, {8, 1}, fill);
   counting_allocations = false;
   REQUIRE_EQ(switched, RoutedRenderStatus::rendered,
              "candidate graph mixed stale inputs or allocated in the callback");
@@ -1196,10 +1133,7 @@ void invalid_blocks_never_activate() {
              "active mixer accepted missing source spans");
   REQUIRE_EQ(publisher.active_revision(), 1, "active mixer accepted missing source spans");
 
-  REQUIRE_TRUE(publisher.request_hold(), "invalid-block fixture did not hold");
-  REQUIRE_EQ(publisher.render_block(input, output, {4, 1}), RoutedRenderStatus::holding,
-             "invalid-block fixture did not hold");
-  REQUIRE_OK(publisher.prepare_and_publish(2, nodes, {}, limits(1, 0, 0)),
+  REQUIRE_OK(publisher.prepare_and_publish_live(2, nodes, {}, limits(1, 0, 0)),
              "successor did not prepare");
   REQUIRE_EQ(publisher.render_block(absent, output, {4, 1}), RoutedRenderStatus::invalid_block,
              "invalid switch inputs activated successor");
@@ -1256,10 +1190,7 @@ void concurrent_handoff() {
   constexpr std::uint64_t warm_up_renders = 8;
   oscillate::test::wait_until([&] { return renders.load() >= warm_up_renders; },
                               "callback fixture made no progress");
-  require(publisher.request_hold(), "concurrent hold request failed");
-  oscillate::test::wait_until([&] { return static_cast<bool>(publisher.held_boundary()); },
-                              "callback did not acknowledge hold");
-  REQUIRE_OK(publisher.prepare_and_publish(2, nodes, {}, limits(1, 0, 0)),
+  REQUIRE_OK(publisher.prepare_and_publish_live(2, nodes, {}, limits(1, 0, 0)),
              "concurrent transition did not prepare");
   oscillate::test::wait_until([&] { return publisher.active_revision() == 2; },
                               "concurrent transition did not activate");
@@ -1694,7 +1625,7 @@ int main() {
     pdc_transition_and_failures();
     live_switch_continues_running_state();
     live_latency_changes_keep_time();
-    held_new_route_uses_source_history();
+    live_new_route_uses_source_history();
     tail_reuse_and_changed_owner_rejection();
     bounded_replacement_drains_across_routing_revisions();
     replacement_drains_only_selected_predecessor_stage();
@@ -1714,7 +1645,7 @@ int main() {
     edge_overlay_rejects_changed_identity_and_unknown_automation();
     live_controls_glide_without_a_revision();
     source_order_and_cursor_rejection();
-    source_fill_linearizes_with_hold_and_publication();
+    source_fill_linearizes_with_live_publication();
     revision_selects_matching_source_bank();
     invalid_blocks_never_activate();
     preparation_allocation_failure();
