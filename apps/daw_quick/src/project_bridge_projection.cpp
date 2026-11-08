@@ -81,6 +81,16 @@ void add_member_spans(QVariantList& tracks, double timeline_bars) {
     entry = bus;
   }
 }
+
+// The saved automation lanes a track holds: its own and its clips'.
+[[nodiscard]] int automation_lane_count(const project::Track& track) {
+  std::size_t lanes = track.automation.size();
+  for (const auto& clip : track.clips)
+    lanes += clip.automation.size();
+  for (const auto& clip : track.midi_clips)
+    lanes += clip.automation.size();
+  return static_cast<int>(lanes);
+}
 } // namespace
 
 // The sound a sampling engine plays, named by its first region (a starter
@@ -439,6 +449,9 @@ void ProjectBridge::refresh() {
         {"frozen", track.frozen.has_value()},
         {"vst3Plugins", vst3_plugins},
         {"channelAutomation", channel_automation_projection(snapshot, track)},
+        // Every saved lane the track holds, its clips' included: the track
+        // list marks a track with automation before its lanes are shown.
+        {"automationLaneCount", detail::automation_lane_count(track)},
         {"clipCount", static_cast<int>(clips.size())},
         {"clips", clips}});
   }

@@ -2,9 +2,10 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import "../devicekit" as Kit
 import "../shell"
+import "MixerDb.js" as Db
 
-// A vertical channel fader over linear gain, scaled in decibels from -60 to
-// +12 dB: the kit Fader with the mixer's look, driven by the strip through a
+// A vertical channel fader over linear gain on the strip's decibel scale
+// (MixerDb.js, -60 to +12 dB): the kit Fader with the mixer's look, driven by the strip through a
 // small controller of its own rather than a device parameter. Drag the cap
 // (Shift for fine), click the track to jump, scroll or use the arrow keys
 // (0.5 dB, Shift 0.1 dB); double-click or Delete returns to 0 dB. The strip
@@ -18,8 +19,8 @@ Kit.Fader {
     property real preview: -1
     readonly property real shown: preview >= 0 ? preview : level
     // The scale's ends and the arrow-key steps, in decibels.
-    readonly property real floorDb: -60
-    readonly property real ceilingDb: 12
+    readonly property real floorDb: Db.floorDb
+    readonly property real ceilingDb: Db.ceilingDb
     readonly property real stepDb: 0.5
     readonly property real fineStepDb: 0.1
 
@@ -29,10 +30,10 @@ Kit.Fader {
     signal resetRequested()
 
     // Decibels from linear gain (20 dB per decade of amplitude) and back.
-    function toDb(value) { return 20 * Math.log10(value) }
+    function toDb(value) { return Db.toDb(value) }
     function fromDb(db) { return Math.pow(10, db / 20) }
     function clamp(value) { return Math.max(0, Math.min(1, value)) }
-    function positionOf(value) { return value <= 0 ? 0 : clamp((toDb(value) - floorDb) / (ceilingDb - floorDb)) }
+    function positionOf(value) { return Db.positionOf(value) }
     function levelAt(position) {
         return position <= 0 ? 0 : fromDb(floorDb + (ceilingDb - floorDb) * clamp(position))
     }
@@ -51,7 +52,10 @@ Kit.Fader {
 
     parameterId: ""
     longName: accessibleName
-    detent: positionOf(1)
+    detent: Db.positionOfDb(Db.unityDb)
+    // The room the cap's half-height leaves at each end of the travel, which
+    // the strip's meters and scale leave too.
+    readonly property real travelInset: theme.faderTop + theme.faderCapHeight / 2
     tipText: accessibleName + ": drag, or wheel; Shift for fine, double-click resets"
     Accessible.description: decibels(level)
 
