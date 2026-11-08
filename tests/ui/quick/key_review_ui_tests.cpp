@@ -318,6 +318,36 @@ void key_match_stops_after_a_keyless_result() {
               fixture.session->snapshot().revision == before + 1 && match.hint().isEmpty(),
           "a keyless clip's analysis was not stored exactly once");
 }
+// Reanalysis that finds the stored result again makes no revision, so the
+// controller must not report one: the bridge would refresh and ask for a save.
+void unchanged_reanalysis_reports_no_revision() {
+  Fixture fixture;
+  quick::KeyReviewController review(
+      [](const auto&, const project::SourceRecord& source, std::uint64_t generation, const auto&) {
+        return foundation::Result<application::KeyCacheResult>::success(
+            suggestion(source, generation, false));
+      });
+  review.set_project(fixture.session.get(), fixture.root);
+  QSignalSpy commits(&review, &quick::KeyReviewController::projectRevisionChanged);
+  review.select_clip(fixture.clip_id, fixture.source);
+  wait_for_commit(commits);
+  require(fixture.session->saving().save().has_value(), "key suggestion save failed");
+  const auto saved_revision = fixture.session->snapshot().revision;
+  commits.clear();
+  review.reanalyze();
+  QElapsedTimer waited;
+  waited.start();
+  while (review.preview().value("state").toString() != QStringLiteral("ready") &&
+         waited.elapsed() < worker_wait_ms)
+    QTest::qWait(wait_step_ms);
+  require(review.preview().value("state").toString() == QStringLiteral("ready"),
+          "reanalysis did not finish");
+  require(commits.isEmpty() && fixture.session->snapshot().revision == saved_revision &&
+              !fixture.session->saving().has_unsaved_changes() &&
+              review.preview().value("message").toString() ==
+                  QStringLiteral("Suggestions unchanged."),
+          "an unchanged reanalysis reported a project revision");
+}
 } // namespace
 
 int main(int argc, char** argv) {
@@ -328,6 +358,7 @@ int main(int argc, char** argv) {
     project_revision_cancels_late_result();
     key_match_drops_a_replaced_sessions_result();
     key_match_stops_after_a_keyless_result();
+    unchanged_reanalysis_reports_no_revision();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return 1;
