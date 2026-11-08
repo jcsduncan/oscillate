@@ -351,6 +351,7 @@ void ProjectBridge::refresh() {
     }
     const auto sound_name = instrument ? starter_sound_name(track) : QString();
     const auto kick_lock = application::kick_bass_lock_state(snapshot, track.id);
+    const auto& nesting = routing_view.nesting(track.id);
     tracks.push_back(QVariantMap{
         {"id", QString::fromStdString(track.id.to_string())},
         {"name",
@@ -366,6 +367,13 @@ void ProjectBridge::refresh() {
         {"mainDestinationId",
          track.main_output ? QString::fromStdString(track.main_output->to_string()) : QString()},
         {"mainDestinationName", routing_view.main_destination_name(track.main_output)},
+        // The track list's nesting (TrackRoutingView::Nesting): the row it
+        // shows in and the group bus it sits under.
+        {"displayIndex", nesting.display_index},
+        {"busId", nesting.bus ? QString::fromStdString(nesting.bus->to_string()) : QString()},
+        {"memberCount", nesting.member_count},
+        {"lastMember", nesting.last_member},
+        {"fedBy", nesting.fed_by},
         {"sends", sends},
         {"sendCount", static_cast<int>(track.sends.size())},
         {"nativeSourceReady",

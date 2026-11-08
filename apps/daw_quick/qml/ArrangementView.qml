@@ -15,6 +15,10 @@ Rectangle {
     required property int creationHeight
     required property int elapsedRulerHeight
     required property var rowLayout
+    // The workspace's layout ({rows, returnsTop, gapTop, height}) and a
+    // dragged track header's target, or null (ArrangementWorkspace).
+    required property var trackLayout
+    required property var trackDrop
     required property bool snapToBeat
     // Track id → {open, overlay, keys} (ArrangementWorkspace).
     required property var automationView
@@ -63,6 +67,33 @@ Rectangle {
     readonly property real barEpsilon: 1e-9
     function tint(colour, alpha) {
         return Qt.rgba(colour.r, colour.g, colour.b, alpha)
+    }
+    // A folded group bus's lane: its members' clips merged into spans
+    // ({startBar, endBar}), drawn as one outline.
+    function busSegments(busId) {
+        const spans = []
+        for (const track of bridge.tracks) {
+            if (track.busId !== busId)
+                continue
+            for (const clip of track.clips)
+                spans.push([clip.start, clip.start + clip.length])
+        }
+        spans.sort((a, b) => a[0] - b[0])
+        const merged = []
+        for (const span of spans) {
+            const last = merged.length > 0 ? merged[merged.length - 1] : null
+            if (last && span[0] <= last[1])
+                last[1] = Math.max(last[1], span[1])
+            else
+                merged.push(span.slice())
+        }
+        return merged.map(span => ({ startBar: span[0] * bridge.timelineBars,
+                                     endBar: span[1] * bridge.timelineBars }))
+    }
+    function trackColorOf(trackId) {
+        const tracks = bridge.tracks
+        const index = tracks.findIndex(track => track.id === trackId)
+        return index >= 0 ? theme.trackColor(tracks[index], index) : accentColor
     }
     property string contextClipId: ""
     property string contextClipKind: "audio"
@@ -278,7 +309,7 @@ Rectangle {
             ? Array.from(bridge.selectedClipIds) : []
         for (let row = 0; row < bridge.tracks.length; ++row) {
             const layout = rowLayout[row]
-            if (!layout || layout.top + layout.height <= top || layout.top >= bottom)
+            if (!layout || layout.hidden || layout.top + layout.height <= top || layout.top >= bottom)
                 continue
             for (const clip of bridge.tracks[row].clips) {
                 const start = clip.start * bridge.timelineBars
@@ -738,6 +769,11 @@ Rectangle {
                 property bool lifted: false
                 readonly property bool carriesGroup: arrangement.groupDragging && arrangement.groupRows !== 0
                     && arrangement.groupTrackRows.indexOf(index) >= 0
+                readonly property var layoutEntry: arrangement.rowLayout[index] || null
+                readonly property bool isGroup: modelData.kind === "group"
+                readonly property bool collapsed: isGroup && arrangement.bridge.collapsedBuses.includes(modelData.id)
+                // A folded bus hides its members' lanes.
+                visible: !(layoutEntry && layoutEntry.hidden)
                 z: lifted ? 10 : carriesGroup ? 9 : 0
                 x: 0
                 y: (arrangement.rowLayout[index] ? arrangement.rowLayout[index].top : index * Theme.laneFallbackHeight)
@@ -783,11 +819,37 @@ Rectangle {
                         }
                     }
                 }
+                // A group bus's lane carries its colour lightly; folded, it
+                // shows its members' clips as one dashed outline.
+                Rectangle {
+                    objectName: "arrangementBusTint"
+                    visible: arrangementRow.isGroup
+                    anchors.fill: parent
+                    color: arrangement.tint(arrangementRow.trackColor, Theme.trackBusLaneTintAlpha)
+                }
+                BusSumLane {
+                    objectName: "arrangementBusSum"
+                    visible: arrangementRow.collapsed
+                    anchors.fill: parent
+                    segments: arrangementRow.collapsed ? arrangement.busSegments(arrangementRow.modelData.id) : []
+                    viewStartBar: arrangement.viewStartBar
+                    visibleBars: arrangement.visibleBars
+                    tone: arrangementRow.trackColor
+                }
                 Rectangle {
                     anchors.bottom: parent.bottom
                     width: parent.width
                     height: Theme.hairline
                     color: arrangement.lineColor
+                }
+                // A dragged header's lane fades with it until it lands.
+                Rectangle {
+                    objectName: "arrangementDragGhost"
+                    visible: arrangement.trackDrop !== null
+                        && arrangement.trackDrop.ids.includes(arrangementRow.modelData.id)
+                    z: 20
+                    anchors.fill: parent
+                    color: arrangement.tint(arrangement.canvasColor, 1 - Theme.trackDragGhostOpacity)
                 }
                 MouseArea {
                     anchors.fill: parent
@@ -1899,6 +1961,26 @@ Rectangle {
                 }
             }
         }
+        // The returns' section, and the slot a dragged header opens.
+        Rectangle {
+            objectName: "arrangementReturnsEdge"
+            visible: arrangement.trackLayout.returnsTop >= 0
+            y: arrangement.trackLayout.returnsTop - arrangement.trackScrollY
+            width: arrangement.width
+            height: Theme.hairline
+            color: Theme.lineStrong
+        }
+        Rectangle {
+            objectName: "arrangementDropSlot"
+            readonly property var drop: arrangement.trackDrop
+            visible: arrangement.trackLayout.gapTop >= 0 && drop !== null
+            y: arrangement.trackLayout.gapTop - arrangement.trackScrollY
+            width: arrangement.width
+            height: Theme.trackDropSlotHeight
+            color: arrangement.tint(drop !== null && drop.busId !== "" ? arrangement.trackColorOf(drop.busId)
+                                                                       : arrangement.accentColor,
+                                    Theme.trackDropLaneAlpha)
+        }
         // Each track's open automation lanes, under its clips (ADR-0051).
         Repeater {
             model: arrangement.bridge.tracks.length
@@ -1936,9 +2018,7 @@ Rectangle {
     // An instrument dropped under the last lane makes a new track.
     DeviceTrackDrop {
         objectName: "arrangementEmptyDrop"
-        readonly property real rowsBottom: arrangement.rowLayout.length > 0
-            ? arrangement.rowLayout[arrangement.rowLayout.length - 1].bottom
-            : 0
+        readonly property real rowsBottom: arrangement.trackLayout.height
         x: 0
         y: arrangementTrackViewport.y + Math.min(arrangementTrackViewport.height,
             Math.max(0, rowsBottom - arrangement.trackScrollY))

@@ -244,6 +244,42 @@ void position_readout_holds_three_digits(const Shell& shell, quick::ProjectBridg
           "the position readout clips \"" + text_of(value) + "\"");
 }
 
+// The bus rows' names (the Music bus, its indented members and the Hall
+// return) show whole, and the bus's member count, the return's effect and
+// the send pills sit clear of each row's buttons.
+void track_labels_clear_buttons(const Shell& shell) {
+  shell.wait_for(QStringLiteral("trackBusBadge"));
+  QList<QQuickItem*> rows;
+  find_items(shell.root(), QStringLiteral("trackRow"), rows);
+  int labels = 0;
+  for (auto* row : rows) {
+    const auto* name = find_item(row, QStringLiteral("trackName"));
+    require(name != nullptr, "a track row shows its name");
+    const auto track = row->property("modelData").toMap();
+    const auto kind = track.value(QStringLiteral("kind")).toString();
+    if (kind == QStringLiteral("group") || kind == QStringLiteral("return") ||
+        !track.value(QStringLiteral("busId")).toString().isEmpty())
+      require_whole(name, "track name " + text_of(name));
+    const auto* buttons = find_item(row, QStringLiteral("trackAutomationButton"));
+    require(buttons != nullptr, "a track row shows its buttons");
+    const auto edge = buttons->mapToScene({0.0, 0.0}).x();
+    for (const auto& label_name :
+         {QStringLiteral("trackBusBadge"), QStringLiteral("trackReturnEffect"),
+          QStringLiteral("trackSendPill")}) {
+      QList<QQuickItem*> found;
+      find_items(row, label_name, found);
+      for (const auto* label : found) {
+        ++labels;
+        require(label->mapToScene({label->width(), 0.0}).x() <= edge + layout_slack_px,
+                label_name.toStdString() + " runs under the buttons of " + text_of(name));
+      }
+    }
+  }
+  // The bus's badge, the return's effect and the Chords' and Pad's pills.
+  constexpr int demo_labels = 4;
+  require(labels == demo_labels, "the demo shows its bus badge, return effect and send pills");
+}
+
 // The mixer's master section fits its loudness readings across its width.
 void master_readings_fit(const Shell& shell) {
   shell.show_view(QStringLiteral("mixer"));
@@ -268,6 +304,7 @@ void shell_text_shows_whole() {
   Shell shell(bridge);
   require_whole(shell.wait_for(QStringLiteral("dockedBrowserSearchHint")),
                 "the browser's search hint");
+  track_labels_clear_buttons(shell);
   shell.select_track(chords_track);
   shell.open_dock_tab(chain_tab);
   ruler_labels_clear_flags_and_tools(shell);

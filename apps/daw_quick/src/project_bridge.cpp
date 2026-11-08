@@ -84,6 +84,17 @@ constexpr int milliseconds_per_second = 1000;
   return QStringLiteral("trackRowHeights/%1").arg(QString::fromStdString(id.to_string()));
 }
 
+[[nodiscard]] QString collapsed_buses_key(const project::ProjectId& id) {
+  return QStringLiteral("collapsedBuses/%1").arg(QString::fromStdString(id.to_string()));
+}
+
+[[nodiscard]] bool is_group_bus(const project::Snapshot& snapshot, const QString& id) {
+  return std::ranges::any_of(snapshot.tracks, [&id](const project::Track& track) {
+    return track.kind == project::TrackKind::group_bus &&
+           QString::fromStdString(track.id.to_string()) == id;
+  });
+}
+
 [[nodiscard]] application::PlaybackOutputFactory
 metered_jack_factory(application::PlaybackOutputFactory factory,
                      std::shared_ptr<native_dsp::StereoMeter> meter,
@@ -935,6 +946,8 @@ void ProjectBridge::close_project() {
   set_save_problem({});
   track_row_heights_.clear();
   emit trackRowHeightsChanged();
+  collapsed_buses_.clear();
+  emit collapsedBusesChanged();
   // The next project publishes everything afresh.
   published_ = {};
   emit projectChanged();
@@ -973,6 +986,13 @@ void ProjectBridge::set_project(std::unique_ptr<application::ProjectSession> ses
       track_row_heights_.insert(id, height);
   }
   emit trackRowHeightsChanged();
+  collapsed_buses_.clear();
+  for (const auto& id :
+       QSettings{}.value(collapsed_buses_key(session_->snapshot().id)).toStringList()) {
+    if (is_group_bus(session_->snapshot(), id) && !collapsed_buses_.contains(id))
+      collapsed_buses_.push_back(id);
+  }
+  emit collapsedBusesChanged();
   managed_media_->set_project(session_.get());
   imports_->audio().set_project(session_.get());
   key_review_->set_project(session_.get(), root);
@@ -1013,6 +1033,18 @@ void ProjectBridge::set_track_row_height(const QString& track_id, int height) {
     track_row_heights_.insert(track_id, height);
   QSettings{}.setValue(track_heights_key(session_->snapshot().id), track_row_heights_);
   emit trackRowHeightsChanged();
+}
+
+void ProjectBridge::set_bus_collapsed(const QString& bus_id, bool collapsed) {
+  if (!session_ || !is_group_bus(session_->snapshot(), bus_id) ||
+      collapsed_buses_.contains(bus_id) == collapsed)
+    return;
+  if (collapsed)
+    collapsed_buses_.push_back(bus_id);
+  else
+    collapsed_buses_.removeAll(bus_id);
+  QSettings{}.setValue(collapsed_buses_key(session_->snapshot().id), collapsed_buses_);
+  emit collapsedBusesChanged();
 }
 
 void ProjectBridge::set_arrangement_viewport(double first_bar, double visible_bars,

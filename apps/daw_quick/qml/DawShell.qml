@@ -660,10 +660,6 @@ Window {
         dimTextColor: shell.textDim
         accentColor: shell.accent
         amberColor: shell.amber
-        onTrackMoveRequested: function(trackId, toIndex) {
-            if (projectBridge.trackCommands.move_track(trackId, toIndex))
-                shell.selectedTrack = toIndex
-        }
         onRowHeightCommitted: function(trackId, height) {
             projectBridge.set_track_row_height(trackId, height)
         }
