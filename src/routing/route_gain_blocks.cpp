@@ -251,8 +251,9 @@ bool PreparedRouteGainBlocks::fill_block(engine::BlockContext context, std::size
       } else {
         std::ranges::fill(samples, binding.saved_gain);
       }
-      if (binding.mute_target && !gate_by_mute(binding, targets_[*binding.mute_target], first,
-                                               samples, context.state_generation()))
+      if (const auto mute_target = binding.mute_target;
+          mute_target && !gate_by_mute(binding, targets_[*mute_target], first, samples,
+                                       context.state_generation()))
         return false;
       edge_spans_[binding.edge_index].values = samples;
     }
