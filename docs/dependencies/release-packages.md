@@ -174,11 +174,3 @@ python3 -I scripts/stage-appdir.py --build-dir build/package-appimage \
 python3 -I scripts/build-appimage.py --appdir build/appdir/Oscillate.AppDir \
   --inventory build/appdir/Oscillate.AppDir.inventory.json --output-dir build/packages
 ```
-
-## Open under G8
-
-Distribution approval belongs to [#93](https://github.com/jcsduncan/oscillate/issues/93):
-the starter-sound grant, a per-library licence review, and a tested
-replacement route for the libfuse code linked into the AppImage runtime. The
-AppImage's library list is the observed closure, not a curated portability
-list.

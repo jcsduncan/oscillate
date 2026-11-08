@@ -24,6 +24,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 # Run as `python3 -I`, which leaves the script's directory off the path.
@@ -67,7 +68,11 @@ EPOCH = re.compile(r"^[0-9]+:")
 ARCHITECTURE = re.compile(r":[a-z0-9]+$")
 URL_ATTEMPTS = 4
 URL_RETRY_SECONDS = 30
-URL_TIMEOUT_SECONDS = 60
+URL_TIMEOUT_SECONDS = 30
+# Links are checked in parallel, so the whole check takes about as long as
+# the slowest link's retries (about four minutes at worst).
+URL_WORKERS = 16
+HTTP_SERVER_ERROR = 500
 HTTP_OK = 200
 
 
@@ -236,7 +241,7 @@ def reachable(url: str) -> bool:
             with urllib.request.urlopen(request, timeout=URL_TIMEOUT_SECONDS) as response:
                 return response.status == HTTP_OK
         except urllib.error.HTTPError as error:
-            if error.code < 500:
+            if error.code < HTTP_SERVER_ERROR:
                 return False
         except (urllib.error.URLError, TimeoutError):
             pass
@@ -254,10 +259,12 @@ def main() -> None:
     check.add_argument("--appdir", type=Path, required=True)
     args = parser.parse_args()
     offer = json.loads((args.appdir / OFFER_JSON).read_text(encoding="utf-8"))
-    broken = [url for url in offer_urls(offer) if not reachable(url)]
+    urls = offer_urls(offer)
+    with ThreadPoolExecutor(max_workers=URL_WORKERS) as pool:
+        broken = [url for url, ok in zip(urls, pool.map(reachable, urls), strict=True) if not ok]
     if broken:
         parser.exit(1, "unreachable source links:\n" + "\n".join(broken) + "\n")
-    print(f"{len(offer_urls(offer))} source links reachable")
+    print(f"{len(urls)} source links reachable")
 
 
 if __name__ == "__main__":
