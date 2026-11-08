@@ -647,16 +647,17 @@ application::RevisionStatus RoutedPlayback::status() {
   // A published source switch whose source never filled its block was
   // withdrawn, and the old graph played on: prime a fresh source at a later
   // block, a bounded number of times.
-  if (source_capture_ && edit_awaiting_activation_ && source_staged_ &&
-      control_->status().model_revision == source_capture_->snapshot->revision &&
+  if (const auto* capture = source_capture_ ? &*source_capture_ : nullptr;
+      capture && edit_awaiting_activation_ && source_staged_ &&
+      control_->status().model_revision == capture->snapshot->revision &&
       control_->status().application == application::PlaybackApplication::failed &&
-      source_selection_->cancel_candidate(source_capture_->snapshot->revision)) {
+      source_selection_->cancel_candidate(capture->snapshot->revision)) {
     source_exact_revision_.store(0, std::memory_order_release);
     source_staged_ = false;
     edit_awaiting_activation_ = false;
     retire_source(std::move(source_candidate_));
     const bool again = source_retry_count_ < max_source_primes &&
-                       control_->restart_captured_source(*source_capture_).has_value();
+                       control_->restart_captured_source(*capture).has_value();
     if (again) {
       ++source_retry_count_;
       if (auto restarted = start_source_preparation(); !restarted)
