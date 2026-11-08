@@ -49,8 +49,9 @@ struct RoutedProcessedClipStatus {
 
 // One bounded worker streams verified project audio clips into
 // per-clip SPSC rings. The callback never reads a file or waits for the worker.
-// An audio-only move/trim can prepare a replacement source off the callback
-// and hand it to a matching graph revision at a held block boundary.
+// A source edit prepares a replacement source off the callback; the matching
+// graph revision switches to it live at the first block it fills completely
+// (ADR-0094).
 class RoutedAudioSource final {
 public:
   // first_sample must match the initial transport cursor position. Each clip

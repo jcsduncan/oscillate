@@ -624,6 +624,8 @@ application::RevisionStatus RoutedPlayback::status() {
                              : control_->publish_captured_source(*source_capture_);
           if (!offered) {
             source_exact_revision_.store(0, std::memory_order_release);
+            // A stale or busy rejection has not marked the revision failed.
+            (void)control_->fail_captured_source_edit(*source_capture_, offered.error());
             fail_source_handoff(offered.error());
           } else {
             edit_awaiting_activation_ = true;
