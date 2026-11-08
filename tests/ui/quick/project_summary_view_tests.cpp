@@ -65,6 +65,7 @@ void run() {
 
 } // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): an uncaught exception is the test's failure report.
 int main(int argc, char** argv) {
   QApplication app(argc, argv);
   run();

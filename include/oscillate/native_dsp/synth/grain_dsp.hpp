@@ -136,15 +136,24 @@ public:
               double* right, std::size_t frames) noexcept;
 
   [[nodiscard]] std::size_t active() const noexcept;
-  // Visits each sounding grain: f(position, rate, reverse, phase), with
-  // position in full-rate frames, rate the playback rate (> 0) and phase
-  // 0..1 through its window. For telemetry; touches nothing.
+  // One sounding grain, as telemetry sees it: its position in full-rate
+  // frames, its playback rate (> 0), its direction and its phase 0..1
+  // through its window.
+  struct GrainView {
+    double position = 0.0;
+    double rate = 0.0;
+    bool reverse = false;
+    double phase = 0.0;
+  };
+  // Visits each sounding grain: f(GrainView). For telemetry; touches nothing.
   template <typename F> void for_each_grain(F&& f) const {
     for (const auto& grain : grains_) {
       if (grain.active) {
         const double scale = static_cast<double>(std::size_t{1} << grain.level);
-        f(grain.position * scale, std::fabs(grain.step) * scale, grain.step < 0.0,
-          static_cast<double>(grain.age) / static_cast<double>(grain.length));
+        f(GrainView{.position = grain.position * scale,
+                    .rate = std::fabs(grain.step) * scale,
+                    .reverse = grain.step < 0.0,
+                    .phase = static_cast<double>(grain.age) / static_cast<double>(grain.length)});
       }
     }
   }

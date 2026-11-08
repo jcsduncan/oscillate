@@ -98,7 +98,13 @@ constexpr std::array<std::size_t, 2> euclid_low_hits{3, 4};
 constexpr double euclid_on_weight = 0.95;
 constexpr double euclid_off_weight = 0.03;
 
-Weights euclid(std::size_t hits, std::size_t rotation) noexcept {
+// `hits` spread evenly over the bar, turned by `rotation` steps.
+struct EuclidRhythm {
+  std::size_t hits = 0;
+  std::size_t rotation = 0;
+};
+Weights euclid(EuclidRhythm rhythm) noexcept {
+  const auto [hits, rotation] = rhythm;
   Weights out{};
   for (std::size_t step = 0; step < steps_per_bar; ++step) {
     const std::size_t from = (step + rotation) % steps_per_bar;
@@ -171,7 +177,7 @@ Bar generate_bar(const GeneratorSettings& settings, const Roles& roles, Random& 
         hits = euclid_mid_hits[random.below(euclid_mid_hits.size())];
       else
         hits = euclid_low_hits[random.below(euclid_low_hits.size())];
-      weights = euclid(hits, random.below(steps_per_bar));
+      weights = euclid({.hits = hits, .rotation = random.below(steps_per_bar)});
       break;
     }
     case Style::top:
@@ -521,8 +527,11 @@ Pattern mutate(const Pattern& pattern, double amount, std::uint32_t seed, const 
   return out;
 }
 
-Pattern evolve(const Pattern& pattern, std::size_t total_bars, std::size_t every_bars,
-               double amount, std::uint32_t seed, const Locks& locked) {
+Pattern evolve(const Pattern& pattern, Evolution evolution, const Locks& locked) {
+  auto total_bars = evolution.total_bars;
+  auto every_bars = evolution.every_bars;
+  const double amount = evolution.amount;
+  const std::uint32_t seed = evolution.seed;
   if (pattern.bars.empty() || total_bars == 0)
     return pattern;
   total_bars = std::min(total_bars, max_bars);

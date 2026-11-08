@@ -33,7 +33,13 @@ using oscillate::test::require;
 
 const synth::EngineDescriptor& table() { return *synth::prism::engine().descriptor; }
 
-std::size_t index(std::string_view id) { return *synth::find_parameter(table(), id); }
+std::size_t index(std::string_view id) {
+  const auto found = synth::find_parameter(table(), id);
+  if (!found) {
+    throw std::runtime_error("unknown parameter " + std::string(id));
+  }
+  return *found;
+}
 
 int preset_index(std::string_view name) {
   for (std::size_t i = 0; i < table().presets.size(); ++i) {
@@ -89,7 +95,7 @@ void edits_round_trip_through_the_adapter() {
   require(std::fabs(controller.value(cutoff) - expected) < 1e-6, "log knob midpoint");
   require(std::fabs(controller.normalised(cutoff) - 0.5) < 1e-9, "normalised round trip");
   require(controller.display(cutoff) == QStringLiteral("632 Hz"), "value is formatted");
-  require(controller.display_at(cutoff, 1.0) == QStringLiteral("20.00 kHz"),
+  require(controller.display_at(cutoff, 1.0) == QStringLiteral("20.0 kHz"),
           "previews format any position");
   require(controller.revision() > revision, "revision advances");
   require(adapter.submissions().size() == 1 &&

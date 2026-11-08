@@ -46,9 +46,9 @@ std::vector<double> clean(double model) {
 }
 
 // Upward zero crossings, interpolated, from frame `from`.
-std::vector<double> crossings(const std::vector<double>& x, std::size_t from, std::size_t to) {
+std::vector<double> crossings(const std::vector<double>& x, std::size_t begin, std::size_t end) {
   std::vector<double> out;
-  for (std::size_t i = std::max<std::size_t>(from, 1); i < to; ++i) {
+  for (std::size_t i = std::max<std::size_t>(begin, 1); i < end; ++i) {
     if (x[i - 1] < 0.0 && x[i] >= 0.0) {
       out.push_back(static_cast<double>(i - 1) + x[i - 1] / (x[i - 1] - x[i]));
     }

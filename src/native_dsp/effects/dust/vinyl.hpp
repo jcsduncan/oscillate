@@ -152,7 +152,7 @@ struct PopVoice {
 
 class Vinyl {
 public:
-  void prepare(double rate, double reference);
+  void prepare(LayerFormat format);
 
   // The record itself: where its scratches are, from the seed alone.
   void press(std::uint64_t seed_key) noexcept;
@@ -161,7 +161,7 @@ public:
 
   void reset() noexcept;
 
-  void set(std::span<const double> v, double tone, double width) noexcept;
+  void set(std::span<const double> v, LayerShape shape) noexcept;
 
   [[nodiscard]] Pair next(double rotation) noexcept {
     const double turn = two_pi * rotation;

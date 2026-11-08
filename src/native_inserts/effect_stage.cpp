@@ -2,6 +2,7 @@
 
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
+#include "oscillate/routing/project_route_plan.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -17,15 +18,18 @@ namespace {
 using foundation::ErrorCode;
 using foundation::Result;
 
-// The note-ons of every track that keys `slot`, sorted and unique. Notes a
-// clip boundary restarts are not new hits.
+// The note-ons of every track that keys `slot` now, sorted and unique: the
+// key is live and audible under the mixer's mute and solo
+// (routing::keys_now), so a muted kick keys nothing, as its audio key does.
+// Notes a clip boundary restarts are not new hits.
 Result<std::vector<native_dsp::effects::KeyNote>> key_note_onsets(const project::Snapshot& snapshot,
                                                                   project::InsertSlotId slot) {
   using R = Result<std::vector<native_dsp::effects::KeyNote>>;
+  const auto silent = routing::silent_key_sources(snapshot);
   std::vector<project::TrackId> keys;
   for (const auto& track : snapshot.tracks) {
     if (std::ranges::any_of(track.sends, [&](const project::SendRoute& send) {
-          return send.purpose == project::SendPurpose::sidechain && send.target_insert == slot;
+          return send.target_insert == slot && routing::keys_now(snapshot, silent, track, send);
         }))
       keys.push_back(track.id);
   }
@@ -71,7 +75,9 @@ NativeEffectStage::create(const project::Snapshot& snapshot,
                           std::optional<project::InsertSlotId> slot,
                           const project::NativeEffectPatch& patch,
                           std::span<const automation_project::PreparedTargetAutomation> automation,
-                          std::size_t max_frames, std::uint64_t last_safe_automation_sample) {
+                          EffectStageLimits limits) {
+  const auto max_frames = limits.max_frames;
+  const auto last_safe_automation_sample = limits.last_safe_automation_sample;
   using R = Result<std::unique_ptr<NativeEffectStage>>;
   if (max_frames == 0 || max_frames > engine::max_midi_block_frames)
     return R::failure({ErrorCode::invalid_argument, "Effect stage block size is invalid"});

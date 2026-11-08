@@ -55,6 +55,7 @@ public:
   // values) they are adopted outright, as if created with them; later ones
   // are offered, and the runtime crossfades its gain over 64 frames. A
   // refused offer (its mailbox full) is retried next tick.
+  // NOLINTNEXTLINE(bugprone-exception-escape): only bad_alloc can escape preparing; fatal here.
   void control(std::span<const double> v, std::uint32_t, const SynthTransport&) noexcept override {
     const CompressorSettings wanted = settings_for(v);
     if (same(wanted, offered_)) {

@@ -26,9 +26,6 @@ KitTheme {
     segmentRadius: 3
     segmentRadiusVertical: 3
     segmentFillAcross: false
-    segmentRule: "none"
-    segmentLed: true
-    segmentLedX: 4
     dropdownHeight: 22
     dropdownTextX: 7
     dropdownTextRight: 22
@@ -348,6 +345,6 @@ KitTheme {
         return stop === 0 && !tile.pressed ? buttonHi : button
     }
     function segmentEdge(tile) {
-        return tile.on ? Qt.rgba(tile.accent.r, tile.accent.g, tile.accent.b, 0.7) : knobRing
+        return tile.on ? tile.accent : knobRing
     }
 }

@@ -6,11 +6,6 @@ on:
   schedule:
     - cron: "0 5 * * *"
   workflow_dispatch:
-    inputs:
-      ref:
-        description: Branch, tag or commit to check (empty checks the ref the run starts from)
-        required: false
-        default: ""
 
 permissions:
   contents: read
@@ -40,7 +35,6 @@ jobs:
             ca-certificates git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref }}
           persist-credentials: false
       # The optional features too, so every configured variant is checked.
       - name: Install dependencies and the pinned clang-tidy

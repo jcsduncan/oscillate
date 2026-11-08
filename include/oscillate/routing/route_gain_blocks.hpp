@@ -38,6 +38,8 @@ private:
     std::size_t edge_index;
     std::vector<double> values;
     std::vector<float> samples;
+    // Zero for a sidechain key whose source is silent (silent_key_sources).
+    float key_gain = 1.0F;
   };
   // One channel node's automated controls; an unautomated control keeps its
   // saved value. Mute steps glide over a short ramp so a toggle never clicks.

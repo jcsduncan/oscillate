@@ -337,7 +337,7 @@ void search_filters_by_name_category_and_tag() {
   clear_filters(*panel);
   const auto tags = controller.preset_tags();
   require(!tags.isEmpty(), "the factory presets are tagged");
-  const auto tag = tags.front();
+  const auto& tag = tags.front();
   // The tags sit behind the #TAGS chip.
   click(*panel, QStringLiteral("novaPresetTagsToggle"));
   click_chip(*panel, QStringLiteral("novaPresetTag:") + tag);

@@ -210,10 +210,6 @@ private:
     std::uint32_t ramp_total = 0;
   };
   struct TailDrain {
-    TailDrain(std::shared_ptr<ProcessorRuntime> owner, std::shared_ptr<ProcessorRuntime> drain,
-              std::uint64_t frames, std::uint64_t generation, bool fade) noexcept
-        : prior_owner(std::move(owner)), drain_processor(std::move(drain)),
-          remaining_frames(frames), processing_generation(generation), fade_out(fade) {}
     std::shared_ptr<ProcessorRuntime> prior_owner;
     std::shared_ptr<ProcessorRuntime> drain_processor;
     // Callback-written; a live switch reads it from the control side.

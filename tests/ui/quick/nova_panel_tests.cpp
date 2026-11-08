@@ -151,9 +151,12 @@ private:
     text_.push_back(std::move(text));
     return text_.back();
   }
+  // A descriptor's fields, in its own order, as the tables list them.
+  // NOLINTBEGIN(bugprone-easily-swappable-parameters)
   void add(std::string id, std::string name, std::string group, std::string_view unit,
            synth::ParameterScale scale, double minimum, double maximum, double fallback,
            std::span<const std::string_view> choices, bool automatable, double skew = 1.0) {
+    // NOLINTEND(bugprone-easily-swappable-parameters)
     synth::ParameterDescriptor p;
     p.id = keep(std::move(id));
     p.name = keep(std::move(name));
@@ -1329,7 +1332,7 @@ void drag_to_modulate_and_edit_the_route() {
   require(std::fabs(controller.value(QStringLiteral("nova.mod.0.amount")) - 0.3) < 1e-9,
           "the route's amount is 30 %");
   require(item(*panel, QStringLiteral("novaReadout"))->property("text").toString() ==
-              QStringLiteral("LFO 1 → CUTOFF 30%"),
+              QStringLiteral("LFO 1 → CUTOFF 30 %"),
           "the readout confirms the route");
   require(js_length(knob->property("routes")) == 1, "the knob shows its route");
 

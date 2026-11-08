@@ -310,6 +310,7 @@ SynthProcessReport NativeSynthRuntime::process(std::span<engine::StereoFrame> ou
                                                std::span<const ParameterLane> lanes) noexcept {
   // The engine's display name is a string literal, so it names the span;
   // the instance number tells two of the same engine apart.
+  // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage): the name is a string literal.
   OSCILLATE_TRACE_SPAN(engine_.descriptor->name.data(), trace_instance_);
   const engine::DenormalsFlushed flushed;
   SynthProcessReport report;

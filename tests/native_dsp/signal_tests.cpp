@@ -223,6 +223,8 @@ std::vector<double> octave_shape(const std::vector<double>& pink, const std::vec
   }
   // Each octave's power through the filter, over what exact 1/f gives it.
   std::vector<double> octaves;
+  // The sweep grid is the test input.
+  // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
   for (double centre = first; centre <= last; centre *= 2.0) {
     double through = 0.0;
     double ideal = 0.0;
@@ -246,7 +248,8 @@ std::vector<double> octave_shape(const std::vector<double>& pink, const std::vec
 }
 
 void pink_reads_level_in_every_octave() {
-  const auto pink = run(with({{"signal.wave", 2.0}, {"signal.level", -20.0}}), quiet(30 * 48'000));
+  const auto pink =
+      run(with({{"signal.wave", 2.0}, {"signal.level", -20.0}}), quiet(std::size_t{30} * 48'000));
   REQUIRE_LT(std::fabs(db(rms(pink.left, 0, pink.size())) + 20.0), 0.1,
              "pink noise reads its RMS level within 0.1 dB: " +
                  std::to_string(db(rms(pink.left, 0, pink.size()))));
@@ -258,6 +261,8 @@ void pink_reads_level_in_every_octave() {
                    std::to_string(o) + " " + std::to_string(octaves[o]));
   }
   // So octave bands of the noise itself read level, within its scatter.
+  // The sweep grid is the test input.
+  // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
   for (double centre = 125.0; centre <= 16'000.0; centre *= 2.0) {
     const double ratio =
         band_power(pink.left, centre / std::numbers::sqrt2, centre * std::numbers::sqrt2) /

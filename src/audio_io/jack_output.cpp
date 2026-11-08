@@ -76,6 +76,7 @@ int real_set_xrun(void*, void* client, JackApi::Event callback, void* data) noex
 void real_set_shutdown(void*, void* client, JackApi::Shutdown callback, void* data) noexcept {
   jack_on_shutdown(static_cast<jack_client_t*>(client), callback, data);
 }
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): JackApi's C-style entry point.
 int real_connect_playback_ports(void*, void* client, void* left, void* right) noexcept {
   auto* jack_client = static_cast<jack_client_t*>(client);
   const auto** ports = jack_get_ports(jack_client, nullptr, JACK_DEFAULT_AUDIO_TYPE,
@@ -90,7 +91,7 @@ int real_connect_playback_ports(void*, void* client, void* left, void* right) no
     if (result == 0 || result == EEXIST)
       ++connected;
   }
-  jack_free(ports);
+  jack_free(static_cast<void*>(ports));
   return connected;
 }
 

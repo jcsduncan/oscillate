@@ -1,5 +1,6 @@
 #include "oscillate/native_dsp/effects/pocket.hpp"
 
+#include "dsp/crossover.hpp"
 #include "effect_dsp.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
 #include "oscillate/native_dsp/synth/filter.hpp"
@@ -142,8 +143,8 @@ struct Band {
     for (auto& stage : bass_filter) {
       stage.reset();
     }
-    std::fill(kick_power.begin(), kick_power.end(), 0.0);
-    std::fill(bass_power.begin(), bass_power.end(), 0.0);
+    std::ranges::fill(kick_power, 0.0);
+    std::ranges::fill(bass_power, 0.0);
     power_index = 0;
     kick_sum = 0.0;
     bass_sum = 0.0;
@@ -158,7 +159,7 @@ struct Band {
     reduction_db = 0.0;
     gain_db = 0.0;
     gain_step = 0.0;
-    std::fill(held.begin(), held.end(), 0.0);
+    std::ranges::fill(held, 0.0);
     held_write = 0;
   }
 
@@ -234,10 +235,11 @@ struct Split {
     high_a.reset();
     high_b.reset();
   }
-  void process(double x, const synth::FilterCoefficients& lp, const synth::FilterCoefficients& hp,
-               double& low, double& high) noexcept {
-    low = low_b.process(low_a.process(x, lp), lp);
-    high = high_b.process(high_a.process(x, hp), hp);
+  [[nodiscard]] native_dsp::dsp::SplitSample process(double x, const synth::FilterCoefficients& lp,
+                                                     const synth::FilterCoefficients& hp) noexcept {
+    const double low = low_b.process(low_a.process(x, lp), lp);
+    const double high = high_b.process(high_a.process(x, hp), hp);
+    return {.low = low, .high = high};
   }
 };
 
@@ -430,9 +432,8 @@ public:
       mono_ += std::clamp(mono_target_ - mono_, -toggle_step_, toggle_step_);
       const double mid = 0.5 * (y[0] + y[1]);
       const double side = 0.5 * (y[0] - y[1]);
-      double side_low = 0.0;
-      double side_high = 0.0;
-      side_split_.process(side, mono_lp_, mono_hp_, side_low, side_high);
+      const auto side_split = side_split_.process(side, mono_lp_, mono_hp_);
+      const double side_high = side_split.high;
       if (mono_ > 0.0) {
         const double s = side + (side_high - side) * mono_;
         y = {mid + s, mid - s};

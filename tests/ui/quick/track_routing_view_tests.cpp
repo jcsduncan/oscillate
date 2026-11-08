@@ -92,4 +92,5 @@ void routing_projection() {
 }
 } // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): an uncaught exception is the test's failure report.
 int main() { routing_projection(); }

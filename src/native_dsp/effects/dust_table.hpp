@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Data tables keep one entry per row; clang-format would split them.
@@ -26,13 +27,13 @@ inline constexpr std::array switches{"Off"sv, "On"sv};
 inline constexpr std::array speeds{"33"sv, "45"sv, "78"sv};
 inline constexpr std::array mains{"50 Hz"sv, "60 Hz"sv};
 inline constexpr std::array gates{"Off"sv, "1/4"sv, "1/8"sv, "1/16"sv};
-enum Gate : int { gate_off, quarter, eighth, sixteenth };
+enum Gate : std::uint8_t { gate_off, quarter, eighth, sixteenth };
 inline constexpr std::array surfaces{"Glass"sv, "Roof"sv, "Leaves"sv};
-enum Surface : int { glass, roof, leaves };
+enum Surface : std::uint8_t { glass, roof, leaves };
 inline constexpr std::array machines{"Fan"sv, "Fridge"sv, "Servers"sv};
-enum Machine : int { fan, fridge, servers };
+enum Machine : std::uint8_t { fan, fridge, servers };
 inline constexpr std::array sources{"Sidechain"sv, "Key notes"sv};
-enum Source : int { sidechain, key_notes };
+enum Source : std::uint8_t { sidechain, key_notes };
 
 // Each layer's range, and the age's mono fold (20 Hz is off).
 inline constexpr double level_min_db = -60.0;

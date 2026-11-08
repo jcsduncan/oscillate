@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import "../devicekit" as Kit
 import "../shell" as Shell
+import Oscillate.Format
 
 // The Knock percussion panel (ADR-0068): eight
 // pads on the left, each named by its sound and flashing with every hit;
@@ -146,7 +147,7 @@ Rectangle {
 
     // Value words where the engine's own display says less.
     function percent(fraction) {
-        return Math.round(fraction * 100) + "%"
+        return Format.fraction(fraction)
     }
     function toneText(value, info) {
         return value <= info.minimum ? "thing" : value >= info.maximum ? "note" : ""
@@ -367,7 +368,7 @@ Rectangle {
                 width: parent.width
                 horizontalAlignment: Text.AlignRight
                 text: panel.tele.live === true && panel.tele.output_peak_db !== undefined
-                    ? "OUT " + panel.tele.output_peak_db.toFixed(1) + " dB" : ""
+                    ? "OUT " + Format.decibels(panel.tele.output_peak_db) : ""
                 color: panel.theme.inkDim
                 font.family: panel.theme.mono
                 font.pixelSize: panel.theme.typeBody

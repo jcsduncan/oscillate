@@ -109,10 +109,10 @@ Rendered export_nulls_against_live(const fs::path& root, const project::Snapshot
   return {std::move(exported)};
 }
 
-double power(const std::vector<float>& interleaved, std::size_t channel, std::size_t from,
-             std::size_t to) {
+double power(const std::vector<float>& interleaved, std::size_t channel, std::size_t begin,
+             std::size_t end) {
   double sum = 0.0;
-  for (std::size_t frame = from; frame < to; ++frame) {
+  for (std::size_t frame = begin; frame < end; ++frame) {
     const double sample = interleaved[2 * frame + channel];
     sum += sample * sample;
   }
@@ -129,9 +129,9 @@ void pan_and_mute_lanes_render_like_live() {
     // Four one-bar clips, each holding a note for most of its bar (120 BPM:
     // 2 s a bar).
     for (int bar = 0; bar < 4; ++bar) {
-      REQUIRE_OK(
-          session->midi_clips().add_midi_clip(track, {bar * 4 * timeline::ticks_per_quarter}),
-          "MIDI clip");
+      REQUIRE_OK(session->midi_clips().add_midi_clip(
+                     track, {static_cast<std::int64_t>(bar) * 4 * timeline::ticks_per_quarter}),
+                 "MIDI clip");
       const auto clip = session->snapshot().tracks.front().midi_clips.back().id;
       require(session->notes()
                   .add_note_with_duration(clip, {0}, {7 * timeline::ticks_per_quarter / 2}, 60)
@@ -213,7 +213,9 @@ void arrangement_lanes_edit_at_any_tick() {
     auto session = take(app::ProjectSession::create(root));
     const auto track = take(session->instruments().add_synth_track());
     for (int bar = 0; bar < 4; ++bar) {
-      REQUIRE_OK(session->midi_clips().add_midi_clip(track, {bar * 4 * quarter}), "MIDI clip");
+      REQUIRE_OK(session->midi_clips().add_midi_clip(
+                     track, {static_cast<std::int64_t>(bar) * 4 * quarter}),
+                 "MIDI clip");
       const auto clip = session->snapshot().tracks.front().midi_clips.back().id;
       REQUIRE_OK(session->notes().add_note_with_duration(clip, {0}, {7 * quarter / 2}, 60), "note");
     }
@@ -264,6 +266,7 @@ void arrangement_lanes_edit_at_any_tick() {
     REQUIRE_EQ(redrawn.points[2].coordinate, 8 * quarter, "drawing did not replace the range");
     // Removing every point removes the lane; undo brings it back.
     std::vector<project::AutomationPointId> all;
+    all.reserve(redrawn.points.size());
     for (const auto& point : redrawn.points)
       all.push_back(point.id);
     REQUIRE_OK(session->automation().remove_automation_points(lane_id, all),

@@ -30,6 +30,7 @@ bool has_frozen_track(const Snapshot& snapshot) noexcept {
                              [](const Track& track) { return track.frozen.has_value(); });
 }
 
+// NOLINTNEXTLINE(bugprone-exception-escape): render_clip_tag is nonzero, so no ID here is nil.
 ClipId frozen_render_clip(TrackId track) noexcept {
   auto bits = track.bits();
   bits.high ^= render_clip_tag;
@@ -46,9 +47,9 @@ std::optional<Snapshot> frozen_playback_view(const Snapshot& snapshot) {
   for (auto& track : view.tracks) {
     if (!track.frozen)
       continue;
+    const auto frozen = *track.frozen;
     for (const auto& slot : track.effects)
       frozen_slots.push_back(slot.id);
-    const auto frozen = *track.frozen;
     track.frozen.reset();
     track.kind = TrackKind::audio;
     track.instrument_source = std::monostate{};

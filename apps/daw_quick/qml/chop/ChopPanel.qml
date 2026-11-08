@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 import "ChopGate.js" as Gate
 
@@ -290,7 +291,7 @@ Rectangle {
             PanelKnob {
                 parameterId: "chop.rotate"
                 valueText: panel.revision >= 0
-                    ? Math.round(panel.controller.value("chop.rotate")) % panel.stepCount + " st" : ""
+                    ? Format.quantity(Math.round(panel.controller.value("chop.rotate")) % panel.stepCount, "steps", 0) : ""
             }
             PanelKnob { parameterId: "chop.repeat_pitch"; accent: panel.theme.violet }
             PanelKnob { parameterId: "chop.repeat_decay"; accent: panel.theme.violet }

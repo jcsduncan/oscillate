@@ -2,6 +2,7 @@
 #include "../core/bandlimited_read.hpp"
 #include "../core/real_fft.hpp"
 #include "../core/source_window.hpp"
+#include "oscillate/foundation/stereo_span.hpp"
 #include "oscillate/warp_dsp/stream.hpp"
 
 #include <algorithm>
@@ -163,7 +164,7 @@ public:
     if (status_ != StreamStatus::ok || left.size() != right.size())
       return 0;
     if (pitched_)
-      return render_transposed(left, right);
+      return render_transposed({.left = left, .right = right});
     const auto requested = std::min<std::size_t>(left.size(), limits_.max_render_frames);
     std::size_t written = 0;
     const auto end = static_cast<std::int64_t>(map_->output_frames());
@@ -179,7 +180,7 @@ public:
       if (want < ready) {
         const auto count = static_cast<std::size_t>(std::min<std::int64_t>(
             {ready - want, end - want, static_cast<std::int64_t>(requested - written)}));
-        emit(want, left.subspan(written, count), right.subspan(written, count));
+        emit(want, {.left = left.subspan(written, count), .right = right.subspan(written, count)});
         written += count;
         next_ += count;
         continue;
@@ -258,8 +259,9 @@ private:
         const auto count = static_cast<std::size_t>(std::min<std::int64_t>(
             {ready - position, end - position, high - position,
              static_cast<std::int64_t>(intermediate_capacity - intermediate_filled_)}));
-        emit(position, std::span(intermediate_left_).subspan(intermediate_filled_, count),
-             std::span(intermediate_right_).subspan(intermediate_filled_, count));
+        emit(position,
+             {.left = std::span(intermediate_left_).subspan(intermediate_filled_, count),
+              .right = std::span(intermediate_right_).subspan(intermediate_filled_, count)});
         intermediate_filled_ += count;
         continue;
       }
@@ -272,9 +274,9 @@ private:
 
   // Transposed output: band-limited reads of the intermediate stream at
   // u = t * p.
-  // Channels are positional (left, right) like every planar stereo API here.
-  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-  std::size_t render_transposed(std::span<float> left, std::span<float> right) noexcept {
+  std::size_t render_transposed(foundation::StereoSpan<float> out) noexcept {
+    const auto left = out.left;
+    const auto right = out.right;
     const auto requested = std::min<std::size_t>(left.size(), limits_.max_render_frames);
     const auto end = map_->output_frames();
     std::size_t written = 0;
@@ -838,9 +840,9 @@ private:
     }
   }
 
-  // Channels are positional (left, right) like every planar stereo API here.
-  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-  void emit(std::int64_t first, std::span<float> left, std::span<float> right) noexcept {
+  void emit(std::int64_t first, foundation::StereoSpan<float> out) noexcept {
+    const auto left = out.left;
+    const auto right = out.right;
     for (std::size_t index = 0; index < left.size(); ++index) {
       const auto slot =
           static_cast<std::size_t>(first + static_cast<std::int64_t>(index)) & ring_mask_;

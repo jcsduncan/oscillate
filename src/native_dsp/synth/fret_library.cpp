@@ -73,6 +73,7 @@ Result<std::unique_ptr<Library>> Library::open(const std::filesystem::path& dire
   };
   auto library = std::unique_ptr<Library>(new Library());
   std::vector<sample_stream::Sample> streams;
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): sample_stream::ManifestLineReader.
   const auto sample_line = [&](std::string_view key, std::string_view rest, std::string& error) {
     if (key != "sample") {
       return false;

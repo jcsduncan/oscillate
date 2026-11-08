@@ -1,5 +1,6 @@
 #include "oscillate/native_dsp/effects/vista.hpp"
 
+#include "dsp/crossover.hpp"
 #include "effect_dsp.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
 #include "oscillate/native_dsp/synth/filter.hpp"
@@ -92,10 +93,11 @@ struct Split {
     high_a.reset();
     high_b.reset();
   }
-  void process(double x, const synth::FilterCoefficients& lp, const synth::FilterCoefficients& hp,
-               double& low, double& high) noexcept {
-    low = low_b.process(low_a.process(x, lp), lp);
-    high = high_b.process(high_a.process(x, hp), hp);
+  [[nodiscard]] native_dsp::dsp::SplitSample process(double x, const synth::FilterCoefficients& lp,
+                                                     const synth::FilterCoefficients& hp) noexcept {
+    const double low = low_b.process(low_a.process(x, lp), lp);
+    const double high = high_b.process(high_a.process(x, hp), hp);
+    return {.low = low, .high = high};
   }
 };
 
@@ -362,19 +364,17 @@ private:
   // 2-3 at crossover 3 behind crossover 1's, all below and above crossover
   // 2. Every band carries the same allpass, so they sum to it.
   void split(Tree& tree, double x, double low_weight, std::array<double, bands>& out) noexcept {
-    double low = 0.0;
-    double high = 0.0;
-    tree.mono.process(x, mono_.lp, mono_.hp, low, high);
-    const double input = high + low_weight * low;
-    double below = 0.0;
-    double above = 0.0;
-    tree.middle.process(input, crossover_[1].lp, crossover_[1].hp, below, above);
-    double a = 0.0;
-    double b = 0.0;
-    tree.low_comp.process(below, crossover_[2].lp, crossover_[2].hp, a, b);
-    tree.low.process(a + b, crossover_[0].lp, crossover_[0].hp, out[0], out[1]);
-    tree.high_comp.process(above, crossover_[0].lp, crossover_[0].hp, a, b);
-    tree.high.process(a + b, crossover_[2].lp, crossover_[2].hp, out[2], out[3]);
+    const auto mono = tree.mono.process(x, mono_.lp, mono_.hp);
+    const double input = mono.high + low_weight * mono.low;
+    const auto middle = tree.middle.process(input, crossover_[1].lp, crossover_[1].hp);
+    const auto below = tree.low_comp.process(middle.low, crossover_[2].lp, crossover_[2].hp);
+    const auto low = tree.low.process(below.low + below.high, crossover_[0].lp, crossover_[0].hp);
+    out[0] = low.low;
+    out[1] = low.high;
+    const auto above = tree.high_comp.process(middle.high, crossover_[0].lp, crossover_[0].hp);
+    const auto high = tree.high.process(above.low + above.high, crossover_[2].lp, crossover_[2].hp);
+    out[2] = high.low;
+    out[3] = high.high;
   }
 
   double rate_;

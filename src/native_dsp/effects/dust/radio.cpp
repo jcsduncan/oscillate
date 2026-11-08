@@ -25,7 +25,9 @@ constexpr double power_decade_db = 10.0;
 
 } // namespace
 
-void Radio::prepare(double rate, double reference) {
+void Radio::prepare(LayerFormat format) {
+  const double rate = format.rate;
+  const double reference = format.reference;
   rate_ = rate;
   reference_ = reference;
   sferic_chance_ = radio_sferics_a_second / rate;
@@ -59,8 +61,11 @@ void Radio::reset() noexcept {
   jump_next_ = true;
 }
 
-void Radio::set(std::span<const double> v, double tone, double width, double steps,
-                double seconds_per_beat) noexcept {
+void Radio::set(std::span<const double> v, LayerShape shape, LayerTiming timing) noexcept {
+  const double tone = shape.tone;
+  const double width = shape.width;
+  const double steps = timing.steps;
+  const double seconds_per_beat = timing.seconds_per_beat;
   if (tone != tone_) {
     tone_ = tone;
     const double centre = radio_band_low_hz * std::pow(radio_band_ratio, tone);

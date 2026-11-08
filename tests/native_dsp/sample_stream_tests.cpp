@@ -208,7 +208,7 @@ void pack_opens_and_reads_resident() {
 
 void malformed_packs_are_rejected() {
   const auto directory = write_library();
-  const auto rejected = [&](stream::PackSpec spec, std::vector<stream::Sample> samples,
+  const auto rejected = [&](const stream::PackSpec& spec, std::vector<stream::Sample> samples,
                             ErrorCode code) {
     auto opened = stream::Pack::open(spec, std::move(samples));
     return !opened.has_value() && opened.error().code == code && !opened.error().message.empty();

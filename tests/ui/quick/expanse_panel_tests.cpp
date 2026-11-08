@@ -43,7 +43,13 @@ namespace expanse = oscillate::native_dsp::effects::expanse;
 using oscillate::test::require;
 
 const synth::EngineDescriptor& table() { return *expanse::engine().descriptor; }
-std::size_t index(std::string_view id) { return *synth::find_parameter(table(), id); }
+std::size_t index(std::string_view id) {
+  const auto found = synth::find_parameter(table(), id);
+  if (!found) {
+    throw std::runtime_error("unknown parameter " + std::string(id));
+  }
+  return *found;
+}
 
 int preset_index(std::string_view name) {
   for (std::size_t i = 0; i < table().presets.size(); ++i) {
@@ -68,6 +74,8 @@ QString qs(std::string_view text) {
 
 // The RBJ cookbook shelves (S = 1) as written there, evaluated with complex
 // arithmetic: |H(e^jw)| in dB for a shelf of amplitude `gain`.
+// The arguments are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 double cookbook_shelf_db(bool high, double gain, double corner, double hz, double rate) {
   const double a = std::pow(10.0, 20.0 * std::log10(gain) / 40.0);
   const double w0 = 2.0 * std::numbers::pi * std::min(corner, 0.45 * rate) / rate;
@@ -243,7 +251,7 @@ void landscape_follows_the_absorption_design() {
           "the low readout: " + text_of(*panel, QStringLiteral("expanseRt:low")).toStdString());
   require(text_of(*panel, QStringLiteral("expanseRt:mid")).startsWith(QStringLiteral("2.0")),
           "the mid readout");
-  require(text_of(*panel, QStringLiteral("expanseRt:pre")) == QStringLiteral("0 ms"),
+  require(text_of(*panel, QStringLiteral("expanseRt:pre")) == QStringLiteral("0.00 ms"),
           "the pre-delay readout");
   // A slower decay widens the view; reflections follow the space.
   const double before = view->property("span").toDouble();
@@ -373,7 +381,7 @@ void the_sky_lights_with_the_reverb() {
   require(QTest::qWaitFor([&] { return view->property("live").toBool(); }, 1000),
           "live levels arrive");
   require(text_of(*panel, QStringLiteral("expanseLandscapeCaption")) ==
-              QStringLiteral("LIVE · LATE -20 dB"),
+              QStringLiteral("LIVE · LATE −20.0 dB"),
           "the late level reads out: " +
               text_of(*panel, QStringLiteral("expanseLandscapeCaption")).toStdString());
   require(std::fabs(item(*panel, QStringLiteral("expanseMeter:early"))->property("db").toDouble() +

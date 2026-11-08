@@ -88,6 +88,11 @@ public:
   // edge gain targets. All edge IDs must match the active plan in order.
   [[nodiscard]] foundation::Result<void>
   prepare_edge_overlay(std::uint64_t revision, std::span<const RoutedEdgeControl> controls);
+  // Node and edge controls in one overlay, under both contracts above: a
+  // mute or solo that also changes which sidechain keys sound.
+  [[nodiscard]] foundation::Result<void>
+  prepare_mix_overlay(std::uint64_t revision, std::span<const RoutedNodeControl> controls,
+                      std::span<const RoutedEdgeControl> edge_controls);
   // A control mid-gesture (a fader or send being dragged) for whichever
   // graph is active, without a revision: the callback glides to it at the
   // next block. A channel or send under automation keeps its automation.
@@ -156,6 +161,11 @@ private:
     std::vector<RoutedEdgeControl> edge_controls{};
   };
 
+  // An absent span keeps the active graph's controls.
+  [[nodiscard]] foundation::Result<void>
+  prepare_overlay(std::uint64_t revision,
+                  std::optional<std::span<const RoutedNodeControl>> node_overlay,
+                  std::optional<std::span<const RoutedEdgeControl>> edge_overlay);
   [[nodiscard]] foundation::Result<void>
   publish(std::uint64_t revision, std::span<const RoutedNode> nodes,
           std::span<const RoutingEdge> edges, RoutedMixerLimits limits,

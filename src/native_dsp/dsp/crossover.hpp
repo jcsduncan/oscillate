@@ -21,9 +21,11 @@ namespace oscillate::native_dsp::dsp {
 // the same Q.
 
 // The RBJ second-order low- and high-pass, on the same bilinear prewarp as
-// rbj_allpass, so LR4 low plus LR4 high equals rbj_allpass(hz, 1/sqrt2)
+// rbj_allpass, so LR4 low plus LR4 high equals rbj_allpass of the same corner at Q 1/sqrt2
 // exactly (up to rounding).
-[[nodiscard]] inline BiquadCoefficients rbj_lowpass(double hz, double q, double rate) noexcept {
+[[nodiscard]] inline BiquadCoefficients rbj_lowpass(Corner at, double q) noexcept {
+  const double hz = at.hz;
+  const double rate = at.rate;
   const double w = 2.0 * std::numbers::pi * hz / rate;
   const double alpha = std::sin(w) / (2.0 * q);
   const double c = std::cos(w);
@@ -32,7 +34,9 @@ namespace oscillate::native_dsp::dsp {
   return {0.5 * b1, b1, 0.5 * b1, -2.0 * c / a0, (1.0 - alpha) / a0};
 }
 
-[[nodiscard]] inline BiquadCoefficients rbj_highpass(double hz, double q, double rate) noexcept {
+[[nodiscard]] inline BiquadCoefficients rbj_highpass(Corner at, double q) noexcept {
+  const double hz = at.hz;
+  const double rate = at.rate;
   const double w = 2.0 * std::numbers::pi * hz / rate;
   const double alpha = std::sin(w) / (2.0 * q);
   const double c = std::cos(w);
@@ -55,9 +59,16 @@ struct Lr4Design {
   BiquadCoefficients high{};
   BiquadCoefficients allpass{};
   static Lr4Design at(double hz, double rate) noexcept {
-    return {rbj_lowpass(hz, butterworth_q, rate), rbj_highpass(hz, butterworth_q, rate),
-            rbj_allpass(hz, butterworth_q, rate)};
+    const Corner corner{.hz = hz, .rate = rate};
+    return {rbj_lowpass(corner, butterworth_q), rbj_highpass(corner, butterworth_q),
+            rbj_allpass(corner, butterworth_q)};
   }
+};
+
+// One sample split into the bands below and above a crossover.
+struct SplitSample {
+  double low = 0.0;
+  double high = 0.0;
 };
 
 // A fourth-order Linkwitz-Riley split of one channel.
@@ -77,9 +88,10 @@ struct Lr4Split {
       s->reset();
     }
   }
-  void process(double x, double& lo, double& hi) noexcept {
-    lo = low[1].process(low[0].process(x));
-    hi = high[1].process(high[0].process(x));
+  [[nodiscard]] SplitSample process(double x) noexcept {
+    const double lo = low[1].process(low[0].process(x));
+    const double hi = high[1].process(high[0].process(x));
+    return {.low = lo, .high = hi};
   }
 };
 
@@ -117,11 +129,9 @@ public:
   void process(double x, std::span<double> out) noexcept {
     double rest = x;
     for (std::size_t k = 0; k < count_; ++k) {
-      double lo = 0.0;
-      double hi = 0.0;
-      split_[k].process(rest, lo, hi);
-      out[k] = lo;
-      rest = hi;
+      const auto split = split_[k].process(rest);
+      out[k] = split.low;
+      rest = split.high;
     }
     out[count_] = rest;
     for (std::size_t band = 0; band + 1 < count_; ++band) {

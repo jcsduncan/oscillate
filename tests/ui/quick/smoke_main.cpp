@@ -630,7 +630,7 @@ int run(int argc, char** argv) {
   // yet been installed: the edit runs inline, so it is complete when the edit
   // call returns and the next playback poll has not happened.
   if (smoke_live_close || smoke_live_stop)
-    dependencies.audio_edit_runner = [](std::function<void()> job) {
+    dependencies.audio_edit_runner = [](const std::function<void()>& job) {
       job();
       return std::jthread{};
     };

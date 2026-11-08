@@ -169,7 +169,7 @@ void history_jumps_in_one_commit() {
           "a new edit kept the old redo steps");
 
   quick::HistoryController refused([&] { return session.get(); }, [] { return false; },
-                                   [](QString) {}, [&] { ++commits; });
+                                   [](const QString&) {}, [&] { ++commits; });
   refused.jump_to(0);
   require(commits == 2 && session->history().redo_steps().empty(), "a refused jump still undid");
 }
@@ -210,6 +210,7 @@ void master_section_reads_the_analysis() {
 
 } // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): an uncaught exception is the test's failure report.
 int main(int argc, char** argv) {
   Directory home;
   // QSettings writes the palette's recents here, never in the user's home.

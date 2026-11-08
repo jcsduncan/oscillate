@@ -250,6 +250,7 @@ StartsResult chop_equal(const SampleAudio& audio, std::size_t count) {
     return StartsResult::failure(invalid("Equal chops must number 1 to 32"));
   const auto frames = static_cast<std::uint64_t>(audio.frames.size());
   std::vector<Candidate> candidates;
+  candidates.reserve(static_cast<std::size_t>(count));
   for (std::uint64_t index = 0; index < count; ++index)
     candidates.push_back(ordered(index * frames / count));
   return StartsResult::success(normalise(std::move(candidates), audio));

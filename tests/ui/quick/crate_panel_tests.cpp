@@ -236,7 +236,7 @@ void pads_bank_by_sixteen() {
   require(!item(*panel, QStringLiteral("cratePad:0"))->property("empty").toBool() &&
               item(*panel, numbered("cratePad:", chop_count))->property("empty").toBool(),
           "pads past the last chop are empty");
-  require(text_of(*panel, QStringLiteral("cratePadsTitle")) == QStringLiteral("PADS · C1–D#2"),
+  require(text_of(*panel, QStringLiteral("cratePadsTitle")) == QStringLiteral("PADS · C1–D♯2"),
           "bank A names its keys");
 
   click(*panel, item(*panel, QStringLiteral("crateBank:1")));

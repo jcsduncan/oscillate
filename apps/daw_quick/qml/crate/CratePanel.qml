@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import "../devicekit" as Kit
 import "CrateContract.js" as Contract
+import Oscillate.Format
 
 // The Crate chop sampler panel (ADR-0063, spec 09 §5): the header with the sample, its
 // tempo and root, the ERA and TIME choices; the chop-mode bar with CHOP TO
@@ -555,7 +556,7 @@ Rectangle {
                         readonly property string parameterId: "crate.swing"
                         caption: "SWING"
                         valueText: panel.controller.revision >= 0
-                            ? Math.round(panel.controller.value(parameterId)) + "%" : ""
+                            ? Format.percent(panel.controller.value(parameterId)) : ""
                         position: panel.controller.revision >= 0 ? panel.controller.normalised(parameterId) : 0
                         enabled: panel.controller.editable
                         onStarted: panel.controller.begin_gesture(parameterId)
@@ -787,10 +788,10 @@ Rectangle {
                                 anchors.right: parent.right
                                 readonly property var ids: panel.chopIds
                                 text: ids.attack === undefined || panel.controller.revision < 0 ? ""
-                                    : "A " + Math.round(panel.controller.value(ids.attack))
-                                      + " · H " + Math.round(panel.controller.value(ids.hold))
-                                      + " · D " + Math.round(panel.controller.value(ids.decay))
-                                      + " · R " + Math.round(panel.controller.value(ids.release)) + " ms"
+                                    : "A " + Format.milliseconds(panel.controller.value(ids.attack))
+                                      + " · H " + Format.milliseconds(panel.controller.value(ids.hold))
+                                      + " · D " + Format.milliseconds(panel.controller.value(ids.decay))
+                                      + " · R " + Format.milliseconds(panel.controller.value(ids.release))
                             }
                         }
                         CrateEnvelopeView {

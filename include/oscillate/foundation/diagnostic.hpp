@@ -23,7 +23,7 @@ enum class DiagnosticCategory : std::uint8_t {
 };
 
 // What happened, for records published without text. Stable values; append new ones.
-enum class DiagnosticKind : std::uint16_t {
+enum class DiagnosticKind : std::uint8_t {
   unspecified = 0,
   // The device callback output silence instead of a rendered block.
   // detail: frames; sample_position: the transport sample, -1 when unknown.
@@ -89,7 +89,7 @@ private:
   alignas(64) std::atomic<std::uint64_t> head_{0}; // Next position to publish.
   alignas(64) std::atomic<std::uint64_t> tail_{0}; // Next position to take.
   alignas(64) std::atomic<std::uint64_t> dropped_{0};
-  std::array<Cell, capacity> cells_{};
+  std::array<Cell, capacity> cells_;
 };
 
 // The process-wide ring that device callbacks, audio workers and engines

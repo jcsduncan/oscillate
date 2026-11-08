@@ -1349,6 +1349,11 @@ Result<void> RoutedPlaybackControl::build_and_publish(
 }
 
 void RoutedPlaybackControl::follow_published_notes() {
+  refresh_effect_key_notes();
+  refresh_synth_locks();
+}
+
+void RoutedPlaybackControl::refresh_effect_key_notes() {
   // Effects that read their keying tracks' notes ahead (Pump's MIDI
   // trigger, ADR-0058) take the new notes on a kept stage, no rebuild. A
   // failure keeps the notes it had.
@@ -1358,7 +1363,6 @@ void RoutedPlaybackControl::follow_published_notes() {
         (void)effect->refresh_key_notes(*published_snapshot_);
     }
   }
-  refresh_synth_locks();
 }
 
 void RoutedPlaybackControl::settle_live_candidate() {
@@ -2151,8 +2155,26 @@ bool RoutedPlaybackControl::set_live_send(project::TrackId track, project::SendI
   const auto route = std::ranges::find_if(published_route_plan_->sends, [&](const auto& item) {
     return item.track == track && item.send == send;
   });
-  return route != published_route_plan_->sends.end() &&
-         publisher_.push_live_edge_gain(route->edge, static_cast<float>(gain));
+  if (route == published_route_plan_->sends.end())
+    return false;
+  // A silent key stays silent while its gain is dragged.
+  float heard = static_cast<float>(gain);
+  if (published_snapshot_) {
+    const auto& tracks = published_snapshot_->tracks;
+    const auto source = std::ranges::find(tracks, track, &project::Track::id);
+    if (source != tracks.end()) {
+      const auto saved = std::ranges::find(source->sends, send, &project::SendRoute::id);
+      if (saved != source->sends.end() && saved->purpose == project::SendPurpose::sidechain) {
+        try {
+          if (routing::silent_key_sources(*published_snapshot_).contains(track))
+            heard = 0.0F;
+        } catch (const std::bad_alloc&) {
+          return false;
+        }
+      }
+    }
+  }
+  return publisher_.push_live_edge_gain(route->edge, heard);
 }
 
 bool RoutedPlaybackControl::set_live_synth_values(project::TrackId track,
@@ -2300,12 +2322,18 @@ Result<void> RoutedPlaybackControl::begin_edit(const project::AppliedRevision& a
     auto controls = routing::project_node_controls(*current, *published_route_plan_);
     if (!controls)
       return fail(current->revision, controls.error());
+    // A mute or solo also decides which sidechain keys sound.
+    auto edges = routing::project_edge_controls(*current, *published_route_plan_);
+    if (!edges)
+      return fail(current->revision, edges.error());
     (void)publisher_.collect_retired();
-    auto offered = publisher_.prepare_control_overlay(current->revision, controls.value());
+    auto offered =
+        publisher_.prepare_mix_overlay(current->revision, controls.value(), edges.value());
     if (offered) {
       // The source bank and every processor remain active. Only the post-insert
       // controls and audible revision change at the next callback boundary.
       published_snapshot_ = current;
+      refresh_effect_key_notes();
       return Result<void>::success();
     }
     // Revision-sensitive VST3 owners or channel automation retain the normal
@@ -2320,6 +2348,7 @@ Result<void> RoutedPlaybackControl::begin_edit(const project::AppliedRevision& a
     auto offered = publisher_.prepare_edge_overlay(current->revision, edges.value());
     if (offered) {
       published_snapshot_ = current;
+      refresh_effect_key_notes(); // A key at zero gain keys no notes.
       return Result<void>::success();
     }
     // A bound automation edge or a revision-sensitive processor follows the

@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Pocket device panel: a precision low-end instrument in charcoal, the
@@ -20,6 +21,9 @@ Rectangle {
     readonly property real margin: theme.spaceXl
     readonly property real gap: theme.plateGap
     readonly property int revision: controller.revision
+    // Levels at or below this read as silence; bare levels have one decimal.
+    readonly property real silentDb: -99
+    readonly property int levelDecimals: 1
 
     // pocket.hpp: kick, bass and cut per band (24 each), overlap before and
     // after, then three waveform histories of 256 (min, max) pairs.
@@ -249,9 +253,6 @@ Rectangle {
                 best = { db: cut[b], hz: bandHz(b) }
         }
         return best
-    }
-    function hzText(hz) {
-        return hz >= 1000 ? (hz / 1000).toFixed(1) + " kHz" : Math.round(hz) + " Hz"
     }
 
     // A graphite plate: a fine bevel along the top, the title in spaced caps.
@@ -520,7 +521,7 @@ Rectangle {
             objectName: "pocketCleared"
             anchors.horizontalCenter: parent.horizontalCenter
             y: panel.theme.clearedY
-            text: panel.cleared.toFixed(1)
+            text: Format.number(panel.cleared, panel.levelDecimals)
             color: panel.cleared >= 0.05 ? panel.theme.cleared : panel.theme.inkDim
             font.family: panel.theme.sans
             font.pixelSize: panel.theme.clearedSize
@@ -560,7 +561,7 @@ Rectangle {
                 Text {
                     objectName: bar.objectId
                     anchors.right: parent.right
-                    text: bar.db <= -99 ? "—" : bar.db.toFixed(1) + " dB"
+                    text: bar.db <= panel.silentDb ? "—" : Format.decibels(bar.db)
                     color: panel.theme.ink
                     font.family: panel.theme.mono
                     font.pixelSize: panel.theme.typeSmall
@@ -637,7 +638,7 @@ Rectangle {
             Line {
                 name: "DEEPEST CUT"
                 value: panel.deepestCut.db >= 0.05
-                    ? "−" + panel.deepestCut.db.toFixed(1) + " dB @ " + panel.hzText(panel.deepestCut.hz) : "—"
+                    ? Format.decibels(-panel.deepestCut.db) + " @ " + Format.hertz(panel.deepestCut.hz) : "—"
                 objectId: "pocketDeepestCut"
                 tone: panel.theme.cleared
             }
@@ -676,7 +677,7 @@ Rectangle {
         theme: panel.theme
         id: wavePlate
         title: "KICK · BASS IN · BASS OUT"
-        note: panel.playing ? "LAST 0.7 S" : "PREVIEW"
+        note: panel.playing ? "LAST 0.7 s" : "PREVIEW"
         noteColor: panel.playing ? panel.theme.live : panel.theme.inkFaint
         x: panel.margin
         y: panel.rowBY
@@ -816,7 +817,7 @@ Rectangle {
         Caption {
             x: panel.theme.timingControlsX
             y: panel.theme.lookaheadCaptionY
-            text: "LOOKAHEAD · LATENCY MS"
+            text: "LOOKAHEAD · LATENCY ms"
         }
         Kit.Segment {
             x: panel.theme.timingControlsX

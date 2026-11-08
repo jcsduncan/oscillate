@@ -44,10 +44,10 @@ inline constexpr double wind_whistle_wander_octaves = 0.5;
 
 class Wind {
 public:
-  void prepare(double rate, double reference);
+  void prepare(LayerFormat format);
   void reseed(std::uint64_t key) noexcept { rng_.seed(key); }
   void reset() noexcept;
-  void set(std::span<const double> v, double tone, double width, double steps, bool jump) noexcept;
+  void set(std::span<const double> v, LayerShape shape, double steps, bool jump) noexcept;
   [[nodiscard]] Pair next() noexcept {
     for (auto& d : wander_) {
       (void)d.next(rng_, wind_wander_seconds, rate_);
@@ -114,10 +114,10 @@ inline constexpr double room_waver_seconds = 8.0;
 
 class Room {
 public:
-  void prepare(double rate, double reference);
+  void prepare(LayerFormat format);
   void reseed(std::uint64_t key) noexcept { rng_.seed(key); }
   void reset() noexcept;
-  void set(std::span<const double> v, double tone, double width) noexcept;
+  void set(std::span<const double> v, LayerShape shape) noexcept;
   [[nodiscard]] Pair next() noexcept {
     std::array<double, channels> y{};
     std::array<double, room_mode_ratios.size()> move{};
@@ -213,13 +213,13 @@ inline constexpr double fridge_mains_multiple = 2.0;
 
 class Machine {
 public:
-  void prepare(double rate, double reference);
+  void prepare(LayerFormat format);
   // The machine's build: the servers' fans and the fridge's cycle, from
   // the seed alone.
   void build(std::uint64_t seed_key) noexcept;
   void reseed(std::uint64_t key) noexcept { rng_.seed(key); }
   void reset() noexcept;
-  void set(std::span<const double> v, double tone, double width) noexcept;
+  void set(std::span<const double> v, LayerShape shape) noexcept;
   [[nodiscard]] Pair next(std::int64_t time) noexcept {
     (void)wobble_.next(rng_, machine_wobble_seconds, rate_);
     Pair out;

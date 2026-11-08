@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The gain-reduction history: the reduction the limiter applies (held 1 s)
 // hanging from 0 dB at the top, over the last `seconds`, newest on the
@@ -58,7 +59,7 @@ Item {
             width: history.px - history.theme.spaceSm
             y: history.yOf(db) - history.theme.historyLabelLift
             horizontalAlignment: Text.AlignRight
-            text: db === 0 ? "0" : "−" + db
+            text: Format.number(-db, 0)
             color: db === 0 ? history.theme.inkDim : history.theme.inkFaint
             font.family: history.theme.mono
             font.pixelSize: history.theme.typeCaption
@@ -73,7 +74,7 @@ Item {
             x: history.px + history.pw * index / history.timeDivisions
                 - (index === history.timeDivisions ? width : index === 0 ? 0 : width / 2)
             y: history.py + history.ph + history.theme.historyTimeGap
-            text: age === 0 ? "NOW" : "−" + Math.round(age * 10) / 10 + " s"
+            text: age === 0 ? "NOW" : Format.seconds(-age)
             color: history.theme.inkFaint
             font.family: history.theme.mono
             font.pixelSize: history.theme.typeCaption

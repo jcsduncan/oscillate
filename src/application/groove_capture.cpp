@@ -375,7 +375,10 @@ Result<Grid> fit_grid(std::span<const Onset> beats, std::uint32_t rate, std::opt
     tempo = *bpm;
   } else {
     double best = -1.0;
-    for (double t = min_fit_bpm; t <= max_fit_bpm + fine_bpm_step; t += coarse_bpm_step) {
+    for (std::size_t step = 0;; ++step) {
+      const double t = min_fit_bpm + static_cast<double>(step) * coarse_bpm_step;
+      if (t > max_fit_bpm + fine_bpm_step)
+        break;
       const double score = resultant(beats, period_frames(t, rate)).length;
       if (score > best) {
         best = score;
@@ -389,7 +392,12 @@ Result<Grid> fit_grid(std::span<const Onset> beats, std::uint32_t rate, std::opt
     // Refine around the coarse choice.
     double refined = tempo;
     double refined_score = -1.0;
-    for (double t = tempo - coarse_bpm_step; t <= tempo + coarse_bpm_step; t += fine_bpm_step) {
+    const double refine_from = tempo - coarse_bpm_step;
+    const double refine_to = tempo + coarse_bpm_step;
+    for (std::size_t step = 0;; ++step) {
+      const double t = refine_from + static_cast<double>(step) * fine_bpm_step;
+      if (t > refine_to)
+        break;
       const double score = resultant(beats, period_frames(t, rate)).length;
       if (score > refined_score) {
         refined_score = score;
@@ -573,7 +581,7 @@ std::string describe(const Measurement& m) {
     text += ", 1 accent";
   else
     text += ", " + std::to_string(m.accents) + " accents";
-  text += ".";
+  text += '.';
   return text;
 }
 
@@ -811,8 +819,16 @@ std::vector<float> audition(const persistence::GrooveTemplate& groove, double bp
   const auto total =
       static_cast<std::size_t>(std::llround(quarter * static_cast<double>(beats_per_bar * bars)));
   std::vector<float> out(total * 2, 0.0F);
-  const auto add = [&](double at, double seconds, double gain, auto&& voice) {
-    const auto first = static_cast<std::int64_t>(std::llround(at));
+  // One audition hit: when it starts (frames), how long it lasts and how loud.
+  struct Strike {
+    double at = 0.0;
+    double seconds = 0.0;
+    double gain = 0.0;
+  };
+  const auto add = [&](Strike strike, auto&& voice) {
+    const double seconds = strike.seconds;
+    const double gain = strike.gain;
+    const auto first = static_cast<std::int64_t>(std::llround(strike.at));
     const auto length = static_cast<std::int64_t>(std::llround(seconds * rate));
     for (std::int64_t i = 0; i < length; ++i) {
       const auto n = first + i;
@@ -828,7 +844,9 @@ std::vector<float> audition(const persistence::GrooveTemplate& groove, double bp
   for (std::size_t beat = 0; beat < beats_per_bar * bars; ++beat) {
     double phase = 0.0;
     double last_t = 0.0;
-    add(quarter * static_cast<double>(beat), audition_kick_seconds, audition_kick_gain,
+    add({.at = quarter * static_cast<double>(beat),
+         .seconds = audition_kick_seconds,
+         .gain = audition_kick_gain},
         [&](double t, double length) {
           const double hz =
               audition_kick_hz + audition_kick_drop_hz * std::exp(-t / audition_kick_pitch_seconds);
@@ -853,13 +871,14 @@ std::vector<float> audition(const persistence::GrooveTemplate& groove, double bp
     const double level = grooved ? feel.velocity : 1.0;
     double previous = 0.0;
     double earlier = 0.0;
-    add(at, audition_hat_seconds, audition_hat_gain * level, [&](double t, double length) {
-      const double x = noise();
-      const double y = x - 2.0 * previous + earlier;
-      earlier = previous;
-      previous = x;
-      return 0.25 * y * (1.0 - t / length) * (1.0 - t / length);
-    });
+    add({.at = at, .seconds = audition_hat_seconds, .gain = audition_hat_gain * level},
+        [&](double t, double length) {
+          const double x = noise();
+          const double y = x - 2.0 * previous + earlier;
+          earlier = previous;
+          previous = x;
+          return 0.25 * y * (1.0 - t / length) * (1.0 - t / length);
+        });
   }
   for (auto& v : out)
     v = std::clamp(v, -1.0F, 1.0F);

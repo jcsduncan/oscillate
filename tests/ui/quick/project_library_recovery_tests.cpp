@@ -7,6 +7,7 @@
 #include <QTimer>
 #include <QUrl>
 
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -23,6 +24,9 @@ namespace foundation = oscillate::foundation;
 namespace quick = oscillate::quick;
 
 using oscillate::test::require;
+
+// Comfortably older than the test process, whatever the filesystem's clock.
+constexpr auto stale_stage_age = std::chrono::hours(1);
 
 class Directory {
 public:
@@ -106,9 +110,18 @@ void project_library_recovery_checks() {
   }
 
   fs::remove(damaged / "state" / "CURRENT");
+  // Creation stages are never projects. One left by an earlier process is
+  // removed at startup; a newer one may belong to a live creation and stays.
+  const auto old_stage = library / ".Third song.creating-00112233445566778899aabbccddeeff";
+  const auto new_stage = library / ".Fourth song.creating-ffeeddccbbaa99887766554433221100";
+  for (const auto& stage : {old_stage, new_stage})
+    fs::create_directories(stage / "state" / "generations");
+  fs::last_write_time(old_stage, fs::file_time_type::clock::now() - stale_stage_age);
   quick::ProjectBridge reopened(directory.root(), nullptr, {}, discover);
   require(!reopened.project_open() && reopened.available_projects().size() == 3,
           "library did not retain a project with recoverable generations after restart");
+  require(!fs::exists(old_stage) && fs::exists(new_stage),
+          "startup cleanup did not remove only the stage older than the process");
   reopened.open_listed(QString::fromStdString(damaged.string()));
   require(!reopened.project_open() && reopened.recovery_choice().value("active").toBool(),
           "unpointed project did not offer a recovery choice");

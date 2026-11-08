@@ -143,7 +143,6 @@ public:
     return id == gain_id ? gain_ : 0.5;
   }
   // The SDK fixes this convertible parameter order.
-  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   Steinberg::tresult PLUGIN_API setParamNormalized(Steinberg::Vst::ParamID id,
                                                    Steinberg::Vst::ParamValue value) override {
     if (id < 1 || id > static_cast<Steinberg::Vst::ParamID>(parameter_count) ||

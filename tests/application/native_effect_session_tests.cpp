@@ -9,6 +9,7 @@
 #include "oscillate/test/temp_dir.hpp"
 #include "oscillate/test/tolerances.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -18,6 +19,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -187,45 +189,120 @@ void documents_travel_with_the_effect() {
   REQUIRE_EQ(gated.curves.front().points[1].x, 0.18, "a preset brings its shape");
 }
 
+// Pump keyed by a kick's MIDI notes (ADR-0058), and what it plays.
+constexpr std::size_t pump_block_frames = 128;
+constexpr std::uint8_t kick_key = 36;
+constexpr std::size_t hard_gate_preset = 3;
+constexpr double midi_trigger = 2.0;
+// The duck is down this far into the kick note, and nothing ducks this far
+// before it.
+constexpr std::size_t duck_settle_frames = 96;
+constexpr std::size_t before_note_frames = 480;
+constexpr std::uint64_t after_note_frames = 4'800;
+constexpr float unducked_floor = 0.99F;
+constexpr float ducked_ceiling = 0.05F;
+
+struct KeyedPump {
+  std::unique_ptr<application::ProjectSession> session;
+  project::TrackId kick;
+  project::TrackId bass;
+  project::TrackId pad;
+  project::InsertSlotId slot;
+  project::SendId key;
+  std::size_t note;
+};
+
+KeyedPump keyed_pump(const fs::path& root) {
+  auto session = take(application::ProjectSession::create(root));
+  const auto kick = take(session->instruments().add_synth_track());
+  const auto bass = take(session->instruments().add_synth_track());
+  const auto pad = take(session->instruments().add_synth_track());
+  accepted(session->midi_clips().add_midi_clip(kick, {0}));
+  const auto clip = session->snapshot().tracks.front().midi_clips.front().id;
+  accepted(session->notes().add_note(clip, {timeline::ticks_per_quarter * 3 / 2}, kick_key));
+  const auto slot = take(session->effects().add_effect_engine(bass, 0, "pump", hard_gate_preset));
+  const auto key = take(session->routing().add_sidechain(kick, bass, slot, 1.0));
+  auto values = take(session->effects().native_effect_values(bass, slot));
+  const auto trigger_index =
+      synth::find_parameter(*effects::find_engine("pump")->descriptor, "pump.trigger");
+  REQUIRE_TRUE(trigger_index.has_value(), "Pump has a trigger parameter");
+  values[*trigger_index] = midi_trigger;
+  accepted(session->effects().set_native_effect_values(bass, slot, values));
+  std::size_t note = 0;
+  const auto plan = take(engine::compile_midi_events(session->snapshot()));
+  for (const auto& instrument : plan.instruments()) {
+    if (instrument.track() == kick)
+      note = static_cast<std::size_t>(instrument.events().front().sample.value);
+  }
+  REQUIRE_GT(note, before_note_frames, "the kick note is on the timeline");
+  return {std::move(session), kick, bass, pad, slot, key, note};
+}
+
+std::unique_ptr<native_inserts::NativeEffectStage> pump_stage(const KeyedPump& pump) {
+  const auto& snapshot = pump.session->snapshot();
+  const auto bass = std::ranges::find(snapshot.tracks, pump.bass, &project::Track::id);
+  return take(native_inserts::NativeEffectStage::create(
+      snapshot, pump.slot, std::get<project::NativeEffectPatch>(bass->effects.front().processor),
+      {}, {.max_frames = pump_block_frames}));
+}
+
+// Unit input through the stage from the start, past the kick note.
+std::vector<engine::StereoFrame> play(native_inserts::NativeEffectStage& stage,
+                                      const KeyedPump& pump, std::uint64_t generation) {
+  std::vector<engine::StereoFrame> out;
+  for (std::uint64_t position = 0; position < pump.note + after_note_frames;
+       position += pump_block_frames) {
+    std::vector<engine::StereoFrame> block(pump_block_frames, engine::StereoFrame{1.0F, 1.0F});
+    stage.process(block, {position, generation});
+    out.insert(out.end(), block.begin(), block.end());
+  }
+  return out;
+}
+
+bool ducks(native_inserts::NativeEffectStage& stage, const KeyedPump& pump,
+           std::uint64_t generation = 1) {
+  const auto out = play(stage, pump, generation);
+  REQUIRE_GT(out[pump.note - before_note_frames].left, unducked_floor,
+             "nothing ducks before the kick note");
+  return out[pump.note + duck_settle_frames].left < ducked_ceiling;
+}
+
 // ADR-0058: Pump's MIDI trigger follows the notes of the track keying it,
 // read from the project when the stage is prepared and again on every
 // publish, so the duck lands on each hit with no lookahead.
 void pump_follows_its_key_tracks_notes() {
   Directory directory;
-  auto session = take(application::ProjectSession::create(directory.path() / "song"));
-  const auto kick = take(session->instruments().add_synth_track());
-  const auto bass = take(session->instruments().add_synth_track());
-  accepted(session->midi_clips().add_midi_clip(kick, {0}));
-  const auto clip = session->snapshot().tracks.front().midi_clips.front().id;
-  accepted(session->notes().add_note(clip, {timeline::ticks_per_quarter * 3 / 2}, 36));
-  const auto slot = take(session->effects().add_effect_engine(bass, 0, "pump", 3)); // Hard Gate.
-  (void)take(session->routing().add_sidechain(kick, bass, slot, 1.0));
-  auto values = take(session->effects().native_effect_values(bass, slot));
-  values[*synth::find_parameter(*effects::find_engine("pump")->descriptor, "pump.trigger")] = 2.0;
-  accepted(session->effects().set_native_effect_values(bass, slot, values));
+  const auto pump = keyed_pump(directory.path() / "song");
+  auto stage = pump_stage(pump);
+  require(ducks(*stage, pump), "the duck is down 2 ms into the kick note");
+}
 
-  const auto& snapshot = session->snapshot();
-  const auto plan = take(engine::compile_midi_events(snapshot));
-  std::int64_t note = -1;
-  for (const auto& instrument : plan.instruments()) {
-    if (instrument.track() == kick)
-      note = instrument.events().front().sample.value;
-  }
-  REQUIRE_GT(note, 0, "the kick note is on the timeline");
-  const auto& bass_track = snapshot.tracks.back();
-  auto stage = take(native_inserts::NativeEffectStage::create(
-      snapshot, slot, std::get<project::NativeEffectPatch>(bass_track.effects.front().processor),
-      {}, 128, std::numeric_limits<std::uint64_t>::max()));
-  std::vector<engine::StereoFrame> out;
-  for (std::uint64_t position = 0; position < static_cast<std::uint64_t>(note) + 4'800;
-       position += 128) {
-    std::vector<engine::StereoFrame> block(128, engine::StereoFrame{1.0F, 1.0F});
-    stage->process(block, {position, 1});
-    out.insert(out.end(), block.begin(), block.end());
-  }
-  const auto at = static_cast<std::size_t>(note);
-  REQUIRE_GT(out[at - 480].left, 0.99F, "nothing ducks before the kick note");
-  REQUIRE_LT(out[at + 96].left, 0.05F, "the duck is down 2 ms into the kick note");
+// Issue #245: only a key you can hear keys Pump's MIDI trigger. Its notes
+// follow the mixer's mute and solo (a soloed bass still ducks to its kick)
+// and the key's gain, and a kept stage picks up the change.
+void pump_hears_only_audible_keys() {
+  Directory directory;
+  const auto pump = keyed_pump(directory.path() / "song");
+  auto& session = *pump.session;
+  accepted(session.tracks().set_track_muted(pump.kick, true));
+  auto stage = pump_stage(pump);
+  require(!ducks(*stage, pump), "a muted kick keys nothing");
+
+  accepted(session.tracks().set_track_muted(pump.kick, false));
+  accepted(stage->refresh_key_notes(session.snapshot()));
+  constexpr std::uint64_t after_unmute = 2;
+  require(ducks(*stage, pump, after_unmute), "unmuting the kick brings the ducks back");
+
+  accepted(session.tracks().set_track_soloed(pump.pad, true));
+  require(!ducks(*pump_stage(pump), pump), "soloing another track silences the kick's key");
+  accepted(session.tracks().set_track_soloed(pump.pad, false));
+
+  accepted(session.tracks().set_track_soloed(pump.bass, true));
+  require(ducks(*pump_stage(pump), pump), "a soloed bass still ducks to its kick");
+  accepted(session.tracks().set_track_soloed(pump.bass, false));
+
+  accepted(session.routing().set_send_gain(pump.key, 0.0));
+  require(!ducks(*pump_stage(pump), pump), "a key at no gain keys nothing");
 }
 
 // ADR-0058: linked Pumps share their shape; knobs stay their own. One edit,
@@ -595,6 +672,7 @@ int main() {
     automation_follows_its_slot();
     documents_travel_with_the_effect();
     pump_follows_its_key_tracks_notes();
+    pump_hears_only_audible_keys();
     linked_effects_share_their_shape();
     lone_links_are_released();
     note_effects_sit_before_the_synth();

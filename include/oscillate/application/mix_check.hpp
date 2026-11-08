@@ -63,11 +63,15 @@ inline constexpr double target_near = 1.0;
 // taken off whether it comes from peaks between samples or from gain after
 // the limiter.
 inline constexpr double ceiling_true_peak_margin_db = 0.5;
-// The new ceiling (dB) for a master limiter at `current` (none: a new one)
-// that let the master's true peak reach `true_peak` against `target`. Never
-// above `current`.
-[[nodiscard]] double lowered_ceiling_db(std::optional<double> current, double target,
-                                        double true_peak) noexcept;
+// A master limiter at `current` dB (none: a new one) that let the master's
+// true peak reach `true_peak` dB against `target` dB.
+struct CeilingReading {
+  std::optional<double> current;
+  double target = 0.0;
+  double true_peak = 0.0;
+};
+// The limiter's new ceiling (dB). Never above `current`.
+[[nodiscard]] double lowered_ceiling_db(const CeilingReading& reading) noexcept;
 
 // ---- Fix rules -----------------------------------------------------------------------
 

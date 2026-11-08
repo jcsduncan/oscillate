@@ -38,7 +38,8 @@ int model_named(std::string_view name) {
   }
   throw std::runtime_error("unknown model " + std::string(name));
 }
-namespace M {
+namespace models {
+// NOLINTBEGIN(bugprone-throwing-static-initialization): a throw fails the test at start-up.
 const int lp12 = model_named("LP 12");
 const int lp24 = model_named("LP 24");
 const int bp12 = model_named("BP 12");
@@ -50,7 +51,8 @@ const int ota = model_named("OTA");
 const int sem = model_named("SEM");
 const int comb_plus = model_named("Comb +");
 const int comb_minus = model_named("Comb -");
-} // namespace M
+// NOLINTEND(bugprone-throwing-static-initialization)
+} // namespace models
 
 // Init: the filter only, flat resonance, no modulation, fully wet.
 std::vector<double> filter(int model, double cutoff, double resonance = 0.0) {
@@ -80,8 +82,8 @@ void svf_modes_match_butterworth() {
     int order;
     bool high;
   };
-  for (const Case c : {Case{M::lp12, 2, false}, Case{M::lp24, 4, false}, Case{M::hp12, 2, true},
-                       Case{M::hp24, 4, true}}) {
+  for (const Case c : {Case{models::lp12, 2, false}, Case{models::lp24, 4, false},
+                       Case{models::hp12, 2, true}, Case{models::hp24, 4, true}}) {
     for (const double ratio : {0.25, 0.5, 1.0, 2.0, 4.0}) {
       const double hz = cutoff * ratio;
       const double expected =
@@ -98,14 +100,14 @@ void svf_modes_match_butterworth() {
 }
 
 void notch_and_band_pass_have_their_shape() {
-  REQUIRE_LT(gain_db(filter(M::notch, 1'000.0), 1'000.0), -40.0, "the notch nulls its centre");
-  REQUIRE_LT(std::fabs(gain_db(filter(M::notch, 1'000.0), 100.0)), 0.2,
+  REQUIRE_LT(gain_db(filter(models::notch, 1'000.0), 1'000.0), -40.0, "the notch nulls its centre");
+  REQUIRE_LT(std::fabs(gain_db(filter(models::notch, 1'000.0), 100.0)), 0.2,
              "the notch passes a decade below");
   // A second-order band-pass at Q = 0.707: |H| = x / sqrt((1 - x^2)^2 + 2x^2).
   for (const double ratio : {0.25, 1.0, 4.0}) {
     const double expected =
         db(ratio / std::sqrt((1.0 - ratio * ratio) * (1.0 - ratio * ratio) + 2.0 * ratio * ratio));
-    const double actual = gain_db(filter(M::bp12, 1'000.0), 1'000.0 * ratio);
+    const double actual = gain_db(filter(models::bp12, 1'000.0), 1'000.0 * ratio);
     REQUIRE_LT(std::fabs(actual - expected), 0.25,
                "band-pass at " + std::to_string(ratio) + "x: " + std::to_string(actual) +
                    " dB, expected " + std::to_string(expected));
@@ -113,22 +115,22 @@ void notch_and_band_pass_have_their_shape() {
 }
 
 void character_models_are_low_passes() {
-  for (const int model : {M::ladder, M::ota, M::sem}) {
+  for (const int model : {models::ladder, models::ota, models::sem}) {
     auto values = filter(model, 1'000.0);
     values[at("contour.morph")] = 0.0; // SEM: fully low-pass.
     const double pass = gain_db(values, 125.0);
     const double stop = gain_db(values, 8'000.0);
     REQUIRE_LT(std::fabs(pass), 3.0,
                "model " + std::to_string(model) + " passes below cutoff: " + std::to_string(pass));
-    REQUIRE_LT(stop - pass, (model == M::sem ? -30.0 : -60.0),
+    REQUIRE_LT(stop - pass, (model == models::sem ? -30.0 : -60.0),
                "model " + std::to_string(model) + " rolls off: " + std::to_string(stop - pass));
   }
 }
 
 void combs_peak_where_they_should() {
   const double f0 = 200.0;
-  const auto plus = filter(M::comb_plus, f0, 0.9);
-  const auto minus = filter(M::comb_minus, f0, 0.9);
+  const auto plus = filter(models::comb_plus, f0, 0.9);
+  const auto minus = filter(models::comb_minus, f0, 0.9);
   const double plus_peak = gain_db(plus, f0);
   const double plus_trough = gain_db(plus, 1.5 * f0);
   const double minus_peak = gain_db(minus, 1.5 * f0);
@@ -143,7 +145,7 @@ void the_mix_is_phase_aligned() {
   const auto input = sine(1'000.0, 0.25, 48'000);
   std::array<Stereo, 3> out;
   for (std::size_t i = 0; i < 3; ++i) {
-    auto values = filter(M::lp12, 20'000.0);
+    auto values = filter(models::lp12, 20'000.0);
     values[at("contour.mix")] = 0.5 * static_cast<double>(i);
     auto runtime = make_effect(contour_engine(), values);
     out[i] = process(*runtime, input);
@@ -164,8 +166,10 @@ void the_mix_is_phase_aligned() {
 
 // The largest sample step across a live switch, against the steady signal's.
 void live_model_switches_are_click_free() {
-  const std::array<std::array<int, 2>, 4> switches{
-      {{M::lp24, M::hp12}, {M::lp24, M::comb_plus}, {M::ladder, M::sem}, {M::notch, M::ota}}};
+  const std::array<std::array<int, 2>, 4> switches{{{models::lp24, models::hp12},
+                                                    {models::lp24, models::comb_plus},
+                                                    {models::ladder, models::sem},
+                                                    {models::notch, models::ota}}};
   const auto input = sine(220.0, 0.5, 48'000);
   for (const auto& pair : switches) {
     auto values = filter(pair[0], 1'500.0, 0.3);
@@ -240,7 +244,7 @@ void the_sidechain_ducks_the_filter() {
 void the_lfo_spreads_in_stereo() {
   const auto input = noise(0.3, 48'000, true);
   for (const double stereo : {0.0, 180.0}) {
-    auto values = filter(M::lp24, 1'000.0, 0.4);
+    auto values = filter(models::lp24, 1'000.0, 0.4);
     values[at("contour.lfo.depth")] = 24.0;
     values[at("contour.lfo.rate")] = 2.0;
     values[at("contour.lfo.stereo")] = stereo;
@@ -260,7 +264,7 @@ void the_lfo_spreads_in_stereo() {
 }
 
 void tempo_sync_follows_the_transport() {
-  auto values = filter(M::lp24, 1'000.0, 0.4);
+  auto values = filter(models::lp24, 1'000.0, 0.4);
   values[at("contour.lfo.depth")] = 24.0;
   values[at("contour.lfo.sync")] = 1.0;
   const auto input = noise(0.3, 24'000, true);

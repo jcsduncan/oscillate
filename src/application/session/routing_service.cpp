@@ -183,7 +183,7 @@ RoutingService::set_sidechain_source(project::TrackId destination, project::Inse
   }
   if (operations.empty())
     return Result::success();
-  auto applied = model().apply(std::move(operations));
+  auto applied = model().apply(operations);
   if (!applied)
     return Result::failure(applied.error());
   return Result::success();

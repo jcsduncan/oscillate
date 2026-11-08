@@ -82,10 +82,12 @@ double filtered_gain(const dsp::BiquadCoefficients& c, double hz, double rate) {
 
 void allpass_is_flat() {
   for (const double rate : {44'100.0, 48'000.0, 96'000.0}) {
-    const auto c = dsp::rbj_allpass(150.0, 0.7, rate);
+    const auto c = dsp::rbj_allpass({.hz = 150.0, .rate = rate}, 0.7);
     REQUIRE_EQ(c.b2, 1.0, "the allpass is mirror-symmetric");
     REQUIRE_EQ(c.a2, c.b0, "the allpass is mirror-symmetric");
     REQUIRE_EQ(c.a1, c.b1, "the allpass is mirror-symmetric");
+    // The sweep grid is the test input.
+    // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
     for (double hz = 10.0; hz < 0.49 * rate; hz *= 1.5) {
       const double w = 2.0 * std::numbers::pi * hz / rate;
       REQUIRE_LT(std::fabs(std::abs(response(c, w)) - 1.0), tolerance::double_rounding,
@@ -103,8 +105,8 @@ void allpass_is_flat() {
 void shelves_hit_their_end_gains() {
   for (const double rate : {44'100.0, 48'000.0}) {
     for (const double gain : {0.25, 0.5, 2.0}) {
-      const auto low = dsp::rbj_shelf(false, gain, 300.0, rate);
-      const auto high = dsp::rbj_shelf(true, gain, 3'000.0, rate);
+      const auto low = dsp::rbj_shelf(false, gain, {.hz = 300.0, .rate = rate});
+      const auto high = dsp::rbj_shelf(true, gain, {.hz = 3'000.0, .rate = rate});
       REQUIRE_LT(std::fabs(std::abs(response(low, 0.0)) - gain), tolerance::double_rounding,
                  "the low shelf's DC gain");
       REQUIRE_LT(std::fabs(std::abs(response(low, std::numbers::pi)) - 1.0),

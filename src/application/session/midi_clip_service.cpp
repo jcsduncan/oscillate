@@ -248,7 +248,7 @@ foundation::Result<void> MidiClipService::resize_midi_clip(project::ClipId clip,
   std::vector<project::Operation> operations{project::SetMidiClipPlacement{clip, placement}};
   if (pattern != found->pattern_length)
     operations.emplace_back(project::SetMidiPattern{clip, pattern, found->loop});
-  auto applied = model().apply(std::move(operations));
+  auto applied = model().apply(operations);
   return applied ? foundation::Result<void>::success()
                  : foundation::Result<void>::failure(applied.error());
 }
@@ -334,7 +334,7 @@ MidiClipService::replace_midi_clip_notes(project::ClipId clip, timeline::TickPos
     operations.emplace_back(project::AddMidiNote{clip, note});
   if (operations.empty())
     return Result::success();
-  auto applied = model().apply(std::move(operations), gesture);
+  auto applied = model().apply(operations, gesture);
   return applied ? Result::success() : Result::failure(applied.error());
 }
 
@@ -608,7 +608,7 @@ Result<project::ClipId> MidiClipService::consolidate_midi_clips(project::TrackId
   if (chosen.size() == 1 && !chosen.front()->loop)
     return R::failure({ErrorCode::invalid_argument,
                        "Select more than one clip, or a looped clip, to consolidate"});
-  return merge_chosen_midi_clips(track, std::move(chosen));
+  return merge_chosen_midi_clips(track, chosen);
 }
 
 Result<project::ClipId> MidiClipService::merge_midi_clips(std::span<const project::ClipId> clips) {
@@ -625,14 +625,14 @@ Result<project::ClipId> MidiClipService::merge_midi_clips(std::span<const projec
       continue;
     if (chosen.size() != clips.size())
       return R::failure({ErrorCode::invalid_argument, "Merge joins MIDI clips on one track"});
-    return merge_chosen_midi_clips(track.id, std::move(chosen));
+    return merge_chosen_midi_clips(track.id, chosen);
   }
   return R::failure({ErrorCode::not_found, "No MIDI clips in the selection"});
 }
 
 Result<project::ClipId>
 MidiClipService::merge_chosen_midi_clips(project::TrackId track,
-                                         std::vector<const project::MidiClip*> clips) {
+                                         const std::vector<const project::MidiClip*>& clips) {
   using R = Result<project::ClipId>;
   const auto& state = snapshot();
   struct Span {
@@ -771,6 +771,7 @@ MidiClipService::merge_chosen_midi_clips(project::TrackId track,
                                  std::move(lanes)};
   consolidated.color = chosen.front().clip->color;
   std::vector<project::Operation> operations;
+  operations.reserve(chosen.size());
   for (const auto& span : chosen)
     operations.emplace_back(project::RemoveClip{span.clip->id});
   operations.emplace_back(project::AddMidiClip{track, std::move(consolidated)});

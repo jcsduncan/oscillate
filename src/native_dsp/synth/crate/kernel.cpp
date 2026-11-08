@@ -374,7 +374,7 @@ public:
                const SynthTransport& transport) noexcept override {
     const bool first = !controlled_;
     controlled_ = true;
-    std::copy(values.begin(), values.end(), values_.begin());
+    std::ranges::copy(values, values_.begin());
     tick_beat_ = transport.beat_at_block_start;
     beats_per_frame_ = transport.beats_per_frame;
     tick_frame_ = now_;
@@ -613,7 +613,7 @@ private:
           choice(values_[global::keys_chop]), max_chops - 1)];
       if (mapped == detail::no_chop)
         return;
-      index = static_cast<std::size_t>(mapped);
+      index = static_cast<std::size_t>(static_cast<unsigned char>(mapped));
     }
     const auto& compiled = state_->chops[index];
     const std::size_t slot = compiled.slot;

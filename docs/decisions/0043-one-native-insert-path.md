@@ -1,6 +1,6 @@
 # ADR-0043 — One native insert path
 
-**Status:** Superseded by [ADR-0090](0090-render-graph-builder.md) where it has export link `native_inserts`: export now reaches it through `render_graph`. The rest is accepted and implemented; the classic kinds become engines in ADR-0047. **Date:** 20 October 2026.
+**Status:** Superseded by [ADR-0090](0090-render-graph-builder.md) where it has export link `native_inserts`: export now reaches it through `render_graph`. Superseded by [ADR-0092](0092-native-inserts-read-key-audibility.md) where it lists `native_inserts`' dependencies: it also links `routing`. The rest is accepted and implemented; the classic kinds become engines in ADR-0047. **Date:** 20 October 2026.
 **Builds on:**
 - ADR-0023, the unified insert chain;
 - ADR-0040, the native effect platform (its model, schema and Quick decisions stand);
@@ -26,7 +26,7 @@ Adding the ADR-0040 alternative as a seventh branch in every one of those places
 
 ### 1. One factory, in its own library
 
-`oscillate::native_inserts` (`src/native_inserts`) depends only on project, engine, timeline, native_dsp and native_effects. It owns:
+`oscillate::native_inserts` (`src/native_inserts`) depends only on project, engine, timeline, native_dsp and native_effects (superseded by [ADR-0092](0092-native-inserts-read-key-audibility.md), which adds routing). It owns:
 - `prepare_native_stage(const project::EffectProcessor&, const StageContext&) -> Result<PreparedStage>`.
   - `PreparedStage` = `{runtime, kind, generation, latency_frames, export_tail_frames, transition_tail_frames, sidechain_capable}`.
   - Every native kind is prepared here, and only here.

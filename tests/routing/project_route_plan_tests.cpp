@@ -1331,7 +1331,7 @@ void native_and_vst3_effects_interleave_in_any_saved_order() {
       require_failure(registry.compile(state, 16, reversed), foundation::ErrorCode::unsupported,
                       "interleaved chain accepted receipts in reverse order");
       ++orders;
-    } while (std::next_permutation(order.begin(), order.end()));
+    } while (std::ranges::next_permutation(order).found);
     REQUIRE_EQ(orders, 24, "not every interleaving was compiled");
   }
 }
@@ -1794,7 +1794,7 @@ void channel_balance_preserves_center_unity() {
   REQUIRE_EQ(gain.right, 0.0F, "hard left balance did not silence the right channel");
 }
 
-void silent_tracks_are_muted_or_feed_only_muted_tracks_and_never_keys() {
+void silent_tracks_are_muted_or_feed_only_muted_tracks_or_silent_keys() {
   routing::ProjectRouteIdRegistry registry;
   auto state = snapshot();
   const auto audio = state.tracks[0].id;
@@ -1840,16 +1840,66 @@ void silent_tracks_are_muted_or_feed_only_muted_tracks_and_never_keys() {
   REQUIRE_TRUE(silent(audio), "solo left a silenced track heard");
   REQUIRE_TRUE(silent(group), "solo left a silenced track heard");
   REQUIRE_TRUE(!silent(other), "solo left a silenced track heard");
-  // A muted track that keys a sidechain still renders: the key taps it first.
-  state.tracks[1].soloed = false;
+  // A track whose key sounds still renders: the key taps it before its
+  // fader, so soloing the track it keys silences its audio, not its key.
   const auto slot = id<project::InsertSlotId>(81);
   state.tracks[1].effects.push_back({slot, true, effect_patch("press")});
   state.tracks[0].sends.push_back(
       {id<project::SendId>(82), other, 1.0, project::SendPurpose::sidechain, slot});
-  state.tracks[0].muted = true;
   const std::array bound{native_stage(other, slot, 1, 0, true)};
-  require(!silent(audio, bound), "a muted sidechain key was skipped");
-  require(!silent(group, bound), "a bus fed by a key was skipped");
+  require(!silent(audio, bound), "a sounding sidechain key was skipped");
+  // A muted track keys nothing (issue #245), so nothing renders for it.
+  state.tracks[1].soloed = false;
+  state.tracks[0].muted = true;
+  require(silent(audio, bound), "a muted track was rendered for its silent key");
+}
+
+// Issue #245: a key follows its source's mute and the mixer's solo, except
+// that a solo keeping the keyed track keeps its key. A silent key carries
+// no audio: its edge gain is zero, live and in a recompiled plan.
+void a_key_sounds_only_from_a_track_you_can_hear() {
+  routing::ProjectRouteIdRegistry registry;
+  auto state = snapshot();
+  const auto kick = state.tracks[0].id;
+  const auto bass = state.tracks[1].id;
+  const auto slot = id<project::InsertSlotId>(91);
+  const auto send = id<project::SendId>(92);
+  state.tracks[1].effects.push_back({slot, true, effect_patch("press")});
+  state.tracks[0].sends.push_back({send, bass, 1.0, project::SendPurpose::sidechain, slot});
+  const std::array bound{native_stage(bass, slot, 1, 0, true)};
+  const auto key_gain = [&] {
+    const auto plan = take(registry.compile(state, 64, bound));
+    const auto mapped = std::ranges::find(plan.sends, send, &routing::ProjectRouteSend::send);
+    REQUIRE_NE(mapped, plan.sends.end(), "the key has an edge");
+    const auto edge = std::ranges::find(plan.edges, mapped->edge, &engine::RoutingEdge::id);
+    const auto controls = take(routing::project_edge_controls(state, plan));
+    const auto control = std::ranges::find(controls, mapped->edge, &engine::RoutedEdgeControl::id);
+    REQUIRE_EQ(control->gain, edge->gain, "live and compiled key gains agree");
+    return edge->gain;
+  };
+  const auto silent = [&] { return routing::silent_key_sources(state).contains(kick); };
+  REQUIRE_EQ(key_gain(), 1.0F, "a heard kick keys at its gain");
+  REQUIRE_TRUE(!silent(), "a heard kick keys at its gain");
+
+  state.tracks[0].muted = true;
+  REQUIRE_EQ(key_gain(), 0.0F, "a muted kick keys nothing");
+  REQUIRE_TRUE(silent(), "a muted kick keys nothing");
+  state.tracks[0].muted = false;
+
+  state.tracks[2].soloed = true;
+  REQUIRE_EQ(key_gain(), 0.0F, "soloing another track silences the kick's key");
+  REQUIRE_TRUE(silent(), "soloing another track silences the kick's key");
+  state.tracks[2].soloed = false;
+
+  state.tracks[1].soloed = true;
+  REQUIRE_EQ(key_gain(), 1.0F, "a soloed bass still hears its kick");
+  REQUIRE_TRUE(!silent(), "a soloed bass still hears its kick");
+  state.tracks[1].soloed = false;
+
+  state.tracks[0].sends.back().gain = 0.0;
+  REQUIRE_TRUE(!routing::keys_now(state, routing::silent_key_sources(state), state.tracks[0],
+                                  state.tracks[0].sends.back()),
+               "a key at no gain keys nothing");
 }
 
 // A processor that does nothing, standing in for a prepared chain.
@@ -2195,7 +2245,8 @@ int main() {
     stage_bound_counts_the_vst3_instrument();
     receipt_mismatches_fail_closed();
     solo_projection_retains_routes_and_respects_explicit_mute();
-    silent_tracks_are_muted_or_feed_only_muted_tracks_and_never_keys();
+    silent_tracks_are_muted_or_feed_only_muted_tracks_or_silent_keys();
+    a_key_sounds_only_from_a_track_you_can_hear();
     channel_balance_preserves_center_unity();
     sidechain_send_binds_a_separate_input();
     vst3_sidechain_needs_exact_auxiliary_bus_receipt();

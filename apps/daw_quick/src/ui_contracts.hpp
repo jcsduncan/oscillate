@@ -5,6 +5,7 @@
 #include <QStringList>
 #include <QVariantList>
 
+#include <cstdint>
 #include <span>
 
 #include "oscillate/project/model.hpp"
@@ -44,7 +45,7 @@ class UiContracts final : public QObject {
   Q_PROPERTY(int semitones_per_octave READ semitones_per_octave CONSTANT)
 
 public:
-  enum Spelling : int {
+  enum Spelling : std::uint8_t {
     sharp_spelling = 0,
     ascii_spelling = 1,
     key_spelling = 2,

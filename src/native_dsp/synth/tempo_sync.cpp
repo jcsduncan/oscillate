@@ -28,9 +28,7 @@ void BarGrid::locate(std::int64_t tick, double& bar, double& beats_per_bar) cons
     bar = static_cast<double>(tick) / (4.0 * quarter);
     return;
   }
-  const auto after = std::upper_bound(
-      segments_.begin(), segments_.end(), tick,
-      [](std::int64_t value, const Segment& segment) { return value < segment.tick; });
+  const auto after = std::ranges::upper_bound(segments_, tick, {}, &Segment::tick);
   const auto& segment = *(after - 1);
   beats_per_bar = segment.ticks_per_bar / quarter;
   bar = segment.first_bar + static_cast<double>(tick - segment.tick) / segment.ticks_per_bar;

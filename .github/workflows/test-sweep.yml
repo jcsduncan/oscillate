@@ -5,14 +5,15 @@ name: Test sweep
 on:
   workflow_dispatch:
     inputs:
-      ref:
-        description: Branch, tag or commit to test (empty tests the ref the run starts from)
-        required: false
-        default: ""
       tests:
         description: Optional ctest -R regex to narrow the sweep (empty runs every non-live test)
         required: false
         default: ""
+
+# One sweep per branch at a time; a new dispatch waits for the running one.
+concurrency:
+  group: test-sweep-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -36,7 +37,6 @@ jobs:
             ca-certificates git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref }}
           persist-credentials: false
       - name: Install dependencies (README list, optional features, ccache)
         run: |
@@ -68,10 +68,8 @@ jobs:
           -DOSCILLATE_BUILD_CONVOLUTION_DSP=ON
       - name: Build everything and the tests
         run: scripts/build.sh "$BUILD_DIR" --target all oscillate_tests
-      # Not for a run given another ref to check out: its objects would land in
-      # this branch's cache.
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: always() && inputs.ref == ''
+        if: always()
         with:
           path: .ccache
           key: ccache-sweep-${{ github.run_id }}

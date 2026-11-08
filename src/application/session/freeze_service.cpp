@@ -6,6 +6,7 @@
 #include "oscillate/automation_project/preparation.hpp"
 #include "oscillate/native_dsp/note_effects/note_effect.hpp"
 #include "oscillate/project/lookup.hpp"
+#include "oscillate/routing/project_route_plan.hpp"
 #include "session_state.hpp"
 
 #include <algorithm>
@@ -107,8 +108,10 @@ TrackRenderTask::run(std::function<bool(std::uint64_t, std::uint64_t)> progress)
   const int fd = ::open(target.value().c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
   if (fd < 0)
     return Result<TrackRender>::failure({ErrorCode::io_failure, "Cannot open the track render"});
-  return Result<TrackRender>::success(
-      TrackRender{fd, rendered.value().first_frame, snapshot_->revision, track_});
+  return Result<TrackRender>::success(TrackRender{
+      fd,
+      {.first_frame = rendered.value().first_frame, .origin_revision = snapshot_->revision},
+      track_});
 }
 
 Result<TrackRenderTask>
@@ -212,9 +215,11 @@ Result<project::TrackId> FreezeService::finish_track_bounce(persistence::StagedW
   std::map<project::SendId, project::SendId> sends;
   auto next_send = next_send_number();
   for (const auto& send : original.sends) {
-    // A bounce keeps its muted source, which still keys (keys are taken
-    // before the fader): only Flatten moves the keys.
-    if (!flatten && send.purpose == project::SendPurpose::sidechain)
+    // The audio keys what its source keyed, once: a bounce's muted source
+    // keys nothing (routing::silent_key_sources) unless a mute lane drives
+    // its mute, and then the source keeps its keys.
+    if (!flatten && send.purpose == project::SendPurpose::sidechain &&
+        routing::has_mute_automation(original))
       continue;
     auto send_id = numbered_id<project::SendId>(next_send);
     if (!send_id)
@@ -223,7 +228,7 @@ Result<project::TrackId> FreezeService::finish_track_bounce(persistence::StagedW
     sends.emplace(send.id, send_id.value());
     auto route = send;
     route.id = send_id.value();
-    operations.emplace_back(project::AddSendRoute{audio, std::move(route)});
+    operations.emplace_back(project::AddSendRoute{audio, route});
   }
 
   // Channel and send lanes follow the audio; device lanes stay with the

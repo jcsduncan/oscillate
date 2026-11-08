@@ -202,7 +202,8 @@ private:
 public:
   void process(Frames io) noexcept override {
     driver_.process(io);
-    const double base = static_cast<double>(io.size() / driver_.factor());
+    const auto base_frames = io.size() / driver_.factor(); // Whole base-rate frames.
+    const double base = static_cast<double>(base_frames);
     phase_ += base * hz_ / driver_.base_rate();
     phase_ -= std::floor(phase_);
   }

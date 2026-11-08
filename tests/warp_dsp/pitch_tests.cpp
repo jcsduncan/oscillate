@@ -60,7 +60,7 @@ void tracks_harmonic_tones() {
 }
 
 void rejects_noise_and_silence() {
-  auto noise = warp_fixtures::silence(48'000 * 2);
+  auto noise = warp_fixtures::silence(std::size_t{48'000} * 2);
   warp_fixtures::add_noise_floor(noise, 0.3, 9);
   warp::MemorySourceView noisy(noise.left, noise.right);
   const auto track = analysis::track_pitch(noisy, {48'000, 60.0F, 1'000.0F, 0.15F});

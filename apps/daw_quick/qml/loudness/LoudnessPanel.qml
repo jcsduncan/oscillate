@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Loudness device panel: a broadcast-grade EBU R128 / BS.1770-4 meter
@@ -139,19 +140,17 @@ Rectangle {
 
     // ---- Formatting ------------------------------------------------------------------
 
-    function signed(value, digits) {
-        const text = Math.abs(value).toFixed(digits)
-        return value < -0.5 * Math.pow(10, -digits) ? "−" + text : value > 0.5 * Math.pow(10, -digits) ? "+" + text : text
-    }
+    // Readings hold one decimal, so the figures do not jump in width.
+    readonly property int readingDecimals: 1
     function lufsText(value) {
-        return value <= silent ? "—" : (value < 0 ? "−" : "") + Math.abs(value).toFixed(1)
+        return value <= silent ? "—" : Format.number(value, readingDecimals)
     }
     // True peak can pass 0 dBTP, so it carries its sign either way.
     function peakText(value) {
-        return value <= silent ? "—" : signed(value, 1)
+        return value <= silent ? "—" : Format.signed_number(value, readingDecimals)
     }
     function luText(value, available) {
-        return available ? Math.abs(value).toFixed(1) : "—"
+        return available ? Format.number(Math.abs(value), readingDecimals) : "—"
     }
     readonly property bool hasIntegrated: live.integrated > silent
     readonly property real delta: hasIntegrated ? live.integrated - target : 0
@@ -396,7 +395,7 @@ Rectangle {
             objectName: "loudnessTargetDelta"
             x: panel.theme.deltaX
             y: panel.theme.deltaY
-            text: panel.hasIntegrated ? panel.signed(panel.delta, 1) + " LU TO TARGET" : "—"
+            text: panel.hasIntegrated ? Format.signed_number(panel.delta, panel.readingDecimals) + " LU TO TARGET" : "—"
             color: panel.deltaTone
             font.family: panel.theme.sans
             font.pixelSize: panel.theme.deltaSize
@@ -523,7 +522,7 @@ Rectangle {
                 }
             }
             Tile {
-                name: "SHORT-TERM · 3 S"
+                name: "SHORT-TERM · 3 s"
                 value: panel.lufsText(panel.live.shortTerm)
                 unit: "LUFS"
                 sub: "MAX " + panel.lufsText(panel.live.shortTermMax)
@@ -531,7 +530,7 @@ Rectangle {
                 tone: panel.live.shortTerm > panel.silent ? panel.theme.shortTerm : panel.theme.inkFaint
             }
             Tile {
-                name: "MOMENTARY · 400 MS"
+                name: "MOMENTARY · 400 ms"
                 value: panel.lufsText(panel.live.momentary)
                 unit: "LUFS"
                 sub: "MAX " + panel.lufsText(panel.live.momentaryMax)
@@ -548,7 +547,7 @@ Rectangle {
                 name: panel.peakOver ? "TRUE PEAK · OVER CEILING" : "TRUE PEAK"
                 value: panel.peakText(panel.live.truePeak)
                 unit: "dBTP"
-                sub: "3 S " + panel.peakText(panel.live.truePeakRecent)
+                sub: "3 s " + panel.peakText(panel.live.truePeakRecent)
                 objectId: "loudnessTruePeak"
                 tone: panel.peakOver ? panel.theme.off : panel.theme.peak
                 alarm: panel.peakOver
@@ -604,7 +603,7 @@ Rectangle {
         theme: panel.theme
         id: historyPlate
         title: "LOUDNESS HISTORY"
-        note: "LAST 60 S · SHORT-TERM FILLED, MOMENTARY LINE · TARGET ±1 LU"
+        note: "LAST 60 s · SHORT-TERM FILLED, MOMENTARY LINE · TARGET ±1 LU"
         x: panel.margin
         y: panel.rowBY
         width: panel.width - 2 * panel.margin

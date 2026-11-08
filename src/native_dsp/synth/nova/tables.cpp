@@ -149,7 +149,7 @@ std::vector<TableLevel> render_levels(std::span<const Complex> spectra, std::siz
 // frames are too unlike for a shift to mean anything.
 double best_shift(const Complex* a, const Complex* b, std::vector<Complex>& bins) {
   constexpr std::size_t length = table_frame_size;
-  std::fill(bins.begin(), bins.end(), Complex{});
+  std::ranges::fill(bins, Complex{});
   double energy_a = 0.0;
   double energy_b = 0.0;
   for (std::size_t h = 1; h <= max_harmonic; ++h) {
@@ -322,7 +322,7 @@ public:
 
   // spectrum gets spectrum_size entries.
   void analyse(std::span<const float> frame, Complex* spectrum) {
-    std::fill(work_.begin(), work_.end(), Complex{});
+    std::ranges::fill(work_, Complex{});
     if (direct_) {
       for (std::size_t n = 0; n < length_; ++n) {
         work_[n] = frame[n];
@@ -403,7 +403,7 @@ build_wavetable(std::span<const float> mono, std::size_t frame_length, std::stri
   }
   const std::size_t frames = std::min(available, max_table_frames);
   const auto used = mono.first(available * length);
-  if (!std::all_of(used.begin(), used.end(), [](float value) { return std::isfinite(value); })) {
+  if (!std::ranges::all_of(used, [](float value) { return std::isfinite(value); })) {
     return failure(ErrorCode::corrupt_data, "wavetable '" + name + "' audio is not finite");
   }
   FrameAnalyser analyser(length);

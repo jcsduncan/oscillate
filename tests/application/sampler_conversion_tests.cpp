@@ -9,6 +9,7 @@
 #include "oscillate/test/temp_dir.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -41,7 +42,7 @@ constexpr double click_amplitude = 0.8;
 // Spec 09 §6: transient starts land within 2 ms of the click.
 constexpr std::uint64_t transient_tolerance = rate * 2 / 1'000;
 // Clicks at 0.25, 0.75, 1.25 and 1.6 s.
-const std::vector<std::uint64_t> clicks{rate / 4, rate * 3 / 4, rate * 5 / 4, rate * 8 / 5};
+constexpr std::array<std::uint64_t, 4> clicks{rate / 4, rate * 3 / 4, rate * 5 / 4, rate * 8 / 5};
 
 using oscillate::test::require;
 
@@ -159,7 +160,7 @@ void whole_clip_becomes_crate_below_it_in_one_undo_step() {
   REQUIRE_EQ(state.revision, revision + 1, "the conversion is one revision");
   REQUIRE_EQ(state.tracks.size(), before.size() + 1, "one track is added");
   REQUIRE_EQ(song.session->tracks().track_index(made.track),
-             song.session->tracks().track_index(song.audio_track).value() + 1,
+             take(song.session->tracks().track_index(song.audio_track)) + 1,
              "the sampler sits right below the audio");
   const auto& audio = song.track(song.audio_track);
   REQUIRE_TRUE(!audio.muted, "the audio track is left as is");

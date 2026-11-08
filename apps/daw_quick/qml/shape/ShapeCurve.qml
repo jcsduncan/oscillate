@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The hero display: Shape's response from 20 Hz to 20 kHz and +24 to -24 dB,
 // evaluated on the EQ's own biquad cascade (NativeSynthDeviceController::
@@ -272,7 +273,7 @@ Rectangle {
             required property var modelData
             x: view.plotX - implicitWidth - view.theme.spaceSm
             y: view.yOf(modelData) - implicitHeight / 2
-            text: modelData > 0 ? "+" + modelData : modelData < 0 ? "−" + (-modelData) : "0"
+            text: Format.signed_number(modelData, 0)
             color: modelData === 0 ? view.theme.accent : view.theme.inkFaint
             font.family: view.theme.mono
             font.pixelSize: view.theme.typeCaption
@@ -283,7 +284,7 @@ Rectangle {
         x: view.theme.captionX
         y: view.theme.captionY
         text: view.onCount === 0 ? "FLAT · EVERY BAND OFF · BIT-EXACT PASS-THROUGH"
-            : view.onCount + (view.onCount === 1 ? " BAND ON" : " BANDS ON") + " · 48 KHZ BIQUADS"
+            : view.onCount + (view.onCount === 1 ? " BAND ON" : " BANDS ON") + " · 48 kHz BIQUADS"
         color: view.onCount === 0 ? view.theme.inkDim : view.theme.accent
         font.pixelSize: view.theme.typeCaption
         font.bold: true

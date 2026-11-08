@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Oscillate.Contracts
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // One sequencer step: its note (an interval from the held root, drawn as a
@@ -45,7 +46,7 @@ Rectangle {
     activeFocusOnTab: editable
     Accessible.role: Accessible.Grouping
     Accessible.name: "Step " + step + (playing ? ", playing" : "")
-    Accessible.description: (gate === 0 ? "rest" : gate === 2 ? "tie" : noteName + " " + (note >= 0 ? "+" : "") + note)
+    Accessible.description: (gate === 0 ? "rest" : gate === 2 ? "tie" : noteName + " " + Format.signed_number(note, 0))
         + (accented ? ", accent" : "") + (sliding ? ", slide" : "")
 
     function touch(id) {
@@ -167,7 +168,7 @@ Rectangle {
             y: cell.theme.intervalY
             // The interval from the held root, octave included.
             readonly property int semitones: cell.note + 12 * cell.octave
-            text: semitones === 0 ? "ROOT" : (semitones > 0 ? "+" : "") + semitones
+            text: semitones === 0 ? "ROOT" : Format.signed_number(semitones, 0)
             color: cell.theme.accent
             opacity: cell.gate === 1 ? 1 : cell.theme.intervalRestOpacity
             font.family: cell.theme.mono

@@ -251,10 +251,11 @@ std::string_view warp_algorithm_id(project::WarpMode mode) noexcept {
 
 std::uint32_t warp_algorithm_version(project::WarpMode mode) noexcept {
   switch (mode) {
+  // Repitch: LDW1 used version 1 for a same-rate-only key. Complex Pro:
+  // formant shaping keeps each frame's energy.
   case project::WarpMode::repitch:
-    return 2U; // LDW1 used version 1 for a same-rate-only key
   case project::WarpMode::complex_pro:
-    return 2U; // formant shaping keeps each frame's energy
+    return 2U;
   default:
     return 1U;
   }
@@ -415,22 +416,26 @@ Result<WarpSourceAnalysis> cached_warp_analysis(media::CacheStore* cache,
   auto key = warp_analysis_cache_key(request);
   if (!key)
     return Result<WarpSourceAnalysis>::failure(key.error());
-  if (cache != nullptr && key.value()) {
+  const auto& cache_key = key.value();
+  if (cache != nullptr && cache_key) {
     // A cache filesystem error only means analysing again.
-    if (auto stored = cache->get(*key.value()); stored && stored.value())
-      if (auto decoded = decode_analysis(kind, *stored.value())) {
-        if (progress)
-          progress->store(1.0, std::memory_order_relaxed);
-        return Result<WarpSourceAnalysis>::success(std::move(*decoded));
+    if (auto stored = cache->get(*cache_key)) {
+      if (const auto& bytes = stored.value()) {
+        if (auto decoded = decode_analysis(kind, *bytes)) {
+          if (progress)
+            progress->store(1.0, std::memory_order_relaxed);
+          return Result<WarpSourceAnalysis>::success(std::move(*decoded));
+        }
       }
+    }
   }
   std::atomic<double> unused{0.0};
   ProgressView watched(view, progress ? *progress : unused);
   auto analysis = analyse_warp_source(request, watched, cancelled);
   if (!analysis)
     return analysis;
-  if (cache != nullptr && key.value())
-    (void)cache->put(*key.value(), encode_analysis(kind, analysis.value()));
+  if (cache != nullptr && cache_key)
+    (void)cache->put(*cache_key, encode_analysis(kind, analysis.value()));
   if (progress)
     progress->store(1.0, std::memory_order_relaxed);
   return analysis;
@@ -438,7 +443,7 @@ Result<WarpSourceAnalysis> cached_warp_analysis(media::CacheStore* cache,
 
 Result<void> prepare_warp_analysis(const std::filesystem::path& project_root,
                                    const WarpRenderRequest& request, std::atomic<double>* progress,
-                                   std::stop_token stop) {
+                                   const std::stop_token& stop) {
   auto store = persistence::ProjectStore::open_reader(project_root);
   if (!store)
     return Result<void>::failure(store.error());
@@ -468,11 +473,14 @@ bool warp_analysis_ready(const media::CacheStore& cache, const WarpRenderRequest
   auto key = warp_analysis_cache_key(request);
   if (!key)
     return false;
-  if (!key.value())
+  const auto& cache_key = key.value();
+  if (!cache_key)
     return true;
-  auto stored = cache.get(*key.value());
-  return stored && stored.value() &&
-         decode_analysis(analysis_kind(request.settings.mode), *stored.value()).has_value();
+  auto stored = cache.get(*cache_key);
+  if (!stored)
+    return false;
+  const auto& bytes = stored.value();
+  return bytes && decode_analysis(analysis_kind(request.settings.mode), *bytes).has_value();
 }
 
 Result<std::unique_ptr<warp_dsp::WarpStream>> create_warp_stream(const WarpRenderRequest& request,
@@ -594,10 +602,11 @@ Result<WarpRenderRequest> warp_render_request(const project::Snapshot& snapshot,
   auto resolved = processed_clip_request(snapshot, clip_id, quality);
   if (!resolved)
     return Result<WarpRenderRequest>::failure(resolved.error());
-  if (!resolved.value())
+  auto& request = resolved.value();
+  if (!request)
     return Result<WarpRenderRequest>::failure(
         {ErrorCode::unsupported, "Clip plays without warp processing"});
-  return Result<WarpRenderRequest>::success(std::move(*resolved.value()));
+  return Result<WarpRenderRequest>::success(std::move(*request));
 }
 
 Result<media::CacheKey> warp_render_cache_key(const WarpRenderRequest& request) {

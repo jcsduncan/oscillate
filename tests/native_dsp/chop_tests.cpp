@@ -68,18 +68,18 @@ double as_float(double x) { return static_cast<double>(static_cast<float>(x)); }
 
 // The fractional frame where `x` first rises through `level` at or after
 // `from`, or -1.
-double rising(const std::vector<double>& x, std::size_t from, std::size_t to, double level) {
-  for (std::size_t i = std::max<std::size_t>(from, 1); i < std::min(to, x.size()); ++i) {
+double rising(const std::vector<double>& x, std::size_t begin, std::size_t end, double level) {
+  for (std::size_t i = std::max<std::size_t>(begin, 1); i < std::min(end, x.size()); ++i) {
     if (x[i - 1] < level && x[i] >= level)
       return static_cast<double>(i - 1) + (level - x[i - 1]) / (x[i] - x[i - 1]);
   }
   return -1.0;
 }
 
-std::size_t count_rises(const std::vector<double>& x, std::size_t from, std::size_t to,
+std::size_t count_rises(const std::vector<double>& x, std::size_t begin, std::size_t end,
                         double level) {
   std::size_t count = 0;
-  for (std::size_t i = std::max<std::size_t>(from, 1); i < std::min(to, x.size()); ++i)
+  for (std::size_t i = std::max<std::size_t>(begin, 1); i < std::min(end, x.size()); ++i)
     count += x[i - 1] < level && x[i] >= level ? 1U : 0U;
   return count;
 }
@@ -181,7 +181,7 @@ void edges_land_on_the_grid() {
 
   // A loop back to the start of step 2: the transport jumps without a new
   // generation (a whole control tick, so the first tick sees the jump).
-  const std::uint64_t loop = 2 * 5'824;
+  const std::uint64_t loop = std::uint64_t{2} * 5'824;
   check(process(*runtime, dc(frames), {.generation = 2, .bpm = tempo}, loop), loop, 4, 12,
         "across a loop");
 }

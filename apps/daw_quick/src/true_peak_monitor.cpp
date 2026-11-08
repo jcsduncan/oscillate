@@ -16,13 +16,12 @@ static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
 LiveTruePeakMonitor::LiveTruePeakMonitor()
     : worker_([this](const std::stop_token& stop) { run(stop); }) {}
 
-void LiveTruePeakMonitor::begin_epoch(std::uint64_t generation, std::uint64_t sample,
-                                      bool complete) noexcept {
-  producer_generation_ = generation;
-  expected_sample_ = sample;
-  producer_complete_ = complete;
+void LiveTruePeakMonitor::begin_epoch(Epoch epoch) noexcept {
+  producer_generation_ = epoch.generation;
+  expected_sample_ = epoch.sample;
+  producer_complete_ = epoch.complete;
   ++producer_epoch_;
-  incomplete_.store(generation != 0 && !complete, std::memory_order_release);
+  incomplete_.store(epoch.generation != 0 && !epoch.complete, std::memory_order_release);
   published_epoch_.store(producer_epoch_, std::memory_order_release);
 }
 
@@ -31,36 +30,46 @@ void LiveTruePeakMonitor::set_sample_rate_after_quiesce(std::uint32_t sample_rat
   sample_rate_.store(sample_rate, std::memory_order_release);
 }
 
-void LiveTruePeakMonitor::invalidate_after_quiesce() noexcept { begin_epoch(0, 0, false); }
+void LiveTruePeakMonitor::invalidate_after_quiesce() noexcept {
+  begin_epoch({.generation = 0, .sample = 0, .complete = false});
+}
 
 void LiveTruePeakMonitor::observe(std::span<const engine::StereoFrame> frames,
                                   engine::BlockContext context) noexcept {
   if (context.transport_generation == 0 ||
       frames.size() > std::numeric_limits<std::uint64_t>::max() - context.project_sample_position) {
     dropped_blocks_.fetch_add(1, std::memory_order_relaxed);
-    begin_epoch(context.transport_generation, context.project_sample_position, false);
+    begin_epoch({.generation = context.transport_generation,
+                 .sample = context.project_sample_position,
+                 .complete = false});
     return;
   }
   if (frames.size() > max_callback_frames) {
     dropped_blocks_.fetch_add(1, std::memory_order_relaxed);
-    begin_epoch(context.transport_generation, context.project_sample_position + frames.size(),
-                false);
+    begin_epoch({.generation = context.transport_generation,
+                 .sample = context.project_sample_position + frames.size(),
+                 .complete = false});
     return;
   }
   if (producer_generation_ != context.transport_generation) {
-    begin_epoch(context.transport_generation, context.project_sample_position, true);
+    begin_epoch({.generation = context.transport_generation,
+                 .sample = context.project_sample_position,
+                 .complete = true});
   } else if (expected_sample_ != context.project_sample_position) {
     // A gap without a new transport generation cannot restore a complete
     // peak hold for this transport, even if subsequent blocks are accepted.
-    begin_epoch(context.transport_generation, context.project_sample_position, false);
+    begin_epoch({.generation = context.transport_generation,
+                 .sample = context.project_sample_position,
+                 .complete = false});
   }
 
   const auto write = write_sequence_.load(std::memory_order_relaxed);
   const auto read = read_sequence_.load(std::memory_order_acquire);
   if (write - read >= queue_capacity) {
     dropped_blocks_.fetch_add(1, std::memory_order_relaxed);
-    begin_epoch(context.transport_generation, context.project_sample_position + frames.size(),
-                false);
+    begin_epoch({.generation = context.transport_generation,
+                 .sample = context.project_sample_position + frames.size(),
+                 .complete = false});
     return;
   }
 

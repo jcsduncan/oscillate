@@ -2,6 +2,7 @@
 
 #include "deck_presets.hpp"
 #include "deck_table.hpp"
+#include "dsp/crossover.hpp"
 #include "effect_dsp.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
 #include "oscillate/native_dsp/synth/filter.hpp"
@@ -55,10 +56,11 @@ struct Split {
     high_a.reset();
     high_b.reset();
   }
-  void process(double x, const synth::FilterCoefficients& lp, const synth::FilterCoefficients& hp,
-               double& low, double& high) noexcept {
-    low = low_b.process(low_a.process(x, lp), lp);
-    high = high_b.process(high_a.process(x, hp), hp);
+  [[nodiscard]] native_dsp::dsp::SplitSample process(double x, const synth::FilterCoefficients& lp,
+                                                     const synth::FilterCoefficients& hp) noexcept {
+    const double low = low_b.process(low_a.process(x, lp), lp);
+    const double high = high_b.process(high_a.process(x, hp), hp);
+    return {.low = low, .high = high};
   }
 };
 
@@ -144,14 +146,10 @@ public:
       std::array<double, bands> power{};
       for (std::size_t c = 0; c < 2; ++c) {
         auto& tree = trees_[c];
-        double low = 0.0;
-        double rest = 0.0;
-        tree.low.process(x[c], low_.lp, low_.hp, low, rest);
-        double a = 0.0;
-        double b = 0.0;
-        tree.low_comp.process(low, high_.lp, high_.hp, a, b);
-        std::array<double, bands> band{a + b, 0.0, 0.0};
-        tree.high.process(rest, high_.lp, high_.hp, band[1], band[2]);
+        const auto split = tree.low.process(x[c], low_.lp, low_.hp);
+        const auto low = tree.low_comp.process(split.low, high_.lp, high_.hp);
+        const auto high = tree.high.process(split.high, high_.lp, high_.hp);
+        std::array<double, bands> band{low.low + low.high, high.low, high.high};
         double sum = 0.0;
         for (std::size_t k = 0; k < bands; ++k) {
           const double shaped = band[k] * weights[k];

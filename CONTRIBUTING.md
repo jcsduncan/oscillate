@@ -151,10 +151,8 @@ gh workflow run test-sweep.yml --ref my-branch -f tests='^native_nova'
 gh run watch "$(gh run list --workflow test-sweep.yml --branch my-branch --limit 1 --json databaseId --jq '.[0].databaseId')"
 ```
 
-`--ref` runs the workflow as that branch defines it. For a branch older than
-the workflow, start it from `main` and pass the branch as the `ref` input:
-`gh workflow run test-sweep.yml -f ref=my-branch` (the run is then listed
-under `main`).
+`--ref` runs the workflow as that branch defines it, with that branch's own
+build cache. A branch older than the workflow needs `main` merged in first.
 
 Before a release, run the broad sweep:
 GCC and Clang builds, the fast and slow tiers, clang-format, clang-tidy,

@@ -774,7 +774,6 @@ public:
     return 0.5;
   }
   // The SDK fixes this convertible parameter order.
-  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   Steinberg::tresult PLUGIN_API setParamNormalized(Steinberg::Vst::ParamID id,
                                                    Steinberg::Vst::ParamValue value) override {
     if (failure_ == Failure::static_controller_set || id != 101)
