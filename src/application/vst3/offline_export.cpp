@@ -160,6 +160,19 @@ foundation::Result<PublishOutcome> render_vst3_master(const project::Snapshot& s
                                std::get<EncodedMasterOptions>(options), host.preparer());
 }
 
+foundation::Result<PublishOutcome> render_vst3_stems(const project::Snapshot& snapshot,
+                                                     const persistence::ProjectStore& store,
+                                                     StoppedExportAuthority authority,
+                                                     plugins::Vst3Scanner& scanner,
+                                                     const StemRenderOptions& options) {
+  if (!authority.matches(snapshot))
+    return stale("Stem");
+  OfflineVst3Host host;
+  if (auto verified = host.verify(snapshot, scanner); !verified)
+    return foundation::Result<PublishOutcome>::failure(verified.error());
+  return render_wav_stems(snapshot, store, std::move(authority), options, host.preparer());
+}
+
 foundation::Result<PublishOutcome>
 render_vst3_stem(const project::Snapshot& snapshot, const persistence::ProjectStore& store,
                  StoppedExportAuthority authority, plugins::Vst3Scanner& scanner,

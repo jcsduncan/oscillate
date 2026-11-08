@@ -59,6 +59,7 @@ public:
 template <typename Id> Id make_id(std::uint64_t value) { return take(Id::from_bits({0, value})); }
 
 // Chords as a keyboard player holds them (the bass first), a bar each.
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): a throw fails the test at start-up.
 const std::vector<std::vector<int>> progression{
     {45, 55, 59, 60, 64}, // Am9
     {50, 57, 60, 64, 65}, // Dm9
@@ -99,7 +100,7 @@ struct Song {
   }
   [[nodiscard]] double value(std::string_view id) const {
     const auto resolved = take(fx::resolve_note_effect(insert()));
-    return resolved.values[*synth::find_parameter(*resolved.engine->descriptor, id)];
+    return resolved.values[take(synth::find_parameter(*resolved.engine->descriptor, id))];
   }
 };
 

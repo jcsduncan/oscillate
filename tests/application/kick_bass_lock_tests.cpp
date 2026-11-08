@@ -85,7 +85,7 @@ double value_of(app::ProjectSession& session, project::TrackId track, std::strin
   const auto* engine = synth::find_engine(patch.engine);
   REQUIRE_NE(engine, nullptr, "the track's engine is registered");
   const auto index = synth::find_parameter(*engine->descriptor, id);
-  REQUIRE_OK(index, "the engine has " + std::string(id));
+  REQUIRE_TRUE(index, "the engine has " + std::string(id));
   return values[*index];
 }
 
@@ -94,13 +94,13 @@ void set_kick_lock(app::ProjectSession& session, project::TrackId kick, double c
   auto values = take(session.instruments().native_instrument_values(kick));
   const auto* anvil = synth::find_engine(synth::lock_kick_engine);
   REQUIRE_NE(anvil, nullptr, "Anvil is registered");
-  values[*synth::find_parameter(*anvil->descriptor, synth::lock_kick_parameter)] = choice;
+  values[take(synth::find_parameter(*anvil->descriptor, synth::lock_kick_parameter))] = choice;
   accepted(session.instruments().set_native_instrument_values(kick, values));
 }
 
 project::ClipId first_clip(app::ProjectSession& session, project::TrackId track) {
   const auto row = session.tracks().track_index(track);
-  REQUIRE_OK(row, "track row");
+  REQUIRE_TRUE(row, "track row");
   return session.snapshot().tracks[*row].midi_clips.front().id;
 }
 
@@ -251,8 +251,10 @@ void a_kept_kick_follows_a_bass_edit() {
   const auto before = session->snapshot();
   // The bassline's first note moves from the root key to the fifth key.
   const auto line = first_clip(*session, bass);
-  const auto& notes =
-      session->snapshot().tracks[*session->tracks().track_index(bass)].midi_clips.front().notes;
+  const auto& notes = session->snapshot()
+                          .tracks[take(session->tracks().track_index(bass))]
+                          .midi_clips.front()
+                          .notes;
   const auto first = std::ranges::find(notes, root_key, &project::MidiNote::key)->id;
   accepted(session->notes().remove_note(line, first));
   accepted(session->notes().add_note_with_duration(line, {0}, {2 * quarter}, fifth_key));

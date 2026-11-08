@@ -106,7 +106,7 @@ struct Selection {
 
 [[nodiscard]] std::vector<std::uint8_t> read_state_file(const fs::path& path) {
   std::ifstream input(path, std::ios::binary | std::ios::ate);
-  if (!input || input.tellg() < 0 || input.tellg() > 4 * 1024 * 1024)
+  if (!input || input.tellg() < 0 || input.tellg() > std::streamoff{4} * 1024 * 1024)
     throw std::runtime_error("state file is unavailable or exceeds 4 MiB");
   const auto size = static_cast<std::size_t>(input.tellg());
   input.seekg(0);
@@ -132,7 +132,7 @@ struct Selection {
   return std::move(*state);
 }
 
-enum class NoteLength { short_note, long_note };
+enum class NoteLength : std::uint8_t { short_note, long_note };
 
 struct Run {
   std::uint32_t frames = 0;

@@ -86,6 +86,8 @@ void allpass_is_flat() {
     REQUIRE_EQ(c.b2, 1.0, "the allpass is mirror-symmetric");
     REQUIRE_EQ(c.a2, c.b0, "the allpass is mirror-symmetric");
     REQUIRE_EQ(c.a1, c.b1, "the allpass is mirror-symmetric");
+    // The sweep grid is the test input.
+    // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
     for (double hz = 10.0; hz < 0.49 * rate; hz *= 1.5) {
       const double w = 2.0 * std::numbers::pi * hz / rate;
       REQUIRE_LT(std::fabs(std::abs(response(c, w)) - 1.0), tolerance::double_rounding,

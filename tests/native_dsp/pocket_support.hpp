@@ -48,13 +48,14 @@ inline std::vector<std::size_t> four_on_the_floor(std::size_t hits, double bpm =
                                                   std::size_t start = 2'400) {
   std::vector<std::size_t> onsets;
   const double beat = 60.0 / bpm * rate;
+  onsets.reserve(hits);
   for (std::size_t i = 0; i < hits; ++i) {
     onsets.push_back(start + static_cast<std::size_t>(std::lround(beat * static_cast<double>(i))));
   }
   return onsets;
 }
 
-enum class Bass { sub, saw, line };
+enum class Bass : std::uint8_t { sub, saw, line };
 
 // Sub: a sustained 55 Hz sine. Saw: E1 with harmonics to 8 kHz. Line: A1,
 // C2, E1, G1 a beat each at 120 BPM, sine plus second harmonic.
@@ -88,6 +89,7 @@ inline Stereo pocket_bass(const std::vector<double>& values, const Stereo& bass_
   return process(*runtime, bass_in, {.block = block, .sidechain = &kick});
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the sum commutes.
 inline Stereo sum(const Stereo& a, const Stereo& b) {
   Stereo out = a;
   for (std::size_t i = 0; i < a.size(); ++i) {
@@ -107,6 +109,8 @@ inline Bands third_octaves(const std::vector<double>& x, double low = 31.5, doub
   constexpr std::size_t n = 2'048;
   constexpr std::size_t hop = 512;
   Bands out;
+  // The sweep grid is the test input.
+  // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
   for (double f = low; f <= high * 1.01; f *= std::pow(2.0, 1.0 / 3.0)) {
     out.centres.push_back(f);
   }
@@ -169,11 +173,11 @@ inline double band_energy(const std::vector<double>& x, std::size_t from, std::s
 }
 
 inline double correlation(const std::vector<double>& a, const std::vector<double>& b,
-                          std::size_t from, std::size_t to) {
+                          std::size_t begin, std::size_t end) {
   double ab = 0.0;
   double aa = 0.0;
   double bb = 0.0;
-  for (std::size_t i = from; i < to; ++i) {
+  for (std::size_t i = begin; i < end; ++i) {
     ab += a[i] * b[i];
     aa += a[i] * a[i];
     bb += b[i] * b[i];

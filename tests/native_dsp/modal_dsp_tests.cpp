@@ -26,11 +26,11 @@ using oscillate::test::require;
 double cents(double measured, double expected) { return 1200.0 * std::log2(measured / expected); }
 
 // Rising zero crossings, interpolated.
-double measured_hz(const std::vector<double>& x, std::size_t from, std::size_t to, double rate) {
+double measured_hz(const std::vector<double>& x, std::size_t begin, std::size_t end, double rate) {
   double first = -1.0;
   double last = -1.0;
   int crossings = 0;
-  for (std::size_t i = from + 1; i < to; ++i) {
+  for (std::size_t i = begin + 1; i < end; ++i) {
     if (x[i - 1] < 0.0 && x[i] >= 0.0) {
       const double t = static_cast<double>(i - 1) + x[i - 1] / (x[i - 1] - x[i]);
       if (first < 0.0) {

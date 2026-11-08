@@ -130,7 +130,8 @@ void tracks_tempo_meter_and_exact_ticks() {
   const auto& clip = synth.midi_clips.front();
   const auto& placed = std::get<project::MusicalInterval>(clip.placement);
   REQUIRE_EQ(placed.start.value, 0, "the clip covers whole 3/4 bars");
-  REQUIRE_EQ(clip.pattern_length.value, 2 * 3 * tpq, "the clip covers whole 3/4 bars");
+  REQUIRE_EQ(clip.pattern_length.value, std::int64_t{2} * 3 * tpq,
+             "the clip covers whole 3/4 bars");
   REQUIRE_EQ(clip.notes.size(), 2, "note ticks rescale exactly");
   REQUIRE_EQ(clip.notes[0].start.value, 0, "note ticks rescale exactly");
   REQUIRE_EQ(clip.notes[0].end.value, tpq / 2, "note ticks rescale exactly");
@@ -234,8 +235,8 @@ void into_a_track_at_a_bar_without_tempo() {
   REQUIRE_TRUE(!result.tempo_imported, "into the chosen track, project tempo kept");
   REQUIRE_EQ(session->snapshot().tempo.events()[0].bpm, 120.0, "tempo unchanged");
   const auto& clip = track(*session, target).midi_clips.front();
-  REQUIRE_EQ(std::get<project::MusicalInterval>(clip.placement).start.value, 2 * 4 * tpq,
-             "the file starts at bar three");
+  REQUIRE_EQ(std::get<project::MusicalInterval>(clip.placement).start.value,
+             std::int64_t{2} * 4 * tpq, "the file starts at bar three");
   REQUIRE_EQ(clip.notes.front().start.value, 0, "the file starts at bar three");
   REQUIRE_EQ(clip.notes.front().end.value, tpq, "the file starts at bar three");
   // Importing over the same bars collides with the clip already there.

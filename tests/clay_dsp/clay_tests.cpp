@@ -202,6 +202,8 @@ void check_exact_notes(const Take& take, std::span<const double> cents, double f
       played[i] = true;
       require(seconds(n.start) <= from + (1.0 - held_share) * held &&
                   seconds(n.end) >= from + held_share * held,
+              // A failure message in a test loop.
+              // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
               what + ": note " + std::to_string(c) + " is not held whole:" + listing);
       REQUIRE_LT(n.noise_share, clean_noise_share,
                  what + ": note " + std::to_string(c) + " noise share " +
@@ -209,10 +211,14 @@ void check_exact_notes(const Take& take, std::span<const double> cents, double f
     }
     REQUIRE_EQ(count, 1,
                what + ": note " + std::to_string(c) + " found " + std::to_string(count) +
+                   // A failure message in a test loop.
+                   // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
                    " times:" + listing);
   }
   for (std::size_t i = 0; i < take.notes.size(); ++i)
     require(played[i] || seconds(take.notes[i].end - take.notes[i].start) <= fragment_seconds,
+            // A failure message in a test loop.
+            // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
             what + ": an extra note:" + listing);
 }
 
@@ -335,6 +341,8 @@ void shifted_chord_note_leaves_the_others() {
   constexpr double step = 5.0;
   constexpr double top = 4'500.0;
   std::vector<double> grid;
+  // The sweep grid is the test input.
+  // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
   for (double hz = step; hz <= top; hz += step)
     grid.push_back(hz);
   const auto envelope =

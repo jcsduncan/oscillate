@@ -746,6 +746,7 @@ void overlapping_validated_opens_all_hit() {
   take(cache.put(entry_key, std::vector<std::byte>(payload_bytes, std::byte{0x5a})));
   std::atomic<std::size_t> misses{0};
   std::vector<std::thread> threads;
+  threads.reserve(readers);
   for (std::size_t reader = 0; reader < readers; ++reader) {
     threads.emplace_back([&] {
       for (std::size_t open = 0; open < opens_per_reader; ++open) {

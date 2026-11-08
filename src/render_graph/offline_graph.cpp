@@ -310,7 +310,7 @@ foundation::Result<OfflineGraph> prepare_offline_graph(const project::Snapshot& 
         {foundation::ErrorCode::unsupported, "Master export sample rate is unsupported"});
   }
   auto inserts = preflight_inserts(snapshot, vst3 ? ExportSource::vst3 : ExportSource::native,
-                                   false, OSCILLATE_HAVE_CONVOLUTION);
+                                   OSCILLATE_HAVE_CONVOLUTION);
   if (!inserts)
     return R::failure(inserts.error());
   native_inserts::StageContext stage_context{snapshot.sample_rate};
@@ -337,7 +337,7 @@ foundation::Result<OfflineGraph> prepare_offline_graph(const project::Snapshot& 
 #endif
   std::vector<NativeRouteRuntime> track_chains;
   std::vector<routing::BoundStage> receipts;
-  for (const auto& saved_chain : inserts.value().native_track_chains) {
+  for (const auto& saved_chain : inserts.value().track_chains) {
     const auto owner = std::ranges::find(snapshot.tracks, saved_chain.owner, &project::Track::id);
     if (owner == snapshot.tracks.end())
       return R::failure({foundation::ErrorCode::corrupt_data, "Offline chain has no saved track"});
@@ -364,7 +364,7 @@ foundation::Result<OfflineGraph> prepare_offline_graph(const project::Snapshot& 
       graph.chain_stages.push_back({stage.runtime, stage.failed});
     track_chains.push_back({owner->id, std::move(prepared).value()});
   }
-  if (!inserts.value().native_track_chains.empty()) {
+  if (!inserts.value().track_chains.empty()) {
     auto prepared = prepare_offline_routing(snapshot, request, receipts, track_chains);
     if (!prepared)
       return R::failure(prepared.error());

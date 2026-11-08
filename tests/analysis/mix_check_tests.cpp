@@ -65,7 +65,7 @@ void sub_rumble_under_the_bass() {
   require(!mix::find_sub_rumble(bass.profile(), 55.0), "a clean bass has no rumble");
   bass.add_sine(30.0, 0.25);
   const auto rumble = mix::find_sub_rumble(bass.profile(), 55.0);
-  REQUIRE_OK(rumble, "the rumble is found");
+  REQUIRE_TRUE(rumble, "the rumble is found");
   REQUIRE_LE(rumble->low_hz, 30.0, "its band holds 30 Hz");
   REQUIRE_GE(rumble->high_hz, 30.0, "its band holds 30 Hz");
   // Sub power -15 dB against the bass's -9 dB: 9 dB over the 15 dB allowance,
@@ -110,7 +110,7 @@ void mono_fold_loss() {
   }
   pad.add_sine(600.0, 0.1);
   const auto loss = mix::find_mono_loss(pad.profile());
-  REQUIRE_OK(loss, "the anticorrelated band is found");
+  REQUIRE_TRUE(loss, "the anticorrelated band is found");
   REQUIRE_LE(mix::band_low(loss->first_band), 600.0, "the span holds 600 Hz");
   REQUIRE_GE(mix::band_high(loss->last_band), 600.0, "the span holds 600 Hz");
   REQUIRE_GT(loss->worst_db, 3.0, "about 3.9 dB lost");
@@ -233,7 +233,7 @@ void loudness_of_a_sine() {
 // A kick and bass in antiphase cancel; in phase they add. Streamed in
 // blocks, as the render hands them over.
 std::optional<mix::Cancellation> streamed_cancellation(double bass_gain) {
-  constexpr std::size_t frames = 4 * rate;
+  constexpr std::size_t frames = std::size_t{4} * rate;
   constexpr std::size_t block = 1'000;
   std::vector<float> kick(frames);
   std::vector<float> bass(frames);
@@ -250,6 +250,7 @@ std::optional<mix::Cancellation> streamed_cancellation(double bass_gain) {
 
 void kick_bass_cancellation() {
   const auto cancel = streamed_cancellation(-0.9);
+  REQUIRE_TRUE(cancel, "the antiphase hits are measured");
   // (1 + 0.81) / 0.01: 22.6 dB in every window of every hit.
   require(cancel && std::fabs(cancel->deepest_db - 22.6) < 0.5 && cancel->hits == 3 &&
               std::fabs(cancel->worst_db - cancel->deepest_db) < 0.01,
@@ -340,7 +341,7 @@ void masking_pair() {
   for (const double hz : {221.0, 331.0})
     pad.add_sine(hz, 0.3);
   const auto found = mix::find_masking(bass.profile(), 1.0, pad.profile(), 1.0);
-  REQUIRE_OK(found, "the pad masks the bass");
+  REQUIRE_TRUE(found, "the pad masks the bass");
   // 10 log10(1 + 9): 10 dB.
   require(found->loss_db > 8.0 && found->loss_db < 11.0, "by about 10 dB");
   require(!mix::find_masking(pad.profile(), 1.0, bass.profile(), 0.1),

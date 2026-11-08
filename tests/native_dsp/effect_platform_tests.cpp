@@ -32,6 +32,7 @@ namespace {
 using namespace effect_test;
 
 std::string label(const effects::EffectEngine& engine, std::string_view preset_name = {}) {
+  // NOLINTNEXTLINE(clang-analyzer-core.NonNullParamChecker): every engine names its descriptor.
   return std::string(engine.descriptor->id) + (preset_name.empty() ? "" : " / ") +
          std::string(preset_name);
 }

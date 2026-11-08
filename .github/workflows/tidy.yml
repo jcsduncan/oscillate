@@ -57,7 +57,8 @@ jobs:
           echo "$RUNNER_TEMP/qa/bin" >> "$GITHUB_PATH"
       - name: Configure
         run: cmake --preset quick
+      # The checkout is GitHub's merge of the pull request into the current
+      # base tip, so its first parent is that tip: diffing against it judges
+      # the change only on its own lines, even after the base moves on.
       - name: clang-tidy on the changed translation units
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-        run: python3 -I scripts/ci/tidy_changed.py quick "$BASE"
+        run: python3 -I scripts/ci/tidy_changed.py quick HEAD^1

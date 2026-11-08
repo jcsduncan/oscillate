@@ -40,7 +40,8 @@ int model_named(std::string_view name) {
   }
   throw std::runtime_error("unknown model " + std::string(name));
 }
-namespace M {
+namespace models {
+// NOLINTBEGIN(bugprone-throwing-static-initialization): a throw fails the test at start-up.
 const int tape = model_named("Tape");
 const int tube = model_named("Tube");
 const int transistor = model_named("Transistor");
@@ -49,7 +50,8 @@ const int clip = model_named("Clip");
 const int fold = model_named("Fold");
 const int sine_fold = model_named("Sine Fold");
 const int rectify = model_named("Rectify");
-} // namespace M
+// NOLINTEND(bugprone-throwing-static-initialization)
+} // namespace models
 
 std::vector<double> shaper(int model, double drive, double bias = 0.0) {
   auto values = preset(table(), "Init");
@@ -104,8 +106,11 @@ void aliases_stay_below_minus_90_dbfs() {
   // Smooth curves at any drive. A fold driven past 24 dB folds its input
   // dozens of times a cycle: a spectrum no oversampler reaches.
   for (const Range r :
-       {Range{M::tape, 48}, Range{M::tube, 48}, Range{M::transistor, 48}, Range{M::diode, 48},
-        Range{M::clip, 48}, Range{M::fold, 24}, Range{M::sine_fold, 24}, Range{M::rectify, 24}}) {
+       {Range{models::tape, 48}, Range{models::tube, 48}, Range{models::transistor, 48},
+        Range{models::diode, 48}, Range{models::clip, 48}, Range{models::fold, 24},
+        Range{models::sine_fold, 24}, Range{models::rectify, 24}}) {
+    // The sweep grid is the test input.
+    // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
     for (double drive = 0.0; drive <= r.max_drive; drive += 12.0) {
       for (const std::size_t bin : {bin_1k, bin_5k}) {
         const double alias = worst_alias_db(spectrum(shaper(r.model, drive), bin, 0.5), bin);
@@ -126,9 +131,12 @@ double level_db(const std::vector<double>& values, double hz, double amp) {
 }
 
 void auto_gain_matches_level() {
-  for (const int model :
-       {M::tape, M::tube, M::transistor, M::diode, M::clip, M::fold, M::sine_fold, M::rectify}) {
-    const bool folds = model == M::fold || model == M::sine_fold || model == M::rectify;
+  for (const int model : {models::tape, models::tube, models::transistor, models::diode,
+                          models::clip, models::fold, models::sine_fold, models::rectify}) {
+    const bool folds =
+        model == models::fold || model == models::sine_fold || model == models::rectify;
+    // The sweep grid is the test input.
+    // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
     for (double drive = 0.0; drive <= (folds ? 24.0 : 48.0); drive += 6.0) {
       for (const double bias : {0.0, 0.5}) {
         const double level = level_db(shaper(model, drive, bias), 1'000.0, 0.25);
@@ -138,16 +146,16 @@ void auto_gain_matches_level() {
       }
     }
   }
-  auto loud = shaper(M::tape, 24.0);
+  auto loud = shaper(models::tape, 24.0);
   loud[at("forge.auto_gain")] = 0.0;
   REQUIRE_GT(level_db(loud, 1'000.0, 0.25), 6.0, "without auto gain drive is louder");
 }
 
 void colour_is_transparent_at_low_level() {
   for (const double hz : {100.0, 1'000.0, 10'000.0}) {
-    const double flat = level_db(shaper(M::tape, 0.0), hz, 0.01);
+    const double flat = level_db(shaper(models::tape, 0.0), hz, 0.01);
     for (const double colour : {-12.0, 12.0}) {
-      auto values = shaper(M::tape, 0.0);
+      auto values = shaper(models::tape, 0.0);
       values[at("forge.colour")] = colour;
       const double coloured = level_db(values, hz, 0.01);
       REQUIRE_LT(std::fabs(coloured - flat), 0.05,
@@ -162,18 +170,18 @@ double harmonic_db(const std::vector<double>& amplitude, std::size_t harmonic) {
 }
 
 void curves_have_their_signature() {
-  for (const int model : {M::tape, M::transistor, M::diode, M::clip}) {
+  for (const int model : {models::tape, models::transistor, models::diode, models::clip}) {
     const auto s = spectrum(shaper(model, 12.0), bin_1k, 0.5);
     REQUIRE_GT(harmonic_db(s, 3), -40.0, "a driven symmetric curve has odd harmonics");
     require(harmonic_db(s, 2) < -110.0 && harmonic_db(s, 4) < -110.0,
             "a symmetric curve without bias has no even harmonics: model " + std::to_string(model) +
                 " " + std::to_string(harmonic_db(s, 2)));
   }
-  const auto tube = spectrum(shaper(M::tube, 12.0), bin_1k, 0.5);
+  const auto tube = spectrum(shaper(models::tube, 12.0), bin_1k, 0.5);
   REQUIRE_GT(harmonic_db(tube, 2), -50.0, "the tube's asymmetry makes a second harmonic");
-  const auto biased = spectrum(shaper(M::tape, 12.0, 0.5), bin_1k, 0.5);
+  const auto biased = spectrum(shaper(models::tape, 12.0, 0.5), bin_1k, 0.5);
   REQUIRE_GT(harmonic_db(biased, 2), -40.0, "bias makes even harmonics");
-  const auto octave = spectrum(shaper(M::rectify, 12.0), bin_1k, 0.5);
+  const auto octave = spectrum(shaper(models::rectify, 12.0), bin_1k, 0.5);
   REQUIRE_GT(harmonic_db(octave, 2), harmonic_db(octave, 1) + 20.0,
              "the rectifier's output is an octave up");
 }
@@ -182,7 +190,7 @@ void the_mix_is_phase_aligned() {
   const auto input = sine(10'000.0, 0.01, 48'000);
   std::array<Stereo, 3> out;
   for (std::size_t i = 0; i < 3; ++i) {
-    auto values = shaper(M::tape, 0.0);
+    auto values = shaper(models::tape, 0.0);
     values[at("forge.auto_gain")] = 0.0;
     values[at("forge.mix")] = 0.5 * static_cast<double>(i);
     auto runtime = make_effect(forge_engine(), values);
@@ -202,8 +210,10 @@ void the_mix_is_phase_aligned() {
 }
 
 void live_model_switches_are_click_free() {
-  const std::array<std::array<int, 2>, 4> switches{
-      {{M::tape, M::clip}, {M::tube, M::fold}, {M::diode, M::rectify}, {M::sine_fold, M::tape}}};
+  const std::array<std::array<int, 2>, 4> switches{{{models::tape, models::clip},
+                                                    {models::tube, models::fold},
+                                                    {models::diode, models::rectify},
+                                                    {models::sine_fold, models::tape}}};
   const auto input = sine(220.0, 0.5, 48'000);
   for (const auto& pair : switches) {
     auto values = shaper(pair[0], 12.0);
@@ -234,7 +244,8 @@ void live_model_switches_are_click_free() {
 }
 
 void telemetry_draws_the_curve() {
-  for (const int model : {M::tape, M::tube, M::transistor, M::diode, M::clip}) {
+  for (const int model :
+       {models::tape, models::tube, models::transistor, models::diode, models::clip}) {
     auto runtime = make_effect(forge_engine(), shaper(model, 18.0, 0.2));
     (void)process(*runtime, sine(1'000.0, 0.25, 48'000));
     std::vector<float> t;

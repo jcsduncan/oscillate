@@ -317,7 +317,7 @@ void reset_is_deterministic() {
           events.push_back(event);
         }
       }
-      std::fill(buffer.begin(), buffer.end(), engine::StereoFrame{0.0F, 0.0F});
+      std::ranges::fill(buffer, engine::StereoFrame{0.0F, 0.0F});
       const auto report = runtime->process(buffer, events, block * 128, generation, {}, {});
       REQUIRE_EQ(report.status, SynthProcessStatus::rendered, "block renders");
       for (const auto& frame : buffer) {
@@ -328,7 +328,7 @@ void reset_is_deterministic() {
     // Let every gate close before the next pass.
     std::vector<engine::BlockMidiEvent> none;
     for (std::uint64_t block = 375; block < 750; ++block) {
-      std::fill(buffer.begin(), buffer.end(), engine::StereoFrame{0.0F, 0.0F});
+      std::ranges::fill(buffer, engine::StereoFrame{0.0F, 0.0F});
       (void)runtime->process(buffer, none, block * 128, generation, {}, {});
     }
     return out;
@@ -547,11 +547,11 @@ void global_decay_shortens_every_ring() {
 }
 
 // The loudest short-term (2 ms) RMS of a stretch of output, in dB.
-double short_term_db(const Rendered& r, std::size_t from, std::size_t to) {
+double short_term_db(const Rendered& r, std::size_t begin, std::size_t end) {
   const double smoothing = std::exp(-1.0 / (0.002 * rate));
   double power = 0.0;
   double loudest = 0.0;
-  for (std::size_t i = from; i < to; ++i) {
+  for (std::size_t i = begin; i < end; ++i) {
     const double x = 0.5 * (r.left[i] + r.right[i]);
     power = smoothing * power + (1.0 - smoothing) * x * x;
     loudest = std::max(loudest, power);
@@ -591,6 +591,7 @@ void preset_levels_sit_in_a_window() {
       }
       const auto r = render(*runtime, events, hits * gap);
       std::vector<double> levels;
+      levels.reserve(hits);
       for (std::size_t h = 0; h < hits; ++h) {
         levels.push_back(short_term_db(r, h * gap, (h + 1) * gap));
       }
@@ -728,7 +729,7 @@ struct Fingerprint {
   double tail_db;
   double bright_hz;
 };
-const std::vector<std::pair<std::string_view, Fingerprint>> golden{
+constexpr auto golden = std::to_array<std::pair<std::string_view, Fingerprint>>({
     {"Minimal", {-24.582, -69.991, 4293.8}},
     {"Tech House", {-25.845, -69.933, 5440.5}},
     {"Dub Techno", {-19.187, -34.059, 7765.1}},
@@ -741,7 +742,7 @@ const std::vector<std::pair<std::string_view, Fingerprint>> golden{
     {"Rubber Bounce", {-24.895, -75.229, 5207.5}},
     {"Metal Workshop", {-26.746, -56.289, 3524.1}},
     {"Glass Garden", {-22.492, -39.596, 3257.0}},
-};
+});
 
 void preset_fingerprints() {
   const bool print = std::getenv("KNOCK_REBASELINE") != nullptr;
@@ -792,9 +793,9 @@ double choice_of(std::size_t parameter, std::string_view name) {
   return 0.0;
 }
 
-double energy(const std::vector<double>& x, std::size_t from, std::size_t to) {
+double energy(const std::vector<double>& x, std::size_t begin, std::size_t end) {
   double sum = 0.0;
-  for (std::size_t i = from; i < std::min(to, x.size()); ++i) {
+  for (std::size_t i = begin; i < std::min(end, x.size()); ++i) {
     sum += x[i] * x[i];
   }
   return sum;
@@ -894,6 +895,7 @@ void scatter_is_seeded_and_varies() {
     auto runtime = make_runtime(knock_engine(), v);
     const auto r = render(*runtime, hits_every(gap, count), count * gap);
     std::vector<double> places;
+    places.reserve(count);
     for (std::size_t h = 0; h < count; ++h) {
       places.push_back(balance(r, h * gap, (h + 1) * gap));
     }
@@ -1081,7 +1083,7 @@ void swung_hits_survive_any_block_split_and_reset() {
         event.velocity = 100;
         events.push_back(event);
       }
-      std::fill(buffer.begin(), buffer.end(), engine::StereoFrame{0.0F, 0.0F});
+      std::ranges::fill(buffer, engine::StereoFrame{0.0F, 0.0F});
       const double beat = static_cast<double>(position) * beats_per_frame;
       const SynthTransport transport{beat, beats_per_frame, beat / 4.0, 4.0};
       const std::uint64_t generation = seek && position > note_frame ? 2 : 1;

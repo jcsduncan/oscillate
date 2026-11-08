@@ -1331,7 +1331,7 @@ void native_and_vst3_effects_interleave_in_any_saved_order() {
       require_failure(registry.compile(state, 16, reversed), foundation::ErrorCode::unsupported,
                       "interleaved chain accepted receipts in reverse order");
       ++orders;
-    } while (std::next_permutation(order.begin(), order.end()));
+    } while (std::ranges::next_permutation(order).found);
     REQUIRE_EQ(orders, 24, "not every interleaving was compiled");
   }
 }

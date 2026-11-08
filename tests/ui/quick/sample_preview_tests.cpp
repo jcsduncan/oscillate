@@ -142,6 +142,7 @@ void rates_convert_and_one_shots_pass() {
 
 } // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): an uncaught exception is the test's failure report.
 int main() {
   the_library_lists_samples();
   a_loop_is_stretched_to_the_song();

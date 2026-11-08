@@ -1,6 +1,6 @@
 # Export insert contract
 
-The ordinary offline master/stem and stopped VST3 instrument/mixed exporters read
+The offline master and stem renders read
 `Track::instrument_source`, each track's `effects`, and `Snapshot::master_effects`.
 They do not retain a second list of processing settings. Before opening an output
 writer, each export validates the saved snapshot. The ordinary native master/stem
@@ -23,13 +23,9 @@ Given a VST3 host's stage preparer (`render_graph::Vst3StagePreparer`,
 supplied by [VST3 offline export](vst3-offline-export.md)), the same renderer
 admits every saved chain: enabled VST3 effects on any track or bus, mixed with
 built-in effects in any order, and VST3 master slots, each prepared as a chain
-stage (ADR-0050). Without one, the native exporter rejects
-VST3 instrument sources; the VST3 instrument exporter takes one or two VST3
-sources and rejects unresolved sources. A saved
-`missing` instrument flag may be cleared by a successful fresh scan of its
-exact binary and class identity; a missing effect is never silently omitted.
+stage (ADR-0050), and VST3 instrument sources as their chains' first stages.
+Without one, the native exporter rejects VST3 instrument sources. A saved
+`missing` flag may be cleared by a successful fresh scan of the plugin's exact
+binary and class identity; a missing plugin is never silently omitted.
 
-These restrictions describe the current renderer, not the product's final
-insert scope. The VST3 instrument exporters keep their own bounded contract
-([#100](https://github.com/jcsduncan/oscillate/issues/100)). Rejected master,
-stem and encoded jobs preserve an existing published output.
+Rejected master, stem and encoded jobs preserve an existing published output.

@@ -259,7 +259,7 @@ void partition_and_seek_are_deterministic() {
   warp::MemorySourceView pad_view(pad.left, pad.right);
   const auto pad_map = stretch_map(pad.left.size(), 0.6);
   const auto whole = render(*stream, pad_map, pad_view, 0, 0);
-  const std::uint64_t seek = 9 * rate;
+  const std::uint64_t seek = std::uint64_t{9} * rate;
   const auto tail = render(*stream, pad_map, pad_view, seek, 0);
   for (std::size_t at = 4'096; at + 4'800 < tail.left.size(); at += 4'800) {
     const double a = rms(tail.left, at, at + 4'800);
@@ -590,6 +590,7 @@ void dense_map_lookup_matches_sparse_map_without_allocation() {
 }
 
 void rejects_invalid_quality_tier() {
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange): an invalid tier on purpose.
   const auto invalid = static_cast<warp::QualityTier>(255);
   require(!warp::create_complex_stream({rate, 128}, invalid, {}).has_value(),
           "Complex accepted invalid quality tier");
