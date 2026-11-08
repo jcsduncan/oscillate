@@ -364,6 +364,7 @@ The baseline processors are the Shape (EQ), Press (compressor), Expanse (algorit
 - a kick/bass masking resolver (Pocket, [ADR-0041](decisions/0041-pocket-kick-bass.md));
 - a drawn volume shaper (Pump, [ADR-0058](decisions/0058-pump-volume-shaper.md)) and a tempo-locked gate and stutter (Chop, [ADR-0075](decisions/0075-chop.md));
 - a resonance suppressor with dynamic EQ bands (Temper, [ADR-0064](decisions/0064-temper-resonance-suppressor.md)) and multiband dynamics (Strata, [ADR-0082](decisions/0082-strata-multiband.md));
+- a clipper for drums and the master that never passes 0 dBTP (Edge, [ADR-0108](decisions/0108-edge-clipper.md));
 - a spatial pass-by effect (Flyby, [ADR-0067](decisions/0067-flyby.md)) and background texture and ageing (Dust, [ADR-0069](decisions/0069-dust-texture.md));
 - the utility suite ([ADR-0042](decisions/0042-native-utility-suite.md)): Lens (spectrum analyser), Loudness (EBU R128), Scope (oscilloscope and alignment), Tune (tuner), Trim (gain and stereo utility) and Signal (test generator).
 

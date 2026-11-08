@@ -171,9 +171,8 @@ double Antialiased::process(double u, const Curve& curve) noexcept {
   }
   const double integral = curve.integral(u);
   const double step = u - previous;
-  const double out = std::fabs(step) < antialias_epsilon
-                         ? curve(0.5 * (u + previous))
-                         : (integral - previous_integral_) / step;
+  const double out = std::fabs(step) < antialias_epsilon ? curve(0.5 * (u + previous))
+                                                         : (integral - previous_integral_) / step;
   previous_integral_ = integral;
   integral_knee_ = curve.knee;
   integral_valid_ = true;
@@ -275,16 +274,16 @@ double Resampler::down(double* in) noexcept {
 }
 
 std::uint32_t TruePeakGuard::delay_at(double sample_rate) noexcept {
-  const auto window = static_cast<std::uint32_t>(
-      std::max(1.0, std::round(guard_attack_seconds * sample_rate)));
+  const auto window =
+      static_cast<std::uint32_t>(std::max(1.0, std::round(guard_attack_seconds * sample_rate)));
   // The averaging must not reach past the interval's interpolation on
   // either side: 2R - 1 frames beyond it.
   return window + static_cast<std::uint32_t>(2 * radius) - 1;
 }
 
 void TruePeakGuard::prepare(double sample_rate, double ceiling) {
-  window_ = static_cast<std::uint32_t>(
-      std::max(1.0, std::round(guard_attack_seconds * sample_rate)));
+  window_ =
+      static_cast<std::uint32_t>(std::max(1.0, std::round(guard_attack_seconds * sample_rate)));
   delay_ = delay_at(sample_rate);
   ceiling_ = ceiling;
   release_ = std::exp(-1.0 / (guard_release_seconds * sample_rate));

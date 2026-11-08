@@ -44,7 +44,8 @@ std::size_t at(std::string_view id) { return index(table(), id); }
 
 constexpr double rate = oscillate::test::sample_rate_48k_hz;
 constexpr std::array rates{oscillate::test::sample_rate_44k_hz, oscillate::test::sample_rate_48k_hz,
-                           oscillate::test::sample_rate_88k_hz, oscillate::test::sample_rate_96k_hz};
+                           oscillate::test::sample_rate_88k_hz,
+                           oscillate::test::sample_rate_96k_hz};
 constexpr std::size_t factor_count = edge::factors.size();
 constexpr std::size_t filter_count = 2;
 constexpr std::size_t x1 = 0;
@@ -87,9 +88,8 @@ Stereo render(const std::vector<double>& values, const Stereo& input, std::size_
 // The source, then silence for the effect's latency and tail, so a meter
 // reads the whole output rather than one cut off mid-signal.
 Stereo then_silence(Stereo s, const std::vector<double>& values) {
-  const auto extra =
-      engine().latency_frames(values, rate) + engine().tail_frames(values, rate) +
-      2 * oscillate::native_dsp::StereoTruePeakMeter::kernel_radius;
+  const auto extra = engine().latency_frames(values, rate) + engine().tail_frames(values, rate) +
+                     2 * oscillate::native_dsp::StereoTruePeakMeter::kernel_radius;
   s.left.resize(s.size() + extra, 0.0);
   s.right.resize(s.left.size(), 0.0);
   return s;
@@ -233,8 +233,8 @@ double worst_spur_db(const std::vector<double>& x, std::size_t from, double hz) 
   double window_sum = 0.0;
   const double half = static_cast<double>(size - 1) / 2.0;
   for (std::size_t i = 0; i < size; ++i) {
-    const double w = oscillate::native_dsp::dsp::kaiser(static_cast<double>(i) - half, half,
-                                                        window_beta);
+    const double w =
+        oscillate::native_dsp::dsp::kaiser(static_cast<double>(i) - half, half, window_beta);
     spectrum[i] = x[from + i] * w;
     window_sum += w;
   }
@@ -330,14 +330,14 @@ void latency_is_reported_and_exact() {
       for (std::size_t i = 2 * latency + 1; i < input.size(); ++i) {
         worst = std::max(worst, std::fabs(out.left[i] - input.left[i - latency]));
       }
-      REQUIRE_LT(worst, ripple, "delayed exactly by the latency: factor " +
-                                    std::to_string(edge::factors[o]) + ": " +
-                                    std::to_string(worst));
+      REQUIRE_LT(worst, ripple,
+                 "delayed exactly by the latency: factor " + std::to_string(edge::factors[o]) +
+                     ": " + std::to_string(worst));
     }
   }
   REQUIRE_EQ(edge::latency_frames(x1, linear_phase, rate), guard_48k, "1x: the guard alone");
   REQUIRE_EQ(edge::latency_frames(x16, linear_phase, rate), guard_48k + resampler_16x_linear,
-           "16x linear phase");
+             "16x linear phase");
   REQUIRE_EQ(edge::latency_frames(x16, light, rate), guard_48k + resampler_16x_light, "16x light");
   for (const double r : rates) {
     std::set<std::uint32_t> seen;
@@ -373,7 +373,8 @@ void stereo_link_shares_the_gain() {
   auto v = with(x1, linear_phase, 0.0);
   v[at("edge.link")] = 0.0;
   const auto separate = render(v, input);
-  REQUIRE_GT(peak(separate.right, settled), kept * quiet, "unlinked: the quiet side keeps its peaks");
+  REQUIRE_GT(peak(separate.right, settled), kept * quiet,
+             "unlinked: the quiet side keeps its peaks");
   REQUIRE_LT(peak(linked.right, settled), taken * quiet, "linked: it does not");
 }
 
@@ -392,7 +393,8 @@ void compare_is_level_matched() {
   const double compare_rms =
       rms(std::vector<double>(matched.left.begin() + from, matched.left.end()));
   REQUIRE_LT(std::fabs(db(compare_rms / out_rms)), matched_db,
-             "matched compare is as loud as the output: " + std::to_string(db(compare_rms / out_rms)));
+             "matched compare is as loud as the output: " +
+                 std::to_string(db(compare_rms / out_rms)));
   v[at("edge.match")] = 0.0;
   const auto plain = render(v, input);
   const auto latency = engine().latency_frames(v, rate);
@@ -465,7 +467,8 @@ Stereo booms(std::size_t frames, double level) {
   for (std::size_t i = 0; i < frames; ++i) {
     const double t = static_cast<double>(i % period) / rate;
     const double phase = hz * t + drop_hz * (1.0 - std::exp(-drop_rate * t)) / drop_rate;
-    out.left[i] = out.right[i] = std::sin(2.0 * std::numbers::pi * phase) * std::exp(-decay_rate * t);
+    out.left[i] = out.right[i] =
+        std::sin(2.0 * std::numbers::pi * phase) * std::exp(-decay_rate * t);
   }
   return scaled(out, level / peak(out.left));
 }
@@ -554,7 +557,8 @@ void telemetry_feeds_the_panel() {
   REQUIRE_GT(frame[t::clipped], clipped_db, "clipping");
   REQUIRE_GE(frame[t::dot_input], frame[t::dot_output], "the dot sits on the curve");
   REQUIRE_LE(frame[t::dot_output], 0.0F, "under the ceiling");
-  const double latency_ms = static_cast<double>(engine().latency_frames(v, rate)) / rate * milliseconds;
+  const double latency_ms =
+      static_cast<double>(engine().latency_frames(v, rate)) / rate * milliseconds;
   REQUIRE_LT(std::fabs(frame[t::latency_ms] - latency_ms), tolerance::coarse, "the latency");
   REQUIRE_EQ(frame[t::factor], static_cast<float>(edge::factors[x8]), "8x by default");
   std::size_t filed = 0;

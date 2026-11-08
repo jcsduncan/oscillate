@@ -257,6 +257,12 @@ public:
   Q_INVOKABLE QVariantList strata_band_shapes(int points) const;
   Q_INVOKABLE QVariantMap strata_ott_values() const;
 
+  // Edge sketches (empty or 0 for other engines): the static curve's output
+  // in dBFS for `points` inputs evenly spaced from `from_db` to `to_db`, and
+  // the latency in milliseconds at `sample_rate`.
+  Q_INVOKABLE QVariantList edge_transfer(double from_db, double to_db, int points) const;
+  Q_INVOKABLE double edge_latency_ms(double sample_rate) const;
+
   // Forge sketches (empty or 0 for other engines): the static transfer curve
   // with auto gain at `points` inputs over -1..1, and the makeup in dB.
   Q_INVOKABLE QVariantList forge_curve(int points) const;

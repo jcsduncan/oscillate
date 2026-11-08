@@ -135,6 +135,9 @@ constexpr std::array styles{
                      "Texture",
                      "#c8a36a",
                      {"dust.mix.bed", "dust.vinyl.crackle", "dust.age.amount", "dust.duck.amount"}},
+    // Oversampling is the latency: not a strip control.
+    DeviceStripStyle{
+        "edge", "Clipper", "#f08a5d", {"edge.input", "edge.shape", "edge.output", "edge.link"}},
     // Lookahead is the latency: not a strip control.
     DeviceStripStyle{
         "ceiling", "Limiter", "#ff8a8a", {"ceiling.ceiling", "ceiling.release", "", ""}},

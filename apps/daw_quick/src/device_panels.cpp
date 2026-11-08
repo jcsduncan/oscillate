@@ -46,6 +46,7 @@ constexpr std::array panels{
     DevicePanel{"shape", "qrc:/shape/ShapePanel.qml", 1240, 720, ""},
     DevicePanel{"press", "qrc:/press/PressPanel.qml", 1240, 680, keyed_inputs},
     DevicePanel{"ceiling", "qrc:/ceiling/CeilingPanel.qml", 1240, 640, ""},
+    DevicePanel{"edge", "qrc:/edge/EdgePanel.qml", 1040, 520, ""},
     DevicePanel{"temper", "qrc:/temper/TemperPanel.qml", 1360, 800, ""},
     DevicePanel{"strata", "qrc:/strata/StrataPanel.qml", 1320, 800, keyed_inputs},
     DevicePanel{"flyby", "qrc:/flyby/FlybyPanel.qml", 1280, 760, keyed_inputs},

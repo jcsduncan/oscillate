@@ -9,10 +9,12 @@
 
 #include "oscillate/foundation/trace.hpp"
 #include "oscillate/foundation/value_text.hpp"
+#include "oscillate/native_dsp/dsp/math.hpp"
 #include "oscillate/native_dsp/effects/ceiling.hpp"
 #include "oscillate/native_dsp/effects/chop.hpp"
 #include "oscillate/native_dsp/effects/contour.hpp"
 #include "oscillate/native_dsp/effects/dust.hpp"
+#include "oscillate/native_dsp/effects/edge.hpp"
 #include "oscillate/native_dsp/effects/flyby.hpp"
 #include "oscillate/native_dsp/effects/forge.hpp"
 #include "oscillate/native_dsp/effects/orbit.hpp"
@@ -1277,6 +1279,21 @@ QVariantMap NativeSynthDeviceController::telemetry() {
     out[QStringLiteral("input_peak")] = QVariantList{at(t::input_peak), at(t::input_peak + 1)};
     out[QStringLiteral("output_peak")] = QVariantList{at(t::output_peak), at(t::output_peak + 1)};
     out[QStringLiteral("reduction")] = at(t::reduction);
+  } else if (id == "edge" && frame.size() >= native_dsp::effects::edge::telemetry::size) {
+    namespace edge = native_dsp::effects::edge;
+    namespace t = edge::telemetry;
+    out[QStringLiteral("input_peak")] = QVariantList{at(t::input_peak), at(t::input_peak + 1)};
+    out[QStringLiteral("output_peak")] = QVariantList{at(t::output_peak), at(t::output_peak + 1)};
+    out[QStringLiteral("clipped")] = at(t::clipped);
+    out[QStringLiteral("dot_input")] = at(t::dot_input);
+    out[QStringLiteral("dot_output")] = at(t::dot_output);
+    out[QStringLiteral("latency_ms")] = at(t::latency_ms);
+    out[QStringLiteral("factor")] = at(t::factor);
+    QVariantList history;
+    for (std::size_t b = 0; b < edge::history_beats; ++b) {
+      history.push_back(at(t::history + b));
+    }
+    out[QStringLiteral("history")] = history;
   } else if (id == "dust" && frame.size() >= native_dsp::effects::dust::telemetry::size) {
     namespace dust = native_dsp::effects::dust;
     namespace t = dust::telemetry;
@@ -1748,6 +1765,34 @@ QVariantList NativeSynthDeviceController::forge_curve(int points) const {
     result.append(static_cast<double>(y));
   }
   return result;
+}
+
+QVariantList NativeSynthDeviceController::edge_transfer(double from_db, double to_db,
+                                                        int points) const {
+  namespace edge = native_dsp::effects::edge;
+  constexpr int most_points = 1'024;
+  if (engine_.id != edge::engine().descriptor->id || points < 2 || !(to_db > from_db)) {
+    return {};
+  }
+  const double shape = value(QStringLiteral("edge.shape"));
+  const int count = std::min(points, most_points);
+  QVariantList result;
+  for (int i = 0; i < count; ++i) {
+    const double db = from_db + (to_db - from_db) * static_cast<double>(i) / (count - 1);
+    const double out = edge::clip(native_dsp::dsp::db_to_gain(db), shape);
+    result.append(native_dsp::dsp::gain_to_db(out));
+  }
+  return result;
+}
+
+double NativeSynthDeviceController::edge_latency_ms(double sample_rate) const {
+  namespace edge = native_dsp::effects::edge;
+  constexpr double milliseconds_per_second = 1'000.0;
+  if (engine_.id != edge::engine().descriptor->id || !(sample_rate > 0.0)) {
+    return 0.0;
+  }
+  return static_cast<double>(edge::engine().latency_frames(values_, sample_rate)) / sample_rate *
+         milliseconds_per_second;
 }
 
 double NativeSynthDeviceController::forge_makeup_db() const {

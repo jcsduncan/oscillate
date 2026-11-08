@@ -264,8 +264,7 @@ private:
     return ratio;
   }
 
-  std::array<double, 2> clip_separate(const std::array<double, 2>& x,
-                                      const Curve& curve) noexcept {
+  std::array<double, 2> clip_separate(const std::array<double, 2>& x, const Curve& curve) noexcept {
     if (!design_.antialiased) {
       return {curve(x[0]), curve(x[1])};
     }
@@ -402,8 +401,7 @@ double clip(double x, double shape) noexcept {
   return Curve::with_knee(edge_dsp::max_knee * std::clamp(shape, 0.0, 1.0))(x);
 }
 
-std::uint32_t latency_frames(std::size_t oversampling, std::size_t filters,
-                             double sample_rate) {
+std::uint32_t latency_frames(std::size_t oversampling, std::size_t filters, double sample_rate) {
   if (!valid_rate(sample_rate)) {
     return 0;
   }
