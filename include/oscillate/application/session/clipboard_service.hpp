@@ -24,6 +24,13 @@ public:
   // (Ableton's Ctrl+D). The clipboard is left untouched.
   [[nodiscard]] foundation::Result<std::vector<project::ClipId>>
   duplicate_clips(std::span<const project::ClipId> clips);
+  // Copies of the clips `delta_ticks` later and `track_delta` rows down,
+  // keeping their spacing and leaving the originals (a Ctrl-drag). One undo
+  // step; refused as a whole, with no edit, when any copy would start before
+  // bar 1, leave the track list, land on the wrong kind of track or overlap
+  // a clip. The clipboard is left untouched.
+  [[nodiscard]] foundation::Result<std::vector<project::ClipId>>
+  copy_clips_by(std::span<const project::ClipId> clips, std::int64_t delta_ticks, int track_delta);
   [[nodiscard]] bool clipboard_has_clips() const noexcept { return !clipboard_.clips.empty(); }
   // Removes the clips, as one undo step; the clipboard is left untouched.
   [[nodiscard]] foundation::Result<void> remove_clips(std::span<const project::ClipId> clips);

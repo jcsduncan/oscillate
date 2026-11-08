@@ -59,6 +59,21 @@ clip_placement(const std::variant<project::Clip, project::MidiClip>& clip) {
                     clip);
 }
 
+// The topmost track row holding one of the clips.
+[[nodiscard]] std::optional<std::size_t> top_row(const project::Snapshot& state,
+                                                 std::span<const project::ClipId> clips) {
+  const auto selected = [&](project::ClipId id) {
+    return std::ranges::find(clips, id) != clips.end();
+  };
+  for (std::size_t row = 0; row < state.tracks.size(); ++row) {
+    const auto& track = state.tracks[row];
+    if (std::ranges::any_of(track.clips, [&](const auto& clip) { return selected(clip.id); }) ||
+        std::ranges::any_of(track.midi_clips, [&](const auto& clip) { return selected(clip.id); }))
+      return row;
+  }
+  return std::nullopt;
+}
+
 } // namespace
 
 foundation::Result<void> ClipboardService::copy_clips(std::span<const project::ClipId> clips) {
@@ -209,22 +224,48 @@ ClipboardService::duplicate_clips(std::span<const project::ClipId> clips) {
     end = end ? std::max(*end, clip_end.value()) : clip_end.value();
   }
   // Paste onto the first copied track's row, which is the topmost selected.
-  std::optional<std::size_t> top;
-  for (std::size_t row = 0; row < state.tracks.size() && !top; ++row) {
-    const auto& track = state.tracks[row];
-    const auto selected = [&](project::ClipId id) {
-      return std::ranges::find(clips, id) != clips.end();
-    };
-    if (std::ranges::any_of(track.clips, [&](const auto& clip) { return selected(clip.id); }) ||
-        std::ranges::any_of(track.midi_clips, [&](const auto& clip) { return selected(clip.id); }))
-      top = row;
-  }
+  const auto top = top_row(state, clips);
   // The copy succeeded, so a selected clip sits on some row and has an end.
   if (!top || !end) {
     clipboard_ = saved;
     return Result::failure({foundation::ErrorCode::internal, "No copied clip to duplicate"});
   }
   auto pasted = paste_clips(state.tracks[*top].id, *end);
+  clipboard_ = saved;
+  return pasted;
+}
+
+foundation::Result<std::vector<project::ClipId>>
+ClipboardService::copy_clips_by(std::span<const project::ClipId> clips, std::int64_t delta_ticks,
+                                int track_delta) {
+  using foundation::ErrorCode;
+  using Result = foundation::Result<std::vector<project::ClipId>>;
+  if (clips.empty())
+    return Result::failure({ErrorCode::invalid_argument, "Select clips to copy"});
+  const auto& state = snapshot();
+  const auto top = top_row(state, clips);
+  if (!top)
+    return Result::failure({ErrorCode::not_found, "A clip to copy was not found"});
+  // The copies land on the selection's top row moved by `track_delta`, and
+  // the other clips' rows keep their distance from it, as a paste does.
+  const auto rows = static_cast<std::int64_t>(state.tracks.size());
+  const auto destination = static_cast<std::int64_t>(*top) + track_delta;
+  if (destination < 0 || destination >= rows)
+    return Result::failure({ErrorCode::invalid_argument, "The copies would leave the track list"});
+  const auto saved = clipboard_;
+  auto copied = copy_clips(clips);
+  if (!copied) {
+    clipboard_ = saved;
+    return Result::failure(copied.error());
+  }
+  const auto origin = clipboard_.clips_origin.value;
+  if ((delta_ticks < 0 && origin < -delta_ticks) ||
+      (delta_ticks > 0 && origin > std::numeric_limits<std::int64_t>::max() - delta_ticks)) {
+    clipboard_ = saved;
+    return Result::failure({ErrorCode::invalid_argument, "The copies cannot start before bar 1"});
+  }
+  auto pasted =
+      paste_clips(state.tracks[static_cast<std::size_t>(destination)].id, {origin + delta_ticks});
   clipboard_ = saved;
   return pasted;
 }

@@ -450,3 +450,8 @@ foreach(comp_case a_pattern_keeps_the_musicians_settings applied_rhythm_plays_wh
   oscillate_add_test(NAME application_comp_session_${comp_case}
     COMMAND oscillate_application_comp_session_tests ${comp_case})
 endforeach()
+
+# UQ-14: a Ctrl-drag copies clips to the drop.
+oscillate_add_test_executable(oscillate_application_clip_copy_drag_tests SOURCES clip_copy_drag_tests.cpp
+  LIBS oscillate::application
+  TEST application_clip_copy_drag)

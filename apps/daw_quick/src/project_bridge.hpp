@@ -573,6 +573,11 @@ public:
   // `from` to `to` (normalised timeline positions) and `track_delta` rows,
   // deleted, or (MIDI clips on one track) merged into one. One undo step each.
   Q_INVOKABLE void move_selected_clips(double from, double to, int track_delta);
+  // A Ctrl-drag: copies of `clip_ids` land moved from `from` to `to` and
+  // `track_delta` rows, the originals stay, and the copies become the
+  // selection. One undo step, or nothing when any copy cannot land.
+  Q_INVOKABLE void copy_clips_to(const QStringList& clip_ids, double from, double to,
+                                 int track_delta);
   // The selected clips one beat later (+1) or earlier (-1), each on its own
   // track, as one undo step; refused as a whole when any clip would start
   // before bar 1.
