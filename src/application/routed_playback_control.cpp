@@ -221,6 +221,23 @@ template <typename TrackRef>
   return masked == after;
 }
 
+// A VST3 instrument track whose MIDI notes, pedals or clip placement alone
+// changed, with no lane on any of its clips: the running plugin takes the
+// new MIDI as a plan at its next block (ADR-0101).
+[[nodiscard]] bool vst3_midi_edit_only(const project::Track& before, const project::Track& after) {
+  const auto unautomated = [](const project::Track& track) {
+    return std::ranges::all_of(track.midi_clips,
+                               [](const auto& clip) { return clip.automation.empty(); });
+  };
+  if (before.id != after.id || before.kind != project::TrackKind::instrument ||
+      !std::holds_alternative<project::Vst3PluginInstance>(before.instrument_source) ||
+      !unautomated(before) || !unautomated(after))
+    return false;
+  auto masked = before;
+  masked.midi_clips = after.midi_clips;
+  return masked == after;
+}
+
 [[nodiscard]] bool same_audio_content(const project::Snapshot& prepared,
                                       const project::Snapshot& candidate) {
   if (prepared.sample_rate != candidate.sample_rate ||
@@ -336,51 +353,22 @@ template <typename TrackRef>
     const bool same_instrument =
         old_plugin && new_plugin
             ? old_plugin->id == new_plugin->id
-            : (old_patch && new_patch ? old_patch->engine == new_patch->engine &&
-                                            old_patch->engine_version == new_patch->engine_version
-                                      : before.instrument_source == after.instrument_source);
+            : (old_patch && new_patch
+                   ? old_patch->engine == new_patch->engine &&
+                         old_patch->engine_version == new_patch->engine_version &&
+                         // New media need decoding into a new player.
+                         old_patch->document.media == new_patch->document.media
+                   : before.instrument_source == after.instrument_source);
     if (!same_instrument)
       return true;
     if (std::holds_alternative<project::NativeInstrumentPatch>(before.instrument_source) &&
         before.midi_clips != after.midi_clips && !player_edit_only(before, after))
       return true;
+    if (std::holds_alternative<project::Vst3PluginInstance>(before.instrument_source) &&
+        before.midi_clips != after.midi_clips && !vst3_midi_edit_only(before, after))
+      return true;
   }
   return false;
-}
-
-// Why an edit that needs a whole replacement cannot switch while playing,
-// if it cannot: VST3 instruments read their MIDI and tempo once, when they
-// are prepared.
-[[nodiscard]] std::optional<std::string> whole_switch_refusal(const project::Snapshot& published,
-                                                              const project::Snapshot& candidate) {
-  const bool timing = !same_timing(published, candidate);
-  const auto plugin = [](const project::EffectInsert& effect) {
-    return std::holds_alternative<project::Vst3PluginInstance>(effect.processor);
-  };
-  if (timing && (std::ranges::any_of(published.master_effects, plugin) ||
-                 std::ranges::any_of(published.tracks, [&plugin](const project::Track& track) {
-                   return std::ranges::any_of(track.effects, plugin);
-                 })))
-    return std::string("A tempo or meter change cannot switch while VST3 effects play");
-  for (const auto& after : candidate.tracks) {
-    const auto before = std::ranges::find(published.tracks, after.id, &project::Track::id);
-    const bool plugin_after =
-        std::holds_alternative<project::Vst3PluginInstance>(after.instrument_source);
-    if (before == published.tracks.end())
-      continue;
-    const bool plugin_before =
-        std::holds_alternative<project::Vst3PluginInstance>(before->instrument_source);
-    if ((plugin_before || plugin_after) && before->instrument_source != after.instrument_source &&
-        !(plugin_before && plugin_after &&
-          std::get<project::Vst3PluginInstance>(before->instrument_source).id ==
-              std::get<project::Vst3PluginInstance>(after.instrument_source).id))
-      return "A change to or from a VST3 instrument on track " + after.id.to_string() +
-             " cannot switch while playing";
-    if (plugin_before && (timing || before->midi_clips != after.midi_clips))
-      return "A MIDI or tempo edit on track " + after.id.to_string() +
-             " (a VST3 instrument) cannot switch while playing";
-  }
-  return std::nullopt;
 }
 
 // What keeps an edit from switching while playing, when it is neither a
@@ -388,8 +376,6 @@ template <typename TrackRef>
 // graph plays on; the edit is saved for the next Play.
 [[nodiscard]] std::string live_refusal(const project::Snapshot& published,
                                        const project::Snapshot& candidate) {
-  if (auto refusal = whole_switch_refusal(published, candidate))
-    return *std::move(refusal);
   if (needs_whole_switch(published, candidate))
     return "This edit is saved but not audible until its sources are prepared "
            "(capture_source_edit)";
@@ -1232,6 +1218,8 @@ RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot
   // stages are unchanged keeps running as it is; a changed one is prepared
   // again, carrying over each unchanged running stage, and switches live.
   const bool playing = publisher_.active_revision() != 0;
+  const bool retimed =
+      playing && published_snapshot_ && !same_timing(*published_snapshot_, snapshot);
   const auto unbounded_ring_out = unbounded_ring_out_seconds * snapshot.sample_rate;
   std::vector<ActiveChain> chains_next;
   std::vector<Vst3Stage> vst3_next;
@@ -1245,27 +1233,22 @@ RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot
           std::optional<project::InsertSlotId> sidechain,
           const std::shared_ptr<native_dsp::ConvolutionRuntime>& convolution) -> Result<void> {
     const auto* prior = active_chain(track);
-    if (prior && prior->sidechain_target == sidechain && runs(prior->chain, saved)) {
+    // A VST3 effect reads the tempo once, when it is prepared: a tempo or
+    // meter change replaces it, and the old one rings out (ADR-0101).
+    const bool fresh_vst3 =
+        retimed && std::ranges::any_of(saved, [](const auto& stage) {
+          return stage.slot && std::holds_alternative<project::Vst3PluginInstance>(stage.processor);
+        });
+    if (prior && prior->sidechain_target == sidechain && runs(prior->chain, saved) && !fresh_vst3) {
       chains_next.push_back(*prior);
       return Result<void>::success();
     }
     if (saved.empty() && !prior)
       return Result<void>::success();
-    // A VST3 instrument is the track's source: replacing it needs a voice
-    // handoff, which is not part of a chain switch.
-    if (playing && track && prior) {
-      const auto* old_source = prior->chain.stages.empty() || prior->chain.stages.front().saved.slot
-                                   ? nullptr
-                                   : &prior->chain.stages.front().saved;
-      const auto* next_source = saved.empty() || saved.front().slot ? nullptr : &saved.front();
-      if ((old_source || next_source) &&
-          (!old_source || !next_source || !(*old_source == *next_source)))
-        return Result<void>::failure(
-            {ErrorCode::unsupported, "A VST3 instrument change on track " + track->to_string() +
-                                         " is saved and plays from the next Play"});
-    }
+    // A replaced VST3 instrument releases its notes on its drain (ADR-0101).
     track_chain::ChainContext context{stage_context};
     context.detector_slot = sidechain;
+    context.fresh_vst3_effects = fresh_vst3;
 #if OSCILLATE_HAVE_CONVOLUTION
     if (convolution) {
       context.native.convolution =
@@ -1457,6 +1440,22 @@ RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot
             !staged)
           return fail(snapshot.revision, staged.error());
       }
+    }
+    // A VST3 instrument that plays on takes its new MIDI and tempo there too.
+    for (const auto& record : vst3_next) {
+      if (record.slot || !record.track || !record.prepared.offer_events ||
+          std::ranges::none_of(vst3_stages_, [&record](const Vst3Stage& running) {
+            return running.prepared.processor == record.prepared.processor;
+          }))
+        continue;
+      const auto before =
+          std::ranges::find(published_snapshot_->tracks, *record.track, &project::Track::id);
+      const auto after = std::ranges::find(snapshot.tracks, *record.track, &project::Track::id);
+      if (before == published_snapshot_->tracks.end() || after == snapshot.tracks.end() ||
+          (!retimed && before->midi_clips == after->midi_clips))
+        continue;
+      if (auto staged = record.prepared.offer_events(snapshot, true); !staged)
+        return fail(snapshot.revision, staged.error());
     }
   }
   auto published =
@@ -1692,6 +1691,8 @@ void RoutedPlaybackControl::unbind_live_source() noexcept {
     pending_native_revision_.reset();
   }
   pending_players_.clear();
+  pending_vst3_.clear();
+  pending_vst3_tracks_.clear();
   deferred_revision_.reset();
   live_source_ = nullptr;
 }
@@ -1818,7 +1819,7 @@ RoutedPlaybackControl::try_queue_live_players(std::shared_ptr<const project::Sna
                                       pending_native_revision_->runtime);
   // Compared with what plays, so a superseded offer's tracks are re-offered.
   const auto* previous = published_snapshot_.get();
-  if (!previous || !live_source_ || publisher_.active_revision() == 0 || publisher_.has_pending() ||
+  if (!previous || publisher_.active_revision() == 0 || publisher_.has_pending() ||
       (pending_native_revision_ && !superseding) ||
       revisions_.snapshot().active_graph_revision != previous->revision ||
       previous->id != snapshot->id || previous->sample_rate != snapshot->sample_rate ||
@@ -1831,25 +1832,33 @@ RoutedPlaybackControl::try_queue_live_players(std::shared_ptr<const project::Sna
       previous->tracks.size() != snapshot->tracks.size() || !same_timing(*previous, *snapshot))
     return Result<bool>::success(false);
   std::vector<const project::Track*> changed;
+  // VST3 instrument tracks whose MIDI changed (ADR-0101).
+  std::vector<const project::Track*> plugins;
   bool silent = false;
   for (std::size_t index = 0; index < previous->tracks.size(); ++index) {
     const auto& old_track = previous->tracks[index];
     const auto& next_track = snapshot->tracks[index];
     const bool offered =
-        superseding && std::ranges::any_of(pending_players_, [&](const auto* player) {
-          return player->track() == next_track.id;
-        });
+        superseding &&
+        (std::ranges::any_of(
+             pending_players_,
+             [&](const auto* player) { return player->track() == next_track.id; }) ||
+         std::ranges::find(pending_vst3_tracks_, next_track.id) != pending_vst3_tracks_.end());
     if (old_track == next_track && !offered)
       continue;
     if (silent_midi_edit_only(old_track, next_track)) {
       silent = true;
       continue;
     }
+    if (vst3_midi_edit_only(old_track, next_track)) {
+      plugins.push_back(&next_track);
+      continue;
+    }
     if (!player_edit_only(old_track, next_track))
       return Result<bool>::success(false);
     changed.push_back(&next_track);
   }
-  if (changed.empty() && silent && !superseding) {
+  if (changed.empty() && plugins.empty() && silent && !superseding) {
     // Nothing that sounds changed: the revision is audible at once.
     published_snapshot_ = snapshot;
     source_snapshot_ = std::move(snapshot);
@@ -1857,12 +1866,24 @@ RoutedPlaybackControl::try_queue_live_players(std::shared_ptr<const project::Sna
     follow_published_notes();
     return Result<bool>::success(true);
   }
-  if (changed.empty())
+  if (changed.empty() && plugins.empty())
     return Result<bool>::success(false);
+  // Each changed VST3 instrument's running stage takes its new MIDI.
+  std::vector<const Vst3Stage*> stages;
+  stages.reserve(plugins.size());
+  for (const auto* track : plugins) {
+    const auto stage = std::ranges::find_if(vst3_stages_, [track](const Vst3Stage& record) {
+      return record.track == track->id && !record.slot;
+    });
+    if (stage == vst3_stages_.end() || !stage->prepared.offer_events ||
+        !stage->prepared.applied_events_revision)
+      return Result<bool>::success(false);
+    stages.push_back(&*stage);
+  }
   std::vector<native_dsp::synth::NativeSynthPlayer*> players;
   players.reserve(changed.size());
   for (const auto* track : changed) {
-    auto* player = live_source_->synth_player(track->id);
+    auto* player = live_source_ ? live_source_->synth_player(track->id) : nullptr;
     // A new note effect layout (an effect added, moved or removed) rebuilds
     // the source.
     if (!player || !player->same_note_effects(track->note_effects))
@@ -1905,11 +1926,35 @@ RoutedPlaybackControl::try_queue_live_players(std::shared_ptr<const project::Sna
     return Result<bool>::failure(
         {ErrorCode::resource_exhausted, "Live instrument edit ran out of memory"});
   }
-  PendingNativeRevision pending{{}, changed.front()->id, {}, std::move(snapshot), {}};
-  pending.runtime = players.front();
+  std::vector<std::function<std::uint64_t()>> probes;
+  std::vector<project::TrackId> plugin_tracks;
+  try {
+    probes.reserve(stages.size());
+    plugin_tracks.reserve(stages.size());
+    for (const auto* stage : stages) {
+      if (auto offered = stage->prepared.offer_events(*snapshot, false); !offered) {
+        // A full mailbox applies the newest revision once the callback moves on.
+        if (offered.error().code == ErrorCode::resource_exhausted && plugin_tracks.empty()) {
+          deferred_revision_ = snapshot->revision;
+          return Result<bool>::success(true);
+        }
+        return Result<bool>::failure(offered.error());
+      }
+      probes.push_back(stage->prepared.applied_events_revision);
+      plugin_tracks.push_back(*stage->track);
+    }
+  } catch (const std::bad_alloc&) {
+    return Result<bool>::failure(
+        {ErrorCode::resource_exhausted, "Live instrument edit ran out of memory"});
+  }
+  const auto first = changed.empty() ? plugins.front()->id : changed.front()->id;
+  PendingNativeRevision pending{{}, first, {}, std::move(snapshot), {}};
+  pending.runtime = players.empty() ? nullptr : players.front();
   for (std::size_t index = 0; index < players.size(); ++index)
     players[index]->commit_plan(std::move(plans[index]), *pending.snapshot);
   pending_players_ = std::move(players);
+  pending_vst3_ = std::move(probes);
+  pending_vst3_tracks_ = std::move(plugin_tracks);
   pending_native_revision_ = std::move(pending);
   return Result<bool>::success(true);
 }
@@ -2545,10 +2590,6 @@ RoutedPlaybackControl::capture_source_edit(const project::AppliedRevision& appli
     return rejected_capture(
         {ErrorCode::unsupported, "Live source preparation requires an isolated source edit"});
   }
-  if (structural) {
-    if (auto refusal = whole_switch_refusal(*published_snapshot_, *current))
-      return rejected_capture({ErrorCode::unsupported, *std::move(refusal)});
-  }
   try {
     RoutedSourcePreparationCapture capture{
         current,
@@ -2593,8 +2634,7 @@ RoutedPlaybackControl::capture_source_edit(const project::AppliedRevision& appli
 bool RoutedPlaybackControl::can_capture_source_edit(const project::Snapshot& candidate) const {
   return !pending_manual_ && published_snapshot_audible() &&
          (audio_clip_edit_only(*published_snapshot_, candidate) ||
-          (needs_whole_switch(*published_snapshot_, candidate) &&
-           !whole_switch_refusal(*published_snapshot_, candidate)));
+          needs_whole_switch(*published_snapshot_, candidate));
 }
 
 Result<std::vector<KeptPlayer>> RoutedPlaybackControl::keep_players(const project::Snapshot& next) {
@@ -2659,10 +2699,6 @@ Result<std::vector<KeptPlayer>> RoutedPlaybackControl::keep_players(const projec
         {ErrorCode::conflict, "A live synth plan mailbox is full; edit again to apply it"});
   for (auto& [index, plan] : plans)
     (void)kept[index].player->stage_plan(std::move(plan));
-  for (auto& player : kept) {
-    if (player.retiring)
-      player.player->retire();
-  }
   return Kept::success(std::move(kept));
 }
 
@@ -2770,6 +2806,8 @@ void RoutedPlaybackControl::observe() {
     std::uint64_t applied = std::numeric_limits<std::uint64_t>::max();
     for (const auto* player : pending_players_)
       applied = std::min(applied, player->applied_plan_revision());
+    for (const auto& probe : pending_vst3_)
+      applied = std::min(applied, probe());
     return applied;
   };
   if (pending_native_revision_ && !pending_native_revision_->group.empty()) {
@@ -2827,6 +2865,8 @@ void RoutedPlaybackControl::observe() {
       published_snapshot_ = std::move(pending_native_revision_->snapshot);
       source_snapshot_ = published_snapshot_;
       pending_players_.clear();
+      pending_vst3_.clear();
+      pending_vst3_tracks_.clear();
       (void)revisions_.observe_active_graph(published_snapshot_->revision);
       // A Lock switch, a followed track's values or notes, or notes an
       // effect reads ahead (Pump's MIDI trigger) changed.

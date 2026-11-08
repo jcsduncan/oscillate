@@ -288,22 +288,109 @@ void live_routed_instrument(const plugins::ScanResult& scanned, std::uint32_t fr
              engine::RoutedRenderStatus::rendered, "instrument post-stop render failed");
   near(output[0], 0.0F);
   require(!control.processor_fault(), "normal stop faulted the instrument");
+}
 
-  const auto changed = take(reopened.apply({project::AddMidiNote{
-      id<project::ClipId>(4), {id<project::NoteId>(8), {12'000'000}, {14'000'000}, 61, 100}}}));
-  // A VST3 instrument's MIDI cannot switch while playing yet: refused at
-  // once, with the old schedule playing on and no held block.
-  REQUIRE_TRUE(!control.begin_edit(changed, "change MIDI"),
-               "MIDI change silently left an old instrument schedule marked active");
-  REQUIRE_EQ(control.render_block(inputs, output, {resume_at + frames, 3}),
-             engine::RoutedRenderStatus::rendered,
-             "the refused MIDI change interrupted the old instrument schedule");
-  REQUIRE_EQ(control.status().model_revision, changed.snapshot->revision,
-             "MIDI change silently left an old instrument schedule marked active");
-  REQUIRE_EQ(control.status().active_graph_revision, revised.snapshot->revision,
-             "MIDI change silently left an old instrument schedule marked active");
-  REQUIRE_EQ(control.status().application, application::PlaybackApplication::failed,
-             "MIDI change silently left an old instrument schedule marked active");
+// A MIDI edit on a VST3 instrument switches at the next block (ADR-0101):
+// the held note the edit moves later is released at once and starts again at
+// its new place, with no held or silent block beyond what the edit plays and
+// no callback allocation. The revision is active without a restart.
+void live_midi_edit_moves_the_held_note(const plugins::ScanResult& scanned, std::uint32_t frames) {
+  // Where the moved note starts again, in the block after the edit.
+  constexpr std::uint32_t restart_offset = 16;
+  constexpr std::int64_t ticks_per_sample = timeline::ticks_per_quarter / 24'000;
+  constexpr float held_level = 0.5F;
+  Gate gate;
+  auto state = make_model(gate, saved(scanned));
+  auto reopened = reopen(state, gate);
+  plugins::Vst3InstrumentTrackProvider provider;
+  provider.set_scan_receipt(id<project::PluginInstanceId>(5), scanned);
+  application::RoutedPlaybackControl control(reopened, {{1, 64}, frames, 4'096, 4'096}, &provider);
+  REQUIRE_OK(control.submit_current(), "verified instrument route failed");
+  std::vector<std::span<const engine::StereoFrame>> inputs(control.topological_order().size());
+  std::vector<engine::StereoFrame> output(frames);
+  REQUIRE_EQ(control.render_block(inputs, output, {0, 1}), engine::RoutedRenderStatus::rendered,
+             "instrument first routed callback failed");
+  near(output[frames - 1], held_level);
+  control.observe();
+
+  auto moved = state.snapshot()->tracks[0].midi_clips.front().notes.front();
+  const auto length = moved.end.value - moved.start.value;
+  moved.start = {static_cast<std::int64_t>(frames + restart_offset) * ticks_per_sample};
+  moved.end = {moved.start.value + length};
+  const auto changed = take(reopened.apply({project::SetMidiNote{id<project::ClipId>(4), moved}}));
+  REQUIRE_OK(control.begin_edit(changed, "move note"),
+             "a VST3 MIDI edit was refused while playing");
+  counted_allocations = 0;
+  counting_allocations = true;
+  const auto switched = control.render_block(inputs, output, {frames, 1});
+  counting_allocations = false;
+  REQUIRE_EQ(switched, engine::RoutedRenderStatus::rendered, "the MIDI edit's block failed");
+  REQUIRE_EQ(counted_allocations, 0, "the MIDI edit's block allocated");
+  for (std::uint32_t frame = 0; frame < restart_offset; ++frame)
+    near(output[frame], 0.0F);
+  for (std::uint32_t frame = restart_offset; frame < frames; ++frame)
+    near(output[frame], held_level);
+  control.observe();
+  REQUIRE_EQ(control.status().active_graph_revision, changed.snapshot->revision,
+             "the MIDI edit did not become active without a restart");
+  REQUIRE_EQ(control.status().application, application::PlaybackApplication::active,
+             "the MIDI edit did not become active without a restart");
+  require(!control.processor_fault(), "the MIDI edit faulted the instrument");
+}
+
+// A VST3 instrument removed while playing switches with a replacement
+// source (ADR-0098): the old instrument drains beside the new graph and
+// releases its held note on the switching block, then plays nothing more
+// (ADR-0101).
+void live_instrument_removal_releases_its_note(const plugins::ScanResult& scanned,
+                                               std::uint32_t frames) {
+  constexpr float held_level = 0.5F;
+  // The fixture's release: its level falls by an eighth a frame.
+  constexpr std::uint32_t tail_frames = 8;
+  // Blocks rendered after the removal.
+  constexpr std::uint64_t drained_blocks = 4;
+  REQUIRE_EQ(::setenv("OSCILLATE_VST3_INSTRUMENT_TAIL", "8", 1), 0,
+             "cannot set the instrument tail fixture");
+  Gate gate;
+  auto state = make_model(gate, saved(scanned));
+  auto reopened = reopen(state, gate);
+  plugins::Vst3InstrumentTrackProvider provider;
+  provider.set_scan_receipt(id<project::PluginInstanceId>(5), scanned);
+  application::RoutedPlaybackControl control(reopened, {{1, 64}, frames, 4'096, 4'096}, &provider);
+  REQUIRE_OK(control.submit_current(), "verified instrument route failed");
+  std::vector<std::span<const engine::StereoFrame>> inputs(control.topological_order().size());
+  std::vector<engine::StereoFrame> output(frames);
+  REQUIRE_EQ(control.render_block(inputs, output, {0, 1}), engine::RoutedRenderStatus::rendered,
+             "instrument first routed callback failed");
+  near(output[frames - 1], held_level);
+  control.observe();
+
+  const auto removed =
+      take(reopened.apply({project::RemoveVst3Plugin{id<project::PluginInstanceId>(5)}}));
+  require(control.can_capture_source_edit(*removed.snapshot),
+          "a VST3 instrument removal is not offered as a source switch");
+  const auto capture = take(control.capture_source_edit(removed, "remove instrument"));
+  REQUIRE_OK(control.publish_captured_source(capture), "the instrument removal did not publish");
+  for (std::uint64_t block = 1; block <= drained_blocks; ++block) {
+    counted_allocations = 0;
+    counting_allocations = true;
+    const auto rendered = control.render_block(inputs, output, {block * frames, 1});
+    counting_allocations = false;
+    REQUIRE_EQ(rendered, engine::RoutedRenderStatus::rendered, "a block after the removal failed");
+    REQUIRE_EQ(counted_allocations, 0, "a block after the removal allocated");
+    // The switching block releases the note: its tail, then silence.
+    for (std::uint32_t frame = 0; frame < frames; ++frame) {
+      const auto remaining = block == 1 && frame < tail_frames ? tail_frames - frame : 0U;
+      near(output[frame], held_level * static_cast<float>(remaining) /
+                              static_cast<float>(tail_frames));
+    }
+    control.observe();
+  }
+  REQUIRE_EQ(::unsetenv("OSCILLATE_VST3_INSTRUMENT_TAIL"), 0,
+             "cannot clear the instrument tail fixture");
+  REQUIRE_EQ(control.status().active_graph_revision, removed.snapshot->revision,
+             "the instrument removal did not become active without a restart");
+  require(!control.processor_fault(), "the removed instrument faulted");
 }
 
 void two_prepared_instruments_keep_independent_owners(const plugins::ScanResult& scanned,
@@ -1778,6 +1865,10 @@ int main() {
       throw std::runtime_error("instrument fixture scan failed: " + scanned.diagnostic);
     live_routed_instrument(scanned, 64);
     live_routed_instrument(scanned, 128);
+    live_midi_edit_moves_the_held_note(scanned, 64);
+    live_midi_edit_moves_the_held_note(scanned, 128);
+    live_instrument_removal_releases_its_note(scanned, 64);
+    live_instrument_removal_releases_its_note(scanned, 128);
     two_prepared_instruments_keep_independent_owners(scanned, 64);
     two_prepared_instruments_keep_independent_owners(scanned, 128);
     paired_instrument_effects_have_any_shape(scanned, 64);

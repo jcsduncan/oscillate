@@ -1,6 +1,6 @@
 # ADR-0005 — Delay-compensation transitions
 
-**Status:** Accepted; implemented for the bounded routed graph. Delay histories and transitions are in `src/engine/delay_compensation.cpp` and `routing_latency.cpp`. The numerical PDC budget remains a G7 qualification item.
+**Status:** Accepted; implemented for the bounded routed graph. Delay histories and transitions are in `src/engine/delay_compensation.cpp` and `routing_latency.cpp`. The numerical PDC budget remains a G7 qualification item. Superseded in part by [ADR-0101](0101-vst3-live-edits.md), for VST3 latency-changing transitions.
 **Date:** 14 October 2026
 **Requirements:** PRD §§7, 15, 17; FS-02 ER-03/ER-10.
 
@@ -27,7 +27,7 @@ The live Quick route currently uses the same 8,192-frame admission cap at
 supports retaining it as a provisional development default. It does not
 qualify a product-wide limit or replace the physical mixed-plugin G7 run.
 
-### VST3 latency-changing transitions (open gate)
+### VST3 latency-changing transitions (superseded by ADR-0101)
 
 The existing routed mixer deliberately rejects a replacement processor whose
 reported latency differs from its predecessor; such an edit is saved but not

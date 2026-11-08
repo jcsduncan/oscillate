@@ -59,6 +59,9 @@ struct ChainContext {
   Vst3Preparer vst3{};
   // The slot a sidechain keys, when one does.
   std::optional<project::InsertSlotId> detector_slot{};
+  // Prepare every VST3 effect afresh rather than carry it over: it read the
+  // tempo when it was prepared, and the tempo changed (ADR-0101).
+  bool fresh_vst3_effects = false;
 };
 
 // A chain's stages in processing order. It records each stage boundary's
