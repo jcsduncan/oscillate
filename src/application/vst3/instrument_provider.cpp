@@ -3,6 +3,7 @@
 
 #include "oscillate/automation_project/preparation.hpp"
 #include "oscillate/engine/midi_events.hpp"
+#include "oscillate/native_dsp/synth/plan_mailbox.hpp"
 #include "oscillate/plugins/project_binding.hpp"
 #include "oscillate/plugins/vst3_bundle_loader.hpp"
 #include "oscillate/plugins/vst3_tempo_plan.hpp"
@@ -68,37 +69,156 @@ class Vst3InstrumentRuntime final : public engine::ProcessorRuntime {
 public:
   enum class Phase : std::uint8_t { fresh, preparing, prepared, running };
   static_assert(std::atomic<Phase>::is_always_lock_free);
+
+  // What a saved revision gives the instrument (ADR-0101): its MIDI, tempo
+  // and parameter lanes, swapped whole at a block start. Note numbers are the
+  // runtime's, stable across plans, so a held note keeps its number.
+  struct Plan {
+    std::uint64_t revision = 0;
+    std::shared_ptr<const engine::InstrumentEvents> events;
+    std::shared_ptr<const engine::NoteSpans> spans;
+    std::shared_ptr<const timeline::TempoMap> tempo;
+    std::vector<TempoBoundary> tempo_boundaries;
+    bool has_ramps = false;
+    // Note id bits and their numbers, sorted by bits.
+    std::vector<std::pair<foundation::IdBits, std::int32_t>> note_numbers;
+    std::vector<automation_project::PreparedTargetAutomation> automation;
+  };
+
   Vst3InstrumentRuntime(
-      std::unique_ptr<LoadedVst3Effect> instrument, engine::InstrumentEvents events,
-      timeline::TempoMap tempo, std::vector<TempoBoundary> tempo_boundaries,
+      std::unique_ptr<LoadedVst3Effect> instrument, project::TrackId track,
+      project::PluginInstanceId plugin,
       // The format is passed as one validated pair at preparation.
       // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-      std::uint32_t sample_rate, std::uint32_t max_frames, std::vector<foundation::IdBits> note_ids,
-      std::vector<automation_project::PreparedTargetAutomation> automation,
-      std::uint32_t event_capacity, std::shared_ptr<Vst3ManualEventSlot> manual_events,
+      std::uint32_t sample_rate, std::uint32_t max_frames, std::size_t automation_lanes,
+      bool pedal_events, std::uint32_t event_capacity,
+      std::shared_ptr<Vst3ManualEventSlot> manual_events,
       std::array<std::optional<std::uint32_t>, project::midi_pedal_count> pedal_parameters = {})
-      : instrument_(std::move(instrument)), events_(std::move(events)), tempo_(std::move(tempo)),
-        tempo_boundaries_(std::move(tempo_boundaries)), sample_rate_(sample_rate),
-        max_frames_(max_frames), note_ids_(std::move(note_ids)),
-        compiled_(engine::max_midi_events_per_block), notes_(engine::max_midi_events_per_block),
-        left_(max_frames), right_(max_frames), automation_(std::move(automation)),
+      : instrument_(std::move(instrument)), track_(track), plugin_(plugin),
+        sample_rate_(sample_rate), max_frames_(max_frames), automation_lanes_(automation_lanes),
+        pedal_events_(pedal_events), compiled_(engine::HeldNotes::block_capacity),
+        notes_(engine::HeldNotes::block_capacity), left_(max_frames), right_(max_frames),
         automation_values_(max_frames), event_capacity_(event_capacity),
         manual_events_(std::move(manual_events)), pedal_parameters_(pedal_parameters),
-        pedals_(engine::max_pedal_events_per_block + project::midi_pedal_count) {
-    has_ramps_ = std::ranges::any_of(tempo_.events(), [](const auto& event) {
-      return event.shape_to_next != timeline::TempoShape::step;
-    });
+        pedals_(engine::max_pedal_events_per_block + project::midi_pedal_count),
+        retired_events_(std::make_shared<const engine::InstrumentEvents>(
+            track, std::vector<engine::ScheduledMidiEvent>{})),
+        retired_spans_(std::make_shared<const engine::NoteSpans>(*retired_events_)) {
     parameter_events_.reserve(event_capacity_);
   }
 
   ~Vst3InstrumentRuntime() override { manual_events_->retire(); }
 
+  // Control only: the plan for `snapshot`, checked against what this runtime
+  // was prepared for.
+  [[nodiscard]] Result<std::unique_ptr<Plan>> make_plan(const project::Snapshot& snapshot) {
+    using PlanResult = Result<std::unique_ptr<Plan>>;
+    if (snapshot.sample_rate != sample_rate_)
+      return PlanResult::failure(
+          {ErrorCode::conflict, "VST3 instrument plan does not match its sample rate"});
+    auto boundaries = detail::compile_vst3_tempo(snapshot.tempo, snapshot.sample_rate);
+    if (!boundaries)
+      return PlanResult::failure(boundaries.error());
+    auto compiled = engine::compile_midi_events(snapshot);
+    if (!compiled)
+      return PlanResult::failure(compiled.error());
+    const auto events =
+        std::ranges::find(compiled.value().instruments(), track_, &engine::InstrumentEvents::track);
+    if (events == compiled.value().instruments().end())
+      return PlanResult::failure(
+          {ErrorCode::corrupt_data, "Compiled VST3 instrument MIDI track is absent"});
+    auto prepared = automation_project::prepare_project_automation(snapshot, snapshot.revision);
+    if (!prepared)
+      return PlanResult::failure(prepared.error());
+    try {
+      auto plan = std::make_unique<Plan>();
+      plan->revision = snapshot.revision;
+      plan->events = std::make_shared<const engine::InstrumentEvents>(*events);
+      plan->spans = std::make_shared<const engine::NoteSpans>(*events);
+      plan->tempo = std::make_shared<const timeline::TempoMap>(snapshot.tempo);
+      plan->tempo_boundaries = std::move(boundaries).value();
+      plan->has_ramps = std::ranges::any_of(snapshot.tempo.events(), [](const auto& event) {
+        return event.shape_to_next != timeline::TempoShape::step;
+      });
+      for (const auto& event : events->events()) {
+        if (note_numbers_.contains(event.note.bits()))
+          continue;
+        if (next_note_number_ == std::numeric_limits<std::int32_t>::max())
+          return PlanResult::failure(
+              {ErrorCode::resource_exhausted, "VST3 instrument note identity space is exhausted"});
+        note_numbers_.emplace(event.note.bits(), next_note_number_++);
+      }
+      plan->note_numbers.assign(note_numbers_.begin(), note_numbers_.end());
+      for (auto& lane : prepared.value()) {
+        const auto* target = std::get_if<project::Vst3ParameterTarget>(&lane.target());
+        if (target != nullptr && target->plugin == plugin_)
+          plan->automation.push_back(std::move(lane));
+      }
+      std::ranges::sort(plan->automation, {}, [](const auto& lane) {
+        return std::get<project::Vst3ParameterTarget>(lane.target()).parameter_id;
+      });
+      if (!pedal_events_ && !events->pedals().empty())
+        return PlanResult::failure(
+            {ErrorCode::unsupported, "A VST3 instrument's first pedals need a fresh preparation"});
+      if (plan->automation.size() > automation_lanes_)
+        return PlanResult::failure(
+            {ErrorCode::unsupported, "A VST3 instrument's new lanes need a fresh preparation"});
+      return PlanResult::success(std::move(plan));
+    } catch (const std::bad_alloc&) {
+      return PlanResult::failure(
+          {ErrorCode::resource_exhausted, "VST3 instrument plan allocation failed"});
+    }
+  }
+
+  // Control only, before the first callback.
+  void install(std::unique_ptr<Plan> plan) {
+    const auto revision = plan->revision;
+    plans_->install(std::move(plan), revision);
+  }
+
+  // Control only: the plan for `snapshot`, for the next block or, with
+  // `at_switch`, for the block the graph of the snapshot's revision takes
+  // over (graph_activated).
+  // Builds and checks the plan and makes room for it; the returned plan
+  // goes in by commit(), which cannot fail, so one edit reaches several
+  // instruments or none.
+  [[nodiscard]] Result<std::unique_ptr<Plan>> prepare_offer(const project::Snapshot& snapshot,
+                                                            bool at_switch) {
+    using Prepared = Result<std::unique_ptr<Plan>>;
+    // A switch withdrawn before it took over stages the same revision again.
+    if (at_switch ? plans_->stale_for_stage(snapshot.revision) : plans_->stale(snapshot.revision))
+      return Prepared::failure({ErrorCode::conflict, "VST3 instrument plan is stale"});
+    if (!plans_->make_room())
+      return Prepared::failure(
+          {ErrorCode::resource_exhausted, "VST3 instrument plan mailbox is full"});
+    return make_plan(snapshot);
+  }
+  void commit(std::unique_ptr<Plan> plan, bool at_switch) {
+    const auto revision = plan->revision;
+    if (at_switch)
+      plans_->stage(std::move(plan), revision);
+    else
+      plans_->offer(std::move(plan), revision);
+  }
+
+  [[nodiscard]] std::uint64_t applied_revision() const noexcept {
+    return plans_->applied_revision();
+  }
+
   void graph_activated(std::uint64_t revision) noexcept override {
+    retiring_.store(false, std::memory_order_relaxed);
+    plans_->release_staged(revision);
     if (!failed())
       manual_events_->activate(revision);
   }
 
-  void graph_deactivated(std::uint64_t) noexcept override { manual_events_->deactivate(); }
+  // A graph that no longer runs this instrument: it rings out on its drain,
+  // so it releases its notes and plays no more (ADR-0101). A graph that keeps
+  // it activates it again before its next block.
+  void graph_deactivated(std::uint64_t) noexcept override {
+    retiring_.store(true, std::memory_order_relaxed);
+    manual_events_->deactivate();
+  }
 
   [[nodiscard]] bool control_overlay_revision_independent() const noexcept override {
     return !failed() && manual_events_->ready_for_control_overlay();
@@ -138,6 +258,17 @@ public:
       fault(stereo);
       return;
     }
+    auto* plan = plans_->current();
+    if (plan == nullptr) {
+      fault(stereo);
+      return;
+    }
+    // A retired instrument plays no notes; its first block releases those it held.
+    const bool retiring = retiring_.load(std::memory_order_relaxed);
+    const auto* events = retiring ? retired_events_.get() : plan->events.get();
+    const auto* spans = retiring ? retired_spans_.get() : plan->spans.get();
+    const bool restarted = !rendered_ || context.transport_generation != rendered_generation_;
+    const auto* replaced = !restarted && rendered_events_ != events ? rendered_events_ : nullptr;
     const auto manual = manual_events_->claim();
     const auto transient = manual ? std::nullopt : manual_events_->claim_preview();
     bool manual_applied = false;
@@ -145,16 +276,16 @@ public:
     while (rendered < stereo.size()) {
       const auto position = context.project_sample_position + rendered;
       const auto next =
-          std::ranges::upper_bound(tempo_boundaries_, position, {}, &TempoBoundary::sample);
+          std::ranges::upper_bound(plan->tempo_boundaries, position, {}, &TempoBoundary::sample);
       const auto active = next - 1;
       const auto available = stereo.size() - rendered;
       const auto count =
-          next == tempo_boundaries_.end()
+          next == plan->tempo_boundaries.end()
               ? available
               : std::min(available, static_cast<std::size_t>(next->sample - position));
       double bpm = active->bpm;
-      if (has_ramps_ &&
-          !tempo_.bpm_at_sample_rt({static_cast<std::int64_t>(position)}, sample_rate_, bpm)) {
+      if (plan->has_ramps && !plan->tempo->bpm_at_sample_rt({static_cast<std::int64_t>(position)},
+                                                            sample_rate_, bpm)) {
         if (manual)
           manual_events_->finish(false, -1);
         fault(stereo);
@@ -167,8 +298,11 @@ public:
         selected.reset();
       if (selected && manual)
         manual_applied = true;
-      if (!render_segment(stereo.subspan(rendered, count), static_cast<std::int64_t>(position), bpm,
-                          context.transport_generation, selected)) {
+      const Segment segment{*plan, *events, rendered == 0 ? replaced : nullptr,
+                            rendered == 0 && replaced != nullptr ? spans : nullptr};
+      if (!render_segment(stereo.subspan(rendered, count), segment,
+                          static_cast<std::int64_t>(position), bpm, context.transport_generation,
+                          selected)) {
         if (manual)
           manual_events_->finish(false, -1);
         fault(stereo);
@@ -176,6 +310,10 @@ public:
       }
       rendered += count;
     }
+    rendered_ = true;
+    rendered_generation_ = context.transport_generation;
+    rendered_events_ = events;
+    plans_->applied(plan->revision);
     last_position_ = context.project_sample_position + stereo.size();
     last_generation_ = context.transport_generation;
     if (manual)
@@ -195,11 +333,14 @@ public:
     if (!phase_.compare_exchange_strong(expected, Phase::preparing, std::memory_order_acq_rel))
       return Result<std::uint64_t>::failure(
           {ErrorCode::unavailable, "VST3 instrument export end needs a fresh prepared runtime"});
+    // Before the first callback, the installed plan is the only one.
+    auto* plan = plans_->current();
     try {
+      const auto& events = *plan->events;
       std::vector<MidiEvent> cut;
-      cut.reserve(events_.events().size());
+      cut.reserve(events.events().size());
       std::map<project::NoteId, MidiEvent> held;
-      for (const auto& event : events_.events()) {
+      for (const auto& event : events.events()) {
         if (event.sample.value >= static_cast<std::int64_t>(end_sample))
           break;
         cut.push_back(event);
@@ -236,9 +377,11 @@ public:
               {ErrorCode::resource_exhausted, "VST3 export cutoff exceeds MIDI block capacity"});
         }
       }
-      events_ =
-          engine::InstrumentEvents(events_.track(), std::move(cut),
-                                   events_.pedals_until(static_cast<std::int64_t>(end_sample)));
+      auto exported = std::make_shared<const engine::InstrumentEvents>(
+          events.track(), std::move(cut),
+          events.pedals_until(static_cast<std::int64_t>(end_sample)));
+      plan->spans = std::make_shared<const engine::NoteSpans>(*exported);
+      plan->events = std::move(exported);
       auto preparing = Phase::preparing;
       if (!phase_.compare_exchange_strong(preparing, Phase::prepared, std::memory_order_acq_rel))
         return Result<std::uint64_t>::failure(
@@ -262,15 +405,18 @@ public:
     manual_events_->deactivate();
     if (failed())
       return false;
+    const auto* plan = plans_->current();
+    if (plan == nullptr)
+      return false;
     const auto tick =
-        tempo_.sample_to_tick({static_cast<std::int64_t>(last_position_)}, sample_rate_);
+        plan->tempo->sample_to_tick({static_cast<std::int64_t>(last_position_)}, sample_rate_);
     if (!tick)
       return false;
-    const auto next =
-        std::ranges::upper_bound(tempo_boundaries_, last_position_, {}, &TempoBoundary::sample);
+    const auto next = std::ranges::upper_bound(plan->tempo_boundaries, last_position_, {},
+                                               &TempoBoundary::sample);
     double bpm = (next - 1)->bpm;
-    if (has_ramps_ &&
-        !tempo_.bpm_at_sample_rt({static_cast<std::int64_t>(last_position_)}, sample_rate_, bpm))
+    if (plan->has_ramps && !plan->tempo->bpm_at_sample_rt(
+                               {static_cast<std::int64_t>(last_position_)}, sample_rate_, bpm))
       return false;
     if ((next - 1)->sample == last_position_)
       bpm = (next - 1)->bpm;
@@ -288,19 +434,34 @@ public:
   }
 
 private:
-  [[nodiscard]] bool render_segment(std::span<StereoFrame> stereo, std::int64_t position,
-                                    double bpm, std::uint64_t generation,
+  // One tempo segment's inputs: the plan and the events it plays, and, on
+  // the first segment of a new plan's first block, the events and spans the
+  // held notes hand over between.
+  struct Segment {
+    const Plan& plan;
+    const engine::InstrumentEvents& events;
+    const engine::InstrumentEvents* replaced;
+    const engine::NoteSpans* replacement;
+  };
+
+  [[nodiscard]] bool render_segment(std::span<StereoFrame> stereo, const Segment& segment,
+                                    std::int64_t position, double bpm, std::uint64_t generation,
                                     std::optional<Vst3ParameterEvent> manual) noexcept {
+    const auto& plan = segment.plan;
+    // Held notes the new plan no longer holds are released at offset 0.
     const auto copied =
-        events_.copy_block({position}, static_cast<std::uint32_t>(stereo.size()), compiled_);
+        held_->copy_block(segment.events, {position}, static_cast<std::uint32_t>(stereo.size()),
+                          generation, compiled_, segment.replacement);
     timeline::TickPosition tick{};
     if (copied.status != engine::BlockMidiStatus::ready ||
-        !tempo_.sample_to_tick_rt({position}, sample_rate_, tick))
+        !plan.tempo->sample_to_tick_rt({position}, sample_rate_, tick))
       return false;
     for (std::size_t index = 0; index < copied.count; ++index) {
       const auto& event = compiled_[index];
-      const auto found = std::ranges::lower_bound(note_ids_, event.note_id_bits);
-      if (found == note_ids_.end() || *found != event.note_id_bits)
+      const auto found =
+          std::ranges::lower_bound(plan.note_numbers, event.note_id_bits, {},
+                                   &std::pair<foundation::IdBits, std::int32_t>::first);
+      if (found == plan.note_numbers.end() || found->first != event.note_id_bits)
         return false;
       notes_[index] = {.kind = event.kind == engine::MidiEventKind::note_on ? Vst3NoteKind::on
                                                                             : Vst3NoteKind::off,
@@ -309,7 +470,7 @@ private:
                        .pitch = event.key,
                        .velocity = static_cast<float>(event.velocity) /
                                    static_cast<float>(foundation::max_note_velocity),
-                       .note_id = static_cast<std::int32_t>(found - note_ids_.begin() + 1)};
+                       .note_id = found->second};
     }
     const auto count = stereo.size();
     const Vst3InstrumentTransport transport{.project_sample = position,
@@ -319,7 +480,7 @@ private:
                                             .generation = generation,
                                             .playing = true};
     parameter_events_.clear();
-    for (const auto& lane : automation_) {
+    for (const auto& lane : plan.automation) {
       const auto* target = std::get_if<project::Vst3ParameterTarget>(&lane.target());
       if (target == nullptr)
         return false;
@@ -337,9 +498,11 @@ private:
             {id, static_cast<std::uint32_t>(frame), automation_values_[frame]});
       }
     }
-    // Pedals as their mapped controllers' parameters, chased after a seek.
-    const auto pedals = events_.copy_pedals({position}, static_cast<std::uint32_t>(count),
-                                            pedal_generation_ != generation, pedals_);
+    // Pedals as their mapped controllers' parameters, chased after a seek;
+    // a pedal an edit changed takes its new value at once.
+    const auto pedals =
+        segment.events.copy_pedals({position}, static_cast<std::uint32_t>(count),
+                                   pedal_generation_ != generation, pedals_, segment.replaced);
     if (pedals.status != engine::BlockMidiStatus::ready)
       return false;
     for (std::size_t index = 0; index < pedals.count; ++index) {
@@ -394,18 +557,27 @@ private:
   // Host destruction precedes module unload. Only the callback processes
   // while running; control may call stop_after_join once that callback ends.
   std::unique_ptr<LoadedVst3Effect> instrument_;
-  engine::InstrumentEvents events_;
-  timeline::TempoMap tempo_;
-  std::vector<TempoBoundary> tempo_boundaries_;
+  project::TrackId track_;
+  project::PluginInstanceId plugin_;
   std::uint32_t sample_rate_;
-  bool has_ramps_{false};
   std::uint32_t max_frames_;
-  std::vector<foundation::IdBits> note_ids_;
+  // The lanes the event budget was sized for, and whether it holds pedals.
+  std::size_t automation_lanes_;
+  bool pedal_events_;
+  // Control only: each note's number, assigned once.
+  std::map<foundation::IdBits, std::int32_t> note_numbers_;
+  std::int32_t next_note_number_ = 1;
+  std::unique_ptr<native_dsp::synth::PlanMailbox<Plan>> plans_ =
+      std::make_unique<native_dsp::synth::PlanMailbox<Plan>>();
+  std::unique_ptr<engine::HeldNotes> held_ = std::make_unique<engine::HeldNotes>();
+  // Callback only: the events the last rendered block used.
+  const engine::InstrumentEvents* rendered_events_ = nullptr;
+  std::uint64_t rendered_generation_ = 0;
+  bool rendered_ = false;
   std::vector<engine::BlockMidiEvent> compiled_;
   std::vector<Vst3NoteEvent> notes_;
   std::vector<float> left_;
   std::vector<float> right_;
-  std::vector<automation_project::PreparedTargetAutomation> automation_;
   std::vector<double> automation_values_;
   std::uint32_t event_capacity_;
   std::vector<Vst3ParameterEvent> parameter_events_;
@@ -415,6 +587,10 @@ private:
   std::array<std::optional<std::uint32_t>, project::midi_pedal_count> pedal_parameters_;
   std::vector<engine::BlockPedalEvent> pedals_;
   std::uint64_t pedal_generation_{0};
+  // What a retired instrument plays: nothing.
+  std::shared_ptr<const engine::InstrumentEvents> retired_events_;
+  std::shared_ptr<const engine::NoteSpans> retired_spans_;
+  std::atomic<bool> retiring_{false};
   std::atomic<bool> failed_{false};
   std::atomic<Phase> phase_{Phase::fresh};
   std::optional<std::uint64_t> prepared_export_end_;
@@ -473,9 +649,6 @@ Vst3InstrumentTrackProvider::prepare(const project::Snapshot& snapshot,
                                      std::uint32_t max_frames) {
   if (max_frames == 0 || max_frames > 128)
     return fail(ErrorCode::invalid_argument, "Instrument binding has no matching project format");
-  auto tempo_boundaries = detail::compile_vst3_tempo(snapshot.tempo, snapshot.sample_rate);
-  if (!tempo_boundaries)
-    return fail(tempo_boundaries.error().code, tempo_boundaries.error().message);
   const project::Track* owner = nullptr;
   for (const auto& track : snapshot.tracks) {
     const auto* source = std::get_if<project::Vst3PluginInstance>(&track.instrument_source);
@@ -499,15 +672,6 @@ Vst3InstrumentTrackProvider::prepare(const project::Snapshot& snapshot,
       plan.value().instruments(), [owner](const auto& item) { return item.track() == owner->id; });
   if (events == plan.value().instruments().end())
     return fail(ErrorCode::corrupt_data, "Compiled VST3 instrument MIDI track is absent");
-  std::vector<foundation::IdBits> note_ids;
-  note_ids.reserve(events->events().size());
-  for (const auto& event : events->events())
-    note_ids.push_back(event.note.bits());
-  std::ranges::sort(note_ids);
-  const auto duplicates = std::ranges::unique(note_ids);
-  note_ids.erase(duplicates.begin(), duplicates.end());
-  if (note_ids.size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max() - 1))
-    return fail(ErrorCode::resource_exhausted, "VST3 instrument note identity space is exhausted");
   auto prepared_automation =
       automation_project::prepare_project_automation(snapshot, snapshot.revision);
   if (!prepared_automation)
@@ -635,9 +799,13 @@ Vst3InstrumentTrackProvider::prepare(const project::Snapshot& snapshot,
     for (std::size_t pedal = 0; pedal < pedal_controllers.size(); ++pedal)
       pedal_parameters[pedal] = loaded->host().map_midi_controller(pedal_controllers[pedal]);
     auto runtime = std::make_shared<Vst3InstrumentRuntime>(
-        std::move(loaded), *events, snapshot.tempo, std::move(tempo_boundaries).value(),
-        sample_rate, max_frames, std::move(note_ids), std::move(instrument_automation),
-        *event_budget, manual_events, pedal_parameters);
+        std::move(loaded), owner->id, saved.id, sample_rate, max_frames,
+        instrument_automation.size(), pedal_budget != 0, *event_budget, manual_events,
+        pedal_parameters);
+    auto first_plan = runtime->make_plan(snapshot);
+    if (!first_plan)
+      return fail(first_plan.error().code, first_plan.error().message);
+    runtime->install(std::move(first_plan).value());
     prepared_.insert_or_assign(saved.id,
                                PreparedSource{owner->id, runtime, manual_events,
                                               tail_qualified ? finite_tail : std::nullopt});
@@ -650,6 +818,29 @@ Vst3InstrumentTrackProvider::prepare(const project::Snapshot& snapshot,
       if (const auto bound = weak.lock())
         return bound->prepared_export_end();
       return std::optional<std::uint64_t>{};
+    };
+    prepared.prepare_events = [weak = std::weak_ptr<Vst3InstrumentRuntime>(runtime)](
+                                  const project::Snapshot& next, bool at_switch) {
+      using Prepared = Result<std::function<void()>>;
+      const auto bound = weak.lock();
+      if (!bound)
+        return Prepared::failure({ErrorCode::unavailable, "VST3 instrument has retired"});
+      auto plan = bound->prepare_offer(next, at_switch);
+      if (!plan)
+        return Prepared::failure(plan.error());
+      try {
+        auto held =
+            std::make_shared<std::unique_ptr<Vst3InstrumentRuntime::Plan>>(std::move(plan).value());
+        return Prepared::success(
+            [bound, held, at_switch] { bound->commit(std::move(*held), at_switch); });
+      } catch (const std::bad_alloc&) {
+        return Prepared::failure(
+            {ErrorCode::resource_exhausted, "VST3 instrument plan allocation failed"});
+      }
+    };
+    prepared.applied_events_revision = [weak = std::weak_ptr<Vst3InstrumentRuntime>(runtime)] {
+      const auto bound = weak.lock();
+      return bound ? bound->applied_revision() : std::uint64_t{0};
     };
     prepared.finite_tail_frames = finite_tail;
     prepared.fixed_tail_qualified = tail_qualified;

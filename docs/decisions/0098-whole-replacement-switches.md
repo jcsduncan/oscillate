@@ -1,6 +1,6 @@
 # ADR-0098 — Structural edits switch with a whole replacement source
 
-**Status:** Accepted and implemented. **Date:** 8 November 2026.
+**Status:** Accepted and implemented; superseded in part by [ADR-0101](0101-vst3-live-edits.md). **Date:** 8 November 2026.
 **Supersedes in part:** [ADR-0094](0094-primed-source-switching.md), where it refuses track, timing, media and instrument changes while playing and holds an engine switch for a note-free boundary; [ADR-0093](0093-live-instrument-edits-and-queued-revisions.md), where it refuses MIDI on a clip with a lane for something other than its instrument.
 
 ## Context

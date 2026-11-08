@@ -363,7 +363,8 @@ foundation::Result<PreparedChain> prepare_chain(std::span<const SavedStage> save
       // A stage a sidechain now keys must have been prepared with its
       // detector, which a plugin activates only when keyed at preparation.
       const auto keyed = context.detector_slot && stage.slot == context.detector_slot;
-      for (std::size_t index = 0; index < taken.size(); ++index) {
+      const bool reprepare = context.fresh_vst3_effects && stage.slot && is_vst3(stage);
+      for (std::size_t index = 0; index < taken.size() && !reprepare; ++index) {
         if (!taken[index] && prior_stages[index].saved == stage &&
             (!keyed || prior_stages[index].detector)) {
           kept = index;
