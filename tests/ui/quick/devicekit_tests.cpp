@@ -559,6 +559,9 @@ std::unique_ptr<Harness> load_header(NativeSynthDeviceController& controller) {
   return harness;
 }
 
+// Layout positions agree within this many pixels (subpixel rounding).
+constexpr double layout_tolerance_px = 1.0;
+
 QRectF scene_rect(QQuickItem* target) { return target->mapRectToScene(target->boundingRect()); }
 
 // One header for every panel: brand | preset browser | readout | status. The
@@ -582,7 +585,7 @@ void the_header_keeps_preset_readout_and_status_apart() {
                   controller.status_text(),
           "the status badge says its state in words");
   require(!status->property("activeFocusOnTab").toBool(), "the status badge is not a control");
-  require(scene_rect(status).right() <= scene_rect(header).right() + 1.0,
+  require(scene_rect(status).right() <= scene_rect(header).right() + layout_tolerance_px,
           "the status badge sits at the header's right");
 
   // Touching a control shows it in the readout, beside the browser.

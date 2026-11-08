@@ -243,9 +243,6 @@ void controls_follow_their_modes() {
   const auto visible = [&](const char* name) {
     return item(*panel, QString::fromLatin1(name))->isVisible();
   };
-  const auto opacity = [&](const char* name) {
-    return item(*panel, QString::fromLatin1(name))->opacity();
-  };
 
   controller.set_choice(QStringLiteral("ember.filter.type"), 0);
   require(!visible("emberFader:ember.filter.morph"), "morph is hidden for the OTA filter");
@@ -266,12 +263,17 @@ void controls_follow_their_modes() {
   controller.set_choice(QStringLiteral("ember.fx.delay_sync"), 0);
   require(visible("emberKnob:ember.fx.delay_time"), "free delay shows its time");
 
+  // A fader's mode-inactive state (the kit's, ADR-0103), not its opacity.
+  const auto fader_state = [&](const char* name) {
+    return item(*panel, QString::fromLatin1(name))->property("controlState").toString();
+  };
   controller.set_choice(QStringLiteral("ember.amp.mode"), 0);
-  require(opacity("emberFader:ember.amp.attack") < 0.6 &&
-              opacity("emberFader:ember.amp.velocity") > 0.9,
+  require(fader_state("emberFader:ember.amp.attack") == QStringLiteral("inactive") &&
+              fader_state("emberFader:ember.amp.velocity") == QStringLiteral("normal"),
           "amp ADSR dims unless the amp has its own envelope");
   controller.set_choice(QStringLiteral("ember.amp.mode"), 2);
-  require(opacity("emberFader:ember.amp.attack") > 0.9, "Own mode lights the amp ADSR");
+  require(fader_state("emberFader:ember.amp.attack") == QStringLiteral("normal"),
+          "Own mode lights the amp ADSR");
 
   controller.set_choice(QStringLiteral("ember.voice.mode"), 0);
   // An inactive knob keeps its opacity and dims its face (the kit's

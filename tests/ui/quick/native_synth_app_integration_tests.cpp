@@ -618,10 +618,10 @@ void nova_window_resizes_and_zooms_in_the_daw() {
 
   click_named(panel, QStringLiteral("novaZoom:100"));
   const double full = host->scale();
-  click_named(panel, QStringLiteral("novaZoom:85"));
-  require(host->scale() < full - 0.1 && std::fabs(host->scale() - 0.85) < 0.01,
-          "the 85% chip draws the panel at 85%");
-  require(std::fabs(layout->property("panelZoom").toDouble() - 0.85) < 1e-9,
+  click_named(panel, QStringLiteral("novaZoom:90"));
+  require(host->scale() < full - 0.05 && std::fabs(host->scale() - 0.9) < 0.01,
+          "the 90% chip draws the panel at 90%");
+  require(std::fabs(layout->property("panelZoom").toDouble() - 0.9) < 1e-9,
           "the zoom is kept in the workspace preferences");
   click_named(panel, QStringLiteral("novaZoom:100"));
   require(std::fabs(host->scale() - full) < 1e-9, "100% restores the scale");

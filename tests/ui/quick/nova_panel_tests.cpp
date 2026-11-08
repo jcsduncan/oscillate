@@ -1143,9 +1143,9 @@ void zoom_and_constellation() {
           "the panel opens at 100%");
   click(*panel, centre(item(*panel, QStringLiteral("novaZoom:140"))));
   require(std::fabs(panel->root->property("zoom").toDouble() - 1.4) < 1e-9, "the 140% chip zooms");
-  click(*panel, centre(item(*panel, QStringLiteral("novaZoom:85"))));
-  require(std::fabs(panel->root->property("zoom").toDouble() - 0.85) < 1e-9,
-          "the 85% chip zooms out");
+  click(*panel, centre(item(*panel, QStringLiteral("novaZoom:90"))));
+  require(std::fabs(panel->root->property("zoom").toDouble() - 0.9) < 1e-9,
+          "the 90% chip zooms out");
 
   click(*panel, centre(item(*panel, QStringLiteral("novaPresetBrowse"))));
   require(item(*panel, QStringLiteral("novaPresetBrowser"))->isVisible(),

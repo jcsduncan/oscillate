@@ -266,7 +266,8 @@ QtObject {
     property int faderWidth: 30
     property int faderHeight: 96
     property real faderDisabledOpacity: 0.5
-    property real faderInactiveOpacity: knobInactiveOpacity
+    // A mode-inactive fader fades less than a disabled one (ADR-0103).
+    property real faderInactiveOpacity: 0.7
     property bool faderTip: true
     // The spoken name includes the parameter's group.
     property bool faderSpeaksGroup: false
@@ -763,7 +764,8 @@ QtObject {
     // A drawn caret instead of the ▾ glyph.
     property bool dropdownCaret: false
     // An inactive dropdown (its choice not in play) dims to this.
-    property real dropdownMutedOpacity: 0.36
+    // A mode-inactive dropdown fades less than a disabled one (ADR-0103).
+    property real dropdownInactiveOpacity: 0.7
     property int dropdownChevronSize: typeSmall
     // The drawn caret: its left edge from the right, its box and stroke.
     property real dropdownCaretRight: 15

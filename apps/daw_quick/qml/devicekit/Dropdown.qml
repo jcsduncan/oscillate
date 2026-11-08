@@ -42,7 +42,7 @@ Rectangle {
     radius: theme.dropdownRadius
     color: theme.dropdownFill(dropdown)
     border.color: activeFocus ? accent : theme.dropdownEdge
-    opacity: !controller.editable ? theme.dropdownDisabledOpacity : inactive ? theme.dropdownMutedOpacity : 1
+    opacity: !controller.editable ? theme.dropdownDisabledOpacity : inactive ? theme.dropdownInactiveOpacity : 1
     activeFocusOnTab: controller.editable
     Accessible.role: Accessible.ComboBox
     Accessible.name: (theme.dropdownSpeaksGroup && info.group !== undefined ? info.group + " " : "")
