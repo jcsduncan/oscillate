@@ -23,8 +23,9 @@
 #include <vector>
 
 // The mixer view (redesign): strips in arrangement order, then returns, then
-// the master; mute and solo; a fader drag is one undo step; send knobs per
-// return create, set and clear sends; the output menu reroutes to a group.
+// the master; a dB scale beside every fader; mute and solo; a fader drag is
+// one undo step; send knobs per return create, set and clear sends; the
+// output menu reroutes to a group.
 namespace {
 namespace application = oscillate::application;
 namespace project = oscillate::project;
@@ -51,6 +52,66 @@ QVariantMap track(quick::ProjectBridge& bridge, const QString& id) {
 }
 
 QString text(const auto& id) { return QString::fromStdString(id.to_string()); }
+
+// A scale mark and the level it stands for, as the mixer shows them.
+struct ScaleMark {
+  QString label;
+  double db;
+};
+// The marks every strip's scale shows at least (the issue's minimum), and
+// the floor, which reads −∞.
+constexpr double unity_db = 0.0;
+constexpr double floor_db = -60.0;
+constexpr double ceiling_db = 12.0;
+const std::vector<ScaleMark>& required_marks() {
+  static const std::vector<ScaleMark> marks{{QStringLiteral("0"), unity_db},
+                                            {QStringLiteral("−6"), -6.0},
+                                            {QStringLiteral("−12"), -12.0},
+                                            {QStringLiteral("−24"), -24.0},
+                                            {QStringLiteral("−∞"), floor_db}};
+  return marks;
+}
+// A mark and the fader cap or meter reading at its level line up within
+// this many pixels.
+constexpr double scale_alignment_px = 1.0;
+
+double scene_y(QQuickItem* item, double y) { return item->mapToScene(QPointF(0.0, y)).y(); }
+
+// Every strip, the master's included, draws a dB scale beside its fader:
+// each required mark, the unity mark brighter than the rest, and each mark
+// level with the fader cap's centre and the meters' reading at that level.
+void every_fader_has_a_db_scale(QQuickItem* view, const QStringList& strip_ids) {
+  for (const auto& id : strip_ids) {
+    auto* scale = find_named(view, QStringLiteral("mixerScale:") + id);
+    auto* fader = find_named(view, QStringLiteral("mixerFader:") + id);
+    auto* meter = find_named(view, QStringLiteral("mixerMeterL:") + id);
+    require(scale != nullptr && scale->isVisible(),
+            "strip " + id.toStdString() + " has a dB scale");
+    require(fader != nullptr && meter != nullptr, "strip " + id.toStdString() + " has its fader");
+    auto* column = find_named(meter, QStringLiteral("mixerMeterColumn"));
+    require(column != nullptr, "the meter has its column");
+    const double span = ceiling_db - floor_db;
+    for (const auto& mark : required_marks()) {
+      auto* item = find_named(scale, QStringLiteral("mixerScaleMark:") + mark.label);
+      require(item != nullptr && item->isVisible(),
+              "strip " + id.toStdString() + "'s scale marks " + mark.label.toStdString());
+      const double mark_y = scene_y(item, item->height() / 2.0);
+      const double position = (mark.db - floor_db) / span;
+      QVariant cap_y;
+      QMetaObject::invokeMethod(fader, "centreOf", Q_RETURN_ARG(QVariant, cap_y),
+                                Q_ARG(QVariant, position));
+      require(std::abs(scene_y(fader, cap_y.toDouble()) - mark_y) <= scale_alignment_px,
+              "the " + mark.label.toStdString() + " mark is level with the fader cap there");
+      const double reading_y = scene_y(column, column->height() * (1.0 - position));
+      require(std::abs(reading_y - mark_y) <= scale_alignment_px,
+              "the " + mark.label.toStdString() + " mark is level with the meter reading there");
+    }
+    auto* unity = find_named(scale, QStringLiteral("mixerScaleMark:0"));
+    auto* minus_six = find_named(scale, QStringLiteral("mixerScaleMark:−6"));
+    require(unity->childItems().front()->width() > minus_six->childItems().front()->width(),
+            "the unity mark stands out from the other marks");
+  }
+}
 
 void mixer_strips_edit_the_project() {
   QTemporaryDir directory;
@@ -102,6 +163,10 @@ void mixer_strips_edit_the_project() {
       order.push_back(item->objectName());
   }
   require(order == expected, "strips are tracks, then returns, then the master");
+  QStringList strip_ids;
+  for (const auto& name : order)
+    strip_ids.push_back(name.mid(QStringLiteral("mixerStrip:").size()));
+  every_fader_has_a_db_scale(view, strip_ids);
 
   // Sends: one knob per return, lettered; the existing send shows its level.
   const auto synth_id = text(synth.value());

@@ -13,6 +13,8 @@
     <file alias="mixer/MixerKnob.qml">qml/mixer/MixerKnob.qml</file>
     <file alias="mixer/MixerFader.qml">qml/mixer/MixerFader.qml</file>
     <file alias="mixer/MixerMeter.qml">qml/mixer/MixerMeter.qml</file>
+    <file alias="mixer/MixerScale.qml">qml/mixer/MixerScale.qml</file>
+    <file alias="mixer/MixerDb.js">qml/mixer/MixerDb.js</file>
     <file alias="mixer/MasterSectionPanel.qml">qml/mixer/MasterSectionPanel.qml</file>
     <file alias="CachePanel.qml">qml/CachePanel.qml</file>
     <file alias="InsertChainPanel.qml">qml/InsertChainPanel.qml</file>

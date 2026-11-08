@@ -1069,6 +1069,10 @@ Rectangle {
                     id: automationButton
                     objectName: "trackAutomationButton"
                     readonly property bool open: trackRow.automationOpen
+                    // The track holds saved lanes (its own or its clips'):
+                    // the closed button wears the track colour and a dot.
+                    readonly property int laneCount: trackRow.modelData.automationLaneCount || 0
+                    readonly property bool holdsAutomation: laneCount > 0
                     x: parent.width - Theme.trackAutomationButtonRight
                     y: trackRow.tall ? Theme.trackButtonTallY : (parent.height - height) / 2
                     width: Theme.trackButtonSize
@@ -1076,25 +1080,42 @@ Rectangle {
                     radius: Theme.trackButtonRadius
                     color: open ? trackRow.trackColor : automationArea.containsMouse ? Theme.buttonHover : Theme.buttonFace
                     Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.hover } }
-                    border.color: activeFocus ? trackPanel.accentColor : "transparent"
+                    border.color: activeFocus ? trackPanel.accentColor
+                        : holdsAutomation && !open ? trackRow.trackColor : "transparent"
                     activeFocusOnTab: true
                     Accessible.role: Accessible.Button
                     Accessible.name: (open ? "Hide " : "Show ") + trackRow.modelData.name + " automation"
+                    Accessible.description: automationButton.laneText
+                    readonly property string laneText: !holdsAutomation ? "No automation"
+                        : laneCount === 1 ? "1 automation lane" : laneCount + " automation lanes"
                     Keys.onReturnPressed: trackPanel.automationToggled(trackRow.modelData.id)
                     Keys.onSpacePressed: trackPanel.automationToggled(trackRow.modelData.id)
                     Text {
                         anchors.centerIn: parent
                         text: "A"
-                        color: automationButton.open ? Theme.canvas : trackPanel.dimTextColor
+                        color: automationButton.open ? Theme.canvas
+                            : automationButton.holdsAutomation ? trackRow.trackColor : trackPanel.dimTextColor
                         font.pixelSize: Theme.typeSmall
                         font.bold: true
+                    }
+                    Rectangle {
+                        objectName: "trackAutomationMark"
+                        visible: automationButton.holdsAutomation && !automationButton.open
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: Theme.trackAutomationMarkInset
+                        width: Theme.trackAutomationMarkSize
+                        height: width
+                        radius: width / 2
+                        color: trackRow.trackColor
                     }
                     MouseArea {
                         id: automationArea
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        readonly property string tip: (automationButton.open ? "Hide" : "Show") + " automation"
+                        readonly property string tip: (automationButton.open ? "Hide" : "Show") + " automation · "
+                            + automationButton.laneText
                         onEntered: trackPanel.showTip(automationButton, tip, "A")
                         onExited: trackPanel.hideTip(tip)
                         onClicked: trackPanel.automationToggled(trackRow.modelData.id)

@@ -314,6 +314,9 @@ KitTheme {
     // A track row's A, M, S and delete buttons, and its level meter, from the right edge.
     readonly property int trackButtonSize: 22
     readonly property int trackButtonRadius: 5
+    // The dot on a closed A button whose track holds automation.
+    readonly property real trackAutomationMarkSize: 5
+    readonly property real trackAutomationMarkInset: 2
     readonly property int trackButtonTallY: 54
     readonly property int trackAutomationButtonRight: 112
     readonly property int trackMuteButtonRight: 86
@@ -1262,6 +1265,12 @@ KitTheme {
     readonly property color mixerFaderCapBottom: "#252e39"
     readonly property color mixerFaderCapRim: "#4a5664"
     readonly property color mixerKnobFaceEdge: "#2a3440"
+    // The decibel scale beside each strip's meters and fader: its marks, the
+    // brighter unity (0 dB) mark and their labels.
+    readonly property color mixerScaleTick: "#3a4552"
+    readonly property color mixerScaleUnity: "#aeb8c4"
+    readonly property real mixerScaleTickLength: 4
+    readonly property real mixerScaleUnityLength: 7
 
     // ---- Device editor windows (NativeSynthEditorOverlay, NativeEffectEditorOverlay) ----
     // Docked, a device panel spans this share of the window's height.

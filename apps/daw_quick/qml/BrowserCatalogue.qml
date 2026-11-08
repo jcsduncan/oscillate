@@ -22,7 +22,10 @@ QtObject {
     // Category state. VST3 plugins are shown when showBuiltIns is false;
     // showInstruments picks instruments or effects within VST3, and
     // instruments or effects among built-ins when no `narrowTo` narrows them.
-    property bool showInstruments: selectedTrack && selectedTrack.kind === "instrument"
+    // It follows the selected track's kind until a category is chosen; with
+    // no track selected (an empty project) it opens on instruments, the
+    // first step.
+    property bool showInstruments: !selectedTrack || selectedTrack.kind === "instrument"
     property bool showBuiltIns: true
     // "", "Drums", "Samples", "Effects", "Utilities", "Favourites", "Recent".
     property string narrowTo: ""
