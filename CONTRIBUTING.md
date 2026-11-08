@@ -48,6 +48,20 @@ problem, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
    requirement IDs, any API or schema change, the tests you ran, and the
    real-time and licensing effects.
 
+## Bundles
+
+Each open issue carries one `bundle:` label naming the area it belongs to
+(`bundle:routing`, `bundle:live-editing` and so on). Work takes a bundle
+whole: every open issue with that label goes into one pull request that
+closes them all (`Closes #N` for each), split into sequential pull requests
+only when the change grows past about 1,500 lines. A new issue without a
+bundle gets `bundle:triage` (`.github/workflows/issue-bundle.yml`) until it
+is assigned one.
+
+```sh
+gh issue list --label bundle:routing --state open
+```
+
 ## Commit messages
 
 Commits and pull request titles follow
