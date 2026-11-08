@@ -362,7 +362,6 @@ KitTheme {
     property real circuitWidth: 170
     property real humRowY: 84
     property real circuitViewY: 170
-    property real circuitNoteY: 272
     property real cardIdleAlpha: 0.3
     property real cardBarWidth: 6
     property real cardTickWidth: 12

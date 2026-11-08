@@ -324,10 +324,10 @@ Rectangle {
     component Envelope: PrismSection {
         id: envelope
         required property string prefix
-        // The envelope picture, then a row of up to knobColumns knobs.
+        // The envelope picture, then its knobs across the card, each slot
+        // in proportion to its share, so a long name gets the room it needs.
         readonly property real pictureHeight: 80
         readonly property real knobRowY: 88
-        readonly property int knobColumns: 6
         theme: panel.theme
         PrismEnvelopeView {
             width: envelope.bodyWidth
@@ -339,13 +339,26 @@ Rectangle {
         }
         Row {
             y: envelope.knobRowY
+            // Every knob's share, summed.
+            readonly property real sharesWidth: {
+                let total = 0
+                for (let index = 0; index < envelopeKnobs.count; ++index) {
+                    const knob = envelopeKnobs.itemAt(index)
+                    if (knob)
+                        total += knob.share
+                }
+                return total
+            }
             Repeater {
+                id: envelopeKnobs
                 model: envelope.prefix === "prism.amp"
                     ? ["attack", "decay", "sustain", "release", "curve", "velocity"]
                     : ["attack", "decay", "sustain", "release", "curve"]
                 delegate: Kit.Knob {
                     required property string modelData
-                    width: envelope.bodyWidth / envelope.knobColumns
+                    // Its label's width, or its dial's when the label is shorter.
+                    readonly property real share: Math.max(labelWidth, diameter)
+                    width: parent.sharesWidth > 0 ? envelope.bodyWidth * share / parent.sharesWidth : 0
                     diameter: panel.theme.compactKnobDiameter
                     // Six to a row: velocity is abbreviated, like Env Amt.
                     label: modelData === "velocity" ? "Vel" : info.name !== undefined ? info.name : ""

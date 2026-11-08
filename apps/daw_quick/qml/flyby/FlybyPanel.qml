@@ -119,6 +119,7 @@ Rectangle {
         Text {
             x: panel.theme.spaceXxs
             y: wordmark.y + wordmark.height + panel.theme.spaceXxs
+            objectName: "flybyTagline"
             text: "SOUND IN MOTION · DOPPLER · DISTANCE · EARS"
             color: panel.theme.inkDim
             font.pixelSize: panel.theme.typeMicro
@@ -456,6 +457,8 @@ Rectangle {
             Row {
                 x: panel.theme.spaceMd
                 y: panel.theme.cardBodyY
+                // Room between neighbouring labels, so two long ones never meet.
+                spacing: panel.theme.spaceSm
                 Repeater {
                     model: ["flyby.doppler", "flyby.air", "flyby.rolloff", "flyby.reference", "flyby.near"]
                     delegate: PanelKnob {

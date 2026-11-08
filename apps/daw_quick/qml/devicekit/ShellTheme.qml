@@ -427,10 +427,7 @@ KitTheme {
     readonly property int pianoRollPedalButtonStride: 104
     readonly property int pianoRollPedalButtonWidth: 98
     readonly property color pianoRollPedalButtonFill: "#2d2a1f"
-    readonly property int pianoRollHintX: 1328
     readonly property int pianoRollHintGap: 10
-    readonly property int pianoRollHintRoom: 220
-    readonly property int pianoRollUnmappedHintRoom: 250
     // Chords: their violet, in clips, the roll and the chord tools.
     readonly property color chordAccent: "#a98bff"
     readonly property color pianoRollChordsOpenFill: "#2d2547"

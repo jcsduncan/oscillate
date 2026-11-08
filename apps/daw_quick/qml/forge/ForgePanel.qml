@@ -242,7 +242,8 @@ Rectangle {
         Text {
             x: wordmark.x + panel.theme.spaceXxs
             y: wordmark.y + wordmark.height + panel.theme.subtitleGap
-            text: "ANTIALIASED SATURATOR · 16× OVERSAMPLED"
+            objectName: "forgeSubtitle"
+            text: "SATURATOR · 16× OVERSAMPLED"
             color: panel.theme.inkDim
             font.pixelSize: panel.theme.typeMicro
             font.bold: true

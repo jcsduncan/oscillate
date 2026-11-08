@@ -497,6 +497,7 @@ Rectangle {
     Kit.Card {
         theme: panel.theme
         id: bass
+        objectName: "vistaBassCard"
         title: "MONO BASS"
         x: panel.margin
         y: panel.rowBY

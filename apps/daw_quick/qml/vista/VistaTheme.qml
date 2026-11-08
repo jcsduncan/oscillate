@@ -147,7 +147,7 @@ KitTheme {
     property real toggleX: 12
     property real toggleY: 32
     property real knobRowY: 34
-    property real lowerKnobY: 76
+    property real lowerKnobY: 64
     property int lowerKnobDiameter: 40
     property int segmentRowHeight: 24
     property real amountX: 8

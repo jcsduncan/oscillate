@@ -57,7 +57,8 @@ Rectangle {
     readonly property int levelEase: 90
     readonly property int spectrumEase: 80
 
-    implicitWidth: sectionWidth
+    // Never narrower than its loudness readings, set side by side.
+    implicitWidth: Math.max(sectionWidth, masterReadings.implicitWidth + 2 * Theme.spaceLg)
     radius: Theme.radiusXl
     color: Theme.panel
     border.color: Theme.line
@@ -164,6 +165,8 @@ Rectangle {
         }
 
         Grid {
+            id: masterReadings
+            objectName: "masterReadings"
             // One column per reading.
             columns: readouts.model.length
             columnSpacing: section.readoutColumnGap

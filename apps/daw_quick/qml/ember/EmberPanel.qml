@@ -839,10 +839,15 @@ Rectangle {
             live: panel.live
             y: panel.theme.circuitViewY
             width: parent.width
-            height: panel.theme.displayWellHeight
+            // The well gives up height so the note below it stays whole.
+            height: Math.min(panel.theme.displayWellHeight,
+                             circuitNote.y - panel.theme.circuitViewY - panel.theme.spaceSm)
         }
         Text {
-            y: panel.theme.circuitNoteY
+            id: circuitNote
+            objectName: "emberCircuitNote"
+            // At the card's foot, however many lines it wraps to.
+            y: parent.height - implicitHeight
             width: parent.width
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
