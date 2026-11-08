@@ -746,15 +746,15 @@ struct MediaContent {
   project::Snapshot playing;
 };
 
-MediaContent import_tone(const fs::path& directory, const fs::path& root) {
-  auto session = take(app::ProjectSession::open(root));
+MediaContent import_tone(const SongFiles& files) {
+  auto session = take(app::ProjectSession::open(files.root));
   const auto rate = session->snapshot().sample_rate;
   std::vector<float> samples(media_clip_blocks * block_frames);
   for (std::size_t frame = 0; frame < samples.size(); ++frame)
     samples[frame] =
         static_cast<float>(media_tone_level * std::sin(2.0 * std::numbers::pi * media_tone_hz *
                                                        static_cast<double>(frame) / rate));
-  const auto wav = directory / "tone.wav";
+  const auto wav = files.directory.path() / "tone.wav";
   oscillate::test::write_wav_float(wav, rate, oscillate::test::mono_channels, samples);
   const int fd = ::open(wav.c_str(), O_RDONLY | O_CLOEXEC);
   REQUIRE_GE(fd, 0, "WAV fixture open failed");
@@ -775,7 +775,7 @@ MediaContent import_tone(const fs::path& directory, const fs::path& root) {
 }
 
 struct MediaSong : Song, MediaContent {
-  MediaSong() : MediaContent(import_tone(directory.path(), root)) {}
+  MediaSong() : MediaContent(import_tone(*this)) {}
 };
 
 void new_media_plays_from_its_switch() {
