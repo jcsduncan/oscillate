@@ -1077,6 +1077,11 @@ void ProjectBridge::copy_clips_to(const QStringList& clip_ids, double from, doub
     set_status(QStringLiteral("Select clips to copy"));
     return;
   }
+  // An audio drag may drop left of bar 1; a copy there is refused, not clamped.
+  if (to < 0.0) {
+    set_status(QStringLiteral("Copy rejected: the copies cannot start before bar 1"));
+    return;
+  }
   const auto bars = static_cast<double>(timeline_bars_);
   const auto& snapshot = session_->snapshot();
   const auto start = tick_at_bars(snapshot, std::clamp(from * bars, 0.0, bars));

@@ -135,7 +135,7 @@ void selection_copies_keep_their_spacing_and_rows() {
 
 void audio_copies_to_another_audio_track() {
   Directory directory;
-  const auto folder = directory.path();
+  const auto& folder = directory.path();
   auto session = take(application::ProjectSession::create(folder / "song"));
   const auto source = folder / "source.wav";
   const std::vector<std::int16_t> samples(source_frames, source_level);
@@ -166,7 +166,7 @@ void audio_copies_to_another_audio_track() {
 
 void refused_copies_make_no_edit() {
   Directory directory;
-  const auto folder = directory.path();
+  const auto& folder = directory.path();
   auto session = take(application::ProjectSession::create(folder / "song"));
   const auto synth = take(session->instruments().add_synth_track());
   const auto source = folder / "source.wav";
