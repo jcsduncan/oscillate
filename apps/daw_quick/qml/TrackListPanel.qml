@@ -182,6 +182,12 @@ Rectangle {
             return ""
         }
         const edge = Theme.trackDropEdgeFraction
+        // A bus never goes inside a bus (itself included): to a dragged bus
+        // another bus's header is a row on the master like any other.
+        const movingBus = dragIds.some(id => {
+            const track = trackWithId(id)
+            return track !== null && isBus(track)
+        })
         let target = { busId: "", beforeId: "" }
         for (let position = 0; position < order.length; ++position) {
             const track = tracks[order[position]]
@@ -189,7 +195,9 @@ Rectangle {
             if (at < row.top || at >= row.bottom)
                 continue
             const fraction = (at - row.top) / Math.max(1, row.bottom - row.top)
-            if (track.kind === "group") {
+            if (track.kind === "group" && movingBus) {
+                target = { busId: "", beforeId: fraction < rowMiddle ? track.id : topLevelAfter(position) }
+            } else if (track.kind === "group") {
                 target = fraction < edge ? { busId: "", beforeId: track.id } : { busId: track.id, beforeId: "" }
             } else if (track.busId !== "") {
                 const following = position + 1 < order.length ? tracks[order[position + 1]] : null
@@ -205,11 +213,7 @@ Rectangle {
         }
         const bus = trackWithId(target.busId)
         return { ids: dragIds, busId: target.busId, beforeId: target.beforeId,
-                 // A bus never goes inside a bus (itself included).
-                 refused: target.busId !== "" && dragIds.some(id => {
-                     const track = trackWithId(id)
-                     return track !== null && isBus(track)
-                 }),
+                 refused: target.busId !== "" && movingBus,
                  busName: bus ? bus.name : "" }
     }
     function beginDrag(track) {
