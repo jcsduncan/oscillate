@@ -179,7 +179,11 @@ Window {
         }
         return false
     }
-    readonly property bool bareKeysAllowed: projectBridge.projectOpen && !textFocus
+    // A project change held for the plug-in state choice keeps the project
+    // still: no shortcut acts until the choice is made.
+    readonly property bool pluginStateChoiceOpen: projectBridge.pluginStateProblem.length > 0
+    readonly property bool projectKeys: projectBridge.projectOpen && !pluginStateChoiceOpen
+    readonly property bool bareKeysAllowed: projectKeys && !textFocus
         && projectBridge.nativeSynthController === null
         && projectBridge.nativeEffectController === null
         && !pluginBrowserOpen && !shortcutsOpen && !commandPalette.open
@@ -318,49 +322,50 @@ Window {
 
     Shortcut {
         sequence: "Ctrl+Shift+N"
-        enabled: projectBridge.projectOpen
+        enabled: shell.projectKeys
         onActivated: projectBridge.trackCommands.add_synth_track()
     }
     Shortcut {
         sequence: "Ctrl+S"
-        enabled: projectBridge.projectOpen
+        enabled: shell.projectKeys
         onActivated: projectBridge.save()
     }
     Shortcut {
         sequence: "Ctrl+Z"
-        enabled: projectBridge.projectOpen
+        enabled: shell.projectKeys
         onActivated: projectBridge.undo()
     }
     Shortcut {
         sequence: "Ctrl+Shift+Z"
-        enabled: projectBridge.projectOpen
+        enabled: shell.projectKeys
         onActivated: projectBridge.redo()
     }
     Shortcut {
         sequence: "Ctrl+Y"
-        enabled: projectBridge.projectOpen
+        enabled: shell.projectKeys
         onActivated: projectBridge.redo()
     }
     Shortcut {
         // The computer keyboard as a musical keyboard (A W S E D F T G Y H U J K…).
         sequence: "Ctrl+Shift+K"
-        enabled: projectBridge.projectOpen
+        enabled: shell.projectKeys
         onActivated: projectBridge.computerKeyboard.toggle()
     }
     Shortcut {
         // Record (ADR-0086): notes played go into the track.
         sequence: "Ctrl+R"
-        enabled: projectBridge.projectOpen
+        enabled: shell.projectKeys
         onActivated: projectBridge.recording.toggle_record()
     }
     Shortcut {
         // Anything by name: actions, tracks, instruments, effects, presets.
         sequence: "Ctrl+K"
+        enabled: !shell.pluginStateChoiceOpen
         onActivated: commandPalette.open ? commandPalette.hide() : commandPalette.show()
     }
     Shortcut {
         sequence: "Ctrl+H"
-        enabled: projectBridge.projectOpen
+        enabled: shell.projectKeys
         onActivated: shell.historyPanelOpen = !shell.historyPanelOpen
     }
     Shortcut {
@@ -370,7 +375,7 @@ Window {
     }
     Shortcut {
         sequence: "Ctrl+Shift+E"
-        enabled: projectBridge.projectOpen
+        enabled: shell.projectKeys
         onActivated: {
             if (shell.exportDialogOpen)
                 shell.exportDialogOpen = false
@@ -380,18 +385,18 @@ Window {
     }
     Shortcut {
         sequence: "Ctrl+Shift+M"
-        enabled: projectBridge.projectOpen
+        enabled: shell.projectKeys
         onActivated: shell.toggleMixCheck()
     }
     // Editing. ShortcutsOverlay lists these; keep the two in step.
     Shortcut {
         sequence: "Ctrl+D"
-        enabled: projectBridge.projectOpen && !shell.textFocus
+        enabled: shell.projectKeys && !shell.textFocus
         onActivated: shell.duplicateSelection()
     }
     Shortcut {
         sequence: "Ctrl+J"
-        enabled: projectBridge.projectOpen && !shell.textFocus
+        enabled: shell.projectKeys && !shell.textFocus
                  && projectBridge.selectedClipIds.length > 1
         onActivated: {
             projectBridge.merge_selected_clips()
@@ -412,12 +417,12 @@ Window {
     }
     Shortcut {
         sequences: [StandardKey.Copy]
-        enabled: projectBridge.projectOpen && !shell.textFocus
+        enabled: shell.projectKeys && !shell.textFocus
         onActivated: projectBridge.copy_selection()
     }
     Shortcut {
         sequences: [StandardKey.Cut]
-        enabled: projectBridge.projectOpen && !shell.textFocus
+        enabled: shell.projectKeys && !shell.textFocus
         onActivated: {
             projectBridge.cut_selection()
             if (projectBridge.selectedClipIds.length === 0)
@@ -426,7 +431,7 @@ Window {
     }
     Shortcut {
         sequences: [StandardKey.Paste]
-        enabled: projectBridge.projectOpen && !shell.textFocus
+        enabled: shell.projectKeys && !shell.textFocus
         onActivated: projectBridge.paste_at_playhead()
     }
     Shortcut {
@@ -448,17 +453,17 @@ Window {
     }
     Shortcut {
         sequence: "Ctrl+E"
-        enabled: projectBridge.projectOpen && !shell.textFocus && shell.selectedClip !== null
+        enabled: shell.projectKeys && !shell.textFocus && shell.selectedClip !== null
         onActivated: shell.splitSelection()
     }
     Shortcut {
         sequence: "Ctrl+U"
-        enabled: projectBridge.projectOpen && !shell.textFocus && shell.selectedClip !== null
+        enabled: shell.projectKeys && !shell.textFocus && shell.selectedClip !== null
         onActivated: shell.quantizeSelection()
     }
     Shortcut {
         sequence: "Ctrl+L"
-        enabled: projectBridge.projectOpen && !shell.textFocus
+        enabled: shell.projectKeys && !shell.textFocus
         onActivated: projectBridge.loopTransport.set_enabled(!projectBridge.loopTransport.enabled)
     }
     Shortcut {
@@ -473,7 +478,7 @@ Window {
     }
     Shortcut {
         sequence: "Ctrl+T"
-        enabled: projectBridge.projectOpen && !shell.textFocus
+        enabled: shell.projectKeys && !shell.textFocus
         onActivated: projectBridge.trackCommands.add_synth_track()
     }
     Shortcut {
@@ -490,7 +495,7 @@ Window {
     }
     Shortcut {
         sequence: "Ctrl+M"
-        enabled: projectBridge.projectOpen && !shell.textFocus
+        enabled: shell.projectKeys && !shell.textFocus
         onActivated: projectBridge.add_marker_at_playhead()
     }
     Shortcut {
@@ -505,7 +510,7 @@ Window {
     }
     Shortcut {
         sequences: ["?", "F1"]
-        enabled: projectBridge.projectOpen && !shell.textFocus
+        enabled: shell.projectKeys && !shell.textFocus
         onActivated: shell.shortcutsOpen = !shell.shortcutsOpen
     }
     Shortcut {
@@ -546,7 +551,7 @@ Window {
     }
     Shortcut {
         sequence: "Ctrl+Shift+P"
-        enabled: projectBridge.projectOpen
+        enabled: shell.projectKeys
         onActivated: shell.openPluginBrowser()
     }
 

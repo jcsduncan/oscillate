@@ -96,9 +96,12 @@ public:
   Q_INVOKABLE void discard_vst3_insert_editor();
 
   // A native editor saves its state before the project changes or the
-  // window closes. Returns why the state did not reach the project; the
-  // editor then stays open with that state when the plug-in still holds it.
+  // window closes. Returns why the state did not reach the project; when the
+  // plug-in still holds that state, the editor keeps it with its view closed.
   [[nodiscard]] std::optional<QString> commit_native_editor();
+  // Shows a kept editor's view again: false (and the editor discarded) when
+  // none is kept or its view cannot reopen.
+  [[nodiscard]] bool resume_native_editor();
   // Follows the latest live gesture's receipt in the open editor.
   void refresh_live_status();
 
@@ -130,7 +133,7 @@ private:
   };
   // Closes the native view and saves its state as one undo step. Returns
   // why the state did not reach the project; with `keep`, a plug-in that
-  // still holds that state is shown again for another try.
+  // still holds that state stays loaded for resume_native_editor.
   [[nodiscard]] std::optional<QString> close_native_editor(bool keep);
   [[nodiscard]] std::optional<QString>
   keep_uncaptured_editor(bool keep, QString failure,

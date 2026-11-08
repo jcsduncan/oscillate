@@ -604,6 +604,7 @@ void unsaved_plugin_state_stops_project_changes() {
   stopped("closing the window");
   bridge.cancel_project_change();
   require(!ready_to_close, "a cancelled window close closed the window");
+  require(bridge.autosave_scheduled(), "a cancelled window close left autosave stopped");
 
   // Going on runs the stopped change once, without another capture.
   capture_fails = true;

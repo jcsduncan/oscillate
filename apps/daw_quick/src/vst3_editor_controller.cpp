@@ -157,6 +157,19 @@ Vst3EditorController::Vst3EditorController(Host host, PluginAutomationController
 
 Vst3EditorController::~Vst3EditorController() = default;
 
+bool Vst3EditorController::resume_native_editor() {
+  if (!editor_.value(QStringLiteral("native")).toBool())
+    return false;
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+  if (attachment_ && attachment_->attached())
+    return true;
+  if (reattach_native_view())
+    return true;
+#endif
+  discard_vst3_insert_editor();
+  return false;
+}
+
 std::optional<QString> Vst3EditorController::commit_native_editor() {
   if (!editor_.value(QStringLiteral("native")).toBool())
     return std::nullopt;
@@ -655,19 +668,20 @@ std::optional<QString> Vst3EditorController::close_native_editor(bool keep) {
 std::optional<QString> Vst3EditorController::keep_uncaptured_editor(
     bool keep, QString failure, std::vector<project::Vst3ParameterReference> references) {
   if (keep) {
+    // The view stays closed while the user decides, so the choice is not
+    // hidden behind the plug-in's native window.
     uncaptured_parameters_ = std::move(references);
-    if (reattach_native_view()) {
-      editor_.insert(QStringLiteral("message"), failure);
-      emit editorChanged();
-      return failure;
-    }
+    editor_.insert(QStringLiteral("message"), failure);
+    emit editorChanged();
+    return failure;
   }
   discard_vst3_insert_editor();
   return failure;
 }
 
 bool Vst3EditorController::reattach_native_view() {
-  if (attachment_->open(plugin_->host()) != plugin_ui::EditorOpenStatus::attached)
+  if (!plugin_ || !original_ || !attachment_ ||
+      attachment_->open(plugin_->host()) != plugin_ui::EditorOpenStatus::attached)
     return false;
   plugin_->host().begin_editor_parameter_capture();
   attachment_->window_shell()->setWindowTitle(QString::fromStdString(original_->name));
@@ -712,10 +726,12 @@ void Vst3EditorController::set_parameter(quint32 parameter_id, double normalized
     host_.status(QStringLiteral("Project changed while VST3 parameters were open"));
     return;
   }
-  auto references = original.parameters;
+  // A kept editor's uncaptured intent goes with its next saved gesture.
+  auto references = uncaptured_parameters_.value_or(original.parameters);
   const auto found =
       std::ranges::find(references, parameter_id, &project::Vst3ParameterReference::id);
-  if (found != references.end() && found->normalized_value == normalized_value)
+  if (found != references.end() && found->normalized_value == normalized_value &&
+      references == original.parameters)
     return;
   const std::array<plugins::Vst3ParameterEvent, 1> value{{{parameter_id, 0, normalized_value}}};
   const bool live = host_.playback_busy();
@@ -844,6 +860,7 @@ void Vst3EditorController::set_parameter(quint32 parameter_id, double normalized
     }
     original_ = std::get<project::Vst3PluginInstance>(slot->processor);
   }
+  uncaptured_parameters_.reset();
   revision_ = snapshot.revision;
   host_.schedule_save();
   const auto live_text = live_status ? live_status_text(*live_status, true)

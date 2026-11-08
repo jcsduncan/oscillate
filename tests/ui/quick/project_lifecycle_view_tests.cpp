@@ -270,8 +270,8 @@ void cache_panel_confirms_forgetting() {
           "the question outlived its project");
 }
 
-// Hidden until a project change is stopped; then it shows why, Keep editing
-// (also Escape) drops the change and Go on without it runs it.
+// Hidden until a project change is stopped; then it shows why, Stay (also
+// Escape) drops the change and Go on without it runs it.
 void plugin_state_problem_offers_the_choice() {
   QQmlEngine engine;
   auto host_object = make_fake(engine, fake_host, QStringLiteral("FakeHost.qml"));
@@ -295,7 +295,7 @@ void plugin_state_problem_offers_the_choice() {
   host.click(named(host.view, QStringLiteral("pluginStateKeepButton")));
   require(bridge->property("log").toString() == QStringLiteral("cancel;") &&
               !host.view->isVisible(),
-          "Keep editing did not drop the change");
+          "Stay did not drop the change");
 
   stop_a_change();
   host.click(named(host.view, QStringLiteral("pluginStateContinueButton")));
@@ -305,10 +305,10 @@ void plugin_state_problem_offers_the_choice() {
 
   stop_a_change();
   require(named(host.view, QStringLiteral("pluginStateKeepButton"))->hasActiveFocus(),
-          "Keep editing does not take the keyboard");
+          "Stay does not take the keyboard");
   QTest::keyClick(&host.window, Qt::Key_Escape);
   require(bridge->property("log").toString() == QStringLiteral("cancel;continue;cancel;"),
-          "Escape did not keep editing");
+          "Escape did not stay");
 }
 
 } // namespace

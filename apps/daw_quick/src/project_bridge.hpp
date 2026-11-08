@@ -326,6 +326,8 @@ public:
   [[nodiscard]] QString autosave_status() const { return autosave_status_; }
   [[nodiscard]] QString save_problem() const { return save_problem_; }
   [[nodiscard]] QString plugin_state_problem() const { return plugin_state_problem_; }
+  // Whether autosave is counting down to its next save.
+  [[nodiscard]] bool autosave_scheduled() const { return autosave_timer_.isActive(); }
   void set_autosave_interval_seconds(int seconds);
   [[nodiscard]] CacheUiController* cache_controls() const { return cache_ui_.get(); }
   [[nodiscard]] KeyReviewController* key_review() const { return key_review_.get(); }
@@ -693,7 +695,7 @@ public:
   Q_INVOKABLE bool request_close();
   // Answers pluginStateProblem: runs the stopped project change without the
   // plug-in's latest state (its editor closes), or drops the change and
-  // leaves the editor open.
+  // reopens the editor when it still holds that state.
   Q_INVOKABLE void continue_without_plugin_state();
   Q_INVOKABLE void cancel_project_change();
 

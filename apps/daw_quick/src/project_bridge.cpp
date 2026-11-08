@@ -943,7 +943,14 @@ void ProjectBridge::continue_without_plugin_state() {
 void ProjectBridge::cancel_project_change() {
   held_project_change_ = {};
   set_plugin_state_problem({});
-  set_status(QStringLiteral("Project change cancelled; the plug-in editor stays open"));
+  // A window close stopped the save timers before the capture refused it.
+  if (session_ && autosave_interval_seconds_ > 0 && !autosave_timer_.isActive())
+    autosave_timer_.start();
+  if (background_save_pending_ && !background_save_timer_.isActive())
+    background_save_timer_.start();
+  set_status(vst3_editor_->resume_native_editor()
+                 ? QStringLiteral("Project change cancelled; the plug-in editor is open again")
+                 : QStringLiteral("Project change cancelled"));
 }
 
 bool ProjectBridge::ready_to_change_project(std::function<void()> change) {

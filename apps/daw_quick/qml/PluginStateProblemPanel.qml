@@ -4,7 +4,8 @@ import "shell"
 
 // A project change (switching projects, Save a copy or closing) stopped
 // because an open plug-in editor's latest state could not be saved. The
-// user keeps editing, or goes on without that state.
+// user stays, and the editor reopens when it still holds that state, or goes
+// on without that state.
 Rectangle {
     id: problemPanel
     transformOrigin: Item.Center
@@ -26,10 +27,10 @@ Rectangle {
     radius: Theme.panelRadius
     color: host.panelRaised
     border.color: host.amber
-    function keepEditing() { bridge.cancel_project_change() }
+    function stay() { bridge.cancel_project_change() }
     function goOn() { bridge.continue_without_plugin_state() }
     onVisibleChanged: if (visible) keepButton.forceActiveFocus()
-    Keys.onEscapePressed: keepEditing()
+    Keys.onEscapePressed: stay()
     MouseArea {
         parent: problemPanel.parent
         anchors.fill: parent
@@ -94,10 +95,10 @@ Rectangle {
         ChoiceButton {
             id: keepButton
             objectName: "pluginStateKeepButton"
-            label: "KEEP EDITING"
+            label: "STAY"
             primary: true
-            Accessible.name: "Stay in this project with the plug-in editor open"
-            onChosen: problemPanel.keepEditing()
+            Accessible.name: "Stay in this project; the plug-in editor reopens if it still holds its state"
+            onChosen: problemPanel.stay()
         }
         ChoiceButton {
             objectName: "pluginStateContinueButton"
