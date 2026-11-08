@@ -434,16 +434,23 @@ void a_bounced_source_under_a_mute_lane_falls_silent() {
   constexpr auto mute = project::TrackControlTarget::Key::channel_mute;
   constexpr double lane_unmuted = 0.0;
   constexpr double lane_muted = 1.0;
-  // The notes sound in bar 1 (add_synth); the lane mutes from bar 3.
+  // The notes sound in bar 1 (add_synth) and again in bar 3, where the lane
+  // mutes them.
   constexpr std::int64_t open_bar = 1;
   constexpr std::int64_t muted_bar = 3;
+  // Past the channel's 5 ms mute glide at the project rate.
+  constexpr std::size_t past_the_glide = 960;
+  constexpr double audible = 1e-3;
+  constexpr double silent = 1e-6;
   constexpr std::uint8_t source_note = 57;
   constexpr std::uint8_t keyed_note = 45;
-  constexpr double same_mix = 1e-6;
   Directory directory;
   const auto root = directory.path() / "song";
   auto session = take(app::ProjectSession::create(root));
   const auto track = add_synth(*session, source_note);
+  done(session->midi_clips().add_midi_clip(track, {muted_bar * bar}), "muted clip");
+  done(session->notes().add_note(only_clip(session->snapshot(), track), {0}, source_note),
+       "muted note");
   const auto keyed = add_synth(*session, keyed_note);
   const auto press =
       take(session->effects().add_effect_engine(project::SignalPathId{keyed}, 0, "press"));
@@ -454,16 +461,32 @@ void a_bounced_source_under_a_mute_lane_falls_silent() {
                                                                        lane_muted));
   done(session->saving().save(), "save");
   const auto before = export_master(root, session->snapshot(), directory.path() / "before.wav");
-  REQUIRE_GT(peak(before), 1e-3, "the source sounds under its open lane");
+  REQUIRE_GT(peak(before), audible, "the source sounds under its open lane");
 
   auto rendered = render(*session, track);
+  // The render is before the channel: the bar-3 note sounds in it, and the
+  // lane silences it in the mix.
+  const auto& saved = session->snapshot();
+  const auto muted_from =
+      2 * static_cast<std::size_t>(
+              take(saved.tempo.tick_to_sample({muted_bar * bar}, saved.sample_rate)).value) +
+      2 * past_the_glide;
+  const auto muted_to = muted_from + 2 * static_cast<std::size_t>(saved.sample_rate);
+  const auto file = read_float_wav(fs::path{"/proc/self/fd"} / std::to_string(rendered.fd()));
+  const auto render_from = muted_from - 2 * static_cast<std::size_t>(rendered.first_frame());
+  REQUIRE_GE(file.size(), render_from + (muted_to - muted_from), "the render covers bar 3");
+  REQUIRE_GT(peak(std::span<const float>(file).subspan(render_from, muted_to - muted_from)),
+             audible, "the source sounds in bar 3 before its channel");
+  REQUIRE_GE(before.size(), muted_to, "the mix covers bar 3");
+  REQUIRE_LT(peak(std::span<const float>(before).subspan(muted_from, muted_to - muted_from)),
+             silent, "the lane mutes the source in bar 3");
   const auto audio = take(session->freeze().finish_track_bounce(
       stage(*session, rendered), rendered.origin_revision(), track, rendered.first_frame(),
       app::BounceMode::new_track));
   const auto bounced = export_master(root, session->snapshot(), directory.path() / "bounce.wav");
   const auto largest = largest_difference(before, bounced);
   std::cout << "bounce under a mute lane: largest difference " << largest << '\n';
-  REQUIRE_LT(largest, same_mix, "the bounce plays once, as its source did");
+  REQUIRE_LT(largest, silent, "the bounce plays once, as its source did");
 
   const auto& state = session->snapshot();
   const auto& source = find(state, track);
