@@ -55,6 +55,19 @@ if(OSCILLATE_BUILD_VST3_SCANNER)
     DEFINITIONS VST3_QUALIFICATION_HELPER="$<TARGET_FILE:oscillate_vst3_scan_helper>"
     DEPENDS oscillate_vst3_scan_helper)
 
+  # One row of the VST3 compatibility matrix (qualify_vst3_matrix.py). With
+  # the Quick UI configured it also attaches each plug-in's X11 editor.
+  oscillate_add_executable(oscillate_vst3_matrix_probe EXCLUDE_FROM_ALL
+    SOURCES vst3_matrix_probe.cpp allocation_probe.cpp
+    LIBS oscillate::application oscillate::vst3_offline_export oscillate::vst3_bundle_loader
+      oscillate::plugins oscillate::persistence
+    DEFINITIONS VST3_QUALIFICATION_HELPER="$<TARGET_FILE:oscillate_vst3_scan_helper>"
+    DEPENDS oscillate_vst3_scan_helper)
+  if(TARGET oscillate::plugin_ui)
+    target_link_libraries(oscillate_vst3_matrix_probe PRIVATE oscillate::plugin_ui)
+    target_compile_definitions(oscillate_vst3_matrix_probe PRIVATE OSCILLATE_MATRIX_EDITOR=1)
+  endif()
+
   set(_qual_vst3_root "${CMAKE_CURRENT_BINARY_DIR}/fixtures")
   add_library(oscillate_qualification_gain_fixture MODULE
     ${CMAKE_CURRENT_LIST_DIR}/../plugins/bundle_loader/gain_plugin.cpp)

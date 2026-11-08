@@ -1,0 +1,80 @@
+{
+  "plugins": [
+    {
+      "name": "Surge XT",
+      "version": "1.3.4",
+      "url": "https://github.com/surge-synthesizer/releases-xt/releases/download/1.3.4/surge-xt-linux-1.3.4-pluginsonly.tar.gz",
+      "sha256": "dd431b75f5fa197c4bffa6ca27ca46970f0a94c834119bb1db7decdeec4c28db",
+      "archive": "tar",
+      "bundles": ["Surge XT.vst3", "Surge XT Effects.vst3"]
+    },
+    {
+      "name": "Vital",
+      "version": "1.5.5",
+      "url": null,
+      "unavailable": "The Linux build downloads only through a vital.audio account, so CI cannot fetch it."
+    },
+    {
+      "name": "Dexed",
+      "version": "1.1.0",
+      "url": "https://github.com/asb2m10/dexed/releases/download/v1.1.0/Dexed-1.1.0-lnx.zip",
+      "sha256": "3a1a01511e3428f432cc91c7bf5267d72bfcb68aded4f084d4f9d002dcc42da6",
+      "archive": "zip",
+      "bundles": ["Dexed.vst3"]
+    },
+    {
+      "name": "OB-Xd",
+      "version": "2.20",
+      "url": "https://github.com/reales/OB-Xd/releases/download/v2.20/Obxd220.deb",
+      "sha256": "f934966008503217a38f5133107bb4712d5d7ac792137c01e771422b3270c27e",
+      "archive": "deb",
+      "bundles": ["OB-Xd.vst3"]
+    },
+    {
+      "name": "Odin 2",
+      "version": "2.4.1",
+      "url": "https://github.com/TheWaveWarden/odin2/releases/download/NightlyDevel/Odin2.4.1Linux.zip",
+      "sha256": "462c4fffda99ff91a6c362d8cf41616b50807778ae7a96471753046a799aed63",
+      "archive": "zip",
+      "bundles": ["Odin2.vst3"]
+    },
+    {
+      "name": "Cardinal",
+      "version": "26.02",
+      "url": "https://github.com/DISTRHO/Cardinal/releases/download/26.02/Cardinal-linux-x86_64-26.02.tar.gz",
+      "sha256": "657df0beeec04184de7359cbd3e173a36eeab78077e1e26da81405632f98ec25",
+      "archive": "tar",
+      "bundles": ["CardinalSynth.vst3", "CardinalFX.vst3"]
+    },
+    {
+      "name": "LSP Plugins",
+      "version": "1.2.37",
+      "url": "https://github.com/lsp-plugins/lsp-plugins/releases/download/1.2.37/lsp-plugins-1.2.37-Linux-x86_64.7z",
+      "sha256": "bbdfbfce4591ea07e7ac9dac0b1aca8ea7ccf9d850aafbf9ac0a347a1340ee55",
+      "archive": "7z",
+      "bundles": ["lsp-plugins.vst3"],
+      "classes": [
+        "Compressor Stereo",
+        "Parametric Equalizer x16 Stereo",
+        "Limiter Stereo",
+        "Room Builder Stereo"
+      ]
+    },
+    {
+      "name": "Airwindows Consolidated",
+      "version": "2026-11-08-316a048",
+      "url": "https://github.com/baconpaul/airwin2rack/releases/download/DAWPlugin/AirwindowsConsolidated-2026-11-08-316a048-Linux.zip",
+      "sha256": "39966721d4c5f275d211211fd956c061d282776876788795730e804f78634eac",
+      "archive": "zip",
+      "bundles": ["Airwindows Consolidated.vst3"]
+    },
+    {
+      "name": "ChowDSP CHOW Tape Model",
+      "version": "2.11.4",
+      "url": "https://github.com/jatinchowdhury18/AnalogTapeModel/releases/download/v2.11.4/ChowTapeModel-Linux-x64-2.11.4.deb",
+      "sha256": "71aaae1c454ac83ac16b248d4cc99c12bf6d11452a87376fcb6b1e79060e3a5c",
+      "archive": "deb",
+      "bundles": ["CHOWTapeModel.vst3"]
+    }
+  ]
+}
