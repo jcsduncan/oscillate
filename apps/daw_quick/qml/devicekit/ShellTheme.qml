@@ -216,6 +216,8 @@ KitTheme {
     readonly property int clipGripInset: 16
     readonly property real clipGripSelectedOpacity: 0.35
     readonly property int clipTrimMinClipWidth: 12
+    // The plus a clip carries while a Ctrl-drag copies it.
+    readonly property int clipCopyBadgeSize: 14
     // The playhead, the master row and the elapsed-time ruler.
     readonly property int playheadGlowWidth: 8
     readonly property real playheadGlowAlpha: 0.12
@@ -262,8 +264,7 @@ KitTheme {
     readonly property int sendKnobTipPadding: 14
     readonly property int sendKnobTipHeight: 22
     readonly property int sendKnobTipRadius: 5
-    // Track rows: drop target, colour bar, frozen wash and badges.
-    readonly property color trackRowDropTarget: "#1c3a33"
+    // Track rows: colour bar, frozen wash and badges.
     readonly property int trackColorBarWidth: 5
     readonly property real trackMutedOpacity: 0.35
     readonly property color trackFrozenWashStart: "#3384c8ec"
@@ -348,7 +349,6 @@ KitTheme {
     readonly property int trackChooserHeadingHeight: 20
     readonly property int trackChooserRowHeight: 22
     readonly property color trackChooserRowHover: "#22303c"
-    readonly property int trackDropLineHeight: 3
     readonly property real emptyTrackListLineHeight: 1.5
     // The track menu, duck popover and colour popover.
     readonly property int trackPopoverTitleHeight: 29
@@ -376,6 +376,59 @@ KitTheme {
     readonly property color trackMasterGround: "#0f1318"
     readonly property int trackMenuEntryTextY: 3
     readonly property int trackSwatchHitOutset: 3
+    // Bus nesting: a group bus heads its members, joined by its colour.
+    readonly property int trackBusBarWidth: 4
+    readonly property real trackBusHeaderTintAlpha: 0.1
+    readonly property real trackBusLaneTintAlpha: 0.05
+    readonly property real trackMemberTintAlpha: 0.04
+    readonly property int trackBusChevronX: 4
+    readonly property int trackBusChevronSize: 16
+    readonly property real trackBusChevronStroke: 1.6
+    // The chevron's glyph, in its own square's units.
+    readonly property real trackBusChevronInset: 0.3
+    readonly property int trackBusSwatchBorder: 2
+    // The bus's swatch, name and summary sit right of its chevron.
+    readonly property int trackBusContentShift: 8
+    // Members' content steps in; their rail runs under the bus's chevron.
+    readonly property int trackMemberIndent: 12
+    readonly property real trackBusRailX: 10.5
+    readonly property int trackBusRailWidth: 3
+    // The rail stops this far above the last member's bottom.
+    readonly property int trackBusRailEndGap: 10
+    readonly property int trackBusRailRadius: 2
+    readonly property int trackBusRailGlowWidth: 9
+    readonly property real trackBusRailGlowAlpha: 0.35
+    // Badges ("3 tracks", a return's effect) and send pills.
+    readonly property real trackBusBadgeAlpha: 0.14
+    readonly property int trackBusBadgePadding: 10
+    readonly property int trackSendPillHeight: 14
+    readonly property int trackSendPillPadding: 10
+    readonly property real trackSendPillEdgeAlpha: 0.5
+    // The text before a row's send pills shows only when this much is left.
+    readonly property int trackSummaryMinWidth: 24
+    // The returns' section at the bottom of the list.
+    readonly property int trackReturnsLabelHeight: 26
+    readonly property color trackReturnGround: "#121620"
+    // A track header being dragged: the slot it opens, the chip naming its
+    // destination and the ghost it leaves.
+    readonly property int trackDropSlotHeight: 40
+    readonly property int trackDropSlotInset: 6
+    readonly property real trackDropSlotAlpha: 0.12
+    readonly property real trackDropLaneAlpha: 0.06
+    readonly property var trackDropSlotDash: [5, 4]
+    readonly property int trackDropSlotStroke: 2
+    // The top and bottom of a bus's bracket that drop outside it.
+    readonly property real trackDropEdgeFraction: 0.25
+    readonly property real trackDragGhostOpacity: 0.35
+    readonly property int trackDragChipOffset: 14
+    readonly property int trackDragChipHeight: 30
+    readonly property int trackDragChipPadding: 10
+    readonly property color trackDragChipGround: "#1f2533"
+    readonly property int trackDragArrowSize: 14
+    // A folded bus's lane: its members' clips as one dashed outline.
+    readonly property real trackBusSumAlpha: 0.16
+    readonly property real trackBusSumEdgeAlpha: 0.6
+    readonly property int trackBusSumInsetY: 10
     // -- end track list
 
     // -- Piano roll, velocity lane, pedal strip --

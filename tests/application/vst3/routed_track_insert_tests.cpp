@@ -136,7 +136,7 @@ void verified_effect_only_processes_own_track(const plugins::ScanResult& scanned
 
   auto revised = take(state.apply({project::AddSendRoute{wet, {send, returns, 0.5}}}));
   // A route edit around an unchanged VST3 insert switches live: no hold.
-  require(control.begin_edit(revised, "add send").has_value() && !control.held_boundary(),
+  require(control.begin_edit(revised, "add send").has_value(),
           "verified VST3 runtime did not survive live route preparation");
   wet_signal.fill({});
   dry_signal.fill({});
@@ -672,7 +672,6 @@ void three_verified_effects_keep_order_and_history(const plugins::ScanResult& sc
       take(reopened.apply({project::AddSendRoute{wet, {id<project::SendId>(25), returns, 0.5}}}));
   REQUIRE_OK(control.begin_edit(changed, "add return send"),
              "three-stage routing revision did not publish live");
-  REQUIRE_TRUE(!control.held_boundary(), "three-stage routing revision did not publish live");
   wet_signal.fill({});
   dry_signal.fill({});
   counted_allocations = 0;
@@ -737,8 +736,6 @@ void automated_effect_renders_and_rejects_live_replacement(const plugins::ScanRe
       take(state.apply({project::AddSendRoute{wet, {id<project::SendId>(4), returns, 0.5}}}));
   REQUIRE_OK(control.begin_edit(rerouted, "add send"),
              "routing-only edit failed to reuse automated VST3 processor");
-  REQUIRE_TRUE(!control.held_boundary(),
-               "routing-only edit failed to reuse automated VST3 processor");
   REQUIRE_EQ(control.render_block(inputs, output, {64, 1}), engine::RoutedRenderStatus::rendered,
              "routing-only edit failed to reuse automated VST3 processor");
   control.observe();

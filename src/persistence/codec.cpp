@@ -1,5 +1,7 @@
 #include "private.hpp"
 
+#include "migration.hpp"
+
 #include "oscillate/foundation/id.hpp"
 #include "oscillate/persistence/effect_preset.hpp"
 #include "oscillate/persistence/rack_file.hpp"
@@ -24,10 +26,6 @@
 #include <vector>
 
 namespace oscillate::persistence::detail {
-// The one schema this build reads and writes (greenfield: no older layouts).
-constexpr std::uint32_t schema_major = 1;
-constexpr std::uint32_t schema_minor = 47;
-
 namespace {
 
 using Json = nlohmann::json;
@@ -1696,7 +1694,7 @@ std::string encode_manifest(const project::Snapshot& snapshot, std::string_view 
                        {"name", marker.name}});
   }
   Json manifest{
-      {"schema", {{"major", schema_major}, {"minor", schema_minor}}},
+      {"schema", {{"major", current_schema.major}, {"minor", current_schema.minor}}},
       {"generation", generation},
       {"parent", parent ? Json(*parent) : Json(nullptr)},
       {"kind", kind == SaveKind::explicit_save ? "explicit" : "autosave"},
@@ -1725,17 +1723,18 @@ Result<LoadedGeneration> decode_manifest(std::string_view text) {
     return Result<LoadedGeneration>::failure({ErrorCode::resource_exhausted, "manifest too large"});
   }
   return contain_parse_errors<LoadedGeneration>([&]() -> foundation::Result<LoadedGeneration> {
-    const auto manifest = parse_strict(text);
-    fields(manifest, {"schema", "generation", "parent", "kind", "project"});
-    const auto& schema = field(manifest, "schema");
+    auto parsed = parse_strict(text);
+    const auto& schema = field(parsed, "schema");
     fields(schema, {"major", "minor"});
-    const auto major = unsigned_integer<std::uint32_t>(field(schema, "major"));
-    const auto minor = unsigned_integer<std::uint32_t>(field(schema, "minor"));
-    // Greenfield: only the current schema exists.
-    if (major != schema_major || minor != schema_minor) {
-      return Result<LoadedGeneration>::failure(
-          {ErrorCode::unsupported, "unsupported manifest schema"});
+    const SchemaVersion saved{unsigned_integer<std::uint32_t>(field(schema, "major")),
+                              unsigned_integer<std::uint32_t>(field(schema, "minor"))};
+    // An older released schema is brought forward here; ADR-0095.
+    auto migrated = migrate_manifest(std::move(parsed), saved);
+    if (!migrated) {
+      return Result<LoadedGeneration>::failure(std::move(migrated.error()));
     }
+    const auto manifest = std::move(migrated).value();
+    fields(manifest, {"schema", "generation", "parent", "kind", "project"});
     auto generation = string(field(manifest, "generation"));
     if (!hex_name(generation, 32)) {
       throw ParseError("invalid generation name");

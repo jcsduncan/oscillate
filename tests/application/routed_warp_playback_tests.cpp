@@ -257,6 +257,9 @@ using oscillate::test::wait_until;
 // A paced play's stream end while an armed loop keeps the worker queueing.
 constexpr std::uint64_t looping_stream = std::numeric_limits<std::uint64_t>::max();
 
+// Callbacks a stepping loop may make before it fails as stalled.
+constexpr std::size_t max_step_attempts = 1'000'000;
+
 // Drives the fake device callback and records what it heard per absolute
 // project sample (left channel). Allocation is counted on the callback.
 class Player {
@@ -284,11 +287,13 @@ public:
     for (std::size_t index = 0; index < block_; ++index)
       if (start + index < heard_.size())
         heard_[start + index] = interleaved_[2 * index];
+    if (!resumed_at_)
+      resumed_at_ = start;
     return true;
   }
   void play_until(std::uint64_t sample) {
     for (std::size_t attempt = 0; transport_.completed_snapshot().next_sample < sample; ++attempt) {
-      REQUIRE_LT(attempt, 1'000'000, "playback did not reach the requested sample");
+      REQUIRE_LT(attempt, max_step_attempts, "playback did not reach the requested sample");
       if (!step())
         std::this_thread::yield();
     }
@@ -332,13 +337,16 @@ public:
   }
   void seek(std::uint64_t sample) {
     target_ = sample;
+    resumed_at_.reset();
     require(transport_.request_seek(sample), "seek request was rejected");
     // The callback that takes the seek holds on the new generation until
     // the worker has primed it; it never emits stale-generation audio.
     require(!step(), "seek rendered before its generation was primed");
   }
   // A device keeps calling while a new generation primes; the held
-  // callbacks let the source discard the old generation's frames.
+  // callbacks let the source discard the old generation's frames. The
+  // worker may finish priming between a check and the next callback, which
+  // then plays: a hold does not pin the playhead.
   void hold_until(const std::function<bool()>& ready, std::string_view what) {
     const auto deadline = std::chrono::steady_clock::now() + 60s;
     while (!ready()) {
@@ -351,6 +359,7 @@ public:
   // moving the playhead.
   void restart_in_place() {
     target_ = transport_.completed_snapshot().next_sample;
+    resumed_at_.reset();
     require(transport_.request_restart_in_place(), "in-place restart was rejected");
     require(!step(), "in-place restart rendered before its generation was primed");
   }
@@ -368,6 +377,16 @@ public:
     for (std::size_t index = 0; index < block_; ++index)
       stream.push_back(interleaved_[2 * index]);
   }
+  // The project sample where the first block rendered since the last seek
+  // or in-place restart started, stepping until one renders.
+  [[nodiscard]] std::uint64_t resumed_at() {
+    for (std::size_t attempt = 0; !resumed_at_; ++attempt) {
+      REQUIRE_LT(attempt, max_step_attempts, "playback did not resume");
+      if (!step())
+        std::this_thread::yield();
+    }
+    return *resumed_at_;
+  }
   [[nodiscard]] float at(std::uint64_t sample) const { return heard_[sample]; }
   [[nodiscard]] audio::TransportCursor& transport() { return transport_; }
 
@@ -379,6 +398,7 @@ private:
   std::vector<float> heard_;
   audio::TransportCursor transport_;
   std::uint64_t target_ = 0;
+  std::optional<std::uint64_t> resumed_at_;
 };
 
 // Waits until the worker has buffered `frames` ahead (or the whole rest of
@@ -816,8 +836,7 @@ void withdrawn_loop_restarts_in_place() {
   player.restart_in_place();
   player.hold_until([&] { return live.source->status().ready_generation == 2; },
                     "in-place restart was not primed");
-  REQUIRE_EQ(player.transport().completed_snapshot().next_sample, position,
-             "in-place restart moved the playhead");
+  REQUIRE_EQ(player.resumed_at(), position, "in-place restart moved the playhead");
   require(!live.source->loop_status().missed, "restart left the stale pass reported");
   player.paced_play_until(loop_end + 8'192, *live.source, start + length);
   require_matches(player, expected, start, position, loop_end + 8'192,

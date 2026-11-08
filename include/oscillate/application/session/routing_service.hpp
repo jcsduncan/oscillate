@@ -21,6 +21,14 @@ public:
   // Sends `tracks` straight to the master again, as one undo step.
   [[nodiscard]] foundation::Result<void>
   route_tracks_to_master(std::span<const project::TrackId> tracks);
+  // A track list drop, as one undo step: `tracks` go to the group `bus` (or
+  // the master without one) and move, in their saved order, to just before
+  // `before`; without `before`, after the bus's last member, or to the end
+  // of the list. A group or return bus goes only to the master: dropping one
+  // into a bus is refused. A drop that changes nothing makes no undo step.
+  [[nodiscard]] foundation::Result<void>
+  place_tracks(std::span<const project::TrackId> tracks, std::optional<project::TrackId> bus,
+               std::optional<project::TrackId> before = std::nullopt);
   [[nodiscard]] foundation::Result<project::SendId>
   add_send(project::TrackId track, project::TrackId destination, double gain);
   [[nodiscard]] foundation::Result<project::SendId> add_sidechain(project::TrackId track,

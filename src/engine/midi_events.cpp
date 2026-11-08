@@ -2,8 +2,10 @@
 #include "oscillate/foundation/midi.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <string>
 #include <tuple>
@@ -333,9 +335,23 @@ InstrumentEvents::copy_pedal_block(timeline::SamplePosition start, std::uint32_t
 }
 
 BlockMidiResult InstrumentEvents::copy_pedals(timeline::SamplePosition start, std::uint32_t frames,
-                                              bool chase,
-                                              std::span<BlockPedalEvent> output) const noexcept {
+                                              bool chase, std::span<BlockPedalEvent> output,
+                                              const InstrumentEvents* replaced) const noexcept {
   std::size_t chased = 0;
+  if (!chase && replaced != nullptr && start.value >= 0) {
+    const auto before = replaced->pedal_state_at(start);
+    const auto after = pedal_state_at(start);
+    for (std::size_t pedal = 0; pedal < after.size(); ++pedal) {
+      if (before[pedal] == after[pedal]) {
+        continue;
+      }
+      if (chased == output.size()) {
+        return {BlockMidiStatus::insufficient_storage, 0};
+      }
+      output[chased++] = {0, static_cast<project::MidiPedal>(pedal),
+                          static_cast<float>(after[pedal])};
+    }
+  }
   if (chase && start.value >= 0) {
     const auto held = pedal_state_at(start);
     for (std::size_t pedal = 0; pedal < held.size(); ++pedal) {
@@ -489,24 +505,81 @@ Result<CompiledMidiPlan> compile_midi_events(const project::Snapshot& snapshot) 
   return Result<CompiledMidiPlan>::success(CompiledMidiPlan(std::move(instruments)));
 }
 
+NoteSpans::NoteSpans(const InstrumentEvents& events) {
+  std::vector<const ScheduledMidiEvent*> order;
+  order.reserve(events.events().size());
+  for (const auto& event : events.events())
+    order.push_back(&event);
+  // Each note's on and off in turn; at one sample an off ends the earlier
+  // occurrence before a repeat starts.
+  std::ranges::stable_sort(order, [](const ScheduledMidiEvent* a, const ScheduledMidiEvent* b) {
+    return std::tuple{a->clip.bits(), a->note.bits(), a->sample.value, a->kind} <
+           std::tuple{b->clip.bits(), b->note.bits(), b->sample.value, b->kind};
+  });
+  spans_.reserve(order.size() / 2 + 1);
+  const ScheduledMidiEvent* open = nullptr;
+  for (const auto* event : order) {
+    if (open != nullptr && (open->clip != event->clip || open->note != event->note ||
+                            event->kind == MidiEventKind::note_on)) {
+      spans_.push_back({open->clip.bits(), open->note.bits(), open->sample.value,
+                        std::numeric_limits<std::int64_t>::max(), open->key});
+      open = nullptr;
+    }
+    if (event->kind == MidiEventKind::note_on) {
+      open = event;
+    } else if (open != nullptr) {
+      spans_.push_back({open->clip.bits(), open->note.bits(), open->sample.value,
+                        event->sample.value, open->key});
+      open = nullptr;
+    }
+  }
+  if (open != nullptr)
+    spans_.push_back({open->clip.bits(), open->note.bits(), open->sample.value,
+                      std::numeric_limits<std::int64_t>::max(), open->key});
+}
+
+bool NoteSpans::holds(const BlockMidiEvent& note_on, std::int64_t sample) const noexcept {
+  // The last occurrence of the note starting before `sample`.
+  const auto after = std::ranges::upper_bound(
+      spans_, std::tuple{note_on.clip_id_bits, note_on.note_id_bits, sample - 1}, std::less<>{},
+      [](const Span& span) { return std::tuple{span.clip, span.note, span.on}; });
+  if (after == spans_.begin())
+    return false;
+  const auto& span = *std::prev(after);
+  return span.clip == note_on.clip_id_bits && span.note == note_on.note_id_bits &&
+         span.key == note_on.key && span.off >= sample;
+}
+
 BlockMidiResult HeldNotes::copy_block(const InstrumentEvents& events,
                                       timeline::SamplePosition start, std::uint32_t frames,
-                                      std::uint64_t generation,
-                                      std::span<BlockMidiEvent> output) noexcept {
+                                      std::uint64_t generation, std::span<BlockMidiEvent> output,
+                                      const NoteSpans* replacement) noexcept {
   if (output.size() < block_capacity)
     return {BlockMidiStatus::insufficient_storage, 0};
   if (!started_ || generation != generation_)
     count_ = 0;
   std::size_t released = 0;
   const bool jumped = started_ && generation == generation_ && start.value != next_sample_;
+  const auto release = [&](const BlockMidiEvent& held) {
+    auto off = held;
+    off.offset = 0;
+    off.kind = MidiEventKind::note_off;
+    off.velocity = 0;
+    off.boundary_crop = true;
+    output[released++] = off;
+  };
+  // Notes a replacing plan no longer holds: released, and forgotten once
+  // the block is ready (a failed block keeps them for its retry).
+  std::array<bool, capacity> dropped{};
   if (jumped) {
+    for (std::size_t i = 0; i < count_; ++i)
+      release(held_[i]);
+  } else if (replacement != nullptr) {
     for (std::size_t i = 0; i < count_; ++i) {
-      auto off = held_[i];
-      off.offset = 0;
-      off.kind = MidiEventKind::note_off;
-      off.velocity = 0;
-      off.boundary_crop = true;
-      output[released++] = off;
+      if (!replacement->holds(held_[i], start.value)) {
+        release(held_[i]);
+        dropped[i] = true;
+      }
     }
   }
   auto copied =
@@ -514,8 +587,16 @@ BlockMidiResult HeldNotes::copy_block(const InstrumentEvents& events,
   // A failed block keeps the held notes, so a retry still releases them.
   if (copied.status != BlockMidiStatus::ready)
     return copied;
-  if (jumped)
+  if (jumped) {
     count_ = 0;
+  } else if (released != 0) {
+    std::size_t kept = 0;
+    for (std::size_t i = 0; i < count_; ++i) {
+      if (!dropped[i])
+        held_[kept++] = held_[i];
+    }
+    count_ = kept;
+  }
   // Track the plan's own notes before the releases are merged in.
   for (const auto& event : output.subspan(released, copied.count)) {
     if (event.kind == MidiEventKind::note_on) {

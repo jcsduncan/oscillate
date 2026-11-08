@@ -17,8 +17,8 @@ APP_RELATIVE = Path("apps/daw_quick/oscillate")
 HELPER_RELATIVE = Path("apps/daw_quick/oscillate_vst3_scan_helper")
 
 # Switches every package shares: a static Release Quick build with no test
-# hooks or local runtime paths, the VST3 host, JACK output and both
-# libsamplerate converters.
+# hooks or local runtime paths, the VST3 host, JACK output, both
+# libsamplerate converters and the libsndfile codec adapter.
 COMMON_SWITCHES = {
     "BUILD_TESTING": "OFF",
     "CMAKE_BUILD_TYPE": "Release",
@@ -30,6 +30,7 @@ COMMON_SWITCHES = {
     "JACK_FOUND": "1",
     "OSCILLATE_BUILD_EXPORT_RESAMPLER": "ON",
     "OSCILLATE_BUILD_SOURCE_RESAMPLER": "ON",
+    "OSCILLATE_BUILD_CODEC_ADAPTER": "ON",
     "OSCILLATE_BUILD_CONVOLUTION_DSP": "OFF",
 }
 
@@ -46,10 +47,6 @@ FEATURES = {
 CONVOLUTION_REASON = (
     "ADR-0020 keeps the convolution core out of release builds until its graph "
     "admission and multi-instance policy are qualified"
-)
-CODEC_REASON = (
-    "the AppImage would have to bundle Ubuntu's libmp3lame, whose fft.c is "
-    "classified GPL-1+; redistribution is undecided (G8, issue #93)"
 )
 
 
@@ -111,6 +108,7 @@ APPIMAGE_BUNDLED = (
     "libegl1",
     "libexpat1",
     "libffi8",
+    "libflac14",
     "libfontconfig1",
     "libfreetype6",
     "libgcc-s1",
@@ -135,9 +133,13 @@ APPIMAGE_BUNDLED = (
     "libldap2",
     "libmd4c0",
     "libmount1",
+    "libmp3lame0",
+    "libmpg123-0t64",
     "libnettle8t64",
     "libnghttp2-14",
+    "libogg0",
     "libopengl0",
+    "libopus0",
     "libp11-kit0",
     "libpcre2-16-0",
     "libpcre2-8-0",
@@ -161,6 +163,7 @@ APPIMAGE_BUNDLED = (
     "libsasl2-2",
     "libselinux1",
     "libsm6",
+    "libsndfile1",
     "libssh2-1t64",
     "libssl3t64",
     "libstdc++6",
@@ -168,6 +171,8 @@ APPIMAGE_BUNDLED = (
     "libtasn1-6",
     "libunistring5",
     "libuuid1",
+    "libvorbis0a",
+    "libvorbisenc2",
     "libwayland-client0",
     "libwayland-cursor0",
     "libx11-6",
@@ -219,18 +224,15 @@ PROFILES = {
     "deb": Profile(
         name="deb",
         preset="package-deb",
-        switches=COMMON_SWITCHES | {"OSCILLATE_BUILD_CODEC_ADAPTER": "ON"},
+        switches=COMMON_SWITCHES,
         excluded={"OSCILLATE_BUILD_CONVOLUTION_DSP": CONVOLUTION_REASON},
         runtime=RuntimeDependencies(system=DEB_DEPENDS, bundled=()),
     ),
     "appimage": Profile(
         name="appimage",
         preset="package-appimage",
-        switches=COMMON_SWITCHES | {"OSCILLATE_BUILD_CODEC_ADAPTER": "OFF"},
-        excluded={
-            "OSCILLATE_BUILD_CODEC_ADAPTER": CODEC_REASON,
-            "OSCILLATE_BUILD_CONVOLUTION_DSP": CONVOLUTION_REASON,
-        },
+        switches=COMMON_SWITCHES,
+        excluded={"OSCILLATE_BUILD_CONVOLUTION_DSP": CONVOLUTION_REASON},
         runtime=RuntimeDependencies(
             system=APPIMAGE_HOST, bundled=APPIMAGE_BUNDLED, conditional=APPIMAGE_CONDITIONAL
         ),
@@ -321,9 +323,16 @@ def feature_readme(profile: Profile, version: str) -> str:
         *(f"  - {feature}: {reason}" for feature, reason in profile.excluded_features().items()),
         "",
         "Licence: GPL-3.0-or-later (LICENSE). Third-party notices are in",
-        "third-party/, indexed by third-party/inventory.json. sbom.spdx.json is an",
-        "SPDX 2.3 bill of materials for every file in this package.",
+        "third-party/, indexed by third-party/inventory.json and joined in",
+        "third-party/NOTICES.txt. sbom.spdx.json is an SPDX 2.3 bill of materials",
+        "for every file in this package.",
     ]
+    if profile.runtime.bundled:
+        lines += [
+            "",
+            "SOURCE-OFFER.txt is the written offer of source for the libraries and",
+            "runtime code this package bundles, with links to their exact sources.",
+        ]
     return "\n".join(lines) + "\n"
 
 
@@ -334,8 +343,10 @@ APPIMAGETOOL = {
     "appimagetool-x86_64.AppImage",
     "sha256": "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0",
 }
+TYPE2_RUNTIME_REPOSITORY = "https://github.com/AppImage/type2-runtime"
+TYPE2_RUNTIME_TAG = "20251108"
 TYPE2_RUNTIME = {
-    "release": "https://github.com/AppImage/type2-runtime/releases/tag/20251108",
-    "url": "https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64",
+    "release": f"{TYPE2_RUNTIME_REPOSITORY}/releases/tag/{TYPE2_RUNTIME_TAG}",
+    "url": f"{TYPE2_RUNTIME_REPOSITORY}/releases/download/{TYPE2_RUNTIME_TAG}/runtime-x86_64",
     "sha256": "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d",
 }
