@@ -2,12 +2,15 @@
 #include "oscillate/export/offline_master.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/project/frozen_view.hpp"
+#include "oscillate/routing/key_mute_lanes.hpp"
+#include "oscillate/routing/project_route_plan.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/signal.hpp"
 #include "oscillate/test/temp_dir.hpp"
 #include "oscillate/test/wav.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -36,6 +39,7 @@ namespace exporting = oscillate::exporting;
 namespace foundation = oscillate::foundation;
 namespace persistence = oscillate::persistence;
 namespace project = oscillate::project;
+namespace routing = oscillate::routing;
 namespace timeline = oscillate::timeline;
 namespace fs = std::filesystem;
 
@@ -423,8 +427,13 @@ void consolidating_past_the_clip_limits_is_refused() {
 } // namespace
 
 // A source whose mute a lane drives keeps its keys after a bounce, so the
-// bounce does not key as well: the keyed effect hears one key, not two.
+// bounce does not key as well: the keyed effect hears one key, not two. The
+// source's keys follow its lane (ADR-0094): none while it mutes the source.
 void a_bounced_source_under_a_mute_lane_keys_once() {
+  constexpr auto mute = project::TrackControlTarget::Key::channel_mute;
+  constexpr double lane_unmuted = 0.0;
+  constexpr double lane_muted = 1.0;
+  constexpr std::int64_t muted_bar = 1;
   Directory directory;
   const auto root = directory.path() / "song";
   auto session = take(app::ProjectSession::create(root));
@@ -434,8 +443,10 @@ void a_bounced_source_under_a_mute_lane_keys_once() {
   const auto press =
       take(session->effects().add_effect_engine(project::SignalPathId{keyed}, 0, "press"));
   (void)take(session->routing().add_sidechain(track, keyed, press, 1.0));
-  (void)take(session->parameter_automation().set_channel_control_point(
-      track, project::TrackControlTarget::Key::channel_mute, 0, 0.0));
+  (void)take(
+      session->parameter_automation().set_channel_control_point(track, mute, 0, lane_unmuted));
+  (void)take(session->parameter_automation().set_channel_control_point(track, mute, muted_bar,
+                                                                       lane_muted));
   done(session->saving().save(), "save");
 
   auto rendered = render(*session, track);
@@ -449,6 +460,16 @@ void a_bounced_source_under_a_mute_lane_keys_once() {
   };
   REQUIRE_EQ(keys(find(state, track)), 1, "the source under a mute lane keeps its key");
   REQUIRE_EQ(keys(find(state, audio)), 0, "the bounce of a source that keeps its key keys again");
+  REQUIRE_TRUE(!routing::silent_key_sources(state).contains(track),
+               "the source's lane, not its mute switch, decides its keys");
+  const std::array<project::TrackId, 1> sources{track};
+  const auto lanes = take(routing::KeyMuteLanes::prepare(state, sources));
+  const auto at_bar = [&](std::int64_t index) {
+    return take(state.tempo.tick_to_sample({index * bar}, state.sample_rate));
+  };
+  REQUIRE_TRUE(!take(lanes.mutes(track, at_bar(0))), "the source keys where its lane is open");
+  REQUIRE_TRUE(take(lanes.mutes(track, at_bar(muted_bar))),
+               "the source keys nothing where its lane mutes it");
 }
 
 int main() {

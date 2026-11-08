@@ -98,4 +98,5 @@ never reused. 0070 was never assigned.
 | 0089 | [Wren: a sampled concert flute with Breath, realtime phrasing](0089-wren-sampled-flute.md) | Accepted; implemented |
 | 0090 | [Export renders a graph the render_graph builder prepares](0090-render-graph-builder.md) | Accepted; implemented for built-in chains |
 | 0091 | [New projects are staged beside their folder and renamed into place](0091-staged-project-creation.md) | Accepted; implemented |
-| 0092 | [Native inserts read which keys sound from routing](0092-native-inserts-read-key-audibility.md) | Accepted; implemented |
+| 0092 | [Native inserts read which keys sound from routing](0092-native-inserts-read-key-audibility.md) | Superseded by ADR-0094 for how key notes follow a mute lane; otherwise implemented |
+| 0094 | [A key source's mute lane gates its keys](0094-mute-lanes-gate-keys.md) | Accepted; implemented |

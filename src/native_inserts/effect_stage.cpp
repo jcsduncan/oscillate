@@ -2,6 +2,7 @@
 
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
+#include "oscillate/routing/key_mute_lanes.hpp"
 #include "oscillate/routing/project_route_plan.hpp"
 
 #include <algorithm>
@@ -21,7 +22,9 @@ using foundation::Result;
 // The note-ons of every track that keys `slot` now, sorted and unique: the
 // key is live and audible under the mixer's mute and solo
 // (routing::keys_now), so a muted kick keys nothing, as its audio key does.
-// Notes a clip boundary restarts are not new hits.
+// A key source's mute lane drops each note-on where it mutes the channel
+// (routing::KeyMuteLanes, ADR-0094). Notes a clip boundary restarts are not
+// new hits.
 Result<std::vector<native_dsp::effects::KeyNote>> key_note_onsets(const project::Snapshot& snapshot,
                                                                   project::InsertSlotId slot) {
   using R = Result<std::vector<native_dsp::effects::KeyNote>>;
@@ -39,11 +42,19 @@ Result<std::vector<native_dsp::effects::KeyNote>> key_note_onsets(const project:
   auto plan = engine::compile_midi_events(snapshot);
   if (!plan)
     return R::failure(plan.error());
+  auto mute_lanes = routing::KeyMuteLanes::prepare(snapshot, keys);
+  if (!mute_lanes)
+    return R::failure(mute_lanes.error());
   for (const auto& instrument : plan.value().instruments()) {
     if (std::ranges::find(keys, instrument.track()) == keys.end())
       continue;
     for (const auto& event : instrument.events()) {
-      if (event.kind == engine::MidiEventKind::note_on && !event.boundary_crop)
+      if (event.kind != engine::MidiEventKind::note_on || event.boundary_crop)
+        continue;
+      auto muted = mute_lanes.value().mutes(instrument.track(), event.sample);
+      if (!muted)
+        return R::failure(muted.error());
+      if (!muted.value())
         onsets.push_back({event.sample.value, event.key, event.velocity});
     }
   }

@@ -5,6 +5,7 @@
 #include "oscillate/routing/project_route_plan.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <span>
@@ -33,13 +34,24 @@ public:
   [[nodiscard]] bool binds_edge_gain(engine::RoutingEdgeId edge) const noexcept override;
 
 private:
+  // One send edge's gain: its send-gain lane, else its saved gain.
   struct EdgeBinding {
-    std::size_t target_index;
+    std::optional<std::size_t> target_index;
     std::size_t edge_index;
     std::vector<double> values;
     std::vector<float> samples;
     // Zero for a sidechain key whose source is silent (silent_key_sources).
     float key_gain = 1.0F;
+    // The gain of an edge without a send-gain lane.
+    float saved_gain = 0.0F;
+    // A key from a source under a mute lane (ADR-0094) also takes that lane's
+    // mute gain, evaluated as many frames back as the edge delays the key,
+    // so the key is silent exactly where its source's channel is.
+    std::optional<std::size_t> mute_target{};
+    std::uint32_t mute_delay = 0;
+    std::vector<double> mute_values{};
+    double mute_gain = 1.0;
+    std::uint64_t mute_generation = 0;
   };
   // One channel node's automated controls; an unautomated control keeps its
   // saved value. Mute steps glide over a short ramp so a toggle never clicks.
@@ -57,6 +69,11 @@ private:
     double mute_gain = 1.0;
     std::uint64_t mute_generation = 0;
   };
+
+  // Multiplies `samples` by the mute gain of the key's source lane.
+  [[nodiscard]] bool gate_by_mute(EdgeBinding& binding, std::int64_t first,
+                                  std::span<float> samples, double mute_step,
+                                  std::uint64_t generation) const;
 
   std::uint32_t sample_rate_ = 0;
   std::shared_ptr<const timeline::TempoMap> tempo_;

@@ -383,6 +383,10 @@ oscillate_add_test_executable(oscillate_application_routed_effect_live_tests SOU
   LIBS oscillate::application oscillate::native_effects
   TEST application_routed_effect_live)
 
+oscillate_add_test_executable(oscillate_application_mute_lane_key_tests SOURCES mute_lane_key_tests.cpp
+  LIBS oscillate::application oscillate::native_effects
+  TEST application_mute_lane_keys TIER slow LABELS parity)
+
 oscillate_add_test_executable(oscillate_application_channel_automation_tests SOURCES channel_automation_tests.cpp
   LIBS oscillate::application
   TEST application_channel_automation)

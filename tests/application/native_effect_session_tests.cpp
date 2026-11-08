@@ -305,6 +305,30 @@ void pump_hears_only_audible_keys() {
   require(!ducks(*pump_stage(pump), pump), "a key at no gain keys nothing");
 }
 
+// Issue #248, ADR-0094: a mute lane on the kick drops its notes wherever it
+// mutes the kick. The lane, not the kick's mute switch, decides.
+void pump_follows_its_keys_mute_lane() {
+  constexpr auto mute = project::TrackControlTarget::Key::channel_mute;
+  constexpr double lane_muted = 1.0;
+  constexpr double lane_unmuted = 0.0;
+  Directory directory;
+  const auto pump = keyed_pump(directory.path() / "song");
+  auto& session = *pump.session;
+  const auto point = take(
+      session.parameter_automation().set_channel_control_point(pump.kick, mute, 0, lane_muted));
+  auto stage = pump_stage(pump);
+  require(!ducks(*stage, pump), "a kick its lane mutes keys nothing");
+
+  accepted(session.parameter_automation().set_channel_control_value(pump.kick, mute, point,
+                                                                    lane_unmuted));
+  accepted(stage->refresh_key_notes(session.snapshot()));
+  constexpr std::uint64_t after_unmute = 2;
+  require(ducks(*stage, pump, after_unmute), "a kick its lane leaves audible keys Pump");
+
+  accepted(session.tracks().set_track_muted(pump.kick, true));
+  require(ducks(*pump_stage(pump), pump), "the lane, not the mute switch, decides");
+}
+
 // ADR-0058: linked Pumps share their shape; knobs stay their own. One edit,
 // preset or link is one undo step, and the link survives a reopen.
 void linked_effects_share_their_shape() {
@@ -673,6 +697,7 @@ int main() {
     documents_travel_with_the_effect();
     pump_follows_its_key_tracks_notes();
     pump_hears_only_audible_keys();
+    pump_follows_its_keys_mute_lane();
     linked_effects_share_their_shape();
     lone_links_are_released();
     note_effects_sit_before_the_synth();
