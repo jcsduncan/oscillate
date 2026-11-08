@@ -778,7 +778,7 @@ void clip_curve_x_follows_shared_tempo_map() {
 
 // The lanes a lane-count fixture saves: none, one on its clip, or that and
 // two on the track (level with two points, pan with one).
-enum class Lanes { none, clip, clip_and_track };
+enum class Lanes : std::uint8_t { none, clip, clip_and_track };
 
 // A track says how many automation lanes it holds, its own and its clips',
 // before any are shown: the projection counts them and the A button says
