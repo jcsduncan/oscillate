@@ -181,12 +181,15 @@ void trimmed_tail_ends_with_the_sound() {
     REQUIRE_LT(rms(full, first, std::min(full_frames, first + window)), quiet,
                "only quiet sound is cut");
 
-  // Off-rate output ends early too, with a consistent header.
+  // Off-rate output ends early too, with a consistent header. Rate
+  // conversion exists only in the libsamplerate export build.
+#if OSCILLATE_HAVE_EXPORT_RESAMPLER
   const auto converted = render(root, saved, directory.path() / "converted.wav", true, 44'100);
   const auto expected = static_cast<double>(kept) * 44'100.0 / static_cast<double>(rate);
   const std::size_t converted_frames = converted.size() / 2; // Interleaved stereo.
   REQUIRE_NEAR(static_cast<double>(converted_frames), expected, 1.0,
                "the converted export is trimmed to the same time");
+#endif
 }
 
 } // namespace
