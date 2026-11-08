@@ -38,7 +38,7 @@ shard_root.mkdir(exist_ok=True)
 by_file = {}
 requested = {Path(argument).resolve() for argument in sys.argv[3:]}
 for entry in entries:
-    path = Path(entry['file']).resolve()
+    path = (Path(entry['directory']) / entry['file']).resolve()
     try:
         relative = path.relative_to(root)
     except ValueError:

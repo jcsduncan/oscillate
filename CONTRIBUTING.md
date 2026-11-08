@@ -133,6 +133,10 @@ These run on `main` every night; none is required for merging.
   ASan/UBSan; the `tsan` preset runs the `engine` area (the audio worker
   pool among it) and the routed playback cases. A failed run uploads the
   sanitizer reports as an artifact.
+- **Tidy sweep** (`tidy-sweep.yml`): the `.clang-tidy` checks over every
+  configured translation unit, with the VST3 host and the optional
+  adapters, in eight parallel shards (`scripts/ci/tidy_shard.py`). The run's
+  summary counts the distinct findings by check; the list is an artifact.
 
 The **Test sweep** (`test-sweep.yml`) runs only on demand: every tier but
 `live` on the Quick preset with the VST3 host and the optional adapters.
