@@ -38,14 +38,15 @@ existing registry identity. A corrupt registry is reported rather than
 overwritten.
 
 The service reports per-project status/usage, global reachable usage and budget;
-supports a persistent budget change, enforcement, one-project clear, clear
-of reachable caches, `forget_project`, which drops one registry entry
-(reachable or not) without touching the project or its cache, and
-`forget_project_cache`, which first clears a reachable project's cache and
-returns the bytes it held. The Processing cache panel lists registered
+supports a persistent budget change, enforcement, one-project clear and the
+clear of reachable caches. `forget_project` drops one registry entry
+(reachable or not) without touching the project or its cache;
+`forget_project_cache` first clears a reachable project's cache and returns
+the bytes it held, and refuses a project whose cache inspection fails. The
+service opens each registered project through `ProjectStore` and uses pinned
+cache-directory descriptors. The Processing cache panel lists registered
 projects; Forget on a project other than the open one asks for confirmation,
-then runs `forget_project_cache` and reports the space freed. It opens each registered project through `ProjectStore`
-and uses pinned cache-directory descriptors. The Quick bridge registers opened
+then runs `forget_project_cache` and reports the space freed. The Quick bridge registers opened
 projects and reports registration failure in its status line. The service does
 not run automatic enforcement after writes. Separate live `CacheStore` instances
 are now serialized with service operations through their pinned directory lock;

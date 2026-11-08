@@ -1948,7 +1948,8 @@ Result<void> ProjectStore::keep_pre_upgrade_generation() {
   auto loaded = load_generation(generation, hash);
   if (!loaded)
     return Result<void>::failure(loaded.error());
-  if (!loaded.value().migrated_from)
+  const auto schema = loaded.value().migrated_from.value_or(std::string{});
+  if (schema.empty())
     return Result<void>::success();
   auto listing = list_named_revisions();
   if (!listing)
@@ -1956,12 +1957,15 @@ Result<void> ProjectStore::keep_pre_upgrade_generation() {
   if (std::ranges::any_of(listing.value().revisions,
                           [&](const auto& item) { return item.generation == generation; }))
     return Result<void>::success();
-  // An uncertain publication is listed by the next save if it landed, and
-  // named again if it did not.
-  auto named = name_generation_unlocked(
-      pre_upgrade_revision_name(*loaded.value().migrated_from, generation), generation, hash);
+  auto named =
+      name_generation_unlocked(pre_upgrade_revision_name(schema, generation), generation, hash);
   if (!named)
     return Result<void>::failure(named.error());
+  // CURRENT must not move past the generation until its revision is durable:
+  // the next save finds the revision if it landed, or names it again.
+  if (named.value().status != SaveStatus::committed)
+    return Result<void>::failure(
+        {ErrorCode::io_failure, "the pre-upgrade version's revision may not be durable"});
   return Result<void>::success();
 }
 

@@ -615,15 +615,19 @@ void ProjectBridge::create_job_controllers() {
     set_status(collection_->status());
   });
   // A saved copy opens, unless another project was opened meanwhile.
-  connect(collection_.get(), &ProjectCollectionController::copySaved, this,
-          [this](const QString& destination, const QString& source) {
-            if (!session_ || QString::fromStdString(waveform_root_.string()) != source)
-              return;
-            lifecycle_->open_project(QUrl::fromLocalFile(destination));
-            const auto copy = std::filesystem::path(destination.toStdString());
-            if (project_name_ == QString::fromStdString(copy.filename().string()))
-              set_status(collection_->status());
-          });
+  connect(
+      collection_.get(), &ProjectCollectionController::copySaved, this,
+      [this](const QString& destination, const QString& source) {
+        if (!session_ || QString::fromStdString(waveform_root_.string()) != source)
+          return;
+        lifecycle_->open_project(QUrl::fromLocalFile(destination));
+        const auto copy = std::filesystem::path(destination.toStdString());
+        if (project_name_ == QString::fromStdString(copy.filename().string()))
+          set_status(collection_->status());
+        else
+          set_status(
+              QStringLiteral("Saved a copy at %1; it did not open: %2").arg(destination, status_));
+      });
   connect(managed_media_.get(), &ManagedMediaController::started, this, [this] {
     emit playbackChanged();
     imports_->notify();
@@ -1779,8 +1783,8 @@ void ProjectBridge::collect_project_copy() {
 void ProjectBridge::cancel_project_collection() { collection_->cancel(); }
 
 void ProjectBridge::save_copy(const QString& copy_name) {
-  if (!session_ || waveform_root_.empty() || collection_->busy() || playback_busy() ||
-      export_busy() || import_busy() || managed_media_busy() || vst3_browser_busy()) {
+  if (!session_ || waveform_root_.empty() || collection_->busy() || !jobs_idle() ||
+      vst3_browser_busy()) {
     set_status(QStringLiteral("Finish active project work before saving a copy"));
     return;
   }

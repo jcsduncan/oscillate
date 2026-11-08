@@ -65,6 +65,7 @@ QtObject {
                                     autosaveIssue: "", hasCurrent: false, options: [] })
     property string status: ""
     property string suggestedProjectName: "Untitled Project 2"
+    property var commandPalette: ({ reducedMotion: false })
     property string log: ""
     function suggested_copy_name() { return "Song copy" }
     function save_copy(name) { log += "copy:" + name + ";" }
@@ -248,6 +249,15 @@ void cache_panel_confirms_forgetting() {
   require(controls->property("log").toString() == QStringLiteral("forget:") + old_path + ';',
           "confirming did not forget the project");
   require(!confirm->isVisible(), "the question stayed after it was answered");
+
+  // From the keyboard; and a project that leaves the list drops its question.
+  forget_old->forceActiveFocus();
+  QTest::keyClick(&host.window, Qt::Key_Return);
+  require(confirm->isVisible(), "Return on Forget did not ask");
+  controls->setProperty("projects", controls->property("projects").toList().mid(0, 1));
+  QCoreApplication::processEvents();
+  require(!confirm->isVisible() && host.view->property("confirmPath").toString().isEmpty(),
+          "the question outlived its project");
 }
 
 } // namespace

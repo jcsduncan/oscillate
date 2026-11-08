@@ -293,8 +293,6 @@ void verify_killed_creation(const CreationKill& kill) {
              0, "a fresh process could not recover the killed creation");
 }
 
-// A stage whose writer lock is still held belongs to a live creation, even
-// when it is older than the process looking at it.
 // A parent flush that fails after the rename leaves a created project behind:
 // publish reports its durability as uncertain instead of failing creation.
 void verify_flush_failure_after_rename_is_uncertain() {
@@ -312,6 +310,8 @@ void verify_flush_failure_after_rename_is_uncertain() {
   REQUIRE_TRUE(stage_names(directory.path()).empty(), "the published stage name remained");
 }
 
+// A stage whose writer lock is still held belongs to a live creation, even
+// when it is older than the process looking at it.
 void verify_live_stage_kept() {
   Directory directory;
   const auto root = directory.path() / "project";

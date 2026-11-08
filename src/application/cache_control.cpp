@@ -324,6 +324,11 @@ Result<std::uint64_t> CacheControl::forget_project_cache(const std::filesystem::
   std::uint64_t freed = 0;
   auto inspected = inspect(found->root, {found->root_device, found->root_inode},
                            {found->cache_device, found->cache_inode});
+  // A cache that could not be inspected may still be on disk: keep it listed.
+  if (inspected.status == CacheProjectStatus::failed) {
+    return Result<std::uint64_t>::failure(
+        {ErrorCode::unavailable, "project cache inspection failed: " + inspected.detail});
+  }
   if (inspected.store) {
     auto usage = inspected.store->usage();
     if (!usage) {

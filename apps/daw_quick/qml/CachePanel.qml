@@ -37,6 +37,8 @@ Rectangle {
         const path = confirmPath
         return controls.projects.find(project => project.path === path) || null
     }
+    // A project that leaves the list takes its question with it.
+    onConfirmProjectChanged: if (confirmProject === null) confirmPath = ""
     function askForget(path) { confirmPath = path }
     function cancelForget() { confirmPath = "" }
     function confirmForget() {
@@ -217,7 +219,12 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 text: "FORGET"
-                color: forgetArea.containsMouse ? cachePanel.host.textMain : cachePanel.host.accent
+                enabled: !cachePanel.controls.busy
+                activeFocusOnTab: visible && enabled
+                opacity: enabled ? 1 : Theme.disabledOpacity
+                color: forgetArea.containsMouse || activeFocus ? cachePanel.host.textMain : cachePanel.host.accent
+                Keys.onReturnPressed: cachePanel.askForget(projectRow.modelData.path)
+                Keys.onSpacePressed: cachePanel.askForget(projectRow.modelData.path)
                 font.pixelSize: Theme.typeCaption
                 font.bold: true
                 Accessible.role: Accessible.Button
@@ -228,7 +235,7 @@ Rectangle {
                     anchors.fill: parent
                     anchors.margins: -Theme.closeHitSlop
                     hoverEnabled: true
-                    enabled: !cachePanel.controls.busy
+                    enabled: parent.enabled
                     cursorShape: Qt.PointingHandCursor
                     onClicked: cachePanel.askForget(projectRow.modelData.path)
                 }

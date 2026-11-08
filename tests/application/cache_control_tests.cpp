@@ -197,6 +197,11 @@ void forgetting_a_project_cache_frees_its_space() {
   REQUIRE_FALSE(fs::exists(cached / "cache" / entry), "forgetting left the cache in place");
   REQUIRE_TRUE(fs::exists(cached / "state" / "CURRENT"), "forgetting touched project state");
   REQUIRE_TRUE(fs::exists(kept / "cache" / entry), "forgetting cleared another project's cache");
+  // A project whose cache cannot be inspected stays listed.
+  std::ofstream(kept / "state" / "CURRENT", std::ios::trunc) << "damaged\n";
+  const auto damaged = control->forget_project_cache(kept);
+  REQUIRE_TRUE(!damaged, "a project whose cache could not be inspected was forgotten");
+  REQUIRE_TRUE(fs::exists(kept / "cache" / entry), "a failed forget cleared the cache");
   fs::remove_all(deleted);
   REQUIRE_EQ(take(control->forget_project_cache(deleted)), std::uint64_t{0},
              "an unreachable project reported freed space");

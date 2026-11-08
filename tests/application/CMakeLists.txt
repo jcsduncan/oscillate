@@ -64,8 +64,8 @@ oscillate_add_test_executable(oscillate_application_project_session_tests SOURCE
 # One CTest entry per case (oscillate/test/cases.hpp), each with its own budget.
 set(project_session_cases
   midi_note_sets_move_and_delete_in_one_step
-  creation_reports_an_uncertain_folder_flush
   midi_note_copies_land_at_the_drop
+  creation_reports_an_uncertain_folder_flush
   routing_commands_reopen_and_undo_atomically
   track_automation_points_are_stable_and_undoable
   send_automation_points_are_stable_undoable_and_durable

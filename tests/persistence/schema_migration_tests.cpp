@@ -292,8 +292,20 @@ void pre_upgrade_generation_survives_pruning() {
   write_file(root / "state" / "CURRENT", detail::encode_pointer(pre_upgrade, hash));
 
   const detail::ScopedMigrationChain chain(previous_releases, previous_steps);
-  auto writer = take(ProjectStore::open_writer(root, false));
   const auto schema = detail::schema_text(previous_release);
+  {
+    // A revision whose durability is uncertain stops the save before CURRENT
+    // moves past the generation it protects.
+    auto uncertain = take(ProjectStore::open_writer(root, false, [](SaveStage stage) {
+      return stage == SaveStage::revision_directory_flush_failed;
+    }));
+    REQUIRE_FALSE(uncertain.save(project_state(pre_upgrade_revision + 1), SaveKind::explicit_save)
+                      .has_value(),
+                  "a save went ahead with an uncertain pre-upgrade revision");
+    REQUIRE_EQ(take(uncertain.load_current()).generation, pre_upgrade,
+               "CURRENT moved past the pre-upgrade generation");
+  }
+  auto writer = take(ProjectStore::open_writer(root, false));
   REQUIRE_EQ(take(writer.load_current()).migrated_from, std::optional<std::string>(schema),
              "the store reports the schema it migrated from");
   for (std::size_t save = 1; save <= saves_after_upgrade; ++save) {
