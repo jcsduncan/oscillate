@@ -274,13 +274,17 @@ void controls_follow_their_modes() {
   require(opacity("emberFader:ember.amp.attack") > 0.9, "Own mode lights the amp ADSR");
 
   controller.set_choice(QStringLiteral("ember.voice.mode"), 0);
-  require(!visible("emberDropdown:ember.voice.chord") &&
-              opacity("emberKnob:ember.voice.detune") < 0.6,
+  // An inactive knob keeps its opacity and dims its face (the kit's
+  // mode-inactive state), so read the state, not the opacity.
+  const auto inactive = [&](const char* name) {
+    return item(*panel, QString::fromLatin1(name))->property("modeInactive").toBool();
+  };
+  require(!visible("emberDropdown:ember.voice.chord") && inactive("emberKnob:ember.voice.detune"),
           "chord and detune stay out of the way in poly");
   controller.set_choice(QStringLiteral("ember.voice.mode"), 2);
   require(visible("emberDropdown:ember.voice.chord"), "chord shape shows in Chord mode");
   controller.set_choice(QStringLiteral("ember.voice.mode"), 1);
-  require(opacity("emberKnob:ember.voice.detune") > 0.9, "unison lights the detune");
+  require(!inactive("emberKnob:ember.voice.detune"), "unison lights the detune");
 
   // A dropdown opens the shared menu and sets the choice.
   controller.set_choice(QStringLiteral("ember.voice.mode"), 2);

@@ -1,5 +1,6 @@
 #include "native_synth_device_controller.hpp"
 #include "panel_fit_checks.hpp"
+#include "panel_kit_checks.hpp"
 #include "panel_text_checks.hpp"
 #include "project_bridge.hpp"
 
@@ -276,6 +277,9 @@ void effect_is_inserted_opened_edited_and_live(const effects::EffectEngine& effe
             "the strip has a knob for " + parameter.toString().toStdString());
   }
   oscillate::test::panel_text::require_formatted_values(card, id + " strip");
+  // The strip's mini view is a framed plot: its scale with units and LIVE or
+  // PREVIEW once it draws anything.
+  oscillate::test::panel_kit::require_plot_frames(card, id + " strip");
   // Each knob's label and value keep to the knob's own slot, elided and
   // clipped there, so no caption runs into its neighbour's.
   constexpr double layout_slack_px = 0.5;
@@ -387,6 +391,10 @@ void effect_is_inserted_opened_edited_and_live(const effects::EffectEngine& effe
   // No text in the playing panel is cut short, drawn over other text or
   // clipped.
   oscillate::test::panel_fit::require_text_fits(find_item(window->contentItem(), panel_name), id);
+  // The window's zoom chips scale the panel (ADR-0103).
+  oscillate::test::panel_kit::require_panel_zoom(*window, id,
+                                                 QStringLiteral("nativeEffectFloatingFrame"),
+                                                 QStringLiteral("nativeEffectPanelLoader"));
 
   if (const auto shots = qEnvironmentVariable("EFFECT_APP_SCREENSHOT_DIR"); !shots.isEmpty()) {
     QDir().mkpath(shots);

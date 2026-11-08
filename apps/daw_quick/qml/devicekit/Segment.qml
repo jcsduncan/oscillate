@@ -16,6 +16,13 @@ Item {
     // The chosen tile's text, on the accent fill.
     property color onInk: theme.segmentOnInk
     property bool vertical: false
+    // Mode-inactive (see Knob): still editable, its choice not in play in
+    // the current setting, with the reason given; it dims to
+    // segmentInactiveOpacity, unlike a disabled segment's fade.
+    property bool inactive: false
+    property string inactiveReason: ""
+    readonly property string controlState: !controller.editable ? "disabled"
+        : inactive ? "inactive" : "normal"
     property int spacing: vertical ? theme.segmentSpacingVertical : theme.segmentSpacing
     // Optional shorter labels, and a caption under each in vertical form.
     property var labels: []
@@ -88,10 +95,12 @@ Item {
     implicitWidth: Math.max(theme.segmentWidth, fitWidth)
     implicitHeight: vertical ? fitHeight : theme.segmentHeight
     activeFocusOnTab: controller.editable
-    opacity: controller.editable ? 1 : theme.segmentDisabledOpacity
+    opacity: !controller.editable ? theme.segmentDisabledOpacity
+        : inactive ? theme.segmentInactiveOpacity : 1
     Accessible.role: Accessible.ComboBox
     Accessible.name: (info.group !== undefined ? info.group + " " : "") + (info.name !== undefined ? info.name : "")
-    Accessible.description: choices[current] !== undefined ? choices[current] : ""
+    Accessible.description: (choices[current] !== undefined ? choices[current] : "")
+        + (inactive && inactiveReason !== "" ? ". Inactive: " + inactiveReason : "")
 
     function pick(index) {
         theme.lastTouched = parameterId
@@ -242,6 +251,11 @@ Item {
                 MouseArea {
                     id: tileArea
                     anchors.fill: parent
+                    // At least the kit's least hit size, however small the control draws.
+                    anchors.leftMargin: -segment.theme.hitOutset(parent.width)
+                    anchors.rightMargin: -segment.theme.hitOutset(parent.width)
+                    anchors.topMargin: -segment.theme.hitOutset(parent.height)
+                    anchors.bottomMargin: -segment.theme.hitOutset(parent.height)
                     enabled: segment.controller.editable
                     hoverEnabled: true
                     onClicked: {

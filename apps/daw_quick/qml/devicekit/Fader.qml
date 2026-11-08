@@ -18,6 +18,10 @@ Item {
     property string longName: (theme.faderSpeaksGroup && info.group !== undefined ? info.group + " " : "") + label
     // Dimmed when the control has no effect.
     property bool active: true
+    // Mode-inactive (active false, see Knob): the reason it is not in play.
+    property string inactiveReason: ""
+    readonly property string controlState: !controller.editable ? "disabled"
+        : !active ? "inactive" : "normal"
     // A position marked across the track (-1: none), such as unity gain.
     property real detent: -1
     property string tipText: longName + "  " + valueText
@@ -49,6 +53,7 @@ Item {
     Accessible.role: Accessible.Slider
     Accessible.name: longName
     Accessible.description: valueText + (theme.knobNextNoteMark && nextNote ? ". Applies to new notes" : "")
+        + (!active && inactiveReason !== "" ? ". Inactive: " + inactiveReason : "")
         + ". Drag, scroll or use arrow keys; Delete resets"
 
     // The y of the cap's centre at a position.

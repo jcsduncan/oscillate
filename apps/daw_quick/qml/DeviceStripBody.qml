@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "devicekit" as Kit
 import "shell"
 
@@ -38,7 +39,7 @@ Item {
         : ({kind: "", accent: "", parameters: []})
     // The mini-view's size: as tall as the strip allows, leaving room for the knobs.
     readonly property int vizMinHeight: 40
-    readonly property int vizMaxHeight: 92
+    readonly property int vizMaxHeight: 150
     readonly property int knobRoom: 78
     readonly property real vizRadius: 7
     readonly property int unavailableGap: 14
@@ -136,255 +137,285 @@ Item {
         height: Math.max(body.vizMinHeight, Math.min(body.vizMaxHeight, parent.height - body.knobRoom))
         radius: body.vizRadius
         color: body.well
-        Canvas {
-            id: viz
+        // The view's frame (Kit.PlotFrame): its scale with units, and LIVE
+        // while the device plays or PREVIEW for the settings' response.
+        Kit.PlotFrame {
+            id: vizFrame
+            objectName: "deviceStripPlot"
             anchors.fill: parent
             anchors.margins: Theme.spaceXs
-            // A baseline when there is nothing to draw; else the curve in a fixed
-            // dB window: dBFS for the live spectrum (as the full panels draw it),
-            // gain for the response. A strip view keeps a text row clear above it.
-            readonly property real baselineRatio: 0.62
-            readonly property int maxPoints: 256
-            readonly property real responseFloorDb: -30
-            readonly property real responseCeilingDb: 12
-            readonly property real spectrumFloorDb: -90
-            readonly property real spectrumCeilingDb: 0
-            readonly property real edgeInset: 2
-            readonly property real textRoom: Theme.typeSmall + Theme.spaceXs
-            readonly property real plotTop: body.stripKind !== "" ? textRoom : 0
-            // Levels at or under this are silence (no reading).
-            readonly property real silentBelow: -199
-            readonly property int meterRows: 4
+            anchors.topMargin: body.stripKind !== "" ? viz.textRoom + Theme.spaceXs : Theme.spaceXs
+            theme: stripTheme
+            readonly property bool liveSpectrum: body.liveFrame.length > body.liveFrameMinPoints
+            readonly property bool hasResponse: body.response.length > 1
+            live: body.stripKind !== "" || liveSpectrum
+            showsChip: body.stripKind !== "" || liveSpectrum || hasResponse
+            // Each view's scale: its range's ends, the unit on the first.
+            function ends(low, high, inverted) {
+                return [{ at: inverted ? 1 : 0, label: Format.number(low, 0) },
+                        { at: inverted ? 0 : 1, label: Format.number(high, 0) }]
+            }
+            yUnit: body.stripKind === "scope" ? "FS" : body.stripKind === "loudness" ? "LU"
+                : body.stripKind === "meters" ? "" : "dB"
+            xUnit: body.stripKind === "meters" ? "dB" : ""
+            yTicks: body.stripKind === "reduction" ? ends(-body.strip.range_db, 0, false)
+                : body.stripKind === "curve" ? ends(body.strip.floor_db, body.strip.ceiling_db, false)
+                : body.stripKind === "scope" ? ends(-1, 1, false)
+                : body.stripKind === "loudness" ? ends(-body.strip.below_lu, body.strip.above_lu, false)
+                : body.stripKind === "meters" ? []
+                : liveSpectrum ? ends(viz.spectrumFloorDb, viz.spectrumCeilingDb, false)
+                : hasResponse ? ends(viz.responseFloorDb, viz.responseCeilingDb, false) : []
+            xTicks: body.stripKind === "meters" ? ends(body.strip.floor_db, body.strip.ceiling_db, false) : []
+            Canvas {
+                id: viz
+                anchors.fill: parent
+                // A baseline when there is nothing to draw; else the curve in a fixed
+                // dB window: dBFS for the live spectrum (as the full panels draw it),
+                // gain for the response. A strip view keeps a text row clear above it.
+                readonly property real baselineRatio: 0.62
+                readonly property int maxPoints: 256
+                readonly property real responseFloorDb: -30
+                readonly property real responseCeilingDb: 12
+                readonly property real spectrumFloorDb: -90
+                readonly property real spectrumCeilingDb: 0
+                readonly property real edgeInset: 2
+                readonly property real textRoom: Theme.typeSmall + Theme.spaceXs
+                // The readings sit above the frame, so the plot starts at its top.
+                readonly property real plotTop: 0
+                // Levels at or under this are silence (no reading).
+                readonly property real silentBelow: -199
+                readonly property int meterRows: 4
 
-            function tint(alpha) {
-                return Qt.rgba(body.accent.r, body.accent.g, body.accent.b, alpha)
-            }
-            function clamp01(v) {
-                return Math.max(0, Math.min(1, v))
-            }
-            // A filled curve, low to high across the width, on a dB window.
-            function paintCurve(ctx, values, low, high) {
-                const w = width
-                const h = height
-                const count = Math.min(values.length, maxPoints)
-                const span = high - low
-                const plotH = h - plotTop - 2 * edgeInset
-                const point = i => {
-                    const v = Number(values[i])
-                    const y = isFinite(v) ? (v - low) / span : 0
-                    return [i / (count - 1) * w, h - edgeInset - clamp01(y) * plotH]
+                function tint(alpha) {
+                    return Qt.rgba(body.accent.r, body.accent.g, body.accent.b, alpha)
                 }
-                ctx.beginPath()
-                ctx.moveTo(0, h)
-                for (let i = 0; i < count; ++i) {
-                    const p = point(i)
-                    ctx.lineTo(p[0], p[1])
+                function clamp01(v) {
+                    return Math.max(0, Math.min(1, v))
                 }
-                ctx.lineTo(w, h)
-                ctx.closePath()
-                ctx.fillStyle = tint(Theme.stripFillAlpha)
-                ctx.fill()
-                ctx.beginPath()
-                for (let i = 0; i < count; ++i) {
-                    const p = point(i)
-                    if (i === 0)
-                        ctx.moveTo(p[0], p[1])
-                    else
-                        ctx.lineTo(p[0], p[1])
-                }
-                ctx.strokeStyle = body.accent
-                ctx.lineWidth = Theme.stripCurveWidth
-                ctx.stroke()
-            }
-            // Gain reduction hanging from 0 dB over the last few seconds, newest
-            // on the right; under it, each band's share of the detector.
-            function paintReduction(ctx) {
-                const s = body.strip
-                const w = width
-                const bandRoom = (height - plotTop) * Theme.stripBandShare
-                const plotH = height - plotTop - bandRoom - Theme.stripBarGap
-                const dx = w / Math.max(1, s.slots - 1)
-                const n = s.history.length
-                const xOf = i => w - (n - 1 - i) * dx
-                const yOf = db => plotTop + clamp01(db / s.range_db) * plotH
-                ctx.strokeStyle = tint(Theme.stripBaselineAlpha)
-                ctx.lineWidth = Theme.hairline
-                ctx.beginPath()
-                ctx.moveTo(0, plotTop)
-                ctx.lineTo(w, plotTop)
-                ctx.stroke()
-                if (n > 0) {
+                // A filled curve, low to high across the width, on a dB window.
+                function paintCurve(ctx, values, low, high) {
+                    const w = width
+                    const h = height
+                    const count = Math.min(values.length, maxPoints)
+                    const span = high - low
+                    const plotH = h - plotTop - 2 * edgeInset
+                    const point = i => {
+                        const v = Number(values[i])
+                        const y = isFinite(v) ? (v - low) / span : 0
+                        return [i / (count - 1) * w, h - edgeInset - clamp01(y) * plotH]
+                    }
                     ctx.beginPath()
-                    ctx.moveTo(xOf(0), plotTop)
-                    for (let i = 0; i < n; ++i)
-                        ctx.lineTo(xOf(i), yOf(s.history[i]))
-                    ctx.lineTo(xOf(n - 1), plotTop)
+                    ctx.moveTo(0, h)
+                    for (let i = 0; i < count; ++i) {
+                        const p = point(i)
+                        ctx.lineTo(p[0], p[1])
+                    }
+                    ctx.lineTo(w, h)
                     ctx.closePath()
                     ctx.fillStyle = tint(Theme.stripFillAlpha)
                     ctx.fill()
                     ctx.beginPath()
-                    for (let i = 0; i < n; ++i) {
+                    for (let i = 0; i < count; ++i) {
+                        const p = point(i)
                         if (i === 0)
-                            ctx.moveTo(xOf(i), yOf(s.history[i]))
+                            ctx.moveTo(p[0], p[1])
                         else
-                            ctx.lineTo(xOf(i), yOf(s.history[i]))
+                            ctx.lineTo(p[0], p[1])
                     }
                     ctx.strokeStyle = body.accent
                     ctx.lineWidth = Theme.stripCurveWidth
                     ctx.stroke()
                 }
-                const count = s.bands.length
-                const barW = (w - (count - 1) * Theme.stripBarGap) / count
-                for (let b = 0; b < count; ++b) {
-                    const barH = clamp01(s.bands[b]) * bandRoom
-                    ctx.fillStyle = b === s.lead ? body.accent : tint(Theme.stripDimAlpha)
-                    ctx.fillRect(b * (barW + Theme.stripBarGap), height - barH, barW, barH)
-                }
-            }
-            // Input and output, left and right: RMS bars with the held peak.
-            function paintMeters(ctx) {
-                const s = body.strip
-                const left = Theme.stripMeterLabelRoom
-                const w = width - left
-                const rowH = (height - plotTop - (meterRows - 1) * Theme.stripBarGap) / meterRows
-                const at = db => clamp01((db - s.floor_db) / (s.ceiling_db - s.floor_db))
-                const zone = db => db > s.over_db ? Theme.masterMeterHot
-                    : db > s.hot_db ? Theme.warning : body.accent
-                const rows = [s.input_rms[0], s.input_rms[1], s.output_rms[0], s.output_rms[1]]
-                const peaks = [s.input_peak[0], s.input_peak[1], s.output_peak[0], s.output_peak[1]]
-                ctx.font = Theme.typeMicro + "px '" + Theme.monoFamily + "'"
-                ctx.textBaseline = "middle"
-                ctx.fillStyle = body.inkDim
-                const pairH = 2 * rowH + Theme.stripBarGap
-                ctx.fillText("IN", 0, plotTop + pairH / 2)
-                ctx.fillText("OUT", 0, plotTop + 2 * (rowH + Theme.stripBarGap) + pairH / 2)
-                for (let r = 0; r < meterRows; ++r) {
-                    const y = plotTop + r * (rowH + Theme.stripBarGap)
-                    ctx.fillStyle = Theme.meterTrack
-                    ctx.fillRect(left, y, w, rowH)
-                    if (rows[r] > s.floor_db) {
-                        ctx.fillStyle = zone(rows[r])
-                        ctx.fillRect(left, y, at(rows[r]) * w, rowH)
-                    }
-                    if (peaks[r] > s.floor_db) {
-                        ctx.fillStyle = peaks[r] > s.over_db ? Theme.masterMeterHot : body.ink
-                        ctx.fillRect(left + at(peaks[r]) * w - Theme.hairline, y, Theme.strokeBold, rowH)
-                    }
-                }
-            }
-            // The scope's sweep: the track's envelope, the key's outline over
-            // it, and the beam at the column being written.
-            function paintScope(ctx) {
-                const s = body.strip
-                const w = width
-                const plotH = height - plotTop
-                const mid = plotTop + plotH / 2
-                const half = plotH / 2
-                const dx = w / s.columns
-                const envelope = data => {
-                    ctx.beginPath()
-                    for (let c = 0; c < s.columns; ++c) {
-                        const y = mid - Math.max(-1, Math.min(1, data[2 * c + 1])) * half
-                        if (c === 0)
-                            ctx.moveTo(c * dx + dx / 2, y)
-                        else
-                            ctx.lineTo(c * dx + dx / 2, y)
-                    }
-                    for (let c = s.columns - 1; c >= 0; --c)
-                        ctx.lineTo(c * dx + dx / 2, mid - Math.max(-1, Math.min(1, data[2 * c])) * half)
-                    ctx.closePath()
-                }
-                ctx.strokeStyle = tint(Theme.stripBaselineAlpha)
-                ctx.lineWidth = Theme.hairline
-                ctx.beginPath()
-                ctx.moveTo(0, mid)
-                ctx.lineTo(w, mid)
-                ctx.stroke()
-                envelope(s.track)
-                ctx.fillStyle = tint(Theme.stripFillAlpha)
-                ctx.fill()
-                ctx.strokeStyle = body.accent
-                ctx.lineWidth = Theme.hairline
-                ctx.stroke()
-                if (s.keyed) {
-                    envelope(s.key)
-                    ctx.strokeStyle = body.inkDim
-                    ctx.stroke()
-                }
-                ctx.fillStyle = tint(Theme.stripDimAlpha)
-                ctx.fillRect(s.write_column * dx, plotTop, Theme.hairline, plotH)
-            }
-            // Short-term loudness over the history around the target line.
-            function paintLoudness(ctx) {
-                const s = body.strip
-                const w = width
-                const plotH = height - plotTop - 2 * edgeInset
-                const span = s.above_lu - s.below_lu
-                const yOf = lufs => plotTop + edgeInset
-                    + clamp01((s.above_lu - (lufs - s.target)) / span) * plotH
-                ctx.strokeStyle = body.inkDim
-                ctx.lineWidth = Theme.hairline
-                ctx.beginPath()
-                ctx.moveTo(0, yOf(s.target))
-                ctx.lineTo(w, yOf(s.target))
-                ctx.stroke()
-                const n = s.history.length
-                ctx.strokeStyle = body.accent
-                ctx.lineWidth = Theme.stripCurveWidth
-                ctx.beginPath()
-                let drawing = false
-                for (let i = 0; i < n; ++i) {
-                    const v = s.history[i]
-                    if (!(v > silentBelow)) {
-                        drawing = false
-                        continue
-                    }
-                    const x = i / Math.max(1, n - 1) * w
-                    if (drawing)
-                        ctx.lineTo(x, yOf(v))
-                    else
-                        ctx.moveTo(x, yOf(v))
-                    drawing = true
-                }
-                ctx.stroke()
-            }
-            onPaint: {
-                const ctx = getContext("2d")
-                ctx.reset()
-                const kind = body.stripKind
-                if (kind === "reduction") {
-                    paintReduction(ctx)
-                    return
-                }
-                if (kind === "meters") {
-                    paintMeters(ctx)
-                    return
-                }
-                if (kind === "curve") {
-                    paintCurve(ctx, body.strip.values, body.strip.floor_db, body.strip.ceiling_db)
-                    return
-                }
-                if (kind === "scope") {
-                    paintScope(ctx)
-                    return
-                }
-                if (kind === "loudness") {
-                    paintLoudness(ctx)
-                    return
-                }
-                const live = body.liveFrame.length > body.liveFrameMinPoints
-                const values = live ? body.liveFrame : body.response.length > 1 ? body.response : []
-                if (values.length < 2) {
+                // Gain reduction hanging from 0 dB over the last few seconds, newest
+                // on the right; under it, each band's share of the detector.
+                function paintReduction(ctx) {
+                    const s = body.strip
+                    const w = width
+                    const bandRoom = (height - plotTop) * Theme.stripBandShare
+                    const plotH = height - plotTop - bandRoom - Theme.stripBarGap
+                    const dx = w / Math.max(1, s.slots - 1)
+                    const n = s.history.length
+                    const xOf = i => w - (n - 1 - i) * dx
+                    const yOf = db => plotTop + clamp01(db / s.range_db) * plotH
                     ctx.strokeStyle = tint(Theme.stripBaselineAlpha)
                     ctx.lineWidth = Theme.hairline
                     ctx.beginPath()
-                    ctx.moveTo(0, height * baselineRatio)
-                    ctx.lineTo(width, height * baselineRatio)
+                    ctx.moveTo(0, plotTop)
+                    ctx.lineTo(w, plotTop)
                     ctx.stroke()
-                    return
+                    if (n > 0) {
+                        ctx.beginPath()
+                        ctx.moveTo(xOf(0), plotTop)
+                        for (let i = 0; i < n; ++i)
+                            ctx.lineTo(xOf(i), yOf(s.history[i]))
+                        ctx.lineTo(xOf(n - 1), plotTop)
+                        ctx.closePath()
+                        ctx.fillStyle = tint(Theme.stripFillAlpha)
+                        ctx.fill()
+                        ctx.beginPath()
+                        for (let i = 0; i < n; ++i) {
+                            if (i === 0)
+                                ctx.moveTo(xOf(i), yOf(s.history[i]))
+                            else
+                                ctx.lineTo(xOf(i), yOf(s.history[i]))
+                        }
+                        ctx.strokeStyle = body.accent
+                        ctx.lineWidth = Theme.stripCurveWidth
+                        ctx.stroke()
+                    }
+                    const count = s.bands.length
+                    const barW = (w - (count - 1) * Theme.stripBarGap) / count
+                    for (let b = 0; b < count; ++b) {
+                        const barH = clamp01(s.bands[b]) * bandRoom
+                        ctx.fillStyle = b === s.lead ? body.accent : tint(Theme.stripDimAlpha)
+                        ctx.fillRect(b * (barW + Theme.stripBarGap), height - barH, barW, barH)
+                    }
                 }
-                paintCurve(ctx, values, live ? spectrumFloorDb : responseFloorDb,
-                           live ? spectrumCeilingDb : responseCeilingDb)
+                // Input and output, left and right: RMS bars with the held peak.
+                function paintMeters(ctx) {
+                    const s = body.strip
+                    const left = Theme.stripMeterLabelRoom
+                    const w = width - left
+                    const rowH = (height - plotTop - (meterRows - 1) * Theme.stripBarGap) / meterRows
+                    const at = db => clamp01((db - s.floor_db) / (s.ceiling_db - s.floor_db))
+                    const zone = db => db > s.over_db ? Theme.masterMeterHot
+                        : db > s.hot_db ? Theme.warning : body.accent
+                    const rows = [s.input_rms[0], s.input_rms[1], s.output_rms[0], s.output_rms[1]]
+                    const peaks = [s.input_peak[0], s.input_peak[1], s.output_peak[0], s.output_peak[1]]
+                    ctx.font = Theme.typeMicro + "px '" + Theme.monoFamily + "'"
+                    ctx.textBaseline = "middle"
+                    ctx.fillStyle = body.inkDim
+                    const pairH = 2 * rowH + Theme.stripBarGap
+                    ctx.fillText("IN", 0, plotTop + pairH / 2)
+                    ctx.fillText("OUT", 0, plotTop + 2 * (rowH + Theme.stripBarGap) + pairH / 2)
+                    for (let r = 0; r < meterRows; ++r) {
+                        const y = plotTop + r * (rowH + Theme.stripBarGap)
+                        ctx.fillStyle = Theme.meterTrack
+                        ctx.fillRect(left, y, w, rowH)
+                        if (rows[r] > s.floor_db) {
+                            ctx.fillStyle = zone(rows[r])
+                            ctx.fillRect(left, y, at(rows[r]) * w, rowH)
+                        }
+                        if (peaks[r] > s.floor_db) {
+                            ctx.fillStyle = peaks[r] > s.over_db ? Theme.masterMeterHot : body.ink
+                            ctx.fillRect(left + at(peaks[r]) * w - Theme.hairline, y, Theme.strokeBold, rowH)
+                        }
+                    }
+                }
+                // The scope's sweep: the track's envelope, the key's outline over
+                // it, and the beam at the column being written.
+                function paintScope(ctx) {
+                    const s = body.strip
+                    const w = width
+                    const plotH = height - plotTop
+                    const mid = plotTop + plotH / 2
+                    const half = plotH / 2
+                    const dx = w / s.columns
+                    const envelope = data => {
+                        ctx.beginPath()
+                        for (let c = 0; c < s.columns; ++c) {
+                            const y = mid - Math.max(-1, Math.min(1, data[2 * c + 1])) * half
+                            if (c === 0)
+                                ctx.moveTo(c * dx + dx / 2, y)
+                            else
+                                ctx.lineTo(c * dx + dx / 2, y)
+                        }
+                        for (let c = s.columns - 1; c >= 0; --c)
+                            ctx.lineTo(c * dx + dx / 2, mid - Math.max(-1, Math.min(1, data[2 * c])) * half)
+                        ctx.closePath()
+                    }
+                    ctx.strokeStyle = tint(Theme.stripBaselineAlpha)
+                    ctx.lineWidth = Theme.hairline
+                    ctx.beginPath()
+                    ctx.moveTo(0, mid)
+                    ctx.lineTo(w, mid)
+                    ctx.stroke()
+                    envelope(s.track)
+                    ctx.fillStyle = tint(Theme.stripFillAlpha)
+                    ctx.fill()
+                    ctx.strokeStyle = body.accent
+                    ctx.lineWidth = Theme.hairline
+                    ctx.stroke()
+                    if (s.keyed) {
+                        envelope(s.key)
+                        ctx.strokeStyle = body.inkDim
+                        ctx.stroke()
+                    }
+                    ctx.fillStyle = tint(Theme.stripDimAlpha)
+                    ctx.fillRect(s.write_column * dx, plotTop, Theme.hairline, plotH)
+                }
+                // Short-term loudness over the history around the target line.
+                function paintLoudness(ctx) {
+                    const s = body.strip
+                    const w = width
+                    const plotH = height - plotTop - 2 * edgeInset
+                    const span = s.above_lu - s.below_lu
+                    const yOf = lufs => plotTop + edgeInset
+                        + clamp01((s.above_lu - (lufs - s.target)) / span) * plotH
+                    ctx.strokeStyle = body.inkDim
+                    ctx.lineWidth = Theme.hairline
+                    ctx.beginPath()
+                    ctx.moveTo(0, yOf(s.target))
+                    ctx.lineTo(w, yOf(s.target))
+                    ctx.stroke()
+                    const n = s.history.length
+                    ctx.strokeStyle = body.accent
+                    ctx.lineWidth = Theme.stripCurveWidth
+                    ctx.beginPath()
+                    let drawing = false
+                    for (let i = 0; i < n; ++i) {
+                        const v = s.history[i]
+                        if (!(v > silentBelow)) {
+                            drawing = false
+                            continue
+                        }
+                        const x = i / Math.max(1, n - 1) * w
+                        if (drawing)
+                            ctx.lineTo(x, yOf(v))
+                        else
+                            ctx.moveTo(x, yOf(v))
+                        drawing = true
+                    }
+                    ctx.stroke()
+                }
+                onPaint: {
+                    const ctx = getContext("2d")
+                    ctx.reset()
+                    const kind = body.stripKind
+                    if (kind === "reduction") {
+                        paintReduction(ctx)
+                        return
+                    }
+                    if (kind === "meters") {
+                        paintMeters(ctx)
+                        return
+                    }
+                    if (kind === "curve") {
+                        paintCurve(ctx, body.strip.values, body.strip.floor_db, body.strip.ceiling_db)
+                        return
+                    }
+                    if (kind === "scope") {
+                        paintScope(ctx)
+                        return
+                    }
+                    if (kind === "loudness") {
+                        paintLoudness(ctx)
+                        return
+                    }
+                    const live = body.liveFrame.length > body.liveFrameMinPoints
+                    const values = live ? body.liveFrame : body.response.length > 1 ? body.response : []
+                    if (values.length < 2) {
+                        ctx.strokeStyle = tint(Theme.stripBaselineAlpha)
+                        ctx.lineWidth = Theme.hairline
+                        ctx.beginPath()
+                        ctx.moveTo(0, height * baselineRatio)
+                        ctx.lineTo(width, height * baselineRatio)
+                        ctx.stroke()
+                        return
+                    }
+                    paintCurve(ctx, values, live ? spectrumFloorDb : responseFloorDb,
+                               live ? spectrumCeilingDb : responseCeilingDb)
+                }
             }
         }
         // The strip view's readings: the main one on the left, the leading
@@ -413,16 +444,6 @@ Item {
             font.family: Theme.monoFamily
             font.pixelSize: Theme.typeSmall
             elide: Text.ElideRight
-        }
-        Text {
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.margins: Theme.spaceSm
-            text: body.stripKind === "" && body.liveFrame.length > body.liveFrameMinPoints ? "LIVE" : ""
-            color: body.accent
-            font.pixelSize: Theme.typeMicro
-            font.bold: true
-            font.letterSpacing: Theme.trackingMd
         }
     }
 

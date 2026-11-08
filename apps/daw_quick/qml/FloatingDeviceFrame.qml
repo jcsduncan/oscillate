@@ -8,6 +8,9 @@ import "shell"
 // its right and bottom edges; dragging one asks the host for a new size
 // (resizeRequested), never below the minimum or past the window, and
 // resizeFinished marks the end of the drag so the host can keep the size.
+// A `zoomable` frame shows the panel zoom chips (90 to 140 %) in its title
+// bar, beside CLOSE: every instrument and effect panel scales the same way
+// (ADR-0103); choosing one emits zoomChosen and the host scales the panel.
 Item {
     id: host
     objectName: "floatingDeviceFrame"
@@ -48,6 +51,10 @@ Item {
     readonly property int closeHeight: 26
     readonly property int bodyY: 38
     default property alias content: body.data
+    property bool zoomable: false
+    property real zoom: 1
+    readonly property var zoomSteps: Theme.panelZoomSteps
+    signal zoomChosen(real zoom)
     signal closeRequested()
     signal resizeRequested(real width, real height)
     signal resizeFinished()
@@ -104,7 +111,8 @@ Item {
             color: host.titleBarColor
             Text {
                 x: host.titleX; anchors.verticalCenter: parent.verticalCenter
-                width: Math.max(host.titleMinWidth, parent.width - (host.showClose ? host.titleCloseRoom : host.titleRightRoom))
+                width: Math.max(host.titleMinWidth, parent.width - (host.showClose ? host.titleCloseRoom : host.titleRightRoom)
+                                - (zoomChips.visible ? zoomChips.width + Theme.spaceMd : 0))
                 elide: Text.ElideRight
                 text: host.title.toUpperCase()
                 color: host.textColor
@@ -113,7 +121,7 @@ Item {
             MouseArea {
                 objectName: host.dragObjectName
                 x: 0; y: 0
-                width: parent.width - (host.showClose ? host.dragCloseRoom : 0)
+                width: (zoomChips.visible ? zoomChips.x : parent.width - (host.showClose ? host.dragCloseRoom : 0))
                 height: parent.height
                 cursorShape: Qt.OpenHandCursor
                 drag.target: surface
@@ -121,6 +129,57 @@ Item {
                 drag.maximumX: Math.max(host.windowMargin, host.width - surface.width - host.windowMargin)
                 drag.minimumY: host.windowMargin
                 drag.maximumY: Math.max(host.windowMargin, host.height - surface.height - host.windowMargin)
+            }
+        }
+
+        // The panel zoom: one chip per step, the chosen one filled.
+        Row {
+            id: zoomChips
+            objectName: "panelZoom"
+            visible: host.zoomable
+            z: 1
+            x: parent.width - width - (host.showClose ? host.dragCloseRoom : host.titleRightRoom)
+            y: Theme.spaceXs
+            height: host.closeHeight
+            spacing: Theme.hairline
+            Accessible.role: Accessible.Grouping
+            Accessible.name: "Panel zoom"
+            Repeater {
+                model: host.zoomSteps
+                delegate: Rectangle {
+                    id: zoomChip
+                    required property real modelData
+                    readonly property bool on: Math.abs(host.zoom - modelData) < Theme.panelZoomTolerance
+                    readonly property string label: Math.round(modelData * 100) + "%"
+                    function choose() { host.zoomChosen(modelData) }
+                    objectName: "panelZoom:" + Math.round(modelData * 100)
+                    width: Math.max(Theme.panelZoomChipWidth, zoomLabel.implicitWidth + 2 * Theme.spaceSm)
+                    height: parent.height
+                    radius: Theme.controlRadius
+                    color: on ? host.accentColor : zoomArea.containsMouse ? host.buttonHoverColor : host.buttonColor
+                    border.color: activeFocus ? host.accentColor : host.buttonBorderColor
+                    border.width: activeFocus ? Theme.strokeBold : Theme.hairline
+                    activeFocusOnTab: host.visible && host.zoomable
+                    Accessible.role: Accessible.RadioButton
+                    Accessible.name: "Zoom " + label
+                    Accessible.checked: on
+                    Keys.onReturnPressed: choose()
+                    Keys.onSpacePressed: choose()
+                    Text {
+                        id: zoomLabel
+                        anchors.centerIn: parent
+                        text: zoomChip.label
+                        color: zoomChip.on ? host.frameColor : host.textColor
+                        font.pixelSize: Theme.typeSmall
+                        font.bold: zoomChip.on
+                    }
+                    MouseArea {
+                        id: zoomArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: zoomChip.choose()
+                    }
+                }
             }
         }
 

@@ -130,7 +130,7 @@ FloatingDeviceFrame {
         // Write to clip: the selected MIDI clip, or a new one at the playhead.
         readonly property var selectedClipIds: editor.bridge.selectedClipIds
         // Nova's zoom chip's choice, kept across sessions.
-        readonly property real zoom: editor.layout !== null ? editor.layout.novaZoom : 1
+        readonly property real zoom: editor.layout !== null ? editor.layout.panelZoom : 1
         // Nova's key strip plays from the typing keyboard's octave.
         readonly property int keyBase: editor.keyboardBase
         // The groove pool, for Nova's arp GROOVE list (ADR-0078).
@@ -183,7 +183,7 @@ FloatingDeviceFrame {
         function onPadReleased(key) { editor.bridge.release_note(key) }
         function onZoomChanged() {
             if (editor.layout !== null)
-                editor.layout.novaZoom = panelLoader.item.zoom
+                editor.layout.panelZoom = panelLoader.item.zoom
         }
     }
     // An engine the catalogue has no panel for says so.

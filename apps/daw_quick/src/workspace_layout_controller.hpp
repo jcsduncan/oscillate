@@ -17,8 +17,8 @@ class WorkspaceLayoutController final : public QObject {
                  set_instrument_window_width NOTIFY changed)
   Q_PROPERTY(int instrumentWindowHeight READ instrument_window_height WRITE
                  set_instrument_window_height NOTIFY changed)
-  // Nova's zoom chip (ADR-0076), as a scale (1 is 100 %).
-  Q_PROPERTY(double novaZoom READ nova_zoom WRITE set_nova_zoom NOTIFY changed)
+  // The device panels' zoom (ADR-0103), as a scale (1 is 100 %).
+  Q_PROPERTY(double panelZoom READ panel_zoom WRITE set_panel_zoom NOTIFY changed)
 
 public:
   explicit WorkspaceLayoutController(QObject* parent = nullptr);
@@ -27,12 +27,12 @@ public:
   [[nodiscard]] bool context_panel_open() const noexcept { return context_panel_open_; }
   [[nodiscard]] int instrument_window_width() const noexcept { return instrument_window_width_; }
   [[nodiscard]] int instrument_window_height() const noexcept { return instrument_window_height_; }
-  [[nodiscard]] double nova_zoom() const noexcept { return nova_zoom_; }
+  [[nodiscard]] double panel_zoom() const noexcept { return panel_zoom_; }
   void set_device_dock_height(int height);
   void set_context_panel_open(bool open);
   void set_instrument_window_width(int width);
   void set_instrument_window_height(int height);
-  void set_nova_zoom(double zoom);
+  void set_panel_zoom(double zoom);
 
 signals:
   void changed();
@@ -42,7 +42,7 @@ private:
   bool context_panel_open_ = false;
   int instrument_window_width_ = 0;
   int instrument_window_height_ = 0;
-  double nova_zoom_ = 1.0;
+  double panel_zoom_ = 1.0;
 };
 
 } // namespace oscillate::quick

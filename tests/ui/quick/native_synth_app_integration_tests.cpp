@@ -570,7 +570,7 @@ void nova_window_resizes_and_zooms_in_the_daw() {
   const auto reset_layout = [layout] {
     layout->setProperty("instrumentWindowWidth", 0);
     layout->setProperty("instrumentWindowHeight", 0);
-    layout->setProperty("novaZoom", 1.0);
+    layout->setProperty("panelZoom", 1.0);
   };
   reset_layout();
   struct Restore {
@@ -621,7 +621,7 @@ void nova_window_resizes_and_zooms_in_the_daw() {
   click_named(panel, QStringLiteral("novaZoom:85"));
   require(host->scale() < full - 0.1 && std::fabs(host->scale() - 0.85) < 0.01,
           "the 85% chip draws the panel at 85%");
-  require(std::fabs(layout->property("novaZoom").toDouble() - 0.85) < 1e-9,
+  require(std::fabs(layout->property("panelZoom").toDouble() - 0.85) < 1e-9,
           "the zoom is kept in the workspace preferences");
   click_named(panel, QStringLiteral("novaZoom:100"));
   require(std::fabs(host->scale() - full) < 1e-9, "100% restores the scale");

@@ -918,6 +918,12 @@ KitTheme {
     readonly property color accentWashEdge: "#2f6b5c"
     readonly property color onAccentText: "#102a23"
     readonly property color focusOnAccent: "#ffffff"
+    // Keyboard focus: an accent ring round the focused control, a bold
+    // stroke standing just outside its edge (shell/FocusRing), or its own
+    // edge turned accent and bold.
+    readonly property color focusRing: accent
+    readonly property real focusRingWidth: strokeBold
+    readonly property real focusRingOffset: strokeBold
     readonly property color tagFill: "#1a212a"
     readonly property color tagText: "#aeb8c4"
     readonly property real controlRadius: 5
@@ -1273,6 +1279,11 @@ KitTheme {
     readonly property real mixerScaleUnityLength: 7
 
     // ---- Device editor windows (NativeSynthEditorOverlay, NativeEffectEditorOverlay) ----
+    // The panel zoom chips in a device window's title bar (ADR-0103): the
+    // steps, a chip's least width and the rounding a chosen step absorbs.
+    readonly property var panelZoomSteps: [0.9, 1, 1.2, 1.4]
+    readonly property int panelZoomChipWidth: 44
+    readonly property real panelZoomTolerance: 0.001
     // Docked, a device panel spans this share of the window's height.
     readonly property real editorDockShare: 0.6
     // The window's chrome around a panel: the frame's insets, and its title

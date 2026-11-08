@@ -16,6 +16,11 @@ Rectangle {
     property string label: ""
     // Show the bare number (a count, not a signed amount).
     property bool plain: false
+    // Mode-inactive (see Knob): still editable, with the reason given.
+    property bool inactive: false
+    property string inactiveReason: ""
+    readonly property string controlState: !controller.editable ? "disabled"
+        : inactive ? "inactive" : "normal"
     readonly property var info: controller.parameter(parameterId)
     readonly property string valueText: controller.revision >= 0 ? controller.display(parameterId) : ""
 
@@ -26,10 +31,11 @@ Rectangle {
     color: theme.stepperFill
     border.color: activeFocus ? accent : theme.stepperEdge
     activeFocusOnTab: controller.editable
-    opacity: controller.editable ? 1 : theme.stepperDisabledOpacity
+    opacity: !controller.editable ? theme.stepperDisabledOpacity
+        : inactive ? theme.stepperInactiveOpacity : 1
     Accessible.role: Accessible.SpinBox
     Accessible.name: (info.group !== undefined ? info.group + " " : "") + (info.name !== undefined ? info.name : "")
-    Accessible.description: valueText
+    Accessible.description: valueText + (inactive && inactiveReason !== "" ? ". Inactive: " + inactiveReason : "")
 
     function stepBy(direction) {
         if (!controller.editable)
@@ -62,6 +68,11 @@ Rectangle {
     MouseArea {
         id: wellArea
         anchors.fill: parent
+        // At least the kit's least hit size, however small the control draws.
+        anchors.leftMargin: -stepper.theme.hitOutset(parent.width)
+        anchors.rightMargin: -stepper.theme.hitOutset(parent.width)
+        anchors.topMargin: -stepper.theme.hitOutset(parent.height)
+        anchors.bottomMargin: -stepper.theme.hitOutset(parent.height)
         enabled: stepper.controller.editable
         hoverEnabled: true
         onDoubleClicked: {
@@ -88,6 +99,11 @@ Rectangle {
         MouseArea {
             id: arrowArea
             anchors.fill: parent
+            // At least the kit's least hit size, however small the control draws.
+            anchors.leftMargin: -stepper.theme.hitOutset(parent.width)
+            anchors.rightMargin: -stepper.theme.hitOutset(parent.width)
+            anchors.topMargin: -stepper.theme.hitOutset(parent.height)
+            anchors.bottomMargin: -stepper.theme.hitOutset(parent.height)
             enabled: stepper.controller.editable
             onClicked: {
                 stepper.forceActiveFocus()

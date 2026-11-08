@@ -562,6 +562,15 @@ target_link_libraries(oscillate_quick_browser_tests PRIVATE
 oscillate_target_defaults(oscillate_quick_browser_tests)
 oscillate_add_test(NAME quick_browser_contract COMMAND oscillate_quick_browser_tests)
 set_tests_properties(quick_browser_contract PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${oscillate_quick_qml_import_dir}")
+# Keyboard access (issue #112): the shell's custom controls take Tab focus,
+# show a focus ring and work from the keyboard.
+add_executable(oscillate_quick_keyboard_access_tests
+  keyboard_access_tests.cpp)
+target_link_libraries(oscillate_quick_keyboard_access_tests PRIVATE
+  oscillate_quick_test_core Qt6::Gui Qt6::Quick Qt6::Test)
+oscillate_target_defaults(oscillate_quick_keyboard_access_tests)
+oscillate_add_test(NAME quick_keyboard_access_contract COMMAND oscillate_quick_keyboard_access_tests)
+set_tests_properties(quick_keyboard_access_contract PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${oscillate_quick_qml_import_dir}")
 # The redesigned mixer view: strips, sends, faders, mute/solo, routing.
 add_executable(oscillate_quick_mixer_view_tests
   mixer_view_tests.cpp)

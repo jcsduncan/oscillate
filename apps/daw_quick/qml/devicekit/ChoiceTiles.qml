@@ -186,6 +186,11 @@ Item {
             MouseArea {
                 id: tileArea
                 anchors.fill: parent
+                // At least the kit's least hit size, however small the control draws.
+                anchors.leftMargin: -choice.theme.hitOutset(parent.width)
+                anchors.rightMargin: -choice.theme.hitOutset(parent.width)
+                anchors.topMargin: -choice.theme.hitOutset(parent.height)
+                anchors.bottomMargin: -choice.theme.hitOutset(parent.height)
                 enabled: choice.editable
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor

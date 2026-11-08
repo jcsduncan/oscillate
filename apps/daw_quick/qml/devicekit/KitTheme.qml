@@ -136,7 +136,16 @@ QtObject {
     property int knobHeightPad: 36
     property int knobReadoutPad: 14
     property real knobDisabledOpacity: 0.45
+    // A mode-inactive knob: its face dims to this, its captions take
+    // knobInactiveInk (readable, unlike a disabled knob's fade).
     property real knobInactiveOpacity: 0.38
+    property color knobInactiveInk: inkDim
+    // A linked knob's badge.
+    property string knobLinkGlyph: "LINK"
+    property real knobLinkPad: 4
+    property int knobLinkSize: typeMicro
+    property color knobLinkFill: accent
+    property color knobLinkInk: well
     // The knob's own colour, unless a knob sets one.
     property color knobAccent: accent
     // The spoken and tooltip name: "groupUnlessSame" prefixes the group
@@ -391,6 +400,7 @@ QtObject {
     property int segmentSize: typeSmall
     property int segmentCaptionSize: typeMicro
     property real segmentDisabledOpacity: 0.5
+    property real segmentInactiveOpacity: 0.7
     // Horizontal tiles' text inset from both sides; a vertical tile's text
     // beside a glyph column.
     property real segmentTextInset: 4
@@ -454,6 +464,29 @@ QtObject {
     property real peakMeterHoldHeight: strokeBold
     property real peakMeterZoneEdge: 0.001
     property real peakMeterSafeFade: 1.6
+
+    // PlotFrame: a plot's labelled axes (a unit on the first tick), its
+    // grid, and the LIVE / PREVIEW chip in the top-right corner.
+    property real plotGutterLeft: 34
+    property real plotGutterBottom: 16
+    property real plotTickGap: spaceXs
+    property real plotTickLength: spaceXs
+    property string plotTickFont: mono
+    property int plotTickSize: typeMicro
+    property color plotTickInk: inkDim
+    property color plotGridInk: grid
+    property color plotAxisInk: gridStrong
+    property real plotChipInset: spaceSm
+    property real plotChipPadX: spaceSm
+    property real plotChipPadY: spaceXxs
+    property int plotChipSize: typeMicro
+    property real plotChipSpacing: 1.2
+    property color plotLiveInk: live
+    property color plotPreviewInk: inkDim
+    property color plotChipFill: well
+    // The room the chip takes at the top of a plot: a framed view's own
+    // top-corner readings sit below it.
+    property real plotChipRowHeight: 22
 
     // Views: the filter scope (and the envelope view's frame defaults).
     property real viewRadius: 6
@@ -626,6 +659,75 @@ QtObject {
         return arrow.activeFocus ? accent : wellEdge
     }
 
+    // The least hit area of a pointer control (issue #170): a widget drawn
+    // smaller extends its pointer area by hitOutset on each side.
+    property real minHitSize: 24
+    function hitOutset(size) {
+        return Math.max(0, (minHitSize - size) / 2)
+    }
+    // The least diameter a knob is drawn at.
+    property int knobMinDiameter: minHitSize
+
+    // The device header (DeviceHeader): wordmark and subtitle | preset
+    // browser | readout | status badge, with mode switches in a second row.
+    // headerBrowserX is the least x the browser starts at (it also keeps
+    // clear of the brand by headerGap); headerModeGap separates the rows.
+    property real headerHeight: 52
+    property real headerGap: spaceXl
+    property real headerBrowserX: 0
+    property real headerModeGap: spaceMd
+    // The kit wordmark (a panel with its own brand draws its own).
+    property string wordmarkFont: sans
+    property int wordmarkSize: 28
+    property int wordmarkWeight: Font.Light
+    property real wordmarkSpacing: 6
+    property color wordmarkInk: ink
+    property real subtitleGap: spaceXxs
+    property int subtitleSize: typeMicro
+    property real subtitleSpacing: 1.6
+    property color subtitleInk: inkFaint
+    // The preset browser: arrows either side of a display that shows the
+    // category tag over the preset name, with the list's chevron.
+    property real presetArrowGap: spaceXs
+    property real presetDisplayWidth: 320
+    property real presetDisplayHeight: arrowHeight
+    property real presetDisplayRadius: radiusMd
+    property color presetFill: well
+    property color presetEdge: wellEdge
+    property real presetFocusStroke: 1.5
+    property real presetTextX: spaceLg
+    property real presetTagY: spaceXs
+    property int presetTagSize: typeMicro
+    property real presetTagSpacing: 1.2
+    property color presetTagInk: inkFaint
+    property real presetNameY: 15
+    property string presetNameFont: sans
+    property int presetNameSize: typeHeading
+    property bool presetNameBold: true
+    property real presetNameSpacing: 0
+    property color presetNameInk: ink
+    property string presetChevron: "▾"
+    property real presetChevronMargin: spaceMd
+    property int presetChevronSize: typeBody
+    property color presetChevronInk: accent
+    // The readout: the control last touched, in its own box beside the
+    // browser; hidden until a control is touched.
+    property real readoutWidth: 220
+    property real readoutMinWidth: 120
+    property color readoutFill: well
+    property color readoutEdge: wellEdge
+    property real readoutRadius: presetDisplayRadius
+    property real readoutTextX: spaceLg
+    property real readoutNameY: spaceXs
+    property int readoutNameSize: typeMicro
+    property real readoutSpacing: 1
+    property color readoutNameInk: inkFaint
+    property real readoutValueY: 16
+    property string readoutValueFont: mono
+    property int readoutValueSize: typeSubtitle
+    property bool readoutValueBold: true
+    property color readoutValueInk: accent
+
     // The status pill.
     property int statusHeight: 24
     property int statusPad: 30
@@ -683,6 +785,7 @@ QtObject {
     property int stepperWellWidth: 80
     property int stepperWellHeight: 22
     property real stepperDisabledOpacity: 0.5
+    property real stepperInactiveOpacity: 0.7
     property real stepperArrowWidth: 14
     property int stepperArrowSize: typeMicro
     property real stepperLabelSpacing: 0.9

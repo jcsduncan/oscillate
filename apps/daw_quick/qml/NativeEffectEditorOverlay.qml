@@ -26,10 +26,16 @@ FloatingDeviceFrame {
     readonly property real dockHeight: Math.round(height * Theme.editorDockShare)
     // Room an unresized floating window leaves at its sides.
     readonly property real floatingMarginWidth: 40
+    // The panel draws at the panel zoom (ADR-0103; floating, of the default
+    // scale), scaled down to fit the window.
+    readonly property var layout: bridge ? bridge.workspaceLayout : null
+    zoomable: hasPanel
+    zoom: layout !== null ? layout.panelZoom : 1
+    onZoomChosen: z => { if (layout !== null) layout.panelZoom = z }
     readonly property real panelScale: docked
-        ? Math.min(1, (width - Theme.editorDockChromeWidth) / panelWidth,
+        ? Math.min(zoom, (width - Theme.editorDockChromeWidth) / panelWidth,
                    (dockHeight - Theme.editorChromeHeight) / panelHeight)
-        : Math.min(Theme.editorFloatingScale, (width - floatingMarginWidth) / panelWidth,
+        : Math.min(Theme.editorFloatingScale * zoom, (width - floatingMarginWidth) / panelWidth,
                    (height - Theme.editorFloatingMarginHeight) / panelHeight)
     title: controller ? controller.engine_name + " effect" : "Effect"
     surfaceObjectName: "nativeEffectFloatingFrame"

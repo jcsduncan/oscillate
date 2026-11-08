@@ -18,6 +18,10 @@
     <file>Segment.qml</file>
     <file>ShellTheme.qml</file>
     <file>StatusBadge.qml</file>
+    <file>DeviceHeader.qml</file>
+    <file>PresetBrowser.qml</file>
+    <file>Readout.qml</file>
+    <file>PlotFrame.qml</file>
     <file>Stepper.qml</file>
     <file>Switch.qml</file>
     <file>Tip.qml</file>
@@ -37,5 +41,6 @@
     <file alias="TipLayer.qml">../shell/TipLayer.qml</file>
     <file alias="Reveal.qml">../shell/Reveal.qml</file>
     <file alias="Theme.qml">../shell/Theme.qml</file>
+    <file alias="FocusRing.qml">../shell/FocusRing.qml</file>
   </qresource>
 </RCC>

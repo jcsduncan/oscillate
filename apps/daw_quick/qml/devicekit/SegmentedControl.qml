@@ -182,6 +182,11 @@ Rectangle {
                 MouseArea {
                     id: cellArea
                     anchors.fill: parent
+                    // At least the kit's least hit size, however small the control draws.
+                    anchors.leftMargin: -control.theme.hitOutset(parent.width)
+                    anchors.rightMargin: -control.theme.hitOutset(parent.width)
+                    anchors.topMargin: -control.theme.hitOutset(parent.height)
+                    anchors.bottomMargin: -control.theme.hitOutset(parent.height)
                     hoverEnabled: true
                     enabled: control.editable
                     cursorShape: control.theme.segmentedPointer ? Qt.PointingHandCursor : Qt.ArrowCursor
