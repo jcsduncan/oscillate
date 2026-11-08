@@ -107,6 +107,7 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends aptly
           scripts/ci/build-apt-repository.sh "$debs" site/apt
           site_url=$(sed -n 's/^site_url: *//p' mkdocs.yml)
+          [ -n "$site_url" ] || { echo "::error::site_url missing from mkdocs.yml"; exit 1; }
           {
             echo "published=true"
             echo "url=${site_url%/}/apt"

@@ -60,17 +60,6 @@ the site is deployed without `/apt/` and the run shows a notice. The packaging
 workflow starts a Pages run once a release's packages are attached, and a
 final job follows the instructions above in a clean `ubuntu:26.04` container.
 
-The archive key is a dedicated signing key. To create one and store it:
-
-```sh
-export GNUPGHOME=$(mktemp -d)
-gpg --batch --passphrase '' --quick-gen-key \
-  "Oscillate archive signing key <jcsduncan2011@gmail.com>" ed25519 sign 2y
-gpg --armor --export-secret-keys | gh secret set APT_GPG_PRIVATE_KEY --repo jcsduncan/oscillate
-gpg --list-keys --with-colons | awk -F: '$1 == "fpr" { print $10; exit }'
-```
-
-Keep an offline copy of the secret key before removing `$GNUPGHOME`. Before
-the key expires, extend it (`gpg --quick-set-expire <fingerprint> 2y`) and set
-the secret again; the next Pages run publishes the extended key, and users
-fetch it again with the `curl` line above.
+The archive key is a dedicated ed25519 signing key that expires after two
+years; the next Pages run after the secret changes publishes the new or
+extended key.

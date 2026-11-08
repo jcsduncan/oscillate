@@ -14,6 +14,8 @@ scan_limit=50
 
 mkdir -p "$destination"
 fetched=0
+release_dir=
+trap 'rm -rf "$release_dir"' EXIT
 while read -r tag; do
   [[ $fetched -lt $count ]] || break
   release_dir=$(mktemp -d)
@@ -22,11 +24,14 @@ while read -r tag; do
     for deb in "$release_dir"/oscillate_*_amd64.deb; do
       [[ -f $deb ]] || continue
       name=$(basename "$deb")
-      grep -q " $name\$" "$release_dir/SHA256SUMS" || {
+      # Check exactly this file's entry ("hash  name" or "hash *name").
+      awk -v name="$name" '$2 == name || $2 == "*" name' "$release_dir/SHA256SUMS" \
+        >"$release_dir/entry"
+      [[ -s $release_dir/entry ]] || {
         echo "fetch-release-debs: $tag's SHA256SUMS does not list $name" >&2
         exit 1
       }
-      (cd "$release_dir" && sha256sum --check --ignore-missing --strict --quiet SHA256SUMS)
+      (cd "$release_dir" && sha256sum --check --strict --quiet entry)
       mv "$deb" "$destination/"
       fetched=$((fetched + 1))
     done

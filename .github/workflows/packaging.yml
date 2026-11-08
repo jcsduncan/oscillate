@@ -182,7 +182,7 @@ jobs:
           pattern: packages-*
           merge-multiple: true
           path: packages
-      - name: Upload packages, inventories and checksums
+      - name: Upload packages, inventories and checksums, and republish the apt repository
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -194,13 +194,5 @@ jobs:
             exit 0
           fi
           gh release upload "$RELEASE_TAG" --repo "$REPOSITORY" --clobber -- *
-      # Pages rebuilds the apt repository from the newest releases' .debs.
-      - name: Publish to the apt repository
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          if ! gh release view "$RELEASE_TAG" --repo "$REPOSITORY" > /dev/null; then
-            exit 0
-          fi
+          # Pages rebuilds the apt repository from the newest releases' .debs.
           gh workflow run pages.yml --repo "$REPOSITORY" --ref main
