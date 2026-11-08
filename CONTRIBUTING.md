@@ -59,8 +59,10 @@ bundle gets `bundle:triage` (`.github/workflows/issue-bundle.yml`) until it
 is assigned one.
 
 ```sh
-gh issue list --label bundle:routing --state open
+gh issue list --label bundle:routing --state open --limit 200
 ```
+
+If the list reaches the limit, raise it: a bundle is taken whole.
 
 ## Commit messages
 
