@@ -18,9 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Release Please acts with RELEASE_PLEASE_TOKEN, a fine-grained personal
-    # access token (CONTRIBUTING.md, "Releases"): a pull request or tag made
-    # with this job's own token starts no workflow, so the release pull
-    # request would get no CI and the tag no packages. The tag push starts
+    # access token (CONTRIBUTING.md, "Releases"): with this job's own token
+    # the release pull request's checks wait for a maintainer's approval and
+    # the tag starts no workflow. The tag pushed with the PAT starts
     # the packaging workflow, which attaches the packages to the release.
     steps:
       - name: Require the release token
