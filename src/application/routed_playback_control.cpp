@@ -329,9 +329,17 @@ template <typename TrackRef>
     const auto& before = *std::ranges::find(published.tracks, after.id, &project::Track::id);
     const auto* old_plugin = std::get_if<project::Vst3PluginInstance>(&before.instrument_source);
     const auto* new_plugin = std::get_if<project::Vst3PluginInstance>(&after.instrument_source);
-    // A VST3 instrument's own state edits switch its chain stage.
-    if (old_plugin && new_plugin ? old_plugin->id != new_plugin->id
-                                 : before.instrument_source != after.instrument_source)
+    // A VST3 instrument's own state edits switch its chain stage, and a
+    // built-in synth's values and document go to its running runtime.
+    const auto* old_patch = std::get_if<project::NativeInstrumentPatch>(&before.instrument_source);
+    const auto* new_patch = std::get_if<project::NativeInstrumentPatch>(&after.instrument_source);
+    const bool same_instrument =
+        old_plugin && new_plugin
+            ? old_plugin->id == new_plugin->id
+            : (old_patch && new_patch ? old_patch->engine == new_patch->engine &&
+                                            old_patch->engine_version == new_patch->engine_version
+                                      : before.instrument_source == after.instrument_source);
+    if (!same_instrument)
       return true;
     if (std::holds_alternative<project::NativeInstrumentPatch>(before.instrument_source) &&
         before.midi_clips != after.midi_clips && !player_edit_only(before, after))
