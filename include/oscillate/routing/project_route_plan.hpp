@@ -78,6 +78,10 @@ struct ProjectRoutePlan {
 [[nodiscard]] std::vector<bool> effective_track_mutes(const project::Snapshot& snapshot,
                                                       const ProjectRoutePlan& plan);
 
+// Whether a channel-mute lane, on the track or on one of its clips, drives
+// the track's mute instead of its saved mute.
+[[nodiscard]] bool has_mute_automation(const project::Track& track) noexcept;
+
 // The tracks whose sidechain keys are silent (ADR-0058): a key follows its
 // source's mute and solo as the mixer applies them (effective_track_mutes),
 // except that a solo which keeps the keyed track keeps its key, so a soloed

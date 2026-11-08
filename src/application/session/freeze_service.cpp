@@ -6,6 +6,7 @@
 #include "oscillate/automation_project/preparation.hpp"
 #include "oscillate/native_dsp/note_effects/note_effect.hpp"
 #include "oscillate/project/lookup.hpp"
+#include "oscillate/routing/project_route_plan.hpp"
 #include "session_state.hpp"
 
 #include <algorithm>
@@ -214,8 +215,12 @@ Result<project::TrackId> FreezeService::finish_track_bounce(persistence::StagedW
   std::map<project::SendId, project::SendId> sends;
   auto next_send = next_send_number();
   for (const auto& send : original.sends) {
-    // The audio keys what its source keyed: a bounce's muted source keys
-    // nothing (routing::silent_key_sources).
+    // The audio keys what its source keyed, once: a bounce's muted source
+    // keys nothing (routing::silent_key_sources) unless a mute lane drives
+    // its mute, and then the source keeps its keys.
+    if (!flatten && send.purpose == project::SendPurpose::sidechain &&
+        routing::has_mute_automation(original))
+      continue;
     auto send_id = numbered_id<project::SendId>(next_send);
     if (!send_id)
       return R::failure(send_id.error());
