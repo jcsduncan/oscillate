@@ -80,9 +80,17 @@ include(GNUInstallDirs)
 # depend on -O0 throughput. Coverage builds stay at -O0 so line counts hold.
 option(OSCILLATE_OPTIMIZE_DSP_IN_DEBUG
   "Optimise audio kernels and DSP oracle tests in Debug builds" ON)
+if(OSCILLATE_OPTIMIZE_DSP_IN_DEBUG AND NOT OSCILLATE_ENABLE_COVERAGE
+   AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  set(OSCILLATE_DSP_OPTIMISED_IN_DEBUG ON)
+else()
+  set(OSCILLATE_DSP_OPTIMISED_IN_DEBUG OFF)
+endif()
 function(oscillate_optimize_in_debug target)
-  if(OSCILLATE_OPTIMIZE_DSP_IN_DEBUG AND NOT OSCILLATE_ENABLE_COVERAGE
-     AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  # Marks the target even where it stays at -O0, so the budgets of tests that
+  # run it can account for that (oscillate_verify_test_labels).
+  set_target_properties(${target} PROPERTIES OSCILLATE_DSP_OPTIMISED ON)
+  if(OSCILLATE_DSP_OPTIMISED_IN_DEBUG)
     target_compile_options(${target} PRIVATE $<$<CONFIG:Debug>:-O3>)
   endif()
 endfunction()
@@ -360,11 +368,18 @@ set(OSCILLATE_TEST_SKIP_RETURN_CODE 77)
 # fast test needs one only when it measures above the default. An entry is
 # three times the test's runtime under `ctest -j4`; regenerate the table with
 # scripts/update-test-budgets.py, which reads these defaults. Sanitizer and
-# coverage presets scale every budget.
+# coverage presets scale every budget; see also
+# OSCILLATE_TEST_UNOPTIMISED_DSP_SCALE below.
 set(OSCILLATE_TEST_DEFAULT_BUDGET_fast 5)
 set(OSCILLATE_TEST_DEFAULT_BUDGET_slow 30)
 set(OSCILLATE_TEST_DEFAULT_BUDGET_live 5)
 set(OSCILLATE_TEST_TIMEOUT_SCALE 1 CACHE STRING "Multiplier applied to every test budget")
+# Budgets are measured with the DSP kernels and oracle test programs
+# optimised (oscillate_optimize_in_debug). A Debug build that leaves them at
+# -O0 (coverage, or OSCILLATE_OPTIMIZE_DSP_IN_DEBUG=OFF) runs those programs
+# this many times slower, so their tests' budgets are scaled by it as well.
+set(OSCILLATE_TEST_UNOPTIMISED_DSP_SCALE 10 CACHE STRING
+  "Further budget multiplier for optimised DSP test programs built at -O0")
 include("${CMAKE_CURRENT_LIST_DIR}/TestBudgets.cmake")
 
 function(oscillate_test_area out)
@@ -402,6 +417,13 @@ function(oscillate_add_test)
     set(extra WORKING_DIRECTORY "${arg_WORKING_DIRECTORY}")
   endif()
   add_test(NAME ${arg_NAME} COMMAND ${arg_COMMAND} ${extra})
+  list(GET arg_COMMAND 0 program)
+  if(TARGET ${program})
+    get_target_property(dsp_optimised ${program} OSCILLATE_DSP_OPTIMISED)
+    if(dsp_optimised)
+      set_tests_properties(${arg_NAME} PROPERTIES OSCILLATE_DSP_OPTIMISED ON)
+    endif()
+  endif()
   oscillate_test_area(area)
   set_tests_properties(${arg_NAME} PROPERTIES LABELS "${arg_TIER};${area};${arg_LABELS}")
   if(DEFINED arg_SKIP_RETURN_CODE)
@@ -432,6 +454,11 @@ function(oscillate_verify_test_labels directory)
                           "run it and add one with scripts/update-test-budgets.py")
     endif()
     math(EXPR timeout "${budget} * ${OSCILLATE_TEST_TIMEOUT_SCALE}")
+    get_test_property(${test} OSCILLATE_DSP_OPTIMISED DIRECTORY "${directory}" dsp_optimised)
+    if(dsp_optimised AND NOT OSCILLATE_DSP_OPTIMISED_IN_DEBUG
+       AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+      math(EXPR timeout "${timeout} * ${OSCILLATE_TEST_UNOPTIMISED_DSP_SCALE}")
+    endif()
     set_tests_properties(${test} DIRECTORY "${directory}" PROPERTIES TIMEOUT ${timeout})
   endforeach()
   get_property(children DIRECTORY "${directory}" PROPERTY SUBDIRECTORIES)
