@@ -52,12 +52,9 @@
     },
     {
       "name": "package-appimage",
-      "displayName": "Release build for the AppImage (no codec adapter; see release-packages.md)",
+      "displayName": "Release build for the AppImage (docs/dependencies/release-packages.md)",
       "inherits": "package-deb",
-      "binaryDir": "${sourceDir}/build/package-appimage",
-      "cacheVariables": {
-        "OSCILLATE_BUILD_CODEC_ADAPTER": "OFF"
-      }
+      "binaryDir": "${sourceDir}/build/package-appimage"
     },
     {
       "name": "vst3",

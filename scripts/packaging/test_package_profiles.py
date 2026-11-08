@@ -58,13 +58,20 @@ class PackageBuildCheckTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, name):
                         check_build(self.build, profile, version_suffix=SUFFIX)
 
-    def test_the_appimage_has_no_codec_and_the_deb_has_it(self):
+    def test_both_packages_have_the_codec(self):
         codec = "OSCILLATE_BUILD_CODEC_ADAPTER"
-        self.assertEqual(PROFILES["deb"].switches[codec], "ON")
-        self.assertEqual(PROFILES["appimage"].switches[codec], "OFF")
-        self.write_cache(PROFILES["deb"])
-        with self.assertRaisesRegex(ValueError, codec):
-            check_build(self.build, PROFILES["appimage"], version_suffix=SUFFIX)
+        for profile in PROFILES.values():
+            with self.subTest(profile=profile.name):
+                self.assertEqual(profile.switches[codec], "ON")
+                self.write_cache(profile, {codec: "OFF"})
+                with self.assertRaisesRegex(ValueError, codec):
+                    check_build(self.build, profile, version_suffix=SUFFIX)
+
+    def test_the_appimage_bundles_the_codec_libraries(self):
+        bundled = PROFILES["appimage"].runtime.bundled
+        for package in ("libsndfile1", "libmp3lame0", "libmpg123-0t64", "libflac14"):
+            with self.subTest(package=package):
+                self.assertIn(package, bundled)
 
     def test_foreign_source_tree_or_missing_helper_is_rejected(self):
         profile = PROFILES["deb"]
@@ -92,13 +99,13 @@ class PackageBuildCheckTests(unittest.TestCase):
             package_version("", RELEASE_TAG, None)
 
     def test_readme_lists_included_and_excluded_features(self):
-        readme = feature_readme(PROFILES["appimage"], PROJECT_VERSION)
-        self.assertIn("VST3 instruments and effects", readme)
-        self.assertIn("AIFF, FLAC and MP3 import and export (libsndfile): ", readme)
-        self.assertIn("#93", readme)
-        deb = feature_readme(PROFILES["deb"], PROJECT_VERSION)
-        self.assertIn("  - AIFF, FLAC and MP3 import and export (libsndfile)\n", deb)
-        self.assertIn("Convolution reverb: ", deb)
+        codec_line = "  - AIFF, FLAC and MP3 import and export (libsndfile)\n"
+        for profile in PROFILES.values():
+            with self.subTest(profile=profile.name):
+                readme = feature_readme(profile, PROJECT_VERSION)
+                self.assertIn("VST3 instruments and effects", readme)
+                self.assertIn(codec_line, readme)
+                self.assertIn("Convolution reverb: ", readme)
 
 
 if __name__ == "__main__":
