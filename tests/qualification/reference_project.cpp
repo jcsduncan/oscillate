@@ -287,6 +287,27 @@ std::vector<project::MidiNote> synth_notes(std::size_t track, std::size_t bars) 
 }
 
 #if defined(OSCILLATE_QUALIFICATION_VST3)
+// The VST3 instrument plays middle C on every eighth note: the synthetic
+// fixture instrument accepts no other key.
+constexpr std::uint8_t vst3_pitch = 60;
+
+std::vector<project::MidiNote> pulse_notes(std::size_t bars) {
+  std::vector<project::MidiNote> notes;
+  std::uint64_t serial = 1;
+  for (std::size_t bar = 0; bar < bars; ++bar) {
+    for (std::size_t step = 0; step < line.size(); ++step) {
+      const auto at = static_cast<std::int64_t>(bar) * ticks_per_bar +
+                      static_cast<std::int64_t>(step) * eighth_ticks;
+      notes.push_back({take(project::NoteId::from_bits({0, serial++}), "note id"),
+                       {at},
+                       {at + staccato_ticks},
+                       vst3_pitch,
+                       note_velocity});
+    }
+  }
+  return notes;
+}
+
 struct ScannedPlugin {
   plugins::ScanResult scan;
   plugins::Vst3Class klass;
@@ -402,7 +423,7 @@ Workload build_project(const fs::path& root, const fs::path& media, const Option
     const auto track =
         take(session->instruments().create_vst3_instrument_track(identity_from(*vst3.instrument)),
              "VST3 instrument");
-    auto notes = synth_notes(0, bars);
+    auto notes = pulse_notes(bars);
     workload.notes += notes.size();
     (void)take(session->midi_clips().add_midi_clip_with_notes(
                    track, {0}, {static_cast<std::int64_t>(bars) * ticks_per_bar}, std::move(notes)),
