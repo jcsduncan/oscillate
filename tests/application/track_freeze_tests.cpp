@@ -460,6 +460,11 @@ void a_bounced_source_under_a_mute_lane_falls_silent() {
   const auto audio = take(session->freeze().finish_track_bounce(
       stage(*session, rendered), rendered.origin_revision(), track, rendered.first_frame(),
       app::BounceMode::new_track));
+  const auto bounced = export_master(root, session->snapshot(), directory.path() / "bounce.wav");
+  const auto largest = largest_difference(before, bounced);
+  std::cout << "bounce under a mute lane: largest difference " << largest << '\n';
+  REQUIRE_LT(largest, same_mix, "the bounce plays once, as its source did");
+
   const auto& state = session->snapshot();
   const auto& source = find(state, track);
   const auto& copy = find(state, audio);
@@ -482,11 +487,6 @@ void a_bounced_source_under_a_mute_lane_falls_silent() {
                "the bounce keys where its lane is open");
   REQUIRE_TRUE(take(lanes.mutes(audio, at_bar(muted_bar))),
                "the bounce keys nothing where its lane mutes it");
-
-  const auto bounced = export_master(root, session->snapshot(), directory.path() / "bounce.wav");
-  const auto largest = largest_difference(before, bounced);
-  std::cout << "bounce under a mute lane: largest difference " << largest << '\n';
-  REQUIRE_LT(largest, same_mix, "the bounce plays once, as its source did");
 
   done(session->history().undo(), "undo the bounce");
   REQUIRE_TRUE(routing::has_mute_automation(find(session->snapshot(), track)),
