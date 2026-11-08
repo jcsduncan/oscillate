@@ -69,10 +69,14 @@ public:
   // rendering; the callback hands over its delay lines, histories and gain
   // ramps (RoutedMixer::adopt_live_state) before mixing the switching block.
   // Processors shared with the active graph keep running.
+  // With `new_sources`, the switch brings its own source bank (filled through
+  // fill_selected), so its nodes may differ from the active graph's: a node
+  // it adds fades in, and one it drops must first fade out
+  // (RoutedMixer::ready_to_continue); the switch waits for that.
   [[nodiscard]] foundation::Result<void>
   prepare_and_publish_live(std::uint64_t revision, std::span<const RoutedNode> nodes,
                            std::span<const RoutingEdge> edges, RoutedMixerLimits limits,
-                           std::shared_ptr<RoutedGainSource> gains = {});
+                           std::shared_ptr<RoutedGainSource> gains = {}, bool new_sources = false);
   // A source-only revision keeps the exact mixer, processor and gain owners.
   // Its candidate source bank is selected by revision on the next callback.
   // If that bank cannot supply a complete block, the old source renders and
@@ -165,7 +169,7 @@ private:
   [[nodiscard]] foundation::Result<void>
   publish(std::uint64_t revision, std::span<const RoutedNode> nodes,
           std::span<const RoutingEdge> edges, RoutedMixerLimits limits,
-          std::shared_ptr<RoutedGainSource> gains, bool live);
+          std::shared_ptr<RoutedGainSource> gains, bool live, bool new_sources = false);
   struct LiveControl {
     bool edge = false;
     std::uint64_t id = 0;

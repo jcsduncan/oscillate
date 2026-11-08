@@ -78,6 +78,17 @@ public:
   offer_automation(const project::Snapshot& snapshot,
                    std::span<const automation_project::PreparedTargetAutomation> automation,
                    std::uint64_t last_safe_automation_sample);
+  // Control only: the same, held back for the live graph switch of the
+  // snapshot's revision and adopted on the callback when that graph
+  // activates, so a tempo or lane change lands on the switching block
+  // (ADR-0098).
+  [[nodiscard]] foundation::Result<void>
+  stage_automation(const project::Snapshot& snapshot,
+                   std::span<const automation_project::PreparedTargetAutomation> automation,
+                   std::uint64_t last_safe_automation_sample);
+  void graph_activated(std::uint64_t revision) noexcept override {
+    automation_mailbox_->release_staged(revision);
+  }
   [[nodiscard]] std::uint64_t applied_automation_revision() const noexcept {
     return automation_mailbox_->applied_revision();
   }
@@ -111,6 +122,9 @@ private:
 
   struct AutomationPlan {
     std::uint64_t revision = 0;
+    // The project's tempo and meter: a tempo change is a new plan.
+    std::shared_ptr<const timeline::TempoMap> tempo;
+    native_dsp::synth::BarGrid bars;
     std::uint64_t last_safe_sample = 0;
     std::vector<std::shared_ptr<const automation_project::PreparedTargetAutomation>> evaluators;
     std::vector<std::uint32_t> parameters;
@@ -128,8 +142,6 @@ private:
   std::uint32_t sample_rate_ = 0;
   std::size_t max_frames_ = 0;
   std::unique_ptr<native_dsp::effects::NativeEffectRuntime> runtime_;
-  std::shared_ptr<const timeline::TempoMap> tempo_;
-  native_dsp::synth::BarGrid bars_;
   std::unique_ptr<native_dsp::synth::PlanMailbox<AutomationPlan>> automation_mailbox_ =
       std::make_unique<native_dsp::synth::PlanMailbox<AutomationPlan>>();
   std::atomic<std::uint64_t> rejected_{0};

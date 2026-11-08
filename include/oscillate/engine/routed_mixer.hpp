@@ -155,6 +155,15 @@ public:
   [[nodiscard]] bool continues(const RoutedMixer& prior) const noexcept {
     return live_from_ == &prior;
   }
+  // Callback only, before the switching block's sources are filled: every
+  // node of `prior` this graph drops has faded to silence (muted, its ramp
+  // done), so leaving it out cannot click (ADR-0098).
+  [[nodiscard]] bool ready_to_continue(const RoutedMixer& prior) const noexcept;
+  // Callback only, while ready_to_continue() is false: mutes in `prior`, with
+  // its usual fade, each node this graph drops. restore_dropped() unmutes
+  // them again when this graph is withdrawn instead.
+  void fade_out_dropped(RoutedMixer& prior) noexcept;
+  void restore_dropped(RoutedMixer& prior) noexcept;
   // Only explicitly qualified owners, or empty nodes, may keep processing.
   [[nodiscard]] bool control_overlay_safe() const noexcept;
   // Callback only, after source preflight and before the next mix_block.
@@ -334,6 +343,10 @@ private:
   const RoutedMixer* live_from_ = nullptr;
   std::vector<std::size_t> live_nodes_;
   std::vector<std::size_t> live_edges_;
+  // The prior's nodes this graph drops, by their index there, and those of
+  // them it muted (fade_out_dropped), reserved for all of them.
+  std::vector<std::size_t> live_removed_;
+  std::vector<std::size_t> live_faded_;
   // Per node, its latency change carried exactly across the switch.
   std::vector<std::int64_t> live_shifts_;
   // Per node, whether its changed processor continues (or releases) its

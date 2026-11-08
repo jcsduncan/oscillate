@@ -570,9 +570,11 @@ application::RevisionStatus RoutedPlayback::status() {
       admit_vst3(std::move(scan));
     }
     // A failed scan fails the edit with its diagnostic; the old graph keeps
-    // playing.
+    // playing. An edit only a replacement source carries prepares one now.
     const auto begun = failed ? control_->reject_edit(applied, "Quick project edit", *failed)
-                              : control_->begin_edit(applied, "Quick project edit");
+                       : control_->can_capture_source_edit(*applied.snapshot)
+                           ? begin_source_edit(applied)
+                           : control_->begin_edit(applied, "Quick project edit");
     if (!begun)
       edit_pending_ = false;
   }
@@ -593,21 +595,13 @@ application::RevisionStatus RoutedPlayback::status() {
       source_candidate_ = std::move(prepared).value();
     }
   }
-  if (source_capture_ && synth_switch_policy_ && !source_staged_ && !edit_awaiting_activation_ &&
-      std::chrono::steady_clock::now() >= synth_switch_policy_->deadline)
-    fail_source_handoff({foundation::ErrorCode::unavailable,
-                         "Native synth switch found no note-free release boundary within ten "
-                         "seconds; saved choice is not audible"});
   if (source_capture_ && source_candidate_ && !source_staged_ && !edit_awaiting_activation_ &&
       !source_cancel_pending_) {
     const auto cursor = cursor_.completed_snapshot();
     // The old mixer must render once in a new transport generation before its
     // history can be handed over.
-    if ((!resumed_boundary_ || cursor.generation != resumed_boundary_->generation ||
-         cursor.next_sample != resumed_boundary_->next_sample) &&
-        (!synth_switch_policy_ ||
-         synth_switch_quiet_over(cursor.next_sample,
-                                 std::uint64_t{requested_buffer_frames_} * synth_switch_blocks))) {
+    if (!resumed_boundary_ || cursor.generation != resumed_boundary_->generation ||
+        cursor.next_sample != resumed_boundary_->next_sample) {
       resumed_boundary_.reset();
       const auto ready = source_candidate_->prime_handoff_window(
           cursor.generation, cursor.next_sample, requested_buffer_frames_);
@@ -666,7 +660,6 @@ application::RevisionStatus RoutedPlayback::status() {
         fail_source_handoff(restarted.error());
     } else {
       edit_pending_ = false;
-      synth_switch_policy_.reset();
       source_capture_.reset();
     }
   }
@@ -679,7 +672,6 @@ application::RevisionStatus RoutedPlayback::status() {
     control_->bind_live_source(*source_);
     source_exact_revision_.store(0, std::memory_order_release);
     source_capture_.reset();
-    synth_switch_policy_.reset();
     source_staged_ = false;
     // The promoted source keeps playing the armed loop. A wrap queued for
     // the retired source's priming is withdrawn and rescheduled once this
@@ -765,75 +757,12 @@ foundation::Result<void> RoutedPlayback::begin_revision(project::Snapshot saved)
       unscanned.push_back(std::move(plugin));
   }
 #endif
-  const auto previous_source_snapshot = model_->snapshot();
   auto adopted = model_->adopt_authoritative_snapshot(std::move(snapshot));
   if (!adopted)
     return foundation::Result<void>::failure(adopted.error());
-  if (source_edit) {
-    auto captured = control_->capture_source_edit(adopted.value(), "Quick source edit");
-    if (!captured)
-      return foundation::Result<void>::failure(captured.error());
-    source_capture_ = std::move(captured).value();
-    if (source_capture_->native_synth_switch) {
-      if (loop_) {
-        const foundation::Error error{foundation::ErrorCode::unsupported,
-                                      "Native synth switching during a loop is saved but not "
-                                      "audible; clear the loop and select the engine again"};
-        (void)control_->fail_captured_source_edit(*source_capture_, error);
-        source_capture_.reset();
-        return foundation::Result<void>::failure(error);
-      }
-      auto compiled = engine::compile_midi_events(*previous_source_snapshot);
-      if (!compiled) {
-        auto error = compiled.error();
-        (void)control_->fail_captured_source_edit(*source_capture_, error);
-        source_capture_.reset();
-        return foundation::Result<void>::failure(std::move(error));
-      }
-      std::vector<std::pair<project::TrackId, std::uint64_t>> tails;
-      for (const auto& track : previous_source_snapshot->tracks) {
-        const auto* patch = std::get_if<project::NativeInstrumentPatch>(&track.instrument_source);
-        if (!patch)
-          continue;
-        const auto native_lane = [](const auto& lane) {
-          return std::holds_alternative<project::NativeParameterTarget>(lane.target);
-        };
-        const bool automated = std::ranges::any_of(track.automation, native_lane) ||
-                               std::ranges::any_of(track.midi_clips, [&](const auto& clip) {
-                                 return std::ranges::any_of(clip.automation, native_lane);
-                               });
-        const auto tail = source_->synth_tail_frames(track.id);
-        const auto resolved = native_dsp::synth::resolve_native_instrument(*patch);
-        if (!tail || !resolved || automated) {
-          const foundation::Error error{
-              foundation::ErrorCode::conflict,
-              "Native synth switch has no fixed release bound; saved choice is not audible"};
-          (void)control_->fail_captured_source_edit(*source_capture_, error);
-          source_capture_.reset();
-          return foundation::Result<void>::failure(error);
-        }
-        const auto current_tail = resolved.value().engine->tail_frames(
-            resolved.value().values, previous_source_snapshot->sample_rate);
-        tails.emplace_back(track.id, std::max(*tail, current_tail));
-      }
-      synth_switch_policy_.emplace(
-          SynthSwitchPolicy{std::move(compiled).value(), std::move(tails),
-                            std::chrono::steady_clock::now() + std::chrono::seconds(10)});
-    }
-    source_retry_count_ = 0;
-    auto started = start_source_preparation();
-    if (!started) {
-      auto error = started.error();
-      if (source_capture_)
-        (void)control_->fail_captured_source_edit(*source_capture_, error);
-      source_capture_.reset();
-      return foundation::Result<void>::failure(std::move(error));
-    }
-    edit_pending_ = true;
-    edit_awaiting_activation_ = false;
-    return foundation::Result<void>::success();
-  }
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+  if (source_edit && unscanned.empty())
+    return begin_source_edit(adopted.value());
   if (!unscanned.empty()) {
     try {
       vst3_scans_ = std::async(std::launch::async, [plugins = std::move(unscanned)]() mutable {
@@ -854,10 +783,33 @@ foundation::Result<void> RoutedPlayback::begin_revision(project::Snapshot saved)
     edit_awaiting_activation_ = false;
     return foundation::Result<void>::success();
   }
+#else
+  if (source_edit)
+    return begin_source_edit(adopted.value());
 #endif
   auto begun = control_->begin_edit(adopted.value(), "Quick project edit");
   if (!begun)
     return begun;
+  edit_pending_ = true;
+  edit_awaiting_activation_ = false;
+  return foundation::Result<void>::success();
+}
+
+foundation::Result<void>
+RoutedPlayback::begin_source_edit(const project::AppliedRevision& adopted) {
+  auto captured = control_->capture_source_edit(adopted, "Quick source edit");
+  if (!captured)
+    return foundation::Result<void>::failure(captured.error());
+  source_capture_ = std::move(captured).value();
+  source_retry_count_ = 0;
+  auto started = start_source_preparation();
+  if (!started) {
+    auto error = started.error();
+    if (source_capture_)
+      (void)control_->fail_captured_source_edit(*source_capture_, error);
+    source_capture_.reset();
+    return foundation::Result<void>::failure(std::move(error));
+  }
   edit_pending_ = true;
   edit_awaiting_activation_ = false;
   return foundation::Result<void>::success();
@@ -916,7 +868,6 @@ void RoutedPlayback::fail_source_handoff(const foundation::Error& error) {
     (void)control_->fail_captured_source_edit(*source_capture_, error);
   edit_pending_ = false;
   edit_awaiting_activation_ = false;
-  synth_switch_policy_.reset();
   if (source_preparation_.valid())
     abandoned_source_preparations_.push_back(std::move(source_preparation_));
   if (source_staged_) {
@@ -925,65 +876,6 @@ void RoutedPlayback::fail_source_handoff(const foundation::Error& error) {
   }
   retire_source(std::move(source_candidate_));
   source_capture_.reset();
-}
-
-bool RoutedPlayback::synth_switch_quiet_over(std::uint64_t sample,
-                                             std::uint64_t frames) const noexcept {
-  if (!synth_switch_quiet_at(sample))
-    return false;
-  if (!synth_switch_policy_)
-    return true;
-  // No note may start before the switch can have taken over either.
-  const auto end =
-      frames > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) - sample
-          ? std::numeric_limits<std::int64_t>::max()
-          : static_cast<std::int64_t>(sample + frames);
-  for (const auto& [track, tail] : synth_switch_policy_->release_tails) {
-    (void)tail;
-    const auto found = std::ranges::find(synth_switch_policy_->old_notes.instruments(), track,
-                                         &engine::InstrumentEvents::track);
-    if (found == synth_switch_policy_->old_notes.instruments().end())
-      return false;
-    if (std::ranges::any_of(found->events(), [&](const engine::ScheduledMidiEvent& event) {
-          return event.kind == engine::MidiEventKind::note_on &&
-                 event.sample.value >= static_cast<std::int64_t>(sample) &&
-                 event.sample.value < end;
-        }))
-      return false;
-  }
-  return true;
-}
-
-bool RoutedPlayback::synth_switch_quiet_at(std::uint64_t sample) const noexcept {
-  if (!synth_switch_policy_ ||
-      sample > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
-    return !synth_switch_policy_;
-  for (const auto& [track, tail] : synth_switch_policy_->release_tails) {
-    const auto found = std::ranges::find(synth_switch_policy_->old_notes.instruments(), track,
-                                         &engine::InstrumentEvents::track);
-    if (found == synth_switch_policy_->old_notes.instruments().end())
-      return false;
-    std::size_t held = 0;
-    std::uint64_t release_end = 0;
-    for (const auto& event : found->events()) {
-      if (event.sample.value >= static_cast<std::int64_t>(sample))
-        break;
-      if (event.kind == engine::MidiEventKind::note_on) {
-        ++held;
-      } else {
-        if (held == 0)
-          return false;
-        --held;
-        const auto off = static_cast<std::uint64_t>(event.sample.value);
-        release_end = std::max(release_end, tail > std::numeric_limits<std::uint64_t>::max() - off
-                                                ? std::numeric_limits<std::uint64_t>::max()
-                                                : off + tail);
-      }
-    }
-    if (held != 0 || sample < release_end)
-      return false;
-  }
-  return true;
 }
 
 foundation::Result<void> RoutedPlayback::submit_revision(project::Snapshot snapshot) {
@@ -1241,7 +1133,7 @@ void RoutedPlayback::withdraw_loop_wrap() noexcept {
 }
 
 bool RoutedPlayback::set_loop(std::uint64_t start, std::uint64_t end) {
-  if (!source_ || end <= start || synth_switch_policy_)
+  if (!source_ || end <= start)
     return false;
   if (loop_ && loop_->start == start && loop_->end == end)
     return true;

@@ -81,7 +81,7 @@ RoutedAudioSource::prepare(const std::filesystem::path& root, const project::Sna
     return fail(ErrorCode::invalid_argument, "Routed source has no matching prepared graph");
   }
   return prepare_with_layout(root, snapshot, control, control.source_layout(),
-                             control.topological_order(), {}, control.max_frames(),
+                             control.topological_order(), {}, false, control.max_frames(),
                              buffer_frame_budget, worker_permit, stop, first_sample, 1, nullptr);
 }
 
@@ -94,15 +94,15 @@ Result<std::unique_ptr<RoutedAudioSource>> RoutedAudioSource::prepare(
       capture.snapshot->revision <= capture.active_graph_revision)
     return fail(ErrorCode::invalid_argument, "Routed source capture has no matching revision");
   return prepare_with_layout(root, *capture.snapshot, control, capture.source_layout,
-                             capture.topological_order, capture.kept_players, capture.max_frames,
-                             buffer_frame_budget, worker_permit, stop, first_sample,
-                             first_generation, live_cursor);
+                             capture.topological_order, capture.kept_players, capture.structural,
+                             capture.max_frames, buffer_frame_budget, worker_permit, stop,
+                             first_sample, first_generation, live_cursor);
 }
 
 Result<std::unique_ptr<RoutedAudioSource>> RoutedAudioSource::prepare_with_layout(
     const std::filesystem::path& root, const project::Snapshot& snapshot,
     RoutedPlaybackControl& control, std::span<const routing::ProjectRouteSource> layout,
-    std::span<const engine::RoutingNodeId> order, std::span<const KeptPlayer> kept,
+    std::span<const engine::RoutingNodeId> order, std::span<const KeptPlayer> kept, bool structural,
     std::size_t max_frames, std::size_t buffer_frame_budget, const std::atomic<bool>* worker_permit,
     const std::stop_token& stop,
     // Project sample and transport generation are separate coordinates.
@@ -149,9 +149,12 @@ Result<std::unique_ptr<RoutedAudioSource>> RoutedAudioSource::prepare_with_layou
         return fail(ErrorCode::conflict, "Routed synth has no prepared source slot");
       // A player the edit leaves alone keeps playing, voices and all: the
       // replacement source renders it from the block it takes over.
-      const auto running = std::ranges::find(kept, track.id, &KeptPlayer::track);
+      const auto running = std::ranges::find_if(kept, [&track](const KeptPlayer& player) {
+        return player.track == track.id && !player.retiring;
+      });
       if (running != kept.end()) {
-        synths.push_back({static_cast<std::size_t>(slot - layout.begin()), running->player});
+        synths.push_back({static_cast<std::size_t>(slot - layout.begin()), running->player,
+                          running->staged_revision});
         continue;
       }
       // A synth with no notes still renders, so live panel edits stay audible
@@ -175,6 +178,18 @@ Result<std::unique_ptr<RoutedAudioSource>> RoutedAudioSource::prepare_with_layou
     }
   }
 
+  // A replaced instrument rings out in its track's slot (ADR-0098).
+  for (const auto& retiring : kept) {
+    if (!retiring.retiring)
+      continue;
+    const auto slot =
+        std::ranges::find(layout, retiring.track, &routing::ProjectRouteSource::track);
+    if (slot == layout.end())
+      return fail(ErrorCode::conflict, "Replaced synth has no prepared source slot");
+    synths.push_back({static_cast<std::size_t>(slot - layout.begin()), retiring.player,
+                      retiring.staged_revision, true});
+  }
+
   // Processed clips prefer a validated cache render; without a cache
   // directory they render live from the verified source.
   std::optional<media::CacheStore> cache;
@@ -195,10 +210,17 @@ Result<std::unique_ptr<RoutedAudioSource>> RoutedAudioSource::prepare_with_layou
     // native synth. A saved VST3 source must have its own exact
     // prepared graph path; another instrument cannot admit its MIDI.
     const bool silent_placeholder =
-        std::holds_alternative<std::monostate>(track.instrument_source) && has_bound_synth;
+        std::holds_alternative<std::monostate>(track.instrument_source) &&
+        (has_bound_synth || std::ranges::any_of(kept, [&track](const KeptPlayer& player) {
+           return player.track == track.id && player.retiring;
+         }));
+    // A structural switch prepares a VST3 instrument's stage with its graph,
+    // which verifies it before the switch can take over (ADR-0098).
+    const bool graph_bound =
+        structural && std::holds_alternative<project::Vst3PluginInstance>(track.instrument_source);
     if (track.kind == project::TrackKind::instrument &&
         !std::holds_alternative<project::NativeInstrumentPatch>(track.instrument_source) &&
-        !track.midi_clips.empty() && !silent_placeholder &&
+        !track.midi_clips.empty() && !silent_placeholder && !graph_bound &&
         !control.has_bound_instrument_track(track.id)) {
       return fail(ErrorCode::unsupported,
                   "Routed managed-audio source requires a verified bound MIDI instrument");
@@ -369,25 +391,32 @@ Result<std::unique_ptr<RoutedAudioSource>> RoutedAudioSource::prepare_with_layou
   return Result<std::unique_ptr<RoutedAudioSource>>::success(std::move(source));
 }
 
+// The player that plays the track's instrument, never one ringing out.
+native_dsp::synth::NativeSynthPlayer*
+RoutedAudioSource::playing_synth(project::TrackId track) const noexcept {
+  const auto found = std::ranges::find_if(synths_, [track](const SynthSlot& synth) {
+    return synth.player->track() == track && !synth.retiring;
+  });
+  return found == synths_.end() ? nullptr : found->player.get();
+}
+
 native_dsp::synth::NativeSynthRuntime*
 RoutedAudioSource::synth_runtime(project::TrackId track) noexcept {
-  const auto found = std::ranges::find_if(
-      synths_, [track](const SynthSlot& synth) { return synth.player->track() == track; });
-  return found == synths_.end() ? nullptr : found->player->runtime().get();
+  auto* player = playing_synth(track);
+  return player == nullptr ? nullptr : player->runtime().get();
 }
 
 std::shared_ptr<native_dsp::synth::NativeSynthPlayer>
 RoutedAudioSource::shared_synth_player(project::TrackId track) const {
-  const auto found = std::ranges::find_if(
-      synths_, [track](const SynthSlot& synth) { return synth.player->track() == track; });
+  const auto found = std::ranges::find_if(synths_, [track](const SynthSlot& synth) {
+    return synth.player->track() == track && !synth.retiring;
+  });
   return found == synths_.end() ? nullptr : found->player;
 }
 
 native_dsp::synth::NativeSynthPlayer*
 RoutedAudioSource::synth_player(project::TrackId track) noexcept {
-  const auto found = std::ranges::find_if(
-      synths_, [track](const SynthSlot& synth) { return synth.player->track() == track; });
-  return found == synths_.end() ? nullptr : found->player.get();
+  return playing_synth(track);
 }
 
 void RoutedAudioSource::refresh_synth_locks(const project::Snapshot& snapshot) {
@@ -402,10 +431,8 @@ void RoutedAudioSource::follow_project_key(std::optional<project::MusicalKey> ke
 
 std::optional<std::uint64_t>
 RoutedAudioSource::synth_tail_frames(project::TrackId track) const noexcept {
-  const auto found = std::ranges::find_if(
-      synths_, [track](const SynthSlot& synth) { return synth.player->track() == track; });
-  return found == synths_.end() ? std::nullopt
-                                : std::optional<std::uint64_t>{found->player->tail_frames()};
+  const auto* player = playing_synth(track);
+  return player == nullptr ? std::nullopt : std::optional<std::uint64_t>{player->tail_frames()};
 }
 
 Result<void> RoutedAudioSource::prepare_realtime_export_end(std::uint64_t end) {
@@ -423,11 +450,10 @@ Result<void> RoutedAudioSource::prepare_realtime_export_end(std::uint64_t end) {
 std::optional<std::uint64_t>
 RoutedAudioSource::prepared_synth_export_tail(project::TrackId track,
                                               std::uint64_t end) const noexcept {
-  const auto found = std::ranges::find_if(
-      synths_, [track](const SynthSlot& synth) { return synth.player->track() == track; });
-  return found == synths_.end() || !found->player->export_end_prepared(end)
+  const auto* player = playing_synth(track);
+  return player == nullptr || !player->export_end_prepared(end)
              ? std::nullopt
-             : std::optional<std::uint64_t>{found->player->tail_frames()};
+             : std::optional<std::uint64_t>{player->tail_frames()};
 }
 
 audio_io::StereoRenderSource
@@ -657,9 +683,25 @@ bool RoutedAudioSource::fill_slots(engine::BlockContext block, std::size_t frame
     return !job.failed.load(std::memory_order_relaxed);
   };
   // A complete fill decides on every clip frame before any player renders.
-  if (require_complete)
-    return run(SlotPart::clips) && run(SlotPart::synths);
+  if (require_complete) {
+    if (!run(SlotPart::clips))
+      return false;
+    if (!took_over_)
+      take_over(block);
+    return run(SlotPart::synths);
+  }
   return run(SlotPart::all);
+}
+
+// The exact fill that takes over playback: this block is the switch's.
+void RoutedAudioSource::take_over(engine::BlockContext block) noexcept {
+  took_over_ = true;
+  for (auto& synth : synths_) {
+    if (synth.staged_revision != 0)
+      synth.player->release_staged_plan(synth.staged_revision);
+    if (synth.retiring)
+      synth.retire_end = block.project_sample_position + synth.player->tail_frames();
+  }
 }
 
 bool RoutedAudioSource::fill_slot(std::size_t index, engine::BlockContext block, std::size_t frames,
@@ -698,6 +740,10 @@ bool RoutedAudioSource::fill_slot(std::size_t index, engine::BlockContext block,
   if (part == SlotPart::clips)
     return true;
   for (const auto synth_index : work.synths) {
+    // A replaced instrument stops once its notes have rung out.
+    if (synths_[synth_index].retiring &&
+        block.project_sample_position >= synths_[synth_index].retire_end)
+      continue;
     // Its voices may spread over the helpers that are free (ADR-0085).
     if (!synths_[synth_index].player->render(buffer, block.project_sample_position,
                                              block.state_generation(), workers))

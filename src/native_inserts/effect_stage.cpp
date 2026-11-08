@@ -105,8 +105,6 @@ NativeEffectStage::create(const project::Snapshot& snapshot,
     stage->sample_rate_ = snapshot.sample_rate;
     stage->max_frames_ = max_frames;
     stage->runtime_ = std::move(runtime).value();
-    stage->tempo_ = std::make_shared<const timeline::TempoMap>(snapshot.tempo);
-    stage->bars_ = native_dsp::synth::BarGrid(snapshot.meter);
     if (auto notes = stage->refresh_key_notes(snapshot); !notes)
       return R::failure(notes.error());
     auto plan = stage->make_automation_plan(snapshot, automation, last_safe_automation_sample);
@@ -128,6 +126,8 @@ Result<std::unique_ptr<NativeEffectStage::AutomationPlan>> NativeEffectStage::ma
     return R::failure({ErrorCode::conflict, "Effect automation does not match the running stage"});
   auto plan = std::make_unique<AutomationPlan>();
   plan->revision = snapshot.revision;
+  plan->tempo = std::make_shared<const timeline::TempoMap>(snapshot.tempo);
+  plan->bars = native_dsp::synth::BarGrid(snapshot.meter);
   plan->last_safe_sample = last_safe_automation_sample;
   for (const auto& prepared : automation) {
     const auto* target = std::get_if<project::NativeEffectParameterTarget>(&prepared.target());
@@ -162,6 +162,28 @@ Result<void> NativeEffectStage::offer_automation(
     if (!plan)
       return Result<void>::failure(plan.error());
     automation_mailbox_->offer(std::move(plan).value(), snapshot.revision);
+    return Result<void>::success();
+  } catch (const std::bad_alloc&) {
+    return Result<void>::failure(
+        {ErrorCode::resource_exhausted, "Cannot prepare live effect automation"});
+  }
+}
+
+Result<void> NativeEffectStage::stage_automation(
+    const project::Snapshot& snapshot,
+    std::span<const automation_project::PreparedTargetAutomation> automation,
+    std::uint64_t last_safe_automation_sample) {
+  if (automation_mailbox_->stale_for_stage(snapshot.revision))
+    return Result<void>::failure({ErrorCode::conflict, "Effect automation revision is stale"});
+  if (!automation_mailbox_->make_room())
+    return Result<void>::failure(
+        {ErrorCode::resource_exhausted,
+         "Live effect automation mailbox is full; retry after the callback"});
+  try {
+    auto plan = make_automation_plan(snapshot, automation, last_safe_automation_sample);
+    if (!plan)
+      return Result<void>::failure(plan.error());
+    automation_mailbox_->stage(std::move(plan).value(), snapshot.revision);
     return Result<void>::success();
   } catch (const std::bad_alloc&) {
     return Result<void>::failure(
@@ -219,12 +241,12 @@ void NativeEffectStage::render(std::span<engine::StereoFrame> stereo,
   timeline::TickPosition tick{};
   double bpm = 0.0;
   const timeline::SamplePosition at{static_cast<std::int64_t>(first)};
-  if (tempo_->sample_to_tick_rt(at, sample_rate_, tick) &&
-      tempo_->bpm_at_sample_rt(at, sample_rate_, bpm) && bpm > 0.0) {
+  if (plan && plan->tempo->sample_to_tick_rt(at, sample_rate_, tick) &&
+      plan->tempo->bpm_at_sample_rt(at, sample_rate_, bpm) && bpm > 0.0) {
     transport.beat_at_block_start =
         static_cast<double>(tick.value) / static_cast<double>(timeline::ticks_per_quarter);
     transport.beats_per_frame = bpm / 60.0 / static_cast<double>(sample_rate_);
-    bars_.locate(tick.value, transport.bar_at_block_start, transport.beats_per_bar);
+    plan->bars.locate(tick.value, transport.bar_at_block_start, transport.beats_per_bar);
   }
   const auto status =
       runtime_->process(stereo, sidechain, first, context.state_generation(), transport, lanes);

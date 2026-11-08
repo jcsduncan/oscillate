@@ -467,10 +467,10 @@ void engine_switch_keeps_old_sound_and_reports_saved_state_until_source_replaced
   candidate.revision = saved.revision + 1;
   candidate.tracks.front().instrument_source = ember_patch;
   require(control.can_capture_source_edit(candidate),
-          "one isolated engine change is eligible for a prepared source handoff");
+          "an engine change is eligible for a prepared source handoff");
   candidate.tracks.front().midi_clips.front().notes.front().velocity -= 1;
-  require(!control.can_capture_source_edit(candidate),
-          "a simultaneous MIDI edit must not reuse the switch capture");
+  require(control.can_capture_source_edit(candidate),
+          "an engine change with a MIDI edit switches with its source too (ADR-0098)");
   const auto switched = take(model.apply({project::SetNativeInstrumentPatch{track, ember_patch}}));
   const auto offered = control.begin_edit(switched, "switch synth engine");
   REQUIRE_TRUE(!offered, "a source-only engine switch must report that it is unapplied");

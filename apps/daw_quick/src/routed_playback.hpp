@@ -329,12 +329,6 @@ private:
   bool source_cancel_pending_ = false;
   // Times the current source edit was primed again after missing its block.
   std::uint8_t source_retry_count_ = 0;
-  struct SynthSwitchPolicy {
-    engine::CompiledMidiPlan old_notes;
-    std::vector<std::pair<project::TrackId, std::uint64_t>> release_tails;
-    std::chrono::steady_clock::time_point deadline;
-  };
-  std::optional<SynthSwitchPolicy> synth_switch_policy_;
   std::optional<audio_io::TransportCursor::CompletedPosition> resumed_boundary_;
   // The device-only click (ADR-0086); it outlives the cursor and output.
   std::shared_ptr<audio_io::Metronome> metronome_;
@@ -369,22 +363,17 @@ private:
 #endif
   [[nodiscard]] foundation::Result<void> begin_revision(project::Snapshot snapshot);
   [[nodiscard]] foundation::Result<void> start_source_preparation();
+  // Captures an edit only a replacement source carries and starts preparing
+  // that source (ADR-0094, ADR-0098).
+  [[nodiscard]] foundation::Result<void> begin_source_edit(const project::AppliedRevision& adopted);
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
 #endif
   void retire_source(std::shared_ptr<application::RoutedAudioSource> source);
   void collect_source_retirements();
   void fail_source_handoff(const foundation::Error& error);
-  [[nodiscard]] bool synth_switch_quiet_at(std::uint64_t sample) const noexcept;
-  // Quiet at `sample`, with no note starting in the `frames` after it, the
-  // window in which the published switch takes over.
-  [[nodiscard]] bool synth_switch_quiet_over(std::uint64_t sample,
-                                             std::uint64_t frames) const noexcept;
   // A source edit is primed again at most this many times after missing its
   // block, before it is reported failed.
   static constexpr std::uint8_t max_source_primes = 3;
-  // Device blocks a native synth switch keeps clear of new notes after the
-  // block it is primed for.
-  static constexpr std::uint64_t synth_switch_blocks = 8;
   [[nodiscard]] std::optional<std::uint64_t> settled_graph_revision() const;
   [[nodiscard]] bool manual_adopted(std::uint64_t revision) const;
   [[nodiscard]] audio_io::StereoRenderSource render_source() noexcept;

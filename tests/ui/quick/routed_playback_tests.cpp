@@ -1600,15 +1600,16 @@ void audio_edit_beside_a_synth_keeps_its_voice() {
             "the synth's output jumped at the source switch");
 }
 
-// An edit that cannot switch while playing (a track removed) is refused at
-// once: the old graph plays on and the transport is free to pause and seek.
-void refused_edit_never_holds_the_transport() {
+// A track removed while playing switches with its prepared source
+// (ADR-0098): the transport never holds, and stays free to pause and seek
+// while the switch prepares and after it.
+void structural_edit_never_holds_the_transport() {
   Directory directory;
-  const auto root = directory.path() / "refused-edit-pause";
+  const auto root = directory.path() / "structural-edit-pause";
   const auto wav = make_wav(directory.path());
   auto session = take(app::ProjectSession::create(root));
   const int fd = ::open(wav.c_str(), O_RDONLY | O_CLOEXEC);
-  require(fd >= 0, "refused edit fixture could not open WAV");
+  require(fd >= 0, "structural edit fixture could not open WAV");
   const auto track = take(session->imports().import_wav_audio(fd));
   (void)::close(fd);
   auto evidence = std::make_shared<SteppedEvidence>();
@@ -1621,20 +1622,26 @@ void refused_edit_never_holds_the_transport() {
                                                            factory, std::nullopt, 64));
   evidence->permit(1);
   evidence->await_blocks(1);
-  const auto active_revision = run->status().active_graph_revision;
-  require(session->tracks().remove_track(track) && !run->submit_revision(session->snapshot()) &&
-              !run->graph_handoff_in_progress(),
-          "a track removal while playing was not refused at once");
-  const auto failed = run->status();
-  require(failed.application == app::PlaybackApplication::failed &&
-              failed.active_graph_revision == active_revision && run->pause() &&
-              run->seek_paused(256) && run->resume(),
-          "a refused edit held the transport");
-  evidence->permit(1);
-  evidence->await_blocks(2);
-  require(run->completed_sample() >= 256 &&
+  require(session->tracks().remove_track(track).has_value() &&
+              run->submit_revision(session->snapshot()).has_value(),
+          "a track removal while playing was refused");
+  const auto removed = session->snapshot().revision;
+  require(run->pause() && run->seek_paused(256) && run->resume(),
+          "a structural edit held the transport");
+  std::size_t blocks = 1;
+  bool switched = false;
+  for (std::size_t attempt = 0; attempt < 400 && !switched; ++attempt) {
+    evidence->permit(8);
+    blocks += 8;
+    evidence->await_blocks(blocks);
+    const auto state = run->status();
+    require(state.application != app::PlaybackApplication::failed,
+            "the track removal failed to switch");
+    switched = state.active_graph_revision == removed && !run->edit_pending();
+  }
+  require(switched && run->completed_sample() >= 256 &&
               run->output_status().state == audio::OutputState::streaming,
-          "prior graph did not play after a refused edit and transport restart");
+          "the track removal did not switch live with the transport running");
   (void)run->stop_and_retire();
 }
 
@@ -4064,7 +4071,7 @@ void saved_instrument_and_separate_native_chain_play_exact_saved_order() {
 #endif
 }
 
-void native_synth_switch_waits_for_held_note_and_promotes_without_stopping() {
+void native_synth_switch_rings_out_and_promotes_without_stopping() {
   Directory directory;
   const auto root = directory.path() / "live-native-switch";
   auto session = take(app::ProjectSession::create(root));
@@ -4132,15 +4139,24 @@ void native_synth_switch_waits_for_held_note_and_promotes_without_stopping() {
   evidence->await_blocks(++blocks);
   require(run->status().active_graph_revision == session->snapshot().revision,
           "replacement synth runtime was not rebound for live editing");
-  const auto last_audible = run->status().active_graph_revision;
+  // Inside a loop the switch is live as well (ADR-0098).
   require(run->set_loop(0, 128) &&
               session->instruments().select_native_instrument(track, "prism").has_value(),
-          "active loop rejection fixture did not prepare");
-  const auto loop_switch = run->submit_revision(session->snapshot());
-  require(!loop_switch && run->status().application == app::PlaybackApplication::failed &&
-              run->status().active_graph_revision == last_audible &&
-              run->output_status().state == audio::OutputState::streaming,
-          "looped native switch did not preserve the old audible revision");
+          "looped engine switch fixture did not prepare");
+  const auto looped_revision = session->snapshot().revision;
+  require(run->submit_revision(session->snapshot()).has_value(),
+          "looped native switch was refused");
+  bool looped = false;
+  for (std::size_t attempt = 0; attempt < 400 && !looped; ++attempt) {
+    evidence->permit(8);
+    blocks += 8;
+    evidence->await_blocks(blocks);
+    const auto state = run->status();
+    require(state.application != app::PlaybackApplication::failed, "looped native switch failed");
+    looped = state.active_graph_revision == looped_revision && !run->edit_pending();
+  }
+  require(looped && run->output_status().state == audio::OutputState::streaming,
+          "looped native switch did not become active without stopping transport");
   run->clear_loop();
   (void)run->stop_and_retire();
 }
@@ -4230,7 +4246,7 @@ void run_native_graph() {
   live_clip_preparation_survives_pause_and_seek();
   pause_waits_for_live_source_switch();
   audio_edit_beside_a_synth_keeps_its_voice();
-  refused_edit_never_holds_the_transport();
+  structural_edit_never_holds_the_transport();
   unsupported_shape_and_device_failure_release_reservation();
 }
 
@@ -4273,7 +4289,7 @@ void run_instrument_sources() {
   instrument_owned_vst3_effects_preserve_order_and_play_a_third();
   instrument_and_bus_vst3_effect_play_in_one_graph();
   saved_instrument_and_separate_native_chain_play_exact_saved_order();
-  native_synth_switch_waits_for_held_note_and_promotes_without_stopping();
+  native_synth_switch_rings_out_and_promotes_without_stopping();
   native_synth_accepts_a_live_native_insert();
 }
 } // namespace

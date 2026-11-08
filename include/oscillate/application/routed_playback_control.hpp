@@ -122,6 +122,14 @@ public:
 struct KeptPlayer {
   project::TrackId track;
   std::shared_ptr<native_dsp::synth::NativeSynthPlayer> player;
+  // Nonzero when the edit changes what the player plays (its notes, lanes or
+  // the tempo): the plan staged for this revision plays from the block the
+  // replacement source takes over (ADR-0098).
+  std::uint64_t staged_revision = 0;
+  // The track's instrument changed: from that block the player releases
+  // every note (its staged plan holds none) and rings out for its tail
+  // beside the new instrument, then stops.
+  bool retiring = false;
 };
 
 // Immutable control-side capture for preparing a source-owned edit on
@@ -133,9 +141,13 @@ struct RoutedSourcePreparationCapture {
   std::vector<engine::RoutingNodeId> topological_order;
   std::size_t max_frames = 0;
   std::uint64_t active_graph_revision = 0;
-  bool native_synth_switch = false;
   bool source_overlay_eligible = false;
   std::vector<KeptPlayer> kept_players;
+  // The edit changes tracks, timing, source media, an instrument or MIDI
+  // that only a whole replacement carries (ADR-0098): source_layout and
+  // topological_order are the edited graph's, and the switch publishes
+  // them.
+  bool structural = false;
 };
 
 // Callback blocks (not frames) the playing graph may render while a live
@@ -195,11 +207,14 @@ public:
   [[nodiscard]] foundation::Result<void> reject_edit(const project::AppliedRevision& applied,
                                                      std::string_view command_label,
                                                      foundation::Error error);
-  // Capture accepts the saved revision. Only unchanged graphs with audio clip
-  // edits (placement, trim, fades, saved warp/pitch processing) or one exact
-  // native-synth engine switch are eligible; every instrument the edit leaves
-  // alone is kept (kept_players). Sources and track layout stay fixed. A
-  // worker prepares the replacement source and primes it for a future block.
+  // Capture accepts the saved revision. Eligible are audio clip edits
+  // (placement, trim, fades, saved warp/pitch processing) on an unchanged
+  // graph, which keep the source layout, and edits only a whole replacement
+  // carries (structural, ADR-0098): tracks added or removed, a tempo or meter
+  // change, new source media, a change of instrument, or MIDI on a clip with
+  // a lane for something else. Every running built-in instrument is kept
+  // (kept_players). A worker prepares the replacement source and primes it
+  // for a future block.
   [[nodiscard]] foundation::Result<RoutedSourcePreparationCapture>
   capture_source_edit(const project::AppliedRevision& applied, std::string_view command_label);
   // The caller has staged the primed replacement source for the capture's
@@ -437,6 +452,11 @@ private:
                     plugins::Vst3ActiveGraphIdentity expected) const;
   [[nodiscard]] bool published_snapshot_audible() const;
   [[nodiscard]] foundation::Result<void> begin_current();
+  // A structural switch's players (ADR-0098): each running built-in
+  // instrument plays on, with a plan staged for the switch when the edit
+  // changes what it plays, or rings out beside a new instrument.
+  [[nodiscard]] foundation::Result<std::vector<KeptPlayer>>
+  keep_players(const project::Snapshot& next);
   [[nodiscard]] foundation::Result<bool>
   try_queue_live_native(std::shared_ptr<const project::Snapshot> snapshot);
   [[nodiscard]] foundation::Result<bool>
@@ -458,10 +478,11 @@ private:
   try_queue_live_effect_automation(std::shared_ptr<const project::Snapshot> snapshot);
   // The initial graph, or a live switch to `prepared_snapshot`'s. With
   // `replaces_source`, a staged replacement source carries its audio clips
-  // or instrument change.
+  // or instrument change; a structural capture's carries its own layout.
   [[nodiscard]] foundation::Result<void>
   build_and_publish(std::shared_ptr<const project::Snapshot> prepared_snapshot,
-                    bool replaces_source = false);
+                    bool replaces_source = false,
+                    const RoutedSourcePreparationCapture* capture = nullptr);
   // Kick & Bass Lock (ADR-0072): every live synth re-reads the notes it
   // follows from the published snapshot, so a bass edit or the other
   // track's Lock switch reaches a kept player; and hears its key. Control
@@ -490,6 +511,9 @@ private:
     std::vector<std::pair<project::Vst3ParameterTarget, std::uint64_t>> vst3_automation;
     bool prepared_limiter = false;
     std::uint32_t master_output_latency_frames = 0;
+    // A structural switch's prior source layout.
+    std::vector<routing::ProjectRouteSource> sources;
+    std::vector<engine::RoutingNodeId> topological_order;
   };
   void settle_live_candidate();
 

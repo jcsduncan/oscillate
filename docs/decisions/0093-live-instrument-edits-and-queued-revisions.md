@@ -1,6 +1,6 @@
 # ADR-0093 — Live MIDI edits and queued revisions
 
-**Status:** Accepted and implemented. **Date:** 8 November 2026.
+**Status:** Accepted and implemented; superseded in part by [ADR-0098](0098-whole-replacement-switches.md). **Date:** 8 November 2026.
 **Supersedes in part:** [ADR-0050](0050-one-chain-per-track.md), where it lists MIDI changes as not yet covered while playing; [ADR-0024](0024-live-source-handoff-contract.md), where it leaves MIDI changes without a preparation rule.
 
 ## Context
