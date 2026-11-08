@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/edge">
+    <file>EdgePanel.qml</file>
+    <file>EdgeTheme.qml</file>
+    <file>EdgeTransfer.qml</file>
+    <file>EdgeSwitch.qml</file>
+  </qresource>
+</RCC>

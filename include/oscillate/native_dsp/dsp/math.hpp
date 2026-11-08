@@ -53,6 +53,32 @@ inline constexpr double silent_db = -200.0;
   return 0.5 - 0.5 * std::cos(2.0 * std::numbers::pi * position / span);
 }
 
+// The zeroth-order modified Bessel function of the first kind, by its power
+// series: the Kaiser window's shape.
+[[nodiscard]] inline double bessel_i0(double x) noexcept {
+  constexpr int terms = 64;
+  constexpr double tolerance = 1e-17;
+  double sum = 1.0;
+  double term = 1.0;
+  for (int k = 1; k < terms && term > tolerance * sum; ++k) {
+    const double half = x / (2.0 * static_cast<double>(k));
+    term *= half * half;
+    sum += term;
+  }
+  return sum;
+}
+
+// The Kaiser window of shape `beta` at `offset` from its centre, of half
+// width `half_width`: 1 at the centre, 0 outside.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): named at every call, as hann's are.
+[[nodiscard]] inline double kaiser(double offset, double half_width, double beta) noexcept {
+  const double ratio = offset / half_width;
+  if (!(ratio > -1.0 && ratio < 1.0)) {
+    return ratio == -1.0 || ratio == 1.0 ? 1.0 / bessel_i0(beta) : 0.0;
+  }
+  return bessel_i0(beta * std::sqrt(1.0 - ratio * ratio)) / bessel_i0(beta);
+}
+
 // A raised cosine from 0 at x = 0 to 1 at x = 1, flat at both ends: a fade
 // or gate edge with no corner to click.
 [[nodiscard]] inline double raised_cosine(double x) noexcept {

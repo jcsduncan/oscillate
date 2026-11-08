@@ -110,3 +110,4 @@ never reused. 0070 was never assigned.
 | 0102 | [A track render plays in slices that keep its clips' channel lanes](0102-renders-play-in-slices.md) | Accepted; implemented |
 | 0104 | [Native engines share a neutral control layer](0104-native-processing-layers.md) | Accepted; control, telemetry, transport and document state built; parameter tables still in `synth` |
 | 0107 | [MP3 import decodes with libmpg123, scanning the whole stream](0107-mp3-decoding-with-libmpg123.md) | Accepted; implemented |
+| 0108 | [Edge: a clipper under a true-peak ceiling — linear-phase oversampling to 16×, antiderivative antialiasing, a BS.1770 guard](0108-edge-clipper.md) | Accepted; implemented |
