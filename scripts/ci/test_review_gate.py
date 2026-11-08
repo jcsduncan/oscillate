@@ -119,6 +119,12 @@ class ReviewTests(unittest.TestCase):
         )
         self.assertEqual(self.state(source), review_gate.SUCCESS)
 
+    def test_comment_from_a_deleted_account_is_ignored(self):
+        deleted = {"user": None, "body": "Review paused", "updated_at": AFTER_REVIEW}
+        self.assertEqual(
+            self.state(FakeSource([coderabbit()], comments=[deleted])), review_gate.SUCCESS
+        )
+
     def test_limit_notice_from_someone_else_is_ignored(self):
         source = FakeSource([coderabbit()], comments=[comment("Review paused", login="dev")])
         self.assertEqual(self.state(source), review_gate.SUCCESS)
@@ -247,14 +253,17 @@ class StatusTests(unittest.TestCase):
 class UpdatingGitHub(FakeSource):
     """Fails to read one pull request and records the statuses it sets."""
 
-    def __init__(self, broken):
+    def __init__(self, broken, malformed):
         super().__init__([coderabbit()])
         self.broken = broken
+        self.malformed = malformed
         self.set = []
 
     def pull(self, number):
         if number == self.broken:
             raise urllib.error.URLError("server error")
+        if number == self.malformed:
+            raise ValueError("invalid JSON")
         return {**pull(), "number": number, "state": "open"}
 
     def set_status(self, sha, verdict, target_url):
@@ -263,8 +272,9 @@ class UpdatingGitHub(FakeSource):
 
 class UpdateTests(unittest.TestCase):
     def test_api_error_on_one_pull_still_updates_the_others(self):
-        github = UpdatingGitHub(broken=NUMBER)
-        result = review_gate.update([NUMBER, NUMBER + 1], github, "", dry_run=False)
+        github = UpdatingGitHub(broken=NUMBER, malformed=NUMBER + 1)
+        numbers = [NUMBER, NUMBER + 1, NUMBER + 2]
+        result = review_gate.update(numbers, github, "", dry_run=False)
         self.assertEqual(result, 1)
         self.assertEqual(github.set, [review_gate.SUCCESS])
 

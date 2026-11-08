@@ -31,7 +31,6 @@ import json
 import os
 import re
 import sys
-import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Protocol
@@ -166,7 +165,7 @@ def review_verdict(pull: dict, source: Source) -> Verdict | None:
     reviewed_at = parse_time(head_run["completed_at"])
     for comment in source.issue_comments(pull["number"]):
         if (
-            comment["user"]["login"] == CODERABBIT_LOGIN
+            (comment.get("user") or {}).get("login") == CODERABBIT_LOGIN
             and LIMIT_NOTICE.search(comment.get("body") or "")
             and parse_time(comment["updated_at"]) > reviewed_at
         ):
@@ -330,8 +329,9 @@ def unchanged(current: dict | None, verdict: Verdict) -> bool:
 
 
 def update(numbers: list[int], github: GitHub, target_url: str, dry_run: bool) -> int:
-    """Evaluate and set each pull request's gate. An API error on one pull
-    request is reported and the rest still update; the exit code is 1."""
+    """Evaluate and set each pull request's gate. An API, network or
+    response error on one pull request is reported and the rest still update;
+    the exit code is 1."""
     failed = False
     for number in sorted(set(numbers)):
         try:
@@ -344,7 +344,7 @@ def update(numbers: list[int], github: GitHub, target_url: str, dry_run: bool) -
             if dry_run or unchanged(gate_status(github.statuses(sha)), verdict):
                 continue
             github.set_status(sha, verdict, target_url)
-        except (urllib.error.URLError, RuntimeError) as error:
+        except (OSError, ValueError, RuntimeError) as error:
             print(f"::error::#{number}: {error}")
             failed = True
     return 1 if failed else 0
