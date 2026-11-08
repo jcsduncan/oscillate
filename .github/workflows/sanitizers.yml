@@ -2,16 +2,11 @@ name: Sanitizers
 
 # ASan/UBSan over every tier but live, and TSan over the concurrency-heavy
 # suites. Nightly on main; run it on any branch with
-# `gh workflow run sanitizers.yml -f ref=<branch>` (CONTRIBUTING.md).
+# `gh workflow run sanitizers.yml --ref <branch>` (CONTRIBUTING.md).
 on:
   schedule:
     - cron: "0 4 * * *"
   workflow_dispatch:
-    inputs:
-      ref:
-        description: Branch, tag or commit to check (empty checks the ref the run starts from)
-        required: false
-        default: ""
 
 permissions:
   contents: read
@@ -38,7 +33,6 @@ jobs:
             ca-certificates git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref }}
           persist-credentials: false
       # The optional feature libraries too, so their adapters are instrumented.
       - name: Install dependencies (README list, optional features, ccache)
@@ -72,10 +66,8 @@ jobs:
           -DOSCILLATE_BUILD_CONVOLUTION_DSP=ON
       - name: Build everything and the tests
         run: scripts/build.sh "$BUILD_DIR" --target all oscillate_tests
-      # Not for a run given another ref to check out: its objects would land in
-      # this branch's cache.
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: always() && inputs.ref == ''
+        if: always()
         with:
           path: .ccache
           key: ccache-sanitize-${{ github.run_id }}
@@ -125,7 +117,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref }}
           persist-credentials: false
       - name: Install dependencies (README list + ccache)
         run: |
@@ -144,10 +135,8 @@ jobs:
       # mixing and PDC) and the application's routed playback cases.
       - name: Build the engine and routed playback tests
         run: scripts/build.sh "$BUILD_DIR" --target tests/engine/all oscillate_application_routed_playback_tests
-      # Not for a run given another ref to check out: its objects would land in
-      # this branch's cache.
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: always() && inputs.ref == ''
+        if: always()
         with:
           path: .ccache
           key: ccache-tsan-${{ github.run_id }}
