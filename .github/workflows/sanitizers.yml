@@ -1,0 +1,171 @@
+name: Sanitizers
+
+# ASan/UBSan over every tier but live, and TSan over the concurrency-heavy
+# suites. Nightly on main; run it on any branch with
+# `gh workflow run sanitizers.yml --ref <branch>` (CONTRIBUTING.md).
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  asan:
+    name: ASan/UBSan (all tiers, no live devices)
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    timeout-minutes: 360
+    env:
+      BUILD_DIR: build/sanitize
+      CCACHE_MAXSIZE: 2G
+      OSCILLATE_BUILD_JOBS: 4
+    steps:
+      - name: Install Git for checkout and the VST3 SDK
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+            ca-certificates git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The optional feature libraries too, so their adapters are instrumented.
+      - name: Install dependencies (README list, optional features, ccache)
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          scripts/ci/install-deps.sh ccache libjack-jackd2-dev libsamplerate0-dev libsndfile1-dev
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
+          echo "SANITIZER_LOGS=$GITHUB_WORKSPACE/sanitizer-logs" >> "$GITHUB_ENV"
+      - name: Fetch the pinned VST3 SDK
+        run: scripts/ci/fetch-vst3-sdk.sh "$RUNNER_TEMP/vst3sdk"
+      # Restored and saved separately, so a run with failing tests still
+      # keeps its compiled objects for the next one.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-sanitize-${{ github.run_id }}
+          restore-keys: ccache-sanitize-
+      # The preset scales budgets by 4 for instrumentation; hosted runners
+      # need a further 3x. Warnings fail the Build workflow; here they would
+      # only hide the sanitizer results.
+      - name: Configure
+        run: >-
+          cmake --preset sanitize
+          -DOSCILLATE_TEST_TIMEOUT_SCALE=12
+          -DOSCILLATE_WARNINGS_AS_ERRORS=OFF
+          -DOSCILLATE_BUILD_VST3_SCANNER=ON
+          -DOSCILLATE_VST3_SDK_ROOT="$RUNNER_TEMP/vst3sdk"
+          -DOSCILLATE_BUILD_CODEC_ADAPTER=ON
+          -DOSCILLATE_BUILD_EXPORT_RESAMPLER=ON
+          -DOSCILLATE_BUILD_SOURCE_RESAMPLER=ON
+          -DOSCILLATE_BUILD_CONVOLUTION_DSP=ON
+      - name: Build everything and the tests
+        run: scripts/build.sh "$BUILD_DIR" --target all oscillate_tests
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: always()
+        with:
+          path: .ccache
+          key: ccache-sanitize-${{ github.run_id }}
+      # #111 is diagnosed from this suite's ASan report; fail if it drops out.
+      - name: The VST3 manual-effect suite is registered
+        run: |
+          test "$(ctest --test-dir "$BUILD_DIR" -N -R '^application_vst3_manual_effect$' | grep -c '^ *Test *#')" -eq 1
+      # Reports go to files (uploaded below); each options string ends in ':'
+      # because some tests append their own options.
+      - name: Tests (no live devices)
+        run: |
+          mkdir -p "$SANITIZER_LOGS"
+          export ASAN_OPTIONS="detect_leaks=1:detect_stack_use_after_return=1:check_initialization_order=1:strict_init_order=1:log_path=$SANITIZER_LOGS/asan:"
+          export UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=1:log_path=$SANITIZER_LOGS/ubsan:"
+          ctest --preset sanitize -LE live -j4
+      - name: Sanitizer reports
+        if: failure()
+        run: |
+          shopt -s nullglob
+          for log in "$SANITIZER_LOGS"/*; do
+            echo "::group::$(basename "$log")"
+            head -n 120 "$log"
+            echo "::endgroup::"
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: asan-ubsan-logs
+          path: |
+            sanitizer-logs/
+            build/sanitize/Testing/Temporary/LastTest*.log
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: ccache stats
+        if: always()
+        run: ccache --show-stats || true
+
+  tsan:
+    name: TSan (engine, routed playback, worker pool)
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    timeout-minutes: 240
+    env:
+      BUILD_DIR: build/tsan
+      CCACHE_MAXSIZE: 1G
+      OSCILLATE_BUILD_JOBS: 4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install dependencies (README list + ccache)
+        run: |
+          scripts/ci/install-deps.sh ccache
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
+          echo "SANITIZER_LOGS=$GITHUB_WORKSPACE/sanitizer-logs" >> "$GITHUB_ENV"
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-tsan-${{ github.run_id }}
+          restore-keys: ccache-tsan-
+      # The preset scales budgets by 10; hosted runners need a further 3x.
+      - name: Configure
+        run: cmake --preset tsan -DOSCILLATE_TEST_TIMEOUT_SCALE=30 -DOSCILLATE_WARNINGS_AS_ERRORS=OFF
+      # The engine area (graph publication, the audio worker pool, routed
+      # mixing and PDC) and the application's routed playback cases.
+      - name: Build the engine and routed playback tests
+        run: scripts/build.sh "$BUILD_DIR" --target tests/engine/all oscillate_application_routed_playback_tests
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: always()
+        with:
+          path: .ccache
+          key: ccache-tsan-${{ github.run_id }}
+      - name: The worker pool suite is registered
+        run: |
+          test "$(ctest --test-dir "$BUILD_DIR" -N -L '^engine$' -R '^audio_worker_pool_contract$' | grep -c '^ *Test *#')" -eq 1
+      - name: Tests
+        run: |
+          mkdir -p "$SANITIZER_LOGS"
+          export TSAN_OPTIONS="second_deadlock_stack=1:history_size=4:log_path=$SANITIZER_LOGS/tsan:"
+          status=0
+          ctest --preset tsan -L '^engine$' -j4 || status=1
+          ctest --preset tsan -R '^application_routed_playback\.' -j4 || status=1
+          exit "$status"
+      - name: Sanitizer reports
+        if: failure()
+        run: |
+          shopt -s nullglob
+          for log in "$SANITIZER_LOGS"/*; do
+            echo "::group::$(basename "$log")"
+            head -n 120 "$log"
+            echo "::endgroup::"
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: tsan-logs
+          path: |
+            sanitizer-logs/
+            build/tsan/Testing/Temporary/LastTest*.log
+          if-no-files-found: ignore
+          retention-days: 14
