@@ -20,7 +20,7 @@ never reused. 0070 was never assigned.
 | 0010 | [Derived-media identity and stale-result rejection](0010-derived-media-identity.md) | Accepted; implemented, shared source-analysis cache and budgets included |
 | 0011 | [Device loss and in-process reselection](0011-device-recovery.md) | Accepted; control contract tested, not used by the app; in-process resume not built |
 | 0012 | [Qt modules for the desktop UI](0012-qt-ui-modules.md) | Superseded by ADR-0022; Core/Gui licensing boundary still applies |
-| 0013 | [Maintained JSON codec for project manifests](0013-manifest-json-library.md) | Accepted; implemented |
+| 0013 | [Maintained JSON codec for project manifests](0013-manifest-json-library.md) | Accepted; implemented; current-schema-only reading superseded by ADR-0095 from the first public beta |
 | 0014 | [M3 MIDI clips, event timing and sampler boundary](0014-m3-midi-event-contract.md) | Accepted; implemented |
 | 0015 | [VST3 SDK baseline for host work](0015-vst3-sdk-baseline.md) | Accepted for the SDK selection; pinned source inventory recorded, compiled-file inventory and host compatibility remain open |
 | 0016 | [Encoded audio codec boundary](0016-encoded-audio-codec-boundary.md) | Accepted; implemented (worker decoding, FLAC/MP3 export, resampling) |
@@ -99,3 +99,4 @@ never reused. 0070 was never assigned.
 | 0090 | [Export renders a graph the render_graph builder prepares](0090-render-graph-builder.md) | Accepted; implemented for built-in chains |
 | 0091 | [New projects are staged beside their folder and renamed into place](0091-staged-project-creation.md) | Accepted; implemented |
 | 0092 | [Native inserts read which keys sound from routing](0092-native-inserts-read-key-audibility.md) | Accepted; implemented |
+| 0095 | [Projects from every released schema open, through chained forward migrations](0095-schema-migration-policy.md) | Accepted; hook and golden-manifest test built, no schema released yet |
