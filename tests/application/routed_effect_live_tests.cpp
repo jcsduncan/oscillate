@@ -462,8 +462,10 @@ KeyedPumpSong keyed_pump_song(const fs::path& root, double trigger) {
   const auto slot = take(session->effects().add_effect_engine(bass, 0, "pump", hard_gate_preset));
   const auto key = take(session->routing().add_sidechain(kick, bass, slot, 1.0));
   auto values = take(session->effects().native_effect_values(bass, slot));
-  values[*synth::find_parameter(*effects::find_engine("pump")->descriptor, "pump.trigger")] =
-      trigger;
+  const auto trigger_index =
+      synth::find_parameter(*effects::find_engine("pump")->descriptor, "pump.trigger");
+  REQUIRE_TRUE(trigger_index.has_value(), "Pump has a trigger parameter");
+  values[*trigger_index] = trigger;
   REQUIRE_OK(session->effects().set_native_effect_values(bass, slot, values), "Pump's trigger");
   REQUIRE_OK(session->saving().save(), "project did not save");
   return {session->snapshot(), kick, bass, pad, slot, key};
