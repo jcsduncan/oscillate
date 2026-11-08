@@ -49,7 +49,7 @@ The process contains the UI, model, engine, and default plugin host. Plugin scan
 | `harmony` | Chord table, naming, voicing, the Progression Lab and chord-clip helpers ([ADR-0084](decisions/0084-chord-clips.md)) | `project`, `timeline` |
 | `midi_file` | Bounded Standard MIDI File reader | `foundation` |
 | `engine` | Render graph, scheduling, buffers, transport, PDC, meters, audio worker pool | `foundation`, `project` (immutable snapshots) |
-| `routing` | Control-side compilation of project main/send intent into stable engine node and edge IDs and latency plans, and the mixer nodes (chains, mutes, channel gains) that live playback and export both build from a plan (`graph_nodes`) | `automation_project`, `engine`, `project` |
+| `routing` | Control-side compilation of project main/send intent into stable engine node and edge IDs and latency plans, and the mixer nodes (chains, mutes, channel gains) that live playback and export both build from a plan (`graph_nodes`); which sidechain keys sound, under mute, solo and mute lanes ([ADR-0094](decisions/0094-mute-lanes-gate-keys.md)) | `automation_project`, `engine`, `project` |
 | `audio_io` | PipeWire and JACK adapters, transport cursor, metronome | `engine` interface |
 | `codec` | Worker-only encoded-audio reader (libsndfile) | `foundation` |
 | `media` | Import staging, source identity, decode/resample prefetch, per-clip rings, caches | `foundation`, `project`, `codec` |
