@@ -11,6 +11,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <span>
 #include <vector>
 
@@ -77,10 +78,32 @@ struct ProjectRoutePlan {
 [[nodiscard]] std::vector<bool> effective_track_mutes(const project::Snapshot& snapshot,
                                                       const ProjectRoutePlan& plan);
 
+// Whether a channel-mute lane, on the track or on one of its clips, drives
+// the track's mute instead of its saved mute.
+[[nodiscard]] bool has_mute_automation(const project::Track& track) noexcept;
+
+// The tracks whose sidechain keys are silent (ADR-0058): a key follows its
+// source's mute and solo as the mixer applies them (effective_track_mutes),
+// except that a solo which keeps the keyed track keeps its key, so a soloed
+// track still ducks to its kick. A key source under a mute lane keeps its key.
+[[nodiscard]] std::set<project::TrackId> silent_key_sources(const project::Snapshot& snapshot);
+// Whether `send` from `source` keys its effect now: a live sidechain
+// (live_sidechain) at a gain above zero, from a source whose keys sound.
+// `silent` is silent_key_sources(snapshot).
+[[nodiscard]] bool keys_now(const project::Snapshot& snapshot,
+                            const std::set<project::TrackId>& silent, const project::Track& source,
+                            const project::SendRoute& send);
+// The gain a send's edge carries: its saved gain, or zero for a sidechain
+// key whose source is in `silent_keys`.
+[[nodiscard]] float send_edge_gain(const std::set<project::TrackId>& silent_keys,
+                                   const project::Track& source,
+                                   const project::SendRoute& send) noexcept;
+
 // The tracks whose rendering cannot be heard, in plan.track_nodes order: each
 // effectively muted track, and each track whose every route leads only to
-// such tracks. A track that keys a sidechain is never silent, since the key
-// taps it before its mute. A render whose mutes cannot change may skip them.
+// such tracks. A track whose sidechain key sounds is never silent, since the
+// key taps it before its fader. A render whose mutes cannot change may skip
+// them.
 [[nodiscard]] std::vector<bool> silent_track_nodes(const project::Snapshot& snapshot,
                                                    const ProjectRoutePlan& plan);
 

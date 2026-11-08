@@ -1,7 +1,9 @@
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/application/routed_audio_source.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
+#include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
+#include "oscillate/native_dsp/effects/pump.hpp"
 #include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/test/allocation_counter.hpp"
@@ -37,6 +39,7 @@ namespace audio = oscillate::audio_io;
 namespace engine = oscillate::engine;
 namespace foundation = oscillate::foundation;
 namespace project = oscillate::project;
+namespace timeline = oscillate::timeline;
 namespace synth = oscillate::native_dsp::synth;
 namespace effects = oscillate::native_dsp::effects;
 namespace inserts = oscillate::native_inserts;
@@ -81,6 +84,7 @@ struct Live {
   audio::TransportCursor transport;
   std::array<engine::StereoFrame, 64> stereo{};
   std::array<float, 128> samples{};
+  std::uint64_t rendered_frames = 0;
 
   Live(const fs::path& root, const project::Snapshot& saved)
       : model(take(project::ProjectModel::open(saved, gate))), control(model, limits()) {
@@ -99,6 +103,7 @@ struct Live {
                  audio::BlockResult::rendered, "block failed to render");
       for (const float sample : samples)
         power += static_cast<double>(sample) * sample;
+      rendered_frames += stereo.size();
     }
     counting_allocations = false;
     REQUIRE_EQ(counted_allocations, 0, "callbacks never allocate");
@@ -404,6 +409,128 @@ void keyed_effect_switches_off_and_deletes() {
              "undo did not restore the effect and its key together");
 }
 
+// Issue #245: Pump ducks only to a kick you can hear. Its MIDI notes and its
+// audio key follow the kick's mute, another track's solo and the key's gain,
+// live, with no rebuild.
+constexpr std::size_t pump_kick_beats = 12;
+constexpr std::uint8_t pump_kick_key = 36;
+constexpr std::uint8_t pump_kick_velocity = 127;
+constexpr std::int64_t pump_kick_note_ticks = timeline::ticks_per_quarter / 4;
+constexpr std::size_t hard_gate_preset = 3;
+constexpr double kick_audio_trigger = 1.0;
+constexpr double midi_trigger = 2.0;
+// A Hard Gate duck goes far below this; no duck stays above the other.
+constexpr float ducked_db = -20.0F;
+constexpr float unducked_db = -0.1F;
+
+struct KeyedPumpSong {
+  project::Snapshot saved;
+  project::TrackId kick;
+  project::TrackId bass;
+  project::TrackId pad;
+  project::InsertSlotId slot;
+  project::SendId key;
+};
+
+KeyedPumpSong keyed_pump_song(const fs::path& root, double trigger) {
+  auto session = take(app::ProjectSession::create(root));
+  const auto kick = take(session->instruments().add_synth_track());
+  const auto bass = take(session->instruments().add_synth_track());
+  const auto pad = take(session->instruments().add_synth_track());
+  const timeline::TickPosition song_length{static_cast<std::int64_t>(pump_kick_beats) *
+                                           timeline::ticks_per_quarter};
+  // The bass and the pad hold a note throughout, so something always sounds.
+  std::uint64_t serial = 0;
+  for (const auto held : {bass, pad}) {
+    const project::MidiNote note{take(project::NoteId::from_bits({0, ++serial})),
+                                 {0},
+                                 song_length,
+                                 pump_kick_key,
+                                 pump_kick_velocity};
+    (void)take(session->midi_clips().add_midi_clip_with_notes(held, {0}, song_length, {note}));
+  }
+  std::vector<project::MidiNote> notes;
+  for (std::size_t beat = 0; beat < pump_kick_beats; ++beat) {
+    const auto start = static_cast<std::int64_t>(beat) * timeline::ticks_per_quarter;
+    notes.push_back({take(project::NoteId::from_bits({0, ++serial})),
+                     {start},
+                     {start + pump_kick_note_ticks},
+                     pump_kick_key,
+                     pump_kick_velocity});
+  }
+  (void)take(session->midi_clips().add_midi_clip_with_notes(kick, {0}, song_length, notes));
+  const auto slot = take(session->effects().add_effect_engine(bass, 0, "pump", hard_gate_preset));
+  const auto key = take(session->routing().add_sidechain(kick, bass, slot, 1.0));
+  auto values = take(session->effects().native_effect_values(bass, slot));
+  const auto trigger_index =
+      synth::find_parameter(*effects::find_engine("pump")->descriptor, "pump.trigger");
+  REQUIRE_TRUE(trigger_index.has_value(), "Pump has a trigger parameter");
+  values[*trigger_index] = trigger;
+  REQUIRE_OK(session->effects().set_native_effect_values(bass, slot, values), "Pump's trigger");
+  REQUIRE_OK(session->saving().save(), "project did not save");
+  return {session->snapshot(), kick, bass, pad, slot, key};
+}
+
+// The kick's note-on frames, in order.
+std::vector<std::uint64_t> kick_frames(const KeyedPumpSong& song) {
+  const auto plan = take(engine::compile_midi_events(song.saved));
+  std::vector<std::uint64_t> frames;
+  for (const auto& instrument : plan.instruments()) {
+    if (instrument.track() != song.kick)
+      continue;
+    for (const auto& event : instrument.events()) {
+      if (event.kind == engine::MidiEventKind::note_on)
+        frames.push_back(static_cast<std::uint64_t>(event.sample.value));
+    }
+  }
+  std::ranges::sort(frames);
+  REQUIRE_EQ(frames.size(), pump_kick_beats, "every kick is on the timeline");
+  return frames;
+}
+
+// Renders up to `frame` and returns Pump's deepest gain on the way, in dB.
+float deepest_duck_until(Live& live, const KeyedPumpSong& song, std::uint64_t frame) {
+  float deepest = 0.0F;
+  std::vector<float> telemetry;
+  while (live.rendered_frames < frame) {
+    live.render(1);
+    REQUIRE_TRUE(live.control.active_effect_telemetry(song.bass, song.slot, telemetry),
+                 "Pump reports its gain");
+    deepest = std::min(deepest, telemetry[effects::pump::telemetry::gain_db]);
+  }
+  return deepest;
+}
+
+void pump_ducks_only_to_a_kick_you_can_hear(double trigger, std::string_view mode) {
+  Directory directory;
+  const auto root = directory.path() / "song";
+  const auto song = keyed_pump_song(root, trigger);
+  const auto beats = kick_frames(song);
+  Live live(root, song.saved);
+  const std::string name(mode);
+  // Each step edits just after a kick, lets that beat's duck pass, then
+  // listens through the next beat.
+  std::size_t beat = 1;
+  const auto listen = [&] {
+    (void)deepest_duck_until(live, song, beats[beat + 1]);
+    const auto deepest = deepest_duck_until(live, song, beats[beat + 2]);
+    beat += 2;
+    return deepest;
+  };
+  REQUIRE_LT(deepest_duck_until(live, song, beats[beat]), ducked_db,
+             name + ": Pump ducks to the kick");
+
+  live.edit_live({project::SetTrackMuted{song.kick, true}}, "mute the kick");
+  REQUIRE_GT(listen(), unducked_db, name + ": a muted kick does not duck");
+  live.edit_live({project::SetTrackMuted{song.kick, false}}, "unmute the kick");
+  REQUIRE_LT(listen(), ducked_db, name + ": unmuting the kick brings the ducks back");
+  live.edit_live({project::SetTrackSoloed{song.pad, true}}, "solo the pad");
+  REQUIRE_GT(listen(), unducked_db, name + ": soloing another track silences the kick's key");
+  live.edit_live({project::SetTrackSoloed{song.pad, false}}, "unsolo the pad");
+  live.edit_live({project::SetSendGain{song.key, 0.0}}, "turn the key down");
+  REQUIRE_GT(listen(), unducked_db, name + ": a key at no gain does not duck");
+}
+
 int main() {
   try {
     keyed_effect_switches_off_and_deletes();
@@ -414,6 +541,8 @@ int main() {
     effect_documents_edit_live();
     linked_effect_groups_edit_live();
     instrument_track_effect_takes_a_key("pump");
+    pump_ducks_only_to_a_kick_you_can_hear(midi_trigger, "MIDI");
+    pump_ducks_only_to_a_kick_you_can_hear(kick_audio_trigger, "Kick Audio");
     effect_automation_edits_live();
     sidechained_effect_edits_live();
     master_effect_values_edit_live();
