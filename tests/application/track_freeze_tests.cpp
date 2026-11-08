@@ -426,19 +426,31 @@ void consolidating_past_the_clip_limits_is_refused() {
 
 } // namespace
 
-// A source whose mute a lane drives keeps its keys after a bounce, so the
-// bounce does not key as well: the keyed effect hears one key, not two. The
-// source's keys follow its lane (ADR-0097): none while it mutes the source.
-void a_bounced_source_under_a_mute_lane_keys_once() {
+// A bounce mutes its source. A mute lane would override that mute, and the
+// bounce carries the lane, so the source's mute lanes move to the bounce:
+// the source falls silent and keys nothing, and the bounce plays and keys
+// under the lane, once (ADR-0099).
+void a_bounced_source_under_a_mute_lane_falls_silent() {
   constexpr auto mute = project::TrackControlTarget::Key::channel_mute;
   constexpr double lane_unmuted = 0.0;
   constexpr double lane_muted = 1.0;
-  constexpr std::int64_t muted_bar = 1;
+  // The notes sound in bar 1 (add_synth) and again in bar 3, where the lane
+  // mutes them.
+  constexpr std::int64_t open_bar = 1;
+  constexpr std::int64_t muted_bar = 3;
+  // Past the channel's 5 ms mute glide at the project rate.
+  constexpr std::size_t past_the_glide = 960;
+  constexpr double audible = 1e-3;
+  constexpr double silent = 1e-6;
+  constexpr std::uint8_t source_note = 57;
+  constexpr std::uint8_t keyed_note = 45;
   Directory directory;
   const auto root = directory.path() / "song";
   auto session = take(app::ProjectSession::create(root));
-  const auto track = add_synth(*session, 57);
-  constexpr std::uint8_t keyed_note = 45;
+  const auto track = add_synth(*session, source_note);
+  done(session->midi_clips().add_midi_clip(track, {muted_bar * bar}), "muted clip");
+  done(session->notes().add_note(only_clip(session->snapshot(), track), {0}, source_note),
+       "muted note");
   const auto keyed = add_synth(*session, keyed_note);
   const auto press =
       take(session->effects().add_effect_engine(project::SignalPathId{keyed}, 0, "press"));
@@ -448,28 +460,63 @@ void a_bounced_source_under_a_mute_lane_keys_once() {
   (void)take(session->parameter_automation().set_channel_control_point(track, mute, muted_bar,
                                                                        lane_muted));
   done(session->saving().save(), "save");
+  const auto before = export_master(root, session->snapshot(), directory.path() / "before.wav");
+  REQUIRE_GT(peak(before), audible, "the source sounds under its open lane");
 
   auto rendered = render(*session, track);
+  // The render is before the channel: the bar-3 note sounds in it, and the
+  // lane silences it in the mix.
+  const auto& saved = session->snapshot();
+  const auto muted_from =
+      2 * static_cast<std::size_t>(
+              take(saved.tempo.tick_to_sample({muted_bar * bar}, saved.sample_rate)).value) +
+      2 * past_the_glide;
+  // A quarter of a second of the bar-3 note, inside its render.
+  constexpr std::size_t quarters_per_second = 4;
+  const auto muted_to =
+      muted_from + 2 * static_cast<std::size_t>(saved.sample_rate) / quarters_per_second;
+  const auto file = read_float_wav(fs::path{"/proc/self/fd"} / std::to_string(rendered.fd()));
+  const auto render_from = muted_from - 2 * static_cast<std::size_t>(rendered.first_frame());
+  REQUIRE_GE(file.size(), render_from + (muted_to - muted_from), "the render covers bar 3");
+  REQUIRE_GT(peak(std::span<const float>(file).subspan(render_from, muted_to - muted_from)),
+             audible, "the source sounds in bar 3 before its channel");
+  REQUIRE_GE(before.size(), muted_to, "the mix covers bar 3");
+  REQUIRE_LT(peak(std::span<const float>(before).subspan(muted_from, muted_to - muted_from)),
+             silent, "the lane mutes the source in bar 3");
   const auto audio = take(session->freeze().finish_track_bounce(
       stage(*session, rendered), rendered.origin_revision(), track, rendered.first_frame(),
       app::BounceMode::new_track));
+  const auto bounced = export_master(root, session->snapshot(), directory.path() / "bounce.wav");
+  const auto largest = largest_difference(before, bounced);
+  std::cout << "bounce under a mute lane: largest difference " << largest << '\n';
+  REQUIRE_LT(largest, silent, "the bounce plays once, as its source did");
+
   const auto& state = session->snapshot();
+  const auto& source = find(state, track);
+  const auto& copy = find(state, audio);
   const auto keys = [](const project::Track& item) {
     return std::ranges::count(item.sends, project::SendPurpose::sidechain,
                               &project::SendRoute::purpose);
   };
-  REQUIRE_EQ(keys(find(state, track)), 1, "the source under a mute lane keeps its key");
-  REQUIRE_EQ(keys(find(state, audio)), 0, "the bounce of a source that keeps its key keys again");
-  REQUIRE_TRUE(!routing::silent_key_sources(state).contains(track),
-               "the source's lane, not its mute switch, decides its keys");
-  const std::array<project::TrackId, 1> sources{track};
+  REQUIRE_TRUE(source.muted, "the bounce mutes its source");
+  REQUIRE_TRUE(!routing::has_mute_automation(source), "the source's mute lane moves to the bounce");
+  REQUIRE_TRUE(routing::has_mute_automation(copy), "the source's mute lane moves to the bounce");
+  REQUIRE_TRUE(routing::silent_key_sources(state).contains(track),
+               "the muted source keys nothing, live and in export");
+  REQUIRE_EQ(keys(copy), 1, "the bounce keys what its source keyed");
+  const std::array<project::TrackId, 1> sources{audio};
   const auto lanes = take(routing::KeyMuteLanes::prepare(state, sources));
   const auto at_bar = [&](std::int64_t index) {
     return take(state.tempo.tick_to_sample({index * bar}, state.sample_rate));
   };
-  REQUIRE_TRUE(!take(lanes.mutes(track, at_bar(0))), "the source keys where its lane is open");
-  REQUIRE_TRUE(take(lanes.mutes(track, at_bar(muted_bar))),
-               "the source keys nothing where its lane mutes it");
+  REQUIRE_TRUE(!take(lanes.mutes(audio, at_bar(open_bar))),
+               "the bounce keys where its lane is open");
+  REQUIRE_TRUE(take(lanes.mutes(audio, at_bar(muted_bar))),
+               "the bounce keys nothing where its lane mutes it");
+
+  done(session->history().undo(), "undo the bounce");
+  REQUIRE_TRUE(routing::has_mute_automation(find(session->snapshot(), track)),
+               "one undo gives the source its lane back");
 }
 
 int main() {
@@ -480,7 +527,7 @@ int main() {
     frozen_tracks_export_what_they_played();
     a_stale_render_is_refused();
     bounce_and_flatten_keep_the_mix();
-    a_bounced_source_under_a_mute_lane_keys_once();
+    a_bounced_source_under_a_mute_lane_falls_silent();
     consolidate_writes_clips_out();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';

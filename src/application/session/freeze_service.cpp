@@ -6,7 +6,6 @@
 #include "oscillate/automation_project/preparation.hpp"
 #include "oscillate/native_dsp/note_effects/note_effect.hpp"
 #include "oscillate/project/lookup.hpp"
-#include "oscillate/routing/project_route_plan.hpp"
 #include "session_state.hpp"
 
 #include <algorithm>
@@ -216,12 +215,7 @@ Result<project::TrackId> FreezeService::finish_track_bounce(persistence::StagedW
   auto next_send = next_send_number();
   for (const auto& send : original.sends) {
     // The audio keys what its source keyed, once: a bounce's muted source
-    // keys nothing (routing::silent_key_sources) unless a mute lane drives
-    // its mute. Then the source keeps its keys, gated by that lane
-    // (ADR-0097), and the audio, under the same lane, keys nothing.
-    if (!flatten && send.purpose == project::SendPurpose::sidechain &&
-        routing::has_mute_automation(original))
-      continue;
+    // keys nothing (routing::silent_key_sources).
     auto send_id = numbered_id<project::SendId>(next_send);
     if (!send_id)
       return R::failure(send_id.error());
@@ -252,8 +246,24 @@ Result<project::TrackId> FreezeService::finish_track_bounce(persistence::StagedW
     operations.emplace_back(project::AddAutomationLane{audio, std::move(copy)});
   }
   if (!flatten) {
-    // The source stays, muted, to unmute or freeze later.
+    // The source stays, muted, to unmute or freeze later. A mute lane would
+    // override that mute (ADR-0097), so the source's mute lanes go: the
+    // audio carries its channel lanes, and the render already holds what a
+    // clip's lane muted (ADR-0099).
     operations.emplace_back(project::SetTrackMuted{track, true});
+    const auto remove_mute_lanes = [&operations](
+                                       const std::vector<project::AutomationLane>& lanes) {
+      for (const auto& lane : lanes) {
+        const auto* control = std::get_if<project::TrackControlTarget>(&lane.target);
+        if (control != nullptr && control->key == project::TrackControlTarget::Key::channel_mute)
+          operations.emplace_back(project::RemoveAutomationLane{lane.id});
+      }
+    };
+    remove_mute_lanes(original.automation);
+    for (const auto& clip : original.clips)
+      remove_mute_lanes(clip.automation);
+    for (const auto& clip : original.midi_clips)
+      remove_mute_lanes(clip.automation);
   } else {
     if (original.muted)
       operations.emplace_back(project::SetTrackMuted{audio, true});
