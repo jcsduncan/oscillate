@@ -2,10 +2,11 @@ name: Review gate
 
 # Sets the required "Review gate" commit status on pull request heads
 # (scripts/ci/review_gate.py, CONTRIBUTING.md "Merging"). Auto-merge waits
-# for it. The job runs no pull request code with its token: the comment,
+# for it. The script only reads the API and sets the status. The comment,
 # check run and schedule events run the default branch's workflow and
-# script, and the pull request events run only for branches of this
-# repository, whose workflow file already comes from the pull request.
+# script with a write token; the pull request events run the pull request's
+# own workflow and script, as any pull_request workflow does, and only for
+# branches of this repository (a fork's events get a read-only token).
 # Resolving a review thread fires no event, so the schedule re-evaluates
 # every open pull request.
 
@@ -20,10 +21,6 @@ on:
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch:
-
-concurrency:
-  group: review-gate-${{ github.event.pull_request.number || github.event.issue.number || github.event.check_run.pull_requests[0].number || github.run_id }}
-  cancel-in-progress: true
 
 permissions: {} # the job asks for what it needs
 
@@ -42,6 +39,10 @@ jobs:
       (github.event_name != 'check_run' ||
        github.event.check_run.app.slug == 'coderabbitai' ||
        startsWith(github.event.check_run.check_suite.head_branch, 'release-please--'))
+    # Job-level, so an event the condition skips can't cancel a run.
+    concurrency:
+      group: review-gate-${{ github.event.pull_request.number || github.event.issue.number || github.event.check_run.pull_requests[0].number || github.run_id }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

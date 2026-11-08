@@ -3,6 +3,7 @@
 import pathlib
 import re
 import unittest
+import urllib.error
 
 import review_gate
 
@@ -241,6 +242,31 @@ class StatusTests(unittest.TestCase):
     def test_workflow_job_name_matches(self):
         names = re.findall(r"^\s+name: (.+)$", WORKFLOW.read_text(encoding="utf-8"), re.MULTILINE)
         self.assertIn(review_gate.GATE_JOB_NAME, names)
+
+
+class UpdatingGitHub(FakeSource):
+    """Fails to read one pull request and records the statuses it sets."""
+
+    def __init__(self, broken):
+        super().__init__([coderabbit()])
+        self.broken = broken
+        self.set = []
+
+    def pull(self, number):
+        if number == self.broken:
+            raise urllib.error.URLError("server error")
+        return {**pull(), "number": number, "state": "open"}
+
+    def set_status(self, sha, verdict, target_url):
+        self.set.append(verdict.state)
+
+
+class UpdateTests(unittest.TestCase):
+    def test_api_error_on_one_pull_still_updates_the_others(self):
+        github = UpdatingGitHub(broken=NUMBER)
+        result = review_gate.update([NUMBER, NUMBER + 1], github, "", dry_run=False)
+        self.assertEqual(result, 1)
+        self.assertEqual(github.set, [review_gate.SUCCESS])
 
 
 if __name__ == "__main__":

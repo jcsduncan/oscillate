@@ -20,8 +20,8 @@ Release Please pull requests (head branch release-please--*, pushed to this
 repository) are never reviewed by CodeRabbit. They pass when every other
 check on the head commit has finished green and no thread is unresolved.
 
-The script reads the GitHub API only; it never checks out or runs pull
-request code.
+The script reads the GitHub API and sets the status; it never checks out
+or runs pull request code.
 """
 
 import argparse
@@ -31,6 +31,7 @@ import json
 import os
 import re
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Protocol
@@ -328,6 +329,27 @@ def unchanged(current: dict | None, verdict: Verdict) -> bool:
     )
 
 
+def update(numbers: list[int], github: GitHub, target_url: str, dry_run: bool) -> int:
+    """Evaluate and set each pull request's gate. An API error on one pull
+    request is reported and the rest still update; the exit code is 1."""
+    failed = False
+    for number in sorted(set(numbers)):
+        try:
+            pull = github.pull(number)
+            if pull["state"] != "open":
+                continue
+            sha = pull["head"]["sha"]
+            verdict = evaluate(pull, github)
+            print(f"#{number} {sha[:SHORT_SHA]}: {verdict.state}: {verdict.description}")
+            if dry_run or unchanged(gate_status(github.statuses(sha)), verdict):
+                continue
+            github.set_status(sha, verdict, target_url)
+        except (urllib.error.URLError, RuntimeError) as error:
+            print(f"::error::#{number}: {error}")
+            failed = True
+    return 1 if failed else 0
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--dry-run", action="store_true", help="print, don't set statuses")
@@ -347,17 +369,7 @@ def main(argv: list[str]) -> int:
     server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
     target_url = f"{server}/{github.repository}/actions/runs/{run_id}" if run_id else ""
 
-    for number in sorted(set(numbers)):
-        pull = github.pull(number)
-        if pull["state"] != "open":
-            continue
-        sha = pull["head"]["sha"]
-        verdict = evaluate(pull, github)
-        print(f"#{number} {sha[:SHORT_SHA]}: {verdict.state}: {verdict.description}")
-        if args.dry_run or unchanged(gate_status(github.statuses(sha)), verdict):
-            continue
-        github.set_status(sha, verdict, target_url)
-    return 0
+    return update(numbers, github, target_url, args.dry_run)
 
 
 if __name__ == "__main__":
