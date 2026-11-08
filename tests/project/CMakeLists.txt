@@ -17,3 +17,7 @@ oscillate_add_test_executable(oscillate_native_instrument_model_tests SOURCES na
 oscillate_add_test_executable(oscillate_project_history_tests SOURCES model_history_tests.cpp
   LIBS oscillate::project
   TEST project_history_contract)
+
+oscillate_add_test_executable(oscillate_render_slices_tests SOURCES render_slices_tests.cpp
+  LIBS oscillate::project
+  TEST project_render_slices)

@@ -1,6 +1,6 @@
 # ADR-0099 — A bounce moves its source's mute lanes to the bounce
 
-**Status:** Accepted; implemented. **Date:** 8 November 2026.
+**Status:** Superseded in part by [ADR-0102](0102-renders-play-in-slices.md), where it says a clip's mute lane is already in the render: the copy's slices carry it. The rest is accepted and implemented. **Date:** 8 November 2026.
 **Supersedes in part:** [ADR-0097](0097-mute-lanes-gate-keys.md) and [ADR-0059](0059-play-and-sparkle.md), where they say a bounced source keeps its mute lane and its keys and the bounced copy takes no keys.
 
 ## Context

@@ -5,10 +5,12 @@
 #include "edit_support.hpp"
 #include "oscillate/automation_project/preparation.hpp"
 #include "oscillate/native_dsp/note_effects/note_effect.hpp"
+#include "oscillate/project/frozen_view.hpp"
 #include "oscillate/project/lookup.hpp"
 #include "session_state.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <fcntl.h>
 #include <filesystem>
@@ -171,11 +173,16 @@ Result<project::TrackId> FreezeService::finish_track_bounce(persistence::StagedW
   const auto& original = *found;
   const auto row = static_cast<std::size_t>(found - state.tracks.begin());
   auto track_id = numbered_id<project::TrackId>(next_track_number());
-  auto clip_id = numbered_id<project::ClipId>(next_clip_number());
   auto ids = fresh_identities(state.revision);
-  if (!track_id || !clip_id || !ids)
-    return R::failure(!track_id ? track_id.error() : !clip_id ? clip_id.error() : ids.error());
+  if (!track_id || !ids)
+    return R::failure(!track_id ? track_id.error() : ids.error());
   const auto audio = track_id.value();
+  // The render is before the channel; its clips' channel lanes play over it
+  // from slices at those clips' places (ADR-0102).
+  auto slices =
+      project::render_slices(original, state.tempo, state.sample_rate, first_frame, record.frames);
+  if (!slices)
+    return R::failure(slices.error());
 
   const auto existing = std::ranges::find_if(state.sources, [&record](const auto& source) {
     return source.sha256 == record.sha256 && source.byte_length == record.byte_length &&
@@ -192,14 +199,6 @@ Result<project::TrackId> FreezeService::finish_track_bounce(persistence::StagedW
   const bool flatten = mode == BounceMode::flatten;
   operations.emplace_back(
       project::AddTrack{audio, project::TrackKind::audio, flatten ? row : row + 1});
-  const auto first = static_cast<std::int64_t>(first_frame);
-  const auto frames = static_cast<std::int64_t>(record.frames);
-  project::Clip clip{clip_id.value(),
-                     is_new_source ? record.id : existing->id,
-                     {{0}, {frames}},
-                     project::ElapsedInterval{{first}, {first + frames}}};
-  clip.name = flatten ? original.name : bounced_name(original);
-  operations.emplace_back(project::AddClip{audio, std::move(clip)});
 
   // The audio sounds as the source did: its channel, routing and sends.
   const auto name = flatten ? original.name : bounced_name(original);
@@ -226,30 +225,47 @@ Result<project::TrackId> FreezeService::finish_track_bounce(persistence::StagedW
     operations.emplace_back(project::AddSendRoute{audio, route});
   }
 
-  // Channel and send lanes follow the audio; device lanes stay with the
-  // devices.
-  for (const auto& lane : original.automation) {
+  // Channel and send lanes follow the audio, on the track and on the clips;
+  // device lanes stay with the devices.
+  const auto follow =
+      [&](const project::AutomationLane& lane) -> std::optional<project::AutomationLane> {
     auto copy = lane;
     if (auto* control = std::get_if<project::TrackControlTarget>(&copy.target)) {
       if (!project::is_channel_control(control->key))
-        continue;
+        return std::nullopt;
       control->track = audio;
     } else if (auto* gain = std::get_if<project::SendGainTarget>(&copy.target)) {
       const auto renamed = sends.find(gain->send);
       if (renamed == sends.end())
-        continue;
+        return std::nullopt;
       gain->send = renamed->second;
     } else {
-      continue;
+      return std::nullopt;
     }
     refresh(copy, ids.value());
-    operations.emplace_back(project::AddAutomationLane{audio, std::move(copy)});
+    return copy;
+  };
+  const auto source = is_new_source ? record.id : existing->id;
+  const auto first_clip = next_clip_number();
+  for (std::size_t index = 0; index < slices.value().size(); ++index) {
+    auto& slice = slices.value()[index];
+    auto clip_id = numbered_id<project::ClipId>(first_clip + index);
+    if (!clip_id)
+      return R::failure(clip_id.error());
+    project::Clip clip{clip_id.value(), source, slice.range, slice.placement};
+    clip.name = name;
+    for (const auto& lane : slice.automation)
+      if (auto copy = follow(lane))
+        clip.automation.push_back(std::move(*copy));
+    operations.emplace_back(project::AddClip{audio, std::move(clip)});
   }
+  for (const auto& lane : original.automation)
+    if (auto copy = follow(lane))
+      operations.emplace_back(project::AddAutomationLane{audio, std::move(*copy)});
   if (!flatten) {
     // The source stays, muted, to unmute or freeze later. A mute lane would
-    // override that mute (ADR-0097), so the source's mute lanes go: the
-    // audio carries its channel lanes, and the render already holds what a
-    // clip's lane muted (ADR-0099).
+    // override that mute (ADR-0097), so the source's mute lanes go; the
+    // audio carries them (ADR-0099, ADR-0102).
     operations.emplace_back(project::SetTrackMuted{track, true});
     const auto remove_mute_lanes = [&operations](
                                        const std::vector<project::AutomationLane>& lanes) {
@@ -342,6 +358,14 @@ Result<void> FreezeService::finish_track_freeze(persistence::StagedWav&& render,
   if (record.sample_rate != state.sample_rate || record.channels != 2 || record.frames == 0)
     return Result<void>::failure(
         {ErrorCode::invalid_argument, "A freeze render is stereo at the project rate"});
+  // The frozen view plays the render in slices (ADR-0102).
+  const auto* owner = find_track(state, track);
+  if (owner == nullptr)
+    return Result<void>::failure({ErrorCode::not_found, "Track to freeze not found"});
+  if (auto slices = project::render_slices(*owner, state.tempo, state.sample_rate, first_frame,
+                                           record.frames);
+      !slices)
+    return Result<void>::failure(slices.error());
   const auto existing = std::ranges::find_if(state.sources, [&record](const auto& source) {
     return source.sha256 == record.sha256 && source.byte_length == record.byte_length &&
            source.encoding == record.encoding && source.sample_rate == record.sample_rate &&
