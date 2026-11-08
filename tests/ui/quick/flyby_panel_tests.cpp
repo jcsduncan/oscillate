@@ -1,5 +1,6 @@
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
+#include "panel_fit_checks.hpp"
 
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/flyby.hpp"
@@ -145,6 +146,7 @@ void panel_covers_every_parameter() {
   InMemoryNativeSynthAdapter adapter(defaults());
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
+  oscillate::test::panel_fit::require_knob_labels_apart(panel->root, "Flyby");
   const int points = item(*panel, QStringLiteral("flybyMap"))->property("pointCount").toInt();
   require(points == 4, "a pass has four points");
   for (const auto& p : table().parameters) {
@@ -163,6 +165,10 @@ void panel_covers_every_parameter() {
     }
     require(shown, "no control for " + id.toStdString());
   }
+  // The tagline ends before the preset browser rather than running under it.
+  oscillate::test::panel_fit::require_clear_of(
+      *item(*panel, QStringLiteral("flybyTagline")),
+      *item(*panel, QStringLiteral("flybyPresetPrevious"))->parentItem(), "the preset browser");
 }
 
 void dragging_a_point_writes_its_x_and_y_as_one_gesture() {

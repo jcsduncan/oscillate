@@ -119,11 +119,17 @@ Rectangle {
         Text {
             x: panel.theme.spaceXxs
             y: wordmark.y + wordmark.height + panel.theme.spaceXxs
+            objectName: "flybyTagline"
             text: "SOUND IN MOTION · DOPPLER · DISTANCE · EARS"
             color: panel.theme.inkDim
             font.pixelSize: panel.theme.typeMicro
             font.bold: true
             font.letterSpacing: panel.theme.taglineSpacing
+            // Kept clear of the preset browser: a wider fallback font steps
+            // the size down rather than running under it.
+            width: browser.x - x - panel.theme.spaceSm
+            fontSizeMode: Text.HorizontalFit
+            minimumPixelSize: panel.theme.typeFitFloor
         }
         Row {
             id: browser
@@ -456,6 +462,8 @@ Rectangle {
             Row {
                 x: panel.theme.spaceMd
                 y: panel.theme.cardBodyY
+                // Room between neighbouring labels, so two long ones never meet.
+                spacing: panel.theme.spaceSm
                 Repeater {
                     model: ["flyby.doppler", "flyby.air", "flyby.rolloff", "flyby.reference", "flyby.near"]
                     delegate: PanelKnob {

@@ -152,6 +152,11 @@ Rectangle {
             font.pixelSize: panel.theme.typeMicro
             font.bold: true
             font.letterSpacing: panel.theme.latencySpacing
+            // Kept clear of the preset browser: a wider fallback font steps
+            // the size down rather than running under it.
+            width: browser.x - x - panel.theme.spaceSm
+            fontSizeMode: Text.HorizontalFit
+            minimumPixelSize: panel.theme.typeFitFloor
         }
 
         Row {

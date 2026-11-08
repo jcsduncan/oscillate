@@ -612,14 +612,18 @@ Rectangle {
         }
     }
     Text {
-        x: roll.drumView ? toolsButton.x + toolsButton.width + Theme.pianoRollHintGap : Theme.pianoRollHintX; y: Theme.pianoRollHeaderLabelY
+        objectName: "pianoRollHint"
+        // After the header's last button: Chords in the piano view, else Tools.
+        readonly property Item lastButton: chordsButton.visible ? chordsButton : toolsButton
+        x: lastButton.x + lastButton.width + Theme.pianoRollHintGap; y: Theme.pianoRollHeaderLabelY
         text: roll.unmappedNotes > 0
             ? roll.unmappedNotes + " UNMAPPED NOTES · OPEN PIANO TO EDIT"
             : roll.drumView ? "PAD LANES  ·  DRAG: MOVE  ·  DEL: REMOVE"
                             : "WHEEL: PITCH  ·  DRAG: MOVE  ·  DEL: REMOVE"
         color: roll.unmappedNotes > 0 ? roll.amberColor : roll.dimTextColor
         font.pixelSize: Theme.typeCaption
-        visible: roll.width > x + (roll.unmappedNotes > 0 ? Theme.pianoRollUnmappedHintRoom : Theme.pianoRollHintRoom)
+        // Shown only where it fits whole.
+        visible: x + implicitWidth <= roll.width
     }
 
     // The key strip plays the clip's instrument: press to sound a key,

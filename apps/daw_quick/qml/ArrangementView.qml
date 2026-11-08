@@ -358,6 +358,7 @@ Rectangle {
     }
     Row {
         id: arrangementTools
+        objectName: "arrangementTools"
         z: 5
         anchors.right: parent.right
         anchors.rightMargin: Theme.spaceSm
@@ -485,7 +486,7 @@ Rectangle {
             x: at
             y: 0
             z: 4
-            width: Math.max(Theme.markerMinWidth, flagText.implicitWidth + Theme.spaceLg)
+            width: arrangement.markerFlagWidth(modelData.name)
             height: arrangement.rulerHeight
             Rectangle {
                 width: Theme.hairline
@@ -568,6 +569,27 @@ Rectangle {
             step *= 2
         return step
     }
+    // A marker flag's width: its name plus padding, never under the minimum.
+    FontMetrics {
+        id: markerFlagMetrics
+        font.pixelSize: Theme.typeCaption
+        font.bold: true
+    }
+    function markerFlagWidth(name) {
+        return Math.max(Theme.markerMinWidth, markerFlagMetrics.advanceWidth(name || "Marker") + Theme.spaceLg)
+    }
+    // A ruler label shows only where it is whole: clear of the tools at the
+    // ruler's right end and of every marker flag.
+    function rulerLabelFree(left, right) {
+        if (right + Theme.arrangementToolSpacing > arrangementTools.x)
+            return false
+        for (const marker of arrangement.bridge.markers || []) {
+            const flagLeft = (Number(marker.bar) - viewStartBar) * width / visibleBars
+            if (flagLeft < right && flagLeft + markerFlagWidth(marker.name) > left)
+                return false
+        }
+        return true
+    }
     readonly property var rulerTicks: {
         const step = rulerStep
         const lead = arrangement.bridge.leadBars
@@ -608,8 +630,10 @@ Rectangle {
                 readonly property bool looped: arrangement.bridge.loopTransport.enabled
                     && bar >= arrangement.bridge.loopTransport.startBar
                     && bar < arrangement.bridge.loopTransport.endBar
+                objectName: "arrangementRulerLabel"
                 x: Theme.spaceSm
                 y: Theme.spaceMd
+                visible: arrangement.rulerLabelFree(parent.x + x, parent.x + x + implicitWidth)
                 text: parent.modelData.label
                 color: looped ? arrangement.amberColor
                     : !parent.modelData.onBar ? arrangement.theme.textFaint
@@ -1333,8 +1357,12 @@ Rectangle {
                             }
                             return played
                         }
+                        // Shown chord names keep the clip's foot; the notes draw above it.
+                        readonly property bool chordsShown: clipCard.height >= Theme.clipChordMinClipHeight
+                            && playedChords.length > 0
+                        readonly property real chordRow: chordsShown ? Theme.clipChordBottom : 0
                         Repeater {
-                            model: clipCard.height >= Theme.clipChordMinClipHeight ? clipCard.playedChords : []
+                            model: clipCard.chordsShown ? clipCard.playedChords : []
                             delegate: Item {
                                 id: chordTag
                                 required property var modelData
@@ -1363,8 +1391,9 @@ Rectangle {
                             model: clipCard.playedNotes
                             delegate: Rectangle {
                                 required property var modelData
+                                objectName: "arrangementClipNote"
                                 x: Theme.spaceSm + (clipCard.width - Theme.spaceLg) * modelData.at
-                                y: Theme.clipNoteTop + (clipCard.height - Theme.clipNoteSpan) * (clipCard.keySpan[1] === clipCard.keySpan[0] ? 0.5
+                                y: Theme.clipNoteTop + (clipCard.height - Theme.clipNoteSpan - clipCard.chordRow) * (clipCard.keySpan[1] === clipCard.keySpan[0] ? 0.5
                                     : (clipCard.keySpan[1] - modelData.key) / (clipCard.keySpan[1] - clipCard.keySpan[0]))
                                 width: Math.max(Theme.clipNoteMinWidth, (clipCard.width - Theme.spaceLg) * modelData.size)
                                 height: Theme.clipNoteHeight

@@ -124,6 +124,26 @@ class ChangedFindingsTests(unittest.TestCase):
         self.assertEqual(len(tidy_changed.changed_findings(output, lines, self.ROOT)), 1)
 
 
+class ConfiguredSourcesTests(unittest.TestCase):
+    PRESET = "quick"
+
+    def test_relative_file_is_resolved_against_its_directory(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = os.path.realpath(root)
+            build = Path(root) / "build" / self.PRESET
+            build.mkdir(parents=True)
+            entries = [
+                {"directory": str(build), "file": "../../src/engine/graph.cpp"},
+                {"directory": str(build), "file": f"{root}/src/foundation/log.cpp"},
+            ]
+            (build / "compile_commands.json").write_text(json.dumps(entries))
+            with mock.patch.object(tidy_changed, "ROOT", Path(root)):
+                self.assertEqual(
+                    tidy_changed.configured_sources(self.PRESET),
+                    {"src/engine/graph.cpp", "src/foundation/log.cpp"},
+                )
+
+
 class MovedBaseTests(unittest.TestCase):
     """GitHub checks out the pull request merged into the current base tip."""
 

@@ -420,9 +420,9 @@ Item {
         font.pixelSize: value ? knob.theme.knobValueSize
             : knob.readout ? knob.theme.knobReadoutLabelSize : knob.theme.knobLabelSize
         font.bold: value ? knob.theme.knobValueBold : knob.theme.knobLabelBold
-        font.letterSpacing: value ? 0 : knob.theme.knobLabelSpacing
-        // A label wider than its slot steps down to the smallest type size
-        // before anything is elided.
+        // A label wider than its slot drops its tracking, then steps down to
+        // the smallest type size, before anything is elided.
+        font.letterSpacing: value || labelMetrics.advanceWidth > width ? 0 : knob.theme.knobLabelSpacing
         fontSizeMode: Text.HorizontalFit
         minimumPixelSize: knob.theme.typeMicro
         elide: Text.ElideRight

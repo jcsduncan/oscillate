@@ -170,7 +170,7 @@ KitTheme {
     property real patternCaptionY: 68
     property real patternStepperY: 82
     property real stepperInactiveOpacity: 0.45
-    property real stepGridY: 142
+    property real stepGridY: 156
     property real stepGap: 5
     property real stepHeight: 34
     property real stepNowStroke: 1.5
@@ -179,7 +179,7 @@ KitTheme {
     property real stepNumberY: 3
     // The step's slot letter sits this far below its centre.
     property real stepLetterDrop: 3
-    property real slotNoteY: 222
+    property real slotNoteY: 236
 
     // The shape card: the tab row (slots, bands, follow, view and grid), the
     // tool row, the editor and the tool help under it.

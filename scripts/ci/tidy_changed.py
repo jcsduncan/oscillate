@@ -130,7 +130,10 @@ def configured_sources(preset):
     with open(database, encoding="utf-8") as stream:
         entries = json.load(stream)
     root = os.path.realpath(ROOT)
-    return {os.path.relpath(os.path.realpath(entry["file"]), root) for entry in entries}
+    return {
+        os.path.relpath(os.path.realpath(os.path.join(entry["directory"], entry["file"])), root)
+        for entry in entries
+    }
 
 
 def main():

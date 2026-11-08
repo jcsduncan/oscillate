@@ -599,10 +599,20 @@ Rectangle {
                 spacing: 0
                 Column {
                     objectName: "positionReadout"
-                    width: toolbar.positionReadoutWidth
+                    // Wide enough for a three-digit bar, so the readout never
+                    // clips or shifts the readouts beside it as the song plays.
+                    width: Math.max(toolbar.positionReadoutWidth,
+                                    Math.ceil(widestPosition.advanceWidth) + 2 * toolbar.readoutPadding)
                     leftPadding: toolbar.readoutPadding
+                    TextMetrics {
+                        id: widestPosition
+                        text: "000 . 0 . 0"
+                        font: positionValue.font
+                    }
                     Text { text: "POSITION"; color: toolbar.dimTextColor; font.pixelSize: Theme.typeSmall; font.letterSpacing: Theme.trackingSm }
                     Text {
+                        id: positionValue
+                        objectName: "positionValue"
                         text: toolbar.positionText
                         color: toolbar.mainTextColor
                         font.pixelSize: Theme.typeHeading

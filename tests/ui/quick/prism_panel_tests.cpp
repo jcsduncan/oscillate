@@ -1,5 +1,6 @@
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
+#include "panel_fit_checks.hpp"
 
 #include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/prism.hpp"
@@ -316,6 +317,7 @@ void panel_loads_and_edits_through_the_controller() {
   InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller, false);
+  oscillate::test::panel_fit::require_knob_labels_apart(panel->root, "Prism");
   require(panel->root->implicitWidth() >= 1200 && panel->root->implicitHeight() > 700,
           "panel has its designed size");
 
