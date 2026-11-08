@@ -1,6 +1,7 @@
 #include "track_commands.hpp"
 
 #include <algorithm>
+#include <optional>
 #include <utility>
 
 namespace oscillate::quick {
@@ -149,6 +150,48 @@ void TrackCommands::route_to_master(const QStringList& track_ids) {
   if (current->snapshot().revision == revision)
     return;
   accepted(QStringLiteral("Sent straight to the master"));
+}
+
+void TrackCommands::place_tracks(const QStringList& track_ids, const QString& bus_id,
+                                 const QString& before_id) {
+  auto* current = editable_session();
+  if (!current)
+    return;
+  const auto tracks = parse_tracks(track_ids);
+  if (!tracks)
+    return;
+  std::optional<project::TrackId> bus;
+  std::optional<project::TrackId> before;
+  const auto parse_optional = [this](const QString& text, std::optional<project::TrackId>& out) {
+    if (text.isEmpty())
+      return true;
+    const auto id = project::TrackId::parse(text.toStdString());
+    if (!id) {
+      report_(QStringLiteral("Choose a valid place in the track list"));
+      return false;
+    }
+    out = id.value();
+    return true;
+  };
+  if (!parse_optional(bus_id, bus) || !parse_optional(before_id, before))
+    return;
+  const auto revision = current->snapshot().revision;
+  const auto result = current->routing().place_tracks(*tracks, bus, before);
+  if (!result)
+    return failure(QStringLiteral("Move track"), result.error());
+  if (current->snapshot().revision == revision)
+    return;
+  const auto& snapshot = current->snapshot();
+  const auto found =
+      bus ? std::ranges::find(snapshot.tracks, *bus, &project::Track::id) : snapshot.tracks.end();
+  const auto destination = found != snapshot.tracks.end() && !found->name.empty()
+                               ? QString::fromStdString(found->name)
+                           : bus ? QStringLiteral("the bus")
+                                 : QStringLiteral("the master");
+  commit_();
+  report_(QStringLiteral("%1 track(s) routed to %2 · Undo is available")
+              .arg(tracks->size())
+              .arg(destination));
 }
 
 void TrackCommands::remove_track(const QString& track_id) {

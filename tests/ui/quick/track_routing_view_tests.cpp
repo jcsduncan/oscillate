@@ -1,6 +1,7 @@
 #include "../../../apps/daw_quick/src/track_routing_view.hpp"
 #include "oscillate/test/check.hpp"
 
+#include <QStringList>
 #include <QVariantMap>
 
 #include <cstdint>
@@ -90,7 +91,61 @@ void routing_projection() {
               sidechain_view.sidechain_target_name(track_id(4), slot_id(2)) == "Missing effect",
           "sidechain target label must identify the exact saved effect slot");
 }
+
+// The track list's order: a group bus with its members right under it (in
+// saved order, wherever they are saved), the returns last; a return names
+// the tracks whose sends feed it, and a silent send does not count.
+void nesting_order() {
+  auto tempo = timeline::TempoMap::create({{{0}, 120.0, timeline::TempoShape::step}}, 1);
+  auto meter = timeline::MeterMap::create({{{0}, 4, 4}}, 1);
+  require(tempo && meter, "fixture timing maps invalid");
+  project::Snapshot snapshot{project::ProjectId::from_bits({1, 1}).value(),
+                             1,
+                             48'000,
+                             std::move(tempo).value(),
+                             std::move(meter).value(),
+                             {}};
+  // Saved: Audio 1, Group 1, Audio 2 (in the group), Audio 3, Return 1,
+  // Audio 4 (in the group).
+  const auto group = track_id(2);
+  const auto send_back = track_id(5);
+  snapshot.tracks.emplace_back(track_id(1));
+  snapshot.tracks.emplace_back(group, std::vector<project::Clip>{}, project::TrackKind::group_bus);
+  snapshot.tracks.emplace_back(track_id(3));
+  snapshot.tracks.emplace_back(track_id(4));
+  snapshot.tracks.emplace_back(send_back, std::vector<project::Clip>{},
+                               project::TrackKind::return_bus);
+  snapshot.tracks.emplace_back(track_id(6));
+  snapshot.tracks[2].main_output = group;
+  snapshot.tracks[5].main_output = group;
+  constexpr double audible_gain = 0.5;
+  constexpr double silent_gain = 0.0;
+  constexpr int members = 2;
+  snapshot.tracks[3].sends.push_back(
+      {project::SendId::from_bits({1, 1}).value(), send_back, audible_gain});
+  snapshot.tracks[5].sends.push_back(
+      {project::SendId::from_bits({1, 2}).value(), send_back, silent_gain});
+  const quick::TrackRoutingView view(snapshot);
+  const std::vector<std::pair<std::uint64_t, int>> rows{{1, 0}, {2, 1}, {3, 2},
+                                                        {6, 3}, {4, 4}, {5, 5}};
+  for (const auto& [serial, row] : rows)
+    require(view.nesting(track_id(serial)).display_index == row,
+            "track " + std::to_string(serial) + " is not on row " + std::to_string(row));
+  require(view.nesting(group).member_count == members && view.nesting(track_id(3)).bus == group &&
+              view.nesting(track_id(6)).bus == group && !view.nesting(track_id(4)).bus,
+          "members must nest under their group bus");
+  require(view.nesting(track_id(6)).last_member && !view.nesting(track_id(3)).last_member,
+          "the bus's last member ends its rail");
+  require(view.nesting(send_back).fed_by == QStringList{QStringLiteral("Audio 3")},
+          "a return must name the tracks whose audible sends feed it");
+  snapshot.tracks[1].name = "Music";
+  require(quick::TrackRoutingView(snapshot).main_destination_name(group) == "Music",
+          "a destination shows the bus's own name");
+}
 } // namespace
 
 // NOLINTNEXTLINE(bugprone-exception-escape): an uncaught exception is the test's failure report.
-int main() { routing_projection(); }
+int main() {
+  routing_projection();
+  nesting_order();
+}

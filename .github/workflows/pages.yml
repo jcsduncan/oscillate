@@ -1,5 +1,10 @@
 name: Pages
 
+# Publishes the MkDocs site and, under /apt/, the signed apt repository built
+# from the newest releases' .debs (docs/install.md). This workflow is the
+# only one that deploys Pages, so each deployment carries both. The packaging
+# workflow dispatches it once a release's packages are attached.
+
 on:
   push:
     branches: [main]
@@ -13,6 +18,9 @@ on:
       - scripts/ci/docs-requirements.txt
       - scripts/ci/mkdocs_hooks.py
       - scripts/ci/known_issues.py
+      - scripts/ci/fetch-release-debs.sh
+      - scripts/ci/build-apt-repository.sh
+      - tests/packaging/apt-install-smoke.sh
       - .github/workflows/pages.yml
   # The known-issues page lists open issues labelled known-issue, so a
   # labelled issue changing republishes the site.
@@ -29,6 +37,10 @@ concurrency:
 
 permissions:
   contents: read
+
+env:
+  # Releases whose .deb the apt repository keeps.
+  APT_KEEP_VERSIONS: 3
 
 jobs:
   build:
@@ -48,8 +60,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: read # Check out the repository.
+      contents: read # Check out the repository and download release packages.
       issues: read # List the issues labelled known-issue.
+    outputs:
+      apt: ${{ steps.apt.outputs.published }}
+      apt_url: ${{ steps.apt.outputs.url }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -69,6 +84,34 @@ jobs:
           NO_MKDOCS_2_WARNING: "1"
           OSCILLATE_KNOWN_ISSUES: ${{ runner.temp }}/known-issues.md
         run: python -I -m mkdocs build --strict --site-dir site
+      # Skipped, with a notice, until the signing key secrets exist.
+      - name: Build the signed apt repository
+        id: apt
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          if [ -z "$APT_GPG_PRIVATE_KEY" ]; then
+            echo "::notice title=apt repository::APT_GPG_PRIVATE_KEY is not set, so the site is published without the apt repository"
+            exit 0
+          fi
+          debs="$RUNNER_TEMP/debs"
+          fetched=$(scripts/ci/fetch-release-debs.sh "$REPOSITORY" "$debs" "$APT_KEEP_VERSIONS")
+          if [ "$fetched" -eq 0 ]; then
+            echo "::notice title=apt repository::No release carries a .deb yet, so the site is published without the apt repository"
+            exit 0
+          fi
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends aptly
+          scripts/ci/build-apt-repository.sh "$debs" site/apt
+          site_url=$(sed -n 's/^site_url: *//p' mkdocs.yml)
+          [ -n "$site_url" ] || { echo "::error::site_url missing from mkdocs.yml"; exit 1; }
+          {
+            echo "published=true"
+            echo "url=${site_url%/}/apt"
+          } >> "$GITHUB_OUTPUT"
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
@@ -87,3 +130,19 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  apt-install:
+    name: Install from the apt repository (clean Ubuntu 26.04)
+    needs: [build, deploy]
+    if: needs.build.outputs.apt == 'true'
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Follow the install instructions
+        env:
+          APT_URL: ${{ needs.build.outputs.apt_url }}
+        run: sh tests/packaging/apt-install-smoke.sh "$APT_URL"

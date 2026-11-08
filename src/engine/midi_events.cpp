@@ -2,9 +2,13 @@
 #include "oscillate/foundation/midi.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
+#include <iterator>
 #include <limits>
+#include <optional>
+#include <ranges>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -137,16 +141,27 @@ struct ClipInterval {
         lane.points.size() > project::max_midi_pedal_points_per_lane) {
       return Result<void>::failure(invalid("invalid MIDI pedal lane"));
     }
-    std::int64_t previous = -1;
+    std::optional<std::int64_t> previous;
     for (const auto& point : lane.points) {
-      if (point.position.value <= previous || !std::isfinite(point.value) || point.value < 0.0 ||
-          point.value > 1.0) {
+      if ((previous && point.position.value <= *previous) || !std::isfinite(point.value) ||
+          point.value < 0.0 || point.value > 1.0) {
         return Result<void>::failure(invalid("invalid MIDI pedal point"));
       }
       previous = point.position.value;
     }
-    // A lane with no point inside the pattern is silent in every repeat.
-    if (lane.points.empty() || lane.points.front().position >= clip.pattern_length) {
+    // Points before tick 0 were trimmed off the clip's left edge: silent,
+    // but the last of them holds from each repeat's start until the first
+    // point inside the pattern, unless that point is at tick 0.
+    const auto inside = std::ranges::find_if(lane.points, [](const project::MidiPedalPoint& point) {
+      return point.position.value >= 0;
+    });
+    std::optional<double> held;
+    if (inside != lane.points.begin() &&
+        (inside == lane.points.end() || inside->position.value != 0)) {
+      held = std::prev(inside)->value;
+    }
+    // A lane with nothing inside the pattern is silent in every repeat.
+    if (!held && (inside == lane.points.end() || inside->position >= clip.pattern_length)) {
       continue;
     }
     double last = 0.0;
@@ -156,7 +171,21 @@ struct ClipInterval {
       }
       const auto base = iteration * clip.pattern_length.value;
       bool past_end = false;
-      for (const auto& point : lane.points) {
+      if (held) {
+        auto sample = sample_at(snapshot, clip, base);
+        if (!sample) {
+          return Result<void>::failure(sample.error());
+        }
+        if (sample.value() >= interval.end) {
+          break;
+        }
+        if (pedals.size() >= project::max_midi_events_per_project) {
+          return Result<void>::failure(exhausted("MIDI pedal event count exceeded"));
+        }
+        pedals.push_back({{sample.value()}, clip.id, lane.pedal, *held, false});
+        last = *held;
+      }
+      for (const auto& point : std::ranges::subrange(inside, lane.points.end())) {
         if (point.position >= clip.pattern_length) {
           break; // Points are sorted; the rest are kept past the pattern, silent.
         }
@@ -233,13 +262,13 @@ struct ClipInterval {
       break;
     }
     for (const auto& note : clip.notes) {
-      if (note.start.value < 0 || note.end <= note.start || note.key > foundation::max_midi_key ||
+      if (note.end <= note.start || note.key > foundation::max_midi_key ||
           note.velocity < foundation::min_note_velocity ||
           note.velocity > foundation::max_note_velocity) {
         return Result<void>::failure(invalid("invalid MIDI note"));
       }
-      if (note.start >= clip.pattern_length) {
-        continue; // Kept past the pattern's end, silent.
+      if (!project::note_plays(clip, note)) {
+        continue; // Kept before tick 0 or past the pattern's end, silent.
       }
       // A note crossing the pattern's end is cut there, as by the clip end.
       const bool cut = note.end > clip.pattern_length;
@@ -333,9 +362,23 @@ InstrumentEvents::copy_pedal_block(timeline::SamplePosition start, std::uint32_t
 }
 
 BlockMidiResult InstrumentEvents::copy_pedals(timeline::SamplePosition start, std::uint32_t frames,
-                                              bool chase,
-                                              std::span<BlockPedalEvent> output) const noexcept {
+                                              bool chase, std::span<BlockPedalEvent> output,
+                                              const InstrumentEvents* replaced) const noexcept {
   std::size_t chased = 0;
+  if (!chase && replaced != nullptr && start.value >= 0) {
+    const auto before = replaced->pedal_state_at(start);
+    const auto after = pedal_state_at(start);
+    for (std::size_t pedal = 0; pedal < after.size(); ++pedal) {
+      if (before[pedal] == after[pedal]) {
+        continue;
+      }
+      if (chased == output.size()) {
+        return {BlockMidiStatus::insufficient_storage, 0};
+      }
+      output[chased++] = {0, static_cast<project::MidiPedal>(pedal),
+                          static_cast<float>(after[pedal])};
+    }
+  }
   if (chase && start.value >= 0) {
     const auto held = pedal_state_at(start);
     for (std::size_t pedal = 0; pedal < held.size(); ++pedal) {
@@ -489,24 +532,81 @@ Result<CompiledMidiPlan> compile_midi_events(const project::Snapshot& snapshot) 
   return Result<CompiledMidiPlan>::success(CompiledMidiPlan(std::move(instruments)));
 }
 
+NoteSpans::NoteSpans(const InstrumentEvents& events) {
+  std::vector<const ScheduledMidiEvent*> order;
+  order.reserve(events.events().size());
+  for (const auto& event : events.events())
+    order.push_back(&event);
+  // Each note's on and off in turn; at one sample an off ends the earlier
+  // occurrence before a repeat starts.
+  std::ranges::stable_sort(order, [](const ScheduledMidiEvent* a, const ScheduledMidiEvent* b) {
+    return std::tuple{a->clip.bits(), a->note.bits(), a->sample.value, a->kind} <
+           std::tuple{b->clip.bits(), b->note.bits(), b->sample.value, b->kind};
+  });
+  spans_.reserve(order.size() / 2 + 1);
+  const ScheduledMidiEvent* open = nullptr;
+  for (const auto* event : order) {
+    if (open != nullptr && (open->clip != event->clip || open->note != event->note ||
+                            event->kind == MidiEventKind::note_on)) {
+      spans_.push_back({open->clip.bits(), open->note.bits(), open->sample.value,
+                        std::numeric_limits<std::int64_t>::max(), open->key});
+      open = nullptr;
+    }
+    if (event->kind == MidiEventKind::note_on) {
+      open = event;
+    } else if (open != nullptr) {
+      spans_.push_back({open->clip.bits(), open->note.bits(), open->sample.value,
+                        event->sample.value, open->key});
+      open = nullptr;
+    }
+  }
+  if (open != nullptr)
+    spans_.push_back({open->clip.bits(), open->note.bits(), open->sample.value,
+                      std::numeric_limits<std::int64_t>::max(), open->key});
+}
+
+bool NoteSpans::holds(const BlockMidiEvent& note_on, std::int64_t sample) const noexcept {
+  // The last occurrence of the note starting before `sample`.
+  const auto after = std::ranges::upper_bound(
+      spans_, std::tuple{note_on.clip_id_bits, note_on.note_id_bits, sample - 1}, std::less<>{},
+      [](const Span& span) { return std::tuple{span.clip, span.note, span.on}; });
+  if (after == spans_.begin())
+    return false;
+  const auto& span = *std::prev(after);
+  return span.clip == note_on.clip_id_bits && span.note == note_on.note_id_bits &&
+         span.key == note_on.key && span.off >= sample;
+}
+
 BlockMidiResult HeldNotes::copy_block(const InstrumentEvents& events,
                                       timeline::SamplePosition start, std::uint32_t frames,
-                                      std::uint64_t generation,
-                                      std::span<BlockMidiEvent> output) noexcept {
+                                      std::uint64_t generation, std::span<BlockMidiEvent> output,
+                                      const NoteSpans* replacement) noexcept {
   if (output.size() < block_capacity)
     return {BlockMidiStatus::insufficient_storage, 0};
   if (!started_ || generation != generation_)
     count_ = 0;
   std::size_t released = 0;
   const bool jumped = started_ && generation == generation_ && start.value != next_sample_;
+  const auto release = [&](const BlockMidiEvent& held) {
+    auto off = held;
+    off.offset = 0;
+    off.kind = MidiEventKind::note_off;
+    off.velocity = 0;
+    off.boundary_crop = true;
+    output[released++] = off;
+  };
+  // Notes a replacing plan no longer holds: released, and forgotten once
+  // the block is ready (a failed block keeps them for its retry).
+  std::array<bool, capacity> dropped{};
   if (jumped) {
+    for (std::size_t i = 0; i < count_; ++i)
+      release(held_[i]);
+  } else if (replacement != nullptr) {
     for (std::size_t i = 0; i < count_; ++i) {
-      auto off = held_[i];
-      off.offset = 0;
-      off.kind = MidiEventKind::note_off;
-      off.velocity = 0;
-      off.boundary_crop = true;
-      output[released++] = off;
+      if (!replacement->holds(held_[i], start.value)) {
+        release(held_[i]);
+        dropped[i] = true;
+      }
     }
   }
   auto copied =
@@ -514,8 +614,16 @@ BlockMidiResult HeldNotes::copy_block(const InstrumentEvents& events,
   // A failed block keeps the held notes, so a retry still releases them.
   if (copied.status != BlockMidiStatus::ready)
     return copied;
-  if (jumped)
+  if (jumped) {
     count_ = 0;
+  } else if (released != 0) {
+    std::size_t kept = 0;
+    for (std::size_t i = 0; i < count_; ++i) {
+      if (!dropped[i])
+        held_[kept++] = held_[i];
+    }
+    count_ = kept;
+  }
   // Track the plan's own notes before the releases are merged in.
   for (const auto& event : output.subspan(released, copied.count)) {
     if (event.kind == MidiEventKind::note_on) {

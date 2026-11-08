@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <ranges>
@@ -125,6 +126,91 @@ RoutingService::route_tracks_to_master(std::span<const project::TrackId> tracks)
   auto applied = model().apply(operations);
   return applied ? foundation::Result<void>::success()
                  : foundation::Result<void>::failure(applied.error());
+}
+
+foundation::Result<void> RoutingService::place_tracks(std::span<const project::TrackId> tracks,
+                                                      std::optional<project::TrackId> bus,
+                                                      std::optional<project::TrackId> before) {
+  using Result = foundation::Result<void>;
+  const auto& current = snapshot();
+  const auto find = [&](project::TrackId id) {
+    return std::ranges::find(current.tracks, id, &project::Track::id);
+  };
+  if (bus) {
+    const auto found = find(*bus);
+    if (found == current.tracks.end() || found->kind != project::TrackKind::group_bus)
+      return Result::failure({foundation::ErrorCode::invalid_argument, "Choose a group bus"});
+  }
+  if (before && find(*before) == current.tracks.end())
+    return Result::failure(
+        {foundation::ErrorCode::not_found, "The track to drop beside no longer exists"});
+  std::vector<project::TrackId> chosen;
+  for (const auto id : tracks) {
+    const auto found = find(id);
+    if (found == current.tracks.end())
+      return Result::failure(
+          {foundation::ErrorCode::not_found, "A selected track no longer exists"});
+    if (bus && is_bus(*found))
+      return Result::failure({foundation::ErrorCode::invalid_argument,
+                              "A bus can't go inside a group bus; it stays on the master"});
+    if (std::ranges::find(chosen, id) == chosen.end())
+      chosen.push_back(id);
+  }
+  if (chosen.empty())
+    return Result::failure({foundation::ErrorCode::invalid_argument, "Select tracks to move"});
+  const auto is_chosen = [&](project::TrackId id) {
+    return std::ranges::find(chosen, id) != chosen.end();
+  };
+
+  // The order after the drop: the others keep theirs, and the chosen tracks,
+  // in their saved order, go in at the drop point.
+  std::vector<project::TrackId> order;
+  std::vector<project::TrackId> moving;
+  for (const auto& track : current.tracks)
+    (is_chosen(track.id) ? moving : order).push_back(track.id);
+  auto at = order.end();
+  if (before) {
+    // A chosen track as the anchor stands for its own place.
+    std::size_t kept = 0;
+    for (const auto& track : current.tracks) {
+      if (track.id == *before)
+        break;
+      if (!is_chosen(track.id))
+        ++kept;
+    }
+    at = order.begin() + static_cast<std::ptrdiff_t>(kept);
+  } else if (bus) {
+    // After the bus's last member, or the bus itself.
+    at = std::ranges::find(order, *bus) + 1;
+    for (auto item = at; item != order.end(); ++item) {
+      if (find(*item)->main_output == bus)
+        at = item + 1;
+    }
+  }
+  order.insert(at, moving.begin(), moving.end());
+
+  std::vector<project::Operation> operations;
+  for (const auto id : chosen) {
+    if (find(id)->main_output != bus)
+      operations.emplace_back(project::SetTrackMainOutput{id, bus});
+  }
+  std::vector<project::TrackId> now;
+  now.reserve(current.tracks.size());
+  for (const auto& track : current.tracks)
+    now.push_back(track.id);
+  for (std::size_t index = 0; index < order.size(); ++index) {
+    if (now[index] == order[index])
+      continue;
+    const auto from = std::ranges::find(now, order[index]);
+    const auto id = *from;
+    now.erase(from);
+    now.insert(now.begin() + static_cast<std::ptrdiff_t>(index), id);
+    operations.emplace_back(project::MoveTrack{id, index});
+  }
+  if (operations.empty())
+    return Result::success();
+  auto applied = model().apply(operations);
+  return applied ? Result::success() : Result::failure(applied.error());
 }
 
 foundation::Result<project::SendId>

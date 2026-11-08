@@ -56,6 +56,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Install: install.md
   - Documentation map: map.md
   - Product requirements: PRD.md
   - High-level design: HLD.md

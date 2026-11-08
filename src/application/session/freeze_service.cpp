@@ -217,7 +217,8 @@ Result<project::TrackId> FreezeService::finish_track_bounce(persistence::StagedW
   for (const auto& send : original.sends) {
     // The audio keys what its source keyed, once: a bounce's muted source
     // keys nothing (routing::silent_key_sources) unless a mute lane drives
-    // its mute, and then the source keeps its keys.
+    // its mute. Then the source keeps its keys, gated by that lane
+    // (ADR-0097), and the audio, under the same lane, keys nothing.
     if (!flatten && send.purpose == project::SendPurpose::sidechain &&
         routing::has_mute_automation(original))
       continue;

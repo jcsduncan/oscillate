@@ -227,16 +227,16 @@ oscillate_add_case_tests(application_routed_playback oscillate_application_route
   live_vst3_bypass_switches_to_dry_path
   live_vst3_edit_spanning_two_tracks_switches_live
   missing_insert_provider_does_not_publish
-  pending_supersession_and_hold_validation
+  pending_supersession_and_refusal
   unadoptable_live_switch_is_withdrawn_and_next_edit_publishes
-  changed_model_during_hold_is_reported
+  later_edit_after_a_refusal_is_reported
   constrained_publication_preserves_failed_revision
   terminal_limiter_alignment_and_tail
   terminal_output_latency_is_separate_from_edge_compensation
-  captured_audio_edit_keeps_old_graph_until_explicit_hold
+  captured_audio_edit_keeps_old_graph_until_its_switch
   exact_split_is_source_only_but_arbitrary_add_is_not
-  captured_audio_edit_failure_and_supersession_do_not_hold
-  captured_audio_edit_rejects_synth_graph_before_hold)
+  captured_audio_edit_failure_and_supersession_never_publish
+  captured_audio_edit_switches_beside_an_unchanged_synth)
 
 oscillate_add_test_executable(oscillate_application_prepared_tail_tests SOURCES prepared_route_tail_tests.cpp
   LIBS oscillate::application oscillate::export
@@ -299,6 +299,21 @@ oscillate_add_test_executable(oscillate_application_native_instrument_session_te
 oscillate_add_test_executable(oscillate_application_routed_synth_tests SOURCES routed_synth_tests.cpp
   LIBS oscillate::application
   TEST application_routed_synth)
+
+oscillate_add_test_executable(oscillate_application_routed_live_edit_tests
+  SOURCES routed_live_edit_tests.cpp
+  LIBS oscillate::application)
+oscillate_add_case_tests(application_routed_live_edit oscillate_application_routed_live_edit_tests
+  CASES
+  note_add_is_heard_from_its_block
+  note_move_plays_at_its_new_place
+  note_delete_releases_the_sounding_note
+  clip_duplicate_plays_its_copy
+  clip_move_plays_at_its_new_place
+  clip_delete_releases_its_sounding_note
+  track_mute_fades_without_a_gap
+  rapid_edits_coalesce_onto_the_newest_revision
+  an_edit_waiting_behind_a_note_edit_applies_next)
 
 oscillate_add_test_executable(oscillate_application_export_tail_trim_tests SOURCES export_tail_trim_tests.cpp
   LIBS oscillate::application
@@ -379,9 +394,18 @@ oscillate_add_test_executable(oscillate_application_arrangement_basics_tests SOU
   LIBS oscillate::application
   TEST application_arrangement_basics)
 
+# ADR-0096: a MIDI clip's left edge trims, keeping its notes in place.
+oscillate_add_test_executable(oscillate_application_midi_clip_trim_tests SOURCES midi_clip_trim_tests.cpp
+  LIBS oscillate::application oscillate::engine
+  TEST application_midi_clip_trim)
+
 oscillate_add_test_executable(oscillate_application_routed_effect_live_tests SOURCES routed_effect_live_tests.cpp
   LIBS oscillate::application oscillate::native_effects
   TEST application_routed_effect_live)
+
+oscillate_add_test_executable(oscillate_application_mute_lane_key_tests SOURCES mute_lane_key_tests.cpp
+  LIBS oscillate::application oscillate::native_effects
+  TEST application_mute_lane_keys TIER slow LABELS parity)
 
 oscillate_add_test_executable(oscillate_application_channel_automation_tests SOURCES channel_automation_tests.cpp
   LIBS oscillate::application
@@ -435,3 +459,8 @@ foreach(comp_case a_pattern_keeps_the_musicians_settings applied_rhythm_plays_wh
   oscillate_add_test(NAME application_comp_session_${comp_case}
     COMMAND oscillate_application_comp_session_tests ${comp_case})
 endforeach()
+
+# UQ-14: a Ctrl-drag copies clips to the drop.
+oscillate_add_test_executable(oscillate_application_clip_copy_drag_tests SOURCES clip_copy_drag_tests.cpp
+  LIBS oscillate::application
+  TEST application_clip_copy_drag)

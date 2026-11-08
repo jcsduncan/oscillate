@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <iterator>
 #include <optional>
 #include <ranges>
 #include <string>
@@ -43,6 +44,42 @@ namespace {
 // "#rrggbb", or empty when the app's palette decides.
 [[nodiscard]] QString color_text(const std::optional<std::uint32_t>& color) {
   return color ? QStringLiteral("#%1").arg(*color, 6, 16, QLatin1Char('0')) : QString();
+}
+
+// A group bus's members' clips merged into spans of zero-based bars
+// ({startBar, endBar}): a folded bus's lane outlines them.
+void add_member_spans(QVariantList& tracks, double timeline_bars) {
+  for (auto& entry : tracks) {
+    auto bus = entry.toMap();
+    if (bus.value(QStringLiteral("kind")).toString() != QStringLiteral("group"))
+      continue;
+    const auto id = bus.value(QStringLiteral("id")).toString();
+    std::vector<std::pair<double, double>> spans;
+    for (const auto& other : tracks) {
+      const auto member = other.toMap();
+      if (member.value(QStringLiteral("busId")).toString() != id)
+        continue;
+      for (const auto& clip : member.value(QStringLiteral("clips")).toList()) {
+        const auto map = clip.toMap();
+        const double start = map.value(QStringLiteral("start")).toDouble();
+        spans.emplace_back(start, start + map.value(QStringLiteral("length")).toDouble());
+      }
+    }
+    std::ranges::sort(spans);
+    std::vector<std::pair<double, double>> merged;
+    for (const auto& span : spans) {
+      if (!merged.empty() && span.first <= merged.back().second)
+        merged.back().second = std::max(merged.back().second, span.second);
+      else
+        merged.push_back(span);
+    }
+    QVariantList projected;
+    for (const auto& [start, end] : merged)
+      projected.push_back(
+          QVariantMap{{"startBar", start * timeline_bars}, {"endBar", end * timeline_bars}});
+    bus.insert(QStringLiteral("memberSpans"), projected);
+    entry = bus;
+  }
 }
 } // namespace
 
@@ -272,8 +309,13 @@ void ProjectBridge::refresh() {
     for (const auto& clip : track.midi_clips) {
       auto projected = clip_projection(snapshot, clip.id, clip.placement, QStringLiteral("midi"),
                                        timeline_bars_);
+      // Notes trimmed off the clip's left edge are kept but neither drawn
+      // nor edited until the edge is dragged back over them.
+      std::vector<project::MidiNote> shown;
+      std::ranges::copy_if(clip.notes, std::back_inserter(shown),
+                           [](const project::MidiNote& note) { return note.start.value >= 0; });
       QVariantList notes;
-      for (const auto& note : clip.notes) {
+      for (const auto& note : shown) {
         notes.push_back(QVariantMap{
             {"id", QString::fromStdString(note.id.to_string())},
             {"step", static_cast<int>(note.start.value / (timeline::ticks_per_quarter / 4))},
@@ -288,7 +330,7 @@ void ProjectBridge::refresh() {
       // The chords the notes make (ADR-0084), named on the clip.
       QVariantList chords;
       const auto chord_key = snapshot.key.value_or(HarmonyController::fallback_key);
-      for (const auto& region : harmony::recognise(clip.notes, clip.pattern_length))
+      for (const auto& region : harmony::recognise(shown, clip.pattern_length))
         chords.push_back(QVariantMap{
             {"startTicks", static_cast<qlonglong>(region.position.value)},
             {"endTicks", static_cast<qlonglong>(region.position.value + region.length_ticks)},
@@ -351,6 +393,7 @@ void ProjectBridge::refresh() {
     }
     const auto sound_name = instrument ? starter_sound_name(track) : QString();
     const auto kick_lock = application::kick_bass_lock_state(snapshot, track.id);
+    const auto& nesting = routing_view.nesting(track.id);
     tracks.push_back(QVariantMap{
         {"id", QString::fromStdString(track.id.to_string())},
         {"name",
@@ -366,6 +409,13 @@ void ProjectBridge::refresh() {
         {"mainDestinationId",
          track.main_output ? QString::fromStdString(track.main_output->to_string()) : QString()},
         {"mainDestinationName", routing_view.main_destination_name(track.main_output)},
+        // The track list's nesting (TrackRoutingView::Nesting): the row it
+        // shows in and the group bus it sits under.
+        {"displayIndex", nesting.display_index},
+        {"busId", nesting.bus ? QString::fromStdString(nesting.bus->to_string()) : QString()},
+        {"memberCount", nesting.member_count},
+        {"lastMember", nesting.last_member},
+        {"fedBy", nesting.fed_by},
         {"sends", sends},
         {"sendCount", static_cast<int>(track.sends.size())},
         {"nativeSourceReady",
@@ -392,6 +442,7 @@ void ProjectBridge::refresh() {
         {"clipCount", static_cast<int>(clips.size())},
         {"clips", clips}});
   }
+  detail::add_member_spans(tracks, static_cast<double>(timeline_bars_));
   insert_chains_.clear();
   const auto projected_chains = project::project_insert_chains(snapshot);
   if (projected_chains && projected_chains.value().paths.size() == snapshot.tracks.size() + 1) {

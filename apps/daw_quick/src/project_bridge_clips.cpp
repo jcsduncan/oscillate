@@ -320,6 +320,39 @@ void ProjectBridge::resize_midi_clip(const QString& clip_id, double normalized_e
                        : QStringLiteral("MIDI clip resized · revision %1").arg(revision_));
 }
 
+void ProjectBridge::trim_midi_clip_start(const QString& clip_id, double normalized_start) {
+  if (!session_ || control_busy() || playback_completion_ || export_busy() || import_busy()) {
+    set_status(QStringLiteral("Finish the current project operation before editing MIDI clips"));
+    return;
+  }
+  const auto parsed = project::ClipId::parse(clip_id.toStdString());
+  if (!parsed || !std::isfinite(normalized_start) || normalized_start < 0.0 ||
+      normalized_start > 1.0 || timeline_bars_ < 1) {
+    set_status(QStringLiteral("Select a MIDI clip and valid starting bar"));
+    return;
+  }
+  const auto tick =
+      tick_at_bars(session_->snapshot(), std::clamp(normalized_start * timeline_bars_, 0.0,
+                                                    static_cast<double>(timeline_bars_)));
+  if (!tick) {
+    set_status(QStringLiteral("MIDI trim rejected: that position is outside the meter"));
+    return;
+  }
+  const auto before = session_->snapshot().revision;
+  auto result = session_->midi_clips().trim_midi_clip_start(parsed.value(), tick.value());
+  if (!result) {
+    set_status(QStringLiteral("MIDI trim rejected: %1")
+                   .arg(QString::fromStdString(result.error().message)));
+    return;
+  }
+  refresh();
+  if (before != revision_)
+    submit_playback_edit();
+  set_status(before == revision_
+                 ? QStringLiteral("MIDI clip start is unchanged")
+                 : QStringLiteral("MIDI clip start trimmed · revision %1").arg(revision_));
+}
+
 void ProjectBridge::set_midi_clip_loop(const QString& clip_id, bool loop) {
   if (!session_ || control_busy() || playback_completion_ || export_busy() || import_busy()) {
     set_status(QStringLiteral("Finish the current project operation before editing MIDI clips"));
@@ -1064,6 +1097,46 @@ void ProjectBridge::move_selected_clips(double from, double to, int track_delta)
     return;
   submit_audio_clip_edit();
   set_status(QStringLiteral("%1 clips moved").arg(static_cast<qulonglong>(clips.size())));
+}
+
+void ProjectBridge::copy_clips_to(const QStringList& clip_ids, double from, double to,
+                                  int track_delta) {
+  if (!audio_edit_enabled()) {
+    set_status(QStringLiteral("Finish active project work before copying clips"));
+    return;
+  }
+  const auto clips = parse_ids<project::ClipId>(clip_ids);
+  if (clips.empty() || !std::isfinite(from) || !std::isfinite(to) || timeline_bars_ < 1) {
+    set_status(QStringLiteral("Select clips to copy"));
+    return;
+  }
+  // An audio drag may drop left of bar 1; a copy there is refused, not clamped.
+  if (to < 0.0) {
+    set_status(QStringLiteral("Copy rejected: the copies cannot start before bar 1"));
+    return;
+  }
+  const auto bars = static_cast<double>(timeline_bars_);
+  const auto& snapshot = session_->snapshot();
+  const auto start = tick_at_bars(snapshot, std::clamp(from * bars, 0.0, bars));
+  const auto end = tick_at_bars(snapshot, std::clamp(to * bars, 0.0, bars));
+  if (!start || !end) {
+    set_status(QStringLiteral("Copy rejected: that position is outside the meter"));
+    return;
+  }
+  const auto copied = session_->clipboard().copy_clips_by(
+      clips, end.value().value - start.value().value, track_delta);
+  if (!copied) {
+    set_status(
+        QStringLiteral("Copy rejected: %1").arg(QString::fromStdString(copied.error().message)));
+    return;
+  }
+  QStringList ids;
+  for (const auto& id : copied.value())
+    ids.push_back(QString::fromStdString(id.to_string()));
+  set_selected_clip_ids(ids);
+  refresh();
+  submit_audio_clip_edit();
+  set_status(QStringLiteral("%1 clips copied").arg(ids.size()));
 }
 
 void ProjectBridge::nudge_selected_clips(int beat_direction) {

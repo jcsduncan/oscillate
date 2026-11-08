@@ -132,7 +132,6 @@ void synth_track_plays_and_takes_live_edits_without_restart() {
   auto edited = take(model.apply({project::SetNativeInstrumentPatch{track, patch}}));
   REQUIRE_OK(control.begin_edit(edited, "synth cutoff"),
              "synth edit was accepted by the live path");
-  require(!control.held_boundary().has_value(), "a live synth edit never holds the graph");
   counting_allocations = true;
   double after = 0.0;
   for (int block = 0; block < 4; ++block) {
@@ -201,8 +200,6 @@ void native_automation_edits_apply_without_restarting_voices() {
       auto adopted = take(model.adopt_authoritative_snapshot(session->snapshot()));
       REQUIRE_OK(control.begin_edit(adopted, label),
                  "native automation edit did not enter the live mailbox");
-      REQUIRE_TRUE(!control.held_boundary().has_value(),
-                   "native automation edit did not enter the live mailbox");
       counted_allocations = 0;
       counting_allocations = true;
       const auto rendered = audio::render_transport_block(device, transport, true, stereo, output);
@@ -218,8 +215,7 @@ void native_automation_edits_apply_without_restarting_voices() {
                   std::to_string(control.status().active_graph_revision) + ", saved " +
                   std::to_string(session->snapshot().revision) + ", voices " +
                   std::to_string(runtime->observed_status().active_voices) + ", player " +
-                  std::to_string(source->synth_player(track)->applied_automation_revision()) +
-                  ", held " + std::to_string(control.held_boundary().has_value()) + ")");
+                  std::to_string(source->synth_player(track)->applied_plan_revision()) + ")");
     };
     const auto point = take(session->parameter_automation().set_native_automation_point(
         track, "prism.filter.cutoff", 0, 500.0));
@@ -336,13 +332,12 @@ void native_automation_mailbox_retries_latest_saved_revision() {
                 .has_value(),
             "automation mailbox edit failed");
     auto adopted = take(model.adopt_authoritative_snapshot(session->snapshot()));
-    const auto offered = control.begin_edit(adopted, "rapid synth lane edit");
-    if (edit < 7)
-      REQUIRE_OK(offered, "bounded synth automation offer was rejected early");
-    else
-      require(!offered && offered.error().code == foundation::ErrorCode::resource_exhausted,
-              "full synth automation mailbox did not reject the latest offer");
+    // Past the mailbox's bound the newest edit waits, never refused.
+    REQUIRE_OK(control.begin_edit(adopted, "rapid synth lane edit"),
+               "a rapid synth lane edit was refused instead of queued");
   }
+  REQUIRE_EQ(control.status().application, app::PlaybackApplication::pending,
+             "the newest synth lane edit waits for the mailbox");
   REQUIRE_EQ(control.status().active_graph_revision, saved.revision,
              "an unacknowledged synth automation offer was reported active");
   counted_allocations = 0;
@@ -352,7 +347,7 @@ void native_automation_mailbox_retries_latest_saved_revision() {
   REQUIRE_EQ(first, audio::BlockResult::rendered,
              "full synth automation mailbox allocated in its callback");
   REQUIRE_EQ(counted_allocations, 0, "full synth automation mailbox allocated in its callback");
-  control.observe(); // Acknowledges offer 7 and retries the saved offer 8.
+  control.observe(); // Acknowledges offer 7 and offers the waiting offer 8.
   counted_allocations = 0;
   counting_allocations = true;
   const auto second = audio::render_transport_block(device, transport, true, stereo, samples);
@@ -364,7 +359,7 @@ void native_automation_mailbox_retries_latest_saved_revision() {
              "latest saved synth automation revision was not retried after acknowledgement");
   REQUIRE_EQ(control.status().active_graph_revision, session->snapshot().revision,
              "latest saved synth automation revision was not retried after acknowledgement");
-  REQUIRE_EQ(source->synth_player(saved.tracks.front().id)->applied_automation_revision(),
+  REQUIRE_EQ(source->synth_player(saved.tracks.front().id)->applied_plan_revision(),
              session->snapshot().revision,
              "latest saved synth automation revision was not retried after acknowledgement");
   control.unbind_live_source();
@@ -431,7 +426,6 @@ void every_engine_plays_live() {
     auto edited = take(model.apply({project::SetNativeInstrumentPatch{track, patch}}));
     REQUIRE_OK(control.begin_edit(edited, "synth parameter"),
                "live edit accepted without a restart");
-    REQUIRE_TRUE(!control.held_boundary().has_value(), "live edit accepted without a restart");
     for (int block = 0; block < 4; ++block) {
       REQUIRE_EQ(audio::render_transport_block(device, transport, true, stereo, samples),
                  audio::BlockResult::rendered, "post-edit block rendered");
@@ -482,7 +476,6 @@ void engine_switch_keeps_old_sound_and_reports_saved_state_until_source_replaced
   REQUIRE_TRUE(!offered, "a source-only engine switch must report that it is unapplied");
   REQUIRE_NE(offered.error().message.find("saved but not audible"), std::string::npos,
              "a source-only engine switch must report that it is unapplied");
-  require(!control.held_boundary().has_value(), "the unsupported switch does not hold playback");
   const auto status = control.status();
   REQUIRE_EQ(status.application, app::PlaybackApplication::failed,
              "saved and audible revisions stay separate");
@@ -507,8 +500,6 @@ void engine_switch_keeps_old_sound_and_reports_saved_state_until_source_replaced
   REQUIRE_EQ(counted_allocations, 0, "failed switch neither allocates nor silences the held note");
   REQUIRE_GT(old_sound, 0.0, "failed switch neither allocates nor silences the held note");
   REQUIRE_TRUE(!control.retry(), "retry cannot falsely publish the old source as the new engine");
-  REQUIRE_TRUE(!control.held_boundary().has_value(),
-               "retry cannot falsely publish the old source as the new engine");
   control.unbind_live_source();
 
   // A newly prepared source reads the saved choice after a deliberate restart.
@@ -613,7 +604,6 @@ void comp_plays_ahead_and_takes_live_edits() {
   auto edited = take(model.apply(
       {project::SetNoteEffectSettings{track.id, track.note_effects.front().id, parameters}}));
   REQUIRE_OK(control.begin_edit(edited, "comp"), "the Comp edit was accepted live");
-  require(!control.held_boundary().has_value(), "a Comp edit never holds the graph");
   counting_allocations = true;
   for (int block = 0; block < 8; ++block) {
     REQUIRE_EQ(audio::render_transport_block(device, transport, true, stereo, samples),
@@ -625,8 +615,8 @@ void comp_plays_ahead_and_takes_live_edits() {
   control.observe();
   REQUIRE_EQ(control.status().active_graph_revision, edited.snapshot->revision,
              "the edit is audible once the player adopts it");
-  REQUIRE_EQ(source->synth_player(track.id)->applied_automation_revision(),
-             edited.snapshot->revision, "the player acknowledged the exact revision");
+  REQUIRE_EQ(source->synth_player(track.id)->applied_plan_revision(), edited.snapshot->revision,
+             "the player acknowledged the exact revision");
   control.unbind_live_source();
 }
 

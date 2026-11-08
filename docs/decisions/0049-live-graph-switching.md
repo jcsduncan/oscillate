@@ -1,6 +1,7 @@
 # ADR-0049 — Live graph switching and latency handover
 
 **Status:** Accepted and implemented; ADR-0050 extends it to every chain, VST3 included. **Date:** 21 October 2026.
+**Superseded in part by:** [ADR-0094](0094-primed-source-switching.md), which removes the held path and its test knob.
 
 ## Context
 

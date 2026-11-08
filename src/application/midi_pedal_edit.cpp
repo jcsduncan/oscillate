@@ -14,12 +14,24 @@ using Point = project::MidiPedalPoint;
 
 // Sorted, and inside the pattern without points that repeat the value in
 // force (0 before the first point). Points kept after the pattern's end are
-// silent (a shortened clip keeps them) and pass through untouched.
+// silent (a shortened clip keeps them) and pass through untouched, as do
+// those before tick 0 (a clip trimmed from its left edge).
 std::vector<Point> normalised(std::vector<Point> points, std::int64_t pattern_length) {
   std::ranges::stable_sort(points, {}, [](const Point& p) { return p.position.value; });
   std::vector<Point> out;
   std::vector<Point> kept;
-  double current = 0.0;
+  std::vector<Point> before;
+  for (const auto& point : points) {
+    if (point.position.value >= 0) {
+      break;
+    }
+    if (before.empty() || before.back().position != point.position) {
+      before.push_back(point);
+    } else {
+      before.back() = point;
+    }
+  }
+  double current = before.empty() ? 0.0 : before.back().value;
   for (const auto& point : points) {
     if (point.position.value >= pattern_length) {
       if (kept.empty() || kept.back().position != point.position) {
@@ -44,8 +56,8 @@ std::vector<Point> normalised(std::vector<Point> points, std::int64_t pattern_le
     current = point.value;
   }
   // A same-tick overwrite can leave a point repeating its predecessor.
-  std::vector<Point> clean;
-  current = 0.0;
+  std::vector<Point> clean = std::move(before);
+  current = clean.empty() ? 0.0 : clean.back().value;
   for (const auto& point : out) {
     if (point.value != current) {
       clean.push_back(point);
@@ -94,9 +106,11 @@ std::vector<PedalSpan> pedal_spans(std::span<const Point> points, std::int64_t p
     if (points[i].value <= 0.0) {
       continue;
     }
+    // A point before tick 0 (trimmed off the clip's left edge) holds from 0.
+    const std::int64_t start = std::max<std::int64_t>(0, points[i].position.value);
     const std::int64_t end = i + 1 < points.size() ? points[i + 1].position.value : pattern_length;
-    if (end > points[i].position.value) {
-      spans.push_back({points[i].position.value, std::min(end, pattern_length), points[i].value});
+    if (end > start) {
+      spans.push_back({start, std::min(end, pattern_length), points[i].value});
     }
   }
   return spans;

@@ -54,6 +54,14 @@ public:
   // the notes after the new end, silent, until the clip is lengthened again.
   [[nodiscard]] foundation::Result<void> resize_midi_clip(project::ClipId clip,
                                                           timeline::TickPosition new_end);
+  // Moves the clip's start to `new_start` and leaves its end, as one undo
+  // step. Notes, pedals and the pattern's end keep their timeline places, so
+  // notes before the new start are kept but silent (and hidden), and
+  // dragging the start back earlier brings them back. Clip automation stays
+  // with the clip's start, as for audio clips. A loop that repeats is
+  // refused: each repeat would move with the start.
+  [[nodiscard]] foundation::Result<void> trim_midi_clip_start(project::ClipId clip,
+                                                              timeline::TickPosition new_start);
   // Switches the clip's loop as one undo step. The pattern becomes the
   // clip's current length either way, so the whole clip repeats, or its
   // repeats stop with the first pass's notes left where they are.

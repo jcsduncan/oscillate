@@ -448,7 +448,7 @@ Result<LoopContent> loop_content(const project::Snapshot& snapshot, const projec
       if (origin >= std::min(end, to) || (!clip.loop && pass > 0))
         break;
       for (const auto& note : clip.notes) {
-        if (note.start.value >= pattern)
+        if (!project::note_plays(clip, note))
           continue;
         const auto on = origin + note.start.value;
         const auto off = std::min({origin + std::min(note.end.value, pattern), end, to});

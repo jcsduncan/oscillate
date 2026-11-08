@@ -1,6 +1,6 @@
 # ADR-0013 — Maintained JSON codec for project manifests
 
-**Status:** Accepted; implemented. The codec reads and writes only the current schema; see the schema table in [`src/persistence/README.md`](../../src/persistence/README.md). The older schema examples below record this decision's original context, not current compatibility.
+**Status:** Accepted; implemented. The codec reads and writes only the current schema (superseded by [ADR-0095](0095-schema-migration-policy.md) from the first public beta: released schemas open through forward migrations); see the schema table in [`src/persistence/README.md`](../../src/persistence/README.md). The older schema examples below record this decision's original context, not current compatibility.
 **Date:** 14 October 2026
 **Requirements:** PRD §§8, 21–23; FS-03 PM-03/PM-08; ADR-0004.
 

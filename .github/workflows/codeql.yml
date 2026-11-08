@@ -1,0 +1,133 @@
+name: CodeQL
+
+# Pull requests and pushes to main analyse C/C++ without a build
+# (build-mode none), plus Python and the workflows. The nightly run analyses
+# C/C++ from a real build of the Quick preset, for full type information.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+
+# The event is part of the group so a push to main never cancels the nightly
+# build analysis on the same ref. Runs on main are not cancelled: each one
+# caches the overlay-base database that pull requests analyse against.
+concurrency:
+  group: codeql-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    name: Changed paths (CodeQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      cpp: ${{ steps.classify.outputs.cpp }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: classify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 -I scripts/ci/changes.py "$BASE_SHA" "${HEAD_SHA:-HEAD}"
+
+  # Every language reports a result on every pull request. The c-cpp job
+  # skips its steps, and passes, when no C/C++ source changed. A pull request
+  # extracts only its changed files into the overlay-base database cached by
+  # the last run on main; without that cache (a new CodeQL version) the whole
+  # tree is extracted, which takes about half an hour.
+  analyze:
+    needs: changes
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      security-events: write # upload results to code scanning
+      contents: read # check out the repository
+      actions: read # read the workflow run for the analysis upload
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, c-cpp, python]
+    env:
+      SCAN: ${{ matrix.language != 'c-cpp' || needs.changes.outputs.cpp == 'true' }}
+    steps:
+      - name: No C/C++ change
+        if: env.SCAN != 'true'
+        run: echo "No C/C++ source changed; c-cpp analysis skipped." | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.SCAN == 'true'
+        with:
+          persist-credentials: false
+      # `tools: linked` uses the CodeQL CLI this action release ships with.
+      # v4.39.1 ships 2.27.3, the version in the runner image's toolcache,
+      # so no bundle is downloaded. Keep the two matched when bumping. A fixed
+      # version also keeps the overlay-base cache key stable.
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        if: env.SCAN == 'true'
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          tools: linked
+      # Code scanning refuses this workflow's results while the repository's
+      # CodeQL default setup is enabled; waiting for processing would fail
+      # the job on that. Processing errors show on the tool status page.
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        if: env.SCAN == 'true'
+        with:
+          category: /language:${{ matrix.language }}
+          wait-for-processing: false
+
+  # The Quick preset built as build.yml builds it, in the same container,
+  # traced by CodeQL. Without ccache, so every translation unit compiles.
+  analyze-build:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    name: Analyze (c-cpp, full build)
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    timeout-minutes: 240
+    permissions:
+      security-events: write # upload results to code scanning
+      contents: read # check out the repository
+      actions: read # read the workflow run for the analysis upload
+    env:
+      OSCILLATE_BUILD_JOBS: 4
+    steps:
+      - name: Install Git for checkout and CodeQL
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+            ca-certificates git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The workspace belongs to the runner user, not the container's root.
+      - name: Trust the workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Install dependencies (README list)
+        run: scripts/ci/install-deps.sh
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: c-cpp
+          build-mode: manual
+          tools: linked
+      - name: Configure
+        run: cmake --preset quick
+      - name: Build
+        run: scripts/build.sh build/quick --target all
+      # A category of its own, so the build analysis and the build-mode none
+      # analysis that pull requests compare against keep separate alerts.
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          category: /language:c-cpp/build-mode:manual
+          wait-for-processing: false

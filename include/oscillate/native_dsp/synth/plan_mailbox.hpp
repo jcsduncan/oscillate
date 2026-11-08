@@ -21,6 +21,10 @@ public:
   // Offers the callback has not yet moved past; a full mailbox refuses more.
   static constexpr std::size_t max_owned_plans = 8;
 
+  // Room for every plan up front, so an offer into a mailbox with room
+  // never reallocates (and so never throws).
+  PlanMailbox() { owned_.reserve(max_owned_plans); }
+
   // Control, before the first callback: the first plan, already applied.
   void install(std::unique_ptr<Plan> plan, std::uint64_t revision) {
     auto* first = plan.get();
@@ -41,8 +45,8 @@ public:
     std::erase_if(owned_, [applied](const auto& plan) { return plan->revision < applied; });
     return owned_.size() < max_owned_plans;
   }
-  // Control: offers a plan built for `revision`. Throws std::bad_alloc,
-  // leaving the current offer in place.
+  // Control: offers a plan built for `revision`. After make_room() returned
+  // true it cannot throw.
   void offer(std::unique_ptr<Plan> plan, std::uint64_t revision) {
     auto* offered = plan.get();
     owned_.push_back(std::move(plan));

@@ -126,9 +126,43 @@ a pull request changes none of their inputs; a skipped job counts as passed.
 - **Documentation**: `scripts/check-doc-links.py` and a strict MkDocs build
   of the documentation site.
 
+**CodeQL** (`codeql.yml`) analyses C/C++ without a build (build mode
+`none`), Python and the workflows with the default query suite, using the
+CodeQL CLI in the runner's toolcache. The C/C++ job passes without analysing
+when a pull request changes no C/C++ source (the `cpp` class of
+`scripts/ci/changes.py`). Results appear in the repository's code scanning
+alerts.
+
 An advisory **clang-tidy** job, not required for merging, runs the
 `.clang-tidy` checks on the translation units a pull request touches
 (`scripts/ci/tidy_changed.py`); `scripts/check-tidy.sh` checks the whole tree.
+
+## Merging
+
+Pull requests are squash-merged by auto-merge
+(`gh pr merge N --auto --squash --subject "<title> (#N)" --body ""`), which
+waits for every required check. One of them, **Review gate**, is a commit
+status that `.github/workflows/review-gate.yml` sets on the head commit
+(`scripts/ci/review_gate.py`). It is green only when:
+
+1. CodeRabbit completed a review of the head commit: its check run there
+   finished with success and says "Review completed". A head whose check
+   run says "Prior review carried forward" or "No files to review" passes
+   when an earlier commit of the same pull request had a completed review.
+   A skipped, paused or rate-limited review never passes, although GitHub
+   counts a skipped check as passed.
+2. CodeRabbit posted no rate-limit or paused notice after that review.
+3. No review thread is unresolved.
+
+CodeRabbit does not review Release Please pull requests (head branch
+`release-please--*` in this repository). Their gate is green when every
+other check run and commit status on the head commit finished green and
+no review thread is unresolved.
+
+The gate is re-evaluated when CodeRabbit's check run completes, on pushes,
+reviews and comments, and every ten minutes for every open pull request,
+because resolving a thread fires no event. After a rate limit or pause,
+comment `@coderabbitai review` and the gate follows the new review.
 
 ## Nightly and on-demand CI runs
 
@@ -140,6 +174,9 @@ These run on `main` every night; none is required for merging.
   ASan/UBSan; the `tsan` preset runs the `engine` area (the audio worker
   pool among it) and the routed playback cases. A failed run uploads the
   sanitizer reports as an artifact.
+- **CodeQL with a build** (`codeql.yml`): C/C++ analysed from a traced
+  build of the Quick preset, for full type information, under its own
+  category (`/language:c-cpp/build-mode:manual`).
 - **Tidy sweep** (`tidy-sweep.yml`): the `.clang-tidy` checks over every
   configured translation unit, with the VST3 host and the optional
   adapters, in eight parallel shards (`scripts/ci/tidy_shard.py`). The run's
@@ -154,6 +191,7 @@ Run any of them on a branch from the command line, then follow the run:
 ```sh
 gh workflow run sanitizers.yml --ref my-branch
 gh workflow run test-sweep.yml --ref my-branch
+gh workflow run codeql.yml --ref my-branch
 gh workflow run test-sweep.yml --ref my-branch -f tests='^native_nova'
 gh run watch "$(gh run list --workflow test-sweep.yml --branch my-branch --limit 1 --json databaseId --jq '.[0].databaseId')"
 ```
@@ -167,6 +205,18 @@ ASan/UBSan, TSan where concurrency changed, and coverage
 ([AGENTS.md](AGENTS.md#commands)). A release needs evidence for each PRD
 release gate (PRD §23); coverage does not waive a blocker. CodeRabbit reviews each pull request with
 the rules in `.coderabbit.yaml`, which follow [AGENTS.md](AGENTS.md).
+
+## Releases
+
+Release Please (`.github/workflows/release-please.yml`) keeps a release pull
+request open on `main` and, when it is merged, tags the release and creates
+the GitHub release; the tag push starts the packaging workflow, which
+attaches the packages. It acts with the `RELEASE_PLEASE_TOKEN` repository
+secret: the checks of a pull request opened with a workflow's own token wait
+for a maintainer's approval, and a tag pushed with it starts no workflow.
+The secret is a fine-grained personal access token with
+access to this repository only and these repository permissions: Contents,
+Issues and Pull requests, read and write (Metadata read is implied).
 
 ## Licence of contributions
 
