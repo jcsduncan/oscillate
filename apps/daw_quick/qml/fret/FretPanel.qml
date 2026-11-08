@@ -332,7 +332,12 @@ Rectangle {
                 color: panel.theme.inkDim
                 font.family: panel.theme.sans
                 font.pixelSize: panel.theme.typeEmphasis
+                // The note gives way to the compare button; its tooltip
+                // shows it whole.
                 elide: Text.ElideRight
+                readonly property bool tipShowsWhole: true
+                Accessible.name: text
+                Kit.HoverTip { theme: panel.theme }
             }
             Kit.Button {
                 id: compareButton

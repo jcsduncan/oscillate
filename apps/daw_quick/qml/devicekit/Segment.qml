@@ -60,6 +60,29 @@ Item {
         font.pixelSize: segment.theme.segmentSize
         font.bold: true
     }
+    // The captions laid out tracked, as a caption lays them out; never
+    // shown. Captions all drop their tracking when the widest would not fit
+    // its tile with it, so a column reads alike.
+    Repeater {
+        id: trackedCaptions
+        model: segment.vertical ? segment.captions : []
+        delegate: Text {
+            required property string modelData
+            visible: false
+            text: modelData
+            font.pixelSize: segment.theme.segmentCaptionSize
+            font.letterSpacing: segment.theme.segmentCaptionSpacing
+        }
+    }
+    readonly property real widestCaption: {
+        let widest = 0
+        for (let i = 0; i < trackedCaptions.count; ++i) {
+            const caption = trackedCaptions.itemAt(i)
+            if (caption !== null)
+                widest = Math.max(widest, caption.implicitWidth)
+        }
+        return widest
+    }
 
     objectName: theme.prefix + "Segment:" + parameterId
     implicitWidth: Math.max(theme.segmentWidth, fitWidth)
@@ -200,7 +223,12 @@ Item {
                         text: segment.captions.length > tile.index ? segment.captions[tile.index] : ""
                         color: tile.on ? segment.onInk : segment.theme.segmentCaptionInk(tile)
                         font.pixelSize: segment.theme.segmentCaptionSize
-                        font.letterSpacing: segment.theme.segmentCaptionSpacing
+                        // A caption wider than its tile drops its tracking,
+                        // then steps down to the least type size, before
+                        // anything is elided.
+                        font.letterSpacing: segment.widestCaption > width ? 0 : segment.theme.segmentCaptionSpacing
+                        fontSizeMode: Text.HorizontalFit
+                        minimumPixelSize: segment.theme.typeFitFloor
                         elide: Text.ElideRight
                     }
                 }
