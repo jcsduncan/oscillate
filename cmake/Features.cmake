@@ -18,6 +18,7 @@ option(OSCILLATE_REQUIRE_JACK "Fail configuration when the JACK backend is unava
 option(OSCILLATE_BUILD_FUZZ "Build opt-in malformed-input parser fuzz targets" OFF)
 option(OSCILLATE_BUILD_BENCHES "Build manual benchmarks (bench/) and listening tools (tools/listening/)" OFF)
 option(OSCILLATE_AUDIO_IO_LIVE_TESTS "Run local PipeWire (and JACK) server qualification smoke tests" OFF)
+option(OSCILLATE_BUILD_QUALIFICATION "Add the opt-in qualification programs (tests/qualification), excluded from all" OFF)
 
 # Always required.
 find_package(Threads REQUIRED)
