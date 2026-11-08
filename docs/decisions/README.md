@@ -23,7 +23,7 @@ never reused. 0070 was never assigned.
 | 0013 | [Maintained JSON codec for project manifests](0013-manifest-json-library.md) | Accepted; implemented; current-schema-only reading superseded by ADR-0095 from the first public beta |
 | 0014 | [M3 MIDI clips, event timing and sampler boundary](0014-m3-midi-event-contract.md) | Accepted; implemented |
 | 0015 | [VST3 SDK baseline for host work](0015-vst3-sdk-baseline.md) | Accepted for the SDK selection; pinned source inventory recorded, compiled-file inventory and host compatibility remain open |
-| 0016 | [Encoded audio codec boundary](0016-encoded-audio-codec-boundary.md) | Accepted; implemented (worker decoding, FLAC/MP3 export, resampling) |
+| 0016 | [Encoded audio codec boundary](0016-encoded-audio-codec-boundary.md) | Superseded in part by ADR-0107 for MP3 decoding; otherwise implemented (worker decoding, FLAC/MP3 export, resampling) |
 | 0017 | [Live VST3 track composition](0017-live-vst3-track-composition-proposal.md) | Superseded by ADR-0050 |
 | 0018 | [Bounded routed mixer handoff](0018-routed-mixer-publication.md) | Accepted; implemented |
 | 0019 | [Persisted automation identity and preparation](0019-persisted-automation-contract.md) | Accepted; implemented |
@@ -109,3 +109,4 @@ never reused. 0070 was never assigned.
 | 0101 | [VST3 instruments and effects follow live edits](0101-vst3-live-edits.md) | Accepted; implemented |
 | 0102 | [A track render plays in slices that keep its clips' channel lanes](0102-renders-play-in-slices.md) | Accepted; implemented |
 | 0104 | [Native engines share a neutral control layer](0104-native-processing-layers.md) | Accepted; control, telemetry, transport and document state built; parameter tables still in `synth` |
+| 0107 | [MP3 import decodes with libmpg123, scanning the whole stream](0107-mp3-decoding-with-libmpg123.md) | Accepted; implemented |

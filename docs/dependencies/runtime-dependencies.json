@@ -126,6 +126,7 @@
         "libc6",
         "libgcc-s1",
         "libjack-jackd2-0 | libjack-0.125",
+        "libmpg123-0t64",
         "libpipewire-0.3-0t64",
         "libqt6core6t64",
         "libqt6gui6",
