@@ -40,8 +40,8 @@ which step crashed.
 | Export | The offline master export with VST3 stages, trimmed at the silent tail; checks a finite, audible WAV. |
 
 Statuses are `pass`, `warn`, `fail`, `skip`, `crash` (the step the process
-died in or timed out in) and `not-run` (after a crash or a failed earlier
-step). Plug-in failures are results, so the workflow fails only on a harness
+died in or timed out in), `missing` (a bundle or a named class the archive
+lacks) and `not-run` (after a crash or a failed earlier step). Plug-in failures are results, so the workflow fails only on a harness
 error.
 
 ## Run it locally

@@ -1,7 +1,9 @@
 """Evidence contract for the VST3 compatibility matrix runner."""
 
 import json
+import os
 import signal
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,6 +17,7 @@ from qualify_vst3_matrix import (
     find_bundle,
     load_manifest,
     markdown,
+    run_probe,
     select_classes,
     tally,
 )
@@ -56,6 +59,16 @@ class Steps(unittest.TestCase):
     def test_a_clean_exit_leaves_unrecorded_steps_not_run(self):
         steps = complete_steps({"steps": {"scan": PASS}}, "")
         self.assertEqual(steps["load"]["status"], "not-run")
+
+    def test_a_timed_out_probe_keeps_its_last_line(self):
+        sleeper = "import time; print('loading', flush=True); time.sleep(5)"
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "out.json"
+            evidence, outcome = run_probe(
+                [sys.executable, "-c", sleeper], output, 1, dict(os.environ)
+            )
+        self.assertIsNone(evidence)
+        self.assertEqual(outcome, "timed out after 1 s: loading")
 
     def test_names_the_signal(self):
         self.assertEqual(describe_exit(-signal.SIGSEGV), "crashed with SIGSEGV")

@@ -8,7 +8,7 @@ and played at 48 kHz. Nothing is read from a user's projects.
 | | Light | Heavy |
 | --- | --- | --- |
 | Source tracks | 32 audio | 16 audio, 15 built-in synths, 1 VST3 instrument |
-| Synths | none | Nova ×6, Prism ×2, Ember ×2, Drift, Halo, Pulse, Torque, Anvil, Knock |
+| Synths | none | Nova ×6, Prism ×2, Ember, Drift, Halo, Pulse, Torque, Anvil, Knock |
 | Track effects | none | EQ and compressor per audio track; saturator and delay per synth; one VST3 effect |
 | MIDI | none | Bar-long four-note chords or an eighth-note line, at 120 BPM |
 | Routing | 2 groups, 2 returns, one send per track | the same |
@@ -16,7 +16,8 @@ and played at 48 kHz. Nothing is read from a user's projects.
 
 The audio tracks play generated WAVs (two partials and a click per beat). The
 VST3 parts default to the repository's synthetic fixtures; on the reference
-machine the heavy project uses Surge XT and Surge XT Effects instead.
+machine the heavy project uses Surge XT and Surge XT Effects instead. A build
+without the VST3 host plays a second Ember in place of the VST3 instrument.
 
 ## What a run reports
 

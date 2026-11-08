@@ -83,6 +83,8 @@ constexpr std::size_t riff_header_bytes = 12;
 constexpr double quarters_per_second = 2.0; // The host transport's default 120 BPM.
 constexpr double microseconds_per_second = 1'000'000.0;
 constexpr auto editor_settle = std::chrono::milliseconds(750);
+// Not 1, which the runner reads as a step the probe recorded itself.
+constexpr int harness_error_exit = 3;
 constexpr std::uint32_t editor_event_slice_ms = 10;
 
 std::string json_string(std::string_view text) {
@@ -733,6 +735,10 @@ int main(int argc, char** argv) {
       const bool open_editor = args.size() == 6 && args[5] == "--editor";
       if (args.size() == 6 && !open_editor)
         throw std::runtime_error("the only option is --editor");
+#if !defined(OSCILLATE_MATRIX_EDITOR)
+      if (open_editor)
+        throw std::runtime_error("--editor needs a build with the Quick UI");
+#endif
       if (!fs::is_directory(args[3]))
         throw std::runtime_error("the scratch directory must exist");
 #if defined(OSCILLATE_MATRIX_EDITOR)
@@ -748,6 +754,6 @@ int main(int argc, char** argv) {
     return 2;
   } catch (const std::exception& error) {
     std::cerr << "VST3 matrix probe: " << error.what() << '\n';
-    return 1;
+    return harness_error_exit;
   }
 }

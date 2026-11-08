@@ -1,6 +1,6 @@
 name: VST3 matrix
 
-# The VST3 compatibility matrix (docs/plugins/vst3-compatibility-matrix.md):
+# The VST3 compatibility matrix (docs/qualification/vst3-compatibility-matrix.md):
 # scan, load, render, state, editor, save/reopen and export for each class of
 # a pinned set of free Linux plug-ins. Weekly on main, on demand, and on pull
 # requests that change the matrix itself. Plug-in failures are evidence in

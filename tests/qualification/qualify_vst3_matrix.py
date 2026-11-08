@@ -170,6 +170,8 @@ def run_probe(command: list[str], output: Path, timeout: int, env: dict) -> tupl
     except subprocess.TimeoutExpired as expired:
         outcome = f"timed out after {timeout} s"
         log = expired.stdout or ""
+        if isinstance(log, bytes):
+            log = log.decode("utf-8", errors="replace")
     evidence = json.loads(output.read_text(encoding="utf-8")) if output.is_file() else None
     if outcome and log.strip():
         outcome += ": " + log.strip().splitlines()[-1]

@@ -9,7 +9,7 @@ whatever PipeWire (and JACK) the machine has:
 | --- | --- |
 | `audio_io_pipewire_live` | Silence to the default sink and the first listed sink, at 64 and 128 frames. |
 | `audio_io_jack_live*` | An isolated `jackd` dummy server the script starts (needs JACK in the build and `jackd`). |
-| 32-track streaming rehearsal | A disposable null sink, with the synthetic VST3 effect and instrument, monitored by `pw-record`. |
+| 32-track streaming rehearsal | A disposable null sink, monitored by `pw-record`. |
 | Reference projects, live | Another disposable null sink: the light and heavy [reference projects](../performance/reference-projects.md) at 64 and 128 frames. |
 
 The script enables `OSCILLATE_AUDIO_IO_LIVE_TESTS`, `OSCILLATE_BUILD_QUALIFICATION`
