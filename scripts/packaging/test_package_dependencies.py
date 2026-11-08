@@ -16,11 +16,14 @@ from package_dependencies import (
     verify,
 )
 from package_profiles import PROFILES
+from package_sources import OFFER_JSON, OFFER_TEXT, build_offer
 
 DEB = PROFILES["deb"]
 APPIMAGE = PROFILES["appimage"]
 EXTRA_PACKAGE = "libextra1"
 AMD64 = ":amd64"
+COMBINED_NOTICES = "usr/share/doc/oscillate/third-party/NOTICES.txt"
+PROJECT_COMMIT = "0" * 40
 
 
 def deb_sidecar(groups):
@@ -31,16 +34,37 @@ def deb_sidecar(groups):
     return {"status": DEB_SIDECAR_STATUS, "depends": depends}
 
 
+def notice_path(name):
+    return f"usr/share/doc/oscillate/third-party/ubuntu/{name}{AMD64}.copyright"
+
+
 def appdir_sidecar(bundled, host):
-    elf_files = [{"kind": "project", "path": "usr/bin/oscillate"}] + [
-        {"kind": "shared-library", "package": name + AMD64, "path": f"usr/lib/{name}.so"}
+    """An AppDir sidecar copying one library from each `bundled` package, with
+    its notice staged and its source in the offer."""
+    libraries = [
+        {
+            "kind": "shared-library",
+            "package": name + AMD64,
+            "source_package": f"{name}-source",
+            "source_version": "1.0-1",
+            "path": f"usr/lib/{name}.so",
+        }
         for name in bundled
     ]
+    elf_files = [{"kind": "project", "path": "usr/bin/oscillate"}, *libraries]
     exclusions = [{"package": name + AMD64, "soname": f"{name}.so"} for name in host]
+    paths = [item["path"] for item in elf_files] + [notice_path(name) for name in bundled]
+    paths += [COMBINED_NOTICES, str(OFFER_TEXT), str(OFFER_JSON)]
     return {
         "status": APPDIR_SIDECAR_STATUS,
         "elf_files": elf_files,
         "host_base_exclusions": exclusions,
+        "payload": [{"path": path} for path in paths],
+        "third_party_notices": {
+            name + AMD64: {"notice_path": notice_path(name)} for name in bundled
+        },
+        "combined_notices": COMBINED_NOTICES,
+        "source_offer": build_offer(libraries, version="1.0", project_commit=PROJECT_COMMIT),
     }
 
 
@@ -104,6 +128,41 @@ class VerifyTests(unittest.TestCase):
         problems = verify(APPIMAGE, sidecar)
         self.assertEqual(len(problems), 1)
         self.assertIn("system", problems[0])
+
+    def test_appdir_without_a_notice_for_a_bundled_package_fails(self):
+        sidecar = appdir_sidecar(APPIMAGE.runtime.bundled, APPIMAGE.runtime.system)
+        lame = "libmp3lame0"
+        sidecar["payload"].remove({"path": notice_path(lame)})
+        problems = verify(APPIMAGE, sidecar)
+        self.assertEqual(len(problems), 1)
+        self.assertIn(f"no staged copyright notice for {lame}", problems[0])
+
+    def test_appdir_without_a_source_entry_for_a_bundled_package_fails(self):
+        sidecar = appdir_sidecar(APPIMAGE.runtime.bundled, APPIMAGE.runtime.system)
+        qt = "libqt6core6t64"
+        sidecar["source_offer"]["ubuntu"] = [
+            entry
+            for entry in sidecar["source_offer"]["ubuntu"]
+            if qt not in entry["binary_packages"]
+        ]
+        problems = verify(APPIMAGE, sidecar)
+        self.assertEqual(len(problems), 1)
+        self.assertIn(f"no source entry for {qt}", problems[0])
+
+    def test_appdir_with_a_wrong_source_link_or_no_runtime_sources_fails(self):
+        sidecar = appdir_sidecar(APPIMAGE.runtime.bundled, APPIMAGE.runtime.system)
+        sidecar["source_offer"]["ubuntu"][0]["url"] = "https://example.invalid/source.dsc"
+        sidecar["source_offer"]["runtime"] = []
+        problems = verify(APPIMAGE, sidecar)
+        self.assertEqual(len(problems), 2)
+        self.assertIn("wrong link", problems[0])
+        self.assertIn("runtime sources", problems[1])
+
+    def test_appdir_without_the_offer_text_fails(self):
+        sidecar = appdir_sidecar(APPIMAGE.runtime.bundled, APPIMAGE.runtime.system)
+        sidecar["payload"].remove({"path": str(OFFER_TEXT)})
+        problems = verify(APPIMAGE, sidecar)
+        self.assertEqual(problems, [f"notices: {OFFER_TEXT} is not in the package"])
 
     def test_wrong_sidecar_for_the_profile_is_rejected(self):
         with self.assertRaises(ValueError):

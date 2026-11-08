@@ -4,8 +4,9 @@
 The AppDir carries the app, its VST3 scanner helper, selected Qt platform
 plugins and their observed Ubuntu shared-library closure, minus the glibc base
 ABI and host-integration libraries listed below. Every copied ELF is mapped to
-its Ubuntu package and copyright file, and an SPDX SBOM lists every file. A
-JSON sidecar records the payload tree for scripts/build-appimage.py.
+its Ubuntu package, copyright file and exact source package, the written
+source offer links each source, and an SPDX SBOM lists every file. A JSON
+sidecar records the payload tree for scripts/build-appimage.py.
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ from package_profiles import (
     feature_readme,
 )
 from package_sbom import installed_version, verify_sbom, write_sbom
+from package_sources import build_offer, verify_offer, write_offer
 
 INVENTORY_STATUS = "oscillate AppDir inventory"
 PLUGINS = (
@@ -60,10 +62,6 @@ HOST_INTEGRATION_NAMES = {
     # Copying it would encode a host path in the AppDir and omit that backend.
     "libproxy.so.1",
     "libpxbackend-1.0.so",
-}
-# Libraries the AppImage must not redistribute until G8 (issue #93) decides.
-BLOCKED_NAMES = {
-    "libmp3lame.so.0": "Ubuntu's LAME classifies fft.c GPL-1+; redistribution is undecided (#93)",
 }
 READ_CHUNK_BYTES = 1 << 20
 EXECUTABLE_MODE = 0o755
@@ -109,13 +107,6 @@ def resolved_libraries(path: Path) -> dict[str, Path]:
     return found
 
 
-def check_not_blocked(sonames: set[str]) -> None:
-    blocked = sorted(sonames & BLOCKED_NAMES.keys())
-    if blocked:
-        reasons = "; ".join(f"{name}: {BLOCKED_NAMES[name]}" for name in blocked)
-        raise ValueError(f"the AppImage would bundle a blocked library: {reasons}")
-
-
 def package_for(path: Path) -> dict[str, str | None]:
     result = subprocess.run(
         ["dpkg-query", "-S", str(path)], capture_output=True, text=True, check=False
@@ -123,11 +114,15 @@ def package_for(path: Path) -> dict[str, str | None]:
     if result.returncode != 0:
         raise ValueError(f"no Ubuntu package owns observed library: {path}")
     package = result.stdout.splitlines()[0].split(": ", 1)[0]
-    version = command("dpkg-query", "-W", "-f=${Version}", package).strip()
+    version, source_package, source_version = command(
+        "dpkg-query", "-W", "-f=${Version}\t${source:Package}\t${source:Version}", package
+    ).split("\t")
     copyright_file = Path("/usr/share/doc") / package.split(":", 1)[0] / "copyright"
     return {
         "package": package,
         "version": version,
+        "source_package": source_package,
+        "source_version": source_version,
         "copyright": str(copyright_file) if copyright_file.is_file() else None,
     }
 
@@ -181,7 +176,6 @@ def stage(
             if soname in libraries and libraries[soname] != path:
                 raise ValueError(f"multiple host versions for {soname}")
             libraries[soname] = path
-    check_not_blocked(set(libraries))
 
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="oscillate-appdir-", dir=output.parent) as tmp:
@@ -261,6 +255,11 @@ def stage(
             scanner_enabled=True,
             runtime_enabled=True,
         )
+        copied = [record for record in records if record["kind"] != "project"]
+        project_commit = command("git", "-C", str(SOURCE_ROOT), "rev-parse", "HEAD").strip()
+        offer = build_offer(copied, version=inputs.version, project_commit=project_commit)
+        write_offer(stage_root, offer)
+        verify_offer(stage_root, {str(record["package"]).split(":", 1)[0] for record in copied})
         epoch = int(os.environ.get("SOURCE_DATE_EPOCH", "0"))
         write_sbom(
             stage_root,
@@ -294,7 +293,7 @@ def stage(
         "status": INVENTORY_STATUS,
         "version": inputs.version,
         "tree_sha256": hashlib.sha256(encoded).hexdigest(),
-        "project_commit": command("git", "-C", str(SOURCE_ROOT), "rev-parse", "HEAD").strip(),
+        "project_commit": project_commit,
         "cmake_feature_profile": inputs.switches,
         "features": profile.included_features(),
         "excluded_features": profile.excluded_features(),
@@ -302,6 +301,9 @@ def stage(
         "elf_files": sorted(records, key=lambda item: str(item["path"])),
         "host_base_exclusions": external,
         "third_party_inventory": f"{DOC_DIR}/third-party/inventory.json",
+        "third_party_notices": notice_inventory["copied_library_packages"],
+        "combined_notices": notice_inventory["combined_notices"]["path"],
+        "source_offer": offer,
         "sbom": f"{DOC_DIR}/sbom.spdx.json",
         "payload": payload,
     }

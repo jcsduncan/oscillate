@@ -1,10 +1,12 @@
 # MP3 export distribution options — decision record for review
 
-**15 October 2026. Status: investigation, no encoder or product-licence selection.**
-The PRD requires MP3 export and prefers permissive dependencies where suitable.
-The HLD requires a measured quality and licence choice. The existing
-[exact-byte codec audit](mp3-flac-redistribution-gate.md) is the baseline for
-the current AppImage candidate, not a release approval.
+**Decision (G8, [#93](https://github.com/jcsduncan/oscillate/issues/93)):**
+keep libsndfile with Ubuntu's LAME. The AppImage bundles `libmp3lame.so.0`
+with its notice and a written source offer linking the exact source
+([release packages](release-packages.md)). The options below are the
+alternatives that were weighed. The
+[exact-byte codec audit](mp3-flac-redistribution-gate.md) records the
+bundled binary.
 
 ## Current constraint
 
@@ -13,7 +15,7 @@ The application calls libsndfile's MP3 writer. Its current Ubuntu 26.04
 [libsndfile's own build definition](https://github.com/libsndfile/libsndfile/blob/1.2.2/CMakeLists.txt)
 links `mp3lame::mp3lame` when MPEG support is enabled. Merely copying a
 different encoder beside the application cannot replace this link. The
-current AppImage candidate bundles the exact [Ubuntu LAME 3.101 source](https://archive.ubuntu.com/ubuntu/pool/main/l/lame/lame_3.101~svn6525+dfsg.orig.tar.gz)
+AppImage bundles the exact [Ubuntu LAME 3.101 source](https://archive.ubuntu.com/ubuntu/pool/main/l/lame/lame_3.101~svn6525+dfsg.orig.tar.gz)
 build whose `fft.c` code and GPL-1+ source classification are recorded in
 the audit. Its matching [Debian packaging source](https://archive.ubuntu.com/ubuntu/pool/main/l/lame/lame_3.101~svn6525+dfsg-2.debian.tar.xz)
 contains the file-level copyright declaration.
@@ -52,19 +54,3 @@ a second export path without review. The next useful prototype is a
 fixtures, matched bitrate/metadata/channel settings, decode/reopen checks,
 blind listening and CPU measurement. It should be built only after the team
 sets a quality floor and decides whether CBR-only output is acceptable.
-
-## Decision needed
-
-1. Decide the intended DAW source/distribution licence and obtain a qualified
-   interpretation of the exact Ubuntu LAME `fft.c` issue. This may make the
-   current libsndfile/LAME route viable with source and notice obligations,
-   but no such conclusion is recorded yet.
-2. Decide whether AppImage must work with no Ubuntu codec packages installed.
-   If yes, host delegation cannot close the feature gate by itself.
-3. If considering Shine, set a listening/quality floor against LAME before
-   integrating it. Measure CPU on target x86-64 hardware rather than relying
-   on the upstream fixed-point speed examples.
-
-The current AppImage codec gate must remain red for distribution. Do not remove
-MP3 from the PRD, suppress the copied-library source gate, or treat an MP3
-file's existence as proof of production quality.

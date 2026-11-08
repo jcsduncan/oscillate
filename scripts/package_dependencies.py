@@ -9,7 +9,9 @@ host and the ones it copies in. It is generated from the profiles:
   check                   fail when the checked-in inventory is out of date
   verify --profile P --inventory SIDECAR
                           fail when a built package's sidecar (the .deb's
-                          inventory or the AppDir's) differs from profile P
+                          inventory or the AppDir's) differs from profile P,
+                          or when a bundled package has no notice in the
+                          AppDir or no entry in its source offer
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ from pathlib import Path
 # Run as `python3 -I`, which leaves the script's directory off the path.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from package_profiles import PROFILES, SOURCE_ROOT, Profile
+from package_sources import OFFER_JSON, OFFER_TEXT, offer_problems
 
 INVENTORY = SOURCE_ROOT / "docs/dependencies/runtime-dependencies.json"
 INVENTORY_STATUS = "oscillate runtime dependencies"
@@ -107,12 +110,35 @@ def differences(label: str, declared: tuple[str, ...], found: list[str]) -> list
     return problems
 
 
+def redistribution_problems(sidecar: dict, bundled: list[str]) -> list[str]:
+    """Bundled packages without a staged notice or a source-offer entry."""
+    payload = {str(item["path"]) for item in sidecar["payload"]}
+    notices = {
+        package_name(package): str(evidence["notice_path"])
+        for package, evidence in sidecar["third_party_notices"].items()
+    }
+    problems = [
+        f"notices: no staged copyright notice for {package}"
+        for package in bundled
+        if notices.get(package) not in payload
+    ]
+    problems += [
+        f"notices: {path} is not in the package"
+        for path in (sidecar["combined_notices"], str(OFFER_TEXT), str(OFFER_JSON))
+        if path not in payload
+    ]
+    return problems + offer_problems(sidecar["source_offer"], set(bundled))
+
+
 def verify(profile: Profile, sidecar: dict) -> list[str]:
-    """Every difference between the profile's dependencies and the sidecar's."""
+    """Differences from the profile's dependencies, and bundled packages left
+    out of the AppDir's notices or source offer."""
     system, bundled = observed(profile, sidecar)
-    return differences(f"{profile.name} system", profile.runtime.system, system) + differences(
-        f"{profile.name} bundled", profile.runtime.bundled, bundled
-    )
+    problems = differences(f"{profile.name} system", profile.runtime.system, system)
+    problems += differences(f"{profile.name} bundled", profile.runtime.bundled, bundled)
+    if sidecar["status"] == APPDIR_SIDECAR_STATUS:
+        problems += redistribution_problems(sidecar, bundled)
+    return problems
 
 
 def main() -> None:

@@ -3,7 +3,8 @@
 
 appimagetool and the runtime are pinned by SHA-256. The image is extracted
 again and its payload, notices and SBOM are checked against the AppDir
-inventory before the image is published.
+inventory before the image is published. The image's third-party notices and
+source offer are copied beside it as release assets.
 """
 
 from __future__ import annotations
@@ -17,14 +18,17 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
 # Run as `python3 -I`, which leaves the script's directory off the path.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from package_notices import verify_notices
+from package_notices import COMBINED_NOTICES, verify_notices
 from package_profiles import APPIMAGETOOL, SOURCE_ROOT, TYPE2_RUNTIME
 from package_sbom import verify_sbom
+from package_sources import OFFER_TEXT, verify_offer
 
 APPDIR_STATUS = "oscillate AppDir inventory"
 RECORD_STATUS = "oscillate AppImage inventory"
@@ -37,6 +41,10 @@ TYPE2_MAGIC = b"AI\x02"
 RUNTIME_MD5_SLOT = (932096, 932112)
 EXECUTABLE_MODE = 0o755
 DOWNLOAD_TIMEOUT_SECONDS = 120
+# GitHub release downloads fail transiently (HTTP 5xx, timeouts).
+DOWNLOAD_ATTEMPTS = 4
+DOWNLOAD_RETRY_SECONDS = 30
+HTTP_SERVER_ERROR = 500
 INPUTS_DIR = SOURCE_ROOT / "build/appimage-inputs"
 
 
@@ -86,17 +94,33 @@ def verify_tree(root: Path, inventory: dict[str, object], *, extracted: bool = F
     require(hashlib.sha256(encoded).hexdigest() == inventory["tree_sha256"], "bad tree hash")
 
 
+def download(url: str, target: Path) -> None:
+    """Download url to target, retrying server errors and timeouts."""
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        try:
+            with (
+                urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response,
+                target.open("wb") as output,
+            ):
+                shutil.copyfileobj(response, output)
+            return
+        except urllib.error.HTTPError as error:
+            if error.code < HTTP_SERVER_ERROR or attempt == DOWNLOAD_ATTEMPTS:
+                raise
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == DOWNLOAD_ATTEMPTS:
+                raise
+        print(f"retrying {url} (attempt {attempt} failed)", file=sys.stderr)
+        time.sleep(DOWNLOAD_RETRY_SECONDS * attempt)
+
+
 def fetch_input(pinned: dict[str, str], destination: Path) -> Path:
     """Download one pinned build input unless a verified copy is already there."""
     if not destination.is_file() or digest(destination) != pinned["sha256"]:
         destination.parent.mkdir(parents=True, exist_ok=True)
         partial = destination.with_name(f"{destination.name}.part")
         try:
-            with (
-                urllib.request.urlopen(pinned["url"], timeout=DOWNLOAD_TIMEOUT_SECONDS) as response,
-                partial.open("wb") as target,
-            ):
-                shutil.copyfileobj(response, target)
+            download(pinned["url"], partial)
             require(
                 digest(partial) == pinned["sha256"], f"download SHA-256 mismatch: {pinned['url']}"
             )
@@ -105,6 +129,15 @@ def fetch_input(pinned: dict[str, str], destination: Path) -> Path:
             partial.unlink(missing_ok=True)
     destination.chmod(EXECUTABLE_MODE)
     return destination
+
+
+def bundled_packages(inventory: dict[str, object]) -> set[str]:
+    """The Ubuntu packages (without architecture) the AppDir copies files from."""
+    return {
+        str(item["package"]).split(":", 1)[0]
+        for item in inventory["elf_files"]
+        if item["kind"] != "project"
+    }
 
 
 def image_name(version: str) -> str:
@@ -183,8 +216,14 @@ def build(
             runtime_enabled=True,
         )
         verify_sbom(extracted)
+        verify_offer(extracted, bundled_packages(inventory))
         image_sha = digest(candidate)
         output.parent.mkdir(parents=True, exist_ok=True)
+        assets = {}
+        for kind, relative in (("notices", COMBINED_NOTICES), ("source_offer", OFFER_TEXT)):
+            asset = output.with_name(f"{output.name}.{relative.name}")
+            shutil.copyfile(extracted / relative, asset)
+            assets[kind] = {"file": asset.name, "sha256": digest(asset)}
         os.replace(candidate, output)
     record = {
         "status": RECORD_STATUS,
@@ -204,6 +243,7 @@ def build(
             "appimagetool_md5_slot": list(RUNTIME_MD5_SLOT),
         },
         "source_date_epoch": 0,
+        "release_assets": assets,
     }
     record_path = output.with_name(f"{output.name}.inventory.json")
     record_path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")

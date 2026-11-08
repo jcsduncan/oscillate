@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise a staged AppDir: payload, notices, SBOM, app startup and scanner helper."""
+"""Exercise a staged AppDir: payload, notices, source offer, SBOM, startup and scanner helper."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 from package_notices import verify_notices
 from package_sbom import verify_sbom
+from package_sources import verify_offer
 
 INVENTORY_STATUS = "oscillate AppDir inventory"
 STARTUP_TIMEOUT_SECONDS = 60
@@ -30,6 +31,8 @@ BUNDLED_SONAMES = (
     "libjack.so.0",
     "libsamplerate.so.0",
     "libcrypto.so.3",
+    "libsndfile.so.1",
+    "libmp3lame.so.0",
 )
 # The platform plugin an offscreen launch must load from the AppDir.
 OFFSCREEN_PLUGIN = "platforms/libqoffscreen.so"
@@ -89,9 +92,13 @@ def smoke(appdir: Path, inventory_path: Path) -> None:
         all(not item["runtime_paths"] for item in inventory["elf_files"]),
         "staged ELF has RPATH/RUNPATH",
     )
-    require(
-        not any(Path(item["path"]).name == "libmp3lame.so.0" for item in inventory["elf_files"]),
-        "AppDir bundles the MP3 encoder",
+    verify_offer(
+        appdir,
+        {
+            str(item["package"]).split(":", 1)[0]
+            for item in inventory["elf_files"]
+            if item["kind"] != "project"
+        },
     )
     subprocess.run(["desktop-file-validate", str(appdir / "oscillate.desktop")], check=True)
 
@@ -168,7 +175,7 @@ def main() -> None:
     parser.add_argument("--inventory", type=Path, required=True)
     args = parser.parse_args()
     smoke(args.appdir, args.inventory)
-    print("AppDir payload, notices, SBOM, startup and VST3 helper smoke passed")
+    print("AppDir payload, notices, source offer, SBOM, startup and VST3 helper smoke passed")
 
 
 if __name__ == "__main__":

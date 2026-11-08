@@ -1,5 +1,6 @@
 {
-  "about": "Allowed oscillate:: links per module, the machine-readable form of docs/HLD.md section 3. Keep both in step. scripts/ci/check_module_deps.py checks every CMakeLists.txt under each module path against it. An allowed entry is a module name or, for one target of a module, oscillate::<target>. Every module may link the modules in every_module. Each exception is one known violation (HLD section 3.1) and names its issue; the check fails once an exception is no longer needed.",
+  "about": "Allowed oscillate:: links per module, the machine-readable form of docs/HLD.md section 3. Keep both in step. scripts/ci/check_module_deps.py checks every CMakeLists.txt under each module path against it. An allowed entry is a module name or, for one target of a module, oscillate::<target>. Every module may link the modules in every_module. Each exception is one known violation (HLD section 3.1) and names its issue; the check fails once an exception is no longer needed. The composition_root (the app) may link any module, and no module may link it.",
+  "composition_root": { "name": "app", "path": "apps/daw_quick" },
   "every_module": ["foundation"],
   "modules": {
     "foundation": { "path": "src/foundation", "allowed": [] },
