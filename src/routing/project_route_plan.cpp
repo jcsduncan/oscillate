@@ -36,10 +36,12 @@ using Result = foundation::Result<ProjectRoutePlan>;
     const auto* control = std::get_if<project::TrackControlTarget>(&lane.target);
     return control && control->key == project::TrackControlTarget::Key::channel_mute;
   };
+  const auto clip_lane = [&](const auto& clip) {
+    return std::ranges::any_of(clip.automation, mute_lane);
+  };
   return std::ranges::any_of(track.automation, mute_lane) ||
-         std::ranges::any_of(track.clips, [&](const project::Clip& clip) {
-           return std::ranges::any_of(clip.automation, mute_lane);
-         });
+         std::ranges::any_of(track.clips, clip_lane) ||
+         std::ranges::any_of(track.midi_clips, clip_lane);
 }
 
 namespace {
