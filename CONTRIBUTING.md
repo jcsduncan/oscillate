@@ -188,6 +188,18 @@ ASan/UBSan, TSan where concurrency changed, and coverage
 release gate (PRD §23); coverage does not waive a blocker. CodeRabbit reviews each pull request with
 the rules in `.coderabbit.yaml`, which follow [AGENTS.md](AGENTS.md).
 
+## Releases
+
+Release Please (`.github/workflows/release-please.yml`) keeps a release pull
+request open on `main` and, when it is merged, tags the release and creates
+the GitHub release; the tag push starts the packaging workflow, which
+attaches the packages. It acts with the `RELEASE_PLEASE_TOKEN` repository
+secret: the checks of a pull request opened with a workflow's own token wait
+for a maintainer's approval, and a tag pushed with it starts no workflow.
+The secret is a fine-grained personal access token with
+access to this repository only and these repository permissions: Contents,
+Issues and Pull requests, read and write (Metadata read is implied).
+
 ## Licence of contributions
 
 By contributing, you agree that your contribution is licensed under the
