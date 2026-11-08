@@ -58,7 +58,8 @@ public:
   // step. Notes, pedals and the pattern's end keep their timeline places, so
   // notes before the new start are kept but silent (and hidden), and
   // dragging the start back earlier brings them back. Clip automation stays
-  // with the clip's start, as for audio clips.
+  // with the clip's start, as for audio clips. A loop that repeats is
+  // refused: each repeat would move with the start.
   [[nodiscard]] foundation::Result<void> trim_midi_clip_start(project::ClipId clip,
                                                               timeline::TickPosition new_start);
   // Switches the clip's loop as one undo step. The pattern becomes the

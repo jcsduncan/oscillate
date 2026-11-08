@@ -963,7 +963,7 @@ Rectangle {
                         }
                         activeFocusOnTab: modelData.kind === "midi" || (modelData.kind === "audio" && arrangement.bridge.audioEditEnabled)
                         Accessible.role: Accessible.ListItem
-                        Accessible.name: modelData.kind === "audio" ? "Audio clip. Drag to move, Shift-click to add to the selection, Shift+Alt-drag to slip source audio, drag edges to trim. Arrow keys move one beat." + (modelData.waveformCacheDegraded ? " Waveform cache unavailable; preview remains usable." : "") : modelData.loop ? "Looping MIDI clip. Drag to move on the grid (Alt for free) or drag the right edge to repeat its pattern; drag the left edge to trim its start, keeping the notes in place; turn Loop off to set its length instead." : "MIDI clip. Drag to move on the grid (Alt for free) or drag either edge to lengthen or shorten it; notes in place past either edge are kept. Turn Loop on to repeat it."
+                        Accessible.name: modelData.kind === "audio" ? "Audio clip. Drag to move, Shift-click to add to the selection, Shift+Alt-drag to slip source audio, drag edges to trim. Arrow keys move one beat." + (modelData.waveformCacheDegraded ? " Waveform cache unavailable; preview remains usable." : "") : modelData.loop ? "Looping MIDI clip. Drag to move on the grid (Alt for free) or drag the right edge to repeat its pattern; drag the left edge, while it plays one pattern, to trim its start, keeping the notes in place; turn Loop off to set its length instead." : "MIDI clip. Drag to move on the grid (Alt for free) or drag either edge to lengthen or shorten it; notes in place past either edge are kept. Turn Loop on to repeat it."
                         // With other clips selected (a group, or a clip this
                         // one is not), the arrow keys move the selection.
                         function nudge(direction) {
@@ -1521,10 +1521,12 @@ Rectangle {
                         // The left edge moves the clip's start on the grid (Alt
                         // for free) while its notes stay where they are: a later
                         // start hides the notes before it, an earlier one brings
-                        // them back. Its grab zone mirrors the right edge's.
+                        // them back. Its grab zone mirrors the right edge's. A loop
+                        // that repeats has none: each repeat would move with it.
                         Item {
                             id: midiTrimZone
                             visible: modelData.kind === "midi"
+                                && !(modelData.loop && Number(modelData.lengthTicks) > Number(modelData.patternTicks))
                             z: 2
                             readonly property real grab: Math.max(Theme.clipGrabMinWidth, Math.min(Theme.clipGrabMaxWidth, clipCard.width * Theme.clipGrabFraction))
                             x: -Theme.clipGrabOverhang

@@ -122,10 +122,19 @@ void validation_and_atomicity() {
              "notes or pedal points past the pattern's end were rejected");
   REQUIRE_EQ(trimmed.snapshot->tracks[1].midi_clips[0].pedals.front().points.size(), 2,
              "notes or pedal points past the pattern's end were rejected");
-  REQUIRE_TRUE(!project.apply({AddMidiNote{id<ClipId>(4), note(10, -1, quarter)}}),
-               "a note or pedal point before the clip's start was accepted");
-  REQUIRE_TRUE(!project.apply({SetMidiPedalLane{id<ClipId>(4), MidiPedal::soft, {{{-1}, 1.0}}}}),
-               "a note or pedal point before the clip's start was accepted");
+  // So are notes and pedal points before tick 0, trimmed off the clip's
+  // left edge (ADR-0096).
+  auto before_start = take(
+      project.apply({AddMidiNote{id<ClipId>(4), note(10, -1, quarter)},
+                     SetMidiPedalLane{id<ClipId>(4), MidiPedal::soft, {{{-1}, 1.0}, {{0}, 0.0}}}}));
+  REQUIRE_EQ(before_start.snapshot->tracks[1].midi_clips[0].notes.size(), 3,
+             "a note or pedal point before the clip's start was rejected");
+  REQUIRE_EQ(before_start.snapshot->tracks[1].midi_clips[0].pedals.size(), 2,
+             "a note or pedal point before the clip's start was rejected");
+  REQUIRE_TRUE(
+      !project.apply({SetMidiPedalLane{id<ClipId>(4), MidiPedal::soft, {{{0}, 1.0}, {{-1}, 0.0}}}}),
+      "pedal points out of order were accepted");
+  REQUIRE_OK(project.undo());
   REQUIRE_OK(project.undo());
   auto enormous =
       clip(6, MusicalInterval{{quarter}, {std::numeric_limits<std::int64_t>::max()}}, true);

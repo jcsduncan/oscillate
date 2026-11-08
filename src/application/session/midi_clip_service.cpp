@@ -292,6 +292,16 @@ foundation::Result<void> MidiClipService::trim_midi_clip_start(project::ClipId c
   const auto shift = counted_from.value - anchor.value().value;
   if (shift == 0)
     return Result::success();
+  // Each repeat of a loop starts a pattern after the last, so a loop that
+  // repeats cannot move its start without moving every repeat after it.
+  if (found->loop) {
+    auto ticks = midi_clip_ticks(state, *found);
+    if (!ticks)
+      return Result::failure(ticks.error());
+    if (ticks.value() > found->pattern_length.value)
+      return Result::failure(
+          {ErrorCode::unsupported, "Turn off the clip's loop to trim the start of its repeats"});
+  }
   const auto pattern = found->pattern_length.value - shift;
   if (pattern <= 0)
     return Result::failure(
@@ -299,15 +309,32 @@ foundation::Result<void> MidiClipService::trim_midi_clip_start(project::ClipId c
   std::vector<project::Operation> operations{project::SetMidiClipPlacement{clip, placement},
                                              project::SetMidiPattern{clip, {pattern}, found->loop}};
   operations.reserve(operations.size() + found->notes.size() + found->pedals.size());
+  // Positions come from the project file, so the shift is checked.
+  const auto shifted = [shift](std::int64_t value) -> std::optional<std::int64_t> {
+    if ((shift > 0 && value < std::numeric_limits<std::int64_t>::min() + shift) ||
+        (shift < 0 && value > std::numeric_limits<std::int64_t>::max() + shift))
+      return std::nullopt;
+    return value - shift;
+  };
+  const foundation::Error out_of_range{ErrorCode::invalid_argument,
+                                       "A note or pedal point is too far from the clip"};
   for (auto note : found->notes) {
-    note.start.value -= shift;
-    note.end.value -= shift;
+    const auto start = shifted(note.start.value);
+    const auto end = shifted(note.end.value);
+    if (!start || !end)
+      return Result::failure(out_of_range);
+    note.start.value = *start;
+    note.end.value = *end;
     operations.emplace_back(project::SetMidiNote{clip, note});
   }
   for (const auto& lane : found->pedals) {
     auto points = lane.points;
-    for (auto& point : points)
-      point.position.value -= shift;
+    for (auto& point : points) {
+      const auto position = shifted(point.position.value);
+      if (!position)
+        return Result::failure(out_of_range);
+      point.position.value = *position;
+    }
     operations.emplace_back(project::SetMidiPedalLane{clip, lane.pedal, std::move(points)});
   }
   auto applied = model().apply(operations);

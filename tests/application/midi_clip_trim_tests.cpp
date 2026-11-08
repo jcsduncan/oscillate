@@ -186,16 +186,32 @@ void refused_trims_change_nothing() {
                 "a start at the end is refused");
   REQUIRE_FALSE(session->midi_clips().trim_midi_clip_start(clip, {-bar}),
                 "a start before bar 1 is refused");
-  // A looping one-bar pattern over two bars: its start stays inside the
-  // first pattern.
+  REQUIRE_EQ(session->snapshot().revision, revision, "refused trims make no edit");
+}
+
+void a_repeating_loop_refuses_a_trim() {
+  Directory directory;
+  auto [session, clip] = two_bar_clip(directory);
+  // A one-bar pattern repeated over two bars: every repeat starts a pattern
+  // after the last, so moving the start would move the second repeat.
   accepted(session->midi_clips().resize_midi_clip(clip, {bar}));
   accepted(session->midi_clips().set_midi_clip_loop(clip, true));
   accepted(session->midi_clips().resize_midi_clip(clip, {clip_end}));
-  const auto looping = session->snapshot().revision;
+  const auto played = note_ons(*session);
+  const auto revision = session->snapshot().revision;
+  REQUIRE_FALSE(session->midi_clips().trim_midi_clip_start(clip, {beat}),
+                "a repeating loop's start cannot be trimmed");
   REQUIRE_FALSE(session->midi_clips().trim_midi_clip_start(clip, {late_note}),
-                "a looping clip cannot start past its first pattern");
-  REQUIRE_EQ(session->snapshot().revision, looping, "refused trims make no edit");
-  REQUIRE_GT(looping, revision, "the loop fixture edited the clip");
+                "a repeating loop's start cannot be trimmed");
+  REQUIRE_EQ(session->snapshot().revision, revision, "refused trims make no edit");
+  REQUIRE_EQ(note_ons(*session), played, "the repeats play where they did");
+
+  // One pass of a loop trims like any clip, and keeps its notes in place.
+  accepted(session->midi_clips().resize_midi_clip(clip, {bar}));
+  const std::vector<NoteOn> first_pass{{sample_at(*session, 0), early_key}};
+  REQUIRE_EQ(note_ons(*session), first_pass, "one pass plays its first note");
+  accepted(session->midi_clips().trim_midi_clip_start(clip, {beat}));
+  REQUIRE_TRUE(note_ons(*session).empty(), "the trimmed pass hides the note before its start");
 }
 
 } // namespace
@@ -206,6 +222,7 @@ int main() {
     undo_restores_the_trim();
     trimmed_sustain_holds_from_the_new_start();
     refused_trims_change_nothing();
+    a_repeating_loop_refuses_a_trim();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';
     return 1;
