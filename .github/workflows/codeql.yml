@@ -13,10 +13,11 @@ on:
   workflow_dispatch:
 
 # The event is part of the group so a push to main never cancels the nightly
-# build analysis on the same ref.
+# build analysis on the same ref. Runs on main are not cancelled: each one
+# caches the overlay-base database that pull requests analyse against.
 concurrency:
   group: codeql-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -41,12 +42,15 @@ jobs:
         run: python3 -I scripts/ci/changes.py "$BASE_SHA" "${HEAD_SHA:-HEAD}"
 
   # Every language reports a result on every pull request. The c-cpp job
-  # skips its steps, and passes, when no C/C++ source changed.
+  # skips its steps, and passes, when no C/C++ source changed. A pull request
+  # extracts only its changed files into the overlay-base database cached by
+  # the last run on main; without that cache (a new CodeQL version) the whole
+  # tree is extracted, which takes about half an hour.
   analyze:
     needs: changes
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     permissions:
       security-events: write # upload results to code scanning
       contents: read # check out the repository
@@ -67,7 +71,8 @@ jobs:
           persist-credentials: false
       # `tools: linked` uses the CodeQL CLI this action release ships with.
       # v4.39.1 ships 2.27.3, the version in the runner image's toolcache,
-      # so no bundle is downloaded. Keep the two matched when bumping.
+      # so no bundle is downloaded. Keep the two matched when bumping. A fixed
+      # version also keeps the overlay-base cache key stable.
       - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         if: env.SCAN == 'true'
         with:
