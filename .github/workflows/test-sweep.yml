@@ -1,0 +1,98 @@
+name: Test sweep
+
+# The full test suite but the live tier, on demand: every tier, the Quick UI
+# and the optional features, for any branch (CONTRIBUTING.md#nightly-and-on-demand-ci-runs).
+on:
+  workflow_dispatch:
+    inputs:
+      tests:
+        description: Optional ctest -R regex to narrow the sweep (empty runs every non-live test)
+        required: false
+        default: ""
+
+# One sweep per branch at a time; a new dispatch waits for the running one.
+concurrency:
+  group: test-sweep-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    name: All non-live tests (Ubuntu 26.04, Qt Quick, optional features)
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    timeout-minutes: 360
+    env:
+      BUILD_DIR: build/quick
+      CCACHE_MAXSIZE: 2G
+      OSCILLATE_BUILD_JOBS: 4
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Install Git for checkout and the VST3 SDK
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+            ca-certificates git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install dependencies (README list, optional features, ccache)
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          scripts/ci/install-deps.sh ccache libjack-jackd2-dev libsamplerate0-dev libsndfile1-dev libx11-dev
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
+      - name: Fetch the pinned VST3 SDK
+        run: scripts/ci/fetch-vst3-sdk.sh "$RUNNER_TEMP/vst3sdk"
+      # Restored and saved separately, so a run with failing tests still
+      # keeps its compiled objects for the next one.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-sweep-${{ github.run_id }}
+          # The pull request build's cache shares most objects.
+          restore-keys: |
+            ccache-sweep-
+            ccache-quick-
+      # Hosted runners are slower than a desktop, so test budgets get headroom.
+      - name: Configure
+        run: >-
+          cmake --preset quick
+          -DOSCILLATE_TEST_TIMEOUT_SCALE=3
+          -DOSCILLATE_BUILD_VST3_SCANNER=ON
+          -DOSCILLATE_VST3_SDK_ROOT="$RUNNER_TEMP/vst3sdk"
+          -DOSCILLATE_BUILD_CODEC_ADAPTER=ON
+          -DOSCILLATE_BUILD_EXPORT_RESAMPLER=ON
+          -DOSCILLATE_BUILD_SOURCE_RESAMPLER=ON
+          -DOSCILLATE_BUILD_CONVOLUTION_DSP=ON
+      - name: Build everything and the tests
+        run: scripts/build.sh "$BUILD_DIR" --target all oscillate_tests
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: always()
+        with:
+          path: .ccache
+          key: ccache-sweep-${{ github.run_id }}
+      - name: Tests (every tier but live)
+        env:
+          TESTS: ${{ inputs.tests }}
+        # TMPDIR stays the container's /tmp: the analysis cache tests refuse
+        # a fixture path under the runner-owned workspace.
+        run: |
+          if [ -n "$TESTS" ]; then
+            ctest --preset quick -LE live -R "$TESTS" -j4 --no-tests=error --output-junit junit.xml
+          else
+            ctest --preset quick -LE live -j4 --output-junit junit.xml
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: test-sweep-logs
+          path: |
+            build/quick/junit.xml
+            build/quick/Testing/Temporary/LastTest*.log
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: ccache stats
+        if: always()
+        run: ccache --show-stats || true
