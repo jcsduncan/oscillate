@@ -2057,31 +2057,35 @@ void pending_supersession_and_hold_validation() {
   REQUIRE_TRUE(!control.submit_current(),
                "initial project refresh or duplicate publication guard failed");
   auto second = take(state.apply({project::AddTrack{id<project::TrackId>(3)}}));
-  auto superseded = control.begin_edit(second, "second track");
-  REQUIRE_TRUE(!superseded, "new model revision during pending publication was hidden");
-  REQUIRE_EQ(superseded.error().code, foundation::ErrorCode::conflict,
-             "new model revision during pending publication was hidden");
+  // An edit made while the first graph is still pending waits for it.
+  REQUIRE_OK(control.begin_edit(second, "second track"),
+             "an edit during a pending publication was refused instead of queued");
   REQUIRE_EQ(control.status().model_revision, second.snapshot->revision,
-             "new model revision during pending publication was hidden");
-  REQUIRE_EQ(control.status().application, app::PlaybackApplication::failed,
-             "new model revision during pending publication was hidden");
-  REQUIRE_TRUE(!control.publish_held(), "new model revision during pending publication was hidden");
+             "the queued edit's revision was not accepted");
+  REQUIRE_EQ(control.status().application, app::PlaybackApplication::pending,
+             "the queued edit was not reported pending");
+  REQUIRE_TRUE(!control.publish_held(), "a queued edit published before the first graph");
   std::array<std::span<const engine::StereoFrame>, 2> inputs{};
   std::array<engine::StereoFrame, 4> output{};
   REQUIRE_EQ(control.render_block(inputs, output, {0, 1}), engine::RoutedRenderStatus::rendered,
              "older pending graph did not activate");
-  control.observe();
-  REQUIRE_EQ(control.status().application, app::PlaybackApplication::failed,
-             "older graph activation masked newer failed revision");
+  control.observe(); // The first graph is active; the queued edit applies now.
   REQUIRE_EQ(control.status().active_graph_revision, first.snapshot->revision,
-             "older graph activation masked newer failed revision");
+             "older pending graph did not activate");
+  REQUIRE_EQ(control.render_block(inputs, output, {4, 1}), engine::RoutedRenderStatus::holding,
+             "the queued source-layout edit did not request its switch");
+  REQUIRE_TRUE(!control.publish_held().has_value(), "a source-layout edit was silently accepted");
+  REQUIRE_EQ(control.status().application, app::PlaybackApplication::failed,
+             "a source-layout edit was not reported failed");
+  REQUIRE_EQ(control.render_block(inputs, output, {4, 1}), engine::RoutedRenderStatus::rendered,
+             "the failed edit did not resume the original graph");
   REQUIRE_OK(control.retry(),
              "failed source-layout edit was not retryable or was silently accepted");
-  REQUIRE_EQ(control.render_block(inputs, output, {4, 1}), engine::RoutedRenderStatus::holding,
+  REQUIRE_EQ(control.render_block(inputs, output, {8, 1}), engine::RoutedRenderStatus::holding,
              "failed source-layout edit was not retryable or was silently accepted");
   REQUIRE_TRUE(!control.publish_held().has_value(),
                "failed source-layout edit was not retryable or was silently accepted");
-  REQUIRE_EQ(control.render_block(inputs, output, {4, 1}), engine::RoutedRenderStatus::rendered,
+  REQUIRE_EQ(control.render_block(inputs, output, {8, 1}), engine::RoutedRenderStatus::rendered,
              "retry failure did not resume the original graph");
   REQUIRE_EQ(control.status().application, app::PlaybackApplication::failed,
              "retry failure did not resume the original graph");

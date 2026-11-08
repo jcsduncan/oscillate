@@ -1,6 +1,7 @@
 # ADR-0050 — One chain per track
 
 **Status:** Accepted and implemented for live playback, routing, authoring and export. **Date:** 21 October 2026.
+**Superseded in part by:** [ADR-0093](0093-live-instrument-edits-and-queued-revisions.md), for MIDI changes while playing.
 
 ## Context
 
