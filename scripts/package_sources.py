@@ -65,8 +65,8 @@ RUNTIME_SOURCES = (
 SHARED_LIBRARY_KINDS = ("shared-library", "qt-plugin")
 EPOCH = re.compile(r"^[0-9]+:")
 ARCHITECTURE = re.compile(r":[a-z0-9]+$")
-URL_ATTEMPTS = 3
-URL_RETRY_SECONDS = 5
+URL_ATTEMPTS = 4
+URL_RETRY_SECONDS = 30
 URL_TIMEOUT_SECONDS = 60
 HTTP_OK = 200
 
@@ -241,7 +241,7 @@ def reachable(url: str) -> bool:
         except (urllib.error.URLError, TimeoutError):
             pass
         if attempt + 1 < URL_ATTEMPTS:
-            time.sleep(URL_RETRY_SECONDS)
+            time.sleep(URL_RETRY_SECONDS * (attempt + 1))
     return False
 
 

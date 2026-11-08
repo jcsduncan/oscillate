@@ -18,6 +18,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -39,6 +41,10 @@ TYPE2_MAGIC = b"AI\x02"
 RUNTIME_MD5_SLOT = (932096, 932112)
 EXECUTABLE_MODE = 0o755
 DOWNLOAD_TIMEOUT_SECONDS = 120
+# GitHub release downloads fail transiently (HTTP 5xx, timeouts).
+DOWNLOAD_ATTEMPTS = 4
+DOWNLOAD_RETRY_SECONDS = 30
+HTTP_SERVER_ERROR = 500
 INPUTS_DIR = SOURCE_ROOT / "build/appimage-inputs"
 
 
@@ -88,17 +94,33 @@ def verify_tree(root: Path, inventory: dict[str, object], *, extracted: bool = F
     require(hashlib.sha256(encoded).hexdigest() == inventory["tree_sha256"], "bad tree hash")
 
 
+def download(url: str, target: Path) -> None:
+    """Download url to target, retrying server errors and timeouts."""
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        try:
+            with (
+                urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response,
+                target.open("wb") as output,
+            ):
+                shutil.copyfileobj(response, output)
+            return
+        except urllib.error.HTTPError as error:
+            if error.code < HTTP_SERVER_ERROR or attempt == DOWNLOAD_ATTEMPTS:
+                raise
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == DOWNLOAD_ATTEMPTS:
+                raise
+        print(f"retrying {url} (attempt {attempt} failed)", file=sys.stderr)
+        time.sleep(DOWNLOAD_RETRY_SECONDS * attempt)
+
+
 def fetch_input(pinned: dict[str, str], destination: Path) -> Path:
     """Download one pinned build input unless a verified copy is already there."""
     if not destination.is_file() or digest(destination) != pinned["sha256"]:
         destination.parent.mkdir(parents=True, exist_ok=True)
         partial = destination.with_name(f"{destination.name}.part")
         try:
-            with (
-                urllib.request.urlopen(pinned["url"], timeout=DOWNLOAD_TIMEOUT_SECONDS) as response,
-                partial.open("wb") as target,
-            ):
-                shutil.copyfileobj(response, target)
+            download(pinned["url"], partial)
             require(
                 digest(partial) == pinned["sha256"], f"download SHA-256 mismatch: {pinned['url']}"
             )
