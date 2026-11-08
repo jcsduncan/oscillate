@@ -83,6 +83,13 @@ constexpr double arp_pan = 0.18;
 constexpr double bells_level = 0.28;
 constexpr double bells_pan = -0.15;
 constexpr double pad_level = 0.26;
+// The Chords, Arp and Pad tracks play through the Music group bus; the
+// Chords and Pad also send to the Hall reverb return.
+constexpr std::uint32_t music_bus_colour = 0xA98CE6;
+constexpr std::uint32_t hall_return_colour = 0x5FC7C0;
+constexpr double hall_send_gain = 0.3;
+constexpr double hall_reverb_mix = 1.0;
+constexpr double hall_reverb_decay = 5.0;
 
 template <typename T> T take(foundation::Result<T> result) {
   if (!result)
@@ -143,6 +150,7 @@ struct Song {
   std::uint64_t next_clip = 1;
   std::uint64_t next_note = 1;
   std::uint64_t next_marker = 1;
+  std::uint64_t next_send = 1;
 
   project::TrackId instrument(Voice voice) {
     const auto* engine = synth::find_engine(voice.engine);
@@ -156,6 +164,19 @@ struct Song {
     operations.emplace_back(project::SetTrackColor{track, voice.colour});
     operations.emplace_back(project::SetTrackLevelPan{track, voice.level, voice.pan});
     return track;
+  }
+
+  project::TrackId bus(project::TrackKind kind, std::string name, std::uint32_t colour) {
+    const auto track = id<project::TrackId>(next_track++);
+    operations.emplace_back(project::AddTrack{track, kind});
+    operations.emplace_back(project::SetTrackName{track, std::move(name)});
+    operations.emplace_back(project::SetTrackColor{track, colour});
+    return track;
+  }
+
+  void send(project::TrackId from, project::TrackId to, double gain) {
+    operations.emplace_back(
+        project::AddSendRoute{from, {id<project::SendId>(next_send++), to, gain}});
   }
 
   void effect(project::SignalPathId path, std::size_t index, std::string_view engine,
@@ -405,6 +426,17 @@ void create_demo_project(const std::filesystem::path& root) {
   song.effect(bell_track, 1, "expanse",
               {{"expanse.mix", bells_reverb_mix}, {"expanse.decay", bells_reverb_decay}});
   song.effect(project::MasterSignalPath{}, 0, "ceiling", {{"ceiling.ceiling", master_ceiling_db}});
+
+  // After the instruments in the saved order, so their indices stay put;
+  // the track list shows the members under their bus.
+  const auto music_bus = song.bus(project::TrackKind::group_bus, "Music", music_bus_colour);
+  for (const auto member : {chord_track, arp_track, pad_track})
+    song.operations.emplace_back(project::SetTrackMainOutput{member, music_bus});
+  const auto hall_return = song.bus(project::TrackKind::return_bus, "Hall", hall_return_colour);
+  song.effect(hall_return, 0, "expanse",
+              {{"expanse.mix", hall_reverb_mix}, {"expanse.decay", hall_reverb_decay}});
+  for (const auto source : {chord_track, pad_track})
+    song.send(source, hall_return, hall_send_gain);
 
   kick(song, kick_track);
   drums(song, drum_track);

@@ -39,33 +39,79 @@ Item {
     // B, or the pencil on a lane header: drag paints the envelope.
     property bool automationDrawMode: false
     readonly property int automationLaneHeight: Theme.automationLaneHeight
-    // Per track: the clip row ({top, height}), its open automation lanes
-    // ([{key, top, height}]) and where the next track starts (bottom).
-    readonly property var trackRowLayout: {
+    // While a track header is dragged (TrackListPanel): the tracks moving
+    // (`ids`), where they would land (`busId`, empty for the master, and
+    // `beforeId`, empty for the bracket's or list's end) and whether the
+    // drop is refused; null otherwise. The lists open a slot there.
+    property var trackDrop: null
+    // The rows top down in the list's order (TrackRoutingView::Nesting):
+    // each group bus with its members under it, the returns in a section of
+    // their own at the bottom. Per track, by saved index: the clip row
+    // ({top, height}), its open automation lanes ([{key, top, height}]),
+    // where the next row starts (bottom) and whether a folded bus hides it.
+    // `drop` opens the drop slot (gapTop) where it would land.
+    function layoutRows(drop) {
         const tracks = bridge.tracks
         const saved = bridge.trackRowHeights
         const preview = trackResizePreview
         const view = automationView
+        const collapsed = bridge.collapsedBuses
+        const order = tracks.map((track, index) => index)
+        order.sort((a, b) => tracks[a].displayIndex - tracks[b].displayIndex)
+        const rows = new Array(tracks.length)
         let top = 0
-        return tracks.map(track => {
-            const height = preview[track.id] ?? saved[track.id] ?? Theme.trackRowHeight
-            const shown = view[track.id]
-            const lanes = []
-            let laneTop = top + height
-            if (shown && shown.open) {
-                for (const key of shown.keys) {
-                    lanes.push({ key: key, top: laneTop, height: automationLaneHeight })
-                    laneTop += automationLaneHeight
-                }
+        let returnsTop = -1
+        let gapTop = -1
+        function openGap() {
+            if (drop && gapTop < 0) {
+                gapTop = top
+                top += Theme.trackDropSlotHeight
             }
-            const row = { top: top, height: height, lanes: lanes, bottom: laneTop }
-            top = laneTop
-            return row
-        })
+        }
+        for (let at = 0; at < order.length; ++at) {
+            const index = order[at]
+            const track = tracks[index]
+            if (track.kind === "return" && returnsTop < 0) {
+                // A drop at the end of the tracks lands above the returns.
+                if (drop && drop.beforeId === "" && drop.busId === "")
+                    openGap()
+                returnsTop = top
+                top += Theme.trackReturnsLabelHeight
+            }
+            if (drop && drop.beforeId === track.id)
+                openGap()
+            if (track.busId !== "" && collapsed.includes(track.busId)) {
+                rows[index] = { top: top, height: 0, lanes: [], bottom: top, hidden: true }
+            } else {
+                const height = preview[track.id] ?? saved[track.id] ?? Theme.trackRowHeight
+                const shown = view[track.id]
+                const lanes = []
+                let laneTop = top + height
+                if (shown && shown.open) {
+                    for (const key of shown.keys) {
+                        lanes.push({ key: key, top: laneTop, height: automationLaneHeight })
+                        laneTop += automationLaneHeight
+                    }
+                }
+                rows[index] = { top: top, height: height, lanes: lanes, bottom: laneTop, hidden: false }
+                top = laneTop
+            }
+            // A drop at a bracket's end lands after its last member.
+            const next = at + 1 < order.length ? tracks[order[at + 1]] : null
+            if (drop && drop.busId !== "" && drop.beforeId === ""
+                    && (track.id === drop.busId || track.busId === drop.busId)
+                    && (!next || next.busId !== drop.busId))
+                openGap()
+        }
+        if (drop && drop.busId === "" && drop.beforeId === "")
+            openGap()
+        return { rows: rows, returnsTop: returnsTop, gapTop: gapTop, height: top }
     }
-    readonly property real trackContentHeight: trackRowLayout.length > 0
-        ? trackRowLayout[trackRowLayout.length - 1].bottom
-        : 0
+    // Without a slot: where the dragged header's pointer finds its target.
+    readonly property var baseTrackLayout: layoutRows(null)
+    readonly property var trackLayout: trackDrop && !trackDrop.refused ? layoutRows(trackDrop) : baseTrackLayout
+    readonly property var trackRowLayout: trackLayout.rows
+    readonly property real trackContentHeight: trackLayout.height
 
     function automationTrack(trackId) {
         const tracks = bridge.arrangementAutomation.tracks
@@ -124,7 +170,6 @@ Item {
     }
 
     signal trackSelected(int index)
-    signal trackMoveRequested(string trackId, int toIndex)
     signal clipSelected(string clipId)
     signal clipsSelected(var clipIds)
     signal clipOpened(string clipId)
@@ -168,6 +213,9 @@ Item {
         elapsedRulerHeight: workspace.elapsedRulerHeight
         rowLayout: workspace.trackRowLayout
         rowsContentHeight: workspace.trackContentHeight
+        trackLayout: workspace.trackLayout
+        baseTrackLayout: workspace.baseTrackLayout
+        trackDrop: workspace.trackDrop
         automationView: workspace.automationView
         automationDrawMode: workspace.automationDrawMode
         panelColor: workspace.panelColor
@@ -178,7 +226,7 @@ Item {
         accentColor: workspace.accentColor
         theme: workspace.theme
         onTrackSelected: function(index) { workspace.trackSelected(index) }
-        onTrackMoveRequested: function(trackId, toIndex) { workspace.trackMoveRequested(trackId, toIndex) }
+        onTrackDropMoved: function(drop) { workspace.trackDrop = drop }
         onScrollPositionChanged: function(contentY) { workspace.trackScrollY = contentY }
         onResizePreview: function(trackId, height) { workspace.previewTrackHeight(trackId, height) }
         onResizeCommitted: function(trackId, height) { workspace.finishTrackHeight(trackId, height, true) }
@@ -208,6 +256,8 @@ Item {
         onVerticalScrollRequested: function(pixels) { trackPanel.scrollBy(pixels) }
         elapsedRulerHeight: workspace.elapsedRulerHeight
         rowLayout: workspace.trackRowLayout
+        trackLayout: workspace.trackLayout
+        trackDrop: workspace.trackDrop
         snapToBeat: workspace.snapToBeat
         automationView: workspace.automationView
         automationDrawMode: workspace.automationDrawMode

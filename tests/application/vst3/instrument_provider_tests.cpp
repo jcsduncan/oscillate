@@ -265,8 +265,7 @@ void live_routed_instrument(const plugins::ScanResult& scanned, std::uint32_t fr
   auto revised = take(reopened.apply(
       {project::AddSendRoute{id<project::TrackId>(2), {send, id<project::TrackId>(3), 0.5}}}));
   // A route edit around an unchanged VST3 instrument switches live: no hold.
-  require(control.begin_edit(revised, "route instrument send").has_value() &&
-              !control.held_boundary(),
+  require(control.begin_edit(revised, "route instrument send").has_value(),
           "live instrument route edit did not publish");
   counting_allocations = true;
   const auto switched = control.render_block(inputs, output, {frames, 1});
@@ -292,13 +291,13 @@ void live_routed_instrument(const plugins::ScanResult& scanned, std::uint32_t fr
 
   const auto changed = take(reopened.apply({project::AddMidiNote{
       id<project::ClipId>(4), {id<project::NoteId>(8), {12'000'000}, {14'000'000}, 61, 100}}}));
-  REQUIRE_OK(control.begin_edit(changed, "change MIDI"),
-             "MIDI change silently left an old instrument schedule marked active");
-  REQUIRE_EQ(control.render_block(inputs, output, {resume_at + frames, 3}),
-             engine::RoutedRenderStatus::holding,
-             "MIDI change silently left an old instrument schedule marked active");
-  REQUIRE_TRUE(!control.publish_held(),
+  // A VST3 instrument's MIDI cannot switch while playing yet: refused at
+  // once, with the old schedule playing on and no held block.
+  REQUIRE_TRUE(!control.begin_edit(changed, "change MIDI"),
                "MIDI change silently left an old instrument schedule marked active");
+  REQUIRE_EQ(control.render_block(inputs, output, {resume_at + frames, 3}),
+             engine::RoutedRenderStatus::rendered,
+             "the refused MIDI change interrupted the old instrument schedule");
   REQUIRE_EQ(control.status().model_revision, changed.snapshot->revision,
              "MIDI change silently left an old instrument schedule marked active");
   REQUIRE_EQ(control.status().active_graph_revision, revised.snapshot->revision,
@@ -1268,9 +1267,7 @@ void instrument_control_overlay_rebinds_manual_slot(const plugins::ScanResult& s
   const std::array<engine::RoutedNodeControl, 2> controls{
       {{1, false, {1.0F, 1.0F}}, {2, false, {1.0F, 1.0F}}}};
   REQUIRE_OK(publisher.prepare_control_overlay(2, controls),
-             "instrument revision-only overlay required a held rebuild");
-  REQUIRE_TRUE(!publisher.request_hold(),
-               "instrument revision-only overlay required a held rebuild");
+             "instrument revision-only overlay required a rebuild");
   counted_allocations = 0;
   counting_allocations = true;
   const auto switched = publisher.render_block(inputs, block, {frames, 1});

@@ -81,8 +81,8 @@ RoutedAudioSource::prepare(const std::filesystem::path& root, const project::Sna
     return fail(ErrorCode::invalid_argument, "Routed source has no matching prepared graph");
   }
   return prepare_with_layout(root, snapshot, control, control.source_layout(),
-                             control.topological_order(), control.max_frames(), buffer_frame_budget,
-                             worker_permit, stop, first_sample, 1, nullptr);
+                             control.topological_order(), {}, control.max_frames(),
+                             buffer_frame_budget, worker_permit, stop, first_sample, 1, nullptr);
 }
 
 Result<std::unique_ptr<RoutedAudioSource>> RoutedAudioSource::prepare(
@@ -93,22 +93,17 @@ Result<std::unique_ptr<RoutedAudioSource>> RoutedAudioSource::prepare(
   if (!capture.snapshot || capture.active_graph_revision == 0 ||
       capture.snapshot->revision <= capture.active_graph_revision)
     return fail(ErrorCode::invalid_argument, "Routed source capture has no matching revision");
-  if (!capture.native_synth_switch &&
-      std::ranges::any_of(capture.snapshot->tracks, [](const auto& track) {
-        return track.kind == project::TrackKind::instrument || !track.midi_clips.empty() ||
-               !std::holds_alternative<std::monostate>(track.instrument_source);
-      }))
-    return fail(ErrorCode::invalid_argument, "Routed source capture is not an audio-only edit");
   return prepare_with_layout(root, *capture.snapshot, control, capture.source_layout,
-                             capture.topological_order, capture.max_frames, buffer_frame_budget,
-                             worker_permit, stop, first_sample, first_generation, live_cursor);
+                             capture.topological_order, capture.kept_players, capture.max_frames,
+                             buffer_frame_budget, worker_permit, stop, first_sample,
+                             first_generation, live_cursor);
 }
 
 Result<std::unique_ptr<RoutedAudioSource>> RoutedAudioSource::prepare_with_layout(
     const std::filesystem::path& root, const project::Snapshot& snapshot,
     RoutedPlaybackControl& control, std::span<const routing::ProjectRouteSource> layout,
-    std::span<const engine::RoutingNodeId> order, std::size_t max_frames,
-    std::size_t buffer_frame_budget, const std::atomic<bool>* worker_permit,
+    std::span<const engine::RoutingNodeId> order, std::span<const KeptPlayer> kept,
+    std::size_t max_frames, std::size_t buffer_frame_budget, const std::atomic<bool>* worker_permit,
     const std::stop_token& stop,
     // Project sample and transport generation are separate coordinates.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
@@ -152,6 +147,13 @@ Result<std::unique_ptr<RoutedAudioSource>> RoutedAudioSource::prepare_with_layou
       const auto slot = std::ranges::find(layout, track.id, &routing::ProjectRouteSource::track);
       if (slot == layout.end())
         return fail(ErrorCode::conflict, "Routed synth has no prepared source slot");
+      // A player the edit leaves alone keeps playing, voices and all: the
+      // replacement source renders it from the block it takes over.
+      const auto running = std::ranges::find(kept, track.id, &KeptPlayer::track);
+      if (running != kept.end()) {
+        synths.push_back({static_cast<std::size_t>(slot - layout.begin()), running->player});
+        continue;
+      }
       // A synth with no notes still renders, so live panel edits stay audible
       // once notes are added and its effects keep their tails.
       const engine::InstrumentEvents empty{track.id, {}};
@@ -168,7 +170,8 @@ Result<std::unique_ptr<RoutedAudioSource>> RoutedAudioSource::prepare_with_layou
         return fail(player.error().code,
                     "Built-in synth is unavailable: " + player.error().message);
       synths.push_back(
-          {static_cast<std::size_t>(slot - layout.begin()), std::move(player).value()});
+          {static_cast<std::size_t>(slot - layout.begin()),
+           std::make_shared<native_dsp::synth::NativeSynthPlayer>(std::move(player).value())});
     }
   }
 
@@ -369,33 +372,40 @@ Result<std::unique_ptr<RoutedAudioSource>> RoutedAudioSource::prepare_with_layou
 native_dsp::synth::NativeSynthRuntime*
 RoutedAudioSource::synth_runtime(project::TrackId track) noexcept {
   const auto found = std::ranges::find_if(
-      synths_, [track](const SynthSlot& synth) { return synth.player.track() == track; });
-  return found == synths_.end() ? nullptr : found->player.runtime().get();
+      synths_, [track](const SynthSlot& synth) { return synth.player->track() == track; });
+  return found == synths_.end() ? nullptr : found->player->runtime().get();
+}
+
+std::shared_ptr<native_dsp::synth::NativeSynthPlayer>
+RoutedAudioSource::shared_synth_player(project::TrackId track) const {
+  const auto found = std::ranges::find_if(
+      synths_, [track](const SynthSlot& synth) { return synth.player->track() == track; });
+  return found == synths_.end() ? nullptr : found->player;
 }
 
 native_dsp::synth::NativeSynthPlayer*
 RoutedAudioSource::synth_player(project::TrackId track) noexcept {
   const auto found = std::ranges::find_if(
-      synths_, [track](const SynthSlot& synth) { return synth.player.track() == track; });
-  return found == synths_.end() ? nullptr : &found->player;
+      synths_, [track](const SynthSlot& synth) { return synth.player->track() == track; });
+  return found == synths_.end() ? nullptr : found->player.get();
 }
 
 void RoutedAudioSource::refresh_synth_locks(const project::Snapshot& snapshot) {
   for (auto& synth : synths_)
-    (void)synth.player.refresh_lock(snapshot);
+    (void)synth.player->refresh_lock(snapshot);
 }
 
 void RoutedAudioSource::follow_project_key(std::optional<project::MusicalKey> key) noexcept {
   for (auto& synth : synths_)
-    synth.player.follow_project_key(key);
+    synth.player->follow_project_key(key);
 }
 
 std::optional<std::uint64_t>
 RoutedAudioSource::synth_tail_frames(project::TrackId track) const noexcept {
   const auto found = std::ranges::find_if(
-      synths_, [track](const SynthSlot& synth) { return synth.player.track() == track; });
+      synths_, [track](const SynthSlot& synth) { return synth.player->track() == track; });
   return found == synths_.end() ? std::nullopt
-                                : std::optional<std::uint64_t>{found->player.tail_frames()};
+                                : std::optional<std::uint64_t>{found->player->tail_frames()};
 }
 
 Result<void> RoutedAudioSource::prepare_realtime_export_end(std::uint64_t end) {
@@ -403,7 +413,7 @@ Result<void> RoutedAudioSource::prepare_realtime_export_end(std::uint64_t end) {
     return Result<void>::failure(
         {ErrorCode::unsupported, "Instrument export needs a finite MIDI end"});
   for (auto& synth : synths_) {
-    auto prepared = synth.player.prepare_export_end(end);
+    auto prepared = synth.player->prepare_export_end(end);
     if (!prepared)
       return prepared;
   }
@@ -414,10 +424,10 @@ std::optional<std::uint64_t>
 RoutedAudioSource::prepared_synth_export_tail(project::TrackId track,
                                               std::uint64_t end) const noexcept {
   const auto found = std::ranges::find_if(
-      synths_, [track](const SynthSlot& synth) { return synth.player.track() == track; });
-  return found == synths_.end() || !found->player.export_end_prepared(end)
+      synths_, [track](const SynthSlot& synth) { return synth.player->track() == track; });
+  return found == synths_.end() || !found->player->export_end_prepared(end)
              ? std::nullopt
-             : std::optional<std::uint64_t>{found->player.tail_frames()};
+             : std::optional<std::uint64_t>{found->player->tail_frames()};
 }
 
 audio_io::StereoRenderSource
@@ -520,10 +530,8 @@ bool RoutedAudioSource::render_block(std::span<StereoFrame> output,
   stream_hold_ = false;
   silent_drain_block_ = silent_drain_requested_.load(std::memory_order_acquire);
   if (output.empty() || output.size() > max_frames_ ||
-      output.size() > std::numeric_limits<std::uint64_t>::max() - block.project_sample_position) {
-    frozen_ = control_.held_boundary().has_value();
+      output.size() > std::numeric_limits<std::uint64_t>::max() - block.project_sample_position)
     return false;
-  }
   const std::span<const std::span<const StereoFrame>> unused{};
   const auto result = control_.render_block(
       unused, output, block,
@@ -534,11 +542,10 @@ bool RoutedAudioSource::render_block(std::span<StereoFrame> output,
          return self.fill_source_bank(fill_block, frames, selected, self.render_workers_);
        }},
       render_workers_);
-  frozen_ = control_.held_boundary().has_value() || stream_hold_;
+  frozen_ = stream_hold_;
   if (result == engine::RoutedRenderStatus::rendered)
     note_rendered_frames(output.size());
   return result == engine::RoutedRenderStatus::rendered ||
-         result == engine::RoutedRenderStatus::holding ||
          (result == engine::RoutedRenderStatus::invalid_block && stream_hold_);
 }
 
@@ -629,34 +636,44 @@ bool RoutedAudioSource::fill_slots(engine::BlockContext block, std::size_t frame
     engine::BlockContext block;
     std::size_t frames;
     bool require_complete;
+    SlotPart part;
     engine::AudioWorkerPool* workers;
     std::atomic<bool> failed{false};
-  } job{*this, block, frames, require_complete, workers};
+  };
   const auto task = [](void* context, std::size_t slot, std::size_t) noexcept {
     auto& slot_job = *static_cast<SlotJob*>(context);
     if (!slot_job.failed.load(std::memory_order_relaxed) &&
         !slot_job.source.fill_slot(slot, slot_job.block, slot_job.frames, slot_job.require_complete,
-                                   slot_job.workers))
+                                   slot_job.part, slot_job.workers))
       slot_job.failed.store(true, std::memory_order_relaxed);
   };
-  if (workers != nullptr)
-    workers->run(slots_.size(), task, &job);
-  else
-    for (std::size_t slot = 0; slot < slots_.size(); ++slot)
-      task(&job, slot, 0);
-  return !job.failed.load(std::memory_order_relaxed);
+  const auto run = [&](SlotPart part) {
+    SlotJob job{*this, block, frames, require_complete, part, workers};
+    if (workers != nullptr)
+      workers->run(slots_.size(), task, &job);
+    else
+      for (std::size_t slot = 0; slot < slots_.size(); ++slot)
+        task(&job, slot, 0);
+    return !job.failed.load(std::memory_order_relaxed);
+  };
+  // A complete fill decides on every clip frame before any player renders.
+  if (require_complete)
+    return run(SlotPart::clips) && run(SlotPart::synths);
+  return run(SlotPart::all);
 }
 
 bool RoutedAudioSource::fill_slot(std::size_t index, engine::BlockContext block, std::size_t frames,
-                                  bool require_complete,
+                                  bool require_complete, SlotPart part,
                                   engine::AudioWorkerPool* workers) noexcept {
   auto& slot = slots_[index];
   OSCILLATE_TRACE_SPAN("graph.source", slot.track.bits().low);
   const auto& work = slot_work_[index];
   const auto end = block.project_sample_position + frames;
   auto buffer = std::span(slot.scratch).first(frames);
-  std::ranges::fill(buffer, StereoFrame{});
-  for (const auto clip_index : work.clips) {
+  if (part != SlotPart::synths)
+    std::ranges::fill(buffer, StereoFrame{});
+  for (const auto clip_index :
+       part == SlotPart::synths ? std::span<const std::size_t>{} : std::span(work.clips)) {
     auto& clip = clips_[clip_index];
     if (clip.start >= end || clip.end <= block.project_sample_position)
       continue;
@@ -678,10 +695,12 @@ bool RoutedAudioSource::fill_slot(std::size_t index, engine::BlockContext block,
     if (received.silent != 0)
       missing_frames_.fetch_add(received.silent, std::memory_order_relaxed);
   }
+  if (part == SlotPart::clips)
+    return true;
   for (const auto synth_index : work.synths) {
     // Its voices may spread over the helpers that are free (ADR-0085).
-    if (!synths_[synth_index].player.render(buffer, block.project_sample_position,
-                                            block.state_generation(), workers))
+    if (!synths_[synth_index].player->render(buffer, block.project_sample_position,
+                                             block.state_generation(), workers))
       return false;
   }
   return true;

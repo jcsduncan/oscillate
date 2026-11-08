@@ -143,10 +143,10 @@ void managed_wav_routes_through_one_transport_cursor() {
   // applied revisions while the managed asset reader remains independent.
   Gate gate;
   auto model = take(project::ProjectModel::open(snapshot, gate));
-  // History for the five saved edges plus the one the held edit adds.
-  auto held_limits = limits();
-  held_limits.max_history_bytes += 65 * sizeof(engine::StereoFrame);
-  app::RoutedPlaybackControl control(model, held_limits);
+  // History for the five saved edges plus the one the live edit adds.
+  auto edit_limits = limits();
+  edit_limits.max_history_bytes += 65 * sizeof(engine::StereoFrame);
+  app::RoutedPlaybackControl control(model, edit_limits);
   REQUIRE_OK(control.submit_current(), "saved routing graph did not prepare");
   auto source = take(app::RoutedAudioSource::prepare(root, *model.snapshot(), control, 128));
   audio::TransportCursor transport;
@@ -171,7 +171,7 @@ void managed_wav_routes_through_one_transport_cursor() {
              "first routed block did not activate saved revision");
 
   // A send gain alone glides live through the mixer overlay (ADR-0029). A new,
-  // silent send adds a graph edge, so this edit takes the held handoff while
+  // silent send adds a graph edge, so this edit switches the graph live while
   // the audible result stays the gain change alone.
   const auto silent_send = project::SendId::from_bits({0, 0x5e7d}).value();
   auto changed = take(
@@ -184,30 +184,8 @@ void managed_wav_routes_through_one_transport_cursor() {
              "accepted send gain was not durably reopened before graph handoff");
   REQUIRE_EQ(take(writer.load_current()).snapshot.revision, changed.snapshot->revision,
              "accepted send gain was not durably reopened before graph handoff");
-  // Held switching, which this test covers, is otherwise reserved for source
-  // and VST3 changes; a route edit alone switches live.
-  control.set_live_switching(false);
   REQUIRE_OK(control.begin_edit(changed, "send gain and new send"),
-             "send gain and new send edit did not begin routed graph handoff");
-  counting_allocations = true;
-  const auto held = audio::render_transport_block(fake_device, transport, true, stereo, samples);
-  counting_allocations = false;
-  REQUIRE_EQ(held, audio::BlockResult::rendered,
-             "held routed block did not freeze and silence fake device");
-  REQUIRE_EQ(counted_allocations, 0, "held routed block did not freeze and silence fake device");
-  REQUIRE_EQ(samples[0], 0.0F, "held routed block did not freeze and silence fake device");
-  REQUIRE_EQ(transport.completed_snapshot().next_sample, 4,
-             "held routed block did not freeze and silence fake device");
-  REQUIRE_EQ(control.held_boundary().value_or(engine::BlockContext{}).project_sample_position, 4,
-             "held routed block did not freeze and silence fake device");
-  require(transport.request_seek(0), "fake-device seek could not queue during hold");
-  REQUIRE_EQ(audio::render_transport_block(fake_device, transport, true, stereo, samples),
-             audio::BlockResult::rendered, "queued seek escaped while routed graph was held");
-  REQUIRE_EQ(transport.completed_snapshot().next_sample, 4,
-             "queued seek escaped while routed graph was held");
-  REQUIRE_EQ(transport.completed_snapshot().generation, 1,
-             "queued seek escaped while routed graph was held");
-  REQUIRE_OK(control.publish_held(), "held send-gain graph failed to prepare");
+             "send gain and new send edit did not begin a live graph switch");
   counting_allocations = true;
   const auto switched =
       audio::render_transport_block(fake_device, transport, true, stereo, samples);
@@ -216,12 +194,13 @@ void managed_wav_routes_through_one_transport_cursor() {
   REQUIRE_EQ(counted_allocations, 0, "routed graph switch failed or allocated");
   near(samples[0], 0.75F);
   REQUIRE_EQ(transport.completed_snapshot().next_sample, 8,
-             "routed handoff advanced cursor more than one audible block");
+             "routed switch did not advance the cursor by exactly one audible block");
   REQUIRE_EQ(transport.completed_snapshot().generation, 1,
-             "routed handoff advanced cursor more than one audible block");
+             "routed switch did not advance the cursor by exactly one audible block");
   control.observe();
   REQUIRE_EQ(control.status().active_graph_revision, changed.snapshot->revision,
              "routed gain edit not marked active after callback switch");
+  require(transport.request_seek(0), "fake-device seek could not queue");
   bool seek_resumed = false;
   for (std::size_t attempt = 0; attempt < 100'000 && !seek_resumed; ++attempt) {
     REQUIRE_EQ(audio::render_transport_block(fake_device, transport, true, stereo, samples),
@@ -243,24 +222,16 @@ void managed_wav_routes_through_one_transport_cursor() {
              "deferred seek did not resume at the requested generation and sample");
   near(samples[0], 0.75F);
 
-  // A lookahead limiter added to the master changes the output latency.
-  auto unsupported = take(model.apply({project::AddNativeEffect{
-      project::MasterSignalPath{}, 0,
-      take(oscillate::native_inserts::native_effect_patch_for_preset(
-          *oscillate::native_dsp::effects::find_engine("ceiling"), std::nullopt))}}));
+  // Removing a track cannot switch while playing: refused at once, with the
+  // old route playing on and no held block (ADR-0094).
+  auto unsupported = take(model.apply({project::RemoveTrack{second.value()}}));
   const auto saved_failure =
       take(writer.save(*unsupported.snapshot, persistence::SaveKind::explicit_save));
   REQUIRE_EQ(saved_failure.status, persistence::SaveStatus::committed,
-             "unsupported accepted edit was not preserved before failed graph build");
+             "unsupported accepted edit was not preserved before the refusal");
   REQUIRE_EQ(take(writer.load_current()).snapshot.revision, unsupported.snapshot->revision,
-             "unsupported accepted edit was not preserved before failed graph build");
-  REQUIRE_OK(control.begin_edit(unsupported, "master limiter"),
-             "unsupported graph edit did not enter a frozen hold");
-  REQUIRE_EQ(audio::render_transport_block(fake_device, transport, true, stereo, samples),
-             audio::BlockResult::rendered, "unsupported graph edit did not enter a frozen hold");
-  REQUIRE_EQ(transport.completed_snapshot().next_sample, 4,
-             "unsupported graph edit did not enter a frozen hold");
-  auto failed = control.publish_held();
+             "unsupported accepted edit was not preserved before the refusal");
+  auto failed = control.begin_edit(unsupported, "remove track");
   REQUIRE_TRUE(!failed, "failed routed edit was silently substituted for active graph");
   REQUIRE_EQ(failed.error().code, foundation::ErrorCode::unsupported,
              "failed routed edit was silently substituted for active graph");
@@ -271,19 +242,11 @@ void managed_wav_routes_through_one_transport_cursor() {
   REQUIRE_EQ(control.status().model_revision, unsupported.snapshot->revision,
              "failed routed edit was silently substituted for active graph");
   REQUIRE_EQ(audio::render_transport_block(fake_device, transport, true, stereo, samples),
-             audio::BlockResult::rendered,
-             "failed graph did not resume old route at same source sample");
+             audio::BlockResult::rendered, "the refused edit interrupted the old route");
   REQUIRE_EQ(transport.completed_snapshot().next_sample, 8,
-             "failed graph did not resume old route at same source sample");
+             "the refused edit interrupted the old route");
   near(samples[0], 0.75F);
-  REQUIRE_OK(control.retry(), "failed graph retry did not remain visibly failed and frozen");
-  REQUIRE_EQ(audio::render_transport_block(fake_device, transport, true, stereo, samples),
-             audio::BlockResult::rendered,
-             "failed graph retry did not remain visibly failed and frozen");
-  REQUIRE_EQ(transport.completed_snapshot().next_sample, 8,
-             "failed graph retry did not remain visibly failed and frozen");
-  REQUIRE_TRUE(!control.publish_held(),
-               "failed graph retry did not remain visibly failed and frozen");
+  REQUIRE_TRUE(!control.retry(), "failed graph retry did not remain visibly failed");
   REQUIRE_EQ(audio::render_transport_block(fake_device, transport, true, stereo, samples),
              audio::BlockResult::rendered, "retry failure did not preserve previous audible graph");
   REQUIRE_EQ(transport.completed_snapshot().next_sample, 12,
@@ -296,36 +259,26 @@ void managed_wav_routes_through_one_transport_cursor() {
   const auto saved_recovery =
       take(writer.save(*recovered.snapshot, persistence::SaveKind::explicit_save));
   REQUIRE_EQ(saved_recovery.status, persistence::SaveStatus::committed,
-             "undo after failed graph build did not durably recover the project");
+             "undo after the refused edit did not durably recover the project");
   REQUIRE_EQ(take(writer.load_current()).snapshot.revision, recovered.snapshot->revision,
-             "undo after failed graph build did not durably recover the project");
-  REQUIRE_TRUE(take(writer.load_current()).snapshot.master_effects.empty(),
-               "undo after failed graph build did not durably recover the project");
-  REQUIRE_TRUE(control.begin_edit(recovered, "undo"),
-               "saved undo did not publish from the held source sample");
-  REQUIRE_EQ(audio::render_transport_block(fake_device, transport, true, stereo, samples),
-             audio::BlockResult::rendered,
-             "saved undo did not publish from the held source sample");
-  REQUIRE_EQ(transport.completed_snapshot().next_sample, 12,
-             "saved undo did not publish from the held source sample");
-  REQUIRE_TRUE(control.publish_held(), "saved undo did not publish from the held source sample");
+             "undo after the refused edit did not durably recover the project");
+  // The undo restores what plays, so it is audible at once.
+  REQUIRE_OK(control.begin_edit(recovered, "undo"), "saved undo was not accepted while playing");
   counting_allocations = true;
   const auto resumed = audio::render_transport_block(fake_device, transport, true, stereo, samples);
   counting_allocations = false;
-  REQUIRE_EQ(resumed, audio::BlockResult::rendered,
-             "saved undo did not resume from the held source sample without allocating");
-  REQUIRE_EQ(counted_allocations, 0,
-             "saved undo did not resume from the held source sample without allocating");
+  REQUIRE_EQ(resumed, audio::BlockResult::rendered, "saved undo interrupted playback or allocated");
+  REQUIRE_EQ(counted_allocations, 0, "saved undo interrupted playback or allocated");
   REQUIRE_EQ(transport.completed_snapshot().next_sample, 16,
-             "saved undo did not resume from the held source sample without allocating");
+             "saved undo interrupted playback or allocated");
   REQUIRE_EQ(transport.completed_snapshot().generation, 2,
-             "saved undo did not resume from the held source sample without allocating");
+             "saved undo interrupted playback or allocated");
   near(samples[0], 0.75F);
   control.observe();
   REQUIRE_EQ(control.status().application, app::PlaybackApplication::active,
-             "recovered routed project was not marked active after fake callback");
+             "recovered routed project was not marked active");
   REQUIRE_EQ(control.status().active_graph_revision, recovered.snapshot->revision,
-             "recovered routed project was not marked active after fake callback");
+             "recovered routed project was not marked active");
 }
 
 void external_wav_requires_saved_identity_before_routed_reader() {
@@ -415,12 +368,9 @@ void bounded_preparation_rejects_large_managed_clip() {
   const auto clip_id = model.snapshot()->tracks.front().clips.front().id;
   auto moved =
       take(model.apply({project::SetClipPlacement{clip_id, project::ElapsedInterval{{8}, {16}}}}));
-  REQUIRE_OK(control.begin_edit(moved, "move clip"), "clip edit did not enter a safe graph hold");
-  REQUIRE_EQ(audio::render_transport_block(fake_device, transport, true, stereo, samples),
-             audio::BlockResult::rendered, "clip edit did not enter a safe graph hold");
-  REQUIRE_EQ(transport.completed_snapshot().next_sample, 4,
-             "clip edit did not enter a safe graph hold");
-  auto failed = control.publish_held();
+  // A clip edit offered without its source handoff (capture_source_edit)
+  // has no prepared source: refused at once, never played from stale PCM.
+  auto failed = control.begin_edit(moved, "move clip");
   REQUIRE_TRUE(!failed, "changed clip silently reused stale prepared managed PCM");
   REQUIRE_EQ(failed.error().code, foundation::ErrorCode::unsupported,
              "changed clip silently reused stale prepared managed PCM");

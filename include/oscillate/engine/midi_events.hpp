@@ -97,9 +97,14 @@ public:
   // held at `start` when `chase` is set: the first block after a seek or
   // loop, when the instrument starts with every pedal up. `output` needs
   // max_pedal_events_per_block + midi_pedal_count slots.
-  [[nodiscard]] BlockMidiResult copy_pedals(timeline::SamplePosition start, std::uint32_t frames,
-                                            bool chase,
-                                            std::span<BlockPedalEvent> output) const noexcept;
+  // When `replaced` is given (this plan has just replaced it in a running
+  // instrument), every pedal whose value at `start` differs between the two
+  // plans is first sent at offset 0 with this plan's value, so a pedal the
+  // edit removed comes up. `chase` takes precedence.
+  [[nodiscard]] BlockMidiResult
+  copy_pedals(timeline::SamplePosition start, std::uint32_t frames, bool chase,
+              std::span<BlockPedalEvent> output,
+              const InstrumentEvents* replaced = nullptr) const noexcept;
   // Callback safe: each pedal's value from the last event before `sample`
   // (0 when none), for chasing pedals held across a seek or loop.
   [[nodiscard]] PedalState pedal_state_at(timeline::SamplePosition sample) const noexcept;
@@ -111,6 +116,27 @@ private:
   project::TrackId track_;
   std::vector<ScheduledMidiEvent> events_;
   std::vector<ScheduledPedalEvent> pedals_;
+};
+
+// Each note of a plan as one interval, for asking whether a plan that
+// replaces another in a running instrument still holds a sounding note.
+// Built on the control thread with its plan; read by the callback.
+class NoteSpans {
+public:
+  explicit NoteSpans(const InstrumentEvents& events);
+  // Callback safe, O(log n): whether the plan has the note `note_on` names
+  // (its clip, note and key) on before `sample` and not yet off before it.
+  [[nodiscard]] bool holds(const BlockMidiEvent& note_on, std::int64_t sample) const noexcept;
+
+private:
+  struct Span {
+    foundation::IdBits clip;
+    foundation::IdBits note;
+    std::int64_t on = 0;
+    std::int64_t off = 0;
+    std::uint8_t key = 0;
+  };
+  std::vector<Span> spans_; // By clip, note, then start.
 };
 
 // The plan's notes still sounding between blocks. A planned loop wrap moves
@@ -134,11 +160,15 @@ public:
 
   // The plan's events for the block, preceded by releases when the block
   // jumps, sorted as instruments require (by offset, offs before ons, then
-  // note id). `output` needs block_capacity slots.
+  // note id). `output` needs block_capacity slots. `replacement`, given on
+  // the first block a new plan (an edit made while playing) renders, names
+  // that plan's notes: a held note it no longer holds is released at offset
+  // 0, and every note it still holds keeps sounding to its new end.
   [[nodiscard]] BlockMidiResult copy_block(const InstrumentEvents& events,
                                            timeline::SamplePosition start, std::uint32_t frames,
                                            std::uint64_t generation,
-                                           std::span<BlockMidiEvent> output) noexcept;
+                                           std::span<BlockMidiEvent> output,
+                                           const NoteSpans* replacement = nullptr) noexcept;
   void reset() noexcept {
     count_ = 0;
     started_ = false;

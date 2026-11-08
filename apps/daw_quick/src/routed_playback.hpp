@@ -319,14 +319,15 @@ private:
   std::vector<std::future<foundation::Result<std::unique_ptr<application::RoutedAudioSource>>>>
       abandoned_source_preparations_;
   std::shared_ptr<application::RoutedAudioSource> source_candidate_;
-  // Callback reads the exact staged source revision; all other graph
-  // revisions may keep using the selected active source.
-  std::atomic<std::uint64_t> source_overlay_revision_{0};
+  // Callback reads the exact staged source revision, filled completely or
+  // not at all until it is promoted; all other graph revisions keep using
+  // the selected active source.
+  std::atomic<std::uint64_t> source_exact_revision_{0};
   std::shared_ptr<RoutedSourceFill> source_fill_ = std::make_shared<RoutedSourceFill>();
   std::vector<std::future<void>> source_retirements_;
-  bool source_hold_requested_ = false;
   bool source_staged_ = false;
   bool source_cancel_pending_ = false;
+  // Times the current source edit was primed again after missing its block.
   std::uint8_t source_retry_count_ = 0;
   struct SynthSwitchPolicy {
     engine::CompiledMidiPlan old_notes;
@@ -374,6 +375,16 @@ private:
   void collect_source_retirements();
   void fail_source_handoff(const foundation::Error& error);
   [[nodiscard]] bool synth_switch_quiet_at(std::uint64_t sample) const noexcept;
+  // Quiet at `sample`, with no note starting in the `frames` after it, the
+  // window in which the published switch takes over.
+  [[nodiscard]] bool synth_switch_quiet_over(std::uint64_t sample,
+                                             std::uint64_t frames) const noexcept;
+  // A source edit is primed again at most this many times after missing its
+  // block, before it is reported failed.
+  static constexpr std::uint8_t max_source_primes = 3;
+  // Device blocks a native synth switch keeps clear of new notes after the
+  // block it is primed for.
+  static constexpr std::uint64_t synth_switch_blocks = 8;
   [[nodiscard]] std::optional<std::uint64_t> settled_graph_revision() const;
   [[nodiscard]] bool manual_adopted(std::uint64_t revision) const;
   [[nodiscard]] audio_io::StereoRenderSource render_source() noexcept;

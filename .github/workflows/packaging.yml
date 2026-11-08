@@ -2,8 +2,9 @@ name: Packaging
 
 # Builds the .deb and the AppImage (docs/dependencies/release-packages.md),
 # installs, launches and removes each in a clean container, and attaches them,
-# with the AppImage's notices and source offer, to the GitHub release. Release Please dispatches this workflow with the new
-# tag; a manual run with a tag rebuilds and re-attaches that release's
+# with the AppImage's notices and source offer, to the GitHub release. The
+# release tag that Release Please pushes starts it; a manual run with a tag
+# rebuilds and re-attaches that release's
 # packages. Pull requests build it only when a packaging input changes.
 
 on:

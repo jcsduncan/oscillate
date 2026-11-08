@@ -153,6 +153,74 @@ template <typename TrackRef>
   return false;
 }
 
+// A lane a built-in instrument's player evaluates: its synth's parameters,
+// a macro (ADR-0059) or one of the track's note effects.
+[[nodiscard]] bool player_lane(const project::Track& track, const project::AutomationLane& lane) {
+  if (std::holds_alternative<project::NativeParameterTarget>(lane.target) ||
+      std::holds_alternative<project::MacroTarget>(lane.target))
+    return true;
+  const auto* effect = std::get_if<project::NativeEffectParameterTarget>(&lane.target);
+  return effect != nullptr &&
+         std::ranges::find(track.note_effects, effect->slot, &project::NoteEffectInsert::id) !=
+             track.note_effects.end();
+}
+
+// Two versions of a built-in instrument track that differ only in what its
+// player renders from a plan: its MIDI clips (notes, pedals, placement and
+// their lanes), its player lanes, note effect values and switches, and its
+// macros' values. Note effect layout is checked against the running player.
+[[nodiscard]] bool player_edit_only(const project::Track& before, const project::Track& after) {
+  if (before.id != after.id || before.kind != project::TrackKind::instrument ||
+      !std::holds_alternative<project::NativeInstrumentPatch>(before.instrument_source) ||
+      before.macros.size() != after.macros.size())
+    return false;
+  // A macro's value is heard only through the parameters it sets; its
+  // mappings shape its lanes.
+  for (std::size_t macro = 0; macro < before.macros.size(); ++macro) {
+    if (before.macros[macro].mappings != after.macros[macro].mappings)
+      return false;
+  }
+  const auto other_lane = [](const project::Track& track) {
+    return [&track](const project::AutomationLane& lane) { return !player_lane(track, lane); };
+  };
+  if (!std::ranges::equal(before.automation | std::views::filter(other_lane(before)),
+                          after.automation | std::views::filter(other_lane(after))))
+    return false;
+  // Only a player lane may ride on a MIDI clip that changes.
+  for (const auto* track : {&before, &after}) {
+    for (const auto& clip : track->midi_clips) {
+      if (!std::ranges::all_of(clip.automation, [track](const project::AutomationLane& lane) {
+            return player_lane(*track, lane);
+          }))
+        return false;
+    }
+  }
+  auto masked = before;
+  masked.midi_clips = after.midi_clips;
+  masked.note_effects = after.note_effects;
+  masked.macros = after.macros;
+  masked.automation = after.automation;
+  return masked == after;
+}
+
+// An instrument track with no instrument plays nothing, so an edit to its
+// MIDI clips alone is heard nowhere (an effect keyed by its notes follows
+// the published snapshot).
+[[nodiscard]] bool silent_midi_edit_only(const project::Track& before,
+                                         const project::Track& after) {
+  const auto unautomated = [](const project::Track& track) {
+    return std::ranges::all_of(track.midi_clips,
+                               [](const auto& clip) { return clip.automation.empty(); });
+  };
+  if (before.id != after.id || before.kind != project::TrackKind::instrument ||
+      !std::holds_alternative<std::monostate>(before.instrument_source) || !unautomated(before) ||
+      !unautomated(after))
+    return false;
+  auto masked = before;
+  masked.midi_clips = after.midi_clips;
+  return masked == after;
+}
+
 [[nodiscard]] bool same_audio_content(const project::Snapshot& prepared,
                                       const project::Snapshot& candidate) {
   if (prepared.sample_rate != candidate.sample_rate ||
@@ -211,8 +279,8 @@ template <typename TrackRef>
   return true;
 }
 
-// An edit the routed graph can switch to without a hold: the same tracks in
-// the same order and unchanged sources (clips, built-in instruments, MIDI).
+// An edit the routed graph can switch to live: the same tracks, perhaps
+// reordered, with unchanged sources (clips, built-in instruments, MIDI).
 // Chains, routing, levels and sends may differ; the callback hands the
 // running state over at the switching block (ADR-0049, ADR-0050). A VST3
 // instrument is a chain stage, so it compares against the audible graph,
@@ -223,19 +291,50 @@ template <typename TrackRef>
   if (published.tracks.size() != candidate.tracks.size() ||
       source.tracks.size() != candidate.tracks.size())
     return false;
-  for (std::size_t index = 0; index < candidate.tracks.size(); ++index) {
-    const auto& next = candidate.tracks[index];
-    const auto& old = published.tracks[index];
-    const auto& sounding = source.tracks[index];
+  // Tracks are matched by identity: a reorder keeps every source, and graph
+  // publication refuses one that would change the routed source order.
+  for (const auto& next : candidate.tracks) {
+    const auto old = std::ranges::find(published.tracks, next.id, &project::Track::id);
+    const auto sounding = std::ranges::find(source.tracks, next.id, &project::Track::id);
+    if (old == published.tracks.end() || sounding == source.tracks.end())
+      return false;
     const auto& instrument =
-        std::holds_alternative<project::Vst3PluginInstance>(next.instrument_source) ? old
-                                                                                    : sounding;
-    if (old.id != next.id || sounding.id != next.id ||
-        instrument.instrument_source != next.instrument_source ||
-        sounding.midi_clips != next.midi_clips)
+        std::holds_alternative<project::Vst3PluginInstance>(next.instrument_source) ? *old
+                                                                                    : *sounding;
+    if (instrument.instrument_source != next.instrument_source ||
+        sounding->midi_clips != next.midi_clips)
       return false;
   }
   return true;
+}
+
+// What keeps an edit from switching while playing, when it is neither a
+// live graph switch, an instrument plan nor a primed source handoff. The old
+// graph plays on; the edit is saved for the next Play.
+[[nodiscard]] std::string live_refusal(const project::Snapshot& published,
+                                       const project::Snapshot& candidate) {
+  if (!std::ranges::equal(published.tracks, candidate.tracks, {}, &project::Track::id,
+                          &project::Track::id))
+    return "Adding, removing or reordering tracks cannot switch while playing";
+  if (!same_timing(published, candidate))
+    return "A tempo or meter change cannot switch while playing";
+  if (published.sources != candidate.sources)
+    return "New or changed source media cannot switch while playing";
+  for (std::size_t index = 0; index < published.tracks.size(); ++index) {
+    const auto& before = published.tracks[index];
+    const auto& after = candidate.tracks[index];
+    if (before.instrument_source != after.instrument_source)
+      return "A change of instrument on track " + after.id.to_string() +
+             " cannot switch while playing";
+    if (before.midi_clips != after.midi_clips)
+      return "A MIDI edit on track " + after.id.to_string() +
+             " (a VST3 instrument, or a clip lane outside its instrument) cannot switch while "
+             "playing";
+    if (before.clips != after.clips || before.frozen != after.frozen)
+      return "An audio clip edit on track " + after.id.to_string() +
+             " together with other changes cannot switch while playing";
+  }
+  return "This edit cannot switch while playing";
 }
 
 // A native synth player belongs to the prepared source bank, not to the
@@ -294,11 +393,12 @@ template <typename TrackRef>
   return changed;
 }
 
-// Only the project key changed (and with it nothing but presentation): the
-// running synths hear the new key; no graph, chain or source changes.
-[[nodiscard]] bool project_key_only(const project::Snapshot& before,
-                                    const project::Snapshot& after) {
-  return after.revision > before.revision && before.key != after.key && before.id == after.id &&
+// Nothing that plays changed but, perhaps, the project key (and with it
+// nothing but presentation): the running synths hear the key; no graph,
+// chain or source changes. An edit undone by the next one lands here too.
+[[nodiscard]] bool same_audible_state(const project::Snapshot& before,
+                                      const project::Snapshot& after) {
+  return after.revision > before.revision && before.id == after.id &&
          before.sample_rate == after.sample_rate && same_timing(before, after) &&
          before.sources == after.sources && before.master_effects == after.master_effects &&
          before.master_level == after.master_level &&
@@ -386,6 +486,10 @@ template <typename TrackRef>
   for (std::size_t index = 0; index < before.tracks.size(); ++index) {
     const auto& prior = before.tracks[index];
     const auto& next = after.tracks[index];
+    // An instrument track the edit leaves alone keeps playing (its player
+    // carries over to the replacement source).
+    if (prior == next)
+      continue;
     if (prior.kind == project::TrackKind::instrument ||
         next.kind == project::TrackKind::instrument ||
         !std::holds_alternative<std::monostate>(prior.instrument_source) ||
@@ -725,8 +829,7 @@ RoutedPlaybackControl::try_queue_live_native(std::shared_ptr<const project::Snap
   const auto* previous =
       superseding ? pending_native_revision_->snapshot.get() : published_snapshot_.get();
   if (!previous || !published_snapshot_ || publisher_.active_revision() == 0 ||
-      publisher_.has_pending() || publisher_.held_boundary() ||
-      (pending_native_revision_ && !superseding) ||
+      publisher_.has_pending() || (pending_native_revision_ && !superseding) ||
       (!superseding && revisions_.snapshot().active_graph_revision != previous->revision))
     return Result<bool>::success(false);
   if (previous->id != snapshot->id || previous->sample_rate != snapshot->sample_rate ||
@@ -822,8 +925,7 @@ Result<bool> RoutedPlaybackControl::try_queue_live_effect_group(
   const auto* previous =
       superseding ? pending_native_revision_->snapshot.get() : published_snapshot_.get();
   if (!previous || !published_snapshot_ || publisher_.active_revision() == 0 ||
-      publisher_.has_pending() || publisher_.held_boundary() ||
-      (pending_native_revision_ && !superseding) ||
+      publisher_.has_pending() || (pending_native_revision_ && !superseding) ||
       (!superseding && revisions_.snapshot().active_graph_revision != previous->revision))
     return Result<bool>::success(false);
   if (previous->id != snapshot->id || previous->sample_rate != snapshot->sample_rate ||
@@ -941,8 +1043,7 @@ Result<bool> RoutedPlaybackControl::try_queue_live_master_native(
   const auto* previous =
       superseding ? pending_native_revision_->snapshot.get() : published_snapshot_.get();
   if (!previous || !published_snapshot_ || publisher_.active_revision() == 0 ||
-      publisher_.has_pending() || publisher_.held_boundary() ||
-      (pending_native_revision_ && !superseding) ||
+      publisher_.has_pending() || (pending_native_revision_ && !superseding) ||
       (!superseding && revisions_.snapshot().active_graph_revision != previous->revision) ||
       (superseding && pending_native_revision_->effects != previous->master_effects))
     return Result<bool>::success(false);
@@ -999,8 +1100,9 @@ Result<bool> RoutedPlaybackControl::try_queue_live_master_native(
   }
 }
 
-Result<void> RoutedPlaybackControl::build_and_publish(
-    std::shared_ptr<const project::Snapshot> prepared_snapshot) {
+Result<void>
+RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot> prepared_snapshot,
+                                         bool replaces_source) {
   OSCILLATE_TRACE_SPAN("edit.build_and_publish");
   const auto& snapshot = *prepared_snapshot;
   if (project::has_convolution_insert(snapshot)) {
@@ -1049,8 +1151,8 @@ Result<void> RoutedPlaybackControl::build_and_publish(
     prepared_convolution = std::move(admitted).value();
   }
 #endif
-  if (!same_audio_content(*source_snapshot_, snapshot) &&
-      !(awaiting_source_replacement_ && published_snapshot_ &&
+  if (source_snapshot_ && !same_audio_content(*source_snapshot_, snapshot) &&
+      !(replaces_source && published_snapshot_ &&
         (audio_clip_edit_only(*published_snapshot_, snapshot) ||
          native_synth_switch_only(*published_snapshot_, snapshot)))) {
     return fail(snapshot.revision,
@@ -1184,12 +1286,6 @@ Result<void> RoutedPlaybackControl::build_and_publish(
     auto prepared = track_chain::prepare_chain(saved, context, prior ? &prior->chain : nullptr);
     if (!prepared)
       return Result<void>::failure(prepared.error());
-    // A held switch keeps exact time, so it cannot carry a latency change.
-    const auto prior_latency = prior ? prior->chain.latency_frames() : 0;
-    if (playing && !publish_live_ && prior_latency != prepared.value().latency_frames())
-      return Result<void>::failure({ErrorCode::unsupported,
-                                    "This edit changes a chain's latency while its graph is held; "
-                                    "it is saved and plays from the next Play"});
     if (prior && prior->chain.runtime) {
       switches.push_back(
           {track, track_chain::switch_chain(prior->chain, prepared.value(), unbounded_ring_out)});
@@ -1305,18 +1401,18 @@ Result<void> RoutedPlaybackControl::build_and_publish(
     return fail(snapshot.revision,
                 {ErrorCode::resource_exhausted, "Routed output latency exceeds 32-bit range"});
   auto published =
-      publish_live_
-          ? publisher_.prepare_and_publish_live(snapshot.revision, nodes, route.value().edges,
-                                                limits_, std::move(gains).value())
-          : publisher_.prepare_and_publish(snapshot.revision, nodes, route.value().edges, limits_,
-                                           std::move(gains).value());
+      playing ? publisher_.prepare_and_publish_live(snapshot.revision, nodes, route.value().edges,
+                                                    limits_, std::move(gains).value())
+              : publisher_.prepare_and_publish(snapshot.revision, nodes, route.value().edges,
+                                               limits_, std::move(gains).value());
   if (!published)
     return fail(snapshot.revision, published.error());
-  if (publish_live_) {
+  if (playing) {
     live_candidate_ =
         LiveCandidate{.revision = snapshot.revision,
                       .passed_at_publication = publisher_.live_candidate_passed_blocks(),
                       .published_snapshot = published_snapshot_,
+                      .source_snapshot = source_snapshot_,
                       .route_plan = published_route_plan_,
                       .convolution = live_convolution_,
                       .chains = active_chains_,
@@ -1333,6 +1429,8 @@ Result<void> RoutedPlaybackControl::build_and_publish(
     initial_route_plan_ = route.value();
   }
   published_route_plan_ = std::move(route.value());
+  if (replaces_source)
+    source_snapshot_ = prepared_snapshot;
   published_snapshot_ = std::move(prepared_snapshot);
   if (prepared_convolution)
     live_convolution_ = std::move(prepared_convolution);
@@ -1387,6 +1485,7 @@ void RoutedPlaybackControl::settle_live_candidate() {
   auto prior = std::move(*live_candidate_);
   live_candidate_.reset();
   published_snapshot_ = std::move(prior.published_snapshot);
+  source_snapshot_ = std::move(prior.source_snapshot);
   published_route_plan_ = std::move(prior.route_plan);
   live_convolution_ = std::move(prior.convolution);
   active_chains_ = std::move(prior.chains);
@@ -1410,7 +1509,7 @@ void RoutedPlaybackControl::refresh_synth_locks() {
 }
 
 Result<void> RoutedPlaybackControl::submit_current() {
-  if (publisher_.active_revision() != 0 || publisher_.has_pending() || awaiting_) {
+  if (publisher_.active_revision() != 0 || publisher_.has_pending()) {
     return rejected(ErrorCode::conflict, "Routed playback is already starting or active");
   }
   const auto current = model_.snapshot();
@@ -1433,8 +1532,8 @@ RoutedPlaybackControl::prepared_route_tail_receipt(std::uint64_t expected_revisi
       published_snapshot_->revision != expected_revision ||
       initial_route_revision_ != expected_revision ||
       (active != expected_revision && !initial_pending) ||
-      (active != 0 && publisher_.has_pending()) || awaiting_ || preparing_source_ ||
-      pending_native_revision_ || pending_manual_ || publisher_.held_boundary())
+      (active != 0 && publisher_.has_pending()) || preparing_source_ || pending_native_revision_ ||
+      pending_manual_)
     return Receipt::failure({ErrorCode::conflict, "Prepared route tail revision is not stable"});
   if (!active_vst3_automation_.empty())
     return Receipt::failure(
@@ -1521,7 +1620,8 @@ void RoutedPlaybackControl::unbind_live_source() noexcept {
                                        pending_native_revision_->runtime))) {
     pending_native_revision_.reset();
   }
-  retry_live_after_ack_ = false;
+  pending_players_.clear();
+  deferred_revision_.reset();
   live_source_ = nullptr;
 }
 
@@ -1560,7 +1660,7 @@ RoutedPlaybackControl::try_queue_live_synth(std::shared_ptr<const project::Snaps
   const auto* previous =
       superseding ? pending_native_revision_->snapshot.get() : published_snapshot_.get();
   if (!previous || !live_source_ || publisher_.active_revision() == 0 || publisher_.has_pending() ||
-      publisher_.held_boundary() || (pending_native_revision_ && !superseding) ||
+      (pending_native_revision_ && !superseding) ||
       (!superseding && revisions_.snapshot().active_graph_revision != previous->revision) ||
       previous->id != snapshot->id || previous->sample_rate != snapshot->sample_rate ||
       previous->sources != snapshot->sources ||
@@ -1620,12 +1720,11 @@ RoutedPlaybackControl::try_queue_live_synth(std::shared_ptr<const project::Snaps
       return Result<bool>::success(false);
   }
   if (!runtime->offer_values(resolved.value().values, snapshot->revision)) {
-    // A drag may end on this value; retry after the callback drains an offer.
-    retry_live_after_ack_ = true;
-    return Result<bool>::failure(
-        {ErrorCode::conflict, "Live synth mailbox is full; saved edit is not active"});
+    // A drag may end on this value: it applies once the callback drains an
+    // offer (observe()).
+    deferred_revision_ = snapshot->revision;
+    return Result<bool>::success(true);
   }
-  retry_live_after_ack_ = false;
   if (superseding) {
     pending_native_revision_->snapshot = std::move(snapshot);
   } else {
@@ -1636,19 +1735,21 @@ RoutedPlaybackControl::try_queue_live_synth(std::shared_ptr<const project::Snaps
   return Result<bool>::success(true);
 }
 
-// A note effect edit (values or a switch, and a macro turned with them)
-// that keeps the chain's slots goes to the running player inside the
-// revision's automation plan: no rebuild and no gap (ADR-0059).
-Result<bool> RoutedPlaybackControl::try_queue_live_note_effects(
-    std::shared_ptr<const project::Snapshot> snapshot) {
+// An edit confined to built-in instrument tracks' notes, pedals, synth and
+// note effect lanes, note effect values and switches and macro values goes
+// to each track's running player as one plan, adopted at its next block: no
+// rebuild and no gap, and the voices keep playing (ADR-0093). Any number of
+// tracks may change in one edit; each acknowledges the same revision.
+Result<bool>
+RoutedPlaybackControl::try_queue_live_players(std::shared_ptr<const project::Snapshot> snapshot) {
   const bool superseding =
       pending_native_revision_ && std::holds_alternative<native_dsp::synth::NativeSynthPlayer*>(
                                       pending_native_revision_->runtime);
-  const auto* previous =
-      superseding ? pending_native_revision_->snapshot.get() : published_snapshot_.get();
+  // Compared with what plays, so a superseded offer's tracks are re-offered.
+  const auto* previous = published_snapshot_.get();
   if (!previous || !live_source_ || publisher_.active_revision() == 0 || publisher_.has_pending() ||
-      publisher_.held_boundary() || (pending_native_revision_ && !superseding) ||
-      (!superseding && revisions_.snapshot().active_graph_revision != previous->revision) ||
+      (pending_native_revision_ && !superseding) ||
+      revisions_.snapshot().active_graph_revision != previous->revision ||
       previous->id != snapshot->id || previous->sample_rate != snapshot->sample_rate ||
       previous->sources != snapshot->sources ||
       previous->master_effects != snapshot->master_effects ||
@@ -1658,138 +1759,87 @@ Result<bool> RoutedPlaybackControl::try_queue_live_note_effects(
       previous->next_insert_slot_serial != snapshot->next_insert_slot_serial ||
       previous->tracks.size() != snapshot->tracks.size() || !same_timing(*previous, *snapshot))
     return Result<bool>::success(false);
-  const project::Track* changed = nullptr;
+  std::vector<const project::Track*> changed;
+  bool silent = false;
   for (std::size_t index = 0; index < previous->tracks.size(); ++index) {
     const auto& old_track = previous->tracks[index];
     const auto& next_track = snapshot->tracks[index];
-    if (old_track == next_track)
+    const bool offered =
+        superseding && std::ranges::any_of(pending_players_, [&](const auto* player) {
+          return player->track() == next_track.id;
+        });
+    if (old_track == next_track && !offered)
       continue;
-    if (changed || old_track.kind != project::TrackKind::instrument ||
-        old_track.note_effects == next_track.note_effects ||
-        !std::holds_alternative<project::NativeInstrumentPatch>(old_track.instrument_source) ||
-        old_track.macros.size() != next_track.macros.size())
-      return Result<bool>::success(false);
-    // A macro's value and name are heard only through the parameters it
-    // sets, which are in this edit; its mappings shape its lanes.
-    for (std::size_t macro = 0; macro < old_track.macros.size(); ++macro) {
-      if (old_track.macros[macro].mappings != next_track.macros[macro].mappings)
-        return Result<bool>::success(false);
+    if (silent_midi_edit_only(old_track, next_track)) {
+      silent = true;
+      continue;
     }
-    auto masked = old_track;
-    masked.note_effects = next_track.note_effects;
-    masked.macros = next_track.macros;
-    if (masked != next_track)
+    if (!player_edit_only(old_track, next_track))
       return Result<bool>::success(false);
-    changed = &next_track;
+    changed.push_back(&next_track);
   }
-  if (!changed)
+  if (changed.empty() && silent && !superseding) {
+    // Nothing that sounds changed: the revision is audible at once.
+    published_snapshot_ = snapshot;
+    source_snapshot_ = std::move(snapshot);
+    (void)revisions_.observe_active_graph(published_snapshot_->revision);
+    follow_published_notes();
+    return Result<bool>::success(true);
+  }
+  if (changed.empty())
     return Result<bool>::success(false);
-  auto* player = live_source_->synth_player(changed->id);
-  // A new chain layout (an effect added, moved or removed) rebuilds the source.
-  if (!player || !player->same_note_effects(changed->note_effects))
-    return Result<bool>::success(false);
-  if (superseding && (pending_native_revision_->track != changed->id ||
-                      std::get<native_dsp::synth::NativeSynthPlayer*>(
-                          pending_native_revision_->runtime) != player))
-    return Result<bool>::success(false);
+  std::vector<native_dsp::synth::NativeSynthPlayer*> players;
+  players.reserve(changed.size());
+  for (const auto* track : changed) {
+    auto* player = live_source_->synth_player(track->id);
+    // A new note effect layout (an effect added, moved or removed) rebuilds
+    // the source.
+    if (!player || !player->same_note_effects(track->note_effects))
+      return Result<bool>::success(false);
+    players.push_back(player);
+  }
+  // Every track takes the revision, or none does: a full mailbox waits for
+  // the callback to move on (observe() applies the newest revision then).
+  if (!std::ranges::all_of(players, [](auto* player) { return player->has_room(); })) {
+    deferred_revision_ = snapshot->revision;
+    return Result<bool>::success(true);
+  }
+  auto midi = engine::compile_midi_events(*snapshot);
+  if (!midi)
+    return Result<bool>::failure(midi.error());
   auto prepared = automation_project::prepare_project_automation(*snapshot, snapshot->revision);
   if (!prepared)
     return Result<bool>::failure(prepared.error());
   auto limit = automation_sample_limit(*snapshot, limits_.max_frames);
   if (!limit)
     return Result<bool>::failure(limit.error());
-  auto offered = player->offer_automation(*snapshot, *changed, prepared.value(), limit.value());
-  if (!offered) {
-    if (offered.error().code == ErrorCode::resource_exhausted)
-      retry_live_after_ack_ = true;
-    return Result<bool>::failure(offered.error());
-  }
-  retry_live_after_ack_ = false;
-  if (superseding) {
-    pending_native_revision_->snapshot = std::move(snapshot);
-  } else {
-    PendingNativeRevision pending{{}, changed->id, {}, std::move(snapshot), {}};
-    pending.runtime = player;
-    pending_native_revision_.emplace(std::move(pending));
-  }
-  return Result<bool>::success(true);
-}
-
-Result<bool> RoutedPlaybackControl::try_queue_live_synth_automation(
-    std::shared_ptr<const project::Snapshot> snapshot) {
-  const bool superseding =
-      pending_native_revision_ && std::holds_alternative<native_dsp::synth::NativeSynthPlayer*>(
-                                      pending_native_revision_->runtime);
-  const auto* previous =
-      superseding ? pending_native_revision_->snapshot.get() : published_snapshot_.get();
-  if (!previous || !live_source_ || publisher_.active_revision() == 0 || publisher_.has_pending() ||
-      publisher_.held_boundary() || (pending_native_revision_ && !superseding) ||
-      (!superseding && revisions_.snapshot().active_graph_revision != previous->revision) ||
-      previous->id != snapshot->id || previous->sample_rate != snapshot->sample_rate ||
-      previous->sources != snapshot->sources ||
-      previous->master_effects != snapshot->master_effects ||
-      previous->master_level != snapshot->master_level ||
-      previous->source_tempo_reviews != snapshot->source_tempo_reviews ||
-      previous->source_key_reviews != snapshot->source_key_reviews ||
-      previous->next_insert_slot_serial != snapshot->next_insert_slot_serial ||
-      previous->tracks.size() != snapshot->tracks.size() || !same_timing(*previous, *snapshot))
-    return Result<bool>::success(false);
-  const project::Track* changed = nullptr;
-  for (std::size_t index = 0; index < previous->tracks.size(); ++index) {
-    const auto& old_track = previous->tracks[index];
-    const auto& next_track = snapshot->tracks[index];
-    if (old_track == next_track)
-      continue;
-    if (changed || old_track.kind != project::TrackKind::instrument ||
-        !std::holds_alternative<project::NativeInstrumentPatch>(old_track.instrument_source))
-      return Result<bool>::success(false);
-    const auto native_lane = [](const project::AutomationLane& lane) {
-      // A macro lane may drive the synth's parameters (ADR-0059).
-      return std::holds_alternative<project::NativeParameterTarget>(lane.target) ||
-             std::holds_alternative<project::MacroTarget>(lane.target);
-    };
-    if (std::ranges::equal(old_track.automation | std::views::filter(native_lane),
-                           next_track.automation | std::views::filter(native_lane)) ||
-        !std::ranges::equal(old_track.automation | std::views::filter(std::not_fn(native_lane)),
-                            next_track.automation | std::views::filter(std::not_fn(native_lane))))
-      return Result<bool>::success(false);
-    auto masked = old_track;
-    masked.automation = next_track.automation;
-    if (masked != next_track)
-      return Result<bool>::success(false);
-    changed = &next_track;
-  }
-  if (!changed)
-    return Result<bool>::success(false);
-  auto* player = live_source_->synth_player(changed->id);
-  if (!player)
+  // Every plan is built and checked before any player gets one, so the
+  // edit reaches all of its tracks or none.
+  std::vector<native_dsp::synth::NativeSynthPlayer::PreparedPlan> plans;
+  try {
+    plans.reserve(changed.size());
+    for (std::size_t index = 0; index < changed.size(); ++index) {
+      const auto& track = *changed[index];
+      const engine::InstrumentEvents empty{track.id, {}};
+      const auto events =
+          std::ranges::find(midi.value().instruments(), track.id, &engine::InstrumentEvents::track);
+      auto plan = players[index]->prepare_plan(
+          *snapshot, track, events == midi.value().instruments().end() ? empty : *events,
+          prepared.value(), limit.value());
+      if (!plan)
+        return Result<bool>::failure(plan.error());
+      plans.push_back(std::move(plan).value());
+    }
+  } catch (const std::bad_alloc&) {
     return Result<bool>::failure(
-        {ErrorCode::unavailable,
-         "Live synth player is unavailable; automation edit is not active"});
-  if (superseding && (pending_native_revision_->track != changed->id ||
-                      std::get<native_dsp::synth::NativeSynthPlayer*>(
-                          pending_native_revision_->runtime) != player))
-    return Result<bool>::success(false);
-  auto prepared = automation_project::prepare_project_automation(*snapshot, snapshot->revision);
-  if (!prepared)
-    return Result<bool>::failure(prepared.error());
-  auto limit = automation_sample_limit(*snapshot, limits_.max_frames);
-  if (!limit)
-    return Result<bool>::failure(limit.error());
-  auto offered = player->offer_automation(*snapshot, *changed, prepared.value(), limit.value());
-  if (!offered) {
-    if (offered.error().code == ErrorCode::resource_exhausted)
-      retry_live_after_ack_ = true;
-    return Result<bool>::failure(offered.error());
+        {ErrorCode::resource_exhausted, "Live instrument edit ran out of memory"});
   }
-  retry_live_after_ack_ = false;
-  if (superseding) {
-    pending_native_revision_->snapshot = std::move(snapshot);
-  } else {
-    PendingNativeRevision pending{{}, changed->id, {}, std::move(snapshot), {}};
-    pending.runtime = player;
-    pending_native_revision_.emplace(std::move(pending));
-  }
+  PendingNativeRevision pending{{}, changed.front()->id, {}, std::move(snapshot), {}};
+  pending.runtime = players.front();
+  for (std::size_t index = 0; index < players.size(); ++index)
+    players[index]->commit_plan(std::move(plans[index]), *pending.snapshot);
+  pending_players_ = std::move(players);
+  pending_native_revision_ = std::move(pending);
   return Result<bool>::success(true);
 }
 
@@ -1802,7 +1852,7 @@ Result<bool> RoutedPlaybackControl::try_queue_live_effect_automation(
   const auto* previous =
       superseding ? pending_native_revision_->snapshot.get() : published_snapshot_.get();
   if (!previous || publisher_.active_revision() == 0 || publisher_.has_pending() ||
-      publisher_.held_boundary() || (pending_native_revision_ && !superseding) ||
+      (pending_native_revision_ && !superseding) ||
       (!superseding && revisions_.snapshot().active_graph_revision != previous->revision) ||
       previous->id != snapshot->id || previous->sample_rate != snapshot->sample_rate ||
       previous->sources != snapshot->sources ||
@@ -1872,11 +1922,13 @@ Result<bool> RoutedPlaybackControl::try_queue_live_effect_automation(
     return Result<bool>::failure(limit.error());
   auto offered = stage->offer_automation(*snapshot, prepared.value(), limit.value());
   if (!offered) {
-    if (offered.error().code == ErrorCode::resource_exhausted)
-      retry_live_after_ack_ = true;
+    // A full mailbox applies the newest revision once the callback drains it.
+    if (offered.error().code == ErrorCode::resource_exhausted) {
+      deferred_revision_ = snapshot->revision;
+      return Result<bool>::success(true);
+    }
     return Result<bool>::failure(offered.error());
   }
-  retry_live_after_ack_ = false;
   if (superseding) {
     pending_native_revision_->snapshot = std::move(snapshot);
   } else {
@@ -1976,8 +2028,8 @@ RoutedPlaybackControl::pending_vst3_manual_preview_events(
     project::PluginInstanceId plugin) const {
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
   if (!pending_manual_ || pending_manual_->plugin != plugin ||
-      pending_manual_->snapshot != model_.snapshot() || awaiting_ || publisher_.has_pending() ||
-      publisher_.held_boundary() || pending_native_revision_ || publisher_.active_revision() == 0)
+      pending_manual_->snapshot != model_.snapshot() || publisher_.has_pending() ||
+      pending_native_revision_ || publisher_.active_revision() == 0)
     return std::nullopt;
   const auto found = std::ranges::find_if(vst3_stages_, [&](const Vst3Stage& candidate) {
     return candidate.track == track && candidate.slot == insert && candidate.saved.id == plugin;
@@ -2073,6 +2125,7 @@ Result<void> RoutedPlaybackControl::begin_vst3_manual_edit(
   (void)revisions_.accept_model_revision(
       current->revision, ChangeDescriptor{std::string(command_label), applied.changes});
   preparing_source_.reset();
+  deferred_revision_.reset();
   if (!ready)
     return fail(current->revision, ready.error());
   if (!manual_vst3_state_only(*published_snapshot_, *current, plugin))
@@ -2243,7 +2296,7 @@ RoutedPlaybackControl::active_effect_key_peak(project::TrackId track,
 }
 
 Result<void> RoutedPlaybackControl::begin_current() {
-  if (awaiting_ || publisher_.has_pending()) {
+  if (publisher_.has_pending()) {
     return rejected(ErrorCode::conflict, "A routed graph update is already pending");
   }
   const auto current = model_.snapshot();
@@ -2257,24 +2310,16 @@ Result<void> RoutedPlaybackControl::begin_current() {
                  "is unavailable. Stop and restart playback to apply it"});
   }
   (void)publisher_.collect_retired();
-  // Built-in chain, routing and level edits switch at the next block while
-  // the current graph keeps playing; anything touching sources or VST3
-  // instances takes the held path.
-  if (live_switching_ && published_snapshot_ && source_snapshot_ && published_snapshot_audible() &&
-      !pending_native_revision_ && !pending_manual_ &&
-      same_audio_content(*source_snapshot_, *current) &&
-      live_switch_eligible(*published_snapshot_, *source_snapshot_, *current)) {
-    publish_live_ = true;
-    auto published = build_and_publish(current);
-    publish_live_ = false;
-    return published;
-  }
-  if (!publisher_.request_hold()) {
-    return fail(current->revision,
-                {ErrorCode::conflict, "Routed graph could not request a callback hold"});
-  }
-  awaiting_ = current;
-  return Result<void>::success();
+  // Chain, routing and level edits switch at the next block while the
+  // current graph keeps playing (ADR-0049, ADR-0050). Sources switch through
+  // their own primed handoff (capture_source_edit); anything else is refused
+  // at once, with the old graph playing on (ADR-0094).
+  if (published_snapshot_ && source_snapshot_ && same_audio_content(*source_snapshot_, *current) &&
+      live_switch_eligible(*published_snapshot_, *source_snapshot_, *current))
+    return build_and_publish(current);
+  return fail(current->revision, {ErrorCode::unsupported,
+                                  published_snapshot_ ? live_refusal(*published_snapshot_, *current)
+                                                      : "Routed playback has no published graph"});
 }
 
 Result<void> RoutedPlaybackControl::reject_edit(const project::AppliedRevision& applied,
@@ -2285,6 +2330,7 @@ Result<void> RoutedPlaybackControl::reject_edit(const project::AppliedRevision& 
     return rejected(ErrorCode::conflict, "Routed project edit was superseded");
   (void)revisions_.accept_model_revision(
       current->revision, ChangeDescriptor{std::string(command_label), applied.changes});
+  deferred_revision_.reset();
   return fail(current->revision, std::move(error));
 }
 
@@ -2299,18 +2345,28 @@ Result<void> RoutedPlaybackControl::begin_edit(const project::AppliedRevision& a
   (void)revisions_.accept_model_revision(
       current->revision, ChangeDescriptor{std::string(command_label), applied.changes});
   preparing_source_.reset(); // A newer saved edit invalidates any worker capture.
-  if (awaiting_ || publisher_.has_pending()) {
-    return fail(current->revision,
-                {ErrorCode::conflict, "Previous routed graph update must activate first"});
-  }
-  if (pending_manual_)
-    return fail(current->revision,
-                {ErrorCode::conflict, "Previous live VST3 parameter must be acknowledged first"});
+  return apply_current();
+}
+
+Result<void> RoutedPlaybackControl::apply_current() {
+  OSCILLATE_TRACE_SPAN("edit.apply");
+  const auto current = model_.snapshot();
+  deferred_revision_.reset();
+  // An edit made while an earlier one is still switching in waits for it;
+  // observe() then applies the newest saved revision, so rapid edits
+  // coalesce instead of being refused.
+  const auto defer = [this, &current] {
+    deferred_revision_ = current->revision;
+    return Result<void>::success();
+  };
+  if (publisher_.has_pending() || pending_manual_ ||
+      (published_snapshot_ && !published_snapshot_audible()))
+    return defer();
   if (published_snapshot_ && published_snapshot_audible() && !pending_native_revision_ &&
-      project_key_only(*published_snapshot_, *current)) {
+      same_audible_state(*published_snapshot_, *current)) {
     // Every running synth adopts the key at its next block; nothing else
     // that plays changed.
-    if (live_source_ != nullptr)
+    if (live_source_ != nullptr && published_snapshot_->key != current->key)
       live_source_->follow_project_key(current->key);
     published_snapshot_ = current;
     source_snapshot_ = current;
@@ -2359,20 +2415,18 @@ Result<void> RoutedPlaybackControl::begin_edit(const project::AppliedRevision& a
     return fail(current->revision, fast_synth.error());
   if (fast_synth.value())
     return Result<void>::success();
-  auto fast_synth_automation = try_queue_live_synth_automation(current);
-  if (!fast_synth_automation)
-    return fail(current->revision, fast_synth_automation.error());
-  if (fast_synth_automation.value())
+  auto fast_players = try_queue_live_players(current);
+  if (!fast_players)
+    return fail(current->revision, fast_players.error());
+  if (fast_players.value())
     return Result<void>::success();
-  auto fast_note_effects = try_queue_live_note_effects(current);
-  if (!fast_note_effects)
-    return fail(current->revision, fast_note_effects.error());
-  if (fast_note_effects.value())
-    return Result<void>::success();
-  if (published_snapshot_ && native_synth_automation_changed(*published_snapshot_, *current))
+  if (published_snapshot_ && native_synth_automation_changed(*published_snapshot_, *current)) {
+    if (pending_native_revision_)
+      return defer();
     return fail(current->revision,
                 {ErrorCode::unsupported, "Live synth automation must be an isolated lane edit; "
                                          "other saved changes need a restart"});
+  }
   auto fast_effect_automation = try_queue_live_effect_automation(current);
   if (!fast_effect_automation)
     return fail(current->revision, fast_effect_automation.error());
@@ -2394,8 +2448,7 @@ Result<void> RoutedPlaybackControl::begin_edit(const project::AppliedRevision& a
   if (fast_group.value())
     return Result<void>::success();
   if (pending_native_revision_)
-    return fail(current->revision,
-                {ErrorCode::conflict, "Previous live parameter update must activate first"});
+    return defer();
   return begin_current();
 }
 
@@ -2411,12 +2464,13 @@ RoutedPlaybackControl::capture_source_edit(const project::AppliedRevision& appli
   (void)revisions_.accept_model_revision(
       current->revision, ChangeDescriptor{std::string(command_label), applied.changes});
   preparing_source_.reset();
+  deferred_revision_.reset();
   const auto rejected_capture = [&](Error error) {
     (void)fail(current->revision, error);
     return Result<RoutedSourcePreparationCapture>::failure(std::move(error));
   };
-  if (publisher_.active_revision() == 0 || publisher_.has_pending() || awaiting_ ||
-      pending_native_revision_ || pending_manual_ || !published_snapshot_audible()) {
+  if (publisher_.active_revision() == 0 || publisher_.has_pending() || pending_native_revision_ ||
+      pending_manual_ || !published_snapshot_audible()) {
     return rejected_capture(
         {ErrorCode::conflict, "Routed source edit needs an active, settled graph"});
   }
@@ -2433,7 +2487,19 @@ RoutedPlaybackControl::capture_source_edit(const project::AppliedRevision& appli
         limits_.max_frames,
         publisher_.active_revision(),
         synth_switch,
-        !synth_switch && source_overlay_clip_only(*published_snapshot_, *current)};
+        !synth_switch && source_overlay_clip_only(*published_snapshot_, *current),
+        {}};
+    // Every built-in instrument the edit leaves alone plays on in the
+    // replacement source, voices and all.
+    for (const auto& track : current->tracks) {
+      const auto before =
+          std::ranges::find(published_snapshot_->tracks, track.id, &project::Track::id);
+      if (live_source_ == nullptr || before == published_snapshot_->tracks.end() ||
+          !(*before == track))
+        continue;
+      if (auto player = live_source_->shared_synth_player(track.id))
+        capture.kept_players.push_back({track.id, std::move(player)});
+    }
     preparing_source_ = current;
     return Result<RoutedSourcePreparationCapture>::success(std::move(capture));
   } catch (const std::bad_alloc&) {
@@ -2458,7 +2524,7 @@ Result<void> RoutedPlaybackControl::publish_captured_source_overlay(
       publisher_.active_revision() != capture.active_graph_revision ||
       !same_sources(sources_, capture.source_layout) ||
       !std::ranges::equal(topological_order_, capture.topological_order) ||
-      limits_.max_frames != capture.max_frames || awaiting_ || publisher_.has_pending() ||
+      limits_.max_frames != capture.max_frames || publisher_.has_pending() ||
       pending_native_revision_ || pending_manual_ ||
       !source_overlay_clip_only(*published_snapshot_, *current))
     return rejected(ErrorCode::conflict, "Routed source overlay capture is stale or busy");
@@ -2473,7 +2539,7 @@ Result<void> RoutedPlaybackControl::publish_captured_source_overlay(
 }
 
 Result<void>
-RoutedPlaybackControl::request_captured_source_hold(const RoutedSourcePreparationCapture& capture) {
+RoutedPlaybackControl::publish_captured_source(const RoutedSourcePreparationCapture& capture) {
   observe();
   const auto current = model_.snapshot();
   if (current != preparing_source_ && current->revision > revisions_.snapshot().model_revision) {
@@ -2489,18 +2555,26 @@ RoutedPlaybackControl::request_captured_source_hold(const RoutedSourcePreparatio
       publisher_.active_revision() != capture.active_graph_revision ||
       !same_sources(sources_, capture.source_layout) ||
       !std::ranges::equal(topological_order_, capture.topological_order) ||
-      limits_.max_frames != capture.max_frames || awaiting_ || publisher_.has_pending() ||
+      limits_.max_frames != capture.max_frames || publisher_.has_pending() ||
       pending_native_revision_ || pending_manual_) {
     return rejected(ErrorCode::conflict, "Routed source preparation capture is stale or busy");
   }
   (void)publisher_.collect_retired();
-  if (!publisher_.request_hold()) {
-    return fail(current->revision,
-                {ErrorCode::conflict, "Routed source graph could not request a callback hold"});
-  }
-  awaiting_ = current;
-  awaiting_source_replacement_ = true;
   preparing_source_.reset();
+  return build_and_publish(current, true);
+}
+
+Result<void>
+RoutedPlaybackControl::restart_captured_source(const RoutedSourcePreparationCapture& capture) {
+  observe();
+  const auto current = model_.snapshot();
+  const auto status = revisions_.snapshot();
+  if (current != capture.snapshot || status.model_revision != current->revision ||
+      status.application != PlaybackApplication::failed || publisher_.has_pending() ||
+      publisher_.active_revision() != capture.active_graph_revision)
+    return rejected(ErrorCode::conflict, "Routed source capture cannot be primed again");
+  (void)revisions_.retry_current_revision();
+  preparing_source_ = current;
   return Result<void>::success();
 }
 
@@ -2517,76 +2591,13 @@ RoutedPlaybackControl::fail_captured_source_edit(const RoutedSourcePreparationCa
   return fail(current->revision, std::move(error));
 }
 
-Result<void> RoutedPlaybackControl::publish_held() {
-  if (!awaiting_ || !publisher_.held_boundary()) {
-    return rejected(ErrorCode::conflict, "Routed graph has not acknowledged a callback hold");
-  }
-  auto current = model_.snapshot();
-  if (current != awaiting_) {
-    (void)publisher_.cancel_hold();
-    awaiting_.reset();
-    awaiting_source_replacement_ = false;
-    if (current->revision > revisions_.snapshot().model_revision) {
-      (void)revisions_.accept_model_revision(current->revision,
-                                             ChangeDescriptor{"project refresh", {}});
-    }
-    return fail(current->revision,
-                {ErrorCode::conflict, "Routed project changed during graph preparation"});
-  }
-  if (awaiting_source_replacement_) {
-    (void)publisher_.cancel_hold();
-    awaiting_.reset();
-    awaiting_source_replacement_ = false;
-    return fail(
-        current->revision,
-        {ErrorCode::unsupported, "Routed source switching is not connected to graph publication"});
-  }
-  auto result = build_and_publish(current);
-  if (!result) {
-    (void)publisher_.cancel_hold();
-  }
-  awaiting_.reset();
-  return result;
-}
-
-Result<void> RoutedPlaybackControl::publish_held_with_source() {
-  if (!awaiting_source_replacement_ || !awaiting_ || !publisher_.held_boundary())
-    return rejected(ErrorCode::conflict, "Routed source graph has no held boundary");
-  auto current = model_.snapshot();
-  if (current != awaiting_) {
-    (void)publisher_.cancel_hold();
-    awaiting_.reset();
-    awaiting_source_replacement_ = false;
-    return fail(current->revision,
-                {ErrorCode::conflict, "Routed project changed during source handoff"});
-  }
-  auto result = build_and_publish(current);
-  if (result)
-    source_snapshot_ = std::move(current);
-  if (!result)
-    (void)publisher_.cancel_hold();
-  awaiting_.reset();
-  awaiting_source_replacement_ = false;
-  return result;
-}
-
-Result<void> RoutedPlaybackControl::cancel_captured_source_hold(Error error) {
-  if (!awaiting_source_replacement_ || !awaiting_ || publisher_.has_pending())
-    return rejected(ErrorCode::conflict, "Routed source hold cannot be cancelled now");
-  const auto revision = awaiting_->revision;
-  (void)publisher_.cancel_hold();
-  awaiting_.reset();
-  awaiting_source_replacement_ = false;
-  return fail(revision, std::move(error));
-}
-
 Result<void> RoutedPlaybackControl::retry() {
   if (revisions_.snapshot().application != PlaybackApplication::failed ||
       revisions_.snapshot().model_revision != model_.snapshot()->revision) {
     return rejected(ErrorCode::conflict, "Only the failed current routed revision can be retried");
   }
   (void)revisions_.retry_current_revision();
-  return begin_current();
+  return apply_current();
 }
 
 void RoutedPlaybackControl::observe() {
@@ -2599,6 +2610,13 @@ void RoutedPlaybackControl::observe() {
     for (const auto& member : pending_native_revision_->group)
       applied = std::min(applied, std::max(member.stage->applied_values_revision(),
                                            member.stage->applied_automation_revision()));
+    return applied;
+  };
+  // An instrument edit is applied when its slowest player is.
+  const auto players_applied = [this] {
+    std::uint64_t applied = std::numeric_limits<std::uint64_t>::max();
+    for (const auto* player : pending_players_)
+      applied = std::min(applied, player->applied_plan_revision());
     return applied;
   };
   if (pending_native_revision_ && !pending_native_revision_->group.empty()) {
@@ -2634,12 +2652,12 @@ void RoutedPlaybackControl::observe() {
     }
   } else if (pending_native_revision_ &&
              std::visit(
-                 [](auto* runtime) {
+                 [&players_applied](auto* runtime) {
                    using Runtime = std::remove_pointer_t<decltype(runtime)>;
                    if constexpr (std::is_same_v<Runtime, native_dsp::synth::NativeSynthRuntime>)
                      return runtime->applied_revision();
                    else if constexpr (std::is_same_v<Runtime, native_dsp::synth::NativeSynthPlayer>)
-                     return runtime->applied_automation_revision();
+                     return players_applied();
                    else if constexpr (std::is_same_v<Runtime, native_inserts::NativeEffectStage>)
                      // A revision offers either values or lanes; the other stays older.
                      return std::max(runtime->applied_values_revision(),
@@ -2655,9 +2673,11 @@ void RoutedPlaybackControl::observe() {
             pending_native_revision_->runtime)) {
       published_snapshot_ = std::move(pending_native_revision_->snapshot);
       source_snapshot_ = published_snapshot_;
+      pending_players_.clear();
       (void)revisions_.observe_active_graph(published_snapshot_->revision);
-      // A Lock switch or a followed track's values changed on one synth.
-      refresh_synth_locks();
+      // A Lock switch, a followed track's values or notes, or notes an
+      // effect reads ahead (Pump's MIDI trigger) changed.
+      follow_published_notes();
     } else {
       if (auto* chain = active_chain(pending_native_revision_->track)) {
         // The running stages now hold the offered values, so their saved
@@ -2679,26 +2699,19 @@ void RoutedPlaybackControl::observe() {
     pending_native_revision_.reset();
   }
   (void)revisions_.observe_active_graph(publisher_.active_revision());
-  if (retry_live_after_ack_ && !pending_native_revision_ && live_source_) {
-    const auto current = model_.snapshot();
-    if (current->revision > revisions_.snapshot().active_graph_revision) {
-      auto retried = try_queue_live_synth(current);
-      if (retried && !retried.value())
-        retried = try_queue_live_synth_automation(current);
-      if (retried && !retried.value())
-        retried = try_queue_live_note_effects(current);
-      if (retried && !retried.value())
-        retried = try_queue_live_effect_automation(current);
-      if (retried && retried.value()) {
-        (void)revisions_.retry_current_revision();
-        retry_live_after_ack_ = false;
-      } else if (retried && !retried.value()) {
-        retry_live_after_ack_ = false; // Saved edit is incompatible; retain failed status.
-      }
-    } else {
-      retry_live_after_ack_ = false;
-    }
-  }
+  // A deferred edit applies the newest saved revision once the earlier
+  // switch has settled; it may wait again for another.
+  // Only the revision that waited, while it is still the current, pending one.
+  const auto status = revisions_.snapshot();
+  if (deferred_revision_ && (*deferred_revision_ != model_.snapshot()->revision ||
+                             status.model_revision != *deferred_revision_ ||
+                             status.application != PlaybackApplication::pending))
+    deferred_revision_.reset(); // Superseded or failed: nothing waits any more.
+  if (deferred_revision_ && *deferred_revision_ == model_.snapshot()->revision &&
+      status.model_revision == *deferred_revision_ &&
+      status.application == PlaybackApplication::pending && !publisher_.has_pending() &&
+      !pending_manual_)
+    (void)apply_current();
 }
 
 } // namespace oscillate::application
