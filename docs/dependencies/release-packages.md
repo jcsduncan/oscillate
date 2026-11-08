@@ -18,6 +18,9 @@ Release Please dispatches the workflow with the new tag. A manual run with a
 run it when a packaging input changes (`packaging` in
 [`changes.py`](../../scripts/ci/changes.py)). It is not a required check.
 
+Once the packages are attached, the workflow starts the Pages workflow,
+which adds the `.deb` to the signed [apt repository](../install.md).
+
 ## Features in each package
 
 Both packages are static Release builds of the Qt Quick app with
