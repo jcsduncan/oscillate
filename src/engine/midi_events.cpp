@@ -7,6 +7,8 @@
 #include <functional>
 #include <iterator>
 #include <limits>
+#include <optional>
+#include <ranges>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -139,16 +141,27 @@ struct ClipInterval {
         lane.points.size() > project::max_midi_pedal_points_per_lane) {
       return Result<void>::failure(invalid("invalid MIDI pedal lane"));
     }
-    std::int64_t previous = -1;
+    std::optional<std::int64_t> previous;
     for (const auto& point : lane.points) {
-      if (point.position.value <= previous || !std::isfinite(point.value) || point.value < 0.0 ||
-          point.value > 1.0) {
+      if ((previous && point.position.value <= *previous) || !std::isfinite(point.value) ||
+          point.value < 0.0 || point.value > 1.0) {
         return Result<void>::failure(invalid("invalid MIDI pedal point"));
       }
       previous = point.position.value;
     }
-    // A lane with no point inside the pattern is silent in every repeat.
-    if (lane.points.empty() || lane.points.front().position >= clip.pattern_length) {
+    // Points before tick 0 were trimmed off the clip's left edge: silent,
+    // but the last of them holds from each repeat's start until the first
+    // point inside the pattern, unless that point is at tick 0.
+    const auto inside = std::ranges::find_if(lane.points, [](const project::MidiPedalPoint& point) {
+      return point.position.value >= 0;
+    });
+    std::optional<double> held;
+    if (inside != lane.points.begin() &&
+        (inside == lane.points.end() || inside->position.value != 0)) {
+      held = std::prev(inside)->value;
+    }
+    // A lane with nothing inside the pattern is silent in every repeat.
+    if (!held && (inside == lane.points.end() || inside->position >= clip.pattern_length)) {
       continue;
     }
     double last = 0.0;
@@ -158,7 +171,21 @@ struct ClipInterval {
       }
       const auto base = iteration * clip.pattern_length.value;
       bool past_end = false;
-      for (const auto& point : lane.points) {
+      if (held) {
+        auto sample = sample_at(snapshot, clip, base);
+        if (!sample) {
+          return Result<void>::failure(sample.error());
+        }
+        if (sample.value() >= interval.end) {
+          break;
+        }
+        if (pedals.size() >= project::max_midi_events_per_project) {
+          return Result<void>::failure(exhausted("MIDI pedal event count exceeded"));
+        }
+        pedals.push_back({{sample.value()}, clip.id, lane.pedal, *held, false});
+        last = *held;
+      }
+      for (const auto& point : std::ranges::subrange(inside, lane.points.end())) {
         if (point.position >= clip.pattern_length) {
           break; // Points are sorted; the rest are kept past the pattern, silent.
         }
@@ -235,13 +262,13 @@ struct ClipInterval {
       break;
     }
     for (const auto& note : clip.notes) {
-      if (note.start.value < 0 || note.end <= note.start || note.key > foundation::max_midi_key ||
+      if (note.end <= note.start || note.key > foundation::max_midi_key ||
           note.velocity < foundation::min_note_velocity ||
           note.velocity > foundation::max_note_velocity) {
         return Result<void>::failure(invalid("invalid MIDI note"));
       }
-      if (note.start >= clip.pattern_length) {
-        continue; // Kept past the pattern's end, silent.
+      if (!project::note_plays(clip, note)) {
+        continue; // Kept before tick 0 or past the pattern's end, silent.
       }
       // A note crossing the pattern's end is cut there, as by the clip end.
       const bool cut = note.end > clip.pattern_length;

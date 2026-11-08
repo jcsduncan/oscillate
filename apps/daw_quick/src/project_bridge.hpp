@@ -531,6 +531,9 @@ public:
   Q_INVOKABLE void toggle_midi_clip_timebase(const QString& clip_id);
   Q_INVOKABLE void move_midi_clip(const QString& clip_id, double normalized_start);
   Q_INVOKABLE void resize_midi_clip(const QString& clip_id, double normalized_end);
+  // The left edge: a later start hides the notes before it, an earlier one
+  // brings them back; the caller snaps the start.
+  Q_INVOKABLE void trim_midi_clip_start(const QString& clip_id, double normalized_start);
   Q_INVOKABLE void set_midi_clip_loop(const QString& clip_id, bool loop);
   Q_INVOKABLE void add_note(const QString& clip_id, int step_index, int key);
   Q_INVOKABLE void toggle_note_grid(const QString& clip_id, int step, int key, int steps_per_bar);

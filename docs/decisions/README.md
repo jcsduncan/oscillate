@@ -100,3 +100,4 @@ never reused. 0070 was never assigned.
 | 0091 | [New projects are staged beside their folder and renamed into place](0091-staged-project-creation.md) | Accepted; implemented |
 | 0092 | [Native inserts read which keys sound from routing](0092-native-inserts-read-key-audibility.md) | Accepted; implemented |
 | 0093 | [Live MIDI edits and queued revisions](0093-live-instrument-edits-and-queued-revisions.md) | Accepted; implemented |
+| 0096 | [MIDI clips keep notes trimmed off their left edge](0096-midi-clip-left-trim.md) | Accepted; implemented |

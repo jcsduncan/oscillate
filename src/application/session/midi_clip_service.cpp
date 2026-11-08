@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <iterator>
 #include <limits>
 #include <optional>
 #include <ranges>
@@ -147,8 +148,8 @@ foundation::Result<void> MidiClipService::quantize_midi_clip(project::ClipId cli
     std::set<std::pair<std::int64_t, std::uint8_t>> destinations;
     const auto pattern = found->pattern_length.value;
     for (const auto& note : found->notes) {
-      // Notes kept after the pattern's end stay where they are.
-      if (note.start.value >= pattern)
+      // Notes kept before tick 0 or after the pattern's end stay where they are.
+      if (!project::note_plays(*found, note))
         continue;
       const auto duration = note.end.value - note.start.value;
       // A note inside the pattern stays inside; one crossing its end may.
@@ -251,6 +252,66 @@ foundation::Result<void> MidiClipService::resize_midi_clip(project::ClipId clip,
   auto applied = model().apply(operations);
   return applied ? foundation::Result<void>::success()
                  : foundation::Result<void>::failure(applied.error());
+}
+
+foundation::Result<void> MidiClipService::trim_midi_clip_start(project::ClipId clip,
+                                                               timeline::TickPosition new_start) {
+  using Result = foundation::Result<void>;
+  const auto& state = snapshot();
+  const auto* found = find_midi_clip(state, clip);
+  if (!found)
+    return Result::failure({ErrorCode::not_found, "MIDI clip not found: " + clip.to_string()});
+  if (new_start.value < 0)
+    return Result::failure({ErrorCode::invalid_argument, "MIDI clip cannot start before bar 1"});
+  auto anchor = midi_anchor_tick(state, *found);
+  if (!anchor)
+    return Result::failure(anchor.error());
+  project::Placement placement = found->placement;
+  // The tick the notes will count from: an elapsed clip's new start sample
+  // maps back to it through the tempo map, as playback maps its notes.
+  auto counted_from = new_start;
+  if (auto* musical = std::get_if<project::MusicalInterval>(&placement)) {
+    if (new_start >= musical->end)
+      return Result::failure({ErrorCode::invalid_argument, "MIDI clip must end after it starts"});
+    musical->start = new_start;
+  } else {
+    auto& elapsed = std::get<project::ElapsedInterval>(placement);
+    auto start_sample = state.tempo.tick_to_sample(new_start, state.sample_rate);
+    if (!start_sample)
+      return Result::failure(start_sample.error());
+    if (start_sample.value() >= elapsed.end)
+      return Result::failure({ErrorCode::invalid_argument, "MIDI clip must end after it starts"});
+    elapsed.start = start_sample.value();
+    auto mapped = state.tempo.sample_to_tick(elapsed.start, state.sample_rate);
+    if (!mapped)
+      return Result::failure(mapped.error());
+    counted_from = mapped.value();
+  }
+  // Everything inside the clip shifts against the start, so it stays put on
+  // the timeline.
+  const auto shift = counted_from.value - anchor.value().value;
+  if (shift == 0)
+    return Result::success();
+  const auto pattern = found->pattern_length.value - shift;
+  if (pattern <= 0)
+    return Result::failure(
+        {ErrorCode::invalid_argument, "Trim a looping MIDI clip inside its first pattern"});
+  std::vector<project::Operation> operations{project::SetMidiClipPlacement{clip, placement},
+                                             project::SetMidiPattern{clip, {pattern}, found->loop}};
+  operations.reserve(operations.size() + found->notes.size() + found->pedals.size());
+  for (auto note : found->notes) {
+    note.start.value -= shift;
+    note.end.value -= shift;
+    operations.emplace_back(project::SetMidiNote{clip, note});
+  }
+  for (const auto& lane : found->pedals) {
+    auto points = lane.points;
+    for (auto& point : points)
+      point.position.value -= shift;
+    operations.emplace_back(project::SetMidiPedalLane{clip, lane.pedal, std::move(points)});
+  }
+  auto applied = model().apply(operations);
+  return applied ? Result::success() : Result::failure(applied.error());
 }
 
 foundation::Result<void> MidiClipService::set_midi_clip_loop(project::ClipId clip, bool loop) {
@@ -688,7 +749,7 @@ MidiClipService::merge_chosen_midi_clips(project::TrackId track,
     // a short pattern over a long clip without bound.
     std::vector<project::MidiNote> pattern;
     for (const auto& note : clip.notes)
-      if (note.start.value < length)
+      if (project::note_plays(clip, note))
         pattern.push_back(note);
     pattern = merge_repeated(std::move(pattern));
     const bool pedalled = std::ranges::any_of(clip.pedals, [length](const auto& lane) {
@@ -713,7 +774,16 @@ MidiClipService::merge_chosen_midi_clips(project::TrackId track,
       for (const auto& lane : clip.pedals) {
         const auto index = static_cast<std::size_t>(lane.pedal);
         auto& points = pedals[index];
-        for (const auto& point : lane.points) {
+        // Points trimmed off the clip's left edge are silent; the last of
+        // them holds from the repeat's start, as playback plays it.
+        const auto inside = std::ranges::find_if(
+            lane.points, [](const auto& point) { return point.position.value >= 0; });
+        std::vector<project::MidiPedalPoint> played;
+        if (inside != lane.points.begin() &&
+            (inside == lane.points.end() || inside->position.value != 0))
+          played.push_back({{0}, std::prev(inside)->value});
+        played.insert(played.end(), inside, lane.points.end());
+        for (const auto& point : played) {
           if (point.position.value >= length || base + point.position.value >= span.last)
             break;
           if (++pedal_written[index] > project::max_midi_pedal_points_per_lane)

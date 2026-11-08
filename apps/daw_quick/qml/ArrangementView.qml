@@ -915,6 +915,13 @@ Rectangle {
                         property real previewStart: modelData.start
                         property real previewEnd: modelData.start + modelData.length
                         property bool gestureActive: false
+                        // While its left edge is dragged, the notes keep their
+                        // places on the timeline: they draw across the clip's
+                        // span before the drag, shifted by how far the edge moved.
+                        property bool leftTrimming: false
+                        readonly property real trimShift: leftTrimming
+                            ? arrangement.projectDeltaToScreen(previewStart - modelData.start) : 0
+                        readonly property real noteSpan: clipCard.width + trimShift - Theme.spaceLg
                         // Dragged onto another audio track: how far down (or up)
                         // its row is, and which track.
                         property real rowShift: 0
@@ -956,7 +963,7 @@ Rectangle {
                         }
                         activeFocusOnTab: modelData.kind === "midi" || (modelData.kind === "audio" && arrangement.bridge.audioEditEnabled)
                         Accessible.role: Accessible.ListItem
-                        Accessible.name: modelData.kind === "audio" ? "Audio clip. Drag to move, Shift-click to add to the selection, Shift+Alt-drag to slip source audio, drag edges to trim. Arrow keys move one beat." + (modelData.waveformCacheDegraded ? " Waveform cache unavailable; preview remains usable." : "") : modelData.loop ? "Looping MIDI clip. Drag to move on the grid (Alt for free) or drag the right edge to repeat its pattern; turn Loop off to set its length instead." : "MIDI clip. Drag to move on the grid (Alt for free) or drag the right edge to lengthen or shorten it; notes after the end are kept. Turn Loop on to repeat it."
+                        Accessible.name: modelData.kind === "audio" ? "Audio clip. Drag to move, Shift-click to add to the selection, Shift+Alt-drag to slip source audio, drag edges to trim. Arrow keys move one beat." + (modelData.waveformCacheDegraded ? " Waveform cache unavailable; preview remains usable." : "") : modelData.loop ? "Looping MIDI clip. Drag to move on the grid (Alt for free) or drag the right edge to repeat its pattern; drag the left edge to trim its start, keeping the notes in place; turn Loop off to set its length instead." : "MIDI clip. Drag to move on the grid (Alt for free) or drag either edge to lengthen or shorten it; notes in place past either edge are kept. Turn Loop on to repeat it."
                         // With other clips selected (a group, or a clip this
                         // one is not), the arrow keys move the selection.
                         function nudge(direction) {
@@ -1367,12 +1374,12 @@ Rectangle {
                                 id: chordTag
                                 required property var modelData
                                 objectName: "arrangementChordName"
-                                x: Theme.spaceSm + (clipCard.width - Theme.spaceLg) * modelData.at
+                                x: Theme.spaceSm + clipCard.noteSpan * modelData.at - clipCard.trimShift
                                 y: clipCard.height - Theme.clipChordBottom
-                                width: (clipCard.width - Theme.spaceLg) * modelData.size
+                                width: clipCard.noteSpan * modelData.size
                                 height: Theme.clipChordHeight
                                 clip: true
-                                visible: width >= Theme.clipChordMinWidth
+                                visible: width >= Theme.clipChordMinWidth && x >= 0
                                 Rectangle { width: Theme.hairline; height: parent.height; color: Theme.chordAccent; opacity: Theme.clipChordLineOpacity }
                                 Text {
                                     x: Theme.clipChordTextInset
@@ -1392,10 +1399,12 @@ Rectangle {
                             delegate: Rectangle {
                                 required property var modelData
                                 objectName: "arrangementClipNote"
-                                x: Theme.spaceSm + (clipCard.width - Theme.spaceLg) * modelData.at
+                                x: Theme.spaceSm + clipCard.noteSpan * modelData.at - clipCard.trimShift
+                                // Trimmed off by the left edge being dragged.
+                                visible: x >= 0
                                 y: Theme.clipNoteTop + (clipCard.height - Theme.clipNoteSpan - clipCard.chordRow) * (clipCard.keySpan[1] === clipCard.keySpan[0] ? 0.5
                                     : (clipCard.keySpan[1] - modelData.key) / (clipCard.keySpan[1] - clipCard.keySpan[0]))
-                                width: Math.max(Theme.clipNoteMinWidth, (clipCard.width - Theme.spaceLg) * modelData.size)
+                                width: Math.max(Theme.clipNoteMinWidth, clipCard.noteSpan * modelData.size)
                                 height: Theme.clipNoteHeight
                                 radius: height / 2
                                 color: Qt.lighter(clipCard.clipColor, Theme.clipNoteLighten)
@@ -1507,6 +1516,77 @@ Rectangle {
                                 if (grouped)
                                     arrangement.endGroupDrag()
                                 grouped = false
+                            }
+                        }
+                        // The left edge moves the clip's start on the grid (Alt
+                        // for free) while its notes stay where they are: a later
+                        // start hides the notes before it, an earlier one brings
+                        // them back. Its grab zone mirrors the right edge's.
+                        Item {
+                            id: midiTrimZone
+                            visible: modelData.kind === "midi"
+                            z: 2
+                            readonly property real grab: Math.max(Theme.clipGrabMinWidth, Math.min(Theme.clipGrabMaxWidth, clipCard.width * Theme.clipGrabFraction))
+                            x: -Theme.clipGrabOverhang
+                            width: grab + Theme.clipGrabOverhang
+                            height: parent.height
+                            Rectangle {
+                                readonly property bool lit: trimArea.containsMouse || trimArea.pressed
+                                x: Theme.clipGrabOverhang + Theme.clipGripGap
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: Theme.clipGripWidth
+                                height: Math.max(Theme.clipGripMinHeight, parent.height - Theme.clipGripInset)
+                                radius: Theme.clipGripWidth / 2
+                                color: lit ? arrangement.accentColor : arrangement.mainTextColor
+                                opacity: lit ? 1 : arrangement.selectedClipId === modelData.id ? Theme.clipGripSelectedOpacity : 0
+                                Behavior on opacity { NumberAnimation { duration: Motion.hover } }
+                            }
+                            MouseArea {
+                                id: trimArea
+                                objectName: "midiClipLeftTrimHandle"
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.SizeHorCursor
+                                property real initialX: 0
+                                property real initialStart: 0
+                                onPressed: mouse => {
+                                    arrangement.clipSelected(modelData.id)
+                                    initialX = mapToItem(arrangement, mouse.x, mouse.y).x
+                                    initialStart = clipCard.previewStart
+                                    clipCard.leftTrimming = true
+                                    clipCard.gestureActive = true
+                                }
+                                onPositionChanged: mouse => {
+                                    if (!pressed)
+                                        return
+                                    const deltaX = mapToItem(arrangement, mouse.x, mouse.y).x - initialX
+                                    let start = initialStart + arrangement.screenDeltaToProject(deltaX)
+                                    const snapping = arrangement.snapToBeat && (mouse.modifiers & Qt.AltModifier) === 0
+                                    if (snapping)
+                                        start = arrangement.snapToGrid(start)
+                                    // At least one grid step (or a sixteenth unsnapped)
+                                    // long, and inside the pattern: its end stays put.
+                                    const shortest = (snapping ? arrangement.gridStepBars() : 1 / arrangement.unsnappedStepsPerBar)
+                                        / arrangement.bridge.timelineBars
+                                    const span = Number(modelData.lengthTicks)
+                                    const pattern = Number(modelData.patternTicks)
+                                    const patternEnd = span > 0 && pattern > 0
+                                        ? initialStart + modelData.length * pattern / span : clipCard.previewEnd
+                                    clipCard.previewStart = Math.max(0, Math.min(Math.min(clipCard.previewEnd, patternEnd) - shortest, start))
+                                }
+                                onReleased: {
+                                    const target = clipCard.previewStart
+                                    clipCard.gestureActive = false
+                                    clipCard.leftTrimming = false
+                                    clipCard.resetPreview()
+                                    if (Math.abs(arrangement.projectDeltaToScreen(target - initialStart)) >= arrangement.clickSlop)
+                                        arrangement.bridge.trim_midi_clip_start(modelData.id, target)
+                                }
+                                onCanceled: {
+                                    clipCard.gestureActive = false
+                                    clipCard.leftTrimming = false
+                                    clipCard.resetPreview()
+                                }
                             }
                         }
                         // The right edge lengthens or shortens the clip. Its grab
