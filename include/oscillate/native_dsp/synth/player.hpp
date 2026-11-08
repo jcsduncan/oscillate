@@ -75,6 +75,13 @@ public:
                std::span<const automation_project::PreparedTargetAutomation> automation,
                std::uint64_t last_safe_automation_sample) const;
   void commit_plan(PreparedPlan plan, const project::Snapshot& snapshot);
+  // Control only: holds a prepared plan back for a live switch of its
+  // revision, which releases it (release_staged_plan) on the callback at the
+  // block it takes over (ADR-0098). False when the mailbox has no room.
+  [[nodiscard]] bool stage_plan(PreparedPlan plan);
+  // Callback only, before this block renders: the plan staged for
+  // `revision`, if any, plays from this block.
+  void release_staged_plan(std::uint64_t revision) noexcept { plans_->release_staged(revision); }
   // The newest offered revision a rendered block has used.
   [[nodiscard]] std::uint64_t applied_plan_revision() const noexcept;
   // Control only: whether offer_plan() has room now. False until the
@@ -139,6 +146,9 @@ private:
   // Everything a saved revision gives the player: swapped whole at a block.
   struct Plan {
     std::uint64_t revision = 0;
+    // The project's tempo and meter: a tempo change is a new plan.
+    std::shared_ptr<const timeline::TempoMap> tempo;
+    BarGrid bars;
     std::shared_ptr<const engine::InstrumentEvents> events;
     std::shared_ptr<const engine::NoteSpans> spans;
     std::uint64_t last_safe_sample = 0;
@@ -166,8 +176,6 @@ private:
   std::uint32_t sample_rate_ = 0;
   std::size_t max_frames_ = 0;
   std::shared_ptr<NativeSynthRuntime> runtime_;
-  std::shared_ptr<const timeline::TempoMap> tempo_;
-  BarGrid bars_;
   std::vector<double> values_;
   // Boxed: the player moves, its atomics cannot.
   std::unique_ptr<PlanMailbox<Plan>> plans_ = std::make_unique<PlanMailbox<Plan>>();

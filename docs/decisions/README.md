@@ -99,8 +99,9 @@ never reused. 0070 was never assigned.
 | 0090 | [Export renders a graph the render_graph builder prepares](0090-render-graph-builder.md) | Accepted; implemented for built-in chains |
 | 0091 | [New projects are staged beside their folder and renamed into place](0091-staged-project-creation.md) | Accepted; implemented |
 | 0092 | [Native inserts read which keys sound from routing](0092-native-inserts-read-key-audibility.md) | Superseded by ADR-0097 for how key notes follow a mute lane; otherwise implemented |
-| 0093 | [Live MIDI edits and queued revisions](0093-live-instrument-edits-and-queued-revisions.md) | Accepted; implemented |
-| 0094 | [Sources switch at a primed block; no held path](0094-primed-source-switching.md) | Accepted; implemented |
+| 0093 | [Live MIDI edits and queued revisions](0093-live-instrument-edits-and-queued-revisions.md) | Superseded in part by ADR-0098; otherwise implemented |
+| 0094 | [Sources switch at a primed block; no held path](0094-primed-source-switching.md) | Superseded in part by ADR-0098; otherwise implemented |
 | 0095 | [Projects from every released schema open, through chained forward migrations](0095-schema-migration-policy.md) | Accepted; hook and golden-manifest test built, no schema released yet |
 | 0096 | [MIDI clips keep notes trimmed off their left edge](0096-midi-clip-left-trim.md) | Accepted; implemented |
 | 0097 | [A key source's mute lane gates its keys](0097-mute-lanes-gate-keys.md) | Accepted; implemented |
+| 0098 | [Structural edits switch with a whole replacement source](0098-whole-replacement-switches.md) | Accepted; implemented |

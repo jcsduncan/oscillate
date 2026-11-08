@@ -42,14 +42,16 @@ foundation::Result<void> RoutedMixerPublisher::prepare_and_publish(
 
 foundation::Result<void> RoutedMixerPublisher::prepare_and_publish_live(
     std::uint64_t revision, std::span<const RoutedNode> nodes, std::span<const RoutingEdge> edges,
-    RoutedMixerLimits limits, std::shared_ptr<RoutedGainSource> gains) {
-  return publish(revision, nodes, edges, limits, std::move(gains), true);
+    RoutedMixerLimits limits, std::shared_ptr<RoutedGainSource> gains, bool new_sources) {
+  return publish(revision, nodes, edges, limits, std::move(gains), true, new_sources);
 }
 
-foundation::Result<void>
-RoutedMixerPublisher::publish(std::uint64_t revision, std::span<const RoutedNode> nodes,
-                              std::span<const RoutingEdge> edges, RoutedMixerLimits limits,
-                              std::shared_ptr<RoutedGainSource> gains, bool live) {
+foundation::Result<void> RoutedMixerPublisher::publish(std::uint64_t revision,
+                                                       std::span<const RoutedNode> nodes,
+                                                       std::span<const RoutingEdge> edges,
+                                                       RoutedMixerLimits limits,
+                                                       std::shared_ptr<RoutedGainSource> gains,
+                                                       bool live, bool new_sources) {
   if (revision == 0 || has_pending() || retired_.load(std::memory_order_acquire) != nullptr)
     return fail(foundation::ErrorCode::conflict,
                 "routed publication needs a new revision and empty handoff slots");
@@ -66,7 +68,7 @@ RoutedMixerPublisher::publish(std::uint64_t revision, std::span<const RoutedNode
                          : prepare_routed_mixer(nodes, edges, limits);
     if (!prepared)
       return foundation::Result<void>::failure(prepared.error());
-    if (prior != nullptr &&
+    if (prior != nullptr && !new_sources &&
         prior->mixer->plan().topological_order != prepared.value()->plan().topological_order)
       return fail(foundation::ErrorCode::conflict,
                   "routed source order changed; named-source publication is required");
@@ -267,8 +269,13 @@ bool RoutedMixerPublisher::withdraw_pending() noexcept {
 void RoutedMixerPublisher::answer_withdrawal() noexcept {
   if (!withdraw_requested_.load(std::memory_order_acquire))
     return;
-  if (auto* candidate = pending_.exchange(nullptr, std::memory_order_acq_rel))
+  if (auto* candidate = pending_.exchange(nullptr, std::memory_order_acq_rel)) {
+    // Tracks it faded out for its switch play on.
+    if (auto* active = active_.load(std::memory_order_relaxed);
+        active != nullptr && candidate->live_switch && candidate->mixer->continues(*active->mixer))
+      candidate->mixer->restore_dropped(*active->mixer);
     retired_.store(candidate, std::memory_order_release);
+  }
   withdraw_requested_.store(false, std::memory_order_release);
 }
 
@@ -366,6 +373,10 @@ RoutedRenderStatus RoutedMixerPublisher::render_block(
       // the active revision unchanged.
       pending_.store(nullptr, std::memory_order_release);
       retired_.store(candidate, std::memory_order_release);
+    } else if (!candidate->mixer->ready_to_continue(*active->mixer)) {
+      // A track the switch drops fades out first; the switch waits for it.
+      candidate->mixer->fade_out_dropped(*active->mixer);
+      live_passed = true;
     } else if ((source_fill.fill_selected != nullptr ||
                 valid_inputs(candidate, sources, output.size())) &&
                candidate->mixer->accepts_context(context, output.size()) &&

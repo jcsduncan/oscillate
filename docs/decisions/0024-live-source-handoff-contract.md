@@ -1,7 +1,7 @@
 # ADR-0024 — Live routed source handoff contract
 
-**Status:** Implemented for audio-only clip move, trim, fade, split, duplication and deletion in Quick; wider source edits remain open.
-**Superseded in part by:** [ADR-0093](0093-live-instrument-edits-and-queued-revisions.md), for MIDI changes; [ADR-0094](0094-primed-source-switching.md), which replaces the held source handoff with a switch at a primed block.
+**Status:** Implemented for audio-only clip move, trim, fade, split, duplication and deletion in Quick; wider source edits switch through ADR-0098.
+**Superseded in part by:** [ADR-0093](0093-live-instrument-edits-and-queued-revisions.md), for MIDI changes; [ADR-0094](0094-primed-source-switching.md), which replaces the held source handoff with a switch at a primed block; [ADR-0098](0098-whole-replacement-switches.md), for track, timing, media and instrument changes.
 
 **Date:** 17 October 2026.  
 **Requirements:** ER-01/08/09/11, TA-05, PM-06.  

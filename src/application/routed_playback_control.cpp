@@ -308,89 +308,111 @@ template <typename TrackRef>
   return true;
 }
 
-// What keeps an edit from switching while playing, when it is neither a
-// live graph switch, an instrument plan nor a primed source handoff. The old
-// graph plays on; the edit is saved for the next Play.
-[[nodiscard]] std::string live_refusal(const project::Snapshot& published,
-                                       const project::Snapshot& candidate) {
-  if (!std::ranges::equal(published.tracks, candidate.tracks, {}, &project::Track::id,
-                          &project::Track::id))
-    return "Adding, removing or reordering tracks cannot switch while playing";
-  if (!same_timing(published, candidate))
-    return "A tempo or meter change cannot switch while playing";
-  if (published.sources != candidate.sources)
-    return "New or changed source media cannot switch while playing";
-  for (std::size_t index = 0; index < published.tracks.size(); ++index) {
-    const auto& before = published.tracks[index];
-    const auto& after = candidate.tracks[index];
-    if (before.instrument_source != after.instrument_source)
-      return "A change of instrument on track " + after.id.to_string() +
-             " cannot switch while playing";
-    if (before.midi_clips != after.midi_clips)
-      return "A MIDI edit on track " + after.id.to_string() +
-             " (a VST3 instrument, or a clip lane outside its instrument) cannot switch while "
-             "playing";
-    if (before.clips != after.clips || before.frozen != after.frozen)
-      return "An audio clip edit on track " + after.id.to_string() +
-             " together with other changes cannot switch while playing";
-  }
-  return "This edit cannot switch while playing";
-}
-
-// A native synth player belongs to the prepared source bank, not to the
-// immutable mixer graph. Rebuilding only the graph cannot replace its engine.
-[[nodiscard]] bool native_synth_engine_changed(const project::Snapshot& source,
-                                               const project::Snapshot& candidate) {
-  for (const auto& old_track : source.tracks) {
-    const auto* old_patch =
-        std::get_if<project::NativeInstrumentPatch>(&old_track.instrument_source);
-    if (!old_patch)
-      continue;
-    const auto next = std::ranges::find(candidate.tracks, old_track.id, &project::Track::id);
-    if (next == candidate.tracks.end())
-      continue;
-    const auto* next_patch = std::get_if<project::NativeInstrumentPatch>(&next->instrument_source);
-    if (next_patch && (old_patch->engine != next_patch->engine ||
-                       old_patch->engine_version != next_patch->engine_version))
+// An edit only a whole replacement carries (ADR-0098): it adds or removes
+// tracks, changes the tempo or meter, the source media or an instrument, or
+// the MIDI of a built-in instrument's clips with a lane for something else.
+// The replacement source and graph switch in together at a primed block.
+[[nodiscard]] bool needs_whole_switch(const project::Snapshot& published,
+                                      const project::Snapshot& candidate) {
+  const auto ids = [](const project::Snapshot& snapshot) {
+    std::vector<project::TrackId> result;
+    result.reserve(snapshot.tracks.size());
+    for (const auto& track : snapshot.tracks)
+      result.push_back(track.id);
+    std::ranges::sort(result);
+    return result;
+  };
+  if (ids(published) != ids(candidate) || !same_timing(published, candidate) ||
+      published.sources != candidate.sources)
+    return true;
+  for (const auto& after : candidate.tracks) {
+    const auto& before = *std::ranges::find(published.tracks, after.id, &project::Track::id);
+    const auto* old_plugin = std::get_if<project::Vst3PluginInstance>(&before.instrument_source);
+    const auto* new_plugin = std::get_if<project::Vst3PluginInstance>(&after.instrument_source);
+    // A VST3 instrument's own state edits switch its chain stage.
+    if (old_plugin && new_plugin ? old_plugin->id != new_plugin->id
+                                 : before.instrument_source != after.instrument_source)
+      return true;
+    if (std::holds_alternative<project::NativeInstrumentPatch>(before.instrument_source) &&
+        before.midi_clips != after.midi_clips && !player_edit_only(before, after))
       return true;
   }
   return false;
 }
 
-// A source-bank replacement may change exactly one saved native instrument.
-// Everything else, including MIDI and routing, remains byte-for-byte project
-// intent. The audio-only clip predicate below admits its own separate case.
-[[nodiscard]] bool native_synth_switch_only(const project::Snapshot& before,
-                                            const project::Snapshot& after) {
-  if (before.id != after.id || before.sample_rate != after.sample_rate ||
-      !same_timing(before, after) || before.sources != after.sources ||
-      before.master_effects != after.master_effects || before.master_level != after.master_level ||
-      before.source_tempo_reviews != after.source_tempo_reviews ||
-      before.source_key_reviews != after.source_key_reviews ||
-      before.next_insert_slot_serial != after.next_insert_slot_serial ||
-      before.tracks.size() != after.tracks.size())
-    return false;
-  bool changed = false;
-  for (std::size_t index = 0; index < before.tracks.size(); ++index) {
-    if (before.tracks[index] == after.tracks[index])
+// Why an edit that needs a whole replacement cannot switch while playing,
+// if it cannot: VST3 instruments read their MIDI and tempo once, when they
+// are prepared.
+[[nodiscard]] std::optional<std::string> whole_switch_refusal(const project::Snapshot& published,
+                                                              const project::Snapshot& candidate) {
+  const bool timing = !same_timing(published, candidate);
+  const auto plugin = [](const project::EffectInsert& effect) {
+    return std::holds_alternative<project::Vst3PluginInstance>(effect.processor);
+  };
+  if (timing && (std::ranges::any_of(published.master_effects, plugin) ||
+                 std::ranges::any_of(published.tracks, [&plugin](const project::Track& track) {
+                   return std::ranges::any_of(track.effects, plugin);
+                 })))
+    return std::string("A tempo or meter change cannot switch while VST3 effects play");
+  for (const auto& after : candidate.tracks) {
+    const auto before = std::ranges::find(published.tracks, after.id, &project::Track::id);
+    const bool plugin_after =
+        std::holds_alternative<project::Vst3PluginInstance>(after.instrument_source);
+    if (before == published.tracks.end())
       continue;
-    if (changed || before.tracks[index].id != after.tracks[index].id)
-      return false;
-    const auto* old_patch =
-        std::get_if<project::NativeInstrumentPatch>(&before.tracks[index].instrument_source);
-    const auto* new_patch =
-        std::get_if<project::NativeInstrumentPatch>(&after.tracks[index].instrument_source);
-    if (!old_patch || !new_patch ||
-        (old_patch->engine == new_patch->engine &&
-         old_patch->engine_version == new_patch->engine_version))
-      return false;
-    auto normalized = after.tracks[index];
-    normalized.instrument_source = before.tracks[index].instrument_source;
-    if (normalized != before.tracks[index])
-      return false;
-    changed = true;
+    const bool plugin_before =
+        std::holds_alternative<project::Vst3PluginInstance>(before->instrument_source);
+    if ((plugin_before || plugin_after) && before->instrument_source != after.instrument_source &&
+        !(plugin_before && plugin_after &&
+          std::get<project::Vst3PluginInstance>(before->instrument_source).id ==
+              std::get<project::Vst3PluginInstance>(after.instrument_source).id))
+      return "A change to or from a VST3 instrument on track " + after.id.to_string() +
+             " cannot switch while playing";
+    if (plugin_before && (timing || before->midi_clips != after.midi_clips))
+      return "A MIDI or tempo edit on track " + after.id.to_string() +
+             " (a VST3 instrument) cannot switch while playing";
   }
-  return changed;
+  return std::nullopt;
+}
+
+// What keeps an edit from switching while playing, when it is neither a
+// live graph switch, an instrument plan nor a primed source switch. The old
+// graph plays on; the edit is saved for the next Play.
+[[nodiscard]] std::string live_refusal(const project::Snapshot& published,
+                                       const project::Snapshot& candidate) {
+  if (auto refusal = whole_switch_refusal(published, candidate))
+    return *std::move(refusal);
+  if (needs_whole_switch(published, candidate))
+    return "This edit is saved but not audible until its sources are prepared "
+           "(capture_source_edit)";
+  return "This edit cannot switch while playing";
+}
+
+// The routed source layout of `snapshot`. It depends on the tracks and their
+// routes, never on the stages' latencies, so receipts stand in for stages
+// that are not prepared yet.
+[[nodiscard]] Result<routing::ProjectRoutePlan>
+layout_route(routing::ProjectRouteIdRegistry& registry, const project::Snapshot& snapshot,
+             std::uint32_t max_compensation_frames) {
+  std::vector<routing::BoundStage> stages;
+  for (const auto& track : snapshot.tracks) {
+    for (const auto& stage : track_chain::saved_chain(track)) {
+      routing::BoundStage bound{track.id, stage.slot};
+      bound.detector = true;
+      if (const auto* plugin = std::get_if<project::Vst3PluginInstance>(&stage.processor)) {
+        bound.processor = routing::StageProcessor::vst3;
+        bound.plugin = plugin->id;
+      } else if (const auto* patch = std::get_if<project::NativeEffectPatch>(&stage.processor)) {
+        bound.generation = patch->generation;
+      } else if (const auto* convolution =
+                     std::get_if<project::NativeConvolution>(&stage.processor)) {
+        bound.processor = routing::StageProcessor::convolution;
+        bound.generation = convolution->generation;
+      }
+      stages.push_back(bound);
+    }
+  }
+  return registry.compile(snapshot, max_compensation_frames, stages, true);
 }
 
 // Nothing that plays changed but, perhaps, the project key (and with it
@@ -1102,7 +1124,9 @@ Result<bool> RoutedPlaybackControl::try_queue_live_master_native(
 
 Result<void>
 RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot> prepared_snapshot,
-                                         bool replaces_source) {
+                                         bool replaces_source,
+                                         const RoutedSourcePreparationCapture* capture) {
+  const bool structural = replaces_source && capture != nullptr && capture->structural;
   OSCILLATE_TRACE_SPAN("edit.build_and_publish");
   const auto& snapshot = *prepared_snapshot;
   if (project::has_convolution_insert(snapshot)) {
@@ -1151,10 +1175,9 @@ RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot
     prepared_convolution = std::move(admitted).value();
   }
 #endif
-  if (source_snapshot_ && !same_audio_content(*source_snapshot_, snapshot) &&
+  if (source_snapshot_ && !structural && !same_audio_content(*source_snapshot_, snapshot) &&
       !(replaces_source && published_snapshot_ &&
-        (audio_clip_edit_only(*published_snapshot_, snapshot) ||
-         native_synth_switch_only(*published_snapshot_, snapshot)))) {
+        audio_clip_edit_only(*published_snapshot_, snapshot))) {
     return fail(snapshot.revision,
                 {ErrorCode::unsupported,
                  "Routed live source content changed; prepare and restart playback"});
@@ -1363,9 +1386,17 @@ RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot
   if (!route) {
     return fail(snapshot.revision, route.error());
   }
+  // A structural switch reads the layout its replacement source was
+  // prepared for; any other keeps the running one.
+  const auto& expected_sources =
+      structural ? std::span<const routing::ProjectRouteSource>(capture->source_layout)
+                 : std::span<const routing::ProjectRouteSource>(sources_);
+  const auto& expected_order =
+      structural ? std::span<const engine::RoutingNodeId>(capture->topological_order)
+                 : std::span<const engine::RoutingNodeId>(topological_order_);
   if (!topological_order_.empty() &&
-      (topological_order_ != route.value().latency.topological_order ||
-       !same_sources(sources_, route.value().sources))) {
+      (!std::ranges::equal(expected_order, route.value().latency.topological_order) ||
+       !same_sources(expected_sources, route.value().sources))) {
     return fail(snapshot.revision,
                 {ErrorCode::conflict,
                  "Routed live source layout changed; restart playback with prepared sources"});
@@ -1400,9 +1431,29 @@ RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot
       std::numeric_limits<std::uint32_t>::max() - master_latency)
     return fail(snapshot.revision,
                 {ErrorCode::resource_exhausted, "Routed output latency exceeds 32-bit range"});
+  // Every built-in effect that plays on across the switch takes the edited
+  // tempo and lanes on its switching block (ADR-0098).
+  if (structural) {
+    for (const auto& chain : chains_next) {
+      for (const auto& stage : chain.chain.stages) {
+        auto* effect = dynamic_cast<native_inserts::NativeEffectStage*>(stage.runtime.get());
+        const bool running = std::ranges::any_of(active_chains_, [&](const ActiveChain& prior) {
+          return std::ranges::any_of(prior.chain.stages, [&](const track_chain::Stage& old) {
+            return old.runtime == stage.runtime;
+          });
+        });
+        if (effect == nullptr || !running)
+          continue;
+        if (auto staged =
+                effect->stage_automation(snapshot, automation.value(), automation_limit.value());
+            !staged)
+          return fail(snapshot.revision, staged.error());
+      }
+    }
+  }
   auto published =
       playing ? publisher_.prepare_and_publish_live(snapshot.revision, nodes, route.value().edges,
-                                                    limits_, std::move(gains).value())
+                                                    limits_, std::move(gains).value(), structural)
               : publisher_.prepare_and_publish(snapshot.revision, nodes, route.value().edges,
                                                limits_, std::move(gains).value());
   if (!published)
@@ -1419,12 +1470,20 @@ RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot
                       .vst3_stages = vst3_stages_,
                       .vst3_automation = active_vst3_automation_,
                       .prepared_limiter = prepared_limiter_,
-                      .master_output_latency_frames = master_output_latency_frames_};
+                      .master_output_latency_frames = master_output_latency_frames_,
+                      .sources = {},
+                      .topological_order = {}};
+    if (structural) {
+      live_candidate_->sources = sources_;
+      live_candidate_->topological_order = topological_order_;
+    }
   }
   const auto route_master_output_latency = route.value().latency.master_output_latency_frames;
-  if (topological_order_.empty()) {
+  if (topological_order_.empty() || structural) {
     sources_ = std::move(route.value().sources);
     topological_order_ = route.value().latency.topological_order;
+  }
+  if (initial_route_revision_ == 0) {
     initial_route_revision_ = snapshot.revision;
     initial_route_plan_ = route.value();
   }
@@ -1493,6 +1552,10 @@ void RoutedPlaybackControl::settle_live_candidate() {
   active_vst3_automation_ = std::move(prior.vst3_automation);
   prepared_limiter_ = prior.prepared_limiter;
   master_output_latency_frames_ = prior.master_output_latency_frames;
+  if (!prior.topological_order.empty()) {
+    sources_ = std::move(prior.sources);
+    topological_order_ = std::move(prior.topological_order);
+  }
   if (published_snapshot_)
     follow_published_notes();
   (void)revisions_.fail_revision(
@@ -2303,12 +2366,6 @@ Result<void> RoutedPlaybackControl::begin_current() {
   if (publisher_.active_revision() == 0) {
     return build_and_publish(current);
   }
-  if (source_snapshot_ && native_synth_engine_changed(*source_snapshot_, *current)) {
-    return fail(current->revision,
-                {ErrorCode::unsupported,
-                 "Native synth engine change is saved but not audible; live source replacement "
-                 "is unavailable. Stop and restart playback to apply it"});
-  }
   (void)publisher_.collect_retired();
   // Chain, routing and level edits switch at the next block while the
   // current graph keeps playing (ADR-0049, ADR-0050). Sources switch through
@@ -2474,10 +2531,15 @@ RoutedPlaybackControl::capture_source_edit(const project::AppliedRevision& appli
     return rejected_capture(
         {ErrorCode::conflict, "Routed source edit needs an active, settled graph"});
   }
-  const bool synth_switch = native_synth_switch_only(*published_snapshot_, *current);
-  if (!audio_clip_edit_only(*published_snapshot_, *current) && !synth_switch) {
+  const bool clips = audio_clip_edit_only(*published_snapshot_, *current);
+  const bool structural = !clips && needs_whole_switch(*published_snapshot_, *current);
+  if (!clips && !structural) {
     return rejected_capture(
         {ErrorCode::unsupported, "Live source preparation requires an isolated source edit"});
+  }
+  if (structural) {
+    if (auto refusal = whole_switch_refusal(*published_snapshot_, *current))
+      return rejected_capture({ErrorCode::unsupported, *std::move(refusal)});
   }
   try {
     RoutedSourcePreparationCapture capture{
@@ -2486,19 +2548,31 @@ RoutedPlaybackControl::capture_source_edit(const project::AppliedRevision& appli
         topological_order_,
         limits_.max_frames,
         publisher_.active_revision(),
-        synth_switch,
-        !synth_switch && source_overlay_clip_only(*published_snapshot_, *current),
-        {}};
-    // Every built-in instrument the edit leaves alone plays on in the
-    // replacement source, voices and all.
-    for (const auto& track : current->tracks) {
-      const auto before =
-          std::ranges::find(published_snapshot_->tracks, track.id, &project::Track::id);
-      if (live_source_ == nullptr || before == published_snapshot_->tracks.end() ||
-          !(*before == track))
-        continue;
-      if (auto player = live_source_->shared_synth_player(track.id))
-        capture.kept_players.push_back({track.id, std::move(player)});
+        clips && source_overlay_clip_only(*published_snapshot_, *current),
+        {},
+        structural};
+    if (structural) {
+      auto layout = layout_route(registry_, *current, limits_.latency.max_compensation_frames);
+      if (!layout)
+        return rejected_capture(layout.error());
+      capture.source_layout = std::move(layout.value().sources);
+      capture.topological_order = std::move(layout.value().latency.topological_order);
+      auto kept = keep_players(*current);
+      if (!kept)
+        return rejected_capture(kept.error());
+      capture.kept_players = std::move(kept).value();
+    } else {
+      // Every built-in instrument the edit leaves alone plays on in the
+      // replacement source, voices and all.
+      for (const auto& track : current->tracks) {
+        const auto before =
+            std::ranges::find(published_snapshot_->tracks, track.id, &project::Track::id);
+        if (live_source_ == nullptr || before == published_snapshot_->tracks.end() ||
+            !(*before == track))
+          continue;
+        if (auto player = live_source_->shared_synth_player(track.id))
+          capture.kept_players.push_back({track.id, std::move(player)});
+      }
     }
     preparing_source_ = current;
     return Result<RoutedSourcePreparationCapture>::success(std::move(capture));
@@ -2511,7 +2585,72 @@ RoutedPlaybackControl::capture_source_edit(const project::AppliedRevision& appli
 bool RoutedPlaybackControl::can_capture_source_edit(const project::Snapshot& candidate) const {
   return !pending_manual_ && published_snapshot_audible() &&
          (audio_clip_edit_only(*published_snapshot_, candidate) ||
-          native_synth_switch_only(*published_snapshot_, candidate));
+          (needs_whole_switch(*published_snapshot_, candidate) &&
+           !whole_switch_refusal(*published_snapshot_, candidate)));
+}
+
+Result<std::vector<KeptPlayer>> RoutedPlaybackControl::keep_players(const project::Snapshot& next) {
+  using Kept = Result<std::vector<KeptPlayer>>;
+  std::vector<KeptPlayer> kept;
+  if (live_source_ == nullptr)
+    return Kept::success(std::move(kept));
+  const auto& published = *published_snapshot_;
+  const bool timing = !same_timing(published, next);
+  auto midi = engine::compile_midi_events(next);
+  if (!midi)
+    return Kept::failure(midi.error());
+  auto automation = automation_project::prepare_project_automation(next, next.revision);
+  if (!automation)
+    return Kept::failure(automation.error());
+  auto limit = automation_sample_limit(next, limits_.max_frames);
+  if (!limit)
+    return Kept::failure(limit.error());
+  // Every plan is built before any player gets one, so a failure leaves
+  // them all as they were.
+  std::vector<std::pair<std::size_t, native_dsp::synth::NativeSynthPlayer::PreparedPlan>> plans;
+  for (const auto& before : published.tracks) {
+    auto player = live_source_->shared_synth_player(before.id);
+    const auto after = std::ranges::find(next.tracks, before.id, &project::Track::id);
+    // A removed track fades out with its node.
+    if (!player || after == next.tracks.end())
+      continue;
+    if (after->instrument_source == before.instrument_source &&
+        player->same_note_effects(after->note_effects)) {
+      if (*after == before && !timing) {
+        kept.push_back({before.id, std::move(player)});
+        continue;
+      }
+      // The same instrument plays on with what the edit changed.
+      const engine::InstrumentEvents empty{before.id, {}};
+      const auto events = std::ranges::find(midi.value().instruments(), before.id,
+                                            &engine::InstrumentEvents::track);
+      auto plan = player->prepare_plan(next, *after,
+                                       events == midi.value().instruments().end() ? empty : *events,
+                                       automation.value(), limit.value());
+      if (!plan)
+        return Kept::failure(plan.error());
+      plans.emplace_back(kept.size(), std::move(plan).value());
+      kept.push_back({before.id, std::move(player), next.revision});
+      continue;
+    }
+    // A new instrument: the old one releases its notes and rings out.
+    auto silent = before;
+    silent.automation.clear();
+    silent.midi_clips.clear();
+    const engine::InstrumentEvents none{before.id, {}};
+    auto plan = player->prepare_plan(next, silent, none, {}, limit.value());
+    if (!plan)
+      return Kept::failure(plan.error());
+    plans.emplace_back(kept.size(), std::move(plan).value());
+    kept.push_back({before.id, std::move(player), next.revision, true});
+  }
+  if (!std::ranges::all_of(
+          plans, [&kept](const auto& plan) { return kept[plan.first].player->has_room(); }))
+    return Kept::failure(
+        {ErrorCode::conflict, "A live synth plan mailbox is full; edit again to apply it"});
+  for (auto& [index, plan] : plans)
+    (void)kept[index].player->stage_plan(std::move(plan));
+  return Kept::success(std::move(kept));
 }
 
 Result<void> RoutedPlaybackControl::publish_captured_source_overlay(
@@ -2553,15 +2692,16 @@ RoutedPlaybackControl::publish_captured_source(const RoutedSourcePreparationCapt
       revisions_.snapshot().model_revision != current->revision ||
       revisions_.snapshot().application != PlaybackApplication::pending ||
       publisher_.active_revision() != capture.active_graph_revision ||
-      !same_sources(sources_, capture.source_layout) ||
-      !std::ranges::equal(topological_order_, capture.topological_order) ||
+      (!capture.structural &&
+       (!same_sources(sources_, capture.source_layout) ||
+        !std::ranges::equal(topological_order_, capture.topological_order))) ||
       limits_.max_frames != capture.max_frames || publisher_.has_pending() ||
       pending_native_revision_ || pending_manual_) {
     return rejected(ErrorCode::conflict, "Routed source preparation capture is stale or busy");
   }
   (void)publisher_.collect_retired();
   preparing_source_.reset();
-  return build_and_publish(current, true);
+  return build_and_publish(current, true, &capture);
 }
 
 Result<void>

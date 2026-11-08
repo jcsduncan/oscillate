@@ -51,11 +51,34 @@ public:
     auto* offered = plan.get();
     owned_.push_back(std::move(plan));
     last_offered_ = revision;
+    // A plan staged for a switch that never took over is superseded.
+    staged_.store(nullptr, std::memory_order_release);
     offered_.store(offered, std::memory_order_release);
+  }
+  // Control: holds a plan built for `revision` back until the callback
+  // releases it (release_staged) at the block a live switch of that revision
+  // takes over, so the plan and the switch start on the same block. A later
+  // offer or stage supersedes it. After make_room() returned true it cannot
+  // throw.
+  void stage(std::unique_ptr<Plan> plan, std::uint64_t revision) {
+    auto* staged = plan.get();
+    owned_.push_back(std::move(plan));
+    last_offered_ = revision;
+    staged_.store(staged, std::memory_order_release);
   }
 
   // Callback (or control): the newest offer; null before install().
   [[nodiscard]] Plan* current() const noexcept { return offered_.load(std::memory_order_acquire); }
+  // Callback: the plan staged for `revision`, if any, becomes the current
+  // one. The control stages only while that switch is pending and offers
+  // nothing else meanwhile, so the two never race.
+  void release_staged(std::uint64_t revision) noexcept {
+    auto* staged = staged_.load(std::memory_order_acquire);
+    if (staged == nullptr || staged->revision != revision)
+      return;
+    staged_.store(nullptr, std::memory_order_relaxed);
+    offered_.store(staged, std::memory_order_release);
+  }
   // Callback: a block rendered with the plan of `revision`.
   void applied(std::uint64_t revision) noexcept {
     applied_.store(revision, std::memory_order_release);
@@ -67,6 +90,7 @@ public:
 private:
   std::vector<std::unique_ptr<Plan>> owned_;
   std::atomic<Plan*> offered_{nullptr};
+  std::atomic<Plan*> staged_{nullptr};
   std::atomic<std::uint64_t> applied_{0};
   std::uint64_t last_offered_ = 0; // The serialized control producer only.
 };

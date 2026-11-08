@@ -1,6 +1,6 @@
 # ADR-0094 — Sources switch at a primed block; no held path
 
-**Status:** Accepted and implemented. **Date:** 8 November 2026.
+**Status:** Accepted and implemented; superseded in part by [ADR-0098](0098-whole-replacement-switches.md). **Date:** 8 November 2026.
 **Supersedes in part:** [ADR-0024](0024-live-source-handoff-contract.md), its held source handoff; [ADR-0049](0049-live-graph-switching.md), where the held path remains for source edits, with its `set_live_switching` test knob.
 
 ## Context

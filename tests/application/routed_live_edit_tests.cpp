@@ -1,22 +1,34 @@
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/application/routed_audio_source.hpp"
+#include "oscillate/application/routed_source_selection.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
+#include "oscillate/native_dsp/synth/engines.hpp"
+#include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/test/allocation_counter.hpp"
+#include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/cases.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/temp_dir.hpp"
+#include "oscillate/test/wav.hpp"
+
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <numbers>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -29,17 +41,20 @@ namespace app = oscillate::application;
 namespace audio = oscillate::audio_io;
 namespace engine = oscillate::engine;
 namespace foundation = oscillate::foundation;
+namespace media = oscillate::media;
+namespace synth = oscillate::native_dsp::synth;
 namespace project = oscillate::project;
 namespace timeline = oscillate::timeline;
 namespace fs = std::filesystem;
 
 // ADR-0093: a MIDI note or clip edit, a mute and a burst of edits made while
-// playing switch at one block boundary. Each case plays, edits mid-note and
-// plays on, then proves the edit seamless against an independent oracle: a
-// fresh run of the edited song (or, for a removed note, of the song with
-// that note ending at the switching block) must match sample for sample.
-// That holds only if the new content is heard from the activation block, no
-// block was held or silent and nothing clicked. The revision must become
+// playing switch at one block boundary. ADR-0098: so do edits only a whole
+// replacement source and graph carry (a track added or removed, a tempo or
+// meter change, new media, a change of instrument, MIDI with other lanes). Each case plays, edits
+// mid-note and plays on, then proves the edit seamless against an independent oracle: a fresh run
+// of the edited song (or, for a removed note, of the song with that note ending at the switching
+// block) must match sample for sample. That holds only if the new content is heard from the
+// activation block, no block was held or silent and nothing clicked. The revision must become
 // active with no restart.
 using oscillate::test::require;
 using oscillate::test::take;
@@ -84,6 +99,30 @@ constexpr std::uint64_t edit_clip_serial = 1'000;
 // A mute or level change glides over this many frames, as in the app.
 constexpr std::uint32_t gain_ramp_frames = 128;
 constexpr std::uint64_t gain_ramp_blocks = gain_ramp_frames / block_frames;
+// Frames each replacement source streams ahead of the callback.
+constexpr std::size_t stream_frames = 65'536;
+// How long a replacement source may take to prime its first block.
+constexpr auto prime_timeout = std::chrono::seconds(10);
+constexpr auto prime_poll = std::chrono::milliseconds(1);
+// The tempo a live tempo change sets: slower, so the held note is still held.
+constexpr double edited_bpm = 96.0;
+constexpr std::uint8_t edited_meter_numerator = 7;
+constexpr std::uint8_t edited_meter_denominator = 8;
+// Blocks after a switch by which a removed track or replaced instrument has
+// faded or rung out.
+constexpr std::uint64_t settled_blocks = 40;
+// The audio clip a media edit adds: where it starts and how long it plays.
+constexpr std::uint64_t media_clip_block = 140;
+constexpr std::uint64_t media_clip_blocks = 30;
+constexpr double media_tone_hz = 330.0;
+constexpr double media_tone_level = 0.25;
+// The engine an instrument change selects.
+constexpr std::string_view replacement_engine = "ember";
+// The level a MIDI clip's lane glides between.
+constexpr double lane_start_level = 1.0;
+constexpr double lane_end_level = 0.5;
+// Ids of the fixture's added track and source.
+constexpr std::uint64_t edit_track_serial = 2'000;
 
 class Directory : public oscillate::test::TempDir {
 public:
@@ -180,32 +219,83 @@ struct Song : SongFiles, SongContent {
 };
 
 // A playing run: a model, its routed control and source, and every output
-// sample (left channel) rendered so far.
+// sample (left channel) rendered so far. It renders as the app does: the
+// source selection hands each graph revision its source bank, and a staged
+// replacement fills exactly on the block it tries to take over.
 struct Run {
+  fs::path root;
   Gate gate;
   project::ProjectModel model;
   app::RoutedPlaybackControl control;
-  std::unique_ptr<app::RoutedAudioSource> source;
+  std::shared_ptr<app::RoutedAudioSource> source;
+  std::unique_ptr<app::RoutedSourceSelection> selection;
+  std::shared_ptr<app::RoutedAudioSource> candidate;
+  std::uint64_t exact_revision = 0;
   audio::TransportCursor transport;
   std::vector<float> left;
 
-  Run(const fs::path& root, const project::Snapshot& song)
-      : model(take(project::ProjectModel::open(song, gate))), control(model, limits()) {
+  Run(fs::path song_root, const project::Snapshot& song)
+      : root(std::move(song_root)), model(take(project::ProjectModel::open(song, gate))),
+        control(model, limits()) {
     REQUIRE_OK(control.submit_current(), "the graph did not prepare");
-    source = take(app::RoutedAudioSource::prepare(root, *model.snapshot(), control, block_frames));
+    source = take(app::RoutedAudioSource::prepare(root, *model.snapshot(), control, stream_frames));
     control.bind_live_source(*source);
+    selection = std::make_unique<app::RoutedSourceSelection>(
+        app::RoutedSourceBinding{model.snapshot()->revision, source});
   }
   Run(const Run&) = delete;
   Run& operator=(const Run&) = delete;
   ~Run() { control.unbind_live_source(); }
 
+  static bool render(void* context, std::span<engine::StereoFrame> output,
+                     engine::BlockContext block) noexcept {
+    auto& run = *static_cast<Run*>(context);
+    auto lease = run.selection->enter_callback();
+    struct Fill {
+      app::RoutedSourceSelection::CallbackLease& lease;
+      std::uint64_t exact;
+    } fill{lease, run.exact_revision};
+    const std::span<const std::span<const engine::StereoFrame>> unused{};
+    return run.control.render_block(
+               unused, output, block,
+               {&fill, nullptr,
+                [](void* context, std::uint64_t revision, engine::BlockContext fill_block,
+                   std::size_t frames,
+                   std::span<const std::span<const engine::StereoFrame>>& selected) noexcept {
+                  auto& state = *static_cast<Fill*>(context);
+                  const bool exact = revision == state.exact;
+                  auto* bank = static_cast<app::RoutedAudioSource*>(
+                      exact ? state.lease.source_for(revision)
+                            : state.lease.source_for_graph_revision(revision));
+                  if (bank == nullptr)
+                    return false;
+                  return exact ? bank->fill_source_bank_exact(fill_block, frames, selected)
+                               : bank->fill_source_bank(fill_block, frames, selected);
+                }}) == engine::RoutedRenderStatus::rendered;
+  }
+
+  // After each block, as the app's status poll: an adopted replacement
+  // becomes the playing source.
+  void observe() {
+    control.observe();
+    if (candidate && control.status().active_graph_revision == exact_revision &&
+        selection->promote_candidate(exact_revision)) {
+      source = std::move(candidate);
+      control.bind_live_source(*source);
+      exact_revision = 0;
+    }
+  }
+
   // Renders up to block `until`, observing between blocks as the app's
   // status poll does; no block may hold, fail or allocate.
   void play_to(std::uint64_t until) {
-    const auto device = source->render_source();
+    const audio::StereoRenderSource device{this, &Run::render, nullptr, nullptr};
     std::array<engine::StereoFrame, block_frames> stereo{};
     std::array<float, block_frames * channels> samples{};
     while (left.size() < until * block_frames) {
+      await_streamed(*source);
+      if (candidate)
+        await_streamed(*candidate);
       counted_allocations = 0;
       counting_allocations = true;
       const auto rendered = audio::render_transport_block(device, transport, true, stereo, samples);
@@ -214,8 +304,53 @@ struct Run {
       REQUIRE_EQ(counted_allocations, 0, "a callback allocated");
       for (std::size_t frame = 0; frame < block_frames; ++frame)
         left.push_back(samples[frame * channels]);
-      control.observe();
+      observe();
     }
+  }
+
+  // Waits until `bank` holds every clip frame of the next block, so a run
+  // rendered faster than real time never outpaces its streaming worker.
+  void await_streamed(app::RoutedAudioSource& bank) const {
+    const auto position = transport.completed_snapshot();
+    const auto deadline = std::chrono::steady_clock::now() + prime_timeout;
+    while (bank.prime_handoff_window(position.generation, position.next_sample, block_frames) !=
+           media::HandoffWindowStatus::ready) {
+      require(std::chrono::steady_clock::now() < deadline, "a source did not stream ahead");
+      std::this_thread::sleep_for(prime_poll);
+    }
+  }
+
+  // Applies `operations` as an edit only a replacement source carries: it is
+  // captured, its source prepared and primed for the next block, staged and
+  // published as a live switch (ADR-0098).
+  std::uint64_t source_edit(const std::vector<project::Operation>& operations,
+                            std::string_view label) {
+    auto applied = take(model.apply(operations));
+    require(control.can_capture_source_edit(*applied.snapshot),
+            std::string(label) + " is not offered as a source switch");
+    auto captured = control.capture_source_edit(applied, label);
+    REQUIRE_OK(captured, std::string(label) + " was refused while playing: " +
+                             (captured ? std::string() : captured.error().message));
+    const auto& capture = captured.value();
+    const auto position = transport.completed_snapshot();
+    candidate =
+        take(app::RoutedAudioSource::prepare(root, capture, control, stream_frames, nullptr, {},
+                                             position.next_sample, position.generation));
+    const auto deadline = std::chrono::steady_clock::now() + prime_timeout;
+    while (candidate->prime_handoff_window(position.generation, position.next_sample,
+                                           block_frames) != media::HandoffWindowStatus::ready) {
+      require(std::chrono::steady_clock::now() < deadline,
+              std::string(label) + ": the replacement source did not prime");
+      std::this_thread::sleep_for(prime_poll);
+    }
+    const auto revision = applied.snapshot->revision;
+    require(selection->stage_candidate({revision, candidate}),
+            std::string(label) + ": the replacement source was not staged");
+    exact_revision = revision;
+    const auto published = control.publish_captured_source(capture);
+    REQUIRE_OK(published, std::string(label) + " did not publish: " +
+                              (published ? std::string() : published.error().message));
+    return revision;
   }
 
   // Applies `operations` as the playing project's next revision and offers it.
@@ -427,6 +562,238 @@ void an_edit_waiting_behind_a_note_edit_applies_next() {
   REQUIRE_LT(block_power(run.left, muted_block), silent_power, "the muted track still sounds");
 }
 
+// --- Edits a whole replacement carries (ADR-0098) ------------------------------
+
+// The playing run over the whole song, with `edit` made at the edit block.
+template <typename Edit> Run& play_with(Run& run, Edit&& edit) {
+  run.play_to(edit_block);
+  const auto revision = edit(run);
+  run.play_to(song_blocks);
+  REQUIRE_EQ(run.control.status().active_graph_revision, revision,
+             "the edit did not become active without a restart");
+  REQUIRE_EQ(run.control.status().application, app::PlaybackApplication::active,
+             "the edit did not become active without a restart");
+  return run;
+}
+
+// A source switch made at the edit block, checked against a fresh render of
+// the song with `expected` applied.
+void check_source_edit(const Song& song, const LiveEdit& live_edit) {
+  Run run(song.root, song.saved);
+  play_with(run, [&](Run& playing) {
+    return playing.source_edit(live_edit.operations, live_edit.label);
+  });
+  require_matches(run.left, reference(song, live_edit.expected), live_edit.label);
+  require_continuous(run.left, live_edit.label);
+}
+
+// A second synth track, added with a clip whose note starts after the edit.
+std::vector<project::Operation> add_synth_track(const Song& song) {
+  const auto track = fresh<project::TrackId>(edit_track_serial);
+  const auto& prism = *std::get_if<project::NativeInstrumentPatch>(
+      &std::ranges::find(song.saved.tracks, song.track, &project::Track::id)->instrument_source);
+  auto clip = midi_clip(song.saved, song.second);
+  clip.id = fresh<project::ClipId>(edit_clip_serial);
+  clip.placement = song.placed(clip, added_note_block);
+  for (std::size_t index = 0; index < clip.notes.size(); ++index)
+    clip.notes[index].id = fresh<project::NoteId>(index + 1);
+  return {project::AddTrack{track, project::TrackKind::instrument},
+          project::SetNativeInstrumentPatch{track, prism}, project::AddMidiClip{track, clip}};
+}
+
+void track_add_switches_with_its_source() {
+  Song song;
+  const auto edit = add_synth_track(song);
+  Run run(song.root, song.saved);
+  play_with(run, [&](Run& playing) { return playing.source_edit(edit, "track add"); });
+  // Exact until the new track's first note: a synth that starts at the
+  // switch need not match one that has run from the start, note for note.
+  const auto until = added_note_block * block_frames;
+  const auto expected = reference(song, edit);
+  require_matches(std::span(run.left).first(until), std::span(expected).first(until), "track add");
+  require_continuous(run.left, "track add");
+  REQUIRE_GT(block_power(run.left, added_note_block + 1), silent_power,
+             "the added track does not play");
+}
+
+void track_remove_fades_out_then_switches() {
+  Song song;
+  Run run(song.root, song.saved);
+  play_with(run, [&](Run& playing) {
+    return playing.source_edit({project::RemoveTrack{song.track}}, "track remove");
+  });
+  // Untouched before the switch, then a fade to silence, never a cut.
+  const auto unedited = reference(song, {});
+  require_matches(std::span(run.left).first(edit_block * block_frames),
+                  std::span(unedited).first(edit_block * block_frames), "track remove");
+  require_continuous(run.left, "track remove", gain_ramp_blocks);
+  for (auto block = edit_block + settled_blocks; block < song_blocks; ++block)
+    REQUIRE_LT(block_power(run.left, block), silent_power, "the removed track still sounds");
+}
+
+void tempo_change_moves_what_follows() {
+  Song song;
+  const auto tempo = take(timeline::TempoMap::create(
+      {{{0}, edited_bpm, timeline::TempoShape::step}}, song.saved.tempo.revision() + 1));
+  const std::vector<project::Operation> edit{project::ReplaceTempoMap{tempo}};
+  check_source_edit(song, {"tempo change", edit, edit});
+}
+
+void meter_change_switches_with_its_source() {
+  Song song;
+  const auto meter = take(timeline::MeterMap::create(
+      {{{0}, edited_meter_numerator, edited_meter_denominator}}, song.saved.meter.revision() + 1));
+  const std::vector<project::Operation> edit{project::ReplaceMeterMap{meter}};
+  check_source_edit(song, {"meter change", edit, edit});
+}
+
+// A lane that glides the song track's level down over the first clip.
+project::AutomationLane level_lane(const Song& song) {
+  const project::AutomationTarget level =
+      project::TrackControlTarget{song.track, project::TrackControlTarget::Key::channel_level};
+  auto session = take(app::ProjectSession::open(song.root));
+  return {fresh<project::AutomationLaneId>(1),
+          level,
+          take(session->automation().automation_domain(song.track, level)),
+          project::AutomationTimebase::musical,
+          {{fresh<project::AutomationPointId>(1), 0, lane_start_level},
+           {fresh<project::AutomationPointId>(2), tick(song.saved, later_note_block).value,
+            lane_end_level, project::AutomationShape::linear}}};
+}
+
+// A track whose level is automated fades out too: the mute fade runs on top
+// of its lane.
+void track_remove_fades_out_over_its_level_lane() {
+  Song song;
+  Gate gate;
+  auto model = take(project::ProjectModel::open(song.saved, gate));
+  const auto automated =
+      *take(model.apply({project::AddAutomationLane{song.track, level_lane(song)}})).snapshot;
+  Run run(song.root, automated);
+  play_with(run, [&](Run& playing) {
+    return playing.source_edit({project::RemoveTrack{song.track}}, "automated track remove");
+  });
+  require_continuous(run.left, "automated track remove", gain_ramp_blocks);
+  for (auto block = edit_block + settled_blocks; block < song_blocks; ++block)
+    REQUIRE_LT(block_power(run.left, block), silent_power, "the removed track still sounds");
+}
+
+void midi_edit_with_a_level_lane_switches_whole() {
+  Song song;
+  // A level lane on the first clip: the clip's notes and the track's level
+  // switch together.
+  const auto lane = level_lane(song);
+  const project::MidiNote added{fresh<project::NoteId>(1), tick(song.saved, added_note_block),
+                                tick(song.saved, added_note_block + note_blocks), added_key,
+                                velocity};
+  const std::vector<project::Operation> edit{project::AddAutomationLane{song.first, lane},
+                                             project::AddMidiNote{song.first, added}};
+  check_source_edit(song, {"MIDI edit with a level lane", edit, edit});
+}
+
+// A different built-in engine than the song's, needing no media.
+const synth::SynthEngine& other_engine() {
+  const auto* engine = synth::find_engine(replacement_engine);
+  require(engine != nullptr && engine != &synth::default_engine(),
+          "the replacement engine is not another built-in one");
+  return *engine;
+}
+
+void instrument_change_rings_out_the_old_one() {
+  Song song;
+  const auto patch = take(synth::native_patch_for_preset(other_engine(), std::nullopt));
+  Run run(song.root, song.saved);
+  play_with(run, [&](Run& playing) {
+    return playing.source_edit({project::SetNativeInstrumentPatch{song.track, patch}},
+                               "instrument change");
+  });
+  const auto unedited = reference(song, {});
+  require_matches(std::span(run.left).first(edit_block * block_frames),
+                  std::span(unedited).first(edit_block * block_frames), "instrument change");
+  // The held note releases into its tail; nothing cuts.
+  require_continuous(run.left, "instrument change", 1);
+  // The new engine plays the later note.
+  REQUIRE_GT(block_power(run.left, later_note_block + 1), silent_power,
+             "the new instrument does not play");
+}
+
+void instrument_removal_rings_out() {
+  Song song;
+  Run run(song.root, song.saved);
+  play_with(run, [&](Run& playing) {
+    return playing.source_edit({project::SetNativeInstrumentPatch{song.track, std::nullopt}},
+                               "instrument removal");
+  });
+  // The old instrument releases its note at the switch and plays nothing
+  // after: as if the note ended there and no other followed.
+  auto ended = song.held;
+  ended.end = tick(song.saved, edit_block);
+  require_matches(run.left,
+                  reference(song, {project::SetMidiNote{song.first, ended},
+                                   project::RemoveMidiNote{song.first, song.later.id},
+                                   project::RemoveClip{song.second}}),
+                  "instrument removal");
+  require_continuous(run.left, "instrument removal", 1);
+}
+
+// A managed WAV tone in the song's store and the audio track it was
+// imported to, and the song as it plays: that track, without the tone.
+struct MediaContent {
+  project::Snapshot saved;
+  project::TrackId audio;
+  project::SourceRecord tone;
+  project::Clip clip;
+  project::Snapshot playing;
+};
+
+MediaContent import_tone(const fs::path& directory, const fs::path& root) {
+  auto session = take(app::ProjectSession::open(root));
+  const auto rate = session->snapshot().sample_rate;
+  std::vector<float> samples(media_clip_blocks * block_frames);
+  for (std::size_t frame = 0; frame < samples.size(); ++frame)
+    samples[frame] =
+        static_cast<float>(media_tone_level * std::sin(2.0 * std::numbers::pi * media_tone_hz *
+                                                       static_cast<double>(frame) / rate));
+  const auto wav = directory / "tone.wav";
+  oscillate::test::write_wav_float(wav, rate, oscillate::test::mono_channels, samples);
+  const int fd = ::open(wav.c_str(), O_RDONLY | O_CLOEXEC);
+  REQUIRE_GE(fd, 0, "WAV fixture open failed");
+  auto audio = take(session->imports().import_wav_audio(fd));
+  (void)::close(fd);
+  REQUIRE_OK(session->saving().save(), "the media song did not save");
+  auto saved = session->snapshot();
+  auto clip = std::ranges::find(saved.tracks, audio, &project::Track::id)->clips.front();
+  auto tone = *std::ranges::find(saved.sources, clip.source, &project::SourceRecord::id);
+  const auto start = static_cast<std::int64_t>(media_clip_block * block_frames);
+  clip.placement = project::ElapsedInterval{
+      {start}, {start + static_cast<std::int64_t>(media_clip_blocks * block_frames)}};
+  Gate gate;
+  auto model = take(project::ProjectModel::open(saved, gate));
+  auto playing =
+      *take(model.apply({project::RemoveClip{clip.id}, project::RemoveSource{tone.id}})).snapshot;
+  return {std::move(saved), audio, std::move(tone), std::move(clip), std::move(playing)};
+}
+
+struct MediaSong : Song, MediaContent {
+  MediaSong() : MediaContent(import_tone(directory.path(), root)) {}
+};
+
+void new_media_plays_from_its_switch() {
+  MediaSong song;
+  const std::vector<project::Operation> edit{project::AddSource{song.tone},
+                                             project::AddClip{song.audio, song.clip}};
+  Run run(song.root, song.playing);
+  play_with(run, [&](Run& playing) { return playing.source_edit(edit, "new media"); });
+  Gate gate;
+  auto model = take(project::ProjectModel::open(song.playing, gate));
+  Run fresh_run(song.root, *take(model.apply(edit)).snapshot);
+  fresh_run.play_to(song_blocks);
+  require_matches(run.left, fresh_run.left, "new media");
+  require_continuous(run.left, "new media");
+  REQUIRE_GT(block_power(run.left, media_clip_block + 1), silent_power,
+             "the new media does not play");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -442,5 +809,14 @@ int main(int argc, char** argv) {
        {"rapid_edits_coalesce_onto_the_newest_revision",
         rapid_edits_coalesce_onto_the_newest_revision},
        {"an_edit_waiting_behind_a_note_edit_applies_next",
-        an_edit_waiting_behind_a_note_edit_applies_next}});
+        an_edit_waiting_behind_a_note_edit_applies_next},
+       {"track_add_switches_with_its_source", track_add_switches_with_its_source},
+       {"track_remove_fades_out_then_switches", track_remove_fades_out_then_switches},
+       {"track_remove_fades_out_over_its_level_lane", track_remove_fades_out_over_its_level_lane},
+       {"tempo_change_moves_what_follows", tempo_change_moves_what_follows},
+       {"meter_change_switches_with_its_source", meter_change_switches_with_its_source},
+       {"midi_edit_with_a_level_lane_switches_whole", midi_edit_with_a_level_lane_switches_whole},
+       {"instrument_change_rings_out_the_old_one", instrument_change_rings_out_the_old_one},
+       {"instrument_removal_rings_out", instrument_removal_rings_out},
+       {"new_media_plays_from_its_switch", new_media_plays_from_its_switch}});
 }
