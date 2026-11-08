@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Signal v1: a test generator (ADR-0042). Off passes the input bit-exact.
@@ -16,11 +17,11 @@ using namespace std::string_view_literals;
 
 inline constexpr std::array waves{"Sine"sv, "Log Sweep"sv, "Pink Noise"sv, "White Noise"sv,
                                   "Impulses"sv};
-enum Wave : int { sine, sweep, pink, white, impulses };
+enum Wave : std::uint8_t { sine, sweep, pink, white, impulses };
 inline constexpr std::array modes{"Replace"sv, "Add"sv};
 inline constexpr std::array outputs{"Both"sv, "Left"sv, "Right"sv, "Alternate"sv,
                                     "Right Inverted"sv};
-enum Output : int { both, left, right, alternate, inverted };
+enum Output : std::uint8_t { both, left, right, alternate, inverted };
 inline constexpr std::array off_on{"Off"sv, "On"sv};
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }

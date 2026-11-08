@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Shape v1: the classic native EQ as an engine (ADR-0047). Eight bands of
@@ -27,7 +28,7 @@ inline constexpr std::array off_on{"Off"sv, "On"sv};
 // In native_dsp::EqBandKind order.
 inline constexpr std::array kinds{"Low Pass"sv, "High Pass"sv, "Low Shelf"sv, "High Shelf"sv,
                                   "Peak"sv};
-enum Kind : int { low_pass, high_pass, low_shelf, high_shelf, peaking };
+enum Kind : std::uint8_t { low_pass, high_pass, low_shelf, high_shelf, peaking };
 // A pass filter's steepness: this many 12 dB/octave stages (the others have
 // one). 12 dB is the classic EQ's band.
 inline constexpr std::array slopes{"12 dB"sv, "24 dB"sv, "48 dB"sv, "96 dB"sv};

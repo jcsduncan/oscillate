@@ -98,14 +98,20 @@ void chord(std::span<const std::uint8_t> keys, double seconds, const std::string
       played[i] = true;
       require(seconds_of(n.start) <= (1.0 - held_share) * seconds &&
                   seconds_of(n.end) >= held_share * seconds,
+              // A failure message in a test loop.
+              // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
               what + ": key " + std::to_string(key) + " is not held whole:" + listing);
     }
     REQUIRE_EQ(count, 1,
                what + ": key " + std::to_string(key) + " found " + std::to_string(count) +
+                   // A failure message in a test loop.
+                   // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
                    " times:" + listing);
   }
   for (std::size_t i = 0; i < take.notes.size(); ++i)
     require(played[i] || seconds_of(take.notes[i].end - take.notes[i].start) <= fragment_seconds,
+            // A failure message in a test loop.
+            // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
             what + ": a note nobody played:" + listing);
 }
 

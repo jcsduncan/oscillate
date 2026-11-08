@@ -5,6 +5,7 @@
 #include "oscillate/foundation/id.hpp"
 #include "oscillate/foundation/sha256.hpp"
 #include "oscillate/foundation/split_mix.hpp"
+#include "oscillate/foundation/stereo_span.hpp"
 #include "oscillate/foundation/trace.hpp"
 #include "oscillate/test/check.hpp"
 
@@ -41,6 +42,7 @@ using oscillate::foundation::Id;
 using oscillate::foundation::IdBits;
 using oscillate::foundation::parse_id_bits;
 using oscillate::foundation::Result;
+using oscillate::foundation::StereoSpan;
 
 struct TrackTag {};
 struct ClipTag {};
@@ -149,6 +151,33 @@ void diagnostic_contract() {
              "fixed diagnostic fields did not survive capture");
 }
 
+void stereo_span_contract() {
+  constexpr std::size_t frames = 6;
+  constexpr std::size_t offset = 2;
+  constexpr std::size_t count = 3;
+  std::array<float, frames> left{};
+  std::array<float, frames> right{};
+  const StereoSpan<float> both{.left = left, .right = right};
+  REQUIRE_EQ(both.size(), frames, "a stereo span is as long as its channels");
+  const auto head = both.first(count);
+  REQUIRE_TRUE(head.left.data() == left.data() && head.right.data() == right.data(),
+               "first kept each channel in place");
+  REQUIRE_EQ(head.size(), count, "first kept the requested frames");
+  const auto tail = both.subspan(offset);
+  REQUIRE_TRUE(tail.left.data() == left.data() + offset &&
+                   tail.right.data() == right.data() + offset,
+               "subspan moved both channels by the offset");
+  REQUIRE_EQ(tail.size(), frames - offset, "subspan kept the rest");
+  const auto middle = both.subspan(offset, count);
+  REQUIRE_TRUE(middle.left.data() == left.data() + offset && middle.size() == count,
+               "a counted subspan took the requested frames");
+  const StereoSpan<const float> read_only = both;
+  REQUIRE_TRUE(read_only.left.data() == left.data() && read_only.right.data() == right.data(),
+               "a writable stereo span reads as a read-only one, channels unswapped");
+  static_assert(!std::is_convertible_v<StereoSpan<const float>, StereoSpan<float>>,
+                "read-only channels never become writable");
+}
+
 std::size_t occurrences(const std::string& text, std::string_view needle) {
   std::size_t count = 0;
   for (auto at = text.find(needle); at != std::string::npos; at = text.find(needle, at + 1))
@@ -178,11 +207,16 @@ void trace_contract() {
   REQUIRE_EQ(trace::capacity_events(), pool_chunks * trace::chunk_events,
              "the pool holds whole chunks of the budget");
   trace::label("node", 7, "Kick \"808\"");
+  // Each thread records its spans, one instant and one counter.
+  constexpr int trace_threads = 4;
+  constexpr int spans_per_thread = 100;
+  constexpr int other_events_per_thread = 2;
   std::vector<std::thread> threads;
-  for (int t = 0; t < 4; ++t) {
+  threads.reserve(trace_threads);
+  for (int t = 0; t < trace_threads; ++t) {
     threads.emplace_back([t] {
       trace::name_thread(t == 0 ? "audio" : "worker");
-      for (int i = 0; i < 100; ++i) {
+      for (int i = 0; i < spans_per_thread; ++i) {
         OSCILLATE_TRACE_SPAN("node", t == 0 ? 7 : 1);
       }
       trace::instant("over budget", 3);
@@ -197,7 +231,9 @@ void trace_contract() {
   }
   const auto written = trace::stop_and_write(path);
   REQUIRE_TRUE(written, "every event, newest first, was written");
-  REQUIRE_EQ(written.value(), 4 * 102 + trace::chunk_events,
+  REQUIRE_EQ(written.value(),
+             std::size_t{trace_threads} * (spans_per_thread + other_events_per_thread) +
+                 trace::chunk_events,
              "every event, newest first, was written");
   {
     OSCILLATE_TRACE_SPAN("after");
@@ -346,6 +382,7 @@ void file_io_contract() {
   UniqueFd target;
   target = std::move(moved);
   REQUIRE_TRUE(target.valid(), "UniqueFd moves and closes");
+  // NOLINTNEXTLINE(bugprone-use-after-move,clang-analyzer-cplusplus.Move): the moved-from state.
   REQUIRE_TRUE(!moved.valid(), "UniqueFd moves and closes");
   REQUIRE_OK(target.close("close"), "UniqueFd moves and closes");
   std::filesystem::remove_all(root);
@@ -403,6 +440,7 @@ int main() {
     malformed_ids();
     result_contract();
     diagnostic_contract();
+    stereo_span_contract();
     trace_contract();
     file_io_contract();
     encoding_contract();

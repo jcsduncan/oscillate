@@ -210,6 +210,8 @@ void margin_shows_only_for_unmask() {
   }
 }
 
+// The arguments are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<float> test_frame(float kick_band5, float overlap_after) {
   namespace t = pocket::telemetry;
   std::vector<float> frame(t::size, 0.0F);
@@ -257,8 +259,8 @@ void telemetry_reaches_the_map_meters_and_waves() {
   require(text_of(*panel, QStringLiteral("pocketCleared")) == QStringLiteral("6.0"),
           "space cleared is overlap in minus out: " +
               text_of(*panel, QStringLiteral("pocketCleared")).toStdString());
-  require(text_of(*panel, QStringLiteral("pocketOverlapBefore")) == QStringLiteral("-20.0 dB") &&
-              text_of(*panel, QStringLiteral("pocketOverlapAfter")) == QStringLiteral("-26.0 dB"),
+  require(text_of(*panel, QStringLiteral("pocketOverlapBefore")) == QStringLiteral("−20.0 dB") &&
+              text_of(*panel, QStringLiteral("pocketOverlapAfter")) == QStringLiteral("−26.0 dB"),
           "the overlap bars read out");
   require(text_of(*panel, QStringLiteral("pocketDeepestCut"))
               .startsWith(QStringLiteral("−6.5 dB @ 62")),
@@ -374,7 +376,7 @@ void the_preview_follows_the_laws() {
   controller.set_value(QStringLiteral("pocket.depth"), 0.0);
   QCoreApplication::processEvents();
   const auto none = list_of(map, "cut");
-  require(*std::max_element(none.begin(), none.end()) == 0.0, "no depth, no cut");
+  require(*std::ranges::max_element(none) == 0.0, "no depth, no cut");
 }
 
 void presets_status_and_switches() {
@@ -457,7 +459,7 @@ std::vector<engine::StereoFrame> render(const synth::SynthEngine& engine,
     events.push_back({n.frame + n.length, engine::MidiEventKind::note_off, n.key, id});
     ++id;
   }
-  std::stable_sort(events.begin(), events.end(), [](const Event& a, const Event& b) {
+  std::ranges::stable_sort(events, [](const Event& a, const Event& b) {
     return a.frame != b.frame ? a.frame < b.frame : a.kind < b.kind;
   });
   std::vector<engine::StereoFrame> out(frames, {0.0F, 0.0F});
@@ -485,7 +487,7 @@ std::vector<engine::StereoFrame> render(const synth::SynthEngine& engine,
     require(runtime->process(block, block_events, position, 1, transport, {}).status ==
                 synth::SynthProcessStatus::rendered,
             "synth renders");
-    std::copy(block.begin(), block.end(), out.begin() + static_cast<std::ptrdiff_t>(position));
+    std::ranges::copy(block, out.begin() + static_cast<std::ptrdiff_t>(position));
   }
   return out;
 }

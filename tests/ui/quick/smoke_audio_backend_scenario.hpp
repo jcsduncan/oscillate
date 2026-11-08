@@ -40,7 +40,7 @@ using AudioBackendVisibleCount = qsizetype (*)(const QQuickItem*, const QString&
 void run_audio_backend(QApplication& app, QQmlApplicationEngine& engine,
                        oscillate::quick::ProjectBridge& bridge,
                        const std::shared_ptr<SmokeDeviceState>& device_state,
-                       oscillate::application::PlaybackOutputFactory jack_output_factory,
+                       const oscillate::application::PlaybackOutputFactory& jack_output_factory,
                        AudioBackendVisibleCount visible_count);
 
 } // namespace quick_smoke

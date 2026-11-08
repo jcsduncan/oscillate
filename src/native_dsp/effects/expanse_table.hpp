@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Expanse v1: an algorithmic reverb (ADR-0040). Defaults are the "Concert
@@ -16,7 +17,7 @@ using namespace std::string_view_literals;
 
 inline constexpr std::array modes{"Room"sv,    "Hall"sv,      "Plate"sv,
                                   "Chamber"sv, "Cathedral"sv, "Cloud"sv};
-enum Mode : int { room, hall, plate, chamber, cathedral, cloud };
+enum Mode : std::uint8_t { room, hall, plate, chamber, cathedral, cloud };
 inline constexpr std::array intervals{"-12"sv, "+5"sv, "+7"sv, "+12"sv, "+19"sv, "+24"sv};
 inline constexpr std::array<double, 6> interval_semitones{-12, 5, 7, 12, 19, 24};
 inline constexpr std::array off_on{"Off"sv, "On"sv};

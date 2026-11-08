@@ -11,7 +11,7 @@ never reused. 0070 was never assigned.
 | 0001 | [Processor runtime survives topology rebuilds](0001-processor-runtime-state.md) | Accepted; implemented |
 | 0002 | [Prepared graph publication and reclamation](0002-graph-publication.md) | Accepted; implemented |
 | 0003 | [Plugin scanning and execution boundaries](0003-plugin-isolation.md) | Accepted; implemented for scanning |
-| 0004 | [Generation-based atomic project saves](0004-atomic-project-save.md) | Accepted; implemented |
+| 0004 | [Generation-based atomic project saves](0004-atomic-project-save.md) | Accepted; implemented; amended by ADR-0039 and ADR-0091 |
 | 0005 | [Delay-compensation transitions](0005-delay-compensation-transitions.md) | Accepted; implemented for the bounded routed graph |
 | 0006 | [Media prefetch and adaptive playback processing](0006-prefetch-processing.md) | Accepted; implemented |
 | 0007 | [Musical timing and meter representation](0007-timing-representation.md) | Accepted; implemented |
@@ -50,7 +50,7 @@ never reused. 0070 was never assigned.
 | 0040 | [A generic native effect platform](0040-native-effect-platform.md) | Accepted; implemented (integration completed under ADR-0043) |
 | 0041 | [Pocket, a kick and bass masking resolver](0041-pocket-kick-bass.md) | Accepted; phase 1 built |
 | 0042 | [A native utility suite](0042-native-utility-suite.md) | Accepted; all six built |
-| 0043 | [One native insert path](0043-one-native-insert-path.md) | Superseded by ADR-0090 for export's link to native_inserts; otherwise implemented, classic kinds follow in ADR-0047 |
+| 0043 | [One native insert path](0043-one-native-insert-path.md) | Superseded by ADR-0090 for export's link to native_inserts and by ADR-0092 for native_inserts' dependencies; otherwise implemented, classic kinds follow in ADR-0047 |
 | 0044 | [Lumen: wavetable synth (third native engine)](0044-lumen-wavetable-synth.md) | Superseded by ADR-0057 |
 | 0045 | [The development build](0045-development-build.md) | Accepted and implemented |
 | 0046 | [The workspace redesign](0046-workspace-redesign.md) | Accepted and implemented |
@@ -97,3 +97,5 @@ never reused. 0070 was never assigned.
 | 0088 | [Fret: a sampled bass guitar with Feel, realtime auto-articulation](0088-fret-sampled-bass.md) | Accepted; implemented; not part of Kick & Bass Lock |
 | 0089 | [Wren: a sampled concert flute with Breath, realtime phrasing](0089-wren-sampled-flute.md) | Accepted; implemented |
 | 0090 | [Export renders a graph the render_graph builder prepares](0090-render-graph-builder.md) | Accepted; implemented for built-in chains |
+| 0091 | [New projects are staged beside their folder and renamed into place](0091-staged-project-creation.md) | Accepted; implemented |
+| 0092 | [Native inserts read which keys sound from routing](0092-native-inserts-read-key-audibility.md) | Accepted; implemented |

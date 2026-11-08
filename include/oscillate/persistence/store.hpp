@@ -22,6 +22,7 @@ enum class SaveKind : std::uint8_t { explicit_save, autosave };
 enum class SaveStatus : std::uint8_t { committed, uncertain };
 enum class RestoreStatus : std::uint8_t { committed, uncertain };
 enum class SaveStage : std::uint8_t {
+  creation_began, // A new project's final name is checked; no stage exists yet.
   root_parent_flushed,
   asset_file_flushed,
   asset_published,
@@ -35,7 +36,8 @@ enum class SaveStage : std::uint8_t {
   state_flush_failed,
   revision_pointer_written,
   revision_pointer_published,
-  revision_directory_flush_failed
+  revision_directory_flush_failed,
+  creation_published // A new project's stage is renamed; the parent is not yet flushed.
 };
 
 struct SaveOutcome {

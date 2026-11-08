@@ -69,8 +69,10 @@ struct Beat {
 
 } // namespace
 
-PreviewStyle preview_style(std::string_view engine, std::string_view category,
-                           std::string_view preset_name) noexcept {
+PreviewStyle preview_style(const PresetWords& sound) noexcept {
+  const std::string_view engine = sound.engine;
+  const std::string_view category = sound.category;
+  const std::string_view preset_name = sound.preset_name;
   if (engine == "pulse")
     return PreviewStyle::drums;
   if (engine == "knock")
@@ -89,6 +91,7 @@ PreviewStyle preview_style(std::string_view engine, std::string_view category,
       return PreviewStyle::texture;
   } catch (...) {
     // Out of memory: fall back to a chord.
+    return PreviewStyle::chord;
   }
   return PreviewStyle::chord;
 }

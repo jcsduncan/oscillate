@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Contour v1: a multimode filter effect built from the synths' filter models
@@ -19,7 +20,19 @@ using namespace std::string_view_literals;
 inline constexpr std::array models{"LP 12"sv, "LP 24"sv,  "BP 12"sv,  "HP 12"sv,
                                    "HP 24"sv, "Notch"sv,  "Ladder"sv, "OTA"sv,
                                    "SEM"sv,   "Comb +"sv, "Comb -"sv};
-enum Model : int { lp12, lp24, bp12, hp12, hp24, notch, ladder, ota, sem, comb_plus, comb_minus };
+enum Model : std::uint8_t {
+  lp12,
+  lp24,
+  bp12,
+  hp12,
+  hp24,
+  notch,
+  ladder,
+  ota,
+  sem,
+  comb_plus,
+  comb_minus
+};
 inline constexpr std::array lfo_shapes{"Sine"sv,     "Triangle"sv, "Saw Up"sv,
                                        "Saw Down"sv, "Square"sv,   "S&H"sv};
 inline constexpr std::array off_on{"Off"sv, "On"sv};

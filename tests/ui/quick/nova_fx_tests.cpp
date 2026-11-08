@@ -177,6 +177,8 @@ struct Rig {
   std::unique_ptr<NativeSynthDeviceController> controller;
   std::unique_ptr<Panel> panel;
 
+  // The main chain and the bus are named at every call.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   explicit Rig(const std::vector<std::string>& main, const std::vector<std::string>& bus = {}) {
     project::NativeSynthDocument document;
     project::NativeChain chain{"fx.main", {}};
@@ -235,6 +237,8 @@ void every_module_reaches_every_parameter() {
     const std::string label = std::string(use.id) + ": ";
     for (const auto& p : use.knobs) {
       auto* knob = find_item(strip, QStringLiteral("novaKnob:") + fx_id(1, p));
+      // A failure message in a test loop.
+      // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
       require(knob != nullptr, label + "no control for " + p);
       require(knob->isVisible() && within(knob, strip), label + p + " is shown on the strip");
     }
@@ -243,6 +247,8 @@ void every_module_reaches_every_parameter() {
       const bool used = std::ranges::find(use.knobs, p) != use.knobs.end();
       auto* knob = find_item(strip, QStringLiteral("novaKnob:") + fx_id(1, p));
       require(used == (knob != nullptr && knob->isVisible()),
+              // A failure message in a test loop.
+              // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
               label + "a knob for " + p + " exactly when the module uses it");
     }
     auto* mode = find_item(strip, QStringLiteral("novaFxMode:1"));
@@ -341,7 +347,7 @@ void shifter_reads_in_signed_hertz() {
   auto& controller = *rig.controller;
   auto& panel = *rig.panel;
   const QString value = QStringLiteral("novaKnobValue:nova.fx.1.p0");
-  require(text_of(panel, value) == QStringLiteral("+40 Hz"), "the default shifts up 40 Hz");
+  require(text_of(panel, value) == QStringLiteral("+40.0 Hz"), "the default shifts up 40 Hz");
   controller.set_value(QStringLiteral("nova.fx.1.p0"), 0.0);
   settle();
   require(text_of(panel, value) == QStringLiteral("−5.00 kHz"), "fully left shifts 5 kHz down");
@@ -359,9 +365,9 @@ void flyby_reads_in_its_units() {
   const auto value = [&](int p) {
     return text_of(panel, QStringLiteral("novaKnobValue:nova.fx.1.p%1").arg(p));
   };
-  require(value(1) == QStringLiteral("14 m"),
+  require(value(1) == QStringLiteral("14.0 m"),
           "the default passes 14 m away: " + value(1).toStdString());
-  require(value(2) == QStringLiteral("90 km/h"), "at 90 km/h: " + value(2).toStdString());
+  require(value(2) == QStringLiteral("90.0 km/h"), "at 90 km/h: " + value(2).toStdString());
   require(value(3) == QStringLiteral("Loop"), "looping");
   require(value(7) == QStringLiteral("Headphones"), "for headphones");
   controller.set_value(QStringLiteral("nova.fx.1.p3"), 0.5);

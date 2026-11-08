@@ -37,7 +37,7 @@ SIDECAR_STATUS = "oscillate .deb inventory"
 QML_RUNTIME_PACKAGES = {"QtQuick": "qml6-module-qtquick"}
 # Modules the app registers itself (qmlRegister* in apps/daw_quick/src): they
 # live in the binary, so no runtime package provides them.
-APP_QML_MODULES = frozenset({"Oscillate.Contracts"})
+APP_QML_MODULES = frozenset({"Oscillate.Contracts", "Oscillate.Format"})
 READ_CHUNK_BYTES = 1 << 20
 EXECUTABLE_MODE = 0o755
 FILE_MODE = 0o644

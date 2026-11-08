@@ -318,6 +318,7 @@ signals:
 
 private:
   struct ClipView {
+    project::ClipId clip;
     project::TrackId track;
     timeline::TickPosition length;
     std::vector<project::MidiNote> notes;

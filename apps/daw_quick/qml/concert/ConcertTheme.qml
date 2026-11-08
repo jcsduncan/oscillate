@@ -24,7 +24,6 @@ KitTheme {
     segmentRadius: 3
     segmentRadiusVertical: 3
     segmentFillAcross: false
-    segmentRule: "bar"
     segmentLetterSpacingVertical: 1.2
     segmentTextXVertical: 14
     segmentFont: serif
@@ -251,7 +250,7 @@ KitTheme {
         return tile.on ? brass : seam
     }
     function segmentLabelInk(tile) {
-        return tile.on ? gold : inkDim
+        return inkDim
     }
     function segmentBold(tile) {
         return false

@@ -2,6 +2,7 @@
 
 #include "oscillate/export/wav_writer.hpp"
 #include "oscillate/project/model.hpp"
+#include "oscillate/render_graph/vst3_stage.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -147,9 +148,14 @@ render_wav_master(const project::Snapshot& snapshot, const persistence::ProjectS
 
 // Stopped-project path. This builds the requested snapshot offline under an
 // exclusive transport lease and never claims that a live graph is active.
+// `vst3` prepares the snapshot's VST3 instruments and effects, which are
+// chain stages like built-in effects (ADR-0050); without it a saved VST3
+// stage fails before any output opens. The VST3 host supplies it
+// (application/vst3/offline_export.hpp).
 [[nodiscard]] foundation::Result<PublishOutcome>
 render_wav_master(const project::Snapshot& snapshot, const persistence::ProjectStore& store,
-                  StoppedExportAuthority authority, const MasterRenderOptions& options);
+                  StoppedExportAuthority authority, const MasterRenderOptions& options,
+                  const render_graph::Vst3StagePreparer& vst3 = {});
 
 [[nodiscard]] foundation::Result<PublishOutcome>
 render_wav_stems(const project::Snapshot& snapshot, const persistence::ProjectStore& store,
@@ -157,7 +163,16 @@ render_wav_stems(const project::Snapshot& snapshot, const persistence::ProjectSt
 
 [[nodiscard]] foundation::Result<PublishOutcome>
 render_wav_stems(const project::Snapshot& snapshot, const persistence::ProjectStore& store,
-                 StoppedExportAuthority authority, const StemRenderOptions& options);
+                 StoppedExportAuthority authority, const StemRenderOptions& options,
+                 const render_graph::Vst3StagePreparer& vst3 = {});
+
+// One source track's stem, exactly as render_wav_stems writes it into its
+// bundle: as long as every other stem, published alone at options.target.
+[[nodiscard]] foundation::Result<PublishOutcome>
+render_wav_stem(const project::Snapshot& snapshot, const persistence::ProjectStore& store,
+                StoppedExportAuthority authority, project::TrackId track,
+                const MasterRenderOptions& options,
+                const render_graph::Vst3StagePreparer& vst3 = {});
 
 // Worker-only encoded master path; available with OSCILLATE_BUILD_CODEC_ADAPTER.
 // The same project rendering and revision/transport guards as WAV apply.
@@ -167,7 +182,8 @@ render_encoded_master(const project::Snapshot& snapshot, const persistence::Proj
 
 [[nodiscard]] foundation::Result<PublishOutcome>
 render_encoded_master(const project::Snapshot& snapshot, const persistence::ProjectStore& store,
-                      StoppedExportAuthority authority, const EncodedMasterOptions& options);
+                      StoppedExportAuthority authority, const EncodedMasterOptions& options,
+                      const render_graph::Vst3StagePreparer& vst3 = {});
 
 // One track's own sound (ADR-0059: freeze, bounce, flatten): its instrument,
 // note effects and inserts, keyed by the project's sidechains and moved by its

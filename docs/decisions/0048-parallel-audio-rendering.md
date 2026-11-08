@@ -72,7 +72,7 @@ Export already ran each block's instruments, and each dependency level of the mi
 
 - **Silent tracks** are no longer rendered in export.
   - A silent track is one that's muted or solo-silenced, or whose every route leads only to such tracks (`routing::silent_track_nodes`).
-  - A track that keys a sidechain still renders, since the key taps it before its mute.
+  - A track whose sidechain key sounds still renders, since the key taps it before its fader.
   - The mixer skips a muted node only with the opt-in `skip_muted_nodes` limit, so live playback keeps rendering muted tracks and unmuting stays seamless.
 - **The mixer pipelines** (`prepare_pipeline` / `mix_step`, offline only).
   - Each node keeps one block slot per dependency level. In every step, all nodes run at once, and level L works on the block fed L steps earlier.

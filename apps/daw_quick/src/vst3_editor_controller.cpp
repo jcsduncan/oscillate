@@ -320,7 +320,6 @@ void Vst3EditorController::publish_insert_editor(const project::Vst3PluginInstan
 }
 #endif
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void Vst3EditorController::publish_instrument_editor(const project::Vst3PluginInstance& source,
                                                      const project::TrackId& track,
                                                      const QString& message,
@@ -551,12 +550,14 @@ void Vst3EditorController::apply_vst3_insert_editor() {
     return;
   }
   const auto original = *original_;
-  const bool instrument_source = !slot_.has_value();
+  const auto track = *track_;
+  const auto slot = slot_;
+  const bool instrument_source = !slot.has_value();
   const auto commit_revision = session()->snapshot().revision;
   const bool unchanged =
       instrument_source
-          ? can_commit_vst3_instrument_state(session()->snapshot(), *track_, original)
-          : can_commit_vst3_editor_state(session()->snapshot(), *track_, *slot_, original);
+          ? can_commit_vst3_instrument_state(session()->snapshot(), track, original)
+          : can_commit_vst3_editor_state(session()->snapshot(), track, *slot, original);
   if (!unchanged) {
     discard_vst3_insert_editor();
     host_.status(QStringLiteral("Project changed while VST3 editor was open; edits discarded"));
@@ -614,14 +615,14 @@ void Vst3EditorController::apply_vst3_insert_editor() {
   }
   const auto prior_revision = session()->snapshot().revision;
   const auto committed =
-      instrument_source ? session()->instruments().set_vst3_instrument_state(
-                              commit_revision, *track_, original, std::move(state->component_state),
-                              std::move(state->controller_state), std::move(references),
-                              application::EditorSavePolicy::background)
-                        : session()->effects().set_vst3_editor_state(
-                              commit_revision, *track_, *slot_, original,
-                              std::move(state->component_state), std::move(state->controller_state),
-                              std::move(references), application::EditorSavePolicy::background);
+      slot ? session()->effects().set_vst3_editor_state(
+                 commit_revision, track, *slot, original, std::move(state->component_state),
+                 std::move(state->controller_state), std::move(references),
+                 application::EditorSavePolicy::background)
+           : session()->instruments().set_vst3_instrument_state(
+                 commit_revision, track, original, std::move(state->component_state),
+                 std::move(state->controller_state), std::move(references),
+                 application::EditorSavePolicy::background);
   discard_vst3_insert_editor();
   if (session()->snapshot().revision != prior_revision) {
     host_.schedule_save();
@@ -645,7 +646,6 @@ void Vst3EditorController::apply_vst3_insert_editor() {
 }
 
 // QML invokable arguments are positional and keep stable ID/value roles.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void Vst3EditorController::set_vst3_insert_parameter(quint32 parameter_id,
                                                      double normalized_value) {
   set_parameter(parameter_id, normalized_value, false);
@@ -914,8 +914,7 @@ void Vst3EditorController::poll_native_gestures() {
           }
           active->second = ++next_sequence_;
         }
-        (void)slot->preview(identity.graph_revision, identity.instance_id,
-                            identity.compatibility_key, event, active->second);
+        (void)slot->preview(identity, event, active->second);
       }
     }
   }

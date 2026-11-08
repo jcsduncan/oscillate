@@ -226,6 +226,8 @@ void ladders_self_oscillate_in_tune() {
 double analytic_peak(const FilterSettings& s, double around, double rate) {
   double best_hz = around;
   double best = -1e9;
+  // The sweep grid is the test input.
+  // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
   for (double hz = 0.97 * around; hz <= 1.03 * around; hz += 0.0005 * around) {
     const double value = filter_response_db(s, hz, rate);
     if (value > best) {
@@ -287,6 +289,8 @@ void combs_peak_on_multiples_of_the_cutoff() {
 double strongest(const FilterSettings& s, double low, double high, double rate) {
   double best_hz = low;
   double best = -1e9;
+  // The sweep grid is the test input.
+  // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
   for (double hz = low; hz <= high; hz *= 1.002) {
     const double value = filter_response_db(s, hz, rate);
     if (value > best) {
@@ -543,8 +547,7 @@ void block_split_independence() {
         split.push_back({event.at + event.frames, event.settings, 64U});
       }
     }
-    std::stable_sort(split.begin(), split.end(),
-                     [](const Event& a, const Event& b) { return a.at < b.at; });
+    std::ranges::stable_sort(split, [](const Event& a, const Event& b) { return a.at < b.at; });
     const auto resent = render(rate, split, length);
     double worst = 0.0;
     for (std::size_t i = 0; i < reference.size(); ++i) {

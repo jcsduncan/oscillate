@@ -26,7 +26,7 @@ namespace {
 
 using pulse_table::index_of;
 
-enum Pad : std::size_t {
+enum Pad : std::uint8_t {
   kick,
   kick2,
   snare,
@@ -173,9 +173,10 @@ public:
       }
     }
     for (std::size_t i = 0; i < frames; ++i) {
-      double l = left[i];
-      double r = right[i];
-      declick_.add(l, r);
+      StereoSample frame{left[i], right[i]};
+      declick_.add(frame);
+      double l = frame.left;
+      double r = frame.right;
       const auto glued = glue_.process(l, r);
       const double saturation = saturation_.next();
       double sl = glued.left;
@@ -363,7 +364,8 @@ private:
     voice.high.reset();
     voice.low.reset();
     // Noise is seeded by pad and hit since the last reset: deterministic.
-    voice.noise.reset(static_cast<std::uint32_t>(pad * 7'919U + voice.hits * 104'729U + 1U));
+    voice.noise.reset(static_cast<std::uint32_t>(
+        pad * 7'919U + static_cast<std::size_t>(voice.hits * 104'729U) + 1U));
     ++voice.hits;
     const auto tuning = body_tuning(pad);
     switch (pad) {

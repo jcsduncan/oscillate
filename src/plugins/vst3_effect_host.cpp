@@ -107,7 +107,6 @@ public:
   }
 
   // SDK IBStream fixes this ABI parameter order and the integral parameter types.
-  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   Steinberg::tresult PLUGIN_API seek(Steinberg::int64 distance, Steinberg::int32 mode,
                                      Steinberg::int64* result) override {
     Steinberg::int64 base = 0;
@@ -212,7 +211,6 @@ public:
     return static_cast<Steinberg::int32>(points_.size());
   }
   // The VST3 interface fixes this parameter order and these convertible types.
-  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   Steinberg::tresult PLUGIN_API getPoint(Steinberg::int32 index, Steinberg::int32& offset,
                                          Steinberg::Vst::ParamValue& value) override {
     if (index < 0 || static_cast<std::size_t>(index) >= points_.size())
@@ -963,7 +961,7 @@ std::optional<std::uint32_t> Vst3EffectHost::map_midi_controller(std::int16_t co
     if (mapping) {
       try {
         mapping->release();
-      } catch (...) {
+      } catch (...) { // NOLINT(bugprone-empty-catch): the mapping already failed.
       }
     }
     return std::nullopt;
@@ -1180,11 +1178,14 @@ bool Vst3EffectHost::restore_state_pair(const Vst3StatePair& state, std::string&
   if (!state.controller_state)
     return true;
   BoundedStream stream(*state.controller_state, host.config.max_state_bytes);
+  bool accepted = false;
   try {
-    if (host.controller->setState(&stream) == Steinberg::kResultOk && !stream.failed())
-      return true;
+    accepted = host.controller->setState(&stream) == Steinberg::kResultOk && !stream.failed();
   } catch (...) {
+    accepted = false;
   }
+  if (accepted)
+    return true;
   host.faulted = true;
   error = "VST3 controller rejected its independent state";
   return false;

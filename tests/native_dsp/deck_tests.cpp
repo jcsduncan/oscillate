@@ -38,7 +38,7 @@ double tone_db(const std::vector<double>& values, double hz) {
   return db(rms(out.left, frames / 2, frames) / rms(input.left, frames / 2, frames));
 }
 
-std::vector<double> with(std::vector<std::pair<std::string_view, double>> changes) {
+std::vector<double> with(const std::vector<std::pair<std::string_view, double>>& changes) {
   auto values = flat();
   for (const auto& [id, value] : changes)
     values[at(id)] = value;

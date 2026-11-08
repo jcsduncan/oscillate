@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Vista device panel, "glacier": a precision stereo imager in machined
@@ -78,11 +79,10 @@ Rectangle {
     function readoutValue(id) {
         return id === "" || revision < 0 ? "" : controller.display(id)
     }
-    function signed(value, digits) {
-        return (value >= 0 ? "+" : "−") + Math.abs(value).toFixed(digits)
-    }
+    // Levels at or below this read as silence.
+    readonly property real silentDb: -99
     function dbText(db) {
-        return db <= -99 ? "−∞ dB" : signed(db, 1) + " dB"
+        return Format.signed_decibels(db <= silentDb ? -Infinity : db)
     }
     // The preview cloud's side-to-mid ratio: a half-correlated reference
     // source (side 0.577 of mid) at the overall and average band widths,
@@ -327,7 +327,7 @@ Rectangle {
             anchors.rightMargin: panel.theme.cardInset
             y: panel.theme.correlationReadoutY
             text: panel.live.playing === true
-                ? "IN " + panel.signed(panel.live.correlationIn, 2) + "   OUT " + panel.signed(panel.live.correlationOut, 2)
+                ? "IN " + Format.signed_number(panel.live.correlationIn) + "   OUT " + Format.signed_number(panel.live.correlationOut)
                 : "—"
             color: panel.theme.glacier
             font.family: panel.theme.mono
@@ -528,7 +528,7 @@ Rectangle {
         id: stereoize
         readonly property bool haas: panel.revision >= 0 && panel.controller.choice("vista.stereoize_mode") === 1
         title: "STEREOIZE"
-        note: "ABOVE 300 HZ · SIDE ONLY"
+        note: "ABOVE 300 Hz · SIDE ONLY"
         x: bass.x + bass.width + panel.gap
         y: panel.rowBY
         width: panel.theme.stereoizeCardWidth

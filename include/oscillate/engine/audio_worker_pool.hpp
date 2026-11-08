@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -110,8 +111,9 @@ private:
   void work_any() noexcept;
   // Only the nested slots: what a waiting dispatcher helps with.
   void work_nested() noexcept;
-  // Claims the next task of the batch in `word`, never one of a later batch.
-  static bool claim(Batch& batch, std::uint64_t& word, std::size_t& index) noexcept;
+  // Claims the next task of the batch in `word`, never one of a later batch:
+  // its index, or nothing when that batch has none left.
+  static std::optional<std::size_t> claim(Batch& batch, std::uint64_t& word) noexcept;
 
   std::size_t wanted_;
   std::atomic<std::size_t> attached_{0};

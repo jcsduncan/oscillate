@@ -62,11 +62,12 @@ and processed-stem export use the same evaluator. Active curve replacement and
 broader plugin-lane editing remain open AM-01/AM-03 work; synthetic capacity
 tests do not qualify third-party plugins.
 
-Bounded stopped VST3 effect, instrument and mixed masters share the native
-master's output stage after their project-rate plugin render, including WAV
-PCM16/24, FLAC, MP3 and output-rate conversion with atomic publication; see
-[VST3 output formats](../export/vst3-output-formats.md). VST3 loudness
-reports, encoded or bundled VST3 stems and real-time VST3 export remain open.
+A project with VST3 instruments or effects exports through the native offline
+render with the plugins as chain stages, so it gets every native output format,
+rate, loudness report and stem rule
+([VST3 offline export](../export/vst3-offline-export.md),
+[VST3 output formats](../export/vst3-output-formats.md)). Encoded VST3 stems and
+real-time VST3 export remain open.
 
 - **AM-06** Offline and real-time export produce a master in WAV 16/24-bit PCM or 32-bit float, FLAC or MP3, at selected sample rate. Output-rate conversion runs in the export worker, outside the audio callback; original media is unchanged. Integer bit-depth reduction uses TPDF dither by default. Processed stems include inserts, routing effects and tails; exact summation to master is not promised.
 - **AM-07** Playback and export use identical tempo, meter, curve, routing and PDC semantics at the same project revision. Offline quality may be higher; any persistent processing limitation is reported. An export of a project revision whose live graph failed must explicitly build that revision or fail with its diagnostic; it cannot silently render the older active graph. Any xrun during real-time export fails the render and records the event. Export failure never replaces an existing valid file.

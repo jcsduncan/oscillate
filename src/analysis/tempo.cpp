@@ -44,6 +44,10 @@ constexpr double clarity_window_seconds = 8.0;
 constexpr double clarity_hop_seconds = 2.0;
 constexpr double prior_centre_bpm = 122.0;
 constexpr double prior_octaves = 0.6;
+// The coarse tempo search grid, then the finer one within reach of its best.
+constexpr double coarse_bpm_step = 0.05;
+constexpr double fine_bpm_step = 0.01;
+constexpr double fine_bpm_reach = 1.5;
 // Beat clarity is |component| / total onset strength in a window: about 1
 // for a click track and 0.2-0.4 for produced music with a steady kick.
 // Below the floor there is no beat; at `clear_clarity` it is certain.
@@ -510,7 +514,10 @@ Result<TempoEstimate> analyze_tempo(media::AudioReader& reader, TempoIdentity id
   const auto coarse = spectra(bands, {}, curves.rate);
   double best_bpm = 0.0;
   double best_value = 0.0;
-  for (auto bpm = options.minimum_bpm; bpm <= options.maximum_bpm; bpm += 0.05) {
+  for (std::size_t step = 0;; ++step) {
+    const auto bpm = options.minimum_bpm + static_cast<double>(step) * coarse_bpm_step;
+    if (bpm > options.maximum_bpm)
+      break;
     const auto value = score(coarse, bpm) * prior(bpm);
     if (value > best_value) {
       best_value = value;
@@ -529,8 +536,12 @@ Result<TempoEstimate> analyze_tempo(media::AudioReader& reader, TempoIdentity id
   const auto weighted = spectra(bands, pulse.weights, curves.rate);
   double fit = best_bpm;
   double fit_value = 0.0;
-  for (auto bpm = std::max(options.minimum_bpm, best_bpm - 1.5);
-       bpm <= std::min(options.maximum_bpm, best_bpm + 1.5); bpm += 0.01) {
+  const auto fine_first = std::max(options.minimum_bpm, best_bpm - fine_bpm_reach);
+  const auto fine_last = std::min(options.maximum_bpm, best_bpm + fine_bpm_reach);
+  for (std::size_t step = 0;; ++step) {
+    const auto bpm = fine_first + static_cast<double>(step) * fine_bpm_step;
+    if (bpm > fine_last)
+      break;
     const auto value = score(weighted, bpm);
     if (value > fit_value) {
       fit_value = value;
@@ -614,7 +625,10 @@ Result<TempoEstimate> analyze_tempo(media::AudioReader& reader, TempoIdentity id
     const auto reach_bins =
         static_cast<std::ptrdiff_t>(0.04 * sample_rate / static_cast<double>(attack_bin));
     std::vector<double> differences;
-    for (auto position = first; position < static_cast<double>(frames); position += period) {
+    for (std::size_t beat = 0;; ++beat) {
+      const auto position = first + static_cast<double>(beat) * period;
+      if (position >= static_cast<double>(frames))
+        break;
       const auto curve_index = static_cast<std::size_t>(
           std::max(0.0, std::round((position - curves.offset) / static_cast<double>(curves.hop))));
       if (curve_index >= pulse.weights.size() || pulse.weights[curve_index] <= 0.0)
@@ -688,7 +702,10 @@ Result<TempoEstimate> analyze_tempo(media::AudioReader& reader, TempoIdentity id
   };
   std::size_t considered = 0;
   std::size_t hit = 0;
-  for (auto position = first; position < static_cast<double>(frames); position += period) {
+  for (std::size_t beat = 0;; ++beat) {
+    const auto position = first + static_cast<double>(beat) * period;
+    if (position >= static_cast<double>(frames))
+      break;
     const auto centre = frame_at(position);
     const auto index = static_cast<std::size_t>(std::max(0.0, std::round(centre)));
     if (index >= length || pulse.weights[index] <= 0.0)

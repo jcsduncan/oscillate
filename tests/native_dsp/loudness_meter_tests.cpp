@@ -122,7 +122,7 @@ void true_peak_matches_the_project_meter() {
   require(reference.prepare(48'000), "the reference meter prepares");
   // Programme-like: noise plus high sines near Nyquist, where intersample
   // peaks live.
-  auto input = noise(0.3, 4 * 48'000);
+  auto input = noise(0.3, std::size_t{4} * 48'000);
   for (const double hz : {9'000.0, 15'000.0, 19'500.0}) {
     const auto tone = sine(hz, 0.2, input.size());
     for (std::size_t i = 0; i < input.size(); ++i) {

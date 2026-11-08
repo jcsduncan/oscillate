@@ -148,6 +148,8 @@ bool wait_for_text(Panel& panel, const QString& name, const QString& text) {
   return QTest::qWaitFor([&] { return text_of(panel, name) == text; }, 1000);
 }
 
+// The arguments are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<float> frame_of(float in_l, float in_r, float out_l, float out_r, float reduction) {
   namespace t = ceiling::telemetry;
   std::vector<float> frame(t::size, 0.0F);
@@ -178,7 +180,7 @@ void panel_covers_every_parameter() {
           "the ceiling reads in large");
   require(text_of(*panel, QStringLiteral("ceilingLatency")) ==
               QStringLiteral("LOOKAHEAD LIMITER · ") +
-                  controller.display(QStringLiteral("ceiling.lookahead")).toUpper() +
+                  controller.display(QStringLiteral("ceiling.lookahead")) +
                   QStringLiteral(" LATENCY"),
           "the header names the latency");
 }
@@ -255,6 +257,8 @@ void telemetry_decodes_into_the_history() {
 
 constexpr double rate = 48'000.0;
 
+// The arguments are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<engine::StereoFrame> sine(double amplitude, std::size_t frames) {
   std::vector<engine::StereoFrame> out(frames);
   for (std::size_t i = 0; i < frames; ++i) {
@@ -442,7 +446,7 @@ void telemetry_gives_the_strip_the_reduction_and_its_band() {
   require(strip.value(QStringLiteral("text")).toString() == QStringLiteral("−2.3 dB · max −4.1"),
           "now and the largest: " + strip.value(QStringLiteral("text")).toString().toStdString());
   require(strip.value(QStringLiteral("lead")).toInt() == static_cast<int>(kick_band) &&
-              strip.value(QStringLiteral("lead_text")).toString() == QStringLiteral("47–112 Hz"),
+              strip.value(QStringLiteral("lead_text")).toString() == QStringLiteral("47.4–112 Hz"),
           "the kick's band leads: " +
               strip.value(QStringLiteral("lead_text")).toString().toStdString());
   require(strip.value(QStringLiteral("bands")).toList().size() ==

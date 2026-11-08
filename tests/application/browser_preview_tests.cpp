@@ -27,23 +27,32 @@ template <typename Id> Id id(std::uint64_t low) { return Id::from_bits({0, low})
 // Each sound gets the phrase that shows it off, in time.
 void phrases_suit_the_sound() {
   using application::PreviewStyle;
-  REQUIRE_EQ(application::preview_style("pulse", "Kit", "808 Classic"), PreviewStyle::drums,
-             "Pulse previews a beat");
-  REQUIRE_EQ(application::preview_style("prism", "Bass", "Wobble"), PreviewStyle::bass,
-             "a bass previews a riff");
-  REQUIRE_EQ(application::preview_style("nova", "Character", "Reese Growl"), PreviewStyle::bass,
-             "a bass previews a riff");
-  REQUIRE_EQ(application::preview_style("halo", "Mallets", "Marimba"), PreviewStyle::line,
-             "leads and mallets preview a line, case aside");
-  REQUIRE_EQ(application::preview_style("prism", "LEAD", "Supersaw"), PreviewStyle::line,
-             "leads and mallets preview a line, case aside");
-  REQUIRE_EQ(application::preview_style("drift", "Clouds", "Nebula"), PreviewStyle::texture,
-             "a granular texture holds; a granular pad plays chords");
-  REQUIRE_EQ(application::preview_style("drift", "Pad", "Aurora"), PreviewStyle::chord,
-             "a granular texture holds; a granular pad plays chords");
-  REQUIRE_EQ(application::preview_style("concert", "Grand", "Hall"), PreviewStyle::chord,
-             "a piano plays chords");
-  REQUIRE_EQ(application::preview_style("knock", "Kit", "Microhouse Clicks"),
+  REQUIRE_EQ(application::preview_style(
+                 {.engine = "pulse", .category = "Kit", .preset_name = "808 Classic"}),
+             PreviewStyle::drums, "Pulse previews a beat");
+  REQUIRE_EQ(
+      application::preview_style({.engine = "prism", .category = "Bass", .preset_name = "Wobble"}),
+      PreviewStyle::bass, "a bass previews a riff");
+  REQUIRE_EQ(application::preview_style(
+                 {.engine = "nova", .category = "Character", .preset_name = "Reese Growl"}),
+             PreviewStyle::bass, "a bass previews a riff");
+  REQUIRE_EQ(application::preview_style(
+                 {.engine = "halo", .category = "Mallets", .preset_name = "Marimba"}),
+             PreviewStyle::line, "leads and mallets preview a line, case aside");
+  REQUIRE_EQ(application::preview_style(
+                 {.engine = "prism", .category = "LEAD", .preset_name = "Supersaw"}),
+             PreviewStyle::line, "leads and mallets preview a line, case aside");
+  REQUIRE_EQ(application::preview_style(
+                 {.engine = "drift", .category = "Clouds", .preset_name = "Nebula"}),
+             PreviewStyle::texture, "a granular texture holds; a granular pad plays chords");
+  REQUIRE_EQ(
+      application::preview_style({.engine = "drift", .category = "Pad", .preset_name = "Aurora"}),
+      PreviewStyle::chord, "a granular texture holds; a granular pad plays chords");
+  REQUIRE_EQ(
+      application::preview_style({.engine = "concert", .category = "Grand", .preset_name = "Hall"}),
+      PreviewStyle::chord, "a piano plays chords");
+  REQUIRE_EQ(application::preview_style(
+                 {.engine = "knock", .category = "Kit", .preset_name = "Microhouse Clicks"}),
              PreviewStyle::percussion, "Knock previews a top loop");
 
   // 120 BPM at 48 kHz: a beat is 24 000 frames.

@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Trim device panel: a console channel strip in graphite and sky. The
@@ -27,6 +28,8 @@ Rectangle {
     readonly property int frameSize: 8
     // Under this a meter reads silence.
     readonly property real floorDb: -60
+    // Bare level readouts (no unit beside them): one decimal.
+    readonly property int levelDecimals: 1
     // A level change smaller than this reads as none.
     readonly property real unchangedDb: 0.05
     // Unity (0 dB) on the gain knob's -36..+24 dB travel.
@@ -80,13 +83,13 @@ Rectangle {
 
     // ---- Formatting ------------------------------------------------------------------
 
-    function signed(value, digits) {
-        const text = Math.abs(value).toFixed(digits)
-        const tiny = 0.5 * Math.pow(10, -digits)
-        return value < -tiny ? "−" + text : value > tiny ? "+" + text : text
+    // A bare level change, signed.
+    function signedDb(db) {
+        return Format.signed_number(db, levelDecimals)
     }
+    // A bare level, −∞ at the floor.
     function dbText(db) {
-        return db <= floorDb ? "−∞" : signed(db, 1)
+        return signedDb(db <= floorDb ? -Infinity : db)
     }
     function panText(value) {
         const amount = Math.round(Math.abs(value) * 100)
@@ -121,13 +124,13 @@ Rectangle {
             return "UNITY · BIT-EXACT PASS-THROUGH"
         const parts = []
         if (Math.abs(gainDb) >= 1e-9)
-            parts.push(signed(gainDb, 1) + " DB")
+            parts.push(Format.signed_decibels(gainDb))
         if (Math.abs(pan) >= 1e-9)
             parts.push("PAN " + panText(pan))
         if (mono)
             parts.push("MONO")
         else if (Math.abs(stereoWidth - 1) >= 1e-9)
-            parts.push("WIDTH " + Math.round(stereoWidth * 100) + "%")
+            parts.push("WIDTH " + Format.fraction(stereoWidth))
         if (swap)
             parts.push("SWAPPED")
         if (invert !== 0)
@@ -339,13 +342,13 @@ Rectangle {
             diameter: panel.theme.gainKnobDiameter
             origin: panel.gainUnityOrigin
             label: ""
-            valueText: panel.signed(panel.gainDb, 1) + " dB"
+            valueText: Format.signed_decibels(panel.gainDb)
         }
         Text {
             objectName: "trimGainValue"
             anchors.horizontalCenter: parent.horizontalCenter
             y: panel.theme.gainValueY
-            text: panel.signed(panel.gainDb, 1)
+            text: panel.signedDb(panel.gainDb)
             color: Math.abs(panel.gainDb) < 1e-9 ? panel.theme.glacier : panel.theme.accent
             font.family: panel.theme.sans
             font.pixelSize: panel.theme.gainValueSize
@@ -362,7 +365,7 @@ Rectangle {
         Caption {
             anchors.horizontalCenter: parent.horizontalCenter
             y: panel.theme.gainCaptionY
-            text: "GAIN · −36 TO +24 DB"
+            text: "GAIN · −36 TO +24 dB"
         }
         Rectangle {
             id: unity
@@ -413,7 +416,7 @@ Rectangle {
         theme: panel.theme
         id: meterPlate
         title: "METERS"
-        note: panel.playing ? "PEAK HELD 1 S · RMS 300 MS" : "NO SIGNAL"
+        note: panel.playing ? "PEAK HELD 1 s · RMS 300 ms" : "NO SIGNAL"
         noteColor: panel.playing ? panel.theme.live : panel.theme.inkFaint
         x: levelPlate.x + levelPlate.width + panel.gap
         y: panel.rowAY
@@ -531,7 +534,7 @@ Rectangle {
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
                         y: -panel.theme.scaleLabelLift
-                        text: mark.modelData > 0 ? "+" + mark.modelData : mark.modelData === 0 ? "0" : "−" + (-mark.modelData)
+                        text: Format.signed_number(mark.modelData, 0)
                         color: mark.modelData === 0 ? panel.theme.inkDim : panel.theme.inkFaint
                         font.family: panel.theme.mono
                         font.pixelSize: panel.theme.typeCaption
@@ -569,7 +572,7 @@ Rectangle {
                 objectName: "trimChange"
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
-                text: panel.changeKnown ? panel.signed(panel.changeDb, 1) : "—"
+                text: panel.changeKnown ? panel.signedDb(panel.changeDb) : "—"
                 color: !panel.changeKnown ? panel.theme.inkFaint
                     : Math.abs(panel.changeDb) < panel.unchangedDb ? panel.theme.live : panel.theme.accent
                 font.family: panel.theme.sans
@@ -579,7 +582,7 @@ Rectangle {
             Caption {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
-                text: "DB RMS"
+                text: "dB RMS"
             }
         }
         Note {
@@ -655,7 +658,7 @@ Rectangle {
             controller: panel.controller
             theme: panel.theme
             parameterId: "trim.law"
-            labels: ["BALANCE", "−3 DB", "−4.5 DB", "−6 DB"]
+            labels: ["BALANCE", "−3 dB", "−4.5 dB", "−6 dB"]
         }
         Note {
             x: panel.theme.lawX
@@ -855,7 +858,7 @@ Rectangle {
             controller: panel.controller
             theme: panel.theme
             parameterId: "trim.dc"
-            onCaption: "5 HZ HIGH-PASS, OFFSET REMOVED"
+            onCaption: "5 Hz HIGH-PASS, OFFSET REMOVED"
             offCaption: "OFF · DC PASSES"
         }
         Kit.Toggle {
@@ -866,7 +869,7 @@ Rectangle {
             controller: panel.controller
             theme: panel.theme
             parameterId: "trim.rotate"
-            onCaption: "ALLPASS AT 150 HZ: PEAKS LOWERED"
+            onCaption: "ALLPASS AT 150 Hz: PEAKS LOWERED"
             offCaption: "OFF"
         }
         Note {

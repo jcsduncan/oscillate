@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "FlybyPaths.js" as Paths
 
 // Flyby's chart (ADR-0067): you at the centre, facing up the page, ears to
@@ -16,6 +17,8 @@ Item {
     property var live: ({ live: false })
 
     readonly property int revision: controller.revision
+    // Heights and the chart scale read in whole metres.
+    readonly property int wholeMetres: 0
     readonly property bool playing: live.live === true
     readonly property int kind: revision >= 0 ? controller.choice("flyby.path") : Paths.pass
     readonly property real radius: revision >= 0 ? controller.value("flyby.radius") : 0
@@ -254,7 +257,7 @@ Item {
             visible: map.heightMetres > 0
             x: parent.width + map.theme.spaceSm
             y: dot.heightLabelY
-            text: "↑ " + Math.round(map.heightMetres) + " m up"
+            text: "↑ " + Format.quantity(map.heightMetres, "m", map.wholeMetres) + " up"
             color: map.theme.inkDim
             font.family: map.theme.mono
             font.pixelSize: map.theme.typeBody
@@ -317,7 +320,7 @@ Item {
     Text {
         x: map.theme.spaceLg
         y: map.theme.chartLabelTop
-        text: "FRONT ↑ · YOU FACE UP THE CHART\nRINGS EVERY " + Paths.ringMetres + " M"
+        text: "FRONT ↑ · YOU FACE UP THE CHART\nRINGS EVERY " + Format.quantity(Paths.ringMetres, "m", map.wholeMetres)
         color: map.theme.inkFaint
         font.family: map.theme.mono
         font.pixelSize: map.theme.typeSmall
@@ -328,7 +331,7 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: map.theme.spaceLg
         y: map.theme.chartLabelTop
-        text: "±" + Math.round(map.view) + " M"
+        text: "±" + Format.quantity(map.view, "m", map.wholeMetres)
         color: map.theme.inkFaint
         font.family: map.theme.mono
         font.pixelSize: map.theme.typeSmall

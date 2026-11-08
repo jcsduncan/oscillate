@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "ChopGate.js" as Gate
 
 // One pattern of the bass with the gate over it: the step grid (beats stronger), the input in slate with what is heard in
@@ -146,7 +147,7 @@ Rectangle {
                 for (let k = 0; k < count; ++k) {
                     const r = steps[layout[k].step].repeat
                     if (r > 0)
-                        ctx.fillText("↻ " + Math.pow(2, r) + "×", layout[k].start * w + theme.repeatMarkInset, h - theme.repeatMarkBaseline)
+                        ctx.fillText("↻ " + Format.quantity(Math.pow(2, r), "×", 0), layout[k].start * w + theme.repeatMarkInset, h - theme.repeatMarkBaseline)
                 }
             }
 

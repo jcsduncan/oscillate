@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Data tables keep one entry per row; clang-format would split them.
@@ -29,7 +30,7 @@ inline constexpr std::array ornaments{"Off"sv, "Some"sv, "Lots"sv};
 // In wren::breath::Articulation order.
 inline constexpr std::array articulations{"Auto"sv, "Legato"sv, "Tongued"sv, "Staccato"sv};
 inline constexpr std::array voice_modes{"Mono"sv, "Poly 4"sv};
-enum VoiceMode : int { mono, poly };
+enum VoiceMode : std::uint8_t { mono, poly };
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
 inline constexpr double g = 0.05;

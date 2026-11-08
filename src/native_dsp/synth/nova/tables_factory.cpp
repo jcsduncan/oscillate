@@ -189,7 +189,7 @@ private:
     }
   }
   void synthesise(const Spectrum& s) {
-    std::fill(bins_.begin(), bins_.end(), Complex{});
+    std::ranges::fill(bins_, Complex{});
     const double half = static_cast<double>(sample_length) / 2.0;
     for (std::size_t h = 1; h <= harmonic_count; ++h) {
       bins_[h] = s[h] * half;
@@ -222,7 +222,7 @@ void pulse_shape(double width, Spectrum& s) {
   piecewise(points, s);
 }
 void sine_shape(Spectrum& s) {
-  std::fill(s.begin(), s.end(), Complex{});
+  std::ranges::fill(s, Complex{});
   s[1] = sine_partial(1.0);
 }
 
@@ -348,7 +348,7 @@ void analog_pulse(double t, Spectrum& s, Context&) {
 void saw_stack(double t, Spectrum& s, Context& context) {
   auto& base = context.scratch();
   saw_shape(base);
-  std::fill(s.begin(), s.end(), Complex{});
+  std::ranges::fill(s, Complex{});
   const std::array<std::pair<std::size_t, double>, 5> stack{
       {{1, 1.0}, {2, 0.75 * t}, {3, 0.55 * t * t}, {4, 0.45 * t * t}, {6, 0.3 * t * t * t}}};
   for (const auto& [multiple, level] : stack) {
@@ -380,7 +380,10 @@ void reese_saw(double t, Spectrum& s, Context& context) {
 void sync_saw(double t, Spectrum& s, Context&) {
   const double ratio = std::exp2(3.0 * t);
   std::vector<Point> points{{0.0, -1.0}};
-  for (double k = 1.0; k / ratio < 1.0; k += 1.0) {
+  for (int step = 1;; ++step) {
+    const auto k = static_cast<double>(step); // Exact: every k is a small whole number.
+    if (!(k / ratio < 1.0))
+      break;
     const double x = k / ratio;
     points.push_back({x, 1.0});
     points.push_back({x, -1.0});
@@ -396,7 +399,10 @@ void sync_square(double t, Spectrum& s, Context&) {
   const double ratio = std::exp2(3.0 * t);
   std::vector<Point> points{{0.0, 1.0}};
   double level = 1.0;
-  for (double k = 0.5; k / ratio < 1.0; k += 0.5) {
+  for (int step = 1;; ++step) {
+    const double k = 0.5 * static_cast<double>(step); // Exact halves, as summed before.
+    if (!(k / ratio < 1.0))
+      break;
     const double x = k / ratio;
     points.push_back({x, level});
     level = -level;
@@ -419,7 +425,7 @@ void window_sync(double t, Spectrum& s, Context& context) {
 // Harmonics added one by one, 1 to 1024 on an exponential scale.
 void harmonic_sweep(double t, Spectrum& s, Context&) {
   const double count = std::exp2(10.0 * t);
-  std::fill(s.begin(), s.end(), Complex{});
+  std::ranges::fill(s, Complex{});
   for (std::size_t h = 1; h <= harmonic_count; ++h) {
     const double edge = std::clamp(count - static_cast<double>(h) + 1.0, 0.0, 1.0);
     if (edge > 0.0) {
@@ -432,7 +438,7 @@ void harmonic_sweep(double t, Spectrum& s, Context&) {
 // Odd harmonics brightening, from a near-sine to a hollow, buzzing square.
 void odd_sweep(double t, Spectrum& s, Context&) {
   const double tilt = 3.0 - 2.3 * t;
-  std::fill(s.begin(), s.end(), Complex{});
+  std::ranges::fill(s, Complex{});
   for (std::size_t h = 1; h <= harmonic_count; h += 2) {
     s[h] = sine_partial(std::pow(static_cast<double>(h), -tilt));
   }
@@ -450,7 +456,7 @@ void organ_drawbars(double t, Spectrum& s, Context&) {
                                                                 {8, 8, 8, 8, 6, 6, 4},
                                                                 {8, 8, 8, 8, 8, 8, 8}}};
   const auto at = segment(t, registrations.size());
-  std::fill(s.begin(), s.end(), Complex{});
+  std::ranges::fill(s, Complex{});
   for (std::size_t bar = 0; bar < harmonics.size(); ++bar) {
     const double setting =
         registrations[at.from][bar] * (1.0 - at.mix) + registrations[at.from + 1][bar] * at.mix;
@@ -472,7 +478,7 @@ void organ_drawbars(double t, Spectrum& s, Context&) {
 void pluck_damp(double t, Spectrum& s, Context&) {
   const double position = 0.13 + 0.1 * t;
   const double damping = 0.002 + 0.12 * t * t;
-  std::fill(s.begin(), s.end(), Complex{});
+  std::ranges::fill(s, Complex{});
   for (std::size_t h = 1; h <= harmonic_count; ++h) {
     const double n = static_cast<double>(h);
     s[h] = sine_partial(std::fabs(std::sin(pi * n * position)) * std::exp(-damping * (n - 1.0)) /
@@ -518,7 +524,7 @@ void spectral_pad(double t, Spectrum& s, Context&) {
 void glass_formant(double t, Spectrum& s, Context&) {
   const double centre = 3.0 * std::exp2(5.0 * t);
   constexpr double q = 14.0;
-  std::fill(s.begin(), s.end(), Complex{});
+  std::ranges::fill(s, Complex{});
   for (std::size_t h = 1; h <= harmonic_count; ++h) {
     const double n = static_cast<double>(h);
     double gain = 0.05 + 0.04 * smooth((n - 24.0) / 64.0);
@@ -601,7 +607,7 @@ void metal_clang(double t, Spectrum& s, Context&) {
   constexpr std::array<double, 10> modes{1.0, 1.59, 2.14, 2.30, 2.65, 2.92, 3.16, 3.50, 4.15, 4.60};
   const double base = 12.0;
   const double stretch = 1.0 + 0.5 * t;
-  std::fill(s.begin(), s.end(), Complex{});
+  std::ranges::fill(s, Complex{});
   s[1] = sine_partial(0.3);
   s[2] = sine_partial(0.1);
   for (std::size_t m = 0; m < modes.size(); ++m) {
@@ -700,7 +706,7 @@ void resample_grind(double t, Spectrum& s, Context& context) {
 // Roar: dense, rough partials through vowels A, O, U.
 void roar(double t, Spectrum& s, Context&) {
   const Vowel vowel = vowel_path(std::array{vowel_a, vowel_o, vowel_u}, t);
-  std::fill(s.begin(), s.end(), Complex{});
+  std::ranges::fill(s, Complex{});
   for (std::size_t h = 1; h <= 400; ++h) {
     Random random(h * 2'654'435'761ULL + 97U);
     const double amplitude =
@@ -896,7 +902,7 @@ Cache& cache() {
 std::span<const std::string_view> builtin_table_names() noexcept { return names; }
 
 std::shared_ptr<const Wavetable> builtin_table(std::string_view name) {
-  const auto found = std::find(names.begin(), names.end(), name);
+  const auto found = std::ranges::find(names, name);
   if (found == names.end()) {
     return nullptr;
   }

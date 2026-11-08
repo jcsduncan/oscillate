@@ -48,8 +48,8 @@ static_assert(std::ranges::all_of(midi_grid_steps_per_bar,
 [[nodiscard]] std::uint8_t snap_to_scale(int key, project::MusicalKey scale) noexcept;
 // Moves `key` (snapped into the scale first) by `degrees` scale steps, as
 // Scale lock transposes a set of notes; kept within 0..127.
-[[nodiscard]] std::uint8_t transpose_in_scale(int key, int degrees,
-                                              project::MusicalKey scale) noexcept;
+[[nodiscard]] std::uint8_t transpose_in_scale(int key, project::MusicalKey scale,
+                                              int degrees) noexcept;
 // Scale steps from `from` up to `to` (negative when lower), both snapped.
 [[nodiscard]] int scale_degrees_between(int from, int to, project::MusicalKey scale) noexcept;
 
@@ -92,10 +92,14 @@ struct QuantizeSettings {
 // Starts move toward the nearest (swung) grid line on the song's grid.
 // Notes after the pattern's end stay. Fails, changing nothing, when two
 // notes would land on one start and key.
+// Where a clip's pattern sits: its first tick on the song, and its length.
+struct ClipPattern {
+  std::int64_t clip_start = 0;
+  std::int64_t pattern_length = 0;
+};
 [[nodiscard]] foundation::Result<std::vector<project::MidiNote>>
 quantize_notes(std::span<const project::MidiNote> notes, std::span<const project::NoteId> scope,
-               const QuantizeSettings& settings, std::int64_t clip_start,
-               std::int64_t pattern_length);
+               const QuantizeSettings& settings, ClipPattern pattern);
 
 // --- Grooves -------------------------------------------------------------
 
@@ -111,7 +115,7 @@ struct GrooveAmounts {
 [[nodiscard]] foundation::Result<std::vector<project::MidiNote>>
 apply_groove(std::span<const project::MidiNote> notes, std::span<const project::NoteId> scope,
              const persistence::GrooveTemplate& groove, const GrooveAmounts& amounts,
-             std::int64_t clip_start, std::int64_t pattern_length);
+             ClipPattern pattern);
 
 // The built-in groove pool: straight swing on 8ths and 16ths (54% to 75%),
 // MPC-style 16th swing with accents, and laid-back and pushed feels.

@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // A cream-faced VU meter for the wet signal: 0 VU sits at -18 dBFS RMS, the
 // scale runs -20 to +3 with the red zone above 0, and the needle moves with
@@ -27,7 +28,7 @@ Rectangle {
         GradientStop { position: 1; color: meter.theme.brassLo }
     }
     Accessible.role: Accessible.Indicator
-    Accessible.name: "Wet level " + vu.toFixed(1) + " VU, ducking " + reduction.toFixed(1) + " dB"
+    Accessible.name: "Wet level " + Format.quantity(vu, "VU") + ", ducking " + Format.decibels(reduction)
 
     Rectangle {
         id: face
@@ -97,7 +98,7 @@ Rectangle {
                     ctx.stroke()
                     if (v === -20 || v === -10 || v === -5 || v === -3 || v === 0 || v === 3) {
                         ctx.fillStyle = v > 0 ? th.vuRed : th.ink
-                        ctx.fillText((v > 0 ? "+" : "") + v, cx + Math.cos(a) * r,
+                        ctx.fillText(Format.signed_number(v, 0), cx + Math.cos(a) * r,
                                      cy + Math.sin(a) * r + th.vuLabelDrop)
                     }
                 }
@@ -167,7 +168,7 @@ Rectangle {
         }
         Text {
             anchors.right: parent.right
-            text: meter.reduction > 0.05 ? "−" + meter.reduction.toFixed(1) + " dB" : "0 dB"
+            text: Format.decibels(-meter.reduction)
             color: meter.theme.duckInk
             font.family: meter.theme.mono
             font.pixelSize: meter.theme.typeCaption

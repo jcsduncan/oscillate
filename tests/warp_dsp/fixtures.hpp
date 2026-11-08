@@ -42,6 +42,8 @@ inline void add_noise_floor(Stereo& signal, double amplitude, std::uint64_t seed
 
 inline Stereo click_train(std::uint32_t rate, double seconds, double interval) {
   auto signal = silence(static_cast<std::size_t>(seconds * rate));
+  // The sweep grid is the test input.
+  // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
   for (double time = 0.25; time < seconds - 0.1; time += interval) {
     const auto at = static_cast<std::uint64_t>(std::llround(time * rate));
     signal.left[at] = 0.8F;
@@ -56,6 +58,8 @@ inline Stereo drum_hits(std::uint32_t rate, double seconds, double interval, std
   auto signal = silence(static_cast<std::size_t>(seconds * rate));
   Random random(seed);
   int hit = 0;
+  // The sweep grid is the test input.
+  // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
   for (double time = 0.3; time < seconds - 0.4; time += interval, ++hit) {
     const auto at = static_cast<std::uint64_t>(std::llround(time * rate));
     signal.onsets.push_back(at);
@@ -89,6 +93,8 @@ inline Stereo plucks(std::uint32_t rate, double seconds, double interval, std::u
   Random random(seed);
   constexpr double scale[] = {110.0, 146.83, 164.81, 220.0, 293.66, 329.63, 440.0, 587.33};
   std::size_t last_choice = 8;
+  // The sweep grid is the test input.
+  // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
   for (double time = 0.3; time < seconds - 0.4; time += interval) {
     const auto at = static_cast<std::uint64_t>(std::llround(time * rate));
     signal.onsets.push_back(at);

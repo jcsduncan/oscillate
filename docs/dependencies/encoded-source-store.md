@@ -17,7 +17,9 @@ requires that receipt or an identical record from a committed generation.
 `open_managed_source` checks the managed filename, no-follow regular-file type,
 length, SHA-256, detected format and decoded media metadata before returning a
 caller-owned pinned descriptor. The existing narrow WAV staging and verification
-path remains in use for WAV sources.
+path remains in use for WAV sources. An MP3's frame count is its decodable
+length: without a Xing/Info header libsndfile estimates the length from the
+byte count, so the reader finds where decoding really ends.
 
 The default build remains WAV-only and returns `unsupported` for encoded
 staging and opening. With the optional codec adapter enabled, playback

@@ -71,7 +71,8 @@ public:
 
 private:
   [[nodiscard]] foundation::Result<project::ClipId>
-  merge_chosen_midi_clips(project::TrackId track, std::vector<const project::MidiClip*> chosen);
+  merge_chosen_midi_clips(project::TrackId track,
+                          const std::vector<const project::MidiClip*>& chosen);
 };
 
 } // namespace oscillate::application

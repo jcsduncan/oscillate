@@ -170,7 +170,8 @@ prepare_document(const project::NativeSynthDocument& document, double, const Doc
   std::array<const Shape*, shape_slots * shape_bands> found{};
   for (const auto& curve : document.curves) {
     state->drawn.push_back(sample_shape(curve.points));
-    found[*curve_index(curve.id)] = &state->drawn.back();
+    if (const auto index = curve_index(curve.id))
+      found[*index] = &state->drawn.back();
   }
   resolve(*state, found);
   return R::success(std::shared_ptr<const DocumentState>(std::move(state)));

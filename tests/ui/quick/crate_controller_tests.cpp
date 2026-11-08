@@ -131,7 +131,7 @@ void a_load_chops_by_transients() {
               !crate.key_name().isEmpty(),
           "the root is detected and named");
   const auto chop_list = crate.chops();
-  require(chop_list.size() == static_cast<qsizetype>(click_seconds.size() + 1),
+  require(chop_list.size() == static_cast<qsizetype>(click_seconds.size()) + 1,
           "one chop per click plus the sample's start");
   for (int index = 0; index < chop_list.size(); ++index) {
     const auto chop = chop_list.at(index).toMap();
@@ -196,7 +196,7 @@ void rechops_are_one_edit_each_and_keep_slots() {
   edits = fixture.adapter.state_submissions().size();
   require(crate.chop_transients(0.5), "transient chop succeeds");
   require(fixture.adapter.state_submissions().size() == edits + 1, "a transient chop is one edit");
-  require(crate.chops().size() == static_cast<qsizetype>(click_seconds.size() + 1),
+  require(crate.chops().size() == static_cast<qsizetype>(click_seconds.size()) + 1,
           "transients find the clicks again");
   require(crate.selected() >= 0 && crate.selected() < crate.chops().size(), "the selection clamps");
 
@@ -206,7 +206,7 @@ void rechops_are_one_edit_each_and_keep_slots() {
   edits = fixture.adapter.state_submissions().size();
   crate.set_chop_mode(QStringLiteral("manual"));
   require(crate.chop() &&
-              crate.chops().size() == static_cast<qsizetype>(click_seconds.size() + 1) &&
+              crate.chops().size() == static_cast<qsizetype>(click_seconds.size()) + 1 &&
               fixture.adapter.state_submissions().size() == edits + 1,
           "a manual chop keeps the starts in one edit");
   require(crate.selected() == 3 && fixture.chop(3).value("slot").toInt() == selected_slot,

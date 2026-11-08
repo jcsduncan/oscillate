@@ -60,7 +60,7 @@ std::vector<double> run_frozen(GrainCloud& cloud, const GrainBuffer& buffer, std
 
 void hann_grains_overlap_add_to_a_constant() {
   GrainBuffer buffer;
-  buffer.prepare(4 * 48'000);
+  buffer.prepare(std::size_t{4} * 48'000);
   GrainCloud cloud;
   cloud.reset(7);
   GrainSettings s;
@@ -76,17 +76,17 @@ void hann_grains_overlap_add_to_a_constant() {
 }
 
 void frozen_sine(GrainBuffer& buffer, double hz) {
-  buffer.prepare(4 * 48'000);
-  for (std::size_t i = 0; i < 3 * 48'000; ++i) {
+  buffer.prepare(std::size_t{4} * 48'000);
+  for (std::size_t i = 0; i < std::size_t{3} * 48'000; ++i) {
     buffer.write(std::sin(2.0 * pi * hz * static_cast<double>(i) / rate));
   }
 }
 
-double crossing_hz(const std::vector<double>& x, std::size_t from, std::size_t to) {
+double crossing_hz(const std::vector<double>& x, std::size_t begin, std::size_t end) {
   double first = -1.0;
   double last = -1.0;
   int count = 0;
-  for (std::size_t i = from + 1; i < to; ++i) {
+  for (std::size_t i = begin + 1; i < end; ++i) {
     if (x[i - 1] < 0.0 && x[i] >= 0.0) {
       const double t = static_cast<double>(i - 1) + x[i - 1] / (x[i - 1] - x[i]);
       if (first < 0.0) {
@@ -154,8 +154,8 @@ void pitched_up_grains_do_not_alias() {
 
 void reverse_grains_read_backwards() {
   GrainBuffer buffer;
-  buffer.prepare(4 * 48'000);
-  for (std::size_t i = 0; i < 3 * 48'000; ++i) {
+  buffer.prepare(std::size_t{4} * 48'000);
+  for (std::size_t i = 0; i < std::size_t{3} * 48'000; ++i) {
     // A ramp in steps of 2^-17: exact in float, so reads are exact too.
     buffer.write(static_cast<double>(i) / 131'072.0);
   }
@@ -181,7 +181,7 @@ void reverse_grains_read_backwards() {
 // of dropping, so the note speaks at once.
 void early_reverse_grains_fall_back_to_forward() {
   GrainBuffer buffer;
-  buffer.prepare(4 * 48'000);
+  buffer.prepare(std::size_t{4} * 48'000);
   GrainCloud cloud;
   cloud.reset(13);
   GrainSettings s;
@@ -200,9 +200,9 @@ void early_reverse_grains_fall_back_to_forward() {
 
 void a_frozen_buffer_repeats_with_the_grain_period() {
   GrainBuffer buffer;
-  buffer.prepare(4 * 48'000);
+  buffer.prepare(std::size_t{4} * 48'000);
   std::uint32_t state = 12'345;
-  for (std::size_t i = 0; i < 2 * 48'000; ++i) {
+  for (std::size_t i = 0; i < std::size_t{2} * 48'000; ++i) {
     state = state * 1'664'525U + 1'013'904'223U;
     buffer.write(static_cast<double>(state) / 4'294'967'296.0 - 0.5);
   }
@@ -225,8 +225,8 @@ void a_frozen_buffer_repeats_with_the_grain_period() {
 // piling onto its newest edge: every grain reads a different place.
 void frozen_grains_wrap_instead_of_piling() {
   GrainBuffer buffer;
-  buffer.prepare(4 * 48'000);
-  for (std::size_t i = 0; i < 3 * 48'000; ++i) {
+  buffer.prepare(std::size_t{4} * 48'000);
+  for (std::size_t i = 0; i < std::size_t{3} * 48'000; ++i) {
     buffer.write(static_cast<double>(i) / 131'072.0);
   }
   GrainCloud cloud;
@@ -244,7 +244,7 @@ void frozen_grains_wrap_instead_of_piling() {
   for (std::size_t spawn = 0; spawn + 2'400 < out.size(); spawn += 12'000) {
     places.push_back(out[spawn + 1'200] * 131'072.0);
   }
-  std::sort(places.begin(), places.end());
+  std::ranges::sort(places);
   for (std::size_t i = 1; i < places.size(); ++i) {
     REQUIRE_GT(places[i] - places[i - 1], 48.0, "frozen grains do not pile onto one place");
   }
@@ -252,7 +252,7 @@ void frozen_grains_wrap_instead_of_piling() {
 
 void synced_grains_land_on_exact_frames() {
   GrainBuffer buffer;
-  buffer.prepare(4 * 48'000);
+  buffer.prepare(std::size_t{4} * 48'000);
   for (int i = 0; i < 48'000; ++i) {
     buffer.write(0.1);
   }
@@ -412,7 +412,7 @@ void fdn_decays_at_its_rt60_and_stays_bounded() {
 
 void processing_does_not_allocate() {
   GrainBuffer buffer;
-  buffer.prepare(4 * 48'000);
+  buffer.prepare(std::size_t{4} * 48'000);
   GrainCloud cloud;
   cloud.reset(11);
   GrainSettings s;

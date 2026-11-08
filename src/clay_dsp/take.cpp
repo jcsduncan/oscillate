@@ -38,7 +38,7 @@ constexpr double drift_window_seconds = 0.2;
 void envelope_at(const Note& note, double hop_index, std::span<float> out) {
   const auto rows = note.envelope.size() / envelope_bands;
   if (rows == 0) {
-    std::fill(out.begin(), out.end(), 0.0F);
+    std::ranges::fill(out, 0.0F);
     return;
   }
   const double row = std::clamp(hop_index / static_cast<double>(envelope_stride), 0.0,

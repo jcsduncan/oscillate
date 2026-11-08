@@ -80,7 +80,7 @@ struct Loop {
 };
 
 project::TrackId midi_track(app::ProjectSession& session, std::string_view engine, std::string name,
-                            std::vector<project::MidiNote> notes) {
+                            const std::vector<project::MidiNote>& notes) {
   const auto track = take(session.instruments().add_native_instrument_track(engine, std::nullopt));
   if (!name.empty())
     accepted(session.tracks().set_track_name(track, std::move(name)));
@@ -175,7 +175,7 @@ std::string fingerprint(const arrange::Plan& plan) {
     text += std::to_string(static_cast<int>(section.kind)) + ":" +
             std::to_string(section.start_bar) + "+" + std::to_string(section.bars) + ";";
   for (const auto& part : plan.parts) {
-    text += "|";
+    text += '|';
     for (const bool plays : part.plays)
       text += plays ? '1' : '0';
   }

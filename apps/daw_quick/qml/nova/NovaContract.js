@@ -1,5 +1,6 @@
 .pragma library
 .import Oscillate.Contracts 1.0 as Law
+.import Oscillate.Format 1.0 as Fmt
 
 // The Nova panel <-> engine contract (docs/specs/08a-nova-panel-contract.md)
 // as data the panel reads: telemetry offsets, modulation sources, effect
@@ -150,8 +151,8 @@ function analogueTolerance(id) {
 }
 // An amount in a tolerance's unit: ± for a spread, signed for one voice.
 function toleranceAmount(t, amount, signed) {
-    var sign = signed ? (amount < 0 ? "−" : "+") : "±"
-    return sign + Math.abs(amount).toFixed(t.digits) + " " + t.unit
+    return signed ? Fmt.Format.signed_quantity(amount, t.unit, t.digits)
+                  : "±" + Fmt.Format.quantity(Math.abs(amount), t.unit, t.digits)
 }
 // The spread a tolerance position p gives at Age `age`.
 function toleranceText(t, p, age) {
@@ -159,11 +160,14 @@ function toleranceText(t, p, age) {
 }
 
 // Drift: each voice's slow wander, the same at every Age.
+// Cents in the drift and flutter readouts keep a decimal; a compressor
+// ratio keeps one.
+var centsDigits = 1, ratioDigits = 1
 var driftMaxCents = 8, driftMinHz = 0.02, driftMaxHz = 0.62, driftMaxCutoff = 10
 var analogueDrift = [
-    { id: "drift.amount", name: "Amount", fmt: function (p) { return "±" + (p * driftMaxCents).toFixed(1) + " ct" } },
-    { id: "drift.rate", name: "Rate", fmt: function (p) { return lin(driftMinHz, driftMaxHz)(p).toFixed(2) + " Hz" } },
-    { id: "drift.cutoff", name: "On cutoff", fmt: function (p) { return "±" + Math.round(p * driftMaxCutoff) + " %" } }
+    { id: "drift.amount", name: "Amount", fmt: function (p) { return "±" + Fmt.Format.quantity(p * driftMaxCents, "ct", centsDigits) } },
+    { id: "drift.rate", name: "Rate", fmt: function (p) { return hz(lin(driftMinHz, driftMaxHz)(p)) } },
+    { id: "drift.cutoff", name: "On cutoff", fmt: function (p) { return "±" + Fmt.Format.percent(p * driftMaxCutoff) } }
 ]
 
 // Re-roll: each note adds a fresh seeded offset up to this share of a
@@ -174,8 +178,8 @@ var analogueReroll = { id: "reroll", name: "Re-roll", fmt: function (p) { return
 // analogue_flutter_tone_min_hz..max_hz, log).
 var flutterMaxCents = 15, flutterToneMinHz = 2, flutterToneMaxHz = 60
 var analogueFlutter = [
-    { id: "flutter.amount", name: "Flutter", fmt: function (p) { return "±" + (p * flutterMaxCents).toFixed(1) + " ct" } },
-    { id: "flutter.tone", name: "Flutter tone", fmt: function (p) { return expo(flutterToneMinHz, flutterToneMaxHz)(p).toFixed(1) + " Hz" } }
+    { id: "flutter.amount", name: "Flutter", fmt: function (p) { return "±" + Fmt.Format.quantity(p * flutterMaxCents, "ct", centsDigits) } },
+    { id: "flutter.tone", name: "Flutter tone", fmt: function (p) { return hz(expo(flutterToneMinHz, flutterToneMaxHz)(p)) } }
 ]
 
 // Voice cards (nova.analogue.cards): 0 gives every note voice its own
@@ -227,7 +231,7 @@ function laneText(lane, x) {
     if (t !== null)
         return toleranceAmount(t, t.ratio ? (Math.pow(1 + t.max / 100, x) - 1) * 100 : x * t.max, true)
     if (lane === "phase")
-        return (x < 0 ? "−" : "+") + Math.round(Math.abs(x) * phaseOffsetDegrees) + "°"
+        return Fmt.Format.signed_quantity(x * phaseOffsetDegrees, "°")
     return signedPct(x)
 }
 
@@ -318,15 +322,15 @@ function expo(a, b) { return function (p) { return a * Math.pow(b / a, p) } }
 function linP(v, a, b) { return (v - a) / (b - a) }
 function expoP(v, a, b) { return Math.log(v / a) / Math.log(b / a) }
 function choiceP(index, count) { return count > 1 ? index / (count - 1) : 0 }
-function hz(v) { return v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 1 : 2) + " kHz" : Math.round(v) + " Hz" }
-function ms(v) { return v >= 1000 ? (v / 1000).toFixed(2) + " s" : (v >= 10 ? Math.round(v) : v.toFixed(1)) + " ms" }
-function db(v) { return (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1) + " dB" }
-function pct(v) { return Math.round(v * 100) + "%" }
-function signedPct(v) { return (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(Math.round(v * 100)) + "%" }
-function signedHz(v) {
-    var a = Math.abs(v)
-    return (v > 0 ? "+" : v < 0 ? "−" : "") + (a >= 1000 ? (a / 1000).toFixed(2) + " kHz" : a >= 10 ? Math.round(a) + " Hz" : a.toFixed(1) + " Hz")
-}
+// Values in their units, through the display formatter.
+function hz(v) { return Fmt.Format.hertz(v) }
+function ms(v) { return Fmt.Format.milliseconds(v) }
+function seconds(v) { return Fmt.Format.seconds(v) }
+function number(v) { return Fmt.Format.number(v) }
+function db(v) { return Fmt.Format.signed_decibels(v) }
+function pct(v) { return Fmt.Format.fraction(v) }
+function signedPct(v) { return Fmt.Format.signed_quantity(v * 100, "%") }
+function signedHz(v) { return Fmt.Format.signed_quantity(v, "Hz") }
 
 // Every slot has p0..p15, mix and on (§2.10); the chains (§3.3).
 var fxSlotParams = 16
@@ -378,7 +382,7 @@ function flybyMetres(p) { return expo(flybyMinM, flybyMaxM)(p) }
 function flybyMetresP(m) { return expoP(m, flybyMinM, flybyMaxM) }
 function flybyKmh(p) { return expo(flybyMinKmh, flybyMaxKmh)(p) }
 function flybyKmhP(v) { return expoP(v, flybyMinKmh, flybyMaxKmh) }
-function metres(v) { return (v >= 10 ? Math.round(v) : v.toFixed(1)) + " m" }
+function metres(v) { return Fmt.Format.quantity(v, "m") }
 
 // The EQ (08a §5): four bands of {type, frequency, gain, Q} on p(4b)..p(4b + 3).
 var eqBands = 4
@@ -455,7 +459,7 @@ function eqBandDb(type, f0, gainDb, q, f) {
 // (`mode`, on p7), the delay's sync (`sync`) and the EQ's band types; MIX
 // follows them on every strip. `summary` is how many knobs a collapsed
 // strip lists. `presets` are factory sounds over the defaults.
-var rateFmt = function (p) { return expo(0.01, 10)(p).toFixed(2) + " Hz" }
+var rateFmt = function (p) { return hz(expo(0.01, 10)(p)) }
 var modules = [
     { id: "distortion", name: "Distortion", category: "Drive", visual: "transfer",
       blurb: "Twelve shapers, from tube warmth to wavefolding and bit crush.",
@@ -532,7 +536,7 @@ var modules = [
     { id: "reverb", name: "Reverb", category: "Space", visual: "decay",
       blurb: "Hall, plate, room and shimmer spaces.",
       knobs: [{ p: 0, label: "SIZE", fmt: pct },
-              { p: 1, label: "DECAY", fmt: function (p) { return expo(0.1, 30)(p).toFixed(2) + " s" } },
+              { p: 1, label: "DECAY", fmt: function (p) { return Fmt.Format.seconds(expo(0.1, 30)(p)) } },
               { p: 2, label: "DAMP", fmt: pct },
               { p: 3, label: "PRE-DELAY", fmt: function (p) { return ms(250 * p) } }],
       mode: { p: 7, choices: ["Hall", "Plate", "Room", "Shimmer"] },
@@ -545,7 +549,7 @@ var modules = [
     { id: "compressor", name: "Compressor", category: "Dynamics", visual: "dynamics",
       blurb: "Feed-forward compression with a soft knee and makeup gain.",
       knobs: [{ p: 0, label: "THRESH", fmt: function (p) { return db(-60 + 60 * p) } },
-              { p: 1, label: "RATIO", fmt: function (p) { return expo(1, 20)(p).toFixed(1) + ":1" } },
+              { p: 1, label: "RATIO", fmt: function (p) { return Fmt.Format.number(expo(1, 20)(p), ratioDigits) + ":1" } },
               { p: 2, label: "ATTACK", fmt: function (p) { return ms(expo(0.1, 100)(p)) } },
               { p: 3, label: "RELEASE", fmt: function (p) { return ms(expo(10, 1000)(p)) } },
               { p: 4, label: "MAKEUP", fmt: function (p) { return db(24 * p) } }],
@@ -590,8 +594,8 @@ var modules = [
                 { name: "Huge", values: { p0: 0.9, p1: 1, p2: 0.5, mix: 0.6 } }] },
     { id: "hyper", name: "Hyper", category: "Stereo", visual: "voices",
       blurb: "Up to seven detuned copies for instant width.",
-      knobs: [{ p: 0, label: "DETUNE", fmt: function (p) { return Math.round(50 * p) + " ct" } },
-              { p: 1, label: "RATE", fmt: function (p) { return expo(0.05, 5)(p).toFixed(2) + " Hz" } },
+      knobs: [{ p: 0, label: "DETUNE", fmt: function (p) { return Fmt.Format.quantity(50 * p, "ct") } },
+              { p: 1, label: "RATE", fmt: function (p) { return hz(expo(0.05, 5)(p)) } },
               { p: 2, label: "WIDTH", fmt: pct }],
       mode: { p: 7, choices: ["2 voices", "3 voices", "4 voices", "5 voices", "6 voices", "7 voices"] },
       defaults: { p0: 0.3, p1: 0.4, p2: 0.8, p7: 0.6, mix: 0.5 },
@@ -635,7 +639,7 @@ var modules = [
     { id: "flyby", name: "Flyby", category: "Space", visual: "flyby",
       blurb: "Fly the sound past your head: Doppler, distance, air, ears.",
       knobs: [{ p: 1, label: "CLOSEST", fmt: function (p) { return metres(flybyMetres(p)) } },
-              { p: 2, label: "SPEED", fmt: function (p) { return Math.round(flybyKmh(p)) + " km/h" } },
+              { p: 2, label: "SPEED", fmt: function (p) { return Fmt.Format.quantity(flybyKmh(p), "km/h") } },
               { p: 3, label: "RUN", fmt: function (p) { return flybyRuns[modeIndex(p, flybyRuns.length)] } },
               { p: 4, label: "LENGTH", fmt: function (p) { return flybyLengths[modeIndex(p, flybyLengths.length)] } },
               { p: 5, label: "POSITION", fmt: pct },
@@ -756,7 +760,7 @@ function tableSample(table, t, x) {
 // Note names with middle C (key 60) as C3, as the arrangement shows them.
 var noteNames = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"]
 function noteName(key) {
-    return noteNames[((key % 12) + 12) % 12] + (Math.floor(key / 12) - 2)
+    return noteNames[((key % 12) + 12) % 12] + Fmt.Format.number(Math.floor(key / 12) - 2, 0)
 }
 
 // ---- Filter sketches ---------------------------------------------------------------------

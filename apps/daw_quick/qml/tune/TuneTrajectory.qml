@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The kick's pitch trajectory: its frequency at 5 ms steps from the onset
 // over the first 400 ms, on a log axis with a line at every C and G, and
@@ -105,7 +106,7 @@ Item {
             Text {
                 x: tick.last ? -width : tick.index === 0 ? 0 : -width / 2
                 y: plot.plotY + plot.plotH + plot.tickLabelGap
-                text: (tick.index * plot.milliseconds / (plot.ticks - 1)) + (tick.last ? " ms" : "")
+                text: Format.number(tick.index * plot.milliseconds / (plot.ticks - 1)) + (tick.last ? " ms" : "")
                 color: plot.theme.inkFaint
                 font.family: plot.theme.mono
                 font.pixelSize: plot.theme.typeCaption

@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The echo train on a dark glass screen: the dry hit, then every repeat at
 // its time, tall by its level (dB), wide by its diffusion smear (shown
@@ -39,7 +40,7 @@ Rectangle {
     border.width: theme.strokeBold
     clip: true
     Accessible.role: Accessible.Graphic
-    Accessible.name: "Echo train: " + echoCount + " repeats, tail " + tailSeconds.toFixed(1) + " s"
+    Accessible.name: "Echo train: " + echoCount + " repeats, tail " + Format.seconds(tailSeconds)
 
     function laneName(lane) {
         return routing === 2 ? "L+R" : lane === 0 ? "L" : "R"
@@ -95,10 +96,7 @@ Rectangle {
                         break
                     }
                 }
-                labelOf = i => {
-                    const s = i * step
-                    return s >= 1 ? s.toFixed(s % 1 === 0 ? 0 : 1) + " s" : Math.round(s * 1000) + " ms"
-                }
+                labelOf = i => Format.seconds(i * step)
             }
             for (let i = 0; i * step <= view.horizon + 1e-9; ++i) {
                 const x = xAt(i * step)
@@ -273,9 +271,8 @@ Rectangle {
         Text {
             objectName: "relayTimeReadout"
             text: view.routing !== 2 && Math.abs(view.rightMs - view.leftMs) > 0.05
-                  ? "L " + view.leftMs.toFixed(view.leftMs < 100 ? 1 : 0) + " ms   R "
-                    + view.rightMs.toFixed(view.rightMs < 100 ? 1 : 0) + " ms"
-                  : view.leftMs.toFixed(view.leftMs < 100 ? 1 : 0) + " ms"
+                  ? "L " + Format.milliseconds(view.leftMs) + "   R " + Format.milliseconds(view.rightMs)
+                  : Format.milliseconds(view.leftMs)
             color: view.theme.screenGlow
             font.family: view.theme.mono
             font.pixelSize: view.theme.typeLabel
@@ -284,7 +281,7 @@ Rectangle {
         Text {
             visible: view.synced
             text: view.controller.revision >= 0 && view.synced
-                  ? view.controller.display("relay.division") + " @ " + view.relay.tempo.toFixed(0) + " BPM" : ""
+                  ? view.controller.display("relay.division") + " @ " + Format.number(view.relay.tempo, 0) + " BPM" : ""
             color: view.theme.accent
             font.family: view.theme.mono
             font.pixelSize: view.theme.typeLabel
@@ -295,7 +292,7 @@ Rectangle {
         anchors.rightMargin: view.theme.echoReadoutRight
         y: view.theme.echoReadoutY
         text: (view.echoCount === 0 ? "NO REPEATS" : view.echoCount + (view.echoCount >= 96 ? "+" : "")
-               + " REPEATS · TAIL " + (view.tailSeconds >= 59.5 ? "∞" : view.tailSeconds.toFixed(1) + " s"))
+               + " REPEATS · TAIL " + (view.tailSeconds >= 59.5 ? "∞" : Format.seconds(view.tailSeconds)))
         color: view.theme.echoCountInk
         font.family: view.theme.mono
         font.pixelSize: view.theme.typeSmall

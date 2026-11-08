@@ -321,7 +321,7 @@ function decay(ctx, t, W, H, m) {
         ctx.moveTo(x, 0)
         ctx.lineTo(x, H)
         ctx.stroke()
-        label(ctx, t, s + " s", x - t.fxAxisLabelGap, H - t.fxLabelLift, "right")
+        label(ctx, t, Contract.seconds(s), x - t.fxAxisLabelGap, H - t.fxLabelLift, "right")
     }
     // −60 dB over the decay time; damping darkens the tail's fill.
     ctx.beginPath()

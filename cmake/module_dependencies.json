@@ -31,7 +31,7 @@
     "native_dsp": { "path": "src/native_dsp", "allowed": ["engine", "warp_dsp"] },
     "native_inserts": {
       "path": "src/native_inserts",
-      "allowed": ["project", "engine", "native_dsp", "automation_project", "timeline"]
+      "allowed": ["project", "engine", "routing", "native_dsp", "automation_project", "timeline"]
     },
     "track_chain": {
       "path": "src/track_chain",

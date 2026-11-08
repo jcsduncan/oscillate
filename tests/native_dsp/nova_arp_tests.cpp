@@ -104,7 +104,7 @@ struct Render {
 };
 
 std::vector<Note> render(NoteGenerator& generator, Render job) {
-  std::stable_sort(job.presses.begin(), job.presses.end(), [](const Press& a, const Press& b) {
+  std::ranges::stable_sort(job.presses, [](const Press& a, const Press& b) {
     return a.frame < b.frame || (a.frame == b.frame && !a.on && b.on);
   });
   std::vector<Note> notes;
@@ -178,13 +178,13 @@ void set_lane(ArpSettings& arp, ArpLane lane, std::initializer_list<double> valu
 
 std::vector<Note> ons(const std::vector<Note>& notes) {
   std::vector<Note> result;
-  std::copy_if(notes.begin(), notes.end(), std::back_inserter(result),
-               [](const Note& note) { return note.on; });
+  std::ranges::copy_if(notes, std::back_inserter(result), [](const Note& note) { return note.on; });
   return result;
 }
 
 std::vector<int> keys(const std::vector<Note>& notes) {
   std::vector<int> result;
+  result.reserve(notes.size());
   for (const auto& note : notes) {
     result.push_back(note.key);
   }
@@ -194,6 +194,7 @@ std::vector<int> keys(const std::vector<Note>& notes) {
 using Signature = std::tuple<std::uint64_t, bool, int, int>;
 std::vector<Signature> signature(const std::vector<Note>& notes) {
   std::vector<Signature> result;
+  result.reserve(notes.size());
   for (const auto& note : notes) {
     result.emplace_back(note.frame, note.on, note.key, note.velocity);
   }
@@ -629,26 +630,23 @@ void every_on_has_one_off() {
   auto arp = arp_with(ArpMode::up_down);
   set_step(arp, ArpLane::tie, 1, 1.0);
   set_step(arp, ArpLane::tie, 4, 1.0);
-  const auto notes = render(
-      generator, {presses, 320'000, Song{}, {997}, [&](std::uint64_t frame, NoteGenerator& g) {
-                    if (frame == 0) {
-                      g.set(arp, {});
-                    } else if (frame == 40 * 997) {
-                      auto changed = arp;
-                      changed.mode = ArpMode::chord;
-                      changed.octaves = 2;
-                      g.set(changed, {});
-                    } else if (frame == 80 * 997) {
-                      g.set({}, {}); // Off: pass-through again.
-                    } else if (frame == 120 * 997) {
-                      sequencer.on = true;
-                      g.set(arp, sequencer);
-                    } else if (frame == 170 * 997) {
-                      g.set(arp, {});
-                    } else if (frame == 200 * 997) {
-                      g.set({}, {});
-                    }
-                  }});
+  const auto notes =
+      render(generator,
+             {presses, 320'000, Song{}, {997}, [&](std::uint64_t frame, NoteGenerator& g) {
+                if (frame == 0 || frame == std::uint64_t{170} * 997) {
+                  g.set(arp, {});
+                } else if (frame == std::uint64_t{40} * 997) {
+                  auto changed = arp;
+                  changed.mode = ArpMode::chord;
+                  changed.octaves = 2;
+                  g.set(changed, {});
+                } else if (frame == std::uint64_t{80} * 997 || frame == std::uint64_t{200} * 997) {
+                  g.set({}, {}); // Off: pass-through again.
+                } else if (frame == std::uint64_t{120} * 997) {
+                  sequencer.on = true;
+                  g.set(arp, sequencer);
+                }
+              }});
   require_paired(notes, true, "settings changes and releases");
 
   // A settings change releases what sounds, at the block start.
@@ -887,6 +885,7 @@ void telemetry_reports_steps() {
 
 // ---- The pattern engine (ADR-0078) -------------------------------------
 
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): a throw fails the test at start-up.
 const std::vector<Press> c_major =
     join({hold(0, 10'000'000, 64, 1), hold(0, 10'000'000, 60, 2), hold(0, 10'000'000, 67, 3)});
 
@@ -900,6 +899,7 @@ std::vector<Note> play(const ArpSettings& arp, const std::vector<Press>& presses
 
 std::vector<std::uint64_t> frames_of(const std::vector<Note>& notes) {
   std::vector<std::uint64_t> result;
+  result.reserve(notes.size());
   for (const auto& note : notes) {
     result.push_back(note.frame);
   }
@@ -941,8 +941,8 @@ void new_modes_play_in_order() {
   const std::vector<int> places{60, 64, 67, 72, 76, 79, 84, 88, 91};
   REQUIRE_EQ(walked.front(), 60, "a walk starts on the first note");
   for (std::size_t i = 1; i < walked.size(); ++i) {
-    const auto a = std::find(places.begin(), places.end(), walked[i - 1]) - places.begin();
-    const auto b = std::find(places.begin(), places.end(), walked[i]) - places.begin();
+    const auto a = std::ranges::find(places, walked[i - 1]) - places.begin();
+    const auto b = std::ranges::find(places, walked[i]) - places.begin();
     REQUIRE_NEAR(a, b, 2, "a walk moves at most two places");
     REQUIRE_LT(b, static_cast<std::ptrdiff_t>(places.size()), "a walk moves at most two places");
   }

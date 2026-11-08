@@ -101,6 +101,7 @@ void runs_inline_without_workers() {
   order.reserve(16);
   pool.run(
       16,
+      // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): AudioWorkerPool::Task.
       [](void* raw, std::size_t task, std::size_t lane) noexcept {
         auto& state = *static_cast<Context*>(raw);
         state.order.push_back(task + lane * 100);
@@ -162,6 +163,7 @@ void nested_runs_inline_without_workers() {
   order.reserve(8);
   pool.run_nested(
       8,
+      // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): AudioWorkerPool::Task.
       [](void* raw, std::size_t task, std::size_t lane) noexcept {
         static_cast<std::vector<std::size_t>*>(raw)->push_back(task + lane * 100);
       },

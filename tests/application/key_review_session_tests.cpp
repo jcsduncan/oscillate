@@ -122,6 +122,11 @@ void review_contract() {
              "reanalysis overwrote manual correction");
   REQUIRE_EQ(regenerated.correction, original_review.correction,
              "reanalysis overwrote manual correction");
+  const auto regenerated_revision = session->snapshot().revision;
+  accepted(session->source_analysis().accept_source_key_analysis(
+      source.id, regenerated_revision, estimate_for(source, {9, analysis::KeyMode::minor}, 2)));
+  REQUIRE_EQ(session->snapshot().revision, regenerated_revision,
+             "the same key result again made a new revision");
   accepted(session->history().undo());
   REQUIRE_EQ(session->snapshot().source_key_reviews.front(), original_review,
              "session undo lost prior generated key");

@@ -34,13 +34,13 @@ inline constexpr double tape_drop_depth_span_db = 21.0;
 
 class Tape {
 public:
-  void prepare(double rate, double reference) {
-    rate_ = rate;
-    reference_ = reference;
+  void prepare(LayerFormat format) {
+    rate_ = format.rate;
+    reference_ = format.reference;
   }
   void reseed(std::uint64_t key) noexcept { rng_.seed(key); }
   void reset() noexcept;
-  void set(std::span<const double> v, double tone, double width) noexcept;
+  void set(std::span<const double> v, LayerShape shape) noexcept;
   [[nodiscard]] Pair next() noexcept {
     if (drop_left_ == 0) {
       envelope_ = 1.0;

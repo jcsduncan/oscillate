@@ -10,7 +10,6 @@ KitTheme {
     segmentSpacing: 0
     segmentRadius: 7
     segmentLetterSpacing: 0.4
-    segmentUpper: true
     knobLabelBold: true
     knobLabelSpacing: 1.2
     knobLabelSize: 9

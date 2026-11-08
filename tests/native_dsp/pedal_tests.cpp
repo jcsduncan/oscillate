@@ -179,7 +179,7 @@ project::Snapshot chase_project(bool pedal) {
 
 // Renders [from, to) in 128-frame blocks, after optionally rendering
 // [0, warm) under generation 1; the main span is generation `generation`.
-std::vector<double> play(const project::Snapshot& state, std::uint64_t from, std::uint64_t to,
+std::vector<double> play(const project::Snapshot& state, std::uint64_t begin, std::uint64_t end,
                          std::uint64_t warm, std::uint64_t generation) {
   const auto plan = take(oscillate::engine::compile_midi_events(state));
   auto player = take(oscillate::native_dsp::synth::NativeSynthPlayer::prepare(
@@ -191,7 +191,7 @@ std::vector<double> play(const project::Snapshot& state, std::uint64_t from, std
     require(player.render(buffer, frame, 1), "warm-up block renders");
   }
   std::vector<double> out;
-  for (std::uint64_t frame = from; frame < to; frame += 128) {
+  for (std::uint64_t frame = begin; frame < end; frame += 128) {
     buffer.assign(128, {});
     require(player.render(buffer, frame, generation), "block renders");
     for (const auto& sample : buffer) {

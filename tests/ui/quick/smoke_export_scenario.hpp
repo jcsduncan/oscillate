@@ -3,6 +3,7 @@
 #include <QString>
 #include <QtTypes>
 
+#include <cstdint>
 #include <filesystem>
 
 class QApplication;
@@ -15,7 +16,7 @@ class ProjectBridge;
 
 namespace quick_smoke {
 
-enum class MasterExportScenario { none, success, failure, close };
+enum class MasterExportScenario : std::uint8_t { none, success, failure, close };
 
 struct ExportOptions {
   MasterExportScenario master = MasterExportScenario::none;

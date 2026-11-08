@@ -312,8 +312,7 @@ void KnockPatternsModel::cycle_cell(int lane, int step) {
 patterns::Pattern KnockPatternsModel::written() const {
   if (evolve_bars_ == 0)
     return pattern_;
-  return patterns::evolve(pattern_, evolve_bars_, patterns::evolve_every_bars,
-                          patterns::evolve_amount, settings_.seed, locks_);
+  return patterns::evolve(pattern_, {.total_bars = evolve_bars_, .seed = settings_.seed}, locks_);
 }
 
 int KnockPatternsModel::note_count() const {

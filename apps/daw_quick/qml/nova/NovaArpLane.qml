@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import "../devicekit" as Kit
+import Oscillate.Format
 
 // One arp lane (ADR-0078): its lock, name and length, then its 32 steps,
 // those past the length dimmed. Each lane loops at its own length, so the
@@ -48,7 +49,7 @@ Item {
         if (spec.kind === "choice")
             return v === spec.fallback ? "·" : spec.choices[Math.round(v)]
         if (spec.kind === "integer")
-            return (signed && v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(Math.round(v))
+            return signed ? Format.signed_number(Math.round(v), 0) : Format.number(Math.round(v), 0)
         return ""
     }
     function setLength(n) {

@@ -446,8 +446,9 @@ void ProjectBridge::preview_browser_preset(const QString& engine_id, int preset_
   if (!snapshot.tempo.bpm_at_sample_rt({playhead}, snapshot.sample_rate, bpm))
     bpm = 120.0;
   const auto style =
-      application::preview_style(table.id, preset ? preset->category : std::string_view{},
-                                 preset ? preset->name : std::string_view{});
+      application::preview_style({.engine = table.id,
+                                  .category = preset ? preset->category : std::string_view{},
+                                  .preset_name = preset ? preset->name : std::string_view{}});
   // A drum-pad engine's beat lands on its own pads.
   const auto pads = drum_pad_layout(table.id);
   auto notes = pads ? application::preview_phrase(style, bpm, snapshot.sample_rate, pads->first_key)

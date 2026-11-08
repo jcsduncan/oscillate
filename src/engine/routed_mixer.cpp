@@ -238,21 +238,24 @@ Result RoutedMixer::prepare_impl(std::span<const RoutedNode> nodes,
             return fail(foundation::ErrorCode::conflict,
                         "new route processor cannot inherit an incompatible predecessor");
         } else {
-          if (handoff && !replacement && handoff == old_owner && next_owner &&
-              (live || latencies.at(id) == prior->processor_latencies_[old_index])) {
-            // The predecessor is quiescent; the successor owns its retained
-            // stage state and must never process it through a drain as well.
-          } else if (live && !replacement && !handoff &&
-                     (next_owner ? next_owner->continues_latency_of(old_owner.get())
-                                 : old_owner->releasable_latency() != 0)) {
-            // The successor takes over what the predecessor held at the
-            // switch, or the path takes it back dry (ADR-0049); the
-            // predecessor needs no drain.
-          } else if (!replacement || handoff || replacement->prior_owner != old_owner ||
-                     (replacement->drain_processor && replacement->drain_processor == next_owner) ||
-                     replacement->drain_frames == 0 ||
-                     replacement->drain_frames > routed_tail_frame_cap ||
-                     (!live && latencies.at(id) != prior->processor_latencies_[old_index])) {
+          // A quiescent predecessor: the successor owns its retained stage
+          // state and must never process it through a drain as well.
+          const bool quiescent_handoff =
+              handoff && !replacement && handoff == old_owner && next_owner &&
+              (live || latencies.at(id) == prior->processor_latencies_[old_index]);
+          // The successor takes over what the predecessor held at the switch,
+          // or the path takes it back dry (ADR-0049); the predecessor needs no
+          // drain.
+          const bool latency_taken_over =
+              !quiescent_handoff && live && !replacement && !handoff &&
+              (next_owner ? next_owner->continues_latency_of(old_owner.get())
+                          : old_owner->releasable_latency() != 0);
+          if (!quiescent_handoff && !latency_taken_over &&
+              (!replacement || handoff || replacement->prior_owner != old_owner ||
+               (replacement->drain_processor && replacement->drain_processor == next_owner) ||
+               replacement->drain_frames == 0 ||
+               replacement->drain_frames > routed_tail_frame_cap ||
+               (!live && latencies.at(id) != prior->processor_latencies_[old_index]))) {
             return fail(foundation::ErrorCode::conflict,
                         "route processor replacement lacks a bounded, compatible tail handoff");
           }
@@ -705,6 +708,7 @@ bool RoutedMixer::mix_block(std::span<const std::span<const StereoFrame>> source
               .subspan(level_offsets_[level], level_offsets_[level + 1] - level_offsets_[level])};
       workers->run(
           job.nodes.size(),
+          // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): AudioWorkerPool::Task.
           [](void* context, std::size_t task, std::size_t lane) noexcept {
             auto& level_job = *static_cast<LevelJob*>(context);
             auto& mixer = level_job.mixer;
@@ -747,8 +751,9 @@ void RoutedMixer::mix_node(std::size_t index, const NodeBlock& block,
   for (const auto edge_index : incoming_[index]) {
     auto& edge = edges_[edge_index];
     auto delayed = std::span(scratch).first(block.frames);
-    // A key is taken after the source's inserts, before its fader and mute,
-    // so muting or soloing away the source never silences what it keys.
+    // A key is taken after the source's inserts, before its fader and mute;
+    // its edge gain carries whether the key sounds (routing silences a muted
+    // source's key there).
     const auto& from = edge.kind == RoutingEdgeKind::sidechain
                            ? prefader_buffer(edge.source_index, block.slot)
                            : node_buffer(edge.source_index, block.slot);
@@ -1169,6 +1174,7 @@ RoutedMixer::mix_step(std::span<const std::span<const StereoFrame>> sources, std
     std::size_t nodes;
     RoutedStepTasks extra;
   } job{*this, steps_, level_offsets_[reached], extra};
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): AudioWorkerPool::Task.
   const auto run = [](void* context, std::size_t task, std::size_t lane) noexcept {
     auto& step_job = *static_cast<StepJob*>(context);
     if (task >= step_job.nodes) {

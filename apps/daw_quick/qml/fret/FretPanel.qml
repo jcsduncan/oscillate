@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import "../devicekit" as Kit
+import Oscillate.Format
 
 // The Fret bass panel (ADR-0088): the header
 // with the preset, the latest note as Feel played it and the output; the
@@ -494,8 +495,8 @@ Rectangle {
                 width: parent.width
                 text: panel.ready
                     ? panel.library.samples + " samples: four pluck layers, ghosts, staccato, behind the bridge "
-                      + "and string releases. " + panel.library.resident_mb.toFixed(0)
-                      + " MB stay in memory; the rest streams from disk."
+                      + "and string releases. " + Format.quantity(panel.library.resident_mb, "MB", 0)
+                      + " stay in memory; the rest streams from disk."
                     : ""
                 color: panel.theme.inkDim
                 font.family: panel.theme.sans

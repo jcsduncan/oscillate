@@ -128,7 +128,7 @@ void trimmed_tail_ends_with_the_sound() {
       take(session->instruments().add_native_instrument_track("ember", std::nullopt));
   accepted(session->midi_clips().add_midi_clip(synth, {0}));
   const auto clip =
-      session->snapshot().tracks[*session->tracks().track_index(synth)].midi_clips.front().id;
+      session->snapshot().tracks[take(session->tracks().track_index(synth))].midi_clips.front().id;
   accepted(session->notes().add_note_with_duration(clip, {0}, {timeline::ticks_per_quarter}, 60));
   // A quiet bed, as in a mix: it plays on after the note, far below it.
   const auto dust = take(session->effects().add_effect_engine(synth, 0, "dust"));
@@ -136,7 +136,7 @@ void trimmed_tail_ends_with_the_sound() {
     const auto& table = *effects::find_engine("dust")->descriptor;
     auto values = take(session->effects().native_effect_values(synth, dust));
     const auto bed = oscillate::native_dsp::synth::find_parameter(table, "dust.mix.bed");
-    REQUIRE_OK(bed, "Dust has a bed level");
+    REQUIRE_TRUE(bed, "Dust has a bed level");
     values[*bed] = bed_level_db;
     accepted(session->effects().set_native_effect_values(synth, dust, values));
   }
@@ -181,11 +181,15 @@ void trimmed_tail_ends_with_the_sound() {
     REQUIRE_LT(rms(full, first, std::min(full_frames, first + window)), quiet,
                "only quiet sound is cut");
 
-  // Off-rate output ends early too, with a consistent header.
+  // Off-rate output ends early too, with a consistent header. Rate
+  // conversion exists only in the libsamplerate export build.
+#if OSCILLATE_HAVE_EXPORT_RESAMPLER
   const auto converted = render(root, saved, directory.path() / "converted.wav", true, 44'100);
   const auto expected = static_cast<double>(kept) * 44'100.0 / static_cast<double>(rate);
-  REQUIRE_NEAR(static_cast<double>(converted.size() / 2), expected, 1.0,
+  const std::size_t converted_frames = converted.size() / 2; // Interleaved stereo.
+  REQUIRE_NEAR(static_cast<double>(converted_frames), expected, 1.0,
                "the converted export is trimmed to the same time");
+#endif
 }
 
 } // namespace

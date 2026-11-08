@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Oscillate.Contracts
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Signal device panel: bench test gear in warm grey with an orange
@@ -72,15 +73,18 @@ Rectangle {
 
     // ---- Formatting ------------------------------------------------------------------
 
-    function signed(value, digits) {
-        const text = Math.abs(value).toFixed(digits)
-        const tiny = 0.5 * Math.pow(10, -digits)
-        return value < -tiny ? "−" + text : value > tiny ? "+" + text : text
+    // The level holds one decimal, so the figure does not jump in width.
+    readonly property int levelDecimals: 1
+    function signed(value) {
+        return Format.signed_number(value, levelDecimals)
     }
-    // Four significant figures: 40.00 Hz, 997.0 Hz, 1.000 kHz, 15.00 kHz.
+    // A generator's frequency to four significant figures: 40.00 Hz,
+    // 997.0 Hz, 1.000 kHz, 15.00 kHz.
+    readonly property int frequencyFigures: 4
     function hzDigits(hz) {
         const v = hz >= 1000 ? hz / 1000 : hz
-        return v >= 100 ? v.toFixed(1) : v >= 10 ? v.toFixed(2) : v.toFixed(3)
+        const whole = v >= 100 ? 3 : v >= 10 ? 2 : 1
+        return Format.number(v, frequencyFigures - whole)
     }
     function hzUnit(hz) {
         return hz >= 1000 ? "kHz" : "Hz"
@@ -96,14 +100,13 @@ Rectangle {
         const nearest = Math.round(midi)
         const cents = Math.round((midi - nearest) * 100)
         const name = Contracts.note_name(nearest, Contracts.sharp, Contracts.scientific_middle_c)
-        return name + (cents === 0 ? "" : " " + (cents > 0 ? "+" : "−") + Math.abs(cents) + "¢")
+        return name + (cents === 0 ? "" : " " + Format.cents(cents))
     }
     function secondsText(s) {
-        return s >= 10 ? s.toFixed(1) + " s" : s.toFixed(2) + " s"
+        return Format.seconds(s)
     }
     function periodText(rate) {
-        const ms = 1000 / rate
-        return ms >= 1000 ? (ms / 1000).toFixed(2) + " s" : ms >= 100 ? Math.round(ms) + " ms" : ms.toFixed(1) + " ms"
+        return Format.seconds(1 / rate)
     }
     // The level's meaning for the wave: peak for tones and impulses, RMS
     // for noise.
@@ -127,17 +130,17 @@ Rectangle {
         : wave === 1 ? (sweeping ? hzDigits(live.hz) : "20 → 20k")
         : wave === 2 ? "PINK"
         : wave === 3 ? "WHITE"
-        : impulseRate.toFixed(impulseRate >= 10 ? 1 : 2)
+        : Format.number(impulseRate)
     readonly property string bigUnit: !on ? ""
         : wave === 0 ? hzUnit(frequency)
         : wave === 1 ? (sweeping ? hzUnit(live.hz) : "Hz")
         : wave === 4 ? "Hz" : ""
     readonly property string subText: !on ? "THE INPUT PASSES UNTOUCHED"
         : wave === 0 ? noteOf(frequency)
-        : wave === 1 ? (sweeping ? noteOf(live.hz) + "  ·  " + Math.round(live.progress * 100) + "% OF "
+        : wave === 1 ? (sweeping ? noteOf(live.hz) + "  ·  " + Format.fraction(live.progress) + " OF "
                                    + secondsText(sweepSeconds)
                                  : "EXPONENTIAL · " + secondsText(sweepSeconds) + " A PASS")
-        : wave === 2 ? "−3 DB/OCT · EQUAL ENERGY PER OCTAVE"
+        : wave === 2 ? "−3 dB/oct · EQUAL ENERGY PER OCTAVE"
         : wave === 3 ? "FLAT · EQUAL ENERGY PER HERTZ"
         : "ONE IMPULSE EVERY " + periodText(impulseRate)
 
@@ -446,7 +449,7 @@ Rectangle {
                 Text {
                     objectName: "signalLevel"
                     anchors.right: parent.right
-                    text: panel.signed(panel.level, 1)
+                    text: panel.signed(panel.level)
                     color: panel.on ? panel.theme.lcdInk : panel.theme.lcdDim
                     font.family: panel.theme.mono
                     font.pixelSize: panel.theme.levelSize
@@ -572,7 +575,7 @@ Rectangle {
                     font.letterSpacing: panel.theme.powerLegendSpacing
                 }
                 Text {
-                    text: panel.on ? "GENERATING · 10 MS FADE" : "BIT-EXACT PASS-THROUGH"
+                    text: panel.on ? "GENERATING · 10 ms FADE" : "BIT-EXACT PASS-THROUGH"
                     color: panel.on ? panel.theme.power : panel.theme.inkFaint
                     font.pixelSize: panel.theme.typeMicro
                     font.letterSpacing: panel.theme.powerNoteSpacing
@@ -897,7 +900,7 @@ Rectangle {
             parameterId: "signal.level"
             diameter: panel.theme.bigDialDiameter
             readout: true
-            valueText: panel.signed(panel.level, 1) + " dBFS"
+            valueText: panel.signed(panel.level) + " dBFS"
         }
         Text {
             objectName: "signalLevelNote"
@@ -950,7 +953,7 @@ Rectangle {
             parameterId: "signal.impulse_rate"
             diameter: panel.theme.bigDialDiameter
             readout: true
-            valueText: panel.impulseRate.toFixed(2) + " Hz"
+            valueText: Format.hertz(panel.impulseRate)
         }
         // The sweep's progress, as a bar.
         Rectangle {

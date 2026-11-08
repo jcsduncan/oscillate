@@ -140,7 +140,7 @@ effect slot IDs; live graph edits reuse compatible prepared processors, while
 offline master/stem export accounts for the chain's latency and finite tails.
 An audio stem keeps the instrument path muted in its temporary render graph
 to preserve the master's parallel-path compensation.
-The bounded offline VST3 export slice is documented in
-[its contract](../export/vst3-effect-slice.md). See
+Offline export of VST3 effects is documented in
+[its contract](../export/vst3-offline-export.md). See
 [ADR-0017](../decisions/0017-live-vst3-track-composition-proposal.md)
 and the [routed fixture baseline](../performance/routed-vst3-single-insert.md).

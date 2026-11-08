@@ -65,7 +65,7 @@ void KeyMatchController::dropped(project::ClipId clip) {
   consider(clip);
 }
 
-void KeyMatchController::consider(project::ClipId clip_id) {
+void KeyMatchController::consider(project::ClipId clip_id, bool analysed) {
   auto* session = session_();
   if (session == nullptr)
     return;
@@ -76,6 +76,10 @@ void KeyMatchController::consider(project::ClipId clip_id) {
   const auto* review = find_review(snapshot, clip->source);
   const auto generation = session->session_generation();
   if (review == nullptr || (!review->detected && !review->correction)) {
+    // Analysis that found no key leaves nothing to offer. Queueing it again
+    // would store the same result in a new revision, forever.
+    if (analysed)
+      return;
     const auto queued = std::ranges::any_of(waiting_, [&](const Waiting& waiting) {
       return waiting.clip == clip_id && waiting.session == generation;
     });
@@ -140,8 +144,9 @@ void KeyMatchController::poll() {
   auto outcome = worker_.collect();
   if (!outcome || outcome->generation != generation_ || !analysing_ || !source_)
     return;
+  const auto clip = *analysing_;
+  analysing_.reset();
   timer_.stop();
-  const auto clip = *std::exchange(analysing_, std::nullopt);
   auto* session = session_();
   if (session == nullptr || session->session_generation() != origin_session_ || !outcome->result) {
     // A replaced session's result must not land on the one open now, even
@@ -164,9 +169,10 @@ void KeyMatchController::poll() {
   const auto accepted = session->source_analysis().accept_source_key_analysis(
       source_->id, origin_revision_, outcome->result.value().estimate);
   if (accepted) {
-    if (commit_)
+    // An unchanged result is accepted without a new revision to commit.
+    if (commit_ && session->snapshot().revision != origin_revision_)
       commit_();
-    consider(clip);
+    consider(clip, true);
   }
   start_next();
 }

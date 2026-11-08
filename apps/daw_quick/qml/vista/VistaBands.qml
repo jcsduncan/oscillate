@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The band strip: a log frequency axis from 20 Hz to 20 kHz with the side
 // width of each band as a column (0-200%, 100% dashed) and the crossovers
@@ -85,8 +86,9 @@ Item {
         theme.lastTouched = "vista.xover_" + k
     }
     function hzText(hz) {
-        return hz >= 1000 ? (hz / 1000).toFixed(hz >= 10000 ? 1 : 2) + " kHz" : Math.round(hz) + " Hz"
+        return Format.hertz(hz)
     }
+    readonly property real hertzPerKilohertz: 1000
 
     // The grid: decades and widths.
     Canvas {
@@ -114,7 +116,8 @@ Item {
                 ctx.lineTo(x, strip.py + strip.ph)
                 ctx.stroke()
                 ctx.fillStyle = decade ? t.inkDim : t.inkFaint
-                ctx.fillText(hz >= 1000 ? hz / 1000 + "k" : String(hz), x, strip.py + strip.ph + t.spaceSm)
+                ctx.fillText(hz >= strip.hertzPerKilohertz ? Format.number(hz / strip.hertzPerKilohertz, 0) + "k"
+                                                           : Format.number(hz, 0), x, strip.py + strip.ph + t.spaceSm)
             }
             ctx.textAlign = "right"
             ctx.textBaseline = "middle"
@@ -127,7 +130,7 @@ Item {
                 ctx.lineTo(strip.px + strip.pw, y)
                 ctx.stroke()
                 ctx.fillStyle = w === 1 ? t.inkDim : t.inkFaint
-                ctx.fillText(Math.round(w * 100) + "%", strip.px - t.spaceSm, y)
+                ctx.fillText(Format.fraction(w), strip.px - t.spaceSm, y)
             }
             ctx.setLineDash([])
         }
@@ -283,7 +286,7 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
                 text: strip.revision >= 0
                     ? strip.controller.display(band.parameterId)
-                      + (band.scaled ? "  →  " + Math.round(band.effective * 100) + " %" : "")
+                      + (band.scaled ? "  →  " + Format.fraction(band.effective) : "")
                     : ""
                 color: strip.theme.glacier
                 font.family: strip.theme.mono
@@ -316,7 +319,7 @@ Item {
                 Text {
                     id: chip
                     anchors.centerIn: parent
-                    text: "ρ " + (band.correlation >= 0 ? "+" : "−") + Math.abs(band.correlation).toFixed(2)
+                    text: "ρ " + Format.signed_number(band.correlation)
                     color: strip.theme.ink
                     font.family: strip.theme.mono
                     font.pixelSize: strip.theme.typeCaption
