@@ -255,7 +255,8 @@ void pedal_lanes_set_validate_and_undo() {
 
   for (const auto& bad : std::vector<std::vector<MidiPedalPoint>>{
            {{{0}, 1.0}, {{0}, 0.0}},
-           {{{-1}, 1.0}},
+           {{{0}, 1.0}, {{-1}, 0.0}},
+           {{{0}, -0.5}},
            {{{0}, 1.5}},
            {{{0}, std::numeric_limits<double>::quiet_NaN()}}}) {
     auto rejected = project.apply({SetMidiPedalLane{clip_id, MidiPedal::sostenuto, bad}});
