@@ -58,7 +58,7 @@ The process contains the UI, model, engine, and default plugin host. Plugin scan
 | `clay_dsp` | Note analysis and resynthesis of audio for Clay ([ADR-0081](decisions/0081-clay-note-editing.md)) | `foundation`, `warp_dsp` |
 | `processing` | Warp maps, clip frame plans, verified source views, warp render cache, Clay sources | `foundation`, `media`, `project`, `warp_dsp`, `clay_dsp`, `persistence` |
 | `plugins` | VST3 discovery, instance lifecycle, state, parameter metadata, graph nodes | `foundation`, engine processor interface (see §3.1) |
-| `native_dsp` | DSP primitives, built-in processors, the neutral control layer every native engine shares ([ADR-0104](decisions/0104-native-processing-layers.md)), the native synth platform (§8.1), note effects, the native effect platform (§8.2) and the optional convolution core | engine processor interface, `warp_dsp` (Crate's sample reader) (see §3.1) |
+| `native_dsp` | DSP primitives, built-in processors, the neutral control layer the native engines share ([ADR-0104](decisions/0104-native-processing-layers.md)), the native synth platform (§8.1), note effects, the native effect platform (§8.2) and the optional convolution core | engine processor interface, `warp_dsp` (Crate's sample reader) (see §3.1) |
 | `native_inserts` | Preparing native effect and instrument stages for every chain builder ([ADR-0043](decisions/0043-one-native-insert-path.md)) | `project`, `engine`, `routing`, `native_dsp`, `automation_project`, `timeline` |
 | `track_chain` | One chain per track: instrument then inserts, prepared for live playback and export ([ADR-0050](decisions/0050-one-chain-per-track.md)) | `project`, `engine`, `routing`, `native_inserts` |
 | `persistence` | Manifest codec and schema migrations, committed asset references, generations, recovery | `project`, `media`, `codec` |
@@ -138,7 +138,7 @@ The `plugin_ui` target (`src/app/plugin_ui`) owns the editor bridge. It provides
 
 ### 8.1 Native synth platform
 
-`oscillate_native_control` is the neutral layer every native engine (synth, effect, note effect) is built on ([ADR-0104](decisions/0104-native-processing-layers.md)): parameter tables and presets, parameter control and lanes, telemetry, the musical `Transport` a kernel sees at each control tick, tempo-synced divisions and the compiled-document base. It depends only on `foundation`.
+`oscillate_native_control` is the neutral layer synths and effects are built on ([ADR-0104](decisions/0104-native-processing-layers.md)): parameter tables and presets, parameter control and lanes, telemetry, the musical `Transport` a kernel sees at each control tick, tempo-synced divisions and the compiled-document base. Note effects use only its parameter tables and lanes, and time their steps with their own `NoteClock`. It depends only on `foundation`.
 
 `oscillate_native_synth` holds the reusable, engine-agnostic DSP blocks: oscillators, oversampling, filters, chorus, wavetable, FM, drum, bass, grain and modal primitives. It depends only on `foundation`. `oscillate_note_effects` holds the MIDI note effects ([ADR-0059](decisions/0059-play-and-sparkle.md)).
 

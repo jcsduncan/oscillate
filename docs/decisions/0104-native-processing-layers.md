@@ -5,7 +5,7 @@
 
 ## Context
 
-Synths, effects and note effects are all a versioned parameter table plus a kernel. The parameter table, the control half that glides panel values and applies automation lanes, the telemetry buffer, the musical position a kernel sees at a control tick and the compiled-document base class were written for the synths and lived in `native_dsp::synth`. The effect platform and the note effects used them from there (`synth::ParameterControl`, `synth::TelemetryBuffer`, `synth::SynthTransport`), so a new effect depended on synth headers and synth names. The meter's bar grid, which only the hosts that compile a project snapshot need, lived beside the tempo-sync helpers and pulled the timeline's meter map into every engine.
+Synths, effects and note effects are all a versioned parameter table plus a kernel. The parameter table, the control half that glides panel values and applies automation lanes, the telemetry buffer, the musical position a kernel sees at a control tick and the compiled-document base class were written for the synths and lived in `native_dsp::synth`. The effect platform used them from there (`synth::ParameterControl`, `synth::TelemetryBuffer`, `synth::SynthTransport`), and the note effects took their parameter tables and lanes from there too, so a new effect depended on synth headers and synth names. The meter's bar grid, which only the hosts that compile a project snapshot need, lived beside the tempo-sync helpers and pulled the timeline's meter map into every engine.
 
 ## Decision
 
@@ -16,7 +16,7 @@ Synths, effects and note effects are all a versioned parameter table plus a kern
    - `transport.hpp`: `Transport`, the musical position at a control tick, and the tempo-synced divisions;
    - `document_state.hpp`: `DocumentState`, the base of every compiled engine document.
 
-   It depends only on `foundation`. The synth engines, the effect platform and the note effects link it, and take parameter control, telemetry, the transport and document state from its neutral headers.
+   It depends only on `foundation`. The synth engines and the effect platform link it and take parameter control, telemetry, the transport and document state from its neutral headers. The note effects link it for their parameter tables and lanes only: they time their steps with their own `NoteClock`, publish no telemetry and have no document.
 2. **Names say what they are.** The moved types lose their synth prefixes: `SynthTransport` is `Transport` and `SynthDocumentState` is `DocumentState`.
 3. **The bar grid belongs to the timeline.** `timeline::BarGrid` turns a meter map into the bar lines the callback reads. Hosts that compile a snapshot (the synth player, the native effect stage) build it; kernels only see the resulting `Transport`.
 
@@ -27,6 +27,6 @@ Synths, effects and note effects are all a versioned parameter table plus a kern
 
 ## Consequences
 
-- An effect or note effect includes the neutral headers, its own DSP and, for its parameter table, `synth/parameters.hpp`.
+- An effect includes the neutral headers, its own DSP and, for its parameter table, `synth/parameters.hpp`; a note effect includes the parameter-table and lane headers.
 - The synth DSP building blocks (filters, oscillators, oversamplers) stay in `oscillate_native_synth`; effects that use them still include those headers.
 - The HLD (§§3, 8.1, 8.2) describes the layer.
