@@ -10,6 +10,11 @@ on:
         required: false
         default: ""
 
+# One sweep per branch at a time; a new dispatch waits for the running one.
+concurrency:
+  group: test-sweep-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
