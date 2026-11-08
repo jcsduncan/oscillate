@@ -123,6 +123,33 @@ An advisory **clang-tidy** job, not required for merging, runs the
 `.clang-tidy` checks on the translation units a pull request touches
 (`scripts/ci/tidy_changed.py`); `scripts/check-tidy.sh` checks the whole tree.
 
+## Merging
+
+Pull requests are squash-merged by auto-merge
+(`gh pr merge N --auto --squash --subject "<title> (#N)" --body ""`), which
+waits for every required check. One of them, **Review gate**, is a commit
+status that `.github/workflows/review-gate.yml` sets on the head commit
+(`scripts/ci/review_gate.py`). It is green only when:
+
+1. CodeRabbit completed a review of the head commit: its check run there
+   finished with success and says "Review completed". A head whose check
+   run says "Prior review carried forward" or "No files to review" passes
+   when an earlier commit of the same pull request had a completed review.
+   A skipped, paused or rate-limited review never passes, although GitHub
+   counts a skipped check as passed.
+2. CodeRabbit posted no rate-limit or paused notice after that review.
+3. No review thread is unresolved.
+
+CodeRabbit does not review Release Please pull requests (head branch
+`release-please--*` in this repository). Their gate is green when every
+other check run and commit status on the head commit finished green and
+no review thread is unresolved.
+
+The gate is re-evaluated when CodeRabbit's check run completes, on pushes,
+reviews and comments, and every ten minutes for every open pull request,
+because resolving a thread fires no event. After a rate limit or pause,
+comment `@coderabbitai review` and the gate follows the new review.
+
 ## Nightly and on-demand CI runs
 
 These run on `main` every night; none is required for merging.
