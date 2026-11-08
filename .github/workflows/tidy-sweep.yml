@@ -15,6 +15,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  SHARD_COUNT: 8
+
 defaults:
   run:
     shell: bash
@@ -30,8 +33,6 @@ jobs:
       # One clang-tidy process per translation unit; eight runners share the tree.
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7]
-    env:
-      SHARD_COUNT: 8
     steps:
       - name: Install Git for checkout and the VST3 SDK
         run: |
@@ -88,23 +89,35 @@ jobs:
           merge-multiple: true
       - name: Distinct findings by check
         run: |
-          shopt -s nullglob
-          shards=(findings/*.txt)
-          if ((${#shards[@]} == 0)); then
-            echo "No shard uploaded findings; see the failed clang-tidy shard jobs." | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-          sort -u "${shards[@]}" > tidy-findings.txt
+          shards=()
+          missing=()
+          for ((shard = 0; shard < SHARD_COUNT; shard++)); do
+            if [[ -f "findings/shard-$shard.txt" ]]; then
+              shards+=("findings/shard-$shard.txt")
+            else
+              missing+=("$shard")
+            fi
+          done
+          cat "${shards[@]}" /dev/null | sort -u > tidy-findings.txt
           {
-            echo "$(wc -l < tidy-findings.txt) distinct clang-tidy finding(s) across the tree."
+            if ((${#missing[@]} > 0)); then
+              echo "Partial: shard(s) ${missing[*]} of $SHARD_COUNT uploaded no findings; see their clang-tidy jobs."
+              echo
+              echo "$(wc -l < tidy-findings.txt) distinct clang-tidy finding(s) in the other shards."
+            else
+              echo "$(wc -l < tidy-findings.txt) distinct clang-tidy finding(s) across the tree."
+            fi
             echo
             echo '| Findings | Check |'
             echo '| ---: | --- |'
-            grep -oE '\[[a-z0-9.-]+(,-warnings-as-errors)?\]$' tidy-findings.txt \
+            # No findings at all is a clean tree, not a failed step.
+            { grep -oE '\[[a-z0-9.-]+(,-warnings-as-errors)?\]$' tidy-findings.txt || true; } \
               | sed -E 's/^\[|(,-warnings-as-errors)?\]$//g' | sort | uniq -c | sort -rn \
               | awk '{ printf "| %s | `%s` |\n", $1, $2 }'
           } | tee -a "$GITHUB_STEP_SUMMARY"
+          ((${#missing[@]} == 0))
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
         with:
           name: tidy-findings
           path: tidy-findings.txt
