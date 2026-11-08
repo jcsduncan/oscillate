@@ -63,6 +63,8 @@ public:
     // "A · Reverb" (Expanse, Vocal Plate, fully wet) and "B · Delay" (Relay,
     // Dotted Eighth, fully wet) return tracks.
     bool default_returns = false;
+    // Tests inject storage faults into the creation and its first save.
+    persistence::FaultHook fault = {};
   };
 
   ProjectSession(const ProjectSession&) = delete;
@@ -83,6 +85,13 @@ public:
   [[nodiscard]] static foundation::Result<std::unique_ptr<ProjectSession>>
   open_recovered(const std::filesystem::path& root, std::string_view generation,
                  persistence::SaveKind kind, bool expected_pointed);
+
+  // Set when create() renamed the new project folder into place but flushing
+  // its entry in the parent failed: the project exists, its durability is
+  // uncertain.
+  [[nodiscard]] const std::optional<foundation::Error>& creation_warning() const noexcept {
+    return creation_warning_;
+  }
 
   [[nodiscard]] const project::Snapshot& snapshot() const noexcept;
   // Unique among the sessions this process opens, never reused. A job
@@ -172,6 +181,7 @@ private:
   ExportService exports_;
   FreezeService freeze_;
   std::uint64_t session_generation_;
+  std::optional<foundation::Error> creation_warning_;
 };
 
 } // namespace oscillate::application

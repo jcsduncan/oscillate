@@ -171,7 +171,9 @@ Result RoutedMixer::prepare_impl(std::span<const RoutedNode> nodes,
         return fail(foundation::ErrorCode::invalid_argument, "route output gain is invalid");
       gain_by_node.emplace(node.routing.id, node.output_gain);
     }
-    if (prior != nullptr) {
+    // A live switch drops a node only once it has faded to silence
+    // (ready_to_continue), its drains with it.
+    if (prior != nullptr && !live) {
       for (std::size_t index = 0; index < prior->plan_.nodes.size(); ++index) {
         if (!owners.contains(prior->plan_.nodes[index].id) && draining(prior->tails_[index]))
           return fail(foundation::ErrorCode::conflict,
@@ -481,6 +483,11 @@ Result RoutedMixer::prepare_impl(std::span<const RoutedNode> nodes,
                 ? RoutedMixer::no_prior
                 : static_cast<std::size_t>(old - prior->plan_.nodes.begin()));
       }
+      for (std::size_t index = 0; index < prior->plan_.nodes.size(); ++index) {
+        if (!owners.contains(prior->plan_.nodes[index].id))
+          mixer->live_removed_.push_back(index);
+      }
+      mixer->live_faded_.reserve(mixer->live_removed_.size());
       mixer->live_edges_.reserve(mixer->plan_.edges.size());
       for (const auto& edge : mixer->plan_.edges) {
         const auto old = std::ranges::find(prior->plan_.edges, edge.id, &PlannedEdgeDelay::id);
@@ -983,6 +990,28 @@ void RoutedMixer::plan_latency_handover(const RoutedMixer& prior) {
     live_flush_.assign(flush_frames, StereoFrame{});
 }
 
+bool RoutedMixer::ready_to_continue(const RoutedMixer& prior) const noexcept {
+  return std::ranges::all_of(live_removed_, [&prior](std::size_t index) {
+    const auto& ramp = prior.gain_ramps_[index];
+    return prior.muted_[index] && ramp.elapsed >= ramp.total;
+  });
+}
+
+void RoutedMixer::fade_out_dropped(RoutedMixer& prior) noexcept {
+  for (const auto index : live_removed_) {
+    if (prior.muted_[index] || live_faded_.size() == live_faded_.capacity())
+      continue;
+    prior.ramp_node(index, true, prior.output_gains_[index]);
+    live_faded_.push_back(index);
+  }
+}
+
+void RoutedMixer::restore_dropped(RoutedMixer& prior) noexcept {
+  for (const auto index : live_faded_)
+    prior.ramp_node(index, false, prior.output_gains_[index]);
+  live_faded_.clear();
+}
+
 bool RoutedMixer::adopt_live_state(const RoutedMixer& prior, BlockContext context) noexcept {
   if (live_from_ != &prior)
     return false;
@@ -1000,8 +1029,14 @@ bool RoutedMixer::adopt_live_state(const RoutedMixer& prior, BlockContext contex
         drain->processing_generation = continuous ? context.state_generation() : 0;
     }
     const auto old = live_nodes_[index];
-    if (!continuous || old == no_prior)
+    if (!continuous)
       continue;
+    if (old == no_prior) {
+      // A new node (an added track) fades in, as an unmute does.
+      if (limits_.gain_ramp_frames != 0)
+        gain_ramps_[index] = {{0.0F, 0.0F}, 0, limits_.gain_ramp_frames};
+      continue;
+    }
     const auto& old_gain = prior.output_gains_[old];
     const auto& old_ramp = prior.gain_ramps_[old];
     auto& ramp = gain_ramps_[index];

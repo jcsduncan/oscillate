@@ -31,7 +31,7 @@ never reused. 0070 was never assigned.
 | 0021 | [Stable send-gain automation binding](0021-send-gain-automation.md) | Implemented; focused live/offline qualification complete |
 | 0022 | [Custom Qt Quick UI for the DAW](0022-qt-quick-ui-direction.md) | Accepted for the production UI direction; module and packaging qualification open |
 | 0023 | [Unified insert chain and visible buses](0023-unified-insert-chain-and-bus-ui.md) | Accepted; implemented through ADR-0043 and ADR-0050 |
-| 0024 | [Live routed source handoff contract](0024-live-source-handoff-contract.md) | Superseded in part by ADR-0093 (MIDI) and ADR-0094 (held handoff) |
+| 0024 | [Live routed source handoff contract](0024-live-source-handoff-contract.md) | Superseded in part by ADR-0093 (MIDI), ADR-0094 (held handoff) and ADR-0098 (track, timing, media and instrument changes) |
 | 0025 | [Planned loop processor history](0025-planned-loop-processor-history.md) | Accepted; implemented |
 | 0026 | [Continuous warp stream and musical-time warp model](0026-continuous-warp-stream.md) | Accepted; points 4–8 implemented |
 | 0027 | [Prism: default native synth and native-synth platform](0027-prism-native-synth.md) | Accepted; implemented |
@@ -99,10 +99,11 @@ never reused. 0070 was never assigned.
 | 0090 | [Export renders a graph the render_graph builder prepares](0090-render-graph-builder.md) | Accepted; implemented for built-in chains |
 | 0091 | [New projects are staged beside their folder and renamed into place](0091-staged-project-creation.md) | Accepted; implemented |
 | 0092 | [Native inserts read which keys sound from routing](0092-native-inserts-read-key-audibility.md) | Superseded by ADR-0097 for how key notes follow a mute lane; otherwise implemented |
-| 0093 | [Live MIDI edits and queued revisions](0093-live-instrument-edits-and-queued-revisions.md) | Accepted; implemented |
-| 0094 | [Sources switch at a primed block; no held path](0094-primed-source-switching.md) | Accepted; implemented |
+| 0093 | [Live MIDI edits and queued revisions](0093-live-instrument-edits-and-queued-revisions.md) | Superseded in part by ADR-0098; otherwise implemented |
+| 0094 | [Sources switch at a primed block; no held path](0094-primed-source-switching.md) | Superseded in part by ADR-0098; otherwise implemented |
 | 0095 | [Projects from every released schema open, through chained forward migrations](0095-schema-migration-policy.md) | Accepted; hook and golden-manifest test built, no schema released yet |
 | 0096 | [MIDI clips keep notes trimmed off their left edge](0096-midi-clip-left-trim.md) | Accepted; implemented |
 | 0097 | [A key source's mute lane gates its keys](0097-mute-lanes-gate-keys.md) | Superseded by ADR-0099 for what a bounce does with its source's mute lane; otherwise implemented |
+| 0098 | [Structural edits switch with a whole replacement source](0098-whole-replacement-switches.md) | Accepted; implemented |
 | 0099 | [A bounce moves its source's mute lanes to the bounce](0099-bounce-moves-mute-lanes.md) | Superseded by ADR-0102 for where a clip's mute lane goes; otherwise implemented |
 | 0102 | [A track render plays in slices that keep its clips' channel lanes](0102-renders-play-in-slices.md) | Accepted; implemented |

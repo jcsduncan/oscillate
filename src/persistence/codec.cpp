@@ -2005,8 +2005,15 @@ Result<LoadedGeneration> decode_manifest(std::string_view text) {
     if (!validated) {
       throw ParseError("invalid project snapshot: " + validated.error().message);
     }
-    return Result<LoadedGeneration>::success(
-        {std::move(snapshot), std::move(generation), kind, std::move(parent), {}});
+    std::optional<std::string> migrated_from;
+    if (saved != current_schema)
+      migrated_from = schema_text(saved);
+    return Result<LoadedGeneration>::success({std::move(snapshot),
+                                              std::move(generation),
+                                              kind,
+                                              std::move(parent),
+                                              {},
+                                              std::move(migrated_from)});
   });
 }
 

@@ -36,15 +36,22 @@ public:
   [[nodiscard]] std::optional<QString> collect(application::ProjectSession& session,
                                                const std::filesystem::path& source,
                                                const std::filesystem::path& library);
+  // Save a copy as: the same collection into `destination`, which the caller
+  // has checked is free; copySaved reports it when done, for opening.
+  [[nodiscard]] std::optional<QString> save_copy(application::ProjectSession& session,
+                                                 const std::filesystem::path& source,
+                                                 const std::filesystem::path& destination);
   void cancel();
 
 signals:
   void changed();
   void finished(bool success);
+  // A save_copy finished: the copy at `destination` was made from `source`.
+  void copySaved(const QString& destination, const QString& source);
 
 private:
   void start(std::filesystem::path source, std::filesystem::path destination,
-             std::uint64_t expected_revision);
+             std::uint64_t expected_revision, bool save_as);
   void poll();
 
   struct State {
@@ -53,8 +60,10 @@ private:
     std::atomic<std::size_t> completed_sources{0};
     std::atomic<std::size_t> total_sources{0};
     std::jthread worker;
+    std::filesystem::path source;
     std::filesystem::path destination;
     std::uint64_t captured_revision = 0;
+    bool save_as = false;
   };
   QTimer timer_;
   std::unique_ptr<State> state_;

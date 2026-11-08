@@ -65,6 +65,7 @@ oscillate_add_test_executable(oscillate_application_project_session_tests SOURCE
 set(project_session_cases
   midi_note_sets_move_and_delete_in_one_step
   midi_note_copies_land_at_the_drop
+  creation_reports_an_uncertain_folder_flush
   routing_commands_reopen_and_undo_atomically
   track_automation_points_are_stable_and_undoable
   send_automation_points_are_stable_undoable_and_durable
@@ -313,7 +314,16 @@ oscillate_add_case_tests(application_routed_live_edit oscillate_application_rout
   clip_delete_releases_its_sounding_note
   track_mute_fades_without_a_gap
   rapid_edits_coalesce_onto_the_newest_revision
-  an_edit_waiting_behind_a_note_edit_applies_next)
+  an_edit_waiting_behind_a_note_edit_applies_next
+  track_add_switches_with_its_source
+  track_remove_fades_out_then_switches
+  track_remove_fades_out_over_its_level_lane
+  tempo_change_moves_what_follows
+  meter_change_switches_with_its_source
+  midi_edit_with_a_level_lane_switches_whole
+  instrument_change_rings_out_the_old_one
+  instrument_removal_rings_out
+  new_media_plays_from_its_switch)
 
 oscillate_add_test_executable(oscillate_application_export_tail_trim_tests SOURCES export_tail_trim_tests.cpp
   LIBS oscillate::application

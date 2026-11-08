@@ -1789,6 +1789,25 @@ void wav_import_is_one_undoable_revision_and_reopens() {
                "one undo did not remove source, track and clip together");
 }
 
+bool fails_parent_flush(persistence::SaveStage stage) {
+  return stage == persistence::SaveStage::creation_published;
+}
+
+// #226: once the new folder is renamed into place, a failed flush of its
+// parent leaves the project created, with a storage warning, not an error.
+void creation_reports_an_uncertain_folder_flush() {
+  Directory directory;
+  const auto root = directory.path() / "song";
+  application::ProjectSession::CreateOptions options;
+  options.fault = fails_parent_flush;
+  auto created = application::ProjectSession::create(root, options);
+  REQUIRE_OK(created, "a project renamed into place was reported as not created");
+  REQUIRE_TRUE(created.value()->creation_warning().has_value(),
+               "the failed parent flush was not reported");
+  created.value().reset();
+  REQUIRE_OK(application::ProjectSession::open(root), "the created project does not open");
+}
+
 void wav_import_rejects_rate_mismatch_without_model_edit() {
   Directory directory;
   auto session = application::ProjectSession::create(directory.path() / "song");
@@ -6150,6 +6169,8 @@ int main(int argc, char** argv) {
           {"midi_note_sets_move_and_delete_in_one_step",
            midi_note_sets_move_and_delete_in_one_step},
           {"midi_note_copies_land_at_the_drop", midi_note_copies_land_at_the_drop},
+          {"creation_reports_an_uncertain_folder_flush",
+           creation_reports_an_uncertain_folder_flush},
           {"routing_commands_reopen_and_undo_atomically",
            routing_commands_reopen_and_undo_atomically},
           {"track_automation_points_are_stable_and_undoable",

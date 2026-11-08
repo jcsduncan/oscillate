@@ -18,6 +18,7 @@
 namespace oscillate::quick {
 namespace {
 constexpr std::uint64_t mib_bytes = 1024ULL * 1024;
+constexpr int mib_decimals = 1;
 
 QString project_status(application::CacheProjectStatus status) {
   switch (status) {
@@ -43,7 +44,8 @@ public:
     register_project,
     set_budget,
     clear_project,
-    clear_all
+    clear_all,
+    forget_project
   };
   struct Request {
     Action action;
@@ -93,6 +95,7 @@ public:
         } else {
           try {
             foundation::Result<void> operation = foundation::Result<void>::success();
+            std::uint64_t freed_bytes = 0;
             switch (request.action) {
             case Action::refresh:
               break;
@@ -117,6 +120,15 @@ public:
             case Action::clear_project:
               operation = control->clear_project(request.root);
               break;
+            case Action::forget_project: {
+              auto forgotten = control->forget_project_cache(request.root);
+              if (forgotten) {
+                freed_bytes = forgotten.value();
+              } else {
+                operation = foundation::Result<void>::failure(forgotten.error());
+              }
+              break;
+            }
             case Action::clear_all: {
               auto cleared = control->clear_reachable();
               if (!cleared) {
@@ -155,6 +167,13 @@ public:
               case Action::clear_all:
                 outcome.status =
                     QStringLiteral("Reachable project and shared analysis caches cleared");
+                break;
+              case Action::forget_project:
+                outcome.status =
+                    QStringLiteral("Forgot %1 · freed %2 MiB")
+                        .arg(QString::fromStdString(request.root.filename().string()))
+                        .arg(static_cast<double>(freed_bytes) / static_cast<double>(mib_bytes), 0,
+                             'f', mib_decimals);
                 break;
               }
             }
@@ -274,6 +293,20 @@ void CacheUiController::clear_current() {
   emit changed();
 }
 
+void CacheUiController::forget_project(const QString& path) {
+  const auto root = std::filesystem::path(path.toStdString()).lexically_normal();
+  // The open project registers itself again; Clear project covers it.
+  if (busy() || root.empty() || root == current_root_) {
+    return;
+  }
+  worker_->submit({CacheUiWorker::Action::forget_project, root, 0});
+  ++outstanding_;
+  status_ = QStringLiteral("Clearing and forgetting %1…")
+                .arg(QString::fromStdString(root.filename().string()));
+  timer_.start();
+  emit changed();
+}
+
 void CacheUiController::clear_all() {
   if (busy()) {
     return;
@@ -305,6 +338,7 @@ void CacheUiController::poll() {
       for (const auto& project : outcome.health->projects) {
         projects.append(QVariantMap{
             {QStringLiteral("name"), QString::fromStdString(project.root.filename().string())},
+            {QStringLiteral("path"), QString::fromStdString(project.root.string())},
             {QStringLiteral("current"), project.root == current_root_},
             {QStringLiteral("status"), project_status(project.status)},
             {QStringLiteral("detail"), QString::fromStdString(project.detail)},

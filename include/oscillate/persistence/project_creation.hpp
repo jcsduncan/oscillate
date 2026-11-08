@@ -38,7 +38,9 @@ public:
   // Requires a committed CURRENT in the stage, flushes it, renames it to the
   // final name without replacing a folder that appeared meanwhile, then
   // flushes the parent. The writer's descriptors stay valid across the rename.
-  [[nodiscard]] foundation::Result<void> publish();
+  // Once the rename succeeds the project exists: a failed parent flush then
+  // returns `uncertain` rather than an error.
+  [[nodiscard]] foundation::Result<SaveStatus> publish();
 
   // Removes stages in `parent` that a process older than this one abandoned:
   // only directories matching the stage pattern, holding only a new project's

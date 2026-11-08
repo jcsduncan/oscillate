@@ -53,6 +53,7 @@ Window {
     property bool historyPanelOpen: false
     property bool mediaPanelOpen: false
     property bool cachePanelOpen: false
+    property bool saveCopyPanelOpen: false
     property bool pluginBrowserOpen: false
     property bool pluginBrowserScanned: false
     function openPluginBrowser(showBuiltIns) {
@@ -594,6 +595,7 @@ Window {
         }
         onPluginsRequested: shell.openPluginBrowser()
         onCacheRequested: shell.cachePanelOpen = !shell.cachePanelOpen
+        onSaveCopyRequested: shell.saveCopyPanelOpen = !shell.saveCopyPanelOpen
         onShortcutsRequested: shell.shortcutsOpen = !shell.shortcutsOpen
     }
 
@@ -622,6 +624,12 @@ Window {
     }
 
     HistoryPanel {
+        host: shell
+        bridge: projectBridge
+        y: topBar.height - 1
+    }
+
+    SaveCopyPanel {
         host: shell
         bridge: projectBridge
         y: topBar.height - 1

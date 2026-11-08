@@ -201,32 +201,30 @@ Result<StartedCreation> ProjectCreation::begin(const std::filesystem::path& root
       StartedCreation{std::move(creation), std::move(writer).value()});
 }
 
-Result<void> ProjectCreation::publish() {
+Result<SaveStatus> ProjectCreation::publish() {
   if (published_ || !stage_fd_)
-    return Result<void>::failure({ErrorCode::conflict, "New project is already published"});
+    return Result<SaveStatus>::failure({ErrorCode::conflict, "New project is already published"});
   // Validate the stage itself, not whichever writer the caller holds.
   auto reader = ProjectStore::open_reader(parent_ / stage_name_);
   if (!reader || !reader.value().load_current())
-    return Result<void>::failure(
+    return Result<SaveStatus>::failure(
         {ErrorCode::conflict, "New project has no committed save to publish"});
   if (auto flushed = foundation::sync(stage_fd_.get(), "flush new project folder"); !flushed)
-    return flushed;
+    return Result<SaveStatus>::failure(flushed.error());
   auto renamed = foundation::rename_in(parent_fd_.get(), stage_name_, final_name_, mode_,
                                        "publish new project folder");
   if (!renamed) {
     const int failure = errno; // Read while the failed result still holds it.
     if (failure == EEXIST || failure == ENOTEMPTY)
-      return Result<void>::failure({ErrorCode::conflict, "New project folder must be empty"});
-    return renamed;
+      return Result<SaveStatus>::failure({ErrorCode::conflict, "New project folder must be empty"});
+    return Result<SaveStatus>::failure(renamed.error());
   }
+  // The project is in place from here on: a failed flush leaves it there, so
+  // creation succeeded and only the durability of its folder entry is in doubt.
   published_ = true;
-  if (injected(fault_, SaveStage::creation_published))
-    return Result<void>::failure(
-        {ErrorCode::io_failure, "injected project-publication interruption"});
-  if (::fsync(parent_fd_.get()) != 0)
-    return Result<void>::failure(
-        {ErrorCode::io_failure, "New project is published but its folder durability is uncertain"});
-  return Result<void>::success();
+  if (injected(fault_, SaveStage::creation_published) || ::fsync(parent_fd_.get()) != 0)
+    return Result<SaveStatus>::success(SaveStatus::uncertain);
+  return Result<SaveStatus>::success(SaveStatus::committed);
 }
 
 Result<std::size_t> ProjectCreation::clean_abandoned(const std::filesystem::path& parent) {

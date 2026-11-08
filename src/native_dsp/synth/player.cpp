@@ -141,13 +141,14 @@ Result<std::shared_ptr<const LockState>> compile_lock(const project::Snapshot& s
 
 Result<void> NativeSynthPlayer::refresh_lock(const project::Snapshot& snapshot) {
   const auto& engine = runtime_->engine();
-  if (engine.lock_follows.empty())
+  if (engine.lock_follows.empty() || retired_)
     return Result<void>::success();
   const auto track = std::ranges::find(snapshot.tracks, track_, &project::Track::id);
   const auto* patch = track != snapshot.tracks.end()
                           ? std::get_if<project::NativeInstrumentPatch>(&track->instrument_source)
                           : nullptr;
-  if (patch == nullptr)
+  // A replaced instrument rings out with the Lock it had.
+  if (patch == nullptr || patch->engine != engine.descriptor->id)
     return Result<void>::success();
   auto resolved = resolve_native_instrument(*patch);
   if (!resolved)
@@ -193,8 +194,6 @@ NativeSynthPlayer::prepare(const project::Snapshot& snapshot, const project::Tra
   player.sample_rate_ = snapshot.sample_rate;
   player.max_frames_ = max_frames;
   player.runtime_ = std::shared_ptr<NativeSynthRuntime>(std::move(runtime).value());
-  player.tempo_ = std::make_shared<const timeline::TempoMap>(snapshot.tempo);
-  player.bars_ = BarGrid(snapshot.meter);
   player.runtime_->offer_project_key(snapshot.key);
   player.values_ = std::move(resolved.value().values);
   player.block_events_.resize(engine::HeldNotes::instrument_capacity);
@@ -231,6 +230,8 @@ Result<std::unique_ptr<NativeSynthPlayer::Plan>> NativeSynthPlayer::make_plan(
         {ErrorCode::conflict, "Synth plan does not match the running source"});
   auto plan = std::make_unique<Plan>();
   plan->revision = snapshot.revision;
+  plan->tempo = std::make_shared<const timeline::TempoMap>(snapshot.tempo);
+  plan->bars = BarGrid(snapshot.meter);
   plan->events = std::make_shared<const engine::InstrumentEvents>(events);
   plan->spans = std::make_shared<const engine::NoteSpans>(events);
   plan->last_safe_sample = last_safe_automation_sample;
@@ -351,6 +352,13 @@ void NativeSynthPlayer::commit_plan(PreparedPlan plan, const project::Snapshot& 
   plans_->offer(std::move(plan.plan_), plan.revision_);
   // Lock follows this track's own switch too; a failure keeps the notes it had.
   (void)refresh_lock(snapshot);
+}
+
+bool NativeSynthPlayer::stage_plan(PreparedPlan plan) {
+  if (!has_room())
+    return false;
+  plans_->stage(std::move(plan.plan_), plan.revision_);
+  return true;
 }
 
 Result<void> NativeSynthPlayer::offer_plan(
@@ -519,7 +527,7 @@ bool NativeSynthPlayer::render(std::span<engine::StereoFrame> output, std::uint6
               first, std::span(plan->note_lane_values[lane]).first(frames)))
         return false;
     }
-    const note_effects::NoteClock clock(*tempo_, sample_rate_, project_frame,
+    const note_effects::NoteClock clock(*plan->tempo, sample_rate_, project_frame,
                                         static_cast<std::uint32_t>(frames));
     if (!clock.valid())
       return false;
@@ -533,12 +541,12 @@ bool NativeSynthPlayer::render(std::span<engine::StereoFrame> output, std::uint6
   SynthTransport transport;
   timeline::TickPosition tick{};
   double bpm = 0.0;
-  if (tempo_->sample_to_tick_rt(first, sample_rate_, tick) &&
-      tempo_->bpm_at_sample_rt(first, sample_rate_, bpm) && bpm > 0.0) {
+  if (plan->tempo->sample_to_tick_rt(first, sample_rate_, tick) &&
+      plan->tempo->bpm_at_sample_rt(first, sample_rate_, bpm) && bpm > 0.0) {
     transport.beat_at_block_start =
         static_cast<double>(tick.value) / static_cast<double>(timeline::ticks_per_quarter);
     transport.beats_per_frame = bpm / 60.0 / static_cast<double>(sample_rate_);
-    bars_.locate(tick.value, transport.bar_at_block_start, transport.beats_per_bar);
+    plan->bars.locate(tick.value, transport.bar_at_block_start, transport.beats_per_bar);
   }
   runtime_->use_workers(workers);
   const auto report =

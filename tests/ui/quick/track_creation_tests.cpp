@@ -40,6 +40,9 @@ namespace {
 namespace app = oscillate::application;
 namespace quick = oscillate::quick;
 
+// How long a dropped file's import may take before the test reports it lost.
+constexpr int import_wait_ms = 15'000;
+
 struct BlockPermits {
   std::mutex mutex;
   std::condition_variable wake;
@@ -546,7 +549,7 @@ void run() {
                 return reopened_bridge.revision() > before_import &&
                        !reopened_bridge.imports()->import_busy();
               },
-              15'000),
+              import_wait_ms),
           "dropped WAV did not create an audio track");
   require(reopened_bridge.tracks().size() == 2 &&
               reopened_bridge.tracks().front().toMap().value(QStringLiteral("id")).toString() ==
@@ -587,11 +590,24 @@ void run() {
   const auto lanes = find_items(reopened_window->contentItem(), QStringLiteral("arrangementRow"));
   const auto headers = find_items(reopened_window->contentItem(), QStringLiteral("trackRow"));
   require(lanes.size() == 3 && headers.size() == 3, "arrangement rows unavailable");
-  send_drop(*reopened_window, midi_drop, scene_point(*lanes[2], 0.75, 0.5));
+  // The file is read on a worker and lands when the import controller polls
+  // it, so each drop waits for the import to finish before looking.
+  const auto drop_midi = [&](QPoint at) {
+    const auto before = reopened_bridge.revision();
+    send_drop(*reopened_window, midi_drop, at);
+    require(QTest::qWaitFor(
+                [&] {
+                  return reopened_bridge.revision() > before &&
+                         !reopened_bridge.imports()->import_busy();
+                },
+                import_wait_ms),
+            "the dropped MIDI file was not imported");
+  };
+  drop_midi(scene_point(*lanes[2], 0.75, 0.5));
   require(reopened_bridge.tracks().size() == 3 && midi_clips(2).size() == 1 &&
               midi_clips(2).front().value(QStringLiteral("start")).toDouble() > 0.0,
           "MIDI dropped on an instrument lane did not land on it at the bar under the pointer");
-  send_drop(*reopened_window, midi_drop, scene_point(*headers[2], 0.5, 0.5));
+  drop_midi(scene_point(*headers[2], 0.5, 0.5));
   require(reopened_bridge.tracks().size() == 3 && midi_clips(2).size() == 2 &&
               std::ranges::any_of(midi_clips(2),
                                   [](const auto& clip) {
@@ -619,7 +635,7 @@ void run() {
               reopened_window->property("selectedTrack").toInt() == 2,
           "double-clicking a MIDI clip did not open its track's notes");
   // Not on an instrument track (here the audio track): new tracks.
-  send_drop(*reopened_window, midi_drop, scene_point(*lanes[1], 0.5, 0.5));
+  drop_midi(scene_point(*lanes[1], 0.5, 0.5));
   require(reopened_bridge.tracks().size() == 4 && !midi_clips(3).empty(),
           "MIDI dropped off an instrument track did not make a new track");
 }
@@ -725,16 +741,14 @@ void paired_vst3_browser_insertion() {
                 15'000) &&
                 bridge.playback_active(),
             "browser did not save second source while playback continued");
-    require(QTest::qWaitFor([&] { return bridge.playback_revision_inactive(); }, 15'000),
-            "asymmetric source/effect pair was incorrectly reported audible");
+    // A track added while playing switches in live (ADR-0098).
+    require(QTest::qWaitFor([&] { return bridge.routed_graph_current(); }, 15'000),
+            "a source track added while playing did not switch in live");
     window->setProperty("selectedTrack", 1);
     browser->setProperty("showInstruments", false);
     QCoreApplication::processEvents();
-    require(browser->property("trackEligible").toBool() &&
-                browser->property("savedInsertState")
-                    .toString()
-                    .contains(QStringLiteral("saved, not yet audible")),
-            "second source target or saved versus audible browser status is wrong");
+    require(browser->property("trackEligible").toBool(),
+            "the added source track was not an effect target");
     const auto second_id = bridge.tracks()[1].toMap().value(QStringLiteral("id")).toString();
     const auto before_second_effect = bridge.revision();
     bridge.vst3_browser()->insert_vst3_effect(effect.value(QStringLiteral("index")).toInt(),
@@ -748,10 +762,9 @@ void paired_vst3_browser_insertion() {
                 15'000) &&
                 bridge.playback_active(),
             "browser did not save second source effect while playback continued");
-    // Its track joined while playing, so it plays from the next Play too.
-    require(QTest::qWaitFor([&] { return bridge.playback_revision_inactive(); }, 15'000) &&
+    require(QTest::qWaitFor([&] { return bridge.routed_graph_current(); }, 15'000) &&
                 bridge.playback_active(),
-            "an effect on a not-yet-audible track was reported live");
+            "an effect on the added track did not switch in live");
     // A chain takes any number of effects (ADR-0050).
     const auto full_revision = bridge.revision();
     bridge.vst3_browser()->insert_vst3_effect(effect.value(QStringLiteral("index")).toInt(),

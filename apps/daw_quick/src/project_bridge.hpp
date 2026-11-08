@@ -214,6 +214,9 @@ class ProjectBridge final : public QObject {
   Q_PROPERTY(int routeTargetCount READ route_target_count NOTIFY routingChanged)
   Q_PROPERTY(double masterLevel READ master_level NOTIFY masterLevelChanged)
   Q_PROPERTY(QVariantList availableProjects READ available_projects NOTIFY availableProjectsChanged)
+  // The welcome screen's default name for a new project: the first free one.
+  Q_PROPERTY(
+      QString suggestedProjectName READ suggested_project_name NOTIFY availableProjectsChanged)
   Q_PROPERTY(QVariantMap recoveryChoice READ recovery_choice NOTIFY recoveryChoiceChanged)
   Q_PROPERTY(QVariantList namedRevisions READ named_revisions NOTIFY namedRevisionsChanged)
   Q_PROPERTY(
@@ -366,6 +369,9 @@ public:
   [[nodiscard]] bool routing_active() const { return routing_active_; }
   [[nodiscard]] double master_level() const noexcept { return summary_.master_level(); }
   [[nodiscard]] QVariantList available_projects() const { return lifecycle_->available_projects(); }
+  [[nodiscard]] QString suggested_project_name() const {
+    return lifecycle_->suggested_project_name();
+  }
   [[nodiscard]] QVariantMap recovery_choice() const { return lifecycle_->recovery_choice(); }
   [[nodiscard]] QVariantList named_revisions() const { return lifecycle_->named_revisions(); }
   [[nodiscard]] QVariantList named_revision_issues() const {
@@ -468,6 +474,12 @@ public:
   void set_project(std::unique_ptr<application::ProjectSession> session,
                    const std::filesystem::path& opened_root);
   Q_INVOKABLE void create_default_project(const QString& project_name);
+  // The first free "<project> copy" name beside the open project.
+  Q_INVOKABLE QString suggested_copy_name() const;
+  // Saves the open project, then on a worker writes it with its saved
+  // versions and media as a new project named `copy_name` beside it, and
+  // opens the copy when that is done.
+  Q_INVOKABLE void save_copy(const QString& copy_name);
   Q_INVOKABLE void open_project(const QUrl& folder);
   Q_INVOKABLE void choose_open_project();
   Q_INVOKABLE void open_listed(const QString& path);

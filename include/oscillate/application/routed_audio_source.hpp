@@ -201,6 +201,11 @@ private:
   struct SynthSlot {
     std::size_t slot_index;
     std::shared_ptr<native_dsp::synth::NativeSynthPlayer> player;
+    // As KeptPlayer: a plan released at take-over, and a player that rings
+    // out until retire_end (callback-owned, set at take-over) and then stops.
+    std::uint64_t staged_revision = 0;
+    bool retiring = false;
+    std::uint64_t retire_end = 0;
   };
   // Indices into clips_ and synths_ that render into one slot.
   struct SlotWork {
@@ -221,7 +226,7 @@ private:
                       RoutedPlaybackControl& control,
                       std::span<const routing::ProjectRouteSource> layout,
                       std::span<const engine::RoutingNodeId> order,
-                      std::span<const KeptPlayer> kept, std::size_t max_frames,
+                      std::span<const KeptPlayer> kept, bool structural, std::size_t max_frames,
                       std::size_t buffer_frame_budget, const std::atomic<bool>* worker_permit,
                       const std::stop_token& stop, std::uint64_t first_sample,
                       std::uint64_t first_generation, const audio_io::TransportCursor* live_cursor);
@@ -313,7 +318,13 @@ private:
   std::uint64_t loop_version_seen_ = 0;        // worker-owned
   bool silent_drain_block_ = false;            // callback-owned
   bool frozen_ = false;                        // callback-owned
-  bool stream_hold_ = false;                   // callback-owned
+  // The first block this replacement source rendered (callback-owned): its
+  // kept players' staged plans play from it and retiring ones ring out.
+  bool took_over_ = false;
+  void take_over(engine::BlockContext block) noexcept;
+  [[nodiscard]] native_dsp::synth::NativeSynthPlayer*
+  playing_synth(project::TrackId track) const noexcept;
+  bool stream_hold_ = false; // callback-owned
   static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
 };
 

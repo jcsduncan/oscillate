@@ -587,6 +587,11 @@ target_link_libraries(oscillate_quick_mix_check_view_tests PRIVATE
 oscillate_target_defaults(oscillate_quick_mix_check_view_tests)
 oscillate_add_test(NAME quick_mix_check_view_contract COMMAND oscillate_quick_mix_check_view_tests)
 set_tests_properties(quick_mix_check_view_contract PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${oscillate_quick_qml_import_dir}")
+oscillate_add_test_executable(oscillate_quick_project_lifecycle_view_tests
+  SOURCES project_lifecycle_view_tests.cpp
+  LIBS oscillate_quick_test_core Qt6::Gui Qt6::Quick Qt6::Test
+  TEST quick_project_lifecycle_view_contract)
+set_tests_properties(quick_project_lifecycle_view_contract PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${oscillate_quick_qml_import_dir}")
 add_executable(oscillate_quick_chord_clip_view_tests
   chord_clip_view_tests.cpp)
 target_link_libraries(oscillate_quick_chord_clip_view_tests PRIVATE

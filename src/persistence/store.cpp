@@ -39,7 +39,7 @@ template <typename T> using Result = foundation::Result<T>;
 constexpr std::size_t max_pointer_bytes = 256;
 constexpr std::size_t max_recovery_entries = 8192;
 constexpr std::size_t max_recovery_candidates = 256;
-constexpr std::size_t retained_recent_generations = 10;
+using detail::retained_recent_generations;
 constexpr std::size_t max_recovery_manifest_bytes = std::size_t{64} * 1024U * 1024U;
 constexpr std::size_t max_recovery_decoded_bytes = std::size_t{64} * 1024U * 1024U;
 constexpr std::size_t max_revision_entries = 1024;
@@ -1921,6 +1921,62 @@ Result<SaveOutcome> ProjectStore::name_current_revision(std::string_view name) {
   auto state_identity = check_directory_identity(root_fd_, "state", state_fd_);
   if (!state_identity)
     return Result<SaveOutcome>::failure(state_identity.error());
+  auto pointer_bytes = read_bounded(state_fd_, "CURRENT", max_pointer_bytes);
+  if (!pointer_bytes)
+    return Result<SaveOutcome>::failure(pointer_bytes.error());
+  auto current = detail::decode_pointer(pointer_bytes.value());
+  if (!current)
+    return Result<SaveOutcome>::failure(current.error());
+  return name_generation_unlocked(name, current.value().first, current.value().second);
+}
+
+std::string ProjectStore::pre_upgrade_revision_name(std::string_view schema,
+                                                    std::string_view generation) {
+  constexpr std::size_t generation_digits = 8;
+  return "Before upgrade from " + std::string(schema) + ' ' +
+         std::string(generation.substr(0, generation_digits));
+}
+
+Result<void> ProjectStore::keep_pre_upgrade_generation() {
+  auto pointer_bytes = read_bounded(state_fd_, "CURRENT", max_pointer_bytes);
+  if (!pointer_bytes)
+    return Result<void>::failure(pointer_bytes.error());
+  auto current = detail::decode_pointer(pointer_bytes.value());
+  if (!current)
+    return Result<void>::failure(current.error());
+  const auto& [generation, hash] = current.value();
+  auto loaded = load_generation(generation, hash);
+  if (!loaded)
+    return Result<void>::failure(loaded.error());
+  const auto schema = loaded.value().migrated_from.value_or(std::string{});
+  if (schema.empty())
+    return Result<void>::success();
+  auto listing = list_named_revisions();
+  if (!listing)
+    return Result<void>::failure(listing.error());
+  if (std::ranges::any_of(listing.value().revisions,
+                          [&](const auto& item) { return item.generation == generation; }))
+    return Result<void>::success();
+  auto named =
+      name_generation_unlocked(pre_upgrade_revision_name(schema, generation), generation, hash);
+  if (!named)
+    return Result<void>::failure(named.error());
+  // CURRENT must not move past the generation until its revision is durable:
+  // the next save finds the revision if it landed, or names it again.
+  if (named.value().status != SaveStatus::committed)
+    return Result<void>::failure(
+        {ErrorCode::io_failure, "the pre-upgrade version's revision may not be durable"});
+  return Result<void>::success();
+}
+
+Result<SaveOutcome> ProjectStore::name_generation_unlocked(std::string_view name,
+                                                           const std::string& generation,
+                                                           const std::string& hash) {
+  if (lock_fd_ < 0)
+    return Result<SaveOutcome>::failure({ErrorCode::conflict, "store is read-only"});
+  auto state_identity = check_directory_identity(root_fd_, "state", state_fd_);
+  if (!state_identity)
+    return Result<SaveOutcome>::failure(state_identity.error());
   auto lock_identity = check_writer_lock({state_fd_, lock_fd_});
   if (!lock_identity)
     return Result<SaveOutcome>::failure(lock_identity.error());
@@ -1935,16 +1991,10 @@ Result<SaveOutcome> ProjectStore::name_current_revision(std::string_view name) {
       std::ranges::any_of(listing.value().issues,
                           [&](const auto& issue) { return issue.name && *issue.name == name; }))
     return Result<SaveOutcome>::failure({ErrorCode::conflict, "named revision already exists"});
-  auto pointer_bytes = read_bounded(state_fd_, "CURRENT", max_pointer_bytes);
-  if (!pointer_bytes)
-    return Result<SaveOutcome>::failure(pointer_bytes.error());
-  auto current = detail::decode_pointer(pointer_bytes.value());
-  if (!current)
-    return Result<SaveOutcome>::failure(current.error());
-  auto generation = load_generation(current.value().first, current.value().second);
-  if (!generation)
-    return Result<SaveOutcome>::failure(generation.error());
-  if (generation.value().kind != SaveKind::explicit_save)
+  auto loaded = load_generation(generation, hash);
+  if (!loaded)
+    return Result<SaveOutcome>::failure(loaded.error());
+  if (loaded.value().kind != SaveKind::explicit_save)
     return Result<SaveOutcome>::failure(
         {ErrorCode::corrupt_data, "CURRENT is not an explicit save"});
   if (::mkdirat(state_fd_, "revisions", 0700) != 0 && errno != EEXIST)
@@ -1960,8 +2010,7 @@ Result<SaveOutcome> ProjectStore::name_current_revision(std::string_view name) {
   const auto temporary = ".tmp-" + id.value();
   auto written =
       write_sync_file(revisions.value().get(), temporary,
-                      detail::encode_named_pointer(
-                          {std::string(name), current.value().first, current.value().second}));
+                      detail::encode_named_pointer({std::string(name), generation, hash}));
   if (!written)
     return Result<SaveOutcome>::failure(written.error());
   if (fail(SaveStage::revision_pointer_written))
@@ -1983,10 +2032,10 @@ Result<SaveOutcome> ProjectStore::name_current_revision(std::string_view name) {
     return Result<SaveOutcome>::failure(std::move(renamed.error()));
   if (fail(SaveStage::revision_pointer_published) ||
       fail(SaveStage::revision_directory_flush_failed))
-    return Result<SaveOutcome>::success({SaveStatus::uncertain, current.value().first});
+    return Result<SaveOutcome>::success({SaveStatus::uncertain, generation});
   if (::fsync(revisions.value().get()) != 0)
-    return Result<SaveOutcome>::success({SaveStatus::uncertain, current.value().first});
-  return Result<SaveOutcome>::success({SaveStatus::committed, current.value().first});
+    return Result<SaveOutcome>::success({SaveStatus::uncertain, generation});
+  return Result<SaveOutcome>::success({SaveStatus::committed, generation});
 }
 
 Result<SaveOutcome> ProjectStore::save(const project::Snapshot& snapshot, SaveKind kind,
@@ -2219,6 +2268,13 @@ Result<SaveOutcome> ProjectStore::save(const project::Snapshot& snapshot, SaveKi
     auto asset = checked_asset(assets_fd_, source);
     if (!asset)
       return Result<SaveOutcome>::failure(asset.error());
+  }
+  // ADR-0095: the generation a migration opened stays loadable after this
+  // save moves CURRENT past it, as a named revision that pruning keeps.
+  if (kind == SaveKind::explicit_save && previous && previous.value().migrated_from) {
+    if (auto kept = keep_pre_upgrade_generation(); !kept)
+      return Result<SaveOutcome>::failure(
+          {kept.error().code, "Cannot keep the pre-upgrade version: " + kept.error().message});
   }
   auto generated = random_name();
   if (!generated)

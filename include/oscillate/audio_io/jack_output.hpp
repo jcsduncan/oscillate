@@ -81,6 +81,12 @@ struct JackApi {
   bool (*start_realtime_thread)(void*, void*, void* (*)(void*), void*,
                                 std::uint64_t*) noexcept = nullptr;
   void (*join_thread)(void*, std::uint64_t) noexcept = nullptr;
+  // The callback's clock, in std::chrono::steady_clock nanoseconds: it times
+  // each callback against its period and stamps when the block is heard.
+  // Optional; null reads steady_clock. A fake device supplies its own, so a
+  // callback it runs on an ordinary thread is not judged by when the host
+  // happened to schedule that thread.
+  std::int64_t (*now_ns)(void*) noexcept = nullptr;
 };
 
 class JackOutput {
