@@ -10,14 +10,14 @@ Synths, effects and note effects are all a versioned parameter table plus a kern
 ## Decision
 
 1. **One neutral layer.** `oscillate_native_control` (`src/native_dsp`, namespace `oscillate::native_dsp`) holds what every table-driven engine is built on:
-   - `parameters.hpp`: `ParameterDescriptor`, `EngineDescriptor`, `Preset`, `NamedValue` and the value helpers (sanitise, normalise, resolve, sparse and preset values);
+   - the parameter tables and their value helpers (`ParameterDescriptor`, `EngineDescriptor`, `SynthPreset`), compiled into the layer but still declared in `native_dsp::synth` by `synth/parameters.hpp`;
    - `parameter_control.hpp`: `ParameterControl`, `ParameterLane` and the control-tick interval;
    - `telemetry.hpp`: `TelemetryBuffer`;
    - `transport.hpp`: `Transport`, the musical position at a control tick, and the tempo-synced divisions;
    - `document_state.hpp`: `DocumentState`, the base of every compiled engine document.
 
-   It depends only on `foundation`. The synth engines, the effect platform and the note effects link it; none of them reaches another's headers for these types.
-2. **Names say what they are.** The types lose their synth prefixes: `SynthTransport` is `Transport`, `SynthPreset` is `Preset` and `SynthDocumentState` is `DocumentState`.
+   It depends only on `foundation`. The synth engines, the effect platform and the note effects link it, and take parameter control, telemetry, the transport and document state from its neutral headers.
+2. **Names say what they are.** The moved types lose their synth prefixes: `SynthTransport` is `Transport` and `SynthDocumentState` is `DocumentState`.
 3. **The bar grid belongs to the timeline.** `timeline::BarGrid` turns a meter map into the bar lines the callback reads. Hosts that compile a snapshot (the synth player, the native effect stage) build it; kernels only see the resulting `Transport`.
 
 ## Alternatives considered
@@ -27,6 +27,6 @@ Synths, effects and note effects are all a versioned parameter table plus a kern
 
 ## Consequences
 
-- An effect or note effect includes only the neutral headers and its own DSP.
+- An effect or note effect includes the neutral headers, its own DSP and, for its parameter table, `synth/parameters.hpp`.
 - The synth DSP building blocks (filters, oscillators, oversamplers) stay in `oscillate_native_synth`; effects that use them still include those headers.
 - The HLD (§§3, 8.1, 8.2) describes the layer.

@@ -1,6 +1,6 @@
 # ADR-0043 — One native insert path
 
-**Status:** Superseded by [ADR-0090](0090-render-graph-builder.md) where it has export link `native_inserts`: export now reaches it through `render_graph`. Superseded by [ADR-0092](0092-native-inserts-read-key-audibility.md) where it lists `native_inserts`' dependencies: it also links `routing`. The rest is accepted and implemented; the classic kinds become engines in ADR-0047. **Date:** 20 October 2026.
+**Status:** Superseded by [ADR-0090](0090-render-graph-builder.md) where it has export link `native_inserts`: export now reaches it through `render_graph`. Superseded by [ADR-0092](0092-native-inserts-read-key-audibility.md) where it lists `native_inserts`' dependencies: it also links `routing`. Superseded by [ADR-0104](0104-native-processing-layers.md) where its stage works out `SynthTransport`: that is now the neutral `native_dsp::Transport`. The rest is accepted and implemented; the classic kinds become engines in ADR-0047. **Date:** 20 October 2026.
 **Builds on:**
 - ADR-0023, the unified insert chain;
 - ADR-0040, the native effect platform (its model, schema and Quick decisions stand);
