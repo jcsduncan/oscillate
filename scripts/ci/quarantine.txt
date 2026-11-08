@@ -1,0 +1,7 @@
+# Tests the pull request shards leave out while an open issue tracks their
+# failure on CI (scripts/ci/ctest_shards.py). One per line: the CTest name,
+# then the issue number. The nightly slow tier and the test sweep still run
+# them. Remove the line in the pull request that fixes the test.
+quick_shell_smoke 227
+quick_native_effect_app_contract 228
+audio_io_contract 238
