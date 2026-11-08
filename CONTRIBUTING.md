@@ -119,6 +119,13 @@ a pull request changes none of their inputs; a skipped job counts as passed.
 - **Documentation**: `scripts/check-doc-links.py` and a strict MkDocs build
   of the documentation site.
 
+**CodeQL** (`codeql.yml`) analyses C/C++ without a build (build mode
+`none`), Python and the workflows with the default query suite, using the
+CodeQL CLI in the runner's toolcache. The C/C++ job passes without analysing
+when a pull request changes no C/C++ source (the `cpp` class of
+`scripts/ci/changes.py`). Results appear in the repository's code scanning
+alerts.
+
 An advisory **clang-tidy** job, not required for merging, runs the
 `.clang-tidy` checks on the translation units a pull request touches
 (`scripts/ci/tidy_changed.py`); `scripts/check-tidy.sh` checks the whole tree.
@@ -160,6 +167,9 @@ These run on `main` every night; none is required for merging.
   ASan/UBSan; the `tsan` preset runs the `engine` area (the audio worker
   pool among it) and the routed playback cases. A failed run uploads the
   sanitizer reports as an artifact.
+- **CodeQL with a build** (`codeql.yml`): C/C++ analysed from a traced
+  build of the Quick preset, for full type information, under its own
+  category (`/language:c-cpp/build-mode:manual`).
 - **Tidy sweep** (`tidy-sweep.yml`): the `.clang-tidy` checks over every
   configured translation unit, with the VST3 host and the optional
   adapters, in eight parallel shards (`scripts/ci/tidy_shard.py`). The run's
@@ -174,6 +184,7 @@ Run any of them on a branch from the command line, then follow the run:
 ```sh
 gh workflow run sanitizers.yml --ref my-branch
 gh workflow run test-sweep.yml --ref my-branch
+gh workflow run codeql.yml --ref my-branch
 gh workflow run test-sweep.yml --ref my-branch -f tests='^native_nova'
 gh run watch "$(gh run list --workflow test-sweep.yml --branch my-branch --limit 1 --json databaseId --jq '.[0].databaseId')"
 ```

@@ -1,7 +1,7 @@
 """Classify a pull request's changed files for CI job selection.
 
 Usage: changes.py BASE_SHA HEAD_SHA
-Writes code=, python=, docs= and packaging= (true/false) to $GITHUB_OUTPUT, or to stdout
+Writes code=, cpp=, python=, docs= and packaging= (true/false) to $GITHUB_OUTPUT, or to stdout
 when that variable is unset. With no BASE_SHA (a push to main or a manual
 run) every class is true.
 
@@ -29,6 +29,22 @@ DOC_ONLY = (
     "scripts/check-doc-links.py",
     "scripts/ci/docs-requirements.txt",
     "scripts/ci/mkdocs_hooks.py",
+)
+# Paths whose change needs the C/C++ CodeQL analysis (codeql.yml), which
+# reads sources without a build.
+CPP = (
+    "*.c",
+    "*.cc",
+    "*.cpp",
+    "*.cxx",
+    "*.h",
+    "*.hh",
+    "*.hpp",
+    "*.hxx",
+    "*.inc",
+    "*.inl",
+    "*.ipp",
+    ".github/workflows/codeql.yml",
 )
 # Paths whose change needs the Python suites.
 PYTHON = (
@@ -62,7 +78,7 @@ PACKAGING = (
     "tests/packaging/*",
     ".github/workflows/packaging.yml",
 )
-CLASSES = ("code", "python", "docs", "packaging")
+CLASSES = ("code", "cpp", "python", "docs", "packaging")
 
 
 def matches(path, patterns):
@@ -82,6 +98,7 @@ def changed_files(base, head):
 def classify(files):
     return {
         "code": any(not matches(f, DOC_ONLY) for f in files),
+        "cpp": any(matches(f, CPP) for f in files),
         "python": any(matches(f, PYTHON) for f in files),
         "docs": any(matches(f, DOCS) for f in files),
         "packaging": any(matches(f, PACKAGING) for f in files),
