@@ -20,6 +20,11 @@ The release tag that Release Please pushes starts the workflow. A manual run wit
 run it when a packaging input changes (`packaging` in
 [`changes.py`](../../scripts/ci/changes.py)). It is not a required check.
 
+Once the packages are attached, the workflow starts the Pages workflow,
+which rebuilds the signed [apt repository](../install.md) from the `.deb` of
+the newest three releases. Pages publishes no repository while the
+`APT_GPG_PRIVATE_KEY` secret is unset.
+
 ## Features in each package
 
 Both packages are static Release builds of the Qt Quick app with

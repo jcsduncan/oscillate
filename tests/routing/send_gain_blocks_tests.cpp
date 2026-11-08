@@ -252,6 +252,115 @@ void channel_level_binding_preserves_stereo_balance() {
   require(!routing::PreparedRouteGainBlocks::prepare(snapshot, missing, lanes, 4),
           "unrouted channel automation was silently omitted");
 }
+// ADR-0097: a sidechain key from a source under a mute lane carries the
+// source channel's mute gain, delayed as the edge delays the key, so it is
+// silent on exactly the audio the channel's mute silences.
+void a_mute_lane_gates_its_sources_key() {
+  constexpr std::int64_t mute_from = 1'000;
+  // Past the 5 ms mute glide at 48 kHz (240 frames).
+  constexpr std::uint64_t past_the_glide = 400;
+  constexpr std::uint32_t key_delay = 16;
+  constexpr std::size_t frames = 4;
+  constexpr float saved_gain = 0.25F;
+  constexpr double lane_unmuted = 0.0;
+  constexpr double lane_muted = 1.0;
+  auto snapshot = snapshot_with_send();
+  auto& bus = snapshot.tracks.back();
+  const auto slot = id<project::InsertSlotId>(4'000);
+  bus.effects.push_back({slot, true, project::NativeEffectPatch{"press", 1, {}, 1}});
+  auto& source = snapshot.tracks.front();
+  auto& send = source.sends.front();
+  send.purpose = project::SendPurpose::sidechain;
+  send.target_insert = slot;
+  // The key's own gain is its saved gain; the source's mute is its lane's.
+  source.automation.clear();
+  const auto domain =
+      project::channel_control_domain(project::TrackControlTarget::Key::channel_mute);
+  source.automation.push_back(
+      {id<project::AutomationLaneId>(5'000),
+       project::TrackControlTarget{source.id, project::TrackControlTarget::Key::channel_mute},
+       {project::AutomationRepresentation::physical, domain.semantic_key, domain.unit,
+        domain.minimum, domain.maximum, lane_unmuted, domain.discrete, domain.step_count,
+        domain.scale},
+       project::AutomationTimebase::elapsed,
+       {{id<project::AutomationPointId>(5'001), 0, lane_unmuted},
+        {id<project::AutomationPointId>(5'002), mute_from, lane_muted}},
+       1});
+  const std::array stages{routing::BoundStage{.track = bus.id,
+                                              .slot = slot,
+                                              .processor = routing::StageProcessor::native_effect,
+                                              .generation = 1,
+                                              .detector = true}};
+  routing::ProjectRouteIdRegistry ids;
+  auto route = take(ids.compile(snapshot, 64, stages));
+  REQUIRE_EQ(route.sends.size(), 1, "the key is live");
+  const auto edge_id = route.sends.front().edge;
+  auto lanes = take(automation_project::prepare_project_automation(snapshot, snapshot.revision));
+  const auto mapped =
+      std::ranges::find(route.track_nodes, source.id, &routing::ProjectRouteTrackNode::track);
+  REQUIRE_NE(mapped, route.track_nodes.end(), "the source has a channel node");
+  const auto node_id = mapped->node;
+  struct Gains {
+    std::vector<float> key;
+    std::vector<float> channel;
+  };
+  // A run of blocks: `length` frames from `start` in one processing
+  // generation.
+  struct Playback {
+    std::uint64_t start;
+    std::uint64_t length;
+    std::uint64_t generation;
+  };
+  const auto play = [&](routing::PreparedRouteGainBlocks& adapter, const Playback& run) {
+    Gains gains;
+    for (auto position = run.start; position < run.start + run.length; position += frames) {
+      engine::RoutedGainSpans block;
+      REQUIRE_TRUE(adapter.fill_block({position, run.generation}, frames, block),
+                   "the key's gain block fills");
+      const auto edge = std::ranges::find(block.edges, edge_id, &engine::EdgeGainSpan::id);
+      const auto node = std::ranges::find(block.nodes, node_id, &engine::NodeGainSpan::id);
+      REQUIRE_NE(edge, block.edges.end(), "the key's gain reaches its edge");
+      REQUIRE_NE(node, block.nodes.end(), "the channel's gain reaches its node");
+      REQUIRE_EQ(edge->values.size(), frames, "the key's gain reaches its edge");
+      gains.key.insert(gains.key.end(), edge->values.begin(), edge->values.end());
+      for (const auto& frame : node->values)
+        gains.channel.push_back(frame.left);
+    }
+    return gains;
+  };
+  constexpr std::uint64_t first_generation = 1;
+  constexpr std::uint64_t seek_generation = 2;
+  constexpr auto length = static_cast<std::uint64_t>(mute_from) + past_the_glide;
+
+  auto adapter = take(routing::PreparedRouteGainBlocks::prepare(snapshot, route, lanes, frames));
+  REQUIRE_TRUE(adapter->binds_edge_gain(edge_id), "the source's mute lane binds its key");
+  const auto played = play(*adapter, {0, length, first_generation});
+  for (std::size_t frame = 0; frame < played.key.size(); ++frame)
+    REQUIRE_EQ(played.key[frame], saved_gain * played.channel[frame],
+               "the key takes its channel's mute gain, frame " + std::to_string(frame));
+  REQUIRE_EQ(played.key.front(), saved_gain, "an open lane keeps the key's saved gain");
+  REQUIRE_EQ(played.key.back(), 0.0F, "the key is silent where the lane mutes");
+
+  auto delayed = route;
+  const auto planned =
+      std::ranges::find(delayed.latency.edges, edge_id, &engine::PlannedEdgeDelay::id);
+  REQUIRE_NE(planned, delayed.latency.edges.end(), "the key has a planned edge");
+  planned->compensation_frames = key_delay;
+  adapter = take(routing::PreparedRouteGainBlocks::prepare(snapshot, delayed, lanes, frames));
+  const auto late = play(*adapter, {0, length, first_generation});
+  for (std::size_t frame = key_delay; frame < late.key.size(); ++frame)
+    REQUIRE_EQ(late.key[frame], saved_gain * late.channel[frame - key_delay],
+               "a delayed key takes the mute its audio left with, frame " + std::to_string(frame));
+  REQUIRE_EQ(late.key[static_cast<std::size_t>(mute_from) + key_delay - 1], saved_gain,
+             "a delayed key still carries audio from before the mute");
+
+  // A seek just past the step starts the channel muted; the key, whose
+  // delay line starts again too, is silent from its first frame.
+  const auto seek = static_cast<std::uint64_t>(mute_from) + 1;
+  const auto sought = play(*adapter, {seek, past_the_glide, seek_generation});
+  require(std::ranges::all_of(sought.key, [](float gain) { return gain == 0.0F; }),
+          "a key sought past its source's mute stays silent");
+}
 } // namespace
 
 int main() {
@@ -260,6 +369,7 @@ int main() {
     memory_budget();
     dormant_sidechain_automation_stays_saved();
     channel_level_binding_preserves_stereo_balance();
+    a_mute_lane_gates_its_sources_key();
   } catch (const std::exception& error) {
     std::fprintf(stderr, "%s\n", error.what());
     return 1;
