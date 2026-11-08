@@ -28,7 +28,9 @@ backends and the harness, not device delivery.
 
 ## On the reference machine
 
-From the repository root, with the normal release build:
+From the repository root, with the normal release build. The script turns on
+the VST3 host, so the build needs `OSCILLATE_VST3_SDK_ROOT` set to the pinned
+SDK ([local development](../dependencies/local-development.md)):
 
 ```sh
 scripts/live-tier.sh build/release build/release/scratch/live-tier

@@ -22,8 +22,9 @@ without the VST3 host plays a second Ember in place of the VST3 instrument.
 ## What a run reports
 
 [`qualify_reference_projects.py`](../../tests/qualification/qualify_reference_projects.py)
-plays each project at 64 and 128 frames after 100 warm-up blocks and writes
-`results.json` and `results.md`:
+plays each project at 64 and 128 frames and writes `results.json` and
+`results.md`. Through the fake callback, timing and CPU cover the blocks after
+100 warm-up blocks; on a sink they cover the whole playback, warm-up included.
 
 - **Callback time:** p50, p99 and maximum of each block's render, and the
   blocks over their period. Through the paced fake callback the player times
@@ -37,8 +38,10 @@ plays each project at 64 and 128 frames after 100 warm-up blocks and writes
 - **Devices** (with `--trace`): from the [performance trace](../decisions/0061-performance-tracing.md),
   each synth and effect kind's share of one core, instance count and
   per-block mean, p99 and maximum, on the callback and worker threads.
-- **Correctness:** a run fails on any render failure, missing source frame,
-  worker failure, non-finite sample or silent output.
+- **Correctness:** a run fails on any render failure, missing source frame or
+  worker failure. Through the fake callback it also fails on a non-finite
+  sample or silent output; on a sink, listen or use the live tier's monitored
+  rehearsal for the output itself.
 
 On a sink, the run also reports PipeWire's xrun count where the backend
 exposes it, and the trace's xrun instants.
@@ -56,10 +59,12 @@ machines, so their numbers show trends between runs, not release headroom.
 
 The reference machine is the maintainer's desktop: Intel Core i7-10700K
 (8 cores, 16 threads), 30 GiB of memory, Ubuntu 26.04 with PipeWire. Build the player in
-the normal release build directory:
+the normal release build directory, with the VST3 host and the pinned SDK
+([local development](../dependencies/local-development.md)):
 
 ```sh
-cmake -DOSCILLATE_BUILD_QUALIFICATION=ON build/release
+cmake -DOSCILLATE_BUILD_QUALIFICATION=ON -DOSCILLATE_BUILD_VST3_SCANNER=ON \
+  -DOSCILLATE_VST3_SDK_ROOT=/path/to/vst3sdk build/release
 scripts/build.sh build/release --target oscillate_reference_project
 ```
 

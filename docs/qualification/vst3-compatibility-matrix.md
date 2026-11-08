@@ -55,7 +55,7 @@ cmake -S tests/qualification -B build/qualification -G Ninja \
   -DCMAKE_BUILD_TYPE=Release -DOSCILLATE_BUILD_QUICK_UI=ON \
   -DOSCILLATE_BUILD_VST3_SCANNER=ON -DOSCILLATE_VST3_SDK_ROOT=/path/to/vst3sdk
 scripts/build.sh build/qualification --target oscillate_vst3_matrix_probe
-python3 -I tests/qualification/qualify_vst3_matrix.py \
+xvfb-run -a python3 -I tests/qualification/qualify_vst3_matrix.py \
   --probe build/qualification/oscillate_vst3_matrix_probe \
   --work build/qualification/vst3-matrix --output build/qualification/vst3-matrix/result \
   --only 'Surge XT' --editor
