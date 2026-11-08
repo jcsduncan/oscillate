@@ -39,7 +39,7 @@ endif()
 if(OSCILLATE_BUILD_CODEC_ADAPTER)
   find_path(OSCILLATE_SNDFILE_INCLUDE_DIR NAMES sndfile.h REQUIRED)
   find_library(OSCILLATE_SNDFILE_LIBRARY NAMES sndfile REQUIRED)
-  # MP3 decoding scans the stream with libmpg123 1.32 or later.
+  # MP3 decoding scans the stream with libmpg123 1.33 or later.
   find_path(OSCILLATE_MPG123_INCLUDE_DIR NAMES mpg123.h REQUIRED)
   find_library(OSCILLATE_MPG123_LIBRARY NAMES mpg123 REQUIRED)
   # MP3 import needs libsndfile 1.1 or later built with MPEG support: the

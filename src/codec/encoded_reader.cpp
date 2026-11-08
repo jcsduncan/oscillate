@@ -26,8 +26,8 @@ constexpr int max_channels = 2;
 constexpr long min_sample_rate = 8'000;
 constexpr long max_sample_rate = 384'000;
 
-// mpg123_reader64 and the 64-bit open, seek and length calls.
-static_assert(MPG123_API_VERSION >= 48, "MP3 decoding needs libmpg123 1.32 or later");
+// mpg123_reader64 (API 48) and mpg123_open_handle64 (API 49, libmpg123 1.33).
+static_assert(MPG123_API_VERSION >= 49, "MP3 decoding needs libmpg123 1.33 or later");
 
 [[nodiscard]] sf_count_t file_length(void* opaque) noexcept;
 [[nodiscard]] sf_count_t seek_file(sf_count_t offset, int whence, void* opaque) noexcept;

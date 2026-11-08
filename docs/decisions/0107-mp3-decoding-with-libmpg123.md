@@ -9,7 +9,7 @@ An MP3 without a Xing/Info header does not state its length. libsndfile estimate
 
 ## Decision
 
-- The codec adapter (`src/codec`) decodes MP3 with libmpg123 1.32 or later directly, through the same pinned-file virtual I/O. It asks for 32-bit float output at the stream's own rate and channel count and calls `mpg123_scan` on open, so the length counts every MPEG frame.
+- The codec adapter (`src/codec`) decodes MP3 with libmpg123 1.33 or later directly, through the same pinned-file virtual I/O. It asks for 32-bit float output at the stream's own rate and channel count and calls `mpg123_scan` on open, so the length counts every MPEG frame.
 - libsndfile still recognises the container, so the accepted formats do not change, and it still decodes WAV, AIFF and FLAC.
 - The reported length stays the first frame that does not decode ([#253](https://github.com/jcsduncan/oscillate/issues/253)), so the length and the decoded stream agree.
 
