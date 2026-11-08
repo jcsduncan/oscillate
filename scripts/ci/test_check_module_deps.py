@@ -14,6 +14,14 @@ SECOND_LINE = 2
 THIRD_LINE = 3
 FOURTH_LINE = 4
 LINK_ISSUE = 129
+ROOT_PATH = "apps/daw_quick"
+ROOT_LIBRARY = "oscillate_quick_core"
+APP = (
+    "add_library(oscillate_quick_shared OBJECT a.cpp)\n"
+    "function(add_quick_core target)\n  add_library(${target} b.cpp)\nendfunction()\n"
+    f"add_quick_core({ROOT_LIBRARY})\n"
+    "add_executable(oscillate main.cpp)\n"
+)
 
 
 def table(exceptions=()):
@@ -26,6 +34,7 @@ def table(exceptions=()):
             "plugin_ui": {"path": "src/app/plugin_ui", "allowed": ["oscillate::engine"]},
         },
         "exceptions": list(exceptions),
+        "composition_root": {"name": "app", "path": ROOT_PATH},
     }
 
 
@@ -45,6 +54,11 @@ class TreeTest(unittest.TestCase):
         directory = self.root / "src" / module_path
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "CMakeLists.txt").write_text(text, encoding="utf-8")
+
+    def write_app(self, text):
+        directory = self.root / ROOT_PATH
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "CMakeLists.txt").write_text(APP + text, encoding="utf-8")
 
     def check(self, exceptions=()):
         return check_module_deps.check(self.root, table(exceptions))
@@ -109,7 +123,7 @@ class CheckTests(TreeTest):
 
     def test_nested_module_path_wins(self):
         nested = table()
-        nested["modules"]["app"] = {"path": "src/app", "allowed": []}
+        nested["modules"]["src_app"] = {"path": "src/app", "allowed": []}
         self.write("app/plugin_ui", "target_link_libraries(x oscillate::engine)\n")
         self.assertEqual(check_module_deps.check(self.root, nested), [])
 
@@ -166,6 +180,64 @@ class TableTests(TreeTest):
     def test_unknown_allowed_module_fails(self):
         broken = table()
         broken["modules"]["engine"]["allowed"] = ["nothing"]
+        self.assertIn("not in the table", " ".join(check_module_deps.check(self.root, broken)))
+
+
+class CompositionRootTests(TreeTest):
+    def setUp(self):
+        super().setUp()
+        self.write("native_dsp", "oscillate_add_library(native_dsp SOURCES eq.cpp)\n")
+
+    def test_root_may_link_any_module(self):
+        self.write_app(
+            "target_link_libraries(oscillate PRIVATE oscillate::engine oscillate::native_dsp\n"
+            "  oscillate::foundation)\n"
+        )
+        self.assertEqual(self.check(), [])
+
+    def test_root_link_to_unknown_target_fails(self):
+        self.write_app("target_link_libraries(oscillate PRIVATE oscillate::nowhere)\n")
+        found = self.check()
+        self.assertEqual(len(found), 1)
+        self.assertIn(f"{ROOT_PATH}/CMakeLists.txt", found[0])
+        self.assertIn("no module defines", found[0])
+
+    def test_module_linking_a_root_library_fails(self):
+        self.write_app("")
+        self.write(
+            "engine", ENGINE + "target_link_libraries(oscillate_engine oscillate_quick_shared)\n"
+        )
+        found = self.check()
+        self.assertEqual(len(found), 1)
+        self.assertIn(f"src/engine/CMakeLists.txt:{SECOND_LINE}", found[0])
+        self.assertIn("composition root", found[0])
+
+    def test_module_linking_a_function_made_root_library_fails(self):
+        self.write_app("")
+        self.write("native_dsp", f"target_link_libraries(oscillate_native_dsp {ROOT_LIBRARY})\n")
+        found = self.check()
+        self.assertEqual(len(found), 1)
+        self.assertIn(ROOT_LIBRARY, found[0])
+
+    def test_longer_names_are_not_root_libraries(self):
+        self.write_app("")
+        self.write(
+            "native_dsp",
+            f"oscillate_add_library(native_dsp SOURCES eq.cpp)\n# {ROOT_LIBRARY}\n"
+            f"set(x {ROOT_LIBRARY}_sources oscillate::engine)\n",
+        )
+        self.assertEqual(self.check(), [])
+
+    def test_root_listed_as_a_module_fails(self):
+        self.write_app("")
+        broken = table()
+        broken["modules"]["app"] = {"path": ROOT_PATH, "allowed": []}
+        self.assertIn("also a module", " ".join(check_module_deps.check(self.root, broken)))
+
+    def test_module_may_not_allow_the_root(self):
+        self.write_app("")
+        broken = table()
+        broken["modules"]["engine"]["allowed"] = ["app"]
         self.assertIn("not in the table", " ".join(check_module_deps.check(self.root, broken)))
 
 
