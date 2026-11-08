@@ -70,9 +70,12 @@ public:
   // notes, as one undo step. Added notes get fresh ids, returned in order.
   // Unknown ids, keys beyond 0..127, velocities beyond 1..127, empty notes
   // or two notes on one start and key reject the edit without change.
+  struct NoteChanges {
+    std::span<const project::MidiNote> changed;
+    std::span<const project::MidiNote> added;
+  };
   [[nodiscard]] foundation::Result<std::vector<project::NoteId>>
-  apply_note_edit(project::ClipId clip, std::span<const project::MidiNote> changed,
-                  std::span<const project::MidiNote> added = {});
+  apply_note_edit(project::ClipId clip, NoteChanges changes);
   // New notes take the velocity last set in the lane (100 to start).
   void set_new_note_velocity(std::uint8_t velocity) noexcept {
     new_note_velocity_ = static_cast<std::uint8_t>(

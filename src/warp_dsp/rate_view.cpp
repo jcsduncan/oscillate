@@ -263,11 +263,8 @@ bool RateConvertedSourceView::convert(std::int64_t first, std::span<float> left,
   return true;
 }
 
-// Rates are positional (source, project) like every rate API here.
-// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 double reference_rate_converted_sample(std::span<const float> source, std::uint32_t source_rate,
                                        std::uint32_t project_rate, std::int64_t output_frame) {
-  // NOLINTEND(bugprone-easily-swappable-parameters)
   const auto frames = project_rate_frames(source.size(), source_rate, project_rate);
   if (!frames || output_frame < 0 || static_cast<std::uint64_t>(output_frame) >= frames.value())
     return 0.0;

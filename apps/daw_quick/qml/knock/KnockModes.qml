@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The selected pad's ringing modes on a log frequency axis: one bar per
 // designed mode (knock::design_pad through the panel model), coloured by
@@ -131,7 +132,7 @@ Canvas {
     Text {
         x: view.theme.modesInset
         y: view.theme.spaceMd
-        text: "RINGING MODES · log frequency " + view.minHz + " Hz – " + (view.maxHz / 1000) + " kHz"
+        text: "RINGING MODES · log frequency " + Format.hertz(view.minHz) + " – " + Format.hertz(view.maxHz)
         color: view.theme.inkFaint
         font.family: view.theme.mono
         font.pixelSize: view.theme.typeBody

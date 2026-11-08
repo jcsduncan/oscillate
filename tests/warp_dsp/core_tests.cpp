@@ -24,11 +24,13 @@ void fft_sizes_are_validated() {
     require(detail::RealFft::supported(size), "valid FFT size rejected");
   for (const std::size_t size : {0U, 16U, 100U, 224U, 1000U})
     require(!detail::RealFft::supported(size), "invalid FFT size accepted");
+  bool refused = false;
   try {
     detail::RealFft fft(std::numeric_limits<std::size_t>::max());
-    throw std::runtime_error("oversized FFT was accepted");
   } catch (const std::invalid_argument&) {
+    refused = true;
   }
+  require(refused, "oversized FFT was accepted");
 }
 
 void source_view_handles_extreme_positions() {

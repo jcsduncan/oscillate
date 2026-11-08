@@ -23,7 +23,7 @@ namespace {
 
 // What a plugin prints to stderr while scanning is kept for the log, up to
 // this many bytes; the rest is read and discarded so the helper never blocks.
-constexpr std::size_t max_plugin_stderr_bytes = 8 * 1024;
+constexpr std::size_t max_plugin_stderr_bytes = std::size_t{8} * 1024;
 constexpr std::size_t pipe_read_bytes = 4096;
 constexpr int max_poll_wait_ms = 25;
 
@@ -81,7 +81,6 @@ ScanResult run_helper(const std::filesystem::path& helper, const std::filesystem
     return failure(ScanStatus::scanner_error, "Cannot create scanner pipe");
   const auto read_flags = fcntl(pipe_fds[0], F_GETFL);
   // POSIX fcntl file-status flags are specified as signed int bitmasks.
-  // NOLINTNEXTLINE(bugprone-signed-bitwise)
   if (read_flags < 0 || fcntl(pipe_fds[0], F_SETFL, read_flags | O_NONBLOCK) < 0) {
     close(pipe_fds[0]);
     close(pipe_fds[1]);
@@ -92,7 +91,6 @@ ScanResult run_helper(const std::filesystem::path& helper, const std::filesystem
   int error_fds[2] = {-1, -1};
   if (pipe2(error_fds, O_CLOEXEC) == 0) {
     const auto error_flags = fcntl(error_fds[0], F_GETFL);
-    // NOLINTNEXTLINE(bugprone-signed-bitwise)
     if (error_flags < 0 || fcntl(error_fds[0], F_SETFL, error_flags | O_NONBLOCK) < 0) {
       close(error_fds[0]);
       close(error_fds[1]);
@@ -176,7 +174,6 @@ ScanResult run_helper(const std::filesystem::path& helper, const std::filesystem
       transport_failed = true;
       break;
     }
-    // NOLINTNEXTLINE(bugprone-signed-bitwise)
     if (polled > 0 && error_fd >= 0 &&
         (descriptors[1].revents & (POLLIN | POLLHUP | POLLERR)) != 0 &&
         !plugin_stderr.read_from(error_fd)) {
@@ -187,13 +184,11 @@ ScanResult run_helper(const std::filesystem::path& helper, const std::filesystem
     // A broken or invalid pipe is a scanner transport failure. Waiting for the
     // deadline would misreport it as a plugin hang.
     // poll uses signed short event bitmasks.
-    // NOLINTNEXTLINE(bugprone-signed-bitwise)
     if (polled > 0 && (descriptor.revents & (POLLERR | POLLNVAL)) != 0) {
       transport_failed = true;
       break;
     }
     // poll uses signed short event bitmasks.
-    // NOLINTNEXTLINE(bugprone-signed-bitwise)
     if (polled > 0 && (descriptor.revents & (POLLIN | POLLHUP)) != 0) {
       std::array<std::uint8_t, pipe_read_bytes> buffer{};
       while (true) {

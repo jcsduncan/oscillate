@@ -1,6 +1,7 @@
 #include "crate_controller.hpp"
 
 #include "oscillate/application/crate_chops.hpp"
+#include "oscillate/foundation/value_text.hpp"
 #include "oscillate/native_dsp/synth/crate.hpp"
 
 #include <QApplication>
@@ -49,8 +50,8 @@ constexpr std::string_view mode_equal = "equal";
 constexpr std::string_view mode_manual = "manual";
 
 // Note names as the panel shows them: MIDI 60 is C3, so pad 1 (36) is C1.
-constexpr std::array<std::string_view, 12> note_names{"C",  "C#", "D",  "D#", "E",  "F",
-                                                      "F#", "G",  "G#", "A",  "A#", "B"};
+constexpr std::array<std::string_view, 12> note_names{"C",  "C♯", "D",  "D♯", "E",  "F",
+                                                      "F♯", "G",  "G♯", "A",  "A♯", "B"};
 constexpr int semitones_per_octave = 12;
 constexpr int octave_offset = 2;
 
@@ -103,8 +104,10 @@ std::shared_ptr<const SynthMediaAsset> builtin_asset(std::string_view name) {
 QString note_name(int key) {
   if (key < 0)
     return {};
+  // A whole octave number; the formatter gives a negative one its minus sign.
+  const int octave = key / semitones_per_octave - octave_offset;
   return text(note_names[static_cast<std::size_t>(key % semitones_per_octave)]) +
-         QString::number(key / semitones_per_octave - octave_offset);
+         QString::fromStdString(foundation::format_number(octave, 0));
 }
 
 } // namespace
@@ -491,6 +494,8 @@ bool CrateController::rename_chop(int index, const QString& name) {
   return status.message.empty();
 }
 
+// The chop, its new place and its phase are named at every call (from QML).
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 bool CrateController::move_chop(int index, double fraction, int phase) {
   if (!audio_ || phase < static_cast<int>(DragPhase::begin) ||
       phase > static_cast<int>(DragPhase::cancel))
@@ -569,6 +574,7 @@ bool CrateController::load_sample(const QString& path_or_url) {
   const auto name = QFileInfo(QString::fromStdString(path)).fileName();
   // Everything the plan needs, copied: it runs on the import's worker.
   std::vector<std::uint32_t> previous_slots;
+  previous_slots.reserve(regions_.size());
   for (const auto& region : regions_)
     previous_slots.push_back(region.slot);
   auto plan = [engine = &engine_, values = values_, previous_slots = std::move(previous_slots),

@@ -84,7 +84,7 @@ MidiNote note(std::int64_t from_step, std::int64_t steps, std::uint8_t key, std:
 }
 
 std::vector<MidiNote> sorted(std::vector<MidiNote> notes) {
-  std::stable_sort(notes.begin(), notes.end(), [](const MidiNote& x, const MidiNote& y) {
+  std::ranges::stable_sort(notes, [](const MidiNote& x, const MidiNote& y) {
     return x.start != y.start ? x.start < y.start : x.key < y.key;
   });
   return notes;
@@ -383,7 +383,7 @@ void rewrite_changes_only_the_edited_region() {
              "the same lane keeps every note");
   // Shuffled input comes back sorted and otherwise unchanged.
   auto shuffled = part;
-  std::reverse(shuffled.begin(), shuffled.end());
+  std::ranges::reverse(shuffled);
   REQUIRE_EQ(rewrite(shuffled, read, {length}, VoicingOptions{}), part, "unsorted input is sorted");
 
   for (const auto& replacement : {chord(b_flat, major_seventh), chord(G, dominant_ninth),

@@ -33,7 +33,14 @@ struct SegmentVoice {
 [[nodiscard]] double lerp(double a, double b, double t) noexcept { return a + (b - a) * t; }
 
 // The note's envelope (natural log) at fractional hop `tau`, at `hz`.
-[[nodiscard]] double envelope(const Note& note, double tau, double hz) {
+// A point on a note's envelope: fractional hop `tau` at `hz`.
+struct EnvelopePoint {
+  double tau = 0.0;
+  double hz = 0.0;
+};
+[[nodiscard]] double envelope(const Note& note, EnvelopePoint point) {
+  const double tau = point.tau;
+  const double hz = point.hz;
   const auto rows = note.envelope.size() / envelope_bands;
   if (rows == 0)
     return 0.0;
@@ -126,8 +133,9 @@ struct SegmentVoice {
         continue;
       double correction = 0.0;
       if (moved != f || formant != 1.0)
-        correction = std::min(max_envelope_gain,
-                              envelope(note, tau, moved * formant) - envelope(note, tau, f));
+        correction =
+            std::min(max_envelope_gain, envelope(note, {.tau = tau, .hz = moved * formant}) -
+                                            envelope(note, {.tau = tau, .hz = f}));
       track.amplitude[i] = a * gain * std::exp(correction);
       if (locked)
         track.phase[i] = t < 0.5 ? p0.phase : p1.phase;
@@ -209,15 +217,8 @@ foundation::Result<Renderer> Renderer::create(const Take& take, std::span<const 
       out[static_cast<std::size_t>(i - from)] = source[static_cast<std::size_t>(i)];
     return out;
   };
-  const auto segment = [&](std::vector<float> source, double at_start, std::int64_t out_start,
-                           std::int64_t out_end, double time_rate, double pitch_rate) {
-    detail::GrainSegment s;
-    s.source = std::move(source);
-    s.source_at_start = at_start;
-    s.out_start = out_start;
-    s.out_end = out_end;
-    s.time_rate = time_rate;
-    s.pitch_rate = pitch_rate;
+  // A segment on this render's grain hop and fade.
+  const auto segment = [&](detail::GrainSegment s) {
     s.grain_hop = grain;
     s.fade = fade;
     return s;
@@ -258,16 +259,21 @@ foundation::Result<Renderer> Renderer::create(const Take& take, std::span<const 
         SegmentVoice removal;
         removal.gain = -1.0;
         for (std::size_t c = 0; c < channels; ++c)
-          removal.channel[c] = segment(slice(c, from, to), static_cast<double>(note.start - from),
-                                       note.start, note.end, 1.0, 1.0);
+          removal.channel[c] = segment({.source = slice(c, from, to),
+                                        .source_at_start = static_cast<double>(note.start - from),
+                                        .out_start = note.start,
+                                        .out_end = note.end});
         state->segments.push_back(std::move(removal));
       }
       SegmentVoice addition;
       addition.gain = gain;
       for (std::size_t c = 0; c < channels; ++c)
-        addition.channel[c] =
-            segment(slice(c, from, to), static_cast<double>(note.start - from), start, end,
-                    time_rate, std::exp2(edit.pitch_cents / cents_per_octave));
+        addition.channel[c] = segment({.source = slice(c, from, to),
+                                       .source_at_start = static_cast<double>(note.start - from),
+                                       .time_rate = time_rate,
+                                       .pitch_rate = std::exp2(edit.pitch_cents / cents_per_octave),
+                                       .out_start = start,
+                                       .out_end = end});
       state->segments.push_back(std::move(addition));
       continue;
     }
@@ -286,10 +292,15 @@ foundation::Result<Renderer> Renderer::create(const Take& take, std::span<const 
         placed.gain = gain;
         for (std::size_t c = 0; c < channels; ++c) {
           auto rest = residual(c, from, to);
-          taken.channel[c] =
-              segment(rest, static_cast<double>(note.start - from), note.start, note.end, 1.0, 1.0);
-          placed.channel[c] = segment(std::move(rest), static_cast<double>(note.start - from),
-                                      start, end, time_rate, 1.0);
+          taken.channel[c] = segment({.source = rest,
+                                      .source_at_start = static_cast<double>(note.start - from),
+                                      .out_start = note.start,
+                                      .out_end = note.end});
+          placed.channel[c] = segment({.source = std::move(rest),
+                                       .source_at_start = static_cast<double>(note.start - from),
+                                       .time_rate = time_rate,
+                                       .out_start = start,
+                                       .out_end = end});
         }
         state->segments.push_back(std::move(taken));
         state->segments.push_back(std::move(placed));

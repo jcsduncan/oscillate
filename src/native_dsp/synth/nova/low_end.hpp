@@ -56,8 +56,9 @@ public:
       // RBJ low- and high-pass at the Butterworth Q; two of each in series
       // make the LR4 pair.
       const double hz = std::min(crossover_hz, native_dsp::dsp::nyquist_guard * rate_);
-      low_coefficients_ = native_dsp::dsp::rbj_lowpass(hz, native_dsp::dsp::butterworth_q, rate_);
-      high_coefficients_ = native_dsp::dsp::rbj_highpass(hz, native_dsp::dsp::butterworth_q, rate_);
+      const native_dsp::dsp::Corner at{.hz = hz, .rate = rate_};
+      low_coefficients_ = native_dsp::dsp::rbj_lowpass(at, native_dsp::dsp::butterworth_q);
+      high_coefficients_ = native_dsp::dsp::rbj_highpass(at, native_dsp::dsp::butterworth_q);
     }
   }
 

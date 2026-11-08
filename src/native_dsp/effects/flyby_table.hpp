@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Data tables keep one entry per row; clang-format would split them.
@@ -21,13 +22,13 @@ using T = synth::ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array paths{"Pass"sv, "Orbit"sv};
-enum Path : int { pass, orbit };
+enum Path : std::uint8_t { pass, orbit };
 inline constexpr std::array directions{"Clockwise"sv, "Anticlockwise"sv};
 // Loop: round and round at Speed, on the song's clock. Once: one pass at
 // Speed from each note-on of the tracks keying Flyby. Sync: one pass every
 // Length of the song. Position: where Position says, for automation.
 inline constexpr std::array runs{"Loop"sv, "Once"sv, "Sync"sv, "Position"sv};
-enum Run : int { loop, once, sync, position };
+enum Run : std::uint8_t { loop, once, sync, position };
 inline constexpr std::array lengths{"1/4 Bar"sv, "1/2 Bar"sv, "1 Bar"sv, "2 Bars"sv,
                                     "4 Bars"sv,  "8 Bars"sv,  "16 Bars"sv};
 inline constexpr std::array<double, 7> length_bars{0.25, 0.5, 1, 2, 4, 8, 16};
@@ -35,10 +36,10 @@ inline constexpr std::array<double, 7> length_bars{0.25, 0.5, 1, 2, 4, 8, 16};
 // Duda). Speakers: a constant-power pan instead, since both ears hear both
 // speakers.
 inline constexpr std::array listens{"Headphones"sv, "Speakers"sv};
-enum Listen : int { headphones, speakers };
+enum Listen : std::uint8_t { headphones, speakers };
 // Where the source rests between Once passes: at the start, or gone.
 inline constexpr std::array rests{"At Start"sv, "Silent"sv};
-enum Rest : int { at_start, silent };
+enum Rest : std::uint8_t { at_start, silent };
 
 // The map's reach: every path point lies within this many metres.
 inline constexpr double reach = 150.0;

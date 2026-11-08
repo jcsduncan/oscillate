@@ -75,8 +75,8 @@ void SampleLibrary::scan(std::filesystem::path root, bool encoded) {
     shared_->ready.reset();
   }
   // Assigning stops and joins the previous scan first.
-  worker_ =
-      std::jthread([this, shared = shared_, root = std::move(root), encoded](std::stop_token stop) {
+  worker_ = std::jthread(
+      [this, shared = shared_, root = std::move(root), encoded](const std::stop_token& stop) {
         std::vector<SampleEntry> found;
         try {
           found = scan_sample_folder(root, encoded, stop);

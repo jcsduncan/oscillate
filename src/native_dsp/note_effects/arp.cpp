@@ -220,11 +220,10 @@ private:
     // The pattern's notes, low to high or as played.
     std::array<Held, max_held> sorted{};
     const auto notes = held.notes();
-    std::copy(notes.begin(), notes.end(), sorted.begin());
+    std::ranges::copy(notes, sorted.begin());
     const auto base = std::span(sorted).first(notes.size());
     if (pattern_mode != table::as_played)
-      std::sort(base.begin(), base.end(),
-                [](const Held& a, const Held& b) { return a.key < b.key; });
+      std::ranges::sort(base, [](const Held& a, const Held& b) { return a.key < b.key; });
     const auto count = static_cast<std::int64_t>(base.size());
     const auto run = count * octave_count; // One pass up, over every octave.
     const auto pick = [&](std::int64_t index) {

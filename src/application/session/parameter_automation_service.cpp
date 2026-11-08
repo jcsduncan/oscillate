@@ -432,11 +432,11 @@ ParameterAutomationService::remove_channel_level_automation_lane(project::TrackI
 }
 
 foundation::Result<project::AutomationPointId>
-ParameterAutomationService::set_vst3_parameter_automation_point(
-    // Plugin parameter identity and timeline bar are distinct persisted coordinates.
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-    project::TrackId track_id, project::PluginInstanceId plugin_id, std::uint32_t parameter_id,
-    std::int64_t zero_based_bar, double normalized_value) {
+ParameterAutomationService::set_vst3_parameter_automation_point(project::TrackId track_id,
+                                                                project::PluginInstanceId plugin_id,
+                                                                std::uint32_t parameter_id,
+                                                                std::int64_t zero_based_bar,
+                                                                double normalized_value) {
   using Result = foundation::Result<project::AutomationPointId>;
   if (zero_based_bar < 0 || zero_based_bar == std::numeric_limits<std::int64_t>::max() ||
       !std::isfinite(normalized_value) || normalized_value < 0.0 || normalized_value > 1.0)

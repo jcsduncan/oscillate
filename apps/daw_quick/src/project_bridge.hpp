@@ -573,6 +573,10 @@ public:
   // `from` to `to` (normalised timeline positions) and `track_delta` rows,
   // deleted, or (MIDI clips on one track) merged into one. One undo step each.
   Q_INVOKABLE void move_selected_clips(double from, double to, int track_delta);
+  // The selected clips one beat later (+1) or earlier (-1), each on its own
+  // track, as one undo step; refused as a whole when any clip would start
+  // before bar 1.
+  Q_INVOKABLE void nudge_selected_clips(int beat_direction);
   Q_INVOKABLE void delete_selected_clips();
   Q_INVOKABLE void merge_selected_clips();
   Q_INVOKABLE void add_marker_at_playhead();

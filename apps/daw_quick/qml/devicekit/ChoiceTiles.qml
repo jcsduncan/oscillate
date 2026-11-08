@@ -3,7 +3,8 @@ import QtQuick
 
 // A choice parameter as tiles: a name and an optional hint under it, the
 // chosen tile edged in its accent on a tint, or, as a segment (`segment`),
-// joined buttons with the chosen one lit. Click a tile, or use the arrow
+// joined buttons. A chosen button or name-only tile is a segmented choice:
+// filled with the accent, its name set in accentInk. Click a tile, or use the arrow
 // keys; Delete resets. Every pick is one undo step. `order` shows the
 // choices in another order than the table's, `names` renames a tile. An
 // empty parameterId leaves the tiles inert. The theme's choice tokens give
@@ -14,6 +15,8 @@ Item {
     required property KitTheme theme
     required property string parameterId
     property color accent: theme.accent
+    // A chosen segmented choice's name, on the accent fill.
+    property color accentInk: theme.accentInk
     property color tint: theme.choiceTileOn
     property int columns: theme.choiceColumns
     property int tileHeight: theme.choiceTileHeight
@@ -115,6 +118,11 @@ Item {
             readonly property color tint: choice.tint
             readonly property int nameSize: choice.nameSize
             readonly property string hint: choice.hints[choiceIndex] !== undefined ? choice.hints[choiceIndex] : ""
+            // A joined button or a tile with no hint picks like a segmented
+            // control: its chosen state is the accent fill and inverse ink.
+            readonly property bool segmented: segment || hint === ""
+            readonly property color selectionFill: on && segmented ? accent : choice.theme.choiceTileFill(tile)
+            readonly property color selectionInk: on && segmented ? choice.accentInk : choice.theme.choiceNameInk(tile)
             readonly property int column: index % choice.cellColumns
             readonly property int row: Math.floor(index / choice.cellColumns)
             // Whole pixels when the theme asks, so a row's tiles never sum
@@ -135,7 +143,7 @@ Item {
             width: choice.segment ? segmentCell : spans ? cell * (spare + 1) + choice.spacing * spare : cell
             height: choice.tileHeight
             radius: choice.segment ? choice.theme.choiceRadius - choice.theme.choiceEdgeWidth : choice.theme.choiceRadius
-            color: choice.theme.choiceTileFill(tile)
+            color: selectionFill
             border.width: choice.segment ? 0 : choice.theme.choiceEdgeWidth
             border.color: on ? choice.accent : choice.theme.choiceTileEdge
             Accessible.role: Accessible.RadioButton
@@ -158,7 +166,7 @@ Item {
                     horizontalAlignment: tile.hint !== "" ? Text.AlignLeft : Text.AlignHCenter
                     text: choice.names[tile.choiceIndex] !== undefined ? choice.names[tile.choiceIndex]
                                                                        : choice.choices[tile.choiceIndex]
-                    color: choice.theme.choiceNameInk(tile)
+                    color: tile.selectionInk
                     font.family: choice.theme.choiceFont
                     font.pixelSize: choice.nameSize
                     font.weight: choice.theme.choiceNameWeight(tile)

@@ -149,9 +149,9 @@ void ping_pong_alternates_and_mono_spreads() {
 }
 
 // Zero-crossing frequency over 10 ms windows.
-std::vector<double> frequencies(const std::vector<double>& y, std::size_t from, std::size_t to) {
+std::vector<double> frequencies(const std::vector<double>& y, std::size_t begin, std::size_t end) {
   std::vector<double> out;
-  for (std::size_t start = from; start + 480 <= to; start += 480) {
+  for (std::size_t start = begin; start + 480 <= end; start += 480) {
     out.push_back(measured_hz(y, start, start + 480, rate));
   }
   return out;
@@ -172,7 +172,7 @@ void digital_time_changes_keep_pitch_and_tape_bends_it() {
                                 require(runtime->offer_values(next, 1), "time change offered");
                               }});
     const auto hz = frequencies(out.left, 48'480, 72'000);
-    const auto [low, high] = std::minmax_element(hz.begin(), hz.end());
+    const auto [low, high] = std::ranges::minmax_element(hz);
     if (tape) {
       REQUIRE_LT(*low, 900.0, "a tape time change bends the pitch: " + std::to_string(*low));
     } else {
@@ -192,7 +192,7 @@ void wow_follows_its_formula() {
   values[at("relay.mod_rate")] = 1.0;
   values[at("relay.high_cut")] = 20'000.0;
   auto runtime = make_effect(relay_engine(), values);
-  const auto out = process(*runtime, sine(1'000.0, 0.05, 4 * 48'000));
+  const auto out = process(*runtime, sine(1'000.0, 0.05, std::size_t{4} * 48'000));
   // Demodulate the delay over one-millisecond windows.
   const double w = 2.0 * std::numbers::pi * 1'000.0 / rate;
   std::vector<double> delay_ms;
@@ -212,7 +212,7 @@ void wow_follows_its_formula() {
     previous = phase;
     delay_ms.push_back(unwrapped / w / 48.0);
   }
-  const auto [low, high] = std::minmax_element(delay_ms.begin(), delay_ms.end());
+  const auto [low, high] = std::ranges::minmax_element(delay_ms);
   double expected_low = 1e9;
   double expected_high = -1e9;
   for (std::size_t k = 0; k < delay_ms.size(); ++k) {
@@ -237,33 +237,33 @@ void tape_self_oscillation_is_bounded() {
   values[at("relay.mix")] = 1.0;
   values[at("relay.low_cut")] = 80.0;
   values[at("relay.high_cut")] = 6'000.0;
-  const auto out = run(values, burst(10 * 48'000));
-  const double late = peak(out.left, 9 * 48'000);
+  const auto out = run(values, burst(std::size_t{10} * 48'000));
+  const double late = peak(out.left, std::size_t{9} * 48'000);
   require(late < 2.0 && late > 0.05,
           "feedback past unity sustains but stays bounded: " + std::to_string(late));
 }
 
-double spread_ms(const std::vector<double>& y, std::size_t from, std::size_t to) {
+double spread_ms(const std::vector<double>& y, std::size_t begin, std::size_t end) {
   // RMS duration of the echo's energy about its centroid.
   double total = 0.0;
   double centroid = 0.0;
-  for (std::size_t i = from; i < to; ++i) {
+  for (std::size_t i = begin; i < end; ++i) {
     total += y[i] * y[i];
     centroid += static_cast<double>(i) * y[i] * y[i];
   }
   centroid /= total;
   double spread = 0.0;
-  for (std::size_t i = from; i < to; ++i) {
+  for (std::size_t i = begin; i < end; ++i) {
     const double d = static_cast<double>(i) - centroid;
     spread += d * d * y[i] * y[i];
   }
   return std::sqrt(spread / total) / 48.0;
 }
 
-double centroid_ms(const std::vector<double>& y, std::size_t from, std::size_t to) {
+double centroid_ms(const std::vector<double>& y, std::size_t begin, std::size_t end) {
   double total = 0.0;
   double centroid = 0.0;
-  for (std::size_t i = from; i < to; ++i) {
+  for (std::size_t i = begin; i < end; ++i) {
     total += y[i] * y[i];
     centroid += static_cast<double>(i) * y[i] * y[i];
   }
@@ -295,7 +295,7 @@ void ducking_tucks_repeats_under_the_input() {
   values[at("relay.ducking")] = 1.0;
   values[at("relay.mix")] = 1.0;
   values[at("relay.feedback")] = 0.6;
-  auto input = sine(440.0, 0.5, 3 * 48'000);
+  auto input = sine(440.0, 0.5, std::size_t{3} * 48'000);
   std::fill(input.left.begin() + 48'000, input.left.end(), 0.0);
   std::fill(input.right.begin() + 48'000, input.right.end(), 0.0);
   auto runtime = make_effect(relay_engine(), values);

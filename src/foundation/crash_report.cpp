@@ -249,6 +249,7 @@ struct Marker {
 template <typename T> std::optional<T> parse_number(std::string_view text) {
   T value{};
   const auto* end = text.data() + text.size();
+  // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage): from_chars reads [data, end).
   const auto [rest, error] = std::from_chars(text.data(), end, value);
   if (error != std::errc{} || rest != end)
     return std::nullopt;
@@ -396,9 +397,7 @@ std::string build_report(const Marker& marker, const std::optional<std::string>&
 
 } // namespace
 
-std::filesystem::path
-default_directory(const char* xdg_state_home, // NOLINT(bugprone-easily-swappable-parameters)
-                  const char* home) {
+std::filesystem::path default_directory(const char* xdg_state_home, const char* home) {
   const auto absolute = [](const char* text) {
     return text != nullptr && text[0] == '/' ? std::filesystem::path(text)
                                              : std::filesystem::path{};

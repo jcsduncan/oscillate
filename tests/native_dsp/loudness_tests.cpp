@@ -190,7 +190,7 @@ void momentary_and_short_term_windows() {
     REQUIRE_TRUE(!meter.finish().short_term_lkfs, "reset retained rolling loudness");
   }
 
-  const auto signal = sine(48'000 * 4, LoudnessLayout::stereo, 0, 0.25);
+  const auto signal = sine(std::size_t{48'000} * 4, LoudnessLayout::stereo, 0, 0.25);
   IntegratedLoudnessAnalyzer whole(48'000, LoudnessLayout::stereo);
   IntegratedLoudnessAnalyzer chunks(48'000, LoudnessLayout::stereo);
   REQUIRE_EQ(whole.append(signal), LoudnessStatus::ok, "whole window fixture rejected");

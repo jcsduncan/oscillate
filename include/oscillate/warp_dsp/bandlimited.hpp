@@ -161,15 +161,19 @@ template <typename Source>
   return {reduce(left_sum), reduce(right_sum)};
 }
 
+// A wing's first tap, relative to the frame, and the way it walks.
+struct WingTaps {
+  std::int64_t origin = 0;
+  std::int64_t direction = 1;
+};
+
 // Scaled cutoff: tap positions advance by cutoff * resolution table steps in
-// 16-bit fixed point, so every read is a pure function of its position. The
-// wing starts at `origin` (relative to the frame) and walks by `direction`.
+// 16-bit fixed point, so every read is a pure function of its position.
 template <typename Source>
-void scaled_wing(const BandlimitedKernel& kernel, const Source& at_frame, std::int64_t origin,
-                 std::int64_t direction, std::uint64_t first, std::uint64_t step,
-                 StereoSample& sum) noexcept {
+void scaled_wing(const BandlimitedKernel& kernel, const Source& at_frame, WingTaps taps,
+                 std::uint64_t first, std::uint64_t step, StereoSample& sum) noexcept {
   const auto limit = static_cast<std::uint64_t>(kernel.table_size()) << table_fraction_bits;
-  std::int64_t tap = origin;
+  std::int64_t tap = taps.origin;
   for (auto position = first; position < limit; position += step) {
     const auto index = static_cast<std::uint32_t>(position >> table_fraction_bits);
     const float fraction =
@@ -177,7 +181,7 @@ void scaled_wing(const BandlimitedKernel& kernel, const Source& at_frame, std::i
     const float weight = kernel.at(index, fraction);
     sum.left += weight * at_frame.l(tap);
     sum.right += weight * at_frame.r(tap);
-    tap += direction;
+    tap += taps.direction;
   }
 }
 
@@ -195,10 +199,10 @@ template <typename Source>
   // Left wing reads frame, frame-1, ... at distance fraction + j; right wing
   // reads frame+1, frame+2, ... at distance (1 - fraction) + j.
   StereoSample sum;
-  scaled_wing(kernel, at_frame, 0, -1,
+  scaled_wing(kernel, at_frame, {.origin = 0, .direction = -1},
               (static_cast<std::uint64_t>(fraction) * step) >> source_fraction_bits, step, sum);
-  scaled_wing(kernel, at_frame, 1, 1, ((source_unit - fraction) * step) >> source_fraction_bits,
-              step, sum);
+  scaled_wing(kernel, at_frame, {.origin = 1, .direction = 1},
+              ((source_unit - fraction) * step) >> source_fraction_bits, step, sum);
   sum.left *= plan.cutoff;
   sum.right *= plan.cutoff;
   return sum;

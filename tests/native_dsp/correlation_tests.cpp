@@ -126,6 +126,7 @@ void non_finite_samples_are_skipped_without_allocating() {
 
 } // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): an uncaught exception is the test's failure report.
 int main() {
   phase_oracles();
   level_does_not_change_phase();

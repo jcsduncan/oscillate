@@ -93,7 +93,8 @@ modal::Striker make_striker(StrikerType type, double hardness) noexcept {
   modal::Striker striker;
   striker.mass = m.mass;
   striker.law.p = m.exponent;
-  striker.law.k = modal::rigid_contact_stiffness(m.mass, m.exponent, reference_speed, seconds);
+  striker.law.k = modal::rigid_contact_stiffness(
+      {.mass = m.mass, .exponent = m.exponent, .speed = reference_speed}, seconds);
   striker.law.alpha = m.hysteresis * seconds;
   return striker;
 }
@@ -406,7 +407,7 @@ public:
   }
   void reset() noexcept {
     for (auto& line : delay_) {
-      std::fill(line.begin(), line.end(), 0.0);
+      std::ranges::fill(line, 0.0);
     }
     write_.fill(0);
     state_.fill(0.0);
@@ -671,6 +672,7 @@ void design_hit(std::span<const double> values, std::size_t pad, double rate, co
 
 // ---- The kernel -----------------------------------------------------------------
 
+// NOLINTNEXTLINE(clang-analyzer-optin.performance.Padding): fields grouped by stage.
 struct Voice {
   bool active = false;
   std::size_t pad = 0;
@@ -1032,11 +1034,12 @@ private:
       double wet_right = 0.0;
       room_.process(room_send * send_left[i], room_send * send_right[i], wet_left, wet_right);
       const double room = room_gain_.next();
-      double l = left[i] + room * wet_left;
-      double r = right[i] + room * wet_right;
+      StereoSample frame{left[i] + room * wet_left, right[i] + room * wet_right};
       last_wet_left_ = room * wet_left;
       last_wet_right_ = room * wet_right;
-      declick_.add(l, r);
+      declick_.add(frame);
+      double l = frame.left;
+      double r = frame.right;
       const double gain = out_gain_.next();
       l = safety(l * gain);
       r = safety(r * gain);
@@ -1198,7 +1201,7 @@ private:
     // The probe hears the source alone: no Lift, no gate, Decay at unity,
     // mono and without Haas, so what calibration measures is exactly what
     // its key holds.
-    std::copy(values_.begin(), values_.end(), probe_values_.begin());
+    std::ranges::copy(values_, probe_values_.begin());
     probe_values_[gl::decay] = knock_table::decay_unity;
     probe_values_[pad * pad_parameters + o::lift] = knock_table::lift_off;
     probe_values_[pad * pad_parameters + o::length] = knock_table::length_off;
@@ -1304,7 +1307,7 @@ private:
           std::min(static_cast<std::size_t>(std::lround(haas / ms_per_second * rate_)),
                    voice.haas_line.size() - 1);
       if (voice.haas_frames > 0) {
-        std::fill(voice.haas_line.begin(), voice.haas_line.end(), 0.0);
+        std::ranges::fill(voice.haas_line, 0.0);
         voice.haas_write = 0;
       }
     }

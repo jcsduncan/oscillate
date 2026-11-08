@@ -303,6 +303,8 @@ oscillate_add_test_executable(oscillate_application_routed_synth_tests SOURCES r
 oscillate_add_test_executable(oscillate_application_export_tail_trim_tests SOURCES export_tail_trim_tests.cpp
   LIBS oscillate::application
   TEST application_export_tail_trim TIER slow)
+target_compile_definitions(oscillate_application_export_tail_trim_tests PRIVATE
+  OSCILLATE_HAVE_EXPORT_RESAMPLER=$<BOOL:${OSCILLATE_BUILD_EXPORT_RESAMPLER}>)
 
 oscillate_add_test_executable(oscillate_application_kick_bass_lock_tests SOURCES kick_bass_lock_tests.cpp
   LIBS oscillate::application

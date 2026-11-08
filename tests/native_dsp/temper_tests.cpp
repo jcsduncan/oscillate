@@ -123,8 +123,8 @@ void the_latency_is_exact() {
     click.right[100] = 1.0;
     const auto out = render(v, click);
     const auto loudest = static_cast<std::size_t>(
-        std::max_element(out.left.begin(), out.left.end(),
-                         [](double a, double b) { return std::fabs(a) < std::fabs(b); }) -
+        std::ranges::max_element(out.left,
+                                 [](double a, double b) { return std::fabs(a) < std::fabs(b); }) -
         out.left.begin());
     REQUIRE_EQ(loudest, 100 + latency(v), "the click comes out exactly a latency later");
     // Twice the rate, twice the frames: the same time.

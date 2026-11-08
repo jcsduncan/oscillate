@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Data tables keep one entry per row; clang-format would split them.
@@ -25,13 +26,13 @@ using namespace std::string_view_literals;
 inline constexpr std::array off_on{"Off"sv, "On"sv};
 inline constexpr std::array band_counts{"1"sv, "2"sv, "3"sv, "4"sv, "5"sv, "6"sv};
 inline constexpr std::array modes{"Bands"sv, "OTT"sv};
-enum Mode : int { bands_mode, ott_mode };
+enum Mode : std::uint8_t { bands_mode, ott_mode };
 inline constexpr std::array phases{"Minimum"sv, "Linear"sv};
-enum Phase : int { minimum, linear };
+enum Phase : std::uint8_t { minimum, linear };
 inline constexpr std::array processes{"Stereo"sv, "Mid"sv, "Side"sv, "Left"sv, "Right"sv};
-enum Process : int { stereo, mid, side, left, right };
+enum Process : std::uint8_t { stereo, mid, side, left, right };
 inline constexpr std::array keys{"Band"sv, "Input"sv, "Sidechain"sv};
-enum Key : int { band_key, input_key, sidechain_key };
+enum Key : std::uint8_t { band_key, input_key, sidechain_key };
 inline constexpr std::array learn_states{"Off"sv, "Learn"sv};
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }

@@ -53,8 +53,8 @@ void Chorus::prepare(double sample_rate) {
 }
 
 void Chorus::reset() noexcept {
-  std::fill(left_line_.begin(), left_line_.end(), 0.0F);
-  std::fill(right_line_.begin(), right_line_.end(), 0.0F);
+  std::ranges::fill(left_line_, 0.0F);
+  std::ranges::fill(right_line_, 0.0F);
   write_ = 0;
   lfo_phase_ = 0.0;
   tone_left_ = 0.0;

@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The shimmer reverb's tail: level falling 60 dB over the decay time (the
 // FDN's RT60), with the octave-up shimmer rising out of it in proportion to
@@ -29,7 +30,7 @@ Rectangle {
     color: theme.well
     border.color: theme.wellEdge
     Accessible.role: Accessible.Graphic
-    Accessible.name: "Reverb decay, " + decay.toFixed(1) + " seconds"
+    Accessible.name: "Reverb decay, " + Format.seconds(decay)
 
     Canvas {
         id: canvas
@@ -100,7 +101,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.rightMargin: view.theme.viewLabelX
         y: view.theme.viewLabelY
-        text: "RT60 " + view.decay.toFixed(1) + " s"
+        text: "RT60 " + Format.seconds(view.decay)
         color: view.theme.inkDim
         font.family: view.theme.mono
         font.pixelSize: view.theme.decayReadoutSize

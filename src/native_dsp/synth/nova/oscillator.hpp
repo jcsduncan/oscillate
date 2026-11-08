@@ -81,6 +81,8 @@ public:
     (void)BasicBlepTables<clean_blep_2x>::instance();
     (void)BasicBlepTables<clean_blep_4x>::instance();
   }
+  // The alternatives construct without throwing, so osc_ is never valueless.
+  // NOLINTBEGIN(bugprone-exception-escape)
   // At a note's start, before reset().
   void select(std::uint32_t oversample) noexcept {
     const std::size_t index = oversample >= 4 ? 2 : oversample >= 2 ? 1 : 0;
@@ -105,6 +107,7 @@ public:
   [[nodiscard]] double phase() const noexcept {
     return std::visit([](const auto& o) { return o.phase(); }, osc_);
   }
+  // NOLINTEND(bugprone-exception-escape)
 
 private:
   std::variant<BasicBlepOscillator<clean_blep>, BasicBlepOscillator<clean_blep_2x>,

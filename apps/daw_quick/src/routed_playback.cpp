@@ -300,8 +300,8 @@ RoutedPlayback::prepare_run(const std::filesystem::path& root, project::Snapshot
       project::ProjectModel::open(project::audible_snapshot(std::move(snapshot)), *run->gate_);
   if (!model)
     return fail(model.error());
-  run->model_.emplace(std::move(model).value());
-  if (project::has_convolution_insert(*run->model_->snapshot()))
+  auto& opened = run->model_.emplace(std::move(model).value());
+  if (project::has_convolution_insert(*opened.snapshot()))
     return fail({foundation::ErrorCode::unsupported,
                  "Saved convolution insert remains in the project, but live playback "
                  "has no qualified device headroom and lifecycle evidence. Use offline "
@@ -314,7 +314,7 @@ RoutedPlayback::prepare_run(const std::filesystem::path& root, project::Snapshot
   run->inserts_ = std::make_unique<plugins::Vst3TrackInsertProvider>();
   run->instruments_ = std::make_unique<plugins::Vst3InstrumentTrackProvider>();
   run->vst3_ = std::make_unique<plugins::Vst3StageProvider>(*run->instruments_, *run->inserts_);
-  for (auto& [saved, instrument] : running_vst3(*run->model_->snapshot())) {
+  for (auto& [saved, instrument] : running_vst3(*opened.snapshot())) {
     auto scanned = scan_vst3(saved);
     if (!scanned)
       return fail(scanned.error());
@@ -322,7 +322,7 @@ RoutedPlayback::prepare_run(const std::filesystem::path& root, project::Snapshot
   }
 #else
   (void)qualification;
-  for (const auto& track : run->model_->snapshot()->tracks) {
+  for (const auto& track : opened.snapshot()->tracks) {
     if (detail::vst3_instrument_source(track) ||
         std::ranges::any_of(track.effects, [](const auto& slot) {
           return slot.enabled && detail::vst3_effect(slot);
@@ -347,7 +347,7 @@ RoutedPlayback::prepare_run(const std::filesystem::path& root, project::Snapshot
                                          // recent input when it switches in live (ADR-0049).
                                          .max_processor_input_history_frames = 8192,
                                          .node_meters = true};
-  run->control_ = std::make_unique<application::RoutedPlaybackControl>(*run->model_, limits,
+  run->control_ = std::make_unique<application::RoutedPlaybackControl>(opened, limits,
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
                                                                        run->vst3_.get()
 #else
@@ -361,15 +361,14 @@ RoutedPlayback::prepare_run(const std::filesystem::path& root, project::Snapshot
   if (!graph)
     return fail(graph.error());
   constexpr std::size_t stream_frame_budget = std::size_t{512} * 1024;
-  auto prepared =
-      application::RoutedAudioSource::prepare(root, *run->model_->snapshot(), *run->control_,
-                                              stream_frame_budget, nullptr, {}, first_sample);
+  auto prepared = application::RoutedAudioSource::prepare(
+      root, *opened.snapshot(), *run->control_, stream_frame_budget, nullptr, {}, first_sample);
   if (!prepared)
     return fail(prepared.error());
   run->source_ = std::move(prepared).value();
   run->control_->bind_live_source(*run->source_);
   run->source_selection_ = std::make_unique<application::RoutedSourceSelection>(
-      application::RoutedSourceBinding{run->model_->snapshot()->revision, run->source_});
+      application::RoutedSourceBinding{opened.snapshot()->revision, run->source_});
   return foundation::Result<std::unique_ptr<RoutedPlayback>>::success(std::move(run));
 }
 
@@ -563,14 +562,14 @@ application::RevisionStatus RoutedPlayback::status() {
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
   if (scanning_revision_ && vst3_scans_.valid() &&
       vst3_scans_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+    auto applied = std::move(*scanning_revision_);
+    scanning_revision_.reset();
     std::optional<foundation::Error> failed;
     for (auto& scan : vst3_scans_.get()) {
       if (!scan.scanned && !failed)
         failed = scan.scanned.error();
       admit_vst3(std::move(scan));
     }
-    auto applied = std::move(*scanning_revision_);
-    scanning_revision_.reset();
     // A failed scan fails the edit with its diagnostic; the old graph keeps
     // playing.
     const auto begun = failed ? control_->reject_edit(applied, "Quick project edit", *failed)
@@ -726,7 +725,7 @@ application::RevisionStatus RoutedPlayback::status() {
 
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
 void RoutedPlayback::admit_vst3(Vst3Scan scan) {
-  if (!scan.scanned)
+  if (!scan.scanned || !model_)
     return;
   const auto& saved = scan.saved;
   const auto sample_rate = model_->snapshot()->sample_rate;
@@ -1090,8 +1089,11 @@ bool RoutedPlayback::manual_adopted(std::uint64_t revision) const {
 void RoutedPlayback::observe_manual_edit() {
   if (!manual_status_ || manual_status_->status.phase != application::Vst3ManualEditPhase::pending)
     return;
-  manual_status_->status =
-      manual_effect_ ? manual_effect_->observe() : manual_instrument_->observe();
+  auto& pending = *manual_status_;
+  if (manual_effect_)
+    pending.status = manual_effect_->observe();
+  else if (manual_instrument_)
+    pending.status = manual_instrument_->observe();
 }
 
 foundation::Result<void>
@@ -1122,11 +1124,10 @@ RoutedPlayback::preflight_vst3_manual_edit(std::uint64_t saved_revision, project
   if (!slot)
     return refuse(foundation::ErrorCode::unavailable,
                   "no qualified live control is active for this plugin's saved state");
-  if (model_->snapshot()->revision != saved_revision)
+  if (!model_ || model_->snapshot()->revision != saved_revision)
     return refuse(foundation::ErrorCode::conflict,
                   "the audible graph is not the saved project revision");
-  const auto admission = slot->admission(identity.graph_revision, identity.instance_id,
-                                         identity.compatibility_key, saved_revision + 1, parameter);
+  const auto admission = slot->admission(identity, saved_revision + 1, parameter);
   if (admission != plugins::Vst3ManualEventStatus::accepted)
     return refuse(foundation::ErrorCode::unsupported, vst3_manual_refusal(admission));
   return manual_adoption_->preflight(plugin, identity);

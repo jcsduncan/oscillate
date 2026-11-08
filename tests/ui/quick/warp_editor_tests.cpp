@@ -787,8 +787,10 @@ void cancelling_onset_analysis_does_not_block_the_ui() {
     bool cancel_seen = false;
   } gate;
   quick::ClipWarpController controller(
-      [&] { return session.get(); }, [root] { return root; }, [] { return true; }, [](QString) {},
-      [] {}, [](const project::Clip&, std::size_t) { return QVariantList{}; },
+      // NOLINTNEXTLINE(performance-no-automatic-move): each call returns the captured root.
+      [&] { return session.get(); }, [root] { return root; }, [] { return true; },
+      [](const QString&) {}, [] {},
+      [](const project::Clip&, std::size_t) { return QVariantList{}; },
       [] { return quick::WarpPlaybackObservation{}; }, {}, nullptr,
       [&](const fs::path&, const project::Snapshot&, project::SourceId,
           const std::atomic<bool>* cancelled) {

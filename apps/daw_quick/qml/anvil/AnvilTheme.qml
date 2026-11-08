@@ -10,7 +10,6 @@ KitTheme {
     segmentSpacing: 3
     segmentRadius: 6
     segmentLetterSpacing: 0.6
-    segmentUpper: true
     knobLabelBold: true
     knobLabelSpacing: 1.2
     knobLabelSize: 9
@@ -159,4 +158,13 @@ KitTheme {
     }
 
     lastTouched: ""
+
+    // The plate behind each plot label, so the kick drawn across the plot
+    // never runs through it: its padding around the text and its opacity.
+    property real labelPlatePad: 2
+    property real labelPlateAlpha: 0.85
+    // The master row: Lock is at least this wide, and the last hit starts
+    // this far after it.
+    property real lockMinWidth: 170
+    property real lastHitGap: spaceXl
 }

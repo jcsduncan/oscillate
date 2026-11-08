@@ -80,7 +80,7 @@ public:
     }
     for (auto& channel : rotators_) {
       for (auto& stage : channel) {
-        stage.set(native_dsp::dsp::rbj_allpass(rotate_hz, rotate_q, sample_rate));
+        stage.set(native_dsp::dsp::rbj_allpass({.hz = rotate_hz, .rate = sample_rate}, rotate_q));
       }
     }
     reset();

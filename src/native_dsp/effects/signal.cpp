@@ -113,8 +113,11 @@ std::array<double, N> solve(std::array<std::array<double, N>, N> a, std::array<d
 
 Pink design_pink(double rate) {
   Pink pink;
+  // Corners a half octave apart, by design.
+  // NOLINTBEGIN(bugprone-float-loop-counter)
   for (double hz = pink_low_hz; hz < 0.5 * rate && pink.corners < pink_max_corners;
        hz *= std::numbers::sqrt2) {
+    // NOLINTEND(bugprone-float-loop-counter)
     pink.radius[pink.corners++] = std::exp(-2.0 * std::numbers::pi * hz / rate);
   }
   std::vector<double> w(pink_grid);

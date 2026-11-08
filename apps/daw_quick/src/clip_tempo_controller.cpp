@@ -161,12 +161,18 @@ void ClipTempoController::refresh() {
 std::optional<std::string> ClipTempoController::analysis_key(const project::Snapshot& snapshot,
                                                              project::ClipId clip) const {
   auto request = processing::processed_clip_request(snapshot, clip);
-  if (!request || !request.value())
+  if (!request)
     return std::nullopt;
-  auto key = processing::warp_analysis_cache_key(*request.value());
-  if (!key || !key.value())
+  const auto& wanted = request.value();
+  if (!wanted)
     return std::nullopt;
-  return key.value()->hex();
+  auto key = processing::warp_analysis_cache_key(*wanted);
+  if (!key)
+    return std::nullopt;
+  const auto& found = key.value();
+  if (!found)
+    return std::nullopt;
+  return found->hex();
 }
 
 void ClipTempoController::render_clips() {
@@ -182,21 +188,27 @@ void ClipTempoController::render_clips() {
   for (const auto& track : snapshot.tracks) {
     for (const auto& clip : track.clips) {
       auto request = processing::processed_clip_request(snapshot, clip.id);
-      if (!request || !request.value())
+      if (!request)
         continue;
-      auto key = processing::warp_analysis_cache_key(*request.value());
-      if (!key || !key.value())
+      const auto& wanted = request.value();
+      if (!wanted)
         continue;
-      const auto hex = key.value()->hex();
+      auto key = processing::warp_analysis_cache_key(*wanted);
+      if (!key)
+        continue;
+      const auto& found = key.value();
+      if (!found)
+        continue;
+      const auto hex = found->hex();
       if (analysed_keys_.contains(hex) || (analysis_job_ && analysis_job_->key == hex) ||
           std::ranges::any_of(analysis_queue_, [&](const auto& item) { return item.first == hex; }))
         continue;
       // Analysed in an earlier session: the cache already holds it.
-      if (processing::warp_analysis_ready(*analysis_cache_, *request.value())) {
+      if (processing::warp_analysis_ready(*analysis_cache_, *wanted)) {
         analysed_keys_.insert(hex);
         continue;
       }
-      analysis_queue_.emplace_back(hex, *request.value());
+      analysis_queue_.emplace_back(hex, *wanted);
     }
   }
   if (!analysis_job_ && !analysis_queue_.empty()) {
@@ -246,6 +258,9 @@ void ClipTempoController::poll() {
       return;
     held_ = std::move(outcome->result);
   }
+  // A held result always has its source in flight; they are set and reset together.
+  if (!held_ || !in_flight_)
+    return;
   // Applying needs an idle session; keep the result until it is.
   if (held_->has_value() && can_edit_ && !can_edit_())
     return;
@@ -312,13 +327,14 @@ void ClipTempoController::set_up(project::SourceId source) {
     });
   });
   if (alone && snapshot.tempo.events().size() == 1) {
-    const auto grid = grid_of(snapshot, source);
-    const auto bpm = std::round(grid->bpm * 100.0) / 100.0;
-    if (bpm != snapshot.tempo.events().front().bpm)
-      if (auto tempo = session->song().set_tempo_event(
-              {0}, bpm, snapshot.tempo.events().front().shape_to_next);
-          !tempo)
-        failure(tempo.error());
+    if (const auto grid = grid_of(snapshot, source)) {
+      const auto bpm = std::round(grid->bpm * 100.0) / 100.0;
+      if (bpm != snapshot.tempo.events().front().bpm)
+        if (auto tempo = session->song().set_tempo_event(
+                {0}, bpm, snapshot.tempo.events().front().shape_to_next);
+            !tempo)
+          failure(tempo.error());
+    }
   }
   for (const auto clip : setup)
     if (auto followed = session->warp().set_audio_clip_follow(clip, true); !followed)

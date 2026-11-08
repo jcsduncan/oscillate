@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Scope device panel: a phosphor oscilloscope and alignment meter in
@@ -42,6 +43,9 @@ Rectangle {
     readonly property int lengthIndex: revision >= 0 ? controller.choice("scope.length") : 2
     readonly property int channelIndex: revision >= 0 ? controller.choice("scope.channel") : 0
     readonly property var lengthNames: ["1/16", "1/8", "1/4", "1/2", "1 BAR", "2 BARS", "4 BARS"]
+    // The length tiles, in bars under a caption that says so: seven
+    // tiles leave no room for the word on each.
+    readonly property var lengthTiles: ["1/16", "1/8", "1/4", "1/2", "1", "2", "4"]
     readonly property var channelNames: ["MID", "SIDE", "LEFT", "RIGHT"]
     readonly property bool overlayOn: revision >= 0 && controller.choice("scope.overlay") === 1
     readonly property bool alignOn: revision >= 0 && controller.choice("scope.align") === 1
@@ -90,13 +94,10 @@ Rectangle {
     // ---- Formatting ------------------------------------------------------------------
 
     function signed(value, digits) {
-        const text = Math.abs(value).toFixed(digits)
-        const tiny = 0.5 * Math.pow(10, -digits)
-        return value < -tiny ? "−" + text : value > tiny ? "+" + text : text
+        return Format.signed_number(value, digits)
     }
     function msText(ms) {
-        return ms >= 1000 ? (ms / 1000).toFixed(ms >= 10000 ? 1 : 2) + " s"
-            : ms >= 100 ? Math.round(ms) + " ms" : ms >= 10 ? ms.toFixed(1) + " ms" : ms.toFixed(2) + " ms"
+        return Format.milliseconds(ms)
     }
     function samplesOf(ms) {
         return ms * sampleRate / 1000
@@ -126,7 +127,7 @@ Rectangle {
             return "Nothing on the sidechain: route the kick (or any reference) to it to align against."
         const name = trackName
         const d = state.delayMs
-        const amount = Math.abs(d).toFixed(Math.abs(d) < 10 ? 1 : 0) + " ms"
+        const amount = Format.milliseconds(Math.abs(d))
         const edge = Math.abs(d) >= reachMs - 0.5 ? " (at the edge of the ±20 ms search)" : ""
         if (state.correlation < guessBelow)
             return name + " and " + keyName + " have little in common here: the reading is uncertain."
@@ -443,7 +444,7 @@ Rectangle {
         theme: panel.theme
         id: alignPlate
         title: "ALIGNMENT"
-        note: !panel.alignOn ? "OFF" : panel.lowBand ? "LOW BAND · BELOW 200 HZ" : "FULL BAND"
+        note: !panel.alignOn ? "OFF" : panel.lowBand ? "LOW BAND · BELOW 200 Hz" : "FULL BAND"
         noteColor: panel.measuring ? panel.theme.live : panel.theme.inkFaint
         x: sweepPlate.x + sweepPlate.width + panel.gap
         y: panel.rowAY
@@ -490,8 +491,8 @@ Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
             y: panel.theme.samplesY
             text: panel.measuring
-                ? panel.signed(panel.samplesOf(panel.live.delayMs), 1) + " SAMPLES @ "
-                  + Math.round(panel.sampleRate / 1000) + " KHZ"
+                ? panel.signed(panel.samplesOf(panel.live.delayMs), 1) + " samples @ "
+                  + Format.hertz(panel.sampleRate)
                 : "SAMPLES"
             color: panel.measuring ? panel.delayTone : panel.theme.inkFaint
             font.family: panel.theme.mono
@@ -572,7 +573,7 @@ Rectangle {
             anchors.right: parent.right
             anchors.rightMargin: panel.theme.alignPad
             y: panel.theme.matchValueY
-            text: panel.measuring ? panel.live.correlation.toFixed(2) : "—"
+            text: panel.measuring ? Format.number(panel.live.correlation, 2) : "—"
             color: panel.confident ? panel.theme.key : panel.theme.inkDim
             font.family: panel.theme.mono
             font.pixelSize: panel.theme.typeBody
@@ -700,7 +701,7 @@ Rectangle {
         Caption {
             x: panel.theme.windowColumnX
             y: panel.theme.cardCaptionY
-            text: panel.synced ? "LENGTH" : "TIME"
+            text: panel.synced ? "LENGTH IN BARS" : "TIME"
         }
         Kit.Segment {
             visible: panel.synced
@@ -711,7 +712,7 @@ Rectangle {
             controller: panel.controller
             theme: panel.theme
             parameterId: "scope.length"
-            labels: panel.lengthNames
+            labels: panel.lengthTiles
         }
         Kit.Knob {
             visible: !panel.synced
@@ -816,7 +817,7 @@ Rectangle {
             controller: panel.controller
             theme: panel.theme
             parameterId: "scope.align_band"
-            labels: ["FULL", "LOW · < 200 HZ"]
+            labels: ["FULL", "LOW · < 200 Hz"]
         }
     }
 

@@ -197,17 +197,25 @@ void captions_never_overlap() {
       const QRectF a = painted_text(captions[i]);
       const auto name = captions[i]->objectName().toStdString();
       require(captions[i]->property("implicitWidth").toDouble() <= captions[i]->width() + 0.5,
+              // A failure message in a test loop.
+              // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
               where + ": caption cut short: " + name);
       auto* knob = captions[i]->parentItem();
       const QRectF k = scene_rect(knob);
       require(k.left() >= bounds.left() - 0.5 && k.right() <= bounds.right() + 0.5,
+              // A failure message in a test loop.
+              // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
               where + ": knob outside its card: " + name);
       for (std::size_t j = i + 1; j < captions.size(); ++j) {
         require(!a.intersects(painted_text(captions[j])),
+                // A failure message in a test loop.
+                // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
                 where + ": captions overlap: " + name + " and " +
                     captions[j]->objectName().toStdString());
       }
       for (auto* dropdown : dropdowns) {
+        // A failure message in a test loop.
+        // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
         require(!a.intersects(scene_rect(dropdown)), where + ": caption under a dropdown: " + name);
       }
     }
@@ -270,6 +278,8 @@ void typing_a_value() {
   InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
+  // The knob and the typed entry are named at every call.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   const auto type = [&](const QString& id, const QString& entry, bool enter) {
     click(*panel, centre(item(*panel, QStringLiteral("novaKnobValue:") + id)));
     auto* field = item(*panel, QStringLiteral("novaKnobField:") + id);
@@ -346,9 +356,8 @@ void counts_have_no_sign() {
   require(text_of(*panel, QStringLiteral("novaKnobValue:nova.osc.a.unison.voices")) ==
               QStringLiteral("1"),
           "unison voices are a count");
-  require(text_of(*panel, QStringLiteral("novaKnobValue:nova.osc.a.octave")) ==
-              QStringLiteral("+0"),
-          "an octave offset keeps its sign");
+  require(text_of(*panel, QStringLiteral("novaKnobValue:nova.osc.a.octave")) == QStringLiteral("0"),
+          "an octave offset at zero has no sign");
   panel->root->setProperty("page", 4);
   settle();
   require(text_of(*panel, QStringLiteral("novaKnobValue:nova.global.polyphony")) ==

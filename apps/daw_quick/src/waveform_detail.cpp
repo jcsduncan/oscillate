@@ -47,7 +47,7 @@ QVariantList detail_columns(const WaveformDetail& detail, std::span<const std::u
 }
 
 WaveformDetailWorker::WaveformDetailWorker() {
-  thread_ = std::jthread([shared = shared_](std::stop_token stopped) {
+  thread_ = std::jthread([shared = shared_](const std::stop_token& stopped) {
     std::filesystem::path root;
     std::optional<persistence::ProjectStore> store;
     std::unordered_map<std::string, media::AudioReader> readers;

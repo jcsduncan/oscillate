@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The gain-reduction meter: a bar hanging from 0 dB at the top, down to the
 // reduction the compressor applies (held 1 s), on a 0 to `rangeDb` scale
@@ -57,7 +58,7 @@ Item {
             Text {
                 x: meter.theme.reductionLabelX
                 y: meter.theme.reductionLabelY
-                text: mark.db === 0 ? "0" : "−" + mark.db
+                text: Format.number(-mark.db, 0)
                 color: mark.db === 0 ? meter.theme.inkDim : meter.theme.inkFaint
                 font.family: meter.theme.mono
                 font.pixelSize: meter.theme.typeCaption

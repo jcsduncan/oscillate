@@ -188,6 +188,7 @@ void tracks_duck_to_a_kick_at_once() {
 }
 } // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape): an uncaught exception is the test's failure report.
 int main(int argc, char** argv) {
   QCoreApplication app(argc, argv);
   saved_route_and_rejection();

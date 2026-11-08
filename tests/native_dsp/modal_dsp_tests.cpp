@@ -26,11 +26,11 @@ using oscillate::test::require;
 double cents(double measured, double expected) { return 1200.0 * std::log2(measured / expected); }
 
 // Rising zero crossings, interpolated.
-double measured_hz(const std::vector<double>& x, std::size_t from, std::size_t to, double rate) {
+double measured_hz(const std::vector<double>& x, std::size_t begin, std::size_t end, double rate) {
   double first = -1.0;
   double last = -1.0;
   int crossings = 0;
-  for (std::size_t i = from + 1; i < to; ++i) {
+  for (std::size_t i = begin + 1; i < end; ++i) {
     if (x[i - 1] < 0.0 && x[i] >= 0.0) {
       const double t = static_cast<double>(i - 1) + x[i - 1] / (x[i - 1] - x[i]);
       if (first < 0.0) {
@@ -73,12 +73,14 @@ void contact_law_is_stulov() {
 
 void rigid_contact_round_trips() {
   for (const double p : {1.0, 1.5, 2.5, 3.0}) {
-    const double k = modal::rigid_contact_stiffness(0.01, p, 1.5, 0.001);
-    REQUIRE_LT(std::fabs(modal::rigid_contact_seconds(0.01, k, p, 1.5) / 0.001 - 1.0),
+    const modal::RigidStrike strike{.mass = 0.01, .exponent = p, .speed = 1.5};
+    const double k = modal::rigid_contact_stiffness(strike, 0.001);
+    REQUIRE_LT(std::fabs(modal::rigid_contact_seconds(strike, k) / 0.001 - 1.0),
                tolerance::double_accumulation, "stiffness and contact time are inverses");
   }
   // A linear spring holds for half a period.
-  const double k = modal::rigid_contact_stiffness(0.02, 1.0, 2.0, 0.004);
+  const double k =
+      modal::rigid_contact_stiffness({.mass = 0.02, .exponent = 1.0, .speed = 2.0}, 0.004);
   REQUIRE_LT(std::fabs(pi * std::sqrt(0.02 / k) / 0.004 - 1.0), tolerance::double_accumulation,
              "p = 1 is half a period");
 }
@@ -186,7 +188,8 @@ void a_striker_bounces_off_a_heavy_bank() {
     modal::Striker striker;
     striker.mass = 0.01;
     striker.law.p = 2.0;
-    striker.law.k = modal::rigid_contact_stiffness(striker.mass, 2.0, 1.5, seconds);
+    striker.law.k = modal::rigid_contact_stiffness(
+        {.mass = striker.mass, .exponent = 2.0, .speed = 1.5}, seconds);
     striker.launch(0.0, 1.5);
     int frames = 0;
     while (striker.active && frames < 4'800) {

@@ -57,6 +57,7 @@ std::unique_ptr<warp::WarpStream> stream(warp::QualityTier tier = warp::QualityT
 }
 
 void invalid_tier_is_rejected() {
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange): an invalid tier on purpose.
   constexpr auto invalid_tier = static_cast<warp::QualityTier>(255);
   require(!warp::create_repitch_stream({48'000, 8'192}, invalid_tier),
           "invalid Re-Pitch quality tier accepted");

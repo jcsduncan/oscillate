@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Ceiling device panel: a mastering brickwall in charcoal and coral.
@@ -74,16 +75,17 @@ Rectangle {
 
     // ---- Formatting ------------------------------------------------------------------
 
-    function signed(value, digits) {
-        const text = Math.abs(value).toFixed(digits)
-        const tiny = 0.5 * Math.pow(10, -digits)
-        return value < -tiny ? "−" + text : value > tiny ? "+" + text : text
+    // Level readings hold one decimal, so the figures do not jump in width.
+    readonly property int levelDecimals: 1
+    function signed(value) {
+        return Format.signed_number(value, levelDecimals)
     }
     function dbText(db) {
-        return db <= floorDb ? "−∞" : signed(db, 1)
+        return db <= floorDb ? Format.number(-Infinity) : signed(db)
     }
+    // The reduction is a cut: shown below zero.
     function reductionText(db) {
-        return db < 0.05 ? "0.0" : "−" + db.toFixed(1)
+        return Format.number(-db, levelDecimals)
     }
     function readoutName(id) {
         if (id === "")
@@ -144,7 +146,7 @@ Rectangle {
             objectName: "ceilingLatency"
             x: wordmark.x + panel.theme.spaceXxs
             y: wordmark.y + wordmark.height + panel.theme.latencyGap
-            text: "LOOKAHEAD LIMITER · " + (panel.revision >= 0 ? panel.controller.display("ceiling.lookahead").toUpperCase() : "")
+            text: "LOOKAHEAD LIMITER · " + (panel.revision >= 0 ? panel.controller.display("ceiling.lookahead") : "")
                 + " LATENCY"
             color: panel.theme.inkDim
             font.pixelSize: panel.theme.typeMicro
@@ -279,7 +281,7 @@ Rectangle {
         id: reductionPlate
         theme: panel.theme
         title: "GAIN REDUCTION"
-        note: panel.playing ? "HELD 1 S · LAST 10 S" : "NO SIGNAL"
+        note: panel.playing ? "HELD 1 s · LAST 10 s" : "NO SIGNAL"
         noteColor: panel.playing ? panel.theme.live : panel.theme.inkFaint
         x: panel.margin
         y: panel.rowAY
@@ -318,7 +320,7 @@ Rectangle {
             Caption {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
-                text: "DB"
+                text: "dB"
             }
             Item {
                 width: 1
@@ -499,13 +501,13 @@ Rectangle {
             parameterId: "ceiling.gain"
             diameter: panel.theme.heroKnobDiameter
             label: ""
-            valueText: panel.signed(panel.gain, 1) + " dB"
+            valueText: panel.signed(panel.gain) + " dB"
         }
         Text {
             objectName: "gainValue"
             x: panel.theme.gainValueX
             y: panel.theme.gainValueY
-            text: panel.signed(panel.gain, 1)
+            text: panel.signed(panel.gain)
             color: panel.theme.accent
             font.family: panel.theme.sans
             font.pixelSize: panel.theme.gainValueSize
@@ -544,13 +546,13 @@ Rectangle {
             parameterId: "ceiling.ceiling"
             diameter: panel.theme.heroKnobDiameter
             label: ""
-            valueText: panel.signed(panel.ceiling, 1) + " dB"
+            valueText: panel.signed(panel.ceiling) + " dB"
         }
         Text {
             objectName: "ceilingValue"
             x: panel.theme.ceilingValueX
             y: panel.theme.ceilingValueY
-            text: panel.signed(panel.ceiling, 1)
+            text: panel.signed(panel.ceiling)
             color: panel.theme.accent
             font.family: panel.theme.sans
             font.pixelSize: panel.theme.ceilingValueSize

@@ -217,8 +217,10 @@ QVariantMap PluginAutomationController::describe(const PluginContext& context,
 QVariantMap PluginAutomationController::project_view() const {
   QVariantMap result{{"active", false}, {"parameterSelected", false}};
   const auto context = plugin_context();
-  if (!context)
+  // A plugin context implies a selection.
+  if (!context || !selection_)
     return result;
+  const auto& selection = *selection_;
   const auto& snapshot = session_()->snapshot();
   const auto& track = *context->track;
   const auto& plugin = *context->plugin;
@@ -236,7 +238,7 @@ QVariantMap PluginAutomationController::project_view() const {
                                   {"name", parameter_name(context->verified, target->parameter_id)},
                                   {"laneId", QString::fromStdString(lane.id.to_string())},
                                   {"pointCount", static_cast<int>(lane.points.size())},
-                                  {"selected", selection_->parameter == target->parameter_id}});
+                                  {"selected", selection.parameter == target->parameter_id}});
   }
 
   // An exact ID match leads; other matches keep host order.
@@ -277,10 +279,10 @@ QVariantMap PluginAutomationController::project_view() const {
                  {"resultStatus", result_status(parameters.size(), match_count, total, filter_)},
                  {"lanes", lanes},
                  {"laneCount", lane_count}});
-  if (!selection_->parameter)
+  if (!selection.parameter)
     return result;
 
-  const auto parameter = *selection_->parameter;
+  const auto parameter = *selection.parameter;
   auto selected = describe(*context, parameter);
   const auto* lane = parameter_lane(track, plugin.id, parameter);
   QVariantMap lane_view{{"present", false},
@@ -390,7 +392,7 @@ void PluginAutomationController::automate(quint32 parameter_id) {
   const auto context = plugin_context();
   const auto ids = context ? parameter_ids(*context->track, *context->plugin, context->host_order)
                            : std::vector<std::uint32_t>{};
-  if (std::ranges::find(ids, parameter_id) == ids.end()) {
+  if (!context || std::ranges::find(ids, parameter_id) == ids.end()) {
     report_(QStringLiteral("Parameter %1 is not available on this plugin").arg(parameter_id));
     return;
   }

@@ -107,7 +107,7 @@ double ClipTime::source_frame_at_seconds(double seconds) const noexcept {
 
 Result<timeline::TickPosition> ClipTime::tick(double source_frame) const {
   const auto frame = std::max(0.0, std::round(song_frame(source_frame)));
-  if (frame > static_cast<double>(std::numeric_limits<std::int64_t>::max() / 2))
+  if (frame > static_cast<double>(std::numeric_limits<std::int64_t>::max()) / 2.0)
     return Result<timeline::TickPosition>::failure(
         {ErrorCode::invalid_argument, "A Clay note is too far into the song"});
   return tempo_.sample_to_tick({static_cast<std::int64_t>(frame)}, project_rate_);

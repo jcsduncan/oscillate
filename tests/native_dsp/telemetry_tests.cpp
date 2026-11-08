@@ -40,7 +40,7 @@ public:
   [[nodiscard]] KernelStatus status() const noexcept override { return {}; }
   [[nodiscard]] std::size_t telemetry(std::span<float> out) const noexcept override {
     ++blocks_;
-    std::fill(out.begin(), out.end(), static_cast<float>(blocks_));
+    std::ranges::fill(out, static_cast<float>(blocks_));
     return out.size();
   }
 
@@ -86,8 +86,7 @@ void frames_are_never_torn_and_never_allocate() {
     while (!done.load()) {
       if (runtime->read_telemetry(seen)) {
         const float value = seen.front();
-        if (std::any_of(seen.begin(), seen.end(), [&](float x) { return x != value; }) ||
-            value < last) {
+        if (std::ranges::any_of(seen, [&](float x) { return x != value; }) || value < last) {
           torn = true;
         }
         last = value;

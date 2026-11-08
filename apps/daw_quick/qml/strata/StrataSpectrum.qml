@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // Strata's spectrum: the input as a faint trace and the output bright over
 // it, a tint per band, each band's live gain change drawn in the band's own
@@ -15,6 +16,7 @@ Item {
     required property StrataTheme theme
 
     readonly property real lowHz: 20
+    readonly property real hertzPerKilohertz: 1000
     readonly property real span: 1000
     // The spectra's scale (dBFS) and the gain overlay's (dB either way).
     readonly property real topDb: -6
@@ -183,7 +185,7 @@ Item {
             Text {
                 anchors.right: parent.right
                 anchors.bottom: parent.top
-                text: line.threshold.toFixed(1) + " dB"
+                text: Format.decibels(line.threshold)
                 color: view.theme.band(line.index)
                 font.family: view.theme.mono
                 font.pixelSize: view.theme.typeCaption
@@ -243,8 +245,8 @@ Item {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 y: view.height - view.theme.crossoverLabelBottom
-                text: handle.hz >= 1000 ? (handle.hz / 1000).toFixed(handle.hz >= 10000 ? 1 : 2) + "k"
-                                        : Math.round(handle.hz)
+                text: handle.hz >= view.hertzPerKilohertz ? Format.number(handle.hz / view.hertzPerKilohertz) + "k"
+                                                         : Format.number(handle.hz)
                 color: view.theme.inkDim
                 font.family: view.theme.mono
                 font.pixelSize: view.theme.typeCaption

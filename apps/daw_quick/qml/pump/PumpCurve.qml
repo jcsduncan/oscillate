@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 import "PumpShapes.js" as Shapes
 
@@ -56,6 +57,8 @@ Kit.CurveEditor {
     readonly property real peakShare: 0.42
     // The dB scale's marks.
     readonly property var dbMarks: [0, -3, -6, -12, -24]
+    // The scale marks are whole decibels.
+    readonly property int markDecimals: 0
 
     objectName: "pumpCurve"
     theme: panel.theme
@@ -89,7 +92,7 @@ Kit.CurveEditor {
     function valueOf(level) { return drawnFor(level) }
     function cellAt(x) { return Math.max(0, Math.min(cells - 1, Math.floor(tx(x) * cells))) }
     function dbText(db) {
-        return db > -0.05 ? "−0.0 dB" : "−" + Math.abs(db).toFixed(1) + " dB"
+        return Format.decibels(db)
     }
 
     // The painting tools, the rubber band and group drags (Select).
@@ -173,7 +176,7 @@ Kit.CurveEditor {
         painted = next
         lastCell = cell
         doc.set_curve(curveId, Shapes.painted(editor.gesture.startPoints, cells, painted))
-        panel.touch("PENCIL", "Step " + (cell + 1) + " · " + Math.round(level * 100) + " %")
+        panel.touch("PENCIL", "Step " + (cell + 1) + " · " + Format.fraction(level))
     }
     function stampTo(x) {
         const a = cellAt(editor.gesture.startX), b = cellAt(x)
@@ -187,19 +190,19 @@ Kit.CurveEditor {
         const x0 = snapped(tx(gesture.startX), free), y0 = drawnFor(ty(gesture.startY))
         const x1 = snapped(tx(mouse.x), free), y1 = drawnFor(ty(mouse.y))
         doc.set_curve(curveId, Shapes.lined(gesture.startPoints, x0, y0, x1, y1))
-        panel.touch("LINE", Math.round(y0 * 100) + " → " + Math.round(y1 * 100) + " %")
+        panel.touch("LINE", Format.fraction(y0) + " → " + Format.fraction(y1))
     }
 
     onPointRemoved: editor.selection = []
-    onTensionDragged: (index, tension) => editor.panel.touch("BEND", tension.toFixed(2))
+    onTensionDragged: (index, tension) => editor.panel.touch("BEND", Format.number(tension))
     onPointMoved: index => {
         const point = editor.points[index]
         if (point !== undefined) {
             const gain = editor.effective(point.y)
             const db = 20 * Math.log10(Math.max(1e-3, gain))
             editor.panel.touch("POINT",
-                (editor.cycleSeconds > 0 ? Math.round(point.x * editor.cycleSeconds * 1000) + " ms · "
-                                         : Math.round(point.x * 100) + " % · ") + db.toFixed(1) + " dB")
+                (editor.cycleSeconds > 0 ? Format.seconds(point.x * editor.cycleSeconds)
+                                         : Format.fraction(point.x)) + " · " + Format.decibels(db))
         }
     }
     onGestureEnded: (mode, mouse) => {
@@ -260,15 +263,21 @@ Kit.CurveEditor {
         // The dB scale on the right, time under the cycle.
         ctx.fillStyle = t.inkFaint
         ctx.font = t.typeCaption + "px '" + t.mono + "'"
-        for (const db of editor.dbMarks)
-            ctx.fillText(db + " dB", R - t.dbLabelRight, editor.py(Math.pow(10, db / 20)) - t.dbLabelLift)
+        // Each mark sits on its line; the top one (0 dB) under it, clear of
+        // the gain readout in the key row above the plot.
+        for (const db of editor.dbMarks) {
+            const y = editor.py(Math.pow(10, db / 20))
+            const top = db === editor.dbMarks[0]
+            ctx.fillText(Format.decibels(db, editor.markDecimals), R - t.dbLabelRight,
+                         top ? y + t.typeCaption + t.dbLabelLift : y - t.dbLabelLift)
+        }
         for (let b = 0; b <= Math.floor(editor.cycleBeats + 1e-6); ++b) {
             if (b < editor.cycleBeats - 1e-6 || b === 0)
                 ctx.fillText(b === 0 ? "kick" : "+" + b + " beat", editor.px(b / editor.cycleBeats) + t.beatLabelGap,
                              editor.height - t.footLabelBottom)
         }
         if (editor.cycleSeconds > 0)
-            ctx.fillText(Math.round(editor.cycleSeconds * 1000) + " ms", R - t.lengthLabelRight, editor.height - t.footLabelBottom)
+            ctx.fillText(Format.seconds(editor.cycleSeconds), R - t.lengthLabelRight, editor.height - t.footLabelBottom)
     }
     onPaintShape: ctx => {
         const t = editor.theme

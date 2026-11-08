@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The machine's window onto its character: two tape reels turning past the
 // heads for Tape, a bucket-brigade chip with its clock lamp for Analog, and
@@ -254,7 +255,7 @@ Rectangle {
                 }
             }
             Text {
-                text: "CLOCK " + (bay.clockHz / 1000).toFixed(1) + " kHz LOW-PASS"
+                text: "CLOCK " + Format.hertz(bay.clockHz) + " LOW-PASS"
                 color: bay.theme.clockInk
                 font.family: bay.theme.mono
                 font.pixelSize: bay.theme.typeCaption
@@ -279,8 +280,7 @@ Rectangle {
             Text {
                 anchors.centerIn: parent
                 anchors.verticalCenterOffset: bay.theme.readoutValueOffset
-                text: bay.timeMs >= 1000 ? (bay.timeMs / 1000).toFixed(3) + "s"
-                                         : bay.timeMs.toFixed(bay.timeMs < 100 ? 1 : 0) + "ms"
+                text: Format.milliseconds(bay.timeMs)
                 color: bay.theme.accent
                 font.family: bay.theme.mono
                 font.pixelSize: bay.theme.readoutValueSize

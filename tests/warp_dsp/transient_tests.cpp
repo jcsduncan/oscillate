@@ -115,7 +115,7 @@ void ignores_vibrato_and_silence() {
   REQUIRE_OK(found, "pad analysis failed");
   std::printf("vibrato pad    found %zu\n", found.value().size());
   REQUIRE_LE(found.value().size(), 1, "vibrato pad produced false transients");
-  const auto quiet = warp_fixtures::silence(48'000 * 3);
+  const auto quiet = warp_fixtures::silence(std::size_t{48'000} * 3);
   warp::MemorySourceView silent(quiet.left, quiet.right);
   const auto none = analysis::detect_transients(silent, {48'000, 1.0F, 0.030});
   REQUIRE_OK(none, "silence produced transients");

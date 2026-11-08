@@ -144,6 +144,7 @@ void ring_overflow_drops_and_never_blocks() {
   constexpr std::size_t per_producer = DiagnosticRing::capacity;
   std::atomic<std::size_t> accepted{0};
   std::vector<std::thread> threads;
+  threads.reserve(producers);
   for (std::size_t producer = 0; producer < producers; ++producer) {
     threads.emplace_back([&] {
       for (std::size_t index = 0; index < per_producer; ++index)

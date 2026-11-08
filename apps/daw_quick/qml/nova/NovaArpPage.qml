@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import "../devicekit" as Kit
 import "NovaContract.js" as Contract
+import Oscillate.Format
 
 // The ARP · CLIP page (ADR-0078): the arpeggiator as a pattern engine and
 // the clip sequencer under it.
@@ -368,13 +369,16 @@ Item {
         height: page.lanesHeight
         readonly property real period: page.controller.revision >= 0 && page.arp !== null ? page.arp.period() : 1
         readonly property real periodBeats: page.controller.revision >= 0 && page.arp !== null ? page.arp.period_beats() : 4
+        readonly property real periodBars: periodBeats / 4
+        // Whole bars read without a decimal, others with one.
+        readonly property int barDecimals: Number.isInteger(periodBars) ? 0 : 1
         Text {
             objectName: "novaArpPeriod"
             anchors.right: parent.right
             anchors.rightMargin: page.theme.arpPageCardPadding
             y: page.theme.arpPageCardPadding
             text: "REPEATS EVERY " + Math.round(lanes.period) + " STEPS · "
-                + (lanes.periodBeats / 4 >= 1000 ? "1000+" : +(lanes.periodBeats / 4).toFixed(1)) + " BARS"
+                + (lanes.periodBars >= 1000 ? "1000+" : Format.number(lanes.periodBars, lanes.barDecimals)) + " BARS"
             color: page.theme.am
             font.family: page.theme.mono
             font.pixelSize: page.theme.typeSmall
@@ -503,7 +507,7 @@ Item {
             }
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                text: page.arp !== null ? Math.round(page.arp.amount * 100) + "%" : ""
+                text: page.arp !== null ? Format.fraction(page.arp.amount) : ""
                 color: page.theme.dim
                 font.family: page.theme.mono
                 font.pixelSize: page.theme.typeSmall

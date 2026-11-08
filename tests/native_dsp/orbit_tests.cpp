@@ -41,7 +41,8 @@ int mode_named(std::string_view name) {
   }
   throw std::runtime_error("unknown mode " + std::string(name));
 }
-namespace M {
+namespace modes {
+// NOLINTBEGIN(bugprone-throwing-static-initialization): a throw fails the test at start-up.
 const int chorus = mode_named("Chorus");
 const int ensemble = mode_named("Ensemble");
 const int dimension = mode_named("Dimension");
@@ -49,7 +50,8 @@ const int flanger = mode_named("Flanger");
 const int phaser = mode_named("Phaser");
 const int vibrato = mode_named("Vibrato");
 const int tremolo = mode_named("Tremolo");
-} // namespace M
+// NOLINTEND(bugprone-throwing-static-initialization)
+} // namespace modes
 
 std::vector<double> mode(int m) {
   auto values = preset(table(), "Init");
@@ -90,16 +92,16 @@ std::vector<double> demodulated_delay_ms(const std::vector<double>& y, double hz
 }
 
 void the_vibrato_sweeps_its_delay() {
-  auto values = mode(M::vibrato);
+  auto values = mode(modes::vibrato);
   values[at("orbit.time")] = 5.0;
   values[at("orbit.depth")] = 0.5;
   values[at("orbit.rate")] = 1.0;
   values[at("orbit.stereo")] = 0.0;
   values[at("orbit.mix")] = 1.0;
   auto runtime = make_effect(orbit_engine(), values);
-  const auto out = process(*runtime, sine(1'000.0, 0.5, 4 * 48'000));
+  const auto out = process(*runtime, sine(1'000.0, 0.5, std::size_t{4} * 48'000));
   const auto delay = demodulated_delay_ms(out.left, 1'000.0);
-  const auto [low, high] = std::minmax_element(delay.begin(), delay.end());
+  const auto [low, high] = std::ranges::minmax_element(delay);
   // D(t) = T (1 + 0.3 depth sin): 5 ms +- 0.75 ms.
   const double swing = *high - *low;
   REQUIRE_LT(std::fabs(swing - 1.5), 0.03, "vibrato swings 1.5 ms: " + std::to_string(swing));
@@ -112,7 +114,7 @@ void the_vibrato_sweeps_its_delay() {
 }
 
 std::vector<double> static_flanger(double feedback) {
-  auto values = mode(M::flanger);
+  auto values = mode(modes::flanger);
   values[at("orbit.depth")] = 0.0;
   values[at("orbit.time")] = 1.0; // 48 frames: notches at 500 Hz, peaks at 1 kHz.
   values[at("orbit.feedback")] = feedback;
@@ -151,7 +153,7 @@ void the_phaser_notches_follow_the_allpass_law() {
   for (const Case& c :
        {Case{0, {notch_hz(std::numbers::pi / 2.0)}},
         Case{1, {notch_hz(std::numbers::pi / 4.0), notch_hz(3.0 * std::numbers::pi / 4.0)}}}) {
-    auto values = mode(M::phaser);
+    auto values = mode(modes::phaser);
     values[at("orbit.depth")] = 0.0;
     values[at("orbit.centre")] = centre;
     values[at("orbit.stages")] = c.stages_index;
@@ -174,17 +176,17 @@ std::vector<double> envelope(const std::vector<double>& x) {
 }
 
 void the_tremolo_modulates_level_in_stereo() {
-  auto values = mode(M::tremolo);
+  auto values = mode(modes::tremolo);
   values[at("orbit.depth")] = 1.0;
   values[at("orbit.rate")] = 2.0;
   values[at("orbit.stereo")] = 180.0;
   values[at("orbit.mix")] = 1.0;
   auto runtime = make_effect(orbit_engine(), values);
-  const auto out = process(*runtime, sine(1'000.0, 0.5, 2 * 48'000));
+  const auto out = process(*runtime, sine(1'000.0, 0.5, std::size_t{2} * 48'000));
   const auto left = envelope(out.left);
   const auto right = envelope(out.right);
   const double full = 0.5 / std::numbers::sqrt2;
-  const auto [low, high] = std::minmax_element(left.begin(), left.end());
+  const auto [low, high] = std::ranges::minmax_element(left);
   REQUIRE_LT(*low, full * 0.01, "full depth reaches silence and unity");
   REQUIRE_GT(*high, full * 0.99, "full depth reaches silence and unity");
   for (std::size_t i = 0; i < left.size(); ++i) {
@@ -212,7 +214,7 @@ void sync_follows_the_tempo() {
   // Auto-Pan: one cycle per half note.
   for (const double bpm : {90.0, 140.0}) {
     auto runtime = make_effect(orbit_engine(), preset(table(), "Auto-Pan"));
-    const auto out = process(*runtime, sine(1'000.0, 0.5, 6 * 48'000), {.bpm = bpm});
+    const auto out = process(*runtime, sine(1'000.0, 0.5, std::size_t{6} * 48'000), {.bpm = bpm});
     const auto left = envelope(out.left);
     // Minima of the left gain sit one period apart.
     std::vector<std::size_t> minima;
@@ -231,11 +233,11 @@ void sync_follows_the_tempo() {
 }
 
 void live_mode_switches_are_click_free() {
-  const std::array<std::array<int, 2>, 5> switches{{{M::chorus, M::flanger},
-                                                    {M::phaser, M::tremolo},
-                                                    {M::ensemble, M::dimension},
-                                                    {M::vibrato, M::chorus},
-                                                    {M::flanger, M::phaser}}};
+  const std::array<std::array<int, 2>, 5> switches{{{modes::chorus, modes::flanger},
+                                                    {modes::phaser, modes::tremolo},
+                                                    {modes::ensemble, modes::dimension},
+                                                    {modes::vibrato, modes::chorus},
+                                                    {modes::flanger, modes::phaser}}};
   const auto input = sine(220.0, 0.5, 48'000);
   for (const auto& pair : switches) {
     auto values = preset(table(), "Classic Chorus");
@@ -268,7 +270,7 @@ void live_mode_switches_are_click_free() {
 }
 
 void tone_darkens_only_the_wet_path() {
-  auto values = mode(M::vibrato);
+  auto values = mode(modes::vibrato);
   values[at("orbit.depth")] = 0.0;
   values[at("orbit.mix")] = 1.0;
   values[at("orbit.tone")] = -12.0;

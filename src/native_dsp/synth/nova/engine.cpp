@@ -390,7 +390,7 @@ public:
         v->oscillator(o).snapshot(std::span<float, 128>(out.data() + 336 + 128 * o, 128));
     }
     const auto put = [&](std::size_t at, std::span<const float> values) {
-      std::copy(values.begin(), values.end(), out.begin() + static_cast<std::ptrdiff_t>(at));
+      std::ranges::copy(values, out.begin() + static_cast<std::ptrdiff_t>(at));
     };
     put(telemetry_fx, fx.live);
     put(telemetry_slot_in, fx.input);
@@ -463,6 +463,7 @@ private:
     } job{*this, out.size()};
     workers_->run_nested(
         sounding,
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): AudioWorkerPool::Task.
         [](void* context, std::size_t task, std::size_t lane) noexcept {
           auto& voice_job = *static_cast<Job*>(context);
           auto& kernel = voice_job.kernel;
@@ -518,12 +519,13 @@ private:
       for (auto& voice : *voices_) {
         if (!voice.active() || voice.dying())
           continue;
-        if (victim == nullptr)
-          victim = &voice;
-        else if (voice.released() != victim->released())
-          victim = voice.released() ? &voice : victim;
-        else if (voice.released() ? voice.order() < victim->order()
-                                  : voice.loudness() < victim->loudness())
+        // Released before held; then the oldest released or the quietest held.
+        const bool better =
+            victim == nullptr || (voice.released() != victim->released()
+                                      ? voice.released()
+                                      : (voice.released() ? voice.order() < victim->order()
+                                                          : voice.loudness() < victim->loudness()));
+        if (better)
           victim = &voice;
       }
       if (victim != nullptr) {

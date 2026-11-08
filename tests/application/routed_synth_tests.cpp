@@ -69,7 +69,7 @@ engine::RoutedMixerLimits limits(std::size_t max_frames = 64) {
 }
 
 std::size_t index(std::string_view id) {
-  return *synth::find_parameter(*synth::default_engine().descriptor, id);
+  return take(synth::find_parameter(*synth::default_engine().descriptor, id));
 }
 
 // A saved project with one Prism track playing a held C4 from the first beat.
@@ -175,8 +175,9 @@ void native_automation_edits_apply_without_restarting_voices() {
     std::array<engine::StereoFrame, 128> reference_stereo{};
     std::array<float, 256> samples{};
     std::array<float, 256> reference_samples{};
-    const auto output = std::span(samples).first(frames * 2);
-    const auto reference_output = std::span(reference_samples).first(frames * 2);
+    const auto output = std::span(samples).first(static_cast<std::size_t>(frames) * 2);
+    const auto reference_output =
+        std::span(reference_samples).first(static_cast<std::size_t>(frames) * 2);
     const auto device = source->render_source();
     const auto reference_device = reference_source->render_source();
     for (int block = 0; block < 16; ++block) {
@@ -371,7 +372,7 @@ void native_automation_mailbox_retries_latest_saved_revision() {
 
 std::string automated_parameter(const synth::SynthEngine& engine) {
   const auto& table = *engine.descriptor;
-  const std::string cutoff = std::string(table.id) + ".filter.cutoff";
+  std::string cutoff = std::string(table.id) + ".filter.cutoff";
   if (synth::find_parameter(table, cutoff))
     return cutoff;
   for (const auto& parameter : table.parameters) {
@@ -423,7 +424,7 @@ void every_engine_plays_live() {
                            model.snapshot()->tracks.front().instrument_source)))
                       .values;
     const auto edited_id = automated_parameter(*engine);
-    const auto edited_index = *synth::find_parameter(*engine->descriptor, edited_id);
+    const auto edited_index = take(synth::find_parameter(*engine->descriptor, edited_id));
     values[edited_index] =
         synth::from_normalised(engine->descriptor->parameters[edited_index], 0.25);
     auto patch = take(synth::make_native_patch(*engine, values));
@@ -562,7 +563,7 @@ project::Snapshot comp_project(const fs::path& root) {
   const std::vector<std::vector<int>> chords{{45, 55, 60, 64}, {50, 57, 60, 65}};
   for (int repeat = 0; repeat < 4; ++repeat) {
     for (std::size_t index = 0; index < chords.size(); ++index) {
-      const auto at = (2 * repeat + static_cast<std::int64_t>(index)) * bar;
+      const auto at = (std::int64_t{2} * repeat + static_cast<std::int64_t>(index)) * bar;
       for (const int key : chords[index])
         notes.push_back({take(project::NoteId::from_bits({0, id++})),
                          {at},

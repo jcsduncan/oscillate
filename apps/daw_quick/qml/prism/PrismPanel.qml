@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import "../devicekit" as Kit
+import Oscillate.Format
 
 // The Prism device panel. Everything here reads and writes through
 // `controller` (NativeSynthDeviceController for the Prism engine); no project or audio state lives in QML.
@@ -261,7 +262,7 @@ Rectangle {
                 accent: osc.accent
             },
             Kit.Dropdown {
-                width: panel.theme.phaseDropdownWidth
+                width: Math.max(panel.theme.phaseDropdownWidth, Math.ceil(fitWidth))
                 controller: panel.controller
                 theme: panel.theme
                 menu: menu
@@ -346,6 +347,8 @@ Rectangle {
                     required property string modelData
                     width: envelope.bodyWidth / envelope.knobColumns
                     diameter: panel.theme.compactKnobDiameter
+                    // Six to a row: velocity is abbreviated, like Env Amt.
+                    label: modelData === "velocity" ? "Vel" : info.name !== undefined ? info.name : ""
                     controller: panel.controller
                     theme: panel.theme
                     parameterId: envelope.prefix + "." + modelData
@@ -504,7 +507,7 @@ Rectangle {
             theme: panel.theme
             parameterId: "prism.sub.octave"
             accent: mixer.accent
-            labels: ["-1", "-2"]
+            labels: [Format.number(-1, 0), Format.number(-2, 0)]
         }
         Caption {
             y: mixer.noiseY

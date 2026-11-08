@@ -25,12 +25,12 @@ public:
   [[nodiscard]] foundation::Result<std::vector<project::ClipId>>
   duplicate_clips(std::span<const project::ClipId> clips);
   [[nodiscard]] bool clipboard_has_clips() const noexcept { return !clipboard_.clips.empty(); }
+  // Removes the clips, as one undo step; the clipboard is left untouched.
+  [[nodiscard]] foundation::Result<void> remove_clips(std::span<const project::ClipId> clips);
   // Moves the clips together by `delta_ticks` and `track_delta` rows,
   // keeping their spacing, as one undo step. Refused as a whole when any
   // clip would start before bar 1, leave the track list or land on the
   // wrong kind of track.
-  // Removes the clips, as one undo step; the clipboard is left untouched.
-  [[nodiscard]] foundation::Result<void> remove_clips(std::span<const project::ClipId> clips);
   [[nodiscard]] foundation::Result<void> move_clips(std::span<const project::ClipId> clips,
                                                     std::int64_t delta_ticks, int track_delta);
 

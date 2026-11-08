@@ -156,8 +156,8 @@ void nudge_moves_the_shape() {
   std::size_t crossed = beat + cycle / 10;
   while (out.left[crossed] < 0.5)
     ++crossed;
-  const double late_ms =
-      (static_cast<double>(crossed) - static_cast<double>(beat + cycle * 19 / 100)) * 1e3 / rate;
+  const std::size_t drawn = beat + cycle * 19 / 100;
+  const double late_ms = (static_cast<double>(crossed) - static_cast<double>(drawn)) * 1e3 / rate;
   REQUIRE_LT(std::fabs(late_ms - 10.0), 0.5, "a 10 ms nudge plays the shape 10 ms later");
 }
 

@@ -49,9 +49,17 @@ struct Biquad {
   }
 };
 
+// A design's corner: a frequency at a sample rate.
+struct Corner {
+  double hz = 0.0;
+  double rate = 0.0;
+};
+
 // The RBJ second-order allpass: unity magnitude, its phase turning through
-// 360 degrees around `hz`. b2 is exactly 1.
-[[nodiscard]] inline BiquadCoefficients rbj_allpass(double hz, double q, double rate) noexcept {
+// 360 degrees around the corner. b2 is exactly 1.
+[[nodiscard]] inline BiquadCoefficients rbj_allpass(Corner at, double q) noexcept {
+  const double hz = at.hz;
+  const double rate = at.rate;
   const double w = 2.0 * std::numbers::pi * hz / rate;
   const double alpha = std::sin(w) / (2.0 * q);
   const double a0 = 1.0 + alpha;
@@ -62,8 +70,9 @@ struct Biquad {
 
 // The RBJ shelf with slope S = 1: exactly `gain` at DC (low) or Nyquist
 // (high), unity at the other end. The corner is held below 0.45 of the rate.
-[[nodiscard]] inline BiquadCoefficients rbj_shelf(bool high, double gain, double hz,
-                                                  double rate) noexcept {
+[[nodiscard]] inline BiquadCoefficients rbj_shelf(bool high, double gain, Corner at) noexcept {
+  const double hz = at.hz;
+  const double rate = at.rate;
   const double a = std::sqrt(gain);
   const double w = 2.0 * std::numbers::pi * std::min(hz, nyquist_guard * rate) / rate;
   const double c = std::cos(w);

@@ -255,6 +255,7 @@ MidiOut to_midi(const Take& take, std::span<const NoteEdit> edits) {
     NoteEdit edit;
   };
   std::vector<Voice> voices;
+  voices.reserve(take.notes.size());
   for (const auto& note : take.notes)
     voices.push_back({&note, edit_of(edits, note.id)});
   for (const auto& e : edits) {
@@ -443,7 +444,7 @@ std::vector<NoteEdit> variation(const Take& take, std::span<const NoteEdit> edit
                                 std::uint64_t seed, double amount, Selection selection) {
   auto out = copied(edits);
   const double a = std::clamp(amount, 0.0, 1.0);
-  enum Channel : std::uint64_t { pitch, timing, level };
+  enum Channel : std::uint8_t { pitch, timing, level };
   for (const auto& note : take.notes) {
     if (!selected(selection, note.id))
       continue;

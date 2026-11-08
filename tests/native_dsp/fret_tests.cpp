@@ -216,7 +216,7 @@ void malformed_libraries_are_rejected() {
     std::ifstream in(manifest);
     text.assign(std::istreambuf_iterator<char>(in), {});
   }
-  const auto broken = [&](std::string replaced) {
+  const auto broken = [&](const std::string& replaced) {
     std::ofstream(manifest) << replaced;
     return library::load(base).state;
   };

@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Orbit v1: a modulation effect (ADR-0040). Defaults are the "Classic
@@ -17,7 +18,7 @@ using namespace std::string_view_literals;
 
 inline constexpr std::array modes{"Chorus"sv, "Ensemble"sv, "Dimension"sv, "Flanger"sv,
                                   "Phaser"sv, "Vibrato"sv,  "Tremolo"sv};
-enum Mode : int { chorus, ensemble, dimension, flanger, phaser, vibrato, tremolo };
+enum Mode : std::uint8_t { chorus, ensemble, dimension, flanger, phaser, vibrato, tremolo };
 inline constexpr std::array shapes{"Sine"sv, "Triangle"sv};
 inline constexpr std::array off_on{"Off"sv, "On"sv};
 inline constexpr std::array voice_counts{"1"sv, "2"sv, "3"sv, "4"sv};

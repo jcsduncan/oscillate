@@ -458,7 +458,7 @@ public:
       key = Key{};
     }
     for (auto& r : resonators_) {
-      std::fill(r.line.begin(), r.line.end(), 0.0F);
+      std::ranges::fill(r.line, 0.0F);
       r.low = 0.0;
       r.mean_square = 0.0;
       r.square_sum = 0.0;
@@ -716,7 +716,7 @@ private:
       const bool awake = lift > 0.0 || r.mean_square > resonance_awake;
       if (r.awake && !awake) {
         // Asleep: clear the loop so it wakes silent.
-        std::fill(r.line.begin(), r.line.end(), 0.0F);
+        std::ranges::fill(r.line, 0.0F);
         r.low = 0.0;
         r.mean_square = 0.0;
       }

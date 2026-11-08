@@ -120,6 +120,8 @@ void the_sweep_locks_to_the_bar() {
     // A click on every downbeat, nothing else.
     const double bar = 4.0 * 60.0 / bpm * rate;
     Stereo clicks{std::vector<double>(4 * second), std::vector<double>(4 * second)};
+    // The sweep grid is the test input.
+    // NOLINTNEXTLINE(bugprone-float-loop-counter,clang-analyzer-security.FloatLoopCounter)
     for (double at = 0.0; at < static_cast<double>(clicks.size()); at += bar) {
       const auto i = static_cast<std::size_t>(std::lround(at));
       clicks.left[i] = clicks.right[i] = 0.9;

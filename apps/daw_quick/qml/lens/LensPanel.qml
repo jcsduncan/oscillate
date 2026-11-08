@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Lens device panel: a precision optical instrument in night blue. The
@@ -425,7 +426,7 @@ Rectangle {
                     delegate: Button {
                         required property int modelData
                         objectName: "lensRange:" + modelData
-                        label: modelData + " dB"
+                        label: Format.decibels(modelData, 0)
                         on: panel.rangeDb === modelData
                         onPressed: panel.rangeDb = modelData
                     }
@@ -443,7 +444,7 @@ Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     width: panel.theme.ceilingTextWidth
                     horizontalAlignment: Text.AlignHCenter
-                    text: "TOP " + (panel.ceilingDb > 0 ? "+" : panel.ceilingDb < 0 ? "−" : "") + Math.abs(panel.ceilingDb)
+                    text: "TOP " + Format.signed_number(panel.ceilingDb, 0)
                     color: panel.theme.inkDim
                     font.family: panel.theme.mono
                     font.pixelSize: panel.theme.typeCaption
@@ -611,7 +612,7 @@ Rectangle {
             x: panel.theme.cardInset
             y: resonancePlate.height - panel.theme.noteBottom
             width: resonancePlate.width - 2 * panel.theme.cardInset
-            text: "Notes in equal temperament, A4 = 440 Hz; green within 10 cents."
+            text: "Notes in equal temperament, A4 = 440 Hz; green within 10 ct."
             color: panel.theme.inkFaint
             font.pixelSize: panel.theme.typeMicro
             wrapMode: Text.WordWrap
@@ -682,7 +683,7 @@ Rectangle {
         Text {
             x: panel.theme.cardInset
             y: panel.theme.colourScaleLabelY
-            text: (panel.ceilingDb - panel.rangeDb) + " dB"
+            text: Format.decibels(panel.ceilingDb - panel.rangeDb, 0)
             color: panel.theme.gridText
             font.family: panel.theme.mono
             font.pixelSize: panel.theme.typeMicro
@@ -690,7 +691,7 @@ Rectangle {
         Text {
             x: readingPlate.width - panel.theme.cardInset - width
             y: panel.theme.colourScaleLabelY
-            text: (panel.ceilingDb > 0 ? "+" : "") + panel.ceilingDb + " dB"
+            text: Format.signed_decibels(panel.ceilingDb, 0)
             color: panel.theme.gridText
             font.family: panel.theme.mono
             font.pixelSize: panel.theme.typeMicro

@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Deck device panel: a club mixer's channel EQ. On the right, the
@@ -41,12 +42,8 @@ Rectangle {
     Accessible.role: Accessible.Pane
     Accessible.name: "Deck DJ EQ"
 
-    function signed(value, digits) {
-        const text = Math.abs(value).toFixed(digits)
-        const tiny = 0.5 * Math.pow(10, -digits)
-        return value < -tiny ? "−" + text : value > tiny ? "+" + text : text
-    }
-    function dbText(db) { return db <= floorDb ? "−∞" : signed(db, 1) }
+    // A band's bottom stop, where it reads as fully cut.
+    readonly property real bottomStopDb: -40
     function readoutName(id) {
         if (id === "")
             return "TOUCH A CONTROL"
@@ -61,7 +58,7 @@ Rectangle {
         if (controller.choice("deck." + name + "_kill") === 1)
             return "KILLED"
         const db = controller.value("deck." + name)
-        return db <= -40 ? "−∞ dB" : signed(db, 1) + " dB"
+        return Format.signed_decibels(db <= bottomStopDb ? -Infinity : db)
     }
 
     component Caption: Text {
@@ -260,7 +257,7 @@ Rectangle {
         id: shapePlate
         theme: panel.theme
         title: "CROSSOVERS · OUTPUT"
-        note: "24 DB/OCT LINKWITZ-RILEY · FLAT AT 0 DB"
+        note: "24 dB/OCT LINKWITZ-RILEY · FLAT AT 0 dB"
         x: panel.margin
         y: responsePlate.y + responsePlate.height + panel.gap
         width: panel.leftWidth

@@ -649,7 +649,7 @@ struct Fingerprint {
   double level_db;
   double bright_hz;
 };
-const std::vector<std::pair<std::string_view, Fingerprint>> golden{
+constexpr auto golden = std::to_array<std::pair<std::string_view, Fingerprint>>({
     {"Dusty 33", {-33.722, 7275.1}},
     {"Worn 78", {-35.779, 5145.0}},
     {"Fresh 45", {-32.824, 9637.4}},
@@ -666,7 +666,7 @@ const std::vector<std::pair<std::string_view, Fingerprint>> golden{
     {"Lo-fi Bed", {-35.436, 5813.2}},
     {"Field Day", {-30.754, 11951.1}},
     {"Init", {-30.790, 11988.9}},
-};
+});
 
 void preset_fingerprints() {
   const bool print = std::getenv("DUST_REBASELINE") != nullptr;

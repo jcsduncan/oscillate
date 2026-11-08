@@ -113,7 +113,7 @@ constexpr std::size_t mod_stride = 3;
 static_assert(index_of("prism.mod4.amount") == mod1_source + 3 * mod_stride + 2);
 } // namespace p
 
-enum Source : std::size_t {
+enum Source : std::uint8_t {
   src_off,
   src_env2,
   src_lfo1,
@@ -126,7 +126,7 @@ enum Source : std::size_t {
   src_amp,
   source_count
 };
-enum Target : std::size_t {
+enum Target : std::uint8_t {
   dst_off,
   dst_pitch,
   dst_osc1_pitch,
@@ -352,9 +352,10 @@ public:
       }
     }
     for (std::size_t i = 0; i < frames; ++i) {
-      double l = left[i];
-      double r = right[i];
-      declick_.add(l, r);
+      StereoSample frame{left[i], right[i]};
+      declick_.add(frame);
+      double l = frame.left;
+      double r = frame.right;
       // Post drive, 2x oversampled.
       const double drive = post_drive_.next();
       const double makeup = post_makeup_.next();
@@ -443,6 +444,7 @@ private:
         }
       }
     }
+    // NOLINTNEXTLINE(clang-analyzer-core.NonNullParamChecker): the pool always has voices.
     capture_declick(*chosen);
     if (!same_key) {
       ++steals_;

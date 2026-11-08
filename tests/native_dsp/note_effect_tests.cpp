@@ -497,9 +497,9 @@ std::vector<double> render(const project::Snapshot& state, std::uint32_t block,
   return out;
 }
 
-double peak(const std::vector<double>& x, std::size_t from, std::size_t to) {
+double peak(const std::vector<double>& x, std::size_t begin, std::size_t end) {
   double level = 0.0;
-  for (std::size_t i = from; i < to && i < x.size(); ++i)
+  for (std::size_t i = begin; i < end && i < x.size(); ++i)
     level = std::max(level, std::abs(x[i]));
   return level;
 }

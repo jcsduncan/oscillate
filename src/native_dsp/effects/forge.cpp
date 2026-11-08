@@ -332,7 +332,7 @@ public:
     out[telemetry::input_rms] = static_cast<float>(std::sqrt(input_power_));
     out[telemetry::output_rms] = static_cast<float>(std::sqrt(output_power_));
     out[telemetry::makeup_db] = static_cast<float>(20.0 * std::log10(makeup_target_));
-    std::copy(curve_.begin(), curve_.end(), out.begin() + telemetry::curve);
+    std::ranges::copy(curve_, out.begin() + telemetry::curve);
     return telemetry::size;
   }
 

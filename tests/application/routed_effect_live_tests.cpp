@@ -106,9 +106,9 @@ struct Live {
   }
 
   // Applies `commands`, offers them to playback and proves they went live.
-  void edit_live(std::vector<project::Operation> commands, std::string_view label) {
-    auto applied = take(model.apply(std::move(commands)));
-    const auto edited = control.begin_edit(applied, std::string(label));
+  void edit_live(const std::vector<project::Operation>& commands, std::string_view label) {
+    auto applied = take(model.apply(commands));
+    const auto edited = control.begin_edit(applied, label);
     REQUIRE_OK(edited, std::string(label) + " was not accepted live: " +
                            (edited ? std::string() : edited.error().message));
     require(!control.held_boundary().has_value(), std::string(label) + " held the graph");
@@ -122,7 +122,7 @@ struct Live {
 project::NativeEffectPatch with_value(const project::NativeEffectPatch& patch,
                                       std::string_view parameter, double value) {
   auto resolved = take(inserts::resolve_native_effect(patch));
-  resolved.values[*synth::find_parameter(*resolved.engine->descriptor, parameter)] = value;
+  resolved.values[take(synth::find_parameter(*resolved.engine->descriptor, parameter))] = value;
   return take(inserts::make_native_effect_patch(*resolved.engine, resolved.values, patch.document));
 }
 

@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The last 0.7 s, as Pocket hears it, drawn as envelopes in two lanes on
 // one time axis: the kick in amber on top, and below it the bass coming in
@@ -131,7 +132,7 @@ Item {
                 ctx.lineTo(x, waves.py + waves.ph)
                 ctx.stroke()
                 ctx.fillStyle = t.inkFaint
-                ctx.fillText(ms === 0 ? "now" : "−" + (ms / 1000).toFixed(1) + " s", x, waves.py + waves.ph + t.timeLabelGap)
+                ctx.fillText(ms === 0 ? "now" : Format.milliseconds(-ms), x, waves.py + waves.ph + t.timeLabelGap)
             }
             // The lane divider and centre lines.
             const kickMid = waves.py + waves.kickHeight / 2

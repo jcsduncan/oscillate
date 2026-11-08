@@ -1,5 +1,7 @@
 #include "native_synth_automation_controller.hpp"
 #include "native_synth_device_controller.hpp"
+#include "panel_fit_checks.hpp"
+#include "panel_text_checks.hpp"
 #include "project_bridge.hpp"
 
 #include "../../native_dsp/concert_test_library.hpp"
@@ -52,6 +54,8 @@ using oscillate::test::require;
 // The scene point at the centre of grid step `step` on the piano roll's row
 // for `key`: each row is one hit area ("pianoRollRow-<key>") that works the
 // step out from x. Empty when the row is missing or hidden.
+// The arguments are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::optional<QPointF> piano_roll_cell(QQuickItem* root, int step, int key) {
   const auto name = QStringLiteral("pianoRollRow-%1").arg(key);
   QQuickItem* row = nullptr;
@@ -83,17 +87,19 @@ public:
                 std::shared_ptr<ConcertProbe> probe)
       : source_(source), cursor_(cursor), probe_(std::move(probe)) {}
 
+  // The PlaybackOutput interface's rate and block size.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   [[nodiscard]] oscillate::foundation::Result<void> start(std::uint32_t rate, std::uint32_t frames,
                                                           std::optional<std::uint64_t>) override {
     if (frames == 0 || frames > app::max_playback_buffer_frames)
       return oscillate::foundation::Result<void>::failure(
           {oscillate::foundation::ErrorCode::invalid_argument, "Invalid preview block size"});
     std::array<engine::StereoFrame, app::max_playback_buffer_frames> scratch{};
-    std::array<float, 2 * app::max_playback_buffer_frames> samples{};
+    std::array<float, 2 * std::size_t{app::max_playback_buffer_frames}> samples{};
     float peak = 0.0F;
     for (int block = 0; block < 64; ++block) {
       if (audio::render_transport_block(source_, cursor_, true, std::span(scratch).first(frames),
-                                        std::span(samples).first(frames * 2)) !=
+                                        std::span(samples).first(std::size_t{frames} * 2)) !=
           audio::BlockResult::rendered)
         return oscillate::foundation::Result<void>::failure(
             {oscillate::foundation::ErrorCode::internal, "Concert callback failed"});
@@ -204,7 +210,9 @@ void concert_note_plays_from_the_quick_shell() {
   window->setProperty("selectedClipId", clip);
   QCoreApplication::processEvents();
   const auto note_cell = piano_roll_cell(window->contentItem(), 0, 60);
-  require(note_cell.has_value(), "Concert note cell is unavailable");
+  if (!note_cell) {
+    throw std::runtime_error("Concert note cell is unavailable");
+  }
   QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, note_cell->toPoint());
   require(bridge.tracks()
                   .at(static_cast<int>(track_index))
@@ -263,6 +271,8 @@ void concert_note_plays_from_the_quick_shell() {
           "Concert playback did not stop");
 }
 
+// The arguments are named at every call.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void engine_is_reachable_and_saves_from_the_app(std::string_view engine_id,
                                                 std::string_view cutoff_id,
                                                 const QString& panel_name) {
@@ -481,9 +491,11 @@ void engine_is_reachable_and_saves_from_the_app(std::string_view engine_id,
   require(values.has_value(), "saved synth patch is missing");
   const auto* engine = native::find_engine(engine_id);
   const auto index = native::find_parameter(*engine->descriptor, cutoff_id);
-  require(index.has_value() && std::fabs(values.value()[*index] -
-                                         native::from_normalised(
-                                             engine->descriptor->parameters[*index], 0.62)) < 1e-9,
+  if (!index) {
+    throw std::runtime_error("the cutoff parameter is missing");
+  }
+  require(std::fabs(values.value()[*index] -
+                    native::from_normalised(engine->descriptor->parameters[*index], 0.62)) < 1e-9,
           "edited synth cutoff did not survive save and reopen");
   const auto& lanes = reopened.value()->snapshot().tracks.front().automation;
   const auto lane = std::ranges::find_if(lanes, [&](const project::AutomationLane& item) {
@@ -519,10 +531,15 @@ void all_registered_panels_open_in_the_daw() {
     bridge.select_native_instrument(track_id, id);
     QCoreApplication::processEvents();
     const auto panel_name = id + QStringLiteral("Panel");
-    const auto* panel = window->findChild<QObject*>(panel_name);
+    auto* panel = qobject_cast<QQuickItem*>(window->findChild<QObject*>(panel_name));
     require(panel != nullptr && panel->property("visible").toBool() &&
                 bridge.native_synth_controller() != nullptr,
             ("registered synth panel did not open in the DAW: " + id.toStdString()).c_str());
+    // Every value the panel shows follows the display formatter.
+    oscillate::test::panel_text::require_formatted_values(panel, id.toStdString());
+    // As the effects' app contract checks: every label shows whole, and no
+    // text is drawn over other text or clipped.
+    oscillate::test::panel_fit::require_text_fits(panel, id.toStdString());
   }
 }
 
@@ -698,7 +715,9 @@ void pulse_drum_lanes_share_the_piano_roll_and_saved_notes() {
         return found;
       };
       const auto kick_cell = piano_roll_cell(window->contentItem(), 0, 36);
-      require(kick_cell.has_value(), "Pulse's first pad cell was not rendered or is hidden");
+      if (!kick_cell) {
+        throw std::runtime_error("Pulse's first pad cell was not rendered or is hidden");
+      }
       QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, kick_cell->toPoint());
       QCoreApplication::processEvents();
       auto notes = bridge.tracks()
@@ -931,6 +950,7 @@ void live_notes_monitor_through_the_graph_while_stopped() {
 int main(int argc, char** argv) {
   QGuiApplication application(argc, argv);
   try {
+    oscillate::test::panel_text::rules_catch_known_mistakes();
     // Concert plays the synthetic library unless a manual run points at an
     // existing project, which plays the installed one.
     if (!qEnvironmentVariableIsSet("OSCILLATE_CONCERT_PROJECT")) {

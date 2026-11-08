@@ -53,7 +53,7 @@ public:
   [[nodiscard]] foundation::Result<project::TrackId>
   finish_wav_audio_import(PreparedWavAudioImport&& prepared,
                           std::optional<std::size_t> insert_index = std::nullopt,
-                          std::string clip_name = {});
+                          const std::string& clip_name = {});
   // Optional codec build: stages original AIFF, FLAC or MP3 bytes on a worker.
   // The same-rate result commits only on the originating project sequencer.
   // Codec-off builds return unsupported at begin, before any asset is staged.
@@ -61,7 +61,7 @@ public:
   [[nodiscard]] foundation::Result<project::TrackId>
   finish_encoded_audio_import(PreparedEncodedAudioImport&& prepared,
                               std::optional<std::size_t> insert_index = std::nullopt,
-                              std::string clip_name = {});
+                              const std::string& clip_name = {});
   // Capture on control, verify full bytes and decoded metadata on a worker,
   // then finish on the same control sequencer. A stale completion changes
   // neither model nor CURRENT. A failed save retains the accepted model edit.
@@ -74,7 +74,7 @@ private:
   [[nodiscard]] foundation::Result<project::TrackId>
   finish_audio_import(persistence::StagedWav&& stage, std::uint64_t origin_revision,
                       project::TrackId track, project::ClipId clip, bool encoded,
-                      std::optional<std::size_t> insert_index, std::string clip_name);
+                      std::optional<std::size_t> insert_index, const std::string& clip_name);
   SaveService& saving_;
 };
 

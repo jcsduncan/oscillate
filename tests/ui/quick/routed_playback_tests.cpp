@@ -900,8 +900,9 @@ void live_clip_move_overlay_keeps_source_timing(std::uint32_t frames,
   require(run->completed_sample() == frames, "ramp playback did not reach first boundary");
   {
     std::lock_guard lock(evidence->mutex);
-    require(evidence->samples.size() == frames * 2 && evidence->samples[0] == 4096.0F / 32768.0F &&
-                evidence->samples[(frames - 1) * 2] ==
+    require(evidence->samples.size() == static_cast<std::size_t>(frames) * 2 &&
+                evidence->samples[0] == 4096.0F / 32768.0F &&
+                evidence->samples[static_cast<std::size_t>(frames - 1) * 2] ==
                     static_cast<float>(4096 + frames - 1) / 32768.0F,
             "ramp source did not reach the correct initial samples");
   }
@@ -938,8 +939,9 @@ void live_clip_move_overlay_keeps_source_timing(std::uint32_t frames,
   status = run->status();
   {
     std::lock_guard lock(evidence->mutex);
-    require(evidence->frozen_silent_blocks == 0 && evidence->samples.size() == frames * 4 &&
-                evidence->samples[frames * 2] ==
+    require(evidence->frozen_silent_blocks == 0 &&
+                evidence->samples.size() == static_cast<std::size_t>(frames) * 4 &&
+                evidence->samples[static_cast<std::size_t>(frames) * 2] ==
                     static_cast<float>(4096 + frames - (refuse_first_candidate ? 0 : 25)) /
                         32768.0F &&
                 evidence->callback_allocation_count == 0,
@@ -953,25 +955,25 @@ void live_clip_move_overlay_keeps_source_timing(std::uint32_t frames,
                   (refuse_first_candidate ? original_revision : edited_revision) &&
               status.application == (refuse_first_candidate ? app::PlaybackApplication::pending
                                                             : app::PlaybackApplication::active) &&
-              run->completed_sample() == frames * 2 &&
+              run->completed_sample() == static_cast<std::uint64_t>(frames) * 2 &&
               run->output_status().state == audio::OutputState::streaming,
           "candidate miss did not keep the old audible revision and moving cursor");
   evidence->permit(1);
   evidence->await_blocks(3);
   status = run->status();
-  require(run->completed_sample() == frames * 3,
+  require(run->completed_sample() == static_cast<std::uint64_t>(frames) * 3,
           "source-only handoff did not keep a monotonic project cursor");
   {
     std::lock_guard lock(evidence->mutex);
     require(
-        evidence->samples.size() == frames * 6 &&
-            evidence->samples[frames * 4] ==
+        evidence->samples.size() == static_cast<std::size_t>(frames) * 6 &&
+            evidence->samples[static_cast<std::size_t>(frames) * 4] ==
                 static_cast<float>(4096 + 2 * frames - (refuse_first_candidate ? 0 : 25)) /
                     32768.0F &&
             evidence->frozen_silent_blocks == 0 && evidence->callback_allocation_count == 0,
         std::string("new clip geometry read the wrong source frame or allocated in callback: ") +
             std::to_string(evidence->samples.size()) + "/" +
-            std::to_string(evidence->samples[frames * 4]) + "/" +
+            std::to_string(evidence->samples[static_cast<std::size_t>(frames) * 4]) + "/" +
             std::to_string(evidence->frozen_silent_blocks) + "/" +
             std::to_string(evidence->callback_allocation_count));
   }
@@ -1005,9 +1007,9 @@ void live_clip_move_overlay_keeps_source_timing(std::uint32_t frames,
     const auto restarted_status = restarted->status();
     {
       std::lock_guard lock(restart_evidence->mutex);
-      require(restart_evidence->samples.size() == frames * 2 &&
+      require(restart_evidence->samples.size() == static_cast<std::size_t>(frames) * 2 &&
                   restart_evidence->samples.front() == 0.0F &&
-                  restart_evidence->samples[25 * 2] == 4096.0F / 32768.0F &&
+                  restart_evidence->samples[std::size_t{25} * 2] == 4096.0F / 32768.0F &&
                   restart_evidence->frozen_silent_blocks == 0,
               "Stop and Play did not render the saved clip move from its new position");
     }
@@ -1067,9 +1069,10 @@ void live_clip_overlay_keeps_master_eq_history(std::uint32_t frames) {
   expected_eq.process(std::span(expected).subspan(frames, frames), {frames, 1});
   {
     std::lock_guard lock(evidence->mutex);
-    require(evidence->samples.size() == frames * 4 && evidence->frozen_silent_blocks == 0,
+    require(evidence->samples.size() == static_cast<std::size_t>(frames) * 4 &&
+                evidence->frozen_silent_blocks == 0,
             "master EQ source overlay inserted a held block");
-    for (std::size_t index = 0; index < frames * 2; ++index) {
+    for (std::size_t index = 0; index < static_cast<std::size_t>(frames) * 2; ++index) {
       require(std::fabs(evidence->samples[index * 2] - expected[index].left) < 0.00001F,
               "master EQ history reset across source-only revision");
     }
@@ -1112,12 +1115,13 @@ void live_clip_trim_overlay_keeps_playing(std::uint32_t frames) {
   evidence->permit(1);
   evidence->await_blocks(2);
   require(run->status().active_graph_revision == session->snapshot().revision &&
-              run->completed_sample() == frames * 2,
+              run->completed_sample() == static_cast<std::uint64_t>(frames) * 2,
           "live right trim did not activate without freezing the cursor");
   {
     std::lock_guard lock(evidence->mutex);
     require(evidence->frozen_silent_blocks == 0 &&
-                evidence->samples[frames * 2] == static_cast<float>(4096 + frames) / 32768.0F &&
+                evidence->samples[static_cast<std::size_t>(frames) * 2] ==
+                    static_cast<float>(4096 + frames) / 32768.0F &&
                 evidence->samples[(trim_end - 1) * 2] ==
                     static_cast<float>(4096 + trim_end - 1) / 32768.0F &&
                 evidence->samples[trim_end * 2] == 0.0F,
@@ -1155,7 +1159,7 @@ void live_clip_split_overlay_keeps_playing(std::uint32_t frames, bool refuse_can
   evidence->permit(1);
   evidence->await_blocks(1);
   const auto active = run->status().active_graph_revision;
-  const auto boundary = static_cast<std::int64_t>(frames + 17);
+  const auto boundary = static_cast<std::int64_t>(frames) + 17;
   const auto right =
       take(session->audio_clips().split_audio_clip_at_sample(original.id, {boundary}));
   const auto split = session->snapshot().tracks.front().clips;
@@ -1182,7 +1186,7 @@ void live_clip_split_overlay_keeps_playing(std::uint32_t frames, bool refuse_can
   evidence->await_blocks(2);
   status = run->status();
   require(run->output_status().state == audio::OutputState::streaming &&
-              run->completed_sample() == frames * 2 &&
+              run->completed_sample() == static_cast<std::uint64_t>(frames) * 2 &&
               status.model_revision == session->snapshot().revision &&
               status.active_graph_revision ==
                   (refuse_candidate ? active : session->snapshot().revision) &&
@@ -1304,7 +1308,7 @@ void multi_track_clip_overlay_preserves_native_processing(std::uint32_t frames,
                   (refuse_candidate ? original_revision : edited_revision) &&
               status.application == (refuse_candidate ? app::PlaybackApplication::pending
                                                       : app::PlaybackApplication::active) &&
-              run->completed_sample() == frames * 2,
+              run->completed_sample() == static_cast<std::uint64_t>(frames) * 2,
           "multi-track source overlay reported the wrong audible revision");
   std::array<engine::StereoFrame, 256> expected{};
   for (std::size_t block = 0; block < 2; ++block) {
@@ -1324,10 +1328,10 @@ void multi_track_clip_overlay_preserves_native_processing(std::uint32_t frames,
   }
   {
     std::lock_guard lock(evidence->mutex);
-    require(evidence->samples.size() == frames * 4 && evidence->frozen_silent_blocks == 0 &&
-                evidence->callback_allocation_count == 0,
+    require(evidence->samples.size() == static_cast<std::size_t>(frames) * 4 &&
+                evidence->frozen_silent_blocks == 0 && evidence->callback_allocation_count == 0,
             "multi-track source overlay froze or allocated in the callback");
-    for (std::size_t index = 0; index < frames * 2; ++index) {
+    for (std::size_t index = 0; index < static_cast<std::size_t>(frames) * 2; ++index) {
       require(std::fabs(evidence->samples[index * 2] - expected[index].left) < 0.00001F,
               "multi-track overlay changed source order or reset native processor history");
     }
@@ -2120,10 +2124,8 @@ void saved_vst3_is_not_silently_omitted() {
     require(binding && binding->slot &&
                 binding->identity.graph_revision == session->snapshot().revision &&
                 binding->identity.instance_id != 0 &&
-                binding->slot->admission(
-                    binding->identity.graph_revision, binding->identity.instance_id,
-                    binding->identity.compatibility_key, session->snapshot().revision + 1,
-                    {0, 0, 0.5}) != plugins::Vst3ManualEventStatus::accepted &&
+                binding->slot->admission(binding->identity, session->snapshot().revision + 1,
+                                         {0, 0, 0.5}) != plugins::Vst3ManualEventStatus::accepted &&
                 !run.value()->active_vst3_effect_manual_events(
                     saved_track.id, saved_track.effects.front().id,
                     project::PluginInstanceId::from_bits({9, 9}).value()),
@@ -2335,9 +2337,8 @@ void live_zero_latency_vst3_insert_uses_worker_and_keeps_source(std::uint32_t re
   const auto manual = run->active_vst3_effect_manual_events(
       track, session->snapshot().tracks.front().effects.front().id, saved_effect.id);
   require(manual && manual->slot && manual->identity.graph_revision == saved_revision &&
-              manual->slot->admission(manual->identity.graph_revision, manual->identity.instance_id,
-                                      manual->identity.compatibility_key, saved_revision + 1,
-                                      {1, 0, 0.5}) == plugins::Vst3ManualEventStatus::accepted,
+              manual->slot->admission(manual->identity, saved_revision + 1, {1, 0, 0.5}) ==
+                  plugins::Vst3ManualEventStatus::accepted,
           "newly inserted effect was absent from active manual-parameter bookkeeping");
   {
     std::lock_guard lock(stepped->mutex);
@@ -2447,8 +2448,8 @@ void live_latent_vst3_insert_switches_without_holding() {
           "latent effect did not become active");
   {
     std::lock_guard lock(stepped->mutex);
-    require(stepped->samples.size() == 64 * 2 * 3 && stepped->frozen_silent_blocks == 0 &&
-                stepped->callback_allocation_count == 0 &&
+    require(stepped->samples.size() == std::size_t{64} * 2 * 3 &&
+                stepped->frozen_silent_blocks == 0 && stepped->callback_allocation_count == 0 &&
                 std::fabs(stepped->samples[0] - 0.25F) < 0.00001F,
             "latent effect switch held, stopped the source or allocated");
     // The switching block plays the plugin's output after its seven frames
@@ -2664,7 +2665,7 @@ void qualified_manual_vst3_edits_become_live() {
         require(live && live->plugin == saved().id &&
                     live->status.phase == app::Vst3ManualEditPhase::applied &&
                     live->status.live_revision == opened + index &&
-                    live->status.applied_sample == static_cast<std::int64_t>(index * frames) &&
+                    live->status.applied_sample == static_cast<std::int64_t>(index) * frames &&
                     run->status().active_graph_revision == opened + index && !run->edit_pending() &&
                     !run->processor_fault(),
                 "manual receipt did not make the exact revision live");
@@ -3029,16 +3030,13 @@ void saved_vst3_instrument_plays_midi_and_fails_closed() {
             "parameter-scoped instrument graph did not activate");
     const auto binding =
         qualified.value()->active_vst3_instrument_manual_events(track, inserted.value());
-    require(binding &&
-                binding->slot->admission(
-                    binding->identity.graph_revision, binding->identity.instance_id,
-                    binding->identity.compatibility_key, session->snapshot().revision + 1,
-                    {1, 0, 0.75}) == plugins::Vst3ManualEventStatus::accepted &&
-                binding->slot->admission(
-                    binding->identity.graph_revision, binding->identity.instance_id,
-                    binding->identity.compatibility_key, session->snapshot().revision + 1,
-                    {2, 0, 0.75}) == plugins::Vst3ManualEventStatus::unavailable,
-            "exact parameter evidence exposed the wrong live controls");
+    require(
+        binding &&
+            binding->slot->admission(binding->identity, session->snapshot().revision + 1,
+                                     {1, 0, 0.75}) == plugins::Vst3ManualEventStatus::accepted &&
+            binding->slot->admission(binding->identity, session->snapshot().revision + 1,
+                                     {2, 0, 0.75}) == plugins::Vst3ManualEventStatus::unavailable,
+        "exact parameter evidence exposed the wrong live controls");
     require(qualified.value()->stop_and_retire() ==
                 quick::RoutedPlayback::StopDrainOutcome::not_requested,
             "qualified instrument did not retire");
@@ -3357,14 +3355,12 @@ void two_vst3_instrument_effect_paths_render_independently() {
   const auto second_binding = mixed_run.value()->active_vst3_effect_manual_events(
       second_track, saved.tracks[1].effects.front().id, second_effect);
   require(first_binding && second_binding && first_binding->slot && second_binding->slot &&
-              first_binding->slot->admission(
-                  first_binding->identity.graph_revision, first_binding->identity.instance_id,
-                  first_binding->identity.compatibility_key, saved.revision + 1,
-                  {101, 0, 0.75}) == plugins::Vst3ManualEventStatus::accepted &&
-              second_binding->slot->admission(
-                  second_binding->identity.graph_revision, second_binding->identity.instance_id,
-                  second_binding->identity.compatibility_key, saved.revision + 1,
-                  {101, 0, 0.75}) != plugins::Vst3ManualEventStatus::accepted,
+              first_binding->slot->admission(first_binding->identity, saved.revision + 1,
+                                             {101, 0, 0.75}) ==
+                  plugins::Vst3ManualEventStatus::accepted &&
+              second_binding->slot->admission(second_binding->identity, saved.revision + 1,
+                                              {101, 0, 0.75}) !=
+                  plugins::Vst3ManualEventStatus::accepted,
           "paired effect control evidence was lost or leaked across saved instances");
   (void)mixed_run.value()->stop_and_retire();
   auto stepped = std::make_shared<SteppedEvidence>();
@@ -3394,7 +3390,7 @@ void two_vst3_instrument_effect_paths_render_independently() {
   float settled_sample = 0.0F;
   {
     std::lock_guard lock(stepped->mutex);
-    require(stepped->samples.size() == 5 * 64 * 2,
+    require(stepped->samples.size() == std::size_t{5} * 64 * 2,
             "paired VST3 graph lost an audio block at its held edit");
     require(stepped->callback_allocation_count == 0,
             "paired VST3 callback allocated across its held edit");

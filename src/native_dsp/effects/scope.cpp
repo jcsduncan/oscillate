@@ -178,12 +178,12 @@ private:
   // averaged correlation and energies.
   void clear_alignment() noexcept {
     for (auto& ring : rings_) {
-      std::fill(ring.begin(), ring.end(), 0.0);
+      std::ranges::fill(ring, 0.0);
     }
     band_[0].reset();
     band_[1].reset();
     write_ = 0;
-    std::fill(average_.begin(), average_.end(), 0.0);
+    std::ranges::fill(average_, 0.0);
     energy_a_ = 0.0;
     energy_b_ = 0.0;
     averaged_ = false;
@@ -226,6 +226,7 @@ private:
     fft_->forward(data);
     // a's and b's spectra from the packed transform, then a conj(b).
     for (std::size_t k = 0; k <= n / 2; ++k) {
+      // NOLINTNEXTLINE(clang-analyzer-core.DivideZero): the transform size is never zero.
       const std::size_t m = (n - k) % n;
       const auto x = data[k];
       const auto y = std::conj(data[m]);

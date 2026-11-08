@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 // Pocket v1: kick and bass masking resolver, phase 1 (ADR-0041). Defaults
@@ -16,7 +17,7 @@ using T = synth::ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array modes{"Unmask"sv, "Duck"sv, "Pump"sv};
-enum Mode : int { unmask, duck, pump };
+enum Mode : std::uint8_t { unmask, duck, pump };
 inline constexpr std::array off_on{"Off"sv, "On"sv};
 inline constexpr std::array lookaheads{"Off"sv, "5 ms"sv, "10 ms"sv, "20 ms"sv, "40 ms"sv};
 inline constexpr std::array<double, 5> lookahead_ms{0, 5, 10, 20, 40};
