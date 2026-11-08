@@ -60,7 +60,9 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <functional>
 #include <iterator>
+#include <memory>
 #include <optional>
 #include <string>
 #include <system_error>
@@ -189,6 +191,9 @@ ProjectBridge::ProjectBridge(const std::filesystem::path& home_directory, QObjec
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
   vst3_binary_hasher_ = std::move(dependencies.vst3_binary_hasher);
 #endif
+  plugin_editor_commit_ = dependencies.plugin_editor_commit
+                              ? std::move(dependencies.plugin_editor_commit)
+                              : [this] { return vst3_editor_->commit_native_editor(); };
   start_timers();
   create_audio_output(std::move(output_factory), std::move(jack_output_factory),
                       std::move(jack_server_probe), std::move(audio_device_discovery));
@@ -898,7 +903,50 @@ QObject* ProjectBridge::groove_capture() const noexcept { return groove_capture_
 QObject* ProjectBridge::clay() const noexcept { return clay_.get(); }
 QObject* ProjectBridge::workspace_layout() const noexcept { return workspace_layout_.get(); }
 
-bool ProjectBridge::ready_to_change_project() {
+bool ProjectBridge::plugin_state_saved(std::function<void()> change) {
+  if (plugin_state_waived_) {
+    vst3_editor_->discard_vst3_insert_editor();
+    return true;
+  }
+  const auto failure = plugin_editor_commit_();
+  if (!failure) {
+    held_project_change_ = {};
+    set_plugin_state_problem({});
+    return true;
+  }
+  held_project_change_ = std::move(change);
+  set_plugin_state_problem(
+      QStringLiteral("Nothing changed: the open plug-in's latest state could not be saved. %1")
+          .arg(*failure));
+  return false;
+}
+
+void ProjectBridge::set_plugin_state_problem(QString problem) {
+  if (!problem.isEmpty())
+    set_status(problem);
+  if (problem == plugin_state_problem_)
+    return;
+  plugin_state_problem_ = std::move(problem);
+  emit pluginStateProblemChanged();
+}
+
+void ProjectBridge::continue_without_plugin_state() {
+  auto change = std::exchange(held_project_change_, {});
+  set_plugin_state_problem({});
+  if (!change)
+    return;
+  plugin_state_waived_ = true;
+  change();
+  plugin_state_waived_ = false;
+}
+
+void ProjectBridge::cancel_project_change() {
+  held_project_change_ = {};
+  set_plugin_state_problem({});
+  set_status(QStringLiteral("Project change cancelled; the plug-in editor stays open"));
+}
+
+bool ProjectBridge::ready_to_change_project(std::function<void()> change) {
   if (background_save_job_.running()) {
     set_status(QStringLiteral("Wait for project save to finish before changing projects"));
     return false;
@@ -915,7 +963,7 @@ bool ProjectBridge::ready_to_change_project() {
                                : QStringLiteral("Stop playback before changing projects"));
     return false;
   }
-  if (!vst3_editor_->commit_native_editor())
+  if (!plugin_state_saved(std::move(change)))
     return false;
   return save_current_project_if_dirty();
 }
@@ -948,7 +996,7 @@ void ProjectBridge::release_project() {
 }
 
 void ProjectBridge::close_project() {
-  if (!session_ || !ready_to_change_project())
+  if (!session_ || !ready_to_change_project([this] { close_project(); }))
     return;
   release_project();
   autosave_timer_.stop();
@@ -971,8 +1019,13 @@ void ProjectBridge::close_project() {
 
 void ProjectBridge::set_project(std::unique_ptr<application::ProjectSession> session,
                                 const std::filesystem::path& opened_root) {
-  if (!ready_to_change_project())
+  // A change the plug-in editor stops keeps the opened project until the
+  // user answers.
+  auto held = std::make_shared<std::unique_ptr<application::ProjectSession>>(std::move(session));
+  if (!ready_to_change_project(
+          [this, held, opened_root] { set_project(std::move(*held), opened_root); }))
     return;
+  session = std::move(*held);
   // Every consumer of the root (warp sources, caches, recents) gets one
   // absolute, normalized path: a project opened as "build/song" or "song/"
   // otherwise plays until a clip needs warping.
@@ -1792,7 +1845,7 @@ void ProjectBridge::save_copy(const QString& copy_name) {
   if (!destination)
     return;
   // An open plug-in editor's state belongs in the copy, not only the original.
-  if (!vst3_editor_->commit_native_editor())
+  if (!plugin_state_saved([this, copy_name] { save_copy(copy_name); }))
     return;
   finish_in_flight_saves();
   if (const auto failure = collection_->save_copy(*session_, waveform_root_, *destination))

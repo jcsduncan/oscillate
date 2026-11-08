@@ -635,6 +635,11 @@ Window {
         y: topBar.height - 1
     }
 
+    PluginStateProblemPanel {
+        host: shell
+        bridge: projectBridge
+    }
+
     AudioOutputPanel {
         host: shell
         bridge: projectBridge

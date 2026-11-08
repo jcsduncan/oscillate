@@ -111,6 +111,9 @@ struct BridgeDependencies {
   // plugins::hash_vst3_binary.
   Vst3BinaryHasher vst3_binary_hasher{};
 #endif
+  // Saves an open plug-in editor's latest state before a project change and
+  // returns why it could not; default: the VST3 editor's commit.
+  std::function<std::optional<QString>()> plugin_editor_commit{};
 };
 
 // A UI-thread, revisioned projection. QML receives values, never model pointers.
@@ -124,6 +127,10 @@ class ProjectBridge final : public QObject {
   // Why the last save of the open project failed, until one succeeds; empty
   // when the project on disk is current.
   Q_PROPERTY(QString saveProblem READ save_problem NOTIFY saveProblemChanged)
+  // Why a project change (switching projects, Save a copy or closing)
+  // stopped: an open plug-in editor's latest state could not be saved.
+  // Empty unless the user is being asked whether to go on without it.
+  Q_PROPERTY(QString pluginStateProblem READ plugin_state_problem NOTIFY pluginStateProblemChanged)
   Q_PROPERTY(qulonglong revision READ revision NOTIFY revisionChanged)
   // Each projection signals only when its value changed. `tracks` is the
   // whole list for lookups; delegates repeat `trackModel` (and each row's
@@ -318,6 +325,7 @@ public:
   }
   [[nodiscard]] QString autosave_status() const { return autosave_status_; }
   [[nodiscard]] QString save_problem() const { return save_problem_; }
+  [[nodiscard]] QString plugin_state_problem() const { return plugin_state_problem_; }
   void set_autosave_interval_seconds(int seconds);
   [[nodiscard]] CacheUiController* cache_controls() const { return cache_ui_.get(); }
   [[nodiscard]] KeyReviewController* key_review() const { return key_review_.get(); }
@@ -683,6 +691,11 @@ public:
   Q_INVOKABLE void cancel_project_collection();
   // A window close waits for worker cancellation, playback retirement or export publication.
   Q_INVOKABLE bool request_close();
+  // Answers pluginStateProblem: runs the stopped project change without the
+  // plug-in's latest state (its editor closes), or drops the change and
+  // leaves the editor open.
+  Q_INVOKABLE void continue_without_plugin_state();
+  Q_INVOKABLE void cancel_project_change();
 
 signals:
   // The project opened, closed, or was renamed or reformatted.
@@ -718,6 +731,7 @@ signals:
   void autosaveIntervalChanged();
   void autosaveStatusChanged();
   void saveProblemChanged();
+  void pluginStateProblemChanged();
 
 private:
   // Construction, by feature.
@@ -772,8 +786,14 @@ private:
   void remember_project(const QString& path);
   void refresh_available_projects();
   // Refuses (with a status) while a save, export, import or playback is
-  // busy; otherwise saves unsaved changes.
-  [[nodiscard]] bool ready_to_change_project();
+  // busy, or when an open plug-in editor's state could not be saved (then
+  // `change` waits for continue_without_plugin_state); otherwise saves
+  // unsaved changes.
+  [[nodiscard]] bool ready_to_change_project(std::function<void()> change);
+  // Saves an open plug-in editor's state, or holds `change` and asks the
+  // user whether to go on without it.
+  [[nodiscard]] bool plugin_state_saved(std::function<void()> change);
+  void set_plugin_state_problem(QString problem);
   void release_project();
   [[nodiscard]] bool save_current_project_if_dirty();
   void poll_playback();
@@ -996,6 +1016,12 @@ private:
   QString autosave_status_;
   QString save_problem_;
   void set_save_problem(QString problem);
+  std::function<std::optional<QString>()> plugin_editor_commit_;
+  QString plugin_state_problem_;
+  // The project change pluginStateProblem stopped, and whether it is being
+  // run again without the plug-in's state.
+  std::function<void()> held_project_change_;
+  bool plugin_state_waived_ = false;
   bool close_after_autosave_ = false;
   std::unique_ptr<KeyReviewController> key_review_;
   std::unique_ptr<ClipAutomationController> clip_automation_;

@@ -96,8 +96,9 @@ public:
   Q_INVOKABLE void discard_vst3_insert_editor();
 
   // A native editor saves its state before the project changes or the
-  // window closes: false while it stays open (the save was refused).
-  [[nodiscard]] bool commit_native_editor();
+  // window closes. Returns why the state did not reach the project; the
+  // editor then stays open with that state when the plug-in still holds it.
+  [[nodiscard]] std::optional<QString> commit_native_editor();
   // Follows the latest live gesture's receipt in the open editor.
   void refresh_live_status();
 
@@ -127,6 +128,14 @@ private:
     // The project the editor was opened in (ProjectSession::session_generation).
     std::uint64_t session = 0;
   };
+  // Closes the native view and saves its state as one undo step. Returns
+  // why the state did not reach the project; with `keep`, a plug-in that
+  // still holds that state is shown again for another try.
+  [[nodiscard]] std::optional<QString> close_native_editor(bool keep);
+  [[nodiscard]] std::optional<QString>
+  keep_uncaptured_editor(bool keep, QString failure,
+                         std::vector<project::Vst3ParameterReference> references);
+  [[nodiscard]] bool reattach_native_view();
   void begin_verification(PendingVerification pending);
   void poll_verification();
   void finish_insert_open(const PendingVerification& pending,
@@ -154,6 +163,9 @@ private:
   std::optional<project::Vst3PluginInstance> original_;
   std::optional<project::TrackId> track_;
   std::optional<project::InsertSlotId> slot_;
+  // Parameter intent of a kept editor whose state was not captured; the
+  // next capture starts from it instead of the saved parameters.
+  std::optional<std::vector<project::Vst3ParameterReference>> uncaptured_parameters_;
   std::uint64_t revision_ = 0;
   std::vector<PendingNativeGesture> pending_gestures_;
   std::unordered_map<std::uint32_t, std::uint64_t> active_sequences_;

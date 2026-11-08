@@ -157,11 +157,14 @@ Vst3EditorController::Vst3EditorController(Host host, PluginAutomationController
 
 Vst3EditorController::~Vst3EditorController() = default;
 
-bool Vst3EditorController::commit_native_editor() {
+std::optional<QString> Vst3EditorController::commit_native_editor() {
   if (!editor_.value(QStringLiteral("native")).toBool())
-    return true;
-  apply_vst3_insert_editor();
-  return !editor_.value(QStringLiteral("native")).toBool();
+    return std::nullopt;
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+  return close_native_editor(true);
+#else
+  return QStringLiteral("VST3 editor unavailable in this build");
+#endif
 }
 
 // QML invokable arguments are positional and retain stable track/slot roles.
@@ -545,10 +548,17 @@ void Vst3EditorController::finish_instrument_open(const PendingVerification& pen
 
 void Vst3EditorController::apply_vst3_insert_editor() {
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
-  if (!session() || !original_ || !plugin_ || !attachment_ || !attachment_->attached() || !track_) {
-    host_.status(QStringLiteral("Native VST3 editor is unavailable; no changes applied"));
-    return;
-  }
+  if (const auto failure = close_native_editor(false))
+    host_.status(*failure);
+#else
+  host_.status(QStringLiteral("VST3 editor unavailable in this build"));
+#endif
+}
+
+#if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
+std::optional<QString> Vst3EditorController::close_native_editor(bool keep) {
+  if (!session() || !original_ || !plugin_ || !attachment_ || !attachment_->attached() || !track_)
+    return QStringLiteral("Native VST3 editor is unavailable; no changes applied");
   const auto original = *original_;
   const auto track = *track_;
   const auto slot = slot_;
@@ -561,31 +571,27 @@ void Vst3EditorController::apply_vst3_insert_editor() {
   if (!unchanged) {
     discard_vst3_insert_editor();
     host_.status(QStringLiteral("Project changed while VST3 editor was open; edits discarded"));
-    return;
+    return std::nullopt;
   }
-  if (host_.jobs_busy()) {
-    host_.status(QStringLiteral("Finish the active task before closing the VST3 editor"));
-    return;
-  }
+  if (host_.jobs_busy())
+    return QStringLiteral("Finish the active task before closing the VST3 editor");
   native_window_.clear();
   emit nativeWindowChanged();
   attachment_->close();
   auto edits = plugin_->host().take_editor_parameter_edits();
   if (!edits) {
     discard_vst3_insert_editor();
-    host_.status(QStringLiteral("VST3 editor exceeded the bounded parameter edit limit"));
-    return;
+    return QStringLiteral("VST3 editor exceeded the bounded parameter edit limit");
   }
-  auto references = original.parameters;
+  auto references = uncaptured_parameters_.value_or(original.parameters);
   if (!edits->empty()) {
     std::ranges::sort(*edits, {}, &plugins::Vst3ParameterEvent::id);
     std::string error;
     if (!plugin_->host().stage_static_parameter_values(*edits, error) ||
         !plugin_->host().activate(error) || !plugin_->host().flush_static_parameter_values(error)) {
       discard_vst3_insert_editor();
-      host_.status(QStringLiteral("VST3 parameter edits were not applied: %1")
-                       .arg(QString::fromStdString(error)));
-      return;
+      return QStringLiteral("VST3 parameter edits were not applied: %1")
+          .arg(QString::fromStdString(error));
     }
     plugin_->host().suspend();
     for (const auto& edit : *edits) {
@@ -600,29 +606,33 @@ void Vst3EditorController::apply_vst3_insert_editor() {
   }
   std::string error;
   auto state = plugin_->host().save_state_pair(error);
-  if (!state) {
-    discard_vst3_insert_editor();
-    host_.status(QStringLiteral("VST3 editor state could not be captured: %1")
-                     .arg(QString::fromStdString(error)));
-    return;
-  }
+  if (!state)
+    return keep_uncaptured_editor(keep,
+                                  QStringLiteral("VST3 editor state could not be captured: %1")
+                                      .arg(QString::fromStdString(error)),
+                                  std::move(references));
   const bool controller_changed = state->controller_state != original.controller_state;
   if (state->component_state == original.component_state && !controller_changed &&
       references == original.parameters) {
     discard_vst3_insert_editor();
     host_.status(QStringLiteral("VST3 editor closed; no state change captured"));
-    return;
+    return std::nullopt;
   }
   const auto prior_revision = session()->snapshot().revision;
   const auto committed =
       slot ? session()->effects().set_vst3_editor_state(
                  commit_revision, track, *slot, original, std::move(state->component_state),
-                 std::move(state->controller_state), std::move(references),
+                 std::move(state->controller_state), references,
                  application::EditorSavePolicy::background)
            : session()->instruments().set_vst3_instrument_state(
                  commit_revision, track, original, std::move(state->component_state),
-                 std::move(state->controller_state), std::move(references),
+                 std::move(state->controller_state), references,
                  application::EditorSavePolicy::background);
+  if (!committed)
+    return keep_uncaptured_editor(keep,
+                                  QStringLiteral("VST3 editor state: %1")
+                                      .arg(QString::fromStdString(committed.error().message)),
+                                  std::move(references));
   discard_vst3_insert_editor();
   if (session()->snapshot().revision != prior_revision) {
     host_.schedule_save();
@@ -636,14 +646,37 @@ void Vst3EditorController::apply_vst3_insert_editor() {
                              "Stop and Play to apply.")
             : QStringLiteral("VST3 effect controller state queued to save; awaiting an exact live "
                              "graph revision receipt.");
-  if (!committed)
-    message = QStringLiteral("VST3 editor state: %1")
-                  .arg(QString::fromStdString(committed.error().message));
   host_.status(message);
-#else
-  host_.status(QStringLiteral("VST3 editor unavailable in this build"));
-#endif
+  return std::nullopt;
 }
+
+// The plug-in still holds the state that did not reach the project: kept,
+// its view comes back so nothing the user did is lost.
+std::optional<QString> Vst3EditorController::keep_uncaptured_editor(
+    bool keep, QString failure, std::vector<project::Vst3ParameterReference> references) {
+  if (keep) {
+    uncaptured_parameters_ = std::move(references);
+    if (reattach_native_view()) {
+      editor_.insert(QStringLiteral("message"), failure);
+      emit editorChanged();
+      return failure;
+    }
+  }
+  discard_vst3_insert_editor();
+  return failure;
+}
+
+bool Vst3EditorController::reattach_native_view() {
+  if (attachment_->open(plugin_->host()) != plugin_ui::EditorOpenStatus::attached)
+    return false;
+  plugin_->host().begin_editor_parameter_capture();
+  attachment_->window_shell()->setWindowTitle(QString::fromStdString(original_->name));
+  (void)attachment_->window_shell()->winId();
+  native_window_ = attachment_->window_shell()->windowHandle();
+  show_native_window();
+  return true;
+}
+#endif
 
 // QML invokable arguments are positional and keep stable ID/value roles.
 void Vst3EditorController::set_vst3_insert_parameter(quint32 parameter_id,
@@ -1031,6 +1064,7 @@ void Vst3EditorController::discard_vst3_insert_editor() {
   original_.reset();
   track_.reset();
   slot_.reset();
+  uncaptured_parameters_.reset();
   revision_ = 0;
   pending_gestures_.clear();
   active_sequences_.clear();

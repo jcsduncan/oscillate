@@ -12,6 +12,8 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <functional>
+#include <optional>
 #include <ranges>
 #include <stdexcept>
 #include <string>
@@ -541,6 +543,108 @@ void autosave_worker_preserves_recovery_and_switch_boundary() {
   require(closed_current && closed_current.value().snapshot.revision == closing_revision,
           "close did not explicitly save the last edit after autosave");
 }
+// A plug-in editor whose latest state cannot be saved stops switching
+// projects, Save a copy and closing, and says why; Cancel keeps the project
+// as it is, and going on without the state makes the stopped change.
+void unsaved_plugin_state_stops_project_changes() {
+  Directory directory;
+  QSettings::setDefaultFormat(QSettings::IniFormat);
+  QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                     QString::fromStdString((directory.root() / "settings").string()));
+  const auto discover = [] {
+    return foundation::Result<std::vector<oscillate::audio_io::PipeWireSink>>::success({});
+  };
+  const QString capture_failure = QStringLiteral("VST3 editor state could not be captured: test");
+  bool capture_fails = false;
+  int captures = 0;
+  quick::ProjectBridge bridge(
+      directory.root(), nullptr, {}, discover, {}, {},
+      quick::ProjectBridge::Dependencies{.plugin_editor_commit = [&]() -> std::optional<QString> {
+        ++captures;
+        if (capture_fails)
+          return capture_failure;
+        return std::nullopt;
+      }});
+  const auto library = directory.root() / ".oscillate" / "projects";
+  const QString first = QStringLiteral("First");
+  const QString second = QStringLiteral("Second");
+  bridge.create_default_project(second);
+  bridge.create_default_project(first);
+  require(bridge.project_name() == first, "the fixture projects were not created");
+  const auto stopped = [&](const char* change) {
+    require(bridge.plugin_state_problem().contains(capture_failure) &&
+                bridge.status().contains(capture_failure) && bridge.project_name() == first,
+            std::string(change) + " went ahead without the plug-in's state");
+  };
+  const auto stop_then_cancel = [&](const char* change, const std::function<void()>& make) {
+    capture_fails = true;
+    make();
+    stopped(change);
+    bridge.cancel_project_change();
+    require(bridge.plugin_state_problem().isEmpty() && bridge.project_name() == first,
+            std::string("cancelling ") + change + " did not keep the project");
+    // Cancelled, nothing is waiting: going on has nothing to run.
+    bridge.continue_without_plugin_state();
+    require(bridge.project_name() == first, std::string("a cancelled ") + change + " ran later");
+  };
+  const auto switch_to_second = [&] {
+    bridge.open_listed(QString::fromStdString((library / second.toStdString()).string()));
+  };
+  const QString copy_name = QStringLiteral("First copy");
+  const auto save_a_copy = [&] { bridge.save_copy(copy_name); };
+  bool ready_to_close = false;
+  QObject::connect(&bridge, &quick::ProjectBridge::readyToClose, [&] { ready_to_close = true; });
+
+  stop_then_cancel("switching projects", switch_to_second);
+  stop_then_cancel("Save a copy", save_a_copy);
+  require(!fs::exists(library / copy_name.toStdString()), "a stopped Save a copy wrote a copy");
+  stop_then_cancel("closing the project", [&] { bridge.close_project(); });
+  capture_fails = true;
+  require(!bridge.request_close(), "closing the window went ahead without the plug-in's state");
+  stopped("closing the window");
+  bridge.cancel_project_change();
+  require(!ready_to_close, "a cancelled window close closed the window");
+
+  // Going on runs the stopped change once, without another capture.
+  capture_fails = true;
+  switch_to_second();
+  stopped("switching projects");
+  const int captures_before = captures;
+  bridge.continue_without_plugin_state();
+  require(bridge.project_name() == second && bridge.plugin_state_problem().isEmpty() &&
+              captures == captures_before,
+          "going on without the plug-in's state did not switch projects");
+
+  save_a_copy();
+  require(bridge.project_name() == second && !bridge.collection_busy(),
+          "Save a copy went ahead without the plug-in's state");
+  bridge.continue_without_plugin_state();
+  require(bridge.collection_busy(), "going on did not save a copy");
+  // Going on closed the editor, so opening the copy asks nothing.
+  capture_fails = false;
+  oscillate::test::wait_until(
+      [&] {
+        QCoreApplication::processEvents();
+        return bridge.project_name() == copy_name;
+      },
+      "the copy opened");
+
+  capture_fails = true;
+  require(!bridge.request_close(), "closing the window went ahead without the plug-in's state");
+  bridge.continue_without_plugin_state();
+  require(ready_to_close, "going on did not close the window");
+
+  bridge.close_project();
+  require(bridge.project_open(), "closing went ahead without the plug-in's state");
+  bridge.continue_without_plugin_state();
+  require(!bridge.project_open(), "going on did not close the project");
+
+  // A capture that works lets every change through with no question.
+  capture_fails = false;
+  bridge.open_listed(QString::fromStdString((library / first.toStdString()).string()));
+  require(bridge.project_name() == first && bridge.plugin_state_problem().isEmpty(),
+          "a saved plug-in state stopped switching projects");
+}
 } // namespace
 
 int main(int argc, char** argv) {
@@ -556,6 +660,7 @@ int main(int argc, char** argv) {
     project_switch_saves_current_revision();
     default_names_and_save_a_copy();
     autosave_worker_preserves_recovery_and_switch_boundary();
+    unsaved_plugin_state_stops_project_changes();
   } catch (const std::exception& error) {
     std::fprintf(stderr, "Quick project library recovery: %s\n", error.what());
     return 1;
