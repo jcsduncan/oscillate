@@ -189,13 +189,14 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write # upload release assets
+      actions: write # dispatch the Pages workflow, which rebuilds the apt repository
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: packages-*
           merge-multiple: true
           path: packages
-      - name: Upload packages, inventories and checksums
+      - name: Upload packages, inventories and checksums, and republish the apt repository
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -207,3 +208,5 @@ jobs:
             exit 0
           fi
           gh release upload "$RELEASE_TAG" --repo "$REPOSITORY" --clobber -- *
+          # Pages rebuilds the apt repository from the newest releases' .debs.
+          gh workflow run pages.yml --repo "$REPOSITORY" --ref main

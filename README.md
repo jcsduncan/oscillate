@@ -46,6 +46,24 @@ Known problems: [known issues](https://jcsduncan.github.io/oscillate/known-issue
 Every instrument and effect panel: [instruments](src/native_dsp/synth/README.md),
 [effects](src/native_dsp/effects/README.md).
 
+## Install
+
+On Ubuntu 26.04 x86-64, from the signed apt repository:
+
+```sh
+sudo apt install curl
+curl -fsSLo /tmp/oscillate-archive-keyring.gpg \
+  https://jcsduncan.github.io/oscillate/apt/oscillate-archive-keyring.gpg
+sudo install -D -m 0644 /tmp/oscillate-archive-keyring.gpg /etc/apt/keyrings/oscillate-archive-keyring.gpg
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/oscillate-archive-keyring.gpg] https://jcsduncan.github.io/oscillate/apt resolute main" \
+  | sudo tee /etc/apt/sources.list.d/oscillate.list
+sudo apt update
+sudo apt install oscillate
+```
+
+The AppImage, the archive key's fingerprint and removal are in
+[Install](docs/install.md).
+
 ## Build
 
 ~~~sh
