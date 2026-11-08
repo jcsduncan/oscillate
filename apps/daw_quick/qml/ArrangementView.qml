@@ -68,28 +68,6 @@ Rectangle {
     function tint(colour, alpha) {
         return Qt.rgba(colour.r, colour.g, colour.b, alpha)
     }
-    // A folded group bus's lane: its members' clips merged into spans
-    // ({startBar, endBar}), drawn as one outline.
-    function busSegments(busId) {
-        const spans = []
-        for (const track of bridge.tracks) {
-            if (track.busId !== busId)
-                continue
-            for (const clip of track.clips)
-                spans.push([clip.start, clip.start + clip.length])
-        }
-        spans.sort((a, b) => a[0] - b[0])
-        const merged = []
-        for (const span of spans) {
-            const last = merged.length > 0 ? merged[merged.length - 1] : null
-            if (last && span[0] <= last[1])
-                last[1] = Math.max(last[1], span[1])
-            else
-                merged.push(span.slice())
-        }
-        return merged.map(span => ({ startBar: span[0] * bridge.timelineBars,
-                                     endBar: span[1] * bridge.timelineBars }))
-    }
     function trackColorOf(trackId) {
         const tracks = bridge.tracks
         const index = tracks.findIndex(track => track.id === trackId)
@@ -831,7 +809,7 @@ Rectangle {
                     objectName: "arrangementBusSum"
                     visible: arrangementRow.collapsed
                     anchors.fill: parent
-                    segments: arrangementRow.collapsed ? arrangement.busSegments(arrangementRow.modelData.id) : []
+                    segments: arrangementRow.collapsed ? arrangementRow.modelData.memberSpans || [] : []
                     viewStartBar: arrangement.viewStartBar
                     visibleBars: arrangement.visibleBars
                     tone: arrangementRow.trackColor

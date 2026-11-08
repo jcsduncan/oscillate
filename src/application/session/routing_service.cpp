@@ -175,7 +175,8 @@ foundation::Result<void> RoutingService::place_tracks(std::span<const project::T
     for (const auto& track : current.tracks) {
       if (track.id == *before)
         break;
-      kept += is_chosen(track.id) ? 0 : 1;
+      if (!is_chosen(track.id))
+        ++kept;
     }
     at = order.begin() + static_cast<std::ptrdiff_t>(kept);
   } else if (bus) {

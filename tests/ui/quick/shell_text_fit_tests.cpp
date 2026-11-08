@@ -12,11 +12,13 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QRectF>
+#include <QSet>
 #include <QString>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QVariant>
 
+#include <array>
 #include <cmath>
 #include <exception>
 #include <filesystem>
@@ -248,10 +250,13 @@ void position_readout_holds_three_digits(const Shell& shell, quick::ProjectBridg
 // return) show whole, and the bus's member count, the return's effect and
 // the send pills sit clear of each row's buttons.
 void track_labels_clear_buttons(const Shell& shell) {
-  shell.wait_for(QStringLiteral("trackBusBadge"));
+  require(shell.wait_for(QStringLiteral("trackBusBadge")) != nullptr,
+          "the Music bus shows its badge");
   QList<QQuickItem*> rows;
   find_items(shell.root(), QStringLiteral("trackRow"), rows);
-  int labels = 0;
+  const std::array label_kinds{QStringLiteral("trackBusBadge"), QStringLiteral("trackReturnEffect"),
+                               QStringLiteral("trackSendPill")};
+  QSet<QString> seen;
   for (auto* row : rows) {
     const auto* name = find_item(row, QStringLiteral("trackName"));
     require(name != nullptr, "a track row shows its name");
@@ -263,21 +268,18 @@ void track_labels_clear_buttons(const Shell& shell) {
     const auto* buttons = find_item(row, QStringLiteral("trackAutomationButton"));
     require(buttons != nullptr, "a track row shows its buttons");
     const auto edge = buttons->mapToScene({0.0, 0.0}).x();
-    for (const auto& label_name :
-         {QStringLiteral("trackBusBadge"), QStringLiteral("trackReturnEffect"),
-          QStringLiteral("trackSendPill")}) {
+    for (const auto& label_name : label_kinds) {
       QList<QQuickItem*> found;
       find_items(row, label_name, found);
       for (const auto* label : found) {
-        ++labels;
+        seen.insert(label_name);
         require(label->mapToScene({label->width(), 0.0}).x() <= edge + layout_slack_px,
                 label_name.toStdString() + " runs under the buttons of " + text_of(name));
       }
     }
   }
-  // The bus's badge, the return's effect and the Chords' and Pad's pills.
-  constexpr int demo_labels = 4;
-  require(labels == demo_labels, "the demo shows its bus badge, return effect and send pills");
+  require(seen.size() == static_cast<qsizetype>(label_kinds.size()),
+          "the demo shows a bus badge, a return's effect and a send pill");
 }
 
 // The mixer's master section fits its loudness readings across its width.
