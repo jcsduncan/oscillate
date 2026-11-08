@@ -248,10 +248,11 @@ double block_power(std::span<const float> samples, std::uint64_t block) {
   return power / static_cast<double>(block_frames);
 }
 
-double largest_step(std::span<const float> samples, std::size_t from, std::size_t to) {
+// The largest step between neighbouring samples of `window`.
+double largest_step(std::span<const float> window) {
   double largest = 0.0;
-  for (std::size_t index = std::max<std::size_t>(from, 1); index < to; ++index)
-    largest = std::max(largest, std::abs(static_cast<double>(samples[index]) - samples[index - 1]));
+  for (std::size_t index = 1; index < window.size(); ++index)
+    largest = std::max(largest, std::abs(static_cast<double>(window[index]) - window[index - 1]));
   return largest;
 }
 
@@ -264,7 +265,8 @@ void require_continuous(std::span<const float> samples, std::string_view label,
     REQUIRE_GT(block_power(samples, block), silent_power,
                std::string(label) + ": a silent block at the switch");
   const auto at = edit_block * block_frames;
-  const auto steady = largest_step(samples, at - around_blocks * block_frames, at);
+  const auto steady = largest_step(
+      samples.subspan(at - around_blocks * block_frames, around_blocks * block_frames));
   REQUIRE_LE(std::abs(static_cast<double>(samples[at]) - samples[at - 1]), click_ratio * steady,
              std::string(label) + ": the output jumps at the switch");
 }
@@ -286,19 +288,27 @@ void require_matches(std::span<const float> live, std::span<const float> expecte
                  std::to_string(worst));
 }
 
-// Plays to the edit block, applies `operations`, plays on, and checks the
-// run against a fresh render of the song with `expected` applied.
-void check_live_edit(const Song& song, const std::vector<project::Operation>& operations,
-                     const std::vector<project::Operation>& expected, std::string_view label) {
+// An edit made while playing, and what the song must then sound like from
+// the start: the edit itself, or how it sounds from the switch on.
+struct LiveEdit {
+  std::string_view label;
+  std::vector<project::Operation> operations;
+  std::vector<project::Operation> expected;
+};
+
+// Plays to the edit block, applies the edit, plays on, and checks the run
+// against a fresh render of the song with the expected operations applied.
+void check_live_edit(const Song& song, const LiveEdit& live_edit) {
+  const auto label = live_edit.label;
   Run run(song.root, song.saved);
   run.play_to(edit_block);
-  const auto revision = run.edit(operations, label);
+  const auto revision = run.edit(live_edit.operations, label);
   run.play_to(song_blocks);
   REQUIRE_EQ(run.control.status().active_graph_revision, revision,
              std::string(label) + " did not become active without a restart");
   REQUIRE_EQ(run.control.status().application, app::PlaybackApplication::active,
              std::string(label) + " did not become active without a restart");
-  require_matches(run.left, reference(song, expected), label);
+  require_matches(run.left, reference(song, live_edit.expected), label);
   require_continuous(run.left, label);
 }
 
@@ -315,14 +325,14 @@ void note_add_is_heard_from_its_block() {
                                 tick(song.saved, added_note_block + note_blocks), added_key,
                                 velocity};
   const std::vector<project::Operation> edit{project::AddMidiNote{song.first, added}};
-  check_live_edit(song, edit, edit, "note add");
+  check_live_edit(song, {"note add", edit, edit});
 }
 
 void note_move_plays_at_its_new_place() {
   Song song;
   const std::vector<project::Operation> edit{
       project::SetMidiNote{song.first, moved(song, song.later, moved_note_block)}};
-  check_live_edit(song, edit, edit, "note move");
+  check_live_edit(song, {"note move", edit, edit});
 }
 
 void note_delete_releases_the_sounding_note() {
@@ -330,8 +340,9 @@ void note_delete_releases_the_sounding_note() {
   // The deleted note sounds as if it had ended at the switch.
   auto ended = song.held;
   ended.end = tick(song.saved, edit_block);
-  check_live_edit(song, {project::RemoveMidiNote{song.first, song.held.id}},
-                  {project::SetMidiNote{song.first, ended}}, "note delete");
+  check_live_edit(song, {"note delete",
+                         {project::RemoveMidiNote{song.first, song.held.id}},
+                         {project::SetMidiNote{song.first, ended}}});
 }
 
 void clip_duplicate_plays_its_copy() {
@@ -342,14 +353,14 @@ void clip_duplicate_plays_its_copy() {
   for (std::size_t index = 0; index < copy.notes.size(); ++index)
     copy.notes[index].id = fresh<project::NoteId>(index + 1);
   const std::vector<project::Operation> edit{project::AddMidiClip{song.track, copy}};
-  check_live_edit(song, edit, edit, "clip duplicate");
+  check_live_edit(song, {"clip duplicate", edit, edit});
 }
 
 void clip_move_plays_at_its_new_place() {
   Song song;
   const std::vector<project::Operation> edit{project::SetMidiClipPlacement{
       song.second, song.placed(midi_clip(song.saved, song.second), moved_clip_block)}};
-  check_live_edit(song, edit, edit, "clip move");
+  check_live_edit(song, {"clip move", edit, edit});
 }
 
 void clip_delete_releases_its_sounding_note() {
@@ -357,10 +368,10 @@ void clip_delete_releases_its_sounding_note() {
   // The held note ends at the switch; nothing later in the clip plays.
   auto ended = song.held;
   ended.end = tick(song.saved, edit_block);
-  check_live_edit(
-      song, {project::RemoveClip{song.first}},
-      {project::SetMidiNote{song.first, ended}, project::RemoveMidiNote{song.first, song.later.id}},
-      "clip delete");
+  check_live_edit(song, {"clip delete",
+                         {project::RemoveClip{song.first}},
+                         {project::SetMidiNote{song.first, ended},
+                          project::RemoveMidiNote{song.first, song.later.id}}});
 }
 
 void track_mute_fades_without_a_gap() {

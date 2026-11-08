@@ -65,6 +65,16 @@ public:
              const engine::InstrumentEvents& events,
              std::span<const automation_project::PreparedTargetAutomation> automation,
              std::uint64_t last_safe_automation_sample);
+  // offer_plan() in two steps, so one edit can reach several players or
+  // none: prepare_plan() builds and checks the plan without touching the
+  // player; commit_plan() offers it and cannot fail once has_room() is true.
+  class PreparedPlan;
+  [[nodiscard]] foundation::Result<PreparedPlan>
+  prepare_plan(const project::Snapshot& snapshot, const project::Track& track,
+               const engine::InstrumentEvents& events,
+               std::span<const automation_project::PreparedTargetAutomation> automation,
+               std::uint64_t last_safe_automation_sample) const;
+  void commit_plan(PreparedPlan plan, const project::Snapshot& snapshot) noexcept;
   // The newest offered revision a rendered block has used.
   [[nodiscard]] std::uint64_t applied_plan_revision() const noexcept;
   // Control only: whether offer_plan() has room now. False until the
@@ -107,7 +117,25 @@ public:
 
 private:
   explicit NativeSynthPlayer(project::TrackId track) : track_(track) {}
+  struct Plan;
 
+public:
+  class PreparedPlan {
+  public:
+    PreparedPlan(PreparedPlan&&) noexcept = default;
+    PreparedPlan& operator=(PreparedPlan&&) noexcept = default;
+    PreparedPlan(const PreparedPlan&) = delete;
+    PreparedPlan& operator=(const PreparedPlan&) = delete;
+    ~PreparedPlan();
+
+  private:
+    friend class NativeSynthPlayer;
+    PreparedPlan(std::unique_ptr<Plan> plan, std::uint64_t revision) noexcept;
+    std::unique_ptr<Plan> plan_;
+    std::uint64_t revision_ = 0;
+  };
+
+private:
   // Everything a saved revision gives the player: swapped whole at a block.
   struct Plan {
     std::uint64_t revision = 0;

@@ -321,28 +321,54 @@ Result<std::unique_ptr<NativeSynthPlayer::Plan>> NativeSynthPlayer::make_plan(
   return Result<std::unique_ptr<Plan>>::success(std::move(plan));
 }
 
+NativeSynthPlayer::PreparedPlan::PreparedPlan(std::unique_ptr<Plan> plan,
+                                              std::uint64_t revision) noexcept
+    : plan_(std::move(plan)), revision_(revision) {}
+
+NativeSynthPlayer::PreparedPlan::~PreparedPlan() = default;
+
+Result<NativeSynthPlayer::PreparedPlan> NativeSynthPlayer::prepare_plan(
+    const project::Snapshot& snapshot, const project::Track& track,
+    const engine::InstrumentEvents& events,
+    std::span<const automation_project::PreparedTargetAutomation> automation,
+    std::uint64_t last_safe_automation_sample) const {
+  using Prepared = Result<PreparedPlan>;
+  if (plans_->stale(snapshot.revision))
+    return Prepared::failure({ErrorCode::conflict, "Synth plan revision is stale"});
+  try {
+    auto plan = make_plan(snapshot, track, events, automation, last_safe_automation_sample);
+    if (!plan)
+      return Prepared::failure(plan.error());
+    return Prepared::success(PreparedPlan(std::move(plan).value(), snapshot.revision));
+  } catch (const std::bad_alloc&) {
+    return Prepared::failure({ErrorCode::resource_exhausted, "Cannot prepare a live synth plan"});
+  }
+}
+
+void NativeSynthPlayer::commit_plan(PreparedPlan plan, const project::Snapshot& snapshot) noexcept {
+  // has_room() was true, so the mailbox's reserved storage takes the plan.
+  plans_->offer(std::move(plan.plan_), plan.revision_);
+  // Lock follows this track's own switch too; a failure keeps the notes it had.
+  try {
+    (void)refresh_lock(snapshot);
+  } catch (const std::bad_alloc&) {
+    return;
+  }
+}
+
 Result<void> NativeSynthPlayer::offer_plan(
     const project::Snapshot& snapshot, const project::Track& track,
     const engine::InstrumentEvents& events,
     std::span<const automation_project::PreparedTargetAutomation> automation,
     std::uint64_t last_safe_automation_sample) {
-  if (plans_->stale(snapshot.revision))
-    return Result<void>::failure({ErrorCode::conflict, "Synth plan revision is stale"});
-  if (!plans_->make_room())
+  auto prepared = prepare_plan(snapshot, track, events, automation, last_safe_automation_sample);
+  if (!prepared)
+    return Result<void>::failure(prepared.error());
+  if (!has_room())
     return Result<void>::failure({ErrorCode::resource_exhausted,
                                   "Live synth plan mailbox is full; retry after the callback"});
-  try {
-    auto plan = make_plan(snapshot, track, events, automation, last_safe_automation_sample);
-    if (!plan)
-      return Result<void>::failure(plan.error());
-    plans_->offer(std::move(plan).value(), snapshot.revision);
-    // Lock follows this track's own switch too; a failure keeps the notes it had.
-    (void)refresh_lock(snapshot);
-    return Result<void>::success();
-  } catch (const std::bad_alloc&) {
-    return Result<void>::failure(
-        {ErrorCode::resource_exhausted, "Cannot prepare a live synth plan"});
-  }
+  commit_plan(std::move(prepared).value(), snapshot);
+  return Result<void>::success();
 }
 
 std::uint64_t NativeSynthPlayer::applied_plan_revision() const noexcept {

@@ -1591,7 +1591,7 @@ void RoutedPlaybackControl::unbind_live_source() noexcept {
     pending_native_revision_.reset();
   }
   pending_players_.clear();
-  deferred_ = false;
+  deferred_revision_.reset();
   live_source_ = nullptr;
 }
 
@@ -1692,7 +1692,7 @@ RoutedPlaybackControl::try_queue_live_synth(std::shared_ptr<const project::Snaps
   if (!runtime->offer_values(resolved.value().values, snapshot->revision)) {
     // A drag may end on this value: it applies once the callback drains an
     // offer (observe()).
-    deferred_ = true;
+    deferred_revision_ = snapshot->revision;
     return Result<bool>::success(true);
   }
   if (superseding) {
@@ -1771,7 +1771,7 @@ RoutedPlaybackControl::try_queue_live_players(std::shared_ptr<const project::Sna
   // Every track takes the revision, or none does: a full mailbox waits for
   // the callback to move on (observe() applies the newest revision then).
   if (!std::ranges::all_of(players, [](auto* player) { return player->has_room(); })) {
-    deferred_ = true;
+    deferred_revision_ = snapshot->revision;
     return Result<bool>::success(true);
   }
   auto midi = engine::compile_midi_events(*snapshot);
@@ -1783,26 +1783,33 @@ RoutedPlaybackControl::try_queue_live_players(std::shared_ptr<const project::Sna
   auto limit = automation_sample_limit(*snapshot, limits_.max_frames);
   if (!limit)
     return Result<bool>::failure(limit.error());
-  for (std::size_t index = 0; index < changed.size(); ++index) {
-    const auto& track = *changed[index];
-    const engine::InstrumentEvents empty{track.id, {}};
-    const auto events =
-        std::ranges::find(midi.value().instruments(), track.id, &engine::InstrumentEvents::track);
-    auto offered = players[index]->offer_plan(
-        *snapshot, track, events == midi.value().instruments().end() ? empty : *events,
-        prepared.value(), limit.value());
-    if (!offered)
-      return Result<bool>::failure(offered.error());
-  }
+  // Every plan is built and checked before any player gets one, so the
+  // edit reaches all of its tracks or none.
+  std::vector<native_dsp::synth::NativeSynthPlayer::PreparedPlan> plans;
   try {
-    PendingNativeRevision pending{{}, changed.front()->id, {}, std::move(snapshot), {}};
-    pending.runtime = players.front();
-    pending_players_ = std::move(players);
-    pending_native_revision_ = std::move(pending);
+    plans.reserve(changed.size());
+    for (std::size_t index = 0; index < changed.size(); ++index) {
+      const auto& track = *changed[index];
+      const engine::InstrumentEvents empty{track.id, {}};
+      const auto events =
+          std::ranges::find(midi.value().instruments(), track.id, &engine::InstrumentEvents::track);
+      auto plan = players[index]->prepare_plan(
+          *snapshot, track, events == midi.value().instruments().end() ? empty : *events,
+          prepared.value(), limit.value());
+      if (!plan)
+        return Result<bool>::failure(plan.error());
+      plans.push_back(std::move(plan).value());
+    }
   } catch (const std::bad_alloc&) {
     return Result<bool>::failure(
         {ErrorCode::resource_exhausted, "Live instrument edit ran out of memory"});
   }
+  PendingNativeRevision pending{{}, changed.front()->id, {}, std::move(snapshot), {}};
+  pending.runtime = players.front();
+  for (std::size_t index = 0; index < players.size(); ++index)
+    players[index]->commit_plan(std::move(plans[index]), *pending.snapshot);
+  pending_players_ = std::move(players);
+  pending_native_revision_ = std::move(pending);
   return Result<bool>::success(true);
 }
 
@@ -1887,7 +1894,7 @@ Result<bool> RoutedPlaybackControl::try_queue_live_effect_automation(
   if (!offered) {
     // A full mailbox applies the newest revision once the callback drains it.
     if (offered.error().code == ErrorCode::resource_exhausted) {
-      deferred_ = true;
+      deferred_revision_ = snapshot->revision;
       return Result<bool>::success(true);
     }
     return Result<bool>::failure(offered.error());
@@ -2088,6 +2095,7 @@ Result<void> RoutedPlaybackControl::begin_vst3_manual_edit(
   (void)revisions_.accept_model_revision(
       current->revision, ChangeDescriptor{std::string(command_label), applied.changes});
   preparing_source_.reset();
+  deferred_revision_.reset();
   if (!ready)
     return fail(current->revision, ready.error());
   if (!manual_vst3_state_only(*published_snapshot_, *current, plugin))
@@ -2300,6 +2308,7 @@ Result<void> RoutedPlaybackControl::reject_edit(const project::AppliedRevision& 
     return rejected(ErrorCode::conflict, "Routed project edit was superseded");
   (void)revisions_.accept_model_revision(
       current->revision, ChangeDescriptor{std::string(command_label), applied.changes});
+  deferred_revision_.reset();
   return fail(current->revision, std::move(error));
 }
 
@@ -2320,12 +2329,12 @@ Result<void> RoutedPlaybackControl::begin_edit(const project::AppliedRevision& a
 Result<void> RoutedPlaybackControl::apply_current() {
   OSCILLATE_TRACE_SPAN("edit.apply");
   const auto current = model_.snapshot();
-  deferred_ = false;
+  deferred_revision_.reset();
   // An edit made while an earlier one is still switching in waits for it;
   // observe() then applies the newest saved revision, so rapid edits
   // coalesce instead of being refused.
-  const auto defer = [this] {
-    deferred_ = true;
+  const auto defer = [this, &current] {
+    deferred_revision_ = current->revision;
     return Result<void>::success();
   };
   if (awaiting_ || publisher_.has_pending() || pending_manual_)
@@ -2432,6 +2441,7 @@ RoutedPlaybackControl::capture_source_edit(const project::AppliedRevision& appli
   (void)revisions_.accept_model_revision(
       current->revision, ChangeDescriptor{std::string(command_label), applied.changes});
   preparing_source_.reset();
+  deferred_revision_.reset();
   const auto rejected_capture = [&](Error error) {
     (void)fail(current->revision, error);
     return Result<RoutedSourcePreparationCapture>::failure(std::move(error));
@@ -2711,10 +2721,12 @@ void RoutedPlaybackControl::observe() {
   (void)revisions_.observe_active_graph(publisher_.active_revision());
   // A deferred edit applies the newest saved revision once the earlier
   // switch has settled; it may wait again for another.
+  // Only the revision that waited, while it is still the current, pending one.
   const auto status = revisions_.snapshot();
-  if (deferred_ && !awaiting_ && !publisher_.has_pending() && !pending_manual_ &&
-      status.model_revision == model_.snapshot()->revision &&
-      status.active_graph_revision < status.model_revision)
+  if (deferred_revision_ && *deferred_revision_ == model_.snapshot()->revision &&
+      status.model_revision == *deferred_revision_ &&
+      status.application == PlaybackApplication::pending && !awaiting_ &&
+      !publisher_.has_pending() && !pending_manual_)
     (void)apply_current();
 }
 

@@ -358,7 +358,8 @@ public:
   // pending publication because its boundary belongs to the old generation.
   [[nodiscard]] bool graph_handoff_in_progress() const noexcept {
     return awaiting_ != nullptr || publisher_.has_pending() ||
-           publisher_.held_boundary().has_value() || pending_manual_.has_value() || deferred_;
+           publisher_.held_boundary().has_value() || pending_manual_.has_value() ||
+           deferred_revision_.has_value();
   }
   // Control side. Off, every structural edit takes the held path (a silent
   // block while the new graph is prepared), as before live switching.
@@ -507,9 +508,9 @@ private:
   // The players a pending instrument edit was offered to (its runtime is the
   // first); the revision is applied when all have rendered it.
   std::vector<native_dsp::synth::NativeSynthPlayer*> pending_players_;
-  // The newest saved revision waits for an earlier switch to settle;
-  // observe() applies it then.
-  bool deferred_ = false;
+  // The saved revision that waits for an earlier switch to settle;
+  // observe() applies it then, if it is still the current, pending one.
+  std::optional<std::uint64_t> deferred_revision_;
   std::uint32_t master_output_latency_frames_ = 0;
   bool prepared_limiter_ = false;
   std::shared_ptr<const project::Snapshot> awaiting_;
