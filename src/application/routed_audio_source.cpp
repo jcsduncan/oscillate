@@ -699,8 +699,10 @@ void RoutedAudioSource::take_over(engine::BlockContext block) noexcept {
   for (auto& synth : synths_) {
     if (synth.staged_revision != 0)
       synth.player->release_staged_plan(synth.staged_revision);
-    if (synth.retiring)
+    if (synth.retiring) {
+      synth.player->retire();
       synth.retire_end = block.project_sample_position + synth.player->tail_frames();
+    }
   }
 }
 

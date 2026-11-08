@@ -137,6 +137,28 @@ void unchanged_stages_carry_over() {
   REQUIRE_TRUE(empty.value().stages.empty(), "an empty chain prepared a runtime");
 }
 
+// A tempo change prepares every VST3 effect afresh, since a plugin reads the
+// tempo once, when it is prepared (ADR-0101); a VST3 instrument carries over,
+// taking the new tempo in its plan.
+void retimed_vst3_effects_are_prepared_afresh() {
+  Host host;
+  const track_chain::SavedStage instrument{std::nullopt, plugin(1)};
+  const std::vector<track_chain::SavedStage> saved{instrument, effect(2, 2), effect(3, 3)};
+  auto first = track_chain::prepare_chain(saved, host.context());
+  REQUIRE_TRUE(first, "the chain did not prepare");
+  auto retimed_context = host.context();
+  retimed_context.fresh_vst3_effects = true;
+  auto retimed = track_chain::prepare_chain(saved, retimed_context, &first.value());
+  REQUIRE_TRUE(retimed, "the retimed chain did not prepare");
+  REQUIRE_EQ(host.prepared, saved.size() + 2, "both effects were not prepared again");
+  REQUIRE_EQ(retimed.value().stages[0].runtime, first.value().stages[0].runtime,
+             "the instrument did not carry over");
+  REQUIRE_NE(retimed.value().stages[1].runtime, first.value().stages[1].runtime,
+             "a retimed effect carried over");
+  REQUIRE_NE(retimed.value().stages[2].runtime, first.value().stages[2].runtime,
+             "a retimed effect carried over");
+}
+
 void switch_retires_by_ring_out() {
   Host host;
   const std::vector<track_chain::SavedStage> both{effect(1, 1), effect(2, 2)};
@@ -327,6 +349,7 @@ void removed_lookahead_hands_on_its_samples() {
 int main() {
   try {
     unchanged_stages_carry_over();
+    retimed_vst3_effects_are_prepared_afresh();
     switch_retires_by_ring_out();
     detector_keys_its_stage();
     added_lookahead_continues_its_predecessor();

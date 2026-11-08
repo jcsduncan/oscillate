@@ -177,6 +177,84 @@ void verified_effect_only_processes_own_track(const plugins::ScanResult& scanned
              "changed VST3 state did not switch live to a new instance");
 }
 
+// A VST3 effect whose state changes its latency is replaced live, and the
+// parallel dry path's delay compensation moves with it (ADR-0005, #102): no
+// block holds, fails or allocates, the revision activates without a restart,
+// and once the switch has settled both paths are aligned at the new latency.
+void latency_change_replaces_the_plugin_live(const plugins::ScanResult& scanned,
+                                             std::size_t block_frames) {
+  // The fixture's latency at its ordinary gain, and at its reserved
+  // 96-frame state, where it plays at half gain.
+  constexpr std::size_t short_latency = 7;
+  constexpr std::size_t long_latency = 96;
+  constexpr float long_state = -96.0F;
+  constexpr float short_gain = 0.5F;
+  constexpr float long_gain = 0.5F;
+  constexpr std::uint32_t compensation_frames = 128;
+  constexpr std::uint64_t settle_blocks = 8;
+  constexpr std::size_t routes = 8;
+  Gate gate;
+  auto state = model(gate);
+  const auto wet = id<project::TrackId>(2);
+  const auto dry = id<project::TrackId>(3);
+  const auto effect = saved(scanned, -short_gain);
+  (void)take(state.apply(
+      {project::AddTrack{wet}, project::AddTrack{dry}, project::InsertVst3Plugin{wet, 0, effect}}));
+  const engine::RoutedMixerLimits limits{
+      .latency = {1, compensation_frames},
+      .max_frames = block_frames,
+      .max_buffer_bytes = routes * block_frames * sizeof(engine::StereoFrame),
+      .max_history_bytes = routes * (compensation_frames + 1) * sizeof(engine::StereoFrame)};
+  plugins::Vst3TrackInsertProvider provider;
+  provider.set_scan_receipt(effect.id, scanned);
+  application::RoutedPlaybackControl control(state, limits, &provider);
+  REQUIRE_OK(control.submit_current(), "the latent VST3 route did not prepare");
+  std::vector<engine::StereoFrame> wet_signal(block_frames), dry_signal(block_frames),
+      output(block_frames);
+  std::array<std::span<const engine::StereoFrame>, 3> inputs{};
+  source(inputs, control.source_layout(), wet, wet_signal);
+  source(inputs, control.source_layout(), dry, dry_signal);
+  const auto play = [&](std::uint64_t block, bool impulse) {
+    wet_signal.assign(block_frames, {});
+    dry_signal.assign(block_frames, {});
+    if (impulse) {
+      wet_signal[0] = {1.0F, -1.0F};
+      dry_signal[0] = {1.0F, -1.0F};
+    }
+    counted_allocations = 0;
+    counting_allocations = true;
+    const auto rendered = control.render_block(inputs, output, {block * block_frames, 1});
+    counting_allocations = false;
+    REQUIRE_EQ(rendered, engine::RoutedRenderStatus::rendered, "a block held or failed");
+    REQUIRE_EQ(counted_allocations, 0, "a block allocated");
+    control.observe();
+  };
+  play(0, true);
+  near(output[short_latency], short_gain + 1.0F);
+
+  auto latent = effect;
+  std::memcpy(latent.component_state.data(), &long_state, sizeof(long_state));
+  const auto changed =
+      take(state.apply({project::SetVst3ComponentState{effect.id, latent.component_state}}));
+  REQUIRE_OK(control.begin_edit(changed, "latency change"),
+             "a latency-changing VST3 state was refused while playing");
+  for (std::uint64_t block = 1; block < settle_blocks; ++block)
+    play(block, false);
+  REQUIRE_EQ(control.status().active_graph_revision, changed.snapshot->revision,
+             "the latency change did not become active without a restart");
+  REQUIRE_EQ(control.status().application, application::PlaybackApplication::active,
+             "the latency change did not become active without a restart");
+  // Both paths meet again, at the new latency only.
+  std::vector<engine::StereoFrame> heard;
+  for (auto block = settle_blocks; heard.size() <= long_latency; ++block) {
+    play(block, block == settle_blocks);
+    heard.insert(heard.end(), output.begin(), output.end());
+  }
+  for (std::size_t frame = 0; frame <= long_latency; ++frame)
+    near(heard[frame], frame == long_latency ? long_gain + 1.0F : 0.0F);
+  require(!control.processor_fault(), "the replaced VST3 effect faulted");
+}
+
 void manual_effect_binding_tracks_callback_graph(const plugins::ScanResult& scanned) {
   Gate gate;
   auto state = model(gate);
@@ -1167,6 +1245,8 @@ int main() {
     REQUIRE_EQ(scanned.metadata.classes.size(), 1, "gain fixture scan failed");
     verified_effect_only_processes_own_track(scanned, 64);
     verified_effect_only_processes_own_track(scanned, 128);
+    latency_change_replaces_the_plugin_live(scanned, 64);
+    latency_change_replaces_the_plugin_live(scanned, 128);
     manual_effect_binding_tracks_callback_graph(scanned);
     channel_control_overlay_rebinds_routed_vst3_manual_slot(scanned, 64);
     channel_control_overlay_rebinds_routed_vst3_manual_slot(scanned, 128);

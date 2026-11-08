@@ -141,7 +141,7 @@ Result<std::shared_ptr<const LockState>> compile_lock(const project::Snapshot& s
 
 Result<void> NativeSynthPlayer::refresh_lock(const project::Snapshot& snapshot) {
   const auto& engine = runtime_->engine();
-  if (engine.lock_follows.empty() || retired_)
+  if (engine.lock_follows.empty() || retired_->load(std::memory_order_relaxed))
     return Result<void>::success();
   const auto track = std::ranges::find(snapshot.tracks, track_, &project::Track::id);
   const auto* patch = track != snapshot.tracks.end()

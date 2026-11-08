@@ -12,7 +12,7 @@ never reused. 0070 was never assigned.
 | 0002 | [Prepared graph publication and reclamation](0002-graph-publication.md) | Accepted; implemented |
 | 0003 | [Plugin scanning and execution boundaries](0003-plugin-isolation.md) | Accepted; implemented for scanning |
 | 0004 | [Generation-based atomic project saves](0004-atomic-project-save.md) | Accepted; implemented; amended by ADR-0039 and ADR-0091 |
-| 0005 | [Delay-compensation transitions](0005-delay-compensation-transitions.md) | Accepted; implemented for the bounded routed graph |
+| 0005 | [Delay-compensation transitions](0005-delay-compensation-transitions.md) | Superseded in part by ADR-0101 (VST3 latency changes); otherwise implemented for the bounded routed graph |
 | 0006 | [Media prefetch and adaptive playback processing](0006-prefetch-processing.md) | Accepted; implemented |
 | 0007 | [Musical timing and meter representation](0007-timing-representation.md) | Accepted; implemented |
 | 0008 | [Atomic project commands and revision publication](0008-project-command-revisions.md) | Accepted; implemented |
@@ -104,6 +104,7 @@ never reused. 0070 was never assigned.
 | 0095 | [Projects from every released schema open, through chained forward migrations](0095-schema-migration-policy.md) | Accepted; hook and golden-manifest test built, no schema released yet |
 | 0096 | [MIDI clips keep notes trimmed off their left edge](0096-midi-clip-left-trim.md) | Accepted; implemented |
 | 0097 | [A key source's mute lane gates its keys](0097-mute-lanes-gate-keys.md) | Superseded by ADR-0099 for what a bounce does with its source's mute lane; otherwise implemented |
-| 0098 | [Structural edits switch with a whole replacement source](0098-whole-replacement-switches.md) | Accepted; implemented |
+| 0098 | [Structural edits switch with a whole replacement source](0098-whole-replacement-switches.md) | Superseded in part by ADR-0101; otherwise implemented |
 | 0099 | [A bounce moves its source's mute lanes to the bounce](0099-bounce-moves-mute-lanes.md) | Superseded by ADR-0102 for where a clip's mute lane goes; otherwise implemented |
+| 0101 | [VST3 instruments and effects follow live edits](0101-vst3-live-edits.md) | Accepted; implemented |
 | 0102 | [A track render plays in slices that keep its clips' channel lanes](0102-renders-play-in-slices.md) | Accepted; implemented |
