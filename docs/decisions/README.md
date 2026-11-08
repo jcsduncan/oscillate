@@ -65,7 +65,7 @@ never reused. 0070 was never assigned.
 | 0055 | [Deck: a DJ mixer's three-band isolator](0055-deck-dj-isolator.md) | Accepted; implemented |
 | 0056 | [Snarl: a growl and wobble synth](0056-snarl-growl-synth.md) | Superseded by ADR-0057 |
 | 0057 | [Nova: the flagship wavetable synth](0057-nova-flagship-synth.md) | Accepted; platform, engine, panel, FX rack, arp and clip sequencer built; sample-based oscillators and table saving not built |
-| 0058 | [Pump: a drawn volume shaper, and documents for effects](0058-pump-volume-shaper.md) | Accepted; platform, engine, MIDI trigger and panel built |
+| 0058 | [Pump: a drawn volume shaper, and documents for effects](0058-pump-volume-shaper.md) | Accepted; platform, engine, MIDI trigger and panel built; superseded by ADR-0097 for how keys follow a mute lane |
 | 0059 | [Play and sparkle: note effects, macros and freeze](0059-play-and-sparkle.md) | Accepted; implemented |
 | 0060 | [Anvil: a drawn kick synth](0060-anvil-kick-synth.md) | Accepted; engine, presets, preview and panel built |
 | 0061 | [Performance tracing](0061-performance-tracing.md) | Accepted; implemented |
@@ -98,7 +98,8 @@ never reused. 0070 was never assigned.
 | 0089 | [Wren: a sampled concert flute with Breath, realtime phrasing](0089-wren-sampled-flute.md) | Accepted; implemented |
 | 0090 | [Export renders a graph the render_graph builder prepares](0090-render-graph-builder.md) | Accepted; implemented for built-in chains |
 | 0091 | [New projects are staged beside their folder and renamed into place](0091-staged-project-creation.md) | Accepted; implemented |
-| 0092 | [Native inserts read which keys sound from routing](0092-native-inserts-read-key-audibility.md) | Accepted; implemented |
+| 0092 | [Native inserts read which keys sound from routing](0092-native-inserts-read-key-audibility.md) | Superseded by ADR-0097 for how key notes follow a mute lane; otherwise implemented |
 | 0093 | [Live MIDI edits and queued revisions](0093-live-instrument-edits-and-queued-revisions.md) | Accepted; implemented |
 | 0094 | [Sources switch at a primed block; no held path](0094-primed-source-switching.md) | Accepted; implemented |
 | 0095 | [Projects from every released schema open, through chained forward migrations](0095-schema-migration-policy.md) | Accepted; hook and golden-manifest test built, no schema released yet |
+| 0097 | [A key source's mute lane gates its keys](0097-mute-lanes-gate-keys.md) | Accepted; implemented |

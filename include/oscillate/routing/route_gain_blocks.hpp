@@ -5,6 +5,7 @@
 #include "oscillate/routing/project_route_plan.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <span>
@@ -33,13 +34,36 @@ public:
   [[nodiscard]] bool binds_edge_gain(engine::RoutingEdgeId edge) const noexcept override;
 
 private:
+  // A channel mute's gain, gliding to its lane's step over a few
+  // milliseconds so a toggle never clicks.
+  struct MuteGlide {
+    double step = 0.0; // The most the gain moves in one frame.
+    double gain = 1.0;
+    std::uint64_t generation = 0;
+    // Advances one frame on `lane`'s value; a new processing generation (a
+    // seek or loop) starts at the lane's value.
+    void advance(double lane, bool restart) noexcept;
+  };
+
+  // One send edge's gain: its send-gain lane, else its saved gain.
   struct EdgeBinding {
-    std::size_t target_index;
+    std::optional<std::size_t> target_index;
     std::size_t edge_index;
     std::vector<double> values;
     std::vector<float> samples;
     // Zero for a sidechain key whose source is silent (silent_key_sources).
     float key_gain = 1.0F;
+    // The gain of an edge without a send-gain lane.
+    float saved_gain = 0.0F;
+    // A key from a source under a mute lane (ADR-0097) also takes its
+    // source channel's mute gain, delayed as the edge delays the key, so the
+    // key is silent on exactly the audio the channel's mute silences. The
+    // history runs and restarts with the edge's delay line: kept across a
+    // planned loop wrap, started again on a seek.
+    std::optional<std::size_t> mute_node{};
+    std::vector<float> mute_history{};
+    std::size_t mute_cursor = 0;
+    std::uint64_t mute_generation = 0;
   };
   // One channel node's automated controls; an unautomated control keeps its
   // saved value. Mute steps glide over a short ramp so a toggle never clicks.
@@ -54,9 +78,15 @@ private:
     std::vector<double> pan_values;
     std::vector<double> mute_values;
     std::vector<engine::StereoFrame> samples;
-    double mute_gain = 1.0;
-    std::uint64_t mute_generation = 0;
+    // The mute gain at each frame of the block, which the track's keys take.
+    std::vector<float> mute_samples;
+    MuteGlide mute{};
   };
+
+  // Multiplies `samples` by the source's mute gains `source`, delayed as
+  // the key is.
+  static void gate_by_mute(EdgeBinding& binding, std::span<const float> source,
+                           std::span<float> samples, std::uint64_t generation) noexcept;
 
   std::uint32_t sample_rate_ = 0;
   std::shared_ptr<const timeline::TempoMap> tempo_;

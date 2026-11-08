@@ -82,10 +82,19 @@ struct ProjectRoutePlan {
 // the track's mute instead of its saved mute.
 [[nodiscard]] bool has_mute_automation(const project::Track& track) noexcept;
 
+// A channel-mute lane is a switch: it mutes its channel from this value up.
+inline constexpr double mute_lane_threshold = 0.5;
+[[nodiscard]] constexpr bool mute_lane_mutes(double value) noexcept {
+  return value >= mute_lane_threshold;
+}
+
 // The tracks whose sidechain keys are silent (ADR-0058): a key follows its
 // source's mute and solo as the mixer applies them (effective_track_mutes),
 // except that a solo which keeps the keyed track keeps its key, so a soloed
-// track still ducks to its kick. A key source under a mute lane keeps its key.
+// track still ducks to its kick. A key source under a mute lane is not in
+// the set: its lane silences its key wherever it mutes the channel (ADR-0097),
+// the audio key in PreparedRouteGainBlocks and the key notes through
+// KeyMuteLanes.
 [[nodiscard]] std::set<project::TrackId> silent_key_sources(const project::Snapshot& snapshot);
 // Whether `send` from `source` keys its effect now: a live sidechain
 // (live_sidechain) at a gain above zero, from a source whose keys sound.
