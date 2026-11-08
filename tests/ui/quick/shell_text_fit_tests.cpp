@@ -12,11 +12,13 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QRectF>
+#include <QSet>
 #include <QString>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QVariant>
 
+#include <array>
 #include <cmath>
 #include <exception>
 #include <filesystem>
@@ -244,6 +246,42 @@ void position_readout_holds_three_digits(const Shell& shell, quick::ProjectBridg
           "the position readout clips \"" + text_of(value) + "\"");
 }
 
+// The bus rows' names (the Music bus, its indented members and the Hall
+// return) show whole, and the bus's member count, the return's effect and
+// the send pills sit clear of each row's buttons.
+void track_labels_clear_buttons(const Shell& shell) {
+  require(shell.wait_for(QStringLiteral("trackBusBadge")) != nullptr,
+          "the Music bus shows its badge");
+  QList<QQuickItem*> rows;
+  find_items(shell.root(), QStringLiteral("trackRow"), rows);
+  const std::array label_kinds{QStringLiteral("trackBusBadge"), QStringLiteral("trackReturnEffect"),
+                               QStringLiteral("trackSendPill")};
+  QSet<QString> seen;
+  for (auto* row : rows) {
+    const auto* name = find_item(row, QStringLiteral("trackName"));
+    require(name != nullptr, "a track row shows its name");
+    const auto track = row->property("modelData").toMap();
+    const auto kind = track.value(QStringLiteral("kind")).toString();
+    if (kind == QStringLiteral("group") || kind == QStringLiteral("return") ||
+        !track.value(QStringLiteral("busId")).toString().isEmpty())
+      require_whole(name, "track name " + text_of(name));
+    const auto* buttons = find_item(row, QStringLiteral("trackAutomationButton"));
+    require(buttons != nullptr, "a track row shows its buttons");
+    const auto edge = buttons->mapToScene({0.0, 0.0}).x();
+    for (const auto& label_name : label_kinds) {
+      QList<QQuickItem*> found;
+      find_items(row, label_name, found);
+      for (const auto* label : found) {
+        seen.insert(label_name);
+        require(label->mapToScene({label->width(), 0.0}).x() <= edge + layout_slack_px,
+                label_name.toStdString() + " runs under the buttons of " + text_of(name));
+      }
+    }
+  }
+  require(seen.size() == static_cast<qsizetype>(label_kinds.size()),
+          "the demo shows a bus badge, a return's effect and a send pill");
+}
+
 // The mixer's master section fits its loudness readings across its width.
 void master_readings_fit(const Shell& shell) {
   shell.show_view(QStringLiteral("mixer"));
@@ -268,6 +306,7 @@ void shell_text_shows_whole() {
   Shell shell(bridge);
   require_whole(shell.wait_for(QStringLiteral("dockedBrowserSearchHint")),
                 "the browser's search hint");
+  track_labels_clear_buttons(shell);
   shell.select_track(chords_track);
   shell.open_dock_tab(chain_tab);
   ruler_labels_clear_flags_and_tools(shell);

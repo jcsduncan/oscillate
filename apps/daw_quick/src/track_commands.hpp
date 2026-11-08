@@ -37,6 +37,12 @@ public:
   Q_INVOKABLE void route_to_bus(const QStringList& track_ids, const QString& bus_id);
   // Sends the tracks straight to the master again.
   Q_INVOKABLE void route_to_master(const QStringList& track_ids);
+  // A track list drop as one undo step: the tracks route to the group bus
+  // `bus_id` (empty for the master) and move to just before `before_id`, or
+  // after the bus's last member (the end of the list for the master) when
+  // it is empty (RoutingService::place_tracks).
+  Q_INVOKABLE void place_tracks(const QStringList& track_ids, const QString& bus_id,
+                                const QString& before_id);
   Q_INVOKABLE void add_audio_track();
   Q_INVOKABLE void remove_track(const QString& track_id);
   // Returns the copy's ID, or empty when nothing was duplicated.
