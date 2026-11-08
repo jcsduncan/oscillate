@@ -56,8 +56,7 @@ public:
     auto* offered = plan.get();
     owned_.push_back(std::move(plan));
     last_offered_ = revision;
-    // A plan staged for a switch that never took over is superseded.
-    staged_.store(nullptr, std::memory_order_release);
+    drop_staged();
     offered_.store(offered, std::memory_order_release);
   }
   // Control: holds a plan built for `revision` back until the callback
@@ -66,6 +65,7 @@ public:
   // offer or stage supersedes it. After make_room() returned true it cannot
   // throw.
   void stage(std::unique_ptr<Plan> plan, std::uint64_t revision) {
+    drop_staged();
     auto* staged = plan.get();
     owned_.push_back(std::move(plan));
     last_offered_ = revision;
@@ -93,6 +93,15 @@ public:
   }
 
 private:
+  // Control: frees a staged plan whose switch never took over. Nothing
+  // pending can release it any more (a stage or offer happens only once
+  // that switch is withdrawn), and the callback never read it.
+  void drop_staged() noexcept {
+    auto* superseded = staged_.exchange(nullptr, std::memory_order_acq_rel);
+    if (superseded != nullptr)
+      std::erase_if(owned_, [superseded](const auto& plan) { return plan.get() == superseded; });
+  }
+
   std::vector<std::unique_ptr<Plan>> owned_;
   std::atomic<Plan*> offered_{nullptr};
   std::atomic<Plan*> staged_{nullptr};

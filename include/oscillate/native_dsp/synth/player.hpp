@@ -79,6 +79,9 @@ public:
   // revision, which releases it (release_staged_plan) on the callback at the
   // block it takes over (ADR-0098). False when the mailbox has no room.
   [[nodiscard]] bool stage_plan(PreparedPlan plan);
+  // Control only: a replaced instrument rings out with the Kick & Bass Lock it
+  // had; refresh_lock() leaves it alone from now on.
+  void retire() noexcept { retired_ = true; }
   // Callback only, before this block renders: the plan staged for
   // `revision`, if any, plays from this block.
   void release_staged_plan(std::uint64_t revision) noexcept { plans_->release_staged(revision); }
@@ -224,6 +227,7 @@ private:
   std::uint64_t rendered_generation_ = 0;
   std::uint64_t tail_frames_ = 0;
   std::optional<std::uint64_t> export_end_;
+  bool retired_ = false; // control only
 };
 
 } // namespace oscillate::native_dsp::synth

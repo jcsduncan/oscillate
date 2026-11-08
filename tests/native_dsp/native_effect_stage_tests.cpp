@@ -87,9 +87,12 @@ void a_withdrawn_switch_stages_its_lanes_again() {
   auto prepared = std::move(made).value();
   auto* stage = dynamic_cast<inserts::NativeEffectStage*>(prepared.runtime.get());
   REQUIRE_NE(stage, nullptr, "Press prepares as a built-in effect stage");
-  REQUIRE_OK(stage->stage_automation(edited, {}, switch_revision), "the switch did not stage");
-  REQUIRE_OK(stage->stage_automation(edited, {}, switch_revision),
-             "the switch published again could not stage its lanes again");
+  // More withdrawals than the mailbox holds plans: each re-stage frees the
+  // plan it supersedes.
+  constexpr std::size_t withdrawals = 12;
+  for (std::size_t attempt = 0; attempt < withdrawals; ++attempt)
+    REQUIRE_OK(stage->stage_automation(edited, {}, switch_revision),
+               "the switch published again could not stage its lanes again");
   REQUIRE_TRUE(!stage->stage_automation(snapshot, {}, switch_revision),
                "an older revision was staged");
   Frames audio(block_frames);

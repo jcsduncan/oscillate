@@ -2633,7 +2633,8 @@ Result<std::vector<KeptPlayer>> RoutedPlaybackControl::keep_players(const projec
       kept.push_back({before.id, std::move(player), next.revision});
       continue;
     }
-    // A new instrument: the old one releases its notes and rings out.
+    // A new instrument: the old one releases its notes and rings out, with
+    // the Lock it had.
     auto silent = before;
     silent.automation.clear();
     silent.midi_clips.clear();
@@ -2650,6 +2651,10 @@ Result<std::vector<KeptPlayer>> RoutedPlaybackControl::keep_players(const projec
         {ErrorCode::conflict, "A live synth plan mailbox is full; edit again to apply it"});
   for (auto& [index, plan] : plans)
     (void)kept[index].player->stage_plan(std::move(plan));
+  for (auto& player : kept) {
+    if (player.retiring)
+      player.player->retire();
+  }
   return Kept::success(std::move(kept));
 }
 
