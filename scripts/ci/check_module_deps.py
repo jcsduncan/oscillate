@@ -31,7 +31,7 @@ ALIAS = re.compile(r"add_library\(\s*oscillate::(\w+)\s+ALIAS\b")
 ADD_LIBRARY = re.compile(r"\boscillate_add_library\(\s*(\w+)")
 LINK = re.compile(r"\boscillate::(\w+)")
 ROOT_LIBRARY = re.compile(r"\badd_library\(\s*([A-Za-z_]\w*)")
-ROOT_FUNCTION = re.compile(r"\bfunction\(\s*(\w+)")
+ROOT_FUNCTION = re.compile(r"\bfunction\(\s*(\w+)\s+(\w+)[^)]*\)(.*?)\bendfunction\(", re.DOTALL)
 
 
 def strip_comments(text):
@@ -60,17 +60,27 @@ def owning_module(relative, modules):
     return max(candidates)[1] if candidates else None
 
 
-def root_libraries(text):
-    """Library targets one composition-root CMakeLists.txt creates by literal name.
+def root_libraries(texts):
+    """Library targets the composition root's CMakeLists.txt files create by name.
 
-    That covers add_library and calls to the file's own target-making functions,
-    whose first argument names the target.
+    That covers add_library with a literal name, and calls, in any root file, to
+    a root function whose add_library names its target from its first
+    parameter, with any suffix (`${target}_resources`).
     """
-    text = strip_comments(text)
-    names = set(ROOT_LIBRARY.findall(text))
-    for function in ROOT_FUNCTION.findall(text):
+    texts = [strip_comments(text) for text in texts]
+    names = set()
+    suffixes = {}
+    for text in texts:
+        names.update(ROOT_LIBRARY.findall(text))
+        for function, parameter, body in ROOT_FUNCTION.findall(text):
+            made = re.findall(rf"\badd_library\(\s*\${{{re.escape(parameter)}}}(\w*)", body)
+            if made:
+                suffixes.setdefault(function, set()).update(made)
+    for function, endings in suffixes.items():
         call = re.compile(rf"^\s*{re.escape(function)}\(\s*([A-Za-z_]\w*)", re.MULTILINE)
-        names.update(call.findall(text))
+        for text in texts:
+            for target in call.findall(text):
+                names.update(target + ending for ending in endings)
     return names
 
 
@@ -80,14 +90,14 @@ def scan_root(root, composition_root):
     Returns ([(target, file, line)] it links, library targets it creates).
     """
     links = []
-    libraries = set()
+    texts = []
     for listfile in sorted((root / composition_root["path"]).rglob("CMakeLists.txt")):
         relative = listfile.relative_to(root).as_posix()
         text = listfile.read_text(encoding="utf-8")
         _, linked = parse(text)
         links.extend((target, relative, line) for target, line in linked)
-        libraries |= root_libraries(text)
-    return links, libraries
+        texts.append(text)
+    return links, root_libraries(texts)
 
 
 def root_link_problems(root, table, owners):

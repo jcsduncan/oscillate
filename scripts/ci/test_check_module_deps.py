@@ -16,10 +16,13 @@ FOURTH_LINE = 4
 LINK_ISSUE = 129
 ROOT_PATH = "apps/daw_quick"
 ROOT_LIBRARY = "oscillate_quick_core"
+ROOT_RESOURCES = ROOT_LIBRARY + "_resources"
+ROOT_HELPER_LIBRARY = "oscillate_quick_helper"
 APP = (
     "add_library(oscillate_quick_shared OBJECT a.cpp)\n"
-    "function(add_quick_core target)\n  add_library(${target} b.cpp)\nendfunction()\n"
-    f"add_quick_core({ROOT_LIBRARY})\n"
+    "function(add_quick_core target codec)\n  add_library(${target} b.cpp)\n"
+    "  add_library(${target}_resources OBJECT r.qrc)\nendfunction()\n"
+    f"add_quick_core({ROOT_LIBRARY} 1)\n"
     "add_executable(oscillate main.cpp)\n"
 )
 
@@ -55,10 +58,15 @@ class TreeTest(unittest.TestCase):
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "CMakeLists.txt").write_text(text, encoding="utf-8")
 
-    def write_app(self, text):
+    def write_app(self, text, subdirectory_text=""):
         directory = self.root / ROOT_PATH
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "CMakeLists.txt").write_text(APP + text, encoding="utf-8")
+        if subdirectory_text:
+            (directory / "helpers").mkdir(exist_ok=True)
+            (directory / "helpers" / "CMakeLists.txt").write_text(
+                subdirectory_text, encoding="utf-8"
+            )
 
     def check(self, exceptions=()):
         return check_module_deps.check(self.root, table(exceptions))
@@ -218,6 +226,22 @@ class CompositionRootTests(TreeTest):
         found = self.check()
         self.assertEqual(len(found), 1)
         self.assertIn(ROOT_LIBRARY, found[0])
+
+    def test_suffixed_function_made_root_library_fails(self):
+        self.write_app("")
+        self.write("native_dsp", f"target_link_libraries(oscillate_native_dsp {ROOT_RESOURCES})\n")
+        found = self.check()
+        self.assertEqual(len(found), 1)
+        self.assertIn(ROOT_RESOURCES, found[0])
+
+    def test_root_function_called_from_another_root_file_counts(self):
+        self.write_app("", f"add_quick_core({ROOT_HELPER_LIBRARY} 0)\n")
+        self.write(
+            "native_dsp", f"target_link_libraries(oscillate_native_dsp {ROOT_HELPER_LIBRARY})\n"
+        )
+        found = self.check()
+        self.assertEqual(len(found), 1)
+        self.assertIn(ROOT_HELPER_LIBRARY, found[0])
 
     def test_longer_names_are_not_root_libraries(self):
         self.write_app("")
