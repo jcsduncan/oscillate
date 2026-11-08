@@ -223,6 +223,17 @@ void empty_project_opens_on_instruments() {
   require(catalogue->property("category").toString() == QStringLiteral("Instruments"),
           "an empty project's browser opens on Instruments, not " +
               catalogue->property("category").toString().toStdString());
+  // The full browser, opened on the built-ins, agrees.
+  window->setProperty("pluginBrowserOpen", true);
+  QCoreApplication::processEvents();
+  auto* full = find_item(window->contentItem(), QStringLiteral("vst3BrowserPanel"));
+  require(full != nullptr && full->isVisible(), "the full browser opens");
+  full->setProperty("showBuiltIns", true);
+  QCoreApplication::processEvents();
+  auto* full_catalogue = full->findChild<QObject*>(QStringLiteral("browserCatalogue"));
+  require(full_catalogue != nullptr &&
+              full_catalogue->property("category").toString() == QStringLiteral("Instruments"),
+          "an empty project's full browser opens on Instruments too");
 }
 
 void shell_browser_creates_and_adds() {
