@@ -1,7 +1,7 @@
 #pragma once
 
 #include "oscillate/native_dsp/note_effects/note_effect.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/timeline/timing.hpp"
 
 #include <array>
@@ -17,8 +17,8 @@
 // persisted: never rename or reuse one.
 namespace oscillate::native_dsp::note_effects::tables {
 
-using S = synth::ParameterScale;
-using T = synth::ParameterTiming;
+using S = ParameterScale;
+using T = ParameterTiming;
 using namespace std::string_view_literals;
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
@@ -71,7 +71,7 @@ inline constexpr std::array modes{"Up"sv,        "Down"sv,   "Up-Down"sv, "Down-
                                   "As Played"sv, "Random"sv, "Chord"sv};
 enum Mode : std::uint8_t { up, down, up_down, down_up, as_played, random, chord };
 inline constexpr std::array velocities{"As Played"sv, "Fixed"sv};
-inline constexpr std::array<synth::ParameterDescriptor, 11> parameters{{
+inline constexpr std::array<ParameterDescriptor, 11> parameters{{
     {"arp.mode", "Mode", "Pattern", "", S::choice, 0, last(modes.size()), up, modes, T::live, 0},
     {"arp.rate", "Rate", "Pattern", "", S::choice, 0, last(divisions.size()), sixteenth, divisions,
      T::live, 0},
@@ -93,7 +93,7 @@ namespace chord {
 inline constexpr std::array modes{"Intervals"sv, "In Key"sv};
 inline constexpr std::array shapes{"Triad"sv, "Seventh"sv, "Sus2"sv, "Sus4"sv,
                                    "Sixth"sv, "Add9"sv,    "Ninth"sv};
-inline constexpr std::array<synth::ParameterDescriptor, 12> parameters{{
+inline constexpr std::array<ParameterDescriptor, 12> parameters{{
     {"chord.mode", "Mode", "Chord", "", S::choice, 0, last(modes.size()), 0, modes, T::live, 0},
     {"chord.shift1", "Shift 1", "Intervals", "st", S::stepped, -24, 24, 4, {}, T::live, 0},
     {"chord.shift2", "Shift 2", "Intervals", "st", S::stepped, -24, 24, 7, {}, T::live, 0},
@@ -113,7 +113,7 @@ inline constexpr std::array<synth::ParameterDescriptor, 12> parameters{{
 
 // Echo.
 namespace echo {
-inline constexpr std::array<synth::ParameterDescriptor, 4> parameters{{
+inline constexpr std::array<ParameterDescriptor, 4> parameters{{
     {"echo.time", "Time", "Echo", "", S::choice, 0, last(divisions.size()), eighth, divisions,
      T::live, 0},
     {"echo.repeats", "Repeats", "Echo", "", S::stepped, 1, 16, 3, {}, T::live, 0},
@@ -124,7 +124,7 @@ inline constexpr std::array<synth::ParameterDescriptor, 4> parameters{{
 
 // Random.
 namespace random {
-inline constexpr std::array<synth::ParameterDescriptor, 7> parameters{{
+inline constexpr std::array<ParameterDescriptor, 7> parameters{{
     {"random.chance", "Chance", "Pitch", "%", S::linear, 0, 1, 0.5, {}, T::live, 0},
     {"random.range", "Range", "Pitch", "st", S::stepped, 1, 24, 12, {}, T::live, 0},
     {"random.root", "Root", "Pitch", "", S::choice, 0, last(roots.size()), 0, roots, T::live, 0},
@@ -140,7 +140,7 @@ inline constexpr std::array<synth::ParameterDescriptor, 7> parameters{{
 namespace scale {
 inline constexpr std::array snaps{"Nearest"sv, "Up"sv, "Down"sv};
 enum Snap : std::uint8_t { nearest, up, down };
-inline constexpr std::array<synth::ParameterDescriptor, 5> parameters{{
+inline constexpr std::array<ParameterDescriptor, 5> parameters{{
     {"scale.root", "Root", "Scale", "", S::choice, 0, last(roots.size()), 0, roots, T::live, 0},
     {"scale.scale", "Scale", "Scale", "", S::choice, 0, last(scales.size()), major_scale, scales,
      T::live, 0},
@@ -189,7 +189,7 @@ inline constexpr std::array<double, steps> top_pattern{off, off, off, on, off, o
                                                        off, off, on, off, off, off, off, off};
 inline constexpr std::array<double, steps> length_pattern{3, 3, 3, 3, 3, 3, 3, 3,
                                                           3, 3, 3, 3, 3, 3, 3, 3};
-inline constexpr std::array<synth::ParameterDescriptor, 81> parameters{{
+inline constexpr std::array<ParameterDescriptor, 81> parameters{{
     {"comp.low.1", "Low 1", "Low", "", S::choice, 0, last(hits.size()), low_pattern[0], hits, T::live, 0},
     {"comp.low.2", "Low 2", "Low", "", S::choice, 0, last(hits.size()), low_pattern[1], hits, T::live, 0},
     {"comp.low.3", "Low 3", "Low", "", S::choice, 0, last(hits.size()), low_pattern[2], hits, T::live, 0},
@@ -283,7 +283,7 @@ inline constexpr std::array<synth::ParameterDescriptor, 81> parameters{{
 }};
 } // namespace comp
 
-using synth::parameter_index;
+using native_dsp::parameter_index;
 
 } // namespace oscillate::native_dsp::note_effects::tables
 // clang-format on

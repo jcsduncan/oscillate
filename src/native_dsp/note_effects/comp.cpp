@@ -565,7 +565,7 @@ constexpr auto trance_gate = pattern({"................", "xo.ox.o.xo.ox.o.", "x
 constexpr auto pads_swells = pattern({"x...............", "x...............", "x...............",
                                       16, 0.0, table::push_eighth, table::straight});
 
-constexpr std::array<synth::SynthPreset, 10> presets{{
+constexpr std::array<Preset, 10> presets{{
     {"Anjuna offbeats", "Patterns", anjuna_offbeats.span()},
     {"Driving pluck", "Patterns", driving_pluck.span()},
     {"Rolling pluck", "Patterns", rolling_pluck.span()},

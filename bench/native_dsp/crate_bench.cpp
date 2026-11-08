@@ -1,5 +1,5 @@
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/crate.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/runtime.hpp"
 
 #include <algorithm>

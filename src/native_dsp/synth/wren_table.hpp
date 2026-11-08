@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/wren_breath.hpp"
 
 #include <array>
@@ -84,7 +84,7 @@ inline constexpr std::array<ParameterDescriptor, 16> parameters{{
 }};
 
 consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
+  return parameter_index(parameters, id);
 }
 
 static_assert(styles.size() == static_cast<std::size_t>(b::Style::airy) + 1,

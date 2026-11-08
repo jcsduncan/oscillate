@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -11,8 +11,8 @@
 // Ids are persisted: never rename or reuse one.
 namespace oscillate::native_dsp::effects::signal_table {
 
-using S = synth::ParameterScale;
-using T = synth::ParameterTiming;
+using S = ParameterScale;
+using T = ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array waves{"Sine"sv, "Log Sweep"sv, "Pink Noise"sv, "White Noise"sv,
@@ -26,7 +26,7 @@ inline constexpr std::array off_on{"Off"sv, "On"sv};
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
 
-inline constexpr std::array<synth::ParameterDescriptor, 8> parameters{{
+inline constexpr std::array<ParameterDescriptor, 8> parameters{{
     {"signal.on", "On", "Signal", "", S::choice, 0, 1, 1, off_on, T::live, 0},
     {"signal.wave", "Wave", "Signal", "", S::choice, 0, last(waves.size()), 0, waves, T::live, 0},
     {"signal.frequency",
@@ -49,8 +49,6 @@ inline constexpr std::array<synth::ParameterDescriptor, 8> parameters{{
      T::live, 0},
 }};
 
-consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
-}
+consteval std::size_t index_of(std::string_view id) { return parameter_index(parameters, id); }
 
 } // namespace oscillate::native_dsp::effects::signal_table

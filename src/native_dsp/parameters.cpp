@@ -1,4 +1,4 @@
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include "oscillate/foundation/value_text.hpp"
 
@@ -9,7 +9,7 @@
 #include <string>
 #include <utility>
 
-namespace oscillate::native_dsp::synth {
+namespace oscillate::native_dsp {
 namespace {
 
 using foundation::Error;
@@ -201,8 +201,7 @@ std::vector<NamedValue> sparse_values(const EngineDescriptor& engine,
   return sparse;
 }
 
-Result<std::vector<double>> preset_values(const EngineDescriptor& engine,
-                                          const SynthPreset& preset) {
+Result<std::vector<double>> preset_values(const EngineDescriptor& engine, const Preset& preset) {
   std::vector<NamedValue> saved;
   saved.reserve(preset.values.size());
   for (const auto& [id, value] : preset.values) {
@@ -216,4 +215,4 @@ Result<std::vector<double>> preset_values(const EngineDescriptor& engine,
   return values;
 }
 
-} // namespace oscillate::native_dsp::synth
+} // namespace oscillate::native_dsp

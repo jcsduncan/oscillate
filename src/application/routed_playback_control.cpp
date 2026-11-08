@@ -2357,7 +2357,7 @@ bool RoutedPlaybackControl::set_live_send(project::TrackId track, project::SendI
 }
 
 bool RoutedPlaybackControl::set_live_synth_values(project::TrackId track,
-                                                  const native_dsp::synth::EngineDescriptor& engine,
+                                                  const native_dsp::EngineDescriptor& engine,
                                                   std::span<const double> values) noexcept {
   auto* runtime = live_source_ ? live_source_->synth_runtime(track) : nullptr;
   return runtime && runtime->engine().descriptor == &engine && runtime->offer_live_values(values);
@@ -2369,9 +2369,10 @@ bool RoutedPlaybackControl::live_note(project::TrackId track, std::uint8_t key,
   return player && player->queue_live_note(key, velocity, on);
 }
 
-bool RoutedPlaybackControl::set_live_effect_values(
-    std::optional<project::TrackId> track, project::InsertSlotId slot,
-    const native_dsp::synth::EngineDescriptor& engine, std::span<const double> values) noexcept {
+bool RoutedPlaybackControl::set_live_effect_values(std::optional<project::TrackId> track,
+                                                   project::InsertSlotId slot,
+                                                   const native_dsp::EngineDescriptor& engine,
+                                                   std::span<const double> values) noexcept {
   auto* stage = active_effect_stage(track, slot);
   if (!stage || stage->engine().descriptor != &engine)
     return false;

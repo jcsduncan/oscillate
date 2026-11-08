@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -64,7 +64,7 @@ inline constexpr std::array init{V{"expanse.mod_depth", 0},     V{"expanse.low_d
                                  V{"expanse.high_cut", 20'000}, V{"expanse.predelay", 0},
                                  V{"expanse.mix", 0.5}};
 
-inline constexpr std::array<synth::SynthPreset, 13> presets{{
+inline constexpr std::array<Preset, 13> presets{{
     {"Concert Hall", "Hall", {}},
     {"Small Room", "Room", small_room},
     {"Drum Room", "Room", drum_room},

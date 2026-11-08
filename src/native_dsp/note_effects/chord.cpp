@@ -179,7 +179,7 @@ constexpr std::array<V, 3> in_key_minor_ninths{
     {{"chord.mode", 1}, {"chord.shape", 6}, {"chord.scale", tables::minor_scale}}};
 constexpr std::array<V, 2> soft_stack{{{"chord.shift3", 12}, {"chord.velocity", 0.6}}};
 
-constexpr std::array<synth::SynthPreset, 12> presets{{
+constexpr std::array<Preset, 12> presets{{
     {"Major", "Intervals", {}},
     {"Minor", "Intervals", minor_triad},
     {"Power", "Intervals", power},

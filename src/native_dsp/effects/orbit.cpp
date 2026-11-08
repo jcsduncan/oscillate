@@ -391,8 +391,8 @@ std::uint64_t tail_frames(std::span<const double> v, double sample_rate) {
 
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"orbit", "Orbit", 1, orbit_table::parameters,
-                                         orbit_presets::presets};
+const EngineDescriptor descriptor{"orbit", "Orbit", 1, orbit_table::parameters,
+                                  orbit_presets::presets};
 const EffectEngine orbit_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, false};
 
 } // namespace

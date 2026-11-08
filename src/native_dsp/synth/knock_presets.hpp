@@ -1,7 +1,7 @@
 #pragma once
 
 #include "knock_table.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -1499,7 +1499,7 @@ inline constexpr std::array rubber_tags{"house"sv, "bouncy"sv, "plop"sv, "tight"
 inline constexpr std::array metal_tags{"techno"sv, "metal"sv, "industrial"sv};
 inline constexpr std::array glass_tags{"organic"sv, "glass"sv, "bright"sv, "space"sv};
 
-inline constexpr std::array<SynthPreset, 12> presets{{
+inline constexpr std::array<Preset, 12> presets{{
     {"Minimal", "Minimal", {}, minimal_tags},
     {"Tech House", "House", tech_house, tech_house_tags},
     {"Dub Techno", "Techno", dub_techno, dub_techno_tags},

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -129,7 +129,7 @@ inline constexpr std::array init{
     V{"torque.fx.dist_mix", 0}, V{"torque.out.level", -6},
 };
 
-inline constexpr std::array<SynthPreset, 16> presets{{
+inline constexpr std::array<Preset, 16> presets{{
     {"Acid Classic", "Acid", {}},
     {"Acid Squelch", "Acid", acid_squelch},
     {"Rubber Acid", "Acid", rubber_acid},

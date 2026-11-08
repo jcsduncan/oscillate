@@ -2377,11 +2377,11 @@ const std::array preset_specs{
 
 // The presets with every placed effect's contract defaults (08a §5) filled
 // in under the preset's own values, so a preset names only what it changes.
-std::span<const SynthPreset> factory_presets() noexcept {
+std::span<const Preset> factory_presets() noexcept {
   struct Built {
     std::deque<std::string> ids;
     std::vector<std::vector<Value>> values;
-    std::vector<SynthPreset> presets;
+    std::vector<Preset> presets;
   };
   static const Built built = [] {
     Built b;

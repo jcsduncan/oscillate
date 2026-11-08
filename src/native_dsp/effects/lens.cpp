@@ -525,8 +525,7 @@ std::unique_ptr<EffectKernel> create_kernel(std::span<const double>, double samp
 std::uint64_t tail_frames(std::span<const double>, double) { return 1; }
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"lens", "Lens", 1, lens_table::parameters,
-                                         lens_presets::presets};
+const EngineDescriptor descriptor{"lens", "Lens", 1, lens_table::parameters, lens_presets::presets};
 const EffectEngine lens_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, true};
 
 } // namespace

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -17,7 +17,7 @@ inline constexpr std::array kick{V{"tune.mode", 2}};
 inline constexpr std::array verdi{V{"tune.reference", 432}};
 inline constexpr std::array baroque{V{"tune.reference", 415}};
 
-inline constexpr std::array<synth::SynthPreset, 5> presets{{
+inline constexpr std::array<Preset, 5> presets{{
     {"Instrument", "Tuner", {}},
     {"Bass", "Tuner", bass},
     {"Kick", "Tuner", kick},

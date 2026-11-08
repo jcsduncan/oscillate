@@ -432,8 +432,8 @@ std::uint64_t tail_frames(std::span<const double>, double sample_rate) {
 
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"vista", "Vista", 1, vista_table::parameters,
-                                         vista_presets::presets};
+const EngineDescriptor descriptor{"vista", "Vista", 1, vista_table::parameters,
+                                  vista_presets::presets};
 const EffectEngine vista_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, false};
 
 } // namespace

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "oscillate/native_dsp/effects/chop.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -16,8 +16,8 @@
 // Ids are persisted and automated: never rename or reuse one.
 namespace oscillate::native_dsp::effects::chop_table {
 
-using S = synth::ParameterScale;
-using T = synth::ParameterTiming;
+using S = ParameterScale;
+using T = ParameterTiming;
 using namespace std::string_view_literals;
 
 // Gate shapes the level step by step; Repeat stutters the steps that have
@@ -50,7 +50,7 @@ inline constexpr double default_seed = 7.0;
 inline constexpr double default_shape = 0.35;
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
-inline constexpr double g = synth::effect_glide_seconds;
+inline constexpr double g = effect_glide_seconds;
 
 // One step's five parameters. Chance has no glide, so its roll threshold
 // is exact the moment it is set.
@@ -82,7 +82,7 @@ inline constexpr double g = synth::effect_glide_seconds;
       {"chop.step." N ".chance", "Chance", "Step " N, "%", S::linear, 0, 1, 1, {}, T::live, 0}
 
 inline constexpr std::size_t global_count = 12;
-inline constexpr std::array<synth::ParameterDescriptor,
+inline constexpr std::array<ParameterDescriptor,
                             global_count + chop::max_steps * step_fields>
     parameters{{
         {"chop.mode", "Mode", "Chop", "", S::choice, 0, last(modes.size()), 0, modes, T::live, 0},
@@ -147,7 +147,7 @@ inline constexpr std::array<synth::ParameterDescriptor,
 #undef CHOP_STEP
 
 consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
+  return parameter_index(parameters, id);
 }
 
 inline constexpr std::size_t first_step = index_of("chop.step.1.level");

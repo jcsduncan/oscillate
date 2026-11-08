@@ -16,9 +16,9 @@ namespace {
 // The initial values sized to the descriptor (and the mailbox): extra values
 // are dropped and missing ones take their defaults, so every later read
 // stays inside both.
-std::vector<double> initial_values(const synth::EngineDescriptor& descriptor,
+std::vector<double> initial_values(const EngineDescriptor& descriptor,
                                    std::span<const double> values) {
-  const std::size_t count = std::min(descriptor.parameters.size(), synth::max_engine_parameters);
+  const std::size_t count = std::min(descriptor.parameters.size(), max_engine_parameters);
   std::vector<double> out(count);
   for (std::size_t i = 0; i < count; ++i)
     out[i] = i < values.size() ? values[i] : descriptor.parameters[i].default_value;
@@ -27,7 +27,7 @@ std::vector<double> initial_values(const synth::EngineDescriptor& descriptor,
 
 } // namespace
 
-ParameterControl::ParameterControl(const synth::EngineDescriptor& descriptor,
+ParameterControl::ParameterControl(const EngineDescriptor& descriptor,
                                    std::span<const double> values, double sample_rate)
     : descriptor_(&descriptor), count_(0), sample_rate_(sample_rate),
       target_(initial_values(descriptor, values)) {
@@ -37,7 +37,7 @@ ParameterControl::ParameterControl(const synth::EngineDescriptor& descriptor,
   effective_ = target_;
 }
 
-bool ParameterControl::valid_values(const synth::EngineDescriptor& descriptor,
+bool ParameterControl::valid_values(const EngineDescriptor& descriptor,
                                     std::span<const double> values) noexcept {
   if (values.size() != descriptor.parameters.size()) {
     return false;

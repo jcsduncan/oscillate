@@ -20,7 +20,7 @@ oscillate_target_defaults(oscillate_native_dsp)
 # The neutral layer every table-driven native engine (synth, effect, note
 # effect) is built on: parameter tables, parameter control and lanes,
 # telemetry, the musical transport and compiled-document state.
-add_library(oscillate_native_control synth/parameters.cpp parameter_control.cpp telemetry.cpp)
+add_library(oscillate_native_control parameters.cpp parameter_control.cpp telemetry.cpp)
 add_library(oscillate::native_control ALIAS oscillate_native_control)
 target_include_directories(oscillate_native_control PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../../include>

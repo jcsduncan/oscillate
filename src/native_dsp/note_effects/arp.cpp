@@ -319,7 +319,7 @@ constexpr std::array<V, 3> played{
 constexpr std::array<V, 3> four_step{{{"arp.steps", 4}, {"arp.octaves", 2}, {"arp.accent", 4}}};
 constexpr std::array<V, 3> legato{{{"arp.gate", 1.0}, {"arp.velocity", 1}, {"arp.level", 90}}};
 
-constexpr std::array<synth::SynthPreset, 11> presets{{
+constexpr std::array<Preset, 11> presets{{
     {"Up 16ths", "Classic", {}},
     {"Down 8ths", "Classic", down_eighths},
     {"Up-Down 2 Octaves", "Classic", up_down},

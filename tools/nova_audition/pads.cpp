@@ -5,8 +5,8 @@
 #include "oscillate/application/midi_file_import.hpp"
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -136,21 +136,21 @@ const std::vector<Audition>& auditions() {
   return list;
 }
 
-std::size_t preset_index(const native_dsp::synth::EngineDescriptor& engine, std::string_view name) {
+std::size_t preset_index(const native_dsp::EngineDescriptor& engine, std::string_view name) {
   for (std::size_t i = 0; i < engine.presets.size(); ++i)
     if (engine.presets[i].name == name)
       return i;
   fail("no " + std::string(engine.id) + " preset " + std::string(name));
 }
 
-const native_dsp::synth::EngineDescriptor& synth(std::string_view engine) {
+const native_dsp::EngineDescriptor& synth(std::string_view engine) {
   const auto* found = native_dsp::synth::find_engine(engine);
   if (found == nullptr)
     fail("no synth " + std::string(engine));
   return *found->descriptor;
 }
 
-const native_dsp::synth::EngineDescriptor& effect(std::string_view engine) {
+const native_dsp::EngineDescriptor& effect(std::string_view engine) {
   const auto* found = native_dsp::effects::find_engine(engine);
   if (found == nullptr)
     fail("no effect " + std::string(engine));
@@ -194,7 +194,7 @@ void add_pad(application::ProjectSession& session, const Audition& audition) {
   const auto slot = take(session.effects().add_effect_engine(track, 0, space_engine,
                                                              preset_index(space, audition.space)));
   auto values = take(session.effects().native_effect_values(track, slot));
-  const auto mix = native_dsp::synth::find_parameter(space, space_mix_id);
+  const auto mix = native_dsp::find_parameter(space, space_mix_id);
   if (!mix)
     fail("no parameter " + std::string(space_mix_id));
   values[*mix] = audition.space_mix;

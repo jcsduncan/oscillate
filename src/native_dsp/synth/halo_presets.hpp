@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -239,7 +239,7 @@ inline constexpr std::array init{
     V{"halo.op1.r4", 66},   V{"halo.op1.l2", 98},     V{"halo.op1.l3", 98},
 };
 
-inline constexpr std::array<SynthPreset, 16> presets{{
+inline constexpr std::array<Preset, 16> presets{{
     {"E-Piano", "Keys", {}},
     {"Bright EP", "Keys", bright_ep},
     {"Bells", "Mallets", bells},

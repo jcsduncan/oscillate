@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -19,7 +19,7 @@ inline constexpr std::array safety{V{"ceiling.ceiling", -0.1}, V{"ceiling.lookah
 inline constexpr std::array broadcast{V{"ceiling.ceiling", -2}, V{"ceiling.lookahead", 8},
                                       V{"ceiling.release", 400}};
 
-inline constexpr std::array<synth::SynthPreset, 5> presets{{
+inline constexpr std::array<Preset, 5> presets{{
     {"Default", "Master", {}},
     {"Transparent", "Master", transparent},
     {"Loud", "Master", loud},

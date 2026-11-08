@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <atomic>
@@ -29,11 +29,11 @@ struct ParameterLane {
 
 class ParameterControl {
 public:
-  ParameterControl(const synth::EngineDescriptor& descriptor, std::span<const double> values,
+  ParameterControl(const EngineDescriptor& descriptor, std::span<const double> values,
                    double sample_rate);
 
   // Whole value sets in table order: finite, in range, discrete ones whole.
-  [[nodiscard]] static bool valid_values(const synth::EngineDescriptor& descriptor,
+  [[nodiscard]] static bool valid_values(const EngineDescriptor& descriptor,
                                          std::span<const double> values) noexcept;
   // Control only. The latest accepted offer is adopted at the next block.
   // Fails when the mailbox is full, the revision does not increase or a
@@ -61,7 +61,7 @@ private:
 
   struct Mailbox {
     struct Entry {
-      std::array<double, synth::max_engine_parameters> values{};
+      std::array<double, max_engine_parameters> values{};
       std::uint64_t revision = 0; // Zero: a live value, no saved revision.
     };
     static constexpr std::size_t capacity = 4;
@@ -72,7 +72,7 @@ private:
     std::uint64_t offered = 0; // Serialized control producer only.
   };
 
-  const synth::EngineDescriptor* descriptor_;
+  const EngineDescriptor* descriptor_;
   std::size_t count_;
   double sample_rate_;
   std::vector<double> target_;     // Latest panel values.

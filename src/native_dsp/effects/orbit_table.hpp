@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/transport.hpp"
 
 #include <array>
@@ -12,8 +12,8 @@
 // Chorus" preset. Ids are persisted and automated: never rename or reuse one.
 namespace oscillate::native_dsp::effects::orbit_table {
 
-using S = synth::ParameterScale;
-using T = synth::ParameterTiming;
+using S = ParameterScale;
+using T = ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array modes{"Chorus"sv, "Ensemble"sv, "Dimension"sv, "Flanger"sv,
@@ -27,9 +27,9 @@ inline constexpr std::array<int, 5> stage_values{2, 4, 6, 8, 12};
 inline constexpr const auto& divisions = sync_divisions;
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
-inline constexpr double g = synth::effect_glide_seconds;
+inline constexpr double g = effect_glide_seconds;
 
-inline constexpr std::array<synth::ParameterDescriptor, 15> parameters{{
+inline constexpr std::array<ParameterDescriptor, 15> parameters{{
     {"orbit.mode", "Mode", "Mode", "", S::choice, 0, last(modes.size()), 0, modes, T::live, 0},
     {"orbit.rate", "Rate", "LFO", "Hz", S::logarithmic, 0.01, 20, 0.6, {}, T::live, g},
     {"orbit.sync", "Sync", "LFO", "", S::choice, 0, 1, 0, off_on, T::live, 0},
@@ -50,8 +50,6 @@ inline constexpr std::array<synth::ParameterDescriptor, 15> parameters{{
     {"orbit.output", "Output", "Output", "dB", S::linear, -24, 12, 0, {}, T::live, g},
 }};
 
-consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
-}
+consteval std::size_t index_of(std::string_view id) { return parameter_index(parameters, id); }
 
 } // namespace oscillate::native_dsp::effects::orbit_table

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -199,7 +199,7 @@ inline constexpr std::array juno_pad{
     V{"prism.fx.chorus", 3},          V{"prism.fx.chorus_mix", 1},
 };
 
-inline constexpr std::array<SynthPreset, 16> presets{{
+inline constexpr std::array<Preset, 16> presets{{
     {"Init", "Init", init},
     {"Prism Default", "Keys", {}},
     {"Supersaw", "Lead", supersaw},

@@ -682,8 +682,7 @@ std::uint32_t latency_frames(std::span<const double>, double sample_rate) {
   return margin_frames(sample_rate);
 }
 
-const synth::EngineDescriptor descriptor{"flyby", "Flyby", 1, t::parameters,
-                                         flyby_presets::presets};
+const EngineDescriptor descriptor{"flyby", "Flyby", 1, t::parameters, flyby_presets::presets};
 // Keyable (a sidechain route names the tracks whose notes start Once), as
 // Pump is; the key's audio itself is not read.
 const EffectEngine flyby_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, true,

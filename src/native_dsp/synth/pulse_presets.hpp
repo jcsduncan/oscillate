@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -83,7 +83,7 @@ inline constexpr std::array init{
     V{"pulse.kick2.drive", 0}, V{"pulse.snare.drive", 0},    V{"pulse.clap.drive", 0},
 };
 
-inline constexpr std::array<SynthPreset, 12> presets{{
+inline constexpr std::array<Preset, 12> presets{{
     {"808 Classic", "808", {}},
     {"808 Boom", "808", boom},
     {"909 House", "909", house},

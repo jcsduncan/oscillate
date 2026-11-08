@@ -6,9 +6,9 @@
 #include "oscillate/application/midi_note_tools.hpp"
 #include "oscillate/application/tempo_cache.hpp"
 #include "oscillate/midi_file/smf.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
 #include "oscillate/native_dsp/synth/lock.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "session_state.hpp"
 
@@ -206,7 +206,7 @@ foundation::Result<void> InstrumentService::lock_kick_and_bass(project::TrackId 
   const auto switch_lock = [&](const NativeTrack& track, std::string_view parameter,
                                double on_value) -> Result {
     const auto& engine = *track.resolved.engine;
-    const auto index = synth::find_parameter(*engine.descriptor, parameter);
+    const auto index = native_dsp::find_parameter(*engine.descriptor, parameter);
     if (!index) {
       return Result::failure(
           {foundation::ErrorCode::not_found, "The synth has no Kick & Bass Lock switch"});

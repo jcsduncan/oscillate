@@ -1,7 +1,7 @@
 #pragma once
 
 #include "oscillate/native_dsp/effects/dust.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -19,8 +19,8 @@
 // persisted and automated: never rename or reuse one.
 namespace oscillate::native_dsp::effects::dust_table {
 
-using S = synth::ParameterScale;
-using T = synth::ParameterTiming;
+using S = ParameterScale;
+using T = ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array switches{"Off"sv, "On"sv};
@@ -45,7 +45,7 @@ inline constexpr double mono_max_hz = 300.0;
 inline constexpr double seed_max = 999.0;
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
-inline constexpr double g = synth::effect_glide_seconds;
+inline constexpr double g = effect_glide_seconds;
 
 // The four controls every layer has; `on` is 1 for the layers Dusty 33
 // plays.
@@ -56,7 +56,7 @@ inline constexpr double g = synth::effect_glide_seconds;
       {"dust." L ".tone", "Tone", NAME, "%", S::linear, 0, 1, 0.5, {}, T::live, g},                \
       {"dust." L ".width", "Width", NAME, "%", S::linear, 0, 1, WIDTH, {}, T::live, g}
 
-inline constexpr std::array<synth::ParameterDescriptor, 62> parameters{{
+inline constexpr std::array<ParameterDescriptor, 62> parameters{{
     DUST_LAYER("vinyl", "Vinyl", 1, 0.5),
     // Pops a second, sparse .. dense.
     {"dust.vinyl.crackle", "Crackle", "Vinyl", "%", S::linear, 0, 1, 0.35, {}, T::live, g},
@@ -123,7 +123,7 @@ inline constexpr std::array<synth::ParameterDescriptor, 62> parameters{{
 #undef DUST_LAYER
 
 consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
+  return parameter_index(parameters, id);
 }
 
 // Every layer's four controls, in Layer order.

@@ -7,8 +7,8 @@
 #include "oscillate/application/tempo_cache.hpp"
 #include "oscillate/midi_file/smf.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "session_state.hpp"
 
@@ -597,7 +597,7 @@ EffectService::apply_effect_edits(std::span<const EffectEdit> edits) {
       return R::failure(resolved.error());
     auto values = std::move(resolved.value().values);
     for (const auto& [id, value] : edit.values) {
-      const auto index = native_dsp::synth::find_parameter(*engine->descriptor, id);
+      const auto index = native_dsp::find_parameter(*engine->descriptor, id);
       if (!index)
         return R::failure({ErrorCode::not_found, "No parameter " + id + " on " + edit.engine});
       values[*index] = value;

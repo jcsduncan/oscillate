@@ -69,7 +69,7 @@ constexpr std::array pluck_values{V{"crate.layout", 1.0}, V{"crate.root", 57.0},
 constexpr std::array snare_values{V{"crate.chop.00.release", 60.0}};
 constexpr std::array hat_values{V{"crate.chop.00.release", 40.0}};
 
-const std::array<SynthPreset, 5> presets{{
+const std::array<Preset, 5> presets{{
     {"Init", "Init", init_values},
     {"Kick", "Drums", kick_values},
     {"Pluck", "Melodic", pluck_values},
