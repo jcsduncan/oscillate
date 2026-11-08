@@ -14,6 +14,8 @@ inline constexpr std::size_t max_events = 100'000;
 inline constexpr std::size_t max_sources = project::max_source_records;
 // Random generation, stage and store-token names are this many bytes as hex.
 inline constexpr std::size_t random_name_bytes = 16;
+// Pruning keeps this many newest complete generations besides the pointed ones.
+inline constexpr std::size_t retained_recent_generations = 10;
 
 [[nodiscard]] bool hex_name(std::string_view value);
 [[nodiscard]] foundation::Result<std::string> random_name();

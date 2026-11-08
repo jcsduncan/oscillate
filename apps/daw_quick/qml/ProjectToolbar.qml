@@ -80,6 +80,7 @@ Rectangle {
     signal masterEffectsRequested()
     signal pluginsRequested()
     signal cacheRequested()
+    signal saveCopyRequested()
     signal shortcutsRequested()
 
     property bool keyPickerOpen: false
@@ -95,6 +96,7 @@ Rectangle {
         { key: "plugins", label: "VST3 plug-ins", name: "openVst3Browser" },
         { key: "media", label: "Media", name: "managedMediaButton" },
         { key: "revisions", label: "Versions", name: "namedRevisionButton" },
+        { key: "saveCopy", label: "Save a copy as…", name: "saveCopyMenuButton" },
         { key: "audio", label: "Audio · " + bridge.audioOutput.selectedAudioDeviceName, name: "audioOutputMenuButton" },
         { key: "cache", label: "Processing cache", name: "openCachePanel" },
         { key: "shortcuts", label: "Keyboard shortcuts", name: "shortcutsHelpButton" },
@@ -110,6 +112,7 @@ Rectangle {
         else if (key === "revisions") revisionsRequested()
         else if (key === "audio") audioMenuRequested()
         else if (key === "cache") cacheRequested()
+        else if (key === "saveCopy") saveCopyRequested()
         else if (key === "shortcuts") shortcutsRequested()
         else if (key === "close") bridge.close_project()
         else detailsRequested()

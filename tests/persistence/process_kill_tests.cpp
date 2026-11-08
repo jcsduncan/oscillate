@@ -246,7 +246,8 @@ std::uint64_t create_project(const fs::path& root, std::uint64_t revision) {
   auto started = take(ProjectCreation::begin(root));
   REQUIRE_EQ(take(started.writer.save(snapshot(revision), SaveKind::explicit_save)).status,
              SaveStatus::committed, "new project save failed");
-  take(started.creation.publish());
+  REQUIRE_EQ(take(started.creation.publish()), SaveStatus::committed,
+             "new project publication was not durable");
   return revision;
 }
 
@@ -294,6 +295,23 @@ void verify_killed_creation(const CreationKill& kill) {
 
 // A stage whose writer lock is still held belongs to a live creation, even
 // when it is older than the process looking at it.
+// A parent flush that fails after the rename leaves a created project behind:
+// publish reports its durability as uncertain instead of failing creation.
+void verify_flush_failure_after_rename_is_uncertain() {
+  Directory directory;
+  const auto root = directory.path() / "project";
+  auto started = take(ProjectCreation::begin(
+      root, [](SaveStage reached) { return reached == SaveStage::creation_published; }));
+  REQUIRE_EQ(take(started.writer.save(snapshot(created_revision), SaveKind::explicit_save)).status,
+             SaveStatus::committed, "new project save failed");
+  REQUIRE_EQ(take(started.creation.publish()), SaveStatus::uncertain,
+             "a failed parent flush after the rename was not reported as uncertain");
+  const auto reader = take(ProjectStore::open_reader(root));
+  REQUIRE_EQ(take(reader.load_current()).snapshot.revision, created_revision,
+             "the project published before the failed flush does not open");
+  REQUIRE_TRUE(stage_names(directory.path()).empty(), "the published stage name remained");
+}
+
 void verify_live_stage_kept() {
   Directory directory;
   const auto root = directory.path() / "project";
@@ -394,6 +412,7 @@ int main(int argc, char** argv) {
     std::this_thread::sleep_for(coarse_clock_margin);
     for (const auto& kill : creation_kills)
       verify_killed_creation(kill);
+    verify_flush_failure_after_rename_is_uncertain();
     verify_live_stage_kept();
     verify_stuck_stage_skipped();
     verify_foreign_stage_kept();

@@ -19,14 +19,35 @@
 namespace oscillate::quick {
 namespace {
 
+constexpr qsizetype max_project_name_length = 80;
+// Numbered names tried after the plain one before giving up on a suggestion.
+constexpr int max_name_suggestions = 9999;
+constexpr int first_numbered_suggestion = 2;
+const QString default_project_name = QStringLiteral("Untitled Project");
+
 // Why a project (folder) name can't be used, or empty when it can.
 QString name_problem(const QString& name) {
-  if (name.isEmpty() || name.size() > 80 || name == "." || name == ".." || name.contains('/') ||
-      name.contains('\\'))
+  if (name.isEmpty() || name.size() > max_project_name_length || name == "." || name == ".." ||
+      name.contains('/') || name.contains('\\'))
     return QStringLiteral("Choose a folder and a valid project name");
   for (const auto character : name) {
     if (character.isNull() || character.unicode() < 32)
       return QStringLiteral("Project name contains unsupported characters");
+  }
+  return {};
+}
+
+// `base`, or `base N` from 2 up, whichever is first absent from `parent`.
+// Empty when every candidate is taken or unusable.
+QString first_free_name(const std::filesystem::path& parent, const QString& base) {
+  for (int number = first_numbered_suggestion - 1; number <= max_name_suggestions; ++number) {
+    const auto name =
+        number < first_numbered_suggestion ? base : QStringLiteral("%1 %2").arg(base).arg(number);
+    if (!name_problem(name).isEmpty())
+      return {};
+    std::error_code error;
+    if (!std::filesystem::exists(parent / name.toStdString(), error) && !error)
+      return name;
   }
   return {};
 }
@@ -150,7 +171,43 @@ void ProjectLifecycleController::create_project(const QUrl& parent_folder,
                      .arg(QString::fromStdString(created.error().message)));
     return;
   }
+  const auto warning = created.value()->creation_warning();
   host_.install_project(std::move(created.value()), root);
+  if (warning)
+    host_.status(
+        QStringLiteral("Project created, but %1").arg(QString::fromStdString(warning->message)));
+}
+
+QString ProjectLifecycleController::suggested_project_name() const {
+  return first_free_name(projects_root_, default_project_name);
+}
+
+QString ProjectLifecycleController::suggested_copy_name() const {
+  if (!host_.session())
+    return {};
+  const auto root = host_.current_root();
+  return first_free_name(root.parent_path(), QStringLiteral("%1 copy").arg(
+                                                 QString::fromStdString(root.filename().string())));
+}
+
+std::optional<std::filesystem::path>
+ProjectLifecycleController::copy_destination(const QString& copy_name) const {
+  if (!host_.session()) {
+    host_.status(QStringLiteral("Open a project first"));
+    return std::nullopt;
+  }
+  const QString name = copy_name.trimmed();
+  if (const auto problem = name_problem(name); !problem.isEmpty()) {
+    host_.status(problem);
+    return std::nullopt;
+  }
+  const auto root = host_.current_root().parent_path() / name.toStdString();
+  std::error_code error;
+  if (std::filesystem::exists(root, error) || error) {
+    host_.status(QStringLiteral("A project folder with that name already exists"));
+    return std::nullopt;
+  }
+  return root;
 }
 
 void ProjectLifecycleController::create_default_project(const QString& project_name) {

@@ -181,11 +181,13 @@ Item {
                 border.color: projectNameInput.activeFocus ? welcome.kit.accent : Theme.fieldEdge
                 TextInput {
                     id: projectNameInput
+                    objectName: "newProjectNameInput"
                     anchors.fill: parent
                     anchors.leftMargin: Theme.spaceLg
                     anchors.rightMargin: Theme.spaceLg
                     verticalAlignment: TextInput.AlignVCenter
-                    text: "Untitled Project"
+                    // The first free name, so the default Create always succeeds.
+                    text: projectBridge.suggestedProjectName
                     selectByMouse: true
                     activeFocusOnTab: true
                     clip: true

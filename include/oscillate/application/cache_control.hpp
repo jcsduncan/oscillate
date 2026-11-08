@@ -53,6 +53,12 @@ public:
   // place; the project and its cache are left as they are. Works whether or
   // not the project is still there, so a deleted or moved one can go.
   [[nodiscard]] foundation::Result<void> forget_project(const std::filesystem::path& root);
+  // Clears the cache of the project registered at `root` when it can be
+  // reached, then forgets the project as forget_project does. Returns the bytes
+  // the cleared cache held: 0 when the project or its cache is unreachable.
+  // A failed clear leaves the project registered.
+  [[nodiscard]] foundation::Result<std::uint64_t>
+  forget_project_cache(const std::filesystem::path& root);
   // Include the shared source-analysis store once when supplied by the caller.
   [[nodiscard]] foundation::Result<CacheHealth>
   health(media::CacheStore* shared_cache = nullptr) const;
@@ -80,6 +86,8 @@ private:
   CacheControl(Descriptors descriptors, std::vector<Entry> entries, std::uint64_t budget_bytes);
   [[nodiscard]] foundation::Result<void> persist(const std::vector<Entry>& entries,
                                                  std::uint64_t budget_bytes, bool& published) const;
+  // Callers hold mutex_.
+  [[nodiscard]] foundation::Result<void> forget_unlocked(const std::filesystem::path& root);
 
   int directory_fd_ = -1;
   int lock_fd_ = -1;

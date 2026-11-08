@@ -15,7 +15,7 @@ Creating a project opened a writer on the final folder, then made the first expl
 1. The stage is created and immediately locked with `flock` on its directory; the lock is held until creation ends. The sole writer then flushes the stage's entry in the parent and lays out `assets/`, `state/` and `cache/`.
 2. The first explicit save commits a generation and `CURRENT` inside the stage, using the ADR-0004 protocol.
 3. The stage's own `CURRENT` is validated, the stage is flushed, then it is renamed to the final name. If the final name was absent, the rename uses `RENAME_NOREPLACE`, so a folder that appeared in the meantime is never replaced. If it was an empty folder, a plain rename replaces it, and that rename fails if the folder has gained contents. The writer's directory descriptors stay valid across the rename.
-4. The parent is flushed. A failure of this flush is reported as uncertain durability.
+4. The parent is flushed. If this flush fails, the project still exists at its name: creation succeeds, and `publish` returns `uncertain` so the caller can report that its durability is in doubt.
 
 If a process is killed before the rename, the final name holds what it held before: nothing, or the empty folder. If it is killed after the rename, the final name holds a project with a committed `CURRENT`. When creation fails without being killed, the stage is removed on a best-effort basis; a stage that cannot be removed is left for cleanup.
 

@@ -1,5 +1,6 @@
 #include "../../../apps/daw_quick/src/project_bridge.hpp"
 #include "oscillate/test/check.hpp"
+#include "oscillate/test/wait.hpp"
 
 #include <QCoreApplication>
 #include <QEventLoop>
@@ -413,6 +414,66 @@ void project_switch_saves_current_revision() {
           "project switch did not save and reopen the prior revision");
 }
 
+// The welcome screen's default name is always free, so a second Create with
+// it works; a typed name that exists is still refused. Save a copy saves the
+// open project, writes it beside itself and opens the copy.
+void default_names_and_save_a_copy() {
+  Directory directory;
+  QSettings::setDefaultFormat(QSettings::IniFormat);
+  QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                     QString::fromStdString((directory.root() / "settings").string()));
+  const auto discover = [] {
+    return foundation::Result<std::vector<oscillate::audio_io::PipeWireSink>>::success({});
+  };
+  const auto library = directory.root() / ".oscillate" / "projects";
+  const QString untitled = QStringLiteral("Untitled Project");
+  quick::ProjectBridge bridge(directory.root(), nullptr, {}, discover);
+  require(bridge.suggested_project_name() == untitled, "the first default name is not plain");
+  bridge.create_default_project(bridge.suggested_project_name());
+  require(bridge.project_name() == untitled, "the first default create failed");
+  require(bridge.suggested_project_name() == untitled + QStringLiteral(" 2"),
+          "the default name was not advanced past the created project");
+  bridge.create_default_project(bridge.suggested_project_name());
+  const QString second = untitled + QStringLiteral(" 2");
+  require(bridge.project_name() == second, "a second default create failed");
+  // Any folder takes its name, project or not.
+  fs::create_directories(library / (untitled + QStringLiteral(" 3")).toStdString());
+  require(bridge.suggested_project_name() == untitled + QStringLiteral(" 4"),
+          "the suggestion took a name an existing folder has");
+  bridge.create_default_project(untitled);
+  require(bridge.project_name() == second &&
+              bridge.status().contains(QStringLiteral("already exists")),
+          "a typed name that exists was not refused");
+
+  // A default project starts with the A · Reverb and B · Delay returns.
+  bridge.add_instrument_track();
+  const auto edited_revision = bridge.revision();
+  const auto copy_name = bridge.suggested_copy_name();
+  require(copy_name == second + QStringLiteral(" copy"), "the copy name is not '<name> copy'");
+  bridge.save_copy(copy_name);
+  require(bridge.collection_busy(), "the copy is not written on a worker");
+  oscillate::test::wait_until(
+      [&] {
+        QCoreApplication::processEvents();
+        return bridge.project_name() == copy_name;
+      },
+      "the copy opened");
+  // Collection saves the copy as one revision past the original's.
+  require(bridge.tracks().size() == 3 && bridge.revision() == edited_revision + 1 &&
+              bridge.status() == QStringLiteral("Saved a copy as ") + copy_name,
+          "the copy did not open with the project's state");
+  require(fs::is_regular_file(library / copy_name.toStdString() / "state" / "CURRENT"),
+          "the copy was not written beside the original");
+  bridge.save_copy(copy_name);
+  require(bridge.project_name() == copy_name &&
+              bridge.status().contains(QStringLiteral("already exists")),
+          "a copy replaced an existing folder");
+  bridge.open_listed(QString::fromStdString((library / second.toStdString()).string()));
+  require(bridge.project_name() == second && bridge.revision() == edited_revision &&
+              bridge.tracks().size() == 3,
+          "the original was not saved before the copy");
+}
+
 void autosave_worker_preserves_recovery_and_switch_boundary() {
   Directory directory;
   const auto discover = [] {
@@ -493,6 +554,7 @@ int main(int argc, char** argv) {
     equal_revision_autosave_stays_unsaved();
     project_collection_ui_checks();
     project_switch_saves_current_revision();
+    default_names_and_save_a_copy();
     autosave_worker_preserves_recovery_and_switch_boundary();
   } catch (const std::exception& error) {
     std::fprintf(stderr, "Quick project library recovery: %s\n", error.what());

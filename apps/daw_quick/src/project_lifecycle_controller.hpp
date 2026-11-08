@@ -57,6 +57,16 @@ public:
   [[nodiscard]] bool save_current_project_if_dirty();
   void create_project(const QUrl& parent_folder, const QString& project_name);
   void create_default_project(const QString& project_name);
+  // The first free name in the library for a new project: "Untitled Project",
+  // then "Untitled Project 2", and so on.
+  [[nodiscard]] QString suggested_project_name() const;
+  // The first free name beside the open project for a copy of it: "<name>
+  // copy", then "<name> copy 2", and so on. Empty when no project is open.
+  [[nodiscard]] QString suggested_copy_name() const;
+  // Where a copy of the open project named `copy_name` goes: beside it.
+  // Reports why not, and returns nothing, for an invalid or taken name.
+  [[nodiscard]] std::optional<std::filesystem::path>
+  copy_destination(const QString& copy_name) const;
   void open_project(const QUrl& folder);
   void choose_open_project();
   void open_listed(const QString& path);

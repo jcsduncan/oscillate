@@ -227,6 +227,7 @@
     <file alias="WelcomeScreen.qml">qml/WelcomeScreen.qml</file>
     <file alias="ManagedMediaPanel.qml">qml/ManagedMediaPanel.qml</file>
     <file alias="NamedRevisionPanel.qml">qml/NamedRevisionPanel.qml</file>
+    <file alias="SaveCopyPanel.qml">qml/SaveCopyPanel.qml</file>
     <file alias="HistoryPanel.qml">qml/HistoryPanel.qml</file>
     <file alias="CommandPalette.qml">qml/CommandPalette.qml</file>
     <file alias="AudioOutputPanel.qml">qml/AudioOutputPanel.qml</file>

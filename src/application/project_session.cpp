@@ -17,6 +17,11 @@
 namespace oscillate::application {
 namespace {
 std::atomic<std::uint64_t> next_session_generation{1};
+
+foundation::Error uncertain_folder() {
+  return {foundation::ErrorCode::io_failure,
+          "the project folder was created, but the system could not confirm it is on disk"};
+}
 } // namespace
 
 ProjectSession::ProjectSession(std::filesystem::path root, persistence::ProjectStore store)
@@ -44,7 +49,7 @@ foundation::Result<std::unique_ptr<ProjectSession>>
 ProjectSession::create(const std::filesystem::path& root, CreateOptions options) {
   // The project is built and first saved in a hidden stage beside `root`, then
   // renamed into place, so a killed creation never leaves a half project there.
-  auto started = persistence::ProjectCreation::begin(root);
+  auto started = persistence::ProjectCreation::begin(root, std::move(options.fault));
   if (!started) {
     return foundation::Result<std::unique_ptr<ProjectSession>>::failure(started.error());
   }
@@ -77,6 +82,8 @@ ProjectSession::create(const std::filesystem::path& root, CreateOptions options)
   if (!published) {
     return foundation::Result<std::unique_ptr<ProjectSession>>::failure(published.error());
   }
+  if (published.value() == persistence::SaveStatus::uncertain)
+    session->creation_warning_ = uncertain_folder();
   return foundation::Result<std::unique_ptr<ProjectSession>>::success(std::move(session));
 }
 

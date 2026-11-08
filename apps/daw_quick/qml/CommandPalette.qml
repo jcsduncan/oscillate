@@ -84,6 +84,8 @@ Item {
             { id: "save", title: "Save", shortcut: "Ctrl+S", enabled: open, run: () => bridge.save() },
             { id: "versions", title: "Saved versions", keywords: "named revisions snapshot restore",
               enabled: open, run: () => { shell.revisionPanelOpen = true; bridge.refresh_named_revisions() } },
+            { id: "save-copy", title: "Save a copy as…", keywords: "duplicate save as branch remix version new project",
+              enabled: open, run: () => shell.saveCopyPanelOpen = true },
             { id: "export", title: "Export…", shortcut: "Ctrl+Shift+E", keywords: "render bounce master wav flac mp3",
               enabled: open, run: () => shell.openExportDialog() },
             { id: "mix-check", title: shell.currentView === "mixcheck" ? "Close Mix Check" : "Mix Check",

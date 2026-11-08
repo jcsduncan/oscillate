@@ -58,6 +58,9 @@ struct LoadedGeneration {
     enum class Status : std::uint8_t { unresolved, missing, damaged } status;
   };
   std::vector<SourceDiagnostic> source_diagnostics;
+  // The older released schema this generation was saved in, as "major.minor",
+  // when loading migrated it (ADR-0095); empty for the current schema.
+  std::optional<std::string> migrated_from = std::nullopt;
 };
 
 struct NamedRevision {
@@ -266,6 +269,11 @@ public:
   // Names are bounded ASCII display labels; they never become path segments.
   // A revision points to the validated generation currently named by CURRENT.
   [[nodiscard]] foundation::Result<SaveOutcome> name_current_revision(std::string_view name);
+  // The name the first explicit save after a migration gives the pre-upgrade
+  // generation (ADR-0095), so pruning keeps it: "Before upgrade from <schema>
+  // <first generation digits>".
+  [[nodiscard]] static std::string pre_upgrade_revision_name(std::string_view schema,
+                                                             std::string_view generation);
   [[nodiscard]] foundation::Result<NamedRevisionListing> list_named_revisions() const;
   [[nodiscard]] foundation::Result<LoadedGeneration>
   load_named_revision(std::string_view name) const;
@@ -287,6 +295,14 @@ private:
   load_generation(const std::string& generation, const std::optional<std::string>& expected_hash,
                   std::size_t* remaining_budget = nullptr) const;
   [[nodiscard]] foundation::Result<std::size_t> prune_generations_unlocked();
+  // Publishes a named revision for a validated explicit generation; the caller
+  // holds the save gate and has checked the writer lock.
+  [[nodiscard]] foundation::Result<SaveOutcome>
+  name_generation_unlocked(std::string_view name, const std::string& generation,
+                           const std::string& hash);
+  // Names the generation CURRENT points at when it was migrated from an older
+  // schema and no revision names it yet.
+  [[nodiscard]] foundation::Result<void> keep_pre_upgrade_generation();
   [[nodiscard]] foundation::Result<SourceReceipt>
   publish_encoded_stage_unlocked(StagedEncoded&& staged);
   [[nodiscard]] bool fail(SaveStage stage) const { return fault_ && fault_(stage); }

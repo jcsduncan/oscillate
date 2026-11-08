@@ -28,6 +28,23 @@ Rectangle {
     readonly property int clearProjectWidth: 120
     readonly property int actionWidth: 95
     readonly property int noteY: 435
+    readonly property int forgetWidth: 64
+    readonly property int confirmButtonWidth: 80
+    readonly property real mib: 1048576
+    // The registered project waiting for "Forget?" to be confirmed, by path.
+    property string confirmPath: ""
+    readonly property var confirmProject: {
+        const path = confirmPath
+        return controls.projects.find(project => project.path === path) || null
+    }
+    function askForget(path) { confirmPath = path }
+    function cancelForget() { confirmPath = "" }
+    function confirmForget() {
+        if (confirmPath.length === 0)
+            return
+        controls.forget_project(confirmPath)
+        confirmPath = ""
+    }
     visible: host.cachePanelOpen
     z: 8
     x: host.browserWidth + Theme.spaceLg
@@ -37,7 +54,10 @@ Rectangle {
     radius: Theme.panelRadius
     color: host.panelRaised
     border.color: host.line
-    function close() { host.cachePanelOpen = false }
+    function close() {
+        cancelForget()
+        host.cachePanelOpen = false
+    }
     // Escape, a click anywhere else, or × closes it.
     onVisibleChanged: if (visible) forceActiveFocus()
     Keys.onEscapePressed: close()
@@ -165,29 +185,59 @@ Rectangle {
         height: cachePanel.projectsHeight
         clip: true
         model: cachePanel.controls.projects
-        delegate: Column {
+        delegate: Item {
+            id: projectRow
             required property var modelData
             width: ListView.view.width
-            spacing: Theme.spaceXxs
-            Text {
-                width: parent.width
-                elide: Text.ElideRight
-                text: (parent.modelData.current ? "● " : "") + parent.modelData.name
-                    + " · " + (parent.modelData.bytes / 1048576).toFixed(1) + " MiB"
-                color: cachePanel.host.textMain
-                font.pixelSize: Theme.typeSmall
+            height: projectText.height
+            Column {
+                id: projectText
+                width: parent.width - (projectRow.modelData.current ? 0 : cachePanel.forgetWidth)
+                spacing: Theme.spaceXxs
+                Text {
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: (projectRow.modelData.current ? "● " : "") + projectRow.modelData.name
+                        + " · " + (projectRow.modelData.bytes / cachePanel.mib).toFixed(1) + " MiB"
+                    color: cachePanel.host.textMain
+                    font.pixelSize: Theme.typeSmall
+                }
+                Text {
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: projectRow.modelData.status + (projectRow.modelData.detail ? " · " + projectRow.modelData.detail : "")
+                    color: projectRow.modelData.status === "Ready" ? cachePanel.host.textDim : cachePanel.host.amber
+                    font.pixelSize: Theme.typeCaption
+                }
             }
+            // The open project is cleared with CLEAR PROJECT; others can go.
             Text {
-                width: parent.width
-                elide: Text.ElideRight
-                text: parent.modelData.status + (parent.modelData.detail ? " · " + parent.modelData.detail : "")
-                color: parent.modelData.status === "Ready" ? cachePanel.host.textDim : cachePanel.host.amber
+                objectName: "cacheForget:" + projectRow.modelData.path
+                visible: !projectRow.modelData.current
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                text: "FORGET"
+                color: forgetArea.containsMouse ? cachePanel.host.textMain : cachePanel.host.accent
                 font.pixelSize: Theme.typeCaption
+                font.bold: true
+                Accessible.role: Accessible.Button
+                Accessible.name: "Forget " + projectRow.modelData.name + " and clear its cache"
+                MouseArea {
+                    Tip {}
+                    id: forgetArea
+                    anchors.fill: parent
+                    anchors.margins: -Theme.closeHitSlop
+                    hoverEnabled: true
+                    enabled: !cachePanel.controls.busy
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: cachePanel.askForget(projectRow.modelData.path)
+                }
             }
         }
     }
     Row {
         x: Theme.spaceXl; y: cachePanel.actionsY
+        visible: cachePanel.confirmProject === null
         spacing: Theme.spaceMd
         Repeater {
             model: [
@@ -219,6 +269,66 @@ Rectangle {
                     enabled: parent.enabled
                     onClicked: parent.invoke()
                     Tip {}
+                }
+            }
+        }
+    }
+    // "Forget?" replaces the actions until it is answered.
+    Item {
+        objectName: "cacheForgetConfirm"
+        x: Theme.spaceXl; y: cachePanel.actionsY
+        width: parent.width - 2 * Theme.spaceXl
+        height: Theme.dialogButtonHeight
+        visible: cachePanel.confirmProject !== null
+        Text {
+            objectName: "cacheForgetQuestion"
+            anchors.left: parent.left
+            anchors.right: forgetButtons.left
+            anchors.rightMargin: Theme.spaceMd
+            anchors.verticalCenter: parent.verticalCenter
+            wrapMode: Text.WordWrap
+            maximumLineCount: 2
+            elide: Text.ElideRight
+            text: cachePanel.confirmProject === null ? ""
+                : "Forget " + cachePanel.confirmProject.name + " and free "
+                    + (cachePanel.confirmProject.bytes / cachePanel.mib).toFixed(1) + " MiB?"
+            color: cachePanel.host.textMain
+            font.pixelSize: Theme.typeSmall
+        }
+        Row {
+            id: forgetButtons
+            anchors.right: parent.right
+            spacing: Theme.spaceMd
+            Repeater {
+                model: [
+                    { label: "FORGET", objectName: "cacheForgetConfirmButton" },
+                    { label: "CANCEL", objectName: "cacheForgetCancelButton" }
+                ]
+                delegate: Rectangle {
+                    required property var modelData
+                    objectName: modelData.objectName
+                    width: cachePanel.confirmButtonWidth
+                    height: Theme.dialogButtonHeight
+                    radius: Theme.controlRadius
+                    color: cachePanel.host.panel
+                    border.color: activeFocus ? cachePanel.host.accent : cachePanel.host.line
+                    enabled: !cachePanel.controls.busy
+                    activeFocusOnTab: enabled
+                    Accessible.role: Accessible.Button
+                    Accessible.name: modelData.label === "FORGET" ? "Forget the project and clear its cache" : "Keep the project"
+                    function invoke() {
+                        if (modelData.label === "FORGET") cachePanel.confirmForget()
+                        else cachePanel.cancelForget()
+                    }
+                    Keys.onReturnPressed: invoke()
+                    Keys.onSpacePressed: invoke()
+                    Text { anchors.centerIn: parent; text: parent.modelData.label; color: cachePanel.host.textMain; font.pixelSize: Theme.typeCaption }
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: parent.enabled
+                        onClicked: parent.invoke()
+                        Tip {}
+                    }
                 }
             }
         }

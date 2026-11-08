@@ -167,6 +167,48 @@ void forgotten_projects_leave_the_registry() {
   REQUIRE_EQ(state.projects.front().root, kept, "forgetting dropped the wrong project");
 }
 
+// Forgetting a project's caches clears its cache, reports the bytes freed and
+// drops it from the registry; an unreachable project just leaves the list.
+void forgetting_a_project_cache_frees_its_space() {
+  Directory fixture;
+  const auto kept = fixture.root() / "kept";
+  const auto cached = fixture.root() / "cached";
+  const auto deleted = fixture.root() / "deleted";
+  constexpr std::uint32_t version = 1;
+  constexpr std::size_t bytes = 100;
+  make_project(kept);
+  make_project(cached);
+  make_project(deleted);
+  put(kept, version, bytes);
+  put(cached, version, bytes);
+  auto control = take(app::CacheControl::open(fixture.root() / "profile"));
+  take(control->register_project(kept));
+  take(control->register_project(cached));
+  take(control->register_project(deleted));
+  std::uint64_t cached_bytes = 0;
+  for (const auto& project : take(control->health()).projects)
+    if (project.root == cached)
+      cached_bytes = project.usage.bytes;
+  REQUIRE_GE(cached_bytes, bytes, "the fixture cache was not counted");
+  const auto entry = key(version).hex() + ".cache";
+
+  REQUIRE_EQ(take(control->forget_project_cache(cached)), cached_bytes,
+             "forgetting did not report the space its cache held");
+  REQUIRE_FALSE(fs::exists(cached / "cache" / entry), "forgetting left the cache in place");
+  REQUIRE_TRUE(fs::exists(cached / "state" / "CURRENT"), "forgetting touched project state");
+  REQUIRE_TRUE(fs::exists(kept / "cache" / entry), "forgetting cleared another project's cache");
+  fs::remove_all(deleted);
+  REQUIRE_EQ(take(control->forget_project_cache(deleted)), std::uint64_t{0},
+             "an unreachable project reported freed space");
+  const auto unknown = control->forget_project_cache(cached);
+  REQUIRE_TRUE(!unknown, "an unregistered project was forgotten");
+  REQUIRE_EQ(unknown.error().code, foundation::ErrorCode::not_found,
+             "an unregistered project was forgotten");
+  const auto state = take(control->health());
+  REQUIRE_EQ(state.projects.size(), std::size_t{1}, "forgotten projects stayed registered");
+  REQUIRE_EQ(state.projects.front().root, kept, "forgetting dropped the wrong project");
+}
+
 void shared_source_analysis_counts_once_and_survives_project_clear() {
   Directory fixture;
   const auto root = fixture.root() / "song";
@@ -363,6 +405,7 @@ int main() {
   try {
     registry_budget_and_clear_preserve_essential_data();
     forgotten_projects_leave_the_registry();
+    forgetting_a_project_cache_frees_its_space();
     shared_source_analysis_counts_once_and_survives_project_clear();
     moved_and_replaced_paths_are_never_cleared();
     missing_cache_and_corrupt_registry_are_reported();
