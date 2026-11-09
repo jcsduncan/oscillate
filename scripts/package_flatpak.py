@@ -427,7 +427,7 @@ def elf_report(build_dir: Path, manifest: Path, relative: str) -> str:
         "sh",
         str(files / relative),
     ]
-    result = subprocess.run(command, capture_output=True, text=True)
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
     if result.returncode != 0:
         raise ValueError(f"cannot inspect {relative}: {result.stderr.strip()}")
     return result.stdout
