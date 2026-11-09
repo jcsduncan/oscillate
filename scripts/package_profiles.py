@@ -348,7 +348,10 @@ def feature_readme(profile: Profile, version: str) -> str:
     if profile.excluded:
         lines += [
             "Left out of this package:",
-            *(f"  - {feature}: {reason}" for feature, reason in profile.excluded_features().items()),
+            *(
+                f"  - {feature}: {reason}"
+                for feature, reason in profile.excluded_features().items()
+            ),
             "",
         ]
     lines += [
