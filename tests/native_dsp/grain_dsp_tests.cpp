@@ -334,11 +334,15 @@ void partials_follow_the_stiff_string_law() {
 }
 
 void octave_shifter_doubles_the_pitch() {
+  OctaveSweep sweep;
+  sweep.prepare(rate);
   OctaveShifter shifter;
-  shifter.prepare(rate);
+  shifter.prepare(sweep.window());
   std::vector<double> y(48'000);
   for (std::size_t i = 0; i < y.size(); ++i) {
-    y[i] = shifter.process(std::sin(2.0 * pi * 440.0 * static_cast<double>(i) / rate));
+    y[i] =
+        shifter.process(std::sin(2.0 * pi * 440.0 * static_cast<double>(i) / rate), sweep.taps());
+    sweep.advance();
   }
   const auto level = [&](double hz) {
     std::complex<double> sum{};
@@ -354,11 +358,14 @@ void octave_shifter_doubles_the_pitch() {
 // Doubling a 16.8 kHz tone would fold 33.6 kHz to 14.4 kHz; the shifter's
 // input band-limit removes it first.
 void octave_shifter_does_not_alias() {
+  OctaveSweep sweep;
+  sweep.prepare(rate);
   OctaveShifter shifter;
-  shifter.prepare(rate);
+  shifter.prepare(sweep.window());
   std::vector<double> y(48'000);
   for (std::size_t i = 0; i < y.size(); ++i) {
-    y[i] = shifter.process(std::sin(2.0 * pi * 0.35 * static_cast<double>(i)));
+    y[i] = shifter.process(std::sin(2.0 * pi * 0.35 * static_cast<double>(i)), sweep.taps());
+    sweep.advance();
   }
   REQUIRE_LT(20.0 * std::log10(level_at(y, 9'600, 32'768, 0.3 * rate) + 1e-30), -60.0,
              "the shifter leaves no folded image of a high tone");

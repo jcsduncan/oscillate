@@ -243,18 +243,37 @@ private:
 // half a window apart, with complementary sin^2 crossfades (gain <= 1). The
 // input is first band-limited below a quarter of the rate (an 8th-order
 // Butterworth low-pass at 0.2 of the rate), so doubling never folds.
+// Shifters with the same window and phase share one OctaveSweep, which
+// works out the taps and the crossfade once a frame for all of them.
+class OctaveSweep {
+public:
+  struct Taps {
+    double first_delay = 1.0;
+    double second_delay = 1.0;
+    double first_weight = 0.0; // sin^2 of the sweep; the second tap has the rest.
+  };
+  void prepare(double rate) noexcept;
+  void reset() noexcept { phase_ = 0.0; }
+  [[nodiscard]] double window() const noexcept { return window_; }
+  [[nodiscard]] Taps taps() const noexcept;
+  void advance() noexcept;
+
+private:
+  double window_ = 2'400.0;
+  double phase_ = 0.0;
+};
+
 class OctaveShifter {
 public:
-  void prepare(double rate);
+  // window: the sweep's length in frames.
+  void prepare(double window);
   void reset() noexcept;
-  [[nodiscard]] double process(double x) noexcept;
+  [[nodiscard]] double process(double x, const OctaveSweep::Taps& taps) noexcept;
 
 private:
   std::array<ZdfSvf, 4> band_limit_{};
   std::array<SvfCoefficients, 4> band_coefficients_{};
   DelayLine line_;
-  double window_ = 2'400.0;
-  double phase_ = 0.0;
 };
 
 // Eight-line feedback delay network with a Householder mix, per-line decay
@@ -277,6 +296,7 @@ private:
   double rate_ = 48'000.0;
   std::array<DelayLine, lines> delays_{};
   std::array<OctaveShifter, lines> shifters_{};
+  OctaveSweep sweep_{};
   std::array<double, lines> length_{};
   std::array<double, lines> gain_{};
   std::array<double, lines> low_{};
