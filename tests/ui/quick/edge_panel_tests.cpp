@@ -310,8 +310,9 @@ void the_curve_is_the_engines() {
   auto panel = load_panel(controller);
   require(item(*panel, QStringLiteral("edgeTransfer"))->property("curve").toList().size() > 1,
           "the panel draws it");
-  require(text_of(*panel, QStringLiteral("edgeCeilingLabel")) == QStringLiteral("CEILING 0 dBFS"),
-          "the ceiling's label");
+  require(text_of(*panel, QStringLiteral("edgeCeilingLabel")) == QStringLiteral("CEILING 0.0 dBFS"),
+          "the ceiling's label: " +
+              text_of(*panel, QStringLiteral("edgeCeilingLabel")).toStdString());
   auto* label = item(*panel, QStringLiteral("edgeCeilingLabel"));
   auto* in_mark = item(*panel, QStringLiteral("edgeInPeakCeiling"));
   auto* out_mark = item(*panel, QStringLiteral("edgeOutPeakCeiling"));
@@ -319,9 +320,10 @@ void the_curve_is_the_engines() {
   const double mark_x = out_mark->x();
   require(in_mark->isVisible() && out_mark->isVisible(), "the level bars mark the ceiling");
   controller.set_value(QStringLiteral("edge.ceiling"), lowered_db);
-  require(
-      wait_for_text(*panel, QStringLiteral("edgeCeilingLabel"), QStringLiteral("CEILING −6 dBFS")),
-      "the label follows: " + text_of(*panel, QStringLiteral("edgeCeilingLabel")).toStdString());
+  require(wait_for_text(*panel, QStringLiteral("edgeCeilingLabel"),
+                        QStringLiteral("CEILING −6.0 dBFS")),
+          "the label follows: " +
+              text_of(*panel, QStringLiteral("edgeCeilingLabel")).toStdString());
   require(label->y() > label_y, "the ceiling line drops");
   require(out_mark->x() < mark_x && in_mark->x() == out_mark->x(), "and the meters' marks");
 }

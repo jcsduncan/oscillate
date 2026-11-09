@@ -15,6 +15,7 @@ Item {
     property bool live: false
     // The ceiling the curve holds under, dBFS.
     property real ceilingDb: 0
+    readonly property int ceilingDecimals: 1
     property real dotIn: -120
     property real dotOut: -120
 
@@ -104,7 +105,7 @@ Item {
         objectName: "edgeCeilingLabel"
         x: plot.theme.spaceSm
         y: plot.py(plot.ceilingDb) - height - plot.theme.spaceXxs
-        text: "CEILING " + Format.number(plot.ceilingDb) + " dBFS"
+        text: "CEILING " + Format.number(plot.ceilingDb, plot.ceilingDecimals) + " dBFS"
         color: plot.theme.accent
         font.family: plot.theme.mono
         font.pixelSize: plot.theme.typeSmall
