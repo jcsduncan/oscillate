@@ -776,6 +776,9 @@ Rectangle {
                 readonly property color trackColor: arrangement.theme.trackColor(modelData, index)
                 // A clip being dragged out of this row draws above the others.
                 property bool lifted: false
+                // So does a row whose warp marker menu is open: the menu
+                // reaches over the rows below.
+                property bool menuRaised: false
                 readonly property bool carriesGroup: arrangement.groupDragging && arrangement.groupRows !== 0
                     && arrangement.groupTrackRows.indexOf(index) >= 0
                 readonly property var layoutEntry: arrangement.rowLayout[index] || null
@@ -783,7 +786,7 @@ Rectangle {
                 readonly property bool collapsed: isGroup && arrangement.bridge.collapsedBuses.includes(modelData.id)
                 // A folded bus hides its members' lanes.
                 visible: !(layoutEntry && layoutEntry.hidden)
-                z: lifted ? 10 : carriesGroup ? 9 : 0
+                z: lifted || menuRaised ? 10 : carriesGroup ? 9 : 0
                 x: 0
                 y: (arrangement.rowLayout[index] ? arrangement.rowLayout[index].top : index * Theme.laneFallbackHeight)
                     - arrangement.trackScrollY
@@ -1490,6 +1493,8 @@ Rectangle {
                                 viewTo: clipWaveform.sourceWindowEnd
                                 editable: arrangement.bridge.audioEditEnabled
                                 monoFamily: arrangement.theme.monoFamily
+                                onMenuOpenChanged: arrangementRow.menuRaised = menuOpen
+                                Component.onDestruction: arrangementRow.menuRaised = false
                             }
                         }
                         Text {

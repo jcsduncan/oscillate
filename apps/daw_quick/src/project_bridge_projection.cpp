@@ -377,6 +377,8 @@ void ProjectBridge::refresh() {
         // "#rrggbb", or empty for the app's palette.
         {"color", detail::color_text(track.color)},
         {"kind", routing_view.kind(track.id)},
+        // Clips, and so the dock's Clip and Notes tabs (#331).
+        {"holdsClips", project::track_holds_clips(track.kind)},
         {"muted", track.muted},
         {"soloed", track.soloed},
         {"level", track.level},

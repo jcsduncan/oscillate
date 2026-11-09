@@ -90,6 +90,10 @@ Rectangle {
         : track ? track.name : "No track selected"
     readonly property string pathId: selectedTrack === -2 ? "master" : (currentRouteTrack.id || "")
     readonly property string trackKind: selectedTrack === -2 ? "master" : (track ? track.kind : "")
+    // Only a track that can hold clips (the projection's holdsClips, from its
+    // kind) has Clip and Notes tabs; the master and buses have the Chain alone.
+    readonly property bool holdsClips: selectedTrack !== -2 && !!track && track.holdsClips === true
+    onHoldsClipsChanged: if (!holdsClips) activeTab = 0
     // "3 devices · MIDI → Master": what the path holds and where it goes.
     readonly property string pathSummary: {
         const devices = (chain.effects || []).length + (trackKind === "instrument" ? 1 : 0)
@@ -229,8 +233,13 @@ Rectangle {
                     id: tab
                     required property string modelData
                     required property int index
-                    readonly property bool available: index === 0 || (index === 1 && dock.selectedClip !== null)
-                        || (index === 2 && (dock.selectedClip?.kind === "midi" || dock.selectedClip?.kind === "audio"))
+                    objectName: "dockTab" + modelData
+                    readonly property bool available: index === 0 || dock.holdsClips
+                        && ((index === 1 && dock.selectedClip !== null)
+                            || (index === 2 && (dock.selectedClip?.kind === "midi" || dock.selectedClip?.kind === "audio")))
+                    // Why a tab is off, for its tooltip.
+                    readonly property string reason: dock.holdsClips ? "Select a clip first"
+                        : (dock.selectedTrack === -2 ? "The master" : "This track") + " holds no clips or notes"
                     width: tabText.implicitWidth + dock.tabPadding; height: dock.tabHeight
                     radius: Theme.radiusLg
                     color: dock.activeTab === index ? Theme.rowHighlight : "transparent"
@@ -241,8 +250,8 @@ Rectangle {
                     Accessible.name: index === 1 ? "Clip detail tab"
                         : index === 2 ? (dock.selectedClip?.kind === "audio" ? "Clay notes tab" : "Piano roll tab")
                         : "Device chain tab"
-                    Keys.onReturnPressed: dock.activeTab = index
-                    Keys.onSpacePressed: dock.activeTab = index
+                    Keys.onReturnPressed: if (available) dock.activeTab = index
+                    Keys.onSpacePressed: if (available) dock.activeTab = index
                     Text {
                         id: tabText
                         anchors.centerIn: parent
@@ -251,7 +260,7 @@ Rectangle {
                         font.pixelSize: Theme.typeLabel
                         font.weight: dock.activeTab === tab.index ? Font.DemiBold : Font.Normal
                     }
-                    Tip { text: (tab.modelData) + " — " + (tab.index === 0 ? "The track's macros, MIDI effects, instrument and effects" : tab.index === 1 ? (tab.available ? "The selected clip" : "Select a clip first") : (!tab.available ? "Select a clip first" : dock.selectedClip?.kind === "audio" ? "Edit the notes inside the audio (Clay)" : "Edit the selected MIDI clip's notes")) }
+                    Tip { text: (tab.modelData) + " — " + (tab.index === 0 ? "The track's macros, MIDI effects, instrument and effects" : !tab.available ? tab.reason : tab.index === 1 ? "The selected clip" : dock.selectedClip?.kind === "audio" ? "Edit the notes inside the audio (Clay)" : "Edit the selected MIDI clip's notes") }
                     MouseArea { id: tabArea; anchors.fill: parent; hoverEnabled: true
                                 enabled: tab.available; onClicked: dock.activeTab = tab.index }
                 }

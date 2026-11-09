@@ -68,7 +68,10 @@ constexpr int settle_ms = 15'000;
 constexpr double far_bpm = 128.0;
 constexpr double fraction_tolerance = 1e-4;
 constexpr double bpm_tolerance = 0.5;
+constexpr int chain_tab = 0;
 constexpr int dock_clip_tab = 1;
+// The shell's index for the master path.
+constexpr int master_track = -2;
 
 QQuickItem* find_item(QQuickItem* parent, const QString& name) {
   if (parent->objectName() == name && parent->isVisible())
@@ -194,6 +197,9 @@ struct Song {
     require(session->warp().set_audio_clip_follow(clip, true).has_value(),
             "the loop does not follow the project");
     clip_id = QString::fromStdString(clip.to_string());
+    // A group bus and a return: tracks that hold no clips (#331).
+    for (const auto kind : {project::TrackKind::group_bus, project::TrackKind::return_bus})
+      require(session->tracks().add_bus_track(kind).has_value(), "a bus was not added");
     bridge = std::make_unique<quick::ProjectBridge>(folder.string());
     bridge->set_project(std::move(created).value(), root);
     bridge->select_audio_clip(clip_id);
@@ -485,6 +491,42 @@ void tempo_lane_and_stretch(Song& song, const Shell& shell) {
               song.bridge->status().toStdString());
 }
 
+// The dock's Clip and Notes tabs are off, with the reason on hover, for the
+// master and for tracks that hold no clips, and the dock shows the Chain.
+void dock_tabs_follow_whether_the_track_holds_clips(Song& song, const Shell& shell) {
+  auto* dock = shell.window()->findChild<QObject*>(QStringLiteral("deviceChainDock"));
+  require(dock != nullptr, "the shell has no device dock");
+  int group = -1;
+  int bus_return = -1;
+  const auto tracks = song.bridge->tracks();
+  for (int index = 0; index < tracks.size(); ++index) {
+    const auto kind = tracks[index].toMap().value(QStringLiteral("kind")).toString();
+    group = kind == QStringLiteral("group") ? index : group;
+    bus_return = kind == QStringLiteral("return") ? index : bus_return;
+  }
+  require(group >= 0 && bus_return >= 0, "the fixture's buses are missing");
+  shell.window()->setProperty("selectedTrack", 0);
+  dock->setProperty("activeTab", dock_clip_tab);
+  QCoreApplication::processEvents();
+  require(shell.wait_for(QStringLiteral("dockTabClip"))->property("available").toBool(),
+          "the loop's track does not offer its clip");
+  for (const int track : {master_track, group, bus_return}) {
+    shell.window()->setProperty("selectedTrack", track);
+    QCoreApplication::processEvents();
+    require(dock->property("activeTab").toInt() == chain_tab,
+            "a track with no clips did not open the Chain");
+    for (const auto* name : {"dockTabClip", "dockTabNotes"}) {
+      auto* tab = shell.wait_for(QString::fromLatin1(name));
+      require(!tab->property("available").toBool() &&
+                  tab->property("reason").toString().contains(QStringLiteral("holds no clips")),
+              std::string(name) + " is offered on a track with no clips");
+      shell.click(QString::fromLatin1(name));
+      require(dock->property("activeTab").toInt() == chain_tab,
+              std::string(name) + " opened on a track with no clips");
+    }
+  }
+}
+
 void arrangement_warp_and_tempo() {
   Song song;
   const Shell shell(song);
@@ -492,6 +534,7 @@ void arrangement_warp_and_tempo() {
   marker_menu_commands(song, shell);
   grid_check_flags_the_drift_and_fixes_it(song, shell);
   tempo_lane_and_stretch(song, shell);
+  dock_tabs_follow_whether_the_track_holds_clips(song, shell);
 }
 
 } // namespace

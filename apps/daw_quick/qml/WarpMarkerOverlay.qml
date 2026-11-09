@@ -45,6 +45,7 @@ Item {
     property real hoverAt: -1
     property bool hoverOnTransient: false
     property int menuIndex: -1
+    readonly property bool menuOpen: menuIndex >= 0 && menuIndex < markers.length
     property real menuX: 0
     // While dragging: output anchors `prev` and `next` stay, and the audio
     // that played at `from` plays at `to`. Null otherwise.
