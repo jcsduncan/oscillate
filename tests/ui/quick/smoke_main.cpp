@@ -3259,6 +3259,8 @@ int run(int argc, char** argv) {
                 first_visible_item(window->contentItem(), QStringLiteral("trackCreationRow"));
             auto* add_track_button =
                 first_visible_item(window->contentItem(), QStringLiteral("addTrackButton"));
+            auto* tempo_header =
+                first_visible_item(window->contentItem(), QStringLiteral("tempoLaneHeader"));
             qsizetype first_index = 0;
             qsizetype second_index = 1;
             auto* first_row =
@@ -3274,7 +3276,11 @@ int run(int argc, char** argv) {
                 bridge.insert_chains().size() != bridge.tracks().size() + 1 ||
                 std::abs(second_row->mapToScene({0, 0}).y() -
                          (first_row->mapToScene({0, 0}).y() + first_row->height())) > 0.5 ||
+                // The tempo lane's header sits between the header row and the list.
+                !tempo_header ||
                 std::abs(track_list->mapToScene({0, 0}).y() -
+                         (tempo_header->mapToScene({0, 0}).y() + tempo_header->height())) > 0.5 ||
+                std::abs(tempo_header->mapToScene({0, 0}).y() -
                          (creation_row->mapToScene({0, 0}).y() + creation_row->height())) > 0.5 ||
                 std::abs(master_row->mapToScene({0, 0}).y() -
                          (track_list->mapToScene({0, 0}).y() + track_list->height())) > 0.5 ||

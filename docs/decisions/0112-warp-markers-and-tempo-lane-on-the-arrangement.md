@@ -10,7 +10,7 @@ ADR-0053 put tempo, Follow and the downbeat on every audio clip, and left warp m
 
 ### Warp markers on the selected clip
 `WarpMarkerOverlay` lies over the selected audio clip's waveform on the arrangement and over the docked clip editor's detail view, with the same gestures in both:
-- **Hover** the band along the waveform's top: a ghost snaps to the nearest transient (from the grid check), else the nearest beat of the clip's grid; Alt places it on any sample. **Click** pins a marker there.
+- **Hover** the band along the waveform's foot: a ghost snaps to the nearest transient (from the grid check), else the nearest beat of the clip's grid; Alt places it on any sample. **Click** pins a marker there.
 - **Drag** a marker to stretch only the audio between its neighbours. Each side's segment tempo shows live, and the waveform redraws where the audio will play.
 - **Shift-drag** keeps the marker on its beat and slides the audio under it (`slide_warp_marker`): a late kick moves onto the grid without changing the tempo around it.
 - **Double-click** removes a marker.

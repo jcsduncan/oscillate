@@ -49,7 +49,7 @@ Its marker lane shows reviewed warp markers over the warp-mapped waveform and th
 - **Deleting:** Delete removes the selected marker.
 
 On the arrangement, the selected audio clip shows its markers over its waveform, and the docked clip editor shows them with the same gestures (ADR-0112). Each gesture or command is one undo step:
-- **Pin:** hovering the band along the waveform's top shows a ghost on the nearest transient, else the nearest beat (Alt: any sample); a click pins it.
+- **Pin:** hovering the band along the waveform's foot shows a ghost on the nearest transient, else the nearest beat (Alt: any sample); a click pins it.
 - **Stretch:** dragging a marker stretches only the audio between its neighbours, with both segments' tempi shown and the waveform redrawn as it will play.
 - **Slide:** Shift-dragging keeps the marker in place and moves the audio under it; the new source frame stays between the neighbouring markers.
 - **Remove:** double-click.

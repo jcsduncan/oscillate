@@ -3,8 +3,8 @@ import QtQuick
 import "shell"
 
 // Warp markers on a clip's waveform (ADR-0112), on the arrangement's
-// selected clip and in the docked clip editor. Along the top band the
-// pointer shows a ghost snapped to the nearest transient or beat (Alt: any
+// selected clip and in the docked clip editor. Along the band at its foot
+// the pointer shows a ghost snapped to the nearest transient or beat (Alt: any
 // sample) and a click pins a marker there. Dragging a marker stretches only
 // the audio between its neighbours, with each side's tempo shown live;
 // Shift-drag keeps the marker on its beat and slides the audio under it;
@@ -148,14 +148,17 @@ Item {
         menu.focus = false
     }
 
-    // The pin band: hover for the ghost, click to pin.
+    // The pin band along the waveform's foot: hover for the ghost, click to
+    // pin. It keeps to the lower third, so the clip's middle, where a drag
+    // moves it, stays free.
     MouseArea {
         id: band
         objectName: "warpPinBand"
         visible: overlay.pinBand
         enabled: overlay.editable && overlay.current
+        y: overlay.height - height
         width: parent.width
-        height: Theme.warpBandHeight
+        height: Math.min(Theme.warpBandHeight, overlay.height * Theme.warpBandMaxShare)
         hoverEnabled: true
         cursorShape: Qt.CrossCursor
         Accessible.role: Accessible.Button

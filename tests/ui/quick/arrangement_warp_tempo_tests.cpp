@@ -284,7 +284,11 @@ public:
     require(item(QStringLiteral("warpMarkerMenu")) != nullptr, "the marker menu did not open");
     click(QStringLiteral("warpMenu_") + entry);
   }
-  [[nodiscard]] static double band_y() { return 7.0; }
+  // Inside the pin band at the waveform's foot.
+  [[nodiscard]] double band_y() const {
+    auto* band = wait_for(QStringLiteral("warpPinBand"));
+    return band->y() + band->height() / 2;
+  }
 
 private:
   Song& song_;
@@ -301,11 +305,11 @@ void markers_pin_stretch_slide_and_remove(Song& song, const Shell& shell) {
   auto& bridge = *song.bridge;
   (void)shell.wait_for(QStringLiteral("warpPinBand"));
   // Hovering the band shows the ghost; a click near a beat pins its kick.
-  QTest::mouseMove(shell.window(), shell.beat(pinned_beat, Shell::band_y(), near_px));
+  QTest::mouseMove(shell.window(), shell.beat(pinned_beat, shell.band_y(), near_px));
   require(shell.item(QStringLiteral("warpMarkerGhost")) != nullptr, "no ghost under the pointer");
   auto revision = bridge.revision();
   QTest::mouseClick(shell.window(), Qt::LeftButton, {},
-                    shell.beat(pinned_beat, Shell::band_y(), near_px));
+                    shell.beat(pinned_beat, shell.band_y(), near_px));
   QCoreApplication::processEvents();
   require(bridge.revision() == revision + 1 && song.markers().size() == 1,
           "a click on the band did not pin one marker");
@@ -313,8 +317,8 @@ void markers_pin_stretch_slide_and_remove(Song& song, const Shell& shell) {
           "the marker did not snap onto the kick");
 
   // Drag: both sides' tempo shows live, nothing saves until release.
-  const auto pinned = shell.beat(pinned_beat, Shell::band_y());
-  const auto stretched = shell.beat(stretched_beat, Shell::band_y(), near_px);
+  const auto pinned = shell.beat(pinned_beat, shell.band_y());
+  const auto stretched = shell.beat(stretched_beat, shell.band_y(), near_px);
   revision = bridge.revision();
   QTest::mousePress(shell.window(), Qt::LeftButton, {}, pinned);
   for (int step = 1; step <= drag_steps; ++step)
@@ -337,8 +341,8 @@ void markers_pin_stretch_slide_and_remove(Song& song, const Shell& shell) {
   // Shift-drag: the marker stays, earlier audio slides under it.
   revision = bridge.revision();
   const auto before = song.marker(0);
-  shell.drag(shell.beat(pinned_beat, Shell::band_y()),
-             shell.beat(pinned_beat, Shell::band_y(), slide_px), Qt::ShiftModifier);
+  shell.drag(shell.beat(pinned_beat, shell.band_y()),
+             shell.beat(pinned_beat, shell.band_y(), slide_px), Qt::ShiftModifier);
   require(bridge.revision() == revision + 1, "a slide was not one edit");
   require(std::abs(song.marker(0).value(QStringLiteral("fraction")).toDouble() -
                    before.value(QStringLiteral("fraction")).toDouble()) < fraction_tolerance &&
@@ -350,7 +354,7 @@ void markers_pin_stretch_slide_and_remove(Song& song, const Shell& shell) {
 
   // Double-click removes.
   revision = bridge.revision();
-  QTest::mouseDClick(shell.window(), Qt::LeftButton, {}, shell.beat(pinned_beat, Shell::band_y()));
+  QTest::mouseDClick(shell.window(), Qt::LeftButton, {}, shell.beat(pinned_beat, shell.band_y()));
   QCoreApplication::processEvents();
   require(bridge.revision() == revision + 1 && song.markers().isEmpty(),
           "a double-click did not remove the marker");
@@ -361,12 +365,12 @@ void markers_pin_stretch_slide_and_remove(Song& song, const Shell& shell) {
 void marker_menu_commands(Song& song, const Shell& shell) {
   auto& bridge = *song.bridge;
   QTest::mouseClick(shell.window(), Qt::LeftButton, {},
-                    shell.beat(second_beat, Shell::band_y(), near_px));
+                    shell.beat(second_beat, shell.band_y(), near_px));
   QCoreApplication::processEvents();
   require(song.markers().size() == 2, "the second marker was not pinned");
 
   // Every entry fits the menu.
-  QTest::mouseClick(shell.window(), Qt::RightButton, {}, shell.beat(pinned_beat, Shell::band_y()));
+  QTest::mouseClick(shell.window(), Qt::RightButton, {}, shell.beat(pinned_beat, shell.band_y()));
   QCoreApplication::processEvents();
   auto* menu = shell.wait_for(QStringLiteral("warpMarkerMenu"));
   for (const auto* entry : {"downbeat", "straight", "tempo", "drift", "remove", "after"}) {

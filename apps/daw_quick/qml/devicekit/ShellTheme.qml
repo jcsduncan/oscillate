@@ -672,8 +672,10 @@ KitTheme {
     readonly property color clipEditorDriftText: "#ffb3a8"
     readonly property int clipEditorFooterDividerHeight: 20
     // Warp markers on the selected clip (WarpMarkerOverlay, ADR-0112): the
-    // band along the waveform's top where the pointer pins and drags them.
+    // band along the waveform's foot where the pointer pins them.
     readonly property int warpBandHeight: 14
+    // ...but never more than this share of the waveform's height.
+    readonly property real warpBandMaxShare: 0.34
     readonly property int warpMarkerHeadSize: 9
     readonly property int warpTagHeight: 15
     readonly property int warpTagGap: 4
