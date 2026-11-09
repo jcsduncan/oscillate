@@ -319,6 +319,7 @@ oscillate_add_case_tests(application_routed_live_edit oscillate_application_rout
   track_remove_fades_out_then_switches
   track_remove_fades_out_over_its_level_lane
   tempo_change_moves_what_follows
+  tempo_ramp_moves_what_follows
   meter_change_switches_with_its_source
   midi_edit_with_a_level_lane_switches_whole
   instrument_change_rings_out_the_old_one

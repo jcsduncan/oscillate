@@ -29,10 +29,24 @@ public:
   [[nodiscard]] std::optional<project::Marker>
   previous_marker(timeline::TickPosition position) const;
   // Tempo event positions are project ticks; callers apply the visible snap
-  // policy before invoking these undoable commands. Tick zero cannot be removed.
+  // policy before invoking these undoable commands. Tick zero cannot be
+  // removed; removing the last event leaves the one before it holding.
   [[nodiscard]] foundation::Result<void> set_tempo_event(timeline::TickPosition tick, double bpm,
                                                          timeline::TempoShape shape_to_next);
   [[nodiscard]] foundation::Result<void> remove_tempo_event(timeline::TickPosition tick);
+  // Moves the tempo event at `from` to `to` with `bpm`, keeping its shape;
+  // the event at tick zero only changes its tempo. One undo step.
+  [[nodiscard]] foundation::Result<void> move_tempo_event(timeline::TickPosition from,
+                                                          timeline::TickPosition to, double bpm);
+  // A drawn tempo ramp (ADR-0112), one undo step: from `from` the tempo
+  // moves along `shape` to `end_bpm` at `to`, then holds there until the
+  // next later event. The tempo playing at `from` is kept and events
+  // strictly between are removed.
+  [[nodiscard]] foundation::Result<void> set_tempo_ramp(timeline::TickPosition from,
+                                                        timeline::TickPosition to, double end_bpm,
+                                                        timeline::TempoShape shape);
+  // "Ramp to this track's tempo" (plan_transition_ramp) as one undo step.
+  [[nodiscard]] foundation::Result<void> ramp_to_clip_tempo(project::ClipId clip);
   [[nodiscard]] foundation::Result<void> set_initial_meter(std::uint8_t numerator,
                                                            std::uint8_t denominator);
   // Adds `bars` bars before bar 1 (ADR-0053), for an intro that starts
@@ -46,6 +60,8 @@ public:
 
 private:
   [[nodiscard]] std::uint64_t next_marker_number() const;
+  // One revision with `events`; the last event's shape becomes a hold.
+  [[nodiscard]] foundation::Result<void> replace_tempo(std::vector<timeline::TempoEvent> events);
   AutomationService& automation_;
 };
 

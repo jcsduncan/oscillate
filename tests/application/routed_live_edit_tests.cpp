@@ -639,6 +639,19 @@ void tempo_change_moves_what_follows() {
   check_source_edit(song, {"tempo change", edit, edit});
 }
 
+// A tempo ramp drawn on the tempo lane (ADR-0112) switches like any tempo
+// change: from the switch, everything plays along the ramp.
+void tempo_ramp_moves_what_follows() {
+  Song song;
+  const auto opening = song.saved.tempo.events().front().bpm;
+  const auto tempo = take(timeline::TempoMap::create(
+      {{{0}, opening, timeline::TempoShape::ease_in_out},
+       {tick(song.saved, song_blocks), edited_bpm, timeline::TempoShape::step}},
+      song.saved.tempo.revision() + 1));
+  const std::vector<project::Operation> edit{project::ReplaceTempoMap{tempo}};
+  check_source_edit(song, {"tempo ramp", edit, edit});
+}
+
 void meter_change_switches_with_its_source() {
   Song song;
   const auto meter = take(timeline::MeterMap::create(
@@ -815,6 +828,7 @@ int main(int argc, char** argv) {
        {"track_remove_fades_out_then_switches", track_remove_fades_out_then_switches},
        {"track_remove_fades_out_over_its_level_lane", track_remove_fades_out_over_its_level_lane},
        {"tempo_change_moves_what_follows", tempo_change_moves_what_follows},
+       {"tempo_ramp_moves_what_follows", tempo_ramp_moves_what_follows},
        {"meter_change_switches_with_its_source", meter_change_switches_with_its_source},
        {"midi_edit_with_a_level_lane_switches_whole", midi_edit_with_a_level_lane_switches_whole},
        {"instrument_change_rings_out_the_old_one", instrument_change_rings_out_the_old_one},

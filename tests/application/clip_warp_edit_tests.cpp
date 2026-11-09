@@ -846,6 +846,277 @@ void transpose_splits_into_semitones_and_cents() {
 // reports a skip in builds without it.
 constexpr std::string_view rate_conversion_case = "rate-conversion";
 
+// --- Marker commands and tempo ramps on the arrangement (ADR-0112) ------------
+
+// Fixture positions in project frames of the one-second, 48 kHz clip.
+constexpr std::uint64_t first_marker = 12'000;
+constexpr std::uint64_t second_marker = 30'000;
+constexpr std::uint64_t clip_frames = 48'000;
+// A tempo read back from frame positions, to a hundredth of a BPM.
+constexpr double bpm_tolerance = 0.01;
+
+[[nodiscard]] bool same_tempo(const std::vector<timeline::TempoEvent>& left,
+                              const std::vector<timeline::TempoEvent>& right) {
+  return std::ranges::equal(left, right, [](const auto& a, const auto& b) {
+    return a.tick == b.tick && a.bpm == b.bpm && a.shape_to_next == b.shape_to_next;
+  });
+}
+
+void slide_moves_the_audio_under_a_marker_that_stays() {
+  Song song;
+  song.apply(take(app::add_warp_marker(song.session->snapshot(), song.clip, first_marker)));
+  song.apply(take(app::add_warp_marker(song.session->snapshot(), song.clip, second_marker)));
+  // The audio playing 2,000 frames earlier now plays at the first marker.
+  constexpr std::uint64_t slid_from = 10'000;
+  const auto revision = song.session->snapshot().revision;
+  song.apply(take(app::slide_warp_marker(song.session->snapshot(), song.clip,
+                                         {.index = 0, .output_frame = slid_from})));
+  auto layout = song.layout();
+  REQUIRE_EQ(song.session->snapshot().revision, revision + 1, "a slide was not one edit");
+  REQUIRE_EQ(layout.markers[0].output_frame, first_marker, "the slid marker left its place");
+  REQUIRE_EQ(layout.markers[0].source_frame, slid_from, "the audio did not slide under the marker");
+  REQUIRE_EQ(layout.markers[1].source_frame, second_marker, "a slide moved the next marker");
+  // Never past a neighbour or a clip end.
+  REQUIRE_FALSE(app::slide_warp_marker(song.session->snapshot(), song.clip,
+                                       {.index = 0, .output_frame = second_marker + 1}),
+                "a slide past the next marker was accepted");
+  REQUIRE_FALSE(
+      app::slide_warp_marker(song.session->snapshot(), song.clip, {.index = 0, .output_frame = 0}),
+      "a slide onto the clip start was accepted");
+  REQUIRE_FALSE(app::slide_warp_marker(song.session->snapshot(), song.clip,
+                                       {.index = 2, .output_frame = slid_from}),
+                "a slide of a missing marker was accepted");
+  REQUIRE_OK(song.session->history().undo(), "the slide did not undo");
+  REQUIRE_EQ(song.layout().markers[0].source_frame, first_marker, "the slide did not undo");
+}
+
+void straight_from_here_keeps_the_segment_tempo_to_the_end() {
+  Song song;
+  constexpr std::uint64_t third_marker = 40'000;
+  for (const auto at : {first_marker, second_marker, third_marker})
+    song.apply(take(app::add_warp_marker(song.session->snapshot(), song.clip, at)));
+  // The first segment now plays its 12,000 source frames over 18,000.
+  constexpr std::uint64_t stretched_to = 18'000;
+  song.apply(take(app::move_warp_marker(song.session->snapshot(), song.clip,
+                                        {.index = 0, .output_frame = stretched_to})));
+
+  // Remove all after: the marker stays, the later ones go, one edit.
+  auto revision = song.session->snapshot().revision;
+  song.apply(take(app::remove_warp_markers_after(song.session->snapshot(), song.clip, 0)));
+  REQUIRE_EQ(song.session->snapshot().revision, revision + 1, "Remove all after was not one edit");
+  REQUIRE_EQ(song.layout().markers.size(), 1, "Remove all after kept a later marker");
+  REQUIRE_FALSE(app::remove_warp_markers_after(song.session->snapshot(), song.clip, 0),
+                "Remove all after on the last marker made an edit");
+  REQUIRE_OK(song.session->history().undo(), "Remove all after did not undo");
+  REQUIRE_EQ(song.layout().markers.size(), 3, "Remove all after did not undo");
+
+  // Straight from here: the 1.5x stretch carries on from the marker, so the
+  // remaining 36,000 source frames take 54,000 and the clip grows to 72,000.
+  constexpr std::uint64_t straightened_end = stretched_to + (clip_frames - first_marker) * 3 / 2;
+  const auto proposal =
+      take(app::straighten_after_warp_marker(song.session->snapshot(), song.clip, 0));
+  revision = song.session->snapshot().revision;
+  REQUIRE_OK(song.session->warp().apply_audio_clip_warp(song.clip, proposal.settings_generation,
+                                                        proposal.placement, proposal.processing),
+             "Straight from here was refused");
+  REQUIRE_EQ(song.session->snapshot().revision, revision + 1,
+             "Straight from here was not one edit");
+  const auto layout = song.layout();
+  REQUIRE_EQ(layout.markers.size(), 1, "Straight from here kept a later marker");
+  REQUIRE_EQ(layout.output_frames, straightened_end, "the tempo did not carry on to the clip end");
+  REQUIRE_EQ(layout.markers[0].output_frame, stretched_to, "Straight from here moved the marker");
+  REQUIRE_OK(song.session->history().undo(), "Straight from here did not undo");
+  REQUIRE_EQ(song.layout().output_frames, clip_frames, "Straight from here did not undo");
+  REQUIRE_EQ(song.layout().markers.size(), 3, "Straight from here did not undo");
+}
+
+void a_segment_sets_the_track_tempo() {
+  Song song;
+  constexpr double project_bpm = 120.0;
+  // Musical at 120 BPM: the second is two quarter notes.
+  REQUIRE_OK(song.session->audio_clips().toggle_audio_clip_timebase(song.clip),
+             "musical timebase toggle failed");
+  review_tempo(song, project_bpm, {});
+  // Half a second of source (24,000 frames) over the clip's last two thirds
+  // (32,000 frames, 4/3 quarter notes at 120): 4/3 quarters per half second.
+  constexpr std::uint64_t marker_source = 24'000;
+  constexpr std::uint64_t marker_output = 16'000;
+  constexpr double segment_bpm = 160.0;
+  song.apply(take(app::add_warp_marker(song.session->snapshot(), song.clip, marker_source)));
+  song.apply(take(app::move_warp_marker(song.session->snapshot(), song.clip,
+                                        {.index = 0, .output_frame = marker_output})));
+  const auto bpm = take(app::warp_segment_source_bpm(song.session->snapshot(), song.clip, 0));
+  REQUIRE_NEAR(bpm, segment_bpm, bpm_tolerance, "the segment's own tempo is wrong");
+  REQUIRE_FALSE(app::warp_segment_source_bpm(song.session->snapshot(), song.clip, 1),
+                "a missing marker's segment had a tempo");
+  const auto revision = song.session->snapshot().revision;
+  REQUIRE_OK(song.session->warp().set_audio_clip_source_bpm(song.clip, bpm),
+             "Set tempo from this segment was refused");
+  REQUIRE_EQ(song.session->snapshot().revision, revision + 1,
+             "Set tempo from this segment was not one edit");
+  REQUIRE_NEAR(*song.session->snapshot().source_tempo_reviews.front().corrected_bpm, segment_bpm,
+               bpm_tolerance, "the track tempo is not the segment's");
+  REQUIRE_OK(song.session->history().undo(), "Set tempo from this segment did not undo");
+  REQUIRE_FALSE(song.session->snapshot().source_tempo_reviews.front().corrected_bpm.has_value(),
+                "Set tempo from this segment did not undo");
+}
+
+// Seconds into a linear BPM ramp after `quarters` of its `length` quarter
+// notes, from `first` to `last` BPM (the integral of 60 / bpm).
+double ramp_seconds(double quarters, double length, double first, double last) {
+  const auto delta = last - first;
+  return 60.0 * length / delta * std::log1p(delta * quarters / (length * first));
+}
+
+void a_drawn_ramp_is_one_step_and_clips_follow_it() {
+  Song song;
+  constexpr auto quarter = timeline::ticks_per_quarter;
+  constexpr double opening_bpm = 120.0;
+  constexpr double ramp_end_bpm = 90.0;
+  constexpr double other_bpm = 100.0;
+  constexpr std::int64_t ramp_from = 4 * quarter;
+  constexpr std::int64_t ramp_to = 12 * quarter;
+  constexpr std::int64_t inside_ramp = 8 * quarter;
+  auto& tempo = song.session->song();
+  REQUIRE_OK(tempo.set_tempo_event({inside_ramp}, other_bpm, timeline::TempoShape::step),
+             "fixture tempo event was refused");
+  const auto before = song.session->snapshot().tempo.events();
+
+  // A musical clip from the ramp's start with a marker two beats in.
+  constexpr std::int64_t marker_tick = 2 * quarter;
+  constexpr std::uint64_t marker_source = 24'000;
+  auto processing = song.session->snapshot().tracks.front().clips.front().processing;
+  processing.reviewed_warp_markers.push_back(
+      {{marker_source}, timeline::TickPosition{marker_tick}});
+  REQUIRE_OK(song.session->warp().apply_audio_clip_warp(
+                 song.clip,
+                 song.session->snapshot().tracks.front().clips.front().settings_generation,
+                 project::MusicalInterval{{ramp_from}, {ramp_from + 4 * quarter}}, processing),
+             "fixture musical clip was refused");
+
+  const auto revision = song.session->snapshot().revision;
+  REQUIRE_OK(
+      tempo.set_tempo_ramp({ramp_from}, {ramp_to}, ramp_end_bpm, timeline::TempoShape::linear_bpm),
+      "a drawn ramp was refused");
+  REQUIRE_EQ(song.session->snapshot().revision, revision + 1, "a drawn ramp was not one edit");
+  const auto& events = song.session->snapshot().tempo.events();
+  REQUIRE_EQ(events.size(), 3, "the ramp kept a point inside it");
+  REQUIRE_EQ(events[1].tick.value, ramp_from, "the ramp does not start where it was drawn");
+  REQUIRE_EQ(events[1].bpm, opening_bpm, "the ramp did not start from the tempo playing there");
+  REQUIRE_EQ(events[1].shape_to_next, timeline::TempoShape::linear_bpm, "the ramp lost its shape");
+  REQUIRE_EQ(events[2].tick.value, ramp_to, "the ramp does not end where it was drawn");
+  REQUIRE_EQ(events[2].bpm, ramp_end_bpm, "the ramp does not reach its end tempo");
+  REQUIRE_EQ(events[2].shape_to_next, timeline::TempoShape::step, "the ramp's end does not hold");
+
+  // The marker plays where the ramp puts its beat: two seconds of 120 BPM,
+  // then two quarter notes into an eight-quarter 120 -> 90 ramp.
+  const auto ramp_length = static_cast<double>(ramp_to - ramp_from) / quarter;
+  const auto expected = (static_cast<double>(ramp_from) / quarter * 60.0 / opening_bpm +
+                         ramp_seconds(static_cast<double>(marker_tick) / quarter, ramp_length,
+                                      opening_bpm, ramp_end_bpm)) *
+                        oscillate::test::sample_rate_48k;
+  const auto layout = song.layout();
+  REQUIRE_NEAR(static_cast<double>(layout.project_start + layout.markers.front().output_frame),
+               expected, 1.0, "the warp marker did not follow the ramp");
+
+  REQUIRE_OK(song.session->history().undo(), "the ramp did not undo");
+  REQUIRE_TRUE(same_tempo(song.session->snapshot().tempo.events(), before),
+               "the ramp did not undo exactly");
+
+  // Dragging a point is one edit; the first point stays at the start.
+  REQUIRE_OK(tempo.move_tempo_event({inside_ramp}, {ramp_to}, ramp_end_bpm),
+             "moving a tempo point was refused");
+  REQUIRE_EQ(song.session->snapshot().tempo.events().back().tick.value, ramp_to,
+             "the tempo point did not move");
+  REQUIRE_FALSE(tempo.move_tempo_event({0}, {ramp_from}, opening_bpm),
+                "the opening tempo point left the start");
+  REQUIRE_OK(song.session->history().undo(), "moving a tempo point did not undo");
+  REQUIRE_TRUE(same_tempo(song.session->snapshot().tempo.events(), before),
+               "moving a tempo point did not undo");
+
+  // Removing the end of a ramp leaves the point before it holding.
+  REQUIRE_OK(
+      tempo.set_tempo_ramp({ramp_from}, {ramp_to}, ramp_end_bpm, timeline::TempoShape::ease_in_out),
+      "an S-curve ramp was refused");
+  REQUIRE_OK(tempo.remove_tempo_event({ramp_to}), "removing a ramp's end was refused");
+  REQUIRE_EQ(song.session->snapshot().tempo.events().back().shape_to_next,
+             timeline::TempoShape::step, "the last tempo point still ramps to nothing");
+}
+
+// Two eight-bar tracks at 128 BPM; the second starts two bars before the
+// first ends, so they overlap for two bars.
+void ramp_to_this_tracks_tempo_spans_the_transition() {
+  constexpr std::uint32_t rate = oscillate::test::sample_rate_48k;
+  constexpr double track_bpm = 128.0;
+  constexpr auto quarter = timeline::ticks_per_quarter;
+  constexpr auto bar = 4 * quarter;
+  constexpr std::int64_t bars_per_track = 8;
+  constexpr std::int64_t incoming_bar = 6;
+  // Eight bars at 128 BPM, to the frame.
+  constexpr auto track_frames =
+      static_cast<std::uint32_t>(bars_per_track * 4 * 60 * rate / track_bpm);
+  Directory directory;
+  auto session = take(app::ProjectSession::create(directory.path() / "song"));
+  const auto wav = make_wav(directory.path(), track_frames, rate);
+  for (int track = 0; track < 2; ++track) {
+    const int fd = ::open(wav.c_str(), O_RDONLY | O_CLOEXEC);
+    REQUIRE_GE(fd, 0, "fixture import failed");
+    REQUIRE_OK(session->imports().import_wav_audio(fd), "fixture import failed");
+    (void)::close(fd);
+  }
+  const auto outgoing = session->snapshot().tracks[0].clips.front().id;
+  const auto incoming = session->snapshot().tracks[1].clips.front().id;
+  REQUIRE_FALSE(session->song().ramp_to_clip_tempo(incoming),
+                "a ramp was planned before the track had a tempo");
+  for (const auto& source : session->snapshot().sources) {
+    oscillate::analysis::TempoEstimate estimate;
+    estimate.identity = {take(app::tempo_cache_key(source)).hex(), 1};
+    estimate.sample_rate = source.sample_rate;
+    estimate.frames = source.frames;
+    estimate.bpm = track_bpm;
+    estimate.confidence = 0.9;
+    REQUIRE_OK(session->source_analysis().accept_source_tempo_analysis(
+                   source.id, session->snapshot().revision, estimate),
+               "tempo review fixture was rejected");
+  }
+  const auto place = [&](project::ClipId clip, std::int64_t first_bar) {
+    const auto* found = &session->snapshot().tracks[0].clips.front();
+    for (const auto& track : session->snapshot().tracks)
+      for (const auto& candidate : track.clips)
+        if (candidate.id == clip)
+          found = &candidate;
+    REQUIRE_OK(
+        session->warp().apply_audio_clip_warp(
+            clip, found->settings_generation,
+            project::MusicalInterval{{first_bar * bar}, {(first_bar + bars_per_track) * bar}},
+            found->processing),
+        "fixture placement was refused");
+  };
+  place(outgoing, 0);
+  place(incoming, bars_per_track);
+  REQUIRE_FALSE(session->song().ramp_to_clip_tempo(incoming),
+                "a ramp was planned without a transition");
+  place(incoming, incoming_bar);
+
+  const auto planned = take(app::plan_transition_ramp(session->snapshot(), incoming));
+  REQUIRE_EQ(planned.from.value, incoming_bar * bar, "the ramp does not start with the transition");
+  REQUIRE_EQ(planned.to.value, bars_per_track * bar, "the ramp does not end with the transition");
+  REQUIRE_EQ(planned.bpm, track_bpm, "the ramp does not end at the track's tempo");
+  const auto before = session->snapshot().tempo.events();
+  const auto revision = session->snapshot().revision;
+  REQUIRE_OK(session->song().ramp_to_clip_tempo(incoming), "Ramp to this track's tempo failed");
+  REQUIRE_EQ(session->snapshot().revision, revision + 1,
+             "Ramp to this track's tempo was not one edit");
+  const auto& events = session->snapshot().tempo.events();
+  REQUIRE_EQ(events.size(), 3, "the transition ramp is not one ramp");
+  REQUIRE_EQ(events[1].shape_to_next, app::transition_ramp_shape,
+             "the transition ramp has the wrong shape");
+  REQUIRE_EQ(events.back().bpm, track_bpm, "the mix does not land at the track's tempo");
+  REQUIRE_OK(session->history().undo(), "Ramp to this track's tempo did not undo");
+  REQUIRE_TRUE(same_tempo(session->snapshot().tempo.events(), before),
+               "Ramp to this track's tempo did not undo exactly");
+}
+
 int main(int argc, char** argv) {
   try {
     if (argc > 1 && std::string_view(argv[1]) == rate_conversion_case) {
@@ -868,6 +1139,11 @@ int main(int argc, char** argv) {
     trim_keeps_marker_timing_and_never_drops_a_marker();
     slip_moves_audio_with_its_markers();
     musical_split_and_trim_rebase_ticks();
+    slide_moves_the_audio_under_a_marker_that_stays();
+    straight_from_here_keeps_the_segment_tempo_to_the_end();
+    a_segment_sets_the_track_tempo();
+    a_drawn_ramp_is_one_step_and_clips_follow_it();
+    ramp_to_this_tracks_tempo_spans_the_transition();
   } catch (const std::exception& error) {
     std::fprintf(stderr, "%s\n", error.what());
     return 1;
