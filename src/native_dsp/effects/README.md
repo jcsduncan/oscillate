@@ -75,6 +75,16 @@ cloud) on a 16-line feedback delay network, with freeze.
 
 ![Expanse panel](../../../docs/images/effects/expanse.png)
 
+### Cast
+
+Convolution reverb with zero latency: bundled modelled rooms, halls, plates and
+a spring, or a user's IR (mono, stereo, or true stereo from two stereo files),
+shaped by start, length, stretch, decay, fade in and reverse, with pre-delay,
+tone, width and ducking.
+[ADR-0115](../../../docs/decisions/0115-cast-convolution-reverb.md)
+
+![Cast panel](../../../docs/images/effects/cast.png)
+
 ## EQ and dynamics
 
 ### Shape
@@ -117,6 +127,15 @@ under the ceiling, delta, stereo link and a level-matched compare.
 [ADR-0113](../../../docs/decisions/0113-edge-adjustable-ceiling.md)
 
 ![Edge panel](../../../docs/images/effects/edge.png)
+
+### Hush
+
+Gate and downward expander: hysteresis and hold so it never chatters,
+lookahead, a range down to a full mute, a key filtered by a high-pass and
+low-pass or taken from a sidechain, stereo link, listen and flip.
+[ADR-0116](../../../docs/decisions/0116-hush-gate-expander.md)
+
+![Hush panel](../../../docs/images/effects/hush.png)
 
 ### Temper
 

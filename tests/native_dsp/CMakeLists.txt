@@ -92,20 +92,6 @@ oscillate_add_test_executable(oscillate_spectrum_tests SOURCES spectrum_tests.cp
   LIBS oscillate::native_dsp
   TEST native_spectrum_contract)
 
-if(OSCILLATE_BUILD_CONVOLUTION_DSP)
-  oscillate_add_test_executable(oscillate_convolution_tests SOURCES convolution_tests.cpp
-    LIBS oscillate::convolution_dsp)
-  if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_definitions(oscillate_convolution_tests PRIVATE CONVOLUTION_WRAP_MALLOC)
-    target_link_options(oscillate_convolution_tests PRIVATE -Wl,--wrap=malloc)
-  endif()
-  oscillate_add_test(NAME native_convolution_contract COMMAND oscillate_convolution_tests)
-
-  oscillate_add_test_executable(oscillate_convolution_ir_tests SOURCES convolution_ir_tests.cpp
-    LIBS oscillate::convolution_ir OpenSSL::Crypto
-    TEST native_convolution_ir_admission)
-endif()
-
 oscillate_add_test_executable(oscillate_synth_switch_tests SOURCES synth_switch_tests.cpp
   LIBS oscillate::synth_engines
   TEST native_synth_switch_contract)
@@ -587,6 +573,61 @@ oscillate_add_case_tests(native_edge_contract oscillate_edge_tests
   hostile_input_stays_finite
   presets_stay_restrained
   a_seek_starts_clean
+  the_callback_never_allocates
+  telemetry_feeds_the_panel)
+
+# Hush (ADR-0116): the gate and expander.
+oscillate_add_test_executable(oscillate_hush_tests SOURCES hush_tests.cpp
+  LIBS oscillate::native_effects)
+oscillate_add_case_tests(native_hush_contract oscillate_hush_tests
+  CASES
+  descriptor_registry_and_presets
+  closed_is_exactly_the_range
+  open_is_unity
+  no_chatter_at_the_threshold
+  attack_hold_and_release_are_timed
+  the_expander_follows_its_ratio
+  lookahead_opens_before_the_transient
+  the_key_filter_keeps_bleed_out
+  an_external_key_drives_it
+  listen_plays_the_filtered_key
+  stereo_link_shares_the_gain
+  flip_ducks
+  any_block_split_renders_the_same
+  export_equals_live
+  hostile_input_stays_finite
+  presets_stay_restrained
+  a_seek_starts_clean
+  the_callback_never_allocates
+  telemetry_feeds_the_panel)
+
+# Cast (ADR-0115): the convolution reverb.
+oscillate_add_test_executable(oscillate_cast_tests SOURCES cast_tests.cpp
+  LIBS oscillate::native_effects)
+oscillate_add_case_tests(native_cast_contract oscillate_cast_tests
+  CASES
+  descriptor_registry_and_presets
+  mono_ir_matches_the_direct_sum
+  stereo_ir_matches_the_direct_sum
+  true_stereo_ir_matches_the_direct_sum
+  latency_is_zero
+  true_stereo_keeps_each_input_apart
+  any_block_split_renders_the_same
+  export_equals_live
+  bundled_irs_decay_as_modelled
+  stretch_lengthens_and_decay_shortens
+  start_length_and_reverse_shape_the_ir
+  normalise_levels_the_irs
+  predelay_delays_the_wet
+  tone_and_width_shape_the_wet
+  ducking_follows_the_key
+  the_mix_is_equal_power
+  a_new_ir_crossfades_in
+  the_tail_is_reported
+  live_ir_edits_recompile
+  a_resampled_file_plays_at_the_session_rate
+  hostile_input_stays_finite
+  presets_stay_restrained
   the_callback_never_allocates
   telemetry_feeds_the_panel)
 

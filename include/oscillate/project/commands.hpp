@@ -266,14 +266,14 @@ struct MoveVst3Plugin {
 struct AddNativeEffect {
   SignalPathId path;
   std::size_t index;
-  NativeEffectProcessor processor;
+  NativeEffectPatch processor;
 };
 // Replaces only the settings of an existing native insert. The saved generation
 // advances monotonically; the caller's processor generation is not authoritative.
 struct SetNativeEffectSettings {
   SignalPathId path;
   InsertSlotId id;
-  NativeEffectProcessor processor;
+  NativeEffectPatch processor;
 };
 struct MoveEffectInsert {
   SignalPathId path;

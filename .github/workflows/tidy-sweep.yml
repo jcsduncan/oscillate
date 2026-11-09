@@ -60,7 +60,6 @@ jobs:
           -DOSCILLATE_BUILD_CODEC_ADAPTER=ON
           -DOSCILLATE_BUILD_EXPORT_RESAMPLER=ON
           -DOSCILLATE_BUILD_SOURCE_RESAMPLER=ON
-          -DOSCILLATE_BUILD_CONVOLUTION_DSP=ON
       # A header's finding repeats for every source that includes it, so the
       # shard also keeps each distinct finding once.
       - name: clang-tidy on this shard

@@ -27,7 +27,7 @@ never reused. 0070 was never assigned.
 | 0017 | [Live VST3 track composition](0017-live-vst3-track-composition-proposal.md) | Superseded by ADR-0050 |
 | 0018 | [Bounded routed mixer handoff](0018-routed-mixer-publication.md) | Accepted; implemented |
 | 0019 | [Persisted automation identity and preparation](0019-persisted-automation-contract.md) | Accepted; implemented |
-| 0020 | [Convolution reverb core and FFT boundary](0020-convolution-reverb.md) | Accepted; offline export only, as an opt-in build; not in release packages |
+| 0020 | [Convolution reverb core and FFT boundary](0020-convolution-reverb.md) | Superseded by ADR-0115 |
 | 0021 | [Stable send-gain automation binding](0021-send-gain-automation.md) | Implemented; focused live/offline qualification complete |
 | 0022 | [Custom Qt Quick UI for the DAW](0022-qt-quick-ui-direction.md) | Accepted for the production UI direction; module and packaging qualification open |
 | 0023 | [Unified insert chain and visible buses](0023-unified-insert-chain-and-bus-ui.md) | Accepted; implemented through ADR-0043 and ADR-0050 |
@@ -54,7 +54,7 @@ never reused. 0070 was never assigned.
 | 0044 | [Lumen: wavetable synth (third native engine)](0044-lumen-wavetable-synth.md) | Superseded by ADR-0057 |
 | 0045 | [The development build](0045-development-build.md) | Accepted and implemented |
 | 0046 | [The workspace redesign](0046-workspace-redesign.md) | Accepted and implemented |
-| 0047 | [The classic processors become engines](0047-classic-processors-as-engines.md) | Accepted and implemented; convolution remains its own kind |
+| 0047 | [The classic processors become engines](0047-classic-processors-as-engines.md) | Accepted and implemented; convolution became Cast (ADR-0115) |
 | 0048 | [Parallel real-time rendering](0048-parallel-audio-rendering.md) | Superseded in part by ADR-0110 (default worker count); otherwise accepted and implemented |
 | 0049 | [Live graph switching and latency handover](0049-live-graph-switching.md) | Accepted and implemented; every chain switches live (ADR-0050); held path removed (ADR-0094) |
 | 0050 | [One chain per track](0050-one-chain-per-track.md) | Accepted and implemented; export has two VST3 renderers; superseded in part by ADR-0093 for MIDI while playing |
@@ -117,3 +117,5 @@ never reused. 0070 was never assigned.
 | 0112 | [Warp markers and the tempo lane on the arrangement](0112-warp-markers-and-tempo-lane-on-the-arrangement.md) | Accepted; implemented |
 | 0113 | [Edge: an adjustable ceiling](0113-edge-adjustable-ceiling.md) | Accepted; implemented |
 | 0114 | [Stick: sampled multi-mic acoustic drums](0114-stick-sampled-drums.md) | Accepted; implemented |
+| 0115 | [Cast: a zero-latency convolution reverb on the native effect platform, with bundled modelled IRs and user IRs](0115-cast-convolution-reverb.md) | Accepted; implemented |
+| 0116 | [Hush: a gate and downward expander with hysteresis, hold, lookahead and a filtered key](0116-hush-gate-expander.md) | Accepted; implemented |

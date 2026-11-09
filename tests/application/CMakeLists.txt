@@ -86,6 +86,7 @@ set(project_session_cases
   session_redo_restores_undone_edit_and_rejects_stale_history
   native_synth_media_import_is_atomic_and_undoable
   native_synth_media_import_runs_on_a_worker
+  native_effect_media_import_is_atomic_and_undoable
   crate_sample_import_sets_state_in_one_step
   accepted_media_import_survives_save_failure
   midi_clip_notes_replace_in_one_undo_step
@@ -242,12 +243,6 @@ oscillate_add_case_tests(application_routed_playback oscillate_application_route
 oscillate_add_test_executable(oscillate_application_prepared_tail_tests SOURCES prepared_route_tail_tests.cpp
   LIBS oscillate::application oscillate::export
   TEST application_prepared_route_tail)
-
-if(OSCILLATE_BUILD_CONVOLUTION_DSP)
-  oscillate_add_test_executable(oscillate_application_routed_live_convolution_tests SOURCES routed_live_convolution_tests.cpp
-    LIBS oscillate::application oscillate::persistence
-    TEST application_routed_live_convolution)
-endif()
 
 oscillate_add_test_executable(oscillate_application_routed_device_tests SOURCES routed_audio_source_tests.cpp
   LIBS oscillate::application

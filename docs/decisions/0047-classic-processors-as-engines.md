@@ -1,6 +1,6 @@
 # ADR-0047 — The classic processors become engines
 
-**Status:** Accepted and implemented for EQ, compressor, limiter and reverb (schema 1.37). Convolution remains its own kind. **Date:** 20 October 2026.
+**Status:** Accepted and implemented for EQ, compressor, limiter and reverb (schema 1.37); convolution superseded by [ADR-0115](0115-cast-convolution-reverb.md). **Date:** 20 October 2026.
 **Completes:** ADR-0043 (one native insert path).
 
 ## Context
@@ -42,4 +42,4 @@ Order: EQ, compressor and limiter first, since nothing else covers them. Then re
 - **Reverb.** Expanse covers it; the classic reverb was deleted without a parity engine, since a bit-exact copy of a weaker reverb has no value once Expanse exists.
 - **Live edits.** The general built-in chain rebuild replaces the classic-only live paths: any built-in chain edit with unchanged latency applies at a held block boundary, keeping unchanged stages running.
 - **Direct playback.** The direct instrument graph has no master effects; projects with any master effect play through the routed graph.
-- **Convolution** keeps its own kind and route contract for now.
+- **Convolution** is the Cast engine ([ADR-0115](0115-cast-convolution-reverb.md)).

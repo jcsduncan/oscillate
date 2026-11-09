@@ -36,6 +36,19 @@ public:
   [[nodiscard]] foundation::Result<void> import_native_synth_media(
       project::TrackId track, std::string_view slot, int input_fd,
       std::optional<std::vector<project::NativeRegion>> regions = std::nullopt);
+  // The same for a built-in effect slot (ADR-0115; Cast's impulse
+  // response) on a track or the master: the file becomes a managed source
+  // and media slot `slot` of the effect's document (and of every effect
+  // linked with it) plays it, in one undo step, then saves. The engine
+  // resolves the new patch before anything changes. Finish with
+  // finish_native_synth_media_import, without regions or state.
+  [[nodiscard]] foundation::Result<NativeSynthMediaImportTask>
+  begin_native_effect_media_import(project::SignalPathId path, project::InsertSlotId effect,
+                                   std::string_view slot, int input_fd);
+  [[nodiscard]] foundation::Result<void> import_native_effect_media(project::SignalPathId path,
+                                                                    project::InsertSlotId effect,
+                                                                    std::string_view slot,
+                                                                    int input_fd);
   // Stages a same-rate pinned WAV descriptor, adds one audio track and clip at
   // timeline zero in one undo step, then saves. An accepted edit and receipt
   // remain in memory for save() retry if persistence fails.
@@ -71,6 +84,14 @@ public:
   finish_external_source_relink(PreparedExternalSourceRelink&& prepared);
 
 private:
+  [[nodiscard]] foundation::Result<NativeSynthMediaImportTask>
+  begin_media_import(NativeMediaTarget target, std::string_view slot, int input_fd);
+  // The operations that point the target's media slot at `reference`.
+  [[nodiscard]] foundation::Result<std::vector<project::Operation>>
+  media_operations(const PreparedNativeSynthMediaImport& prepared,
+                   const project::ManagedAudioReference& reference,
+                   std::optional<std::vector<project::NativeRegion>> regions,
+                   std::optional<NativeSynthMediaState> state);
   [[nodiscard]] foundation::Result<project::TrackId>
   finish_audio_import(persistence::StagedWav&& stage, std::uint64_t origin_revision,
                       project::TrackId track, project::ClipId clip, bool encoded,

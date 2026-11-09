@@ -405,7 +405,7 @@ validate_parameters(const std::vector<Vst3ParameterReference>& parameters) {
 }
 
 // Structure only: the engine resolves ids, ranges and the document's
-// meaning (ADR-0040, ADR-0058). Effects have no media.
+// meaning (ADR-0040, ADR-0058), including which media slots it plays.
 [[nodiscard]] Result<void> validate_native_effect_patch(const NativeEffectPatch& effect,
                                                         const Snapshot& snapshot) {
   std::set<std::string_view> ids;
@@ -419,28 +419,7 @@ validate_parameters(const std::vector<Vst3ParameterReference>& parameters) {
       (!effect.link.empty() && !valid_native_identifier(effect.link))) {
     return Result<void>::failure(invalid("invalid built-in effect patch"));
   }
-  if (!effect.document.media.empty()) {
-    return Result<void>::failure(invalid("built-in effects have no media"));
-  }
   return validate_native_document(effect.document, snapshot);
-}
-
-[[nodiscard]] Result<void> validate_native_convolution(const NativeConvolution& effect,
-                                                       const Snapshot& snapshot) {
-  const auto& ir = effect.ir;
-  if (effect.generation == 0 || !std::isfinite(effect.wet) || effect.wet < 0.0 ||
-      effect.wet > 1.0 || ir.encoded_bytes < 44 || ir.encoded_bytes > 16ULL * 1024 * 1024 ||
-      (ir.sample_rate != 44'100 && ir.sample_rate != 48'000 && ir.sample_rate != 88'200 &&
-       ir.sample_rate != 96'000) ||
-      (ir.channels != 1 && ir.channels != 2) || ir.frames == 0 ||
-      ir.frames > 2ULL * ir.sample_rate) {
-    return Result<void>::failure(invalid("invalid convolution IR identity or settings"));
-  }
-  const auto* source = managed_audio_source(ir, snapshot);
-  if (source == nullptr || source->encoding != SourceEncoding::wav) {
-    return Result<void>::failure(invalid("convolution IR does not match a managed source record"));
-  }
-  return Result<void>::success();
 }
 
 [[nodiscard]] bool has_clip_id(const Snapshot& state, ClipId id) {

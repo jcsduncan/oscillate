@@ -7,6 +7,7 @@
 #include "oscillate/application/tempo_cache.hpp"
 #include "oscillate/media/source_rate_reader.hpp"
 #include "oscillate/midi_file/smf.hpp"
+#include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/native_inserts/instrument_binding.hpp"
 #include "session_state.hpp"
 
@@ -61,6 +62,48 @@ using foundation::Result;
   return owner == state.tracks.end()
              ? nullptr
              : std::get_if<project::NativeInstrumentPatch>(&owner->instrument_source);
+}
+
+[[nodiscard]] const std::vector<project::EffectInsert>*
+path_effects(const project::Snapshot& state, const project::SignalPathId& path) {
+  if (std::holds_alternative<project::MasterSignalPath>(path))
+    return &state.master_effects;
+  const auto owner =
+      std::ranges::find(state.tracks, std::get<project::TrackId>(path), &project::Track::id);
+  return owner == state.tracks.end() ? nullptr : &owner->effects;
+}
+
+[[nodiscard]] const project::NativeEffectPatch* effect_patch(const project::Snapshot& state,
+                                                             const project::SignalPathId& path,
+                                                             project::InsertSlotId slot) {
+  const auto* effects = path_effects(state, path);
+  if (effects == nullptr)
+    return nullptr;
+  const auto found = std::ranges::find(*effects, slot, &project::EffectInsert::id);
+  return found == effects->end() ? nullptr
+                                 : std::get_if<project::NativeEffectPatch>(&found->processor);
+}
+
+// Points media slot `slot` of `document` at `reference`, whole.
+void play_in_slot(project::NativeSynthDocument& document, std::string_view slot,
+                  const project::ManagedAudioReference& reference) {
+  auto& media = document.media;
+  const auto found = std::ranges::find(media, slot, &project::NativeMediaSlot::id);
+  if (found != media.end()) {
+    found->media = reference;
+    found->frame_length = 0;
+  } else {
+    media.push_back({std::string(slot), reference, 0});
+  }
+}
+
+// Every effect slot of every track, then the master's.
+template <typename Visit> void for_each_effect(const project::Snapshot& state, Visit visit) {
+  for (const auto& track : state.tracks)
+    for (const auto& insert : track.effects)
+      visit(project::SignalPathId{track.id}, insert);
+  for (const auto& insert : state.master_effects)
+    visit(project::SignalPathId{project::MasterSignalPath{}}, insert);
 }
 
 } // namespace
@@ -311,11 +354,25 @@ ImportService::finish_audio_import(persistence::StagedWav&& stage, std::uint64_t
 Result<NativeSynthMediaImportTask>
 ImportService::begin_native_synth_media_import(project::TrackId track, std::string_view slot,
                                                int input_fd) {
+  if (native_patch(snapshot(), track) == nullptr)
+    return Result<NativeSynthMediaImportTask>::failure(
+        {ErrorCode::unavailable, "Track has no built-in synth"});
+  return begin_media_import(track, slot, input_fd);
+}
+
+Result<NativeSynthMediaImportTask> ImportService::begin_native_effect_media_import(
+    project::SignalPathId path, project::InsertSlotId effect, std::string_view slot, int input_fd) {
+  if (effect_patch(snapshot(), path, effect) == nullptr)
+    return Result<NativeSynthMediaImportTask>::failure(
+        {ErrorCode::unavailable, "No built-in effect in that slot"});
+  return begin_media_import(NativeEffectMediaTarget{path, effect}, slot, input_fd);
+}
+
+Result<NativeSynthMediaImportTask>
+ImportService::begin_media_import(NativeMediaTarget target, std::string_view slot, int input_fd) {
   using R = Result<NativeSynthMediaImportTask>;
   if (state_.repair_state)
     return R::failure(repair_in_progress());
-  if (native_patch(snapshot(), track) == nullptr)
-    return R::failure({ErrorCode::unavailable, "Track has no built-in synth"});
   if (input_fd < 0)
     return R::failure({ErrorCode::invalid_argument, "Choose an audio file"});
   const auto number = next_source_number();
@@ -330,7 +387,72 @@ ImportService::begin_native_synth_media_import(project::TrackId track, std::stri
   if (!stage)
     return R::failure(stage.error());
   return R::success(NativeSynthMediaImportTask(std::move(stage).value(), wav, snapshot().revision,
-                                               track, std::string(slot)));
+                                               target, std::string(slot)));
+}
+
+Result<std::vector<project::Operation>>
+ImportService::media_operations(const PreparedNativeSynthMediaImport& prepared,
+                                const project::ManagedAudioReference& reference,
+                                std::optional<std::vector<project::NativeRegion>> regions,
+                                std::optional<NativeSynthMediaState> state) {
+  using R = Result<std::vector<project::Operation>>;
+  const auto& current = snapshot();
+  const std::string_view slot = prepared.slot_;
+  std::vector<project::Operation> operations;
+  if (const auto* effect = std::get_if<NativeEffectMediaTarget>(&prepared.target_)) {
+    if (regions || state)
+      return R::failure(
+          {ErrorCode::invalid_argument, "A built-in effect's media has no regions or state"});
+    const auto* patch = effect_patch(current, effect->path, effect->slot);
+    if (patch == nullptr)
+      return R::failure({ErrorCode::unavailable, "No built-in effect in that slot"});
+    auto next = *patch;
+    play_in_slot(next.document, slot, reference);
+    if (auto resolved = native_inserts::resolve_native_effect(next); !resolved)
+      return R::failure(resolved.error());
+    // Linked effects share their document (ADR-0058).
+    for_each_effect(current, [&](const project::SignalPathId& path,
+                                 const project::EffectInsert& insert) {
+      const auto* member = std::get_if<project::NativeEffectPatch>(&insert.processor);
+      const bool target = path == effect->path && insert.id == effect->slot;
+      const bool linked = member != nullptr && !patch->link.empty() &&
+                          member->engine == patch->engine && member->link == patch->link;
+      if (!target && !linked)
+        return;
+      auto edited = *member;
+      edited.document = next.document;
+      operations.emplace_back(project::SetNativeEffectSettings{path, insert.id, std::move(edited)});
+    });
+    return R::success(std::move(operations));
+  }
+  const auto track = std::get<project::TrackId>(prepared.target_);
+  const auto* patch = native_patch(current, track);
+  if (patch == nullptr)
+    return R::failure({ErrorCode::unavailable, "Track has no built-in synth"});
+  auto next = *patch;
+  play_in_slot(next.document, slot, reference);
+  if (regions) {
+    std::erase_if(next.document.regions,
+                  [&](const project::NativeRegion& region) { return region.media == slot; });
+    next.document.regions.insert(next.document.regions.end(), regions->begin(), regions->end());
+  }
+  if (state) {
+    next.parameters = std::move(state->values);
+    next.document.labels = std::move(state->labels);
+  }
+  auto resolved = native_inserts::resolve_native_instrument(next);
+  if (!resolved)
+    return R::failure(resolved.error());
+  if (state) {
+    // Stored in canonical form: only non-default values.
+    auto canonical = native_inserts::make_native_patch(
+        *resolved.value().engine, resolved.value().values, std::move(next.document));
+    if (!canonical)
+      return R::failure(canonical.error());
+    next = std::move(canonical).value();
+  }
+  operations.emplace_back(project::SetNativeInstrumentPatch{track, std::move(next)});
+  return R::success(std::move(operations));
 }
 
 Result<void> ImportService::finish_native_synth_media_import(
@@ -344,9 +466,6 @@ Result<void> ImportService::finish_native_synth_media_import(
   if (prepared.origin_revision_ != current.revision || record.id.bits().low != next_source_number())
     return Result<void>::failure(
         {ErrorCode::conflict, "Sound import is stale; retry against the current project"});
-  const auto* patch = native_patch(current, prepared.track_);
-  if (patch == nullptr)
-    return Result<void>::failure({ErrorCode::unavailable, "Track has no built-in synth"});
   if (record.frames == 0 || record.frames > project::max_native_synth_media_frames ||
       record.channels == 0 || record.channels > 2)
     return Result<void>::failure(
@@ -361,45 +480,19 @@ Result<void> ImportService::finish_native_synth_media_import(
   });
   const bool is_new_source = existing == current.sources.end();
   const auto& source = is_new_source ? record : *existing;
-  auto next = *patch;
   const project::ManagedAudioReference reference{source.id,          source.sha256,
                                                  source.byte_length, source.sample_rate,
                                                  source.channels,    source.frames};
-  const std::string_view slot = prepared.slot_;
-  auto& media = next.document.media;
-  const auto found = std::ranges::find(media, slot, &project::NativeMediaSlot::id);
-  if (found != media.end()) {
-    found->media = reference;
-    found->frame_length = 0;
-  } else {
-    media.push_back({std::string(slot), reference, 0});
-  }
-  if (regions) {
-    std::erase_if(next.document.regions,
-                  [&](const project::NativeRegion& region) { return region.media == slot; });
-    next.document.regions.insert(next.document.regions.end(), regions->begin(), regions->end());
-  }
-  if (state) {
-    next.parameters = std::move(state->values);
-    next.document.labels = std::move(state->labels);
-  }
-  auto resolved = native_inserts::resolve_native_instrument(next);
-  if (!resolved)
-    return Result<void>::failure(resolved.error());
-  if (state) {
-    // Stored in canonical form: only non-default values.
-    auto canonical = native_inserts::make_native_patch(
-        *resolved.value().engine, resolved.value().values, std::move(next.document));
-    if (!canonical)
-      return Result<void>::failure(canonical.error());
-    next = std::move(canonical).value();
-  }
+  auto edits = media_operations(prepared, reference, std::move(regions), std::move(state));
+  if (!edits)
+    return Result<void>::failure(edits.error());
   std::vector<project::Operation> operations;
   if (is_new_source) {
     state_.pending_receipts.reserve(state_.pending_receipts.size() + 1);
     operations.emplace_back(project::AddSource{record});
   }
-  operations.emplace_back(project::SetNativeInstrumentPatch{prepared.track_, std::move(next)});
+  for (auto& edit : edits.value())
+    operations.push_back(std::move(edit));
   // Preflight the whole command before the managed asset becomes visible.
   auto candidate = project::ProjectModel::open(current, *state_.gate);
   if (!candidate)
@@ -434,6 +527,19 @@ Result<void> ImportService::import_native_synth_media(
   if (!prepared)
     return Result<void>::failure(prepared.error());
   return finish_native_synth_media_import(std::move(prepared).value(), std::move(regions));
+}
+
+Result<void> ImportService::import_native_effect_media(project::SignalPathId path,
+                                                       project::InsertSlotId effect,
+                                                       std::string_view slot, int input_fd) {
+  auto task = begin_native_effect_media_import(path, effect, slot, input_fd);
+  if (!task)
+    return Result<void>::failure(task.error());
+  // An impulse response is short: staging it here is a brief read and hash.
+  auto prepared = std::move(task).value().run();
+  if (!prepared)
+    return Result<void>::failure(prepared.error());
+  return finish_native_synth_media_import(std::move(prepared).value());
 }
 
 } // namespace oscillate::application

@@ -107,8 +107,8 @@ struct OfflineGraph {
 // Control or worker side. Prepares the snapshot's track chains, routing and
 // master chain for blocks of at most request.max_frames. Built-in effects
 // run, and VST3 effects through request.vst3; without it a saved VST3 effect
-// or instrument fails (see preflight_inserts). The store opens saved
-// convolution impulse responses.
+// or instrument fails (see preflight_inserts). The store decodes built-in
+// synths' and effects' managed media.
 [[nodiscard]] foundation::Result<OfflineGraph>
 prepare_offline_graph(const project::Snapshot& snapshot, const persistence::ProjectStore& store,
                       const OfflineGraphRequest& request);

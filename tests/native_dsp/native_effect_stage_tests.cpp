@@ -1,6 +1,8 @@
 #include "effect_test_support.hpp"
 
 #include "oscillate/engine/graph.hpp"
+#include "oscillate/engine/synth_media.hpp"
+#include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_inserts/effect_stage.hpp"
 #include "oscillate/native_inserts/native_stage.hpp"
 #include "oscillate/project/model.hpp"
@@ -11,6 +13,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -102,6 +108,66 @@ void a_withdrawn_switch_stages_its_lanes_again() {
              "the staged lanes did not play from the switching block");
 }
 
+// An engine that plays media (Cast, ADR-0115) has its document's managed
+// media decoded through the context's loader as its stage is prepared: a
+// path without a loader refuses it, a loader's failure fails the stage, and
+// decoded media reach the engine.
+void a_media_engine_decodes_through_the_loader() {
+  constexpr std::string_view media_slot = "ir";
+  constexpr std::uint64_t ir_frames = 64;
+  constexpr std::uint64_t encoded_bytes = 300;
+  constexpr std::size_t sha256_hex_length = 64;
+  auto tempo = timeline::TempoMap::create({{{0}, 120.0, timeline::TempoShape::step}}, 1);
+  auto meter = timeline::MeterMap::create({{{0}, 4, 4}}, 1);
+  auto project_id = project::ProjectId::from_bits({0, 1});
+  auto source_id = project::SourceId::from_bits({0, 1});
+  REQUIRE_TRUE(tempo && meter && project_id && source_id, "a test project");
+  const project::Snapshot snapshot{
+      project_id.value(), 1, oscillate::test::sample_rate_48k, tempo.value(), meter.value(), {}};
+  const auto* engine = oscillate::native_dsp::effects::find_engine("cast");
+  REQUIRE_NE(engine, nullptr, "Cast is registered");
+  REQUIRE_TRUE(engine->media, "Cast plays media");
+  const project::ManagedAudioReference reference{source_id.value(),
+                                                 std::string(sha256_hex_length, 'a'),
+                                                 encoded_bytes,
+                                                 oscillate::test::sample_rate_48k,
+                                                 oscillate::test::stereo_channels,
+                                                 ir_frames};
+  project::NativeEffectPatch patch{"cast"};
+  patch.document.media.push_back({std::string(media_slot), reference, 0});
+
+  inserts::StageContext context;
+  context.sample_rate = oscillate::test::sample_rate_48k;
+  context.snapshot = &snapshot;
+  const auto unloaded = inserts::prepare_native_stage(patch, context);
+  REQUIRE_TRUE(!unloaded, "a path without a loader refuses managed media");
+  REQUIRE_EQ(unloaded.error().code, foundation::ErrorCode::unsupported,
+             "a path without a loader refuses managed media");
+
+  std::size_t calls = 0;
+  context.media = [&](const project::NativeSynthDocument& document) {
+    ++calls;
+    REQUIRE_EQ(document, patch.document, "the loader decodes the stage's own document");
+    return foundation::Result<engine::SynthMedia>::failure(
+        {foundation::ErrorCode::unavailable, "no store"});
+  };
+  const auto failed = inserts::prepare_native_stage(patch, context);
+  REQUIRE_TRUE(!failed, "a loader's failure fails the stage");
+  REQUIRE_EQ(failed.error().code, foundation::ErrorCode::unavailable,
+             "a loader's failure fails the stage");
+  REQUIRE_EQ(calls, 1U, "the loader runs once per stage");
+
+  context.media = [&](const project::NativeSynthDocument&) {
+    auto asset = std::make_shared<engine::SynthMediaAsset>();
+    asset->source_rate = oscillate::test::sample_rate_48k;
+    asset->frames.assign(ir_frames, engine::StereoFrame{});
+    asset->frames.front() = {1.0F, 1.0F};
+    return foundation::Result<engine::SynthMedia>::success(
+        engine::SynthMedia{{std::string(media_slot), reference.sha256, std::move(asset)}});
+  };
+  REQUIRE_OK(inserts::prepare_native_stage(patch, context), "decoded media reach the engine");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -109,5 +175,7 @@ int main(int argc, char** argv) {
       argc, argv, "native effect stage passed",
       {{"press_listens_to_its_key", [] { press_listens_to_its_key(); }},
        {"a_withdrawn_switch_stages_its_lanes_again",
-        [] { a_withdrawn_switch_stages_its_lanes_again(); }}});
+        [] { a_withdrawn_switch_stages_its_lanes_again(); }},
+       {"a_media_engine_decodes_through_the_loader",
+        [] { a_media_engine_decodes_through_the_loader(); }}});
 }

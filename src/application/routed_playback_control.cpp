@@ -4,7 +4,6 @@
 
 #include "oscillate/application/routed_audio_source.hpp"
 #include "oscillate/foundation/trace.hpp"
-#include "oscillate/native_dsp/convolution_runtime.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/native_inserts/native_stage.hpp"
@@ -174,8 +173,8 @@ using routed_playback::same_timing;
 RoutedPlaybackControl::RoutedPlaybackControl(project::ProjectModel& model,
                                              engine::RoutedMixerLimits limits,
                                              TrackInsertProvider* inserts,
-                                             LiveConvolutionAdmission convolution)
-    : model_(model), limits_(limits), inserts_(inserts), convolution_(convolution),
+                                             std::filesystem::path project_root)
+    : model_(model), limits_(limits), inserts_(inserts), project_root_(std::move(project_root)),
       revisions_(model.snapshot()->revision, 0, ChangeDescriptor{"open project", {}}),
       source_snapshot_(model.snapshot()) {
   limits_.latency.master = 1;
@@ -274,7 +273,6 @@ void RoutedPlaybackControl::settle_live_candidate() {
   published_snapshot_ = std::move(prior.published_snapshot);
   source_snapshot_ = std::move(prior.source_snapshot);
   published_route_plan_ = std::move(prior.route_plan);
-  live_convolution_ = std::move(prior.convolution);
   active_chains_ = std::move(prior.chains);
   vst3_stages_ = std::move(prior.vst3_stages);
   active_vst3_automation_ = std::move(prior.vst3_automation);

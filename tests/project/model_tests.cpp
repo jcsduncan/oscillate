@@ -1814,7 +1814,7 @@ void native_insert_commands_cover_all_signal_paths_and_history() {
   const std::vector<SignalPathId> paths{audio, instrument, group, returns, MasterSignalPath{}};
   for (std::size_t index = 0; index < paths.size(); ++index) {
     const auto& path = paths[index];
-    NativeEffectProcessor processor = NativeEffectPatch{"ceiling"};
+    NativeEffectPatch processor{"ceiling"};
     if (index == 1) {
       processor = NativeEffectPatch{"shape", 1, {{"shape.gain_1", 3.0}}};
     } else if (index == 2) {
@@ -1997,7 +1997,7 @@ void native_insert_settings_preserve_slot_and_history() {
   REQUIRE_EQ(reopened.snapshot()->tracks[0].effects, stable->tracks[0].effects,
              "native settings did not survive project reopen");
 
-  const std::vector<NativeEffectProcessor> replacements{
+  const std::vector<NativeEffectPatch> replacements{
       NativeEffectPatch{"shape", 1, {{"shape.gain_1", -2.0}}, 1},
       NativeEffectPatch{"press", 1, {{"press.ratio", 3.0}}, 99},
       NativeEffectPatch{"expanse", 1, {{"expanse.mix", 0.5}}, 99},
@@ -2027,7 +2027,7 @@ void native_insert_settings_preserve_slot_and_history() {
              "native settings generation followed caller data instead of saved state");
   const auto before_compound = project.snapshot();
   const auto before_compound_depth = project.undo_depth();
-  auto invalid_compressor = std::get<NativeEffectPatch>(replacements[1]);
+  auto invalid_compressor = replacements[1];
   invalid_compressor.parameters[0].value = std::numeric_limits<double>::infinity();
   REQUIRE_TRUE(!project.apply({SetNativeEffectSettings{track, slots[0].id, updated_eq},
                                SetNativeEffectSettings{track, slots[1].id, invalid_compressor}}),
@@ -2061,7 +2061,10 @@ void native_insert_settings_preserve_slot_and_history() {
   REQUIRE_EQ(plugin_project.undo_depth(), 0, "native settings edit replaced a VST3 plugin slot");
 }
 
-void convolution_insert_preserves_identity_and_undo() {
+// A built-in effect's document may play managed media (Cast's impulse
+// response): its identity is kept, a stale or orphaned one is refused and
+// the edit is one undo step.
+void effect_media_preserves_identity_and_undo() {
   FakeGate gate;
   auto project = model(gate);
   const auto track = id<TrackId>(990);
@@ -2069,37 +2072,41 @@ void convolution_insert_preserves_identity_and_undo() {
   REQUIRE_OK(project.apply({AddTrack{track}, AddSource{media}}));
   const ManagedAudioReference reference{media.id,          media.sha256,   media.byte_length,
                                         media.sample_rate, media.channels, media.frames};
-  auto added =
-      take(project.apply({AddNativeEffect{track, 0, NativeConvolution{reference, 0.3, 1}}}));
+  constexpr std::string_view engine = "cast";
+  constexpr std::string_view slot_name = "ir";
+  const auto patch_playing = [&](const ManagedAudioReference& audio) {
+    NativeEffectPatch patch{std::string(engine)};
+    patch.document.media.push_back({std::string(slot_name), audio, 0});
+    return patch;
+  };
+  auto added = take(project.apply({AddNativeEffect{track, 0, patch_playing(reference)}}));
   const auto slot = added.snapshot->tracks[0].effects[0].id;
-  REQUIRE_TRUE(has_convolution_insert(*added.snapshot),
-               "saved convolution insert lost its managed IR identity");
-  REQUIRE_EQ(std::get<NativeConvolution>(added.snapshot->tracks[0].effects[0].processor).ir,
-             reference, "saved convolution insert lost its managed IR identity");
+  const auto saved_media = [](const Snapshot& snapshot) {
+    return std::get<ManagedAudioReference>(
+        std::get<NativeEffectPatch>(snapshot.tracks[0].effects[0].processor)
+            .document.media.front()
+            .media);
+  };
+  REQUIRE_EQ(saved_media(*added.snapshot), reference,
+             "a built-in effect lost its media's managed identity");
   const auto stable = project.snapshot();
   auto bad = reference;
   bad.sha256[0] = 'b';
-  REQUIRE_TRUE(
-      !project.apply({SetNativeEffectSettings{track, slot, NativeConvolution{bad, 0.4, 1}}}),
-      "invalid relink or source deletion changed a referenced convolution IR");
+  REQUIRE_TRUE(!project.apply({SetNativeEffectSettings{track, slot, patch_playing(bad)}}),
+               "a stale media identity reached a built-in effect");
   REQUIRE_TRUE(!project.apply({RemoveSource{media.id}}),
-               "invalid relink or source deletion changed a referenced convolution IR");
-  REQUIRE_EQ(project.snapshot(), stable,
-             "invalid relink or source deletion changed a referenced convolution IR");
-  auto changed = take(
-      project.apply({SetNativeEffectSettings{track, slot, NativeConvolution{reference, 0.7, 1}}}));
+               "a source a built-in effect plays was removed");
+  REQUIRE_EQ(project.snapshot(), stable, "a refused media edit changed the project");
+  auto relinked = patch_playing(reference);
+  relinked.document.media.front().id = "ir_right";
+  auto changed = take(project.apply({SetNativeEffectSettings{track, slot, relinked}}));
   REQUIRE_EQ(
-      std::get<NativeConvolution>(changed.snapshot->tracks[0].effects[0].processor).generation, 2,
-      "convolution wet edit did not advance generation");
-  REQUIRE_EQ(std::get<NativeConvolution>(changed.snapshot->tracks[0].effects[0].processor).wet, 0.7,
-             "convolution wet edit did not advance generation");
+      std::get<NativeEffectPatch>(changed.snapshot->tracks[0].effects[0].processor).generation, 2,
+      "a media edit did not advance the effect's generation");
   REQUIRE_EQ(take(project.undo()).snapshot->tracks[0].effects, stable->tracks[0].effects,
-             "convolution undo or redo lost the IR, slot or generation");
+             "undo or redo lost the effect's media");
   REQUIRE_EQ(take(project.redo()).snapshot->tracks[0].effects, changed.snapshot->tracks[0].effects,
-             "convolution undo or redo lost the IR, slot or generation");
-  REQUIRE_OK(project.apply({SetEffectInsertEnabled{track, slot, false}}));
-  require(has_convolution_insert(*project.snapshot()),
-          "bypassed convolution was lost from unsupported-render detection");
+             "undo or redo lost the effect's media");
 }
 
 void effect_removal_cleans_only_attached_vst3_automation_atomically() {
@@ -2421,7 +2428,7 @@ int main() {
     insert_projection_rejects_invalid_snapshot();
     native_insert_commands_cover_all_signal_paths_and_history();
     native_insert_settings_preserve_slot_and_history();
-    convolution_insert_preserves_identity_and_undo();
+    effect_media_preserves_identity_and_undo();
     effect_removal_cleans_only_attached_vst3_automation_atomically();
     mute_and_delete_tracks_are_undoable();
     clip_processing_is_durable_undoable_and_validated();

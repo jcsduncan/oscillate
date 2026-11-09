@@ -46,7 +46,7 @@ AVX2/FMA runtime dispatch is deferred to milestone A8, which will measure it acr
 ## A2 — FFT and transient detection
 
 **FFT wrapper**
-- `RealFft` wraps the reviewed, pinned and patched PFFFT v1.1.0 target (`docs/dependencies/pffft-convolution.md`). warp_dsp creates that target only if convolution has not already done so.
+- `RealFft` wraps the reviewed, pinned and patched PFFFT v1.1.0 target (`docs/dependencies/pffft-convolution.md`), shared with the native effects.
 - Forward transforms match a naive double-precision DFT within 2e-6·n for sizes 32 to 4096, including the 3- and 5-factor sizes.
 - The inverse round-trips within 1e-5.
 

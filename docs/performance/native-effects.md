@@ -17,6 +17,8 @@
 | Trim | under 0.2% | Gains and two allpasses per channel; stages at rest are bypassed. |
 | Signal | under 0.2% | One oscillator, or noise through the 30-odd first-order pink corners. Creation fits the pink filter in about 15 ms. |
 | Expanse | 5.1–6.5% | 16 lines with two allpasses and two biquads each; Hadamard mixing; shimmer when on. |
+| Cast | 1.2–1.9% at 64 and 128 frames (`oscillate_cast_bench`, true-stereo bundled IRs of 0.4–9.5 s); 99th-percentile block 2.3–5.2% of its period, longest 3.2–12.3%; process CPU (getrusage) equal to the mean | The 64-tap head per route, then each tier's partition products, spread over its next block. |
+| Hush | 0.45–0.55% (0.46–0.56% in 64-frame blocks) | Eight key-filter biquads, the detector and the state per channel; a `pow` only while the gain moves. |
 
 Quality comes first, so nothing is traded for CPU here. The obvious savings, if they're ever needed:
 - **Forge:** a lower oversampling factor while the drive is low.

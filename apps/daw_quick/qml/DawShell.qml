@@ -789,8 +789,7 @@ Window {
                 if (active)
                     setSource("MixerView.qml", { bridge: projectBridge })
             }
-            // "+ Insert" opens the browser for that strip's path; a convolution
-            // insert opens in the arrangement's device chain.
+            // "+ Insert" opens the browser for that strip's path.
             function selectPath(pathId) {
                 shell.selectedTrack = pathId === "master" ? -2
                     : projectBridge.tracks.findIndex(track => track.id === pathId)
@@ -799,11 +798,6 @@ Window {
                 item.browserRequested.connect(function(pathId) {
                     mixerLoader.selectPath(pathId)
                     shell.openPluginBrowser(true)
-                })
-                item.nativeInsertEditorRequested.connect(function(pathId, slotId, kind) {
-                    mixerLoader.selectPath(pathId)
-                    shell.currentView = "arrange"
-                    deviceDock.activeTab = 0
                 })
             }
         }

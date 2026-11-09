@@ -17,8 +17,6 @@ namespace {
 
 [[nodiscard]] QString native_insert_name(project::NativeInsertKind kind) {
   switch (kind) {
-  case project::NativeInsertKind::convolution:
-    return QStringLiteral("Convolution reverb (unavailable)");
   case project::NativeInsertKind::effect:
     return QStringLiteral("Built-in effect");
   }

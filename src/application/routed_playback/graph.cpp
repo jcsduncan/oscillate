@@ -7,11 +7,11 @@
 #include "oscillate/engine/chunked_processor.hpp"
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/foundation/trace.hpp"
-#include "oscillate/native_dsp/convolution_runtime.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/native_inserts/native_stage.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/routing/route_gain_blocks.hpp"
+#include "oscillate/source_prep/synth_media.hpp"
 #include "oscillate/track_chain/track_chain.hpp"
 
 #include <algorithm>
@@ -22,7 +22,6 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <unistd.h>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -67,44 +66,6 @@ constexpr std::uint64_t unbounded_ring_out_seconds = 4;
           prepared.routed_sidechain};
 }
 
-#if OSCILLATE_HAVE_CONVOLUTION
-[[nodiscard]] Result<std::shared_ptr<native_dsp::ConvolutionRuntime>>
-prepare_live_convolution(const project::Snapshot& snapshot, const project::NativeConvolution& saved,
-                         const LiveConvolutionAdmission& admission) {
-  using Runtime = native_dsp::ConvolutionRuntime;
-  using RuntimeResult = Result<std::shared_ptr<Runtime>>;
-  if (!admission.store)
-    return RuntimeResult::failure(
-        {ErrorCode::unavailable,
-         "Live convolution needs a verified IR store and measured headroom"});
-  const auto record =
-      std::ranges::find(snapshot.sources, saved.ir.source, &project::SourceRecord::id);
-  if (record == snapshot.sources.end() || record->external_link ||
-      record->encoding != project::SourceEncoding::wav)
-    return RuntimeResult::failure(
-        {ErrorCode::corrupt_data, "Live convolution IR has no managed WAV source"});
-  auto descriptor = admission.store->open_managed_source(*record);
-  if (!descriptor)
-    return RuntimeResult::failure(descriptor.error());
-  auto prepared = native_dsp::prepare_convolution_ir(
-      descriptor.value(),
-      {saved.ir.sha256, saved.ir.encoded_bytes, saved.ir.sample_rate,
-       static_cast<std::uint16_t>(saved.ir.channels), saved.ir.frames},
-      admission.budget, snapshot.sample_rate, static_cast<float>(saved.wet));
-  const int closed = ::close(descriptor.value());
-  if (!prepared)
-    return RuntimeResult::failure(prepared.error());
-  if (closed != 0)
-    return RuntimeResult::failure({ErrorCode::io_failure, "Cannot close verified live IR"});
-  try {
-    return RuntimeResult::success(std::make_shared<Runtime>(std::move(prepared.value().processor)));
-  } catch (const std::bad_alloc&) {
-    return RuntimeResult::failure(
-        {ErrorCode::resource_exhausted, "Live convolution runtime allocation failed"});
-  }
-}
-#endif
-
 } // namespace
 
 Result<std::uint64_t> automation_sample_limit(const project::Snapshot& snapshot,
@@ -133,52 +94,10 @@ RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot
   const bool structural = replaces_source && capture != nullptr && capture->structural;
   OSCILLATE_TRACE_SPAN("edit.build_and_publish");
   const auto& snapshot = *prepared_snapshot;
-  if (project::has_convolution_insert(snapshot)) {
-#if OSCILLATE_HAVE_CONVOLUTION
-    if (snapshot.master_effects.size() != 1 || !snapshot.master_effects.front().enabled ||
-        !std::holds_alternative<project::NativeConvolution>(
-            snapshot.master_effects.front().processor) ||
-        std::ranges::any_of(snapshot.tracks, [](const auto& track) {
-          return std::ranges::any_of(track.effects, [](const auto& effect) {
-            return std::holds_alternative<project::NativeConvolution>(effect.processor);
-          });
-        }))
-      return fail(snapshot.revision,
-                  {ErrorCode::unsupported, "Live convolution admits one sole master insert"});
-    if ((limits_.max_frames != 64 && limits_.max_frames != 128) ||
-        convolution_.budget.measured_block_frames != limits_.max_frames)
-      return fail(snapshot.revision,
-                  {ErrorCode::resource_exhausted,
-                   "Live convolution has no measurement at the prepared callback block size"});
-    if (live_convolution_ && published_snapshot_ &&
-        published_snapshot_->master_effects != snapshot.master_effects)
-      return fail(snapshot.revision,
-                  {ErrorCode::unsupported,
-                   "Live convolution IR changes need a stopped, freshly measured graph"});
-#else
-    return fail(snapshot.revision,
-                {ErrorCode::unsupported, "This build has no live convolution runtime"});
-#endif
-  } else if (live_convolution_) {
-    return fail(snapshot.revision,
-                {ErrorCode::unsupported,
-                 "Removing live convolution needs a stopped, freshly measured graph"});
-  }
   if (limits_.max_frames == 0 || limits_.max_frames > 8192) {
     return fail(snapshot.revision,
                 {ErrorCode::invalid_argument, "Routed live block limit must be 1..8192"});
   }
-  std::shared_ptr<native_dsp::ConvolutionRuntime> prepared_convolution;
-#if OSCILLATE_HAVE_CONVOLUTION
-  if (project::has_convolution_insert(snapshot) && !live_convolution_) {
-    const auto& saved =
-        std::get<project::NativeConvolution>(snapshot.master_effects.front().processor);
-    auto admitted = prepare_live_convolution(snapshot, saved, convolution_);
-    if (!admitted)
-      return fail(snapshot.revision, admitted.error());
-    prepared_convolution = std::move(admitted).value();
-  }
-#endif
   if (source_snapshot_ && !structural && !same_audio_content(*source_snapshot_, snapshot) &&
       !(replaces_source && published_snapshot_ &&
         audio_clip_edit_only(*published_snapshot_, snapshot))) {
@@ -199,6 +118,22 @@ RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot
   stage_context.automation = automation.value();
   stage_context.max_frames = limits_.max_frames;
   stage_context.last_safe_automation_sample = automation_limit.value();
+  // A built-in effect's managed media (Cast's impulse response) is decoded
+  // from the project's store as its stage is prepared.
+  std::optional<persistence::ProjectStore> media_store;
+  stage_context.media =
+      [&](const project::NativeSynthDocument& document) -> Result<engine::SynthMedia> {
+    if (!media_store) {
+      if (project_root_.empty())
+        return Result<engine::SynthMedia>::failure(
+            {ErrorCode::unavailable, "Built-in effect media needs the project's store"});
+      auto opened = persistence::ProjectStore::open_reader(project_root_);
+      if (!opened)
+        return Result<engine::SynthMedia>::failure(opened.error());
+      media_store.emplace(std::move(opened).value());
+    }
+    return source_prep::load_synth_media(*media_store, snapshot, document);
+  };
   std::vector<std::pair<project::Vst3ParameterTarget, std::uint64_t>> vst3_automation;
   for (const auto& item : automation.value()) {
     if (const auto* target = std::get_if<project::Vst3ParameterTarget>(&item.target()))
@@ -238,10 +173,9 @@ RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot
     track_chain::ChainSwitch change;
   };
   std::vector<Switched> switches;
-  const auto build_chain =
-      [&](std::optional<project::TrackId> track, std::vector<track_chain::SavedStage> saved,
-          std::optional<project::InsertSlotId> sidechain,
-          const std::shared_ptr<native_dsp::ConvolutionRuntime>& convolution) -> Result<void> {
+  const auto build_chain = [&](std::optional<project::TrackId> track,
+                               std::vector<track_chain::SavedStage> saved,
+                               std::optional<project::InsertSlotId> sidechain) -> Result<void> {
     const auto* prior = active_chain(track);
     // A VST3 effect reads the tempo once, when it is prepared: a tempo or
     // meter change replaces it, and the old one rings out (ADR-0101).
@@ -259,23 +193,6 @@ RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot
     track_chain::ChainContext context{stage_context};
     context.detector_slot = sidechain;
     context.fresh_vst3_effects = fresh_vst3;
-#if OSCILLATE_HAVE_CONVOLUTION
-    if (convolution) {
-      context.native.convolution =
-          [&](const project::NativeConvolution& saved_ir) -> Result<native_inserts::PreparedStage> {
-        native_inserts::PreparedStage stage;
-        stage.kind = native_inserts::StageKind::convolution;
-        stage.generation = saved_ir.generation;
-        stage.export_tail_frames = saved_ir.wet == 0.0 ? 0 : convolution->tail_frames();
-        stage.transition_tail_frames =
-            saved_ir.wet == 0.0 ? 1 : std::max<std::uint64_t>(1, convolution->tail_frames());
-        stage.runtime = convolution;
-        return Result<native_inserts::PreparedStage>::success(std::move(stage));
-      };
-    }
-#else
-    (void)convolution;
-#endif
     if (inserts_) {
       const auto owner = track ? "track " + track->to_string() : std::string("the master");
       context.vst3 = [&,
@@ -325,13 +242,12 @@ RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot
         return fail(snapshot.revision,
                     {ErrorCode::unsupported, "Routed effect path has an instrument source"});
       auto built = build_chain(track.id, track_chain::saved_chain(track),
-                               routing::sidechain_target(snapshot, track.id), nullptr);
+                               routing::sidechain_target(snapshot, track.id));
       if (!built)
         return fail(snapshot.revision, built.error());
     }
     auto built =
-        build_chain(std::nullopt, track_chain::saved_chain(snapshot.master_effects), std::nullopt,
-                    prepared_convolution ? prepared_convolution : live_convolution_);
+        build_chain(std::nullopt, track_chain::saved_chain(snapshot.master_effects), std::nullopt);
     if (!built)
       return fail(snapshot.revision, built.error());
     // Every running VST3 stage keeps its host record; new ones were recorded
@@ -381,9 +297,7 @@ RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot
       receipts.insert(receipts.end(), stages.begin(), stages.end());
     }
   }
-  auto route = registry_.compile(snapshot, limits_.latency.max_compensation_frames, receipts,
-                                 static_cast<bool>(live_convolution_) ||
-                                     static_cast<bool>(prepared_convolution));
+  auto route = registry_.compile(snapshot, limits_.latency.max_compensation_frames, receipts);
   if (!route) {
     return fail(snapshot.revision, route.error());
   }
@@ -484,7 +398,6 @@ RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot
                       .published_snapshot = published_snapshot_,
                       .source_snapshot = source_snapshot_,
                       .route_plan = published_route_plan_,
-                      .convolution = live_convolution_,
                       .chains = active_chains_,
                       .vst3_stages = vst3_stages_,
                       .vst3_automation = active_vst3_automation_,
@@ -510,8 +423,6 @@ RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot
   if (replaces_source)
     source_snapshot_ = prepared_snapshot;
   published_snapshot_ = std::move(prepared_snapshot);
-  if (prepared_convolution)
-    live_convolution_ = std::move(prepared_convolution);
   active_chains_ = std::move(chains_next);
   follow_published_notes();
   vst3_stages_ = std::move(vst3_next);
@@ -611,28 +522,14 @@ RoutedPlaybackControl::prepared_route_tail_receipt(std::uint64_t expected_revisi
   return Receipt::success(std::move(receipt));
 }
 
-Result<void> RoutedPlaybackControl::reset_convolution_after_quiesce(std::uint64_t generation) {
-  if (generation == 0 || graph_handoff_in_progress())
-    return rejected(ErrorCode::conflict,
-                    "Convolution reset requires a quiescent graph and nonzero generation");
-#if OSCILLATE_HAVE_CONVOLUTION
-  if (live_convolution_ && !live_convolution_->reset_after_quiesce(generation))
-    return rejected(ErrorCode::conflict,
-                    "Convolution reset generation is stale; current IR history was preserved");
-#endif
-  return Result<void>::success();
-}
-
-Result<void>
-RoutedPlaybackControl::seek_convolution_after_quiesce(audio_io::TransportCursor& cursor,
-                                                      std::uint64_t first_sample) {
+Result<void> RoutedPlaybackControl::seek_after_quiesce(audio_io::TransportCursor& cursor,
+                                                       std::uint64_t first_sample) {
   if (graph_handoff_in_progress())
     return rejected(ErrorCode::conflict,
-                    "Convolution seek requires a quiescent graph after the device callback joins");
-  const auto position = cursor.seek_after_quiesce(first_sample);
-  if (!position)
+                    "A seek requires a quiescent graph after the device callback joins");
+  if (!cursor.seek_after_quiesce(first_sample))
     return rejected(ErrorCode::resource_exhausted, "Transport cannot seek to that sample");
-  return reset_convolution_after_quiesce(position->generation);
+  return Result<void>::success();
 }
 
 } // namespace oscillate::application

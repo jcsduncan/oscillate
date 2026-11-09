@@ -4,7 +4,6 @@
 
 #include "oscillate/application/routed_audio_source.hpp"
 #include "oscillate/automation_project/preparation.hpp"
-#include "oscillate/native_dsp/convolution_runtime.hpp"
 #include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/native_inserts/native_stage.hpp"
 #include "oscillate/track_chain/track_chain.hpp"
@@ -46,15 +45,11 @@ layout_route(routing::ProjectRouteIdRegistry& registry, const project::Snapshot&
         bound.plugin = plugin->id;
       } else if (const auto* patch = std::get_if<project::NativeEffectPatch>(&stage.processor)) {
         bound.generation = patch->generation;
-      } else if (const auto* convolution =
-                     std::get_if<project::NativeConvolution>(&stage.processor)) {
-        bound.processor = routing::StageProcessor::convolution;
-        bound.generation = convolution->generation;
       }
       stages.push_back(bound);
     }
   }
-  return registry.compile(snapshot, max_compensation_frames, stages, true);
+  return registry.compile(snapshot, max_compensation_frames, stages);
 }
 
 [[nodiscard]] bool source_overlay_clip_only(const project::Snapshot& before,

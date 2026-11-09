@@ -301,11 +301,6 @@ RoutedPlayback::prepare_run(const std::filesystem::path& root, project::Snapshot
   if (!model)
     return fail(model.error());
   auto& opened = run->model_.emplace(std::move(model).value());
-  if (project::has_convolution_insert(*opened.snapshot()))
-    return fail({foundation::ErrorCode::unsupported,
-                 "Saved convolution insert remains in the project, but live playback "
-                 "has no qualified device headroom and lifecycle evidence. Use offline "
-                 "export or remove the insert from a copy of the project to play"});
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
   // Both providers exist for the whole run, so an edit may add a plugin of
   // either kind; each saved plugin is scanned and admitted before its first
@@ -347,13 +342,12 @@ RoutedPlayback::prepare_run(const std::filesystem::path& root, project::Snapshot
                                          // recent input when it switches in live (ADR-0049).
                                          .max_processor_input_history_frames = 8192,
                                          .node_meters = true};
-  run->control_ = std::make_unique<application::RoutedPlaybackControl>(opened, limits,
+  application::TrackInsertProvider* inserts = nullptr;
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
-                                                                       run->vst3_.get()
-#else
-                                                                       nullptr
+  inserts = run->vst3_.get();
 #endif
-  );
+  run->control_ =
+      std::make_unique<application::RoutedPlaybackControl>(opened, limits, inserts, root);
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
   run->manual_adoption_ = std::make_unique<ManualAdoption>(*run);
 #endif
@@ -464,7 +458,7 @@ foundation::Result<void> RoutedPlayback::seek_paused(std::uint64_t first_sample)
   if (!paused_)
     return foundation::Result<void>::failure(
         {foundation::ErrorCode::conflict, "Pause playback before seeking"});
-  return control_->seek_convolution_after_quiesce(cursor_, first_sample);
+  return control_->seek_after_quiesce(cursor_, first_sample);
 }
 
 foundation::Result<void> RoutedPlayback::resume() {

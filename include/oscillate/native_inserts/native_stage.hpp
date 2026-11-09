@@ -3,6 +3,7 @@
 #include "oscillate/automation_project/preparation.hpp"
 #include "oscillate/engine/graph.hpp"
 #include "oscillate/engine/midi_events.hpp"
+#include "oscillate/engine/synth_media.hpp"
 #include "oscillate/foundation/error.hpp"
 #include "oscillate/project/model.hpp"
 
@@ -18,15 +19,12 @@
 // insert stages here and only here.
 namespace oscillate::native_inserts {
 
-enum class StageKind : std::uint8_t { convolution, effect };
-
 // How a stage contributes to a master chain's replacement ring-out: the first
 // stage that sets it, a stage that overrides it, or not at all.
 enum class TransitionRule : std::uint8_t { fill_if_unset, override, none };
 
 struct PreparedStage {
   std::shared_ptr<engine::ProcessorRuntime> runtime;
-  StageKind kind = StageKind::effect;
   std::uint64_t generation = 0;
   // Constant processing delay the stage adds.
   std::uint32_t latency_frames = 0;
@@ -42,14 +40,15 @@ struct PreparedStage {
   bool sidechain_capable = false;
 };
 
-// Prepares a convolution stage; live and offline playback admit IRs
-// differently (store, budget, headroom), so they supply it.
-using ConvolutionPreparer =
-    std::function<foundation::Result<PreparedStage>(const project::NativeConvolution&)>;
+// Decodes a built-in effect document's managed media slots off the callback
+// (EffectEngine::media). Live and offline playback supply it from their
+// project store.
+using EffectMediaLoader =
+    std::function<foundation::Result<engine::SynthMedia>(const project::NativeSynthDocument&)>;
 
 struct StageContext {
   std::uint32_t sample_rate = 0;
-  ConvolutionPreparer convolution{};
+  EffectMediaLoader media{};
   // Built-in effects (ADR-0040) need the project's tempo and meter for their
   // musical position, and take their slot's lanes from `automation`.
   const project::Snapshot* snapshot = nullptr;
@@ -65,6 +64,11 @@ prepare_native_stage(const project::EffectInsert& slot, const StageContext& cont
 // built-in effect gets no automation.
 [[nodiscard]] foundation::Result<PreparedStage>
 prepare_native_stage(const project::EffectProcessor& processor, const StageContext& context);
+
+// Control side: frames a built-in effect keeps sounding after its input
+// stops at this rate (its stage's export tail), without preparing it.
+[[nodiscard]] foundation::Result<std::uint64_t>
+native_effect_tail_frames(const project::NativeEffectPatch& patch, std::uint32_t sample_rate);
 
 // True for every processor this factory prepares.
 [[nodiscard]] bool is_native(const project::EffectProcessor& processor) noexcept;

@@ -38,7 +38,7 @@ Exactly these files, uncompressed:
 | --- | --- |
 | `README.txt` | What the bundle is, when it was written, and which of the files below were left out and why. |
 | `session.txt` | This session as a [crash report](crash-reports.md#what-a-report-contains) describes it: Oscillate's version and the Qt version, the time, the kernel, the distribution, the processor count, total memory and the environment variables that change how Oscillate runs. |
-| `build.txt` | The build type and whether this build has each optional feature: the VST3 host, JACK output and real-time export, AIFF/FLAC/MP3 import and export, export and source sample-rate conversion, and convolution reverb. |
+| `build.txt` | The build type and whether this build has each optional feature: the VST3 host, JACK output and real-time export, AIFF/FLAC/MP3 import and export, and export and source sample-rate conversion. |
 | `plugins.txt` | The VST3 scan: for each plug-in its name, version and scan status, and for a bundle that failed to scan its folder name and why (for example `scan timed out`). In the app this is the VST3 browser's last scan in this session; the terminal command scans first. |
 | `logs/` | The application log files, as a crash report includes them: `oscillate.4.log` to `oscillate.1.log`, then `oscillate.log`, the last 1 MiB of each. |
 | `crash-report/` | The newest [crash report](crash-reports.md), if Oscillate has written one. |

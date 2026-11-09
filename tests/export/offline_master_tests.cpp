@@ -396,36 +396,6 @@ void test_mix_formats_and_guards() {
   require(!render_wav_master(changed, store, active, {output}), "empty master rendered");
   REQUIRE_EQ(read_bytes(output), previous, "unsupported content changed existing target");
 
-  auto convolution = snapshot;
-  const auto& ir_source = convolution.sources[0];
-  const project::ManagedAudioReference ir{ir_source.id,          ir_source.sha256,
-                                          ir_source.byte_length, ir_source.sample_rate,
-                                          ir_source.channels,    ir_source.frames};
-  convolution.master_effects.push_back(
-      {id<project::InsertSlotId>(900), false, project::NativeConvolution{ir, 0.4, 1}});
-#if OSCILLATE_HAVE_CONVOLUTION
-  require(take(render_wav_master(convolution, store, active, {output, WavFormat::pcm24, 123})) ==
-                  PublishOutcome::durable &&
-              read_bytes(output) == previous,
-          "bypassed convolution changed the master render");
-  const auto stems = directory.path() / "convolution-stems";
-  REQUIRE_EQ(take(render_wav_stems(convolution, store, active, {stems})), PublishOutcome::durable,
-             "bypassed convolution blocked stem export");
-#else
-  const auto unavailable = render_wav_master(convolution, store, active, {output});
-  REQUIRE_TRUE(!unavailable, "bypassed convolution was silently omitted from master export");
-  REQUIRE_EQ(unavailable.error().code, foundation::ErrorCode::unsupported,
-             "bypassed convolution was silently omitted from master export");
-  REQUIRE_NE(unavailable.error().message.find("convolution"), std::string::npos,
-             "bypassed convolution was silently omitted from master export");
-  REQUIRE_EQ(read_bytes(output), previous,
-             "bypassed convolution was silently omitted from master export");
-  const auto stems = directory.path() / "convolution-stems";
-  REQUIRE_TRUE(!render_wav_stems(convolution, store, active, {stems}),
-               "convolution was silently omitted from stem export");
-  REQUIRE_TRUE(!fs::exists(stems), "convolution was silently omitted from stem export");
-#endif
-
   const auto asset = directory.path() / "project" / "assets" / (receipt.record().sha256 + ".wav");
   auto with_eq = snapshot;
   test_insert::set_master(

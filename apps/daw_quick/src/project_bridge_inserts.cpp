@@ -48,17 +48,13 @@ bool ProjectBridge::insert_chain_edit_enabled() const {
 }
 
 // While playing, any chain takes any edit (add, remove, reorder, switch,
-// built-in or VST3): the changed chain switches live (ADR-0050). Convolution
-// still needs Stop.
+// built-in or VST3): the changed chain switches live (ADR-0050).
 bool ProjectBridge::live_chain_structure_edit_enabled(const QString& track_id) const {
   if (!live_routed_insert_edit_enabled())
     return false;
   const auto& snapshot = session_->snapshot();
   const auto path = editable_effect_path(snapshot, track_id);
-  const auto* effects = path ? effect_slots(snapshot, *path) : nullptr;
-  return effects && std::ranges::none_of(*effects, [](const auto& effect) {
-           return std::holds_alternative<project::NativeConvolution>(effect.processor);
-         });
+  return path && effect_slots(snapshot, *path) != nullptr;
 }
 
 bool ProjectBridge::chain_edit_enabled(const QString& path_id) const {

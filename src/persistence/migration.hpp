@@ -22,7 +22,7 @@ struct SchemaVersion {
 };
 
 // The one schema this build writes.
-inline constexpr SchemaVersion current_schema{1, 47};
+inline constexpr SchemaVersion current_schema{1, 48};
 
 // Every schema a public release wrote, oldest first. Each has a golden manifest
 // in tests/persistence/golden. Empty before the first public beta, so only the

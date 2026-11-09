@@ -11,8 +11,8 @@ public:
 
   // Racks (ADR-0059): the track's built-in
   // devices and macros as a rack, with destinations renamed to the rack's own
-  // slot ids. VST3 and convolution devices, and a VST3 instrument, are left
-  // out and counted in `skipped`.
+  // slot ids. VST3 devices, including a VST3 instrument, are left out and
+  // counted in `skipped`.
   struct CapturedRack {
     persistence::TrackRack rack;
     std::size_t skipped = 0;
@@ -76,7 +76,7 @@ public:
   // Loads a rack onto an instrument (or, without instrument or note effects,
   // any) track in one undo step: the track's note effects, built-in effects
   // and macros are replaced, the rack's instrument replaces a built-in or
-  // empty one, and VST3 and convolution effects stay after the rack's. New
+  // empty one, and VST3 effects stay after the rack's. New
   // slot ids are allocated and the macros retargeted to them.
   [[nodiscard]] foundation::Result<void> load_track_rack(project::TrackId track,
                                                          const persistence::TrackRack& rack);

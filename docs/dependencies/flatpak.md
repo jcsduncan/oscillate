@@ -22,8 +22,7 @@ and X11. The manifest builds only what the runtime lacks:
 | `libsndfile` | 1.2.2 release archive, SHA-256 pinned, with four upstream security fixes for CVE-2022-33065, CVE-2024-50612, CVE-2025-56226 and CVE-2026-37555 ([`patches/libsndfile`](../../packaging/flatpak/patches/libsndfile)) | The runtime's libsndfile is built without MPEG, and the codec adapter needs MP3. This build links the runtime's LAME and mpg123. |
 | `oscillate` | The source tree, plus the VST3 SDK `v3.8.1_build_84` and its `pluginterfaces` at pinned commits | Configured with the `package-flatpak` CMake preset, the `package-deb` switches, so the [`flatpak` profile](../../scripts/package_profiles.py) holds. |
 
-The Flatpak has the same features as the `.deb`: everything except
-convolution reverb.
+The Flatpak has the same features as the `.deb`.
 
 ## Sandbox permissions
 

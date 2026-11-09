@@ -1,3 +1,4 @@
+#include "oscillate/native_dsp/effects/cast.hpp"
 #include "oscillate/native_dsp/effects/ceiling.hpp"
 #include "oscillate/native_dsp/effects/chop.hpp"
 #include "oscillate/native_dsp/effects/contour.hpp"
@@ -8,6 +9,7 @@
 #include "oscillate/native_dsp/effects/expanse.hpp"
 #include "oscillate/native_dsp/effects/flyby.hpp"
 #include "oscillate/native_dsp/effects/forge.hpp"
+#include "oscillate/native_dsp/effects/hush.hpp"
 #include "oscillate/native_dsp/effects/lens.hpp"
 #include "oscillate/native_dsp/effects/loudness.hpp"
 #include "oscillate/native_dsp/effects/orbit.hpp"
@@ -30,13 +32,14 @@ namespace oscillate::native_dsp::effects {
 namespace {
 // The classic processors' engines (ADR-0047) come last.
 // NOLINTNEXTLINE(bugprone-throwing-static-initialization): engines are built from constant tables.
-const std::array<const EffectEngine*, 24> registry{
-    &contour::engine(),  &forge::engine(), &orbit::engine(),  &relay::engine(),
-    &expanse::engine(),  &vista::engine(), &deck::engine(),   &pocket::engine(),
-    &pump::engine(),     &chop::engine(),  &temper::engine(), &strata::engine(),
-    &edge::engine(),     &flyby::engine(), &dust::engine(),   &lens::engine(),
-    &loudness::engine(), &scope::engine(), &tune::engine(),   &trim::engine(),
-    &signal::engine(),   &shape::engine(), &press::engine(),  &ceiling::engine()};
+const std::array<const EffectEngine*, 26> registry{
+    &contour::engine(), &forge::engine(),  &orbit::engine(),    &relay::engine(),
+    &expanse::engine(), &cast::engine(),   &vista::engine(),    &deck::engine(),
+    &pocket::engine(),  &pump::engine(),   &chop::engine(),     &temper::engine(),
+    &strata::engine(),  &edge::engine(),   &hush::engine(),     &flyby::engine(),
+    &dust::engine(),    &lens::engine(),   &loudness::engine(), &scope::engine(),
+    &tune::engine(),    &trim::engine(),   &signal::engine(),   &shape::engine(),
+    &press::engine(),   &ceiling::engine()};
 } // namespace
 
 std::span<const EffectEngine* const> engines() noexcept { return registry; }

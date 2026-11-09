@@ -41,7 +41,7 @@ void fades_round_trip() {
   const auto encoded = detail::encode_manifest(original, std::string(32, 'a'), std::nullopt,
                                                SaveKind::explicit_save);
   auto json = Json::parse(encoded);
-  REQUIRE_EQ(json["schema"]["minor"], 47, "clip fade schema was not saved");
+  REQUIRE_EQ(json["schema"]["minor"], 48, "clip fade schema was not saved");
   REQUIRE_EQ(json["project"]["tracks"][0]["clips"][0]["fades"]["out_curve"], "smoothstep",
              "clip fade schema was not saved");
   const auto decoded = take(detail::decode_manifest(encoded));
@@ -59,7 +59,7 @@ void fades_round_trip() {
   malformed = json;
   malformed["project"]["tracks"][0]["clips"][0]["fades"]["in_fraction"] = 0.9;
   require(!detail::decode_manifest(malformed.dump()), "overlapping fade lengths were accepted");
-  for (const int other : {46, 48}) {
+  for (const int other : {47, 49}) {
     malformed = json;
     malformed["schema"]["minor"] = other;
     require(!detail::decode_manifest(malformed.dump()), "another schema minor was accepted");

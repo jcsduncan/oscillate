@@ -29,7 +29,7 @@ struct NativeInstrumentParameter {
 
 // The encoded audio remains a managed source. Repeating its immutable identity
 // here prevents a relink or source-record edit from silently changing what a
-// convolution insert or a synth media slot plays.
+// synth's or an effect's media slot plays.
 struct ManagedAudioReference {
   SourceId source;
   std::string sha256;
@@ -211,16 +211,11 @@ struct NativeInstrumentPatch {
 // path's ordered audio-effect slots.
 using InstrumentSource = std::variant<std::monostate, Vst3PluginInstance, NativeInstrumentPatch>;
 
-struct NativeConvolution {
-  ManagedAudioReference ir;
-  double wet = 0.25;
-  std::uint64_t generation = 1;
-  bool operator==(const NativeConvolution&) const = default;
-};
 // A built-in effect (ADR-0040): the engine's stable parameter ids with plain
 // values, storing only values that differ from that engine version's
-// defaults, and its structured document (ADR-0058; drawn curves, empty for
-// most effects, never media). The project validates structure only; the
+// defaults, and its structured document (ADR-0058; drawn curves and, for an
+// engine that plays media such as Cast's impulse response, media slots;
+// empty for most effects). The project validates structure only; the
 // engine resolves ids, ranges and the document when a command is built or a
 // stage is prepared, so new effects need no schema. Effects of one engine
 // sharing a non-empty link (a native identifier) share their document: the
@@ -234,8 +229,7 @@ struct NativeEffectPatch {
   std::string link = {};
   bool operator==(const NativeEffectPatch&) const = default;
 };
-using EffectProcessor = std::variant<Vst3PluginInstance, NativeConvolution, NativeEffectPatch>;
-using NativeEffectProcessor = std::variant<NativeConvolution, NativeEffectPatch>;
+using EffectProcessor = std::variant<Vst3PluginInstance, NativeEffectPatch>;
 struct EffectInsert {
   InsertSlotId id;
   bool enabled = true;

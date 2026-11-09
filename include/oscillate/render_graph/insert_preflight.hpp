@@ -4,8 +4,6 @@
 #include "oscillate/routing/project_route_plan.hpp"
 
 #include <algorithm>
-#include <array>
-#include <cstddef>
 #include <cstdint>
 #include <ranges>
 #include <utility>
@@ -29,29 +27,22 @@ struct ExportInserts {
     std::vector<const project::EffectInsert*> effects;
   };
   std::vector<TrackChain> track_chains;
-  const project::NativeConvolution* master_convolution = nullptr;
   // Active master slots in saved order.
   std::vector<const project::EffectInsert*> master_chain;
 };
 
 [[nodiscard]] inline foundation::Result<ExportInserts>
-preflight_inserts(const project::Snapshot& snapshot, ExportSource source,
-                  bool convolution_supported = false) {
+preflight_inserts(const project::Snapshot& snapshot, ExportSource source) {
   using R = foundation::Result<ExportInserts>;
   auto valid = project::project_insert_chains(snapshot);
   if (!valid)
     return R::failure(valid.error());
 
   ExportInserts plan;
-  if (project::has_convolution_insert(snapshot) && !convolution_supported)
-    return R::failure({foundation::ErrorCode::unsupported,
-                       "Saved convolution insert is not available for export yet"});
   const bool vst3 = source == ExportSource::vst3;
   const auto vst3_slot = [](const project::EffectInsert& slot) {
     return std::holds_alternative<project::Vst3PluginInstance>(slot.processor);
   };
-  std::size_t active_convolutions = 0;
-  std::array<bool, std::variant_size_v<project::EffectProcessor>> active_kinds{};
   for (const auto& slot : snapshot.master_effects) {
     // A bypassed slot remains saved, but does not enter the rendered chain.
     // In particular, no plugin binary is needed to render past a bypassed
@@ -61,18 +52,7 @@ preflight_inserts(const project::Snapshot& snapshot, ExportSource source,
     if (vst3_slot(slot) && !vst3)
       return R::failure(
           {foundation::ErrorCode::unsupported, "Export cannot render a VST3 master insert"});
-    const auto kind = slot.processor.index();
-    const bool repeatable =
-        vst3_slot(slot) || std::holds_alternative<project::NativeEffectPatch>(slot.processor);
-    if (!repeatable && active_kinds[kind])
-      return R::failure({foundation::ErrorCode::unsupported,
-                         "Export cannot render duplicate native master kinds"});
-    active_kinds[kind] = true;
     plan.master_chain.push_back(&slot);
-    if (const auto* convolution = std::get_if<project::NativeConvolution>(&slot.processor)) {
-      plan.master_convolution = convolution;
-      ++active_convolutions;
-    }
   }
 
   for (const auto& track : snapshot.tracks) {
@@ -101,16 +81,10 @@ preflight_inserts(const project::Snapshot& snapshot, ExportSource source,
       continue;
     ExportInserts::TrackChain owned{track.id, {}};
     owned.effects.reserve(track.effects.size());
-    for (const auto& slot : track.effects) {
+    for (const auto& slot : track.effects)
       owned.effects.push_back(&slot);
-      if (slot.enabled && std::holds_alternative<project::NativeConvolution>(slot.processor))
-        ++active_convolutions;
-    }
     plan.track_chains.push_back(std::move(owned));
   }
-  if (active_convolutions > 1)
-    return R::failure({foundation::ErrorCode::resource_exhausted,
-                       "Offline export admits one active convolution insert"});
   return R::success(std::move(plan));
 }
 

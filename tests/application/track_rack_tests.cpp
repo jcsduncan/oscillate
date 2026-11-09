@@ -155,10 +155,20 @@ void malformed_racks_are_refused() {
   auto no_synth = rack;
   no_synth.instrument.reset();
   require(!persistence::validate_rack(no_synth), "a synth mapping without the synth is refused");
-  auto convolution = rack;
-  convolution.effects.front().processor = project::NativeConvolution{project::ManagedAudioReference{
-      take(project::SourceId::from_bits({1, 1})), std::string(64, 'a'), 44, 48'000, 2, 1}};
-  require(!persistence::validate_rack(convolution), "only built-in effects travel in racks");
+  auto plugin = rack;
+  project::Vst3PluginInstance vst3{take(project::PluginInstanceId::from_bits({1, 1})),
+                                   "fixture",
+                                   "Vendor",
+                                   "Gate",
+                                   "1.0",
+                                   "/opt/fixture",
+                                   "sha",
+                                   {},
+                                   {},
+                                   false,
+                                   std::nullopt};
+  plugin.effects.front().processor = std::move(vst3);
+  require(!persistence::validate_rack(plugin), "only built-in effects travel in racks");
 
   // A rack an engine rejects changes nothing.
   auto unknown = rack;

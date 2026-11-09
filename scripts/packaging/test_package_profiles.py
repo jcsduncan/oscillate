@@ -98,14 +98,14 @@ class PackageBuildCheckTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unusable project version"):
             package_version("", RELEASE_TAG, None)
 
-    def test_readme_lists_included_and_excluded_features(self):
+    def test_readme_lists_included_features(self):
         codec_line = "  - AIFF, FLAC and MP3 import and export (libsndfile, libmpg123)\n"
         for profile in PROFILES.values():
             with self.subTest(profile=profile.name):
                 readme = feature_readme(profile, PROJECT_VERSION)
                 self.assertIn("VST3 instruments and effects", readme)
                 self.assertIn(codec_line, readme)
-                self.assertIn("Convolution reverb: ", readme)
+                self.assertNotIn("Left out of this package", readme)
 
 
 if __name__ == "__main__":

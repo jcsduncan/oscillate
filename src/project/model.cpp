@@ -58,17 +58,6 @@ bool requires_automation_rendering(const Snapshot& snapshot) noexcept {
   });
 }
 
-bool has_convolution_insert(const Snapshot& snapshot) noexcept {
-  const auto contains = [](const std::vector<EffectInsert>& effects) {
-    return std::ranges::any_of(effects, [](const EffectInsert& effect) {
-      return std::holds_alternative<NativeConvolution>(effect.processor);
-    });
-  };
-  return contains(snapshot.master_effects) ||
-         std::ranges::any_of(snapshot.tracks,
-                             [&](const Track& track) { return contains(track.effects); });
-}
-
 Result<InsertSlotId> command_insert_slot_id(std::uint64_t serial) {
   if (serial == std::numeric_limits<std::uint64_t>::max()) {
     return Result<InsertSlotId>::failure(exhausted("effect slot identity exhausted"));
@@ -109,19 +98,9 @@ foundation::Result<InsertChainProjection> project_insert_chains(const Snapshot& 
                   {slot.id, processor.id, slot.enabled, std::nullopt, processor.missing});
               projection.has_missing_plugins |= processor.missing;
             } else {
-              const auto kind = [] {
-                if constexpr (std::is_same_v<T, NativeConvolution>)
-                  return NativeInsertKind::convolution;
-                else {
-                  static_assert(std::is_same_v<T, NativeEffectPatch>);
-                  return NativeInsertKind::effect;
-                }
-              }();
-              std::string engine;
-              if constexpr (std::is_same_v<T, NativeEffectPatch>)
-                engine = processor.engine;
-              path.effects.push_back(
-                  {slot.id, kind, slot.enabled, processor.generation, false, std::move(engine)});
+              static_assert(std::is_same_v<T, NativeEffectPatch>);
+              path.effects.push_back({slot.id, NativeInsertKind::effect, slot.enabled,
+                                      processor.generation, false, processor.engine});
             }
           },
           slot.processor);

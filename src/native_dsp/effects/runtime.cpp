@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <new>
 #include <string>
 
 namespace oscillate::native_dsp::effects {
@@ -23,7 +24,8 @@ NativeEffectRuntime::create(const EffectEngine& engine, std::span<const double> 
 
 Result<std::unique_ptr<NativeEffectRuntime>>
 NativeEffectRuntime::create(const EffectEngine& engine, std::span<const double> values,
-                            const project::NativeSynthDocument& document, double sample_rate) {
+                            const project::NativeSynthDocument& document, double sample_rate,
+                            engine::SynthMedia media) {
   using R = Result<std::unique_ptr<NativeEffectRuntime>>;
   if (engine.descriptor == nullptr || engine.create_kernel == nullptr ||
       engine.tail_frames == nullptr || engine.latency_frames == nullptr ||
@@ -33,9 +35,13 @@ NativeEffectRuntime::create(const EffectEngine& engine, std::span<const double> 
   if (!ParameterControl::valid_values(*engine.descriptor, values)) {
     return R::failure({ErrorCode::invalid_argument, "effect values do not match the engine"});
   }
+  if (!engine.media && !media.empty()) {
+    return R::failure(
+        {ErrorCode::invalid_argument, std::string(engine.descriptor->name) + " plays no media"});
+  }
   std::shared_ptr<const DocumentState> state;
   if (engine.prepare_document != nullptr) {
-    auto prepared = engine.prepare_document(document, sample_rate, nullptr);
+    auto prepared = engine.prepare_document(document, {values, &media, sample_rate, nullptr});
     if (!prepared) {
       return R::failure(prepared.error());
     }
@@ -54,14 +60,19 @@ NativeEffectRuntime::create(const EffectEngine& engine, std::span<const double> 
   auto runtime = std::unique_ptr<NativeEffectRuntime>(
       new NativeEffectRuntime(engine, std::move(kernel), values, sample_rate));
   runtime->document_ = document;
+  runtime->media_ = std::move(media);
+  runtime->compiled_values_.assign(values.begin(), values.end());
   if (state) {
     runtime->documents_.push_back(std::make_unique<DocumentOffer>(0, std::move(state)));
+    runtime->document_mailbox_->applied.store(runtime->documents_.back().get(),
+                                              std::memory_order_release);
   }
   return R::success(std::move(runtime));
 }
 
 Result<std::unique_ptr<NativeEffectRuntime::DocumentOffer>>
 NativeEffectRuntime::compile_document(const project::NativeSynthDocument& document,
+                                      std::span<const double> values,
                                       std::uint64_t revision) const {
   using R = Result<std::unique_ptr<DocumentOffer>>;
   if (engine_.prepare_document == nullptr) {
@@ -75,25 +86,85 @@ NativeEffectRuntime::compile_document(const project::NativeSynthDocument& docume
     return R::failure({ErrorCode::conflict, "effect document revision went backwards"});
   }
   auto prepared = engine_.prepare_document(
-      document, sample_rate_, documents_.empty() ? nullptr : documents_.back()->state.get());
+      document, {values, &media_, sample_rate_,
+                 documents_.empty() ? nullptr : documents_.back()->state.get()});
   if (!prepared) {
     return R::failure(prepared.error());
   }
   return R::success(std::make_unique<DocumentOffer>(revision, std::move(prepared).value()));
 }
 
+bool NativeEffectRuntime::document_values_changed(std::span<const double> values) const noexcept {
+  return std::ranges::any_of(engine_.document_parameters, [&](std::size_t index) {
+    return index < values.size() && index < compiled_values_.size() &&
+           values[index] != compiled_values_[index];
+  });
+}
+
+bool NativeEffectRuntime::recompile_for_values(std::span<const double> values,
+                                               std::uint64_t revision) noexcept {
+  if (!document_values_changed(values)) {
+    return true;
+  }
+  try {
+    auto compiled = compile_document(document_, values, revision);
+    if (!compiled) {
+      return false;
+    }
+    if (compiled.value()) {
+      documents_.reserve(documents_.size() + 1);
+      publish_document(std::move(compiled).value());
+    }
+    compiled_values_.assign(values.begin(), values.end());
+    return true;
+  } catch (...) {
+    // A compile that cannot finish leaves the playing document in place.
+    return false;
+  }
+}
+
+bool NativeEffectRuntime::offer_values(std::span<const double> values,
+                                       std::uint64_t revision) noexcept {
+  if (!control_.can_offer(values, revision) || !recompile_for_values(values, revision)) {
+    return false;
+  }
+  return control_.offer(values, revision);
+}
+
+bool NativeEffectRuntime::offer_live_values(std::span<const double> values) noexcept {
+  const std::uint64_t newest = documents_.empty() ? 0 : documents_.back()->revision;
+  if (!ParameterControl::valid_values(*engine_.descriptor, values) ||
+      !recompile_for_values(values, newest)) {
+    return false;
+  }
+  return control_.offer_live(values);
+}
+
 void NativeEffectRuntime::publish_document(std::unique_ptr<DocumentOffer> offer) noexcept {
-  // Retire offers the callback has moved past; keep the one it reads. The
-  // room for the new one was reserved when it was compiled.
-  const auto applied = document_mailbox_->applied.load(std::memory_order_acquire);
-  std::erase_if(documents_, [applied](const auto& kept) { return kept->revision < applied; });
+  // The room for the new offer was reserved when it was compiled. An offer
+  // the callback never took is replaced and retired. Every offer published
+  // after the one the callback adopted may be in its hands (it takes an
+  // offer before it records it as adopted), so only older ones retire.
+  const DocumentOffer* newest = offer.get();
   documents_.push_back(std::move(offer));
-  document_mailbox_->offered.store(documents_.back().get(), std::memory_order_release);
+  const auto* untaken = document_mailbox_->offered.exchange(newest, std::memory_order_acq_rel);
+  const auto* applied = document_mailbox_->applied.load(std::memory_order_acquire);
+  const auto adopted = std::ranges::find_if(
+      documents_, [applied](const auto& kept) { return kept.get() == applied; });
+  const auto first_kept = adopted == documents_.end() ? documents_.begin() : adopted;
+  const auto older = static_cast<std::size_t>(first_kept - documents_.begin());
+  std::size_t index = 0;
+  std::erase_if(documents_, [&](const auto& kept) {
+    const auto* held = kept.get();
+    const bool retire = held != newest && (index < older || held == untaken);
+    ++index;
+    return retire;
+  });
 }
 
 Result<void> NativeEffectRuntime::offer_document(const project::NativeSynthDocument& document,
                                                  std::uint64_t revision) {
-  auto compiled = compile_document(document, revision);
+  auto compiled = compile_document(document, compiled_values_, revision);
   if (!compiled) {
     return Result<void>::failure(compiled.error());
   }
@@ -117,14 +188,15 @@ NativeEffectRuntime::prepare_offer(std::span<const double> values,
   PreparedOffer prepared;
   prepared.values.assign(values.begin(), values.end());
   prepared.revision = revision;
-  if (document != nullptr) {
-    auto compiled = compile_document(*document, revision);
+  if (document != nullptr || document_values_changed(values)) {
+    const auto& compiled_document = document != nullptr ? *document : document_;
+    auto compiled = compile_document(compiled_document, values, revision);
     if (!compiled) {
       return R::failure(compiled.error());
     }
     prepared.document_offer = std::move(compiled).value();
     if (prepared.document_offer) {
-      prepared.document = *document;
+      prepared.document = compiled_document;
       documents_.reserve(documents_.size() + 1);
     }
   }
@@ -137,6 +209,7 @@ bool NativeEffectRuntime::commit_offer(PreparedOffer&& offer) noexcept {
   }
   if (offer.document_offer) {
     document_ = std::move(offer.document);
+    std::ranges::copy(offer.values, compiled_values_.begin());
     publish_document(std::move(offer.document_offer));
   }
   return control_.offer(offer.values, offer.revision);
@@ -170,7 +243,7 @@ void NativeEffectRuntime::adopt_document() noexcept {
     return;
   }
   kernel_->adopt_document(*offer->state);
-  document_mailbox_->applied.store(offer->revision, std::memory_order_release);
+  document_mailbox_->applied.store(offer, std::memory_order_release);
 }
 
 NativeEffectRuntime::NativeEffectRuntime(const EffectEngine& engine,

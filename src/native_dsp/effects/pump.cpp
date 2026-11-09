@@ -160,7 +160,7 @@ Result<void> validate_document(const project::NativeSynthDocument& document) {
 }
 
 Result<std::shared_ptr<const DocumentState>>
-prepare_document(const project::NativeSynthDocument& document, double, const DocumentState*) {
+prepare_document(const project::NativeSynthDocument& document, const DocumentInputs&) {
   using R = Result<std::shared_ptr<const DocumentState>>;
   if (auto valid = validate_document(document); !valid)
     return R::failure(valid.error());

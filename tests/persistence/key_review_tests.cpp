@@ -148,7 +148,7 @@ void codec_and_store_contract() {
   const auto text =
       detail::encode_manifest(before, std::string(32, 'a'), std::nullopt, SaveKind::explicit_save);
   auto value = Json::parse(text);
-  REQUIRE_EQ(value["schema"]["minor"], 47, "wrong key-review schema version");
+  REQUIRE_EQ(value["schema"]["minor"], 48, "wrong key-review schema version");
   REQUIRE_EQ(take(detail::decode_manifest(text)).snapshot.source_key_reviews,
              before.source_key_reviews, "key review codec round-trip failed");
   for (const auto& altered : {"detected", "confidence", "compatible", "correction"}) {
@@ -169,7 +169,7 @@ void codec_and_store_contract() {
   malformed["project"]["source_key_reviews"].push_back(
       malformed["project"]["source_key_reviews"][0]);
   require(!detail::decode_manifest(malformed.dump()), "duplicate review accepted");
-  for (const int minor : {46, 48}) {
+  for (const int minor : {47, 49}) {
     malformed = value;
     malformed["schema"]["minor"] = minor;
     require(!detail::decode_manifest(malformed.dump()), "another schema minor accepted");

@@ -33,9 +33,6 @@ GraphControl::build_and_publish(const std::shared_ptr<const project::Snapshot>& 
                                 std::span<const ClipFeed> feeds) {
   observe();
   const auto& snapshot = *built_snapshot;
-  if (project::has_convolution_insert(snapshot))
-    return fail(snapshot.revision,
-                {ErrorCode::unsupported, "Convolution insert has no live graph runtime yet"});
   // Master effects render only on the routed graph.
   if (std::ranges::any_of(snapshot.master_effects, &project::EffectInsert::enabled))
     return fail(snapshot.revision,

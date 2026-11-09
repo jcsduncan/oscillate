@@ -584,8 +584,7 @@ Result<void> SongService::apply_arrangement(const arrange::Plan& plan) {
     if (!slot)
       return slot;
     const auto index = track->effects.size() + added[track_id]++;
-    operations.emplace_back(project::AddNativeEffect{
-        track_id, index, project::NativeEffectProcessor{std::move(patch)}});
+    operations.emplace_back(project::AddNativeEffect{track_id, index, std::move(patch)});
     return slot;
   };
 

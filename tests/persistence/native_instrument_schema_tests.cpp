@@ -108,7 +108,7 @@ void native_patch_round_trips_exactly() {
   const auto encoded = detail::encode_manifest(original, std::string(32, 'a'), std::nullopt,
                                                SaveKind::explicit_save);
   const auto json = Json::parse(encoded);
-  REQUIRE_EQ(json["schema"]["minor"], 47, "native instruments save in the current schema");
+  REQUIRE_EQ(json["schema"]["minor"], 48, "native instruments save in the current schema");
   const auto& source = json["project"]["tracks"][0]["instrument_source"];
   REQUIRE_EQ(source["kind"], "native_instrument", "native instrument payload is saved");
   REQUIRE_EQ(source["payload"]["engine"], "prism", "native instrument payload is saved");
@@ -124,7 +124,7 @@ void malformed_manifests_are_rejected() {
   const auto json = Json::parse(encoded);
 
   auto future = json;
-  future["schema"]["minor"] = 48;
+  future["schema"]["minor"] = 49;
   require(!detail::decode_manifest(future.dump()), "future schema is rejected");
 
   for (const char* missing : {"engine", "engine_version", "parameters", "document"}) {

@@ -2357,7 +2357,7 @@ void mixed_native_vst3_keeps_order_and_state(std::size_t block_frames, bool nati
   const auto send = id<project::SendId>(2203);
   const auto plugin = saved_fixture_insert();
   const native_dsp::CompressorSettings compressor_settings{-24.0, 6.0, 0.0, 0.1, 100.0, 0.0};
-  const project::NativeEffectProcessor native =
+  const project::NativeEffectPatch native =
       compressor ? press_patch(compressor_settings) : shape_patch(low_pass_1k);
   (void)take(state.apply({project::AddTrack{wet}, project::AddTrack{dry},
                           project::AddTrack{returns, project::TrackKind::return_bus},

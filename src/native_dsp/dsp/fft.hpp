@@ -9,7 +9,7 @@
 
 // The one complex FFT of the native DSP and analysis code. Double precision
 // throughout: wavetables, analysers and key detection all want it. (Warp
-// and convolution keep the pinned PFFFT for their float real transforms.)
+// and Cast keep the pinned PFFFT for their float real transforms.)
 namespace oscillate::native_dsp::dsp {
 
 // An in-place radix-2 transform of one power-of-two size. Its tables are

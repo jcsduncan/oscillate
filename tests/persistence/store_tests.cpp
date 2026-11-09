@@ -207,7 +207,7 @@ void clip_processing_round_trip() {
   const auto generation = std::string(32, 'a');
   const auto encoded =
       detail::encode_manifest(state, generation, std::nullopt, SaveKind::explicit_save);
-  REQUIRE_NE(encoded.find("\"minor\":47"), std::string::npos,
+  REQUIRE_NE(encoded.find("\"minor\":48"), std::string::npos,
              "clip processing intent did not round-trip");
   REQUIRE_EQ(take(detail::decode_manifest(encoded)).snapshot.tracks, state.tracks,
              "clip processing intent did not round-trip");
@@ -254,7 +254,7 @@ void clip_warp_round_trip() {
   const auto generation = std::string(32, 'b');
   const auto encoded =
       detail::encode_manifest(state, generation, std::nullopt, SaveKind::explicit_save);
-  REQUIRE_NE(encoded.find("\"minor\":47"), std::string::npos,
+  REQUIRE_NE(encoded.find("\"minor\":48"), std::string::npos,
              "clip warp settings did not round-trip");
   REQUIRE_EQ(take(detail::decode_manifest(encoded)).snapshot.tracks, state.tracks,
              "clip warp settings did not round-trip");
@@ -1124,8 +1124,8 @@ void bounded_manifest_codec() {
   require(!detail::decode_manifest(replaced(valid, "\"kind\":\"explicit\"",
                                             "\"kind\":\"explicit\",\"k\\u0069nd\":\"autosave\"")),
           "escaped duplicate JSON key accepted");
-  require(!detail::decode_manifest(replaced(valid, "\"schema\":{\"major\":1,\"minor\":47}",
-                                            "\"schema\":{\"major\":1,\"major\":1,\"minor\":47}")),
+  require(!detail::decode_manifest(replaced(valid, "\"schema\":{\"major\":1,\"minor\":48}",
+                                            "\"schema\":{\"major\":1,\"major\":1,\"minor\":48}")),
           "duplicate nested JSON key accepted");
   require(!detail::decode_manifest(
               replaced(valid, "\"kind\":\"explicit\"", "\"kind\":\"explicit\",\"unknown\":0")),
@@ -1218,7 +1218,7 @@ void midi_round_trip_and_validation() {
   const auto generation = std::string(32, 'a');
   const auto manifest =
       detail::encode_manifest(state, generation, std::nullopt, SaveKind::explicit_save);
-  REQUIRE_NE(manifest.find("\"minor\":47"), std::string::npos,
+  REQUIRE_NE(manifest.find("\"minor\":48"), std::string::npos,
              "MIDI writer did not use the current schema");
   auto decoded = take(detail::decode_manifest(manifest));
   REQUIRE_EQ(decoded.snapshot.tracks, state.tracks,
@@ -1283,7 +1283,7 @@ void native_regions_round_trip() {
     return tracks[index]["instrument_source"]["payload"]["document"];
   };
   const auto with_regions = tracks.size() - 2;
-  REQUIRE_EQ(current["schema"]["minor"], 47,
+  REQUIRE_EQ(current["schema"]["minor"], 48,
              "regions are written as specified and omitted when empty");
   REQUIRE_EQ(document_of(with_regions)["regions"].size(), 2,
              "regions are written as specified and omitted when empty");
@@ -1519,7 +1519,7 @@ void external_link_schema_reopen_and_missing_diagnostics() {
   const auto encoded =
       detail::encode_manifest(state, std::string(32, 'a'), std::nullopt, SaveKind::explicit_save);
   auto json = Json::parse(encoded);
-  REQUIRE_EQ(json["schema"]["minor"], 47, "typed external link was not serialized");
+  REQUIRE_EQ(json["schema"]["minor"], 48, "typed external link was not serialized");
   REQUIRE_EQ(json["project"]["sources"][0]["location"]["kind"], "external",
              "typed external link was not serialized");
   for (const auto& bad_path :
@@ -2121,7 +2121,7 @@ void master_effect_round_trip_and_validation() {
        project::NativeEffectPatch{"ceiling", 1, {{"ceiling.ceiling", -2.0}}, 7}});
   const auto encoded =
       detail::encode_manifest(state, generation, std::nullopt, SaveKind::explicit_save);
-  REQUIRE_NE(encoded.find("\"minor\":47"), std::string::npos,
+  REQUIRE_NE(encoded.find("\"minor\":48"), std::string::npos,
              "current schema lost built-in master effect state");
   REQUIRE_EQ(take(detail::decode_manifest(encoded)).snapshot.master_effects, state.master_effects,
              "current schema lost built-in master effect state");
@@ -2160,7 +2160,7 @@ void source_encodings_round_trip() {
                              96'000});
     const auto encoded =
         detail::encode_manifest(state, generation, std::nullopt, SaveKind::explicit_save);
-    REQUIRE_NE(encoded.find("\"minor\":47"), std::string::npos,
+    REQUIRE_NE(encoded.find("\"minor\":48"), std::string::npos,
                "source writer did not use the current schema");
     REQUIRE_NE(encoded.find(std::string("\"encoding\":\"") + name + "\""), std::string::npos,
                "source encoding tag changed");
@@ -2217,7 +2217,7 @@ void vst3_round_trip() {
   const auto generation = std::string(32, 'a');
   const auto encoded =
       detail::encode_manifest(state, generation, std::nullopt, SaveKind::explicit_save);
-  REQUIRE_NE(encoded.find("\"minor\":47"), std::string::npos,
+  REQUIRE_NE(encoded.find("\"minor\":48"), std::string::npos,
              "current VST3 schema or canonical state missing");
   REQUIRE_NE(encoded.find("\"component_state_base64\":\"AAH+/w==\""), std::string::npos,
              "current VST3 schema or canonical state missing");
@@ -2253,7 +2253,7 @@ void routing_round_trip_and_failed_save() {
   const auto generation = std::string(32, 'a');
   const auto encoded =
       detail::encode_manifest(state, generation, std::nullopt, SaveKind::explicit_save);
-  REQUIRE_NE(encoded.find("\"minor\":47"), std::string::npos,
+  REQUIRE_NE(encoded.find("\"minor\":48"), std::string::npos,
              "schema 1.8 routing roundtrip lost destinations or send gains");
   REQUIRE_EQ(take(detail::decode_manifest(encoded)).snapshot.tracks, state.tracks,
              "schema 1.8 routing roundtrip lost destinations or send gains");
@@ -2353,7 +2353,7 @@ void automation_round_trip_and_failures() {
        1});
   const auto encoded =
       detail::encode_manifest(state, generation, std::nullopt, SaveKind::explicit_save);
-  REQUIRE_NE(encoded.find("\"minor\":47"), std::string::npos,
+  REQUIRE_NE(encoded.find("\"minor\":48"), std::string::npos,
              "automation 1.9 codec lost track/clip lane or missing plugin identity");
   REQUIRE_EQ(take(detail::decode_manifest(encoded)).snapshot.tracks, state.tracks,
              "automation 1.9 codec lost track/clip lane or missing plugin identity");
@@ -2438,7 +2438,7 @@ void send_gain_round_trip() {
   state.tracks[0].clips[0].automation.push_back(clip_lane);
   const auto encoded =
       detail::encode_manifest(state, generation, std::nullopt, SaveKind::explicit_save);
-  REQUIRE_NE(encoded.find("\"minor\":47"), std::string::npos,
+  REQUIRE_NE(encoded.find("\"minor\":48"), std::string::npos,
              "schema 1.11 lost send gain target or descriptor metadata");
   REQUIRE_NE(encoded.find("\"kind\":\"send_gain\""), std::string::npos,
              "schema 1.11 lost send gain target or descriptor metadata");
@@ -2734,11 +2734,11 @@ void channel_level_automation_schema21_round_trip() {
   const auto generation = std::string(32, 'a');
   const auto encoded =
       detail::encode_manifest(state, generation, std::nullopt, SaveKind::explicit_save);
-  REQUIRE_NE(encoded.find("\"minor\":47"), std::string::npos,
+  REQUIRE_NE(encoded.find("\"minor\":48"), std::string::npos,
              "channel automation schema 1.21 did not preserve level lane and balance");
   REQUIRE_EQ(take(detail::decode_manifest(encoded)).snapshot.tracks, state.tracks,
              "channel automation schema 1.21 did not preserve level lane and balance");
-  require(!detail::decode_manifest(replaced(encoded, "\"minor\":47", "\"minor\":20")),
+  require(!detail::decode_manifest(replaced(encoded, "\"minor\":48", "\"minor\":20")),
           "schema 1.20 silently accepted a 1.21 channel automation target");
   Directory temp;
   auto store = take(ProjectStore::open_writer(temp.path() / "channel-automation", true));

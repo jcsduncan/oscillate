@@ -86,7 +86,7 @@ NativeEffectStage::create(const project::Snapshot& snapshot,
                           std::optional<project::InsertSlotId> slot,
                           const project::NativeEffectPatch& patch,
                           std::span<const automation_project::PreparedTargetAutomation> automation,
-                          EffectStageLimits limits) {
+                          EffectStageLimits limits, engine::SynthMedia media) {
   const auto max_frames = limits.max_frames;
   const auto last_safe_automation_sample = limits.last_safe_automation_sample;
   using R = Result<std::unique_ptr<NativeEffectStage>>;
@@ -96,7 +96,8 @@ NativeEffectStage::create(const project::Snapshot& snapshot,
   if (!resolved)
     return R::failure(resolved.error());
   auto runtime = native_dsp::effects::NativeEffectRuntime::create(
-      *resolved.value().engine, resolved.value().values, patch.document, snapshot.sample_rate);
+      *resolved.value().engine, resolved.value().values, patch.document, snapshot.sample_rate,
+      std::move(media));
   if (!runtime)
     return R::failure(runtime.error());
   try {

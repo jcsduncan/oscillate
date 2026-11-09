@@ -86,7 +86,6 @@ std::vector<crash::Fact> build_features() {
       {"aiff, flac and mp3 import and export", yes_no(OSCILLATE_HAVE_CODEC != 0)},
       {"export sample-rate conversion", yes_no(OSCILLATE_HAVE_EXPORT_RESAMPLER != 0)},
       {"source sample-rate conversion", yes_no(OSCILLATE_HAVE_SOURCE_RESAMPLER != 0)},
-      {"convolution reverb", yes_no(OSCILLATE_HAVE_CONVOLUTION != 0)},
   };
 }
 

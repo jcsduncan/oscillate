@@ -2,7 +2,6 @@
 
 #include "oscillate/application/revision_status.hpp"
 #include "oscillate/engine/routed_publisher.hpp"
-#include "oscillate/native_dsp/convolution_ir.hpp"
 #include "oscillate/native_dsp/synth/runtime.hpp"
 #include "oscillate/native_inserts/effect_stage.hpp"
 #include "oscillate/plugins/vst3_graph_node.hpp"
@@ -12,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -21,14 +21,8 @@
 #include <variant>
 #include <vector>
 
-namespace oscillate::native_dsp {
-class ConvolutionRuntime;
-} // namespace oscillate::native_dsp
 namespace oscillate::native_inserts {
 class NativeSynthPlayer;
-}
-namespace oscillate::persistence {
-class ProjectStore;
 }
 namespace oscillate::audio_io {
 class TransportCursor;
@@ -36,13 +30,6 @@ class TransportCursor;
 
 namespace oscillate::application {
 class RoutedAudioSource;
-
-// Supplied only after the device/whole graph has measured free callback time.
-// The store and budget remain control-side; neither is read by render_block.
-struct LiveConvolutionAdmission {
-  const persistence::ProjectStore* store = nullptr;
-  native_dsp::ConvolutionIrBudget budget;
-};
 
 // A verified, activated, single-use plugin binding prepared off the callback.
 // Its owner is retained for topology edits; process_failed is polled only by
@@ -183,9 +170,12 @@ public:
   // The optional provider must outlive this control while a fresh binding or
   // retry can be requested. The prepared runtime is owned by this control and
   // the published graphs, independently of the provider after preparation.
+  // `project_root` is the project's store, from which built-in effects' managed
+  // media (Cast's impulse responses) are decoded off the callback; empty when
+  // the project has none.
   RoutedPlaybackControl(project::ProjectModel& model, engine::RoutedMixerLimits limits,
                         TrackInsertProvider* inserts = nullptr,
-                        LiveConvolutionAdmission convolution = {});
+                        std::filesystem::path project_root = {});
   RoutedPlaybackControl(const RoutedPlaybackControl&) = delete;
   RoutedPlaybackControl& operator=(const RoutedPlaybackControl&) = delete;
 
@@ -197,14 +187,11 @@ public:
   void bind_live_source(RoutedAudioSource& source) noexcept;
   // Call after the callback has joined and before the source bank is retired.
   void unbind_live_source() noexcept;
-  // Callback and graph publisher must be quiescent. Resetting a long IR in the
-  // callback would cause an unbounded deadline spike.
-  [[nodiscard]] foundation::Result<void> reset_convolution_after_quiesce(std::uint64_t generation);
-  // Device owner first joins the callback. This advances the cursor and resets
-  // the active IR to the same new processor generation before output resumes.
-  // A pure pause or planned loop wrap must not call this method.
-  [[nodiscard]] foundation::Result<void>
-  seek_convolution_after_quiesce(audio_io::TransportCursor& cursor, std::uint64_t first_sample);
+  // Device owner first joins the callback. This advances the cursor to a new
+  // transport generation, which resets every stage's history at its next
+  // block. A pure pause or planned loop wrap must not call this method.
+  [[nodiscard]] foundation::Result<void> seek_after_quiesce(audio_io::TransportCursor& cursor,
+                                                            std::uint64_t first_sample);
   // Offers the model's newest saved revision to playback. One made while an
   // earlier switch is still settling is accepted and waits; observe() then
   // applies the newest revision, so a burst of edits coalesces onto its last.
@@ -513,7 +500,6 @@ private:
     std::shared_ptr<const project::Snapshot> published_snapshot;
     std::shared_ptr<const project::Snapshot> source_snapshot;
     std::optional<routing::ProjectRoutePlan> route_plan;
-    std::shared_ptr<native_dsp::ConvolutionRuntime> convolution;
     std::vector<ActiveChain> chains;
     std::vector<Vst3Stage> vst3_stages;
     std::vector<std::pair<project::Vst3ParameterTarget, std::uint64_t>> vst3_automation;
@@ -529,8 +515,7 @@ private:
   engine::RoutedMixerLimits limits_;
   routing::ProjectRouteIdRegistry registry_;
   TrackInsertProvider* inserts_;
-  LiveConvolutionAdmission convolution_;
-  std::shared_ptr<native_dsp::ConvolutionRuntime> live_convolution_;
+  std::filesystem::path project_root_;
   // Every running track chain and the master's. A chain edit switches only
   // the chains it changes, keeping each unchanged running stage; a built-in
   // effect's value edit reaches its running stage through a block mailbox.

@@ -7,6 +7,7 @@
 #include <stop_token>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace oscillate::application {
@@ -23,7 +24,17 @@ struct NativeSynthMediaState {
   std::vector<project::NativeLabel> labels;
 };
 
-// A user's audio for a built-in synth's media slot (ADR-0060, ADR-0063).
+// Where an imported sound plays: a built-in synth's track, or a built-in
+// effect's slot on a signal path (Cast's impulse response, ADR-0115).
+struct NativeEffectMediaTarget {
+  project::SignalPathId path;
+  project::InsertSlotId slot;
+  bool operator==(const NativeEffectMediaTarget&) const = default;
+};
+using NativeMediaTarget = std::variant<project::TrackId, NativeEffectMediaTarget>;
+
+// A user's audio for a built-in synth's or effect's media slot (ADR-0060,
+// ADR-0063, ADR-0115).
 // Control-thread begin pins the input; the move-only task copies, decodes
 // and hashes it on a worker without the writer lock; finish runs on the
 // originating control sequencer. WAV always, and AIFF, FLAC or MP3 in the
@@ -42,14 +53,14 @@ public:
 private:
   friend class ImportService;
   NativeSynthMediaImportTask(persistence::WavStageTask stage, bool wav, std::uint64_t revision,
-                             project::TrackId track, std::string slot)
-      : stage_(std::move(stage)), wav_(wav), origin_revision_(revision), track_(track),
+                             NativeMediaTarget target, std::string slot)
+      : stage_(std::move(stage)), wav_(wav), origin_revision_(revision), target_(target),
         slot_(std::move(slot)) {}
 
   persistence::WavStageTask stage_;
   bool wav_;
   std::uint64_t origin_revision_;
-  project::TrackId track_;
+  NativeMediaTarget target_;
   std::string slot_;
 };
 
@@ -64,21 +75,21 @@ public:
   // before finish.
   [[nodiscard]] const project::SourceRecord& source() const noexcept { return stage_.record(); }
   [[nodiscard]] std::uint64_t origin_revision() const noexcept { return origin_revision_; }
-  [[nodiscard]] project::TrackId track() const noexcept { return track_; }
+  [[nodiscard]] const NativeMediaTarget& target() const noexcept { return target_; }
   [[nodiscard]] const std::string& slot() const noexcept { return slot_; }
 
 private:
   friend class NativeSynthMediaImportTask;
   friend class ImportService;
   PreparedNativeSynthMediaImport(persistence::StagedWav stage, bool wav, std::uint64_t revision,
-                                 project::TrackId track, std::string slot)
-      : stage_(std::move(stage)), wav_(wav), origin_revision_(revision), track_(track),
+                                 NativeMediaTarget target, std::string slot)
+      : stage_(std::move(stage)), wav_(wav), origin_revision_(revision), target_(target),
         slot_(std::move(slot)) {}
 
   persistence::StagedWav stage_;
   bool wav_;
   std::uint64_t origin_revision_;
-  project::TrackId track_;
+  NativeMediaTarget target_;
   std::string slot_;
 };
 
@@ -88,7 +99,7 @@ NativeSynthMediaImportTask::run(const std::stop_token& stop) && {
   if (!staged)
     return foundation::Result<PreparedNativeSynthMediaImport>::failure(staged.error());
   return foundation::Result<PreparedNativeSynthMediaImport>::success(PreparedNativeSynthMediaImport(
-      std::move(staged).value(), wav_, origin_revision_, track_, std::move(slot_)));
+      std::move(staged).value(), wav_, origin_revision_, target_, std::move(slot_)));
 }
 
 } // namespace oscillate::application

@@ -95,8 +95,6 @@ template <typename T> [[nodiscard]] std::size_t elements(const std::vector<T>& v
   for (const auto& effect : effects) {
     if (const auto* plugin = std::get_if<Vst3PluginInstance>(&effect.processor))
       total += bytes(*plugin);
-    else if (const auto* convolution = std::get_if<NativeConvolution>(&effect.processor))
-      total += bytes(convolution->ir);
     else if (const auto* patch = std::get_if<NativeEffectPatch>(&effect.processor))
       total += text(patch->engine) + bytes(patch->parameters) + bytes(patch->document) +
                text(patch->link);

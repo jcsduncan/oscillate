@@ -118,9 +118,6 @@ validate_parameters(const std::vector<Vst3ParameterReference>& parameters);
 [[nodiscard]] Result<void> validate_native_effect_patch(const NativeEffectPatch& effect,
                                                         const Snapshot& snapshot);
 
-[[nodiscard]] Result<void> validate_native_convolution(const NativeConvolution& effect,
-                                                       const Snapshot& snapshot);
-
 [[nodiscard]] bool has_clip_id(const Snapshot& state, ClipId id);
 
 struct MutableMidiClip {

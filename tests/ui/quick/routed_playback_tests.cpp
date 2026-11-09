@@ -1812,19 +1812,6 @@ void unsupported_shape_and_device_failure_release_reservation() {
                       {root / "after-null-device.wav", oscillate::exporting::WavFormat::float32})
                   .has_value(),
           "null output retained routed playback reservation");
-  auto convolution = session->snapshot();
-  const auto& source = convolution.sources.front();
-  const project::ManagedAudioReference ir{source.id,          source.sha256,   source.byte_length,
-                                          source.sample_rate, source.channels, source.frames};
-  convolution.master_effects.push_back({take(project::InsertSlotId::from_bits({0, 9005})), false,
-                                        project::NativeConvolution{ir, 0.5, 1}});
-  auto unavailable = quick::RoutedPlayback::prepare_and_start(
-      root, std::move(convolution), take(session->reserve_playback_start()), {}, std::nullopt);
-  require(!unavailable && unavailable.error().code == foundation::ErrorCode::unsupported &&
-              unavailable.error().message.find("convolution") != std::string::npos &&
-              unavailable.error().message.find("offline export") != std::string::npos &&
-              session->exports().prepare_wav_master_export({root / "after-convolution.wav"}),
-          "saved convolution was silently bypassed or retained playback reservation");
   require(session->tracks().add_instrument_track().has_value(),
           "unsupported routed instrument track fixture failed");
   const auto instrument = session->snapshot().tracks.back().id;

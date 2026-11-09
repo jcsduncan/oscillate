@@ -229,9 +229,7 @@ namespace {
     return std::visit(
         [&](const auto& processor) -> Result<void> {
           using T = std::decay_t<decltype(processor)>;
-          if constexpr (std::is_same_v<T, NativeConvolution>) {
-            return validate_native_convolution(processor, state);
-          } else if constexpr (std::is_same_v<T, NativeEffectPatch>) {
+          if constexpr (std::is_same_v<T, NativeEffectPatch>) {
             return validate_native_effect_patch(processor, state);
           } else {
             return validate_saved_plugin(processor);
