@@ -113,18 +113,6 @@ oscillate_optimize_in_debug(oscillate_native_synth)
 oscillate_optimize_in_debug(oscillate_synth_engines)
 oscillate_optimize_in_debug(oscillate_note_effects)
 
-if(OSCILLATE_BUILD_CONVOLUTION_DSP)
-  # Always static: its allocation-failure tests wrap malloc at link time
-  # (-Wl,--wrap=malloc), which only reaches code linked into the test.
-  oscillate_add_library(convolution_dsp STATIC SOURCES convolution.cpp convolution_runtime.cpp
-    PUBLIC oscillate::engine
-    PRIVATE oscillate_pffft)
-
-  oscillate_add_library(convolution_ir SOURCES convolution_ir.cpp
-    PUBLIC oscillate::convolution_dsp
-    PRIVATE oscillate::media OpenSSL::Crypto)
-endif()
-
 # The native effect platform (ADR-0040): the generic runtime, the registry
 # and the built-in effects. Shape, Press and Ceiling run the classic EQ,
 # compressor and limiter (ADR-0047), so the platform links their DSP.
@@ -149,13 +137,18 @@ add_library(oscillate_native_effects effects/runtime.cpp effects/registry.cpp
                                             effects/press.cpp effects/ceiling.cpp
                                             effects/strata.cpp
                                             # Edge's oversampler and guard (ADR-0108).
-                                            effects/edge.cpp effects/edge_dsp.cpp)
+                                            effects/edge.cpp effects/edge_dsp.cpp
+                                            # Hush, the gate and expander (ADR-0116).
+                                            effects/hush.cpp
+                                            # Cast, the convolution reverb (ADR-0115).
+                                            effects/cast.cpp effects/cast_convolver.cpp
+                                            effects/cast_ir.cpp)
 add_library(oscillate::native_effects ALIAS oscillate_native_effects)
 target_include_directories(oscillate_native_effects PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../../include>
 )
 target_link_libraries(oscillate_native_effects PUBLIC oscillate::native_control oscillate::native_synth
-  oscillate::engine oscillate::native_dsp PRIVATE oscillate::dsp_primitives)
+  oscillate::engine oscillate::native_dsp PRIVATE oscillate::dsp_primitives oscillate_pffft)
 oscillate_target_defaults(oscillate_native_effects)
 oscillate_optimize_in_debug(oscillate_native_effects)
 

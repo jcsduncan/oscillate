@@ -276,13 +276,24 @@ Result<AppliedRevision> ProjectModel::apply(const std::vector<Operation>& operat
   if (!changed_source_ids.empty()) {
     std::set<TrackId> changed_tracks(changes.tracks.begin(), changes.tracks.end());
     std::set<ClipId> changed_clips(changes.clips.begin(), changes.clips.end());
+    // A built-in synth or effect plays its document's managed media slots.
+    const auto plays_changed = [&](const NativeSynthDocument& document) {
+      return std::ranges::any_of(document.media, [&](const NativeMediaSlot& slot) {
+        const auto* managed = std::get_if<ManagedAudioReference>(&slot.media);
+        return managed != nullptr && changed_source_ids.contains(managed->source);
+      });
+    };
+    const auto effects_play_changed = [&](const std::vector<EffectInsert>& effects) {
+      return std::ranges::any_of(effects, [&](const EffectInsert& effect) {
+        const auto* patch = std::get_if<NativeEffectPatch>(&effect.processor);
+        return patch != nullptr && plays_changed(patch->document);
+      });
+    };
+    if (effects_play_changed(candidate.master_effects))
+      changes.master_effects = true;
     for (const auto& track : candidate.tracks) {
-      // A built-in synth plays its managed media slots.
       if (const auto* native = native_source(track);
-          native && std::ranges::any_of(native->document.media, [&](const NativeMediaSlot& slot) {
-            const auto* managed = std::get_if<ManagedAudioReference>(&slot.media);
-            return managed != nullptr && changed_source_ids.contains(managed->source);
-          })) {
+          (native && plays_changed(native->document)) || effects_play_changed(track.effects)) {
         changed_tracks.insert(track.id);
       }
       for (const auto& clip : track.clips) {

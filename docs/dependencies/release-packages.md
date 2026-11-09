@@ -44,7 +44,6 @@ cannot be made from a build configured differently.
 | JACK output and real-time export | yes | yes |
 | Source and export sample-rate conversion (libsamplerate) | yes | yes |
 | AIFF, FLAC and MP3 import and export (libsndfile, libmpg123) | yes | yes |
-| Convolution reverb | **no** | **no** |
 
 - **Codecs.** The codec adapter links Ubuntu's libsndfile, which links
   LAME (`libmp3lame.so.0`) for MP3 export and mpg123, FLAC, Ogg, Vorbis and
@@ -53,9 +52,6 @@ cannot be made from a build configured differently.
   offer ([MP3 and FLAC gate](mp3-flac-redistribution-gate.md)). The `.deb`
   copies no codec: it depends on Ubuntu's `libsndfile1`, which brings its own
   codec packages, and `libmpg123-0t64`.
-- **Convolution reverb.** [ADR-0020](../decisions/0020-convolution-reverb.md)
-  keeps the convolution core out of release builds until its graph admission
-  and multi-instance policy are qualified.
 - **JACK.** The `.deb` links Ubuntu's `libjack.so.0` through its
   `libjack-jackd2-0 | libjack-0.125` dependency, so PipeWire's JACK
   replacement works where it is installed. The AppImage bundles JACK2's client

@@ -352,8 +352,8 @@ EffectService::duck_tracks_to(project::TrackId source, std::span<const project::
     patch.document = document;
     patch.link = link;
     if (member.existing == nullptr)
-      operations.emplace_back(project::AddNativeEffect{
-          member.track, member.index, project::NativeEffectProcessor{std::move(patch)}});
+      operations.emplace_back(
+          project::AddNativeEffect{member.track, member.index, std::move(patch)});
     else if (!(patch == *member.existing))
       operations.emplace_back(
           project::SetNativeEffectSettings{member.track, member.slot, std::move(patch)});
@@ -495,7 +495,7 @@ EffectService::relink_vst3_plugin(std::uint64_t opened_revision, project::TrackI
 
 foundation::Result<project::InsertSlotId>
 EffectService::add_native_effect(project::SignalPathId path, std::size_t index,
-                                 project::NativeEffectProcessor processor) {
+                                 project::NativeEffectPatch processor) {
   auto applied = model().apply({project::AddNativeEffect{path, index, std::move(processor)}});
   if (!applied)
     return foundation::Result<project::InsertSlotId>::failure(applied.error());
@@ -516,7 +516,7 @@ EffectService::add_native_effect(project::SignalPathId path, std::size_t index,
 
 foundation::Result<void> EffectService::set_native_effect(project::SignalPathId path,
                                                           project::InsertSlotId slot,
-                                                          project::NativeEffectProcessor processor,
+                                                          project::NativeEffectPatch processor,
                                                           std::optional<std::uint64_t> gesture) {
   auto applied =
       model().apply({project::SetNativeEffectSettings{path, slot, std::move(processor)}}, gesture);
@@ -627,9 +627,8 @@ EffectService::apply_effect_edits(std::span<const EffectEdit> edits) {
     if (!slot)
       return R::failure(slot.error());
     slots.push_back(slot.value());
-    operations.emplace_back(
-        project::AddNativeEffect{edit.path, std::min(edit.index.value_or(length), length),
-                                 project::NativeEffectProcessor{std::move(patch).value()}});
+    operations.emplace_back(project::AddNativeEffect{
+        edit.path, std::min(edit.index.value_or(length), length), std::move(patch).value()});
   }
   if (operations.empty())
     return R::success(std::move(slots));

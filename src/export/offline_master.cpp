@@ -384,12 +384,6 @@ using WriterOptions = MasterOutputOptions;
                               source_extent_floor, nullptr, nullptr, detector_buses, controls,
                               vst3);
   }
-#if !OSCILLATE_HAVE_CONVOLUTION
-  if (project::has_convolution_insert(snapshot))
-    return foundation::Result<PublishOutcome>::failure(
-        {foundation::ErrorCode::unsupported,
-         "Saved convolution insert is not available for export yet"});
-#endif
   // Only the solo track's own content sets a track render's length.
   const bool solo_extent_only = controls != nullptr && controls->solo_extent_only && solo_track;
   const auto sets_extent = [&](const project::Track& track) {
@@ -1284,11 +1278,6 @@ struct StemPlan {
 
 [[nodiscard]] foundation::Result<StemPlan> prepare_stems(const project::Snapshot& snapshot) {
   using R = foundation::Result<StemPlan>;
-#if !OSCILLATE_HAVE_CONVOLUTION
-  if (project::has_convolution_insert(snapshot))
-    return R::failure({foundation::ErrorCode::unsupported,
-                       "Saved convolution insert is not available for stem export yet"});
-#endif
   auto detector_buses = stem_detector_buses(snapshot);
   if (!detector_buses)
     return R::failure(detector_buses.error());

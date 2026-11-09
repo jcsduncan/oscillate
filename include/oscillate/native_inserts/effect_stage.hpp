@@ -2,6 +2,7 @@
 
 #include "oscillate/automation_project/preparation.hpp"
 #include "oscillate/engine/graph.hpp"
+#include "oscillate/engine/synth_media.hpp"
 #include "oscillate/foundation/error.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/synth/plan_mailbox.hpp"
@@ -37,12 +38,13 @@ class NativeEffectStage final : public engine::SidechainProcessorRuntime {
 public:
   // Control only. Lanes targeting `slot` are taken from `automation` (none
   // without a slot); automated frames must not pass
-  // last_safe_automation_sample.
+  // last_safe_automation_sample. `media` is the patch document's managed
+  // media, decoded (empty for an engine without EffectEngine::media).
   [[nodiscard]] static foundation::Result<std::unique_ptr<NativeEffectStage>>
   create(const project::Snapshot& snapshot, std::optional<project::InsertSlotId> slot,
          const project::NativeEffectPatch& patch,
          std::span<const automation_project::PreparedTargetAutomation> automation,
-         EffectStageLimits limits);
+         EffectStageLimits limits, engine::SynthMedia media = {});
 
   void process(std::span<engine::StereoFrame> stereo,
                engine::BlockContext context) noexcept override;

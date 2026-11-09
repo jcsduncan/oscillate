@@ -321,7 +321,7 @@ function(oscillate_add_quick_core target codec export_resampler vst3)
   set_source_files_properties(${here}/src/diagnostics_controller.cpp
     TARGET_DIRECTORY ${target}
     PROPERTIES COMPILE_DEFINITIONS
-      "OSCILLATE_VERSION=\"${PROJECT_VERSION}\";OSCILLATE_HAVE_SOURCE_RESAMPLER=$<BOOL:${OSCILLATE_BUILD_SOURCE_RESAMPLER}>;OSCILLATE_HAVE_CONVOLUTION=$<BOOL:${OSCILLATE_BUILD_CONVOLUTION_DSP}>")
+      "OSCILLATE_VERSION=\"${PROJECT_VERSION}\";OSCILLATE_HAVE_SOURCE_RESAMPLER=$<BOOL:${OSCILLATE_BUILD_SOURCE_RESAMPLER}>")
   if(vst3)
     target_link_libraries(${target} PUBLIC
       oscillate::vst3_track_insert oscillate::vst3_instrument_provider

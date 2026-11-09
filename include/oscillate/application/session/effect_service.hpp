@@ -69,10 +69,10 @@ public:
   // qualify live playback/export before describing a revision as active.
   [[nodiscard]] foundation::Result<project::InsertSlotId>
   add_native_effect(project::SignalPathId path, std::size_t index,
-                    project::NativeEffectProcessor processor);
+                    project::NativeEffectPatch processor);
   [[nodiscard]] foundation::Result<void>
   set_native_effect(project::SignalPathId path, project::InsertSlotId slot,
-                    project::NativeEffectProcessor processor,
+                    project::NativeEffectPatch processor,
                     std::optional<std::uint64_t> gesture = {});
   // A built-in effect (ADR-0040) at a factory preset or the engine defaults.
   [[nodiscard]] foundation::Result<project::InsertSlotId>

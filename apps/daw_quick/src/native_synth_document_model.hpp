@@ -133,6 +133,8 @@ public:
   // also carries {frames, sample_rate}.
   Q_INVOKABLE QVariantMap media(const QString& id) const;
   Q_INVOKABLE bool set_builtin_media(const QString& id, const QString& name, int frame_length);
+  // Builtin `name` in slot `id` as the document's only media, in one edit.
+  Q_INVOKABLE bool set_sole_builtin_media(const QString& id, const QString& name);
   // The label's text, or `fallback` when the document has none.
   Q_INVOKABLE QString label(const QString& id, const QString& fallback) const;
   Q_INVOKABLE bool set_label(const QString& id, const QString& text);

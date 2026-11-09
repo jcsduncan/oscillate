@@ -13,9 +13,6 @@ Rectangle {
     objectName: "mixerView"
     required property var bridge
 
-    // A convolution insert has its controls in the device chain; the shell
-    // opens it there. Every other built-in effect opens in place.
-    signal nativeInsertEditorRequested(string pathId, string slotId, string kind)
     // '+ Insert' on a strip: the shell opens the browser for that path.
     signal browserRequested(string pathId)
 
@@ -26,7 +23,6 @@ Rectangle {
     readonly property var trackPalette: Theme.mixerTrackPalette
     readonly property var returnPalette: Theme.mixerReturnPalette
     readonly property var engineColors: Theme.mixerEngineColors
-    readonly property var nativeKindColors: Theme.mixerNativeKindColors
 
     function trackColor(track, index) {
         return track.color ? track.color : trackPalette[index % trackPalette.length]
@@ -61,7 +57,7 @@ Rectangle {
             kind: effect.nativeKind || "",
             color: effect.pluginId ? Theme.textDim
                 : effect.nativeKind === "effect" ? (engineColors[effect.engine] || Theme.accent)
-                : (nativeKindColors[effect.nativeKind] || Theme.textDim)
+                : Theme.textDim
         }))
     }
     function truePeakText() {
@@ -136,8 +132,6 @@ Rectangle {
             bridge.vst3Editor.open_vst3_insert_editor(pathId, insert.slotId)
         else if (insert.kind === "effect")
             bridge.open_native_effect_editor(pathId, insert.slotId)
-        else
-            nativeInsertEditorRequested(pathId, insert.slotId, insert.kind)
     }
     function activateSource(trackId) {
         const track = (bridge.tracks || []).find(item => item.id === trackId)

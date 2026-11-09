@@ -1,7 +1,8 @@
 # PFFFT inventory
 
 **Status:** Vendored at [third_party/pffft](../../third_party/pffft/README.md)
-and linked statically by the warp DSP and the optional convolution core.
+and linked statically by the warp DSP and the native effects (Cast's
+partitioned convolution, [ADR-0115](../decisions/0115-cast-convolution-reverb.md)), in every build.
 
 | Field | Value |
 | --- | --- |
@@ -9,7 +10,7 @@ and linked statically by the warp DSP and the optional convolution core.
 | Pin | Annotated tag `v1.1.0`, peeled commit `1fdcb508e5082052ab406d560b7c4622b8b4b0dd` |
 | Needed API | `PFFFT` single-precision real transforms and `pffft_zconvolve_accumulate`; `PFFASTCONV` is excluded |
 | Licence | [BSD-like upstream terms](https://github.com/marton78/pffft/blob/v1.1.0/LICENSE.txt): preserve notices/disclaimer in source or binary materials, no endorsement |
-| Linkage | Static C library target `oscillate_pffft` (`third_party/pffft/CMakeLists.txt`), private to `oscillate_warp_dsp` and `oscillate_convolution_dsp` |
+| Linkage | Static C library target `oscillate_pffft` (`third_party/pffft/CMakeLists.txt`), private to `oscillate_warp_dsp` and `oscillate_native_effects` |
 | External runtime | None beyond the platform C/math runtime |
 | Local change | [`allocation-failure.patch`](../../third_party/pffft/patches/allocation-failure.patch), already applied to the vendored `src/pffft_priv_impl.h` |
 
@@ -19,10 +20,7 @@ are not included.
 
 ## Allocation-failure patch
 
-The isolated [convolution prototype](../performance/convolution-prototype.md)
-passes independent FIR oracles at 44.1, 48, 88.2 and 96 kHz and measures
-1, 4 and 8 full-length stereo processors at 64/128 frames. GNU allocator
-fault injection found that PFFFT v1.1.0's `pffft_new_setup` does not check
+GNU allocator fault injection found that PFFFT v1.1.0's `pffft_new_setup` does not check
 the initial struct `malloc` or the later aligned-data allocation before
 dereferencing them (`src/pffft_priv_impl.h` around line 1,079). The vendored
 copy carries a two-check patch so that setup returns null instead; `malloc`
@@ -51,11 +49,3 @@ the partition scheduler and must not be treated as convolution CPU evidence.
 | 256 | 0.235 | 0.199 |
 | 512 | 0.473 | 0.410 |
 | 2,048 | 2.025 | 1.798 |
-
-The baseline 48 kHz schedule uses 128-, 512- and 2,048-point transforms at
-64-, 256- and 1,024-frame tier boundaries. Complete two-second stereo
-callback measurements, including 1/4/8 simultaneous instances, are in the
-performance note. A half-size final partition improves some 96 kHz peaks
-but leaves many multi-instance simulated deadline misses, so it is not
-selected for production. Full graph/device qualification and a bounded
-instance policy remain open.

@@ -35,6 +35,7 @@
 #include <thread>
 #include <unistd.h>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace tolerance = oscillate::test::tolerance;
@@ -44,6 +45,7 @@ namespace fs = std::filesystem;
 using namespace oscillate;
 
 using oscillate::test::require;
+using oscillate::test::take;
 
 const std::string& external_path(const project::SourceRecord& source) {
   if (!source.external_link)
@@ -1372,6 +1374,59 @@ void native_synth_media_import_is_atomic_and_undoable() {
   REQUIRE_EQ(slot_media(undo_session.value()->snapshot().tracks.front()), nullptr,
              "undo did not remove source and slot together");
   REQUIRE_OK(undo_session.value()->saving().save(), "save after undo failed");
+}
+
+// A user's impulse response in a built-in effect's media slot (Cast,
+// ADR-0115), on a track and on the master: the source and the document are
+// one undoable revision, and a slot without a built-in effect is refused.
+void native_effect_media_import_is_atomic_and_undoable() {
+  constexpr std::string_view engine = "cast";
+  constexpr std::string_view slot = "ir";
+  Directory directory;
+  const auto source = make_wav(directory.path());
+  auto session = application::ProjectSession::create(directory.path() / "song");
+  REQUIRE_OK(session, "session setup failed");
+  auto& opened = *session.value();
+  const auto track = take(opened.tracks().add_audio_track());
+  const project::SignalPathId track_path{track};
+  const project::SignalPathId master_path{project::MasterSignalPath{}};
+  const auto on_track = take(opened.effects().add_effect_engine(track_path, 0, engine));
+  const auto on_master = take(opened.effects().add_effect_engine(master_path, 0, engine));
+  const auto media_of = [&](const project::EffectInsert& insert) {
+    const auto& document = std::get<project::NativeEffectPatch>(insert.processor).document;
+    const auto found = std::ranges::find(document.media, slot, &project::NativeMediaSlot::id);
+    return found == document.media.end()
+               ? nullptr
+               : std::get_if<project::ManagedAudioReference>(&found->media);
+  };
+  const auto before = opened.snapshot().revision;
+  FileDescriptor descriptor(source);
+  require(
+      !opened.imports().import_native_effect_media(track_path, on_master, slot, descriptor.get()),
+      "a slot that is not on the path was accepted");
+  REQUIRE_EQ(opened.snapshot().revision, before, "a refused import changed the project");
+  REQUIRE_OK(
+      opened.imports().import_native_effect_media(track_path, on_track, slot, descriptor.get()),
+      "an impulse response did not import into a track's effect");
+  const auto& bound = opened.snapshot();
+  REQUIRE_EQ(bound.revision, before + 1, "source and document were not one accepted revision");
+  REQUIRE_EQ(bound.sources.size(), 1, "source and document were not one accepted revision");
+  const auto* imported = media_of(bound.tracks.front().effects.front());
+  REQUIRE_NE(imported, nullptr, "the effect's media slot does not play the import");
+  REQUIRE_EQ(imported->source, bound.sources.front().id,
+             "the effect's media slot does not play the import");
+  REQUIRE_OK(
+      opened.imports().import_native_effect_media(master_path, on_master, slot, descriptor.get()),
+      "an impulse response did not import into a master effect");
+  REQUIRE_EQ(opened.snapshot().sources.size(), 1, "importing the same sound again added a source");
+  REQUIRE_NE(media_of(opened.snapshot().master_effects.front()), nullptr,
+             "the master effect's media slot does not play the import");
+  REQUIRE_OK(opened.history().undo(), "master import undo failed");
+  REQUIRE_OK(opened.history().undo(), "track import undo failed");
+  REQUIRE_TRUE(opened.snapshot().sources.empty(), "undo did not remove source and slot together");
+  REQUIRE_EQ(media_of(opened.snapshot().tracks.front().effects.front()), nullptr,
+             "undo did not remove source and slot together");
+  REQUIRE_OK(opened.saving().save(), "save after undo failed");
 }
 
 // Begin on control, run on a worker, finish on control; a stale completion
@@ -6210,6 +6265,8 @@ int main(int argc, char** argv) {
            native_synth_media_import_is_atomic_and_undoable},
           {"native_synth_media_import_runs_on_a_worker",
            native_synth_media_import_runs_on_a_worker},
+          {"native_effect_media_import_is_atomic_and_undoable",
+           native_effect_media_import_is_atomic_and_undoable},
           {"crate_sample_import_sets_state_in_one_step",
            crate_sample_import_sets_state_in_one_step},
           {"accepted_media_import_survives_save_failure",

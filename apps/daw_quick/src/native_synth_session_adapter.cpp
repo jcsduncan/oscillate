@@ -306,10 +306,6 @@ void SessionNativeSynthAdapter::submit_document(project::NativeSynthDocument doc
 }
 
 bool SessionNativeSynthAdapter::import_media(std::string_view slot, std::string_view path) {
-  if (slot_) {
-    message_ = "Effects take no media";
-    return false;
-  }
   if (const auto reason = unavailable_reason(); !reason.empty()) {
     message_ = reason;
     return false;
@@ -321,7 +317,9 @@ bool SessionNativeSynthAdapter::import_media(std::string_view slot, std::string_
   }
   gesture_.reset();
   const auto before = session_.snapshot().revision;
-  auto imported = session_.imports().import_native_synth_media(track_, slot, fd);
+  // A built-in effect's slot (Cast's impulse response) or the synth's.
+  auto imported = slot_ ? session_.imports().import_native_effect_media(path_, *slot_, slot, fd)
+                        : session_.imports().import_native_synth_media(track_, slot, fd);
   ::close(fd);
   if (!imported) {
     message_ = imported.error().message;
@@ -505,7 +503,7 @@ bool SessionNativeSynthAdapter::begin_media_import(std::string_view slot, std::s
                                                    NativeSynthMediaPlanner plan,
                                                    NativeSynthMediaDone done) {
   if (slot_) {
-    message_ = "Effects take no media";
+    message_ = "An effect's media is imported whole";
     return false;
   }
   if (const auto reason = unavailable_reason(); !reason.empty()) {

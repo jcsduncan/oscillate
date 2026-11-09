@@ -1,6 +1,6 @@
 # ADR-0020 — Convolution reverb core and FFT boundary
 
-**Status:** Accepted; implemented as an opt-in build (`OSCILLATE_BUILD_CONVOLUTION_DSP`): offline export renders a saved convolution insert; the Quick app refuses live playback of a project that holds one. Release packages leave it out.
+**Status:** Superseded by [ADR-0115](0115-cast-convolution-reverb.md).
 **Date:** 15 October 2026
 **Requirements:** PRD §§5, 7, 15, 17, 21–22; FS-06 native processing and export tails.
 
@@ -125,8 +125,7 @@ does not link it. Each call accepts at most 128 stereo frames. Preparation
 accepts only 44.1/48/88.2/96 kHz, a finite dual-mono IR of at most two seconds,
 and a wet level of 0–1. An oversized call fails closed to silence and
 increments the fault count. IR preparation, reset and destruction remain
-control-side operations after callback quiescence. See the
-[native-core evidence](../performance/convolution-native-core.md).
+control-side operations after callback quiescence.
 
 This closes the standalone runtime and test portion of gates 2/3 above; it
 does not close listening quality, safe multi-instance admission, graph/export

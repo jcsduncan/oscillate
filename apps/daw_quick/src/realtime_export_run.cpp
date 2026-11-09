@@ -27,17 +27,8 @@ Result<std::uint64_t> insert_tail_frames(const project::EffectInsert& insert,
     return Result<std::uint64_t>::failure(
         {ErrorCode::unsupported,
          "JACK real-time export cannot bound a VST3 effect tail; use offline export"});
-  if (std::holds_alternative<project::NativeConvolution>(insert.processor))
-    return Result<std::uint64_t>::failure(
-        {ErrorCode::unsupported, "JACK real-time export cannot bound a convolution tail"});
-  native_inserts::StageContext context{snapshot.sample_rate};
-  context.snapshot = &snapshot;
-  auto prepared = native_inserts::prepare_native_stage(insert, context);
-  if (!prepared)
-    return Result<std::uint64_t>::failure(prepared.error());
-  if (!prepared.value().export_tail_frames)
-    return Result<std::uint64_t>::failure(*prepared.value().tail_error);
-  return Result<std::uint64_t>::success(*prepared.value().export_tail_frames);
+  return native_inserts::native_effect_tail_frames(
+      std::get<project::NativeEffectPatch>(insert.processor), snapshot.sample_rate);
 }
 } // namespace
 

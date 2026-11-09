@@ -119,12 +119,11 @@ bool RackLibraryController::save_rack(const QString& track_id, const QString& na
     return false;
   }
   const auto skipped = captured.value().skipped;
-  report(skipped == 0
-             ? QStringLiteral("Saved rack \"%1\"").arg(trimmed)
-             : QStringLiteral("Saved rack \"%1\"; %2 VST3 or convolution device%3 left out")
-                   .arg(trimmed)
-                   .arg(skipped)
-                   .arg(skipped == 1 ? QString() : QStringLiteral("s")));
+  report(skipped == 0 ? QStringLiteral("Saved rack \"%1\"").arg(trimmed)
+                      : QStringLiteral("Saved rack \"%1\"; %2 VST3 device%3 left out")
+                            .arg(trimmed)
+                            .arg(skipped)
+                            .arg(skipped == 1 ? QString() : QStringLiteral("s")));
   emit racks_changed();
   return true;
 }

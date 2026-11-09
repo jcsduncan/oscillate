@@ -56,7 +56,6 @@ struct MasterSignalPath {
 };
 using SignalPathId = std::variant<TrackId, MasterSignalPath>;
 enum class NativeInsertKind : std::uint8_t {
-  convolution = 1,
   effect = 2 // A built-in effect engine (ADR-0040).
 };
 

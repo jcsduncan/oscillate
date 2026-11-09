@@ -28,8 +28,8 @@ public:
 
   // Conservative saved-native diagnostic retained for focused parity tests.
   // begin() instead checks exact prepared runtime tails and route topology.
-  // This diagnostic rejects VST3 effects and instruments, unbounded MIDI releases,
-  // convolution, and a sum above max_tail_seconds.
+  // This diagnostic rejects VST3 effects and instruments, unbounded MIDI releases
+  // and a sum above max_tail_seconds.
   [[nodiscard]] static foundation::Result<std::uint64_t>
   bounded_tail_frames(const project::Snapshot& snapshot);
 

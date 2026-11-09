@@ -82,7 +82,8 @@ struct MasterRenderOptions {
 // Each source is isolated before its saved main/send routes and the master
 // native insert chain. Bus-only tracks have no independent source stem.
 // Saved automation uses the shared curve evaluator.
-// Optional convolution processing verifies a managed WAV IR before rendering.
+// Built-in effects' managed media (Cast's impulse responses) is verified and
+// decoded from the store before rendering.
 // A new directory is published only after every stem is durable. Existing
 // target directories are rejected rather than replaced.
 struct StemRenderOptions {

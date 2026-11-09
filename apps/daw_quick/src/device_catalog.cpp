@@ -99,6 +99,11 @@ constexpr std::array looks{
                "Clips peaks under a 0 dBFS ceiling, oversampled",
                "Clipper for drums and the master: hard to soft, up to 16x, never over 0 dBTP", "",
                "clip clipper clipping soft hard loud loudness drums kick 808 master true peak"},
+    DeviceLook{"hush", "Effects", S::dynamics, "Gate", "Gt", "#b49cff",
+               "Gate and expander with lookahead and a filtered key",
+               "Gate and expander: hysteresis, hold, lookahead, a filtered or external key", "",
+               "gate noise gate expander bleed drums kick snare tom hum duck gated reverb "
+               "sidechain key"},
     DeviceLook{"pump", "Effects", S::dynamics, "Sidechain shaper", "Sc", "#ff7a6b",
                "Draw the duck over the kick",
                "Draw the duck over the kick: tempo or kick-triggered", "",
@@ -138,6 +143,11 @@ constexpr std::array looks{
                "Small rooms to cathedrals, shimmer and freeze",
                "Rooms to vast clouds, shimmer and freeze", "",
                "verb room hall plate space ambience shimmer"},
+    DeviceLook{"cast", "Effects", S::space, "Convolution reverb", "Cv", "#f0b86e",
+               "Real spaces, plates and springs, or your own IR",
+               "Convolution reverb: modelled rooms, halls, plates and a spring, or your own IR", "",
+               "convolution impulse response ir reverb verb room hall plate spring chamber "
+               "cathedral space ambience true stereo"},
     DeviceLook{"relay", "Effects", S::space, "Delay", "Dl", "#ffb36b",
                "Tape, analog and digital echoes", "Digital, tape and analog echoes, tempo-synced",
                "", "echo tape ping pong dub repeat"},

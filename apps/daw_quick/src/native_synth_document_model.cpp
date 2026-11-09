@@ -652,6 +652,7 @@ QVariantMap NativeSynthDocumentModel::media(const QString& id) const {
   if (const auto* managed = std::get_if<project::ManagedAudioReference>(&found->media)) {
     out.insert(QStringLiteral("frames"), static_cast<double>(managed->frames));
     out.insert(QStringLiteral("sample_rate"), static_cast<int>(managed->sample_rate));
+    out.insert(QStringLiteral("channels"), static_cast<int>(managed->channels));
   }
   return out;
 }
@@ -673,6 +674,15 @@ bool NativeSynthDocumentModel::set_builtin_media(const QString& id, const QStrin
     }
     next.media.push_back(std::move(slot));
   }
+  return submit(std::move(next));
+}
+
+bool NativeSynthDocumentModel::set_sole_builtin_media(const QString& id, const QString& name) {
+  if (name.isEmpty()) {
+    return false;
+  }
+  auto next = document_;
+  next.media = {{utf8(id), project::NativeBuiltinMedia{utf8(name)}, 0}};
   return submit(std::move(next));
 }
 

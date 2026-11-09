@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/cast">
+    <file>CastPanel.qml</file>
+    <file>CastTheme.qml</file>
+    <file>CastIrView.qml</file>
+  </qresource>
+</RCC>

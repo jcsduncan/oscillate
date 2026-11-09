@@ -238,10 +238,6 @@ channel_control_domain(TrackControlTarget::Key key) noexcept {
 // intent before rendering, including lanes owned by clips.
 [[nodiscard]] bool requires_automation_rendering(const Snapshot& snapshot) noexcept;
 
-// Until a convolution runtime is bound in every render path, consumers must
-// explicitly reject a saved convolution insert even when its slot is bypassed.
-[[nodiscard]] bool has_convolution_insert(const Snapshot& snapshot) noexcept;
-
 // The heap and inline bytes a snapshot holds, estimated from its element
 // counts, strings and plugin state blobs. Undo history retention budgets with
 // it; it is not an allocator measurement.

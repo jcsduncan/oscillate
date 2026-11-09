@@ -1,6 +1,7 @@
 #pragma once
 
 #include "oscillate/engine/graph.hpp"
+#include "oscillate/engine/synth_media.hpp"
 #include "oscillate/foundation/error.hpp"
 #include "oscillate/native_dsp/document_state.hpp"
 #include "oscillate/native_dsp/parameter_control.hpp"
@@ -67,6 +68,17 @@ public:
   virtual void locate(std::uint64_t project_frame) noexcept { (void)project_frame; }
 };
 
+// What an engine compiles its document with: the effect's values in table
+// order, its decoded managed media (EffectEngine::media) and the rate.
+// `previous` is the state last compiled for the same runtime (null for the
+// first) and may still be in use; an engine may share its parts.
+struct DocumentInputs {
+  std::span<const double> values;
+  const engine::SynthMedia* media = nullptr;
+  double sample_rate = 0.0;
+  const DocumentState* previous = nullptr;
+};
+
 struct EffectEngine {
   const EngineDescriptor* descriptor = nullptr;
   // Control only. Allocates everything the kernel needs for these initial
@@ -90,17 +102,29 @@ struct EffectEngine {
   foundation::Result<void> (*validate_document)(const project::NativeSynthDocument& document) =
       nullptr;
   // Control only, for a validated document: compile it. The kernel reads
-  // the result without allocating; `previous` is the state last compiled
-  // for the same runtime (null for the first) and may still be in use.
+  // the result without allocating.
   foundation::Result<std::shared_ptr<const DocumentState>> (*prepare_document)(
-      const project::NativeSynthDocument& document, double sample_rate,
-      const DocumentState* previous) = nullptr;
+      const project::NativeSynthDocument& document, const DocumentInputs& inputs) = nullptr;
   // The document a factory preset, or the defaults (nullopt), start with;
   // empty when null.
   project::NativeSynthDocument (*preset_document)(std::optional<std::size_t> preset) = nullptr;
   // True when the kernel reads its keying tracks' notes (adopt_key_notes):
   // stages compile them from the project and refresh them on every edit.
   bool key_notes = false;
+  // True when the document may hold managed media slots (ADR-0115): stages
+  // decode them off the callback and pass them to prepare_document. A
+  // change of managed media rebuilds the stage.
+  bool media = false;
+  // Parameters prepare_document reads (indices in table order; never
+  // automatable). A change of any of them compiles the document again on
+  // control, adopted at a block start like a document edit.
+  std::span<const std::size_t> document_parameters{};
+  // Control only, for engines whose tail depends on their document (an
+  // IR's length): frames the effect keeps sounding after its input stops
+  // with this document. Null: tail_frames.
+  std::uint64_t (*document_tail_frames)(const project::NativeSynthDocument& document,
+                                        std::span<const double> values,
+                                        double sample_rate) = nullptr;
 };
 
 [[nodiscard]] std::span<const EffectEngine* const> engines() noexcept;
@@ -121,10 +145,12 @@ class NativeEffectRuntime {
 public:
   [[nodiscard]] static foundation::Result<std::unique_ptr<NativeEffectRuntime>>
   create(const EffectEngine& engine, std::span<const double> values, double sample_rate);
-  // With a document the engine validated.
+  // With a document the engine validated and its decoded managed media
+  // (EffectEngine::media; empty for every other engine).
   [[nodiscard]] static foundation::Result<std::unique_ptr<NativeEffectRuntime>>
   create(const EffectEngine& engine, std::span<const double> values,
-         const project::NativeSynthDocument& document, double sample_rate);
+         const project::NativeSynthDocument& document, double sample_rate,
+         engine::SynthMedia media = {});
 
   // Callback only. In place. A transport-generation change resets the
   // kernel. Lanes name live, automatable parameters with one value per
@@ -136,13 +162,11 @@ public:
 
   // Control only (ADR-0027 semantics): adopted at the next block, panel
   // jumps glide over each parameter's glide time.
-  [[nodiscard]] bool offer_values(std::span<const double> values, std::uint64_t revision) noexcept {
-    return control_.offer(values, revision);
-  }
-  // Control only: a panel control mid-drag, with no saved revision.
-  [[nodiscard]] bool offer_live_values(std::span<const double> values) noexcept {
-    return control_.offer_live(values);
-  }
+  [[nodiscard]] bool offer_values(std::span<const double> values, std::uint64_t revision) noexcept;
+  // Control only: a panel control mid-drag, with no saved revision. A
+  // change of a document parameter compiles the document first; false when
+  // that fails or the mailbox is full.
+  [[nodiscard]] bool offer_live_values(std::span<const double> values) noexcept;
   [[nodiscard]] std::uint64_t applied_revision() const noexcept {
     return control_.applied_revision();
   }
@@ -189,23 +213,33 @@ private:
   NativeEffectRuntime(const EffectEngine& engine, std::unique_ptr<EffectKernel> kernel,
                       std::span<const double> values, double sample_rate);
   void adopt_document() noexcept;
-  // Control only: the document compiled as an offer at `revision` (null
-  // for an engine without one), and published once compiled.
+  // Control only: the document compiled with `values` as an offer at
+  // `revision` (null for an engine without one), and published once
+  // compiled.
   [[nodiscard]] foundation::Result<std::unique_ptr<DocumentOffer>>
-  compile_document(const project::NativeSynthDocument& document, std::uint64_t revision) const;
+  compile_document(const project::NativeSynthDocument& document, std::span<const double> values,
+                   std::uint64_t revision) const;
+  // Control only: true when `values` differ from the last compiled ones in
+  // a document parameter.
+  [[nodiscard]] bool document_values_changed(std::span<const double> values) const noexcept;
+  // Control only: compiles and publishes the current document with these
+  // values when a document parameter changed (at the newest revision).
+  [[nodiscard]] bool recompile_for_values(std::span<const double> values,
+                                          std::uint64_t revision) noexcept;
   void publish_document(std::unique_ptr<DocumentOffer> offer) noexcept;
   void adopt_key_notes() noexcept;
 
-  // Compiled documents in offer order. Control owns them and retires those
-  // older than the callback's adopted revision; the callback reads the one
-  // it adopted until the next adoption.
+  // Compiled documents in offer order. Control owns them and retires every
+  // one but the newest, the one the callback adopted and the one it may be
+  // adopting; the callback reads the one it adopted until the next
+  // adoption.
   struct DocumentOffer {
     std::uint64_t revision = 0;
     std::shared_ptr<const DocumentState> state;
   };
   struct DocumentMailbox {
     std::atomic<const DocumentOffer*> offered{nullptr};
-    std::atomic<std::uint64_t> applied{0};
+    std::atomic<const DocumentOffer*> applied{nullptr};
   };
 
   EffectEngine engine_;
@@ -213,7 +247,10 @@ private:
   ParameterControl control_;
   std::unique_ptr<TelemetryBuffer> telemetry_ = std::make_unique<TelemetryBuffer>();
   project::NativeSynthDocument document_;                 // Control only.
+  engine::SynthMedia media_;                              // Control only.
+  std::vector<double> compiled_values_;                   // Control only.
   std::vector<std::unique_ptr<DocumentOffer>> documents_; // Control only.
+  const DocumentOffer* published_ = nullptr;              // Control only.
   std::unique_ptr<DocumentMailbox> document_mailbox_ = std::make_unique<DocumentMailbox>();
   // Key notes in offer order (control owns them): the callback reads the
   // one it adopted until it adopts the newest.

@@ -72,7 +72,7 @@ Json encoded(const Snapshot& state) {
 void pedals_and_controller_state_round_trip_together() {
   const auto original = snapshot(pedals());
   const auto json = encoded(original);
-  REQUIRE_EQ(json["schema"]["minor"], 47, "pedals save in the current schema");
+  REQUIRE_EQ(json["schema"]["minor"], 48, "pedals save in the current schema");
   const auto& track = json["project"]["tracks"][0];
   REQUIRE_EQ(track["instrument_source"]["payload"]["controller_state_base64"], "CQgH",
              "1.32 keeps 1.31's VST3 controller state");

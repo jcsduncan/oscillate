@@ -285,10 +285,8 @@ Result<void> apply_command(ApplyContext& context, const AddNativeEffect& command
   auto slot = allocate_insert_slot(candidate);
   if (!slot)
     return Result<void>::failure(slot.error());
-  auto processor =
-      std::visit([](const auto& native) -> EffectProcessor { return native; }, command.processor);
   effects->insert(effects->begin() + static_cast<std::ptrdiff_t>(command.index),
-                  {slot.value(), true, std::move(processor)});
+                  {slot.value(), true, command.processor});
   mark_effect_path_changed(command.path, changes);
   return Result<void>::success();
 }
@@ -358,54 +356,28 @@ Result<void> apply_command(ApplyContext& context, const SetNativeEffectSettings&
   if (found == effects->end()) {
     return Result<void>::failure({ErrorCode::not_found, "effect slot not on signal path"});
   }
-  auto replaced = std::visit(
-      [&](auto replacement) -> Result<void> {
-        using Native = std::decay_t<decltype(replacement)>;
-        auto* saved = std::get_if<Native>(&found->processor);
-        if (!saved) {
-          return Result<void>::failure(
-              conflict("effect settings must preserve the native processor kind"));
-        }
-        if constexpr (std::is_same_v<Native, NativeEffectPatch>) {
-          // A slot keeps its engine; changing effect is remove + add.
-          if (saved->engine != replacement.engine ||
-              saved->engine_version != replacement.engine_version) {
-            return Result<void>::failure(
-                conflict("effect settings must preserve the built-in effect engine"));
-          }
-        }
-        const bool same_settings = [&] {
-          if constexpr (std::is_same_v<Native, NativeEffectPatch>) {
-            return saved->parameters == replacement.parameters &&
-                   saved->document == replacement.document && saved->link == replacement.link;
-          } else {
-            return saved->ir == replacement.ir && saved->wet == replacement.wet;
-          }
-        }();
-        if (same_settings) {
-          return Result<void>::failure(invalid("native effect settings are unchanged"));
-        }
-        if (saved->generation == std::numeric_limits<std::uint64_t>::max()) {
-          return Result<void>::failure(exhausted("native effect generation exhausted"));
-        }
-        replacement.generation = saved->generation + 1;
-        auto valid = [&] {
-          if constexpr (std::is_same_v<Native, NativeEffectPatch>) {
-            return validate_native_effect_patch(replacement, candidate);
-          } else {
-            return validate_native_convolution(replacement, candidate);
-          }
-        }();
-        if (!valid) {
-          return valid;
-        }
-        found->processor = std::move(replacement);
-        return Result<void>::success();
-      },
-      command.processor);
-  if (!replaced) {
-    return replaced;
+  auto* saved = std::get_if<NativeEffectPatch>(&found->processor);
+  if (!saved) {
+    return Result<void>::failure(conflict("effect settings must name a built-in effect slot"));
   }
+  auto replacement = command.processor;
+  // A slot keeps its engine; changing effect is remove + add.
+  if (saved->engine != replacement.engine || saved->engine_version != replacement.engine_version) {
+    return Result<void>::failure(
+        conflict("effect settings must preserve the built-in effect engine"));
+  }
+  if (saved->parameters == replacement.parameters && saved->document == replacement.document &&
+      saved->link == replacement.link) {
+    return Result<void>::failure(invalid("native effect settings are unchanged"));
+  }
+  if (saved->generation == std::numeric_limits<std::uint64_t>::max()) {
+    return Result<void>::failure(exhausted("native effect generation exhausted"));
+  }
+  replacement.generation = saved->generation + 1;
+  if (auto valid = validate_native_effect_patch(replacement, candidate); !valid) {
+    return valid;
+  }
+  found->processor = std::move(replacement);
   mark_effect_path_changed(command.path, changes);
   return Result<void>::success();
 }

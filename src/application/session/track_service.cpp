@@ -181,8 +181,7 @@ foundation::Result<void> TrackService::seed_default_returns() {
     operations.emplace_back(project::AddTrack{id.value(), project::TrackKind::return_bus});
     operations.emplace_back(project::SetTrackName{id.value(), std::string(item.name)});
     operations.emplace_back(
-        project::AddNativeEffect{project::SignalPathId{id.value()}, 0,
-                                 project::NativeEffectProcessor{std::move(wet).value()}});
+        project::AddNativeEffect{project::SignalPathId{id.value()}, 0, std::move(wet).value()});
   }
   auto applied = model().apply(operations);
   return applied ? Result::success() : Result::failure(applied.error());

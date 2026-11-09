@@ -94,14 +94,10 @@ target_link_libraries(oscillate_application PUBLIC
 )
 target_compile_definitions(oscillate_application PRIVATE
   OSCILLATE_HAVE_CODEC=$<BOOL:${OSCILLATE_BUILD_CODEC_ADAPTER}>
-  OSCILLATE_HAVE_CONVOLUTION=$<BOOL:${OSCILLATE_BUILD_CONVOLUTION_DSP}>
   OSCILLATE_HAVE_VST3=$<BOOL:${OSCILLATE_BUILD_VST3_SCANNER}>)
 if(OSCILLATE_BUILD_CODEC_ADAPTER)
   # Mix Check and Groove from a record decode a reference in any supported format.
   target_link_libraries(oscillate_application PRIVATE oscillate::codec)
-endif()
-if(OSCILLATE_BUILD_CONVOLUTION_DSP)
-  target_link_libraries(oscillate_application PRIVATE oscillate::convolution_ir)
 endif()
 if(OSCILLATE_BUILD_VST3_SCANNER)
   target_link_libraries(oscillate_application PRIVATE oscillate::vst3_graph_runtime)

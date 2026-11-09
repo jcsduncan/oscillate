@@ -76,7 +76,7 @@ void writer_round_trip_and_validation() {
   auto saved = state();
   const auto encoded = manifest(saved);
   const auto json = Json::parse(encoded);
-  REQUIRE_EQ(json["schema"]["minor"], 47, "writer wrote retired fields or omitted allocator state");
+  REQUIRE_EQ(json["schema"]["minor"], 48, "writer wrote retired fields or omitted allocator state");
   REQUIRE_TRUE(!json["project"].contains("master_eq"),
                "writer wrote retired fields or omitted allocator state");
   REQUIRE_TRUE(!json["project"]["tracks"][0].contains("vst3_plugins"),
@@ -122,7 +122,7 @@ void controller_state_round_trip() {
   missing.controller_state = std::vector<std::uint8_t>{6, 5};
   const auto encoded = manifest(saved);
   const auto json = Json::parse(encoded);
-  REQUIRE_EQ(json["schema"]["minor"], 47, "controller chunks lost present, empty or absent state");
+  REQUIRE_EQ(json["schema"]["minor"], 48, "controller chunks lost present, empty or absent state");
   REQUIRE_EQ(json["project"]["tracks"][0]["effects"][0]["payload"]["controller_state_base64"],
              "CQgH", "controller chunks lost present, empty or absent state");
   REQUIRE_EQ(json["project"]["tracks"][0]["effects"][1]["payload"]["controller_state_base64"], "",
@@ -180,7 +180,12 @@ void write_ir_wav(const fs::path& path) {
                                    oscillate::test::mono_channels, taps);
 }
 
-void convolution_identity_round_trips_and_missing_asset_reopens() {
+// A built-in effect's document may play managed media (schema 1.48): Cast's
+// impulse response keeps its identity through save and reopen, a stale or
+// malformed identity is refused, and a missing asset keeps the slot.
+void effect_media_round_trips_and_missing_asset_reopens() {
+  constexpr std::uint64_t generation = 7;
+  constexpr std::string_view media_slot = "ir";
   Directory temp;
   const auto root = temp.path() / "project";
   const auto input = temp.path() / "ir.wav";
@@ -195,40 +200,41 @@ void convolution_identity_round_trips_and_missing_asset_reopens() {
   saved.sources.push_back(source);
   const ManagedAudioReference ir{source.id,          source.sha256,   source.byte_length,
                                  source.sample_rate, source.channels, source.frames};
-  saved.master_effects.push_back({id<InsertSlotId>(2005), true, NativeConvolution{ir, 0.6, 7}});
+  NativeEffectPatch cast{"cast"};
+  cast.generation = generation;
+  cast.document.media.push_back({std::string(media_slot), ir, 0});
+  saved.master_effects.push_back({id<InsertSlotId>(2005), true, cast});
   const auto encoded = manifest(saved);
   const auto json = Json::parse(encoded);
-  REQUIRE_EQ(json["schema"]["minor"], 47,
-             "new convolution manifest kind or schema was not written");
-  REQUIRE_EQ(json["project"]["master_effects"].back()["kind"], "native_convolution",
-             "new convolution manifest kind or schema was not written");
+  REQUIRE_EQ(json["schema"]["minor"], 48, "effect media was not written in the current schema");
+  REQUIRE_EQ(json["project"]["master_effects"].back()["kind"], "native_effect",
+             "effect media was not written as a built-in effect");
+  const auto media_entry = [](Json& manifest_json) -> Json& {
+    return manifest_json["project"]["master_effects"].back()["payload"]["document"]["media"][0];
+  };
   auto malformed = json;
-  malformed["project"]["master_effects"].back()["payload"]["ir"]["unknown"] = 1;
-  require(!detail::decode_manifest(malformed.dump()), "unknown IR identity field was accepted");
+  media_entry(malformed)["managed"]["unknown"] = 1;
+  require(!detail::decode_manifest(malformed.dump()), "unknown media identity field was accepted");
   malformed = json;
-  malformed["project"]["master_effects"].back()["payload"]["ir"]["sha256"] = std::string(64, 'b');
-  require(!detail::decode_manifest(malformed.dump()), "mismatched IR identity was accepted");
-  malformed = json;
-  malformed["project"]["master_effects"].back()["payload"]["wet"] = 2.0;
-  require(!detail::decode_manifest(malformed.dump()), "out-of-range IR wet level was accepted");
+  media_entry(malformed)["managed"]["sha256"] = std::string(64, 'b');
+  require(!detail::decode_manifest(malformed.dump()), "mismatched media identity was accepted");
   std::array<SourceReceipt, 1> receipts{std::move(receipt)};
   REQUIRE_OK(writer.save(saved, SaveKind::explicit_save, receipts));
   auto reopened = take(ProjectStore::open_reader(root));
   auto loaded = take(reopened.load_current());
   REQUIRE_EQ(loaded.snapshot.master_effects, saved.master_effects,
-             "convolution IR settings or source identity changed on save/reopen");
+             "effect media or source identity changed on save/reopen");
   REQUIRE_EQ(loaded.snapshot.sources, saved.sources,
-             "convolution IR settings or source identity changed on save/reopen");
+             "effect media or source identity changed on save/reopen");
   REQUIRE_TRUE(loaded.source_diagnostics.empty(),
-               "convolution IR settings or source identity changed on save/reopen");
+               "effect media or source identity changed on save/reopen");
   fs::remove(root / "assets" / (source.sha256 + ".wav"));
   auto missing = take(reopened.load_current());
   REQUIRE_EQ(missing.snapshot.master_effects, saved.master_effects,
-             "missing IR media discarded the saved insert identity");
-  REQUIRE_EQ(missing.source_diagnostics.size(), 1,
-             "missing IR media discarded the saved insert identity");
+             "missing effect media discarded the saved slot");
+  REQUIRE_EQ(missing.source_diagnostics.size(), 1, "missing effect media was not reported");
   REQUIRE_EQ(missing.source_diagnostics.front().id, source.id,
-             "missing IR media discarded the saved insert identity");
+             "missing effect media was not reported");
 }
 
 } // namespace
@@ -238,7 +244,7 @@ int main() {
     writer_round_trip_and_validation();
     controller_state_round_trip();
     sidechain_send_round_trips_with_target_identity();
-    convolution_identity_round_trips_and_missing_asset_reopens();
+    effect_media_round_trips_and_missing_asset_reopens();
   } catch (const std::exception& error) {
     std::cerr << "insert schema: " << error.what() << '\n';
     return 1;

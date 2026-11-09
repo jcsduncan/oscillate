@@ -1022,7 +1022,6 @@ KitTheme {
     readonly property var mixerTrackPalette: ["#f5b14c", "#8fa6ff", "#c49bff", "#e8d9b8", "#ff8f6b", "#ff7aa8", "#9be36b", "#6be3d8", "#ffb36b", "#7fb8ff"]
     readonly property var mixerReturnPalette: ["#7fb8ff", "#ffb36b", "#c49bff", "#9be36b", "#ff7aa8", "#6be3d8"]
     readonly property var mixerEngineColors: ({ contour: "#ff7aa8", forge: "#ff9d5c", orbit: "#c49bff", relay: "#ffb36b", expanse: "#7fb8ff", vista: "#6be3d8", deck: "#ff8fd0", pocket: "#5fe0bf", lens: "#9be36b", loudness: "#6be3d8", scope: "#8fa6ff", tune: "#f5b14c", trim: "#b9c3cf", signal: "#ff6b6b", shape: "#8fa6ff", press: "#f5b14c", ceiling: "#ff6b6b" })
-    readonly property var mixerNativeKindColors: ({ convolution: "#c49bff" })
     // Project toolbar.
     readonly property int toolbarHeight: 56
     readonly property color recordColor: "#ff4d4d"

@@ -2,7 +2,7 @@
 
 This module links OpenSSL 3 `libcrypto` through CMake's `OpenSSL::Crypto` target for SHA-256 manifest checksums. OpenSSL 3 is licensed under Apache-2.0. The dependency and its transitive package closure belong in the release software bill of materials and Ubuntu/AppImage redistribution review. The checksum detects accidental or malicious changes to a generation; it is not an authenticity signature because the pointer and manifest live together.
 
-The bounded nlohmann/json codec writes the current schema, 1.47, with strict duplicate-field and size checks; a missing or unknown field is rejected. `migration.cpp` brings a manifest from an older released schema to the current one before decoding, through one pure step per schema change, and refuses newer and pre-release schemas ([ADR-0095](../../docs/decisions/0095-schema-migration-policy.md)). No schema is released yet, so only 1.47 opens; there are no migrations from earlier development layouts. The first explicit save after a migration names the pre-upgrade generation as a revision, so pruning keeps it. Each released schema has a golden manifest in `tests/persistence/golden`. The [project-media specification](../../docs/specs/03-project-media.md) and the specs it cites hold the detailed field contracts.
+The bounded nlohmann/json codec writes the current schema, 1.48, with strict duplicate-field and size checks; a missing or unknown field is rejected. `migration.cpp` brings a manifest from an older released schema to the current one before decoding, through one pure step per schema change, and refuses newer and pre-release schemas ([ADR-0095](../../docs/decisions/0095-schema-migration-policy.md)). No schema is released yet, so only 1.48 opens; there are no migrations from earlier development layouts. The first explicit save after a migration names the pre-upgrade generation as a revision, so pruning keeps it. Each released schema has a golden manifest in `tests/persistence/golden`. The [project-media specification](../../docs/specs/03-project-media.md) and the specs it cites hold the detailed field contracts.
 
 | Minor | Adds |
 | --- | --- |
@@ -51,6 +51,7 @@ The bounded nlohmann/json codec writes the current schema, 1.47, with strict dup
 | 1.45 | Audio clip `clay` take ([ADR-0081](../../docs/decisions/0081-clay-note-editing.md)). |
 | 1.46 | Project `chords` (the Chord track, [ADR-0083](../../docs/decisions/0083-harmony-chord-track-and-comp.md)). |
 | 1.47 | `chords` removed: chords are notes in MIDI clips ([ADR-0084](../../docs/decisions/0084-chord-clips.md)). |
+| 1.48 | `native_convolution` inserts removed; a built-in effect `document` may hold managed `media` slots (Cast's impulse responses, [ADR-0115](../../docs/decisions/0115-cast-convolution-reverb.md)). |
 
 This table records the evolution of the development format, not a promise
 that old development schemas open. Check every active branch before claiming

@@ -357,7 +357,7 @@ Provide:
 - Algorithmic and convolution reverb.
 - Limiter.
 
-The baseline processors are the Shape (EQ), Press (compressor), Expanse (algorithmic reverb) and Ceiling (limiter) engines on the generic native effect platform ([ADR-0040](decisions/0040-native-effect-platform.md), [ADR-0047](decisions/0047-classic-processors-as-engines.md)). Convolution reverb is an optional build component ([ADR-0020](decisions/0020-convolution-reverb.md)). The same platform adds:
+The baseline processors are the Shape (EQ), Press (compressor), Expanse (algorithmic reverb) and Ceiling (limiter) engines on the generic native effect platform ([ADR-0040](decisions/0040-native-effect-platform.md), [ADR-0047](decisions/0047-classic-processors-as-engines.md)). Cast is the convolution reverb on the same platform ([ADR-0115](decisions/0115-cast-convolution-reverb.md)). The same platform adds:
 
 - a filter (Contour), saturation (Forge), modulation (Orbit) and delay (Relay);
 - a stereo imager (Vista) and a DJ three-band isolator (Deck, [ADR-0055](decisions/0055-deck-dj-isolator.md));
@@ -365,6 +365,7 @@ The baseline processors are the Shape (EQ), Press (compressor), Expanse (algorit
 - a drawn volume shaper (Pump, [ADR-0058](decisions/0058-pump-volume-shaper.md)) and a tempo-locked gate and stutter (Chop, [ADR-0075](decisions/0075-chop.md));
 - a resonance suppressor with dynamic EQ bands (Temper, [ADR-0064](decisions/0064-temper-resonance-suppressor.md)) and multiband dynamics (Strata, [ADR-0082](decisions/0082-strata-multiband.md));
 - a clipper for drums and the master whose true peak never passes its ceiling, 0 dBFS or lower (Edge, [ADR-0108](decisions/0108-edge-clipper.md), [ADR-0113](decisions/0113-edge-adjustable-ceiling.md));
+- a gate and downward expander with hysteresis, hold, lookahead and a filtered or external key, for drum bleed and gated reverbs (Hush, [ADR-0116](decisions/0116-hush-gate-expander.md));
 - a spatial pass-by effect (Flyby, [ADR-0067](decisions/0067-flyby.md)) and background texture and ageing (Dust, [ADR-0069](decisions/0069-dust-texture.md));
 - the utility suite ([ADR-0042](decisions/0042-native-utility-suite.md)): Lens (spectrum analyser), Loudness (EBU R128), Scope (oscilloscope and alignment), Tune (tuner), Trim (gain and stereo utility) and Signal (test generator).
 

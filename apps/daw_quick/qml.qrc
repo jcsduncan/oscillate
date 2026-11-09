@@ -337,6 +337,13 @@
     <file alias="edge/EdgeTheme.qml">qml/edge/EdgeTheme.qml</file>
     <file alias="edge/EdgeTransfer.qml">qml/edge/EdgeTransfer.qml</file>
     <file alias="edge/EdgeSwitch.qml">qml/edge/EdgeSwitch.qml</file>
+    <file alias="cast/CastPanel.qml">qml/cast/CastPanel.qml</file>
+    <file alias="cast/CastTheme.qml">qml/cast/CastTheme.qml</file>
+    <file alias="cast/CastIrView.qml">qml/cast/CastIrView.qml</file>
+    <file alias="hush/HushPanel.qml">qml/hush/HushPanel.qml</file>
+    <file alias="hush/HushTheme.qml">qml/hush/HushTheme.qml</file>
+    <file alias="hush/HushScope.qml">qml/hush/HushScope.qml</file>
+    <file alias="hush/HushSwitch.qml">qml/hush/HushSwitch.qml</file>
     <file alias="strata/StrataPanel.qml">qml/strata/StrataPanel.qml</file>
     <file alias="strata/StrataTheme.qml">qml/strata/StrataTheme.qml</file>
     <file alias="strata/StrataSpectrum.qml">qml/strata/StrataSpectrum.qml</file>

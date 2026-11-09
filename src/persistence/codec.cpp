@@ -1315,13 +1315,7 @@ decode_sparse_parameters(const Json& entries) {
   auto [kind, payload] = std::visit(
       [](const auto& value) -> std::pair<std::string_view, Json> {
         using T = std::decay_t<decltype(value)>;
-        if constexpr (std::is_same_v<T, project::NativeConvolution>) {
-          const auto& ir = value.ir;
-          return {"native_convolution",
-                  {{"generation", value.generation},
-                   {"wet", value.wet},
-                   {"ir", encode_managed_audio(ir)}}};
-        } else if constexpr (std::is_same_v<T, project::NativeEffectPatch>) {
+        if constexpr (std::is_same_v<T, project::NativeEffectPatch>) {
           Json parameters = Json::array();
           for (const auto& parameter : value.parameters)
             parameters.push_back({{"id", parameter.id}, {"value", parameter.value}});
@@ -1353,13 +1347,6 @@ decode_sparse_parameters(const Json& entries) {
   const auto& payload = field(value, "payload");
   if (kind == "vst3_effect")
     return {id, enabled.get<bool>(), decode_plugin(payload)};
-  if (kind == "native_convolution") {
-    fields(payload, {"generation", "wet", "ir"});
-    return {id, enabled.get<bool>(),
-            project::NativeConvolution{
-                decode_managed_audio(field(payload, "ir")), real(field(payload, "wet")),
-                unsigned_integer<std::uint64_t>(field(payload, "generation"))}};
-  }
   if (kind == "native_effect") {
     fields(payload, {"generation", "engine", "engine_version", "parameters", "document", "link"});
     project::NativeEffectPatch patch;

@@ -20,18 +20,12 @@ oscillate_add_test_executable(oscillate_offline_master_tests SOURCES offline_mas
   INCLUDES ${CMAKE_CURRENT_LIST_DIR}/../../src/export
   DEFINITIONS OSCILLATE_HAVE_CODEC=$<BOOL:${OSCILLATE_BUILD_CODEC_ADAPTER}>
     OSCILLATE_HAVE_EXPORT_RESAMPLER=$<BOOL:${OSCILLATE_BUILD_EXPORT_RESAMPLER}>
-    OSCILLATE_HAVE_CONVOLUTION=$<BOOL:${OSCILLATE_BUILD_CONVOLUTION_DSP}>
     OSCILLATE_CODEC_FIXTURE_DIR="${PROJECT_SOURCE_DIR}/tests/codec/assets"
   TEST export_offline_master TIER slow)
 
 oscillate_add_test_executable(oscillate_warp_export_tests SOURCES warp_export_tests.cpp
   LIBS oscillate::application oscillate::export oscillate::persistence
   TEST export_warp TIER slow)
-if(OSCILLATE_BUILD_CONVOLUTION_DSP)
-  oscillate_add_test_executable(oscillate_convolution_export_tests SOURCES convolution_export_tests.cpp
-    LIBS oscillate::export oscillate::persistence oscillate::native_inserts
-    TEST export_convolution)
-endif()
 if(OSCILLATE_BUILD_CODEC_ADAPTER)
   target_include_directories(oscillate_offline_master_tests SYSTEM PRIVATE
     ${OSCILLATE_SNDFILE_INCLUDE_DIR})

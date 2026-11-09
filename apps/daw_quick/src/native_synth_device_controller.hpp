@@ -277,6 +277,9 @@ public:
   // the latency in milliseconds at `sample_rate`.
   Q_INVOKABLE QVariantList edge_transfer(double from_db, double to_db, int points) const;
   Q_INVOKABLE double edge_latency_ms(double sample_rate) const;
+  // Cast (ADR-0115): its bundled IRs ({id, name, category}, in browser
+  // order).
+  Q_INVOKABLE QVariantList cast_irs() const;
 
   // Forge sketches (empty or 0 for other engines): the static transfer curve
   // with auto gain at `points` inputs over -1..1, and the makeup in dB.
@@ -346,9 +349,13 @@ public:
   Q_INVOKABLE bool set_favourite(const QString& key, bool favourite);
   Q_INVOKABLE bool export_preset(const QString& path);
   Q_INVOKABLE bool import_preset(const QString& path);
-  // A user's audio file (WAV) in document media slot `slot`, as one undo
-  // step. False when it is refused; the status says why.
+  // A user's audio file in document media slot `slot` of the bound synth or
+  // built-in effect (Cast's impulse response), as one undo step. False when
+  // it is refused; the status says why.
   Q_INVOKABLE bool import_media(const QString& slot, const QString& path);
+  // A file dialog titled `title`, then import_media; false when cancelled,
+  // refused or without a desktop.
+  Q_INVOKABLE bool choose_media(const QString& slot, const QString& title);
   // The system clipboard, for copying shapes between panels.
   Q_INVOKABLE void set_clipboard_text(const QString& text);
   Q_INVOKABLE QString clipboard_text() const;

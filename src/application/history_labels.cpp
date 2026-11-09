@@ -48,8 +48,6 @@ std::string effect_name(const project::EffectInsert& insert) {
         using T = std::decay_t<decltype(processor)>;
         if constexpr (std::is_same_v<T, project::Vst3PluginInstance>)
           return processor.name.empty() ? std::string("plug-in") : processor.name;
-        else if constexpr (std::is_same_v<T, project::NativeConvolution>)
-          return "Convolution";
         else
           return native_effect_name(processor.engine);
       },

@@ -467,9 +467,7 @@ std::vector<routing::BoundStage> receipts(project::TrackId track, const Prepared
       receipt.processor = routing::StageProcessor::vst3;
       receipt.plugin = plugin->id;
     } else {
-      receipt.processor = std::holds_alternative<project::NativeConvolution>(stage.saved.processor)
-                              ? routing::StageProcessor::convolution
-                              : routing::StageProcessor::native_effect;
+      receipt.processor = routing::StageProcessor::native_effect;
       receipt.generation = native_inserts::native_generation(stage.saved.processor);
     }
     receipt.latency_frames = stage.latency_frames;

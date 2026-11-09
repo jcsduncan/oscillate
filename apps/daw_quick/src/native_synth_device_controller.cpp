@@ -9,6 +9,7 @@
 
 #include "oscillate/foundation/trace.hpp"
 #include "oscillate/foundation/value_text.hpp"
+#include "oscillate/native_dsp/effects/cast.hpp"
 #include "oscillate/native_dsp/effects/ceiling.hpp"
 #include "oscillate/native_dsp/effects/chop.hpp"
 #include "oscillate/native_dsp/effects/contour.hpp"
@@ -16,6 +17,7 @@
 #include "oscillate/native_dsp/effects/edge.hpp"
 #include "oscillate/native_dsp/effects/flyby.hpp"
 #include "oscillate/native_dsp/effects/forge.hpp"
+#include "oscillate/native_dsp/effects/hush.hpp"
 #include "oscillate/native_dsp/effects/orbit.hpp"
 #include "oscillate/native_dsp/effects/press.hpp"
 #include "oscillate/native_dsp/effects/pump.hpp"
@@ -37,11 +39,13 @@
 #include "oscillate/native_dsp/synth/wren.hpp"
 #include "oscillate/native_dsp/synth/wren_breath.hpp"
 
+#include <QApplication>
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
+#include <QFileDialog>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QJsonDocument>
@@ -1316,6 +1320,42 @@ QVariantMap NativeSynthDeviceController::telemetry() {
       history.push_back(at(t::history + b));
     }
     out[QStringLiteral("history")] = history;
+  } else if (id == "cast" && frame.size() >= native_dsp::effects::cast::telemetry::size) {
+    namespace cast = native_dsp::effects::cast;
+    namespace t = cast::telemetry;
+    out[QStringLiteral("input_peak")] = QVariantList{at(t::input_peak), at(t::input_peak + 1)};
+    out[QStringLiteral("wet_peak")] = QVariantList{at(t::wet_peak), at(t::wet_peak + 1)};
+    out[QStringLiteral("duck")] = at(t::duck);
+    out[QStringLiteral("length_seconds")] = at(t::length_seconds);
+    out[QStringLiteral("responses")] = at(t::responses);
+    out[QStringLiteral("rt60_seconds")] = at(t::rt60_seconds);
+    QVariantList envelope;
+    QVariantList decay;
+    for (std::size_t p = 0; p < cast::overview_points; ++p) {
+      envelope.push_back(at(t::envelope + p));
+      decay.push_back(at(t::decay_curve + p));
+    }
+    out[QStringLiteral("envelope")] = envelope;
+    out[QStringLiteral("decay_curve")] = decay;
+  } else if (id == "hush" && frame.size() >= native_dsp::effects::hush::telemetry::size) {
+    namespace hush = native_dsp::effects::hush;
+    namespace t = hush::telemetry;
+    out[QStringLiteral("input_peak")] = QVariantList{at(t::input_peak), at(t::input_peak + 1)};
+    out[QStringLiteral("output_peak")] = QVariantList{at(t::output_peak), at(t::output_peak + 1)};
+    out[QStringLiteral("key_level")] = at(t::key_level);
+    out[QStringLiteral("reduction")] = at(t::reduction);
+    out[QStringLiteral("open")] = at(t::open);
+    out[QStringLiteral("open_threshold")] = at(t::open_threshold);
+    out[QStringLiteral("close_threshold")] = at(t::close_threshold);
+    out[QStringLiteral("latency_ms")] = at(t::latency_ms);
+    QVariantList peaks;
+    QVariantList gains;
+    for (std::size_t s = 0; s < hush::history_slices; ++s) {
+      peaks.push_back(at(t::history_peak + s));
+      gains.push_back(at(t::history_gain + s));
+    }
+    out[QStringLiteral("history_peak")] = peaks;
+    out[QStringLiteral("history_gain")] = gains;
   } else if (id == "dust" && frame.size() >= native_dsp::effects::dust::telemetry::size) {
     namespace dust = native_dsp::effects::dust;
     namespace t = dust::telemetry;
@@ -1894,6 +1934,31 @@ QVariantList NativeSynthDeviceController::edge_transfer(double from_db, double t
                                                         int points) const {
   return list(quick::edge_transfer(engine_, values_, from_db, to_db,
                                    static_cast<std::size_t>(std::clamp(points, 0, 1'024))));
+}
+
+QVariantList NativeSynthDeviceController::cast_irs() const {
+  QVariantList out;
+  for (const auto& ir : native_dsp::effects::cast::builtin_irs()) {
+    out.push_back(QVariantMap{
+        {QStringLiteral("id"),
+         QString::fromUtf8(ir.id.data(), static_cast<qsizetype>(ir.id.size()))},
+        {QStringLiteral("name"),
+         QString::fromUtf8(ir.name.data(), static_cast<qsizetype>(ir.name.size()))},
+        {QStringLiteral("category"),
+         QString::fromUtf8(ir.category.data(), static_cast<qsizetype>(ir.category.size()))}});
+  }
+  return out;
+}
+
+bool NativeSynthDeviceController::choose_media(const QString& slot, const QString& title) {
+  if (qobject_cast<QApplication*>(QCoreApplication::instance()) == nullptr) {
+    return false;
+  }
+  // Formats the build cannot decode are refused by the import with a reason.
+  const auto chosen = QFileDialog::getOpenFileName(
+      nullptr, title, QDir::homePath(),
+      QStringLiteral("Audio (*.wav *.wave *.aiff *.aif *.flac);;All files (*)"));
+  return !chosen.isEmpty() && import_media(slot, chosen);
 }
 
 double NativeSynthDeviceController::edge_latency_ms(double sample_rate) const {

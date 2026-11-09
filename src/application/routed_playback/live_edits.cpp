@@ -61,7 +61,8 @@ using routed_playback::vst3_midi_edit_only;
 
 // A built-in effect's values edit prepared for its running stage (ADR-0043):
 // no rebuild, the kernel glides. Declines (nullopt) when the stage is not
-// the one prepared for this slot or the values would change its latency;
+// the one prepared for this slot, its media changed or the values would
+// change its latency;
 // fails when the stage cannot take the offer now. Nothing is offered until
 // the prepared offer is committed.
 struct PreparedStageOffer {
@@ -74,8 +75,10 @@ prepare_effect_values(engine::ProcessorRuntime* stage, const project::NativeEffe
                       const project::NativeEffectPatch& next, std::uint64_t revision) {
   using R = Result<std::optional<PreparedStageOffer>>;
   auto* runtime = dynamic_cast<native_inserts::NativeEffectStage*>(stage);
+  // New managed media need decoding into a new stage (ADR-0115).
   if (!runtime || next.engine != old_patch.engine ||
-      next.engine_version != old_patch.engine_version || next.generation <= old_patch.generation)
+      next.engine_version != old_patch.engine_version || next.generation <= old_patch.generation ||
+      next.document.media != old_patch.document.media)
     return R::success(std::nullopt);
   auto resolved = native_inserts::resolve_native_effect(next);
   if (!resolved)

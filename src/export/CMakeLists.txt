@@ -9,8 +9,7 @@ oscillate_add_library(export
   PRIVATE oscillate::source_prep oscillate::engine oscillate::media
           oscillate::native_dsp oscillate::persistence
   DEFINITIONS OSCILLATE_HAVE_CODEC=$<BOOL:${OSCILLATE_BUILD_CODEC_ADAPTER}>
-              OSCILLATE_HAVE_EXPORT_RESAMPLER=$<BOOL:${OSCILLATE_BUILD_EXPORT_RESAMPLER}>
-              OSCILLATE_HAVE_CONVOLUTION=$<BOOL:${OSCILLATE_BUILD_CONVOLUTION_DSP}>)
+              OSCILLATE_HAVE_EXPORT_RESAMPLER=$<BOOL:${OSCILLATE_BUILD_EXPORT_RESAMPLER}>)
 if(OSCILLATE_BUILD_EXPORT_RESAMPLER)
   target_include_directories(oscillate_export SYSTEM PRIVATE ${OSCILLATE_SAMPLERATE_INCLUDE_DIR})
   target_link_libraries(oscillate_export PRIVATE ${OSCILLATE_SAMPLERATE_LIBRARY})

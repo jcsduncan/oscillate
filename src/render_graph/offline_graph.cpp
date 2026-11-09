@@ -8,10 +8,6 @@
 #include "oscillate/routing/project_route_plan.hpp"
 #include "oscillate/source_prep/synth_media.hpp"
 #include "oscillate/track_chain/track_chain.hpp"
-#if OSCILLATE_HAVE_CONVOLUTION
-#include "oscillate/native_dsp/convolution_ir.hpp"
-#include "oscillate/native_dsp/convolution_runtime.hpp"
-#endif
 
 #include <algorithm>
 #include <limits>
@@ -20,8 +16,6 @@
 #include <utility>
 #include <variant>
 
-#include <unistd.h>
-
 namespace oscillate::render_graph {
 namespace {
 
@@ -29,10 +23,6 @@ namespace {
 constexpr std::uint32_t latent_compensation_frames = 8192;
 // Delay history an offline route may hold.
 constexpr std::uint64_t history_budget_bytes = 64ULL * 1024 * 1024;
-#if OSCILLATE_HAVE_CONVOLUTION
-// Memory a saved impulse response may take while it is prepared.
-constexpr std::uint64_t convolution_preparation_budget_bytes = 12ULL * 1024 * 1024;
-#endif
 
 struct NativeRouteRuntime {
   project::TrackId track;
@@ -87,8 +77,7 @@ prepare_offline_routing(const project::Snapshot& snapshot, const OfflineGraphReq
       native_chain, [](const auto& receipt) { return receipt.latency_frames != 0; });
   const std::uint32_t compensation_limit = latent_stage ? latent_compensation_frames : 0;
   const auto route_view = native_export_view(snapshot);
-  auto plan = ids.compile(route_view ? *route_view : snapshot, compensation_limit, native_chain,
-                          OSCILLATE_HAVE_CONVOLUTION);
+  auto plan = ids.compile(route_view ? *route_view : snapshot, compensation_limit, native_chain);
   if (!plan) {
     return foundation::Result<OfflineRoute>::failure(plan.error());
   }
@@ -227,34 +216,6 @@ prepare_offline_routing(const project::Snapshot& snapshot, const OfflineGraphReq
   return foundation::Result<OfflineRoute>::success(std::move(route));
 }
 
-#if OSCILLATE_HAVE_CONVOLUTION
-[[nodiscard]] foundation::Result<native_dsp::PreparedConvolutionIr>
-prepare_saved_convolution(const project::Snapshot& snapshot, const persistence::ProjectStore& store,
-                          const project::NativeConvolution& effect) {
-  const auto record =
-      std::ranges::find(snapshot.sources, effect.ir.source, &project::SourceRecord::id);
-  if (record == snapshot.sources.end() || record->external_link ||
-      record->encoding != project::SourceEncoding::wav)
-    return foundation::Result<native_dsp::PreparedConvolutionIr>::failure(
-        {foundation::ErrorCode::corrupt_data, "Convolution IR has no managed WAV source"});
-  auto descriptor = store.open_managed_source(*record);
-  if (!descriptor)
-    return foundation::Result<native_dsp::PreparedConvolutionIr>::failure(descriptor.error());
-  auto prepared = native_dsp::prepare_convolution_ir_offline(
-      descriptor.value(),
-      {effect.ir.sha256, effect.ir.encoded_bytes, effect.ir.sample_rate,
-       static_cast<std::uint16_t>(effect.ir.channels), effect.ir.frames},
-      convolution_preparation_budget_bytes, snapshot.sample_rate, static_cast<float>(effect.wet));
-  const int close_result = ::close(descriptor.value());
-  if (!prepared)
-    return foundation::Result<native_dsp::PreparedConvolutionIr>::failure(prepared.error());
-  if (close_result != 0)
-    return foundation::Result<native_dsp::PreparedConvolutionIr>::failure(
-        {foundation::ErrorCode::io_failure, "Cannot close verified convolution IR"});
-  return prepared;
-}
-#endif
-
 } // namespace
 
 foundation::Result<std::vector<automation_project::PreparedTargetAutomation>>
@@ -276,10 +237,6 @@ bool OfflineGraph::chain_faulted() const noexcept {
 bool held_non_finite(const engine::ProcessorRuntime& stage) noexcept {
   if (const auto frames = native_inserts::guarded_frames_after_quiesce(stage))
     return *frames != 0;
-#if OSCILLATE_HAVE_CONVOLUTION
-  if (const auto* convolution = dynamic_cast<const native_dsp::ConvolutionRuntime*>(&stage))
-    return convolution->guarded_frames_after_quiesce() != 0;
-#endif
   return true;
 }
 
@@ -287,9 +244,6 @@ foundation::Result<OfflineGraph> prepare_offline_graph(const project::Snapshot& 
                                                        const persistence::ProjectStore& store,
                                                        const OfflineGraphRequest& request) {
   using R = foundation::Result<OfflineGraph>;
-#if !OSCILLATE_HAVE_CONVOLUTION
-  (void)store;
-#endif
   OfflineGraph graph;
   const bool vst3 = static_cast<bool>(request.vst3);
   const bool has_track_chain = std::ranges::any_of(snapshot.tracks, [vst3](const auto& track) {
@@ -309,32 +263,17 @@ foundation::Result<OfflineGraph> prepare_offline_graph(const project::Snapshot& 
     return R::failure(
         {foundation::ErrorCode::unsupported, "Master export sample rate is unsupported"});
   }
-  auto inserts = preflight_inserts(snapshot, vst3 ? ExportSource::vst3 : ExportSource::native,
-                                   OSCILLATE_HAVE_CONVOLUTION);
+  auto inserts = preflight_inserts(snapshot, vst3 ? ExportSource::vst3 : ExportSource::native);
   if (!inserts)
     return R::failure(inserts.error());
   native_inserts::StageContext stage_context{snapshot.sample_rate};
   stage_context.snapshot = &snapshot;
   stage_context.automation = request.automation;
   stage_context.max_frames = request.max_frames;
-#if OSCILLATE_HAVE_CONVOLUTION
-  stage_context.convolution = [&](const project::NativeConvolution& saved)
-      -> foundation::Result<native_inserts::PreparedStage> {
-    auto prepared = prepare_saved_convolution(snapshot, store, saved);
-    if (!prepared)
-      return foundation::Result<native_inserts::PreparedStage>::failure(prepared.error());
-    native_inserts::PreparedStage stage;
-    stage.kind = native_inserts::StageKind::convolution;
-    stage.generation = saved.generation;
-    const auto tail = prepared.value().processor->tail_frames();
-    stage.export_tail_frames = saved.wet == 0.0 ? 0 : tail;
-    stage.transition_tail_frames = saved.wet == 0.0 ? 1 : std::max<std::uint64_t>(1, tail);
-    stage.transition_rule = native_inserts::TransitionRule::override;
-    stage.runtime =
-        std::make_shared<native_dsp::ConvolutionRuntime>(std::move(prepared.value().processor));
-    return foundation::Result<native_inserts::PreparedStage>::success(std::move(stage));
+  // A built-in effect's managed media (Cast's impulse response).
+  stage_context.media = [&](const project::NativeSynthDocument& document) {
+    return source_prep::load_synth_media(store, snapshot, document);
   };
-#endif
   std::vector<NativeRouteRuntime> track_chains;
   std::vector<routing::BoundStage> receipts;
   for (const auto& saved_chain : inserts.value().track_chains) {

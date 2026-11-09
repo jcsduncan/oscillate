@@ -83,6 +83,11 @@ constexpr std::array styles{
                      "Reverb",
                      "#7fb8ff",
                      {"expanse.size", "expanse.decay", "expanse.low_cut", "expanse.mix"}},
+    // The IR's shape compiles off the callback: not strip controls.
+    DeviceStripStyle{"cast",
+                     "Convolution",
+                     "#f0b86e",
+                     {"cast.predelay", "cast.low_cut", "cast.high_cut", "cast.mix"}},
     DeviceStripStyle{"vista",
                      "Stereo",
                      "#6bd4ff",
@@ -137,6 +142,11 @@ constexpr std::array styles{
     // Oversampling is the latency: not a strip control.
     DeviceStripStyle{
         "edge", "Clipper", "#f08a5d", {"edge.input", "edge.shape", "edge.output", "edge.link"}},
+    // Lookahead is the latency: not a strip control.
+    DeviceStripStyle{"hush",
+                     "Gate",
+                     "#b49cff",
+                     {"hush.threshold", "hush.range", "hush.release", "hush.hysteresis"}},
     // Lookahead is the latency: not a strip control.
     DeviceStripStyle{
         "ceiling", "Limiter", "#ff8a8a", {"ceiling.ceiling", "ceiling.release", "", ""}},

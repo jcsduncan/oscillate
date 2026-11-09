@@ -12,7 +12,6 @@ set(OSCILLATE_VST3_SDK_ROOT "" CACHE PATH "Path to pinned VST3 SDK v3.8.1_build_
 option(OSCILLATE_BUILD_CODEC_ADAPTER "Build the worker-only libsndfile codec adapter" OFF)
 option(OSCILLATE_BUILD_EXPORT_RESAMPLER "Enable high-quality offline export rate conversion (libsamplerate)" OFF)
 option(OSCILLATE_BUILD_SOURCE_RESAMPLER "Build worker-only source-rate conversion (libsamplerate)" OFF)
-option(OSCILLATE_BUILD_CONVOLUTION_DSP "Build the pinned PFFFT convolution core" OFF)
 option(OSCILLATE_CONVOLUTION_SIMD "Enable PFFFT x86 SIMD" ON)
 option(OSCILLATE_REQUIRE_JACK "Fail configuration when the JACK backend is unavailable" OFF)
 option(OSCILLATE_BUILD_FUZZ "Build opt-in malformed-input parser fuzz targets" OFF)

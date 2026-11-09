@@ -55,7 +55,7 @@ void presentation_round_trips() {
   const auto original = snapshot();
   const auto encoded = encode(original);
   const auto json = Json::parse(encoded);
-  REQUIRE_EQ(json["schema"]["minor"], 47, "presentation saves in the current schema");
+  REQUIRE_EQ(json["schema"]["minor"], 48, "presentation saves in the current schema");
   REQUIRE_EQ(json["project"]["tracks"][0]["name"], "Bass · sub",
              "names, colours, markers and the key are written");
   REQUIRE_EQ(json["project"]["tracks"][0]["color"], 0x8F'A6'FF,

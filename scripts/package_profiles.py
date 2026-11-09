@@ -31,7 +31,6 @@ COMMON_SWITCHES = {
     "OSCILLATE_BUILD_EXPORT_RESAMPLER": "ON",
     "OSCILLATE_BUILD_SOURCE_RESAMPLER": "ON",
     "OSCILLATE_BUILD_CODEC_ADAPTER": "ON",
-    "OSCILLATE_BUILD_CONVOLUTION_DSP": "OFF",
 }
 
 # What each optional feature gives the user, by the switch that enables it.
@@ -41,13 +40,7 @@ FEATURES = {
     "OSCILLATE_BUILD_EXPORT_RESAMPLER": "Export sample-rate conversion (libsamplerate)",
     "OSCILLATE_BUILD_SOURCE_RESAMPLER": "Source sample-rate conversion (libsamplerate)",
     "OSCILLATE_BUILD_CODEC_ADAPTER": "AIFF, FLAC and MP3 import and export (libsndfile, libmpg123)",
-    "OSCILLATE_BUILD_CONVOLUTION_DSP": "Convolution reverb",
 }
-
-CONVOLUTION_REASON = (
-    "ADR-0020 keeps the convolution core out of release builds until its graph "
-    "admission and multi-instance policy are qualified"
-)
 
 UBUNTU_PLATFORM = "Ubuntu 26.04 amd64"
 
@@ -222,12 +215,13 @@ class Profile:
     name: str
     preset: str
     switches: dict[str, str]
-    excluded: dict[str, str]
     runtime: RuntimeDependencies
     # What the package runs on: an Ubuntu release, or a Flatpak runtime.
     platform: str = UBUNTU_PLATFORM
     # Whether the package ships an SPDX SBOM (sbom.spdx.json).
     sbom: bool = True
+    # Optional features left out, by switch, with the reason.
+    excluded: dict[str, str] = field(default_factory=dict)
 
     def included_features(self) -> list[str]:
         return [
@@ -245,14 +239,12 @@ PROFILES = {
         name="deb",
         preset="package-deb",
         switches=COMMON_SWITCHES,
-        excluded={"OSCILLATE_BUILD_CONVOLUTION_DSP": CONVOLUTION_REASON},
         runtime=RuntimeDependencies(system=DEB_DEPENDS, bundled=()),
     ),
     "appimage": Profile(
         name="appimage",
         preset="package-appimage",
         switches=COMMON_SWITCHES,
-        excluded={"OSCILLATE_BUILD_CONVOLUTION_DSP": CONVOLUTION_REASON},
         runtime=RuntimeDependencies(
             system=APPIMAGE_HOST, bundled=APPIMAGE_BUNDLED, conditional=APPIMAGE_CONDITIONAL
         ),
@@ -263,7 +255,6 @@ PROFILES = {
         name="flatpak",
         preset="package-flatpak",
         switches=COMMON_SWITCHES,
-        excluded={"OSCILLATE_BUILD_CONVOLUTION_DSP": CONVOLUTION_REASON},
         runtime=RuntimeDependencies(
             system=(FLATPAK_RUNTIME_REF,),
             bundled=tuple(sorted(set(FLATPAK_LIBRARY_MODULES.values()))),
@@ -353,9 +344,14 @@ def feature_readme(profile: Profile, version: str) -> str:
         "Included optional features:",
         *(f"  - {feature}" for feature in profile.included_features()),
         "",
-        "Left out of this package:",
-        *(f"  - {feature}: {reason}" for feature, reason in profile.excluded_features().items()),
-        "",
+    ]
+    if profile.excluded:
+        lines += [
+            "Left out of this package:",
+            *(f"  - {feature}: {reason}" for feature, reason in profile.excluded_features().items()),
+            "",
+        ]
+    lines += [
         "Licence: GPL-3.0-or-later (LICENSE). Third-party notices are in",
         "third-party/, indexed by third-party/inventory.json and joined in",
         "third-party/NOTICES.txt.",

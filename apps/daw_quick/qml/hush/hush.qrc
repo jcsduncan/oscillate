@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/hush">
+    <file>HushPanel.qml</file>
+    <file>HushTheme.qml</file>
+    <file>HushScope.qml</file>
+    <file>HushSwitch.qml</file>
+  </qresource>
+</RCC>

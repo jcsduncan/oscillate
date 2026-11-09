@@ -35,7 +35,7 @@ struct ProjectRouteTrackNode {
 };
 
 // The kind of processor a prepared stage runs.
-enum class StageProcessor : std::uint8_t { vst3, native_effect, convolution };
+enum class StageProcessor : std::uint8_t { vst3, native_effect };
 
 // A control-side receipt for one prepared stage of a track's chain (ADR-0050).
 // A track's chain is its VST3 instrument, when it has one, then each enabled
@@ -184,7 +184,7 @@ public:
   // the master node carries no stage latency here.
   [[nodiscard]] foundation::Result<ProjectRoutePlan>
   compile(const project::Snapshot& snapshot, std::uint32_t max_compensation_frames,
-          std::span<const BoundStage> stages = {}, bool convolution_runtime_available = false);
+          std::span<const BoundStage> stages = {});
 
 private:
   std::map<foundation::IdBits, engine::RoutingNodeId> tracks_;

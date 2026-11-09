@@ -353,9 +353,6 @@ namespace {
     else if (const auto* patch = std::get_if<project::NativeEffectPatch>(&effect.processor))
       result.push_back(
           {track.id, effect.id, StageProcessor::native_effect, std::nullopt, patch->generation});
-    else if (const auto* convolution = std::get_if<project::NativeConvolution>(&effect.processor))
-      result.push_back({track.id, effect.id, StageProcessor::convolution, std::nullopt,
-                        convolution->generation});
   }
   return result;
 }
@@ -369,12 +366,8 @@ namespace {
 
 Result ProjectRouteIdRegistry::compile(const project::Snapshot& snapshot,
                                        std::uint32_t max_compensation_frames,
-                                       std::span<const BoundStage> stages,
-                                       bool convolution_runtime_available) {
+                                       std::span<const BoundStage> stages) {
   using foundation::ErrorCode;
-  if (project::has_convolution_insert(snapshot) && !convolution_runtime_available)
-    return fail(ErrorCode::unsupported,
-                "Convolution insert is saved but has no prepared routing runtime");
   // The engine's bounded latency planner accepts 1024 nodes and 4096 edges.
   // Reserve one node for master and one edge per track's main output.
   if (snapshot.tracks.size() > 1023) {

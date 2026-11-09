@@ -106,17 +106,6 @@ routing::BoundStage native_stage(project::TrackId track, project::InsertSlotId s
           .detector = detector};
 }
 
-routing::BoundStage convolution_stage(project::TrackId track, project::InsertSlotId slot,
-                                      std::uint64_t generation, std::uint32_t latency = 0) {
-  return {.track = track,
-          .slot = slot,
-          .processor = routing::StageProcessor::convolution,
-          .plugin = std::nullopt,
-          .generation = generation,
-          .latency_frames = latency,
-          .detector = false};
-}
-
 project::Snapshot snapshot() {
   auto tempo = take(timeline::TempoMap::create({{{0}, 120.0, timeline::TempoShape::step}}, 1));
   auto meter = take(timeline::MeterMap::create({{{0}, 4, 4}}, 1));
@@ -733,7 +722,7 @@ void mixed_eq_vst3_receipts_accept_both_saved_orders() {
     require(!registry.compile(state, 7, stale),
             "mixed route accepted stale native settings generation");
     auto wrong_kind = native_first;
-    wrong_kind[0].processor = routing::StageProcessor::convolution;
+    wrong_kind[0].processor = routing::StageProcessor::vst3;
     require(!registry.compile(state, 7, wrong_kind),
             "mixed route accepted a native receipt for the wrong processor kind");
     auto wrong_slot = native_first;
@@ -780,7 +769,7 @@ void mixed_limiter_vst3_receipts_sum_latency_and_bind_exact_slot() {
   wrong[0].slot = id<project::InsertSlotId>(9'999);
   require(!registry.compile(state, 19, wrong), "limiter/VST3 route accepted wrong native slot");
   wrong = receipts;
-  wrong[0].processor = routing::StageProcessor::convolution;
+  wrong[0].processor = routing::StageProcessor::vst3;
   require(!registry.compile(state, 19, wrong), "limiter/VST3 route accepted wrong native kind");
   track.effects.push_back({id<project::InsertSlotId>(412), true, effect_patch("shape")});
   require(!registry.compile(state, 19, receipts),
@@ -831,7 +820,7 @@ void mixed_bus_receipts_preserve_order_and_parallel_pdc() {
       stale[native_index].slot = id<project::InsertSlotId>(9'999);
       require(!registry.compile(state, 19, stale), "mixed bus accepted wrong native slot");
       stale = receipts;
-      stale[native_index].processor = routing::StageProcessor::convolution;
+      stale[native_index].processor = routing::StageProcessor::vst3;
       require(!registry.compile(state, 19, stale), "mixed bus accepted wrong native kind");
       const auto third_slot = id<project::InsertSlotId>(424);
       bus.effects.push_back({third_slot, true, effect_patch("shape")});
@@ -2211,47 +2200,6 @@ void keyed_stage_on_a_vst3_instrument_track() {
   }
 }
 
-void saved_convolution_requires_a_prepared_runtime() {
-  auto state = snapshot();
-  const auto source = project::SourceRecord{id<project::SourceId>(90),
-                                            project::SourceEncoding::wav,
-                                            std::string(64, 'a'),
-                                            192'044,
-                                            48'000,
-                                            1,
-                                            96'000};
-  state.sources.push_back(source);
-  const project::ManagedAudioReference ir{source.id,          source.sha256,   source.byte_length,
-                                          source.sample_rate, source.channels, source.frames};
-  state.tracks[0].effects.push_back(
-      {id<project::InsertSlotId>(91), false, project::NativeConvolution{ir, 0.4, 1}});
-  routing::ProjectRouteIdRegistry registry;
-  const auto result = registry.compile(state, 128);
-  REQUIRE_TRUE(!result, "bypassed saved convolution was silently omitted from a route");
-  REQUIRE_EQ(result.error().code, foundation::ErrorCode::unsupported,
-             "bypassed saved convolution was silently omitted from a route");
-  REQUIRE_NE(result.error().message.find("Convolution"), std::string::npos,
-             "bypassed saved convolution was silently omitted from a route");
-  REQUIRE_OK(registry.compile(state, 128, {}, true),
-             "offline capability rejected a bypassed convolution slot");
-  state.tracks[0].effects.front().enabled = true;
-  require(!registry.compile(state, 128, {}, true),
-          "enabled convolution accepted without an ordered runtime receipt");
-  const std::array receipts{
-      convolution_stage(state.tracks[0].id, state.tracks[0].effects.front().id, 1)};
-  REQUIRE_OK(registry.compile(state, 128, receipts, true),
-             "exact convolution runtime receipt did not bind");
-  require(!registry.compile(state, 128, receipts),
-          "convolution receipt bound without an available convolution runtime");
-  auto stale = receipts;
-  stale.front().generation = 2;
-  require(!registry.compile(state, 128, stale, true),
-          "stale convolution runtime receipt was accepted");
-  auto wrong_kind = receipts;
-  wrong_kind.front().processor = routing::StageProcessor::native_effect;
-  require(!registry.compile(state, 128, wrong_kind, true),
-          "a built-in effect receipt was accepted for a convolution slot");
-}
 } // namespace
 
 int main() {
@@ -2286,7 +2234,6 @@ int main() {
     vst3_sidechain_needs_exact_auxiliary_bus_receipt();
     keyed_vst3_detector_shares_its_track();
     keyed_stage_on_a_vst3_instrument_track();
-    saved_convolution_requires_a_prepared_runtime();
     saved_projection_shapes_fail_closed();
     bypassed_native_track_eq_needs_no_runtime_receipt();
     bypassed_missing_vst3_between_native_stages_is_inert();
