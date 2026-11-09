@@ -411,19 +411,26 @@ def is_elf(path: Path) -> bool:
 
 
 def elf_report(build_dir: Path, manifest: Path, relative: str) -> str:
-    """SONAME and library resolution of one ELF, run inside the build sandbox."""
+    """SONAME and library resolution of one ELF, run in the manifest's SDK
+    with the build's /app tree mounted read-only and first on the library path."""
+    declared = load_manifest(manifest)
+    files = (build_dir / "files").resolve()
     command = [
-        "flatpak-builder",
-        "--run",
-        str(build_dir),
-        str(manifest),
-        "sh",
+        "flatpak",
+        "run",
+        f"--filesystem={files}:ro",
+        f"--env=LD_LIBRARY_PATH={files}/lib",
+        "--command=sh",
+        f"{declared['sdk']}//{declared['runtime-version']}",
         "-c",
         ELF_REPORT_SCRIPT,
         "sh",
-        f"/app/{relative}",
+        str(files / relative),
     ]
-    return subprocess.run(command, check=True, capture_output=True, text=True).stdout
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise ValueError(f"cannot inspect {relative}: {result.stderr.strip()}")
+    return result.stdout
 
 
 def runtime_ref(metadata: str) -> str:
@@ -564,7 +571,7 @@ def main() -> None:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(json.dumps(sidecar, indent=2, sort_keys=True) + "\n")
             print(f"{args.output}: {sidecar['version']} on {sidecar['runtime']}")
-    except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:
+    except (OSError, ValueError, KeyError) as error:
         parser.exit(1, f"package_flatpak: {error}\n")
 
 

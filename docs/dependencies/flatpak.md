@@ -98,7 +98,7 @@ sources.
 | --- | --- |
 | Lint | `flatpak-builder-lint manifest` on the Flathub form of the manifest, `flatpak-builder-lint appstream` and `appstreamcli validate` on the [metainfo](../../assets/packaging/io.github.jcsduncan.Oscillate.metainfo.xml), and `flatpak-builder-lint repo` on the built repository, screenshots mirrored as Flathub does. |
 | Build | `stage` binds the build to the `flatpak` profile's switches, as the other packages are bound to theirs. |
-| Runtime dependencies | `package_flatpak.py inventory` resolves every ELF under `/app` inside the build sandbox; `package_dependencies.py verify --profile flatpak` fails on an unresolved library, a runtime other than the profile's, a library no declared module owns, or a bundled module without a licence file or a source-offer entry. |
+| Runtime dependencies | `package_flatpak.py inventory` resolves every ELF under `/app` in the SDK sandbox, `/app/lib` first on the library path; `package_dependencies.py verify --profile flatpak` fails on an unresolved library, a runtime other than the profile's, a library no declared module owns, or a bundled module without a licence file or a source-offer entry. |
 | Smoke | [`flatpak-smoke.sh`](../../tests/packaging/flatpak-smoke.sh) installs the bundle, creates and reopens a project with `--check-startup` offscreen, uninstalls with `--delete-data`, and checks that nothing is left. |
 
 Source archives and git repositories are downloaded before the build, with
