@@ -41,7 +41,7 @@ installed=$(flatpak info --system --show-location "$app")
 test -d "$installed" || fail "no installation at $installed"
 for file in bin/oscillate bin/oscillate_vst3_scan_helper \
   share/applications/$app.desktop share/metainfo/$app.metainfo.xml \
-  share/icons/hicolor/scalable/apps/$app.svg share/doc/oscillate/README \
+  share/icons/hicolor/scalable/apps/$app.svg share/doc/oscillate/LICENSE share/doc/oscillate/README \
   share/doc/oscillate/SOURCE-OFFER.txt share/doc/oscillate/third-party/NOTICES.txt; do
   test -f "$installed/files/$file" || fail "installed app lacks $file"
 done

@@ -63,15 +63,19 @@
         },
         {
           "type": "patch",
-          "path": "patches/libsndfile/CVE-2024-50612-Update-mpeg_l3_encode.c.patch"
+          "path": "patches/libsndfile/mpeg-l3-encode-memory-leak-CVE-2025-56226.patch"
         },
         {
           "type": "patch",
-          "path": "patches/libsndfile/CVE-2025-56226-src-ogg-better-error-checking-for-vorbis.-Fixes-1035.patch"
+          "path": "patches/libsndfile/ogg-vorbis-error-checking-CVE-2024-50612.patch"
         },
         {
           "type": "patch",
-          "path": "patches/libsndfile/CVE-2026-37555-ima_adpcm-fix-int-overflow-in-ima_reader_init.patch"
+          "path": "patches/libsndfile/ima-adpcm-aiff-overflow-CVE-2022-33065.patch"
+        },
+        {
+          "type": "patch",
+          "path": "patches/libsndfile/ima-adpcm-wav-close-overflow-CVE-2026-37555.patch"
         }
       ]
     },
