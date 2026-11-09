@@ -586,8 +586,12 @@ void drawn_ramp_and_slid_marker_match_live_export() {
   REQUIRE_OK(control.submit_current(), "the warped clip's graph did not prepare");
   auto active =
       take(app::RoutedAudioSource::prepare(song.root, *model.snapshot(), control, stream_budget));
+  // Into the clip, so the slide replaces audio that is playing.
+  const auto clip_start =
+      static_cast<std::uint64_t>(take(model.snapshot()->tempo.tick_to_sample({beat}, rate)).value);
+  wait_buffered(*active, handoff_block * blocks_before_slide);
   Player player(*active, handoff_block, stream_budget);
-  player.play_until(handoff_block * blocks_before_slide);
+  player.play_until(clip_start + handoff_block * blocks_before_slide);
   const auto layout = take(app::clip_warp_layout(*model.snapshot(), song.clip));
   const auto slid = take(app::slide_warp_marker(
       *model.snapshot(), song.clip,

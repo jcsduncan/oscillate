@@ -954,8 +954,8 @@ void a_segment_sets_the_track_tempo() {
              "Set tempo from this segment was refused");
   REQUIRE_EQ(song.session->snapshot().revision, revision + 1,
              "Set tempo from this segment was not one edit");
-  REQUIRE_NEAR(*song.session->snapshot().source_tempo_reviews.front().corrected_bpm, segment_bpm,
-               bpm_tolerance, "the track tempo is not the segment's");
+  REQUIRE_NEAR(song.session->snapshot().source_tempo_reviews.front().corrected_bpm.value_or(0.0),
+               segment_bpm, bpm_tolerance, "the track tempo is not the segment's");
   REQUIRE_OK(song.session->history().undo(), "Set tempo from this segment did not undo");
   REQUIRE_FALSE(song.session->snapshot().source_tempo_reviews.front().corrected_bpm.has_value(),
                 "Set tempo from this segment did not undo");
