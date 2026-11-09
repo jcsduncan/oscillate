@@ -105,8 +105,10 @@ void ProjectBridge::remove_notes(const QString& clip_id, const QStringList& note
                                : QStringLiteral("%1 notes deleted").arg(notes.size()));
 }
 
+// NOLINTBEGIN(bugprone-easily-swappable-parameters): QML calls this positionally.
 void ProjectBridge::move_notes_grid(const QString& clip_id, const QStringList& note_ids,
                                     int step_delta, int key_delta, int steps_per_bar) {
+  // NOLINTEND(bugprone-easily-swappable-parameters)
   if (!session_ || control_busy() || playback_completion_ || export_busy() || import_busy()) {
     set_status(QStringLiteral("Finish the current project operation before editing MIDI notes"));
     return;
@@ -131,8 +133,10 @@ void ProjectBridge::move_notes_grid(const QString& clip_id, const QStringList& n
   }
 }
 
+// NOLINTBEGIN(bugprone-easily-swappable-parameters): QML calls this positionally.
 QStringList ProjectBridge::copy_notes_grid(const QString& clip_id, const QStringList& note_ids,
                                            int step_delta, int key_delta, int steps_per_bar) {
+  // NOLINTEND(bugprone-easily-swappable-parameters)
   if (!session_ || control_busy() || playback_completion_ || export_busy() || import_busy()) {
     set_status(QStringLiteral("Finish the current project operation before editing MIDI notes"));
     return {};

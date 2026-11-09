@@ -136,7 +136,7 @@ void ProjectBridge::add_marker_at_playhead() {
     return;
   }
   const auto name =
-      QStringLiteral("Marker %1").arg(static_cast<qulonglong>(snapshot.markers.size() + 1));
+      QStringLiteral("Marker %1").arg(static_cast<qulonglong>(snapshot.markers.size()) + 1);
   const auto added = session_->song().add_marker(tick.value(), name.toStdString());
   if (!added) {
     set_status(QStringLiteral("Marker: %1").arg(QString::fromStdString(added.error().message)));
@@ -191,6 +191,7 @@ void ProjectBridge::remove_marker(const QString& marker_id) {
   refresh();
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): QML calls this positionally.
 void ProjectBridge::set_track_color(const QString& track_id, const QString& color) {
   const auto track = project::TrackId::parse(track_id.toStdString());
   const auto parsed = parse_color(color);
@@ -206,6 +207,7 @@ void ProjectBridge::set_track_color(const QString& track_id, const QString& colo
   refresh();
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): QML calls this positionally.
 void ProjectBridge::set_clip_color(const QString& clip_id, const QString& color) {
   const auto clip = project::ClipId::parse(clip_id.toStdString());
   const auto parsed = parse_color(color);
@@ -221,6 +223,7 @@ void ProjectBridge::set_clip_color(const QString& clip_id, const QString& color)
   refresh();
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): QML calls this positionally.
 void ProjectBridge::set_audio_clip_name(const QString& clip_id, const QString& name) {
   const auto clip = project::ClipId::parse(clip_id.toStdString());
   if (!session_ || !clip)
@@ -234,6 +237,7 @@ void ProjectBridge::set_audio_clip_name(const QString& clip_id, const QString& n
   refresh();
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): QML calls this positionally.
 void ProjectBridge::set_track_name(const QString& track_id, const QString& name) {
   const auto track = project::TrackId::parse(track_id.toStdString());
   if (!session_ || !track)
