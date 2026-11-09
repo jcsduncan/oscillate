@@ -33,7 +33,7 @@ FloatingDeviceFrame {
     readonly property real fixedFloatingScale: Theme.editorFloatingScale
     readonly property real minimumWindowWidth: Theme.editorMinimumWidth
     readonly property real minimumWindowHeight: Theme.editorMinimumHeight
-    // Where workspace preferences live (the window size, Nova's zoom).
+    // Where workspace preferences live (the window size, the panel zoom).
     readonly property var layout: bridge ? bridge.workspaceLayout : null
     // The floating window's size, once dragged (0 until then).
     property real floatingWidth: 0
@@ -45,7 +45,18 @@ FloatingDeviceFrame {
     // designed size and scale to fit.
     readonly property bool reflows: controller !== null && controller.panel_reflows
     readonly property var reflowPanel: reflows ? panelLoader.item : null
-    readonly property real zoom: reflowPanel !== null ? reflowPanel.zoom : 1
+    // The panel zoom (ADR-0103): Nova's own chips, or for any other panel
+    // the window's; both keep it in the workspace preferences.
+    zoom: reflowPanel !== null ? reflowPanel.zoom : layout !== null ? layout.panelZoom : 1
+    zoomable: hasPanel && !reflows
+    // A chosen zoom sizes the window: a size dragged by hand gives way to
+    // the zoomed panel's.
+    onZoomChosen: z => {
+        if (layout !== null)
+            layout.panelZoom = z
+        floatingWidth = 0
+        floatingHeight = 0
+    }
     readonly property real minimumWidth: reflowPanel !== null ? reflowPanel.minimumWidth : panelWidth
     readonly property real minimumHeight: reflowPanel !== null ? reflowPanel.minimumHeight : panelHeight
     // The area the panel draws in, in window pixels.
@@ -59,7 +70,7 @@ FloatingDeviceFrame {
         : height - floatingMarginHeight)
     readonly property real panelScale: Math.max(minimumPanelScale, reflows
         ? Math.min(zoom, areaWidth / minimumWidth, areaHeight / minimumHeight)
-        : Math.min(docked ? 1 : resized ? Number.POSITIVE_INFINITY : fixedFloatingScale,
+        : Math.min(docked ? zoom : resized ? Number.POSITIVE_INFINITY : fixedFloatingScale * zoom,
                    areaWidth / panelWidth, areaHeight / panelHeight))
     // The panel's own size: a reflowing panel fills the area.
     readonly property real logicalWidth: reflows ? areaWidth / panelScale : panelWidth

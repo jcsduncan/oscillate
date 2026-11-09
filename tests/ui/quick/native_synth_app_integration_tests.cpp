@@ -1,6 +1,7 @@
 #include "native_synth_automation_controller.hpp"
 #include "native_synth_device_controller.hpp"
 #include "panel_fit_checks.hpp"
+#include "panel_kit_checks.hpp"
 #include "panel_text_checks.hpp"
 #include "project_bridge.hpp"
 
@@ -526,6 +527,7 @@ void all_registered_panels_open_in_the_daw() {
   require(!qml.rootObjects().isEmpty(), "synth panel shell did not load");
   auto* window = qobject_cast<QQuickWindow*>(qml.rootObjects().front());
   require(window != nullptr, "synth panel shell has no window");
+  window->resize(1600, 1000);
   for (const auto* engine : native::engines()) {
     const auto id = QString::fromStdString(std::string(engine->descriptor->id));
     bridge.select_native_instrument(track_id, id);
@@ -540,6 +542,13 @@ void all_registered_panels_open_in_the_daw() {
     // As the effects' app contract checks: every label shows whole, and no
     // text is drawn over other text or clipped.
     oscillate::test::panel_fit::require_text_fits(panel, id.toStdString());
+    // Every fixed-size panel scales with its window's zoom chips (ADR-0103);
+    // Nova reflows at its own chips' zoom (nova_window_resizes_and_zooms).
+    if (!bridge.native_synth_controller()->property("panel_reflows").toBool()) {
+      oscillate::test::panel_kit::require_panel_zoom(*window, id.toStdString(),
+                                                     QStringLiteral("nativeSynthFloatingFrame"),
+                                                     QStringLiteral("nativeSynthPanelHost"));
+    }
   }
 }
 
