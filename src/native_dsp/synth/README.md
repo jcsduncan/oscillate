@@ -121,5 +121,15 @@ sul tasto to sul ponticello and an ensemble of up to sixteen players.
 
 ![Bow panel](../../../docs/images/instruments/bow.png)
 
-Concert, Fret, Wren and Bow need their sample libraries, installed as the
+## Stick
+
+Sampled acoustic drums: three multi-mic DrumGizmo kits on the General MIDI
+map, velocity choosing each hit by its recorded power with round robins, the
+hi-hat opened by its pedal, a mic mixer with or without bleed, and each
+piece's tune, decay, level, pan and sends.
+[ADR-0114](../../../docs/decisions/0114-stick-sampled-drums.md)
+
+![Stick panel](../../../docs/images/instruments/stick.png)
+
+Concert, Fret, Wren, Bow and Stick need their sample libraries, installed as the
 [README](../../../README.md#sample-libraries) describes.

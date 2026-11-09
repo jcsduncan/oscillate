@@ -1,6 +1,7 @@
 #include "../native_dsp/bow_test_library.hpp"
 #include "../native_dsp/concert_test_library.hpp"
 #include "../native_dsp/fret_test_library.hpp"
+#include "../native_dsp/stick_test_library.hpp"
 #include "../native_dsp/wren_test_library.hpp"
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/application/routed_audio_source.hpp"
@@ -629,12 +630,13 @@ void comp_plays_ahead_and_takes_live_edits() {
 
 int main() {
   try {
-    // Concert, Fret, Wren and Bow play their synthetic libraries, notes held whole in
-    // memory, so live playback never waits on the disk.
+    // Concert, Fret, Wren, Bow and Stick play their synthetic libraries, notes held
+    // whole in memory, so live playback never waits on the disk.
     (void)concert_test::install(concert_test::resident_note_seconds);
     (void)fret_test::install(fret_test::resident_note_seconds);
     (void)wren_test::install();
     (void)bow_test::install();
+    (void)stick_test::install(stick_test::resident_seconds);
     synth_track_plays_and_takes_live_edits_without_restart();
     native_automation_edits_apply_without_restarting_voices();
     native_automation_mailbox_retries_latest_saved_revision();

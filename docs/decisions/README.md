@@ -116,3 +116,4 @@ never reused. 0070 was never assigned.
 | 0111 | [Bow: sampled strings, sections and solo, bowed from the mod wheel](0111-bow-sampled-strings.md) | Accepted |
 | 0112 | [Warp markers and the tempo lane on the arrangement](0112-warp-markers-and-tempo-lane-on-the-arrangement.md) | Accepted; implemented |
 | 0113 | [Edge: an adjustable ceiling](0113-edge-adjustable-ceiling.md) | Accepted; implemented |
+| 0114 | [Stick: sampled multi-mic acoustic drums](0114-stick-sampled-drums.md) | Accepted; implemented |

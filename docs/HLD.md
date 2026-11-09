@@ -141,7 +141,7 @@ The `plugin_ui` target (`src/app/plugin_ui`) owns the editor bridge. It provides
 
 `oscillate_synth_engines` holds:
 - the generic `NativeSynthRuntime`;
-- the engine registry (`src/native_dsp/synth/engines.cpp`): Prism, Ember, Nova, Pulse, Halo, Torque, Drift, Concert, Anvil, Crate, Knock, Fret, Wren and Bow;
+- the engine registry (`src/native_dsp/synth/engines.cpp`): Prism, Ember, Nova, Pulse, Halo, Torque, Drift, Concert, Anvil, Crate, Knock, Fret, Wren, Bow and Stick;
 
 The project binding (`native_inserts/instrument_binding.hpp`) and the `NativeSynthPlayer` that live playback and export render through (`native_inserts/synth_player.hpp`) sit above `native_dsp` in `native_inserts`: they compile automation lanes, the tempo map and the meter for the engines ([ADR-0104](decisions/0104-native-processing-layers.md)). Note effects read project ticks through a `FrameTicks` source the player supplies (`native_inserts::TempoTicks`), so no native engine evaluates a tempo or meter map.
 
@@ -154,6 +154,7 @@ Real-time contract:
 - Control values are adopted at fixed control ticks aligned to project frames, so any block split renders identically and export equals live playback.
 - A kernel that streams content from disk (the Concert, Fret and Wren sample libraries; ADR-0071, ADR-0088, ADR-0089) reads it on a worker thread into preallocated rings; offline renders call `await_content` between blocks so they never outrun the disk, and the callback never waits.
 - Bow's library ([ADR-0111](decisions/0111-bow-sampled-strings.md)) is read on a background thread at the first look; a kernel is silent until it adopts it while idle, and offline renders wait for the read in `await_content`.
+- An engine whose values choose content to load (Stick's kit; [ADR-0114](decisions/0114-stick-sampled-drums.md)) names it in `SynthEngine::fetch_content`, which the runtime calls on control when it is created and whenever it is offered values. The engine starts the read on a background thread; the kernel adopts the content once read, and offline renders wait for it in `await_content`. Stick's kits stream their hits from disk as Concert's notes do.
 - Automation lanes, stepped lanes ([ADR-0034](decisions/0034-stepped-native-automation.md)) and pedal events ([ADR-0035](decisions/0035-pedals-in-midi-clips.md)) are delivered sample-accurately.
 - Telemetry goes through a bounded lock-free buffer for panels ([ADR-0037](decisions/0037-synth-telemetry.md)).
 - Structural parameter changes switch live ([ADR-0038](decisions/0038-live-structural-switching.md)).

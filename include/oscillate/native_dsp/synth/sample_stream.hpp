@@ -46,7 +46,8 @@ template <class T> [[nodiscard]] bool parse_number(std::string_view text, T& out
 
 // ---- The pack ----------------------------------------------------------------------------
 
-inline constexpr std::uint32_t max_channels = 2;
+// A pack interleaves up to this many channels (a multi-mic drum kit's).
+inline constexpr std::uint32_t max_channels = 16;
 
 // One sample's place in the pack, in frames.
 struct Sample {
@@ -246,8 +247,10 @@ struct StreamSlot {
 };
 
 // A kernel's stream slots and rings, streaming from its instrument's
-// registry's packs of `channels` channels. Created and destroyed on
-// control; it registers with the process's streamer for its lifetime.
+// registry's packs of up to `channels` channels: each slot's ring holds
+// ring_frames frames of the streamed pack's own channel count. Created and
+// destroyed on control; it registers with the process's streamer for its
+// lifetime.
 class Streams {
 public:
   Streams(const Registry& registry, std::uint32_t channels, std::size_t slots);
@@ -258,7 +261,8 @@ public:
   [[nodiscard]] std::size_t size() const noexcept { return count_; }
   [[nodiscard]] std::uint32_t channels() const noexcept { return channels_; }
   [[nodiscard]] StreamSlot& slot(std::size_t index) noexcept { return slots_[index]; }
-  // ring_frames interleaved frames of channels() int16s.
+  // ring_frames interleaved frames of the streamed pack's channels (at most
+  // channels() int16s each).
   [[nodiscard]] const std::int16_t* ring(std::size_t index) const noexcept {
     return rings_.data() + index * ring_frames * channels_;
   }
@@ -266,8 +270,8 @@ public:
   // callback: the streamer thread calls it, and offline renders between
   // blocks (SynthKernel::await_content).
   void service() noexcept;
-  // Streamer reads that failed (cumulative), including a pack whose
-  // channel count is not this one's.
+  // Streamer reads that failed (cumulative), including a pack with more
+  // channels than this one's rings hold.
   [[nodiscard]] std::uint64_t failures() const noexcept {
     return failures_.load(std::memory_order_relaxed);
   }
@@ -287,7 +291,8 @@ private:
 // Source frames [first, first + count) of a voice's sample as floats: the
 // resident start, then its ring (`streamed` frames of it on hand; null for
 // none). Frames outside the sample are silence. A mono pack writes `left`
-// and copies it to `right`. True when a streamed frame had not arrived.
+// and copies it to `right`; `channels` is 1 or 2. True when a streamed
+// frame had not arrived.
 [[nodiscard]] bool gather(const Sample& sample, std::uint32_t channels,
                           const std::int16_t* resident, const std::int16_t* ring,
                           std::uint32_t streamed, std::int64_t first, std::size_t count,
@@ -352,6 +357,16 @@ public:
 private:
   std::vector<float> table_;
 };
+
+// Tables for reading at any speed: one per sixth of an octave of reading
+// speed up to five octaves, each cut so reading that fast cannot alias.
+// Built once, on control (the first call); immortal and callback safe after.
+inline constexpr std::size_t speed_tables_per_octave = 6;
+inline constexpr std::size_t speed_table_octaves = 5;
+[[nodiscard]] const std::vector<SincTable>& speed_tables();
+// The table for reading `step` source frames per output frame.
+[[nodiscard]] const SincTable& speed_table(const std::vector<SincTable>& tables,
+                                           double step) noexcept;
 
 // ---- Library manifests and directories --------------------------------------------------
 

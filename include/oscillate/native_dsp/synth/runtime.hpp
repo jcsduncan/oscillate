@@ -152,6 +152,12 @@ struct SynthEngine {
                                       const project::NativeSynthDocument& document,
                                       std::uint8_t velocity, std::uint32_t note_frames, double bpm,
                                       double sample_rate) = nullptr;
+  // Control only, when a runtime is created with values and whenever it is
+  // offered new ones: start fetching what these values need that the
+  // kernel cannot read on the callback (Stick's chosen drum kit, ADR-0114),
+  // so the kernel adopts it once fetched and an offline render's
+  // await_content can wait for it. Null for engines that need nothing.
+  void (*fetch_content)(std::span<const double> values) noexcept = nullptr;
 };
 
 enum class SynthProcessStatus : std::uint8_t {
@@ -201,9 +207,7 @@ public:
   [[nodiscard]] bool offer_values(std::span<const double> values, std::uint64_t revision) noexcept;
   // Control only: a panel control mid-drag, with no saved revision
   // (ParameterControl::offer_live).
-  [[nodiscard]] bool offer_live_values(std::span<const double> values) noexcept {
-    return control_.offer_live(values);
-  }
+  [[nodiscard]] bool offer_live_values(std::span<const double> values) noexcept;
   [[nodiscard]] std::uint64_t applied_revision() const noexcept;
   // Control only: compile a validated document against this runtime's media
   // and offer it, before offer_values with the same revision; the callback

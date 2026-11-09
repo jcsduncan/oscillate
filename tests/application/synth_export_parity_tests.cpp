@@ -1,6 +1,7 @@
 #include "../native_dsp/bow_test_library.hpp"
 #include "../native_dsp/concert_test_library.hpp"
 #include "../native_dsp/fret_test_library.hpp"
+#include "../native_dsp/stick_test_library.hpp"
 #include "../native_dsp/wren_test_library.hpp"
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/application/routed_audio_source.hpp"
@@ -304,12 +305,13 @@ void parallel_live_playback_is_bit_identical() {
 
 int main() {
   try {
-    // Concert, Fret, Wren and Bow play their synthetic libraries, notes held whole in
-    // memory, so live playback never waits on the disk.
+    // Concert, Fret, Wren, Bow and Stick play their synthetic libraries, notes held
+    // whole in memory, so live playback never waits on the disk.
     (void)concert_test::install(concert_test::resident_note_seconds);
     (void)fret_test::install(fret_test::resident_note_seconds);
     (void)wren_test::install();
     (void)bow_test::install();
+    (void)stick_test::install(stick_test::resident_seconds);
     parallel_live_playback_is_bit_identical();
     for (const auto* engine : synth::engines()) {
       const auto plain = export_nulls_against_live_playback(*engine, 2);

@@ -118,6 +118,9 @@ NativeSynthRuntime::create(const SynthEngine& engine, std::span<const double> va
     return R::failure({ErrorCode::invalid_argument,
                        std::string(engine.descriptor->name) + " has no structured state"});
   }
+  if (engine.fetch_content != nullptr) {
+    engine.fetch_content(values);
+  }
   auto kernel = engine.create_kernel(sample_rate);
   if (!kernel) {
     return R::failure({ErrorCode::internal, "synth engine did not create a kernel"});
@@ -241,7 +244,19 @@ NativeSynthRuntime::NativeSynthRuntime(const SynthEngine& engine,
 
 bool NativeSynthRuntime::offer_values(std::span<const double> values,
                                       std::uint64_t revision) noexcept {
-  return control_.offer(values, revision);
+  const bool offered = control_.offer(values, revision);
+  if (offered && engine_.fetch_content != nullptr) {
+    engine_.fetch_content(values);
+  }
+  return offered;
+}
+
+bool NativeSynthRuntime::offer_live_values(std::span<const double> values) noexcept {
+  const bool offered = control_.offer_live(values);
+  if (offered && engine_.fetch_content != nullptr) {
+    engine_.fetch_content(values);
+  }
+  return offered;
 }
 
 std::uint64_t NativeSynthRuntime::applied_revision() const noexcept {

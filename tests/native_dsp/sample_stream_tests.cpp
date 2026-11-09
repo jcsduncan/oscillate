@@ -271,7 +271,8 @@ void registry_loads_and_keys_by_serial() {
 }
 
 // Streams sample 0 as a voice would: blocks of block_frames, handing back
-// what it has read, servicing between blocks as an offline render does.
+// what it has read, servicing between blocks as an offline render does; then
+// into rings sized for stereo.
 void mono_stream_is_bit_exact_across_the_join() {
   const auto& library = loaded();
   const auto& pack = library.pack();
@@ -331,14 +332,19 @@ void mono_stream_is_bit_exact_across_the_join() {
              "the read crossed the join and streamed the whole sample");
   REQUIRE_EQ(streams.failures(), 0, "no read failed");
 
-  // A stereo kernel cannot stream a mono pack.
-  stream::Streams wrong(registry(), stereo, 1);
-  wrong.slot(0).request.store(stream::request_word(generation, library.serial(), 0),
+  // Rings sized for more channels stream a pack of fewer in its own
+  // layout (a multi-mic kit's rings hold any kit's channels).
+  stream::Streams wider(registry(), stereo, 1);
+  wider.slot(0).request.store(stream::request_word(generation, library.serial(), 0),
                               std::memory_order_release);
-  wrong.service();
-  REQUIRE_EQ(wrong.failures(), 1, "a pack of the wrong channel count is refused, not read");
-  REQUIRE_EQ(stream::frames_of(wrong.slot(0).progress.load(std::memory_order_acquire)), 0,
-             "a pack of the wrong channel count is refused, not read");
+  wider.service();
+  REQUIRE_EQ(wider.failures(), 0, "a pack of fewer channels streams");
+  const auto filled = stream::frames_of(wider.slot(0).progress.load(std::memory_order_acquire));
+  REQUIRE_GT(filled, 0, "a pack of fewer channels streams");
+  for (std::uint32_t f = 0; f < filled; ++f) {
+    REQUIRE_EQ(wider.ring(0)[f], data[sample.offset + sample.resident + f],
+               "frame by frame in the pack's own layout");
+  }
 }
 
 void request_words_round_trip() {

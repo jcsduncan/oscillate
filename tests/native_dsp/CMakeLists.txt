@@ -331,6 +331,30 @@ oscillate_add_case_tests(native_bow_contract oscillate_bow_tests
   the_callback_does_not_allocate
   the_tail_bound_covers_a_released_note)
 
+# Stick plays its synthetic kits (stick_test_library.hpp).
+oscillate_add_test_executable(oscillate_stick_tests SOURCES stick_tests.cpp
+  LIBS oscillate::synth_engines)
+oscillate_add_case_tests(native_stick_contract oscillate_stick_tests
+  CASES
+  a_missing_kit_is_silent_then_plays_once_installed
+  kits_chosen_load_in_the_background
+  malformed_kits_are_rejected
+  descriptor_registry_and_presets
+  velocity_follows_the_recorded_power
+  round_robins_are_seeded_and_never_repeat
+  the_pedal_opens_the_hat_and_closing_chokes_it
+  bleed_mutes_solos_and_mixes_route_the_mics
+  pans_place_close_mics_and_balance_cymbals
+  tune_decay_and_brushes
+  the_stream_joins_the_resident_start
+  voices_are_bounded
+  telemetry_lights_the_piece_and_its_mics
+  humanise_is_seeded
+  block_splits_render_the_same
+  a_reset_plays_the_same_again
+  the_callback_does_not_allocate
+  the_tail_bound_covers_a_hit)
+
 oscillate_add_test_executable(oscillate_wren_breath_tests SOURCES wren_breath_tests.cpp
   LIBS oscillate::synth_engines)
 oscillate_add_case_tests(native_wren_breath_contract oscillate_wren_breath_tests
