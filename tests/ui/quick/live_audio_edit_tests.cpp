@@ -147,12 +147,15 @@ QVariantMap only_clip(const quick::ProjectBridge& bridge) {
   return clips.front().toMap();
 }
 
-// Starts direct playback, then moves the clip: the edit is accepted as
-// pending while the old audio plays on.
+// Starts direct playback and waits for its graph to stream, then moves the
+// clip: the edit is accepted as pending while the old audio plays on.
 void play_and_move(quick::ProjectBridge& bridge) {
   bridge.toggle_playback();
   require(QTest::qWaitFor(
-              [&] { return bridge.playback_status().contains(QStringLiteral("Playing revision")); },
+              [&] {
+                return bridge.playback_status().contains(QStringLiteral("Playing revision")) &&
+                       bridge.audio_edit_enabled();
+              },
               ui_wait_ms),
           "direct playback did not start: " + bridge.playback_status().toStdString());
   const auto before = bridge.revision();
