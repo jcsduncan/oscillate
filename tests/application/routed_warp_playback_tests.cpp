@@ -551,6 +551,95 @@ void saved_marker_and_tempo_ramp_match_live_export() {
   }
 }
 
+// ADR-0112: a ramp drawn on the tempo lane (S-curve, 120 -> 90 BPM over four
+// quarter notes) under a musical clip whose warp marker was then slid, as the
+// arrangement makes them. The saved export and the live route must agree
+// sample for sample at both callback sizes. A slide made while playing is
+// captured as a live source edit whose replacement source primes the block
+// it takes over at; its audio is the saved project's, compared above.
+void drawn_ramp_and_slid_marker_match_live_export() {
+  constexpr std::uint32_t rate = oscillate::test::sample_rate_48k;
+  constexpr auto beat = timeline::ticks_per_quarter;
+  constexpr double ramp_end_bpm = 90.0;
+  constexpr std::int64_t marker_source = 12'000;
+  // The slid audio: what played this many frames before the marker.
+  constexpr std::uint64_t slide_frames = 1'000;
+  constexpr std::size_t handoff_block = 64;
+  // How long the clip plays before the slide arrives.
+  constexpr std::size_t blocks_before_slide = 16;
+  constexpr std::size_t stream_budget = 262'144;
+  Song song(rate, rate, [](std::uint32_t frame) { return tone_with_clicks(frame, rate); });
+  REQUIRE_OK(song.session->song().set_tempo_ramp({0}, {4 * beat}, ramp_end_bpm,
+                                                 timeline::TempoShape::ease_in_out),
+             "the drawn ramp was refused");
+  auto processing = with_mode(project::WarpMode::beats);
+  processing.reviewed_warp_markers.push_back({{marker_source}, timeline::TickPosition{beat}});
+  const auto generation = song.session->snapshot().tracks.front().clips.front().settings_generation;
+  REQUIRE_OK(song.session->warp().apply_audio_clip_warp(
+                 song.clip, generation, project::MusicalInterval{{beat}, {3 * beat}}, processing),
+             "the musical clip was refused");
+
+  // Playing the clip as it is, the slide arrives as a live edit.
+  Gate gate;
+  auto model = take(project::ProjectModel::open(song.session->snapshot(), gate));
+  app::RoutedPlaybackControl control(model, limits(handoff_block));
+  REQUIRE_OK(control.submit_current(), "the warped clip's graph did not prepare");
+  auto active =
+      take(app::RoutedAudioSource::prepare(song.root, *model.snapshot(), control, stream_budget));
+  // Into the clip, so the slide replaces audio that is playing.
+  const auto clip_start =
+      static_cast<std::uint64_t>(take(model.snapshot()->tempo.tick_to_sample({beat}, rate)).value);
+  wait_buffered(*active, handoff_block * blocks_before_slide);
+  Player player(*active, handoff_block, stream_budget);
+  player.play_until(clip_start + handoff_block * blocks_before_slide);
+  const auto layout = take(app::clip_warp_layout(*model.snapshot(), song.clip));
+  const auto slid = take(app::slide_warp_marker(
+      *model.snapshot(), song.clip,
+      {.index = 0, .output_frame = layout.markers.front().output_frame - slide_frames}));
+  auto edited = take(model.apply({project::SetClipProcessing{song.clip, slid}}));
+  auto capture = take(control.capture_source_edit(edited, "warp marker slide"));
+  const auto position = player.transport().completed_snapshot();
+  auto candidate =
+      take(app::RoutedAudioSource::prepare(song.root, capture, control, stream_budget, nullptr, {},
+                                           position.next_sample, position.generation));
+  wait_until(
+      [&] {
+        return candidate->prime_handoff_window(position.generation, position.next_sample,
+                                               handoff_block) == media::HandoffWindowStatus::ready;
+      },
+      "the slid marker's source did not prime the exact handoff block");
+
+  // Saved, the ramp and the slid marker export exactly as they play.
+  REQUIRE_OK(song.session->audio_clips().set_audio_clip_processing(song.clip, slid),
+             "the slide was refused by the session");
+  REQUIRE_OK(song.session->saving().save(), "the ramp and slide did not save");
+  auto store = take(persistence::ProjectStore::open_reader(song.root));
+  const auto saved = take(store.load_current()).snapshot;
+  const auto end = take(saved.tempo.tick_to_sample({3 * beat}, rate)).value;
+  const auto path = song.directory.path() / "ramp-slide-master.wav";
+  Gate export_gate;
+  auto authority = take(exporting::StoppedExportAuthority::acquire(saved, export_gate));
+  REQUIRE_EQ(take(exporting::render_wav_master(saved, store, std::move(authority), {path})),
+             exporting::PublishOutcome::durable, "the ramp and slide master did not publish");
+  const auto exported = read_export_left(path);
+  REQUIRE_EQ(exported.size(), static_cast<std::size_t>(end),
+             "the export does not end with the clip under the ramp");
+  for (const std::size_t block : {64U, 128U}) {
+    Live live(song.root, saved, block, stream_budget);
+    const auto start = take(saved.tempo.tick_to_sample({beat}, rate)).value;
+    wait_buffered(*live.source, static_cast<std::size_t>(end - start));
+    Player heard(*live.source, block, static_cast<std::uint64_t>(end + 512));
+    heard.play_until(static_cast<std::uint64_t>(end + 256));
+    for (std::size_t sample = 0; sample < exported.size(); ++sample)
+      REQUIRE_EQ(heard.at(sample), exported[sample],
+                 "ramp and slide export/live parity differs at " + std::to_string(sample) +
+                     " with " + std::to_string(block) + " frames");
+    REQUIRE_EQ(live.source->status().missing_frames, 0, "the ramp and slide playback underran");
+    REQUIRE_EQ(live.source->status().quality_step_downs, 0,
+               "the ramp and slide playback stepped down");
+  }
+}
+
 // --- Seek, loop wrap, cache backing and fallback --------------------------------
 
 void require_matches(const Player& player, const std::vector<float>& expected, std::uint64_t start,
@@ -1327,6 +1416,7 @@ int main() {
     every_mode_plays_live_exactly_as_offline();
     markers_land_on_exact_project_frames();
     saved_marker_and_tempo_ramp_match_live_export();
+    drawn_ramp_and_slid_marker_match_live_export();
     seeks_and_loop_wraps_resume_exactly();
     rearm_after_ready_never_accepts_the_old_loop();
     rearm_after_ready_reports_missed_until_seek();

@@ -220,6 +220,54 @@ source_frame_at_fraction(const project::Snapshot& snapshot, project::ClipId clip
                                                                   project::ClipId clip,
                                                                   std::uint64_t source_frame);
 
+// --- Marker commands on the arrangement (ADR-0112) ---------------------------
+//
+// Each returns the replacement for one undoable edit, like the commands above.
+
+// Slides the audio under a marker that stays where it is: the source frame
+// playing at `output_frame` now plays at the marker, so a late kick moves
+// onto its beat without changing the tempo around it. The new source frame
+// must lie strictly between the neighbouring markers' (or the clip ends').
+struct WarpMarkerSlide {
+  std::size_t index = 0;
+  std::uint64_t output_frame = 0;
+};
+[[nodiscard]] foundation::Result<project::ClipProcessing>
+slide_warp_marker(const project::Snapshot& snapshot, project::ClipId clip, WarpMarkerSlide slide);
+
+// Removes every marker after `index`; the marker itself stays.
+[[nodiscard]] foundation::Result<project::ClipProcessing>
+remove_warp_markers_after(const project::Snapshot& snapshot, project::ClipId clip,
+                          std::size_t index);
+
+// "Straight from here": removes the markers after `index` and keeps the
+// tempo of the segment that ends at it constant to the clip's end. The clip
+// grows or shrinks so its last source frame lands where that tempo plays it;
+// a musical clip's new end is the tick there under the tempo map.
+[[nodiscard]] foundation::Result<ClipWarpProposal>
+straighten_after_warp_marker(const project::Snapshot& snapshot, project::ClipId clip,
+                             std::size_t index);
+
+// The source's own tempo across the segment that starts at marker `index`
+// (to the next marker or the clip end): the project's quarter notes it
+// spans under the tempo map, per minute of its source audio.
+[[nodiscard]] foundation::Result<double>
+warp_segment_source_bpm(const project::Snapshot& snapshot, project::ClipId clip, std::size_t index);
+
+// "Ramp to this track's tempo" on a transition: the bars across which
+// `clip` overlaps the audio playing into it on other tracks (from the bar
+// nearest its start to the bar nearest where the latest of them ends,
+// at least one bar), ending at the clip's reviewed source BPM so it plays
+// unstretched once the mix lands. Fails without an overlap or a tempo.
+struct TransitionRamp {
+  timeline::TickPosition from;
+  timeline::TickPosition to;
+  double bpm = 0.0;
+};
+inline constexpr timeline::TempoShape transition_ramp_shape = timeline::TempoShape::ease_in_out;
+[[nodiscard]] foundation::Result<TransitionRamp>
+plan_transition_ramp(const project::Snapshot& snapshot, project::ClipId clip);
+
 // Splits a pitch into the nearest whole semitone and the remaining cents
 // (-50..50), and rebuilds it; the UI edits these two parts.
 struct TransposeParts {

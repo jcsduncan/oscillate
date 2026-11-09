@@ -265,15 +265,82 @@ foundation::Result<void> SongService::remove_tempo_event(timeline::TickPosition 
     return Result::failure({foundation::ErrorCode::not_found, "Tempo event not found"});
   }
   events.erase(existing);
+  return replace_tempo(std::move(events));
+}
+
+foundation::Result<void> SongService::replace_tempo(std::vector<timeline::TempoEvent> events) {
+  using Result = foundation::Result<void>;
+  if (snapshot().tempo.revision() == std::numeric_limits<std::uint64_t>::max())
+    return Result::failure(
+        {foundation::ErrorCode::resource_exhausted, "Tempo map revision exhausted"});
+  // The last event holds: there is no later tempo for it to move towards.
+  if (!events.empty())
+    events.back().shape_to_next = timeline::TempoShape::step;
   auto map = timeline::TempoMap::create(std::move(events), snapshot().tempo.revision() + 1);
-  if (!map) {
+  if (!map)
     return Result::failure(map.error());
-  }
   auto applied = model().apply({project::ReplaceTempoMap{std::move(map.value())}});
-  if (!applied) {
+  if (!applied)
     return Result::failure(applied.error());
-  }
   return Result::success();
+}
+
+foundation::Result<void> SongService::move_tempo_event(timeline::TickPosition from,
+                                                       timeline::TickPosition to, double bpm) {
+  using Result = foundation::Result<void>;
+  if (to.value < 0 || (from.value == 0) != (to.value == 0))
+    return Result::failure({foundation::ErrorCode::invalid_argument,
+                            "The first tempo point stays at the start of the song"});
+  auto events = snapshot().tempo.events();
+  const auto moved = std::ranges::find(events, from, &timeline::TempoEvent::tick);
+  if (moved == events.end())
+    return Result::failure({foundation::ErrorCode::not_found, "Tempo event not found"});
+  const auto shape = moved->shape_to_next;
+  if (moved->tick == to && moved->bpm == bpm)
+    return Result::success();
+  events.erase(moved);
+  const auto at = std::ranges::lower_bound(events, to, {}, &timeline::TempoEvent::tick);
+  if (at != events.end() && at->tick == to)
+    return Result::failure(
+        {foundation::ErrorCode::conflict, "Another tempo point is already there"});
+  events.insert(at, {to, bpm, shape});
+  return replace_tempo(std::move(events));
+}
+
+foundation::Result<void> SongService::set_tempo_ramp(timeline::TickPosition from,
+                                                     timeline::TickPosition to, double end_bpm,
+                                                     timeline::TempoShape shape) {
+  using Result = foundation::Result<void>;
+  if (from.value < 0 || to <= from)
+    return Result::failure(
+        {foundation::ErrorCode::invalid_argument, "A tempo ramp needs a range of the song"});
+  const auto& tempo = snapshot().tempo;
+  auto events = tempo.events();
+  // The tempo playing at the ramp's start, before the edit.
+  double start_bpm = 0.0;
+  if (const auto existing = std::ranges::find(events, from, &timeline::TempoEvent::tick);
+      existing != events.end()) {
+    start_bpm = existing->bpm;
+  } else {
+    auto sample = tempo.tick_to_sample(from, snapshot().sample_rate);
+    if (!sample || !tempo.bpm_at_sample_rt(sample.value(), snapshot().sample_rate, start_bpm))
+      return Result::failure(
+          {foundation::ErrorCode::invalid_argument, "The ramp's start is outside the song"});
+  }
+  std::erase_if(events, [&](const timeline::TempoEvent& event) {
+    return event.tick >= from && event.tick <= to;
+  });
+  const auto at = std::ranges::lower_bound(events, from, {}, &timeline::TempoEvent::tick);
+  events.insert(at, {{from, start_bpm, shape}, {to, end_bpm, timeline::TempoShape::step}});
+  return replace_tempo(std::move(events));
+}
+
+foundation::Result<void> SongService::ramp_to_clip_tempo(project::ClipId clip) {
+  auto ramp = plan_transition_ramp(snapshot(), clip);
+  if (!ramp)
+    return foundation::Result<void>::failure(ramp.error());
+  return set_tempo_ramp(ramp.value().from, ramp.value().to, ramp.value().bpm,
+                        transition_ramp_shape);
 }
 
 foundation::Result<void> SongService::set_initial_meter(std::uint8_t numerator,

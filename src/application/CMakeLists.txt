@@ -2,6 +2,7 @@ add_library(oscillate_application
   browser_preview.cpp
   clip_playback.cpp
   clip_warp_edit.cpp
+  clip_warp_marker_edit.cpp
   clip_prefetch_worker.cpp
   control_transport_gate.cpp
   crate_chops.cpp
