@@ -36,7 +36,7 @@ QVariantMap TransportController::playback_state(const PlaybackView& view) const 
       view.plugin_fault ||
       (view.graph && view.graph->application == application::PlaybackApplication::failed);
   QString phase = QStringLiteral("stopped");
-  if (view.routed_stopping || view.audio_edit_stopping)
+  if (view.routed_stopping)
     phase = QStringLiteral("stopping");
   else if (playback_paused(view))
     phase = QStringLiteral("paused");

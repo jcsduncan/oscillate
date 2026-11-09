@@ -626,9 +626,9 @@ int run(int argc, char** argv) {
         };
   }
 #endif
-  // Close and Stop are checked against a handoff that has finished but not
-  // yet been installed: the edit runs inline, so it is complete when the edit
-  // call returns and the next playback poll has not happened.
+  // Close and Stop are checked against an edit that is prepared but not yet
+  // installed: the preparation runs inline, so it is complete when the edit
+  // call returns, and only the next playback poll installs it.
   if (smoke_live_close || smoke_live_stop)
     dependencies.audio_edit_runner = [](const std::function<void()>& job) {
       job();
@@ -1854,8 +1854,8 @@ int run(int argc, char** argv) {
               return;
             }
             if (smoke_live_close || smoke_live_stop) {
-              // Still within the edit's event-loop turn: the inline handoff is
-              // done and no playback poll has installed it.
+              // Still within the edit's event-loop turn: the inline preparation
+              // is done and no playback poll has installed it.
               if (smoke_live_close && bridge.request_close()) {
                 std::cerr << "Live audio smoke: close did not await completed handoff\n";
                 app.exit(1);

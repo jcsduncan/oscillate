@@ -30,28 +30,24 @@ QString underrun_detail(const media::UnderrunEvent& event) {
 
 } // namespace
 
-void ProjectBridge::begin_async_playback_stop() {
-  auto completion = std::make_shared<AudioEditCompletion>();
-  completion->stopping_only = true;
-  auto* playback = playback_.get();
+foundation::Result<void> ProjectBridge::hand_off_live_audio_edit(AudioEditCompletion& completion) {
+  if (!completion.result)
+    return foundation::Result<void>::failure(
+        {foundation::ErrorCode::internal, "Audio edit preparation returned no result"});
+  if (!*completion.result)
+    return foundation::Result<void>::failure(completion.result->error());
   try {
-    audio_edit_worker_ = std::jthread([completion, playback] {
-      playback->stop();
-      completion->result.emplace(foundation::Result<void>::success());
-      completion->done.store(true, std::memory_order_release);
-    });
+    if (before_live_edit_handoff_)
+      before_live_edit_handoff_(*session_, completion.result->value());
+    return playback_->restart_prepared_after_edit(std::move(*completion.result).value());
   } catch (const std::exception& error) {
-    close_after_playback_ = false;
-    stop_worker_start_failed_ = true;
-    playback_timer_.stop();
-    set_playback_status(
-        QStringLiteral("Could not stop playback on a worker: %1. Select Stop to retry.")
-            .arg(error.what()));
-    return;
+    return foundation::Result<void>::failure(
+        {foundation::ErrorCode::internal,
+         std::string("Audio edit handoff failed: ") + error.what()});
+  } catch (...) {
+    return foundation::Result<void>::failure(
+        {foundation::ErrorCode::internal, "Audio edit handoff failed unexpectedly"});
   }
-  audio_edit_completion_ = std::move(completion);
-  set_playback_status(QStringLiteral("Stopping playback"));
-  playback_timer_.start();
 }
 
 void ProjectBridge::poll_live_audio_edit() {
@@ -60,24 +56,24 @@ void ProjectBridge::poll_live_audio_edit() {
   }
   if (audio_edit_worker_.joinable())
     audio_edit_worker_.join();
-  auto completion = std::move(audio_edit_completion_);
-  refresh();
-  const bool stop_requested = completion->stop_requested.load(std::memory_order_acquire);
-  if (stop_requested && playback_->playing()) {
-    begin_async_playback_stop();
-    return;
-  }
-  if (completion->stopping_only || stop_requested) {
+  const auto completion = std::move(audio_edit_completion_);
+  if (completion->stop_requested) {
+    // Stop (or close) won over the prepared edit: it is never installed.
+    playback_->stop();
+    refresh();
     set_playback_status(
         QStringLiteral("Playback stopped; model revision %1 retained").arg(revision_));
-  } else if (!completion->result || !*completion->result) {
+    emit playbackChanged();
+    return;
+  }
+  const auto handed_off = hand_off_live_audio_edit(*completion);
+  refresh();
+  if (!handed_off) {
     if (playback_->playing()) {
       (void)playback_->submit_current();
     }
     const auto graph = playback_->status();
-    const auto reason = completion->result
-                            ? QString::fromStdString(completion->result->error().message)
-                            : QStringLiteral("unknown handoff failure");
+    const auto reason = QString::fromStdString(handed_off.error().message);
     audio_edit_failure_ = reason;
     set_playback_status(
         playback_->playing()
@@ -98,10 +94,6 @@ void ProjectBridge::poll_live_audio_edit() {
             .arg(revision_));
   }
   emit playbackChanged();
-  if (close_after_playback_ && !playback_->playing() && !playback_->retiring()) {
-    playback_timer_.stop();
-    emit readyToClose();
-  }
 }
 
 void ProjectBridge::preview_track_level_pan(const QString& track_id, double level, double pan) {
@@ -397,10 +389,6 @@ void ProjectBridge::poll_playback() {
   }
   if (audio_edit_completion_) {
     poll_live_audio_edit();
-    if (stop_worker_start_failed_) {
-      stop_worker_start_failed_ = false;
-      return;
-    }
     if (audio_edit_completion_) {
       return;
     }
@@ -472,6 +460,9 @@ void ProjectBridge::poll_playback() {
     return;
   }
   playback_->observe();
+  // A live edit retires the clip workers it replaced: join them as they
+  // finish, so the next edit is not held behind them.
+  (void)playback_->poll_retirement();
   playhead_sample_ = playback_->completed_sample();
   if (const auto failure = playback_->source_failure()) {
     playback_->stop();
@@ -551,8 +542,8 @@ bool ProjectBridge::request_close() {
   waveform_->cancel_work();
   if (audio_edit_completion_) {
     close_after_playback_ = true;
-    audio_edit_completion_->stop_requested.store(true, std::memory_order_release);
-    set_playback_status(QStringLiteral("Finishing and stopping audio edit before closing"));
+    audio_edit_completion_->stop_requested = true;
+    set_playback_status(QStringLiteral("Stopping once the audio edit is prepared, then closing"));
     playback_timer_.start();
     return false;
   }

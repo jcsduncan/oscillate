@@ -172,11 +172,12 @@ bool ProjectBridge::playback_enabled() const {
     return !close_after_playback_;
   }
   if (audio_edit_completion_) {
-    return !audio_edit_completion_->stop_requested.load(std::memory_order_acquire) &&
-           !close_after_playback_;
+    return !audio_edit_completion_->stop_requested && !close_after_playback_;
   }
-  return session_ && !playback_completion_ && (!playback_ || !playback_->retiring()) &&
-         !export_busy() && !import_busy() && !managed_media_busy() && !close_after_playback_ &&
+  // Workers still retiring hold a new start back, never Stop of a playing run.
+  return session_ && !playback_completion_ &&
+         (!playback_ || playback_->playing() || !playback_->retiring()) && !export_busy() &&
+         !import_busy() && !managed_media_busy() && !close_after_playback_ &&
          !closing_after_export() && !imports_->audio().closing();
 }
 

@@ -101,9 +101,9 @@ struct BridgeDependencies {
   // Binaries known to report a fixed latency, in place of the shipped
   // qualification list (verified_vst3_live_qualification).
   std::optional<std::vector<std::string>> fixed_latency_vst3_binaries{};
-  // Runs the live audio-edit handoff; default: a new worker thread.
+  // Runs a live audio edit's media preparation; default: a new worker thread.
   BridgeWorkerRunner audio_edit_runner{};
-  // Sees each prepared live audio edit on the worker, before the handoff
+  // Sees each prepared live audio edit on the UI thread, before the handoff
   // replaces the playing graph.
   BridgeLiveEditHandoffHook before_live_edit_handoff{};
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
@@ -828,7 +828,6 @@ private:
   void finish_in_flight_saves();
   void begin_live_audio_edit();
   void submit_audio_clip_edit();
-  void begin_async_playback_stop();
   void begin_routed_playback();
   // Live monitoring (project_bridge_monitor.cpp): notes played while the
   // transport is stopped run through the project's real graph with its
@@ -906,12 +905,16 @@ private:
     std::uint64_t sample = 0;
     std::optional<foundation::Result<void>> result;
   };
+  // A live audio edit's media, prepared on a worker that sees only its own
+  // snapshot. The UI thread installs it (poll_live_audio_edit): the session
+  // and the playing run are never touched off the UI thread.
   struct AudioEditCompletion {
     std::atomic<bool> done{false};
-    std::atomic<bool> stop_requested{false};
-    bool stopping_only = false;
-    std::optional<foundation::Result<void>> result;
+    bool stop_requested = false;
+    std::optional<foundation::Result<application::PreparedInstrumentPlayback>> result;
   };
+  // Installs a prepared live audio edit in the playing run.
+  [[nodiscard]] foundation::Result<void> hand_off_live_audio_edit(AudioEditCompletion& completion);
 
   std::unique_ptr<application::ProjectSession> session_;
   std::unique_ptr<SessionNativeSynthAdapter> native_synth_adapter_;
@@ -1081,7 +1084,6 @@ private:
   QString source_underrun_detail_;
   QString audio_edit_failure_;
   bool close_after_playback_ = false;
-  bool stop_worker_start_failed_ = false;
   QString project_name_;
   std::unique_ptr<ProjectLifecycleController> lifecycle_;
   std::unique_ptr<CacheUiController> cache_ui_;
