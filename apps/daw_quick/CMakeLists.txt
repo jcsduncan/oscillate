@@ -115,6 +115,7 @@ set(oscillate_quick_core_sources
   src/vst3_editor_commit.cpp
   src/vst3_editor_commit.hpp
   src/project_bridge_transport.cpp
+  src/project_bridge_playback.cpp
   src/project_bridge.hpp
   src/routed_playback.cpp
   src/routed_playback.hpp
