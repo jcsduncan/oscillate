@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.3.0](https://github.com/jcsduncan/oscillate/compare/v0.2.0...v0.3.0) (2026-11-09)
+
+
+### Features
+
+* **app,application,engine,project:** trim a MIDI clip from its left edge ([#275](https://github.com/jcsduncan/oscillate/issues/275)) ([704de78](https://github.com/jcsduncan/oscillate/commit/704de78556ee22288a208128a4c3551f5d4b88a1))
+* **app,application:** Ctrl+drag a clip to copy it where you drop it ([#276](https://github.com/jcsduncan/oscillate/issues/276)) ([5a67b0e](https://github.com/jcsduncan/oscillate/commit/5a67b0e37f55695c864b501f6bbc45ad43021005))
+* **app,application:** nest group buses in the track list and route by drag ([#274](https://github.com/jcsduncan/oscillate/issues/274)) ([a3882de](https://github.com/jcsduncan/oscillate/commit/a3882de28046572510c90572433678a4d290bb20))
+* **app,native_dsp:** Edge, a clipper under a 0 dBTP ceiling ([#307](https://github.com/jcsduncan/oscillate/issues/307)) ([e056726](https://github.com/jcsduncan/oscillate/commit/e05672688431c6bbf576e89d767ef3865a9e10a8))
+* **app,native_dsp:** the Bow panel, and one missing-library notice for every sampled instrument ([#322](https://github.com/jcsduncan/oscillate/issues/322)) ([a4ffbe1](https://github.com/jcsduncan/oscillate/commit/a4ffbe1b443b6ae5e8185dfcaab7aaecf245e338))
+* **app:** dB scale on mixer faders, automated-track mark, browser opens on Instruments ([#302](https://github.com/jcsduncan/oscillate/issues/302)) ([732fde2](https://github.com/jcsduncan/oscillate/commit/732fde28d6a82af7ff7f0789e20cbdee156bc4d7))
+* **app:** every instrument and effect panel on the shared device kit ([#320](https://github.com/jcsduncan/oscillate/issues/320)) ([c476787](https://github.com/jcsduncan/oscillate/commit/c476787840762beac92f87f02c91b364d2631c79))
+* **application,track_chain,native_dsp:** switch VST3 instrument and tempo edits live ([#295](https://github.com/jcsduncan/oscillate/issues/295)) ([a08e117](https://github.com/jcsduncan/oscillate/commit/a08e1171f9d348b36077d93d3e2953df5b58d3d2))
+* **application:** warp marker commands and tempo ramps for the arrangement ([#329](https://github.com/jcsduncan/oscillate/issues/329)) ([4802581](https://github.com/jcsduncan/oscillate/commit/4802581995832ed061e431ec43f74fd964b3553e))
+* **app:** shared device header, status badge, control states, plot frame, panel zoom and keyboard reach ([#315](https://github.com/jcsduncan/oscillate/issues/315)) ([0547495](https://github.com/jcsduncan/oscillate/commit/0547495c25e875312c85ceba0cbf648692295ba1))
+* **engine,application,native_dsp,native_inserts,app:** switch track, tempo, media and instrument edits live ([#287](https://github.com/jcsduncan/oscillate/issues/287)) ([16fa989](https://github.com/jcsduncan/oscillate/commit/16fa989a7e2696f842c2a45eeb740d412a3cb426))
+* **native_dsp,tools:** Bow, sampled strings on the sample core ([#321](https://github.com/jcsduncan/oscillate/issues/321)) ([2f847ff](https://github.com/jcsduncan/oscillate/commit/2f847ff13e94aa349254e6250639521141e028df))
+* **persistence,application,app:** keep pre-upgrade versions, save a copy and forget project caches ([#286](https://github.com/jcsduncan/oscillate/issues/286)) ([2b6e37c](https://github.com/jcsduncan/oscillate/commit/2b6e37c92dddb82e4ff94b913d37bba25365d694))
+* **persistence:** open released project schemas through chained forward migrations ([#266](https://github.com/jcsduncan/oscillate/issues/266)) ([cffa9e0](https://github.com/jcsduncan/oscillate/commit/cffa9e0204bb649365460e38bb3399b5ad25d878))
+
+
+### Bug Fixes
+
+* **app:** fit Halo's keytrack knob label ([#256](https://github.com/jcsduncan/oscillate/issues/256)) ([edab48b](https://github.com/jcsduncan/oscillate/commit/edab48b50041bd9deda94a4f238a64fe418a3a3b))
+* **app:** fit the device panels' text under CI's font ([#282](https://github.com/jcsduncan/oscillate/issues/282)) ([2e04a29](https://github.com/jcsduncan/oscillate/commit/2e04a291bbd0570a00c03ac359492348924b1ba9))
+* **application,routing:** silence a bounced source under a mute lane ([#288](https://github.com/jcsduncan/oscillate/issues/288)) ([8aa5155](https://github.com/jcsduncan/oscillate/commit/8aa5155c3b9291f57cec2446ef4f5bd0f4cf462e))
+* **app:** stop a project change when a plug-in editor's state is not saved ([#301](https://github.com/jcsduncan/oscillate/issues/301)) ([fc6fe73](https://github.com/jcsduncan/oscillate/commit/fc6fe734b094ae19efd1683366c63c6ee73313ca))
+* **audio_io:** make five CI-flaky tests deterministic ([#290](https://github.com/jcsduncan/oscillate/issues/290)) ([a326d24](https://github.com/jcsduncan/oscillate/commit/a326d242058d411c3aa7c296ce80ddf103668211))
+* **codec:** decode MP3 with libmpg123 so headerless VBR files import whole ([#304](https://github.com/jcsduncan/oscillate/issues/304)) ([bfb982a](https://github.com/jcsduncan/oscillate/commit/bfb982a68cf856bf23f784f3431d64ff2d322ee4))
+* **engine,application,app:** switch sources at a primed block and remove the held path ([#273](https://github.com/jcsduncan/oscillate/issues/273)) ([2b587b4](https://github.com/jcsduncan/oscillate/commit/2b587b40e18363205b475ad7bcd07c0abda70d20))
+* **engine,native_dsp,application:** switch MIDI edits live and queue rapid edits ([#261](https://github.com/jcsduncan/oscillate/issues/261)) ([95ffecc](https://github.com/jcsduncan/oscillate/commit/95ffecc01f0b17687648c9679cf16215e9060167))
+* **project,export,application:** keep a clip envelope's precedence through a bounce or freeze ([#293](https://github.com/jcsduncan/oscillate/issues/293)) ([27b683c](https://github.com/jcsduncan/oscillate/commit/27b683cc224f393318564f95c119c5fd4ef1ae05))
+* **routing,native_inserts:** silence a key wherever its source's mute lane mutes it ([#267](https://github.com/jcsduncan/oscillate/issues/267)) ([bddb3c0](https://github.com/jcsduncan/oscillate/commit/bddb3c0639065b048bf984ebc2c12454dd043e29))
+
+
+### Performance Improvements
+
+* **engine,native_dsp:** spread heavy projects over the audio helpers and cut Forge's cost ([#319](https://github.com/jcsduncan/oscillate/issues/319)) ([f46ec9e](https://github.com/jcsduncan/oscillate/commit/f46ec9ebfcf120ffdf8660d088bccd6f1b191296))
+
 ## [0.2.0](https://github.com/jcsduncan/oscillate/compare/oscillate-v0.1.0...oscillate-v0.2.0) (2026-11-08)
 
 
