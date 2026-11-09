@@ -8,7 +8,16 @@
 // their own parts.
 //   oscillate_nova_audition --pads <output directory> <lead.mid>
 // renders the pad audition set under a flute lead (pads.hpp).
+//   oscillate_nova_audition --breakdown <output directory> [--stems]
+// renders the breakdown audition set (breakdown.hpp).
+//   oscillate_nova_audition --keys|--keys2 <output directory> [--stems]
+// renders the keys audition sets (keys.hpp).
+//   oscillate_nova_audition --strings <output directory> [--stems]
+// renders the strings audition set (strings.hpp).
 #include "audition.hpp"
+#include "breakdown.hpp"
+#include "keys.hpp"
+#include "strings.hpp"
 #include "pads.hpp"
 
 #include "oscillate/application/project_session.hpp"
@@ -136,11 +145,37 @@ void set_value(application::ProjectSession& session, project::TrackId track, std
 int main(int argc, char** argv) {
   if (argc < 2)
     fail("usage: oscillate_nova_audition <output directory> [preset...] | --pads <output "
-         "directory> <lead.mid>");
+         "directory> <lead.mid> | --breakdown <output directory> [--stems] | --keys|--keys2 "
+         "<output directory> [--stems] | --strings <output directory> [--stems]");
   if (std::string_view(argv[1]) == tools::pads::flag) {
     if (argc != 4)
       fail("usage: oscillate_nova_audition --pads <output directory> <lead.mid>");
     tools::pads::render_set(argv[2], argv[3]);
+    return 0;
+  }
+  if (std::string_view(argv[1]) == tools::breakdown::flag) {
+    const bool stems = argc == 4 && std::string_view(argv[3]) == tools::breakdown::stems_flag;
+    if (argc != 3 && !stems)
+      fail("usage: oscillate_nova_audition --breakdown <output directory> [--stems]");
+    tools::breakdown::render_set(argv[2], stems);
+    return 0;
+  }
+  if (std::string_view(argv[1]) == tools::keys::flag ||
+      std::string_view(argv[1]) == tools::keys::breakdown_flag) {
+    const bool stems = argc == 4 && std::string_view(argv[3]) == tools::breakdown::stems_flag;
+    if (argc != 3 && !stems)
+      fail("usage: oscillate_nova_audition --keys|--keys2 <output directory> [--stems]");
+    const auto round = std::string_view(argv[1]) == tools::keys::flag
+                           ? tools::keys::Round::first
+                           : tools::keys::Round::breakdown;
+    tools::keys::render_set(argv[2], stems, round);
+    return 0;
+  }
+  if (std::string_view(argv[1]) == tools::strings::flag) {
+    const bool stems = argc == 4 && std::string_view(argv[3]) == tools::breakdown::stems_flag;
+    if (argc != 3 && !stems)
+      fail("usage: oscillate_nova_audition --strings <output directory> [--stems]");
+    tools::strings::render_set(argv[2], stems);
     return 0;
   }
   const fs::path out = argv[1];
