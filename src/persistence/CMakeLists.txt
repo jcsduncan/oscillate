@@ -1,4 +1,7 @@
-oscillate_add_library(persistence SOURCES store.cpp codec.cpp migration.cpp groove_file.cpp project_creation.cpp
+oscillate_add_library(persistence
+  SOURCES store.cpp store_generations.cpp store_revisions.cpp store_save.cpp store_staging.cpp
+          store_support.cpp store_verification.cpp
+          codec.cpp migration.cpp groove_file.cpp project_creation.cpp
   PUBLIC oscillate::project
   PRIVATE OpenSSL::Crypto oscillate::foundation_digest oscillate::media
           nlohmann_json::nlohmann_json
