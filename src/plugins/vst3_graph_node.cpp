@@ -480,6 +480,20 @@ private:
   bool routed_sidechain_;
 };
 
+// The callback trusts these: a runtime is made only from complete inputs.
+[[nodiscard]] bool complete(const Vst3GraphRuntimeInputs& inputs) noexcept {
+  const auto& tempo = inputs.tempo;
+  if (!inputs.effect || !inputs.status || !inputs.manual_events || !tempo.clock ||
+      inputs.max_frames == 0 || tempo.boundaries.empty() || tempo.boundaries.front().sample != 0)
+    return false;
+  if (!std::ranges::all_of(inputs.automation,
+                           [](const auto& lane) { return lane.curve != nullptr; }))
+    return false;
+  // One lane per parameter, in parameter order.
+  return std::ranges::adjacent_find(inputs.automation, std::ranges::greater_equal{},
+                                    &Vst3AutomationLane::parameter_id) == inputs.automation.end();
+}
+
 } // namespace
 
 engine::NodeRequest make_vst3_graph_request(std::uint64_t engine_instance_id,
@@ -489,7 +503,7 @@ engine::NodeRequest make_vst3_graph_request(std::uint64_t engine_instance_id,
   return {.instance_id = engine_instance_id,
           .compatibility_key = compatibility_key,
           .create_runtime = [factory]() -> std::unique_ptr<engine::ProcessorRuntime> {
-            if (!factory->effect)
+            if (!complete(*factory))
               return {};
             return std::make_unique<Vst3GraphRuntime>(std::move(*factory));
           }};

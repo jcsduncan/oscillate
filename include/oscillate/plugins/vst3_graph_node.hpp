@@ -188,7 +188,9 @@ struct Vst3GraphRuntimeInputs {
 
 // Control side only: the single-use node request that creates the runtime.
 // engine_instance_id is allocated by the graph composition owner and must be
-// nonzero and unique among all nodes.
+// nonzero and unique among all nodes. Incomplete inputs (a missing effect,
+// status, slot, clock or curve, no boundary at sample 0, or lanes out of
+// parameter order) make no runtime.
 [[nodiscard]] engine::NodeRequest make_vst3_graph_request(std::uint64_t engine_instance_id,
                                                           std::uint64_t compatibility_key,
                                                           Vst3GraphRuntimeInputs inputs);
