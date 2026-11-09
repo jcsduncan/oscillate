@@ -25,6 +25,10 @@ struct VerifiedExternalSource::Impl {
 namespace oscillate::persistence::detail {
 
 inline constexpr std::size_t max_pointer_bytes = 256;
+// A SHA-256 digest in lowercase hex, and the checksum file that holds one and
+// a newline.
+inline constexpr std::size_t sha256_hex_digits = 64;
+inline constexpr std::size_t checksum_file_bytes = sha256_hex_digits + 1;
 
 inline constexpr std::size_t max_recovery_entries = 8192;
 

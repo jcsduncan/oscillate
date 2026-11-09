@@ -45,7 +45,7 @@ std::string_view source_extension(project::SourceEncoding encoding) {
 }
 
 bool valid_sha256(std::string_view value) {
-  return value.size() == 64 && std::ranges::all_of(value, [](char ch) {
+  return value.size() == sha256_hex_digits && std::ranges::all_of(value, [](char ch) {
            return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f');
          });
 }

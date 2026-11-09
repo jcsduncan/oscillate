@@ -26,6 +26,7 @@ using detail::check_directory_identity;
 using detail::check_writer_lock;
 using detail::checked_asset;
 using detail::checked_external_source;
+using detail::checksum_file_bytes;
 using detail::digest;
 using detail::injected;
 using detail::open_directory;
@@ -315,7 +316,8 @@ Result<SaveOutcome> ProjectStore::save(const project::Snapshot& snapshot, SaveKi
       read_bounded(temporary_fd.value().get(), "manifest.json", detail::max_manifest_bytes);
   if (!on_disk)
     return Result<SaveOutcome>::failure(on_disk.error());
-  auto staged_checksum = read_bounded(temporary_fd.value().get(), "manifest.sha256", 65);
+  auto staged_checksum =
+      read_bounded(temporary_fd.value().get(), "manifest.sha256", checksum_file_bytes);
   if (!staged_checksum)
     return Result<SaveOutcome>::failure(staged_checksum.error());
   auto staged_hash = digest(on_disk.value());

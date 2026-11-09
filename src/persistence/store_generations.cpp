@@ -29,6 +29,7 @@ using detail::check_directory_identity;
 using detail::check_writer_lock;
 using detail::checked_asset;
 using detail::checked_external_source;
+using detail::checksum_file_bytes;
 using detail::decoded_footprint;
 using detail::digest;
 using detail::Fd;
@@ -43,6 +44,7 @@ using detail::open_directory;
 using detail::random_name;
 using detail::read_bounded;
 using detail::retained_recent_generations;
+using detail::sha256_hex_digits;
 using detail::write_sync_file;
 using foundation::io_error;
 
@@ -78,7 +80,7 @@ ProjectStore::load_generation(const std::string& generation,
                             remaining_budget);
   if (!bytes)
     return Result<LoadedGeneration>::failure(bytes.error());
-  auto recorded = read_bounded(directory.value().get(), "manifest.sha256", 65);
+  auto recorded = read_bounded(directory.value().get(), "manifest.sha256", checksum_file_bytes);
   if (!recorded)
     return Result<LoadedGeneration>::failure(recorded.error());
   auto local_hash = digest(bytes.value());
@@ -262,12 +264,12 @@ Result<SaveOutcome> ProjectStore::adopt_generation(std::string_view generation,
   auto directory = open_directory(generations_fd_, name.c_str());
   if (!directory)
     return Result<SaveOutcome>::failure(directory.error());
-  auto recorded = read_bounded(directory.value().get(), "manifest.sha256", 65);
+  auto recorded = read_bounded(directory.value().get(), "manifest.sha256", checksum_file_bytes);
   if (!recorded)
     return Result<SaveOutcome>::failure(recorded.error());
-  if (recorded.value().size() != 65 || recorded.value().back() != '\n')
+  if (recorded.value().size() != checksum_file_bytes || recorded.value().back() != '\n')
     return Result<SaveOutcome>::failure({ErrorCode::corrupt_data, "invalid generation checksum"});
-  const auto hash = recorded.value().substr(0, 64);
+  const auto hash = recorded.value().substr(0, sha256_hex_digits);
   auto verified = load_generation(name, hash);
   if (!verified)
     return Result<SaveOutcome>::failure(verified.error());
