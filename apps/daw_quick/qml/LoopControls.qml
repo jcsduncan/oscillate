@@ -31,8 +31,11 @@ Rectangle {
     radius: Theme.radiusXl
     color: transport.enabled ? Qt.rgba(amberColor.r, amberColor.g, amberColor.b, Theme.loopActiveWashAlpha) : raisedColor
     Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.fast } }
-    border.color: activeFocus ? mainTextColor : troubled ? amberColor : lineColor
+    border.color: activeFocus ? Theme.focusRing : troubled ? amberColor : lineColor
+    border.width: activeFocus ? Theme.focusRingWidth : Theme.hairline
     activeFocusOnTab: true
+    // Space and Return reach the focused button before the shell's Space (play).
+    Keys.onShortcutOverride: event => event.accepted = event.key === Qt.Key_Space || event.key === Qt.Key_Return
     Accessible.role: Accessible.CheckBox
     Accessible.name: "Loop bars " + firstShown + " to " + lastShown
     Accessible.checked: transport.enabled

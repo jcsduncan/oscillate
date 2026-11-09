@@ -19,14 +19,31 @@ Item {
     required property KitTheme theme
     required property string parameterId
     property int diameter: theme.knobDiameter
+    // The face is never drawn below the kit's least knob size.
+    readonly property int faceDiameter: Math.max(diameter, theme.knobMinDiameter)
     property string label: info.name !== undefined ? info.name : ""
     // Spoken and tooltip name when the label alone is ambiguous.
     property string longName: theme.knobLongName === "label" ? label
         : (info.group !== undefined && (theme.knobLongName === "group" || info.group !== label)
            ? info.group + " " : "") + label
-    // Dimmed but still editable, for a control the current setting ignores.
+    // Three states read apart (issue #163). Disabled (the device is not
+    // editable): the whole knob fades. Mode-inactive (`inactive`, or
+    // `active` false: the current setting ignores it, but it stays
+    // editable): the face dims, the captions turn inkDim and
+    // `inactiveReason` says why ("Rate follows Sync") in the tooltip and to
+    // a screen reader; every inactive knob gives one. Linked (`linked`:
+    // another control drives it): full contrast with an accent link badge,
+    // and `linkReason` says what drives it.
     property bool inactive: false
     property bool active: true
+    property string inactiveReason: ""
+    property bool linked: false
+    property string linkReason: ""
+    readonly property bool modeInactive: inactive || !active
+    // A dial, not a plot, however large it is drawn (see PlotFrame).
+    readonly property string plotExemptReason: "a knob's dial"
+    readonly property string controlState: !editable ? "disabled"
+        : modeInactive ? "inactive" : linked ? "linked" : "normal"
     // Hero knobs show their value under the name at all times.
     property bool readout: false
     // False while there is no parameter to drive (a wrapper's idle knob): the
@@ -89,7 +106,9 @@ Item {
     // The tooltip: shown on hover while allowed.
     property bool tipAllowed: true
     property string tipText: longName + "  " + valueText
-    property string tipDetail: (macroIndex >= 0 ? "Macro " + (macroIndex + 1) + " drives this\n" : "")
+    property string tipDetail: (modeInactive && inactiveReason !== "" ? inactiveReason + "\n" : "")
+        + (linked && linkReason !== "" ? linkReason + "\n" : "")
+        + (macroIndex >= 0 ? "Macro " + (macroIndex + 1) + " drives this\n" : "")
         + (mapArmed >= 0 ? "Click to map to Macro " + (mapArmed + 1)
            : "Drag · Shift fine · double-click resets · right-click maps to a macro")
         + (theme.knobNextNoteMark && nextNote ? "\nApplies to new notes" : "")
@@ -110,7 +129,7 @@ Item {
     // Wide enough for its dial and for its label set whole, so a row or grid
     // of knobs is sized from its longest label.
     readonly property real labelWidth: theme.knobCaptions ? labelMetrics.advanceWidth : 0
-    implicitWidth: Math.max(diameter + theme.knobWidthPad, theme.knobMinWidth,
+    implicitWidth: Math.max(faceDiameter + theme.knobWidthPad, theme.knobMinWidth,
                             Math.ceil(labelWidth) - 2 * theme.knobCaptionInset)
     // The label laid out as the caption lays it out, hinting included (a
     // TextMetrics advance can fall a pixel short of it); never shown.
@@ -121,14 +140,15 @@ Item {
         text: caption.labelText
         font: caption.labelFont
     }
-    implicitHeight: diameter + theme.knobHeightPad + (readout ? theme.knobReadoutPad : 0)
+    implicitHeight: faceDiameter + theme.knobHeightPad + (readout ? theme.knobReadoutPad : 0)
     objectName: theme.prefix + "Knob:" + parameterId
     activeFocusOnTab: editable
-    opacity: !editable ? theme.knobDisabledOpacity
-        : inactive || !active ? theme.knobInactiveOpacity : 1
+    opacity: editable ? 1 : theme.knobDisabledOpacity
     Accessible.role: Accessible.Dial
     Accessible.name: theme.knobLongName === "none" ? label : longName
     Accessible.description: valueText + (theme.knobNextNoteMark && nextNote ? ". Applies to new notes" : "")
+        + (modeInactive && inactiveReason !== "" ? ". Inactive: " + inactiveReason : "")
+        + (linked && linkReason !== "" ? ". Linked: " + linkReason : "")
         + (macroIndex >= 0 ? ". Driven by Macro " + (macroIndex + 1) : "")
         + ". Drag, scroll or use arrow keys; Delete resets; the context menu maps it to a macro"
 
@@ -241,10 +261,11 @@ Item {
 
     Canvas {
         id: dialCanvas
+        opacity: knob.modeInactive && knob.editable ? knob.theme.knobInactiveOpacity : 1
         x: (parent.width - width) / 2
         y: knob.theme.knobDialY
-        width: knob.diameter + knob.theme.knobDialPad
-        height: knob.diameter + knob.theme.knobDialPad
+        width: knob.faceDiameter + knob.theme.knobDialPad
+        height: knob.faceDiameter + knob.theme.knobDialPad
         renderStrategy: Canvas.Cooperative
         onPaint: {
             const ctx = getContext("2d")
@@ -414,7 +435,8 @@ Item {
         x: -knob.theme.knobCaptionInset
         horizontalAlignment: Text.AlignHCenter
         text: value ? knob.valueText : labelText
-        color: value ? knob.valueInk
+        color: knob.modeInactive && knob.editable ? knob.theme.knobInactiveInk
+            : value ? knob.valueInk
             : knob.theme.knobStacked && (knob.activeFocus || area.pressed) ? knob.theme.knobLabelActiveInk
             : knob.labelInk
         font.family: value ? knob.theme.knobValueFont : knob.theme.knobLabelFont
@@ -441,12 +463,33 @@ Item {
         x: -knob.theme.knobCaptionInset
         horizontalAlignment: Text.AlignHCenter
         text: knob.valueText
-        color: knob.theme.knobStacked ? (knob.touched ? knob.valueInk : knob.theme.knobValueIdleInk)
-                                      : knob.touched ? knob.theme.ink : knob.valueInk
+        color: knob.modeInactive && knob.editable ? knob.theme.knobInactiveInk
+            : knob.theme.knobStacked ? (knob.touched ? knob.valueInk : knob.theme.knobValueIdleInk)
+            : knob.touched ? knob.theme.ink : knob.valueInk
         font.family: knob.theme.knobValueFont
         font.pixelSize: knob.theme.knobStacked ? knob.theme.knobStackedValueSize : knob.theme.knobReadoutValueSize
         elide: Text.ElideRight
         clip: knob.theme.knobCaptionClip
+    }
+
+    // A linked knob's badge: an accent chip over the dial's top-right.
+    Rectangle {
+        objectName: knob.theme.prefix + "KnobLink:" + knob.parameterId
+        visible: knob.linked
+        x: dialCanvas.x + dialCanvas.width - width
+        y: dialCanvas.y
+        width: linkText.implicitWidth + 2 * knob.theme.knobLinkPad
+        height: linkText.implicitHeight
+        radius: height / 2
+        color: knob.theme.knobLinkFill
+        Text {
+            id: linkText
+            anchors.centerIn: parent
+            text: knob.theme.knobLinkGlyph
+            color: knob.theme.knobLinkInk
+            font.pixelSize: knob.theme.knobLinkSize
+            font.bold: true
+        }
     }
 
     // Parameters that apply to new notes carry a small hollow mark.

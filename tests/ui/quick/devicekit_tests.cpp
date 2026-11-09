@@ -495,6 +495,159 @@ void every_segmented_choice_fills_its_selection() {
   require(themes_checked > 1, "the themes under the QML tree are checked");
 }
 
+// The shared header and the three control states (issues #163-#165), on a
+// harness of their own: a DeviceHeader over Trim, and one knob in each state.
+std::unique_ptr<Harness> load_header(NativeSynthDeviceController& controller) {
+  auto harness = std::make_unique<Harness>();
+  QQmlComponent component(&harness->engine);
+  component.setData(R"(
+      import QtQuick
+      import "qrc:/devicekit" as Kit
+      Item {
+          id: root
+          required property var controller
+          property Kit.KitTheme theme: Kit.KitTheme { prefix: "kit" }
+          width: 900
+          height: 300
+          Kit.DeviceHeader {
+              objectName: "kitHeaderUnderTest"
+              x: 16
+              y: 10
+              width: parent.width - 32
+              controller: root.controller
+              theme: root.theme
+              menu: menu
+              wordmark: "TRIM"
+              subtitle: "GAIN AND WIDTH"
+          }
+          Row {
+              y: 140
+              x: 16
+              spacing: 24
+              Kit.Knob {
+                  objectName: "plainKnob"
+                  controller: root.controller; theme: root.theme; parameterId: "trim.gain"
+              }
+              Kit.Knob {
+                  objectName: "inactiveKnob"
+                  controller: root.controller; theme: root.theme; parameterId: "trim.width"
+                  inactive: true
+                  inactiveReason: "Width follows Mono"
+              }
+              Kit.Knob {
+                  objectName: "linkedKnob"
+                  controller: root.controller; theme: root.theme; parameterId: "trim.gain"
+                  linked: true
+                  linkReason: "Set by the macro"
+              }
+          }
+          Kit.Menu { id: menu; anchors.fill: parent; theme: root.theme }
+      }
+    )",
+                    QUrl(QStringLiteral("qrc:/DeviceHeaderTest.qml")));
+  require(component.isReady(), "header harness loads: " + component.errorString().toStdString());
+  QObject* object = component.createWithInitialProperties(
+      {{QStringLiteral("controller"), QVariant::fromValue<QObject*>(&controller)}});
+  require(object != nullptr, "header harness is created: " + component.errorString().toStdString());
+  harness->root = qobject_cast<QQuickItem*>(object);
+  harness->window->resize(900, 300);
+  harness->root->setParentItem(harness->window->contentItem());
+  harness->window->show();
+  require(QTest::qWaitForWindowExposed(harness->window.get()), "window is exposed");
+  QCoreApplication::processEvents();
+  return harness;
+}
+
+// Layout positions agree within this many pixels (subpixel rounding).
+constexpr double layout_tolerance_px = 1.0;
+
+QRectF scene_rect(QQuickItem* target) { return target->mapRectToScene(target->boundingRect()); }
+
+// One header for every panel: brand | preset browser | readout | status. The
+// readout has a box of its own and hides until a control is touched; the
+// status badge says its state in words and takes no focus.
+void the_header_keeps_preset_readout_and_status_apart() {
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
+  NativeSynthDeviceController controller(table(), adapter);
+  auto harness = load_header(controller);
+  auto* header = item(*harness, "kitHeaderUnderTest");
+  auto* display = item(*harness, "kitPresetDisplay");
+  auto* readout = item(*harness, "kitReadoutBox");
+  auto* status = item(*harness, "kitStatus");
+  auto* wordmark = item(*harness, "kitWordmark");
+  require(header->property("deviceHeader").toBool(), "the header marks itself");
+  require(!readout->isVisible(), "the readout hides while no control is touched");
+  require(scene_rect(wordmark).right() < scene_rect(display).left(),
+          "the preset browser sits after the brand");
+  require(status->property("deviceStatus").toBool() &&
+              item(*harness, "kitStatusText")->property("text").toString() ==
+                  controller.status_text(),
+          "the status badge says its state in words");
+  require(!status->property("activeFocusOnTab").toBool(), "the status badge is not a control");
+  require(scene_rect(status).right() <= scene_rect(header).right() + layout_tolerance_px,
+          "the status badge sits at the header's right");
+
+  // Touching a control shows it in the readout, beside the browser.
+  harness->root->property("theme").value<QObject*>()->setProperty("lastTouched",
+                                                                  QStringLiteral("trim.gain"));
+  QCoreApplication::processEvents();
+  require(readout->isVisible(), "the readout shows the control last touched");
+  require(
+      item(*harness, "kitReadout")->property("text").toString().contains(QStringLiteral("GAIN")),
+      "the readout names the control");
+  require(item(*harness, "kitReadoutValue")->property("text").toString() ==
+              controller.display(QStringLiteral("trim.gain")),
+          "the readout shows the control's value");
+  require(!scene_rect(readout).intersects(scene_rect(display)) &&
+              scene_rect(readout).left() > scene_rect(display).right() &&
+              scene_rect(readout).right() < scene_rect(status).left(),
+          "the readout has its own box between the browser and the badge");
+}
+
+// Disabled, mode-inactive and linked controls look different: a disabled
+// knob fades whole; an inactive one keeps readable inkDim captions and says
+// why; a linked one keeps full contrast and wears the link badge.
+void control_states_read_apart() {
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
+  NativeSynthDeviceController controller(table(), adapter);
+  auto harness = load_header(controller);
+  auto* theme = harness->root->property("theme").value<QObject*>();
+  auto* plain = item(*harness, "plainKnob");
+  auto* inactive = item(*harness, "inactiveKnob");
+  auto* linked = item(*harness, "linkedKnob");
+  require(plain->property("controlState").toString() == QStringLiteral("normal") &&
+              inactive->property("controlState").toString() == QStringLiteral("inactive") &&
+              linked->property("controlState").toString() == QStringLiteral("linked"),
+          "each knob reports its state");
+  require(inactive->opacity() == 1.0, "an inactive knob does not fade like a disabled one");
+  const auto inactive_label = find_item(inactive, QStringLiteral("kitKnobLabel:trim.width"));
+  require(inactive_label != nullptr && inactive_label->property("color").value<QColor>() ==
+                                           theme->property("knobInactiveInk").value<QColor>(),
+          "an inactive knob's label reads in inkDim");
+  require(inactive->property("tipDetail").toString().contains(QStringLiteral("Width follows Mono")),
+          "an inactive knob says why in its tooltip");
+  auto* badge = find_item(linked, QStringLiteral("kitKnobLink:trim.gain"));
+  require(badge != nullptr && badge->isVisible(), "a linked knob wears the link badge");
+  require(find_item(plain, QStringLiteral("kitKnobLink:trim.gain"))->isVisible() == false,
+          "an unlinked knob has no link badge");
+  const auto face_opacity = [](QQuickItem* knob) {
+    return knob->property("face").value<QQuickItem*>()->opacity();
+  };
+  require(face_opacity(inactive) == theme->property("knobInactiveOpacity").toDouble(),
+          "an inactive knob's face dims");
+  require(linked->opacity() == 1.0 && face_opacity(linked) == 1.0,
+          "a linked knob keeps full contrast");
+
+  oscillate::quick::NativeSynthPanelStatus status;
+  status.editable = false;
+  adapter.set_status(status);
+  controller.refresh();
+  QCoreApplication::processEvents();
+  require(plain->property("controlState").toString() == QStringLiteral("disabled") &&
+              plain->opacity() == theme->property("knobDisabledOpacity").toDouble(),
+          "a disabled knob fades whole");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -504,6 +657,8 @@ int main(int argc, char** argv) {
     read_only_panels_edit_nothing();
     every_theme_reads_at_body_text_contrast();
     every_segmented_choice_fills_its_selection();
+    the_header_keeps_preset_readout_and_status_apart();
+    control_states_read_apart();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';
     return 1;

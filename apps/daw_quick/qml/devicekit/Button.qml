@@ -48,7 +48,9 @@ Rectangle {
     }
     border.color: theme.pushButtonEdge(button)
     border.width: activeFocus ? theme.pushButtonFocusEdgeWidth : theme.pushButtonEdgeWidth
-    activeFocusOnTab: usable && visible
+    // Tab skips a hidden button by itself; binding to visibility would try
+    // to drop the focus of a button hidden while focused.
+    activeFocusOnTab: usable
     Accessible.role: Accessible.Button
     Accessible.name: theme.tipIsName && tip.length > 0 ? tip : label
     Accessible.description: theme.tipIsName ? "" : tip
@@ -71,6 +73,11 @@ Rectangle {
     MouseArea {
         id: area
         anchors.fill: parent
+        // At least the kit's least hit size, however small the control draws.
+        anchors.leftMargin: -button.theme.hitOutset(parent.width)
+        anchors.rightMargin: -button.theme.hitOutset(parent.width)
+        anchors.topMargin: -button.theme.hitOutset(parent.height)
+        anchors.bottomMargin: -button.theme.hitOutset(parent.height)
         hoverEnabled: true
         enabled: button.active && button.interactive
         cursorShape: button.theme.pushButtonPointer && button.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor

@@ -11,7 +11,7 @@ constexpr auto dock_height_key = "workspace/deviceDockHeight";
 constexpr auto context_open_key = "workspace/contextPanelOpen";
 constexpr auto instrument_width_key = "workspace/instrumentWindowWidth";
 constexpr auto instrument_height_key = "workspace/instrumentWindowHeight";
-constexpr auto nova_zoom_key = "workspace/novaZoom";
+constexpr auto panel_zoom_key = "workspace/panelZoom";
 // A saved window size beyond any screen, or a zoom no panel offers, is a
 // corrupt setting: the panel's own chips pick the zoom within these.
 constexpr int largest_window = 16384;
@@ -29,8 +29,8 @@ WorkspaceLayoutController::WorkspaceLayoutController(QObject* parent) : QObject(
   instrument_window_width_ = window_size(settings.value(instrument_width_key, 0).toInt());
   instrument_window_height_ = window_size(settings.value(instrument_height_key, 0).toInt());
   // A corrupt (non-finite) stored zoom falls back to 1.
-  const double stored_zoom = settings.value(nova_zoom_key, 1.0).toDouble();
-  nova_zoom_ =
+  const double stored_zoom = settings.value(panel_zoom_key, 1.0).toDouble();
+  panel_zoom_ =
       std::clamp(std::isfinite(stored_zoom) ? stored_zoom : 1.0, smallest_zoom, largest_zoom);
 }
 
@@ -69,14 +69,14 @@ void WorkspaceLayoutController::set_instrument_window_height(int height) {
   emit changed();
 }
 
-void WorkspaceLayoutController::set_nova_zoom(double zoom) {
+void WorkspaceLayoutController::set_panel_zoom(double zoom) {
   if (!std::isfinite(zoom))
     return;
   const auto bounded = std::clamp(zoom, smallest_zoom, largest_zoom);
-  if (bounded == nova_zoom_)
+  if (bounded == panel_zoom_)
     return;
-  nova_zoom_ = bounded;
-  QSettings{}.setValue(nova_zoom_key, bounded);
+  panel_zoom_ = bounded;
+  QSettings{}.setValue(panel_zoom_key, bounded);
   emit changed();
 }
 

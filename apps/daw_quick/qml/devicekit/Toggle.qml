@@ -95,6 +95,11 @@ Rectangle {
     MouseArea {
         id: toggleArea
         anchors.fill: parent
+        // At least the kit's least hit size, however small the control draws.
+        anchors.leftMargin: -toggle.theme.hitOutset(parent.width)
+        anchors.rightMargin: -toggle.theme.hitOutset(parent.width)
+        anchors.topMargin: -toggle.theme.hitOutset(parent.height)
+        anchors.bottomMargin: -toggle.theme.hitOutset(parent.height)
         enabled: toggle.controller.editable
         hoverEnabled: true
         onClicked: {

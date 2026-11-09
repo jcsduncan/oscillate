@@ -3,6 +3,7 @@
     <file alias="DawShell.qml">qml/DawShell.qml</file>
     <file alias="shell/qmldir">qml/shell/qmldir</file>
     <file alias="shell/Motion.qml">qml/shell/Motion.qml</file>
+    <file alias="shell/FocusRing.qml">qml/shell/FocusRing.qml</file>
     <file alias="shell/Tips.qml">qml/shell/Tips.qml</file>
     <file alias="shell/Tip.qml">qml/shell/Tip.qml</file>
     <file alias="shell/TipLayer.qml">qml/shell/TipLayer.qml</file>
@@ -81,6 +82,10 @@
     <file alias="devicekit/Segment.qml">qml/devicekit/Segment.qml</file>
     <file alias="devicekit/ShellTheme.qml">qml/devicekit/ShellTheme.qml</file>
     <file alias="devicekit/StatusBadge.qml">qml/devicekit/StatusBadge.qml</file>
+    <file alias="devicekit/DeviceHeader.qml">qml/devicekit/DeviceHeader.qml</file>
+    <file alias="devicekit/PresetBrowser.qml">qml/devicekit/PresetBrowser.qml</file>
+    <file alias="devicekit/Readout.qml">qml/devicekit/Readout.qml</file>
+    <file alias="devicekit/PlotFrame.qml">qml/devicekit/PlotFrame.qml</file>
     <file alias="devicekit/Stepper.qml">qml/devicekit/Stepper.qml</file>
     <file alias="devicekit/Switch.qml">qml/devicekit/Switch.qml</file>
     <file alias="devicekit/Tip.qml">qml/devicekit/Tip.qml</file>
