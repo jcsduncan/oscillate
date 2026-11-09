@@ -193,7 +193,8 @@ std::vector<double> edge_transfer(const native_dsp::EngineDescriptor& engine,
                                   std::span<const double> values, double from_db, double to_db,
                                   std::size_t points) {
   const auto shape = native_dsp::find_parameter(engine, "edge.shape");
-  if (!is_edge(engine, values) || !shape || points < 2 || !(to_db > from_db)) {
+  const auto ceiling = native_dsp::find_parameter(engine, "edge.ceiling");
+  if (!is_edge(engine, values) || !shape || !ceiling || points < 2 || !(to_db > from_db)) {
     return {};
   }
   std::vector<double> curve;
@@ -201,8 +202,8 @@ std::vector<double> edge_transfer(const native_dsp::EngineDescriptor& engine,
   for (std::size_t i = 0; i < points; ++i) {
     const double db =
         from_db + (to_db - from_db) * static_cast<double>(i) / static_cast<double>(points - 1);
-    curve.push_back(native_dsp::dsp::gain_to_db(
-        native_dsp::effects::edge::clip(native_dsp::dsp::db_to_gain(db), values[*shape])));
+    curve.push_back(native_dsp::dsp::gain_to_db(native_dsp::effects::edge::clip(
+        native_dsp::dsp::db_to_gain(db), values[*shape], values[*ceiling])));
   }
   return curve;
 }

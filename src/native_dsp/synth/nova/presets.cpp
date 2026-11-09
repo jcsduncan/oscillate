@@ -273,6 +273,9 @@ constexpr auto arp_sequence = std::to_array<Value>({
 // library plays at one level: a held C major chord (C1 for basses) peaks
 // near -6 dBFS, or as near as the master's +6 dB reaches.
 
+// Utility: bass mono below about 120 Hz (p2, log 20..500 Hz).
+constexpr double mono_below_120_hz = 0.557;
+
 // Basses.
 constexpr auto rolling_reese = std::to_array<Value>({
     {"nova.master", 1.5},
@@ -297,7 +300,7 @@ constexpr auto rolling_reese = std::to_array<Value>({
     {"nova.global.portamento", 0.04},
     {"nova.fx.1.p0", 0.2},
     {"nova.fx.1.p7", 1.0 / 11.0},
-    {"nova.fx.2.p2", 0.557},
+    {"nova.fx.2.p2", mono_below_120_hz},
 });
 
 constexpr auto acid_line = std::to_array<Value>({
@@ -1642,11 +1645,44 @@ constexpr auto warm_sub_bed = std::to_array<Value>({
     {"nova.lfo.1.smooth", 0.5},
     {"nova.mod.0.amount", octaves_of_travel(0.4)},
     // Utility: bass mono below about 120 Hz (p2, log 20..500 Hz).
-    {"nova.fx.1.p2", 0.557},
+    {"nova.fx.1.p2", mono_below_120_hz},
     {"nova.analogue.on", 1.0},
     {"nova.analogue.age", 0.35},
     {"nova.analogue.seed", 909.0},
     {"nova.analogue.drift.amount", 0.4},
+});
+
+// ---- Drop parts ---------------------------------------------------------------------------
+// What hits after a breakdown, ducked from the kick by a Pump on the track.
+
+// A mono saw and sine sub for off-beat sixteenths: a ladder that opens on
+// each note and shuts within a sixteenth, so the line rolls rather than
+// drones, with the lows kept mono.
+constexpr auto rolling_sixteenth_bass = std::to_array<Value>({
+    {"nova.master", 0.0},
+    {"nova.osc.a.type", 0.0},
+    {"nova.osc.a.shape", 2.0},
+    {"nova.osc.a.unison.voices", 1.0},
+    {"nova.sub.on", 1.0},
+    {"nova.sub.level", 0.7},
+    {"nova.filter.1.model", 0.0},
+    {"nova.filter.1.cutoff", 260.0},
+    {"nova.filter.1.resonance", 0.28},
+    {"nova.filter.1.drive", 4.0},
+    {"nova.filter.1.keytrack", 0.5},
+    {"nova.env.1.attack", 0.001},
+    {"nova.env.1.decay", 0.13},
+    {"nova.env.1.sustain", 0.2},
+    {"nova.env.1.release", 0.05},
+    {"nova.env.2.attack", 0.0},
+    {"nova.env.2.decay", 0.08},
+    {"nova.env.2.sustain", 0.0},
+    {"nova.mod.0.amount", octaves_of_travel(2.5)},
+    {"nova.global.voicing", 1.0},
+    {"nova.fx.1.p2", mono_below_120_hz},
+    {"nova.analogue.on", 1.0},
+    {"nova.analogue.age", 0.3},
+    {"nova.analogue.seed", 3'131.0},
 });
 
 // ---- Tags -------------------------------------------------------------------------------
@@ -1716,6 +1752,7 @@ constexpr auto t_brass = std::to_array<std::string_view>({"warm", "analog"});
 constexpr auto t_ney = std::to_array<std::string_view>({"airy", "noise", "soft"});
 constexpr auto t_santur = std::to_array<std::string_view>({"metallic", "percussive", "bright"});
 constexpr auto t_sub_bed = std::to_array<std::string_view>({"warm", "soft", "bass"});
+constexpr auto t_rolling_bass = std::to_array<std::string_view>({"mono", "short", "trance"});
 
 // ---- Documents --------------------------------------------------------------------------
 
@@ -2291,6 +2328,13 @@ NativeSynthDocument sub_bed_document() {
   return document;
 }
 
+NativeSynthDocument rolling_bass_document() {
+  auto document = base();
+  document.routes = {route(0, "env.2", "nova.filter.1.cutoff")};
+  document.chains = {{"fx.main", {{1, "utility"}}}};
+  return document;
+}
+
 // A factory preset: its values, tags and document.
 struct PresetSpec {
   std::string_view name;
@@ -2371,6 +2415,8 @@ const std::array preset_specs{
     PresetSpec{"Ney Breath", "Pad", ney_breath, t_ney, ney_document},
     PresetSpec{"Santur Bloom", "Pluck", santur_bloom, t_santur, santur_document},
     PresetSpec{"Warm Sub Bed", "Pad", warm_sub_bed, t_sub_bed, sub_bed_document},
+    PresetSpec{"Rolling Sixteenth Bass", "Bass", rolling_sixteenth_bass, t_rolling_bass,
+               rolling_bass_document},
 };
 
 } // namespace

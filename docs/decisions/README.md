@@ -111,8 +111,9 @@ never reused. 0070 was never assigned.
 | 0103 | [Device panels share one header, status badge, control states, plot frame and zoom](0103-shared-device-panel-parts.md) | Accepted |
 | 0104 | [A neutral native control layer, with project binding above native_dsp and plugins](0104-native-processing-layers.md) | Accepted; implemented |
 | 0107 | [MP3 import decodes with libmpg123, scanning the whole stream](0107-mp3-decoding-with-libmpg123.md) | Accepted; implemented |
-| 0108 | [Edge: a clipper under a true-peak ceiling — linear-phase oversampling to 16×, antiderivative antialiasing, a BS.1770 guard](0108-edge-clipper.md) | Accepted; implemented |
+| 0108 | [Edge: a clipper under a true-peak ceiling — linear-phase oversampling to 16×, antiderivative antialiasing, a BS.1770 guard](0108-edge-clipper.md) | Superseded in part by ADR-0113 for the fixed ceiling; otherwise implemented |
 | 0110 | [Heavy projects across the helpers: qualification with the live helpers, a helper per hardware thread up to seven, cheaper Forge and Shape spectra](0110-heavy-projects-across-the-helpers.md) | Accepted; implemented |
 | 0111 | [Bow: sampled strings, sections and solo, bowed from the mod wheel](0111-bow-sampled-strings.md) | Accepted |
 | 0112 | [Warp markers and the tempo lane on the arrangement](0112-warp-markers-and-tempo-lane-on-the-arrangement.md) | Accepted; implemented |
+| 0113 | [Edge: an adjustable ceiling](0113-edge-adjustable-ceiling.md) | Accepted; implemented |
 | 0114 | [Stick: sampled multi-mic acoustic drums](0114-stick-sampled-drums.md) | Accepted; implemented |

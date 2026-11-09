@@ -60,31 +60,86 @@ NativeEffectRuntime::create(const EffectEngine& engine, std::span<const double> 
   return R::success(std::move(runtime));
 }
 
-Result<void> NativeEffectRuntime::offer_document(const project::NativeSynthDocument& document,
-                                                 std::uint64_t revision) {
+Result<std::unique_ptr<NativeEffectRuntime::DocumentOffer>>
+NativeEffectRuntime::compile_document(const project::NativeSynthDocument& document,
+                                      std::uint64_t revision) const {
+  using R = Result<std::unique_ptr<DocumentOffer>>;
   if (engine_.prepare_document == nullptr) {
     if (!document.empty()) {
-      return Result<void>::failure(
-          {ErrorCode::invalid_argument,
-           std::string(engine_.descriptor->name) + " has no structured state"});
+      return R::failure({ErrorCode::invalid_argument,
+                         std::string(engine_.descriptor->name) + " has no structured state"});
     }
-    return Result<void>::success();
+    return R::success(nullptr);
   }
   if (!documents_.empty() && revision < documents_.back()->revision) {
-    return Result<void>::failure({ErrorCode::conflict, "effect document revision went backwards"});
+    return R::failure({ErrorCode::conflict, "effect document revision went backwards"});
   }
   auto prepared = engine_.prepare_document(
       document, sample_rate_, documents_.empty() ? nullptr : documents_.back()->state.get());
   if (!prepared) {
-    return Result<void>::failure(prepared.error());
+    return R::failure(prepared.error());
   }
-  // Retire offers the callback has moved past; keep the one it reads.
+  return R::success(std::make_unique<DocumentOffer>(revision, std::move(prepared).value()));
+}
+
+void NativeEffectRuntime::publish_document(std::unique_ptr<DocumentOffer> offer) noexcept {
+  // Retire offers the callback has moved past; keep the one it reads. The
+  // room for the new one was reserved when it was compiled.
   const auto applied = document_mailbox_->applied.load(std::memory_order_acquire);
-  std::erase_if(documents_, [applied](const auto& offer) { return offer->revision < applied; });
-  documents_.push_back(std::make_unique<DocumentOffer>(revision, std::move(prepared).value()));
+  std::erase_if(documents_, [applied](const auto& kept) { return kept->revision < applied; });
+  documents_.push_back(std::move(offer));
   document_mailbox_->offered.store(documents_.back().get(), std::memory_order_release);
-  document_ = document;
+}
+
+Result<void> NativeEffectRuntime::offer_document(const project::NativeSynthDocument& document,
+                                                 std::uint64_t revision) {
+  auto compiled = compile_document(document, revision);
+  if (!compiled) {
+    return Result<void>::failure(compiled.error());
+  }
+  if (compiled.value()) {
+    documents_.reserve(documents_.size() + 1);
+    document_ = document;
+    publish_document(std::move(compiled).value());
+  }
   return Result<void>::success();
+}
+
+Result<NativeEffectRuntime::PreparedOffer>
+NativeEffectRuntime::prepare_offer(std::span<const double> values,
+                                   const project::NativeSynthDocument* document,
+                                   std::uint64_t revision) {
+  using R = Result<PreparedOffer>;
+  if (!control_.can_offer(values, revision)) {
+    return R::failure(
+        {ErrorCode::conflict, "Live effect parameter mailbox is full; retry the saved edit"});
+  }
+  PreparedOffer prepared;
+  prepared.values.assign(values.begin(), values.end());
+  prepared.revision = revision;
+  if (document != nullptr) {
+    auto compiled = compile_document(*document, revision);
+    if (!compiled) {
+      return R::failure(compiled.error());
+    }
+    prepared.document_offer = std::move(compiled).value();
+    if (prepared.document_offer) {
+      prepared.document = *document;
+      documents_.reserve(documents_.size() + 1);
+    }
+  }
+  return R::success(std::move(prepared));
+}
+
+bool NativeEffectRuntime::commit_offer(PreparedOffer&& offer) noexcept {
+  if (!control_.can_offer(offer.values, offer.revision)) {
+    return false;
+  }
+  if (offer.document_offer) {
+    document_ = std::move(offer.document);
+    publish_document(std::move(offer.document_offer));
+  }
+  return control_.offer(offer.values, offer.revision);
 }
 
 bool NativeEffectRuntime::offer_key_notes(std::vector<KeyNote> notes) {

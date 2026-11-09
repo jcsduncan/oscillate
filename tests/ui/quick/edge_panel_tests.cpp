@@ -33,7 +33,9 @@
 #include <utility>
 #include <vector>
 
-// The Edge panel (ADR-0108): every parameter on a control; the text fits;
+// The Edge panel (ADR-0108, ADR-0113): every parameter on a control; the
+// text fits; the transfer's ceiling line, its label and the meters' marks
+// follow the ceiling;
 // the subtitle and latency follow the oversampling; the switches and the
 // level-matched compare edit their parameters; the transfer curve comes
 // from the engine; the telemetry decodes into the meters, the dot and the
@@ -273,24 +275,32 @@ void controls_edit_their_parameters() {
       "unmatched, the button says so");
 }
 
-// The drawn curve is the engine's: linear to the knee, then held under 0.
+// The drawn curve is the engine's: linear to the knee, then held under the
+// ceiling.
 void the_curve_is_the_engines() {
   constexpr int points = 37;
   constexpr double from_db = -24.0;
   constexpr double to_db = 12.0;
+  constexpr double lowered_db = -6.0;
   auto values = preset("Default");
   values[at("edge.shape")] = 0.0;
   InMemoryNativeSynthAdapter adapter(values);
   NativeSynthDeviceController controller(table(), adapter);
-  const auto curve = controller.edge_transfer(from_db, to_db, points);
-  require(curve.size() == points, "a point per input");
-  for (int i = 0; i < points; ++i) {
-    const double in = from_db + (to_db - from_db) * i / (points - 1);
-    const double expected = std::min(in, 0.0);
-    require(std::fabs(curve.at(i).toDouble() - expected) <
-                oscillate::test::tolerance::double_accumulation,
-            "a hard clip at shape 0, point " + std::to_string(i));
-  }
+  const auto hard_clip_at = [&](double ceiling_db) {
+    const auto curve = controller.edge_transfer(from_db, to_db, points);
+    require(curve.size() == points, "a point per input");
+    for (int i = 0; i < points; ++i) {
+      const double in = from_db + (to_db - from_db) * i / (points - 1);
+      const double expected = std::min(in, ceiling_db);
+      require(std::fabs(curve.at(i).toDouble() - expected) <
+                  oscillate::test::tolerance::double_accumulation,
+              "a hard clip at shape 0, point " + std::to_string(i));
+    }
+  };
+  hard_clip_at(0.0);
+  controller.set_value(QStringLiteral("edge.ceiling"), lowered_db);
+  hard_clip_at(lowered_db);
+  controller.set_value(QStringLiteral("edge.ceiling"), 0.0);
   // Default is 8x linear phase: 92 frames of filters and 55 of guard, 147
   // frames at 48 kHz.
   constexpr double default_latency_ms = 147.0 / 48.0;
@@ -300,6 +310,22 @@ void the_curve_is_the_engines() {
   auto panel = load_panel(controller);
   require(item(*panel, QStringLiteral("edgeTransfer"))->property("curve").toList().size() > 1,
           "the panel draws it");
+  require(text_of(*panel, QStringLiteral("edgeCeilingLabel")) == QStringLiteral("CEILING 0.0 dBFS"),
+          "the ceiling's label: " +
+              text_of(*panel, QStringLiteral("edgeCeilingLabel")).toStdString());
+  auto* label = item(*panel, QStringLiteral("edgeCeilingLabel"));
+  auto* in_mark = item(*panel, QStringLiteral("edgeInPeakCeiling"));
+  auto* out_mark = item(*panel, QStringLiteral("edgeOutPeakCeiling"));
+  const double label_y = label->y();
+  const double mark_x = out_mark->x();
+  require(in_mark->isVisible() && out_mark->isVisible(), "the level bars mark the ceiling");
+  controller.set_value(QStringLiteral("edge.ceiling"), lowered_db);
+  require(wait_for_text(*panel, QStringLiteral("edgeCeilingLabel"),
+                        QStringLiteral("CEILING −6.0 dBFS")),
+          "the label follows: " +
+              text_of(*panel, QStringLiteral("edgeCeilingLabel")).toStdString());
+  require(label->y() > label_y, "the ceiling line drops");
+  require(out_mark->x() < mark_x && in_mark->x() == out_mark->x(), "and the meters' marks");
 }
 
 void telemetry_decodes_into_the_meters() {
@@ -426,7 +452,10 @@ void screenshots_if_requested() {
   constexpr int frame_ms = 33;
   constexpr int settle_ms = 150;
   QDir().mkpath(QString::fromLocal8Bit(directory));
-  const auto values = preset("Kick Punch");
+  // Under a ceiling 3 dB down, as on a master that feeds a limiter.
+  constexpr double ceiling_db = -3.0;
+  auto values = preset("Kick Punch");
+  values[at("edge.ceiling")] = ceiling_db;
   InMemoryNativeSynthAdapter adapter(values);
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);

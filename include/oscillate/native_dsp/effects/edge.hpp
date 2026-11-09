@@ -9,24 +9,26 @@
 
 namespace oscillate::native_dsp::effects::edge {
 
-// Edge (ADR-0108): a clipper under a fixed 0 dBFS ceiling. Input gain
-// drives the signal into one curve that runs from a hard flat top (shape 0)
-// to a soft knee (shape 1), oversampled 1x to 16x through linear-phase
-// half-band filters (or shorter, lighter ones), with antiderivative
-// antialiasing from 8x. A true-peak guard after the filters keeps the
-// output at or under 0 dBTP as the BS.1770 meter reads it; output gain
-// only attenuates. Delta plays the input (gain- and latency-aligned) less
-// the output; Compare plays the aligned input, level-matched to the output
-// when Level Match is on. Oversampling and the filters fix the latency.
+// Edge (ADR-0108, ADR-0113): a clipper under a ceiling of -12 to 0 dBFS
+// (edge.ceiling). Input gain drives the signal into one curve that runs
+// from a hard flat top at the ceiling (shape 0) to a soft knee (shape 1),
+// oversampled 1x to 16x through linear-phase half-band filters (or shorter,
+// lighter ones), with antiderivative antialiasing from 8x. A true-peak guard
+// after the filters keeps the output at or under the ceiling as the BS.1770
+// meter reads it; output gain only attenuates. Delta plays the input (gain-
+// and latency-aligned) less the output; Compare plays the aligned input,
+// level-matched to the output when Level Match is on. Oversampling and the
+// filters fix the latency.
 [[nodiscard]] const EffectEngine& engine();
 
 // The oversampling factors, indexed by edge.oversampling.
 inline constexpr std::array<std::uint32_t, 5> factors{1, 2, 4, 8, 16};
 
-// The static curve: the output for input `x` (linear, the ceiling at 1) at
-// `shape` (0 hard, 1 soft). Odd, monotonic, never above 1 in magnitude, and
-// exactly x up to the knee.
-[[nodiscard]] double clip(double x, double shape) noexcept;
+// The static curve: the output for input `x` (linear) at `shape` (0 hard,
+// 1 soft) under a ceiling of `ceiling_db` dBFS (clamped to the parameter's
+// range). Odd, monotonic, never above the ceiling in magnitude, and exactly
+// x up to the knee.
+[[nodiscard]] double clip(double x, double shape, double ceiling_db) noexcept;
 
 // The latency in frames for a factor index and filter choice at `sample_rate`
 // (the engine's latency_frames for those values).
