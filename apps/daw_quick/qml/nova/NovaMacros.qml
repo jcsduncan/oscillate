@@ -4,7 +4,8 @@ import "../shell" as Shell
 
 // The macros (NOVA-UI-10), on the MACROS overview card: eight knobs named
 // by the preset in two rows, each with a ✥ handle to drag onto any knob.
-// Double-click a name to rename it (a document label). Compact (the
+// Double-click a name, or focus it and press Return, to rename it (a
+// document label). Compact (the
 // overview card), the knobs are full size and the rows sit at the top, as
 // tall as they need; otherwise the knobs are big and the rows share the
 // height.
@@ -17,7 +18,8 @@ Item {
     readonly property int rows: 2
     readonly property real compactRowSpacing: panel.theme.spaceSm
     readonly property real minimumRowSpacing: panel.theme.spaceMd
-    readonly property real nameHeight: 14
+    // The name and the handle each take a row the kit's least hit size tall.
+    readonly property real nameHeight: panel.theme.minHitSize
     readonly property real nameSize: panel.theme.typeSmall
     readonly property int nameLength: 32
     readonly property real handleGlyph: panel.theme.typeSmall
@@ -33,7 +35,7 @@ Item {
         rowSpacing: card.compact ? card.compactRowSpacing
             : Math.max(card.minimumRowSpacing, (card.height - card.rows * macroHeight) / (card.rows + 1))
         // A big knob with its caption and value, the name and the handle.
-        readonly property real macroHeight: 116
+        readonly property real macroHeight: 134
         Repeater {
             model: card.columns * card.rows
             delegate: Column {
@@ -52,8 +54,33 @@ Item {
                     label: "M" + (macro.index + 1)
                 }
                 Item {
+                    id: nameBox
+                    objectName: "novaMacroNameBox:" + (macro.index + 1)
                     width: parent.width
                     height: card.nameHeight
+                    activeFocusOnTab: card.panel.controller.editable
+                    Accessible.role: Accessible.EditableText
+                    Accessible.name: "Macro " + (macro.index + 1) + " name"
+                    Accessible.description: macro.name + ". Return renames it"
+                    function rename() {
+                        if (!card.panel.controller.editable)
+                            return
+                        nameEdit.text = macro.name
+                        nameEdit.visible = true
+                        nameEdit.forceActiveFocus()
+                        nameEdit.selectAll()
+                    }
+                    Keys.onReturnPressed: rename()
+                    Keys.onEnterPressed: rename()
+                    // The focus edge.
+                    Rectangle {
+                        visible: nameBox.activeFocus
+                        anchors.fill: parent
+                        radius: card.panel.theme.radiusSm
+                        color: "transparent"
+                        border.color: card.panel.theme.vi
+                        border.width: card.panel.theme.hairline
+                    }
                     Text {
                         id: nameText
                         objectName: "novaMacroName:" + (macro.index + 1)
@@ -79,14 +106,8 @@ Item {
                         Shell.Tip {}
                         MouseArea {
                             anchors.fill: parent
-                            anchors.margins: -card.panel.theme.macroNameHit
                             enabled: card.panel.controller.editable
-                            onDoubleClicked: {
-                                nameEdit.text = macro.name
-                                nameEdit.visible = true
-                                nameEdit.forceActiveFocus()
-                                nameEdit.selectAll()
-                            }
+                            onDoubleClicked: nameBox.rename()
                         }
                     }
                     Rectangle {
@@ -102,6 +123,7 @@ Item {
                         objectName: "novaMacroEdit:" + (macro.index + 1)
                         visible: false
                         anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.verticalCenter: parent.verticalCenter
                         width: parent.width - card.panel.theme.macroEditRoom
                         horizontalAlignment: TextInput.AlignHCenter
                         color: card.panel.theme.text
@@ -112,16 +134,25 @@ Item {
                         onAccepted: {
                             card.panel.doc.set_label(macro.source, text)
                             visible = false
+                            nameBox.forceActiveFocus()
                         }
                         onActiveFocusChanged: if (!activeFocus) visible = false
-                        Keys.onEscapePressed: visible = false
+                        Keys.onEscapePressed: {
+                            visible = false
+                            nameBox.forceActiveFocus()
+                        }
                     }
                 }
-                NovaHandle {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    panel: card.panel
-                    source: macro.source
-                    glyphSize: card.handleGlyph
+                // The handle draws small; its pointer area fills this row.
+                Item {
+                    width: parent.width
+                    height: card.panel.theme.minHitSize
+                    NovaHandle {
+                        anchors.centerIn: parent
+                        panel: card.panel
+                        source: macro.source
+                        glyphSize: card.handleGlyph
+                    }
                 }
             }
         }

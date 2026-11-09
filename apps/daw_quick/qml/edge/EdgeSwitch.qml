@@ -52,7 +52,6 @@ Item {
         height: row.theme.toggleTrackHeight
         radius: height / 2
         color: row.on ? row.theme.accent : row.theme.track
-        border.color: row.activeFocus ? row.theme.ink : "transparent"
         Rectangle {
             readonly property real inset: row.theme.toggleKnobInset
             x: row.on ? track.width - width - inset : inset
@@ -62,6 +61,17 @@ Item {
             radius: width / 2
             color: row.theme.dotFill
         }
+    }
+    // The focus ring, clear of the track so it shows on and off.
+    Rectangle {
+        objectName: row.theme.prefix + "ToggleFocus:" + row.parameterId
+        visible: row.activeFocus
+        anchors.fill: track
+        anchors.margins: -row.theme.toggleFocusGap
+        radius: height / 2
+        color: "transparent"
+        border.color: row.theme.accent
+        border.width: row.theme.strokeBold
     }
     Kit.Tip {
         theme: row.theme

@@ -112,18 +112,6 @@ Rectangle {
     // for noise.
     readonly property string levelKind: noise ? "RMS" : "PEAK"
 
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        if (info.name === undefined)
-            return ""
-        return (info.group === info.name ? info.name : info.group + " · " + info.name).toUpperCase()
-    }
-    function readoutValue(id) {
-        return id === "" || revision < 0 ? "" : controller.display(id)
-    }
-
     // The display's main line and the line under it.
     readonly property string bigText: !on ? "OFF"
         : wave === 0 ? hzDigits(frequency)
@@ -179,156 +167,49 @@ Rectangle {
 
     // ---- Header ----------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin + panel.theme.headerInset
         y: panel.theme.headerY
         width: panel.width - 2 * panel.margin - 2 * panel.theme.headerInset
-        height: panel.theme.headerHeight
-
-        Text {
-            id: wordmark
-            y: panel.theme.wordmarkY
-            text: "SIGNAL"
-            color: panel.theme.glacier
-            font.family: panel.theme.sans
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Light
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        Rectangle {
-            x: wordmark.x + panel.theme.wordmarkInset
-            y: wordmark.y + wordmark.height + panel.theme.underlineGap
-            width: wordmark.implicitWidth - panel.theme.underlineTrim
-            height: panel.theme.strokeBold
-            radius: height / 2
-            color: panel.theme.accent
-        }
-        Text {
-            x: wordmark.x + panel.theme.wordmarkInset
-            y: wordmark.y + wordmark.height + panel.theme.subtitleGap
-            text: "TEST GENERATOR"
-            color: panel.theme.inkDim
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.subtitleSpacing
-        }
-
-        Row {
-            id: browser
-            x: panel.theme.browserX
-            y: panel.theme.browserY
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "signalPresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "signalPresetDisplay"
-                width: panel.theme.presetDisplayWidth
-                height: panel.theme.presetDisplayHeight
-                radius: panel.theme.radiusLg
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                border.width: activeFocus ? panel.theme.focusStroke : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.accent)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        // The wordmark over its accent underline, and the subtitle.
+        brand: Component {
+            Item {
+                implicitWidth: Math.max(wordmark.implicitWidth, subtitle.x + subtitle.implicitWidth)
+                implicitHeight: subtitle.y + subtitle.implicitHeight
                 Text {
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetCategoryY
-                    text: panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.captionSpacing
-                }
-                Text {
-                    objectName: "signalPresetName"
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetNameY
-                    width: panel.theme.presetNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeHeading
-                    font.letterSpacing: panel.theme.presetNameSpacing
-                    elide: Text.ElideRight
+                    id: wordmark
+                    objectName: "signalWordmark"
+                    text: "SIGNAL"
+                    color: panel.theme.wordmarkInk
+                    font.family: panel.theme.wordmarkFont
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.weight: panel.theme.wordmarkWeight
+                    font.letterSpacing: panel.theme.wordmarkSpacing
                 }
                 Rectangle {
-                    x: panel.theme.presetDividerX
-                    y: panel.theme.presetDividerInset
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.theme.presetDividerInset
-                    color: panel.theme.wellEdge
-                }
-                Text {
-                    objectName: "signalReadout"
-                    x: panel.theme.readoutX
-                    y: panel.theme.presetCategoryY
-                    width: display.width - x - panel.theme.readoutRight
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.tagSpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "signalReadoutValue"
-                    x: panel.theme.readoutX
-                    y: panel.theme.readoutValueY
-                    width: display.width - x - panel.theme.readoutRight
-                    text: panel.readoutValue(panel.theme.lastTouched)
+                    x: panel.theme.wordmarkInset
+                    y: wordmark.height + panel.theme.underlineGap
+                    width: wordmark.implicitWidth - panel.theme.underlineTrim
+                    height: panel.theme.strokeBold
+                    radius: height / 2
                     color: panel.theme.accent
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeSubtitle
-                    elide: Text.ElideRight
                 }
                 Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.chevronMargin
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.inkDim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
-                    }
+                    id: subtitle
+                    objectName: "signalSubtitle"
+                    x: panel.theme.wordmarkInset
+                    y: wordmark.height + panel.theme.subtitleGap
+                    text: "TEST GENERATOR"
+                    color: panel.theme.subtitleInk
+                    font.pixelSize: panel.theme.subtitleSize
+                    font.bold: true
+                    font.letterSpacing: panel.theme.subtitleSpacing
                 }
             }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "signalPresetNext"
-                direction: 1
-            }
-        }
-
-        Kit.StatusBadge {
-            id: status
-            objectName: "signalStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: panel.theme.statusY
         }
     }
 
@@ -465,18 +346,27 @@ Rectangle {
                 }
             }
 
-            SignalAxis {
-                objectName: "signalAxis"
+            // The strip in its frame: frequency ticks, LIVE while a sweep runs.
+            Kit.PlotFrame {
                 x: panel.theme.lcdTextX
                 y: panel.theme.axisY
                 width: lcd.width - 2 * panel.theme.lcdTextX
                 height: lcd.height - panel.theme.axisY - panel.theme.axisBottom
                 theme: panel.theme
-                wave: panel.wave
-                on: panel.on
                 live: panel.sweeping
-                hz: panel.wave === 0 ? panel.frequency : panel.sweeping ? panel.live.hz : 0
-                progress: panel.live.progress
+                xTicks: signalAxis.ticks
+                xUnit: "Hz"
+                SignalAxis {
+                    id: signalAxis
+                    objectName: "signalAxis"
+                    anchors.fill: parent
+                    theme: panel.theme
+                    wave: panel.wave
+                    on: panel.on
+                    live: panel.sweeping
+                    hz: panel.wave === 0 ? panel.frequency : panel.sweeping ? panel.live.hz : 0
+                    progress: panel.live.progress
+                }
             }
         }
     }
@@ -878,6 +768,7 @@ Rectangle {
             diameter: panel.theme.bigDialDiameter
             readout: true
             inactive: !panel.tonal
+            inactiveReason: panel.tonal ? "" : "Frequency sets the sine only"
             valueText: panel.hzText(panel.frequency)
         }
         Text {
@@ -887,7 +778,7 @@ Rectangle {
             width: panel.theme.dialNoteWidth
             horizontalAlignment: Text.AlignHCenter
             text: panel.tonal ? panel.noteOf(panel.frequency) : "SINE ONLY"
-            color: panel.tonal ? panel.theme.accent : panel.theme.inkFaint
+            color: panel.tonal ? panel.theme.accent : panel.theme.inkDim
             font.family: panel.theme.mono
             font.pixelSize: panel.tonal ? panel.theme.typeEmphasis : panel.theme.typeCaption
             font.letterSpacing: panel.tonal ? 0 : panel.theme.tagSpacing

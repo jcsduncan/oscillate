@@ -51,6 +51,7 @@ Canvas {
     readonly property var coreHighlight: ({ x: 4, y: 5, r: 1 })
 
     objectName: "orbitOrrery"
+    readonly property string plotExemptReason: "a picture of the two LFOs as bodies orbiting the signal; it has no axes (the SWEEP plot shows the values)"
     renderStrategy: Canvas.Cooperative
 
     onAngleLeftChanged: requestPaint()

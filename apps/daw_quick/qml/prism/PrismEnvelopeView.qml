@@ -36,6 +36,12 @@ Kit.EnvelopeView {
     readonly property real sustainY: plotBottom - sustain * (plotBottom - plotTop)
     readonly property real releaseStart: decayX + plotWidth * holdShare
     readonly property real releaseX: releaseStart + Math.max(shortestStage, release * segment)
+    // The level scale the frame labels: silence and full level, at this
+    // view's own plot edges.
+    readonly property real fullLevelPercent: 100
+    readonly property var levelTicks: height > 0
+        ? [{ at: 1 - plotBottom / height, label: "0" },
+           { at: 1 - plotTop / height, label: String(fullLevelPercent) }] : []
 
     objectName: "prismEnvelopeView:" + prefix
     points: trace()
@@ -90,8 +96,11 @@ Kit.EnvelopeView {
         border.width: view.theme.envelopeKnotLineWidth
         MouseArea {
             id: handleArea
+            // The envelope's knobs below set the same values from the keyboard.
+            readonly property string keyboardAlternative: "the envelope's Attack, Decay, Sustain and Release knobs"
             anchors.fill: parent
-            anchors.margins: -view.theme.envelopeKnotGrab
+            // A grab ring round the knot, never under the kit's least hit size.
+            anchors.margins: -Math.max(view.theme.envelopeKnotGrab, view.theme.hitOutset(handle.width))
             enabled: view.controller.editable
             hoverEnabled: true
             preventStealing: true

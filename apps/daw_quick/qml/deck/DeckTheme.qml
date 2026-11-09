@@ -66,42 +66,39 @@ KitTheme {
     property real caseMidStop: 0.35
     // Between the plates.
     property real plateGap: 10
-    // A focused well's edge.
-    property real focusStroke: 1.5
-
     // Small bold captions (L/R, the preset category, the readout name).
     property real captionSpacing: 1.4
 
-    // The header: the wordmark, its three-colour rule and the subtitle.
+    // The header (Kit.DeviceHeader): the wordmark over its three-colour rule
+    // and the subtitle, the preset browser and, once a control is touched,
+    // its readout.
     property real headerY: 10
-    property real headerHeight: 54
-    property int wordmarkSize: 27
-    property real wordmarkSpacing: 9
+    headerHeight: 54
+    wordmarkSize: 27
+    wordmarkSpacing: 9
+    wordmarkInk: glacier
     property real wordmarkRuleGap: 1
     property real wordmarkRuleHeight: 2
     // How much shorter than the wordmark the rule runs.
     property real wordmarkRuleInset: 10
-    property real subtitleGap: 7
-    property real subtitleSpacing: 2.4
-    property real statusY: 14
-
-    // The preset display between the arrows, and the readout inside it.
-    property real presetX: 210
-    property real presetY: 5
-    property real presetWidth: 470
-    property real presetHeight: 42
-    property real presetTextX: 14
-    property real presetCaptionY: 5
-    property real presetNameY: 16
-    property real presetNameWidth: 210
-    property real presetNameSpacing: 0.4
-    property real presetDividerX: 236
-    property real presetDividerInset: 8
-    property real readoutX: 248
-    property real readoutValueY: 17
-    property real readoutRight: 26
-    property real readoutSpacing: 1.2
-    property real chevronMargin: 10
+    subtitleGap: 7
+    subtitleSpacing: 2.4
+    subtitleInk: inkDim
+    headerBrowserX: 210
+    presetDisplayWidth: 236
+    presetDisplayHeight: 42
+    presetDisplayRadius: radiusLg
+    presetTextX: 14
+    presetTagY: 5
+    presetTagSpacing: captionSpacing
+    presetNameY: 16
+    presetNameBold: false
+    presetChevronMargin: 10
+    presetChevronInk: inkDim
+    readoutWidth: 220
+    readoutNameY: 5
+    readoutValueY: 17
+    readoutSpacing: 1.2
 
     // The body: the response plate on the left, the channel on the right.
     property real bodyY: 76
@@ -131,10 +128,9 @@ KitTheme {
     property real bandLevelHeight: 6
     property real bandKillY: 78
 
-    // The response screen: band fills and outlines, the crossover dash, and
-    // the scale captions inside the bottom edge.
+    // The response screen: band fills and outlines and the crossover dash
+    // (its frame draws the scales).
     property real bandFillAlpha: 0.18
     property real bandLineAlpha: 0.85
     property var crossoverDash: [3, 4]
-    property real responseCaptionBottom: 14
 }

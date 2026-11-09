@@ -50,7 +50,9 @@ Rectangle {
                 required property int index
                 readonly property bool on: index === segs.selected
                 objectName: segs.tileNames.length > index ? segs.tileNames[index] : segs.objectName + ":" + index
-                width: label.implicitWidth + (segs.compact ? segs.theme.segTilePadCompact : segs.theme.segTilePad)
+                // Never narrower than the kit's least hit size.
+                width: Math.max(segs.theme.minHitSize,
+                                label.implicitWidth + (segs.compact ? segs.theme.segTilePadCompact : segs.theme.segTilePad))
                 height: row.height
                 radius: segs.compact ? segs.theme.segTileRadiusCompact : segs.theme.segTileRadius
                 color: on ? segs.accent : tileArea.containsMouse ? segs.theme.buttonHi : "transparent"
@@ -75,6 +77,10 @@ Rectangle {
                 MouseArea {
                     id: tileArea
                     anchors.fill: parent
+                    // A compact tile's pointer area reaches past the well
+                    // to the kit's least hit size; its neighbours sit beside it.
+                    anchors.topMargin: -segs.theme.hitOutset(parent.height)
+                    anchors.bottomMargin: -segs.theme.hitOutset(parent.height)
                     hoverEnabled: true
                     onClicked: segs.pick(tile.index)
                 }

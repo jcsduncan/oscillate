@@ -82,7 +82,7 @@ never reused. 0070 was never assigned.
 | 0073 | [Nova Analogue: seeded voice cards, drift and Voice Lanes](0073-nova-analogue.md) | Accepted; implemented |
 | 0074 | [Mix Check: offline checks, blame and one-step fixes](0074-mix-check.md) | Accepted; implemented |
 | 0075 | [Chop: a tempo-locked gate and stutter](0075-chop.md) | Accepted; implemented |
-| 0076 | [Nova panel: resize and reflow, a signal spine, a browser that lets you play](0076-nova-panel-redesign.md) | Accepted; implemented, including revision 2 |
+| 0076 | [Nova panel: resize and reflow, a signal spine, a browser that lets you play](0076-nova-panel-redesign.md) | Superseded in part by ADR-0103 (zoom chips, status line); otherwise implemented, including revision 2 |
 | 0077 | [Nova Constellation: browse presets by sound, morph between them](0077-nova-constellation.md) | Accepted; implemented |
 | 0078 | [Nova arp patterns: lanes of their own length, sixteen modes, a library and MUTATE](0078-nova-arp-patterns.md) | Accepted; implemented |
 | 0079 | [Groove from a record: one band's feel from a record or clip, for the groove pool](0079-groove-from-a-record.md) | Accepted; implemented |

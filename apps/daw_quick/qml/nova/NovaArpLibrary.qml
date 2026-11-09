@@ -25,7 +25,9 @@ Rectangle {
     objectName: "novaArpLibrary"
     radius: theme.moduleCardRadius
     color: theme.card
-    border.color: theme.line
+    // The list's focus shows on the library's edge.
+    border.color: list.activeFocus ? theme.am : theme.line
+    border.width: list.activeFocus ? theme.strokeBold : theme.hairline
     Accessible.role: Accessible.Pane
     Accessible.name: "Arp patterns"
     onSearchingChanged: panel.arpSearching = searching
@@ -136,9 +138,18 @@ Rectangle {
                 height: library.chipHeight
                 radius: height / 2
                 color: on ? library.theme.soft(tone) : "transparent"
-                border.color: on ? tone : library.theme.line2
+                border.color: activeFocus || on ? tone : library.theme.line2
+                border.width: activeFocus ? library.theme.strokeBold : library.theme.hairline
+                activeFocusOnTab: true
                 Accessible.role: Accessible.Button
                 Accessible.name: chipText.text
+                Accessible.checked: on
+                function activate() {
+                    library.category = on ? "" : modelData
+                    library.selected = -1
+                }
+                Keys.onSpacePressed: activate()
+                Keys.onReturnPressed: activate()
                 Text {
                     id: chipText
                     anchors.centerIn: parent
@@ -152,8 +163,7 @@ Rectangle {
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
-                        library.category = chip.on ? "" : chip.modelData
-                        library.selected = -1
+                        chip.activate()
                         library.focusList()
                     }
                 }

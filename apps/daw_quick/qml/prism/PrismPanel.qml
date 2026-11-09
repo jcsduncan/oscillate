@@ -42,192 +42,97 @@ Rectangle {
 
     // ---- Header ---------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.margin
         width: panel.inner
-        height: panel.headerHeight
-
-        Canvas {
-            id: glyph
-            // The prism's corners, and each coloured beam's start and end
-            // (the first beam's, then the step down per beam), in pixels.
-            readonly property var corners: [[13, 2], [24, 26], [2, 26]]
-            readonly property point beamFrom: Qt.point(18, 14)
-            readonly property real beamFromStep: 0.8
-            readonly property point beamTo: Qt.point(33, 8)
-            readonly property real beamToStep: 4.2
-            x: panel.theme.spaceXs
-            anchors.verticalCenter: parent.verticalCenter
-            width: panel.theme.glyphWidth
-            height: panel.theme.glyphHeight
-            onPaint: {
-                const ctx = getContext("2d")
-                ctx.reset()
-                // A triangle splitting a beam into the section colours.
-                ctx.strokeStyle = panel.theme.text
-                ctx.lineWidth = panel.theme.glyphStroke
-                ctx.lineJoin = "round"
-                ctx.beginPath()
-                ctx.moveTo(corners[0][0], corners[0][1]); ctx.lineTo(corners[1][0], corners[1][1])
-                ctx.lineTo(corners[2][0], corners[2][1]); ctx.closePath()
-                ctx.stroke()
-                const colours = [panel.theme.osc1, panel.theme.osc2, panel.theme.mixer,
-                                 panel.theme.amp, panel.theme.filter]
-                ctx.lineWidth = panel.theme.glyphStroke
-                for (let i = 0; i < colours.length; ++i) {
-                    ctx.strokeStyle = colours[i]
-                    ctx.beginPath()
-                    ctx.moveTo(beamFrom.x, beamFrom.y + i * beamFromStep)
-                    ctx.lineTo(beamTo.x, beamTo.y + i * beamToStep)
-                    ctx.stroke()
-                }
-            }
-        }
-        Text {
-            id: wordmark
-            x: glyph.x + glyph.width + panel.theme.spaceMd
-            y: panel.theme.wordmarkY
-            text: "PRISM"
-            color: panel.theme.text
-            font.pixelSize: panel.theme.wordmarkSize
-            font.bold: true
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        Text {
-            x: wordmark.x + panel.theme.taglineX
-            y: wordmark.y + wordmark.height - panel.theme.taglineLift
-            text: "POLYPHONIC SYNTHESIZER"
-            color: panel.theme.faint
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.taglineSpacing
-        }
-
-        // Preset browser.
-        Row {
-            id: browser
-            anchors.centerIn: parent
-            spacing: panel.theme.spaceSm
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "prismPresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: presetBox
-                objectName: "prismPresetBox"
-                width: panel.theme.presetBoxWidth
-                height: panel.theme.presetBoxHeight
-                radius: panel.theme.radiusXl
-                color: presetArea.containsMouse ? panel.theme.raised : panel.theme.panel
-                border.color: activeFocus ? panel.theme.osc1 : panel.theme.line
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", modified" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(presetBox, panel.controller, panel.theme.osc1)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
-                Rectangle {
-                    x: panel.theme.spaceSm
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        // The prism glyph before the wordmark, the tagline under it.
+        brand: Component {
+            Row {
+                spacing: panel.theme.spaceMd
+                leftPadding: panel.theme.spaceXs
+                Canvas {
+                    id: glyph
+                    // The prism's corners, and each coloured beam's start and end
+                    // (the first beam's, then the step down per beam), in pixels.
+                    readonly property var corners: [[13, 2], [24, 26], [2, 26]]
+                    readonly property point beamFrom: Qt.point(18, 14)
+                    readonly property real beamFromStep: 0.8
+                    readonly property point beamTo: Qt.point(33, 8)
+                    readonly property real beamToStep: 4.2
                     anchors.verticalCenter: parent.verticalCenter
-                    width: category.implicitWidth + panel.theme.spaceLg
-                    height: panel.theme.presetChipHeight
-                    radius: panel.theme.radiusMd
-                    color: panel.theme.presetChipFill
+                    width: panel.theme.glyphWidth
+                    height: panel.theme.glyphHeight
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.reset()
+                        // A triangle splitting a beam into the section colours.
+                        ctx.strokeStyle = panel.theme.text
+                        ctx.lineWidth = panel.theme.glyphStroke
+                        ctx.lineJoin = "round"
+                        ctx.beginPath()
+                        ctx.moveTo(corners[0][0], corners[0][1]); ctx.lineTo(corners[1][0], corners[1][1])
+                        ctx.lineTo(corners[2][0], corners[2][1]); ctx.closePath()
+                        ctx.stroke()
+                        const colours = [panel.theme.osc1, panel.theme.osc2, panel.theme.mixer,
+                                         panel.theme.amp, panel.theme.filter]
+                        ctx.lineWidth = panel.theme.glyphStroke
+                        for (let i = 0; i < colours.length; ++i) {
+                            ctx.strokeStyle = colours[i]
+                            ctx.beginPath()
+                            ctx.moveTo(beamFrom.x, beamFrom.y + i * beamFromStep)
+                            ctx.lineTo(beamTo.x, beamTo.y + i * beamToStep)
+                            ctx.stroke()
+                        }
+                    }
+                }
+                Column {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: panel.theme.subtitleGap
                     Text {
-                        id: category
-                        anchors.centerIn: parent
-                        text: panel.controller.preset_category.toUpperCase()
-                        color: panel.theme.osc1
-                        font.pixelSize: panel.theme.typeCaption
+                        objectName: "prismWordmark"
+                        text: "PRISM"
+                        color: panel.theme.wordmarkInk
+                        font.pixelSize: panel.theme.wordmarkSize
+                        font.weight: panel.theme.wordmarkWeight
+                        font.letterSpacing: panel.theme.wordmarkSpacing
+                    }
+                    Text {
+                        objectName: "prismSubtitle"
+                        x: panel.theme.taglineX
+                        text: "POLYPHONIC SYNTHESIZER"
+                        color: panel.theme.subtitleInk
+                        font.pixelSize: panel.theme.subtitleSize
                         font.bold: true
-                        font.letterSpacing: panel.theme.presetTagSpacing
+                        font.letterSpacing: panel.theme.subtitleSpacing
                     }
                 }
-                Text {
-                    objectName: "prismPresetName"
-                    anchors.centerIn: parent
-                    width: parent.width - panel.theme.presetNameClearance
-                    horizontalAlignment: Text.AlignHCenter
-                    text: panel.controller.preset_name
-                    color: panel.theme.text
-                    font.pixelSize: panel.theme.typeSubtitle
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.space2xl
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: panel.controller.preset_modified
-                    text: "EDITED"
-                    color: panel.theme.dim
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.presetTagSpacing
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.presetChevronRight
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.dim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    id: presetArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        presetBox.forceActiveFocus()
-                        presetBox.openPresets()
-                    }
-                }
-            }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "prismPresetNext"
-                direction: 1
             }
         }
+    }
 
-        // Audible status, with the next-note legend beneath.
-        Kit.StatusBadge {
-            id: status
-            objectName: "prismStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: panel.theme.spaceSm
+    // The legend for the next-note mark on knobs, under the status badge.
+    Row {
+        anchors.right: header.right
+        anchors.rightMargin: panel.theme.spaceXxs
+        y: header.y + header.status.y + header.status.height + panel.theme.legendGap
+        spacing: panel.theme.legendSpacing
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            width: panel.theme.knobNextNoteSize
+            height: panel.theme.knobNextNoteSize
+            rotation: panel.theme.nextNoteMarkRotation
+            color: "transparent"
+            border.color: panel.theme.dim
         }
-        Row {
-            anchors.right: parent.right
-            anchors.rightMargin: panel.theme.spaceXxs
-            y: status.y + status.height + panel.theme.spaceSm
-            spacing: panel.theme.legendSpacing
-            Rectangle {
-                anchors.verticalCenter: parent.verticalCenter
-                width: panel.theme.knobNextNoteSize
-                height: panel.theme.knobNextNoteSize
-                rotation: panel.theme.nextNoteMarkRotation
-                color: "transparent"
-                border.color: panel.theme.dim
-            }
-            Text {
-                text: "Applies to new notes"
-                color: panel.theme.faint
-                font.pixelSize: panel.theme.typeCaption
-            }
+        Text {
+            text: "Applies to new notes"
+            color: panel.theme.faint
+            font.pixelSize: panel.theme.typeCaption
         }
     }
 
@@ -329,13 +234,22 @@ Rectangle {
         readonly property real pictureHeight: 80
         readonly property real knobRowY: 88
         theme: panel.theme
-        PrismEnvelopeView {
+        // Stage widths follow knob travel, not time, so only the level is
+        // scaled; the picture draws the settings ahead of the voice.
+        Kit.PlotFrame {
             width: envelope.bodyWidth
             height: envelope.pictureHeight
-            controller: panel.controller
             theme: panel.theme
-            prefix: envelope.prefix
-            accent: envelope.accent
+            yUnit: "%"
+            yTicks: envelopeView.levelTicks
+            PrismEnvelopeView {
+                id: envelopeView
+                anchors.fill: parent
+                controller: panel.controller
+                theme: panel.theme
+                prefix: envelope.prefix
+                accent: envelope.accent
+            }
         }
         Row {
             y: envelope.knobRowY
@@ -584,12 +498,22 @@ Rectangle {
                 accent: filter.accent
             }
         ]
-        PrismFilterView {
+        // The response the settings give, drawn ahead of the voice.
+        Kit.PlotFrame {
             width: filter.bodyWidth
             height: filter.pictureHeight
-            controller: panel.controller
             theme: panel.theme
-            accent: filter.accent
+            xUnit: "Hz"
+            yUnit: "dB"
+            xTicks: filterView.frequencyTicks
+            yTicks: filterView.levelTicks
+            PrismFilterView {
+                id: filterView
+                anchors.fill: parent
+                controller: panel.controller
+                theme: panel.theme
+                accent: filter.accent
+            }
         }
         Row {
             y: filter.knobRowY

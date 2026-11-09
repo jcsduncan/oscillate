@@ -45,6 +45,9 @@ Rectangle {
     }
     // Under every control, so only the bare plate takes the click.
     MouseArea {
+        // The plate itself is no control: the module it shows is opened
+        // from the keyboard by the signal strip's buttons.
+        readonly property string pointerOnlyReason: "a click on the bare plate; the signal strip opens the module from the keyboard"
         anchors.fill: parent
         onClicked: card.focusRequested()
     }

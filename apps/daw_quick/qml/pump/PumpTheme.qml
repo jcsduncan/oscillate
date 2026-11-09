@@ -40,7 +40,6 @@ KitTheme {
     property color heard: "#ffb199"
     property color kick: "#6f86b0"
     property color time: "#f5b14c"
-    property color wordmark: "#ffd5c9"
     property color pointFill: "#0b1224"
 
     // The shape editor. A followed curve (a slot or band without its own)
@@ -100,50 +99,55 @@ KitTheme {
     property real headingSpacing: 2
     // Tracking for small bold capitals (the preset category, the name field).
     property real capsSpacing: 1.4
-    // Tracking for the readout's parameter name.
-    property real capsTightSpacing: 1.2
     // Wrapped notes, and the trigger pages' looser ones.
     property real noteLineHeight: 1.25
     property real modeNoteLineHeight: 1.3
     // A well cut into a card: the library's tiles, the trigger's source.
     property real wellRadius: 7
-    property real focusStroke: 1.5
 
     // A pill button: its height, its padding round the label, its tracking,
     // and its opacity disabled and when it only follows.
-    property real pillHeight: 22
+    property real pillHeight: minHitSize
     property real pillPad: 16
     property real pillSpacing: 0.6
     property real pillDisabledOpacity: 0.5
     property real pillDimOpacity: 0.55
+    // The accent edge a focused control of the panel's own draws (pills,
+    // grid tiles, library tiles, pattern steps).
+    property real focusEdgeWidth: strokeBold
 
-    // The header: wordmark, subtitle and rule, preset well, link, status.
-    property real headerHeight: 68
-    property real wordmarkY: 10
-    property int wordmarkSize: 30
-    property real wordmarkSpacing: 12
-    property real subtitleGap: 1
-    property real subtitleSpacing: 2
+    // The header (Kit.DeviceHeader): the wordmark over its subtitle and rule,
+    // the preset browser and, once a control is touched or the curve
+    // edited, its readout.
+    property real headerY: 10
+    headerHeight: 54
+    wordmarkSize: 30
+    wordmarkSpacing: 12
+    wordmarkInk: "#ffd5c9"
+    subtitleGap: 1
+    subtitleSpacing: 2
+    subtitleInk: inkDim
     property real ruleGap: 3
-    property real browserX: 214
-    property real browserY: 12
-    property real presetWidth: 590
-    property real presetHeight: 44
-    property real presetRadius: 9
-    property real presetTextX: 14
-    property real presetCaptionY: 6
-    property real presetNameY: 18
-    property real presetNameWidth: 330
-    property real presetDividerX: 356
-    property real presetReadoutX: 368
-    // The readout's room from the well's right edge (clear of the chevron).
-    property real presetReadoutRight: 26
-    property real presetValueY: 19
-    property real presetChevronMargin: 10
-    // The name field's input leaves this much room on the right for its hint.
+    headerBrowserX: 214
+    presetDisplayWidth: 340
+    presetDisplayHeight: 44
+    presetDisplayRadius: 9
+    presetTextX: 14
+    presetTagY: 6
+    presetTagSpacing: capsSpacing
+    presetNameY: 18
+    presetNameBold: false
+    presetChevronMargin: 10
+    presetChevronInk: inkDim
+    readoutWidth: 260
+    readoutSpacing: 1.2
+    readoutValueY: 19
+    readoutValueInk: shape
+    readoutValueSize: typeLabel
+    // The name field typed in place of the preset display: its input's top,
+    // and the room it leaves on the right for its hint.
+    property real nameInputY: 19
     property real nameFieldRight: 120
-    property real linkY: 23
-    property real statusY: 21
 
     // The body: the side column (library, slots), the editor, the trigger,
     // and the lower row (band, output).
@@ -169,7 +173,6 @@ KitTheme {
     property real patternX: 98
     property real patternCaptionY: 68
     property real patternStepperY: 82
-    property real stepperInactiveOpacity: 0.45
     property real stepGridY: 156
     property real stepGap: 5
     property real stepHeight: 34
@@ -275,11 +278,7 @@ KitTheme {
     property real kickAlpha: 0.55
     // The output drawn faint over the kick.
     property real kickOutputAlpha: 0.22
-    // The dB scale's labels: their room from the plot's right, their lift.
-    property real dbLabelRight: 38
-    property real dbLabelLift: 2
-    property real beatLabelGap: 3
-    // The beat and length labels sit this far above the editor's bottom.
+    // The cycle's length label sits this far above the editor's bottom.
     property real footLabelBottom: 8
     property real lengthLabelRight: 46
     property real playheadDot: 8

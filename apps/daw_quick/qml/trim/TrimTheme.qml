@@ -92,40 +92,37 @@ KitTheme {
     property real rowAY: 76
     property real rowAHeight: 400
 
-    // The header: wordmark, tagline, preset browser, status.
+    // The header (Kit.DeviceHeader): the wordmark over its underline and
+    // tagline, the preset browser and, once a control is touched, its
+    // readout.
     property real headerY: 10
-    property real headerHeight: 54
-    property real wordmarkY: 2
-    property int wordmarkSize: 27
-    property real wordmarkSpacing: 9
+    headerHeight: 54
+    wordmarkSize: 27
+    wordmarkSpacing: 9
+    wordmarkInk: glacier
     // The underline and tagline sit in from the wordmark's left edge.
     property real wordmarkIndent: 2
     property real underlineGap: 1
     // The underline stops short of the wordmark's right edge.
     property real underlineTrim: 10
     property real underlineRadius: 1
-    property real taglineGap: 7
-    property real taglineSpacing: 2.4
-    property real browserX: 250
-    property real browserY: 5
-    property int presetDisplayWidth: 540
-    property int presetDisplayHeight: 42
-    property real focusStroke: 1.5
-    property real presetTextX: 14
-    property real presetCaptionY: 5
-    property real presetNameY: 16
-    property int presetNameWidth: 250
-    property real presetNameSpacing: 0.4
-    property real presetDividerX: 276
-    // The divider's gap from the display's top and bottom.
-    property real presetDividerInset: 8
-    property real readoutX: 288
-    property real readoutValueY: 17
-    // Room right of the readout for the chevron.
-    property real readoutRight: 26
-    property real readoutSpacing: 1.2
-    property real presetChevronMargin: 10
-    property real statusY: 14
+    subtitleGap: 7
+    subtitleSpacing: 2.4
+    subtitleInk: inkDim
+    headerBrowserX: 250
+    presetDisplayWidth: 300
+    presetDisplayHeight: 42
+    presetDisplayRadius: radiusLg
+    presetTextX: 14
+    presetTagY: 5
+    presetTagSpacing: captionSpacing
+    presetNameY: 16
+    presetNameBold: false
+    presetChevronMargin: 10
+    presetChevronInk: inkDim
+    readoutWidth: 240
+    readoutSpacing: 1.2
+    readoutValueY: 17
 
     // The level plate: the gain knob, its value, the unity button.
     property int levelPlateWidth: 300

@@ -8,7 +8,9 @@ import QtQuick
 // under group labels. A card with neither places free content in `body`,
 // `bodyHeight` tall.
 //
-// A card whose module is off fades, and rises again under the pointer. ⤢,
+// A card whose module is off fades, and rises again under the pointer; a
+// `collapsible` one instead folds to its header with an OFF chip, its light
+// still there to switch it on (issue #163). ⤢,
 // or a double-click on the title, opens the card large over the overview
 // (`panel.focusModule`), with a bigger display; Esc, ⤢ again or a click on
 // the scrim restores it. The overview places the card. The display takes
@@ -29,13 +31,16 @@ Rectangle {
     property string typeParameter: ""
     property var typeGroups: []
     property bool expandable: true
+    // Folds to its header while its module is off.
+    property bool collapsible: false
     property Component display: null
     property Component controls: null
     property real bodyHeight: 0
     default property alias content: body.data
     readonly property alias body: body
-    readonly property bool expanded: expandable && panel.focusModule === key
     readonly property bool off: !panel.moduleOn(key)
+    readonly property bool collapsed: collapsible && off
+    readonly property bool expanded: expandable && !collapsed && panel.focusModule === key
     readonly property bool flashing: flashPulse.running
     // The height the card takes in the grid. It is kept while the card is
     // large, so the cards under the scrim keep their places.
@@ -55,7 +60,8 @@ Rectangle {
     readonly property real typeWidth: 112
     readonly property real typeHeight: 20
     readonly property real typeFontSize: panel.theme.moduleTypeTextSize
-    readonly property real expandWidth: 18
+    // ⤢ takes the kit's least hit size.
+    readonly property real expandWidth: panel.theme.minHitSize
     readonly property real expandGlyphSize: panel.theme.typeSubtitle
     readonly property real edge: panel.theme.hairline
     readonly property real expandedEdge: panel.theme.moduleExpandedEdge
@@ -67,6 +73,9 @@ Rectangle {
     readonly property int flashRise: 270
     readonly property int flashFall: 630
     readonly property real glowWidth: panel.theme.moduleFlashWidth
+    // The OFF chip of a folded card.
+    readonly property real offChipHeight: panel.theme.moduleOffChipHeight
+    readonly property real offChipPadding: panel.theme.moduleOffChipPadding
 
     readonly property real naturalDisplayHeight: display === null ? 0
         : expanded ? expandedDisplayHeight : displayHeight
@@ -85,12 +94,12 @@ Rectangle {
     }
 
     objectName: "novaModuleCard:" + key
-    implicitHeight: 2 * padding + headerHeight + gap + contentHeight
+    implicitHeight: 2 * padding + headerHeight + (collapsed ? 0 : gap + contentHeight)
     radius: cardRadius
     color: panel.theme.card
     border.color: expanded ? accent : panel.theme.line
     border.width: expanded ? expandedEdge : edge
-    opacity: off && !expanded ? (hover.hovered ? offHoverOpacity : offOpacity) : 1
+    opacity: off && !expanded && !collapsed ? (hover.hovered ? offHoverOpacity : offOpacity) : 1
     Accessible.role: Accessible.Grouping
     Accessible.name: title + (off ? ", off" : "")
     Behavior on opacity { NumberAnimation { duration: card.fadeDuration } }
@@ -164,6 +173,8 @@ Rectangle {
             font.weight: Font.Bold
             font.letterSpacing: card.titleSpacing
             MouseArea {
+                // A shortcut for ⤢, which takes Tab focus.
+                readonly property string pointerOnlyReason: "double-click shortcut for the card's ⤢ button"
                 anchors.fill: parent
                 enabled: card.expandable
                 onDoubleClicked: card.panel.expand(card.key)
@@ -178,7 +189,8 @@ Rectangle {
             parameterId: card.typeParameter
             groups: card.typeGroups
             accentStyle: true
-            width: Math.min(card.typeWidth, Math.max(0, expandButton.x - card.headerGap - x))
+            width: Math.min(card.typeWidth, Math.max(0, (card.collapsed ? offChip.x : expandButton.x)
+                                                         - card.headerGap - x))
             height: card.typeHeight
             fontSize: card.typeFontSize
         }
@@ -187,7 +199,7 @@ Rectangle {
             objectName: "novaCardSub:" + card.key
             readonly property real leftEdge: typeDropdown.visible ? typeDropdown.x + typeDropdown.width
                                                                : titleText.x + titleText.implicitWidth
-            visible: card.sub !== ""
+            visible: card.sub !== "" && !card.collapsed
             anchors.verticalCenter: parent.verticalCenter
             x: expandButton.x - card.headerGap - width
             width: Math.max(0, Math.min(implicitWidth, expandButton.x - 2 * card.headerGap - leftEdge))
@@ -199,20 +211,60 @@ Rectangle {
             font.weight: Font.Medium
             elide: Text.ElideRight
         }
+        // A folded card's OFF chip, at the right.
+        Rectangle {
+            id: offChip
+            objectName: "novaCardOff:" + card.key
+            visible: card.collapsed
+            x: parent.width - width
+            anchors.verticalCenter: parent.verticalCenter
+            width: offLabel.implicitWidth + card.offChipPadding
+            height: card.offChipHeight
+            radius: card.panel.theme.radiusMd
+            color: "transparent"
+            border.color: card.panel.theme.line2
+            Accessible.role: Accessible.StaticText
+            Accessible.name: card.title + " is off"
+            Text {
+                id: offLabel
+                anchors.centerIn: parent
+                text: "OFF"
+                color: card.panel.theme.dim
+                font.family: card.panel.theme.mono
+                font.pixelSize: card.panel.theme.typeMicro
+                font.weight: Font.DemiBold
+                font.letterSpacing: card.panel.theme.moduleOffChipSpacing
+            }
+        }
         // ⤢: open the card large, or restore it.
         Text {
             id: expandButton
             objectName: "novaExpand:" + card.key
-            visible: card.expandable
+            visible: card.expandable && !card.collapsed
             x: parent.width - (visible ? width : 0)
             anchors.verticalCenter: parent.verticalCenter
             width: card.expandWidth
+            height: card.headerHeight
             horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
             text: "⤢"
-            color: expandArea.containsMouse || card.expanded ? card.panel.theme.text : card.panel.theme.faint
+            color: activeFocus || expandArea.containsMouse || card.expanded ? card.panel.theme.text : card.panel.theme.faint
             font.pixelSize: card.expandGlyphSize
+            activeFocusOnTab: visible
             Accessible.role: Accessible.Button
             Accessible.name: card.expanded ? "Restore " + card.title : "Open " + card.title + " large"
+            Accessible.onPressAction: card.panel.expand(card.key)
+            Keys.onReturnPressed: card.panel.expand(card.key)
+            Keys.onSpacePressed: card.panel.expand(card.key)
+            // The focus edge.
+            Rectangle {
+                visible: expandButton.activeFocus
+                anchors.fill: parent
+                radius: card.panel.theme.radiusMd
+                color: "transparent"
+                border.color: card.accent
+                border.width: card.panel.theme.strokeBold
+            }
             MouseArea {
                 id: expandArea
                 anchors.fill: parent
@@ -229,6 +281,7 @@ Rectangle {
         id: body
         x: card.padding
         y: card.padding + card.headerHeight + card.gap
+        visible: !card.collapsed
         width: card.width - 2 * card.padding
         height: card.height - y - card.padding
 

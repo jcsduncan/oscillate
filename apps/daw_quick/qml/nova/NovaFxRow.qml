@@ -34,10 +34,36 @@ Rectangle {
     objectName: "novaFxRow:" + uid
     radius: panel.theme.fxRackTileRadius
     color: selected ? panel.theme.selectedFill : panel.theme.card
-    border.color: selected ? panel.theme.pk : panel.theme.line
+    border.color: activeFocus || selected ? panel.theme.pk : panel.theme.line
+    border.width: activeFocus ? panel.theme.strokeBold : panel.theme.hairline
     opacity: dragging ? panel.theme.fxRowDragOpacity : on ? 1 : panel.theme.fxRowOffOpacity
+    activeFocusOnTab: true
     Accessible.role: Accessible.ListItem
     Accessible.name: (spec !== null ? spec.name : module) + (on ? "" : ", off")
+    Accessible.description: "Return selects its strip; Ctrl with Up or Down moves it in the chain"
+
+    // Keys: Return or Space selects the strip; Ctrl+Up/Down moves the
+    // module one place (one chain edit), as a drag would.
+    function moveBy(step) {
+        const to = index + step
+        if (!controller.editable || to < 0 || to >= page.modules.length)
+            return
+        panel.doc.move_chain_module(panel.fxChain, index, to)
+    }
+    Keys.onReturnPressed: page.select(uid)
+    Keys.onSpacePressed: page.select(uid)
+    Keys.onUpPressed: event => {
+        if (event.modifiers & Qt.ControlModifier)
+            moveBy(-1)
+        else
+            event.accepted = false
+    }
+    Keys.onDownPressed: event => {
+        if (event.modifiers & Qt.ControlModifier)
+            moveBy(1)
+        else
+            event.accepted = false
+    }
 
     // The selection edge.
     Rectangle {
@@ -171,10 +197,28 @@ Rectangle {
         text: "⋯"
         color: kebabArea.containsMouse ? row.panel.theme.text : row.panel.theme.faint
         font.pixelSize: row.panel.theme.typeHeading
+        activeFocusOnTab: row.controller.editable
+        Accessible.role: Accessible.Button
+        Accessible.name: "More actions"
+        Keys.onReturnPressed: row.page.openSlotMenu(kebab, row.index)
+        Keys.onSpacePressed: row.page.openSlotMenu(kebab, row.index)
+        // The focus ring, in the FX accent.
+        Rectangle {
+            visible: kebab.activeFocus
+            anchors.fill: parent
+            anchors.margins: -row.panel.theme.fxFocusOutset
+            radius: row.panel.theme.radiusMd
+            color: "transparent"
+            border.color: row.panel.theme.pk
+            border.width: row.panel.theme.strokeBold
+        }
         MouseArea {
             id: kebabArea
             anchors.fill: parent
-            anchors.margins: -row.panel.theme.fxMenuHit
+            anchors.leftMargin: -Math.max(row.panel.theme.fxMenuHit, row.panel.theme.hitOutset(parent.width))
+            anchors.rightMargin: -Math.max(row.panel.theme.fxMenuHit, row.panel.theme.hitOutset(parent.width))
+            anchors.topMargin: -Math.max(row.panel.theme.fxMenuHit, row.panel.theme.hitOutset(parent.height))
+            anchors.bottomMargin: -Math.max(row.panel.theme.fxMenuHit, row.panel.theme.hitOutset(parent.height))
             hoverEnabled: true
             enabled: row.controller.editable
             onClicked: row.page.openSlotMenu(kebab, row.index)

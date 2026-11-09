@@ -95,7 +95,7 @@ KitTheme {
 
     mono: "DejaVu Sans Mono"
 
-    // The control last touched, shown on the LCD. Shared by the panel's controls.
+    // The control last touched, read back in the header. Shared by the panel's controls.
     lastTouched: ""
 
     // The knob face.
@@ -241,9 +241,6 @@ KitTheme {
     // Control heights: compact (operator and title-bar controls) and in a row.
     property int compactControlHeight: 20
     property int rowControlHeight: 22
-    // Dimming for a stepper or dropdown that does not apply in the current mode.
-    property real stepperInactiveOpacity: 0.4
-    property real dropdownInactiveOpacity: 0.45
     // Global section knobs: the cell, the FM hero knobs and the play knobs.
     property int cellWidth: 70
     property int cellHeight: 62
@@ -269,42 +266,49 @@ KitTheme {
     property int delaySyncWidth: 86
     property real effectsKnobGap: 14
 
-    // Header: the ring logo, the wordmark and its tagline.
+    // Header (Kit.DeviceHeader): the ring logo before the wordmark, the
+    // amber tagline under it; the preset browser and readout as LCDs.
     property real headerTop: 10
-    property int headerHeight: 46
-    property real logoTop: 7
+    headerHeight: 46
     property int logoSize: 30
     property real logoStroke: 3
     property int logoDotSize: 12
     property real wordmarkGap: spaceLg
-    property int wordmarkSize: 30
-    property real wordmarkSpacing: 7
+    wordmarkSize: 30
+    wordmarkWeight: Font.Black
+    wordmarkSpacing: 7
+    subtitleGap: -taglineLift
+    subtitleSize: typeCaption
+    subtitleSpacing: 2.2
+    subtitleInk: amber
     property real taglineIndent: spaceXxs
     property real taglineLift: 5
-    property real taglineSpacing: 2.2
-
-    // The header LCD: category and preset name on the left, a divider, the
-    // last touched control and its value, the algorithm and edited flag at
-    // the right, faint scan lines over it all.
-    property int lcdWidth: 470
-    property int lcdHeight: 40
-    property color lcdScanLine: Qt.rgba(1, 1, 1, 0.012)
-    property int lcdScanLines: 18
-    property real lcdScanHeight: 2
-    property real lcdScanInset: spaceXxs
-    property real lcdTextX: 10
-    property real lcdTopLineY: 4
-    property real lcdNameY: 15
-    property int lcdNameWidth: 230
-    property real lcdDividerX: 250
-    property real lcdDividerInset: 6
-    property real lcdReadoutX: 260
-    property real lcdReadoutRight: 96
-    property real lcdReadoutValueY: 17
-    property real lcdTagRight: 22
-    property real lcdAlgorithmY: 5
-    property real lcdEditedY: 23
-    property real lcdChevronRight: 7
+    headerBrowserX: 250
+    presetDisplayWidth: 280
+    presetDisplayHeight: 40
+    presetFill: lcd
+    presetEdge: lcdEdge
+    presetFocusStroke: strokeBold
+    presetTextX: 10
+    presetTagY: 4
+    presetTagInk: lcdDim
+    presetNameY: 15
+    presetNameFont: mono
+    presetNameSize: typeTitle
+    presetNameInk: lcdText
+    presetChevronMargin: 7
+    presetChevronInk: teal
+    readoutWidth: 220
+    readoutFill: lcd
+    readoutEdge: lcdEdge
+    readoutTextX: 10
+    readoutNameY: 4
+    readoutNameInk: lcdDim
+    readoutValueY: 17
+    readoutValueInk: lcdText
+    // A section switched Off collapses to its title bar.
+    property real collapsedCardHeight: 2 * cardDropdownY + compactControlHeight
+    property real offChipPad: spaceSm
 
     // The algorithm plate: the routing view and the grid of 32 membrane keys.
     property int algorithmViewHeight: 176
@@ -323,12 +327,10 @@ KitTheme {
     property real carrierFillAlpha: 0.85
 
     // The filter view: the response line and its fill, the dashed 0 dB rule,
-    // the frequency labels and the bypass legend.
+    // and the bypass legend (its frame labels the scales).
     property real responseStroke: 1.6
     property real responseFillAlpha: 0.16
     property var zeroDash: [2, 3]
-    property real frequencyLabelGap: 3
-    property real frequencyLabelBottom: 13
     property real bypassOffset: 14
     property real bypassSpacing: 2
 
@@ -357,8 +359,10 @@ KitTheme {
     property int operatorLevelDiameter: 32
     property int operatorKnobDiameter: 28
     property real operatorEnvelopeY: 248
-    property int operatorEnvelopeHeight: 40
-    property real operatorRatesY: 292
-    property real operatorRateRowHeight: 48
-    property int operatorRateDiameter: 20
+    // The rate and level rows hold knobs drawn at the kit's least face
+    // (knobMinDiameter) plus their captions; the envelope gives up the room.
+    property int operatorEnvelopeHeight: 38
+    property real operatorRatesY: 290
+    property real operatorRateRowHeight: 50
+    property int operatorRateDiameter: knobMinDiameter
 }

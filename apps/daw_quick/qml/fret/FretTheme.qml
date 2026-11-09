@@ -64,19 +64,45 @@ KitTheme {
     warning: "#ffb257"
     live: "#7ee2a8"
 
-    arrowHeight: presetHeight
+    arrowHeight: presetDisplayHeight
     arrowRadius: tileRadius
     menuMinWidth: 220
+
+    // The header (Kit.DeviceHeader): the bold wordmark over the bass it
+    // plays, the preset tile and, once a control is touched, its readout.
+    wordmarkSize: 30
+    wordmarkWeight: Font.Bold
+    wordmarkSpacing: 6
+    subtitleSize: typeSmall
+    subtitleSpacing: 0.4
+    subtitleInk: inkDim
+    presetDisplayWidth: 220
+    presetDisplayHeight: 44
+    presetDisplayRadius: tileRadius
+    presetFill: tile
+    presetEdge: tileEdge
+    presetTextX: 18
+    presetTagY: spaceSm
+    presetTagInk: inkDim
+    presetNameY: 19
+    presetNameSize: typeSubtitle
+    presetNameBold: false
+    presetChevronMargin: 14
+    presetChevronInk: inkDim
+    presetChevronSize: typeLabel
+    readoutWidth: 180
+    readoutFill: tile
+    readoutEdge: tileEdge
+    readoutRadius: tileRadius
+    readoutNameY: spaceSm
+    readoutValueY: 19
 
     sans: "Inter"
     mono: "JetBrains Mono"
 
     // The case's corners.
     property int caseRadius: 14
-    // Type: the wordmark, and the letter spacing of card titles and of
-    // upper-case captions.
-    property int wordmarkSize: 30
-    property real wordmarkSpacing: 6
+    // Type: the letter spacing of card titles and of upper-case captions.
     property real headingSpacing: 2
     property real labelSpacing: 1.5
     // Wrapped notes under a card's controls.
@@ -86,23 +112,16 @@ KitTheme {
     property int titleHeight: 20
     property int titleDot: 10
     property int titleGap: spaceLg
-    // Between a caption and its value (the preset's, the meter's).
+    // Between a caption and its value (the meter's).
     property int captionGap: 10
     // A colour swatch: the latest note's articulation, the lane's legend.
     property int swatch: 10
 
-    // Tiles, the preset display and push buttons.
+    // Tiles and push buttons.
     property int tileRadius: 10
     property int styleTileHeight: 64
     property int styleTileGap: 10
     property int compactTileHeight: 34
-    property int presetWidth: 220
-    property int presetHeight: 44
-    // The preset's caption from the left edge, the chevron from the right,
-    // and the room the caption and chevron leave for the name.
-    property int presetInset: 18
-    property int presetChevronInset: 14
-    property int presetNameRoom: 120
     property int buttonHeight: 36
     property int buttonPad: 14
 
@@ -119,7 +138,9 @@ KitTheme {
     property real libraryMessageShare: 0.42
 
     // The kit's Slider: its name and value over the rail, and an optional
-    // hint.
+    // hint. The caption and rail are one touch target, so the rail's
+    // pointer area clears the kit's minimum hit size.
+    sliderTouchCaption: true
     sliderWidth: 200
     sliderCaptionHeight: 18
     sliderRailHeight: 22
@@ -139,7 +160,7 @@ KitTheme {
     // The header's output meter, dBFS, and its size.
     property real meterFloorDb: -60
     property real meterCeilDb: 6
-    property int meterWidth: 120
+    property int meterWidth: 100
     property int meterHeight: 8
 
     // The colour of an articulation, by its name from the controller.

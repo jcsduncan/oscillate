@@ -375,12 +375,15 @@ void loading_from_the_list_and_the_keys() {
   require(!browser(*panel)->isVisible() && controller.preset_index() == 1,
           "Return closes, keeping the preset");
 
-  // EDITED shows once the loaded preset changes.
-  require(!item(*panel, QStringLiteral("novaPresetEdited"))->isVisible(), "a fresh preset");
+  // EDITED shows in the preset's tag once the loaded preset changes.
+  const auto tag = [&] {
+    return item(*panel, QStringLiteral("novaPresetCategory"))->property("text").toString();
+  };
+  const auto edited = QStringLiteral("EDITED");
+  require(!tag().contains(edited), "a fresh preset");
   controller.set_value(QStringLiteral("nova.osc.a.level"), 0.123);
   settle();
-  require(item(*panel, QStringLiteral("novaPresetEdited"))->isVisible(),
-          "EDITED shows after a change");
+  require(tag().endsWith(edited), "EDITED shows after a change");
 }
 
 void favourites_persist() {

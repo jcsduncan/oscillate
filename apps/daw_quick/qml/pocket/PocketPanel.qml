@@ -233,17 +233,6 @@ Rectangle {
                  waveKick: waveKick, waveIn: waveIn, waveOut: waveOut }
     }
 
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        if (info.name === undefined)
-            return ""
-        return (info.group === info.name ? info.name : info.group + " · " + info.name).toUpperCase()
-    }
-    function readoutValue(id) {
-        return id === "" || revision < 0 ? "" : controller.display(id)
-    }
     readonly property real cleared: Math.max(0, shown.before - shown.after)
     readonly property var deepestCut: {
         let best = { db: 0, hz: 0 }
@@ -263,6 +252,8 @@ Rectangle {
         property int diameter: panel.theme.cellDiameter
         property string label: ""
         property bool readout: true
+        property bool inactive: false
+        property string inactiveReason: ""
         width: panel.theme.cellWidth
         height: diameter + (readout ? panel.theme.cellReadoutPad : panel.theme.cellLabelPad)
         Kit.Knob {
@@ -273,6 +264,8 @@ Rectangle {
             parameterId: cell.parameterId
             diameter: cell.diameter
             readout: cell.readout
+            inactive: cell.inactive
+            inactiveReason: cell.inactiveReason
             label: cell.label !== "" ? cell.label : cellKnob.info.name !== undefined ? cellKnob.info.name : ""
         }
     }
@@ -286,161 +279,53 @@ Rectangle {
 
     // ---- Header ---------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
-
-        Text {
-            id: wordmark
-            y: panel.theme.wordmarkY
-            text: "POCKET"
-            color: panel.theme.glacier
-            font.family: panel.theme.sans
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Light
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        // Amber into cyan under the name: kick and bass.
-        Rectangle {
-            x: wordmark.x + panel.theme.wordmarkInset
-            y: wordmark.y + wordmark.height + panel.theme.underlineGap
-            width: wordmark.implicitWidth - panel.theme.underlineTrim
-            height: panel.theme.underlineHeight
-            radius: panel.theme.underlineRadius
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0; color: panel.theme.kick }
-                GradientStop { position: 1; color: panel.theme.bass }
-            }
-        }
-        Text {
-            x: wordmark.x + panel.theme.wordmarkInset
-            y: wordmark.y + wordmark.height + panel.theme.subtitleGap
-            text: "KICK & BASS RESOLVER"
-            color: panel.theme.inkDim
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.subtitleSpacing
-        }
-
-        Row {
-            id: browser
-            x: panel.theme.browserX
-            y: panel.theme.browserY
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "pocketPresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "pocketPresetDisplay"
-                width: panel.theme.presetDisplayWidth
-                height: panel.theme.presetDisplayHeight
-                radius: panel.theme.radiusLg
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                border.width: activeFocus ? panel.theme.focusStroke : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.accent)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        brand: Component {
+            Item {
+                implicitWidth: wordmark.implicitWidth
+                implicitHeight: subtitle.y + subtitle.implicitHeight
                 Text {
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetCaptionY
-                    text: panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.captionSpacing
+                    id: wordmark
+                    objectName: "pocketWordmark"
+                    text: "POCKET"
+                    color: panel.theme.wordmarkInk
+                    font.family: panel.theme.wordmarkFont
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.weight: panel.theme.wordmarkWeight
+                    font.letterSpacing: panel.theme.wordmarkSpacing
                 }
-                Text {
-                    objectName: "pocketPresetName"
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetNameY
-                    width: panel.theme.presetNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeHeading
-                    font.letterSpacing: panel.theme.presetNameSpacing
-                    elide: Text.ElideRight
-                }
+                // Amber into cyan under the name: kick and bass.
                 Rectangle {
-                    x: panel.theme.presetDividerX
-                    y: panel.theme.presetDividerInset
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.theme.presetDividerInset
-                    color: panel.theme.wellEdge
-                }
-                Text {
-                    objectName: "pocketReadout"
-                    x: panel.theme.readoutX
-                    y: panel.theme.presetCaptionY
-                    width: display.width - x - panel.theme.readoutRight
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.keySpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "pocketReadoutValue"
-                    x: panel.theme.readoutX
-                    y: panel.theme.readoutValueY
-                    width: display.width - x - panel.theme.readoutRight
-                    text: panel.readoutValue(panel.theme.lastTouched)
-                    color: panel.theme.accent
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeSubtitle
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.chevronMargin
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.inkDim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
+                    x: panel.theme.wordmarkInset
+                    y: wordmark.height + panel.theme.underlineGap
+                    width: wordmark.implicitWidth - panel.theme.underlineTrim
+                    height: panel.theme.underlineHeight
+                    radius: panel.theme.underlineRadius
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0; color: panel.theme.kick }
+                        GradientStop { position: 1; color: panel.theme.bass }
                     }
                 }
+                Text {
+                    id: subtitle
+                    objectName: "pocketSubtitle"
+                    x: panel.theme.wordmarkInset
+                    y: wordmark.height + panel.theme.subtitleGap
+                    text: "KICK & BASS RESOLVER"
+                    color: panel.theme.subtitleInk
+                    font.pixelSize: panel.theme.subtitleSize
+                    font.bold: true
+                    font.letterSpacing: panel.theme.subtitleSpacing
+                }
             }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "pocketPresetNext"
-                direction: 1
-            }
-        }
-
-        Kit.StatusBadge {
-            id: status
-            objectName: "pocketStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: panel.theme.statusY
         }
     }
 
@@ -453,8 +338,8 @@ Rectangle {
         theme: panel.theme
         id: mapPlate
         title: "MASKING MAP"
-        note: panel.playing ? "LIVE" : "PREVIEW · A TYPICAL KICK AND BASS THROUGH THESE SETTINGS"
-        noteColor: panel.playing ? panel.theme.live : panel.theme.inkFaint
+        note: panel.playing ? "" : "A TYPICAL KICK AND BASS THROUGH THESE SETTINGS"
+        noteColor: panel.theme.inkFaint
         x: panel.margin
         y: panel.rowAY
         width: panel.width - 2 * panel.margin - panel.gap - panel.theme.metersWidth
@@ -677,8 +562,8 @@ Rectangle {
         theme: panel.theme
         id: wavePlate
         title: "KICK · BASS IN · BASS OUT"
-        note: panel.playing ? "LAST 0.7 s" : "PREVIEW"
-        noteColor: panel.playing ? panel.theme.live : panel.theme.inkFaint
+        note: "LAST 0.7 s"
+        noteColor: panel.theme.inkFaint
         x: panel.margin
         y: panel.rowBY
         width: panel.width - 2 * panel.margin
@@ -800,7 +685,8 @@ Rectangle {
             Cell {
                 parameterId: "pocket.release"
                 diameter: panel.theme.timingKnobDiameter
-                opacity: timing.following ? panel.theme.unusedOpacity : 1
+                inactive: timing.following
+                inactiveReason: timing.following ? "Release follows the kick" : ""
             }
         }
         Kit.Toggle {
@@ -839,6 +725,7 @@ Rectangle {
         y: panel.rowCY
         width: panel.theme.subWidth
         height: panel.rowCHeight
+        readonly property bool mono: panel.revision >= 0 && panel.controller.choice("pocket.mono_sub") === 1
         Kit.Toggle {
             x: panel.theme.spaceLg
             y: panel.theme.controlY
@@ -857,7 +744,8 @@ Rectangle {
             parameterId: "pocket.mono_freq"
             label: "Below"
             diameter: panel.theme.subKnobDiameter
-            opacity: panel.revision >= 0 && panel.controller.choice("pocket.mono_sub") === 1 ? 1 : panel.theme.unusedOpacity
+            inactive: !sub.mono
+            inactiveReason: sub.mono ? "" : "Mono Sub is off"
         }
     }
 

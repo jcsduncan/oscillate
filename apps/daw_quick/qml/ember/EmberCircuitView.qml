@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The eight voice cards as the engine reports them (ADR-0066): each card's
 // VCO B pitch error as a bar from the centre line (sharp up, flat down) and
@@ -14,6 +15,21 @@ Rectangle {
     readonly property int cardCount: 8
     // Cents from the centre line to the top or bottom of the well.
     readonly property real range: 20
+    // Whether the cards are the engine's own (telemetry) or at rest.
+    readonly property bool reporting: cards.length > 0
+    // The pitch error scale the frame labels (cents), from this view's own
+    // mapping: the plot sits spaceXs inside the well, over the card numbers.
+    readonly property var centsMarks: [range, 0, -range]
+    readonly property var centsTicks: {
+        const t = theme
+        const plotHeight = height - 2 * t.spaceXs - t.cardNumberRow
+        if (!(height > 0) || !(plotHeight > 0))
+            return []
+        const mid = plotHeight / 2
+        return centsMarks.map(cents => ({
+            at: 1 - (t.spaceXs + mid - Math.max(-1, Math.min(1, cents / range)) * (mid - t.cardPlotHeadroom)) / height,
+            label: Format.signed_number(cents, 0) }))
+    }
 
     radius: theme.viewRadius
     color: theme.well

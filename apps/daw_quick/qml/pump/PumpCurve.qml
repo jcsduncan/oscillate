@@ -57,8 +57,20 @@ Kit.CurveEditor {
     readonly property real peakShare: 0.42
     // The dB scale's marks.
     readonly property var dbMarks: [0, -3, -6, -12, -24]
-    // The scale marks are whole decibels.
-    readonly property int markDecimals: 0
+    // The rounding a whole number of beats absorbs.
+    readonly property real beatTolerance: 1e-6
+    // The marks the frame labels: dB up the side (on the plot's linear
+    // gain), beats across from the kick; the first carries the unit.
+    readonly property var levelTicks: height > 0 ? dbMarks.map(db => ({
+        at: 1 - py(Math.pow(10, db / 20)) / height, label: String(db) })) : []
+    readonly property var beatTicks: {
+        const ticks = []
+        if (width <= 0 || cycleBeats <= 0)
+            return ticks
+        for (let b = 0; b <= Math.floor(cycleBeats + beatTolerance); ++b)
+            ticks.push({ at: px(b / cycleBeats) / width, label: String(b) })
+        return ticks
+    }
 
     objectName: "pumpCurve"
     theme: panel.theme
@@ -67,7 +79,6 @@ Kit.CurveEditor {
     points: doc.curves_revision >= 0 && panel.defaultsRevision >= 0 ? doc.curve(curveId) : []
     emptyValue: Shapes.untouched
     editable: panel.controller.editable
-    activeFocusOnTab: false
     // The plot inside the well.
     plotLeft: theme.curvePlotSide
     plotRight: width - theme.curvePlotSide
@@ -82,6 +93,17 @@ Kit.CurveEditor {
     linkEnds: false
     pointerShape: tool === "select" ? Qt.CrossCursor : Qt.PointingHandCursor
     areaName: "pumpCurveArea"
+    // From the keyboard: Left and Right shift the shape a step, Delete
+    // clears it to Classic Pump (the library tiles set whole shapes).
+    activeFocusOnTab: editable
+    border.color: activeFocus ? theme.accent : theme.curveEdge
+    border.width: activeFocus ? theme.focusEdgeWidth : theme.hairline
+    Accessible.role: Accessible.Graphic
+    Accessible.name: "Volume shape for " + panel.curveName()
+    Accessible.description: "Left and Right shift the shape a step; Delete clears it"
+    Keys.onLeftPressed: panel.shiftShape(-1)
+    Keys.onRightPressed: panel.shiftShape(1)
+    Keys.onDeletePressed: panel.clearShape()
 
     function effective(g) { return 1 - depth * (1 - g) }
     // The drawn volume for a height on screen, undoing depth.
@@ -228,7 +250,7 @@ Kit.CurveEditor {
         for (let i = 1; i < editor.steps; ++i)
             ctx.fillRect(Math.round(editor.px(i / editor.steps)), T, t.hairline, B - T)
         ctx.fillStyle = t.gridStrong
-        for (let b = 1; b < editor.cycleBeats - 1e-6; ++b)
+        for (let b = 1; b < editor.cycleBeats - editor.beatTolerance; ++b)
             ctx.fillRect(Math.round(editor.px(b / editor.cycleBeats)), T, t.hairline, B - T)
         // Audio as peaks, symmetric about the middle.
         const mid = (T + B) / 2
@@ -260,22 +282,10 @@ Kit.CurveEditor {
             peaks(editor.kick, t.kick, t.kickAlpha, 1)
             peaks(editor.output, t.heard, t.kickOutputAlpha, ioScale)
         }
-        // The dB scale on the right, time under the cycle.
+        // The frame labels the dB and beat scales; the cycle's length sits
+        // under its end.
         ctx.fillStyle = t.inkFaint
         ctx.font = t.typeCaption + "px '" + t.mono + "'"
-        // Each mark sits on its line; the top one (0 dB) under it, clear of
-        // the gain readout in the key row above the plot.
-        for (const db of editor.dbMarks) {
-            const y = editor.py(Math.pow(10, db / 20))
-            const top = db === editor.dbMarks[0]
-            ctx.fillText(Format.decibels(db, editor.markDecimals), R - t.dbLabelRight,
-                         top ? y + t.typeCaption + t.dbLabelLift : y - t.dbLabelLift)
-        }
-        for (let b = 0; b <= Math.floor(editor.cycleBeats + 1e-6); ++b) {
-            if (b < editor.cycleBeats - 1e-6 || b === 0)
-                ctx.fillText(b === 0 ? "kick" : "+" + b + " beat", editor.px(b / editor.cycleBeats) + t.beatLabelGap,
-                             editor.height - t.footLabelBottom)
-        }
         if (editor.cycleSeconds > 0)
             ctx.fillText(Format.seconds(editor.cycleSeconds), R - t.lengthLabelRight, editor.height - t.footLabelBottom)
     }
@@ -411,7 +421,8 @@ Kit.CurveEditor {
         objectName: "pumpGainReadout"
         anchors.right: parent.right
         anchors.rightMargin: editor.theme.keyInset
-        y: editor.theme.spaceMd
+        // Under the frame's LIVE / PREVIEW chip.
+        y: editor.theme.plotChipRowHeight
         text: editor.dbText(editor.gainDb)
         color: editor.theme.shape
         font.family: editor.theme.mono

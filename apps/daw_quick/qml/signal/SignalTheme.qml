@@ -30,7 +30,12 @@ KitTheme {
     property color lcdInk: "#ff9a3c"
     property color lcdGlow: "#c25e12"
     property color lcdDim: "#7a4a1f"
-    property color lcdGhost: "#2f200f"
+    // The frequency strip's frame, in the LCD's colours.
+    plotTickInk: lcdDim
+    plotAxisInk: lcdGrid
+    plotChipFill: lcd
+    plotLiveInk: lcdInk
+    plotPreviewInk: lcdDim
 
     // The output diagram.
     property color left: "#5cb8ff"
@@ -89,40 +94,38 @@ KitTheme {
     property real screwSlotWidth: 1.5
     property real screwSlotAngle: 35
 
-    // The header: the wordmark, its underline and subtitle.
+    // The header (Kit.DeviceHeader): the wordmark over its underline and
+    // subtitle, the preset browser and, once a control is touched, its
+    // readout.
     property real headerInset: 4
     property real headerY: 10
-    property real headerHeight: 54
-    property real wordmarkY: 2
-    property int wordmarkSize: 27
-    property real wordmarkSpacing: 9
+    headerHeight: 54
+    wordmarkSize: 27
+    wordmarkSpacing: 9
+    wordmarkInk: glacier
     // The underline and subtitle sit this far in from the wordmark's left.
     property real wordmarkInset: 2
     property real underlineGap: 1
     // How much shorter than the wordmark the underline runs.
     property real underlineTrim: 10
-    property real subtitleGap: 7
-    property real subtitleSpacing: 2.4
-
-    // The preset browser and the readout of the last-touched control.
-    property real browserX: 246
-    property real browserY: 5
-    property int presetDisplayWidth: 540
-    property int presetDisplayHeight: 42
-    property real presetTextX: 14
-    property real presetCategoryY: 5
-    property real presetNameY: 16
-    property real presetNameWidth: 250
-    property real presetNameSpacing: 0.4
-    property real presetDividerX: 276
-    // The divider's inset from the display's top and bottom.
-    property real presetDividerInset: 8
-    property real readoutX: 288
-    property real readoutValueY: 17
-    // Room kept right of the readout for the chevron.
-    property real readoutRight: 26
-    property real chevronMargin: 10
-    property real statusY: 14
+    subtitleGap: 7
+    subtitleSpacing: 2.4
+    subtitleInk: inkDim
+    headerBrowserX: 246
+    presetDisplayWidth: 276
+    presetDisplayHeight: 42
+    presetDisplayRadius: radiusLg
+    presetTextX: 14
+    presetTagY: 5
+    presetTagSpacing: captionSpacing
+    presetNameY: 16
+    presetNameBold: false
+    presetChevronMargin: 10
+    presetChevronInk: inkDim
+    readoutWidth: 226
+    readoutNameY: 5
+    readoutValueY: 17
+    readoutSpacing: tagSpacing
 
     // Plates: padding, the y of the first control, the row heights.
     property real cardPad: 14
@@ -171,9 +174,6 @@ KitTheme {
     property real axisY: 186
     property real axisBottom: 14
     property real axisTop: 4
-    // The band under the strip where its labels sit.
-    property real axisLabelBand: 18
-    property real axisLabelBaseline: 4
     property real toneGlowHalfWidth: 14
     property real toneGlowAlpha: 0.45
     property real sweepFillStartAlpha: 0.08

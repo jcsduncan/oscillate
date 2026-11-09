@@ -73,8 +73,12 @@ KitTheme {
     property color label: "#8a5a2e"
     property color labelInk: "#f0dcb8"
     property color spark: "#ffe2a8"
-    // A layer that is off: its card and meter at this opacity.
+    // A layer that is off: its meter at this opacity; its card collapses to
+    // its header with an OFF chip.
     property real offOpacity: 0.42
+    property real offChipPad: 5
+    property real offChipHeight: 16
+    property real offChipRadius: 3
 
     // Each layer's tint, keyed by its id in dust.<layer>.*.
     readonly property var layerTint: ({
@@ -111,7 +115,7 @@ KitTheme {
     // Where the case's middle colour sits down its gradient.
     property real caseMidStop: 0.45
     property real sectionGap: 10
-    property real headerHeight: 52
+    headerHeight: 52
     property real topRowHeight: 196
     property real shelfHeight: 268
     property real footRowHeight: 136
@@ -120,28 +124,37 @@ KitTheme {
     // A note's baseline room above its card's foot.
     property real noteRise: 22
 
-    // ---- The header ------------------------------------------------------------------
-    property int wordmarkSize: 28
-    property real wordmarkSpacing: 9
-    property real taglineSpacing: 2.2
-    // Small bold upper-case captions (the preset's, OUT), the readout's
-    // parameter name, and the tags under the record and over the seed.
+    // ---- The header (Kit.DeviceHeader) -----------------------------------------------
+    // The amber serif wordmark over its tagline, the preset browser and,
+    // once a control is touched, its readout.
+    property real headerY: 10
+    wordmarkFont: display
+    wordmarkSize: 28
+    wordmarkWeight: Font.Bold
+    wordmarkSpacing: 9
+    wordmarkInk: amber
+    subtitleInk: inkDim
+    subtitleSpacing: 2.2
+    headerBrowserX: 330
+    presetDisplayWidth: 230
+    presetDisplayHeight: 42
+    presetDisplayRadius: radiusLg
+    presetTagY: 5
+    presetTagSpacing: captionSpacing
+    presetNameY: 16
+    presetNameSize: typeSubtitle
+    presetNameBold: false
+    presetChevronMargin: 9
+    presetChevronInk: inkDim
+    readoutWidth: 200
+    readoutNameY: 5
+    readoutSpacing: 1.2
+    readoutValueY: 17
+    readoutValueSize: typeEmphasis
+    // Small bold upper-case captions (OUT) and the tags under the record
+    // and over the seed.
     property real captionSpacing: 1.4
-    property real readoutSpacing: 1.2
     property real tagSpacing: 1.6
-    // The preset display: its place in the header, its size and the columns
-    // inside it (caption and name, a divider, then the last-touched readout).
-    property real presetX: 330
-    property real presetTop: 5
-    property real presetWidth: 380
-    property real presetHeight: 42
-    property real presetCaptionTop: 5
-    property real presetNameTop: 16
-    property real presetNameWidth: 180
-    property real presetDividerX: 202
-    property real presetReadoutX: 212
-    property real presetValueTop: 17
-    property real presetChevronInset: 9
     // The output's peak meters.
     property real outMeterWidth: 8
     property real outMeterHeight: 44
@@ -177,7 +190,8 @@ KitTheme {
     property real seedTop: 34
     property real seedStepperWidth: 74
     property real diceWidth: 30
-    property real diceHeight: 22
+    // At least the kit's least hit size.
+    property real diceHeight: minHitSize
     property real diceDisabledOpacity: 0.5
 
     // ---- A layer's glyph ------------------------------------------------------------------

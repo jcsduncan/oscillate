@@ -28,21 +28,19 @@ Kit.CurveEditor {
     // The pointer's reading, "" when outside.
     property string hoverText: ""
 
-    // The plot's insets: room for the axis labels left and the time
-    // labels below.
-    readonly property real plotLeftInset: 44
+    // The plot's insets: room for a point's dot at each edge (the frame
+    // around the editor draws the scales).
+    readonly property real plotLeftInset: 12
     readonly property real plotRightInset: 12
     readonly property real plotTopInset: 14
-    readonly property real plotBottomInset: 22
-    // The axis labels: their left edge, their lift above a row's line and
-    // their gap right of a time line; the time labels' rise from the bottom.
-    readonly property real axisLabelX: 6
-    readonly property real axisLabelDrop: 3
-    readonly property real timeLabelGap: 3
-    readonly property real timeLabelRise: 7
-    // The rows: pitches on the log axis, levels on the linear one.
-    readonly property var pitchRowsHz: [30, 50, 100, 200, 500, 1000]
+    readonly property real plotBottomInset: 14
+    // The rows: pitches on the log axis as [Hz, label], levels on the
+    // linear one.
+    readonly property var pitchRows: [[30, "30"], [50, "50"], [100, "100"], [200, "200"], [500, "500"], [1000, "1k"]]
     readonly property var levelRows: [0, 0.25, 0.5, 0.75, 1]
+    readonly property real percentPerUnit: 100
+    readonly property real msPerSecond: 1000
+    readonly property real kickMs: kickSeconds * msPerSecond
     // Time lines every 200 ms over a kick longer than 900 ms, every 100 ms
     // over one longer than 450 ms, else every 50 ms.
     readonly property real longKickMs: 900
@@ -53,7 +51,85 @@ Kit.CurveEditor {
     // The kick's peaks reach this fraction of the plot's height either side.
     readonly property real kickReach: 0.46
 
+    // The rows as stored values with their labels, the time lines in ms,
+    // and both as the frame's ticks, from the editor's own mapping.
+    readonly property var rows: pitch
+        ? pitchRows.map(row => [AnvilMath.yOfHz(row[0]), row[1]])
+        : levelRows.map(v => [v, Format.number(v * percentPerUnit, 0)])
+    readonly property var timeLinesMs: {
+        const ms = kickMs
+        if (!(ms > 0))
+            return []
+        const step = ms > longKickMs ? longStepMs : ms > mediumKickMs ? mediumStepMs : shortStepMs
+        const lines = []
+        for (let at = step; at < ms; at += step)
+            lines.push(at)
+        return lines
+    }
+    readonly property string yUnit: pitch ? "Hz" : "%"
+    readonly property var yTicks: height > 0
+        ? rows.map(row => ({ at: 1 - py(row[0]) / height, label: row[1] })) : []
+    readonly property var xTicks: width > 0 && kickSeconds > 0
+        ? [{ at: px(0) / width, label: "0" }].concat(timeLinesMs.map(at => ({
+            at: px(at / kickMs) / width, label: Format.number(at, 0) }))) : []
+
+    // Keys: Left/Right pick a point, Up/Down move it (Shift: coarse),
+    // Ctrl+Left/Right move it in time, Page Up/Down bend the segment after
+    // it, Delete removes it (not the ends). Each key is one undo step.
+    property int keyIndex: 0
+    // The key point, kept on the curve as points come and go.
+    readonly property int keyPoint: Math.max(0, Math.min(points.length - 1, keyIndex))
+    readonly property real keyStep: 0.01
+    readonly property real keyCoarseStep: 0.1
+    readonly property real keyBendStep: 0.1
+
+    function keyEdit(change) {
+        if (!editable || points.length === 0)
+            return
+        const index = keyPoint
+        doc.begin_edit()
+        change(index, points[index])
+        doc.commit_edit()
+        pointMoved(Math.min(index, points.length - 1))
+    }
+
     objectName: "anvilCurve"
+    activeFocusOnTab: true
+    border.color: activeFocus ? theme.accent : theme.curveEdge
+    Accessible.role: Accessible.Graphic
+    Accessible.name: "Body " + curveId + " curve"
+    Accessible.description: "Left and Right pick a point, Up and Down move it, Ctrl with Left and Right moves it in time, "
+        + "Page Up and Page Down bend the segment after it, Delete removes it"
+    onKeyPointChanged: repaintShape()
+    onActiveFocusChanged: repaintShape()
+    Keys.onPressed: event => {
+        const step = (event.modifiers & Qt.ShiftModifier) !== 0 ? keyCoarseStep : keyStep
+        const inTime = (event.modifiers & Qt.ControlModifier) !== 0
+        const sideways = event.key === Qt.Key_Left || event.key === Qt.Key_Right
+        const direction = event.key === Qt.Key_Right || event.key === Qt.Key_Up || event.key === Qt.Key_PageUp ? 1 : -1
+        if (sideways && !inTime) {
+            keyIndex = Math.max(0, Math.min(points.length - 1, keyPoint + direction))
+        } else if (sideways || event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+            keyEdit((index, point) => doc.move_curve_point(curveId, index,
+                sideways ? Math.max(0, Math.min(1, point.x + direction * step)) : point.x,
+                sideways ? point.y : Math.max(0, Math.min(1, point.y + direction * step)), linkEnds))
+        } else if (event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown) {
+            if (keyPoint + 1 >= points.length)
+                return
+            keyEdit((index, point) => doc.set_curve_tension(curveId, index,
+                Math.max(-maxTension, Math.min(maxTension, point.tension + direction * keyBendStep))))
+        } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
+            if (!editable || !removable(keyPoint) || keyPoint + 1 >= points.length)
+                return
+            const removed = keyPoint
+            doc.remove_curve_point(curveId, removed)
+            pointRemoved(removed)
+        } else {
+            return
+        }
+        event.accepted = true
+    }
+
     theme: panel.theme
     doc: panel.doc
     curveId: "pitch"
@@ -85,29 +161,13 @@ Kit.CurveEditor {
     onPaintBack: ctx => {
         const t = editor.theme
         const L = editor.plotLeft, R = editor.plotRight, T = editor.plotTop, B = editor.plotBottom
-        ctx.fillStyle = t.inkFaint
-        ctx.font = t.typeCaption + "px '" + t.mono + "'"
-        const rows = editor.pitch
-            ? editor.pitchRowsHz.map(hz => [AnvilMath.yOfHz(hz), AnvilMath.hzText(hz)])
-            : editor.levelRows.map(v => [v, Format.fraction(v)])
-        // Labels are drawn last, over the kick, each on its plate.
-        const labels = []
-        for (const row of rows) {
-            const y = Math.round(editor.py(row[0]))
+        for (const row of editor.rows) {
             ctx.fillStyle = t.grid
-            ctx.fillRect(L, y, R - L, t.hairline)
-            labels.push([row[1], editor.axisLabelX, y + editor.axisLabelDrop])
+            ctx.fillRect(L, Math.round(editor.py(row[0])), R - L, t.hairline)
         }
-        if (editor.kickSeconds > 0) {
-            const ms = editor.kickSeconds * 1000
-            const step = ms > editor.longKickMs ? editor.longStepMs
-                : ms > editor.mediumKickMs ? editor.mediumStepMs : editor.shortStepMs
-            for (let at = step; at < ms; at += step) {
-                const x = Math.round(editor.px(at / ms))
-                ctx.fillStyle = t.grid
-                ctx.fillRect(x, T, t.hairline, B - T)
-                labels.push([Format.milliseconds(at), x + editor.timeLabelGap, editor.height - editor.timeLabelRise])
-            }
+        for (const at of editor.timeLinesMs) {
+            ctx.fillStyle = t.grid
+            ctx.fillRect(Math.round(editor.px(at / editor.kickMs)), T, t.hairline, B - T)
         }
         // The kick as peaks, symmetric about the middle.
         const list = editor.kick
@@ -132,14 +192,6 @@ Kit.CurveEditor {
             ctx.lineWidth = t.waveEdgeWidth
             ctx.stroke()
         }
-        const pad = t.labelPlatePad
-        for (const label of labels) {
-            const width = ctx.measureText(label[0]).width
-            ctx.fillStyle = Qt.rgba(t.well.r, t.well.g, t.well.b, t.labelPlateAlpha)
-            ctx.fillRect(label[1] - pad, label[2] - t.typeCaption, width + 2 * pad, t.typeCaption + 2 * pad)
-            ctx.fillStyle = t.inkFaint
-            ctx.fillText(label[0], label[1], label[2])
-        }
     }
     // The ghost, the curve, its points and bend rings.
     onPaintShape: ctx => {
@@ -160,7 +212,8 @@ Kit.CurveEditor {
         editor.traceCurve(ctx, editor.sample(pts, t.curveSamples))
         editor.strokeCurve(ctx, [])
         editor.paintRings(ctx)
-        editor.paintPoints(ctx, i => i === editor.dragIndex, (i, x, y) => {})
+        editor.paintPoints(ctx, i => i === editor.dragIndex || (editor.activeFocus && i === editor.keyPoint),
+                           (i, x, y) => {})
     }
     onGhostChanged: editor.repaintShape()
     onCurveIdChanged: editor.repaintBack()

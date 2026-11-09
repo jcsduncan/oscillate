@@ -28,7 +28,15 @@ Rectangle {
     }
     MouseArea {
         id: area
+        // A drag needs a pointer; the MATRIX page makes the same route from
+        // the keyboard.
+        readonly property string keyboardAlternative: "MATRIX page: a route's source and destination menus"
         anchors.fill: parent
+        // At least the kit's least hit size around the small handle.
+        anchors.leftMargin: -handle.panel.theme.hitOutset(handle.width)
+        anchors.rightMargin: -handle.panel.theme.hitOutset(handle.width)
+        anchors.topMargin: -handle.panel.theme.hitOutset(handle.height)
+        anchors.bottomMargin: -handle.panel.theme.hitOutset(handle.height)
         hoverEnabled: true
         preventStealing: true
         cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor

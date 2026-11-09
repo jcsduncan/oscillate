@@ -220,6 +220,7 @@ Rectangle {
     }
     // Clicks and wheel turns on the drawer never reach the page under it.
     MouseArea {
+        readonly property string pointerOnlyReason: "the drawer's backing keeps clicks off the page under it; it is not a control"
         anchors.fill: parent
         onWheel: wheel => { wheel.accepted = true }
     }
@@ -230,12 +231,13 @@ Rectangle {
         property bool on: false
         property color accent: browser.theme.neutral
         signal clicked()
-        implicitWidth: chipLabel.implicitWidth + browser.theme.browserLabelPadding
+        implicitWidth: Math.max(browser.theme.minHitSize, chipLabel.implicitWidth + browser.theme.browserLabelPadding)
         implicitHeight: browser.chipHeight
         radius: height / 2
-        // Lit: filled in its accent.
+        // Lit: filled in its accent; focused: a bold edge (in the text's ink when lit).
         color: on ? accent : chipArea.containsMouse ? browser.theme.hover : "transparent"
-        border.color: on ? accent : browser.theme.line2
+        border.color: activeFocus ? (on ? browser.theme.text : accent) : on ? accent : browser.theme.line2
+        border.width: activeFocus ? browser.theme.strokeBold : browser.theme.hairline
         activeFocusOnTab: true
         Accessible.role: Accessible.CheckBox
         Accessible.name: text
@@ -322,7 +324,8 @@ Rectangle {
         radius: browser.theme.browserControlRadius
         opacity: enabledAction ? 1 : browser.theme.browserDisabledOpacity
         color: actionArea.pressed ? browser.theme.wellFill : actionArea.containsMouse ? browser.theme.hover : browser.theme.card2
-        border.color: browser.theme.line2
+        border.color: activeFocus ? accent : browser.theme.line2
+        border.width: activeFocus ? browser.theme.strokeBold : browser.theme.hairline
         activeFocusOnTab: enabledAction
         Accessible.role: Accessible.Button
         Accessible.name: text
@@ -391,8 +394,13 @@ Rectangle {
         height: browser.theme.browserCloseSize
         radius: browser.theme.browserControlRadius
         color: closeArea.containsMouse ? browser.theme.hover : "transparent"
+        border.color: activeFocus ? browser.theme.text : "transparent"
+        border.width: browser.theme.strokeBold
+        activeFocusOnTab: true
         Accessible.role: Accessible.Button
         Accessible.name: "Close presets"
+        Keys.onReturnPressed: browser.close()
+        Keys.onSpacePressed: browser.close()
         Text {
             anchors.centerIn: parent
             text: "×"
@@ -516,6 +524,10 @@ Rectangle {
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Slash) {
                 browser.focusSearch()
+                event.accepted = true
+            } else if (event.key === Qt.Key_Asterisk && browser.selectedEntry !== null) {
+                // * stars the selected preset, as its ★.
+                browser.toggleFavourite(browser.selectedEntry.key)
                 event.accepted = true
             }
         }
@@ -726,7 +738,7 @@ Rectangle {
         Text {
             objectName: "novaPresetKeysHint"
             width: parent.width
-            text: "↑ ↓ audition · / search · Esc back to playing · letters play notes unless the search is amber"
+            text: "↑ ↓ audition · * favourite · / search · Esc back to playing · letters play notes unless the search is amber"
             color: browser.theme.faint
             font.family: browser.theme.mono
             font.pixelSize: browser.theme.typeCaption

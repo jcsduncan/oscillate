@@ -1,19 +1,19 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import "../devicekit" as Kit
-import "../shell" as Shell
 import "NovaContract.js" as Contract
 import Oscillate.Format
 
 // The Nova device panel (ADR-0057, ADR-0076 revision 2, spec 08 §2,
-// contract 08a): the header with the wordmark, the preset box
-// (◀ name CATEGORY ▶), BROWSE, ✦ CONSTELLATION, the page buttons (MAIN, FX,
-// MATRIX, ARP · CLIP, VOICES, GLOBAL), the keys pill and zoom; the slim signal strip (a light, a name
-// and a small live picture per module in signal order: OSC A, B, C,
-// SUB · NOISE, FILTER 1, 2, FX, VOICES, OUT); the preset browser docked at
-// the left; six pages (MAIN, the overview with every sound module on it,
-// then FX, MATRIX, ARP · CLIP, GLOBAL, VOICES); a status line with the
-// TOUCH A CONTROL readout, voices, CPU and the Live badge; the playable key
+// contract 08a): the device header (Kit.DeviceHeader: the NOVA wordmark,
+// the preset browser ◀ name ▾ ▶, the readout of the control last touched
+// and the status badge) with its second row of views and tools (BROWSE,
+// ✦ CONSTELLATION, the page buttons MAIN, FX, MATRIX, ARP · CLIP, VOICES,
+// GLOBAL; voices and CPU and the keys pill); the slim signal strip (a
+// light, a name and a small live picture per module in signal order: OSC A,
+// B, C, SUB · NOISE, FILTER 1, 2, FX, VOICES, OUT); the preset browser
+// docked at the left; six pages (MAIN, the overview with every sound module
+// on it, then FX, MATRIX, ARP · CLIP, GLOBAL, VOICES); the playable key
 // strip along the bottom; and the wavetable editor overlay. The panel
 // reflows to whatever size its host gives it at or above its minimum; a
 // page that needs more than the area it gets is scaled down to fit (the
@@ -36,7 +36,7 @@ Rectangle {
     // `zoom`, never below the minimum (it scales the panel down instead);
     // the designed size is what a host with no size of its own shows, and
     // holds the whole overview unscaled and unscrolled. The minimum width
-    // holds the compact header (header.compactWidth).
+    // holds the compact header (headerCompactWidth).
     readonly property real minimumWidth: 980
     readonly property real minimumHeight: 720
     readonly property real designedWidth: 1440
@@ -44,20 +44,23 @@ Rectangle {
     // Below this width (the page area's, margins included) the overview
     // goes to two columns.
     readonly property real overviewNarrowWidth: 1050
-    // The zoom chips; the host keeps the choice across sessions.
-    // The device panels' shared zoom steps (ADR-0103).
-    readonly property var zoomSteps: Shell.Theme.panelZoomSteps
+    // The panel zoom the host chose (its zoom chips, ADR-0103).
     property real zoom: 1
-    readonly property real headerHeight: 48
+    // The header: its rows and the room above and below them. Narrower than
+    // headerCompactWidth it is compact: ✦ alone for CONSTELLATION and the
+    // keys pill as its light.
+    readonly property real headerHeight: header.y + header.height + theme.headerFoot
+    readonly property real headerMargin: theme.spaceXl
+    readonly property real headerCompactWidth: 1250
+    readonly property bool compactHeader: width < headerCompactWidth
     readonly property real stripHeight: 28
-    readonly property real statusHeight: 24
     readonly property real keyStripHeight: 56
     readonly property real pageMargin: 12
     readonly property real browserWidth: 300
     // Where the pages sit: under the strip, right of the browser drawer,
-    // over the status line and the keys.
+    // over the keys.
     readonly property real bodyTop: headerHeight + stripHeight
-    readonly property real bodyBottom: height - statusHeight - keyStripHeight
+    readonly property real bodyBottom: height - keyStripHeight
     readonly property real pageLeft: (presetBrowser.opened ? browserWidth : 0) + pageMargin
     readonly property real pageTop: bodyTop + pageMargin
 
@@ -129,7 +132,7 @@ Rectangle {
     // The oscillator whose wavetable editor is open ("a", "b", "c"), or "".
     property string editorOsc: ""
 
-    // The TOUCH A CONTROL readout: the last control touched, or a route.
+    // The header's readout: the last control touched, or a route.
     property string touchedId: ""
     property string touchedLabel: ""
     property var touchedFormatter: null
@@ -250,31 +253,47 @@ Rectangle {
         touchedId = knob.parameterId
         touchedLabel = knob.label
         touchedFormatter = knob.formatter
+        theme.lastTouched = touchedId
     }
     function touchId(id, label) {
         touchedRoute = null
         touchedId = id
         touchedLabel = label
         touchedFormatter = null
+        theme.lastTouched = id
     }
     function touchRoute(route, knob) {
         touchedId = route.destination
         touchedLabel = knob ? knob.label : destinationName(route.destination)
         touchedFormatter = null
         touchedRoute = route
+        theme.lastTouched = touchedId
     }
-    readonly property string readoutText: {
+    // The readout's name and value for `id`: a route as source → knob and
+    // its depth, a Nova knob by its caption and formatter; a control that
+    // did not go through touch() (a kit control) by its parameter's name.
+    function touchedName(id) {
+        if (id !== touchedId) {
+            const info = controller.parameter(id)
+            return info.name === undefined ? "" : info.name.toUpperCase()
+        }
+        return touchedRoute !== null ? sourceName(touchedRoute.source) + " → " + touchedLabel : touchedLabel
+    }
+    function touchedValue(id) {
         if (controller.revision < 0)
             return ""
-        if (touchedRoute !== null) {
-            const amount = controller.value(touchedRoute.amount_id)
-            return sourceName(touchedRoute.source) + " → " + touchedLabel + " "
-                + Format.fraction(amount)
-        }
-        if (touchedId === "")
-            return "—"
-        return touchedLabel + " " + (touchedFormatter ? touchedFormatter(controller.normalised(touchedId))
-                                                      : controller.display(touchedId))
+        if (id !== touchedId)
+            return controller.display(id)
+        if (touchedRoute !== null)
+            return Format.fraction(controller.value(touchedRoute.amount_id))
+        return touchedFormatter ? touchedFormatter(controller.normalised(id)) : controller.display(id)
+    }
+    // The preset arrows: with a browser filter set, they walk what it shows.
+    function stepPreset(direction) {
+        if (presetBrowser.filterActive)
+            presetBrowser.step(direction)
+        else
+            controller.step_preset(direction)
     }
 
     function beginSourceDrag(source, x, y) {
@@ -661,6 +680,7 @@ Rectangle {
     // A radial light from the top edge, a fifth of the way across, reaching
     // a little past the plate's longer side.
     Canvas {
+        readonly property string plotExemptReason: "the plate's lighting behind the panel, not a plot"
         readonly property real lightX: 0.2
         readonly property real lightReach: 1.15
         readonly property real midStop: 0.55
@@ -689,7 +709,8 @@ Rectangle {
         height: panel.theme.headerControlHeight
         radius: panel.theme.headerControlRadius
         color: on && !star ? panel.theme.neutral : buttonArea.containsMouse ? panel.theme.hover : "transparent"
-        border.color: on ? (star ? "transparent" : panel.theme.neutral) : panel.theme.line2
+        border.color: activeFocus ? panel.theme.accent : on ? (star ? "transparent" : panel.theme.neutral) : panel.theme.line2
+        border.width: activeFocus ? panel.theme.strokeBold : panel.theme.hairline
         activeFocusOnTab: true
         Accessible.role: Accessible.Button
         Accessible.name: text
@@ -726,358 +747,260 @@ Rectangle {
         }
     }
 
-    // ---- Header (NOVA-UI-01) ---------------------------------------------------------------
+    // ---- Header (NOVA-UI-01, Kit.DeviceHeader) ----------------------------------------------
 
-    // Over the plate's lit top edge. Narrower than `compactWidth` the header
-    // is compact: ✦ alone for CONSTELLATION and the keys pill as its light.
-    Item {
+    // Over the plate's lit top edge: the NOVA wordmark, the preset browser
+    // (its list is the browser drawer), the readout and the status badge;
+    // under them the views (BROWSE, ✦ CONSTELLATION, the pages) on the left
+    // and the tools (voices and CPU, the keys pill) on the right.
+    Kit.DeviceHeader {
         id: header
-        objectName: "novaHeader"
-        width: parent.width
-        height: panel.headerHeight
-        readonly property real margin: panel.theme.spaceXl
-        readonly property real spacing: panel.theme.headerSpacing
-        readonly property real compactWidth: 1250
-        readonly property bool compact: width < compactWidth
-
-        Rectangle {
-            y: parent.height - height
-            width: parent.width
-            height: panel.theme.hairline
-            color: panel.theme.line
-        }
-
-        // The wordmark: wide-tracked light capitals in a cyan-to-violet light.
-        Canvas {
-            id: wordmark
-            objectName: "novaWordmark"
-            readonly property real tracking: panel.theme.wordmarkTracking
-            readonly property real fontSize: panel.theme.wordmarkSize
-            x: header.margin
-            anchors.verticalCenter: parent.verticalCenter
-            width: panel.theme.wordmarkWidth
-            height: panel.theme.wordmarkHeight
-            onPaint: {
-                const ctx = getContext("2d")
-                ctx.reset()
-                const g = ctx.createLinearGradient(0, 0, width, 0)
-                g.addColorStop(0, panel.theme.cyLight)
-                g.addColorStop(panel.theme.wordmarkMidStop, panel.theme.cy)
-                g.addColorStop(1, panel.theme.vi)
-                ctx.fillStyle = g
-                ctx.font = "300 " + fontSize + "px \"" + panel.theme.sans + "\""
-                ctx.textBaseline = "alphabetic"
-                let x = 0
-                const letters = "NOVA"
-                for (let i = 0; i < letters.length; ++i) {
-                    ctx.fillText(letters[i], x, height - panel.theme.wordmarkDescent)
-                    x += ctx.measureText(letters[i]).width + tracking
+        x: panel.headerMargin
+        y: panel.theme.headerY
+        width: panel.width - 2 * panel.headerMargin
+        controller: panel.controller
+        theme: panel.theme
+        brand: Component {
+            // The wordmark: wide-tracked light capitals in a cyan-to-violet light.
+            Canvas {
+                objectName: "novaWordmark"
+                readonly property real tracking: panel.theme.wordmarkTracking
+                readonly property real fontSize: panel.theme.wordmarkSize
+                width: panel.theme.wordmarkWidth
+                height: panel.theme.wordmarkHeight
+                Accessible.role: Accessible.StaticText
+                Accessible.name: "Nova"
+                onPaint: {
+                    const ctx = getContext("2d")
+                    ctx.reset()
+                    const g = ctx.createLinearGradient(0, 0, width, 0)
+                    g.addColorStop(0, panel.theme.cyLight)
+                    g.addColorStop(panel.theme.wordmarkMidStop, panel.theme.cy)
+                    g.addColorStop(1, panel.theme.vi)
+                    ctx.fillStyle = g
+                    ctx.font = "300 " + fontSize + "px \"" + panel.theme.sans + "\""
+                    ctx.textBaseline = "alphabetic"
+                    let x = 0
+                    const letters = "NOVA"
+                    for (let i = 0; i < letters.length; ++i) {
+                        ctx.fillText(letters[i], x, height - panel.theme.wordmarkDescent)
+                        x += ctx.measureText(letters[i]).width + tracking
+                    }
                 }
             }
         }
+        // The name opens the browser drawer; with a filter set the arrows
+        // walk what it shows.
+        opener: function(display) { panel.openBrowser() }
+        stepper: function(direction) { panel.stepPreset(direction) }
+        readoutNameOf: function(id) { return panel.touchedName(id) }
+        readoutValueOf: function(id) { return panel.touchedValue(id) }
 
-        // The preset box: ◀ name CATEGORY (EDITED once changed) ▶. The name
-        // opens the browser.
-        Rectangle {
-            id: presetBar
-            objectName: "novaPresetBar"
-            readonly property real arrowWidth: 28
-            readonly property real preferredWidth: 300
-            readonly property real minimumWidth: header.compact ? compactMinimumWidth : fullMinimumWidth
-            readonly property real fullMinimumWidth: 200
-            readonly property real compactMinimumWidth: 150
-            readonly property real room: keysPill.x - header.spacing - x - browseButton.width
-                - constellationButton.width - pageTabs.width - 4 * header.spacing
-            x: wordmark.x + wordmark.width + header.spacing
-            anchors.verticalCenter: parent.verticalCenter
-            width: Math.max(minimumWidth, Math.min(preferredWidth, room))
+        // The views and tools, one row under the first.
+        Item {
+            width: header.width
             height: panel.theme.headerControlHeight
-            radius: panel.theme.headerControlRadius
-            color: panel.theme.wellFill
-            border.color: panel.theme.line2
-            clip: true
+
             Row {
-                x: panel.theme.hairline
-                y: panel.theme.hairline
-                height: parent.height - 2 * panel.theme.hairline
-                Kit.PresetArrow {
-                    objectName: "novaPresetPrevious"
-                    controller: panel.controller
-                    theme: panel.theme
-                    direction: -1
-                    width: presetBar.arrowWidth
-                    height: parent.height
-                    radius: panel.theme.presetArrowRadius
-                    // With a browser filter set, the arrows walk what it shows.
-                    stepper: presetBrowser.filterActive ? (d => presetBrowser.step(d)) : null
+                id: views
+                height: parent.height
+                spacing: panel.theme.headerSpacing
+                HeaderButton {
+                    id: browseButton
+                    objectName: "novaPresetBrowse"
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "BROWSE"
+                    on: presetBrowser.opened
+                    enabled: panel.controller.editable
+                    onClicked: panel.toggleBrowser()
                 }
+                HeaderButton {
+                    id: constellationButton
+                    objectName: "novaConstellationButton"
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: panel.compactHeader ? "✦" : "✦ CONSTELLATION"
+                    star: true
+                    Accessible.name: "Constellation"
+                    on: panel.constellationOpen
+                    onClicked: panel.toggleConstellation()
+                }
+
+                // The pages: MAIN (the overview), FX, MATRIX, ARP · CLIP, VOICES
+                // and GLOBAL, each named for panel.page's number.
                 Rectangle {
-                    id: presetName
-                    objectName: "novaPresetDisplay"
-                    width: presetBar.width - 2 * panel.theme.hairline - 2 * presetBar.arrowWidth
-                    height: parent.height
-                    radius: panel.theme.presetNameRadius
-                    color: nameArea.containsMouse ? panel.theme.hover : "transparent"
-                    Accessible.role: Accessible.Button
-                    Accessible.name: "Presets: " + panel.controller.preset_name
+                    id: pageTabs
+                    objectName: "novaPages"
+                    readonly property real inset: panel.theme.spaceXxs
+                    readonly property real tabPadding: panel.theme.pageTabPadding
+                    readonly property real tabRadius: panel.theme.pageTabRadius
+                    readonly property real labelSize: panel.theme.pageTabLabelSize
+                    readonly property real labelSpacing: panel.theme.headerLabelSpacing
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: pageRow.implicitWidth + 2 * inset
+                    height: panel.theme.headerControlHeight
+                    radius: panel.theme.headerControlRadius
+                    color: panel.theme.wellFill
+                    border.color: panel.theme.line
                     Row {
-                        x: panel.theme.spaceMd
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: panel.theme.spaceMd
-                        Text {
-                            objectName: "novaPresetName"
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: Math.min(implicitWidth, presetName.width - 2 * panel.theme.spaceMd
-                                            - sourceText.implicitWidth - panel.theme.spaceMd
-                                            - (edited.visible ? edited.width + panel.theme.spaceMd : 0))
-                            text: panel.controller.preset_name
-                            color: panel.theme.text
-                            font.family: panel.theme.sans
-                            font.pixelSize: panel.theme.typeEmphasis
-                            font.weight: Font.Medium
-                            elide: Text.ElideRight
-                        }
-                        // Where the sound came from: its category, a user
-                        // preset or an unnamed patch.
-                        Text {
-                            id: sourceText
-                            objectName: "novaPresetSource"
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: (panel.controller.preset_category === "User" ? "USER"
-                                   : panel.controller.preset_index < 0 ? "PATCH"
-                                   : panel.controller.preset_category).toUpperCase()
-                            color: panel.theme.faint
-                            font.family: panel.theme.mono
-                            font.pixelSize: panel.theme.typeCaption
-                            font.weight: Font.Medium
-                            font.letterSpacing: panel.theme.presetTagSpacing
-                        }
-                        // The preset has been changed since it was loaded.
-                        Rectangle {
-                            id: edited
-                            objectName: "novaPresetEdited"
-                            visible: panel.controller.preset_modified
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: editedLabel.implicitWidth + panel.theme.presetEditedPadding
-                            height: panel.theme.presetEditedHeight
-                            radius: panel.theme.radiusMd
-                            color: panel.theme.soft(panel.theme.am)
-                            border.color: panel.theme.am
-                            Accessible.role: Accessible.StaticText
-                            Accessible.name: "Edited"
-                            Text {
-                                id: editedLabel
-                                anchors.centerIn: parent
-                                text: "EDITED"
-                                color: panel.theme.am
-                                font.family: panel.theme.mono
-                                font.pixelSize: panel.theme.typeMicro
-                                font.weight: Font.DemiBold
-                                font.letterSpacing: panel.theme.presetTagSpacing
+                        id: pageRow
+                        x: pageTabs.inset
+                        y: pageTabs.inset
+                        height: parent.height - 2 * pageTabs.inset
+                        spacing: pageTabs.inset
+                        Repeater {
+                            model: panel.pageButtons
+                            delegate: Rectangle {
+                                id: tab
+                                required property var modelData
+                                // The page the button shows.
+                                readonly property int target: modelData.page
+                                readonly property bool on: panel.page === target
+                                objectName: "novaTab:" + target
+                                width: tabLabel.implicitWidth + 2 * pageTabs.tabPadding
+                                height: parent.height
+                                radius: pageTabs.tabRadius
+                                color: on ? panel.theme.card2 : tabArea.containsMouse ? panel.theme.hover : "transparent"
+                                border.color: activeFocus ? panel.theme.accent : "transparent"
+                                border.width: activeFocus ? panel.theme.strokeBold : 0
+                                activeFocusOnTab: true
+                                Accessible.role: Accessible.PageTab
+                                Accessible.name: modelData.label
+                                Accessible.checked: on
+                                Keys.onSpacePressed: panel.showPage(target)
+                                Keys.onReturnPressed: panel.showPage(target)
+                                Text {
+                                    id: tabLabel
+                                    anchors.centerIn: parent
+                                    text: tab.modelData.label
+                                    color: tab.on ? panel.theme.text : panel.theme.dim
+                                    font.family: panel.theme.mono
+                                    font.pixelSize: pageTabs.labelSize
+                                    font.weight: Font.DemiBold
+                                    font.letterSpacing: pageTabs.labelSpacing
+                                }
+                                MouseArea {
+                                    id: tabArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onClicked: panel.showPage(tab.target)
+                                }
                             }
                         }
                     }
-                    MouseArea {
-                        id: nameArea
-                        anchors.fill: parent
-                        enabled: panel.controller.editable
-                        hoverEnabled: true
-                        onClicked: panel.openBrowser()
-                    }
-                }
-                Kit.PresetArrow {
-                    objectName: "novaPresetNext"
-                    controller: panel.controller
-                    theme: panel.theme
-                    direction: 1
-                    width: presetBar.arrowWidth
-                    height: parent.height
-                    radius: panel.theme.presetArrowRadius
-                    stepper: presetBrowser.filterActive ? (d => presetBrowser.step(d)) : null
                 }
             }
-        }
-        HeaderButton {
-            id: browseButton
-            objectName: "novaPresetBrowse"
-            x: presetBar.x + presetBar.width + header.spacing
-            anchors.verticalCenter: parent.verticalCenter
-            text: "BROWSE"
-            on: presetBrowser.opened
-            enabled: panel.controller.editable
-            onClicked: panel.toggleBrowser()
-        }
-        HeaderButton {
-            id: constellationButton
-            objectName: "novaConstellationButton"
-            x: browseButton.x + browseButton.width + header.spacing
-            anchors.verticalCenter: parent.verticalCenter
-            text: header.compact ? "✦" : "✦ CONSTELLATION"
-            star: true
-            Accessible.name: "Constellation"
-            on: panel.constellationOpen
-            onClicked: panel.toggleConstellation()
-        }
 
-        // The pages: MAIN (the overview), FX, MATRIX, ARP · CLIP, VOICES and
-        // GLOBAL, each named for panel.page's number.
-        Rectangle {
-            id: pageTabs
-            objectName: "novaPages"
-            readonly property real inset: panel.theme.spaceXxs
-            readonly property real tabPadding: panel.theme.pageTabPadding
-            readonly property real tabRadius: panel.theme.pageTabRadius
-            readonly property real labelSize: panel.theme.pageTabLabelSize
-            readonly property real labelSpacing: panel.theme.headerLabelSpacing
-            readonly property real barHeight: panel.theme.headerControlHeight
-            readonly property real barRadius: panel.theme.headerControlRadius
-            x: constellationButton.x + constellationButton.width + header.spacing
-            anchors.verticalCenter: parent.verticalCenter
-            width: pageRow.implicitWidth + 2 * inset
-            height: barHeight
-            radius: barRadius
-            color: panel.theme.wellFill
-            border.color: panel.theme.line
             Row {
-                id: pageRow
-                x: pageTabs.inset
-                y: pageTabs.inset
-                height: parent.height - 2 * pageTabs.inset
-                spacing: pageTabs.inset
-                Repeater {
-                    model: panel.pageButtons
-                    delegate: Rectangle {
-                        id: tab
-                        required property var modelData
-                        // The page the button shows.
-                        readonly property int target: modelData.page
-                        readonly property bool on: panel.page === target
-                        objectName: "novaTab:" + target
-                        width: tabLabel.implicitWidth + 2 * pageTabs.tabPadding
+                id: tools
+                anchors.right: parent.right
+                height: parent.height
+                spacing: panel.theme.headerSpacing
+
+                // Voices in use against the polyphony, and the engine's CPU.
+                Row {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: panel.theme.spaceSm
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "VOICES"
+                        color: panel.theme.faint
+                        font.family: panel.theme.mono
+                        font.pixelSize: panel.theme.typeCaption
+                        font.letterSpacing: panel.theme.headerLabelSpacing
+                    }
+                    Text {
+                        objectName: "novaVoices"
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: (panel.live ? Math.round(panel.at(Contract.T.voices)) : 0) + " / "
+                            + (panel.controller.revision >= 0 ? Math.round(panel.controller.value("nova.global.polyphony")) : 0)
+                        color: panel.theme.text
+                        font.family: panel.theme.mono
+                        font.pixelSize: panel.theme.typeSmall
+                    }
+                    Item {
+                        width: panel.theme.headerMeterGap
                         height: parent.height
-                        radius: pageTabs.tabRadius
-                        color: on ? panel.theme.card2 : tabArea.containsMouse ? panel.theme.hover : "transparent"
-                        activeFocusOnTab: true
-                        Accessible.role: Accessible.PageTab
-                        Accessible.name: modelData.label
-                        Accessible.checked: on
-                        Keys.onSpacePressed: panel.showPage(target)
-                        Keys.onReturnPressed: panel.showPage(target)
-                        Text {
-                            id: tabLabel
-                            anchors.centerIn: parent
-                            text: tab.modelData.label
-                            color: tab.on ? panel.theme.text : panel.theme.dim
-                            font.family: panel.theme.mono
-                            font.pixelSize: pageTabs.labelSize
-                            font.weight: Font.DemiBold
-                            font.letterSpacing: pageTabs.labelSpacing
-                        }
-                        MouseArea {
-                            id: tabArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: panel.showPage(tab.target)
-                        }
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "CPU"
+                        color: panel.theme.faint
+                        font.family: panel.theme.mono
+                        font.pixelSize: panel.theme.typeCaption
+                        font.letterSpacing: panel.theme.headerLabelSpacing
+                    }
+                    Text {
+                        objectName: "novaCpu"
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: panel.live ? Format.fraction(panel.at(Contract.T.cpu)) : "— %"
+                        color: panel.live && panel.at(Contract.T.cpu) > panel.cpuWarning ? panel.theme.red : panel.theme.text
+                        font.family: panel.theme.mono
+                        font.pixelSize: panel.theme.typeSmall
                     }
                 }
-            }
-        }
 
-        // Whether the typing keyboard plays notes: green while it does,
-        // amber while a browser field has the keys. Compact, the light alone.
-        Rectangle {
-            id: keysPill
-            objectName: "novaKeysPill"
-            readonly property bool typing: presetBrowser.typing || panel.arpSearching
-            readonly property color tone: typing ? panel.theme.am : panel.theme.gr
-            x: zoomChips.x - header.spacing - width
-            anchors.verticalCenter: parent.verticalCenter
-            width: keysRow.implicitWidth + panel.theme.keysPillPadding
-            height: panel.theme.headerChipHeight
-            radius: height / 2
-            color: panel.theme.soft(tone, panel.theme.keysPillFillAlpha)
-            border.color: panel.theme.soft(tone, panel.theme.keysPillEdgeAlpha)
-            Accessible.role: Accessible.StaticText
-            Accessible.name: keysText.text
-            Row {
-                id: keysRow
-                anchors.centerIn: parent
-                spacing: panel.theme.spaceSm
+                // Whether the typing keyboard plays notes: green while it does,
+                // amber while a browser field has the keys. Compact, the light alone.
                 Rectangle {
+                    id: keysPill
+                    objectName: "novaKeysPill"
+                    readonly property bool typing: presetBrowser.typing || panel.arpSearching
+                    readonly property color tone: typing ? panel.theme.am : panel.theme.gr
                     anchors.verticalCenter: parent.verticalCenter
-                    width: panel.theme.keysLedSize
-                    height: panel.theme.keysLedSize
-                    radius: width / 2
-                    color: keysPill.tone
-                }
-                Text {
-                    id: keysText
-                    objectName: "novaKeysText"
-                    visible: !header.compact
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: !keysPill.typing ? "KEYS PLAY NOTES"
-                        : presetBrowser.searching || panel.arpSearching ? "TYPING IN SEARCH · ESC TO PLAY"
-                        : "TYPING A NAME · ESC TO PLAY"
-                    color: keysPill.tone
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeCaption
-                    font.weight: Font.DemiBold
-                    font.letterSpacing: panel.theme.keysLabelSpacing
-                }
-            }
-        }
-
-        // Zoom: how large the panel draws in its window.
-        Rectangle {
-            id: zoomChips
-            objectName: "novaZoom"
-            anchors.right: parent.right
-            anchors.rightMargin: header.margin
-            anchors.verticalCenter: parent.verticalCenter
-            width: zoomRow.implicitWidth + 2 * panel.theme.hairline
-            height: panel.theme.headerChipHeight
-            radius: panel.theme.radiusLg
-            color: "transparent"
-            border.color: panel.theme.line2
-            clip: true
-            Row {
-                id: zoomRow
-                x: panel.theme.hairline
-                y: panel.theme.hairline
-                height: parent.height - 2 * panel.theme.hairline
-                Repeater {
-                    model: panel.zoomSteps
-                    delegate: Rectangle {
-                        id: zoomChip
-                        required property real modelData
-                        // Chip steps are far apart; this only absorbs rounding.
-                        readonly property real tolerance: 0.001
-                        readonly property bool on: Math.abs(panel.zoom - modelData) < tolerance
-                        objectName: "novaZoom:" + Math.round(modelData * 100)
-                        width: zoomLabel.implicitWidth + panel.theme.spaceLg
-                        height: parent.height
-                        color: on ? panel.theme.card2 : "transparent"
-                        Accessible.role: Accessible.RadioButton
-                        Accessible.name: "Zoom " + zoomLabel.text
-                        Accessible.checked: on
+                    width: keysRow.implicitWidth + panel.theme.keysPillPadding
+                    height: panel.theme.headerChipHeight
+                    radius: height / 2
+                    color: panel.theme.soft(tone, panel.theme.keysPillFillAlpha)
+                    border.color: panel.theme.soft(tone, panel.theme.keysPillEdgeAlpha)
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: keysText.text
+                    Row {
+                        id: keysRow
+                        anchors.centerIn: parent
+                        spacing: panel.theme.spaceSm
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: panel.theme.keysLedSize
+                            height: panel.theme.keysLedSize
+                            radius: width / 2
+                            color: keysPill.tone
+                        }
                         Text {
-                            id: zoomLabel
-                            anchors.centerIn: parent
-                            text: Format.fraction(zoomChip.modelData)
-                            color: zoomChip.on ? panel.theme.text : panel.theme.faint
+                            id: keysText
+                            objectName: "novaKeysText"
+                            visible: !panel.compactHeader
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: !keysPill.typing ? "KEYS PLAY NOTES"
+                                : presetBrowser.searching || panel.arpSearching ? "TYPING IN SEARCH · ESC TO PLAY"
+                                : "TYPING A NAME · ESC TO PLAY"
+                            color: keysPill.tone
                             font.family: panel.theme.mono
                             font.pixelSize: panel.theme.typeCaption
                             font.weight: Font.DemiBold
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: panel.zoom = zoomChip.modelData
+                            font.letterSpacing: panel.theme.keysLabelSpacing
                         }
                     }
                 }
             }
         }
+    }
+    // The preset tag in Nova's words: the category, a user preset or an
+    // unnamed patch, and EDITED once the preset has changed.
+    Binding {
+        target: header.browser
+        when: header.browser !== null
+        property: "tag"
+        value: (panel.controller.preset_category === "User" ? "USER"
+                : panel.controller.preset_index < 0 ? "PATCH"
+                : panel.controller.preset_category).toUpperCase()
+            + (panel.controller.preset_modified ? " · EDITED" : "")
+    }
+    // The header's foot.
+    Rectangle {
+        y: panel.headerHeight - height
+        width: panel.width
+        height: panel.theme.hairline
+        color: panel.theme.line
     }
 
     // ---- The signal strip (ADR-0076 revision 2) ----------------------------------------------
@@ -1102,7 +1025,7 @@ Rectangle {
         readonly property real thumbnailWidth: panel.theme.stripThumbnailWidth
         readonly property real thumbnailHeight: panel.theme.stripThumbnailHeight
         readonly property real offAlpha: panel.theme.stripOffOpacity
-        y: header.height
+        y: panel.headerHeight
         width: parent.width
         height: panel.stripHeight
         color: panel.theme.rail
@@ -1165,6 +1088,8 @@ Rectangle {
                             height: spine.itemHeight
                             radius: spine.itemRadius
                             color: selected || itemArea.containsMouse ? panel.theme.card : "transparent"
+                            border.color: activeFocus ? accent : "transparent"
+                            border.width: activeFocus ? panel.theme.strokeBold : 0
                             activeFocusOnTab: true
                             Accessible.role: Accessible.Button
                             Accessible.name: slot.modelData.title + (on ? "" : ", off")
@@ -1306,96 +1231,7 @@ Rectangle {
         sourceComponent: NovaConstellationView { panel: panel }
     }
 
-    // ---- The status line and the keys --------------------------------------------------------
-
-    // The TOUCH A CONTROL readout on the left (the last control touched, or
-    // a route), voices, CPU and the Live badge on the right.
-    Rectangle {
-        id: statusLine
-        objectName: "novaStatusLine"
-        readonly property real margin: panel.theme.statusLineMargin
-        readonly property real labelSize: panel.theme.typeCaption
-        readonly property real valueSize: panel.theme.typeSmall
-        y: panel.bodyBottom
-        width: panel.width
-        height: panel.statusHeight
-        color: panel.theme.rail
-        Rectangle {
-            width: parent.width
-            height: panel.theme.hairline
-            color: panel.theme.line
-        }
-        Row {
-            x: statusLine.margin
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: panel.theme.spaceMd
-            Text {
-                anchors.verticalCenter: parent.verticalCenter
-                text: "TOUCH A CONTROL"
-                color: panel.theme.faint
-                font.family: panel.theme.mono
-                font.pixelSize: statusLine.labelSize
-                font.letterSpacing: panel.theme.statusLabelSpacing
-            }
-            Text {
-                objectName: "novaReadout"
-                anchors.verticalCenter: parent.verticalCenter
-                width: Math.min(implicitWidth, statusRight.x - statusLine.margin - x - 2 * statusLine.margin)
-                text: panel.readoutText
-                color: panel.touchedRoute !== null ? panel.theme.vi
-                    : panel.touchedId !== "" ? panel.accentFor(panel.touchedId) : panel.theme.dim
-                font.family: panel.theme.mono
-                font.pixelSize: statusLine.valueSize
-                font.weight: Font.Medium
-                elide: Text.ElideRight
-            }
-        }
-        Row {
-            id: statusRight
-            anchors.right: parent.right
-            anchors.rightMargin: statusLine.margin
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: panel.theme.spaceSm
-            Text {
-                anchors.verticalCenter: parent.verticalCenter
-                text: "VOICES"
-                color: panel.theme.faint
-                font.family: panel.theme.mono
-                font.pixelSize: statusLine.labelSize
-            }
-            Text {
-                objectName: "novaVoices"
-                anchors.verticalCenter: parent.verticalCenter
-                text: (panel.live ? Math.round(panel.at(Contract.T.voices)) : 0) + " / "
-                    + (panel.controller.revision >= 0 ? Math.round(panel.controller.value("nova.global.polyphony")) : 0)
-                color: panel.theme.text
-                font.family: panel.theme.mono
-                font.pixelSize: statusLine.valueSize
-            }
-            Text {
-                anchors.verticalCenter: parent.verticalCenter
-                text: "  CPU"
-                color: panel.theme.faint
-                font.family: panel.theme.mono
-                font.pixelSize: statusLine.labelSize
-            }
-            Text {
-                objectName: "novaCpu"
-                anchors.verticalCenter: parent.verticalCenter
-                text: panel.live ? Format.fraction(panel.at(Contract.T.cpu)) : "— %"
-                color: panel.live && panel.at(Contract.T.cpu) > panel.cpuWarning ? panel.theme.red : panel.theme.text
-                font.family: panel.theme.mono
-                font.pixelSize: statusLine.valueSize
-            }
-            Kit.StatusBadge {
-                objectName: "novaStatus"
-                anchors.verticalCenter: parent.verticalCenter
-                height: panel.statusHeight - 2 * panel.theme.spaceXxs
-                controller: panel.controller
-                theme: panel.theme
-            }
-        }
-    }
+    // ---- The keys ------------------------------------------------------------------------------
 
     NovaKeyStrip {
         id: keyStrip

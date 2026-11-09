@@ -82,36 +82,35 @@ KitTheme {
     // Tracking for the readout's parameter name and the screen's hint.
     property real capsTightSpacing: 1.2
 
-    // The header: wordmark, band-colour rule, subtitle, preset well, status.
+    // The header (Kit.DeviceHeader): the wordmark over its band-colour rule
+    // and subtitle, the preset browser and, once a control is touched, its
+    // readout.
     property real headerY: 10
-    property real headerHeight: 54
-    property int wordmarkSize: 27
-    property real wordmarkSpacing: 9
+    headerHeight: 54
+    wordmarkSize: 27
+    wordmarkSpacing: 9
+    wordmarkInk: glacier
     // The band-colour rule under the wordmark: its gap below the wordmark and
     // how much shorter than the wordmark it runs.
     property real bandRuleGap: 1
     property real bandRuleTrim: 10
-    property real subtitleGap: 7
-    property real subtitleSpacing: 2.4
-    property real browserX: 250
-    property real browserY: 5
-    property real presetWidth: 540
-    property real presetHeight: 42
-    property real focusStroke: 1.5
-    property real presetTextX: 14
-    property real presetCaptionY: 5
-    property real presetNameY: 16
-    property real presetNameWidth: 250
-    property real presetNameSpacing: 0.4
-    property real presetDividerX: 276
-    // The divider's inset from the well's top and bottom.
-    property real presetDividerInset: 8
-    property real presetReadoutX: 288
-    // The readout's room from the well's right edge (clear of the chevron).
-    property real presetReadoutRight: 26
-    property real presetValueY: 17
-    property real presetChevronMargin: 10
-    property real statusY: 14
+    subtitleGap: 7
+    subtitleSpacing: 2.4
+    subtitleInk: inkDim
+    headerBrowserX: 250
+    presetDisplayWidth: 300
+    presetDisplayHeight: 42
+    presetDisplayRadius: radiusLg
+    presetTextX: 14
+    presetTagY: 5
+    presetTagSpacing: capsSpacing
+    presetNameY: 16
+    presetNameBold: false
+    presetChevronMargin: 10
+    presetChevronInk: inkDim
+    readoutWidth: 240
+    readoutSpacing: capsTightSpacing
+    readoutValueY: 17
 
     // The cards: the top row (response, levels) and the bottom row (bands,
     // the selected band).
@@ -150,7 +149,10 @@ KitTheme {
     property real tileFreqY: 62
     property real tileGainY: 78
 
-    // The selected band's card.
+    // The selected band's card; a band that is off shows an OFF chip.
+    property real offChipPad: 5
+    property real offChipHeight: 16
+    property real offChipRadius: 3
     property real kindSegmentY: 44
     property real bandKnobsY: 82
     property real bandKnobGap: 22
@@ -172,7 +174,9 @@ KitTheme {
     property real captionSpacing: 1.6
     // The hint's inset from the screen's right edge.
     property real hintRight: 16
-    property real scaleLabelGap: 5
+    // The response screen's scales (Kit.PlotFrame).
+    plotTickGap: 5
+    plotTickSize: typeCaption
     property real spectrumInAlpha: 0.35
     property real spectrumOutAlpha: 0.7
     property real spectrumOutStroke: 1.2

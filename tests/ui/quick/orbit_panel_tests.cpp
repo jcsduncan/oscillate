@@ -262,8 +262,10 @@ void controls_edit_through_the_controller() {
   auto* sync = item(*panel, QStringLiteral("orbitSegment:orbit.sync"));
   click(*panel, sync->mapToScene(QPointF(sync->width() * 0.75, sync->height() / 2)).toPoint());
   require(controller.choice(QStringLiteral("orbit.sync")) == 1, "the sync switch turns on");
-  require(item(*panel, QStringLiteral("orbitKnob:orbit.rate"))->property("inactive").toBool(),
-          "a synced LFO dims its free rate");
+  auto* rate = item(*panel, QStringLiteral("orbitKnob:orbit.rate"));
+  require(rate->property("inactive").toBool() &&
+              !rate->property("inactiveReason").toString().isEmpty(),
+          "a synced LFO dims its free rate and says why");
 }
 
 void presets_and_status() {
@@ -306,8 +308,8 @@ void the_orrery_follows_live_telemetry() {
   require(text_of(*panel, QStringLiteral("orbitSweepLeft")) == QStringLiteral("13.8 ms") &&
               text_of(*panel, QStringLiteral("orbitSweepRight")) == QStringLiteral("10.5 ms"),
           "the sweep readout shows the running delays");
-  require(text_of(*panel, QStringLiteral("orbitLiveCaption")) == QStringLiteral("LIVE"),
-          "the sky says live");
+  require(text_of(*panel, QStringLiteral("orbitLiveCaption")) == QStringLiteral("PLAYING"),
+          "the sky says it is playing");
   const double angle = panel->root->property("liveAngleLeft").toDouble();
   require(std::fabs(std::cos(angle) - 0.6) < 1e-6, "the left body sits at its LFO value");
   adapter.set_telemetry({});

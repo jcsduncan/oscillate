@@ -68,7 +68,7 @@ KitTheme {
 
     mono: "DejaVu Sans Mono"
 
-    // The control last touched, read back in the display.
+    // The control last touched, read back in the header.
     lastTouched: ""
 
     // The knob face.
@@ -188,21 +188,40 @@ KitTheme {
     property int captionSize: typeMicro
     property real captionSpacing: 1.2
 
-    // The wordmark, its aurora rule and the tagline under it.
-    property int wordmarkSize: 32
-    property real wordmarkSpacing: 12
+    // The header (Kit.DeviceHeader): the wordmark over its aurora rule and
+    // the tagline; the preset display and, once touched, the readout.
+    property real headerY: 10
+    headerHeight: 52
+    wordmarkSize: 32
+    wordmarkSpacing: 12
+    subtitleGap: 0
+    subtitleSize: captionSize
+    subtitleSpacing: 2
+    subtitleInk: inkDim
     property real wordmarkInset: 2
     property real wordmarkRuleTrim: 14
-    property real taglineGap: 6
-    property real taglineSpacing: 2
-
-    // The preset display: name, the touched control's readout and a chevron.
+    headerBrowserX: 230
+    presetDisplayWidth: 280
+    presetDisplayHeight: 42
+    presetDisplayRadius: radiusXl
+    presetFocusStroke: litEdgeWidth
+    presetTextX: 14
+    presetTagY: 5
+    presetTagSize: captionSize
+    presetTagSpacing: captionSpacing
+    presetNameY: 16
+    presetNameSize: typeTitle
+    presetChevronMargin: 10
+    readoutWidth: 230
+    readoutRadius: radiusXl
+    readoutTextX: 14
+    readoutNameY: 5
+    readoutNameSize: captionSize
+    readoutValueY: 17
+    // Between the header and the first row of plates.
+    property real headerContentGap: 10
+    // A lit edge: a focused display, a switch that is on.
     property real litEdgeWidth: 1.5
-    property int presetNameSize: typeTitle
-    property int readoutValueSize: typeSubtitle
-    property real readoutLabelSpacing: 1
-    property real chevronInset: 10
-    property int chevronSize: typeBody
 
     // Knob cells: a knob with its caption, at least cellMinWidth wide.
     property int cellDiameter: 30
@@ -212,8 +231,6 @@ KitTheme {
     // Between the Blur macro and the big switches.
     property real motionSpacing: 10
     property int stepperHeight: 22
-    // A control waiting on another (a division while free-running).
-    property real unsyncedOpacity: 0.45
     // The grain window drawn on a shape key.
     property int glyphSamples: 24
     property real glyphStroke: 1.2
@@ -255,8 +272,9 @@ KitTheme {
     property color cloudWashLeft: Qt.rgba(0.36, 0.25, 0.85, 0.10)
     property color cloudWashMiddle: Qt.rgba(0.10, 0.55, 0.62, 0.08)
     property color cloudWashRight: Qt.rgba(0.95, 0.35, 0.78, 0.08)
-    property real cloudPlotLeft: 34
-    property real cloudPlotRight: 12
+    // The cloud's frame: in from the view's sides and bottom, and below
+    // its title.
+    property real cloudFrameInset: 8
     property real cloudPlotVertical: 26
     property color star: Qt.rgba(1, 1, 1, 0.22)
     property real starLarge: 1.5
@@ -278,7 +296,9 @@ KitTheme {
     property color frostBottom: Qt.rgba(0.75, 0.91, 1.0, 0.05)
     property color frostEdge: Qt.rgba(0.75, 0.91, 1.0, 0.35)
     property color frostCrystal: Qt.rgba(0.85, 0.95, 1.0, 0.35)
-    property real frostLabelInset: 10
+    // The FROZEN label, right of the corner crystal (the frame's chip
+    // holds the top right).
+    property real frostLabelInset: 40
     property real frostLabelY: 8
     property real frostLabelSpacing: 2
     property real cloudTitleX: 12
@@ -286,7 +306,10 @@ KitTheme {
     property real cloudTitleSpacing: 1.6
     property real syncCaptionInset: 4
     property real syncCaptionLift: 26
-    property real axisLabelX: 6
-    property real axisLabelLift: 6
-    property real timeLabelLift: 15
+    property real cloudKeyGap: 12
+
+    // The framed filter view: its cutoff reading sits under the plot's chip,
+    // and the curve under both.
+    filterViewReadoutY: plotChipRowHeight
+    filterViewTop: plotChipRowHeight + typeSmall + spaceXs
 }

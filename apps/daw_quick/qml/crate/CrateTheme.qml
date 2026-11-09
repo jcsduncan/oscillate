@@ -58,7 +58,7 @@ KitTheme {
     tipFont: mono
 
     // Type: no text under 10 px.
-    property int wordmarkSize: 20
+    wordmarkSize: 20
     property int captionSize: 11
     property int labelSize: 10
     property int valueSize: 12
@@ -70,7 +70,6 @@ KitTheme {
     property real labelSpacing: 1.2
 
     // Geometry.
-    property int headerHeight: 56
     property int gutter: 20
     property int segHeight: 26
     property int segRadius: 7
@@ -111,12 +110,28 @@ KitTheme {
     property int panelWidth: 1440
     property int panelHeight: 680
     property real caseRadius: 12
-    // Header: between its groups, between items in a group; the wordmark's
-    // and tagline's tracking; the sample box and its record icon.
-    property real headerGap: 20
+    // The header (Kit.DeviceHeader) on its band: the band's padding above
+    // and below; the first row's height; between its groups, between items
+    // in a group; the wordmark's and tagline's tracking. ERA and TIME sit in
+    // the second row. No presets: the sample sits in the browser's place,
+    // and a load message gets at most messageWidth beside it. The readout
+    // matches the sample box.
+    property real headerY: 8
+    property real headerBottom: 8
+    headerHeight: 40
+    headerModeGap: spaceSm
+    headerGap: 20
     property real headerItemGap: 10
-    property real wordmarkSpacing: 3
+    wordmarkSpacing: 3
     property real taglineSpacing: 1
+    property real messageWidth: 320
+    presetDisplayHeight: sampleBoxHeight
+    readoutFill: caseColor
+    readoutEdge: line2
+    readoutRadius: radiusLg
+    readoutValueY: 14
+    readoutValueSize: valueSize
+    // The sample box and its record icon.
     property int sampleBoxHeight: 32
     property real sampleBoxInset: 12
     property real recordIconSize: 16
@@ -181,7 +196,14 @@ KitTheme {
     property real padBarHeight: 3
 
     // The waveform's chop markers: the width a marker takes the pointer.
-    property real markerHitWidth: 16
+    property real markerHitWidth: minHitSize
+    // The accent edge a focused control of the panel's own draws (the
+    // waveform, the chop's name).
+    property real focusEdgeWidth: strokeBold
+    // The waveform's time scale: the steps its ticks may take, in seconds,
+    // and the most ticks it shows.
+    property var waveTickSteps: [0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60]
+    property int waveMostTicks: 8
     // The filter curve: inset top and bottom, and its dimming while off.
     property real filterCurvePad: 3
     property real filterCurveOffAlpha: 0.4

@@ -49,209 +49,58 @@ Rectangle {
     function isCarrier(op) {
         return routing.carriers !== undefined && routing.carriers[op - 1] === true
     }
-    // The LCD's second window: what the last touched control is, and its value.
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        return info.name === undefined ? "" : (info.group + " · " + info.name).toUpperCase()
-    }
-    function readoutValue(id) {
-        return id === "" || controller.revision < 0 ? "" : controller.display(id)
-    }
 
     // ---- Header ---------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.theme.headerTop
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
-
-        Rectangle {
-            id: ring
-            y: panel.theme.logoTop
-            width: panel.theme.logoSize
-            height: panel.theme.logoSize
-            radius: width / 2
-            color: "transparent"
-            border.color: panel.theme.teal
-            border.width: panel.theme.logoStroke
-            Rectangle {
-                anchors.centerIn: parent
-                width: panel.theme.logoDotSize
-                height: panel.theme.logoDotSize
-                radius: width / 2
-                color: panel.theme.amber
-            }
-        }
-        Text {
-            id: wordmark
-            x: ring.width + panel.theme.wordmarkGap
-            y: 0
-            text: "HALO"
-            color: panel.theme.ink
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Black
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        Text {
-            x: wordmark.x + panel.theme.taglineIndent
-            y: wordmark.y + wordmark.height - panel.theme.taglineLift
-            text: "SIX-OPERATOR FM SYNTHESIS"
-            color: panel.theme.amber
-            font.pixelSize: panel.theme.typeCaption
-            font.bold: true
-            font.letterSpacing: panel.theme.taglineSpacing
-        }
-
-        Row {
-            anchors.centerIn: parent
-            spacing: panel.theme.spaceSm
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "haloPresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: lcd
-                objectName: "haloLcd"
-                width: panel.theme.lcdWidth
-                height: panel.theme.lcdHeight
-                radius: panel.theme.radiusMd
-                color: panel.theme.lcd
-                border.color: activeFocus ? panel.theme.teal : panel.theme.lcdEdge
-                border.width: activeFocus ? panel.theme.strokeBold : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(lcd, panel.controller, panel.theme.teal)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
-                // Faint scan lines.
-                Column {
-                    anchors.fill: parent
-                    anchors.margins: panel.theme.lcdScanInset
-                    clip: true
-                    Repeater {
-                        model: panel.theme.lcdScanLines
-                        delegate: Rectangle {
-                            width: lcd.width - 2 * panel.theme.lcdScanInset
-                            height: panel.theme.lcdScanHeight
-                            color: index % 2 === 0 ? panel.theme.lcdScanLine : "transparent"
-                            required property int index
-                        }
-                    }
-                }
-                Text {
-                    x: panel.theme.lcdTextX
-                    y: panel.theme.lcdTopLineY
-                    text: panel.controller.preset_category.toUpperCase()
-                    color: panel.theme.lcdDim
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeCaption
-                }
-                Text {
-                    objectName: "haloPresetName"
-                    x: panel.theme.lcdTextX
-                    y: panel.theme.lcdNameY
-                    width: panel.theme.lcdNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.lcdText
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeTitle
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        // The ring logo before the wordmark, the amber tagline under it.
+        brand: Component {
+            Row {
+                spacing: panel.theme.wordmarkGap
                 Rectangle {
-                    x: panel.theme.lcdDividerX
-                    y: panel.theme.lcdDividerInset
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.theme.lcdDividerInset
-                    color: panel.theme.lcdDim
-                }
-                Text {
-                    objectName: "haloReadout"
-                    x: panel.theme.lcdReadoutX
-                    y: panel.theme.lcdTopLineY
-                    width: lcd.width - x - panel.theme.lcdReadoutRight
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.lcdDim
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeCaption
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "haloReadoutValue"
-                    x: panel.theme.lcdReadoutX
-                    y: panel.theme.lcdReadoutValueY
-                    width: lcd.width - x - panel.theme.lcdReadoutRight
-                    text: panel.readoutValue(panel.theme.lastTouched)
-                    color: panel.theme.lcdText
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeSubtitle
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "haloLcdAlgorithm"
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.lcdTagRight
-                    y: panel.theme.lcdAlgorithmY
-                    text: "ALG " + (panel.algorithm + 1 < 10 ? "0" : "") + (panel.algorithm + 1)
-                    color: panel.theme.lcdAmber
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeSubtitle
-                    font.bold: true
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.lcdTagRight
-                    y: panel.theme.lcdEditedY
-                    text: panel.controller.preset_modified ? "EDITED" : ""
-                    color: panel.theme.lcdDim
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeCaption
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.lcdChevronRight
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.teal
-                    font.pixelSize: panel.theme.typeBody
+                    width: panel.theme.logoSize
+                    height: panel.theme.logoSize
+                    radius: width / 2
+                    color: "transparent"
+                    border.color: panel.theme.teal
+                    border.width: panel.theme.logoStroke
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: panel.theme.logoDotSize
+                        height: panel.theme.logoDotSize
+                        radius: width / 2
+                        color: panel.theme.amber
+                    }
                 }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        lcd.forceActiveFocus()
-                        lcd.openPresets()
+                Column {
+                    spacing: panel.theme.subtitleGap
+                    Text {
+                        objectName: "haloWordmark"
+                        text: "HALO"
+                        color: panel.theme.wordmarkInk
+                        font.pixelSize: panel.theme.wordmarkSize
+                        font.weight: panel.theme.wordmarkWeight
+                        font.letterSpacing: panel.theme.wordmarkSpacing
+                    }
+                    Text {
+                        objectName: "haloSubtitle"
+                        x: panel.theme.taglineIndent
+                        text: "SIX-OPERATOR FM SYNTHESIS"
+                        color: panel.theme.subtitleInk
+                        font.pixelSize: panel.theme.subtitleSize
+                        font.bold: true
+                        font.letterSpacing: panel.theme.subtitleSpacing
                     }
                 }
             }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "haloPresetNext"
-                direction: 1
-            }
-        }
-
-        Kit.StatusBadge {
-            id: status
-            objectName: "haloStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
         }
     }
 
@@ -287,6 +136,19 @@ Rectangle {
         y: panel.lowerY
         width: panel.theme.algorithmCardWidth
         height: panel.lowerHeight
+
+        // The algorithm's number, LCD amber, at the right of the title bar.
+        Text {
+            objectName: "haloAlgorithmNumber"
+            anchors.right: parent.right
+            anchors.rightMargin: panel.theme.cardPad
+            y: panel.theme.cardTitleY
+            text: "ALG " + (panel.algorithm + 1 < 10 ? "0" : "") + (panel.algorithm + 1)
+            color: panel.theme.lcdAmber
+            font.family: panel.theme.mono
+            font.pixelSize: panel.theme.cardTitleSize
+            font.bold: true
+        }
 
         HaloAlgorithmView {
             x: panel.theme.spaceMd
@@ -392,6 +254,7 @@ Rectangle {
         property color accent: panel.theme.teal
         property int diameter: panel.theme.knobDiameter
         property bool inactive: false
+        property string inactiveReason: ""
         property string label: ""
         width: panel.theme.cellWidth
         height: panel.theme.cellHeight
@@ -404,6 +267,7 @@ Rectangle {
             accent: cell.accent
             diameter: cell.diameter
             inactive: cell.inactive
+            inactiveReason: cell.inactiveReason
             label: cell.label !== "" ? cell.label : cellKnob.info.name !== undefined ? cellKnob.info.name : ""
         }
     }
@@ -446,6 +310,8 @@ Rectangle {
         }
     }
 
+    // The filter: Off collapses the card to its title bar, the type
+    // dropdown and an OFF chip.
     Kit.Card {
         theme: panel.theme
         id: filter
@@ -454,9 +320,30 @@ Rectangle {
         x: fm.x + fm.width + panel.gap
         y: panel.lowerY
         width: panel.theme.filterCardWidth
-        height: panel.rowHeight
+        height: active ? panel.rowHeight : panel.theme.collapsedCardHeight
         readonly property bool active: panel.controller.revision >= 0 && panel.controller.choice("halo.filter.type") > 0
+        Rectangle {
+            objectName: "haloFilterOff"
+            visible: !filter.active
+            x: filterType.x - width - panel.theme.spaceSm
+            y: panel.theme.cardDropdownY
+            width: offText.implicitWidth + 2 * panel.theme.offChipPad
+            height: panel.theme.compactControlHeight
+            radius: panel.theme.radiusSm
+            color: panel.theme.lcd
+            border.color: panel.theme.lcdEdge
+            Text {
+                id: offText
+                anchors.centerIn: parent
+                text: "OFF"
+                color: panel.theme.lcdDim
+                font.family: panel.theme.mono
+                font.pixelSize: panel.theme.typeCaption
+                font.bold: true
+            }
+        }
         Kit.Dropdown {
+            id: filterType
             x: filter.width - width - panel.theme.cardPad
             y: panel.theme.cardDropdownY
             width: panel.theme.cardDropdownWidth
@@ -467,40 +354,49 @@ Rectangle {
             menu: menu
             accent: panel.theme.amber
         }
-        HaloFilterView {
-            id: filterView
+        // The filter drawn from its settings: always a PREVIEW.
+        Kit.PlotFrame {
+            id: filterFrame
+            visible: filter.active
             x: panel.theme.cardPad
             y: panel.theme.controlRowTop
             width: panel.theme.filterViewWidth
-            height: filter.height - y - panel.theme.cardPad
-            controller: panel.controller
+            height: panel.rowHeight - y - panel.theme.cardPad
             theme: panel.theme
+            live: false
+            xUnit: "Hz"
+            yUnit: "dB"
+            xTicks: filterView.frequencyTicks
+            yTicks: filterView.levelTicks
+            HaloFilterView {
+                id: filterView
+                anchors.fill: parent
+                controller: panel.controller
+                theme: panel.theme
+            }
         }
         Grid {
-            x: filterView.x + filterView.width + panel.theme.cardPad
+            visible: filter.active
+            x: filterFrame.x + filterFrame.width + panel.theme.cardPad
             y: panel.theme.knobRowTop
             columns: 2
             columnSpacing: panel.theme.filterKnobGap
             Cell {
                 parameterId: "halo.filter.cutoff"
                 accent: panel.theme.amber
-                inactive: !filter.active
             }
             Cell {
                 parameterId: "halo.filter.resonance"
                 accent: panel.theme.amber
-                inactive: !filter.active
             }
             Cell {
                 parameterId: "halo.filter.keytrack"
                 accent: panel.theme.amber
-                inactive: !filter.active
                 label: "Keytrack"
             }
             Cell {
                 parameterId: "halo.filter.velocity"
                 accent: panel.theme.amber
-                inactive: !filter.active
             }
         }
     }
@@ -530,6 +426,7 @@ Rectangle {
             Cell {
                 parameterId: "halo.lfo.rate"
                 inactive: lfo.synced
+                inactiveReason: lfo.synced ? "Rate follows Sync" : ""
             }
             Cell { parameterId: "halo.lfo.delay" }
             Cell { parameterId: "halo.lfo.pitch" }
@@ -555,7 +452,8 @@ Rectangle {
                 theme: panel.theme
                 parameterId: "halo.lfo.division"
                 menu: menu
-                opacity: lfo.synced ? 1 : panel.theme.dropdownInactiveOpacity
+                inactive: !lfo.synced
+                inactiveReason: lfo.synced ? "" : "Division applies with Sync on"
             }
         }
     }
@@ -657,7 +555,8 @@ Rectangle {
             theme: panel.theme
             parameterId: "halo.fx.delay_division"
             menu: menu
-            opacity: effects.synced ? 1 : panel.theme.dropdownInactiveOpacity
+            inactive: !effects.synced
+            inactiveReason: effects.synced ? "" : "Division applies with Sync on"
         }
         Row {
             x: (effects.width - width) / 2
@@ -671,6 +570,7 @@ Rectangle {
             Cell {
                 parameterId: "halo.fx.delay_time"
                 inactive: effects.synced
+                inactiveReason: effects.synced ? "Time follows Sync" : ""
             }
             Cell {
                 parameterId: "halo.fx.delay_feedback"

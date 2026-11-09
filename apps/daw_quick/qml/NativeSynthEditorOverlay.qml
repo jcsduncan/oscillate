@@ -45,17 +45,20 @@ FloatingDeviceFrame {
     // designed size and scale to fit.
     readonly property bool reflows: controller !== null && controller.panel_reflows
     readonly property var reflowPanel: reflows ? panelLoader.item : null
-    // The panel zoom (ADR-0103): Nova's own chips, or for any other panel
-    // the window's; both keep it in the workspace preferences.
-    zoom: reflowPanel !== null ? reflowPanel.zoom : layout !== null ? layout.panelZoom : 1
-    zoomable: hasPanel && !reflows
-    // A chosen zoom sizes the window: a size dragged by hand gives way to
-    // the zoomed panel's.
+    // The panel zoom (ADR-0103): the window's chips, kept in the workspace
+    // preferences, for every panel.
+    zoom: layout !== null ? layout.panelZoom : 1
+    zoomable: hasPanel
+    // A chosen zoom sizes the window of a fixed-size panel: a size dragged
+    // by hand gives way to the zoomed panel's. Nova reflows at the zoom in
+    // the window it has.
     onZoomChosen: z => {
         if (layout !== null)
             layout.panelZoom = z
-        floatingWidth = 0
-        floatingHeight = 0
+        if (!reflows) {
+            floatingWidth = 0
+            floatingHeight = 0
+        }
     }
     readonly property real minimumWidth: reflowPanel !== null ? reflowPanel.minimumWidth : panelWidth
     readonly property real minimumHeight: reflowPanel !== null ? reflowPanel.minimumHeight : panelHeight
@@ -140,8 +143,8 @@ FloatingDeviceFrame {
         readonly property real playheadBar: editor.bridge.playheadBar
         // Write to clip: the selected MIDI clip, or a new one at the playhead.
         readonly property var selectedClipIds: editor.bridge.selectedClipIds
-        // Nova's zoom chip's choice, kept across sessions.
-        readonly property real zoom: editor.layout !== null ? editor.layout.panelZoom : 1
+        // The panel zoom, for a panel that reflows to it (Nova).
+        readonly property real zoom: editor.zoom
         // Nova's key strip plays from the typing keyboard's octave.
         readonly property int keyBase: editor.keyboardBase
         // The groove pool, for Nova's arp GROOVE list (ADR-0078).
@@ -177,7 +180,7 @@ FloatingDeviceFrame {
         }
     }
     // What panels ask of the host: auditions and live notes on the open
-    // synth's track (held until released), and Nova's zoom kept.
+    // synth's track (held until released).
     Connections {
         target: panelLoader.item
         ignoreUnknownSignals: true
@@ -192,10 +195,6 @@ FloatingDeviceFrame {
             editor.bridge.play_note(editor.bridge.nativeSynthTrackId, key, velocity)
         }
         function onPadReleased(key) { editor.bridge.release_note(key) }
-        function onZoomChanged() {
-            if (editor.layout !== null)
-                editor.layout.panelZoom = panelLoader.item.zoom
-        }
     }
     // An engine the catalogue has no panel for says so.
     Text {

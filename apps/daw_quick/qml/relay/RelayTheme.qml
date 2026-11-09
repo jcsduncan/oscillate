@@ -65,6 +65,10 @@ KitTheme {
     inkFaint: "#6a634d"
     inkGround: body
     property color label: "#efe6cc"
+    // The status badge on the dark well reads in the panel's light label ink.
+    function statusInk(tone) {
+        return label
+    }
     property color labelDim: "#eae4cc"
     // Brass.
     property color brassHi: "#f0d58b"
@@ -136,49 +140,85 @@ KitTheme {
     property real cellHeightPad: 34
     property real cellRowSpacing: 18
 
-    // The header: wordmark, subtitle and model line.
+    // The header (Kit.DeviceHeader): the italic serif wordmark with the
+    // subtitle and model line beside it, the preset browser on a glowing
+    // screen, the readout and the status; the character switch in the
+    // header's second row.
+    property real headerY: 8
+    headerHeight: 44
     property real wordmarkInset: 4
-    property real wordmarkY: 8
-    property int wordmarkSize: 34
-    property real subtitleGap: 12
-    property real subtitleY: 18
-    property real subtitleSpacing: 3
-    property real modelLineY: 33
+    wordmarkFont: serif
+    wordmarkSize: 34
+    wordmarkInk: brassLo
+    property real brandSubtitleGap: 12
+    subtitleGap: 3
+    subtitleSize: typeSmall
+    subtitleSpacing: 3
+    subtitleInk: inkDim
     property real modelLineSpacing: 2
+    headerBrowserX: 340
     // The character switch.
-    property real headerControlY: 14
-    property real characterX: 430
     property real characterWidth: 330
     property real characterHeight: 36
     property real characterCaptionSpacing: 1.8
     property real characterSegmentGap: 12
     property real characterSegmentHeight: 30
-    // The preset browser.
-    property real presetArrowWidth: 26
-    property real presetHeight: 32
-    property real presetDisplayWidth: 250
-    property real presetDisplayStroke: 1.5
-    property real presetTextX: 10
-    property real presetNameY: 3
-    // Room kept right of the preset name for the chevron.
-    property real presetNameRight: 30
-    property real presetCategoryY: 18
+    // The preset browser: brass arrows round a screen, the name over its
+    // category.
+    arrowWidth: 26
+    arrowHeight: 32
+    arrowRadius: radiusSm
+    arrowPrevious: "◀"
+    arrowNext: "▶"
+    arrowInk: brassInk
+    arrowGlyphSize: typeLabel
+    function arrowFill(arrow, stop) {
+        return stop > 0 ? brassLo : arrow.pressed ? brass : brassHi
+    }
+    function arrowEdge(arrow) {
+        return arrow.activeFocus ? accent : brassShadowEdge
+    }
+    presetDisplayWidth: 250
+    presetDisplayHeight: 32
+    presetDisplayRadius: radiusSm
+    presetFill: screen
+    presetEdge: brassLo
+    presetTextX: 10
+    presetNameY: 3
+    presetNameFont: mono
+    presetNameSize: typeEmphasis
+    presetNameInk: screenGlow
+    presetTagY: 18
+    presetTagSpacing: tagSpacing
+    presetTagInk: presetCategoryInk
     property color presetCategoryInk: "#8d8a6c"
-    property real chevronMargin: 8
+    presetChevronMargin: 8
+    presetChevronInk: brass
+    // The readout: the control last touched, on a screen like the preset's.
+    readoutFill: screen
+    readoutEdge: brassLo
+    readoutRadius: radiusSm
+    readoutTextX: 10
+    readoutNameY: 3
+    readoutNameInk: presetCategoryInk
+    readoutSpacing: 1.6
+    readoutValueY: 14
+    readoutValueSize: typeLabel
+    readoutValueInk: screenGlow
     // The brass trim under the header.
-    property real trimY: 58
+    property real trimGap: 6
     property real trimHeight: 3
     property real trimMidStop: 0.5
 
     // The hero row: character bay, echo train, VU meter.
-    property real heroY: 72
+    // Below the trim.
+    property real heroGap: 11
     property real heroHeight: 250
     property real bayWidth: 218
     property real vuWidth: 196
 
     // The control plates.
-    property real plateRowY: 336
-    property real plateRowHeight: 290
+    property real plateRowGap: 14
     property real timePlateWidth: 318
     property real feedbackPlateWidth: 400
     property real wowPlateWidth: 170
@@ -200,14 +240,6 @@ KitTheme {
     property real feedbackColumnSpacing: 10
     property real outputGridX: 22
     property real outputColumnSpacing: 26
-
-    // The brass nameplate along the bottom.
-    property real nameplateBottom: 12
-    property real nameplatePad: 14
-    property real nameplateValueX: 300
-    property real nameplateSpacing: 1.6
-    property color nameplateInk: "#3a2c10"
-    property color nameplateValueInk: "#2a1f08"
 
     // The character bay.
     property color bayTop: "#2d2a21"
@@ -265,16 +297,16 @@ KitTheme {
     property real clockLampDim: 0.25
     property color clockInk: "#c9c2a6"
     // Digital: the DSP readout.
-    property real readoutOffset: -4
+    property real dspReadoutOffset: -4
     // How much narrower than the bay the readout is.
-    property real readoutInset: 34
-    property real readoutHeight: 62
-    property real readoutValueOffset: -6
-    property int readoutValueSize: 24
-    property real readoutCaptionBottom: 5
-    property color readoutBody: "#0c0d09"
-    property color readoutEdge: "#33352a"
-    property color readoutCaptionInk: "#6c6a58"
+    property real dspReadoutInset: 34
+    property real dspReadoutHeight: 62
+    property real dspReadoutValueOffset: -6
+    property int dspReadoutValueSize: 24
+    property real dspReadoutCaptionBottom: 5
+    property color dspReadoutBody: "#0c0d09"
+    property color dspReadoutEdge: "#33352a"
+    property color dspReadoutCaptionInk: "#6c6a58"
 
     // The echo train screen.
     property color glassTop: "#262a1b"
@@ -289,6 +321,9 @@ KitTheme {
     property real gridOverhang: 6
     property real gridLabelBottom: 10
     property color gridLabelInk: "#6f7357"
+    // The echo train's time scale (Kit.PlotFrame), in the grid labels' ink.
+    plotTickInk: gridLabelInk
+    plotTickSize: typeCaption
     // Each lane's floor sits above its bottom edge, with headroom above
     // the tallest bar.
     property real laneFloorInset: 6

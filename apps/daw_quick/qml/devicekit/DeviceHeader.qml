@@ -120,7 +120,8 @@ Item {
     }
     Loader {
         id: toolsLoader
-        x: status.x - (item !== null ? width + header.theme.headerGap : 0)
+        anchors.right: status.left
+        anchors.rightMargin: item !== null ? header.theme.headerGap : 0
         anchors.verticalCenter: firstRow.verticalCenter
         sourceComponent: header.tools
     }

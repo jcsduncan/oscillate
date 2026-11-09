@@ -146,18 +146,6 @@ Rectangle {
         return "Kick settles at " + label + ": tune it " + Format.semitones(-p.cents / 100, 2) + " to land on " + name + "."
     }
 
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        if (info.name === undefined)
-            return ""
-        return (info.group === info.name ? info.name : info.group + " · " + info.name).toUpperCase()
-    }
-    function readoutValue(id) {
-        return id === "" || revision < 0 ? "" : controller.display(id)
-    }
-
     // A black plate: a fine bevel along the top, the title in spaced caps.
     component Caption: Text {
         color: panel.theme.inkFaint
@@ -225,183 +213,53 @@ Rectangle {
 
     // ---- Header ----------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
-        // The header's top, height, the preset browser's place and the
-        // status badge's drop.
-        readonly property real topY: 10
-        readonly property real headerHeight: 54
-        readonly property real browserX: 250
-        readonly property real browserY: 5
-        readonly property real statusY: 14
-        // The wordmark's underline: its gap below the word and how much
-        // shorter than the word it is; the tagline's gap below the word.
-        readonly property real underlineGap: 1
-        readonly property real underlineTrim: 10
-        readonly property real taglineGap: 7
         x: panel.margin
-        y: topY
+        y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: headerHeight
-
-        Text {
-            id: wordmark
-            y: panel.theme.spaceXxs
-            text: "TUNE"
-            color: panel.theme.glacier
-            font.family: panel.theme.sans
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Light
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        Rectangle {
-            x: wordmark.x + panel.theme.spaceXxs
-            y: wordmark.y + wordmark.height + header.underlineGap
-            width: wordmark.implicitWidth - header.underlineTrim
-            height: panel.theme.underlineHeight
-            radius: panel.theme.underlineHeight / 2
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0; color: panel.theme.accentSoft }
-                GradientStop { position: 1; color: panel.theme.amberHot }
-            }
-        }
-        Text {
-            x: wordmark.x + panel.theme.spaceXxs
-            y: wordmark.y + wordmark.height + header.taglineGap
-            text: "STROBE TUNER · KICK TRACKER"
-            color: panel.theme.inkDim
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.taglineSpacing
-        }
-
-        Row {
-            id: browser
-            x: header.browserX
-            y: header.browserY
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "tunePresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "tunePresetDisplay"
-                // The text's inset, its two lines' tops, the name's width,
-                // the divider's place and the readout's room for the chevron.
-                readonly property real inset: panel.theme.plateInset
-                readonly property real captionY: 5
-                readonly property real nameY: 16
-                readonly property real nameWidth: 250
-                readonly property real dividerX: 276
-                readonly property real readoutX: 288
-                readonly property real readoutValueY: 17
-                readonly property real readoutRightPad: 26
-                readonly property real chevronInset: 10
-                width: panel.theme.presetDisplayWidth
-                height: panel.theme.presetDisplayHeight
-                radius: panel.theme.radiusLg
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                border.width: activeFocus ? panel.theme.focusStroke : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.accent)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        // The wordmark with its amber underline, over the tagline.
+        brand: Component {
+            Item {
+                implicitWidth: Math.max(wordmark.implicitWidth, tagline.x + tagline.implicitWidth)
+                implicitHeight: tagline.y + tagline.implicitHeight
                 Text {
-                    x: display.inset
-                    y: display.captionY
-                    text: panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.captionSpacing
-                }
-                Text {
-                    objectName: "tunePresetName"
-                    x: display.inset
-                    y: display.nameY
-                    width: display.nameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeHeading
-                    font.letterSpacing: panel.theme.presetNameSpacing
-                    elide: Text.ElideRight
+                    id: wordmark
+                    objectName: "tuneWordmark"
+                    text: "TUNE"
+                    color: panel.theme.wordmarkInk
+                    font.family: panel.theme.wordmarkFont
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.weight: panel.theme.wordmarkWeight
+                    font.letterSpacing: panel.theme.wordmarkSpacing
                 }
                 Rectangle {
-                    x: display.dividerX
-                    y: panel.theme.spaceMd
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.theme.spaceMd
-                    color: panel.theme.wellEdge
-                }
-                Text {
-                    objectName: "tuneReadout"
-                    x: display.readoutX
-                    y: display.captionY
-                    width: display.width - x - display.readoutRightPad
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.readoutSpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "tuneReadoutValue"
-                    x: display.readoutX
-                    y: display.readoutValueY
-                    width: display.width - x - display.readoutRightPad
-                    text: panel.readoutValue(panel.theme.lastTouched)
-                    color: panel.theme.accent
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeSubtitle
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: display.chevronInset
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.inkDim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
+                    x: panel.theme.spaceXxs
+                    y: wordmark.height + panel.theme.underlineGap
+                    width: wordmark.implicitWidth - panel.theme.underlineTrim
+                    height: panel.theme.underlineHeight
+                    radius: panel.theme.underlineHeight / 2
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0; color: panel.theme.accentSoft }
+                        GradientStop { position: 1; color: panel.theme.amberHot }
                     }
                 }
+                Text {
+                    id: tagline
+                    objectName: "tuneSubtitle"
+                    x: panel.theme.spaceXxs
+                    y: wordmark.height + panel.theme.subtitleGap
+                    text: "STROBE TUNER · KICK TRACKER"
+                    color: panel.theme.subtitleInk
+                    font.pixelSize: panel.theme.subtitleSize
+                    font.bold: true
+                    font.letterSpacing: panel.theme.subtitleSpacing
+                }
             }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "tunePresetNext"
-                direction: 1
-            }
-        }
-
-        Kit.StatusBadge {
-            id: status
-            objectName: "tuneStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: header.statusY
         }
     }
 
@@ -535,6 +393,7 @@ Rectangle {
                 width: kickView.plotWidth
                 height: kickView.plotHeight
                 theme: panel.theme
+                live: panel.playing
                 points: panel.live.trajectory
                 settledHz: panel.settled ? panel.live.settledHz : 0
                 settledName: panel.settled ? panel.noteLabel(panel.live.settledNote, panel.flats) : ""

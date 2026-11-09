@@ -178,18 +178,6 @@ Rectangle {
     function timeLabel() {
         return mode === 3 ? "Max Delay" : "Delay"
     }
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        if (info.name === undefined)
-            return ""
-        return (info.group === info.name ? info.name : info.group + " · " + info.name).toUpperCase()
-    }
-    function readoutValue(id) {
-        return id === "" || controller.revision < 0 ? "" : controller.display(id)
-    }
-
     // A glass section with a title.
     component Plate: Rectangle {
         id: plate
@@ -236,6 +224,7 @@ Rectangle {
         required property string parameterId
         property int diameter: panel.theme.cellDiameter
         property bool inactive: false
+        property string inactiveReason: ""
         property string label: ""
         width: Math.max(diameter + panel.theme.cellWidthPad, panel.theme.cellMinWidth)
         height: diameter + panel.theme.cellHeightPad
@@ -247,6 +236,7 @@ Rectangle {
             parameterId: cell.parameterId
             diameter: cell.diameter
             inactive: cell.inactive
+            inactiveReason: cell.inactiveReason
             label: cell.label !== "" ? cell.label : cellKnob.info.name !== undefined ? cellKnob.info.name : ""
         }
     }
@@ -260,184 +250,74 @@ Rectangle {
 
     // ---- Header ---------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
-
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
         // The wordmark with its own small orbit.
-        Item {
-            id: mark
-            width: panel.theme.markSize
-            height: panel.theme.markSize
-            Rectangle {
-                anchors.centerIn: parent
-                width: panel.theme.markRingWidth
-                height: panel.theme.markRingHeight
-                radius: panel.theme.markRingHeight / 2
-                color: "transparent"
-                border.color: Qt.rgba(panel.theme.accent.r, panel.theme.accent.g, panel.theme.accent.b,
-                                      panel.theme.markRingAlpha)
-                border.width: panel.theme.markRingStroke
-                rotation: panel.theme.markRingTilt
-            }
-            Rectangle {
-                anchors.centerIn: parent
-                width: panel.theme.markCoreSize
-                height: panel.theme.markCoreSize
-                radius: panel.theme.markCoreSize / 2
-                gradient: Gradient {
-                    GradientStop { position: 0; color: panel.theme.glint }
-                    GradientStop { position: 1; color: panel.theme.accent }
-                }
-            }
-            Rectangle {
-                x: panel.theme.markMoonX
-                y: panel.theme.markMoonY
-                width: panel.theme.markMoonSize
-                height: panel.theme.markMoonSize
-                radius: panel.theme.markMoonSize / 2
-                color: panel.theme.companion
-            }
-        }
-        Text {
-            id: wordmark
-            x: mark.width + panel.theme.spaceMd
-            y: 0
-            text: "ORBIT"
-            color: panel.theme.ink
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Light
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        Text {
-            x: wordmark.x + panel.theme.taglineIndent
-            y: wordmark.y + wordmark.height + panel.theme.taglineGap
-            text: "MODULATION · " + panel.theme.modeTaglines[panel.mode]
-            color: panel.theme.accent
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.taglineSpacing
-        }
-
-        // Preset browser and readout.
-        Row {
-            id: browser
-            x: panel.theme.browserX
-            y: panel.theme.browserY
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "orbitPresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "orbitPresetDisplay"
-                width: panel.theme.presetDisplayWidth
-                height: panel.theme.presetDisplayHeight
-                radius: panel.theme.presetDisplayRadius
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                border.width: activeFocus ? panel.theme.focusStroke : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.accent)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
-                Text {
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetCaptionY
-                    text: panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.presetCategorySpacing
-                }
-                Text {
-                    objectName: "orbitPresetName"
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetNameY
-                    width: panel.theme.presetNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.pixelSize: panel.theme.typeHeading
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-                Rectangle {
-                    x: panel.theme.presetDividerX
-                    y: panel.theme.presetDividerInset
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.theme.presetDividerInset
-                    color: panel.theme.wellEdge
-                }
-                Text {
-                    objectName: "orbitReadout"
-                    x: panel.theme.presetReadoutX
-                    y: panel.theme.presetCaptionY
-                    width: display.width - x - panel.theme.presetReadoutRight
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.readoutSpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "orbitReadoutValue"
-                    x: panel.theme.presetReadoutX
-                    y: panel.theme.presetValueY
-                    width: display.width - x - panel.theme.presetReadoutRight
-                    text: panel.readoutValue(panel.theme.lastTouched)
-                    color: panel.theme.accent
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeSubtitle
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.presetChevronMargin
+        brand: Component {
+            Row {
+                spacing: panel.theme.spaceMd
+                Item {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.accent
-                    font.pixelSize: panel.theme.typeBody
+                    width: panel.theme.markSize
+                    height: panel.theme.markSize
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: panel.theme.markRingWidth
+                        height: panel.theme.markRingHeight
+                        radius: panel.theme.markRingHeight / 2
+                        color: "transparent"
+                        border.color: Qt.rgba(panel.theme.accent.r, panel.theme.accent.g,
+                                              panel.theme.accent.b, panel.theme.markRingAlpha)
+                        border.width: panel.theme.markRingStroke
+                        rotation: panel.theme.markRingTilt
+                    }
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: panel.theme.markCoreSize
+                        height: panel.theme.markCoreSize
+                        radius: panel.theme.markCoreSize / 2
+                        gradient: Gradient {
+                            GradientStop { position: 0; color: panel.theme.glint }
+                            GradientStop { position: 1; color: panel.theme.accent }
+                        }
+                    }
+                    Rectangle {
+                        x: panel.theme.markMoonX
+                        y: panel.theme.markMoonY
+                        width: panel.theme.markMoonSize
+                        height: panel.theme.markMoonSize
+                        radius: panel.theme.markMoonSize / 2
+                        color: panel.theme.companion
+                    }
                 }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
+                Column {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: panel.theme.subtitleGap
+                    Text {
+                        objectName: "orbitWordmark"
+                        text: "ORBIT"
+                        color: panel.theme.wordmarkInk
+                        font.pixelSize: panel.theme.wordmarkSize
+                        font.weight: panel.theme.wordmarkWeight
+                        font.letterSpacing: panel.theme.wordmarkSpacing
+                    }
+                    Text {
+                        objectName: "orbitSubtitle"
+                        x: panel.theme.taglineIndent
+                        text: "MODULATION · " + panel.theme.modeTaglines[panel.mode]
+                        color: panel.theme.subtitleInk
+                        font.pixelSize: panel.theme.subtitleSize
+                        font.bold: true
+                        font.letterSpacing: panel.theme.subtitleSpacing
                     }
                 }
             }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "orbitPresetNext"
-                direction: 1
-            }
-        }
-
-        Kit.StatusBadge {
-            id: status
-            objectName: "orbitStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: panel.theme.statusY
         }
     }
 
@@ -608,23 +488,15 @@ Rectangle {
                 font.bold: true
             }
         }
-        Row {
+        // What the sky shows: the running LFOs, or a preview at the
+        // patch's rate. The header's badge is the panel's status.
+        Caption {
+            objectName: "orbitLiveCaption"
             x: panel.theme.skyInsetX
             anchors.bottom: parent.bottom
             anchors.bottomMargin: panel.theme.skyInsetY
-            spacing: panel.theme.liveLampGap
-            Rectangle {
-                anchors.verticalCenter: parent.verticalCenter
-                width: panel.theme.liveLampSize
-                height: panel.theme.liveLampSize
-                radius: panel.theme.liveLampSize / 2
-                color: panel.isLive ? panel.theme.live : panel.theme.inkFaint
-            }
-            Caption {
-                objectName: "orbitLiveCaption"
-                text: panel.isLive ? "LIVE" : "PREVIEW · NOT PLAYING"
-                color: panel.isLive ? panel.theme.live : panel.theme.inkFaint
-            }
+            text: panel.isLive ? "PLAYING" : "PREVIEW · NOT PLAYING"
+            color: panel.isLive ? panel.theme.inkDim : panel.theme.inkFaint
         }
         Caption {
             anchors.right: parent.right
@@ -645,21 +517,31 @@ Rectangle {
         height: sky.height
         title: "SWEEP"
         note: panel.mode === 4 ? "LOG FREQUENCY" : panel.mode === 6 ? "LEVEL" : "DELAY TIME"
-        OrbitSweep {
+        // The LFO cycles' time along the shared frame; the range track
+        // above them prints its own scale with units.
+        Kit.PlotFrame {
             x: panel.theme.sweepInset
             y: panel.theme.plateBodyY
             width: parent.width - 2 * panel.theme.sweepInset
             height: parent.height - panel.theme.plateBodyY - panel.theme.sweepInset
             theme: panel.theme
-            range: panel.controller.revision >= 0 ? panel.sweepRange() : ({ lo: 0, hi: 1, unit: "ms", log: false })
-            leftValue: panel.sweepLeft()
-            rightValue: panel.sweepRight()
-            shape: panel.shape
-            stereoDegrees: panel.usesStereo ? panel.stereo : panel.mode === 1 ? 240 : 180
-            phase: panel.previewPhase
             live: panel.isLive
-            lfoLeft: panel.isLive ? panel.live.lfo_left : 0
-            lfoRight: panel.isLive ? panel.live.lfo_right : 0
+            xTicks: sweepView.cycleTicks
+            xUnit: "cycles"
+            OrbitSweep {
+                id: sweepView
+                anchors.fill: parent
+                theme: panel.theme
+                range: panel.controller.revision >= 0 ? panel.sweepRange() : ({ lo: 0, hi: 1, unit: "ms", log: false })
+                leftValue: panel.sweepLeft()
+                rightValue: panel.sweepRight()
+                shape: panel.shape
+                stereoDegrees: panel.usesStereo ? panel.stereo : panel.mode === 1 ? 240 : 180
+                phase: panel.previewPhase
+                live: panel.isLive
+                lfoLeft: panel.isLive ? panel.live.lfo_left : 0
+                lfoRight: panel.isLive ? panel.live.lfo_right : 0
+            }
         }
         Caption {
             x: panel.theme.sweepCaptionX
@@ -686,6 +568,7 @@ Rectangle {
             Cell {
                 parameterId: "orbit.rate"
                 inactive: panel.synced
+                inactiveReason: panel.synced ? "Rate follows Sync" : ""
             }
             Cell {
                 parameterId: "orbit.depth"
@@ -693,6 +576,10 @@ Rectangle {
             Cell {
                 parameterId: "orbit.stereo"
                 inactive: !panel.usesStereo
+                inactiveReason: panel.usesStereo ? ""
+                    : panel.theme.modeNames[panel.mode].charAt(0)
+                      + panel.theme.modeNames[panel.mode].slice(1).toLowerCase()
+                      + " sets its own stereo spread"
             }
         }
         Column {
@@ -707,17 +594,15 @@ Rectangle {
                 parameterId: "orbit.sync"
             }
             Caption { text: "DIVISION" }
-            Item {
+            Kit.Dropdown {
                 width: panel.theme.motionChoiceWidth
                 height: panel.theme.dropdownHeight
-                opacity: panel.synced ? 1 : panel.theme.unsyncedOpacity
-                Kit.Dropdown {
-                    anchors.fill: parent
-                    controller: panel.controller
-                    theme: panel.theme
-                    menu: menu
-                    parameterId: "orbit.division"
-                }
+                controller: panel.controller
+                theme: panel.theme
+                menu: menu
+                parameterId: "orbit.division"
+                inactive: !panel.synced
+                inactiveReason: panel.synced ? "" : "Division needs Sync on"
             }
             Caption { text: "SHAPE" }
             Kit.Segment {
@@ -730,7 +615,9 @@ Rectangle {
         Caption {
             x: panel.theme.plateContentX
             y: panel.theme.motionFootY
-            text: panel.synced ? "RATE FOLLOWS THE TEMPO" : "FREE RUNNING"
+            color: panel.synced || !panel.usesStereo ? panel.theme.inkDim : panel.theme.inkFaint
+            text: (panel.synced ? "RATE FOLLOWS SYNC" : "FREE RUNNING")
+                + (panel.usesStereo ? "" : " · " + panel.theme.modeNames[panel.mode] + " SETS ITS STEREO")
         }
     }
 

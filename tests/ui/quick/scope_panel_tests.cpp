@@ -395,9 +395,9 @@ void the_grid_follows_the_window() {
   require(QTest::qWaitFor(
               [&] {
                 return label_texts(*panel) ==
-                       QStringList({QStringLiteral("0"), QStringLiteral("4.00 ms"),
-                                    QStringLiteral("8.00 ms"), QStringLiteral("12.0 ms"),
-                                    QStringLiteral("16.0 ms")});
+                       QStringList({QStringLiteral("0"), QStringLiteral("4.00"),
+                                    QStringLiteral("8.00"), QStringLiteral("12.0"),
+                                    QStringLiteral("16.0")});
               },
               1000),
           "free time divides the window: " + label_texts(*panel).join(' ').toStdString());

@@ -9,7 +9,11 @@ import Oscillate.Format
 // painted by dragging across the steps (one undo step a drag); toggles
 // paint the state the first step flipped to; choices step on with a
 // click (back with the right button). Double-click returns a step to its
-// default; the length steps with − and + or the wheel.
+// default; the length steps with − and + or the wheel. From the keyboard
+// the lock toggles with Space, the length steps with the arrows, and the
+// steps take a cursor: Left/Right move it, Up/Down step its value (a
+// toggle flips, a choice steps on), Space flips or steps on, Delete
+// returns it to its default.
 Item {
     id: lane
     required property var panel
@@ -30,6 +34,8 @@ Item {
     readonly property bool signed: spec.minimum < 0
     // A toggle's dot, as a share of the cell's shorter side.
     readonly property real toggleDotShare: 0.42
+    // The step the keyboard cursor is on.
+    property int cursor: 0
 
     objectName: "novaArpLane:" + spec.id
     implicitHeight: panel.theme.arpLaneHeight
@@ -52,6 +58,25 @@ Item {
             return signed ? Format.signed_number(Math.round(v), 0) : Format.number(Math.round(v), 0)
         return ""
     }
+    function touchStep(i) {
+        panel.touchId(stepId(i), spec.name.toUpperCase() + " " + (i + 1))
+    }
+    // Steps a step's value from the keyboard: a toggle flips, a choice
+    // steps on (wrapping), a number steps by one, a level by the
+    // controller's step.
+    function keyStep(i, direction) {
+        if (!controller.editable)
+            return
+        if (spec.kind === "toggle") {
+            controller.set_value(stepId(i), valueAt(i) >= 0.5 ? 0 : 1)
+        } else if (spec.kind === "choice") {
+            const count = spec.choices.length
+            controller.set_value(stepId(i), (Math.round(valueAt(i)) + direction + count) % count)
+        } else {
+            controller.step(stepId(i), direction, false)
+        }
+        touchStep(i)
+    }
     function setLength(n) {
         controller.set_value(base + "length", Math.max(1, Math.min(maxSteps, n)))
         panel.touchId(base + "length", spec.name.toUpperCase() + " LENGTH")
@@ -71,7 +96,11 @@ Item {
             height: lane.panel.theme.arpLockSize
             radius: lane.panel.theme.radiusMd
             color: lane.locked ? lane.panel.theme.soft(lane.accent) : "transparent"
-            border.color: lane.locked ? lane.accent : lane.panel.theme.line2
+            border.color: activeFocus ? lane.accent : lane.locked ? lane.accent : lane.panel.theme.line2
+            border.width: activeFocus ? lane.panel.theme.strokeBold : lane.panel.theme.hairline
+            activeFocusOnTab: true
+            Keys.onSpacePressed: lane.arp.set_lock(lane.spec.id, !lane.locked)
+            Keys.onReturnPressed: lane.arp.set_lock(lane.spec.id, !lane.locked)
             Accessible.role: Accessible.CheckBox
             Accessible.name: "Lock " + lane.spec.name
             Accessible.checked: lane.locked
@@ -84,6 +113,7 @@ Item {
             MouseArea {
                 id: lockArea
                 anchors.fill: parent
+                anchors.margins: -lane.panel.theme.hitOutset(parent.width)
                 hoverEnabled: true
                 onClicked: lane.arp.set_lock(lane.spec.id, !lane.locked)
             }
@@ -114,7 +144,13 @@ Item {
             height: lane.panel.theme.arpLengthHeight
             radius: lane.panel.theme.arpLengthRadius
             color: lane.panel.theme.wellFill
-            border.color: lane.panel.theme.line2
+            border.color: activeFocus ? lane.accent : lane.panel.theme.line2
+            border.width: activeFocus ? lane.panel.theme.strokeBold : lane.panel.theme.hairline
+            activeFocusOnTab: lane.controller.editable
+            Keys.onUpPressed: lane.setLength(lane.length + 1)
+            Keys.onRightPressed: lane.setLength(lane.length + 1)
+            Keys.onDownPressed: lane.setLength(lane.length - 1)
+            Keys.onLeftPressed: lane.setLength(lane.length - 1)
             Accessible.role: Accessible.SpinBox
             Accessible.name: lane.spec.name + " length"
             Accessible.description: String(lane.length)
@@ -127,8 +163,10 @@ Item {
                     color: lane.panel.theme.dim
                     font.pixelSize: lane.panel.theme.typeBody
                     MouseArea {
-                        anchors.fill: parent
-                        anchors.margins: -lane.panel.theme.arpLengthHit
+                        // A least-hit square on the glyph, clear of the other's.
+                        anchors.centerIn: parent
+                        width: Math.max(parent.width, lane.panel.theme.minHitSize)
+                        height: Math.max(parent.height, lane.panel.theme.minHitSize)
                         enabled: lane.controller.editable
                         onClicked: lane.setLength(lane.length - 1)
                     }
@@ -147,8 +185,10 @@ Item {
                     color: lane.panel.theme.dim
                     font.pixelSize: lane.panel.theme.typeBody
                     MouseArea {
-                        anchors.fill: parent
-                        anchors.margins: -lane.panel.theme.arpLengthHit
+                        // A least-hit square on the glyph, clear of the other's.
+                        anchors.centerIn: parent
+                        width: Math.max(parent.width, lane.panel.theme.minHitSize)
+                        height: Math.max(parent.height, lane.panel.theme.minHitSize)
                         enabled: lane.controller.editable
                         onClicked: lane.setLength(lane.length + 1)
                     }
@@ -171,6 +211,23 @@ Item {
         x: lane.headerWidth
         width: lane.width - x
         height: lane.height
+        activeFocusOnTab: true
+        Accessible.role: Accessible.Table
+        Accessible.name: lane.spec.name + " steps"
+        Accessible.description: "Step " + (lane.cursor + 1) + ": " + (lane.label(lane.valueAt(lane.cursor)) || String(lane.valueAt(lane.cursor)))
+            + ". Left and Right move, Up and Down change, Space flips or steps on, Delete resets"
+        Keys.onLeftPressed: lane.cursor = Math.max(0, lane.cursor - 1)
+        Keys.onRightPressed: lane.cursor = Math.min(lane.maxSteps - 1, lane.cursor + 1)
+        Keys.onUpPressed: lane.keyStep(lane.cursor, 1)
+        Keys.onDownPressed: lane.keyStep(lane.cursor, -1)
+        Keys.onSpacePressed: lane.keyStep(lane.cursor, 1)
+        Keys.onReturnPressed: lane.keyStep(lane.cursor, 1)
+        Keys.onDeletePressed: {
+            if (!lane.controller.editable)
+                return
+            lane.controller.set_value(lane.stepId(lane.cursor), lane.spec.fallback)
+            lane.touchStep(lane.cursor)
+        }
         Repeater {
             model: lane.maxSteps
             delegate: Rectangle {
@@ -179,13 +236,15 @@ Item {
                 readonly property real value: lane.valueAt(index)
                 readonly property bool inside: index < lane.length
                 readonly property bool here: index === lane.playing
+                readonly property bool keyed: cells.activeFocus && index === lane.cursor
                 objectName: "novaArpCell:" + lane.stepId(index)
                 x: index * (lane.cellWidth + lane.cellGap)
                 width: lane.cellWidth
                 height: cells.height
                 radius: lane.panel.theme.radiusSm
+                border.width: keyed ? lane.panel.theme.strokeBold : lane.panel.theme.hairline
                 color: lane.panel.theme.wellFill
-                border.color: here ? lane.panel.theme.am
+                border.color: keyed ? lane.accent : here ? lane.panel.theme.am
                     : index % 4 === 0 && inside ? lane.panel.theme.line2 : lane.panel.theme.line
                 opacity: inside ? 1 : lane.panel.theme.arpCellOutsideOpacity
                 // Levels: a bar from the floor. Numbers: a bar from zero.
@@ -245,6 +304,7 @@ Item {
             }
             onPressed: mouse => {
                 const i = lane.cellAt(mouse.x)
+                lane.cursor = i
                 if (lane.spec.kind === "choice") {
                     const count = lane.spec.choices.length
                     const step = mouse.button === Qt.RightButton || (mouse.modifiers & Qt.ShiftModifier) ? -1 : 1

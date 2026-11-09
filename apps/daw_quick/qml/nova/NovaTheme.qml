@@ -39,8 +39,6 @@ KitTheme {
     arrowPrevious: "◀"
     arrowNext: "▶"
     arrowGlyphSize: 11
-    arrowWidth: 34
-    arrowHeight: 44
 
     // The plate and its parts: neutral graphite, darkest at the rails.
     property color bg: "#0a0a0b"
@@ -326,30 +324,56 @@ KitTheme {
     // ---- Panel, voices, presets, tables, constellation, arp page tokens ----
     // The panel (NovaPanel): its case's corner.
     property real panelRadius: 14
-    // The header: the gap between its parts; BROWSE, ✦ CONSTELLATION, the
-    // preset box and the page bar share one height and corner; the keys
-    // pill and zoom chips are shorter. Button labels' padding and tracking.
+    // The header (Kit.DeviceHeader): its top and foot; the first row (the
+    // wordmark, the preset browser, the readout, the status badge) and the
+    // second (views and tools) and the gap between them and between their
+    // parts. BROWSE, ✦ CONSTELLATION and the page bar share one height and
+    // corner; the keys pill and zoom chips are shorter. Button labels'
+    // padding and tracking; the gap before CPU.
+    property real headerY: 6
+    property real headerFoot: 7
+    headerHeight: 42
+    headerGap: headerSpacing
+    headerModeGap: spaceXs
     property real headerSpacing: 10
     property real headerControlHeight: 30
     property real headerControlRadius: 7
     property real headerChipHeight: 24
     property real headerButtonPadding: 22
     property real headerLabelSpacing: 0.8
+    property real headerMeterGap: spaceSm
     // The NOVA wordmark: light capitals tracked wide, the gradient's cyan
     // stop, and the baseline's height above the box's foot.
-    property int wordmarkSize: 19
+    wordmarkSize: 19
     property real wordmarkTracking: 7
     property real wordmarkWidth: 96
     property real wordmarkHeight: 26
     property real wordmarkMidStop: 0.4
     property real wordmarkDescent: 5
-    // The preset box: its arrows' and name's corners, the CATEGORY and
-    // EDITED tags' tracking, and the EDITED tag.
-    property real presetArrowRadius: 6
-    property real presetNameRadius: 5
-    property real presetTagSpacing: 0.8
-    property real presetEditedPadding: 10
-    property real presetEditedHeight: 15
+    // The preset browser: a well with the source tag over the name, between
+    // the ◀ ▶ arrows; the readout's box matches it.
+    arrowWidth: 28
+    arrowHeight: 36
+    arrowRadius: 6
+    presetDisplayWidth: 300
+    presetDisplayRadius: headerControlRadius
+    presetFill: wellFill
+    presetEdge: line2
+    presetTagY: 5
+    presetTagSpacing: 0.8
+    presetTagInk: faint
+    presetNameY: 16
+    presetNameSize: typeEmphasis
+    // Plot frames: Nova's text floor is the small size (its strips' rule).
+    plotTickSize: typeSmall
+    plotChipSize: typeSmall
+    presetNameBold: false
+    presetNameInk: text
+    presetChevronInk: dim
+    readoutFill: wellFill
+    readoutEdge: line2
+    readoutNameY: presetTagY
+    readoutNameInk: faint
     // The page bar's tabs.
     property real pageTabPadding: 9
     property real pageTabRadius: 5
@@ -361,10 +385,10 @@ KitTheme {
     property real keysPillEdgeAlpha: 0.3
     property real keysLedSize: 7
     property real keysLabelSpacing: 0.5
-    // The signal strip: an item's height, the › separator's width, the
-    // light, the title's tracking, the thumbnail (about 3.4 × 1.2 of 12 px
-    // type) and an off module's thumbnail opacity.
-    property real stripItemHeight: 20
+    // The signal strip: an item's height (the kit's least hit size), the ›
+    // separator's width, the light, the title's tracking, the thumbnail
+    // (about 3.4 × 1.2 of 12 px type) and an off module's thumbnail opacity.
+    property real stripItemHeight: minHitSize
     property real stripSeparatorWidth: 12
     property real stripLedSize: 6
     property real stripTitleSpacing: 0.8
@@ -380,9 +404,6 @@ KitTheme {
     property real stripThumbnailVoiceAlphaStep: 0.15
     property real stripThumbnailMeterTrackAlpha: 0.25
     property real stripThumbnailMeterAlpha: 0.85
-    // The status line: its side margin and its labels' tracking.
-    property real statusLineMargin: 14
-    property real statusLabelSpacing: 0.8
     // The route popover over a modulated knob.
     property real routePopoverWidth: 220
     property real routePopoverRadius: 9
@@ -441,15 +462,16 @@ KitTheme {
     property real voicesAgeCaptionBottom: 24
     property real voicesAgeCaptionSpacing: 1.4
     property real voicesAgeHintHeight: 54
-    // The seed readout and the voice-cards stepper.
-    property real voicesFieldHeight: 22
+    // The seed readout and the voice-cards stepper (its − and + at least
+    // the least hit size).
+    property real voicesFieldHeight: minHitSize
     property real voicesSeedPad: 14
     property real voicesStepperWidth: 112
-    property real voicesStepperButtonWidth: 22
+    property real voicesStepperButtonWidth: minHitSize
     // Voice Lanes' bars: width bounds and share of a voice's cell, the zero
     // line's lift, the room above and below the swing, the fill's tint, the
-    // value cap, the +/0/− scale's column and baseline, and the voice
-    // number and value lines from the bottom.
+    // value cap, the room right of the last voice, and the voice number
+    // and value lines from the bottom.
     property real voicesBarMinWidth: 6
     property real voicesBarWidthRatio: 0.56
     property real voicesBarMaxWidth: 56
@@ -457,8 +479,7 @@ KitTheme {
     property real voicesLaneAmpInset: 34
     property real voicesBarFillAlpha: 0.2
     property real voicesBarCapHeight: 3
-    property real voicesScaleX: 16
-    property real voicesScaleBaseline: 4
+    property real voicesLaneEnd: 8
     property real voicesVoiceNumberBottom: 22
     property real voicesLaneValueSize: 9.5
     property real voicesLaneValueBottom: 8
@@ -486,7 +507,7 @@ KitTheme {
     // heights.
     property real browserPad: 10
     property real browserChipsMaximum: 132
-    property real browserChipHeight: 21
+    property real browserChipHeight: minHitSize
     property real browserRowHeight: 30
     property real browserTaggedRowHeight: 46
     property real browserHeaderRowHeight: 26
@@ -511,7 +532,7 @@ KitTheme {
     // it), the ★ button, and how far the tags line rises into the row above.
     property real browserDotSize: 7
     property real browserNameX: 27
-    property real browserStarSize: 22
+    property real browserStarSize: minHitSize
     property real browserTagsRaise: 7
     // The Constellation (NovaConstellationView). Canvas CSS colours: the
     // sky's centre, the grid, the cursor, the links from the cursor to the
@@ -538,7 +559,7 @@ KitTheme {
     property real constellationBarAlpha: 0.9
     property real constellationBarSpacing: 10
     property real constellationLabelSpacing: 1.4
-    property real constellationChipHeight: 22
+    property real constellationChipHeight: minHitSize
     property real constellationChipFillAlpha: 0.08
     property real constellationChipSpacing: 0.8
 
@@ -608,7 +629,7 @@ KitTheme {
     property real arpPageVaryWidth: 78
     // FILL.
     property real arpPageFillPadding: 18
-    property real arpPageFillHeight: 22
+    property real arpPageFillHeight: minHitSize
     property real arpPageFillSpacing: 0.6
     // HARMONY · RHYTHM: the scale row, the Euclidean label and knobs, dimmed
     // outside Euclidean mode, and the rhythm ring (its radius, inset from the
@@ -638,6 +659,9 @@ KitTheme {
     property real arpPageAmountHeight: 8
     property real arpPageAmountOpacity: 0.7
     property real arpPageAmountSlop: 6
+    // The amount's arrow-key step, and with Shift.
+    property real arpPageAmountKeyStep: 0.01
+    property real arpPageAmountKeyCoarseStep: 0.1
     // The note on routing ARP MOD and ARP ACCENT, above the card's bottom.
     property real arpPageNoteBottom: 17
     // END nova block 1
@@ -645,11 +669,11 @@ KitTheme {
     // ---- Pages, cards, controls, FX, matrix and displays tokens ----
     // Section headings (NovaHeading): their letter spacing.
     property real headingSpacing: 1.3
-    // LEDs (NovaLed): the lamp, its glow's growth past it and the click margin.
+    // LEDs (NovaLed): the lamp and its glow's growth past it.
     property int ledSize: 13
     property real ledGlowGrow: 8
-    property real ledHitOutset: 3
-    // A modulation source's drag handle (NovaHandle).
+    // A modulation source's drag handle (NovaHandle), drawn; its pointer
+    // area is the kit's least hit size.
     property int handleSize: 16
     // Pills (NovaPill): the label's padding, the height and the tracking.
     property real pillPad: 16
@@ -715,14 +739,13 @@ KitTheme {
     property real routingHeaderSpacing: 1
     property real routingCellRadius: 5
     property real routingDotSize: 6
-    // Macros (NovaMacros): the name's side room and click margin, the rename field.
+    // Macros (NovaMacros): the name's side room, the rename field.
     property real macroNameRoom: 4
-    property real macroNameHit: 3
     property real macroEditOutset: 2
     property real macroEditRoom: 6
     // Modulation source chips (NovaSourceChip): the tab, its tint and the
-    // raised route count.
-    property real chipHeight: 22
+    // raised route count. The tab is the kit's least hit size tall.
+    property real chipHeight: minHitSize
     property real chipRadius: 5
     property real chipLetterSpacing: 0.7
     property real chipFillAlpha: 0.1
@@ -793,7 +816,6 @@ KitTheme {
     // The clip sequencer (NovaClipSequencer): the root stepper, the export
     // button, and a note's alpha by velocity.
     property real seqRootInset: 6
-    property real seqArrowHit: 4
     property real seqExportPad: 14
     property real seqNoteMinAlpha: 0.45
     property real seqNoteVelocityAlpha: 0.55
@@ -812,7 +834,7 @@ KitTheme {
     property real arpLibraryTitleTop: 12
     property real arpSearchTop: 32
     property real arpSearchHeight: 24
-    property real arpChipHeight: 19
+    property real arpChipHeight: minHitSize
     property real arpChipPad: 12
     property real arpChipSpacing: 0.6
     property real arpDotSize: 6
@@ -828,6 +850,10 @@ KitTheme {
     property real moduleExpandedEdge: 1.5
     property real moduleOffOpacity: 0.42
     property real moduleOffHoverOpacity: 0.75
+    // A folded card's OFF chip: height, padding and tracking.
+    property real moduleOffChipHeight: 15
+    property real moduleOffChipPadding: 10
+    property real moduleOffChipSpacing: 0.8
     property real moduleFlashWidth: 5
     // Arp lanes (NovaArpLane): the lane, its header (lock, name, length box)
     // and its step cells; steps past the length fade; level and number bars.
@@ -838,7 +864,6 @@ KitTheme {
     property real arpLengthWidth: 54
     property real arpLengthHeight: 20
     property real arpLengthRadius: 5
-    property real arpLengthHit: 3
     property real arpLengthDigits: 16
     property real arpCellOutsideOpacity: 0.28
     property real arpBarInsetX: 2
@@ -862,7 +887,7 @@ KitTheme {
     // A module strip on the FX page (NovaFxModule): its corner and padding,
     // the selected edge's tint, the header's gaps and name, the preset box,
     // the collapsed summary, the gap between the display and the knobs, the
-    // EQ's band grid with a band that is off faded.
+    // EQ's band grid.
     property real fxStripRadius: 12
     property real fxStripPad: 12
     property real fxStripSelectedAlpha: 0.55
@@ -870,12 +895,15 @@ KitTheme {
     property real fxStripNameSpacing: 2.2
     property real fxStripNameHit: 4
     property real fxPresetTextRoom: 12
-    property real fxPresetArrowWidth: 22
+    // At least the kit's least hit size: the arrows are their own targets.
+    property real fxPresetArrowWidth: minHitSize
+    // The focus ring around a glyph button (a strip's name, ▾, ⋯): its
+    // gap from the glyph.
+    property real fxFocusOutset: spaceXxs
     property real fxSummaryGap: 14
     property real fxBodyGap: 30
     property real eqColumnGap: 18
     property real eqRowGap: 10
-    property real eqBandOffOpacity: 0.4
     // The MATRIX page (NovaMatrixPage): the header pills, column labels and
     // rule; the rows; each column's inset for a control, a bar or a mark, and
     // text; the source chip, the aux menu's room, the amount, curve and scale.
@@ -896,6 +924,11 @@ KitTheme {
     property real matrixScaleHeight: 8
     property real matrixScaleOpacity: 0.8
     property real matrixScaleHit: 6
+    // A row's arrow keys: the amount and scale step, with Shift coarser,
+    // and the curve's bend step.
+    property real matrixKeyStep: 0.01
+    property real matrixKeyCoarseStep: 0.1
+    property real matrixBendKeyStep: 0.1
     // The FX page's rack (NovaFxPage): a translucent well with its padding;
     // its tiles (bus tabs, chain rows, the routing box, + Add effect) share a
     // corner and their names' tracking; a bus tab's text and level meter; the
@@ -949,7 +982,6 @@ KitTheme {
     property real fxLabelLift: 4
     property real fxSideLabelInset: 10
     property real fxSideLabelTop: 12
-    property real fxAxisLabelGap: 3
     property real fxBandCurveAlpha: 0.45
     property real fxGrMeterWidth: 14
     property real fxGrMeterGap: 10

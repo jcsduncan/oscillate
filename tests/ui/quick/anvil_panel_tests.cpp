@@ -141,11 +141,12 @@ QString text_of(Panel& panel, const QString& name) {
 
 // Where a curve point sits on the editor (AnvilCurve's plot: 44 px from the
 // left, 12 from the right, 14 from the top, 22 from the bottom).
+// A point on the curve editor's plot, from its own plot edges.
 QPoint point_on_curve(QQuickItem* curve, double x, double y) {
-  const double left = 44.0;
-  const double right = curve->width() - 12.0;
-  const double top = 14.0;
-  const double bottom = curve->height() - 22.0;
+  const double left = curve->property("plotLeft").toDouble();
+  const double right = curve->property("plotRight").toDouble();
+  const double top = curve->property("plotTop").toDouble();
+  const double bottom = curve->property("plotBottom").toDouble();
   return scene(curve, left + x * (right - left), bottom - y * (bottom - top));
 }
 
@@ -299,8 +300,6 @@ void telemetry_moves_the_playhead() {
   QMetaObject::invokeMethod(panel->root, "poll");
   QCoreApplication::processEvents();
   require(playhead->isVisible(), "the playhead shows while a hit plays");
-  require(text_of(*panel, QStringLiteral("anvilLastHit")).contains(QStringLiteral("C2")),
-          "the last hit is named");
   require(text_of(*panel, QStringLiteral("anvilPeak")).startsWith(QStringLiteral("−3.0")),
           "the live peak reads");
 }

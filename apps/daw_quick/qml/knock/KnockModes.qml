@@ -1,12 +1,12 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Oscillate.Format
 
 // The selected pad's ringing modes on a log frequency axis: one bar per
 // designed mode (knock::design_pad through the panel model), coloured by
 // what rings it (resonator, coupled, body). From the moment the pad is hit
 // each bar decays at its own T60; at rest a faint outline shows the modes
-// the next hit will ring.
+// the next hit will ring. The panel frames it (Kit.PlotFrame), labelling
+// the frequency axis from `frequencyTicks`.
 Canvas {
     id: view
     required property KnockTheme theme
@@ -33,16 +33,15 @@ Canvas {
     readonly property real restingAlpha: theme.modeRestingAlpha
     // Repaint once a frame while the modes ring.
     readonly property int frameMs: 16
-    // The plot's top and bottom margins (the title above, the Hz labels
-    // below), and where a gridline's Hz label sits.
+    // The plot's top margin, under the title and the key.
     readonly property real plotTop: 30
-    readonly property real plotBottom: 22
-    readonly property real gridLabelShift: 8
-    readonly property real gridLabelBaseline: 7
     // A ringing mode's halo: its radius at silence and its growth at full level.
     readonly property real haloRadius: 4
     readonly property real haloGrowth: 6
     readonly property var gridHz: [50, 100, 200, 500, 1000, 2000, 5000, 10000]
+    // The gridlines as PlotFrame ticks, from this view's own mapping.
+    readonly property var frequencyTicks: width > 0 ? gridHz.map(hz => ({
+        at: xOf(hz) / width, label: hz >= 1000 ? (hz / 1000) + "k" : String(hz) })) : []
 
     objectName: "knockModes"
     renderStrategy: Canvas.Cooperative
@@ -73,12 +72,10 @@ Canvas {
         const ctx = getContext("2d")
         ctx.reset()
         const top = plotTop
-        const base = height - plotBottom
+        const base = height
         ctx.fillStyle = theme.well
         ctx.fillRect(0, 0, width, height)
-        ctx.font = theme.typeSmall + "px \"" + theme.mono + "\""
         ctx.strokeStyle = theme.line
-        ctx.fillStyle = theme.inkFaint
         ctx.lineWidth = theme.hairline
         for (const hz of gridHz) {
             const x = Math.round(xOf(hz)) + theme.hairline / 2
@@ -86,7 +83,6 @@ Canvas {
             ctx.moveTo(x, top)
             ctx.lineTo(x, base)
             ctx.stroke()
-            ctx.fillText(hz >= 1000 ? (hz / 1000) + "k" : String(hz), x - gridLabelShift, height - gridLabelBaseline)
         }
         const age = hitAt >= 0 ? (Date.now() - hitAt) / 1000 : -1
         let live = 0
@@ -129,17 +125,20 @@ Canvas {
             ringing = false
     }
 
+    // The title, then the key of parts (the frame's LIVE / PREVIEW chip
+    // takes the top-right corner).
     Text {
+        id: title
         x: view.theme.modesInset
         y: view.theme.spaceMd
-        text: "RINGING MODES · log frequency " + Format.hertz(view.minHz) + " – " + Format.hertz(view.maxHz)
+        text: "RINGING MODES · log frequency"
         color: view.theme.inkFaint
         font.family: view.theme.mono
         font.pixelSize: view.theme.typeBody
     }
     Row {
-        anchors.right: parent.right
-        anchors.rightMargin: view.theme.modesInset
+        anchors.left: title.right
+        anchors.leftMargin: view.theme.modesKeyLead
         y: view.theme.spaceMd
         spacing: view.theme.modesKeyGap
         Repeater {

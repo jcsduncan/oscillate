@@ -62,15 +62,6 @@ Rectangle {
     Accessible.role: Accessible.Pane
     Accessible.name: "Contour filter"
 
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        return info.name === undefined ? "" : (info.group + " · " + info.name).toUpperCase()
-    }
-    function readoutValue(id) {
-        return id === "" || controller.revision < 0 ? "" : controller.display(id)
-    }
     function chooseModel(index) {
         if (!controller.editable)
             return
@@ -167,156 +158,16 @@ Rectangle {
 
     // ---- Header ----------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
-
-        Text {
-            id: wordmark
-            y: panel.theme.spaceXxs
-            text: "CONTOUR"
-            color: panel.theme.ink
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Light
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        Rectangle {
-            x: wordmark.x + panel.theme.spaceXxs
-            y: wordmark.y + wordmark.height
-            width: panel.theme.wordmarkRuleWidth
-            height: panel.theme.strokeBold
-            color: panel.theme.accent
-        }
-        Text {
-            x: wordmark.x + panel.theme.subtitleX
-            y: wordmark.y + wordmark.height - panel.theme.spaceXs
-            text: "MULTIMODE FILTER · " + panel.familyNames[panel.model]
-            color: panel.theme.inkFaint
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.subtitleSpacing
-        }
-
-        // Preset browser and readout.
-        Row {
-            id: browser
-            x: panel.theme.browserX
-            y: panel.theme.spaceXs
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "contourPresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "contourPresetDisplay"
-                width: panel.theme.presetDisplayWidth
-                height: panel.theme.presetDisplayHeight
-                radius: panel.theme.presetDisplayRadius
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                border.width: activeFocus ? panel.theme.presetFocusStroke : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.accent)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
-                Text {
-                    x: panel.theme.spaceLg
-                    y: panel.theme.spaceXs
-                    text: panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.tagSpacing
-                }
-                Text {
-                    objectName: "contourPresetName"
-                    x: panel.theme.spaceLg
-                    y: panel.theme.presetNameY
-                    width: panel.theme.presetNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.pixelSize: panel.theme.typeHeading
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-                Rectangle {
-                    x: panel.theme.presetDividerX
-                    y: panel.theme.presetDividerInset
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.theme.presetDividerInset
-                    color: panel.theme.wellEdge
-                }
-                Text {
-                    objectName: "contourReadout"
-                    x: panel.theme.presetReadoutX
-                    y: panel.theme.spaceXs
-                    width: display.width - x - panel.theme.space2xl
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.readoutSpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "contourReadoutValue"
-                    x: panel.theme.presetReadoutX
-                    y: panel.theme.presetValueY
-                    width: display.width - x - panel.theme.space2xl
-                    text: panel.readoutValue(panel.theme.lastTouched)
-                    color: panel.theme.accent
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeSubtitle
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.presetChevronMargin
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.accent
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
-                    }
-                }
-            }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "contourPresetNext"
-                direction: 1
-            }
-        }
-
-        Kit.StatusBadge {
-            id: status
-            objectName: "contourStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: panel.theme.spaceLg
-        }
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        wordmark: "CONTOUR"
+        subtitle: "MULTIMODE FILTER · " + panel.familyNames[panel.model]
     }
 
     // ---- Screen and filter ------------------------------------------------------------
@@ -327,7 +178,7 @@ Rectangle {
     Plate {
         id: screenPlate
         title: "RESPONSE"
-        note: panel.liveOn ? "LIVE · MEASURED FROM THE FILTER" : "MEASURED FROM THE FILTER"
+        note: "MEASURED FROM THE FILTER"
         titleColor: panel.liveOn ? panel.theme.accent : panel.theme.inkDim
         x: panel.margin
         y: panel.rowAY
@@ -365,15 +216,27 @@ Rectangle {
                 }
             }
         }
-        ContourResponseView {
+        // The response, LIVE while the filter runs (the live curve burns
+        // over the set one), else a PREVIEW of the settings.
+        Kit.PlotFrame {
             x: panel.theme.screenInset
             y: panel.theme.screenTop
             width: screenPlate.width - 2 * panel.theme.screenInset
             height: screenPlate.height - panel.theme.screenTop - panel.theme.screenInset
-            controller: panel.controller
             theme: panel.theme
-            live: panel.live
-            liveResponse: panel.liveResponse
+            live: panel.liveOn
+            xUnit: "Hz"
+            yUnit: "dB"
+            xTicks: responseView.frequencyTicks
+            yTicks: responseView.levelTicks
+            ContourResponseView {
+                id: responseView
+                anchors.fill: parent
+                controller: panel.controller
+                theme: panel.theme
+                live: panel.live
+                liveResponse: panel.liveResponse
+            }
         }
     }
 
@@ -505,6 +368,7 @@ Rectangle {
                 y: panel.smallDialDrop
                 // Morph shapes the SEM only.
                 inactive: panel.model !== panel.semModel
+                inactiveReason: "Morph shapes the SEM model only"
             }
         }
     }
@@ -520,7 +384,7 @@ Rectangle {
         id: lfoPlate
         title: "LFO"
         titleColor: panel.lfoOn ? panel.theme.lfo : panel.theme.inkDim
-        note: panel.synced ? "TEMPO SYNC" : "FREE"
+        note: panel.synced ? "TEMPO SYNC · RATE FOLLOWS SYNC" : "FREE · DIVISION NEEDS SYNC"
         x: panel.margin
         y: panel.rowBY
         width: panel.theme.lfoPlateWidth
@@ -578,6 +442,7 @@ Rectangle {
             parameterId: "contour.lfo.division"
             accent: panel.theme.lfo
             inactive: !panel.synced
+            inactiveReason: "Division applies with Sync on"
         }
         Row {
             x: panel.theme.dialRowX
@@ -587,6 +452,7 @@ Rectangle {
                 parameterId: "contour.lfo.rate"
                 accent: panel.theme.lfo
                 inactive: panel.synced
+                inactiveReason: "Rate follows Sync"
             }
             Dial {
                 parameterId: "contour.lfo.depth"
@@ -603,7 +469,8 @@ Rectangle {
         id: envelopePlate
         title: "ENVELOPE"
         titleColor: panel.envelopeOn ? panel.theme.envelope : panel.theme.inkDim
-        note: panel.sidechain ? "FOLLOWS THE SIDECHAIN" : "FOLLOWS THE INPUT"
+        note: (panel.sidechain ? "FOLLOWS THE SIDECHAIN" : "FOLLOWS THE INPUT")
+            + (panel.envelopeOn ? "" : " · AMOUNT IS 0")
         x: lfoPlate.x + lfoPlate.width + panel.gap
         y: panel.rowBY
         width: panel.theme.envelopePlateWidth
@@ -776,11 +643,13 @@ Rectangle {
                 parameterId: "contour.env.attack"
                 accent: panel.theme.envelope
                 inactive: !panel.envelopeOn
+                inactiveReason: "Envelope amount is 0"
             }
             Dial {
                 parameterId: "contour.env.release"
                 accent: panel.theme.envelope
                 inactive: !panel.envelopeOn
+                inactiveReason: "Envelope amount is 0"
             }
         }
     }

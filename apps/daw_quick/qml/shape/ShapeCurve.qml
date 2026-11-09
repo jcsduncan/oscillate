@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Oscillate.Format
+import "../devicekit" as Kit
 
 // The hero display: Shape's response from 20 Hz to 20 kHz and +24 to -24 dB,
 // evaluated on the EQ's own biquad cascade (NativeSynthDeviceController::
@@ -50,6 +51,12 @@ Rectangle {
     readonly property real gridStrongDb: 12
     // Strokes land on pixel centres.
     readonly property real pixelCentre: 0.5
+    // The scale's labelled frequencies and levels.
+    readonly property var hzTicks: [{ hz: 20, text: "20" }, { hz: 50, text: "50" }, { hz: 100, text: "100" },
+                                    { hz: 200, text: "200" }, { hz: 500, text: "500" }, { hz: 1000, text: "1k" },
+                                    { hz: 2000, text: "2k" }, { hz: 5000, text: "5k" }, { hz: 10000, text: "10k" },
+                                    { hz: 20000, text: "20k" }]
+    readonly property var dbTicks: [-24, -12, -6, 0, 6, 12, 24]
     // The detail of each band's own curve (the summed one takes `points`).
     readonly property int bandPoints: 160
 
@@ -119,166 +126,158 @@ Rectangle {
         }
     }
 
-    Canvas {
-        id: canvas
-        anchors.fill: parent
-        renderStrategy: Canvas.Cooperative
-        onPaint: {
-            const ctx = getContext("2d")
-            ctx.reset()
-            const t = view.theme
-            const x0 = view.plotX
-            const y0 = view.plotY
-            const w = view.plotW
-            const h = view.plotH
-            // Graticule: 1-2-5 lines with the decades stronger; dB every 6
-            // with 0 dB brightest.
-            ctx.lineWidth = t.hairline
-            for (const hz of [30, 40, 50, 60, 70, 80, 90, 200, 300, 400, 500, 600, 700, 800, 900,
-                              2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000]) {
-                const x = Math.round(view.xOf(hz)) + view.pixelCentre
-                ctx.strokeStyle = t.grid
-                ctx.beginPath()
-                ctx.moveTo(x, y0)
-                ctx.lineTo(x, y0 + h)
-                ctx.stroke()
-            }
-            for (const hz of [100, 1000, 10000]) {
-                const x = Math.round(view.xOf(hz)) + view.pixelCentre
-                ctx.strokeStyle = t.gridStrong
-                ctx.beginPath()
-                ctx.moveTo(x, y0)
-                ctx.lineTo(x, y0 + h)
-                ctx.stroke()
-            }
-            for (let db = view.topDb; db >= view.bottomDb; db -= view.gridStepDb) {
-                const y = Math.round(view.yOf(db)) + view.pixelCentre
-                ctx.strokeStyle = db === 0 ? t.zero : db % view.gridStrongDb === 0 ? t.gridStrong : t.grid
-                ctx.beginPath()
-                ctx.moveTo(x0, y)
-                ctx.lineTo(x0 + w, y)
-                ctx.stroke()
-            }
-            ctx.save()
-            ctx.beginPath()
-            ctx.rect(x0, y0, w, h)
-            ctx.clip()
-            ctx.lineJoin = "round"
-            // The live spectra, behind everything: band i sits at the centre
-            // of its log band, 20 Hz to 20 kHz.
-            const spectrum = (bands, fill) => {
-                if (bands.length < 2)
-                    return
-                const n = bands.length
-                ctx.beginPath()
-                for (let i = 0; i < n; ++i) {
-                    const x = x0 + (i + 0.5) / n * w
-                    const y = view.spectrumY(Number(bands[i]))
-                    if (i === 0) {
-                        if (fill)
-                            ctx.moveTo(x0, y0 + h)
-                        else
-                            ctx.moveTo(x, y)
-                    }
-                    ctx.lineTo(x, y)
-                }
-                if (fill) {
-                    ctx.lineTo(x0 + w, y0 + h)
-                    ctx.closePath()
-                    ctx.fillStyle = t.spectrumIn
-                    ctx.globalAlpha = t.spectrumInAlpha
-                    ctx.fill()
-                } else {
-                    ctx.strokeStyle = t.spectrumOut
-                    ctx.globalAlpha = t.spectrumOutAlpha
-                    ctx.lineWidth = t.spectrumOutStroke
+    // The plot's frame: its plot area is the graticule's, so the canvas
+    // below spans the whole screen and keeps drawing in screen coordinates.
+    Kit.PlotFrame {
+        id: frame
+        objectName: "shapeCurveFrame"
+        theme: view.theme
+        x: view.plotX - gutterLeft
+        y: view.plotY
+        width: view.plotW + gutterLeft
+        height: view.plotH + gutterBottom
+        live: view.live.live === true
+        xUnit: "Hz"
+        yUnit: "dB"
+        xTicks: view.hzTicks.map(t => ({ at: view.controller.fraction_of(t.hz), label: t.text }))
+        yTicks: view.dbTicks.map(db => ({ at: (db - view.bottomDb) / (view.topDb - view.bottomDb),
+                                          label: Format.signed_number(db, 0) }))
+
+        Canvas {
+            id: canvas
+            x: -view.plotX
+            y: -view.plotY
+            width: view.width
+            height: view.height
+            renderStrategy: Canvas.Cooperative
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                const t = view.theme
+                const x0 = view.plotX
+                const y0 = view.plotY
+                const w = view.plotW
+                const h = view.plotH
+                // Graticule: 1-2-5 lines with the decades stronger; dB every 6
+                // with 0 dB brightest.
+                ctx.lineWidth = t.hairline
+                for (const hz of [30, 40, 50, 60, 70, 80, 90, 200, 300, 400, 500, 600, 700, 800, 900,
+                                  2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000]) {
+                    const x = Math.round(view.xOf(hz)) + view.pixelCentre
+                    ctx.strokeStyle = t.grid
+                    ctx.beginPath()
+                    ctx.moveTo(x, y0)
+                    ctx.lineTo(x, y0 + h)
                     ctx.stroke()
                 }
-                ctx.globalAlpha = 1
-            }
-            spectrum(view.spectrumIn, true)
-            spectrum(view.spectrumOut, false)
-            const zeroY = view.yOf(0)
-            const path = r => {
-                ctx.beginPath()
-                for (let i = 0; i < r.length; ++i) {
-                    const x = x0 + i / (r.length - 1) * w
-                    if (i === 0)
-                        ctx.moveTo(x, view.yOf(r[i]))
-                    else
-                        ctx.lineTo(x, view.yOf(r[i]))
+                for (const hz of [100, 1000, 10000]) {
+                    const x = Math.round(view.xOf(hz)) + view.pixelCentre
+                    ctx.strokeStyle = t.gridStrong
+                    ctx.beginPath()
+                    ctx.moveTo(x, y0)
+                    ctx.lineTo(x, y0 + h)
+                    ctx.stroke()
                 }
-            }
-            // Each band's own curve, washed down to 0 dB in its colour.
-            for (let b = 0; b < view.bandCount; ++b) {
-                const r = view.bandCurves[b]
-                if (r.length < 2)
-                    continue
-                const chosen = b === view.selected
+                for (let db = view.topDb; db >= view.bottomDb; db -= view.gridStepDb) {
+                    const y = Math.round(view.yOf(db)) + view.pixelCentre
+                    ctx.strokeStyle = db === 0 ? t.zero : db % view.gridStrongDb === 0 ? t.gridStrong : t.grid
+                    ctx.beginPath()
+                    ctx.moveTo(x0, y)
+                    ctx.lineTo(x0 + w, y)
+                    ctx.stroke()
+                }
+                ctx.save()
                 ctx.beginPath()
-                ctx.moveTo(x0, zeroY)
-                for (let i = 0; i < r.length; ++i)
-                    ctx.lineTo(x0 + i / (r.length - 1) * w, view.yOf(r[i]))
-                ctx.lineTo(x0 + w, zeroY)
-                ctx.closePath()
-                ctx.fillStyle = t.bands[b]
-                ctx.globalAlpha = chosen ? t.bandFillChosenAlpha : t.bandFillAlpha
-                ctx.fill()
-                path(r)
-                ctx.strokeStyle = t.bands[b]
-                ctx.globalAlpha = chosen ? t.bandLineChosenAlpha : t.bandLineAlpha
-                ctx.lineWidth = chosen ? t.bandLineChosenStroke : t.hairline
-                ctx.stroke()
-                ctx.globalAlpha = 1
+                ctx.rect(x0, y0, w, h)
+                ctx.clip()
+                ctx.lineJoin = "round"
+                // The live spectra, behind everything: band i sits at the centre
+                // of its log band, 20 Hz to 20 kHz.
+                const spectrum = (bands, fill) => {
+                    if (bands.length < 2)
+                        return
+                    const n = bands.length
+                    ctx.beginPath()
+                    for (let i = 0; i < n; ++i) {
+                        const x = x0 + (i + 0.5) / n * w
+                        const y = view.spectrumY(Number(bands[i]))
+                        if (i === 0) {
+                            if (fill)
+                                ctx.moveTo(x0, y0 + h)
+                            else
+                                ctx.moveTo(x, y)
+                        }
+                        ctx.lineTo(x, y)
+                    }
+                    if (fill) {
+                        ctx.lineTo(x0 + w, y0 + h)
+                        ctx.closePath()
+                        ctx.fillStyle = t.spectrumIn
+                        ctx.globalAlpha = t.spectrumInAlpha
+                        ctx.fill()
+                    } else {
+                        ctx.strokeStyle = t.spectrumOut
+                        ctx.globalAlpha = t.spectrumOutAlpha
+                        ctx.lineWidth = t.spectrumOutStroke
+                        ctx.stroke()
+                    }
+                    ctx.globalAlpha = 1
+                }
+                spectrum(view.spectrumIn, true)
+                spectrum(view.spectrumOut, false)
+                const zeroY = view.yOf(0)
+                const path = r => {
+                    ctx.beginPath()
+                    for (let i = 0; i < r.length; ++i) {
+                        const x = x0 + i / (r.length - 1) * w
+                        if (i === 0)
+                            ctx.moveTo(x, view.yOf(r[i]))
+                        else
+                            ctx.lineTo(x, view.yOf(r[i]))
+                    }
+                }
+                // Each band's own curve, washed down to 0 dB in its colour.
+                for (let b = 0; b < view.bandCount; ++b) {
+                    const r = view.bandCurves[b]
+                    if (r.length < 2)
+                        continue
+                    const chosen = b === view.selected
+                    ctx.beginPath()
+                    ctx.moveTo(x0, zeroY)
+                    for (let i = 0; i < r.length; ++i)
+                        ctx.lineTo(x0 + i / (r.length - 1) * w, view.yOf(r[i]))
+                    ctx.lineTo(x0 + w, zeroY)
+                    ctx.closePath()
+                    ctx.fillStyle = t.bands[b]
+                    ctx.globalAlpha = chosen ? t.bandFillChosenAlpha : t.bandFillAlpha
+                    ctx.fill()
+                    path(r)
+                    ctx.strokeStyle = t.bands[b]
+                    ctx.globalAlpha = chosen ? t.bandLineChosenAlpha : t.bandLineAlpha
+                    ctx.lineWidth = chosen ? t.bandLineChosenStroke : t.hairline
+                    ctx.stroke()
+                    ctx.globalAlpha = 1
+                }
+                // The summed curve, glowing.
+                const sum = view.response
+                if (sum.length > 1) {
+                    const a = t.accent
+                    path(sum)
+                    ctx.strokeStyle = Qt.rgba(a.r, a.g, a.b, t.curveGlowWideAlpha)
+                    ctx.lineWidth = t.curveGlowWideStroke
+                    ctx.stroke()
+                    ctx.strokeStyle = Qt.rgba(a.r, a.g, a.b, t.curveGlowTightAlpha)
+                    ctx.lineWidth = t.curveGlowTightStroke
+                    ctx.stroke()
+                    ctx.strokeStyle = t.curve
+                    ctx.lineWidth = t.curveStroke
+                    ctx.stroke()
+                }
+                ctx.restore()
             }
-            // The summed curve, glowing.
-            const sum = view.response
-            if (sum.length > 1) {
-                const a = t.accent
-                path(sum)
-                ctx.strokeStyle = Qt.rgba(a.r, a.g, a.b, t.curveGlowWideAlpha)
-                ctx.lineWidth = t.curveGlowWideStroke
-                ctx.stroke()
-                ctx.strokeStyle = Qt.rgba(a.r, a.g, a.b, t.curveGlowTightAlpha)
-                ctx.lineWidth = t.curveGlowTightStroke
-                ctx.stroke()
-                ctx.strokeStyle = t.curve
-                ctx.lineWidth = t.curveStroke
-                ctx.stroke()
-            }
-            ctx.restore()
         }
     }
 
-    // Frequency and level scales.
-    Repeater {
-        model: [{ hz: 20, text: "20" }, { hz: 50, text: "50" }, { hz: 100, text: "100" },
-                { hz: 200, text: "200" }, { hz: 500, text: "500" }, { hz: 1000, text: "1k" },
-                { hz: 2000, text: "2k" }, { hz: 5000, text: "5k" }, { hz: 10000, text: "10k" },
-                { hz: 20000, text: "20k" }]
-        delegate: Text {
-            required property var modelData
-            x: Math.min(view.xOf(modelData.hz) - implicitWidth / 2, view.plotX + view.plotW - implicitWidth)
-            y: view.plotY + view.plotH + view.theme.scaleLabelGap
-            text: modelData.text
-            color: modelData.hz === 100 || modelData.hz === 1000 || modelData.hz === 10000
-                ? view.theme.inkDim : view.theme.inkFaint
-            font.family: view.theme.mono
-            font.pixelSize: view.theme.typeCaption
-        }
-    }
-    Repeater {
-        model: [24, 12, 6, 0, -6, -12, -24]
-        delegate: Text {
-            required property var modelData
-            x: view.plotX - implicitWidth - view.theme.spaceSm
-            y: view.yOf(modelData) - implicitHeight / 2
-            text: Format.signed_number(modelData, 0)
-            color: modelData === 0 ? view.theme.accent : view.theme.inkFaint
-            font.family: view.theme.mono
-            font.pixelSize: view.theme.typeCaption
-        }
-    }
     Text {
         objectName: "shapeCurveCaption"
         x: view.theme.captionX
@@ -304,6 +303,7 @@ Rectangle {
     // Double-click the empty screen to switch on a free band there.
     MouseArea {
         objectName: "shapeCurveArea"
+        readonly property string keyboardAlternative: "a band tile's On switch turns a free band on; its strip sets where"
         x: view.plotX
         y: view.plotY
         width: view.plotW
@@ -355,6 +355,7 @@ Rectangle {
             }
             MouseArea {
                 id: grab
+                readonly property string keyboardAlternative: "the selected band's strip: its Freq, Gain and Q knobs"
                 anchors.fill: parent
                 anchors.margins: -view.theme.handleGrabOutset
                 enabled: view.controller.editable

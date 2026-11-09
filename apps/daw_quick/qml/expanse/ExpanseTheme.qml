@@ -95,40 +95,42 @@ KitTheme {
     property real cellHeightPad: 36
     property real cellReadoutHeightPad: 50
 
-    // The header: the wordmark, its aurora rule and the subtitle.
+    // The header (Kit.DeviceHeader): the wordmark over its aurora rule and
+    // the subtitle, the preset browser and, once a control is touched, its
+    // readout.
     property real headerY: 10
-    property real headerHeight: 54
-    property int wordmarkSize: 27
-    property real wordmarkSpacing: 11
+    headerHeight: 54
+    wordmarkSize: 27
+    wordmarkSpacing: 11
+    // The rule and subtitle sit this far in from the wordmark's left.
+    property real wordmarkInset: spaceXxs
     property real wordmarkRuleGap: 1
     property real wordmarkRuleHeight: 2
     // How much shorter than the wordmark the rule runs.
     property real wordmarkRuleInset: 12
     property real wordmarkRuleMidStop: 0.55
     property color wordmarkRuleFade: Qt.rgba(auroraViolet.r, auroraViolet.g, auroraViolet.b, 0.1)
-    property real subtitleGap: 7
-    property real subtitleSpacing: 2.6
-    property real statusY: 14
-
-    // The preset display between the arrows, and the readout inside it.
-    property real presetX: 252
-    property real presetY: 5
-    property real presetWidth: 560
-    property real presetHeight: 42
-    property color presetFill: Qt.rgba(well.r, well.g, well.b, 0.92)
-    property real presetTextX: 14
-    property real presetCaptionY: 5
-    property real presetCaptionSpacing: 1.4
-    property real presetNameY: 16
-    property real presetNameWidth: 250
-    property real presetNameSpacing: 0.6
-    property real presetDividerX: 276
-    property real presetDividerInset: 8
-    property real readoutX: 288
-    property real readoutValueY: 17
-    property real readoutRight: 26
-    property real readoutSpacing: 1.2
-    property real chevronMargin: 10
+    subtitleGap: 7
+    subtitleSpacing: 2.6
+    subtitleInk: inkDim
+    headerBrowserX: 252
+    presetDisplayWidth: 300
+    presetDisplayHeight: 42
+    presetDisplayRadius: radiusXl
+    presetFill: Qt.rgba(well.r, well.g, well.b, 0.92)
+    presetTextX: 14
+    presetTagY: 5
+    presetTagSpacing: 1.4
+    presetNameY: 16
+    presetNameBold: false
+    presetChevronMargin: 10
+    presetChevronInk: inkDim
+    readoutWidth: 240
+    readoutFill: presetFill
+    readoutRadius: radiusXl
+    readoutNameY: 5
+    readoutSpacing: 1.2
+    readoutValueY: 17
 
     // The plate grid: three rows and the widths of the fixed plates.
     property real rowAY: 76
@@ -231,11 +233,7 @@ KitTheme {
     property color glowMid: Qt.rgba(aurora.r, aurora.g, aurora.b, 0.10)
     property color glowBottom: Qt.rgba(aurora.r, aurora.g, aurora.b, 0.22)
 
-    // The landscape's axes: labels clear of the field, time ticks below it.
-    property real axisLabelGap: 7
-    property color timeTick: Qt.rgba(inkFaint.r, inkFaint.g, inkFaint.b, 0.6)
-    property real timeTickLength: 4
-    property real timeLabelInset: 14
+    // The landscape's time scale: at most this many ticks across.
     property int maxTimeTicks: 7
 
     // The early-reflections strip: its dark bed, the late onset line and

@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import "../devicekit" as Kit
 import "NovaContract.js" as Contract
 
 // The wavetable editor overlay (NOVA-UI-15): DRAW / FORMULA tools, the frame
@@ -136,6 +137,7 @@ Item {
         anchors.fill: parent
         color: editor.theme.soft(editor.theme.bg, editor.theme.tableScrimAlpha)
         MouseArea {
+            readonly property string pointerOnlyReason: "the scrim keeps the panel behind inert; it is not a control"
             anchors.fill: parent
             onWheel: wheel => { wheel.accepted = true }
         }
@@ -252,6 +254,10 @@ Item {
             // Vertical grid divisions, and the neighbouring frames drawn each side.
             readonly property int gridColumns: 8
             readonly property int neighbours: 2
+            // The scale: the cycle's phase across and the level up it, in percent.
+            readonly property var phaseTicks: [0, 0.5, 1]
+            readonly property var levelTicks: [-1, 0, 1]
+            readonly property real percent: 100
             x: editor.theme.tableSheetPadding
             y: editor.theme.tableEditorTop
             width: sheet.width - 2 * editor.theme.tableSheetPadding - editor.theme.tableSideWidth - editor.theme.tableSideGap
@@ -260,57 +266,6 @@ Item {
             color: editor.panel.theme.wellFill
             border.color: editor.panel.theme.line
             clip: true
-            Canvas {
-                id: waveCanvas
-                anchors.fill: parent
-                renderStrategy: Canvas.Cooperative
-                onPaint: {
-                    const ctx = getContext("2d")
-                    ctx.reset()
-                    const t = editor.panel.theme
-                    ctx.strokeStyle = t.gridLine
-                    ctx.lineWidth = t.hairline
-                    for (let i = 1; i < wave.gridColumns; ++i) {
-                        ctx.beginPath()
-                        ctx.moveTo(i * width / wave.gridColumns, 0)
-                        ctx.lineTo(i * width / wave.gridColumns, height)
-                        ctx.stroke()
-                    }
-                    ctx.beginPath()
-                    ctx.moveTo(0, height / 2)
-                    ctx.lineTo(width, height / 2)
-                    ctx.stroke()
-                    const frame = editor.frames[editor.selected]
-                    if (!frame)
-                        return
-                    // Neighbouring frames, faint, for context.
-                    for (let d = -wave.neighbours; d <= wave.neighbours; ++d) {
-                        const other = editor.frames[editor.selected + d]
-                        if (d === 0 || !other)
-                            continue
-                        ctx.beginPath()
-                        for (let i = 0; i < other.length; ++i) {
-                            const x = i / (other.length - 1) * width, y = height / 2 - other[i] * height * wave.reach
-                            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
-                        }
-                        ctx.strokeStyle = t.soft(t.dim, t.tableNeighbourAlpha)
-                        ctx.stroke()
-                    }
-                    ctx.beginPath()
-                    for (let i = 0; i < frame.length; ++i) {
-                        const x = i / (frame.length - 1) * width, y = height / 2 - frame[i] * height * wave.reach
-                        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
-                    }
-                    // The glow is a wide faint stroke under the line: a software shadow
-                    // blur costs a hundred times more to paint.
-                    ctx.strokeStyle = t.soft(t.cy, t.glowAlpha)
-                    ctx.lineWidth = t.tableGlowWidth
-                    ctx.stroke()
-                    ctx.strokeStyle = t.cy
-                    ctx.lineWidth = t.tableLineWidth
-                    ctx.stroke()
-                }
-            }
             Text {
                 x: editor.theme.spaceMd
                 y: editor.theme.spaceSm
@@ -321,45 +276,112 @@ Item {
                 font.weight: Font.Bold
                 font.letterSpacing: editor.theme.tableLabelSpacing
             }
-            MouseArea {
-                property real lastX: -1
-                property real lastY: 0
-                property real startX: 0
-                property real startY: 0
+            // The frame's scale: phase across, level up; the draft being
+            // edited, not the running oscillator: PREVIEW.
+            Kit.PlotFrame {
                 anchors.fill: parent
-                enabled: editor.mode === "draw"
-                preventStealing: true
-                cursorShape: Qt.CrossCursor
-                function paintSegment(x0, y0, x1, y1) {
-                    const frame = editor.frames[editor.selected]
-                    const i0 = Math.round(Math.max(0, Math.min(1, x0 / width)) * (editor.points - 1))
-                    const i1 = Math.round(Math.max(0, Math.min(1, x1 / width)) * (editor.points - 1))
-                    const v0 = Math.max(-1, Math.min(1, (height / 2 - y0) / (height * wave.reach)))
-                    const v1 = Math.max(-1, Math.min(1, (height / 2 - y1) / (height * wave.reach)))
-                    const from = Math.min(i0, i1), to = Math.max(i0, i1)
-                    for (let i = from; i <= to; ++i)
-                        frame[i] = to === from ? v1 : (i0 <= i1 ? v0 + (v1 - v0) * (i - i0) / (i1 - i0) : v1 + (v0 - v1) * (i - i1) / (i0 - i1))
-                    editor.changed()
-                }
-                onPressed: mouse => {
-                    editor.remember()
-                    startX = mouse.x
-                    startY = mouse.y
-                    lastX = mouse.x
-                    lastY = mouse.y
-                    paintSegment(mouse.x, mouse.y, mouse.x, mouse.y)
-                }
-                onPositionChanged: mouse => {
-                    if (!pressed)
-                        return
-                    if (mouse.modifiers & Qt.ShiftModifier) {
-                        editor.frames[editor.selected] = editor.history[editor.history.length - 1][editor.selected].slice()
-                        paintSegment(startX, startY, mouse.x, mouse.y)
-                    } else {
-                        paintSegment(lastX, lastY, mouse.x, mouse.y)
+                theme: editor.panel.theme
+                live: false
+                xUnit: "%"
+                yUnit: "%"
+                xTicks: wave.phaseTicks.map(p => ({ at: p, label: String(Math.round(p * wave.percent)) }))
+                yTicks: wave.levelTicks.map(v => ({ at: 0.5 + v * wave.reach,
+                                                    label: (v > 0 ? "+" : "") + Math.round(v * wave.percent) }))
+
+                Canvas {
+                    id: waveCanvas
+                    anchors.fill: parent
+                    renderStrategy: Canvas.Cooperative
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.reset()
+                        const t = editor.panel.theme
+                        ctx.strokeStyle = t.gridLine
+                        ctx.lineWidth = t.hairline
+                        for (let i = 1; i < wave.gridColumns; ++i) {
+                            ctx.beginPath()
+                            ctx.moveTo(i * width / wave.gridColumns, 0)
+                            ctx.lineTo(i * width / wave.gridColumns, height)
+                            ctx.stroke()
+                        }
+                        ctx.beginPath()
+                        ctx.moveTo(0, height / 2)
+                        ctx.lineTo(width, height / 2)
+                        ctx.stroke()
+                        const frame = editor.frames[editor.selected]
+                        if (!frame)
+                            return
+                        // Neighbouring frames, faint, for context.
+                        for (let d = -wave.neighbours; d <= wave.neighbours; ++d) {
+                            const other = editor.frames[editor.selected + d]
+                            if (d === 0 || !other)
+                                continue
+                            ctx.beginPath()
+                            for (let i = 0; i < other.length; ++i) {
+                                const x = i / (other.length - 1) * width, y = height / 2 - other[i] * height * wave.reach
+                                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
+                            }
+                            ctx.strokeStyle = t.soft(t.dim, t.tableNeighbourAlpha)
+                            ctx.stroke()
+                        }
+                        ctx.beginPath()
+                        for (let i = 0; i < frame.length; ++i) {
+                            const x = i / (frame.length - 1) * width, y = height / 2 - frame[i] * height * wave.reach
+                            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
+                        }
+                        // The glow is a wide faint stroke under the line: a software shadow
+                        // blur costs a hundred times more to paint.
+                        ctx.strokeStyle = t.soft(t.cy, t.glowAlpha)
+                        ctx.lineWidth = t.tableGlowWidth
+                        ctx.stroke()
+                        ctx.strokeStyle = t.cy
+                        ctx.lineWidth = t.tableLineWidth
+                        ctx.stroke()
                     }
-                    lastX = mouse.x
-                    lastY = mouse.y
+                }
+                MouseArea {
+                    // The frame's drawing is a pointer gesture; the keyboard writes
+                    // frames through the FORMULA field and APPLY.
+                    readonly property string keyboardAlternative: "the FORMULA field and APPLY draw every frame from the keyboard"
+                    property real lastX: -1
+                    property real lastY: 0
+                    property real startX: 0
+                    property real startY: 0
+                    anchors.fill: parent
+                    enabled: editor.mode === "draw"
+                    preventStealing: true
+                    cursorShape: Qt.CrossCursor
+                    function paintSegment(x0, y0, x1, y1) {
+                        const frame = editor.frames[editor.selected]
+                        const i0 = Math.round(Math.max(0, Math.min(1, x0 / width)) * (editor.points - 1))
+                        const i1 = Math.round(Math.max(0, Math.min(1, x1 / width)) * (editor.points - 1))
+                        const v0 = Math.max(-1, Math.min(1, (height / 2 - y0) / (height * wave.reach)))
+                        const v1 = Math.max(-1, Math.min(1, (height / 2 - y1) / (height * wave.reach)))
+                        const from = Math.min(i0, i1), to = Math.max(i0, i1)
+                        for (let i = from; i <= to; ++i)
+                            frame[i] = to === from ? v1 : (i0 <= i1 ? v0 + (v1 - v0) * (i - i0) / (i1 - i0) : v1 + (v0 - v1) * (i - i1) / (i0 - i1))
+                        editor.changed()
+                    }
+                    onPressed: mouse => {
+                        editor.remember()
+                        startX = mouse.x
+                        startY = mouse.y
+                        lastX = mouse.x
+                        lastY = mouse.y
+                        paintSegment(mouse.x, mouse.y, mouse.x, mouse.y)
+                    }
+                    onPositionChanged: mouse => {
+                        if (!pressed)
+                            return
+                        if (mouse.modifiers & Qt.ShiftModifier) {
+                            editor.frames[editor.selected] = editor.history[editor.history.length - 1][editor.selected].slice()
+                            paintSegment(startX, startY, mouse.x, mouse.y)
+                        } else {
+                            paintSegment(lastX, lastY, mouse.x, mouse.y)
+                        }
+                        lastX = mouse.x
+                        lastY = mouse.y
+                    }
                 }
             }
         }
@@ -378,32 +400,51 @@ Item {
                 readonly property real barInset: 8
                 readonly property real barRoom: 30
                 readonly property real barGap: 2
+                // The scale: these partials across, the magnitude up in percent.
+                readonly property var harmonicTicks: [1, 10, 20, 40]
+                readonly property var magnitudeTicks: [0, 0.5, 1]
+                readonly property real percent: 100
+                // Keys: Left and Right pick a partial, Up and Down move its
+                // magnitude this much (Shift: the coarse step), one UNDO step each.
+                property int keyHarmonic: 0
+                readonly property real keyStep: 0.01
+                readonly property real keyCoarseStep: 0.1
                 width: parent.width
                 height: editor.theme.tableHarmonicsHeight
                 radius: editor.theme.radiusXl
                 color: editor.panel.theme.wellFill
-                border.color: editor.panel.theme.line
+                border.color: activeFocus ? editor.panel.theme.cy : editor.panel.theme.line
+                border.width: activeFocus ? editor.panel.theme.strokeBold : editor.panel.theme.hairline
                 clip: true
-                Canvas {
-                    id: harmonicsCanvas
-                    anchors.fill: parent
-                    renderStrategy: Canvas.Cooperative
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        ctx.reset()
+                activeFocusOnTab: true
+                Accessible.role: Accessible.Graphic
+                Accessible.name: "Harmonics"
+                Accessible.description: "Left and Right pick a partial, Up and Down set its level; partial " + (keyHarmonic + 1)
+                onKeyHarmonicChanged: harmonicsCanvas.requestPaint()
+                onActiveFocusChanged: harmonicsCanvas.requestPaint()
+                Keys.onPressed: event => {
+                    if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+                        keyHarmonic = Math.max(0, Math.min(editor.harmonicCount - 1,
+                                                           keyHarmonic + (event.key === Qt.Key_Right ? 1 : -1)))
+                    } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
                         const frame = editor.frames[editor.selected]
                         if (!frame)
                             return
-                        const inset = harmonicsView.barInset
-                        const room = height - harmonicsView.barRoom
-                        const bins = editor.harmonics(frame, editor.harmonicCount)
-                        const w = (width - 2 * inset) / editor.harmonicCount
-                        for (let h = 0; h < bins.length; ++h) {
-                            const a = Math.min(1, bins[h].magnitude)
-                            ctx.fillStyle = h < editor.litHarmonics ? editor.panel.theme.cy : editor.panel.theme.line2
-                            ctx.fillRect(inset + h * w, height - inset - a * room, w - harmonicsView.barGap, a * room)
-                        }
+                        const step = (event.modifiers & Qt.ShiftModifier) !== 0 ? keyCoarseStep : keyStep
+                        const now = editor.harmonics(frame, editor.harmonicCount)[keyHarmonic].magnitude
+                        editor.remember()
+                        editor.setHarmonic(keyHarmonic, Math.max(0, Math.min(1, now + (event.key === Qt.Key_Up ? step : -step))))
+                    } else {
+                        return
                     }
+                    event.accepted = true
+                }
+                // A bar's centre across, and a magnitude's place up, as shares of the plot.
+                function barAt(h, width) {
+                    return (barInset + (h + 0.5) * (width - 2 * barInset) / editor.harmonicCount) / width
+                }
+                function levelAt(a, height) {
+                    return (barInset + a * (height - barRoom)) / height
                 }
                 Text {
                     x: editor.theme.spaceMd
@@ -415,21 +456,69 @@ Item {
                     font.weight: Font.Bold
                     font.letterSpacing: editor.theme.tableLabelSpacing
                 }
-                MouseArea {
+                // The partials' scale; the draft being edited: PREVIEW.
+                Kit.PlotFrame {
+                    id: harmonicsFrame
                     anchors.fill: parent
-                    preventStealing: true
-                    function set(mouse) {
-                        const inset = harmonicsView.barInset
-                        const h = Math.floor((mouse.x - inset) / ((width - 2 * inset) / editor.harmonicCount))
-                        if (h >= 0 && h < editor.harmonicCount)
-                            editor.setHarmonic(h, Math.max(0, Math.min(1, (height - inset - mouse.y)
-                                                                          / (height - harmonicsView.barRoom))))
+                    theme: editor.panel.theme
+                    live: false
+                    xUnit: "×"
+                    yUnit: "%"
+                    // Placed from the view's size less the gutters (both axes are
+                    // always ticked), not from plotArea, whose size follows the ticks.
+                    readonly property real plotWidth: harmonicsView.width - editor.panel.theme.plotGutterLeft
+                    readonly property real plotHeight: harmonicsView.height - editor.panel.theme.plotGutterBottom
+                    xTicks: plotWidth > 0 ? harmonicsView.harmonicTicks.map(h => ({
+                        at: harmonicsView.barAt(h - 1, harmonicsFrame.plotWidth), label: String(h) })) : []
+                    yTicks: plotHeight > 0 ? harmonicsView.magnitudeTicks.map(a => ({
+                        at: harmonicsView.levelAt(a, harmonicsFrame.plotHeight), label: String(Math.round(a * harmonicsView.percent)) })) : []
+
+                    Canvas {
+                        id: harmonicsCanvas
+                        anchors.fill: parent
+                        renderStrategy: Canvas.Cooperative
+                        onPaint: {
+                            const ctx = getContext("2d")
+                            ctx.reset()
+                            const frame = editor.frames[editor.selected]
+                            if (!frame)
+                                return
+                            const inset = harmonicsView.barInset
+                            const room = height - harmonicsView.barRoom
+                            const bins = editor.harmonics(frame, editor.harmonicCount)
+                            const w = (width - 2 * inset) / editor.harmonicCount
+                            for (let h = 0; h < bins.length; ++h) {
+                                const a = Math.min(1, bins[h].magnitude)
+                                ctx.fillStyle = h < editor.litHarmonics ? editor.panel.theme.cy : editor.panel.theme.line2
+                                ctx.fillRect(inset + h * w, height - inset - a * room, w - harmonicsView.barGap, a * room)
+                            }
+                            // The partial the keys move: its column outlined.
+                            if (harmonicsView.activeFocus) {
+                                ctx.strokeStyle = editor.panel.theme.text
+                                ctx.lineWidth = editor.panel.theme.hairline
+                                ctx.strokeRect(inset + harmonicsView.keyHarmonic * w, height - inset - room, w, room)
+                            }
+                        }
                     }
-                    onPressed: mouse => {
-                        editor.remember()
-                        set(mouse)
+                    MouseArea {
+                        anchors.fill: parent
+                        preventStealing: true
+                        function set(mouse) {
+                            const inset = harmonicsView.barInset
+                            const h = Math.floor((mouse.x - inset) / ((width - 2 * inset) / editor.harmonicCount))
+                            if (h >= 0 && h < editor.harmonicCount) {
+                                harmonicsView.keyHarmonic = h
+                                editor.setHarmonic(h, Math.max(0, Math.min(1, (height - inset - mouse.y)
+                                                                              / (height - harmonicsView.barRoom))))
+                            }
+                        }
+                        onPressed: mouse => {
+                            harmonicsView.forceActiveFocus()
+                            editor.remember()
+                            set(mouse)
+                        }
+                        onPositionChanged: mouse => { if (pressed) set(mouse) }
                     }
-                    onPositionChanged: mouse => { if (pressed) set(mouse) }
                 }
             }
             NovaCard {
@@ -506,10 +595,18 @@ Item {
 
         // The frame strip.
         Row {
+            id: frameStrip
             objectName: "novaEditorFrames"
             x: editor.theme.tableSheetPadding
             y: sheet.height - editor.theme.tableFrameStripBottom
             spacing: editor.theme.spaceXs
+            // Left and Right pick the frame to edit.
+            activeFocusOnTab: true
+            Accessible.role: Accessible.List
+            Accessible.name: "Frames"
+            Accessible.description: "Frame " + (editor.selected + 1) + " of " + editor.frameCount + "; Left and Right pick another"
+            Keys.onLeftPressed: editor.selected = Math.max(0, editor.selected - 1)
+            Keys.onRightPressed: editor.selected = Math.min(editor.frameCount - 1, editor.selected + 1)
             Repeater {
                 model: editor.frameCount
                 delegate: Rectangle {
@@ -522,6 +619,8 @@ Item {
                     radius: editor.theme.tableThumbRadius
                     color: editor.panel.theme.wellFill
                     border.color: index === editor.selected ? editor.panel.theme.cy : editor.panel.theme.line
+                    border.width: index === editor.selected && frameStrip.activeFocus
+                        ? editor.panel.theme.strokeBold : editor.panel.theme.hairline
                     Canvas {
                         id: thumbCanvas
                         anchors.fill: parent

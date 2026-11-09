@@ -105,16 +105,10 @@ Rectangle {
         && louder(live.outRms) > floorDb
     readonly property real changeDb: changeKnown ? louder(live.outRms) - louder(live.inRms) : 0
 
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        if (info.name === undefined)
-            return ""
-        return (info.group === info.name ? info.name : info.group + " · " + info.name).toUpperCase()
-    }
+    // The header's readout: pan as the panel words it, the rest as the
+    // controller does.
     function readoutValue(id) {
-        if (id === "" || revision < 0)
+        if (revision < 0)
             return ""
         return id === "trim.pan" ? panText(pan) : controller.display(id)
     }
@@ -159,160 +153,53 @@ Rectangle {
 
     // ---- Header ----------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
-
-        Text {
-            id: wordmark
-            y: panel.theme.wordmarkY
-            text: "TRIM"
-            color: panel.theme.glacier
-            font.family: panel.theme.sans
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Light
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        Rectangle {
-            x: wordmark.x + panel.theme.wordmarkIndent
-            y: wordmark.y + wordmark.height + panel.theme.underlineGap
-            width: wordmark.implicitWidth - panel.theme.underlineTrim
-            height: panel.theme.strokeBold
-            radius: panel.theme.underlineRadius
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0; color: panel.theme.left }
-                GradientStop { position: 1; color: panel.theme.right }
-            }
-        }
-        Text {
-            x: wordmark.x + panel.theme.wordmarkIndent
-            y: wordmark.y + wordmark.height + panel.theme.taglineGap
-            text: "GAIN · PAN · STEREO · REPAIR"
-            color: panel.theme.inkDim
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.taglineSpacing
-        }
-
-        Row {
-            id: browser
-            x: panel.theme.browserX
-            y: panel.theme.browserY
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "trimPresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "trimPresetDisplay"
-                width: panel.theme.presetDisplayWidth
-                height: panel.theme.presetDisplayHeight
-                radius: panel.theme.radiusLg
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                border.width: activeFocus ? panel.theme.focusStroke : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.accent)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        readoutValueOf: function(id) { return panel.readoutValue(id) }
+        brand: Component {
+            Item {
+                implicitWidth: wordmark.implicitWidth
+                implicitHeight: subtitle.y + subtitle.implicitHeight
                 Text {
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetCaptionY
-                    text: panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.captionSpacing
-                }
-                Text {
-                    objectName: "trimPresetName"
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetNameY
-                    width: panel.theme.presetNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeHeading
-                    font.letterSpacing: panel.theme.presetNameSpacing
-                    elide: Text.ElideRight
+                    id: wordmark
+                    objectName: "trimWordmark"
+                    text: "TRIM"
+                    color: panel.theme.wordmarkInk
+                    font.family: panel.theme.wordmarkFont
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.weight: panel.theme.wordmarkWeight
+                    font.letterSpacing: panel.theme.wordmarkSpacing
                 }
                 Rectangle {
-                    x: panel.theme.presetDividerX
-                    y: panel.theme.presetDividerInset
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.theme.presetDividerInset
-                    color: panel.theme.wellEdge
-                }
-                Text {
-                    objectName: "trimReadout"
-                    x: panel.theme.readoutX
-                    y: panel.theme.presetCaptionY
-                    width: display.width - x - panel.theme.readoutRight
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.readoutSpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "trimReadoutValue"
-                    x: panel.theme.readoutX
-                    y: panel.theme.readoutValueY
-                    width: display.width - x - panel.theme.readoutRight
-                    text: panel.readoutValue(panel.theme.lastTouched)
-                    color: panel.theme.accent
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeSubtitle
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.presetChevronMargin
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.inkDim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
+                    x: panel.theme.wordmarkIndent
+                    y: wordmark.height + panel.theme.underlineGap
+                    width: wordmark.implicitWidth - panel.theme.underlineTrim
+                    height: panel.theme.strokeBold
+                    radius: panel.theme.underlineRadius
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0; color: panel.theme.left }
+                        GradientStop { position: 1; color: panel.theme.right }
                     }
                 }
+                Text {
+                    id: subtitle
+                    objectName: "trimSubtitle"
+                    x: panel.theme.wordmarkIndent
+                    y: wordmark.height + panel.theme.subtitleGap
+                    text: "GAIN · PAN · STEREO · REPAIR"
+                    color: panel.theme.subtitleInk
+                    font.pixelSize: panel.theme.subtitleSize
+                    font.bold: true
+                    font.letterSpacing: panel.theme.subtitleSpacing
+                }
             }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "trimPresetNext"
-                direction: 1
-            }
-        }
-
-        Kit.StatusBadge {
-            id: status
-            objectName: "trimStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: panel.theme.statusY
         }
     }
 
@@ -616,6 +503,7 @@ Rectangle {
             border.color: panel.theme.wellEdge
             TrimStage {
                 objectName: "trimStage"
+                readonly property string plotExemptReason: "a top-down picture of the stereo field (listener, speakers, image), drawn from the settings; no axes to scale"
                 anchors.fill: parent
                 anchors.margins: panel.theme.spaceXs
                 theme: panel.theme
@@ -679,6 +567,7 @@ Rectangle {
             diameter: panel.theme.panKnobDiameter
             readout: true
             inactive: panel.mono
+            inactiveReason: panel.mono ? "Mono is on: there is no width" : ""
         }
     }
 

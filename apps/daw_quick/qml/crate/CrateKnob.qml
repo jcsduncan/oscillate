@@ -50,11 +50,17 @@ Kit.Knob {
         x: (knob.width - width) / 2
         horizontalAlignment: Text.AlignHCenter
         text: knob.valueText
-        color: knob.touched ? knob.colour : knob.theme.ink
+        color: knob.modeInactive && knob.editable ? knob.theme.knobInactiveInk
+            : knob.touched ? knob.colour : knob.theme.ink
         font.family: knob.theme.mono
         font.pixelSize: knob.small ? knob.theme.knobValueSizeSmall : knob.theme.valueSize
         MouseArea {
             anchors.fill: parent
+            // At least the kit's least hit size: it reaches down over the
+            // caption (the dial sits just above).
+            anchors.leftMargin: -knob.theme.hitOutset(parent.width)
+            anchors.rightMargin: -knob.theme.hitOutset(parent.width)
+            anchors.bottomMargin: -Math.max(0, knob.theme.minHitSize - parent.height)
             enabled: knob.editable
             cursorShape: Qt.IBeamCursor
             onClicked: knob.beginEdit()

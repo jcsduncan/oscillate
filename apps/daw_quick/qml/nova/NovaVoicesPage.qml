@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import "../devicekit" as Kit
 import "NovaContract.js" as Contract
 import "NovaVoiceLanes.js" as Lanes
 
@@ -185,6 +186,9 @@ Item {
             } else if (event.key === Qt.Key_Down || event.key === Qt.Key_Left) {
                 page.controller.step(row.parameterId, -1, fine)
                 event.accepted = true
+            } else if (event.key === Qt.Key_Delete) {
+                page.controller.reset_to_default(row.parameterId)
+                event.accepted = true
             }
         }
 
@@ -231,6 +235,8 @@ Item {
                 anchors.fill: parent
                 anchors.leftMargin: -page.theme.voicesSliderGrabOutset
                 anchors.rightMargin: -page.theme.voicesSliderGrabOutset
+                anchors.topMargin: -page.theme.hitOutset(parent.height)
+                anchors.bottomMargin: -page.theme.hitOutset(parent.height)
                 enabled: page.controller.editable
                 preventStealing: true
                 cursorShape: Qt.SizeHorCursor
@@ -328,6 +334,8 @@ Item {
         }
         MouseArea {
             anchors.fill: parent
+            anchors.topMargin: -page.theme.hitOutset(parent.height)
+            anchors.bottomMargin: -page.theme.hitOutset(parent.height)
             onClicked: toggle.flip()
         }
     }
@@ -376,6 +384,9 @@ Item {
                             event.accepted = true
                         } else if (event.key === Qt.Key_Down || event.key === Qt.Key_Left) {
                             page.controller.step("nova.analogue.age", -1, fine)
+                            event.accepted = true
+                        } else if (event.key === Qt.Key_Delete) {
+                            page.controller.reset_to_default("nova.analogue.age")
                             event.accepted = true
                         }
                     }
@@ -621,6 +632,9 @@ Item {
                         } else if (event.key === Qt.Key_Down || event.key === Qt.Key_Left) {
                             page.stepCards(-1)
                             event.accepted = true
+                        } else if (event.key === Qt.Key_Delete && page.controller.editable) {
+                            page.controller.reset_to_default("nova.analogue.cards")
+                            event.accepted = true
                         }
                     }
                     Repeater {
@@ -738,8 +752,9 @@ Item {
 
         Rectangle {
             id: lanes
-            readonly property real pad: 34
-            readonly property real end: 8
+            // The scale's gutter on the left (the plot frame's) and the room on the right.
+            readonly property real pad: page.theme.plotGutterLeft
+            readonly property real end: page.theme.voicesLaneEnd
             readonly property int count: page.count
             readonly property var bars: page.bars
             readonly property real cellWidth: (width - pad - end) / Math.max(1, count)
@@ -747,6 +762,12 @@ Item {
                                                    Math.min(cellWidth * page.theme.voicesBarWidthRatio, page.theme.voicesBarMaxWidth))
             readonly property real mid: height / 2 - page.theme.voicesLaneMidLift
             readonly property real amp: height / 2 - page.theme.voicesLaneAmpInset
+            // The scale: a lane's reach each way, in percent of it.
+            readonly property real reachPercent: 100
+            // Keys: Left and Right pick a voice, Up and Down move its value
+            // a paint step (Shift: this many steps). Each key is one edit.
+            property int keyVoice: 0
+            readonly property int keyCoarseSteps: 10
 
             objectName: "novaVoiceLanes"
             x: page.theme.spaceLg
@@ -755,10 +776,14 @@ Item {
             height: page.lanesBarsMinimum + page.lanesHeight - page.lanesMinimum
             radius: page.theme.radiusXl
             color: page.theme.wellFill
-            border.color: page.theme.line
+            border.color: activeFocus ? page.theme.vi : page.theme.line
+            border.width: activeFocus ? page.theme.strokeBold : page.theme.hairline
             clip: true
+            activeFocusOnTab: page.controller.editable
             Accessible.role: Accessible.Graphic
             Accessible.name: "Per-voice " + page.laneInfo.name + " offsets, paint to edit"
+            Accessible.description: "Left and Right pick a voice, Up and Down move its value; voice "
+                + (keyVoice + 1) + " is " + (keyVoice < bars.length ? Contract.laneText(page.lane, Number(bars[keyVoice].value)) : "")
 
             function voiceAt(x) {
                 return Math.floor((x - pad) / cellWidth)
@@ -769,107 +794,154 @@ Item {
             function centreX(voice) {
                 return pad + (voice + 0.5) * cellWidth
             }
+            // A value's place on the scale, 0 at the plot's foot to 1 at its top.
+            function scaleAt(value) {
+                return height > 0 ? 1 - (mid - value * amp) / height : 0
+            }
 
-            Canvas {
-                id: laneCanvas
+            onCountChanged: {
+                keyVoice = Math.max(0, Math.min(count - 1, keyVoice))
+                laneCanvas.requestPaint()
+            }
+            onKeyVoiceChanged: laneCanvas.requestPaint()
+            onActiveFocusChanged: laneCanvas.requestPaint()
+            Keys.onPressed: event => {
+                if (!page.controller.editable || count === 0)
+                    return
+                if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+                    keyVoice = Math.max(0, Math.min(count - 1, keyVoice + (event.key === Qt.Key_Right ? 1 : -1)))
+                } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+                    const steps = (event.modifiers & Qt.ShiftModifier) !== 0 ? keyCoarseSteps : 1
+                    const value = keyVoice < bars.length ? Number(bars[keyVoice].value) : 0
+                    const direction = event.key === Qt.Key_Up ? 1 : -1
+                    Lanes.write(page.doc, page.kind, page.osc, page.lane, keyVoice,
+                                page.snap(value + direction * steps * Contract.analogue.paintStep))
+                } else {
+                    return
+                }
+                event.accepted = true
+            }
+
+            // The offsets' frame: the scale in percent of the lane's reach
+            // (each bar's caption gives its value in the lane's unit). The
+            // lanes are the settings, never the running voices: PREVIEW.
+            Kit.PlotFrame {
                 anchors.fill: parent
-                renderStrategy: Canvas.Cooperative
-                onPaint: {
-                    const ctx = getContext("2d")
-                    ctx.reset()
-                    const t = page.theme
-                    const mid = lanes.mid, amp = lanes.amp
-                    ctx.fillStyle = t.gridLine
-                    ctx.fillRect(lanes.pad, mid - amp, width - lanes.pad - lanes.end, t.hairline)
-                    ctx.fillRect(lanes.pad, mid + amp, width - lanes.pad - lanes.end, t.hairline)
-                    ctx.fillStyle = t.line2
-                    ctx.fillRect(lanes.pad, mid, width - lanes.pad - lanes.end, t.hairline)
-                    ctx.font = t.typeSmall + "px \"" + t.mono + "\""
-                    ctx.textAlign = "center"
-                    ctx.fillStyle = t.faint
-                    ctx.fillText("+", t.voicesScaleX, mid - amp + t.voicesScaleBaseline)
-                    ctx.fillText("0", t.voicesScaleX, mid + t.voicesScaleBaseline)
-                    ctx.fillText("−", t.voicesScaleX, mid + amp + t.voicesScaleBaseline)
-                    for (let v = 0; v < lanes.count; ++v) {
-                        const bar = v < lanes.bars.length ? lanes.bars[v] : null
-                        const value = bar !== null ? Number(bar.value) : 0
-                        const edited = bar !== null && bar.edited === true
-                        const c = edited ? t.am : t.vi
-                        const bx = lanes.centreX(v) - lanes.barWidth / 2
-                        const y = mid - value * amp
-                        ctx.fillStyle = t.soft(c, t.voicesBarFillAlpha)
-                        ctx.fillRect(bx, Math.min(mid, y), lanes.barWidth, Math.abs(y - mid))
-                        ctx.fillStyle = c
-                        ctx.fillRect(bx, y - t.voicesBarCapHeight / 2, lanes.barWidth, t.voicesBarCapHeight)
-                        ctx.fillStyle = t.dim
-                        ctx.font = t.typeBody + "px \"" + t.mono + "\""
-                        ctx.fillText(String(v + 1), lanes.centreX(v), height - t.voicesVoiceNumberBottom)
-                        ctx.fillStyle = edited ? t.am : t.faint
-                        ctx.font = t.voicesLaneValueSize + "px \"" + t.mono + "\""
-                        ctx.fillText(Contract.laneText(page.lane, value), lanes.centreX(v), height - t.voicesLaneValueBottom)
+                theme: page.theme
+                live: false
+                yUnit: "%"
+                yTicks: [{ at: lanes.scaleAt(-1), label: "−" + lanes.reachPercent },
+                         { at: lanes.scaleAt(0), label: "0" },
+                         { at: lanes.scaleAt(1), label: "+" + lanes.reachPercent }]
+
+                Canvas {
+                    id: laneCanvas
+                    anchors.fill: parent
+                    renderStrategy: Canvas.Cooperative
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.reset()
+                        // Drawn in the lanes' coordinates: the plot starts past the gutter.
+                        ctx.translate(-lanes.pad, 0)
+                        const t = page.theme
+                        const W = lanes.width, H = lanes.height
+                        const mid = lanes.mid, amp = lanes.amp
+                        ctx.fillStyle = t.gridLine
+                        ctx.fillRect(lanes.pad, mid - amp, W - lanes.pad - lanes.end, t.hairline)
+                        ctx.fillRect(lanes.pad, mid + amp, W - lanes.pad - lanes.end, t.hairline)
+                        ctx.fillStyle = t.line2
+                        ctx.fillRect(lanes.pad, mid, W - lanes.pad - lanes.end, t.hairline)
+                        ctx.textAlign = "center"
+                        for (let v = 0; v < lanes.count; ++v) {
+                            const bar = v < lanes.bars.length ? lanes.bars[v] : null
+                            const value = bar !== null ? Number(bar.value) : 0
+                            const edited = bar !== null && bar.edited === true
+                            const c = edited ? t.am : t.vi
+                            const bx = lanes.centreX(v) - lanes.barWidth / 2
+                            const y = mid - value * amp
+                            // The voice the keys move: its column outlined.
+                            if (lanes.activeFocus && v === lanes.keyVoice) {
+                                ctx.strokeStyle = t.vi
+                                ctx.lineWidth = t.hairline
+                                ctx.strokeRect(lanes.centreX(v) - lanes.cellWidth / 2, mid - amp,
+                                               lanes.cellWidth, 2 * amp)
+                            }
+                            ctx.fillStyle = t.soft(c, t.voicesBarFillAlpha)
+                            ctx.fillRect(bx, Math.min(mid, y), lanes.barWidth, Math.abs(y - mid))
+                            ctx.fillStyle = c
+                            ctx.fillRect(bx, y - t.voicesBarCapHeight / 2, lanes.barWidth, t.voicesBarCapHeight)
+                            ctx.fillStyle = t.dim
+                            ctx.font = t.typeBody + "px \"" + t.mono + "\""
+                            ctx.fillText(String(v + 1), lanes.centreX(v), H - t.voicesVoiceNumberBottom)
+                            ctx.fillStyle = edited ? t.am : t.faint
+                            ctx.font = t.voicesLaneValueSize + "px \"" + t.mono + "\""
+                            ctx.fillText(Contract.laneText(page.lane, value), lanes.centreX(v), H - t.voicesLaneValueBottom)
+                        }
+                    }
+                }
+
+                // Paint: press and drag across the bars, one gesture. Voices a
+                // fast drag skips over take the values in between. Positions
+                // are the lanes' (past the frame's gutter).
+                MouseArea {
+                    id: paint
+                    property bool painting: false
+                    property int last: -1
+                    property real lastValue: 0
+                    anchors.fill: parent
+                    enabled: page.controller.editable
+                    preventStealing: true
+                    cursorShape: Qt.CrossCursor
+
+                    function put(voice, value) {
+                        Lanes.write(page.doc, page.kind, page.osc, page.lane, voice, value)
+                    }
+                    function paintAt(x, y) {
+                        const voice = Math.max(0, Math.min(lanes.count - 1, lanes.voiceAt(x)))
+                        const value = lanes.valueAt(y)
+                        if (voice === last && value === lastValue)
+                            return
+                        if (last >= 0 && Math.abs(voice - last) > 1) {
+                            const step = voice > last ? 1 : -1
+                            for (let v = last + step; v !== voice; v += step)
+                                put(v, page.snap(lastValue + (value - lastValue) * (v - last) / (voice - last)))
+                        }
+                        put(voice, value)
+                        last = voice
+                        lastValue = value
+                        lanes.keyVoice = voice
+                    }
+                    onPressed: mouse => {
+                        const voice = lanes.voiceAt(mouse.x + lanes.pad)
+                        if (voice < 0 || voice >= lanes.count) {
+                            mouse.accepted = false
+                            return
+                        }
+                        lanes.forceActiveFocus()
+                        Lanes.begin(page.doc)
+                        painting = true
+                        last = -1
+                        paintAt(mouse.x + lanes.pad, mouse.y)
+                    }
+                    onPositionChanged: mouse => {
+                        if (painting)
+                            paintAt(mouse.x + lanes.pad, mouse.y)
+                    }
+                    onReleased: {
+                        if (painting)
+                            Lanes.commit(page.doc)
+                        painting = false
+                    }
+                    onCanceled: {
+                        if (painting)
+                            Lanes.cancel(page.doc)
+                        painting = false
                     }
                 }
             }
             onBarsChanged: laneCanvas.requestPaint()
-            onCountChanged: laneCanvas.requestPaint()
             onWidthChanged: laneCanvas.requestPaint()
             onHeightChanged: laneCanvas.requestPaint()
-
-            // Paint: press and drag across the bars, one gesture. Voices a
-            // fast drag skips over take the values in between.
-            MouseArea {
-                id: paint
-                property bool painting: false
-                property int last: -1
-                property real lastValue: 0
-                anchors.fill: parent
-                enabled: page.controller.editable
-                preventStealing: true
-                cursorShape: Qt.CrossCursor
-
-                function put(voice, value) {
-                    Lanes.write(page.doc, page.kind, page.osc, page.lane, voice, value)
-                }
-                function paintAt(x, y) {
-                    const voice = Math.max(0, Math.min(lanes.count - 1, lanes.voiceAt(x)))
-                    const value = lanes.valueAt(y)
-                    if (voice === last && value === lastValue)
-                        return
-                    if (last >= 0 && Math.abs(voice - last) > 1) {
-                        const step = voice > last ? 1 : -1
-                        for (let v = last + step; v !== voice; v += step)
-                            put(v, page.snap(lastValue + (value - lastValue) * (v - last) / (voice - last)))
-                    }
-                    put(voice, value)
-                    last = voice
-                    lastValue = value
-                }
-                onPressed: mouse => {
-                    const voice = lanes.voiceAt(mouse.x)
-                    if (voice < 0 || voice >= lanes.count) {
-                        mouse.accepted = false
-                        return
-                    }
-                    Lanes.begin(page.doc)
-                    painting = true
-                    last = -1
-                    paintAt(mouse.x, mouse.y)
-                }
-                onPositionChanged: mouse => {
-                    if (painting)
-                        paintAt(mouse.x, mouse.y)
-                }
-                onReleased: {
-                    if (painting)
-                        Lanes.commit(page.doc)
-                    painting = false
-                }
-                onCanceled: {
-                    if (painting)
-                        Lanes.cancel(page.doc)
-                    painting = false
-                }
-            }
         }
 
         // Legend and tools.

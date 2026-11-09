@@ -26,22 +26,6 @@ Rectangle {
     readonly property real designedHeight: 806
     readonly property real margin: 16
     readonly property real gap: 10
-    readonly property real headerY: 10
-    readonly property real headerHeight: 52
-    readonly property real browserX: 230
-    readonly property real browserY: 4
-    readonly property real displayWidth: 520
-    readonly property real displayHeight: 42
-    readonly property real displayPadX: 14
-    readonly property real categoryY: 5
-    readonly property real presetNameY: 16
-    readonly property real presetNameWidth: 220
-    readonly property real dividerX: 248
-    readonly property real dividerInset: 8
-    readonly property real readoutX: 260
-    readonly property real readoutValueY: 17
-    readonly property real readoutRightPad: 26
-    readonly property real statusY: 13
     // Inside a plate: controls start contentX in and contentTop down (rows
     // of keys and dropdowns a little lower at controlTop); views sit
     // viewInset in from the sides and bottom.
@@ -74,6 +58,8 @@ Rectangle {
     readonly property real envelopeHeight: 72
     readonly property real ampKnobsY: 110
     readonly property real filterViewWidth: 184
+    // The filter view's level scale (dB), labelled by its frame.
+    readonly property var filterLevelMarks: [12, 0, -24]
     readonly property real filterControlsX: 206
     readonly property real filterViewGap: filterControlsX - filterViewWidth - viewInset
     readonly property real filterKnobsY: 62
@@ -117,15 +103,6 @@ Rectangle {
     Accessible.role: Accessible.Pane
     Accessible.name: "Drift granular synthesizer"
 
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        return info.name === undefined ? "" : (info.group + " · " + info.name).toUpperCase()
-    }
-    function readoutValue(id) {
-        return id === "" || controller.revision < 0 ? "" : controller.display(id)
-    }
     // Draws grain window `index` as a small curve for the shape keys.
     function windowGlyph(ctx, index, w, h, colour) {
         const curve = controller.grain_window(index, theme.glyphSamples)
@@ -147,6 +124,7 @@ Rectangle {
 
     // Aurora: soft coloured light drifting behind the glass.
     Canvas {
+        readonly property string plotExemptReason: "the panel's aurora backdrop, decoration rather than a plot"
         anchors.fill: parent
         renderStrategy: Canvas.Cooperative
         onPaint: {
@@ -200,6 +178,7 @@ Rectangle {
         required property string parameterId
         property int diameter: panel.theme.cellDiameter
         property bool inactive: false
+        property string inactiveReason: ""
         property string label: ""
         width: Math.max(diameter + panel.theme.cellWidthPad, panel.theme.cellMinWidth)
         height: diameter + panel.theme.cellHeightPad
@@ -211,6 +190,7 @@ Rectangle {
             parameterId: cell.parameterId
             diameter: cell.diameter
             inactive: cell.inactive
+            inactiveReason: cell.inactiveReason
             label: cell.label !== "" ? cell.label : cellKnob.info.name !== undefined ? cellKnob.info.name : ""
         }
     }
@@ -224,167 +204,55 @@ Rectangle {
 
     // ---- Header ---------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
-        y: panel.headerY
+        y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.headerHeight
-
-        Text {
-            id: wordmark
-            y: 0
-            text: "DRIFT"
-            color: panel.theme.ink
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Light
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        Rectangle {
-            x: wordmark.x + panel.theme.wordmarkInset
-            y: wordmark.y + wordmark.height
-            width: wordmark.implicitWidth - panel.theme.wordmarkRuleTrim
-            height: panel.theme.strokeBold
-            radius: height / 2
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0; color: panel.theme.accent }
-                GradientStop { position: 0.6; color: panel.theme.accent2 }
-                GradientStop { position: 1; color: panel.theme.magenta }
-            }
-        }
-        Text {
-            x: wordmark.x + panel.theme.wordmarkInset
-            y: wordmark.y + wordmark.height + panel.theme.taglineGap
-            text: "GRANULAR TEXTURES · NEBULA"
-            color: panel.theme.inkDim
-            font.pixelSize: panel.theme.captionSize
-            font.bold: true
-            font.letterSpacing: panel.theme.taglineSpacing
-        }
-
-        // Preset browser and readout.
-        Row {
-            id: browser
-            x: panel.browserX
-            y: panel.browserY
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "driftPresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "driftPresetDisplay"
-                width: panel.displayWidth
-                height: panel.displayHeight
-                radius: panel.theme.radiusXl
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                border.width: activeFocus ? panel.theme.litEdgeWidth : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.accent)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        // The wordmark over its aurora rule, the tagline under it.
+        brand: Component {
+            Column {
+                spacing: panel.theme.subtitleGap
                 Text {
-                    x: panel.displayPadX
-                    y: panel.categoryY
-                    text: panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.captionSize
-                    font.bold: true
-                    font.letterSpacing: panel.theme.captionSpacing
-                }
-                Text {
-                    objectName: "driftPresetName"
-                    x: panel.displayPadX
-                    y: panel.presetNameY
-                    width: panel.presetNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.pixelSize: panel.theme.presetNameSize
-                    font.weight: Font.DemiBold
-                    elide: Text.ElideRight
+                    id: wordmark
+                    objectName: "driftWordmark"
+                    text: "DRIFT"
+                    color: panel.theme.wordmarkInk
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.weight: panel.theme.wordmarkWeight
+                    font.letterSpacing: panel.theme.wordmarkSpacing
                 }
                 Rectangle {
-                    x: panel.dividerX
-                    y: panel.dividerInset
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.dividerInset
-                    color: panel.theme.wellEdge
-                }
-                Text {
-                    objectName: "driftReadout"
-                    x: panel.readoutX
-                    y: panel.categoryY
-                    width: display.width - x - panel.readoutRightPad
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.captionSize
-                    font.bold: true
-                    font.letterSpacing: panel.theme.readoutLabelSpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "driftReadoutValue"
-                    x: panel.readoutX
-                    y: panel.readoutValueY
-                    width: display.width - x - panel.readoutRightPad
-                    text: panel.readoutValue(panel.theme.lastTouched)
-                    color: panel.theme.accent
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.readoutValueSize
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.chevronInset
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.accent
-                    font.pixelSize: panel.theme.chevronSize
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
+                    x: panel.theme.wordmarkInset
+                    width: wordmark.implicitWidth - panel.theme.wordmarkRuleTrim
+                    height: panel.theme.strokeBold
+                    radius: height / 2
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0; color: panel.theme.accent }
+                        GradientStop { position: 0.6; color: panel.theme.accent2 }
+                        GradientStop { position: 1; color: panel.theme.magenta }
                     }
                 }
+                Text {
+                    objectName: "driftSubtitle"
+                    x: panel.theme.wordmarkInset
+                    text: "GRANULAR TEXTURES · NEBULA"
+                    color: panel.theme.subtitleInk
+                    font.pixelSize: panel.theme.subtitleSize
+                    font.bold: true
+                    font.letterSpacing: panel.theme.subtitleSpacing
+                }
             }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "driftPresetNext"
-                direction: 1
-            }
-        }
-
-        Kit.StatusBadge {
-            id: status
-            objectName: "driftStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: panel.statusY
         }
     }
 
     // ---- Cloud and grains -----------------------------------------------------------------
 
-    readonly property real rowAY: 72
+    readonly property real rowAY: header.y + header.height + panel.theme.headerContentGap
     readonly property real rowAHeight: 300
 
     Plate {
@@ -459,7 +327,8 @@ Rectangle {
                 parameterId: "drift.sync.division"
                 menu: menu
                 accent: panel.theme.accent2
-                opacity: panel.synced ? 1 : panel.theme.unsyncedOpacity
+                inactive: !panel.synced
+                inactiveReason: inactive ? "Division applies with Sync on" : ""
             }
         }
         Rectangle {
@@ -479,6 +348,7 @@ Rectangle {
             Cell {
                 parameterId: "drift.grain.chaos"
                 inactive: panel.synced
+                inactiveReason: inactive ? "Chaos follows Sync" : ""
             }
             Cell { parameterId: "drift.grain.position" }
             Cell { parameterId: "drift.grain.scan" }
@@ -493,6 +363,7 @@ Rectangle {
             Cell {
                 parameterId: "drift.grain.interval_amount"
                 inactive: panel.controller.revision >= 0 && panel.controller.choice("drift.grain.intervals") === 0
+                inactiveReason: inactive ? "Amount applies with Intervals on" : ""
             }
             Cell { parameterId: "drift.grain.reverse" }
             Cell { parameterId: "drift.grain.spread" }
@@ -602,6 +473,7 @@ Rectangle {
                 parameterId: "drift.air.width"
                 label: "Air Width"
                 inactive: panel.controller.revision >= 0 && panel.controller.value("drift.air.level") <= 0
+                inactiveReason: inactive ? "Air Width applies with Air above 0" : ""
             }
         }
         Row {
@@ -670,15 +542,35 @@ Rectangle {
         y: panel.rowBY
         width: panel.width - panel.margin - x
         height: panel.rowBHeight
-        Kit.FilterView {
-            caption: panel.filterCaption
+        // The filter drawn from its settings (a PREVIEW), its level scale
+        // in dB on the frame; the view labels its own decades.
+        Kit.PlotFrame {
+            id: filterFrame
             x: panel.viewInset
             y: panel.contentTop
             // Gives way when the type selector needs more than its column.
             width: Math.min(panel.filterViewWidth, filterType.x - panel.filterViewGap - x)
             height: filter.height - panel.contentTop - panel.viewInset
-            controller: panel.controller
             theme: panel.theme
+            live: false
+            yUnit: "dB"
+            yTicks: {
+                const t = panel.theme
+                const h = filterFrame.plotArea.height
+                const plot = h - t.filterViewTop - t.filterViewBottom
+                if (!(h > 0) || !(plot > 0))
+                    return []
+                return panel.filterLevelMarks.map(db => ({
+                    at: 1 - (t.filterViewTop + (t.filterViewCeilingDb - db)
+                             / (t.filterViewCeilingDb - t.filterViewFloorDb) * plot) / h,
+                    label: Format.signed_number(db, 0) }))
+            }
+            Kit.FilterView {
+                anchors.fill: parent
+                caption: panel.filterCaption
+                controller: panel.controller
+                theme: panel.theme
+            }
         }
         Kit.Segment {
             id: filterType
@@ -752,7 +644,8 @@ Rectangle {
             theme: panel.theme
             parameterId: lfoPlate.base + ".division"
             menu: menu
-            opacity: lfoPlate.lfoSynced ? 1 : panel.theme.unsyncedOpacity
+            inactive: !lfoPlate.lfoSynced
+            inactiveReason: inactive ? "Division applies with Sync on" : ""
         }
         Caption {
             x: panel.lfoDivisionX
@@ -766,6 +659,7 @@ Rectangle {
             Cell {
                 parameterId: lfoPlate.base + ".rate"
                 inactive: lfoPlate.lfoSynced
+                inactiveReason: inactive ? "Rate follows Sync" : ""
             }
             Cell { parameterId: lfoPlate.base + "." + lfoPlate.firstTarget }
             Cell { parameterId: lfoPlate.base + "." + lfoPlate.secondTarget }
@@ -871,7 +765,8 @@ Rectangle {
                 theme: panel.theme
                 parameterId: "drift.fx.delay_division"
                 menu: menu
-                opacity: effects.delaySynced ? 1 : panel.theme.unsyncedOpacity
+                inactive: !effects.delaySynced
+                inactiveReason: inactive ? "Division applies with Sync on" : ""
             }
         }
         Row {
@@ -885,6 +780,7 @@ Rectangle {
             Cell {
                 parameterId: "drift.fx.delay_time"
                 inactive: effects.delaySynced
+                inactiveReason: inactive ? "Time follows Sync" : ""
                 width: panel.compactCellWidth
             }
             Cell {

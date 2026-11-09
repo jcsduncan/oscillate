@@ -77,6 +77,7 @@ Rectangle {
 
     // A click anywhere on the strip selects it.
     MouseArea {
+        readonly property string keyboardAlternative: "Return on the strip's row in the rack selects it"
         anchors.fill: parent
         onPressed: mouse => {
             strip.page.selected = strip.uid
@@ -123,11 +124,18 @@ Rectangle {
                 font.pixelSize: strip.panel.theme.typeBody
                 font.weight: Font.ExtraBold
                 font.letterSpacing: strip.panel.theme.fxStripNameSpacing
+                activeFocusOnTab: strip.controller.editable
                 Accessible.role: Accessible.Button
                 Accessible.name: "Swap " + (strip.spec !== null ? strip.spec.name : "") + " for another effect"
+                Keys.onReturnPressed: strip.page.openBrowser(name, strip.index)
+                Keys.onSpacePressed: strip.page.openBrowser(name, strip.index)
+                FocusRing { theme: strip.panel.theme; target: name }
                 MouseArea {
                     anchors.fill: parent
-                    anchors.margins: -strip.panel.theme.fxStripNameHit
+                    anchors.leftMargin: -strip.panel.theme.fxStripNameHit
+                    anchors.rightMargin: -strip.panel.theme.fxStripNameHit
+                    anchors.topMargin: -Math.max(strip.panel.theme.fxStripNameHit, strip.panel.theme.hitOutset(parent.height))
+                    anchors.bottomMargin: -Math.max(strip.panel.theme.fxStripNameHit, strip.panel.theme.hitOutset(parent.height))
                     enabled: strip.controller.editable
                     cursorShape: Qt.PointingHandCursor
                     onClicked: strip.page.openBrowser(name, strip.index)
@@ -174,10 +182,16 @@ Rectangle {
                         width: strip.presetWidth
                         height: parent.height
                         color: "transparent"
-                        border.color: strip.panel.theme.line
+                        border.color: activeFocus ? strip.panel.theme.pk : strip.panel.theme.line
+                        border.width: activeFocus ? strip.panel.theme.strokeBold : strip.panel.theme.hairline
+                        activeFocusOnTab: strip.controller.editable
                         Accessible.role: Accessible.ComboBox
                         Accessible.name: "Preset"
-                        Accessible.description: strip.presetName
+                        Accessible.description: strip.presetName + ". Return opens the list; Left and Right step the presets"
+                        Keys.onReturnPressed: strip.page.openPresetMenu(presetName, strip.uid, strip.module)
+                        Keys.onSpacePressed: strip.page.openPresetMenu(presetName, strip.uid, strip.module)
+                        Keys.onLeftPressed: strip.page.stepPreset(strip.uid, strip.module, -1)
+                        Keys.onRightPressed: strip.page.stepPreset(strip.uid, strip.module, 1)
                         Text {
                             anchors.centerIn: parent
                             width: parent.width - strip.panel.theme.fxPresetTextRoom
@@ -238,14 +252,24 @@ Rectangle {
                 objectName: "novaFxCollapse:" + strip.uid
                 anchors.verticalCenter: parent.verticalCenter
                 text: strip.collapsed ? "▸" : "▾"
+                // As wide as the least hit size, so ▾ and ⋯ never share a target.
+                width: Math.max(implicitWidth, strip.panel.theme.minHitSize)
+                horizontalAlignment: Text.AlignHCenter
                 color: collapseArea.containsMouse ? strip.panel.theme.text : strip.panel.theme.faint
                 font.pixelSize: strip.panel.theme.typeEmphasis
+                activeFocusOnTab: true
                 Accessible.role: Accessible.Button
                 Accessible.name: strip.collapsed ? "Expand" : "Collapse"
+                Keys.onReturnPressed: strip.page.setCollapsed(strip.uid, !strip.collapsed)
+                Keys.onSpacePressed: strip.page.setCollapsed(strip.uid, !strip.collapsed)
+                FocusRing { theme: strip.panel.theme; target: parent }
                 MouseArea {
                     id: collapseArea
                     anchors.fill: parent
-                    anchors.margins: -strip.panel.theme.fxMenuHit
+                    anchors.leftMargin: -strip.panel.theme.hitOutset(parent.width)
+                    anchors.rightMargin: -strip.panel.theme.hitOutset(parent.width)
+                    anchors.topMargin: -Math.max(strip.panel.theme.fxMenuHit, strip.panel.theme.hitOutset(parent.height))
+                    anchors.bottomMargin: -Math.max(strip.panel.theme.fxMenuHit, strip.panel.theme.hitOutset(parent.height))
                     hoverEnabled: true
                     onClicked: strip.page.setCollapsed(strip.uid, !strip.collapsed)
                 }
@@ -256,13 +280,22 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 text: "⋯"
                 color: kebabArea.containsMouse ? strip.panel.theme.text : strip.panel.theme.faint
+                width: Math.max(implicitWidth, strip.panel.theme.minHitSize)
+                horizontalAlignment: Text.AlignHCenter
                 font.pixelSize: strip.panel.theme.typeHeading
+                activeFocusOnTab: strip.controller.editable
                 Accessible.role: Accessible.Button
                 Accessible.name: "More actions"
+                Keys.onReturnPressed: strip.page.openSlotMenu(kebab, strip.index)
+                Keys.onSpacePressed: strip.page.openSlotMenu(kebab, strip.index)
+                FocusRing { theme: strip.panel.theme; target: kebab }
                 MouseArea {
                     id: kebabArea
                     anchors.fill: parent
-                    anchors.margins: -strip.panel.theme.fxMenuHit
+                    anchors.leftMargin: -strip.panel.theme.hitOutset(parent.width)
+                    anchors.rightMargin: -strip.panel.theme.hitOutset(parent.width)
+                    anchors.topMargin: -Math.max(strip.panel.theme.fxMenuHit, strip.panel.theme.hitOutset(parent.height))
+                    anchors.bottomMargin: -Math.max(strip.panel.theme.fxMenuHit, strip.panel.theme.hitOutset(parent.height))
                     hoverEnabled: true
                     enabled: strip.controller.editable
                     onClicked: strip.page.openSlotMenu(kebab, strip.index)
@@ -289,11 +322,25 @@ Rectangle {
         }
         MouseArea {
             id: arrowArea
+            readonly property string keyboardAlternative: "Left and Right on the focused preset name step the presets"
             anchors.fill: parent
             hoverEnabled: true
             enabled: arrow.owner.controller.editable
             onClicked: arrow.owner.page.stepPreset(arrow.owner.uid, arrow.owner.module, arrow.direction)
         }
+    }
+
+    // A glyph button's focus ring, in the FX accent.
+    component FocusRing: Rectangle {
+        required property NovaTheme theme
+        required property Item target
+        anchors.fill: target
+        anchors.margins: -theme.fxFocusOutset
+        visible: target.activeFocus
+        radius: theme.radiusMd
+        color: "transparent"
+        border.color: theme.pk
+        border.width: theme.strokeBold
     }
 
     // ---- Body ----
@@ -399,13 +446,18 @@ Rectangle {
                             }
                         }
                         Row {
+                            id: bandKnobs
+                            // An Off band's knobs are mode-inactive.
+                            readonly property bool off: band.type === Contract.eqType.off
+                            readonly property string offReason: "Band " + (band.index + 1) + " is Off"
                             spacing: strip.panel.theme.spaceXxs
-                            opacity: band.type === Contract.eqType.off ? strip.panel.theme.eqBandOffOpacity : 1
                             NovaKnob {
                                 panel: strip.panel
                                 parameterId: Contract.fxParam(strip.uid, 4 * band.index + 1)
                                 size: "sm"
                                 label: "FREQ"
+                                inactive: bandKnobs.off
+                                inactiveReason: inactive ? bandKnobs.offReason : ""
                                 formatter: p => Contract.hz(Contract.eqHz(p))
                             }
                             NovaKnob {
@@ -414,6 +466,8 @@ Rectangle {
                                 size: "sm"
                                 label: "GAIN"
                                 inactive: !Contract.eqHasGain(band.type)
+                                inactiveReason: bandKnobs.off ? bandKnobs.offReason
+                                    : inactive ? "Gain acts on bell and shelf bands only" : ""
                                 formatter: p => Contract.db(Contract.eqDb(p))
                             }
                             NovaKnob {
@@ -421,6 +475,8 @@ Rectangle {
                                 parameterId: Contract.fxParam(strip.uid, 4 * band.index + 3)
                                 size: "sm"
                                 label: "Q"
+                                inactive: bandKnobs.off
+                                inactiveReason: inactive ? bandKnobs.offReason : ""
                                 formatter: p => Contract.number(Contract.eqQ(p))
                             }
                         }

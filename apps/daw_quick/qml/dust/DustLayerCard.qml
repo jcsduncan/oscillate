@@ -4,8 +4,8 @@ import "../devicekit" as Kit
 
 // One layer on Dust's shelf: its glyph and on/off switch, a level fader,
 // Tone and Width, the layer's own knobs and (where it has one) its choice
-// across the foot. An off layer dims but stays editable, so it can be set
-// up before it is heard.
+// across the foot. An off layer collapses to its header with an OFF chip:
+// its switch brings the controls back.
 Item {
     id: card
     required property var controller
@@ -51,13 +51,43 @@ Item {
         label: card.spec.title.toUpperCase()
         accent: card.tint
     }
+    Rectangle {
+        objectName: "dustLayerOff:" + card.key
+        visible: !card.on
+        x: card.width - width - card.pad
+        y: card.theme.spaceMd + (card.theme.switchHeight - height) / 2
+        width: offText.implicitWidth + 2 * card.theme.offChipPad
+        height: card.theme.offChipHeight
+        radius: card.theme.offChipRadius
+        color: card.theme.well
+        border.color: card.theme.plateEdge
+        Text {
+            id: offText
+            anchors.centerIn: parent
+            text: "OFF"
+            color: card.theme.inkDim
+            font.pixelSize: card.theme.typeMicro
+            font.bold: true
+            font.letterSpacing: card.theme.tagSpacing
+        }
+    }
+    Text {
+        visible: !card.on
+        x: card.pad
+        y: card.headerHeight
+        width: card.width - 2 * card.pad
+        text: "Switch " + card.spec.title + " on to hear and set it."
+        color: card.theme.inkDim
+        font.pixelSize: card.theme.noteSize
+        wrapMode: Text.WordWrap
+    }
 
     Item {
         id: body
         y: card.headerHeight
         width: card.width
         height: card.height - card.headerHeight
-        opacity: card.on ? 1 : card.theme.offOpacity
+        visible: card.on
 
         Kit.Fader {
             x: card.pad

@@ -964,10 +964,23 @@ void panel_loads_and_visits_every_page() {
 // scrolling: the three oscillators and SUB · NOISE across the top, the
 // filters and ROUTING under them, MODULATION and MACROS at the foot. Each
 // card holds its display and its controls; the master level is on ROUTING.
+// OSC C starts off, folded to its header with an OFF chip (issue #163);
+// switched on, it opens to its display and controls.
 void overview_shows_every_module() {
   InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
+  auto* osc_c = item(*panel, QStringLiteral("novaModuleCard:c"));
+  require(osc_c->property("collapsed").toBool() &&
+              item(*panel, QStringLiteral("novaCardOff:c"))->isVisible() &&
+              !item(*panel, QStringLiteral("novaOsc:c"))->isVisible() &&
+              osc_c->height() < item(*panel, QStringLiteral("novaModuleCard:a"))->height(),
+          "an off OSC C folds to its header with an OFF chip");
+  controller.set_choice(QStringLiteral("nova.osc.c.on"), 1);
+  settle();
+  require(!osc_c->property("collapsed").toBool() &&
+              !item(*panel, QStringLiteral("novaCardOff:c"))->isVisible(),
+          "switched on, OSC C opens");
   require(panel->root->property("page").toInt() == 0, "the panel opens on MAIN");
   auto* overview = item(*panel, QStringLiteral("novaOverview"));
   const QRectF area = scene_rect(item(*panel, QStringLiteral("novaPage:0")));
@@ -1138,19 +1151,17 @@ void a_mod_tab_selects_its_source() {
           "a performance source has nothing to edit: the selection stays");
 }
 
-// The zoom chips set the zoom the host lays the panel out at; the
-// constellation button opens its place over the pages and closes the browser.
+// The zoom is the host's (its chips, ADR-0103): the panel has none of its
+// own and opens at 100%. The constellation button opens its place over the
+// pages and closes the browser.
 void zoom_and_constellation() {
   InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(std::fabs(panel->root->property("zoom").toDouble() - 1.0) < 1e-9,
           "the panel opens at 100%");
-  click(*panel, centre(item(*panel, QStringLiteral("novaZoom:140"))));
-  require(std::fabs(panel->root->property("zoom").toDouble() - 1.4) < 1e-9, "the 140% chip zooms");
-  click(*panel, centre(item(*panel, QStringLiteral("novaZoom:90"))));
-  require(std::fabs(panel->root->property("zoom").toDouble() - 0.9) < 1e-9,
-          "the 90% chip zooms out");
+  require(find_item(panel->root, QStringLiteral("novaZoom")) == nullptr,
+          "the zoom chips are the host's, not the panel's");
 
   click(*panel, centre(item(*panel, QStringLiteral("novaPresetBrowse"))));
   require(item(*panel, QStringLiteral("novaPresetBrowser"))->isVisible(),
@@ -1256,6 +1267,8 @@ void every_parameter_has_a_control() {
   InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
+  // OSC C starts off, folded to its header: switch it on to show its controls.
+  controller.set_choice(QStringLiteral("nova.osc.c.on"), 1);
   QSet<QString> ids;
   std::vector<QString> names;
   const auto sweep = [&] {
@@ -1337,8 +1350,10 @@ void drag_to_modulate_and_edit_the_route() {
   require(std::fabs(controller.value(QStringLiteral("nova.mod.0.amount")) - 0.3) < 1e-9,
           "the route's amount is 30 %");
   require(item(*panel, QStringLiteral("novaReadout"))->property("text").toString() ==
-              QStringLiteral("LFO 1 → CUTOFF 30 %"),
-          "the readout confirms the route");
+                  QStringLiteral("LFO 1 → CUTOFF") &&
+              item(*panel, QStringLiteral("novaReadoutValue"))->property("text").toString() ==
+                  QStringLiteral("30 %"),
+          "the header's readout confirms the route");
   require(js_length(knob->property("routes")) == 1, "the knob shows its route");
 
   // A second source on the same knob takes the next slot.

@@ -20,6 +20,15 @@ Rectangle {
     readonly property var response: revision >= 0 ? controller.filter_response(points) : []
     readonly property real cutoffDb: response.length > 0
         ? response[Math.round(cutoffFraction * (points - 1))] : 0
+    // The decades the grid marks and the levels the frame labels, as
+    // [value, label]; the first carries the axis unit.
+    readonly property var frequencyMarks: [[100, "100"], [1000, "1k"], [10000, "10k"]]
+    readonly property var levelMarks: [[0, "0"], [12, "+12"], [-24, "-24"]]
+    // The same marks as PlotFrame ticks, from this view's own mapping.
+    readonly property var frequencyTicks: frequencyMarks.map(mark => ({
+        at: controller.fraction_of(mark[0]), label: mark[1] }))
+    readonly property var levelTicks: height > 0 ? levelMarks.map(mark => ({
+        at: 1 - yOf(mark[0]) / height, label: mark[1] })) : []
 
     objectName: "prismFilterView"
     radius: theme.viewRadius
@@ -56,19 +65,15 @@ Rectangle {
             ctx.reset()
             const w = width
             const h = height
-            // Decade grid.
+            // Decade grid; the frame labels it.
             const t = view.theme
             ctx.strokeStyle = t.line
             ctx.lineWidth = t.hairline
-            ctx.fillStyle = t.faint
-            ctx.font = t.typeCaption + "px sans-serif"
-            const marks = [[100, "100"], [1000, "1k"], [10000, "10k"]]
-            for (let i = 0; i < marks.length; ++i) {
-                const x = Math.round(view.controller.fraction_of(marks[i][0]) * w) + 0.5
+            for (let i = 0; i < view.frequencyMarks.length; ++i) {
+                const x = Math.round(view.controller.fraction_of(view.frequencyMarks[i][0]) * w) + 0.5
                 ctx.globalAlpha = t.filterGridAlpha
                 ctx.beginPath(); ctx.moveTo(x, t.filterPlotInset); ctx.lineTo(x, h - t.filterPlotInset); ctx.stroke()
                 ctx.globalAlpha = 1
-                ctx.fillText(marks[i][1], x + t.filterLabelGap, h - t.filterLabelLift)
             }
             const zero = Math.round(view.yOf(0)) + 0.5
             ctx.globalAlpha = t.filterZeroAlpha

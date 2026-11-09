@@ -123,6 +123,7 @@ Item {
                         label: "RATE"
                         inactive: controls.panel.controller.revision >= 0
                                   && controls.panel.controller.choice(controls.base + ".sync") !== 0
+                        inactiveReason: "Rate follows Sync"
                     }
                     Knob { parameterId: controls.base + ".rise"; label: "RISE" }
                     Knob { parameterId: controls.base + ".delay"; label: "DELAY" }

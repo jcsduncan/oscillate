@@ -368,7 +368,7 @@ void panel_loads_and_edits_through_the_controller() {
   require(controller.choice(QStringLiteral("prism.osc1.wave")) == 3, "click picks sine");
 
   // Preset menu: open, then choose with the keyboard.
-  auto* box = item(*panel, QStringLiteral("prismPresetBox"));
+  auto* box = item(*panel, QStringLiteral("prismPresetDisplay"));
   auto* menu = item(*panel, QStringLiteral("prismMenu"));
   QTest::mouseClick(panel->window.get(), Qt::LeftButton, Qt::NoModifier,
                     box->mapToScene(QPointF(box->width() / 2, box->height() / 2)).toPoint());

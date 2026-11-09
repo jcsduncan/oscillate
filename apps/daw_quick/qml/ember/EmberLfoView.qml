@@ -23,6 +23,7 @@ Rectangle {
     // Pixels kept clear above and below the wave's peaks.
     readonly property real peakHeadroom: 3
 
+    readonly property string plotExemptReason: "a thumbnail of the LFO's shape over two cycles; its rate and delay read on their knobs"
     radius: theme.viewRadius
     color: theme.well
     border.color: theme.engraving

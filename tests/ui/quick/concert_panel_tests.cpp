@@ -308,7 +308,7 @@ void strings_view_goes_live() {
   QTest::qWait(300);
   require(!view->property("live").toBool() &&
               text_of(*panel, QStringLiteral("concertStringsCaption"))
-                  .contains(QStringLiteral("NOT LIVE")) &&
+                  .contains(QStringLiteral("PREVIEW")) &&
               view->property("sustain").toList().size() ==
                   static_cast<qsizetype>(concert::key_count),
           "no telemetry: the ring preview");
@@ -319,7 +319,7 @@ void strings_view_goes_live() {
           "live strings arrive");
   require(view->property("ringing").toInt() == 1 &&
               text_of(*panel, QStringLiteral("concertStringsCaption")) ==
-                  QStringLiteral("LIVE · 1 KEY RINGING"),
+                  QStringLiteral("PLAYING · 1 KEY RINGING"),
           "C4 rings");
   const int damped = concert_test::last_damped_key - concert::first_key + 1;
   require(view->property("lifted").toInt() == damped,

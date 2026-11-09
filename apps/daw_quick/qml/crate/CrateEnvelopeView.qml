@@ -22,6 +22,13 @@ Kit.EnvelopeView {
     }
     // The four timed stages share what the sustain leaves.
     readonly property int timedStages: 4
+    // The level scale the frame labels: silence and full level, where the
+    // plot draws them (stage widths follow the square root of their times,
+    // so time takes no scale).
+    readonly property real fullLevelPercent: 100
+    readonly property var levelTicks: height > 0
+        ? [{ at: 1 - plotY(0) / height, label: "0" },
+           { at: 1 - plotY(1) / height, label: String(fullLevelPercent) }] : []
 
     objectName: "crateEnvelope"
     accent: colour

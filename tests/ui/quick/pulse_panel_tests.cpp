@@ -414,16 +414,16 @@ void kit_browser_and_status() {
   InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
-  require(item(*panel, QStringLiteral("pulseKitName"))->property("text").toString() ==
+  require(item(*panel, QStringLiteral("pulsePresetName"))->property("text").toString() ==
               QStringLiteral("808 Classic"),
           "defaults are 808 Classic");
 
-  click(*panel, item(*panel, QStringLiteral("pulseKitNext")));
+  click(*panel, item(*panel, QStringLiteral("pulsePresetNext")));
   require(controller.preset_name() == QStringLiteral("808 Boom"), "next steps the kit");
-  click(*panel, item(*panel, QStringLiteral("pulseKitPrevious")));
+  click(*panel, item(*panel, QStringLiteral("pulsePresetPrevious")));
   require(controller.preset_name() == QStringLiteral("808 Classic"), "previous steps back");
 
-  auto* box = item(*panel, QStringLiteral("pulseKitBox"));
+  auto* box = item(*panel, QStringLiteral("pulsePresetDisplay"));
   auto* menu = item(*panel, QStringLiteral("pulseMenu"));
   click(*panel, box);
   require(menu->isVisible(), "the kit menu opens");
@@ -431,7 +431,7 @@ void kit_browser_and_status() {
   QTest::keyClick(panel->window.get(), Qt::Key_Return);
   require(!menu->isVisible() && controller.preset_name() == QStringLiteral("808 Boom"),
           "the keyboard chooses the next kit");
-  require(item(*panel, QStringLiteral("pulseKitName"))->property("text").toString() ==
+  require(item(*panel, QStringLiteral("pulsePresetName"))->property("text").toString() ==
               QStringLiteral("808 Boom"),
           "the header shows the kit");
   require(controller.value(QStringLiteral("pulse.kick.decay")) == 1.8, "the kit is applied");

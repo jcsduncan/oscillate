@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Oscillate.Format
+import "../devicekit" as Kit
 
 // The masking map: Pocket's 24 bands on a log frequency axis (30 Hz to
 // 8 kHz) and a dBFS scale. The kick is amber, the bass cyan, each with a
@@ -8,7 +9,8 @@ import Oscillate.Format
 // overlap is shaded red, and the cut Pocket makes hangs from the bass curve
 // in green, the bass after Pocket dashed beneath it. The focus range is
 // lit, outside it dimmed, its edges draggable handles that never cross; the
-// mono sub's region is hatched. Hovering reads one band out.
+// mono sub's region is hatched. Hovering reads one band out. The shared
+// plot frame labels the axes and says LIVE or PREVIEW.
 Item {
     id: map
     required property var controller
@@ -47,6 +49,23 @@ Item {
     // A cut bar's width as a share of the band step, hovered or not.
     readonly property real cutBarShare: 0.52
     readonly property real cutBarHoveredShare: 0.7
+    // The grid: these frequencies (the strong ones brighter) and every
+    // levelStep dB down to the lowest level line.
+    readonly property var gridHz: [30, 50, 100, 200, 500, 1000, 2000, 5000]
+    readonly property var strongHz: [100, 1000]
+    readonly property real levelStep: 12
+    readonly property real lowestLevelLine: -72
+    // The axes' ticks, for the frame: frequency left to right, level from 0 dB down.
+    readonly property var xTicks: gridHz.map(hz => ({
+        at: (xOf(hz) - px) / pw,
+        label: hz >= hertzPerKilohertz ? Format.number(hz / hertzPerKilohertz, 0) + "k" : Format.number(hz, 0)
+    }))
+    readonly property var yTicks: {
+        const ticks = []
+        for (let db = topDb; db >= lowestLevelLine; db -= levelStep)
+            ticks.push({ at: (db - bottomDb) / (topDb - bottomDb), label: Format.number(db, 0) })
+        return ticks
+    }
 
     objectName: "pocketMap"
     implicitWidth: theme.mapWidth
@@ -106,194 +125,199 @@ Item {
     onWidthChanged: plot.requestPaint()
     onHeightChanged: plot.requestPaint()
 
-    Canvas {
-        id: plot
-        anchors.fill: parent
-        renderStrategy: Canvas.Cooperative
-        // A smooth curve through the band points.
-        function curve(ctx, values, offset) {
-            const n = values.length
-            if (n === 0)
-                return
-            const point = i => [map.xOf(map.bandHz(i)), map.yOf(values[i] - (offset ? offset[i] : 0))]
-            let [x0, y0] = point(0)
-            ctx.moveTo(x0, y0)
-            for (let i = 1; i < n; ++i) {
-                const [x1, y1] = point(i)
-                ctx.quadraticCurveTo(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2)
-                x0 = x1
-                y0 = y1
-            }
-            ctx.lineTo(x0, y0)
-        }
-        onPaint: {
-            const ctx = getContext("2d")
-            ctx.reset()
-            const t = map.theme
-            const left = map.px
-            const right = map.px + map.pw
-            const top = map.py
-            const bottom = map.py + map.ph
-            // The well.
-            ctx.fillStyle = t.well
-            ctx.fillRect(left, top, map.pw, map.ph)
-            // Grid: octaves of frequency, 12 dB of level.
-            ctx.lineWidth = t.hairline
-            ctx.font = t.typeMicro + "px '" + t.mono + "'"
-            ctx.textBaseline = "top"
-            ctx.textAlign = "center"
-            for (const hz of [30, 50, 100, 200, 500, 1000, 2000, 5000]) {
-                const x = Math.round(map.xOf(hz)) + 0.5
-                const strong = hz === 100 || hz === 1000
-                ctx.strokeStyle = strong ? t.gridStrong : t.grid
-                ctx.beginPath()
-                ctx.moveTo(x, top)
-                ctx.lineTo(x, bottom)
-                ctx.stroke()
-                ctx.fillStyle = strong ? t.inkDim : t.inkFaint
-                ctx.fillText(hz >= map.hertzPerKilohertz ? Format.number(hz / map.hertzPerKilohertz, 0) + "k"
-                                                         : Format.number(hz, 0), x, bottom + t.axisLabelGap)
-            }
-            ctx.textAlign = "right"
-            ctx.textBaseline = "middle"
-            for (let db = 0; db >= -72; db -= 12) {
-                const y = Math.round(map.yOf(db)) + 0.5
-                ctx.strokeStyle = t.grid
-                ctx.beginPath()
-                ctx.moveTo(left, y)
-                ctx.lineTo(right, y)
-                ctx.stroke()
-                ctx.fillStyle = t.inkFaint
-                ctx.fillText(Format.number(db, 0), left - t.axisLabelGap, y)
-            }
+    Kit.PlotFrame {
+        id: frame
+        x: map.px - gutterLeft
+        y: map.py
+        width: map.pw + gutterLeft
+        height: map.ph + gutterBottom
+        theme: map.theme
+        live: map.live
+        xTicks: map.xTicks
+        xUnit: "Hz"
+        yTicks: map.yTicks
+        yUnit: "dBFS"
 
-            const n = Math.min(map.kick.length, map.bass.length)
-            const focusL = map.xOf(map.focusLow)
-            const focusR = map.xOf(map.focusHigh)
-            ctx.save()
-            ctx.beginPath()
-            ctx.rect(left, top, map.pw, map.ph)
-            ctx.clip()
-            if (n > 0) {
-                // Masking: under both curves, inside the focus.
-                const shared = []
-                for (let i = 0; i < n; ++i)
-                    shared.push(Math.min(map.kick[i], map.bass[i]))
+        // Draws in the map's coordinates, shifted onto the frame's plot area.
+        Canvas {
+            id: plot
+            anchors.fill: parent
+            renderStrategy: Canvas.Cooperative
+            // A smooth curve through the band points.
+            function curve(ctx, values, offset) {
+                const n = values.length
+                if (n === 0)
+                    return
+                const point = i => [map.xOf(map.bandHz(i)), map.yOf(values[i] - (offset ? offset[i] : 0))]
+                let [x0, y0] = point(0)
+                ctx.moveTo(x0, y0)
+                for (let i = 1; i < n; ++i) {
+                    const [x1, y1] = point(i)
+                    ctx.quadraticCurveTo(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2)
+                    x0 = x1
+                    y0 = y1
+                }
+                ctx.lineTo(x0, y0)
+            }
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                ctx.translate(-map.px, -map.py)
+                const t = map.theme
+                const left = map.px
+                const right = map.px + map.pw
+                const top = map.py
+                const bottom = map.py + map.ph
+                // The well.
+                ctx.fillStyle = t.well
+                ctx.fillRect(left, top, map.pw, map.ph)
+                // Grid: octaves of frequency, 12 dB of level (the frame labels them).
+                ctx.lineWidth = t.hairline
+                for (const hz of map.gridHz) {
+                    const x = Math.round(map.xOf(hz)) + 0.5
+                    ctx.strokeStyle = map.strongHz.indexOf(hz) >= 0 ? t.gridStrong : t.grid
+                    ctx.beginPath()
+                    ctx.moveTo(x, top)
+                    ctx.lineTo(x, bottom)
+                    ctx.stroke()
+                }
+                for (let db = map.topDb; db >= map.lowestLevelLine; db -= map.levelStep) {
+                    const y = Math.round(map.yOf(db)) + 0.5
+                    ctx.strokeStyle = t.grid
+                    ctx.beginPath()
+                    ctx.moveTo(left, y)
+                    ctx.lineTo(right, y)
+                    ctx.stroke()
+                }
+
+                const n = Math.min(map.kick.length, map.bass.length)
+                const focusL = map.xOf(map.focusLow)
+                const focusR = map.xOf(map.focusHigh)
                 ctx.save()
                 ctx.beginPath()
-                ctx.rect(focusL, top, focusR - focusL, map.ph)
+                ctx.rect(left, top, map.pw, map.ph)
                 ctx.clip()
-                ctx.beginPath()
-                curve(ctx, shared)
-                ctx.lineTo(map.xOf(map.bandHz(n - 1)), bottom)
-                ctx.lineTo(map.xOf(map.bandHz(0)), bottom)
-                ctx.closePath()
-                const red = ctx.createLinearGradient(0, top, 0, bottom)
-                red.addColorStop(0, Qt.rgba(t.masked.r, t.masked.g, t.masked.b, t.maskTopAlpha))
-                red.addColorStop(1, Qt.rgba(t.masked.r, t.masked.g, t.masked.b, t.maskBottomAlpha))
-                ctx.fillStyle = red
-                ctx.fill()
-                ctx.restore()
-
-                // The kick: a warm glow under its line.
-                ctx.beginPath()
-                curve(ctx, map.kick)
-                ctx.lineTo(map.xOf(map.bandHz(n - 1)), bottom)
-                ctx.lineTo(map.xOf(map.bandHz(0)), bottom)
-                ctx.closePath()
-                const amber = ctx.createLinearGradient(0, top, 0, bottom)
-                amber.addColorStop(0, Qt.rgba(t.kick.r, t.kick.g, t.kick.b, t.kickGlowTopAlpha))
-                amber.addColorStop(1, Qt.rgba(t.kick.r, t.kick.g, t.kick.b, t.kickGlowBottomAlpha))
-                ctx.fillStyle = amber
-                ctx.fill()
-
-                // The cut: green bars hanging from the bass, the bass after
-                // Pocket dashed beneath.
-                const step = map.xOf(map.bandHz(1)) - map.xOf(map.bandHz(0))
-                for (let i = 0; i < n && i < map.cut.length; ++i) {
-                    const c = map.cut[i]
-                    if (c < 0.05)
-                        continue
-                    const x = map.xOf(map.bandHz(i))
-                    const y0 = map.yOf(map.bass[i])
-                    const y1 = map.yOf(map.bass[i] - c)
-                    const w = step * (i === map.hovered ? map.cutBarHoveredShare : map.cutBarShare)
-                    const green = ctx.createLinearGradient(0, y0, 0, y1)
-                    green.addColorStop(0, Qt.rgba(t.cleared.r, t.cleared.g, t.cleared.b, t.cutTopAlpha))
-                    green.addColorStop(1, Qt.rgba(t.cleared.r, t.cleared.g, t.cleared.b, t.cutBottomAlpha))
-                    ctx.fillStyle = green
-                    ctx.fillRect(x - w / 2, y0, w, Math.max(1, y1 - y0))
-                }
-                if (map.cut.length >= n) {
+                if (n > 0) {
+                    // Masking: under both curves, inside the focus.
+                    const shared = []
+                    for (let i = 0; i < n; ++i)
+                        shared.push(Math.min(map.kick[i], map.bass[i]))
+                    ctx.save()
                     ctx.beginPath()
-                    curve(ctx, map.bass, map.cut)
-                    ctx.setLineDash(t.afterDash)
-                    ctx.lineWidth = t.afterStroke
-                    ctx.strokeStyle = Qt.rgba(t.bass.r, t.bass.g, t.bass.b, t.afterAlpha)
+                    ctx.rect(focusL, top, focusR - focusL, map.ph)
+                    ctx.clip()
+                    ctx.beginPath()
+                    curve(ctx, shared)
+                    ctx.lineTo(map.xOf(map.bandHz(n - 1)), bottom)
+                    ctx.lineTo(map.xOf(map.bandHz(0)), bottom)
+                    ctx.closePath()
+                    const red = ctx.createLinearGradient(0, top, 0, bottom)
+                    red.addColorStop(0, Qt.rgba(t.masked.r, t.masked.g, t.masked.b, t.maskTopAlpha))
+                    red.addColorStop(1, Qt.rgba(t.masked.r, t.masked.g, t.masked.b, t.maskBottomAlpha))
+                    ctx.fillStyle = red
+                    ctx.fill()
+                    ctx.restore()
+
+                    // The kick: a warm glow under its line.
+                    ctx.beginPath()
+                    curve(ctx, map.kick)
+                    ctx.lineTo(map.xOf(map.bandHz(n - 1)), bottom)
+                    ctx.lineTo(map.xOf(map.bandHz(0)), bottom)
+                    ctx.closePath()
+                    const amber = ctx.createLinearGradient(0, top, 0, bottom)
+                    amber.addColorStop(0, Qt.rgba(t.kick.r, t.kick.g, t.kick.b, t.kickGlowTopAlpha))
+                    amber.addColorStop(1, Qt.rgba(t.kick.r, t.kick.g, t.kick.b, t.kickGlowBottomAlpha))
+                    ctx.fillStyle = amber
+                    ctx.fill()
+
+                    // The cut: green bars hanging from the bass, the bass after
+                    // Pocket dashed beneath.
+                    const step = map.xOf(map.bandHz(1)) - map.xOf(map.bandHz(0))
+                    for (let i = 0; i < n && i < map.cut.length; ++i) {
+                        const c = map.cut[i]
+                        if (c < 0.05)
+                            continue
+                        const x = map.xOf(map.bandHz(i))
+                        const y0 = map.yOf(map.bass[i])
+                        const y1 = map.yOf(map.bass[i] - c)
+                        const w = step * (i === map.hovered ? map.cutBarHoveredShare : map.cutBarShare)
+                        const green = ctx.createLinearGradient(0, y0, 0, y1)
+                        green.addColorStop(0, Qt.rgba(t.cleared.r, t.cleared.g, t.cleared.b, t.cutTopAlpha))
+                        green.addColorStop(1, Qt.rgba(t.cleared.r, t.cleared.g, t.cleared.b, t.cutBottomAlpha))
+                        ctx.fillStyle = green
+                        ctx.fillRect(x - w / 2, y0, w, Math.max(1, y1 - y0))
+                    }
+                    if (map.cut.length >= n) {
+                        ctx.beginPath()
+                        curve(ctx, map.bass, map.cut)
+                        ctx.setLineDash(t.afterDash)
+                        ctx.lineWidth = t.afterStroke
+                        ctx.strokeStyle = Qt.rgba(t.bass.r, t.bass.g, t.bass.b, t.afterAlpha)
+                        ctx.stroke()
+                        ctx.setLineDash([])
+                    }
+
+                    // The bass and the kick lines.
+                    ctx.lineJoin = "round"
+                    ctx.beginPath()
+                    curve(ctx, map.bass)
+                    ctx.lineWidth = t.curveStroke
+                    ctx.strokeStyle = t.bass
+                    ctx.stroke()
+                    ctx.beginPath()
+                    curve(ctx, map.kick)
+                    ctx.lineWidth = t.curveStroke
+                    ctx.strokeStyle = t.kick
+                    ctx.stroke()
+
+                    // Held peaks: fine bright lines that fall slowly.
+                    for (const [held, colour] of [[map.heldBass, t.bass], [map.heldKick, t.kick]]) {
+                        if (held.length < n)
+                            continue
+                        ctx.beginPath()
+                        curve(ctx, held)
+                        ctx.lineWidth = t.hairline
+                        ctx.strokeStyle = Qt.rgba(colour.r, colour.g, colour.b, t.heldAlpha)
+                        ctx.stroke()
+                    }
+                }
+
+                // Mono sub: hatched below its frequency.
+                if (map.monoOn) {
+                    const x = map.xOf(map.monoHz)
+                    ctx.save()
+                    ctx.beginPath()
+                    ctx.rect(left, top, x - left, map.ph)
+                    ctx.clip()
+                    ctx.strokeStyle = Qt.rgba(t.bass.r, t.bass.g, t.bass.b, t.hatchAlpha)
+                    ctx.lineWidth = t.hairline
+                    for (let d = -map.ph; d < x - left; d += t.hatchPitch) {
+                        ctx.beginPath()
+                        ctx.moveTo(left + d, bottom)
+                        ctx.lineTo(left + d + map.ph, top)
+                        ctx.stroke()
+                    }
+                    ctx.restore()
+                    ctx.strokeStyle = Qt.rgba(t.bass.r, t.bass.g, t.bass.b, t.monoEdgeAlpha)
+                    ctx.setLineDash(t.monoDash)
+                    ctx.beginPath()
+                    ctx.moveTo(Math.round(x) + 0.5, top)
+                    ctx.lineTo(Math.round(x) + 0.5, bottom)
                     ctx.stroke()
                     ctx.setLineDash([])
                 }
 
-                // The bass and the kick lines.
-                ctx.lineJoin = "round"
-                ctx.beginPath()
-                curve(ctx, map.bass)
-                ctx.lineWidth = t.curveStroke
-                ctx.strokeStyle = t.bass
-                ctx.stroke()
-                ctx.beginPath()
-                curve(ctx, map.kick)
-                ctx.lineWidth = t.curveStroke
-                ctx.strokeStyle = t.kick
-                ctx.stroke()
-
-                // Held peaks: fine bright lines that fall slowly.
-                for (const [held, colour] of [[map.heldBass, t.bass], [map.heldKick, t.kick]]) {
-                    if (held.length < n)
-                        continue
-                    ctx.beginPath()
-                    curve(ctx, held)
-                    ctx.lineWidth = t.hairline
-                    ctx.strokeStyle = Qt.rgba(colour.r, colour.g, colour.b, t.heldAlpha)
-                    ctx.stroke()
-                }
-            }
-
-            // Mono sub: hatched below its frequency.
-            if (map.monoOn) {
-                const x = map.xOf(map.monoHz)
-                ctx.save()
-                ctx.beginPath()
-                ctx.rect(left, top, x - left, map.ph)
-                ctx.clip()
-                ctx.strokeStyle = Qt.rgba(t.bass.r, t.bass.g, t.bass.b, t.hatchAlpha)
-                ctx.lineWidth = t.hairline
-                for (let d = -map.ph; d < x - left; d += t.hatchPitch) {
-                    ctx.beginPath()
-                    ctx.moveTo(left + d, bottom)
-                    ctx.lineTo(left + d + map.ph, top)
-                    ctx.stroke()
-                }
+                // Outside the focus, dimmed.
+                ctx.fillStyle = t.focusDim
+                ctx.fillRect(left, top, focusL - left, map.ph)
+                ctx.fillRect(focusR, top, right - focusR, map.ph)
                 ctx.restore()
-                ctx.strokeStyle = Qt.rgba(t.bass.r, t.bass.g, t.bass.b, t.monoEdgeAlpha)
-                ctx.setLineDash(t.monoDash)
-                ctx.beginPath()
-                ctx.moveTo(Math.round(x) + 0.5, top)
-                ctx.lineTo(Math.round(x) + 0.5, bottom)
-                ctx.stroke()
-                ctx.setLineDash([])
+
+                ctx.strokeStyle = t.wellEdge
+                ctx.lineWidth = t.hairline
+                ctx.strokeRect(left + 0.5, top + 0.5, map.pw - 1, map.ph - 1)
             }
-
-            // Outside the focus, dimmed.
-            ctx.fillStyle = t.focusDim
-            ctx.fillRect(left, top, focusL - left, map.ph)
-            ctx.fillRect(focusR, top, right - focusR, map.ph)
-            ctx.restore()
-
-            ctx.strokeStyle = t.wellEdge
-            ctx.lineWidth = t.hairline
-            ctx.strokeRect(left + 0.5, top + 0.5, map.pw - 1, map.ph - 1)
-        }
+    }
     }
 
     // The mono sub's label.
@@ -377,7 +401,10 @@ Item {
                     map.moveFocus(handle.parameterId, handle.hz * factor)
                 else if (event.key === Qt.Key_Left || event.key === Qt.Key_Down)
                     map.moveFocus(handle.parameterId, handle.hz / factor)
-                else
+                else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
+                    map.controller.reset_to_default(handle.parameterId)
+                    map.theme.lastTouched = handle.parameterId
+                } else
                     return
                 event.accepted = true
             }
@@ -408,6 +435,7 @@ Item {
             }
             MouseArea {
                 id: handleArea
+                readonly property string keyboardAlternative: "Tab to the edge, then the arrow keys move it and Delete resets it"
                 x: handle.width / 2 - map.theme.handleGrabWidth / 2
                 y: map.py - map.theme.gripRise
                 width: map.theme.handleGrabWidth

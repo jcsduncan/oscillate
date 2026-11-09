@@ -368,9 +368,12 @@ void the_sky_lights_with_the_reverb() {
   auto panel = load_panel(controller);
   auto* view = item(*panel, QStringLiteral("expanseLandscape"));
   QTest::qWait(300);
-  require(!view->property("live").toBool() &&
-              item(*panel, QStringLiteral("expanseGlow"))->property("opacity").toDouble() == 0.0,
-          "no telemetry: the settings preview");
+  require(
+      !view->property("live").toBool() &&
+          item(*panel, QStringLiteral("expanseGlow"))->property("opacity").toDouble() == 0.0 &&
+          item(*panel, QStringLiteral("expanseLandscapeFrame"))->property("chipText").toString() ==
+              QStringLiteral("PREVIEW"),
+      "no telemetry: the settings preview");
   namespace t = expanse::telemetry;
   std::vector<float> frame(t::size, 0.0F);
   frame[t::input_rms] = 0.25F;
@@ -379,8 +382,10 @@ void the_sky_lights_with_the_reverb() {
   adapter.set_telemetry(frame);
   require(QTest::qWaitFor([&] { return view->property("live").toBool(); }, 1000),
           "live levels arrive");
-  require(text_of(*panel, QStringLiteral("expanseLandscapeCaption")) ==
-              QStringLiteral("LIVE · LATE −20.0 dB"),
+  require(item(*panel, QStringLiteral("expanseLandscapeFrame"))->property("chipText").toString() ==
+                  QStringLiteral("LIVE") &&
+              text_of(*panel, QStringLiteral("expanseLandscapeCaption")) ==
+                  QStringLiteral("LATE −20.0 dB"),
           "the late level reads out: " +
               text_of(*panel, QStringLiteral("expanseLandscapeCaption")).toStdString());
   require(std::fabs(item(*panel, QStringLiteral("expanseMeter:early"))->property("db").toDouble() +

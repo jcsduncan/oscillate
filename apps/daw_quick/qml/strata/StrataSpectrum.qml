@@ -4,9 +4,9 @@ import Oscillate.Format
 
 // Strata's spectrum: the input as a faint trace and the output bright over
 // it, a tint per band, each band's live gain change drawn in the band's own
-// shape around a 0 dB line, the crossovers as handles to drag (kept apart by
-// the engine) and each band's threshold as a dashed line to drag on its own
-// -60..0 dB scale. Double-click adds a band where you click. Shapes and
+// shape around the middle line, the crossovers as handles to drag or step
+// from the keyboard (kept apart by the engine) and each band's threshold as a
+// dashed line to drag, on the spectra's dBFS scale down to -60 dB. Double-click adds a band where you click. Shapes and
 // crossovers come from the controller (strata_band_shapes,
 // strata_crossovers), levels only from the telemetry.
 Item {
@@ -18,13 +18,24 @@ Item {
     readonly property real lowHz: 20
     readonly property real hertzPerKilohertz: 1000
     readonly property real span: 1000
-    // The spectra's scale (dBFS) and the gain overlay's (dB either way).
-    readonly property real topDb: -6
+    // The spectra's and thresholds' scale (dBFS), the threshold's own range
+    // and the gain overlay's (dB either way, round the middle line).
+    readonly property real topDb: 0
     readonly property real bottomDb: -96
     readonly property real gainSpanDb: 18
     readonly property real thresholdFloorDb: -60
+    readonly property real thresholdCeilingDb: 0
     readonly property int points: 160
     readonly property var gridHz: [50, 100, 200, 500, 1000, 2000, 5000, 10000]
+    // The levels the frame labels; the first carries the unit.
+    readonly property var levelMarks: [topDb, -24, -48, -72]
+    function hertzLabel(hz) {
+        return hz >= hertzPerKilohertz ? String(hz / hertzPerKilohertz) + "k" : String(hz)
+    }
+    readonly property var frequencyTicks: width > 0
+        ? gridHz.map(hz => ({ at: xOf(hz) / width, label: hertzLabel(hz) })) : []
+    readonly property var levelTicks: levelMarks.map(db => ({
+        at: (db - bottomDb) / (topDb - bottomDb), label: String(db) }))
 
     readonly property int revision: controller.revision
     readonly property var crossovers: revision >= 0 ? controller.strata_crossovers() : []
@@ -48,10 +59,11 @@ Item {
         return height / 2 - (height / 2) * Math.max(-1, Math.min(1, db / gainSpanDb))
     }
     function yThreshold(db) {
-        return height * db / thresholdFloorDb
+        return ySpectrum(db)
     }
     function thresholdOf(y) {
-        return thresholdFloorDb * Math.max(0, Math.min(1, y / height))
+        const db = topDb - (topDb - bottomDb) * y / height
+        return Math.max(thresholdFloorDb, Math.min(thresholdCeilingDb, db))
     }
     function edgeLow(b) {
         return b === 0 ? lowHz : crossovers[b - 1]
@@ -149,6 +161,7 @@ Item {
     // Double-click adds a band at that frequency.
     MouseArea {
         objectName: "strataSpectrumArea"
+        readonly property string keyboardAlternative: "the BANDS count under the spectrum adds and removes bands"
         anchors.fill: parent
         enabled: view.controller.editable
         onDoubleClicked: (mouse) => view.panel.addBandAt(view.hzOf(mouse.x))
@@ -193,6 +206,7 @@ Item {
             }
             MouseArea {
                 id: lineArea
+                readonly property string keyboardAlternative: "the band's tab, then the band card's Threshold knob"
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.SizeVerCursor
@@ -226,11 +240,31 @@ Item {
             y: 0
             width: view.theme.crossoverHitWidth
             height: view.height
+            // Left and Right step it (Shift: finer), Delete resets it.
+            activeFocusOnTab: view.controller.editable
+            Accessible.role: Accessible.Slider
+            Accessible.name: "Crossover " + (index + 1)
+            Accessible.description: view.controller.display(parameterId)
+            Keys.onPressed: (event) => {
+                const fine = (event.modifiers & Qt.ShiftModifier) !== 0
+                if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+                    view.panel.takeOver()
+                    view.theme.lastTouched = handle.parameterId
+                    view.controller.step(handle.parameterId, event.key === Qt.Key_Right ? 1 : -1, fine)
+                    event.accepted = true
+                } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
+                    view.panel.takeOver()
+                    view.theme.lastTouched = handle.parameterId
+                    view.controller.reset_to_default(handle.parameterId)
+                    event.accepted = true
+                }
+            }
             Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: crossArea.containsMouse || crossArea.pressed ? view.theme.strokeBold : view.theme.hairline
+                width: crossArea.containsMouse || crossArea.pressed || handle.activeFocus
+                    ? view.theme.strokeBold : view.theme.hairline
                 height: parent.height
-                color: view.theme.inkDim
+                color: handle.activeFocus ? view.theme.accent : view.theme.inkDim
                 opacity: view.theme.crossoverLineOpacity
             }
             Rectangle {
@@ -240,7 +274,8 @@ Item {
                 height: view.theme.crossoverKnobSize
                 radius: width / 2
                 color: view.theme.plateHi
-                border.color: view.theme.ink
+                border.color: handle.activeFocus ? view.theme.accent : view.theme.ink
+                border.width: handle.activeFocus ? view.theme.focusEdgeWidth : view.theme.hairline
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -258,6 +293,7 @@ Item {
                 cursorShape: Qt.SizeHorCursor
                 enabled: view.controller.editable
                 onPressed: {
+                    handle.forceActiveFocus()
                     view.panel.takeOver()
                     view.theme.lastTouched = handle.parameterId
                     view.controller.begin_gesture(handle.parameterId)

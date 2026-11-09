@@ -69,49 +69,50 @@ KitTheme {
     property real buttonRadius: 5
     property real buttonLitAlpha: 0.2
     property real buttonDisabledOpacity: 0.5
+    // The accent edge a focused control of the panel's own draws.
+    property real focusEdgeWidth: strokeBold
 
-    // The header: the wordmark, its band-coloured underline and subtitle.
+    // The header (Kit.DeviceHeader): the wordmark over its band-coloured
+    // underline and subtitle, the preset browser, the readout once a control
+    // is touched; the mode row under it.
     property real headerY: 10
-    property real headerHeight: 50
-    property real wordmarkY: 2
-    property int wordmarkSize: 27
-    property real wordmarkSpacing: 9
+    headerHeight: 50
+    wordmarkSize: 27
+    wordmarkSpacing: 9
+    wordmarkInk: glacier
     // The underline and subtitle sit this far in from the wordmark's left.
     property real wordmarkInset: 2
     property real underlineGap: 1
     // How much shorter than the wordmark the underline runs.
     property real underlineTrim: 20
-    property real subtitleGap: 7
-    property real subtitleSpacing: 2.4
+    subtitleGap: 7
+    subtitleSpacing: 2.4
+    subtitleInk: inkDim
+    headerBrowserX: 230
+    presetDisplayWidth: 300
+    presetDisplayHeight: 40
+    presetDisplayRadius: radiusLg
+    presetTextX: 12
+    presetTagY: 5
+    presetTagSpacing: captionSpacing
+    presetNameY: 16
+    presetNameBold: false
+    presetChevronMargin: 10
+    presetChevronInk: inkDim
+    readoutValueY: 16
 
-    // The preset browser.
-    property real browserX: 230
-    property real browserY: 4
-    property int presetDisplayWidth: 300
-    property int presetDisplayHeight: 40
-    property real presetTextX: 12
-    property real presetCategoryY: 5
-    property real presetNameY: 16
-    // Room kept right of the preset name for the chevron.
-    property real presetNameRight: 34
-    property real chevronMargin: 10
-
-    // The mode, phase, latency and delta row beside the browser.
-    property real modeRowGap: 20
-    property real modeRowY: 11
-    property real modeRowSpacing: 10
+    // The mode row: the mode and phase segments.
     property int modeSegmentWidth: 130
     property int phaseSegmentWidth: 170
 
-    // The keyed badge, left of the status pill.
-    property real statusY: 12
-    property real keyedBadgeGap: 10
+    // The keyed badge at the end of the mode row.
     property real keyedBadgePad: 24
     property real keyedFillAlpha: 0.12
 
     // The band strip: a tab per band above the spectrum.
     property real stripInset: 10
-    property real stripY: 66
+    // The strip's gap below the header.
+    property real stripGap: 6
     property real stripHeight: 30
     property real tabY: 2
     property real tabPad: 16
@@ -121,11 +122,12 @@ KitTheme {
     property real tabDotRadius: 4
     property real tabLabelSpacing: 1
     // The solo, mute, bypass and remove flags.
-    property real flagSize: 17
+    property real flagSize: minHitSize
 
     // The spectrum card.
-    property real spectrumY: 98
-    property real spectrumHeight: 330
+    // The spectrum's gap below the strip.
+    property real spectrumGap: 2
+    property real spectrumHeight: 296
     property real spectrumInset: 10
     // The strip below the spectrum for the note and the band count.
     property real spectrumFoot: 34
@@ -141,14 +143,15 @@ KitTheme {
     property real inputTraceWidth: 1.2
     property real outputTraceWidth: 1.6
     property real gainFillAlpha: 0.35
-    // A band's dashed threshold line and the strip that grabs it.
-    property real thresholdLineInset: 4
-    property real thresholdHitHeight: 12
+    // A band's dashed threshold line and the strip that grabs it; the line
+    // stops clear of the crossovers' grab strips.
+    property real thresholdLineInset: minHitSize / 2
+    property real thresholdHitHeight: minHitSize
     property real thresholdDash: 6
     property real thresholdDashGap: 4
     property real thresholdDashOpacity: 0.8
     // A crossover handle: its grab strip, line, knob and label.
-    property real crossoverHitWidth: 14
+    property real crossoverHitWidth: minHitSize
     property real crossoverLineOpacity: 0.7
     property real crossoverKnobY: 6
     property real crossoverKnobSize: 12
@@ -164,15 +167,11 @@ KitTheme {
     property real bandKnobsY: 32
     property real knobColumnSpacing: 22
     property int bandKnobDiameter: 46
-    // Band knobs dim in OTT mode: they hold the band's own values, not
-    // what plays.
-    property real ottOverrideOpacity: 0.4
     property real bandRowsGap: 10
     property real bandRowCaptionWidth: 56
     property int processSegmentWidth: 300
     property int keySegmentWidth: 240
-    // The OTT card, dimmed while it does not drive the bands.
-    property real ottIdleOpacity: 0.55
+    // The OTT card.
     property int ottDepthDiameter: 84
     property real ottRowY: 170
     property int smallKnobDiameter: 42

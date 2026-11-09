@@ -389,6 +389,17 @@ void effect_is_inserted_opened_edited_and_live(const effects::EffectEngine& effe
   // No text in the playing panel is cut short, drawn over other text or
   // clipped.
   oscillate::test::panel_fit::require_text_fits(find_item(window->contentItem(), panel_name), id);
+  // The panel is built from the kit's shared parts: one header with its own
+  // readout and the one status badge; inactive and linked controls say why.
+  auto* panel_item = find_item(window->contentItem(), panel_name);
+  oscillate::test::panel_kit::require_device_header(panel_item, id, parameter_id);
+  oscillate::test::panel_kit::require_control_states(panel_item, id);
+  oscillate::test::panel_kit::require_plot_frames(panel_item, id);
+  oscillate::test::panel_kit::require_pointer_controls(panel_item, id);
+  // With a control touched, its readout's text fits the header as well.
+  oscillate::test::panel_kit::with_touched(panel_item, parameter_id, [&] {
+    oscillate::test::panel_fit::require_text_fits(panel_item, id + " (a control touched)");
+  });
   // The window's zoom chips scale the panel (ADR-0103).
   oscillate::test::panel_kit::require_panel_zoom(*window, id,
                                                  QStringLiteral("nativeEffectFloatingFrame"),

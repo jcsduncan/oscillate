@@ -32,6 +32,7 @@ Rectangle {
     radius: panel.theme.dropdownRadius
     color: area.containsMouse ? panel.theme.hoverDeep : panel.theme.wellFill
     border.color: activeFocus ? accent : accentStyle ? panel.theme.accentSoft : panel.theme.line2
+    border.width: activeFocus ? panel.theme.strokeBold : panel.theme.hairline
     opacity: !panel.controller.editable ? panel.theme.dropdownDisabledOpacity : inactive ? panel.theme.dropdownInactiveOpacity : 1
     activeFocusOnTab: panel.controller.editable
     Accessible.role: Accessible.ComboBox
@@ -98,6 +99,11 @@ Rectangle {
     MouseArea {
         id: area
         anchors.fill: parent
+        // At least the kit's least hit size, however short the dropdown draws.
+        anchors.leftMargin: -dropdown.panel.theme.hitOutset(parent.width)
+        anchors.rightMargin: -dropdown.panel.theme.hitOutset(parent.width)
+        anchors.topMargin: -dropdown.panel.theme.hitOutset(parent.height)
+        anchors.bottomMargin: -dropdown.panel.theme.hitOutset(parent.height)
         hoverEnabled: true
         onClicked: {
             dropdown.forceActiveFocus()

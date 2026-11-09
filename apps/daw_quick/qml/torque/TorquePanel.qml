@@ -67,15 +67,6 @@ Rectangle {
         const info = controller.parameter(id)
         return info.name !== undefined ? info.name : ""
     }
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        return info.name === undefined ? "" : (info.group + " · " + info.name).toUpperCase()
-    }
-    function readoutValue(id) {
-        return id === "" || controller.revision < 0 ? "" : controller.display(id)
-    }
 
     // A dark section with a title.
     component Plate: Rectangle {
@@ -113,6 +104,7 @@ Rectangle {
         required property string parameterId
         property int diameter: panel.theme.cellDiameter
         property bool inactive: false
+        property string inactiveReason: ""
         property string label: ""
         width: Math.max(diameter + panel.theme.cellWidthPad, panel.theme.cellMinWidth)
         height: diameter + panel.theme.cellHeightPad
@@ -124,6 +116,7 @@ Rectangle {
             parameterId: cell.parameterId
             diameter: cell.diameter
             inactive: cell.inactive
+            inactiveReason: cell.inactiveReason
             label: cell.label !== "" ? cell.label : cellKnob.info.name !== undefined ? cellKnob.info.name : ""
         }
     }
@@ -137,46 +130,55 @@ Rectangle {
 
     // ---- Header ---------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        // The wordmark over a neon rule in the model's colour, the model's
+        // tagline under it.
+        brand: Component {
+            Column {
+                spacing: panel.theme.subtitleGap
+                Text {
+                    id: wordmark
+                    objectName: "torqueWordmark"
+                    text: "TORQUE"
+                    color: panel.theme.wordmarkInk
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.weight: panel.theme.wordmarkWeight
+                    font.letterSpacing: panel.theme.wordmarkSpacing
+                }
+                Rectangle {
+                    x: panel.theme.spaceXxs
+                    width: wordmark.implicitWidth - panel.theme.wordmarkRuleInset
+                    height: panel.theme.wordmarkRuleHeight
+                    radius: height / 2
+                    color: panel.theme.accent
+                }
+                Text {
+                    objectName: "torqueSubtitle"
+                    x: panel.theme.spaceXxs
+                    text: "BASS · " + panel.theme.modelTaglines[panel.model]
+                    color: panel.theme.accent
+                    font.pixelSize: panel.theme.subtitleSize
+                    font.bold: true
+                    font.letterSpacing: panel.theme.subtitleSpacing
+                }
+            }
+        }
 
-        Text {
-            id: wordmark
-            y: panel.theme.spaceXxs
-            text: "TORQUE"
-            color: panel.theme.ink
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Black
-            font.letterSpacing: panel.theme.wordmarkSpacing
+        // The model tabs, in the header's second row.
+        Caption {
+            anchors.verticalCenter: tabs.verticalCenter
+            text: "MODEL"
         }
-        Rectangle {
-            x: wordmark.x + panel.theme.spaceXxs
-            y: wordmark.y + wordmark.height - panel.theme.spaceXxs
-            width: wordmark.implicitWidth - panel.theme.wordmarkRuleInset
-            height: panel.theme.wordmarkRuleHeight
-            radius: height / 2
-            color: panel.theme.accent
-        }
-        Text {
-            x: wordmark.x + panel.theme.spaceXxs
-            y: wordmark.y + wordmark.height + panel.theme.spaceXs
-            text: "BASS · " + panel.theme.modelTaglines[panel.model]
-            color: panel.theme.accent
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.taglineSpacing
-        }
-
-        // Model tabs.
         Row {
             id: tabs
             objectName: "torqueTabs:torque.model"
-            x: panel.theme.modelTabsX
-            y: panel.theme.spaceXs
             spacing: panel.theme.spaceXs
             activeFocusOnTab: panel.controller.editable
             Accessible.role: Accessible.PageTabList
@@ -241,134 +243,11 @@ Rectangle {
                 }
             }
         }
-        Caption {
-            x: tabs.x + panel.theme.spaceXxs
-            y: tabs.y + tabs.height + panel.theme.spaceXxs
-            text: "MODEL"
-        }
-
-        // Preset browser and readout.
-        Row {
-            id: browser
-            x: tabs.x + tabs.width + panel.theme.browserGap
-            y: panel.theme.spaceXs
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "torquePresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "torquePresetDisplay"
-                width: panel.theme.presetDisplayWidth
-                height: panel.theme.presetDisplayHeight
-                radius: panel.theme.radiusLg
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                border.width: activeFocus ? panel.theme.focusStroke : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.accent)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
-                Text {
-                    x: panel.theme.spaceLg
-                    y: panel.theme.spaceXs
-                    text: panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.captionSpacing
-                }
-                Text {
-                    objectName: "torquePresetName"
-                    x: panel.theme.spaceLg
-                    y: panel.theme.presetNameY
-                    width: panel.theme.presetNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.pixelSize: panel.theme.typeHeading
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-                Rectangle {
-                    x: panel.theme.presetDividerX
-                    y: panel.theme.presetDividerInset
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.theme.presetDividerInset
-                    color: panel.theme.wellEdge
-                }
-                Text {
-                    objectName: "torqueReadout"
-                    x: panel.theme.readoutX
-                    y: panel.theme.spaceXs
-                    width: display.width - x - panel.theme.space2xl
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.readoutLetterSpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "torqueReadoutValue"
-                    x: panel.theme.readoutX
-                    y: panel.theme.readoutValueY
-                    width: display.width - x - panel.theme.space2xl
-                    text: panel.readoutValue(panel.theme.lastTouched)
-                    color: panel.theme.accent
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeSubtitle
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.presetChevronMargin
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.accent
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
-                    }
-                }
-            }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "torquePresetNext"
-                direction: 1
-            }
-        }
-
-        Kit.StatusBadge {
-            id: status
-            objectName: "torqueStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: panel.theme.statusY
-        }
     }
 
     // ---- Display and main controls ------------------------------------------------------
 
-    readonly property real rowAY: theme.rowAY
+    readonly property real rowAY: header.y + header.height + theme.headerContentGap
     readonly property real rowAHeight: theme.rowAHeight
 
     Plate {
@@ -378,23 +257,48 @@ Rectangle {
         y: panel.rowAY
         width: panel.theme.scopePlateWidth
         height: panel.rowAHeight
-        Kit.FilterView {
-            cutoffId: "torque.cutoff"
-            caption: panel.filterCaption
+        // Both views draw the settings ahead of the voice: PREVIEW. The
+        // filter's level axis comes from the kit view's own mapping (its
+        // response between the caption rows and the frequency labels).
+        Kit.PlotFrame {
+            id: filterFrame
+            // The levels the axis labels, as [dB, label]; the first carries the unit.
+            readonly property var levelMarks: [[0, "0"], [12, "+12"], [-24, "-24"]]
+            readonly property real responseHeight: plotArea.height - panel.theme.filterViewTop
+                - panel.theme.filterViewBottom
             x: panel.theme.scopeInset
             y: panel.theme.scopeTop
             width: panel.theme.filterViewWidth
             height: screen.height - panel.theme.scopeTop - panel.theme.scopeInset
-            controller: panel.controller
             theme: panel.theme
+            yUnit: "dB"
+            yTicks: plotArea.height > 0 ? levelMarks.map(mark => ({
+                at: 1 - (panel.theme.filterViewTop + (panel.theme.filterViewCeilingDb - mark[0])
+                         / (panel.theme.filterViewCeilingDb - panel.theme.filterViewFloorDb)
+                         * responseHeight) / plotArea.height,
+                label: mark[1] })) : []
+            Kit.FilterView {
+                anchors.fill: parent
+                cutoffId: "torque.cutoff"
+                caption: panel.filterCaption
+                controller: panel.controller
+                theme: panel.theme
+            }
         }
-        TorqueScopeView {
+        Kit.PlotFrame {
             x: panel.theme.scopeInset + panel.theme.filterViewWidth + panel.theme.spaceMd
             y: panel.theme.scopeTop
             width: screen.width - x - panel.theme.scopeInset
             height: screen.height - panel.theme.scopeTop - panel.theme.scopeInset
-            controller: panel.controller
             theme: panel.theme
+            xTicks: oscillatorScope.timeTicks
+            xUnit: oscillatorScope.timeUnit
+            TorqueScopeView {
+                id: oscillatorScope
+                anchors.fill: parent
+                controller: panel.controller
+                theme: panel.theme
+            }
         }
     }
 
@@ -463,6 +367,7 @@ Rectangle {
             Cell {
                 parameterId: "torque.acid.tilt"
                 inactive: !parent.square
+                inactiveReason: inactive ? "Sag applies to the Square wave" : ""
                 label: "Sag"
             }
         }
@@ -569,6 +474,7 @@ Rectangle {
             Cell {
                 parameterId: "torque.sub.layer_level"
                 inactive: !parent.layered
+                inactiveReason: inactive ? "Layer Level applies with a Layer on" : ""
                 label: "Layer Level"
             }
         }
@@ -713,7 +619,8 @@ Rectangle {
                 theme: panel.theme
                 parameterId: "torque.lfo.division"
                 menu: menu
-                opacity: lfo.synced ? 1 : panel.theme.unsyncedOpacity
+                inactive: !lfo.synced
+                inactiveReason: inactive ? "Division applies with Sync on" : ""
             }
         }
         Row {
@@ -722,6 +629,7 @@ Rectangle {
             Cell {
                 parameterId: "torque.lfo.rate"
                 inactive: lfo.synced
+                inactiveReason: inactive ? "Rate follows Sync" : ""
             }
             Cell {
                 parameterId: "torque.lfo.cutoff"
@@ -770,10 +678,12 @@ Rectangle {
                 parameterId: "torque.fx.dist_drive"
                 label: "Drive"
                 inactive: !effects.distorted
+                inactiveReason: inactive ? "Drive applies with Mix above 0" : ""
             }
             Cell {
                 parameterId: "torque.fx.dist_tone"
                 inactive: !effects.distorted
+                inactiveReason: inactive ? "Tone applies with Mix above 0" : ""
             }
             Cell {
                 parameterId: "torque.fx.dist_mix"
@@ -827,7 +737,8 @@ Rectangle {
                 theme: panel.theme
                 parameterId: "torque.fx.delay_division"
                 menu: menu
-                opacity: effects.synced ? 1 : panel.theme.unsyncedOpacity
+                inactive: !effects.synced
+                inactiveReason: inactive ? "Division applies with Sync on" : ""
             }
         }
         Row {
@@ -840,6 +751,7 @@ Rectangle {
             Cell {
                 parameterId: "torque.fx.delay_time"
                 inactive: effects.synced
+                inactiveReason: inactive ? "Time follows Sync" : ""
             }
             Cell {
                 parameterId: "torque.fx.delay_feedback"
@@ -942,26 +854,50 @@ Rectangle {
             }
         }
 
-        Row {
-            id: steps
-            readonly property real cellWidth: (width - 15 * spacing) / 16
+        // The steps are one Tab stop: the focused step is the cursor (its
+        // edge lit), Left/Right move it along the strip.
+        FocusScope {
+            id: stepStrip
+            objectName: "torqueSteps"
+            readonly property int stepCount: 16
             x: panel.theme.stepsX
             y: panel.theme.plateContentY
             width: sequencer.width - x - panel.theme.spaceLg
-            spacing: panel.theme.stepSpacing
+            height: sequencer.height - panel.theme.plateContentY - panel.theme.spaceLg
+            activeFocusOnTab: panel.controller.editable
             opacity: panel.sequencerOn ? 1 : panel.theme.seqOffOpacity
-            Repeater {
-                model: 16
-                delegate: TorqueStepCell {
-                    required property int index
-                    width: steps.cellWidth
-                    height: sequencer.height - panel.theme.plateContentY - panel.theme.spaceLg
-                    controller: panel.controller
-                    theme: panel.theme
-                    step: index + 1
-                    inPattern: index < panel.seqLength
-                    playing: panel.playingStep === index
-                    gateOpen: panel.liveGate
+            Accessible.role: Accessible.List
+            Accessible.name: "Sequencer steps"
+
+            // Moves the cursor to step `index` (from 0), kept on the strip.
+            function moveTo(index) {
+                const next = stepRepeater.itemAt(Math.max(0, Math.min(stepCount - 1, index)))
+                if (next)
+                    next.forceActiveFocus()
+            }
+
+            Row {
+                id: steps
+                readonly property real cellWidth: (width - (stepStrip.stepCount - 1) * spacing) / stepStrip.stepCount
+                anchors.fill: parent
+                spacing: panel.theme.stepSpacing
+                Repeater {
+                    id: stepRepeater
+                    model: stepStrip.stepCount
+                    delegate: TorqueStepCell {
+                        required property int index
+                        width: steps.cellWidth
+                        height: steps.height
+                        // The cursor starts on the first step.
+                        focus: index === 0
+                        controller: panel.controller
+                        theme: panel.theme
+                        step: index + 1
+                        inPattern: index < panel.seqLength
+                        playing: panel.playingStep === index
+                        gateOpen: panel.liveGate
+                        onMoveRequested: delta => stepStrip.moveTo(index + delta)
+                    }
                 }
             }
         }

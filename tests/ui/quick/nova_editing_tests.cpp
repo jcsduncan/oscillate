@@ -187,6 +187,8 @@ void captions_never_overlap() {
   InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
+  // OSC C starts off, folded to its header: switch it on to show its controls.
+  controller.set_choice(QStringLiteral("nova.osc.c.on"), 1);
   const auto check_card = [&](QQuickItem* card, const std::string& where) {
     std::vector<QQuickItem*> captions;
     std::vector<QQuickItem*> dropdowns;

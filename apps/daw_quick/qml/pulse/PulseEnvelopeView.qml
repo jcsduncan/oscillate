@@ -28,11 +28,18 @@ Kit.EnvelopeView {
     Accessible.name: "Amplitude envelope"
     Accessible.description: "Falls 60 dB in " + controller.display(decayId)
 
+    // The time scale for the plot's frame: the start, the middle and the
+    // end of the view, placed where the plot draws them.
+    readonly property var timeTickShares: [0, 0.5, 1]
+    readonly property var timeTicks: width <= 0 ? [] : timeTickShares.map(f => ({
+        at: plotX(f) / width, label: f === 0 ? "0" : Format.number(f * seconds) }))
+
     function timeText(s) {
         return Format.seconds(s)
     }
 
     Text {
+        id: caption
         x: view.theme.envelopeLabelInset
         y: view.theme.envelopeLabelTop
         text: "AMP ENVELOPE"
@@ -41,30 +48,13 @@ Kit.EnvelopeView {
         font.bold: true
         font.letterSpacing: view.theme.envelopeLabelSpacing
     }
+    // Beside the caption, clear of the frame's PREVIEW chip.
     Text {
-        anchors.right: parent.right
-        anchors.rightMargin: view.theme.envelopeLabelInset
+        x: caption.x + caption.width + view.theme.envelopeLabelInset
         y: view.theme.envelopeLabelTop
         text: "−60 dB @ " + view.timeText(view.decay)
         color: view.accent
         font.pixelSize: view.theme.envelopeLabelSize
         font.bold: true
-    }
-    Text {
-        x: view.theme.envelopeLabelInset
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: view.theme.envelopeLabelBottom
-        text: "0"
-        color: view.theme.envelopeLabelInk
-        font.pixelSize: view.theme.envelopeLabelSize
-    }
-    Text {
-        anchors.right: parent.right
-        anchors.rightMargin: view.theme.envelopeLabelInset
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: view.theme.envelopeLabelBottom
-        text: view.timeText(view.seconds)
-        color: view.theme.envelopeLabelInk
-        font.pixelSize: view.theme.envelopeLabelSize
     }
 }

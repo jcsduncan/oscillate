@@ -155,6 +155,9 @@ Rectangle {
         }
     }
     MouseArea {
+        // The typing keyboard plays the same notes: each key is labelled
+        // with its letter.
+        readonly property string keyboardAlternative: "the typing keyboard: each key's letter plays it"
         anchors.fill: parent
         preventStealing: true
         onPressed: mouse => strip.press(strip.noteAt(mouse.x, mouse.y), mouse.y)

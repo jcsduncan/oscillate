@@ -41,9 +41,24 @@ Rectangle {
         color: led.panel.theme.soft(led.accent, led.panel.theme.glowAlpha)
         z: -1
     }
+    // The focus ring, just outside the lamp.
+    Rectangle {
+        visible: led.activeFocus
+        anchors.fill: parent
+        anchors.margins: -led.panel.theme.strokeBold
+        radius: led.radius + led.panel.theme.strokeBold
+        color: "transparent"
+        border.color: led.accent
+        border.width: led.panel.theme.hairline
+    }
     MouseArea {
         anchors.fill: parent
-        anchors.margins: -led.panel.theme.ledHitOutset
+        // At least the kit's least hit size around the small lamp.
+        anchors.leftMargin: -led.panel.theme.hitOutset(led.width)
+        anchors.rightMargin: -led.panel.theme.hitOutset(led.width)
+        anchors.topMargin: -led.panel.theme.hitOutset(led.height)
+        anchors.bottomMargin: -led.panel.theme.hitOutset(led.height)
+        enabled: led.panel.controller.editable
         onClicked: led.toggle()
     }
 }

@@ -133,36 +133,38 @@ KitTheme {
     property real subcaptionSpacing: 0.6
     // Spaced caps for banners and toggle labels.
     property real bannerSpacing: 2
-    property real focusStroke: 1.5
     // A control with nothing to act on.
     property real idleOpacity: 0.45
 
-    // The header: wordmark, preset browser and status.
+    // The header (Kit.DeviceHeader): the wordmark over its spectrum sweep
+    // and subtitle, the preset browser and, once a control is touched, its
+    // readout.
     property real headerY: 10
-    property real headerHeight: 54
-    property int wordmarkSize: 27
-    property real wordmarkSpacing: 12
+    headerHeight: 54
+    wordmarkSize: 27
+    wordmarkSpacing: 12
+    wordmarkInk: glacier
     // How much shorter than the wordmark its sweep is, and where the sweep
     // reaches the primary.
     property real wordmarkRuleTrim: 12
     property real wordmarkSweepStop: 0.6
-    property real subtitleGap: 7
-    property real subtitleSpacing: 2.4
-    property real browserX: 230
-    property real browserY: 5
-    property real presetDisplayWidth: 560
-    property real presetDisplayHeight: 42
-    property real presetTextX: 14
-    property real presetCaptionY: 5
-    property real presetNameY: 16
-    property real presetNameWidth: 250
-    property real presetNameSpacing: 0.6
-    property real presetDividerX: 276
-    property real readoutX: 288
-    property real readoutValueY: 17
-    property real readoutRight: 26
-    property real chevronMargin: 10
-    property real statusY: 14
+    subtitleGap: 7
+    subtitleSpacing: 2.4
+    subtitleInk: inkDim
+    headerBrowserX: 230
+    presetDisplayWidth: 300
+    presetDisplayHeight: 42
+    presetDisplayRadius: radiusLg
+    presetTextX: 14
+    presetTagY: 5
+    presetTagSpacing: captionSpacing
+    presetNameY: 16
+    presetNameBold: false
+    presetChevronMargin: 10
+    presetChevronInk: inkDim
+    readoutWidth: 260
+    readoutSpacing: captionTightSpacing
+    readoutValueY: 17
 
     // The spectrum card's toolbar: the key and the drawing buttons.
     property real toolbarY: 7
@@ -170,7 +172,8 @@ KitTheme {
     property real toolbarDividerHeight: 18
     property real keyGap: 5
     property real keySwatchWidth: 11
-    property real buttonHeight: 20
+    // At least the kit's least hit size.
+    property real buttonHeight: minHitSize
     property real buttonSpacing: 3
     property real buttonOnFillAlpha: 0.16
     property real buttonOnEdgeAlpha: 0.6

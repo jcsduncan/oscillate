@@ -161,8 +161,7 @@ Rectangle {
     Text {
         objectName: "chopHeroHint"
         visible: !hero.playing
-        anchors.right: parent.right
-        anchors.rightMargin: hero.theme.hintInset
+        x: hero.theme.hintInset
         y: hero.theme.hintY
         text: "PLAY TO SEE THE BASS UNDER THE GATE"
         color: hero.theme.inkFaint

@@ -101,7 +101,7 @@ Rectangle {
     readonly property string kickLabel: keyHeard ? "KICK · " + keyName.toUpperCase()
         : playing ? "INPUT" : "KICK · PREVIEW"
 
-    // The display's readout: the control last touched, or a curve gesture.
+    // The header's readout: the control last touched, or a curve gesture.
     property string gestureName: ""
     property string gestureValue: ""
     // MIDI Learn: armed, waiting for a note on the keying tracks.
@@ -177,34 +177,34 @@ Rectangle {
                 learnNote(lastNote)
         }
     }
-    // A curve gesture's readout, until a control is touched again.
+    // A curve gesture's readout, until a control is touched again: the
+    // header's readout shows it under its own id.
+    readonly property string gestureId: "pump:gesture"
     function touch(name, value) {
-        theme.lastTouched = ""
         gestureName = name
         gestureValue = value
+        theme.lastTouched = gestureId
     }
     Connections {
         target: panel.theme
         function onLastTouchedChanged() {
-            if (panel.theme.lastTouched !== "") {
+            if (panel.theme.lastTouched !== panel.gestureId) {
                 panel.gestureName = ""
                 panel.gestureValue = ""
             }
         }
     }
-    function readoutName() {
-        const id = theme.lastTouched
-        if (id === "")
-            return gestureName !== "" ? gestureName : "TOUCH A CONTROL"
+    function readoutName(id) {
+        if (id === gestureId)
+            return gestureName
         const info = controller.parameter(id)
         if (info.name === undefined)
             return ""
         return (info.group === info.name ? info.name : info.group + " · " + info.name).toUpperCase()
     }
-    function readoutValue() {
-        const id = theme.lastTouched
-        if (id === "")
-            return gestureName !== "" ? gestureValue : "—"
+    function readoutValue(id) {
+        if (id === gestureId)
+            return gestureValue
         if (revision < 0)
             return ""
         if (id === "pump.note_low" || id === "pump.note_high")
@@ -234,6 +234,11 @@ Rectangle {
     function mirrorShape() {
         setShape(Shapes.mirrored(points))
         touch("SHAPE " + curveName(), "Mirrored")
+    }
+    // Back to the library's first shape, Classic Pump.
+    function clearShape() {
+        setShape(Shapes.shapes[0].points)
+        touch("SHAPE " + curveName(), Shapes.shapes[0].name)
     }
     function shiftShape(direction) {
         setShape(Shapes.shifted(points, direction / curve.cells))
@@ -302,9 +307,12 @@ Rectangle {
     // ---- Presets: the factory library, the user's own, and their files ---------------
 
     readonly property var userPresets: controller.user_presets !== undefined ? controller.user_presets : []
-    function openPresets() {
+    // The preset display the list opened from.
+    property Item presetAnchor: null
+    function openPresets(display) {
         if (!controller.editable)
             return
+        presetAnchor = display
         const items = []
         const categories = controller.preset_categories
         const presets = controller.presets
@@ -322,7 +330,7 @@ Rectangle {
         items.push({ label: "Export…", value: "export" })
         if (userPresets.length > 0)
             items.push({ label: "Delete…", value: "delete" })
-        menu.open(display, items, controller.preset_index, theme.accent, value => presetPicked(value))
+        menu.open(presetAnchor, items, controller.preset_index, theme.accent, value => presetPicked(value))
     }
     function presetPicked(value) {
         if (typeof value === "number") {
@@ -333,7 +341,7 @@ Rectangle {
             const items = [{ label: "Delete a user preset", value: "", header: true }]
             for (let u = 0; u < userPresets.length; ++u)
                 items.push({ label: userPresets[u].name, value: userPresets[u].name })
-            menu.open(display, items, "", theme.warning, name => {
+            menu.open(presetAnchor, items, "", theme.warning, name => {
                 controller.delete_user_preset(name)
                 touch("PRESET", "Deleted " + name)
             })
@@ -389,12 +397,19 @@ Rectangle {
         property string tip: ""
         signal activated
         signal rightClicked
-        width: pillText.implicitWidth + panel.theme.pillPad
+        // The edge it draws when not focused (a slot tab marks the slot playing).
+        property color edge: on ? ink : panel.theme.wellEdge
+        width: Math.max(panel.theme.minHitSize, pillText.implicitWidth + panel.theme.pillPad)
         height: panel.theme.pillHeight
         radius: panel.theme.radiusLg
         color: on ? panel.theme.shapeOn : panel.theme.well
-        border.color: on ? ink : panel.theme.wellEdge
+        border.color: activeFocus ? panel.theme.accent : edge
+        border.width: activeFocus ? panel.theme.focusEdgeWidth : panel.theme.hairline
         opacity: !panel.controller.editable ? panel.theme.pillDisabledOpacity : dim ? panel.theme.pillDimOpacity : 1
+        activeFocusOnTab: panel.controller.editable && visible
+        Keys.onReturnPressed: activated()
+        Keys.onSpacePressed: activated()
+        Accessible.onPressAction: activated()
         Accessible.role: Accessible.Button
         Kit.HoverTip { theme: panel.theme; text: pill.tip }
         Accessible.name: label
@@ -433,216 +448,120 @@ Rectangle {
 
     // ---- Header ---------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
-        x: panel.theme.spaceXl
-        y: 0
-        width: panel.width - 2 * panel.theme.spaceXl
-        height: panel.theme.headerHeight
-
-        Text {
-            id: wordmark
-            y: panel.theme.wordmarkY
-            text: "PUMP"
-            color: panel.theme.wordmark
-            font.family: panel.theme.sans
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Light
-            font.letterSpacing: panel.theme.wordmarkSpacing
+        x: panel.margin
+        y: panel.theme.headerY
+        width: panel.width - 2 * panel.margin
+        controller: panel.controller
+        theme: panel.theme
+        opener: function(display) { panel.openPresets(display) }
+        readoutNameOf: function(id) { return panel.readoutName(id) }
+        readoutValueOf: function(id) { return panel.readoutValue(id) }
+        brand: Component {
+            Item {
+                implicitWidth: Math.max(wordmark.implicitWidth, subtitle.implicitWidth)
+                implicitHeight: rule.y + rule.height
+                Text {
+                    id: wordmark
+                    objectName: "pumpWordmark"
+                    text: "PUMP"
+                    color: panel.theme.wordmarkInk
+                    font.family: panel.theme.wordmarkFont
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.weight: panel.theme.wordmarkWeight
+                    font.letterSpacing: panel.theme.wordmarkSpacing
+                }
+                Text {
+                    id: subtitle
+                    objectName: "pumpSubtitle"
+                    y: wordmark.height + panel.theme.subtitleGap
+                    text: "VOLUME SHAPER · SIDECHAIN"
+                    color: panel.theme.subtitleInk
+                    font.family: panel.theme.sans
+                    font.pixelSize: panel.theme.subtitleSize
+                    font.bold: true
+                    font.letterSpacing: panel.theme.subtitleSpacing
+                }
+                Rectangle {
+                    id: rule
+                    y: subtitle.y + subtitle.height + panel.theme.ruleGap
+                    width: Math.max(wordmark.implicitWidth, subtitle.implicitWidth)
+                    height: panel.theme.strokeBold
+                    radius: height / 2
+                    color: panel.theme.shape
+                }
+            }
         }
+    }
+
+    // Save as, export and import: a name or path typed in place of the
+    // preset display.
+    Rectangle {
+        objectName: "pumpNameField"
+        parent: header.browser !== null ? header.browser.display : panel
+        anchors.fill: parent
+        visible: panel.naming !== ""
+        radius: panel.theme.presetDisplayRadius
+        color: panel.theme.well
+        border.color: panel.theme.accent
         Text {
-            id: subtitle
-            y: wordmark.y + wordmark.height + panel.theme.subtitleGap
-            text: "VOLUME SHAPER · SIDECHAIN"
-            color: panel.theme.inkDim
-            font.family: panel.theme.sans
+            x: panel.theme.presetTextX
+            y: panel.theme.presetTagY
+            text: panel.naming === "save" ? "SAVE AS · NAME"
+                : panel.naming === "export" ? "EXPORT · FILE PATH" : "IMPORT · FILE PATH"
+            color: panel.theme.inkFaint
             font.pixelSize: panel.theme.typeMicro
             font.bold: true
-            font.letterSpacing: panel.theme.subtitleSpacing
+            font.letterSpacing: panel.theme.capsSpacing
         }
-        Rectangle {
-            y: subtitle.y + subtitle.height + panel.theme.ruleGap
-            width: Math.max(wordmark.implicitWidth, subtitle.implicitWidth)
-            height: panel.theme.strokeBold
-            radius: height / 2
-            color: panel.theme.shape
+        TextInput {
+            id: nameInput
+            objectName: "pumpNameInput"
+            x: panel.theme.presetTextX
+            y: panel.theme.nameInputY
+            width: parent.width - panel.theme.nameFieldRight
+            color: panel.theme.ink
+            selectionColor: panel.theme.accentSoft
+            font.family: panel.theme.sans
+            font.pixelSize: panel.theme.typeSubtitle
+            clip: true
+            Keys.onReturnPressed: panel.confirmName(text)
+            Keys.onEnterPressed: panel.confirmName(text)
+            Keys.onEscapePressed: panel.naming = ""
         }
-
-        Row {
-            x: panel.theme.browserX
-            y: panel.theme.browserY
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "pumpPresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "pumpPresetDisplay"
-                width: panel.theme.presetWidth
-                height: panel.theme.presetHeight
-                radius: panel.theme.presetRadius
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                border.width: activeFocus ? panel.theme.focusStroke : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                Keys.onReturnPressed: panel.openPresets()
-                Keys.onSpacePressed: panel.openPresets()
-                Text {
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetCaptionY
-                    text: (panel.controller.preset_category + " · FACTORY").toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.capsSpacing
-                }
-                Text {
-                    objectName: "pumpPresetName"
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetNameY
-                    width: panel.theme.presetNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeHeading
-                    elide: Text.ElideRight
-                }
-                Rectangle {
-                    x: panel.theme.presetDividerX
-                    y: 0
-                    width: panel.theme.hairline
-                    height: parent.height
-                    color: panel.theme.plateEdge
-                }
-                Text {
-                    objectName: "pumpReadout"
-                    x: panel.theme.presetReadoutX
-                    y: panel.theme.presetCaptionY
-                    width: display.width - x - panel.theme.presetReadoutRight
-                    text: panel.readoutName()
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.capsTightSpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "pumpReadoutValue"
-                    x: panel.theme.presetReadoutX
-                    y: panel.theme.presetValueY
-                    width: display.width - x - panel.theme.presetReadoutRight
-                    text: panel.readoutValue()
-                    color: panel.theme.shape
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeLabel
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.presetChevronMargin
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.inkDim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        panel.openPresets()
-                    }
-                }
-                // Save as, export and import: a name or path typed in place.
-                Rectangle {
-                    objectName: "pumpNameField"
-                    anchors.fill: parent
-                    visible: panel.naming !== ""
-                    radius: panel.theme.presetRadius
-                    color: panel.theme.well
-                    border.color: panel.theme.accent
-                    Text {
-                        x: panel.theme.presetTextX
-                        y: panel.theme.presetCaptionY
-                        text: panel.naming === "save" ? "SAVE AS · NAME"
-                            : panel.naming === "export" ? "EXPORT · FILE PATH" : "IMPORT · FILE PATH"
-                        color: panel.theme.inkFaint
-                        font.pixelSize: panel.theme.typeMicro
-                        font.bold: true
-                        font.letterSpacing: panel.theme.capsSpacing
-                    }
-                    TextInput {
-                        id: nameInput
-                        objectName: "pumpNameInput"
-                        x: panel.theme.presetTextX
-                        y: panel.theme.presetValueY
-                        width: parent.width - panel.theme.nameFieldRight
-                        color: panel.theme.ink
-                        selectionColor: panel.theme.accentSoft
-                        font.family: panel.theme.sans
-                        font.pixelSize: panel.theme.typeSubtitle
-                        clip: true
-                        Keys.onReturnPressed: panel.confirmName(text)
-                        Keys.onEnterPressed: panel.confirmName(text)
-                        Keys.onEscapePressed: panel.naming = ""
-                    }
-                    Text {
-                        anchors.right: parent.right
-                        anchors.rightMargin: panel.theme.spaceLg
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "↵ OK · ESC"
-                        color: panel.theme.inkFaint
-                        font.pixelSize: panel.theme.typeCaption
-                        font.bold: true
-                    }
-                }
-            }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "pumpPresetNext"
-                direction: 1
-            }
-        }
-
-        // Linked instances: one shape across every Pump in the group.
-        Pill {
-            id: linkPill
-            objectName: "pumpLink"
-            anchors.right: status.left
-            anchors.rightMargin: panel.theme.spaceLg
-            y: panel.theme.linkY
-            visible: panel.linkedCount > 1
-            on: true
-            ink: panel.theme.time
-            label: "LINKED · " + panel.linkedCount
-            Accessible.description: "This shape is shared by " + panel.linkedCount + " Pumps"
-            onActivated: menu.open(linkPill, [{ label: "Shared by " + panel.linkedCount + " Pumps", value: "",
-                                                header: true },
-                                              { label: "Unlink this Pump", value: "unlink" }], "",
-                                   panel.theme.time, value => {
-                                       if (value === "unlink") {
-                                           panel.controller.unlink()
-                                           panel.touch("LINK", "This Pump has its own shapes")
-                                       }
-                                   })
-        }
-        Kit.StatusBadge {
-            id: status
-            objectName: "pumpStatus"
-            controller: panel.controller
-            theme: panel.theme
+        Text {
             anchors.right: parent.right
-            y: panel.theme.statusY
+            anchors.rightMargin: panel.theme.spaceLg
+            anchors.verticalCenter: parent.verticalCenter
+            text: "↵ OK · ESC"
+            color: panel.theme.inkFaint
+            font.pixelSize: panel.theme.typeCaption
+            font.bold: true
         }
+    }
+
+    // Linked instances: one shape across every Pump in the group, left of
+    // the status badge.
+    Pill {
+        id: linkPill
+        objectName: "pumpLink"
+        x: header.x + header.status.x - width - panel.theme.spaceLg
+        y: header.y + (header.rowHeight - height) / 2
+        visible: panel.linkedCount > 1
+        on: true
+        ink: panel.theme.time
+        label: "LINKED · " + panel.linkedCount
+        Accessible.description: "This shape is shared by " + panel.linkedCount + " Pumps"
+        onActivated: menu.open(linkPill, [{ label: "Shared by " + panel.linkedCount + " Pumps", value: "",
+                                            header: true },
+                                          { label: "Unlink this Pump", value: "unlink" }], "",
+                               panel.theme.time, value => {
+                                   if (value === "unlink") {
+                                       panel.controller.unlink()
+                                       panel.touch("LINK", "This Pump has its own shapes")
+                                   }
+                               })
     }
 
     // ---- Body: library and pattern | editor | trigger, then band | output ------------
@@ -687,7 +606,22 @@ Rectangle {
                     height: panel.theme.shapeTileHeight
                     radius: panel.theme.wellRadius
                     color: on ? panel.theme.shapeOn : panel.theme.well
-                    border.color: on ? panel.theme.shape : panel.theme.wellEdge
+                    border.color: activeFocus ? panel.theme.accent : on ? panel.theme.shape : panel.theme.wellEdge
+                    border.width: activeFocus ? panel.theme.focusEdgeWidth : panel.theme.hairline
+                    // Sets the curve to this shape, or picks what Stamp stamps.
+                    function pick() {
+                        panel.stampIndex = tile.index
+                        if (curve.tool === "stamp") {
+                            panel.touch("STAMP", tile.shape.name)
+                            return
+                        }
+                        panel.setShape(tile.shape.points)
+                        panel.touch("SHAPE " + panel.curveName(), tile.shape.name)
+                    }
+                    activeFocusOnTab: panel.controller.editable
+                    Keys.onReturnPressed: pick()
+                    Keys.onSpacePressed: pick()
+                    Accessible.onPressAction: pick()
                     Accessible.role: Accessible.Button
                     Kit.HoverTip { theme: panel.theme }
                     Accessible.name: shape.name + " shape"
@@ -731,15 +665,7 @@ Rectangle {
                     MouseArea {
                         anchors.fill: parent
                         enabled: panel.controller.editable
-                        onClicked: {
-                            panel.stampIndex = tile.index
-                            if (curve.tool === "stamp") {
-                                panel.touch("STAMP", tile.shape.name)
-                                return
-                            }
-                            panel.setShape(tile.shape.points)
-                            panel.touch("SHAPE " + panel.curveName(), tile.shape.name)
-                        }
+                        onClicked: tile.pick()
                     }
                 }
             }
@@ -776,6 +702,7 @@ Rectangle {
             parameterId: "pump.morph"
             diameter: panel.theme.smallKnobDiameter
             inactive: panel.slotMode !== 5
+            inactiveReason: panel.slotMode !== 5 ? "Morph plays only when Play is Morph A-B" : ""
         }
         Caption {
             x: panel.theme.patternX
@@ -813,9 +740,18 @@ Rectangle {
                     height: panel.theme.stepHeight
                     radius: panel.theme.radiusLg
                     color: now ? panel.theme.shapeOn : panel.theme.well
-                    border.color: now ? panel.theme.time : used ? panel.theme.wellEdge : panel.theme.seam
-                    border.width: now ? panel.theme.stepNowStroke : panel.theme.hairline
+                    border.color: activeFocus ? panel.theme.accent
+                        : now ? panel.theme.time : used ? panel.theme.wellEdge : panel.theme.seam
+                    border.width: activeFocus ? panel.theme.focusEdgeWidth
+                        : now ? panel.theme.stepNowStroke : panel.theme.hairline
                     opacity: used ? 1 : panel.theme.stepUnusedOpacity
+                    // Return, Space or Up: the next slot; Down: the one before.
+                    activeFocusOnTab: panel.controller.editable
+                    Keys.onReturnPressed: panel.cycleStep(index, 1)
+                    Keys.onSpacePressed: panel.cycleStep(index, 1)
+                    Keys.onUpPressed: panel.cycleStep(index, 1)
+                    Keys.onDownPressed: panel.cycleStep(index, -1)
+                    Accessible.onPressAction: panel.cycleStep(index, 1)
                     Accessible.role: Accessible.Button
                     Kit.HoverTip { theme: panel.theme }
                     Accessible.name: "Pattern step " + (index + 1) + ", slot " + Shapes.slotNames[slot]
@@ -887,7 +823,7 @@ Rectangle {
                     on: panel.editSlot === index
                     dim: !own
                     ink: panel.playingSlot === index ? panel.theme.time : panel.theme.shape
-                    border.color: panel.playingSlot === index ? panel.theme.time
+                    edge: panel.playingSlot === index ? panel.theme.time
                         : on ? panel.theme.shape : panel.theme.wellEdge
                     Accessible.name: "Edit slot " + Shapes.slotNames[index]
                     onActivated: panel.selectSlot(index)
@@ -957,7 +893,15 @@ Rectangle {
                         width: panel.theme.gridTileWidth
                         height: panel.theme.pillHeight
                         color: on ? panel.theme.shapeOn : panel.theme.well
-                        border.color: panel.theme.wellEdge
+                        border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
+                        border.width: activeFocus ? panel.theme.focusEdgeWidth : panel.theme.hairline
+                        activeFocusOnTab: true
+                        Keys.onReturnPressed: curve.grid = modelData[1]
+                        Keys.onSpacePressed: curve.grid = modelData[1]
+                        Accessible.role: Accessible.RadioButton
+                        Accessible.name: "Snap grid " + modelData[0]
+                        Accessible.checked: on
+                        Accessible.onPressAction: curve.grid = modelData[1]
                         Text {
                             anchors.centerIn: parent
                             text: gridTile.modelData[0]
@@ -1008,32 +952,39 @@ Rectangle {
             Pill {
                 objectName: "pumpClear"
                 label: "CLEAR"
-                onActivated: {
-                    panel.setShape(Shapes.shapes[0].points)
-                    panel.touch("SHAPE " + panel.curveName(), "Classic Pump")
-                }
+                onActivated: panel.clearShape()
             }
         }
-        PumpCurve {
-            id: curve
-            panel: panel
+        // Gain up the side, beats across from the kick; LIVE while playing.
+        Kit.PlotFrame {
             x: panel.theme.cardInset
             y: panel.theme.curveY
             width: shapeCard.width - 2 * panel.theme.cardInset
             height: shapeCard.height - panel.theme.curveY - panel.theme.curveFoot
-            curveId: panel.editCurveId
-            follows: panel.editFollows
-            followsLabel: panel.followsLabel
-            depthId: ["pump.depth", "pump.depth_mid", "pump.depth_high"][panel.shownBand]
-            kick: panel.kick
-            input: panel.inputCycle
-            output: panel.outputCycle
-            applied: panel.heardCurve
-            phase: panel.phase
-            cycleBeats: panel.cycleBeats
-            cycleSeconds: panel.cycleSeconds
-            gainDb: [panel.gainDb, panel.gainMidDb, panel.gainHighDb][panel.shownBand]
-            stampShape: Shapes.shapes[panel.stampIndex].points
+            theme: panel.theme
+            live: panel.playing
+            xUnit: "beats"
+            yUnit: "dB"
+            xTicks: curve.beatTicks
+            yTicks: curve.levelTicks
+            PumpCurve {
+                id: curve
+                panel: panel
+                anchors.fill: parent
+                curveId: panel.editCurveId
+                follows: panel.editFollows
+                followsLabel: panel.followsLabel
+                depthId: ["pump.depth", "pump.depth_mid", "pump.depth_high"][panel.shownBand]
+                kick: panel.kick
+                input: panel.inputCycle
+                output: panel.outputCycle
+                applied: panel.heardCurve
+                phase: panel.phase
+                cycleBeats: panel.cycleBeats
+                cycleSeconds: panel.cycleSeconds
+                gainDb: [panel.gainDb, panel.gainMidDb, panel.gainHighDb][panel.shownBand]
+                stampShape: Shapes.shapes[panel.stampIndex].points
+            }
         }
         Caption {
             objectName: "pumpToolHelp"
@@ -1370,22 +1321,26 @@ Rectangle {
                 label: "Low Split"
                 diameter: panel.theme.bandKnobDiameter
                 inactive: panel.bandMode === 0
+                inactiveReason: panel.bandMode === 0 ? "Band is Full: nothing splits" : ""
             }
             Cell {
                 parameterId: "pump.crossover_high"
                 label: "High Split"
                 diameter: panel.theme.bandKnobDiameter
                 inactive: !panel.threeBand
+                inactiveReason: panel.threeBand ? "" : "Only Three Band has a high band"
             }
             Cell {
                 parameterId: "pump.depth_mid"
                 diameter: panel.theme.bandKnobDiameter
                 inactive: !panel.threeBand
+                inactiveReason: panel.threeBand ? "" : "Only Three Band has a high band"
             }
             Cell {
                 parameterId: "pump.depth_high"
                 diameter: panel.theme.bandKnobDiameter
                 inactive: !panel.threeBand
+                inactiveReason: panel.threeBand ? "" : "Only Three Band has a high band"
             }
             Cell {
                 parameterId: "pump.anticlick"

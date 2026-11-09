@@ -28,8 +28,11 @@ Rectangle {
     readonly property real barFloorDb: -24
     readonly property real barTopDb: 6
     readonly property real clippedFullDb: 12
-    // The history's bars: full height at this much clipping.
+    // The history's bars: full height at this much clipping; its scale's
+    // dB ticks, and the bars ago its time ticks mark (four bars of 4/4).
     readonly property real historyFullDb: 6
+    readonly property var historyDbTicks: [0, 3, 6]
+    readonly property var historyBarTicks: [4, 3, 2, 1]
     // The curve's resolution.
     readonly property int curvePoints: 121
     // When the panel cannot read the running latency, it shows it at 48 kHz.
@@ -80,155 +83,86 @@ Rectangle {
         font.bold: true
         font.letterSpacing: panel.theme.captionSpacing
     }
-    component Note: Text {
-        color: panel.theme.inkFaint
-        font.pixelSize: panel.theme.typeCaption
-        wrapMode: Text.WordWrap
-    }
 
     // ---- Header ----------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
-
-        Rectangle {
-            id: mark
-            anchors.verticalCenter: parent.verticalCenter
-            width: panel.theme.markSize
-            height: width
-            radius: width / 2
-            color: "transparent"
-            border.color: panel.theme.accent
-            border.width: panel.theme.markStroke
-            // A flat top: the clipped wave.
-            Canvas {
-                anchors.fill: parent
-                onPaint: {
-                    const ctx = getContext("2d")
-                    ctx.reset()
-                    const w = width
-                    ctx.strokeStyle = panel.theme.accent
-                    ctx.lineWidth = panel.theme.markStroke
-                    ctx.lineJoin = "round"
-                    ctx.beginPath()
-                    const points = panel.theme.markPoints
-                    for (let i = 0; i < points.length; ++i) {
-                        if (i === 0)
-                            ctx.moveTo(w * points[i][0], w * points[i][1])
-                        else
-                            ctx.lineTo(w * points[i][0], w * points[i][1])
-                    }
-                    ctx.stroke()
-                }
-            }
-        }
-        Column {
-            anchors.left: mark.right
-            anchors.leftMargin: panel.theme.markGap
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: panel.theme.spaceXxs
-            Text {
-                text: "EDGE"
-                color: panel.theme.glacier
-                font.family: panel.theme.sans
-                font.pixelSize: panel.theme.wordmarkSize
-                font.bold: true
-                font.letterSpacing: panel.theme.wordmarkSpacing
-            }
-            Text {
-                objectName: "edgeSubtitle"
-                text: "CLIPPER · " + panel.factorText + " OVERSAMPLED"
-                color: panel.theme.accent
-                font.pixelSize: panel.theme.typeSmall
-                font.bold: true
-                font.letterSpacing: panel.theme.subtitleSpacing
-            }
-        }
-
-        Row {
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: panel.theme.headerSpacing
-            Kit.StatusBadge {
-                objectName: "edgeStatus"
-                anchors.verticalCenter: parent.verticalCenter
-                controller: panel.controller
-                theme: panel.theme
-            }
-            Row {
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: panel.theme.presetArrowGap
-                Kit.PresetArrow {
-                    anchors.verticalCenter: parent.verticalCenter
-                    controller: panel.controller
-                    theme: panel.theme
-                    objectName: "edgePresetPrevious"
-                    direction: -1
-                }
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        // The mark (a clipped wave in a ring) beside the wordmark over the
+        // oversampling it runs at.
+        brand: Component {
+            Item {
+                implicitWidth: words.x + words.implicitWidth
+                implicitHeight: Math.max(mark.height, words.implicitHeight)
                 Rectangle {
-                    id: display
-                    objectName: "edgePresetDisplay"
-                    width: panel.theme.presetWidth
-                    height: panel.theme.presetHeight
-                    radius: panel.theme.radiusXl
-                    color: panel.theme.button
-                    border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                    activeFocusOnTab: true
-                    Accessible.role: Accessible.ComboBox
-                    Accessible.name: "Preset"
-                    Accessible.description: panel.controller.preset_name
-                        + (panel.controller.preset_modified ? ", edited" : "")
-                    function openPresets() {
-                        if (panel.controller.editable)
-                            menu.openPresets(display, panel.controller, panel.theme.accent)
-                    }
-                    Keys.onReturnPressed: openPresets()
-                    Keys.onSpacePressed: openPresets()
-                    Text {
-                        objectName: "edgePresetName"
-                        x: panel.theme.presetTextX
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: chevron.x - x - panel.theme.spaceSm
-                        text: panel.controller.preset_name + (panel.controller.preset_modified ? " · edited" : "")
-                        color: panel.theme.ink
-                        font.family: panel.theme.sans
-                        font.pixelSize: panel.theme.typeLabel
-                        elide: Text.ElideRight
-                    }
-                    Text {
-                        id: chevron
-                        anchors.right: parent.right
-                        anchors.rightMargin: panel.theme.presetTextX
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "▾"
-                        color: panel.theme.inkDim
-                        font.pixelSize: panel.theme.typeBody
-                    }
-                    MouseArea {
+                    id: mark
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: panel.theme.markSize
+                    height: width
+                    radius: width / 2
+                    color: "transparent"
+                    border.color: panel.theme.accent
+                    border.width: panel.theme.markStroke
+                    // A flat top: the clipped wave.
+                    Canvas {
+                        readonly property string plotExemptReason: "Edge's logo, not a plot"
                         anchors.fill: parent
-                        enabled: panel.controller.editable
-                        onClicked: {
-                            display.forceActiveFocus()
-                            display.openPresets()
+                        onPaint: {
+                            const ctx = getContext("2d")
+                            ctx.reset()
+                            const w = width
+                            ctx.strokeStyle = panel.theme.accent
+                            ctx.lineWidth = panel.theme.markStroke
+                            ctx.lineJoin = "round"
+                            ctx.beginPath()
+                            const points = panel.theme.markPoints
+                            for (let i = 0; i < points.length; ++i) {
+                                if (i === 0)
+                                    ctx.moveTo(w * points[i][0], w * points[i][1])
+                                else
+                                    ctx.lineTo(w * points[i][0], w * points[i][1])
+                            }
+                            ctx.stroke()
                         }
                     }
                 }
-                Kit.PresetArrow {
+                Column {
+                    id: words
+                    x: mark.width + panel.theme.markGap
                     anchors.verticalCenter: parent.verticalCenter
-                    controller: panel.controller
-                    theme: panel.theme
-                    objectName: "edgePresetNext"
-                    direction: 1
+                    spacing: panel.theme.subtitleGap
+                    Text {
+                        objectName: "edgeWordmark"
+                        text: "EDGE"
+                        color: panel.theme.wordmarkInk
+                        font.family: panel.theme.wordmarkFont
+                        font.pixelSize: panel.theme.wordmarkSize
+                        font.weight: panel.theme.wordmarkWeight
+                        font.letterSpacing: panel.theme.wordmarkSpacing
+                    }
+                    Text {
+                        objectName: "edgeSubtitle"
+                        text: "CLIPPER · " + panel.factorText + " OVERSAMPLED"
+                        color: panel.theme.subtitleInk
+                        font.pixelSize: panel.theme.subtitleSize
+                        font.bold: true
+                        font.letterSpacing: panel.theme.subtitleSpacing
+                    }
                 }
             }
+        }
+        // The level-matched A/B, left of the status badge.
+        tools: Component {
             Kit.Button {
                 objectName: "edgeCompare"
-                anchors.verticalCenter: parent.verticalCenter
-                width: panel.theme.compareWidth
+                // As wide as its longer label, so the width holds as it changes.
+                width: Math.max(implicitWidth, panel.theme.compareWidth)
                 theme: panel.theme
                 label: panel.matched ? "A/B matched" : "A/B"
                 tip: panel.matched ? "Hear the input, level-matched to the output"
@@ -257,53 +191,78 @@ Rectangle {
         y: panel.bodyY
         width: panel.theme.transferWidth
         height: panel.bodyHeight
-        EdgeTransfer {
-            id: transfer
-            objectName: "edgeTransfer"
+        Kit.PlotFrame {
+            id: transferFrame
             x: panel.theme.cardInset
             y: panel.theme.cardContentY
             width: transferCard.width - 2 * panel.theme.cardInset
             height: panel.theme.plotHeight
             theme: panel.theme
-            curve: panel.curve
+            // The dot follows the running signal; idle, the curve previews the settings.
             live: panel.playing
-            dotIn: panel.playing ? panel.live.dot_input : panel.silentDb
-            dotOut: panel.playing ? panel.live.dot_output : panel.silentDb
+            xUnit: "dBFS"
+            yUnit: "dBFS"
+            xTicks: transfer.inTicks.map(db => ({ at: transfer.inAt(db), label: Format.signed_number(db, 0) }))
+            yTicks: transfer.outTicks.map(db => ({ at: transfer.outAt(db), label: Format.signed_number(db, 0) }))
+            EdgeTransfer {
+                id: transfer
+                objectName: "edgeTransfer"
+                anchors.fill: parent
+                theme: panel.theme
+                curve: panel.curve
+                live: panel.playing
+                dotIn: panel.playing ? panel.live.dot_input : panel.silentDb
+                dotOut: panel.playing ? panel.live.dot_output : panel.silentDb
+            }
         }
-        Row {
-            id: historyRow
-            objectName: "edgeHistory"
-            x: panel.theme.cardInset
-            y: panel.theme.historyY
-            width: transferCard.width - 2 * panel.theme.cardInset
-            height: panel.theme.historyHeight
-            spacing: panel.theme.historyGap
+        // How hard each of the last sixteen beats clipped, oldest on the
+        // left; the bars sit under the frame's chip row.
+        Kit.PlotFrame {
+            id: historyFrame
             readonly property int beats: panel.theme.historyBeats
-            readonly property real barWidth: (width - spacing * (beats - 1)) / beats
-            Repeater {
-                model: historyRow.beats
-                delegate: Item {
-                    id: beat
-                    required property int index
-                    readonly property real db: index < panel.history.length ? panel.history[index] : 0
-                    width: historyRow.barWidth
-                    height: historyRow.height
-                    Rectangle {
-                        anchors.bottom: parent.bottom
-                        width: parent.width
+            readonly property real barsShare: panel.theme.historyBarsHeight
+                / (panel.theme.historyBarsHeight + panel.theme.plotChipRowHeight)
+            x: panel.theme.cardInset
+            y: transferFrame.y + transferFrame.height + panel.theme.historyFrameGap
+            width: transferCard.width - 2 * panel.theme.cardInset
+            height: panel.theme.plotChipRowHeight + panel.theme.historyBarsHeight + panel.theme.plotGutterBottom
+            theme: panel.theme
+            live: panel.playing
+            xUnit: "bars"
+            yUnit: "dB"
+            xTicks: panel.historyBarTicks.map((bars, i) => ({
+                at: i / panel.historyBarTicks.length, label: Format.signed_number(-bars, 0) }))
+                .concat([{ at: 1, label: "now" }])
+            yTicks: panel.historyDbTicks.map(db => ({
+                at: db / panel.historyFullDb * historyFrame.barsShare, label: Format.number(db, 0) }))
+            Caption {
+                x: panel.theme.plotChipInset
+                y: panel.theme.plotChipInset
+                text: "CLIPPED PER BEAT"
+            }
+            Item {
+                id: historyRow
+                objectName: "edgeHistory"
+                y: panel.theme.plotChipRowHeight
+                width: historyFrame.plotArea.width
+                height: panel.theme.historyBarsHeight
+                readonly property real slot: width / historyFrame.beats
+                Repeater {
+                    model: historyFrame.beats
+                    delegate: Rectangle {
+                        id: beat
+                        required property int index
+                        readonly property real db: index < panel.history.length ? panel.history[index] : 0
+                        x: index * historyRow.slot + panel.theme.historyGap / 2
+                        width: historyRow.slot - panel.theme.historyGap
                         height: Math.max(panel.theme.historyMinBar,
-                                         panel.fraction(beat.db, 0, panel.historyFullDb) * parent.height)
+                                         panel.fraction(beat.db, 0, panel.historyFullDb) * historyRow.height)
+                        y: historyRow.height - height
                         radius: panel.theme.radiusXs
                         color: beat.db > panel.theme.historyLitDb ? panel.theme.accent : panel.theme.historyQuiet
                     }
                 }
             }
-        }
-        Note {
-            x: panel.theme.cardInset
-            y: historyRow.y + historyRow.height + panel.theme.historyCaptionGap
-            width: transferCard.width - 2 * panel.theme.cardInset
-            text: "Clipping over the last 4 bars, one bar per beat"
         }
     }
 

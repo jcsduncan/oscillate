@@ -302,6 +302,14 @@ double contrast(const QColor& first, const QColor& second) {
   return (std::max(a, b) + contrast_flare) / (std::min(a, b) + contrast_flare);
 }
 
+// A colour as seen over an opaque one.
+QColor blend(const QColor& top, const QColor& under) {
+  const double alpha = top.alphaF();
+  return QColor::fromRgbF(static_cast<float>(top.redF() * alpha + under.redF() * (1.0 - alpha)),
+                          static_cast<float>(top.greenF() * alpha + under.greenF() * (1.0 - alpha)),
+                          static_cast<float>(top.blueF() * alpha + under.blueF() * (1.0 - alpha)));
+}
+
 bool is_singleton(const QString& path) {
   QFile file(path);
   require(file.open(QIODevice::ReadOnly), "theme opens: " + path.toStdString());
@@ -338,6 +346,24 @@ void every_theme_reads_at_body_text_contrast() {
       require(ratio >= minimum_text_contrast, name + ": " + token + " " + ink.name().toStdString() +
                                                   " on " + ground.name().toStdString() +
                                                   " reads at " + std::to_string(ratio) + ":1");
+    }
+    // The status badge's words read on its own fill in every tone (issue
+    // #165); a translucent fill is seen over the theme's well.
+    const auto well = theme->property("well").value<QColor>();
+    for (const char* tone_token : {"live", "warning", "statusPendingInk"}) {
+      const QVariant tone = theme->property(tone_token);
+      QVariant fill;
+      QVariant text;
+      require(QMetaObject::invokeMethod(theme.get(), "statusFill", Q_RETURN_ARG(QVariant, fill),
+                                        Q_ARG(QVariant, tone)) &&
+                  QMetaObject::invokeMethod(theme.get(), "statusInk", Q_RETURN_ARG(QVariant, text),
+                                            Q_ARG(QVariant, tone)),
+              name + ": the status badge's colours resolve");
+      const auto under = blend(fill.value<QColor>(), well);
+      const double ratio = contrast(text.value<QColor>(), under);
+      require(ratio >= minimum_text_contrast, name + ": the " + tone_token +
+                                                  " status badge reads at " +
+                                                  std::to_string(ratio) + ":1");
     }
     saw_kit = saw_kit || path.endsWith(QStringLiteral("/devicekit/KitTheme.qml"));
   }

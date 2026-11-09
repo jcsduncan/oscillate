@@ -69,7 +69,7 @@ KitTheme {
 
     mono: "DejaVu Sans Mono"
 
-    // The control last touched, read back in the display.
+    // The control last touched, read back in the header.
     lastTouched: ""
 
     // Neon glow: the soft wide stroke under a lit arc or trace.
@@ -78,8 +78,6 @@ KitTheme {
     property real tabWashAlpha: 0.14
     // The edge of a focused or chosen well (tabs, preset display).
     property real focusStroke: 1.5
-    // A synced-away control (division while free) is dimmed.
-    property real unsyncedOpacity: 0.45
 
     // The faceplate.
     property int panelWidth: 1280
@@ -106,47 +104,53 @@ KitTheme {
     property int cellMinWidth: 62
     property int cellHeightPad: 30
 
-    // Header: wordmark, model tabs, preset display.
+    // Header (Kit.DeviceHeader): the wordmark over a neon rule and the
+    // model's tagline; the model tabs in the second row.
     property real headerY: 10
-    property real headerHeight: 50
-    property int wordmarkSize: 30
-    property real wordmarkSpacing: 6
+    headerHeight: 46
+    headerModeGap: spaceXs
+    wordmarkSize: 30
+    wordmarkWeight: Font.Black
+    wordmarkSpacing: 6
+    subtitleGap: -spaceXxs
     property real wordmarkRuleInset: 6
     property real wordmarkRuleHeight: 3
-    property real taglineSpacing: 1.6
-    property real modelTabsX: 196
     property int modelTabWidth: 92
-    property int modelTabHeight: 40
+    property int modelTabHeight: 28
     property real modelLedX: 10
     property int modelLedSize: 7
     property real modelTabTextOffset: 6
     property real modelTabLetterSpacing: 1.6
-    property real browserGap: 18
-    property int presetDisplayWidth: 420
-    property int presetDisplayHeight: 40
-    property real presetNameY: 15
-    property int presetNameWidth: 190
-    property real presetDividerX: 212
-    property real presetDividerInset: 7
-    property real readoutX: 222
-    property real readoutValueY: 16
-    property real readoutLetterSpacing: 1
-    property real presetChevronMargin: 9
-    property real statusY: 12
+    headerBrowserX: 250
+    presetDisplayWidth: 260
+    presetDisplayHeight: 40
+    presetDisplayRadius: radiusLg
+    presetFocusStroke: focusStroke
+    presetChevronMargin: 9
+    readoutWidth: 220
+    readoutRadius: radiusLg
+    // Between the header and the first row of plates.
+    property real headerContentGap: plateGap
 
     // Row A: the scope plate and the model's main controls.
-    property real rowAY: 72
-    property real rowAHeight: 240
+    property real rowAHeight: 214
     property int scopePlateWidth: 500
     property real scopeInset: 10
     property real scopeTop: 28
     property int filterViewWidth: 300
+    // The scope plate's views sit in PlotFrames: the frame's LIVE / PREVIEW
+    // chip takes a row along a view's top, so the filter's cutoff readout
+    // drops to a row of its own under it, above the response.
+    property real chipRowHeight: 22
+    property real readoutRowHeight: 16
+    filterViewReadoutY: chipRowHeight
+    filterViewTop: chipRowHeight + readoutRowHeight
     property int mainKnobDiameter: 46
     property int mainCellWidth: 92
-    property real mainDividerY: 118
-    property real mainCaptionY: 126
-    property real modelRowY: 148
-    property real moogRowY: 146
+    property real mainDividerY: 112
+    property real mainCaptionY: 118
+    property real modelRowY: 134
+    property real moogRowY: 132
     property real modelRowSpacing: 18
     property real moogRowSpacing: 10
     property real reeseRowSpacing: 14
@@ -230,20 +234,22 @@ KitTheme {
     property real noteNameY: 3
     property real intervalY: 23
     property real intervalRestOpacity: 0.5
-    property int octaveKeyHeight: 18
+    // The octave keys and the toggles are at least the hit size tall.
+    property int octaveKeyHeight: minHitSize
     property real octaveOnAlpha: 0.22
-    property int stepToggleHeight: 20
+    property int stepToggleHeight: minHitSize
     property real stepToggleSpacing: 0.8
-    // Offsets below the octave keys: the gate toggle, then accent and slide.
-    property real stepGateOffset: 23
-    property real stepFlagsOffset: 46
+    // Offsets below the octave keys: the gate toggle, then accent and slide,
+    // with this gap between the rows.
+    property real stepToggleGap: 3
+    property real stepGateOffset: octaveKeyHeight + stepToggleGap
+    property real stepFlagsOffset: stepGateOffset + stepToggleHeight + stepToggleGap
     property real slideLinkWidth: 6
 
     // The oscillator scope.
-    property real scopeCanvasTop: 22
+    property real scopeCanvasTop: chipRowHeight
     property real scopeTitleX: 10
     property real scopeTitleSpacing: 1.4
-    property real scopeReadoutY: 5
     property real scopeGlowWidth: 6
     property real scopeTraceWidth: 1.8
     property real dropTraceWidth: 1.5

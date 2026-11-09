@@ -7,7 +7,8 @@ import Oscillate.Format
 // the effect runs, the live curve (at the modulated cutoff) burns bright
 // over the set one, and a ruler along the top shows how far the LFO (blue)
 // and envelope (amber) have moved the cutoff. Drag the cutoff handle
-// sideways; scroll over the screen for resonance.
+// sideways; scroll over the screen for resonance. Focused, the arrow keys
+// do the same. The frame around it (Kit.PlotFrame) draws the scales.
 Rectangle {
     id: view
     required property var controller
@@ -43,10 +44,11 @@ Rectangle {
     objectName: "contourResponseView"
     radius: theme.radiusLg
     color: theme.well
-    border.color: theme.wellEdge
+    border.color: activeFocus ? theme.accent : theme.wellEdge
     Accessible.role: Accessible.Graphic
     Accessible.name: "Filter response, " + captions[model].toLowerCase()
     Accessible.description: "Cutoff " + (controller.revision >= 0 ? controller.display("contour.cutoff") : "")
+        + ". Left and Right set the cutoff, Up and Down the resonance"
 
     // Plot area inside the screen bezel.
     readonly property real plotX: theme.screenPlotLeft
@@ -56,6 +58,38 @@ Rectangle {
     function xOf(hz) { return plotX + controller.fraction_of(hz) * plotW }
     function yOf(db) { return plotY + (topDb - Math.max(bottomDb, Math.min(topDb, db))) / (topDb - bottomDb) * plotH }
     function hzAt(x) { return controller.frequency_at(Math.max(0, Math.min(1, (x - plotX) / plotW))) }
+
+    // The scales the frame around the screen labels, from this view's own
+    // mapping: frequency marks [Hz, label] and levels in dB.
+    readonly property var frequencyMarks: [[20, "20"], [50, "50"], [100, "100"], [200, "200"], [500, "500"],
+                                           [1000, "1k"], [2000, "2k"], [5000, "5k"], [10000, "10k"], [20000, "20k"]]
+    readonly property var levelMarks: [24, 12, 0, -12, -24, -36, -48]
+    readonly property var frequencyTicks: width > 0 && controller.revision >= 0
+        ? frequencyMarks.map(mark => ({ at: xOf(mark[0]) / width, label: mark[1] })) : []
+    readonly property var levelTicks: height > 0
+        ? levelMarks.map(db => ({ at: 1 - yOf(db) / height, label: Format.signed_number(db, 0) })) : []
+
+    // Keys: Left/Right step the cutoff, Up/Down the resonance (Shift:
+    // fine), Delete resets the cutoff.
+    activeFocusOnTab: controller.editable
+    Keys.onPressed: event => {
+        if (!controller.editable)
+            return
+        const fine = (event.modifiers & Qt.ShiftModifier) !== 0
+        if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+            controller.step("contour.cutoff", event.key === Qt.Key_Right ? 1 : -1, fine)
+            theme.lastTouched = "contour.cutoff"
+        } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+            controller.step("contour.resonance", event.key === Qt.Key_Up ? 1 : -1, fine)
+            theme.lastTouched = "contour.resonance"
+        } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
+            controller.reset_to_default("contour.cutoff")
+            theme.lastTouched = "contour.cutoff"
+        } else {
+            return
+        }
+        event.accepted = true
+    }
 
     // A soft phosphor glow in the middle of the screen.
     Rectangle {
@@ -201,36 +235,6 @@ Rectangle {
                 ctx.lineTo(lx, y0 + h)
                 ctx.stroke()
             }
-        }
-    }
-
-    // Frequency and level scales.
-    Repeater {
-        model: [{ hz: 20, text: "20" }, { hz: 50, text: "50" }, { hz: 100, text: "100" },
-                { hz: 200, text: "200" }, { hz: 500, text: "500" }, { hz: 1000, text: "1k" },
-                { hz: 2000, text: "2k" }, { hz: 5000, text: "5k" }, { hz: 10000, text: "10k" },
-                { hz: 20000, text: "20k" }]
-        delegate: Text {
-            required property var modelData
-            x: Math.min(view.xOf(modelData.hz) - implicitWidth / 2, view.plotX + view.plotW - implicitWidth)
-            y: view.plotY + view.plotH + view.theme.screenScaleGap
-            text: modelData.text
-            color: modelData.hz === 100 || modelData.hz === 1000 || modelData.hz === 10000
-                ? view.theme.inkDim : view.theme.inkFaint
-            font.family: view.theme.mono
-            font.pixelSize: view.theme.typeCaption
-        }
-    }
-    Repeater {
-        model: [24, 12, 0, -12, -24, -36, -48]
-        delegate: Text {
-            required property var modelData
-            x: view.plotX - implicitWidth - view.theme.spaceSm
-            y: view.yOf(modelData) - implicitHeight / 2
-            text: Format.signed_number(modelData, 0)
-            color: modelData === 0 ? view.theme.accentDim : view.theme.inkFaint
-            font.family: view.theme.mono
-            font.pixelSize: view.theme.typeCaption
         }
     }
 

@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 
 // The optional filter's magnitude response on an LCD, 20 Hz to 20 kHz and
 // -36 to +18 dB. Off draws a flat bypass line.
@@ -12,8 +13,19 @@ Rectangle {
     readonly property real topDb: 18
     readonly property real floorDb: -36
     readonly property int samples: 96
-    // Grid lines at each decade, labelled along the foot.
+    // Grid lines at each decade; the frame around the view labels them.
     readonly property var decades: [{ hz: 100, text: "100" }, { hz: 1000, text: "1k" }, { hz: 10000, text: "10k" }]
+    // The levels the frame labels (dB).
+    readonly property var levelMarks: [topDb, 0, floorDb]
+    // The scales as the frame's ticks, from this view's own mapping (the
+    // plot sits spaceXs inside the LCD).
+    readonly property var frequencyTicks: width > 0 && controller.revision >= 0
+        ? decades.map(decade => ({ at: (theme.spaceXs + controller.fraction_of(decade.hz)
+                                        * (width - 2 * theme.spaceXs)) / width, label: decade.text })) : []
+    readonly property var levelTicks: height > 0
+        ? levelMarks.map(db => ({ at: 1 - (theme.spaceXs + (topDb - db) / (topDb - floorDb)
+                                           * (height - 2 * theme.spaceXs)) / height,
+                                  label: Format.signed_number(db, 0) })) : []
     readonly property bool active: controller.revision >= 0 && controller.choice("halo.filter.type") > 0
     readonly property var response: controller.revision >= 0 && active ? controller.filter_response(samples) : []
 
@@ -85,19 +97,6 @@ Rectangle {
         font.family: view.theme.mono
         font.pixelSize: view.theme.typeBody
         font.letterSpacing: view.theme.bypassSpacing
-    }
-    Repeater {
-        model: view.decades
-        delegate: Text {
-            required property var modelData
-            x: view.theme.spaceXs + view.controller.fraction_of(modelData.hz) * (view.width - 2 * view.theme.spaceXs)
-                + view.theme.frequencyLabelGap
-            y: view.height - view.theme.frequencyLabelBottom
-            text: modelData.text
-            color: view.theme.lcdDim
-            font.family: view.theme.mono
-            font.pixelSize: view.theme.typeMicro
-        }
     }
     onResponseChanged: canvas.requestPaint()
     onActiveChanged: canvas.requestPaint()

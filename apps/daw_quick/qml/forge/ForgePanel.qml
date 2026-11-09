@@ -47,17 +47,6 @@ Rectangle {
     Accessible.role: Accessible.Pane
     Accessible.name: "Forge saturator"
 
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        if (info.name === undefined)
-            return ""
-        return (info.group === info.name ? info.name : info.group + " · " + info.name).toUpperCase()
-    }
-    function readoutValue(id) {
-        return id === "" || controller.revision < 0 ? "" : controller.display(id)
-    }
     function modelName() {
         const info = controller.parameter("forge.model")
         const index = controller.revision >= 0 ? controller.choice("forge.model") : 0
@@ -105,6 +94,7 @@ Rectangle {
     // from the bottom edge.
     Canvas {
         id: steelGrain
+        readonly property string plotExemptReason: "the brushed-steel grain of the faceplate, decoration rather than a plot"
         anchors.fill: parent
         renderStrategy: Canvas.Cooperative
         onPaint: {
@@ -207,170 +197,61 @@ Rectangle {
 
     // ---- Header ---------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
-
-        Text {
-            id: wordmark
-            y: 0
-            text: "FORGE"
-            font.family: panel.theme.sans
-            font.pixelSize: panel.theme.wordmarkSize
-            font.bold: true
-            font.letterSpacing: panel.theme.wordmarkSpacing
-            color: panel.theme.heat(panel.theme.heatGlowBase + panel.theme.heatGlowRange * panel.heat)
-            style: Text.Raised
-            styleColor: panel.theme.wordmarkShadow
-        }
-        Rectangle {
-            x: wordmark.x + panel.theme.spaceXxs
-            y: wordmark.y + wordmark.height + panel.theme.ruleGap
-            width: wordmark.implicitWidth - panel.theme.ruleTrim
-            height: panel.theme.strokeBold
-            radius: height / 2
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0; color: panel.theme.amber }
-                GradientStop { position: panel.theme.ruleEmberStop; color: panel.theme.ember }
-                GradientStop { position: 1; color: Qt.rgba(panel.theme.ember.r, panel.theme.ember.g, panel.theme.ember.b, 0) }
-            }
-        }
-        Text {
-            x: wordmark.x + panel.theme.spaceXxs
-            y: wordmark.y + wordmark.height + panel.theme.subtitleGap
-            objectName: "forgeSubtitle"
-            text: "SATURATOR · 16× OVERSAMPLED"
-            color: panel.theme.inkDim
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.subtitleSpacing
-            // Kept clear of the preset browser: a wider fallback font steps
-            // the size down rather than running under it.
-            width: browser.x - x - panel.theme.spaceSm
-            fontSizeMode: Text.HorizontalFit
-            minimumPixelSize: panel.theme.typeFitFloor
-        }
-
-        Row {
-            id: browser
-            x: panel.theme.browserX
-            y: panel.theme.browserY
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "forgePresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "forgePresetDisplay"
-                width: panel.theme.presetWidth
-                height: panel.theme.presetHeight
-                radius: panel.theme.wellRadius
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.amber : panel.theme.wellEdge
-                border.width: activeFocus ? panel.theme.focusStroke : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.amber)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        // The wordmark glows with the drive over its amber-to-ember rule.
+        brand: Component {
+            Item {
+                implicitWidth: wordmark.implicitWidth
+                implicitHeight: subtitle.y + subtitle.height
                 Text {
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetCaptionY
-                    text: panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.capsTightSpacing
-                }
-                Text {
-                    objectName: "forgePresetName"
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetNameY
-                    width: panel.theme.presetNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeTitle
-                    font.bold: true
-                    elide: Text.ElideRight
+                    id: wordmark
+                    objectName: "forgeWordmark"
+                    text: "FORGE"
+                    font.family: panel.theme.wordmarkFont
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.weight: panel.theme.wordmarkWeight
+                    font.letterSpacing: panel.theme.wordmarkSpacing
+                    color: panel.theme.heat(panel.theme.heatGlowBase + panel.theme.heatGlowRange * panel.heat)
+                    style: Text.Raised
+                    styleColor: panel.theme.wordmarkShadow
                 }
                 Rectangle {
-                    x: panel.theme.presetDividerX
-                    y: panel.theme.presetDividerInset
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.theme.presetDividerInset
-                    color: panel.theme.wellEdge
-                }
-                Text {
-                    objectName: "forgeReadout"
-                    x: panel.theme.presetReadoutX
-                    y: panel.theme.presetCaptionY
-                    width: display.width - x - panel.theme.presetReadoutRight
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.presetReadoutSpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "forgeReadoutValue"
-                    x: panel.theme.presetReadoutX
-                    y: panel.theme.presetValueY
-                    width: display.width - x - panel.theme.presetReadoutRight
-                    text: panel.readoutValue(panel.theme.lastTouched)
-                    color: panel.theme.amber
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeSubtitle
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.presetChevronMargin
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.copper
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
+                    x: panel.theme.spaceXxs
+                    y: wordmark.height + panel.theme.ruleGap
+                    width: wordmark.implicitWidth - panel.theme.ruleTrim
+                    height: panel.theme.strokeBold
+                    radius: height / 2
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0; color: panel.theme.amber }
+                        GradientStop { position: panel.theme.ruleEmberStop; color: panel.theme.ember }
+                        GradientStop { position: 1; color: Qt.rgba(panel.theme.ember.r, panel.theme.ember.g, panel.theme.ember.b, 0) }
                     }
                 }
+                Text {
+                    id: subtitle
+                    objectName: "forgeSubtitle"
+                    x: panel.theme.spaceXxs
+                    y: wordmark.height + panel.theme.subtitleGap
+                    text: "SATURATOR · 16× OVERSAMPLED"
+                    color: panel.theme.subtitleInk
+                    font.pixelSize: panel.theme.subtitleSize
+                    font.bold: true
+                    font.letterSpacing: panel.theme.subtitleSpacing
+                    // Kept clear of the preset browser: a wider fallback font
+                    // steps the size down rather than running under it.
+                    width: panel.theme.headerBrowserX - x - panel.theme.headerGap
+                    fontSizeMode: Text.HorizontalFit
+                    minimumPixelSize: panel.theme.typeFitFloor
+                }
             }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "forgePresetNext"
-                direction: 1
-            }
-        }
-
-        Kit.StatusBadge {
-            id: status
-            objectName: "forgeStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: panel.theme.statusY
         }
     }
 

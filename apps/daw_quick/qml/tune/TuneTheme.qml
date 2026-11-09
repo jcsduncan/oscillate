@@ -72,13 +72,8 @@ KitTheme {
     property real nearCents: 15
 
     // Type with a particular job.
-    property int wordmarkSize: 27
-    property real wordmarkSpacing: 9
-    property real taglineSpacing: 2.4
     // Small spaced-caps captions and plate labels.
     property real captionSpacing: 1.4
-    property real presetNameSpacing: 0.4
-    property real readoutSpacing: 1.2
     // The CENTS unit beside a large cents reading.
     property real unitSpacing: 1.6
     property real adviceSpacing: 0.8
@@ -95,12 +90,38 @@ KitTheme {
     // Plates: content inset from the plate's edge.
     property real plateInset: 14
     property real plateGap: 10
-    // The preset display.
-    property int presetDisplayWidth: 540
-    property int presetDisplayHeight: 42
-    property real focusStroke: 1.5
-    // The wordmark's underline.
+    // The header (Kit.DeviceHeader): the wordmark with its amber underline
+    // over the tagline (the panel's own brand), the preset browser and,
+    // once a control is touched, its readout.
+    property real headerY: 10
+    headerHeight: 54
+    wordmarkSize: 27
+    wordmarkSpacing: 9
+    wordmarkInk: glacier
+    // The underline: its height, its gap below the word and how much
+    // shorter than the word it is; the tagline sits subtitleGap below the word.
     property real underlineHeight: 2
+    property real underlineGap: 1
+    property real underlineTrim: 10
+    subtitleGap: 7
+    subtitleSpacing: 2.4
+    subtitleInk: inkDim
+    headerBrowserX: 250
+    presetDisplayWidth: 290
+    presetDisplayHeight: 42
+    presetDisplayRadius: radiusLg
+    presetTextX: plateInset
+    presetTagY: 5
+    presetTagSpacing: captionSpacing
+    presetNameY: 16
+    presetNameBold: false
+    presetChevronMargin: 10
+    presetChevronInk: inkDim
+    readoutWidth: 240
+    readoutTextX: plateInset
+    readoutNameY: 5
+    readoutValueY: 17
+    readoutSpacing: 1.2
 
     // Light: the soft glow behind lit marks and its tint.
     property real glowStroke: 7

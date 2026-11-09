@@ -294,8 +294,8 @@ void algorithm_keys_drive_the_diagram_and_roles() {
   auto panel = load_panel(controller);
 
   // E-Piano is algorithm 5: three carrier/modulator pairs, feedback on 6.
-  require(text_of(*panel, QStringLiteral("haloLcdAlgorithm")) == QStringLiteral("ALG 05"),
-          "the LCD shows the algorithm");
+  require(text_of(*panel, QStringLiteral("haloAlgorithmNumber")) == QStringLiteral("ALG 05"),
+          "the algorithm plate shows the algorithm");
   for (int op = 1; op <= 6; ++op) {
     const QString role =
         item(*panel, QStringLiteral("haloOperatorRole:%1").arg(op))->property("role").toString();
@@ -405,8 +405,18 @@ void controls_edit_with_gestures_and_keys() {
       item(*panel, QStringLiteral("haloKnob:halo.op4.fine"))->property("inactive").toBool() &&
           !item(*panel, QStringLiteral("haloKnob:halo.op4.fixed"))->property("inactive").toBool(),
       "fixed mode dims Fine and lights Fixed");
+  require(!item(*panel, QStringLiteral("haloKnob:halo.op4.fine"))
+               ->property("inactiveReason")
+               .toString()
+               .isEmpty(),
+          "an inactive knob says why");
 
   // A dropdown opens the shared menu and the keyboard chooses.
+  // An Off filter collapses to its title bar and an OFF chip.
+  require(controller.choice(QStringLiteral("halo.filter.type")) == 0 &&
+              item(*panel, QStringLiteral("haloFilterOff"))->isVisible() &&
+              !item(*panel, QStringLiteral("haloKnob:halo.filter.cutoff"))->isVisible(),
+          "an Off filter collapses");
   auto* type = item(*panel, QStringLiteral("haloDropdown:halo.filter.type"));
   auto* menu = item(*panel, QStringLiteral("haloMenu"));
   click(*panel, centre(type));
@@ -418,9 +428,9 @@ void controls_edit_with_gestures_and_keys() {
           "the keyboard picks LP 24");
   require(item(*panel, QStringLiteral("haloFilterView"))->property("active").toBool(),
           "the filter view wakes up");
-  require(
-      !item(*panel, QStringLiteral("haloKnob:halo.filter.cutoff"))->property("inactive").toBool(),
-      "the cutoff lights with the filter on");
+  require(item(*panel, QStringLiteral("haloKnob:halo.filter.cutoff"))->isVisible() &&
+              !item(*panel, QStringLiteral("haloFilterOff"))->isVisible(),
+          "the filter's controls return with the filter on");
 
   // Unison stepper keys.
   auto* unison = item(*panel, QStringLiteral("haloStepper:halo.voice.unison"));
@@ -442,16 +452,16 @@ void presets_and_status() {
   click(*panel, centre(item(*panel, QStringLiteral("haloPresetPrevious"))));
   require(controller.preset_name() == QStringLiteral("E-Piano"), "previous steps back");
 
-  auto* lcd = item(*panel, QStringLiteral("haloLcd"));
+  auto* display = item(*panel, QStringLiteral("haloPresetDisplay"));
   auto* menu = item(*panel, QStringLiteral("haloMenu"));
-  click(*panel, centre(lcd));
+  click(*panel, centre(display));
   require(menu->isVisible(), "the preset menu opens");
   QTest::keyClick(panel->window.get(), Qt::Key_Escape);
   require(!menu->isVisible(), "Escape closes it");
 
   controller.apply_preset(preset_index("Organ"));
   QCoreApplication::processEvents();
-  require(text_of(*panel, QStringLiteral("haloLcdAlgorithm")) == QStringLiteral("ALG 32"),
+  require(text_of(*panel, QStringLiteral("haloAlgorithmNumber")) == QStringLiteral("ALG 32"),
           "presets set the algorithm");
 
   adapter.set_status({.saved_revision = 9, .audible_revision = 9, .deferred_changes = true});

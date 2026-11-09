@@ -68,45 +68,42 @@ KitTheme {
     // Small bold captions and tags.
     property real captionSpacing: 1.4
     property real tagSpacing: 1.2
-    // A focused well's edge.
-    property real focusStroke: 1.5
 
-    // The header: the wordmark, its underline and subtitle.
+    // The header (Kit.DeviceHeader): the wordmark over its underline and
+    // subtitle, the preset browser and, once a control is touched, its
+    // readout.
     property real headerY: 10
-    property real headerHeight: 54
-    property real wordmarkY: 2
-    property int wordmarkSize: 27
-    property real wordmarkSpacing: 9
+    headerHeight: 54
+    wordmarkSize: 27
+    wordmarkSpacing: 9
+    wordmarkInk: glacier
     // The underline and subtitle sit this far in from the wordmark's left.
     property real wordmarkInset: 2
     property real underlineGap: 1
     // How much shorter than the wordmark the underline runs.
     property real underlineTrim: 10
-    property real subtitleGap: 7
-    property real subtitleSpacing: 2.4
+    subtitleGap: 7
+    subtitleSpacing: 2.4
+    subtitleInk: inkDim
+    headerBrowserX: 250
+    presetDisplayWidth: 300
+    presetDisplayHeight: 42
+    presetDisplayRadius: radiusLg
+    presetTextX: 14
+    presetTagY: 5
+    presetTagSpacing: captionSpacing
+    presetNameY: 16
+    presetNameBold: false
+    presetChevronMargin: 10
+    presetChevronInk: inkDim
+    readoutWidth: 240
+    readoutSpacing: tagSpacing
+    readoutValueY: 17
 
-    // The preset browser and the readout of the last-touched control.
-    property real browserX: 250
-    property real browserY: 5
-    property int presetDisplayWidth: 540
-    property int presetDisplayHeight: 42
-    property real presetTextX: 14
-    property real presetCategoryY: 5
-    property real presetNameY: 16
-    property real presetNameWidth: 250
-    property real presetNameSpacing: 0.4
-    property real presetDividerX: 276
-    // The divider's inset from the display's top and bottom.
-    property real presetDividerInset: 8
-    property real readoutX: 288
-    property real readoutValueY: 17
-    // Room kept right of the readout for the chevron.
-    property real readoutRight: 26
-    property real chevronMargin: 10
-    property real statusY: 14
-
-    // The keyed badge, styled like the status pill, left of it.
+    // The keyed tag left of the status badge: its gap, padding round the
+    // text, tint and tracking.
     property real keyedBadgeGap: 10
+    property real keyedBadgePad: 24
     property real keyedFillAlpha: 0.12
     property real keyedSpacing: 1
 
@@ -142,13 +139,6 @@ KitTheme {
     property real operatingHaloAlpha: 0.25
     property real operatingHaloRadius: 8
     property real operatingDotRadius: 4
-    // Scale labels below and beside the plot, and the axis titles.
-    property real scaleGap: 5
-    property real scaleSideGap: 6
-    property real axisTitleGap: 16
-    property int axisTitleSize: typeMicro
-    property real outTitleX: 10
-    property real outTitleY: 9
     // The readouts across the screen's top right.
     property real screenReadoutRight: 14
     property real screenReadoutY: 8

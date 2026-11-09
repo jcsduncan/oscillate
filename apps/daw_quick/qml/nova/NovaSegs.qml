@@ -3,7 +3,9 @@ import QtQuick
 
 // Joined segment buttons. Bound to a choice parameter they pick its value
 // (labels default to its choices); unbound they show `labels` with
-// `current` and report `picked`.
+// `current` and report `picked`. One Tab stop: Left and Right pick the
+// segment beside the selected one; the edge lights in the accent while
+// focused. A segment is never narrower than the kit's least hit size.
 Rectangle {
     id: segs
     required property var panel
@@ -26,9 +28,15 @@ Rectangle {
     implicitHeight: panel.theme.segsHeight
     radius: panel.theme.radiusLg
     color: panel.theme.wellFill
-    border.color: panel.theme.line2
+    border.color: activeFocus ? accent : panel.theme.line2
+    border.width: activeFocus ? panel.theme.strokeBold : panel.theme.hairline
     clip: true
+    activeFocusOnTab: parameterId === "" || panel.controller.editable
     Accessible.role: Accessible.PageTabList
+    Accessible.name: parameterId !== "" ? (info.group || "") + " " + (info.name || "") : shown.join(", ")
+    Accessible.description: shown[selected] !== undefined ? shown[selected] : ""
+    Keys.onLeftPressed: if (selected > 0) pick(selected - 1)
+    Keys.onRightPressed: if (selected < shown.length - 1) pick(selected + 1)
 
     function pick(index) {
         if (parameterId !== "") {
@@ -53,7 +61,7 @@ Rectangle {
                 readonly property bool on: index === segs.selected
                 objectName: segs.objectName + ":" + index
                 width: segs.fill ? (segs.width - 2 * segs.panel.theme.hairline) / Math.max(1, segs.shown.length)
-                                 : label.implicitWidth + 2 * segs.segmentPadding
+                                 : Math.max(segs.panel.theme.minHitSize, label.implicitWidth + 2 * segs.segmentPadding)
                 height: row.height
                 color: on ? segs.panel.theme.tab : "transparent"
                 Accessible.role: Accessible.PageTab
@@ -76,6 +84,9 @@ Rectangle {
                 }
                 MouseArea {
                     anchors.fill: parent
+                    // Over the segments' edge too: the whole height of the control.
+                    anchors.topMargin: -segs.panel.theme.hitOutset(parent.height)
+                    anchors.bottomMargin: -segs.panel.theme.hitOutset(parent.height)
                     onClicked: segs.pick(tile.index)
                 }
             }

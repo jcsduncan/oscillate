@@ -11,7 +11,9 @@ import "CrateContract.js" as Contract
 // Click a chop to select it (in MANUAL, a click adds a cut there instead).
 // Drag a marker to move its cut (one undo step, heard as it moves; Esc
 // cancels); double-click a marker to remove it (not the first: a sample
-// always plays from its start on pad 1).
+// always plays from its start on pad 1). From the keyboard: Left and Right
+// select a chop, Ctrl+Left and Ctrl+Right move its cut, Delete removes it,
+// and in MANUAL Return cuts the chop in two.
 Rectangle {
     id: wave
     required property var crate
@@ -36,13 +38,68 @@ Rectangle {
     readonly property int phaseEnd: 2
     readonly property int phaseCancel: 3
 
+    // The time scale the frame labels, in seconds, at the plot's own x.
+    readonly property real seconds: crate !== null ? crate.sample_seconds : 0
+    readonly property real tickStep: {
+        const steps = theme.waveTickSteps
+        for (let i = 0; i < steps.length; ++i)
+            if (seconds / steps[i] <= theme.waveMostTicks)
+                return steps[i]
+        return steps[steps.length - 1]
+    }
+    readonly property var timeTicks: {
+        const ticks = []
+        if (seconds <= 0 || width <= 0)
+            return ticks
+        for (let i = 0; i * tickStep <= seconds; ++i) {
+            const at = i * tickStep
+            ticks.push({ at: xOf(at / seconds) / width, label: String(Number(at.toPrecision(3))) })
+        }
+        return ticks
+    }
+
     objectName: "crateWaveform"
     radius: theme.cardRadius
     color: theme.well
-    border.color: theme.line
+    border.color: activeFocus ? theme.accent : theme.line
+    border.width: activeFocus ? theme.focusEdgeWidth : theme.hairline
     clip: true
+    activeFocusOnTab: crate !== null && crate.has_sample
     Accessible.role: Accessible.Graphic
     Accessible.name: "Sample waveform with " + chops.length + " chops"
+    Accessible.description: "Left and Right select a chop; Ctrl+Left and Ctrl+Right move its cut; Delete removes it"
+        + (manual ? "; Return cuts it in two" : "")
+
+    // Moves the selected chop's cut one waveform bar, as one undo step.
+    function nudgeCut(direction) {
+        const index = selected
+        if (crate === null || index <= 0 || index >= chops.length)
+            return
+        const at = Math.max(0, Math.min(1, chops[index].start + direction / columns))
+        crate.move_chop(index, chops[index].start, phaseBegin)
+        crate.move_chop(index, at, phaseMove)
+        crate.move_chop(index, at, phaseEnd)
+    }
+    Keys.onPressed: event => {
+        if (crate === null || chops.length === 0)
+            return
+        const ctrl = (event.modifiers & Qt.ControlModifier) !== 0
+        if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+            const direction = event.key === Qt.Key_Right ? 1 : -1
+            if (ctrl)
+                nudgeCut(direction)
+            else
+                crate.selected = Math.max(0, Math.min(chops.length - 1, selected + direction))
+            event.accepted = true
+        } else if ((event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) && selected > 0) {
+            crate.remove_chop(selected)
+            event.accepted = true
+        } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && manual && selected >= 0) {
+            const chop = chops[selected]
+            crate.add_chop((chop.start + chop.end) / 2)
+            event.accepted = true
+        }
+    }
 
     function xOf(fraction) {
         return insetX + Math.max(0, Math.min(1, fraction)) * plotWidth
@@ -121,6 +178,7 @@ Rectangle {
         enabled: wave.crate !== null && wave.crate.has_sample
         cursorShape: wave.manual ? Qt.CrossCursor : Qt.PointingHandCursor
         onClicked: mouse => {
+            wave.forceActiveFocus()
             const fraction = wave.fractionAt(mouse.x)
             if (wave.manual) {
                 wave.crate.add_chop(fraction)

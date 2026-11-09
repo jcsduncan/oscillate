@@ -4,7 +4,7 @@ import "../devicekit" as Kit
 import Oscillate.Format
 
 // The Wren flute panel (ADR-0089): the header
-// with Mono or Poly 4, the preset and the output; the Breath card (style
+// with the preset, the output and, under them, Mono or Poly 4; the Breath card (style
 // tiles, the phrase lane of notes about to play, Amount, Dynamics, Vibrato,
 // Bloom, Swell, Humanize and Ornaments); on the right the Articulation card
 // with Slur time, the Tone card with Tune and Level, and the sample
@@ -33,16 +33,14 @@ Rectangle {
 
     // The designed size, and the layout's spacing.
     readonly property real designedWidth: 1280
-    readonly property real designedHeight: 900
+    readonly property real designedHeight: 952
     readonly property real margin: 28
     readonly property real headerY: theme.space2xl
-    readonly property real headerHeight: 52
     readonly property real headerGap: theme.spaceXl
     readonly property real gap: 18
     readonly property real stack: theme.spaceXl
     readonly property real rightWidth: 380
     readonly property real rightPad: 18
-    readonly property real presetWidth: 220
     readonly property real voicesWidth: 168
     readonly property real ornamentsWidth: 210
     // The library's message, at most this many lines.
@@ -51,7 +49,7 @@ Rectangle {
     readonly property real sliderRowGap: 14
     readonly property int breathColumns: 3
     readonly property int articulationColumns: 2
-    readonly property real bodyY: headerY + headerHeight + headerGap
+    readonly property real bodyY: header.y + header.height + headerGap
     readonly property real bodyHeight: height - bodyY - headerY
     readonly property real pollLiveMs: 33
     readonly property real pollIdleMs: 250
@@ -111,151 +109,61 @@ Rectangle {
 
     // ---- Header ---------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.headerHeight
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        wordmark: "WREN"
+        subtitle: "Concert flute · Iowa MIS · B3 to D♭7 · pp, mf, ff · straight and vibrato"
 
-        Text {
-            id: wordmark
-            anchors.verticalCenter: parent.verticalCenter
-            text: "WREN"
-            color: panel.theme.ink
-            font.family: panel.theme.sans
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Bold
-            font.letterSpacing: panel.theme.wordmarkSpacing
+        // Mono or Poly 4: a mode, in the header's second row.
+        Kit.ChoiceTiles {
+            width: panel.voicesWidth
+            controller: panel.controller
+            theme: panel.theme
+            parameterId: "wren.voices"
+            segment: true
+            nameSize: panel.theme.bodySize
         }
+    }
+
+    // Beside the status badge: the output.
+    Row {
+        x: header.x + header.status.x - panel.gap - width
+        y: header.y
+        height: header.rowHeight
+        spacing: panel.theme.captionGap
         Text {
-            objectName: "wrenSubtitle"
-            x: wordmark.width + panel.theme.titleGap
-            width: headerControls.x - x - panel.gap
-            anchors.baseline: wordmark.baseline
-            text: "Concert flute · Iowa MIS · B3 to D♭7 · pp, mf, ff · straight and vibrato"
+            anchors.verticalCenter: parent.verticalCenter
+            text: "OUT"
             color: panel.theme.inkDim
             font.family: panel.theme.sans
-            font.pixelSize: panel.theme.subtitleSize
-            elide: Text.ElideRight
+            font.pixelSize: panel.theme.captionSize
+            font.letterSpacing: panel.theme.labelSpacing
         }
-
-        Row {
-            id: headerControls
-            anchors.right: parent.right
+        Rectangle {
+            id: meter
+            objectName: "wrenOutputMeter"
+            readonly property real peakDb: panel.live.live === true && panel.live.output_peak_db !== undefined
+                ? panel.live.output_peak_db : panel.theme.meterFloorDb
+            readonly property real level: Math.max(0, Math.min(1,
+                (peakDb - panel.theme.meterFloorDb) / (panel.theme.meterCeilDb - panel.theme.meterFloorDb)))
             anchors.verticalCenter: parent.verticalCenter
-            spacing: panel.gap
-
-            Kit.ChoiceTiles {
-                anchors.verticalCenter: parent.verticalCenter
-                width: panel.voicesWidth
-                controller: panel.controller
-                theme: panel.theme
-                parameterId: "wren.voices"
-                segment: true
-                nameSize: panel.theme.bodySize
-            }
-
+            width: panel.theme.meterWidth
+            height: panel.theme.meterHeight
+            radius: height / 2
+            color: panel.theme.track
+            clip: true
+            Accessible.role: Accessible.ProgressBar
+            Accessible.name: "Output level"
             Rectangle {
-                id: presetBox
-                objectName: "wrenPresetDisplay"
-                anchors.verticalCenter: parent.verticalCenter
-                width: panel.presetWidth
-                height: panel.theme.touch
-                radius: panel.theme.tileRadius
-                color: presetArea.containsMouse ? panel.theme.buttonHi : panel.theme.tile
-                border.width: activeFocus ? panel.theme.focusBorder : panel.theme.idleBorder
-                border.color: activeFocus ? panel.theme.focusRing : panel.theme.tileEdge
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(presetBox, panel.controller, panel.theme.tongued)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
-                Row {
-                    x: panel.theme.tilePad + panel.theme.focusBorder * 2
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: panel.theme.captionGap
-                    Text {
-                        id: presetCaption
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: panel.controller.preset_modified ? "EDITED" : "PRESET"
-                        color: panel.theme.inkDim
-                        font.family: panel.theme.sans
-                        font.pixelSize: panel.theme.captionSize
-                        font.letterSpacing: panel.theme.labelSpacing
-                    }
-                    Text {
-                        objectName: "wrenPresetName"
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: presetBox.width - presetCaption.width - presetChevron.width
-                            - 3 * panel.theme.tilePad - 2 * panel.theme.captionGap
-                        text: panel.controller.preset_name !== "" ? panel.controller.preset_name : "Custom"
-                        color: panel.theme.ink
-                        font.family: panel.theme.sans
-                        font.pixelSize: panel.theme.subtitleSize
-                        elide: Text.ElideRight
-                    }
-                }
-                Text {
-                    id: presetChevron
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.tilePad
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.inkDim
-                    font.pixelSize: panel.theme.captionSize
-                }
-                MouseArea {
-                    id: presetArea
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        presetBox.forceActiveFocus()
-                        presetBox.openPresets()
-                    }
-                }
-            }
-
-            Row {
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: panel.theme.captionGap
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "OUT"
-                    color: panel.theme.inkDim
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.captionSize
-                    font.letterSpacing: panel.theme.labelSpacing
-                }
-                Rectangle {
-                    id: meter
-                    objectName: "wrenOutputMeter"
-                    readonly property real peakDb: panel.live.live === true && panel.live.output_peak_db !== undefined
-                        ? panel.live.output_peak_db : panel.theme.meterFloorDb
-                    readonly property real level: Math.max(0, Math.min(1,
-                        (peakDb - panel.theme.meterFloorDb) / (panel.theme.meterCeilDb - panel.theme.meterFloorDb)))
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: panel.theme.meterWidth
-                    height: panel.theme.meterHeight
-                    radius: height / 2
-                    color: panel.theme.track
-                    clip: true
-                    Accessible.role: Accessible.ProgressBar
-                    Accessible.name: "Output level"
-                    Rectangle {
-                        width: parent.width * meter.level
-                        height: parent.height
-                        color: meter.peakDb > 0 ? panel.theme.warning : panel.theme.tongued
-                    }
-                }
+                width: parent.width * meter.level
+                height: parent.height
+                color: meter.peakDb > 0 ? panel.theme.warning : panel.theme.tongued
             }
         }
     }

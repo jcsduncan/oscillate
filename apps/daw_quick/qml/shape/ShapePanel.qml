@@ -39,6 +39,7 @@ Rectangle {
     readonly property var outPeak: playing ? live.output_peak : [silentDb, silentDb]
     readonly property int selectedKind: revision >= 0 ? controller.choice(bandId(selected, "kind")) : 4
     readonly property bool selectedOn: revision >= 0 && controller.choice(bandId(selected, "on")) === 1
+    readonly property string bandOffReason: "Band " + (selected + 1) + " is off"
     readonly property var kindNames: ["LOW PASS", "HIGH PASS", "LOW SHELF", "HIGH SHELF", "BELL"]
     readonly property var kindShort: ["LP", "HP", "LS", "HS", "BELL"]
     readonly property var slopeShort: ["12", "24", "48", "96"]
@@ -86,18 +87,6 @@ Rectangle {
     function hzText(hz) {
         return hz >= hertzPerKilohertz ? Format.number(hz / hertzPerKilohertz) + "k" : Format.number(hz, 0)
     }
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        if (info.name === undefined)
-            return ""
-        return (info.group + " · " + info.name).toUpperCase()
-    }
-    function readoutValue(id) {
-        return id === "" || revision < 0 ? "" : controller.display(id)
-    }
-
     component Caption: Text {
         color: panel.theme.inkFaint
         font.pixelSize: panel.theme.typeMicro
@@ -112,162 +101,54 @@ Rectangle {
 
     // ---- Header ----------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
-
-        Text {
-            id: wordmark
-            y: panel.theme.spaceXxs
-            text: "SHAPE"
-            color: panel.theme.glacier
-            font.family: panel.theme.sans
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Light
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        // The eight band colours, as one rule.
-        Row {
-            x: wordmark.x + panel.theme.spaceXxs
-            y: wordmark.y + wordmark.height + panel.theme.bandRuleGap
-            Repeater {
-                model: panel.bandCount
-                delegate: Rectangle {
-                    required property int index
-                    width: (wordmark.implicitWidth - panel.theme.bandRuleTrim) / panel.bandCount
-                    height: panel.theme.strokeBold
-                    color: panel.theme.bands[index]
-                }
-            }
-        }
-        Text {
-            x: wordmark.x + panel.theme.spaceXxs
-            y: wordmark.y + wordmark.height + panel.theme.subtitleGap
-            text: "PARAMETRIC EQ · EIGHT BANDS"
-            color: panel.theme.inkDim
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.subtitleSpacing
-        }
-
-        Row {
-            id: browser
-            x: panel.theme.browserX
-            y: panel.theme.browserY
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "shapePresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "shapePresetDisplay"
-                width: panel.theme.presetWidth
-                height: panel.theme.presetHeight
-                radius: panel.theme.radiusLg
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                border.width: activeFocus ? panel.theme.focusStroke : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.accent)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        brand: Component {
+            Item {
+                implicitWidth: wordmark.implicitWidth
+                implicitHeight: subtitle.y + subtitle.implicitHeight
                 Text {
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetCaptionY
-                    text: panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.capsSpacing
+                    id: wordmark
+                    objectName: "shapeWordmark"
+                    text: "SHAPE"
+                    color: panel.theme.wordmarkInk
+                    font.family: panel.theme.wordmarkFont
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.weight: panel.theme.wordmarkWeight
+                    font.letterSpacing: panel.theme.wordmarkSpacing
                 }
-                Text {
-                    objectName: "shapePresetName"
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetNameY
-                    width: panel.theme.presetNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeHeading
-                    font.letterSpacing: panel.theme.presetNameSpacing
-                    elide: Text.ElideRight
-                }
-                Rectangle {
-                    x: panel.theme.presetDividerX
-                    y: panel.theme.presetDividerInset
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.theme.presetDividerInset
-                    color: panel.theme.wellEdge
-                }
-                Text {
-                    objectName: "shapeReadout"
-                    x: panel.theme.presetReadoutX
-                    y: panel.theme.presetCaptionY
-                    width: display.width - x - panel.theme.presetReadoutRight
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.capsTightSpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "shapeReadoutValue"
-                    x: panel.theme.presetReadoutX
-                    y: panel.theme.presetValueY
-                    width: display.width - x - panel.theme.presetReadoutRight
-                    text: panel.readoutValue(panel.theme.lastTouched)
-                    color: panel.theme.accent
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeSubtitle
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.presetChevronMargin
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.inkDim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
+                // The eight band colours, as one rule.
+                Row {
+                    x: panel.theme.spaceXxs
+                    y: wordmark.height + panel.theme.bandRuleGap
+                    Repeater {
+                        model: panel.bandCount
+                        delegate: Rectangle {
+                            required property int index
+                            width: (wordmark.implicitWidth - panel.theme.bandRuleTrim) / panel.bandCount
+                            height: panel.theme.strokeBold
+                            color: panel.theme.bands[index]
+                        }
                     }
                 }
+                Text {
+                    id: subtitle
+                    objectName: "shapeSubtitle"
+                    x: panel.theme.spaceXxs
+                    y: wordmark.height + panel.theme.subtitleGap
+                    text: "PARAMETRIC EQ · EIGHT BANDS"
+                    color: panel.theme.subtitleInk
+                    font.pixelSize: panel.theme.subtitleSize
+                    font.bold: true
+                    font.letterSpacing: panel.theme.subtitleSpacing
+                }
             }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "shapePresetNext"
-                direction: 1
-            }
-        }
-
-        Kit.StatusBadge {
-            id: status
-            objectName: "shapeStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: panel.theme.statusY
         }
     }
 
@@ -504,19 +385,50 @@ Rectangle {
         id: bandPlate
         theme: panel.theme
         title: "BAND " + (panel.selected + 1)
-        note: panel.selectedOn ? panel.kindNames[panel.selectedKind] : "OFF · SWITCH IT ON TO HEAR IT"
-        noteColor: panel.selectedOn ? panel.theme.bands[panel.selected] : panel.theme.inkFaint
+        note: panel.selectedOn ? panel.kindNames[panel.selectedKind] : ""
+        noteColor: panel.theme.bands[panel.selected]
         x: bandsPlate.x + bandsPlate.width + panel.gap
         y: panel.rowBY
         width: panel.width - panel.margin - x
         height: panel.rowBHeight
 
+        // A band that is off has nothing to set here: the card shows OFF and
+        // where to switch it on, not a card of dimmed controls.
+        Rectangle {
+            objectName: "shapeBandOff"
+            visible: !panel.selectedOn
+            x: panel.theme.cardTextX
+            y: panel.theme.cardRowY
+            width: offText.implicitWidth + 2 * panel.theme.offChipPad
+            height: panel.theme.offChipHeight
+            radius: panel.theme.offChipRadius
+            color: panel.theme.well
+            border.color: panel.theme.wellEdge
+            Text {
+                id: offText
+                anchors.centerIn: parent
+                text: "OFF"
+                color: panel.theme.inkDim
+                font.pixelSize: panel.theme.typeMicro
+                font.bold: true
+                font.letterSpacing: panel.theme.capsSpacing
+            }
+        }
+        Note {
+            visible: !panel.selectedOn
+            x: panel.theme.cardTextX
+            y: panel.theme.cardRowY + panel.theme.offChipHeight + panel.theme.spaceSm
+            width: bandPlate.width - 2 * panel.theme.cardTextX
+            text: "Switch the band on at its tile to hear it."
+        }
         Caption {
+            visible: panel.selectedOn
             x: panel.theme.cardTextX
             y: panel.theme.cardRowY
             text: "KIND"
         }
         Kit.Segment {
+            visible: panel.selectedOn
             x: panel.theme.cardTextX
             y: panel.theme.kindSegmentY
             width: bandPlate.width - 2 * panel.theme.cardTextX
@@ -528,6 +440,7 @@ Rectangle {
             labels: panel.kindNames
         }
         Row {
+            visible: panel.selectedOn
             x: panel.theme.cardInset
             y: panel.theme.bandKnobsY
             spacing: panel.theme.bandKnobGap
@@ -539,6 +452,7 @@ Rectangle {
                 diameter: panel.theme.bandKnobDiameter
                 readout: true
                 inactive: !panel.selectedOn
+                inactiveReason: panel.selectedOn ? "" : panel.bandOffReason
             }
             Kit.Knob {
                 controller: panel.controller
@@ -550,6 +464,7 @@ Rectangle {
                 // A shelf's Q is its slope.
                 label: panel.selectedKind === 2 || panel.selectedKind === 3 ? "Slope" : "Q"
                 inactive: !panel.selectedOn
+                inactiveReason: panel.selectedOn ? "" : panel.bandOffReason
             }
             Kit.Knob {
                 controller: panel.controller
@@ -560,6 +475,8 @@ Rectangle {
                 readout: true
                 // The pass filters have no gain.
                 inactive: !panel.selectedOn || panel.selectedKind < 2
+                inactiveReason: !panel.selectedOn ? panel.bandOffReason
+                    : panel.selectedKind < 2 ? "A pass filter has no gain" : ""
             }
             Column {
                 width: bandPlate.width - 3 * (panel.theme.bandKnobWidth + panel.theme.bandKnobGap)
