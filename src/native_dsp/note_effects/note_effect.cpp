@@ -143,11 +143,11 @@ resolve_note_effect(std::string_view id, std::uint32_t engine_version,
                                                    " was saved by a newer version"});
   if (engine_version < engine->descriptor->version)
     return R::failure({ErrorCode::unsupported, "No upgrade path for this note effect version"});
-  std::vector<synth::NamedValue> saved;
+  std::vector<NamedValue> saved;
   saved.reserve(parameters.size());
   for (const auto& parameter : parameters)
     saved.push_back({parameter.id, parameter.value});
-  auto values = synth::resolve_values(*engine->descriptor, saved);
+  auto values = resolve_values(*engine->descriptor, saved);
   if (!values)
     return R::failure(values.error());
   return R::success({engine, std::move(values).value()});
@@ -160,14 +160,14 @@ Result<ResolvedNoteEffect> resolve_note_effect(const project::NoteEffectInsert& 
 std::vector<project::NativeInstrumentParameter>
 sparse_note_effect_parameters(const NoteEffectEngine& engine, std::span<const double> values) {
   std::vector<project::NativeInstrumentParameter> parameters;
-  for (auto& entry : synth::sparse_values(*engine.descriptor, values))
+  for (auto& entry : sparse_values(*engine.descriptor, values))
     parameters.push_back({std::move(entry.id), entry.value});
   return parameters;
 }
 
 Result<std::size_t> note_effect_parameter_index(const NoteEffectEngine& engine,
                                                 std::string_view parameter_id) {
-  const auto index = synth::find_parameter(*engine.descriptor, parameter_id);
+  const auto index = find_parameter(*engine.descriptor, parameter_id);
   if (!index)
     return Result<std::size_t>::failure(
         {ErrorCode::not_found, "Unknown " + std::string(engine.descriptor->name) + " parameter '" +
@@ -183,7 +183,7 @@ Result<project::AutomationDomain> note_effect_automation_domain(const NoteEffect
     return R::failure(index.error());
   const auto& parameter = engine.descriptor->parameters[index.value()];
   // Stepped and choice parameters automate in whole steps (ADR-0034).
-  const bool discrete = synth::is_discrete(parameter);
+  const bool discrete = is_discrete(parameter);
   const auto steps =
       discrete ? static_cast<std::uint32_t>(parameter.maximum - parameter.minimum) : 0U;
   return R::success({project::AutomationRepresentation::physical, std::string(parameter.id),

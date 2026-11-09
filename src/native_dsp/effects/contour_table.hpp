@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/transport.hpp"
 
 #include <array>
@@ -13,8 +13,8 @@
 // automated: never rename or reuse one.
 namespace oscillate::native_dsp::effects::contour_table {
 
-using S = synth::ParameterScale;
-using T = synth::ParameterTiming;
+using S = ParameterScale;
+using T = ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array models{"LP 12"sv, "LP 24"sv,  "BP 12"sv,  "HP 12"sv,
@@ -40,9 +40,9 @@ inline constexpr std::array sources{"Input"sv, "Sidechain"sv};
 inline constexpr const auto& divisions = sync_divisions;
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
-inline constexpr double g = synth::effect_glide_seconds;
+inline constexpr double g = effect_glide_seconds;
 
-inline constexpr std::array<synth::ParameterDescriptor, 17> parameters{{
+inline constexpr std::array<ParameterDescriptor, 17> parameters{{
     {"contour.model", "Model", "Filter", "", S::choice, 0, last(models.size()), 1, models, T::live,
      0},
     {"contour.cutoff", "Cutoff", "Filter", "Hz", S::logarithmic, 20, 20'000, 1'200, {}, T::live, g},
@@ -75,8 +75,6 @@ inline constexpr std::array<synth::ParameterDescriptor, 17> parameters{{
     {"contour.output", "Output", "Output", "dB", S::linear, -24, 12, 0, {}, T::live, g},
 }};
 
-consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
-}
+consteval std::size_t index_of(std::string_view id) { return parameter_index(parameters, id); }
 
 } // namespace oscillate::native_dsp::effects::contour_table

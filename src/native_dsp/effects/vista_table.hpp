@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -10,8 +10,8 @@
 // Ids are persisted and automated: never rename or reuse one.
 namespace oscillate::native_dsp::effects::vista_table {
 
-using S = synth::ParameterScale;
-using T = synth::ParameterTiming;
+using S = ParameterScale;
+using T = ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array band_counts{"1"sv, "2"sv, "3"sv, "4"sv};
@@ -20,9 +20,9 @@ inline constexpr std::array stereoize_modes{"Diffuse"sv, "Haas"sv};
 inline constexpr std::array polarities{"None"sv, "Left"sv, "Right"sv, "Both"sv};
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
-inline constexpr double g = synth::effect_glide_seconds;
+inline constexpr double g = effect_glide_seconds;
 
-inline constexpr std::array<synth::ParameterDescriptor, 21> parameters{{
+inline constexpr std::array<ParameterDescriptor, 21> parameters{{
     {"vista.bands", "Bands", "Bands", "", S::choice, 0, last(band_counts.size()), 2, band_counts,
      T::live, 0},
     {"vista.xover_1", "Low X", "Bands", "Hz", S::logarithmic, 40, 2'000, 180, {}, T::live, g},
@@ -59,8 +59,6 @@ inline constexpr std::array<synth::ParameterDescriptor, 21> parameters{{
     {"vista.output", "Output", "Output", "dB", S::linear, -24, 12, 0, {}, T::live, g},
 }};
 
-consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
-}
+consteval std::size_t index_of(std::string_view id) { return parameter_index(parameters, id); }
 
 } // namespace oscillate::native_dsp::effects::vista_table

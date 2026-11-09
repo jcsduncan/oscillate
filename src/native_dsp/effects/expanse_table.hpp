@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -11,8 +11,8 @@
 // Hall" preset. Ids are persisted and automated: never rename or reuse one.
 namespace oscillate::native_dsp::effects::expanse_table {
 
-using S = synth::ParameterScale;
-using T = synth::ParameterTiming;
+using S = ParameterScale;
+using T = ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array modes{"Room"sv,    "Hall"sv,      "Plate"sv,
@@ -23,12 +23,12 @@ inline constexpr std::array<double, 6> interval_semitones{-12, 5, 7, 12, 19, 24}
 inline constexpr std::array off_on{"Off"sv, "On"sv};
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
-inline constexpr double g = synth::effect_glide_seconds;
+inline constexpr double g = effect_glide_seconds;
 // Size and decay glide slowly: a size change sweeps every line like a real
 // space growing, never steps.
 inline constexpr double slow = 0.25;
 
-inline constexpr std::array<synth::ParameterDescriptor, 22> parameters{{
+inline constexpr std::array<ParameterDescriptor, 22> parameters{{
     {"expanse.mode", "Mode", "Space", "", S::choice, 0, last(modes.size()), 1, modes, T::live, 0},
     {"expanse.size", "Size", "Space", "%", S::linear, 0, 1, 0.6, {}, T::live, slow},
     {"expanse.decay", "Decay", "Space", "s", S::logarithmic, 0.1, 30, 2.4, {}, T::live, g},
@@ -146,8 +146,6 @@ inline constexpr std::array<synth::ParameterDescriptor, 22> parameters{{
     {"expanse.output", "Output", "Output", "dB", S::linear, -24, 12, 0, {}, T::live, g},
 }};
 
-consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
-}
+consteval std::size_t index_of(std::string_view id) { return parameter_index(parameters, id); }
 
 } // namespace oscillate::native_dsp::effects::expanse_table

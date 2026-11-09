@@ -4,7 +4,7 @@
 #include "oscillate/foundation/error.hpp"
 #include "oscillate/native_dsp/document_state.hpp"
 #include "oscillate/native_dsp/parameter_control.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/telemetry.hpp"
 #include "oscillate/native_dsp/transport.hpp"
 #include "oscillate/project/model.hpp"
@@ -24,9 +24,6 @@
 // neutral native_dsp parameter control, stepped lanes, telemetry and
 // transport that synths use too.
 namespace oscillate::native_dsp::effects {
-
-using synth::EngineDescriptor;
-
 // A note-on of a track keying an effect (EffectEngine::key_notes), at its
 // project frame.
 struct KeyNote {

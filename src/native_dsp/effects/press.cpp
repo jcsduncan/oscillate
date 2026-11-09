@@ -168,8 +168,8 @@ std::unique_ptr<EffectKernel> create_kernel(std::span<const double> values, doub
 std::uint64_t tail_frames(std::span<const double>, double) { return 0; }
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"press", "Press", 1, press_table::parameters,
-                                         press_presets::presets};
+const EngineDescriptor descriptor{"press", "Press", 1, press_table::parameters,
+                                  press_presets::presets};
 const EffectEngine press_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, true};
 
 } // namespace

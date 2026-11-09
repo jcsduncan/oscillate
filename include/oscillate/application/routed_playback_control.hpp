@@ -354,7 +354,7 @@ public:
   // engine plays the track or slot, the mailbox is full, or (for an effect)
   // the values would change its latency, which needs the saved edit.
   [[nodiscard]] bool set_live_synth_values(project::TrackId track,
-                                           const native_dsp::synth::EngineDescriptor& engine,
+                                           const native_dsp::EngineDescriptor& engine,
                                            std::span<const double> values) noexcept;
   // A note played live on a track's built-in synth, heard through the
   // track's chain, sends and the master. False when no synth plays the
@@ -363,7 +363,7 @@ public:
                                bool on) noexcept;
   [[nodiscard]] bool set_live_effect_values(std::optional<project::TrackId> track,
                                             project::InsertSlotId slot,
-                                            const native_dsp::synth::EngineDescriptor& engine,
+                                            const native_dsp::EngineDescriptor& engine,
                                             std::span<const double> values) noexcept;
   [[nodiscard]] std::span<const engine::RoutingNodeId> topological_order() const noexcept {
     return topological_order_;

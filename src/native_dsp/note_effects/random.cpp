@@ -137,7 +137,7 @@ constexpr std::array<V, 2> octave_jumps{{{"random.chance", 0.35}, {"random.scale
 constexpr std::array<V, 3> loose{
     {{"random.chance", 0.15}, {"random.range", 2}, {"random.velocity", 0.3}}};
 
-constexpr std::array<synth::SynthPreset, 7> presets{{
+constexpr std::array<Preset, 7> presets{{
     {"Pitch Dice", "Pitch", {}},
     {"Melody Dice in Major", "Pitch", major_dice},
     {"Pentatonic Sparkle", "Pitch", sparkle},

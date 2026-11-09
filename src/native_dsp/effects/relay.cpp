@@ -468,8 +468,8 @@ std::uint64_t tail_frames(std::span<const double> v, double sample_rate) {
 
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"relay", "Relay", 1, relay_table::parameters,
-                                         relay_presets::presets};
+const EngineDescriptor descriptor{"relay", "Relay", 1, relay_table::parameters,
+                                  relay_presets::presets};
 const EffectEngine relay_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, false};
 
 } // namespace

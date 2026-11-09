@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/transport.hpp"
 
 #include <array>
@@ -172,9 +172,7 @@ inline constexpr std::array<ParameterDescriptor, 6 * operator_parameters + 32> p
 #undef HALO_OP
 #undef HALO_ENV
 
-consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
-}
+consteval std::size_t index_of(std::string_view id) { return parameter_index(parameters, id); }
 
 // First parameter of operator n (0-based); the block order matches HALO_OP.
 constexpr std::size_t operator_base(std::size_t n) { return n * operator_parameters; }

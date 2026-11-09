@@ -13,8 +13,6 @@
 namespace oscillate::application::nova_arp {
 
 namespace {
-
-namespace synth = native_dsp::synth;
 using foundation::Error;
 using foundation::ErrorCode;
 using nova::ArpChord;
@@ -507,7 +505,7 @@ private:
 // The arp's parameters by id, resolved against a table once per call.
 class Ids {
 public:
-  explicit Ids(const synth::EngineDescriptor& table) : table_(table) {
+  explicit Ids(const native_dsp::EngineDescriptor& table) : table_(table) {
     for (std::size_t i = 0; i < table.parameters.size(); ++i) {
       const auto id = table.parameters[i].id;
       if (id.starts_with(arp_prefix))
@@ -518,10 +516,10 @@ public:
     const auto found = index_.find(id);
     return found == index_.end() ? std::nullopt : std::optional(found->second);
   }
-  [[nodiscard]] const synth::EngineDescriptor& table() const noexcept { return table_; }
+  [[nodiscard]] const native_dsp::EngineDescriptor& table() const noexcept { return table_; }
 
 private:
-  const synth::EngineDescriptor& table_;
+  const native_dsp::EngineDescriptor& table_;
   std::unordered_map<std::string_view, std::size_t> index_;
 };
 
@@ -531,7 +529,7 @@ public:
   Writer(const Ids& ids, std::vector<double>& values) : ids_(ids), values_(values) {}
   void set(std::string_view id, double value) {
     if (const auto index = ids_.find(id)) {
-      values_[*index] = synth::sanitise(ids_.table().parameters[*index], value);
+      values_[*index] = native_dsp::sanitise(ids_.table().parameters[*index], value);
     }
   }
   [[nodiscard]] double get(std::string_view id, double fallback) const {
@@ -660,8 +658,8 @@ constexpr double level_digit_step = 0.1;
           "Arp pattern '" + std::string(pattern.name) + "': " + std::string(why)};
 }
 
-[[nodiscard]] std::optional<std::size_t> choice_index(const synth::ParameterDescriptor& parameter,
-                                                      std::string_view name) noexcept {
+[[nodiscard]] std::optional<std::size_t>
+choice_index(const native_dsp::ParameterDescriptor& parameter, std::string_view name) noexcept {
   for (std::size_t i = 0; i < parameter.choices.size(); ++i) {
     if (parameter.choices[i] == name)
       return i;
@@ -710,7 +708,7 @@ lanes_of(const PatternSpec& pattern) {
   return R::success(lanes);
 }
 
-foundation::Result<std::vector<double>> apply(const synth::EngineDescriptor& table,
+foundation::Result<std::vector<double>> apply(const native_dsp::EngineDescriptor& table,
                                               std::span<const double> current,
                                               const PatternSpec& pattern, const LaneLocks& locks) {
   using R = foundation::Result<std::vector<double>>;
@@ -756,7 +754,7 @@ foundation::Result<std::vector<double>> apply(const synth::EngineDescriptor& tab
   return R::success(std::move(values));
 }
 
-std::vector<double> mutate(const synth::EngineDescriptor& table, std::span<const double> base,
+std::vector<double> mutate(const native_dsp::EngineDescriptor& table, std::span<const double> base,
                            std::uint32_t seed, double amount, const LaneLocks& locks) {
   std::vector<double> values(base.begin(), base.end());
   if (seed == 0 || base.size() != table.parameters.size())
@@ -817,7 +815,7 @@ std::vector<double> mutate(const synth::EngineDescriptor& table, std::span<const
   return values;
 }
 
-foundation::Result<std::vector<double>> apply_groove(const synth::EngineDescriptor& table,
+foundation::Result<std::vector<double>> apply_groove(const native_dsp::EngineDescriptor& table,
                                                      std::span<const double> current,
                                                      const persistence::GrooveTemplate& groove) {
   using R = foundation::Result<std::vector<double>>;
@@ -845,7 +843,7 @@ foundation::Result<std::vector<double>> apply_groove(const synth::EngineDescript
   return R::success(std::move(values));
 }
 
-std::vector<double> clear_groove(const synth::EngineDescriptor& table,
+std::vector<double> clear_groove(const native_dsp::EngineDescriptor& table,
                                  std::span<const double> current) {
   std::vector<double> values(current.begin(), current.end());
   if (current.size() != table.parameters.size())
@@ -857,7 +855,7 @@ std::vector<double> clear_groove(const synth::EngineDescriptor& table,
   return values;
 }
 
-nova::ArpSettings settings_of(const synth::EngineDescriptor& table,
+nova::ArpSettings settings_of(const native_dsp::EngineDescriptor& table,
                               std::span<const double> values) {
   nova::ArpSettings arp;
   if (values.size() != table.parameters.size())

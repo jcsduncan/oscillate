@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -50,7 +50,7 @@ inline constexpr std::array init{V{"relay.sync", 0},          V{"relay.time", 50
                                  V{"relay.feedback", 0.3},    V{"relay.low_cut", 20},
                                  V{"relay.high_cut", 20'000}, V{"relay.mix", 0.5}};
 
-inline constexpr std::array<synth::SynthPreset, 13> presets{{
+inline constexpr std::array<Preset, 13> presets{{
     {"Quarter Echo", "Echo", {}},
     {"Dotted Eighth", "Echo", dotted_eighth},
     {"Slapback", "Tape", slapback},

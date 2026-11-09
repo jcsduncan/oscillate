@@ -1107,8 +1107,7 @@ std::uint32_t latency_frames(std::span<const double> values, double sample_rate)
   return frames_for(values, sample_rate).latency;
 }
 
-const synth::EngineDescriptor descriptor{"temper", "Temper", 1, t::parameters,
-                                         temper_presets::presets};
+const EngineDescriptor descriptor{"temper", "Temper", 1, t::parameters, temper_presets::presets};
 const EffectEngine temper_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, true};
 
 } // namespace

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -17,8 +17,8 @@
 // and automated: never rename or reuse one.
 namespace oscillate::native_dsp::effects::temper_table {
 
-using S = synth::ParameterScale;
-using T = synth::ParameterTiming;
+using S = ParameterScale;
+using T = ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array off_on{"Off"sv, "On"sv};
@@ -36,7 +36,7 @@ inline constexpr std::array kinds{"Bell"sv, "Low Shelf"sv, "High Shelf"sv};
 enum Kind : std::uint8_t { bell, low_shelf, high_shelf };
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
-inline constexpr double g = synth::effect_glide_seconds;
+inline constexpr double g = effect_glide_seconds;
 
 inline constexpr std::size_t sensitivity_nodes = 6;
 inline constexpr std::size_t bands = 8;
@@ -44,7 +44,7 @@ inline constexpr std::size_t per_node = 2;
 inline constexpr std::size_t per_band = 7;
 inline constexpr std::size_t globals = 19;
 
-inline constexpr std::array<synth::ParameterDescriptor,
+inline constexpr std::array<ParameterDescriptor,
                             globals + sensitivity_nodes * per_node + bands * per_band>
     parameters{{
     {"temper.depth", "Depth", "Suppress", "", S::linear, 0, 20, 5, {}, T::live, g},
@@ -140,7 +140,7 @@ inline constexpr std::array<synth::ParameterDescriptor,
 }};
 
 consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
+  return parameter_index(parameters, id);
 }
 
 // Node n (from 0) is frequency then sensitivity, from sensitivity_base +

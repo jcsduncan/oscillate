@@ -1,5 +1,5 @@
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/anvil.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/runtime.hpp"
 
 #include <algorithm>
@@ -17,6 +17,7 @@
 // rumble and the oversampled master; then the panel's preview of one beat.
 namespace {
 using namespace oscillate;
+using namespace oscillate::native_dsp;
 using namespace oscillate::native_dsp::synth;
 
 void run(std::string_view name, std::size_t block) {

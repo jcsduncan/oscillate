@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -21,7 +21,7 @@ inline constexpr std::array club{V{"loudness.target", -8}, V{"loudness.ceiling",
 inline constexpr std::array cinema{V{"loudness.target", -27}, V{"loudness.ceiling", -2},
                                    V{"loudness.scale", 1}};
 
-inline constexpr std::array<synth::SynthPreset, 7> presets{{
+inline constexpr std::array<Preset, 7> presets{{
     {"Streaming (Spotify, YouTube)", "Music", {}},
     {"Apple Music", "Music", apple},
     {"Club Master", "Music", club},

@@ -147,7 +147,7 @@ constexpr std::array<V, 3> long_tail{
     {{"echo.repeats", 10}, {"echo.decay", 0.85}, {"echo.time", 9}}};
 constexpr std::array<V, 3> stutter{{{"echo.time", 1}, {"echo.repeats", 8}, {"echo.decay", 0.9}}};
 
-constexpr std::array<synth::SynthPreset, 8> presets{{
+constexpr std::array<Preset, 8> presets{{
     {"Eighth Echo", "Echo", {}},
     {"Dotted Eighth", "Echo", dotted},
     {"Sixteenth Trail", "Echo", sixteenths},

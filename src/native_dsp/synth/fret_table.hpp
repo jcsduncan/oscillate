@@ -1,7 +1,7 @@
 #pragma once
 
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/fret_feel.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -82,7 +82,7 @@ inline constexpr std::array<ParameterDescriptor, 15> parameters{{
 }};
 
 consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
+  return parameter_index(parameters, id);
 }
 
 static_assert(styles.size() == static_cast<std::size_t>(fret::feel::Style::laid_back) + 1,

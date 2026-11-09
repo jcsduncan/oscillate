@@ -6,8 +6,8 @@
 #include "oscillate/application/midi_note_tools.hpp"
 #include "oscillate/application/tempo_cache.hpp"
 #include "oscillate/midi_file/smf.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "session_state.hpp"
@@ -170,7 +170,7 @@ foundation::Result<void> TrackService::seed_default_returns() {
     auto resolved = native_inserts::resolve_native_effect(patch.value());
     if (!resolved)
       return Result::failure(resolved.error());
-    const auto mix = native_dsp::synth::find_parameter(*engine->descriptor, item.mix);
+    const auto mix = native_dsp::find_parameter(*engine->descriptor, item.mix);
     if (!mix)
       return Result::failure({foundation::ErrorCode::internal, "Default return has no mix"});
     resolved.value().values[*mix] = 1.0;

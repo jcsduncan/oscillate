@@ -772,8 +772,7 @@ std::uint32_t latency_frames(std::span<const double> values, double sample_rate)
   return static_cast<std::uint32_t>(lookahead_frames(values, sample_rate));
 }
 
-const synth::EngineDescriptor descriptor{"pump", "Pump", 1, pump_table::parameters,
-                                         pump_presets::presets};
+const EngineDescriptor descriptor{"pump", "Pump", 1, pump_table::parameters, pump_presets::presets};
 const EffectEngine pump_engine{
     &descriptor, &create_kernel,     &tail_frames,      &latency_frames,  true,
     false,       &validate_document, &prepare_document, &preset_document, true};

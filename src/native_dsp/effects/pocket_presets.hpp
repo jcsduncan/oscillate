@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -33,7 +33,7 @@ inline constexpr std::array classic_pump{V{"pocket.mode", 2},       V{"pocket.de
                                          V{"pocket.lookahead", 3}};
 inline constexpr std::array init{V{"pocket.depth", 0}, V{"pocket.mono_sub", 0}};
 
-inline constexpr std::array<synth::SynthPreset, 7> presets{{
+inline constexpr std::array<Preset, 7> presets{{
     {"Clean Low End", "Unmask", clean_low_end},
     {"Sub Only", "Unmask", sub_only},
     {"Punchy House", "Duck", punchy_house},

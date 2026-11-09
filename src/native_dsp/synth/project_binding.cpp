@@ -122,7 +122,7 @@ Result<project::AutomationDomain> native_automation_domain(const SynthEngine& en
   return R::success({project::AutomationRepresentation::physical, std::string(parameter.id),
                      std::string(parameter.unit), parameter.minimum, parameter.maximum,
                      parameter.default_value, discrete, steps,
-                     !discrete && parameter.scale == synth::ParameterScale::logarithmic
+                     !discrete && parameter.scale == ParameterScale::logarithmic
                          ? project::AutomationScale::logarithmic
                          : project::AutomationScale::linear});
 }

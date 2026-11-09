@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -18,7 +18,7 @@ inline constexpr std::array bass_only{V{"deck.mid_kill", 1}, V{"deck.high_kill",
 inline constexpr std::array warm{V{"deck.low", 2}, V{"deck.high", -3}};
 inline constexpr std::array crisp{V{"deck.low", -2}, V{"deck.high", 3}};
 
-inline constexpr std::array<synth::SynthPreset, 7> presets{{
+inline constexpr std::array<Preset, 7> presets{{
     {"Flat", "Mixer", {}},
     {"Bass Swap (Low Killed)", "Transition", bass_swap},
     {"Mids Out", "Transition", mids_out},

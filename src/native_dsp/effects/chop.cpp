@@ -512,8 +512,7 @@ std::uint64_t tail_frames(std::span<const double> values, double sample_rate) {
 
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"chop", "Chop", 1, chop_table::parameters,
-                                         chop_presets::presets};
+const EngineDescriptor descriptor{"chop", "Chop", 1, chop_table::parameters, chop_presets::presets};
 const EffectEngine chop_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, false};
 
 // The pattern and step are spread by two odd gammas before SplitMix64.

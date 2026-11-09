@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -23,7 +23,7 @@ inline constexpr std::array polarity_check{V{"signal.wave", 0}, V{"signal.freque
                                            V{"signal.output", 4}};
 inline constexpr std::array sub_check{V{"signal.frequency", 40}, V{"signal.level", -12}};
 
-inline constexpr std::array<synth::SynthPreset, 9> presets{{
+inline constexpr std::array<Preset, 9> presets{{
     {"1 kHz Reference", "Tone", {}},
     {"Alignment Tone -20", "Tone", alignment},
     {"Log Sweep", "Sweep", sweep},

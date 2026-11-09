@@ -592,7 +592,7 @@ std::uint32_t latency_frames(std::span<const double>, double sample_rate) {
   return latency_of(sample_rate);
 }
 
-const synth::EngineDescriptor descriptor{"dust", "Dust", 1, t::parameters, dust_presets::presets};
+const EngineDescriptor descriptor{"dust", "Dust", 1, t::parameters, dust_presets::presets};
 // A generator that reads a sidechain and is keyed by notes, as Pump is.
 const EffectEngine dust_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, true,
                                true,        nullptr,        nullptr,      nullptr,         true};

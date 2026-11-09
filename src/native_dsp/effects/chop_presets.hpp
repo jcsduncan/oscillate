@@ -2,7 +2,7 @@
 
 #include "chop_table.hpp"
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <algorithm>
 #include <array>
@@ -101,7 +101,7 @@ inline constexpr auto glitch_fill =
               return Step{1.0, length, i == fill - 1 ? ratchets : 1.0};
             });
 
-inline constexpr std::array<synth::SynthPreset, 7> presets{{
+inline constexpr std::array<Preset, 7> presets{{
     {"Init", "Init", init},
     {"Off-beat chop", "Gate", off_beat_chop},
     {"Rolling 16ths", "Gate", rolling_16ths},

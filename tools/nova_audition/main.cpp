@@ -13,8 +13,8 @@
 
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -124,7 +124,7 @@ void set_value(application::ProjectSession& session, project::TrackId track, std
                double value) {
   const auto& table = *native_dsp::synth::find_engine("nova")->descriptor;
   auto values = take(session.instruments().native_instrument_values(track));
-  const auto index = native_dsp::synth::find_parameter(table, id);
+  const auto index = native_dsp::find_parameter(table, id);
   if (!index)
     fail("no parameter " + std::string(id));
   values[*index] = value;

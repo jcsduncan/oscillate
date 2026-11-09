@@ -2,7 +2,7 @@
 
 #include "oscillate/application/sound_map.hpp"
 #include "oscillate/foundation/error.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -55,9 +55,10 @@ inline constexpr std::size_t max_parts = 3;
 //     from `current`.
 // Fails for no parts, more than max_parts, a negative, non-finite or zero
 // total weight, or a sound whose values do not fit the table.
-[[nodiscard]] foundation::Result<sound_map::Sound>
-morph(const native_dsp::synth::EngineDescriptor& table, std::span<const Part> parts,
-      const sound_map::Sound& current, Locks locks);
+[[nodiscard]] foundation::Result<sound_map::Sound> morph(const native_dsp::EngineDescriptor& table,
+                                                         std::span<const Part> parts,
+                                                         const sound_map::Sound& current,
+                                                         Locks locks);
 
 // Mutations: each continuous parameter moved by up to mutation_spread of its
 // knob travel, uniformly, from a seed; discrete parameters, the document,
@@ -65,9 +66,9 @@ morph(const native_dsp::synth::EngineDescriptor& table, std::span<const Part> pa
 // seed, same variations.
 inline constexpr std::size_t variation_count = 6;
 inline constexpr double mutation_spread = 0.08;
-[[nodiscard]] bool mutable_parameter(const native_dsp::synth::ParameterDescriptor& parameter,
+[[nodiscard]] bool mutable_parameter(const native_dsp::ParameterDescriptor& parameter,
                                      Locks locks) noexcept;
-[[nodiscard]] std::vector<sound_map::Sound> mutate(const native_dsp::synth::EngineDescriptor& table,
+[[nodiscard]] std::vector<sound_map::Sound> mutate(const native_dsp::EngineDescriptor& table,
                                                    const sound_map::Sound& base, std::uint64_t seed,
                                                    Locks locks = {},
                                                    std::size_t count = variation_count);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/wren_breath.hpp"
 #include "wren_table.hpp"
 
@@ -58,7 +58,7 @@ inline constexpr std::array pad_tags{"flute"sv, "breathy"sv, "pad"sv};
 inline constexpr std::array birds_tags{"flute"sv, "staccato"sv, "short"sv};
 inline constexpr std::array duet_tags{"flute"sv, "poly"sv, "duet"sv};
 
-inline constexpr std::array<SynthPreset, 6> presets{{
+inline constexpr std::array<Preset, 6> presets{{
     {"Lyrical Air", "Flute", {}, lyrical_tags},
     {"Folk Breeze", "Flute", folk_breeze, folk_tags},
     {"Plain Flute", "Flute", plain_flute, plain_tags},

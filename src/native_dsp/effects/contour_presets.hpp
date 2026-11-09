@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -67,7 +67,7 @@ inline constexpr std::array init{
     V{"contour.resonance", 0},
 };
 
-inline constexpr std::array<synth::SynthPreset, 12> presets{{
+inline constexpr std::array<Preset, 12> presets{{
     {"Warm Low-Pass", "Low-Pass", {}},
     {"Acid Sweep", "Movement", acid_sweep},
     {"Auto-Wah", "Envelope", auto_wah},

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -15,8 +15,8 @@
 // Ids are persisted and automated: never rename or reuse one.
 namespace oscillate::native_dsp::effects::pump_table {
 
-using S = synth::ParameterScale;
-using T = synth::ParameterTiming;
+using S = ParameterScale;
+using T = ParameterTiming;
 using namespace std::string_view_literals;
 
 // MIDI restarts the cycle on each note-on of the tracks keying Pump, read
@@ -53,9 +53,9 @@ inline constexpr std::array lookaheads{"Off"sv, "5 ms"sv, "10 ms"sv, "20 ms"sv};
 inline constexpr std::array<double, 4> lookahead_ms{0, 5, 10, 20};
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
-inline constexpr double g = synth::effect_glide_seconds;
+inline constexpr double g = effect_glide_seconds;
 
-inline constexpr std::array<synth::ParameterDescriptor, 35> parameters{{
+inline constexpr std::array<ParameterDescriptor, 35> parameters{{
     {"pump.trigger", "Trigger", "Trigger", "", S::choice, 0, last(triggers.size()), 0, triggers,
      T::live, 0},
     {"pump.rate", "Rate", "Trigger", "", S::choice, 0, last(rates.size()), 2, rates, T::live, 0},
@@ -114,7 +114,7 @@ inline constexpr std::array<synth::ParameterDescriptor, 35> parameters{{
 }};
 
 consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
+  return parameter_index(parameters, id);
 }
 
 } // namespace oscillate::native_dsp::effects::pump_table

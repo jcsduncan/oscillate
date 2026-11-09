@@ -154,8 +154,8 @@ std::uint32_t latency_frames(std::span<const double> values, double sample_rate)
   return prepared ? prepared.value().latency_frames() : 0;
 }
 
-const synth::EngineDescriptor descriptor{"ceiling", "Ceiling", 1, ceiling_table::parameters,
-                                         ceiling_presets::presets};
+const EngineDescriptor descriptor{"ceiling", "Ceiling", 1, ceiling_table::parameters,
+                                  ceiling_presets::presets};
 const EffectEngine ceiling_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames,
                                   false};
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -51,7 +51,7 @@ inline constexpr std::array auto_pan{V{"orbit.mode", 6},      V{"orbit.sync", 1}
                                      V{"orbit.stereo", 180},  V{"orbit.mix", 1}};
 inline constexpr std::array init{V{"orbit.depth", 0}, V{"orbit.mix", 0}};
 
-inline constexpr std::array<synth::SynthPreset, 15> presets{{
+inline constexpr std::array<Preset, 15> presets{{
     {"Classic Chorus", "Chorus", {}},
     {"Lush Chorus", "Chorus", lush_chorus},
     {"String Ensemble", "Chorus", string_ensemble},

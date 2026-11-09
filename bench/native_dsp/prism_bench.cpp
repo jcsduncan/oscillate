@@ -1,4 +1,4 @@
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/prism.hpp"
 #include "oscillate/native_dsp/synth/runtime.hpp"
 
@@ -13,6 +13,7 @@
 // Run in an uninstrumented Release build; timing is not a CTest gate.
 namespace {
 using namespace oscillate;
+using namespace oscillate::native_dsp;
 using namespace oscillate::native_dsp::synth;
 
 std::vector<double> preset(std::string_view name) {

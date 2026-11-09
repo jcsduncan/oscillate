@@ -13,7 +13,7 @@
 namespace oscillate::application::nova_morph {
 namespace {
 using foundation::ErrorCode;
-using native_dsp::synth::ParameterDescriptor;
+using native_dsp::ParameterDescriptor;
 using sound_map::Sound;
 template <typename T> using Result = foundation::Result<T>;
 
@@ -83,15 +83,15 @@ private:
 }
 
 [[nodiscard]] std::optional<std::size_t>
-route_amount_index(const native_dsp::synth::EngineDescriptor& table, std::uint32_t slot) {
-  return native_dsp::synth::find_parameter(table, std::string(route_prefix) + std::to_string(slot) +
-                                                      std::string(route_amount_suffix));
+route_amount_index(const native_dsp::EngineDescriptor& table, std::uint32_t slot) {
+  return native_dsp::find_parameter(table, std::string(route_prefix) + std::to_string(slot) +
+                                               std::string(route_amount_suffix));
 }
 
 // A sound's amount for the route from `source` to `destination`, 0 when it
 // has none.
-[[nodiscard]] double route_amount(const native_dsp::synth::EngineDescriptor& table,
-                                  const Sound& sound, const project::NativeModRoute& like) {
+[[nodiscard]] double route_amount(const native_dsp::EngineDescriptor& table, const Sound& sound,
+                                  const project::NativeModRoute& like) {
   const auto found = std::ranges::find_if(sound.document.routes, [&](const auto& route) {
     return route.source == like.source && route.destination == like.destination;
   });
@@ -111,7 +111,7 @@ std::size_t heaviest(std::span<const Part> parts) noexcept {
   return best;
 }
 
-Result<Sound> morph(const native_dsp::synth::EngineDescriptor& table, std::span<const Part> parts,
+Result<Sound> morph(const native_dsp::EngineDescriptor& table, std::span<const Part> parts,
                     const Sound& current, Locks locks) {
   const auto size = table.parameters.size();
   if (parts.empty() || parts.size() > max_parts)
@@ -139,7 +139,7 @@ Result<Sound> morph(const native_dsp::synth::EngineDescriptor& table, std::span<
     }
     // Route amounts follow the routes, below; switches and choices the
     // heaviest.
-    if (is_route_amount(id) || native_dsp::synth::is_discrete(parameter))
+    if (is_route_amount(id) || native_dsp::is_discrete(parameter))
       continue;
     // An effect slot's settings mean something only for its module.
     const std::string* module = nullptr;
@@ -158,11 +158,11 @@ Result<Sound> morph(const native_dsp::synth::EngineDescriptor& table, std::span<
           continue;
       }
       weight += part.weight;
-      position += part.weight * native_dsp::synth::to_normalised(parameter, part.sound->values[i]);
+      position += part.weight * native_dsp::to_normalised(parameter, part.sound->values[i]);
     }
     if (weight > 0.0)
-      result.values[i] = native_dsp::synth::sanitise(
-          parameter, native_dsp::synth::from_normalised(parameter, position / weight));
+      result.values[i] = native_dsp::sanitise(
+          parameter, native_dsp::from_normalised(parameter, position / weight));
   }
 
   if (locks.routes) {
@@ -175,7 +175,7 @@ Result<Sound> morph(const native_dsp::synth::EngineDescriptor& table, std::span<
       double amount = 0.0;
       for (const auto& part : parts)
         amount += part.weight * route_amount(table, *part.sound, route);
-      result.values[*index] = native_dsp::synth::sanitise(table.parameters[*index], amount / total);
+      result.values[*index] = native_dsp::sanitise(table.parameters[*index], amount / total);
     }
   }
   if (locks.fx) {
@@ -190,7 +190,7 @@ Result<Sound> morph(const native_dsp::synth::EngineDescriptor& table, std::span<
 
 bool mutable_parameter(const ParameterDescriptor& parameter, Locks locks) noexcept {
   const std::string_view id = parameter.id;
-  if (native_dsp::synth::is_discrete(parameter) || id == master_id)
+  if (native_dsp::is_discrete(parameter) || id == master_id)
     return false;
   if (std::ranges::any_of(fixed_prefixes, [&](std::string_view p) { return starts(id, p); }) ||
       std::ranges::any_of(fixed_suffixes, [&](std::string_view s) { return id.ends_with(s); }))
@@ -200,7 +200,7 @@ bool mutable_parameter(const ParameterDescriptor& parameter, Locks locks) noexce
          !(locks.routes && is_route_amount(id));
 }
 
-std::vector<Sound> mutate(const native_dsp::synth::EngineDescriptor& table, const Sound& base,
+std::vector<Sound> mutate(const native_dsp::EngineDescriptor& table, const Sound& base,
                           std::uint64_t seed, Locks locks, std::size_t count) {
   std::vector<Sound> variations;
   if (base.values.size() != table.parameters.size())
@@ -213,12 +213,11 @@ std::vector<Sound> mutate(const native_dsp::synth::EngineDescriptor& table, cons
       const auto& parameter = table.parameters[i];
       if (!mutable_parameter(parameter, locks))
         continue;
-      const double position =
-          std::clamp(native_dsp::synth::to_normalised(parameter, base.values[i]) +
-                         mutation_spread * random.bipolar(),
-                     0.0, 1.0);
-      variation.values[i] = native_dsp::synth::sanitise(
-          parameter, native_dsp::synth::from_normalised(parameter, position));
+      const double position = std::clamp(native_dsp::to_normalised(parameter, base.values[i]) +
+                                             mutation_spread * random.bipolar(),
+                                         0.0, 1.0);
+      variation.values[i] =
+          native_dsp::sanitise(parameter, native_dsp::from_normalised(parameter, position));
     }
     variations.push_back(std::move(variation));
   }

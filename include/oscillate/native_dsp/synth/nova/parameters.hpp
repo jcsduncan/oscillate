@@ -1,7 +1,7 @@
 #pragma once
 
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/nova/arp.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 
 #include <array>
 #include <cstddef>

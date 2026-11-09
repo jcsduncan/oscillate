@@ -10,8 +10,8 @@
 #include "oscillate/automation/curve.hpp"
 #include "oscillate/midi_file/smf.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/project/lookup.hpp"
@@ -137,7 +137,7 @@ effect_patch(std::string_view engine_id, std::optional<std::string_view> preset,
   std::optional<std::size_t> index;
   if (preset) {
     const auto& presets = engine->descriptor->presets;
-    const auto found = std::ranges::find(presets, *preset, &native_dsp::synth::SynthPreset::name);
+    const auto found = std::ranges::find(presets, *preset, &native_dsp::Preset::name);
     if (found == presets.end())
       return R::failure({ErrorCode::not_found, "Preset not found: " + std::string(*preset)});
     index = static_cast<std::size_t>(found - presets.begin());
@@ -150,7 +150,7 @@ effect_patch(std::string_view engine_id, std::optional<std::string_view> preset,
     return R::failure(resolved.error());
   auto dense = std::move(resolved.value().values);
   for (const auto& [id, value] : values) {
-    const auto at = native_dsp::synth::find_parameter(*engine->descriptor, id);
+    const auto at = native_dsp::find_parameter(*engine->descriptor, id);
     if (!at)
       return R::failure({ErrorCode::not_found, "No parameter " + std::string(id)});
     dense[*at] = value;
@@ -170,7 +170,7 @@ struct EffectParameter {
   const auto* engine = native_dsp::effects::find_engine(effect.engine_id);
   if (engine == nullptr)
     return Result<double>::failure({ErrorCode::not_found, "Built-in effect not found"});
-  const auto at = native_dsp::synth::find_parameter(*engine->descriptor, parameter);
+  const auto at = native_dsp::find_parameter(*engine->descriptor, parameter);
   if (!at)
     return Result<double>::failure(
         {ErrorCode::not_found, "No parameter " + std::string(parameter)});
@@ -628,8 +628,7 @@ Result<void> SongService::apply_arrangement(const arrange::Plan& plan) {
       if (uses.empty())
         continue;
       const auto& facts = arrange::transition_facts[kind];
-      const auto preset =
-          std::ranges::find(presets, facts.nova_preset, &native_dsp::synth::SynthPreset::name);
+      const auto preset = std::ranges::find(presets, facts.nova_preset, &native_dsp::Preset::name);
       if (preset == presets.end())
         return R::failure(
             {ErrorCode::not_found, "Nova preset not found: " + std::string(facts.nova_preset)});

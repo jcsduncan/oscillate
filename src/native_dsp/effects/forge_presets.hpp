@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -33,7 +33,7 @@ inline constexpr std::array broken_speaker{V{"forge.model", 3}, V{"forge.drive",
                                            V{"forge.colour", 9}, V{"forge.tone", 3'200}};
 inline constexpr std::array init{V{"forge.drive", 0}};
 
-inline constexpr std::array<synth::SynthPreset, 12> presets{{
+inline constexpr std::array<Preset, 12> presets{{
     {"Warm Tape", "Warmth", {}},
     {"Tube Warmth", "Warmth", tube_warmth},
     {"Hot Tube", "Drive", hot_tube},

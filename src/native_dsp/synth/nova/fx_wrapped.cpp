@@ -4,7 +4,7 @@
 #include "oscillate/native_dsp/effects/flyby.hpp"
 #include "oscillate/native_dsp/effects/orbit.hpp"
 #include "oscillate/native_dsp/effects/relay.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <algorithm>
 #include <array>
@@ -34,7 +34,7 @@ bool KernelDriver::init(const effects::EffectEngine& engine, double base_rate,
   }
   engine_ = &engine;
   base_rate_ = base_rate;
-  values_ = synth::default_values(*engine.descriptor);
+  values_ = default_values(*engine.descriptor);
   kernel_ = engine.create_kernel(values_, base_rate);
   scratch_.assign(std::max<std::size_t>(1, max_frames), engine::StereoFrame{0.0F, 0.0F});
   resampler_.set_factor(1);
@@ -42,7 +42,7 @@ bool KernelDriver::init(const effects::EffectEngine& engine, double base_rate,
 }
 
 std::size_t KernelDriver::index(std::string_view id) {
-  const auto found = synth::find_parameter(*engine_->descriptor, id);
+  const auto found = find_parameter(*engine_->descriptor, id);
   if (!found) {
     ok_ = false;
     return std::numeric_limits<std::size_t>::max();
@@ -53,7 +53,7 @@ std::size_t KernelDriver::index(std::string_view id) {
 void KernelDriver::control(std::uint32_t base_frames, double beats_per_second) noexcept {
   const auto& parameters = engine_->descriptor->parameters;
   for (std::size_t i = 0; i < values_.size(); ++i) {
-    values_[i] = synth::sanitise(parameters[i], values_[i]);
+    values_[i] = sanitise(parameters[i], values_[i]);
   }
   transport_.beats_per_frame = std::isfinite(beats_per_second) && beats_per_second > 0.0
                                    ? beats_per_second / base_rate_

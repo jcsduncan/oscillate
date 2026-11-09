@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -32,7 +32,7 @@ inline constexpr std::array safe_widen{V{"vista.width", 1.6}, V{"vista.safe", 1}
 inline constexpr std::array lean_left{V{"vista.rotation", -12}};
 inline constexpr std::array init{V{"vista.bands", 0}};
 
-inline constexpr std::array<synth::SynthPreset, 11> presets{{
+inline constexpr std::array<Preset, 11> presets{{
     {"Natural", "Width", {}},
     {"Wide Master", "Mastering", wide_master},
     {"Tight Low End", "Mastering", tight_low_end},

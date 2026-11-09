@@ -382,8 +382,8 @@ std::uint64_t tail_frames(std::span<const double>, double sample_rate) {
 }
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"signal", "Signal", 1, signal_table::parameters,
-                                         signal_presets::presets};
+const EngineDescriptor descriptor{"signal", "Signal", 1, signal_table::parameters,
+                                  signal_presets::presets};
 const EffectEngine signal_engine{&descriptor,     &create_kernel, &tail_frames,
                                  &latency_frames, false,          true};
 

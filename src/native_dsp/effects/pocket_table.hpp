@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -12,8 +12,8 @@
 // rename or reuse one.
 namespace oscillate::native_dsp::effects::pocket_table {
 
-using S = synth::ParameterScale;
-using T = synth::ParameterTiming;
+using S = ParameterScale;
+using T = ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array modes{"Unmask"sv, "Duck"sv, "Pump"sv};
@@ -23,9 +23,9 @@ inline constexpr std::array lookaheads{"Off"sv, "5 ms"sv, "10 ms"sv, "20 ms"sv, 
 inline constexpr std::array<double, 5> lookahead_ms{0, 5, 10, 20, 40};
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
-inline constexpr double g = synth::effect_glide_seconds;
+inline constexpr double g = effect_glide_seconds;
 
-inline constexpr std::array<synth::ParameterDescriptor, 13> parameters{{
+inline constexpr std::array<ParameterDescriptor, 13> parameters{{
     {"pocket.mode", "Mode", "Duck", "", S::choice, 0, last(modes.size()), 0, modes, T::live, 0},
     {"pocket.depth", "Depth", "Duck", "dB", S::linear, 0, 24, 9, {}, T::live, g},
     {"pocket.margin", "Margin", "Duck", "dB", S::linear, 0, 12, 3, {}, T::live, g},
@@ -55,8 +55,6 @@ inline constexpr std::array<synth::ParameterDescriptor, 13> parameters{{
     {"pocket.output", "Output", "Output", "dB", S::linear, -24, 12, 0, {}, T::live, g},
 }};
 
-consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
-}
+consteval std::size_t index_of(std::string_view id) { return parameter_index(parameters, id); }
 
 } // namespace oscillate::native_dsp::effects::pocket_table

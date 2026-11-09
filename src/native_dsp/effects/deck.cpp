@@ -208,8 +208,7 @@ std::uint64_t tail_frames(std::span<const double>, double sample_rate) {
 }
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"deck", "Deck", 1, deck_table::parameters,
-                                         deck_presets::presets};
+const EngineDescriptor descriptor{"deck", "Deck", 1, deck_table::parameters, deck_presets::presets};
 const EffectEngine deck_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, false};
 
 } // namespace

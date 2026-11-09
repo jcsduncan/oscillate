@@ -375,8 +375,8 @@ std::uint64_t tail_frames(std::span<const double> v, double sample_rate) {
 
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"contour", "Contour", 1, contour_table::parameters,
-                                         contour_presets::presets};
+const EngineDescriptor descriptor{"contour", "Contour", 1, contour_table::parameters,
+                                  contour_presets::presets};
 const EffectEngine contour_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, true};
 
 } // namespace

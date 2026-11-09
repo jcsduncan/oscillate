@@ -3,7 +3,7 @@
 
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_dsp/note_effects/note_effect.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <algorithm>
 #include <array>
@@ -73,7 +73,7 @@ pattern_parameters(std::size_t index, std::span<const project::NativeInstrumentP
   auto resolved = fx::resolve_note_effect(engine_id, descriptor.version, current);
   if (!resolved)
     return R::failure(resolved.error());
-  auto pattern = native_dsp::synth::preset_values(descriptor, descriptor.presets[index]);
+  auto pattern = native_dsp::preset_values(descriptor, descriptor.presets[index]);
   if (!pattern)
     return R::failure(pattern.error());
   auto values = std::move(resolved).value().values;

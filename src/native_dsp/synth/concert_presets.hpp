@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -68,7 +68,7 @@ inline constexpr std::array bright_tags{"piano"sv, "bright"sv, "pop"sv};
 inline constexpr std::array soft_tags{"piano"sv, "soft"sv, "intimate"sv};
 inline constexpr std::array felt_tags{"piano"sv, "felt"sv, "dark"sv};
 
-inline constexpr std::array<SynthPreset, 7> presets{{
+inline constexpr std::array<Preset, 7> presets{{
     {"Concert Grand", "Grand", {}, grand_tags},
     {"Bright", "Grand", bright, bright_tags},
     {"Soft", "Grand", soft, soft_tags},

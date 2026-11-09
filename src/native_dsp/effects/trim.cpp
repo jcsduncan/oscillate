@@ -298,8 +298,7 @@ std::uint64_t tail_frames(std::span<const double>, double sample_rate) {
 }
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"trim", "Trim", 1, trim_table::parameters,
-                                         trim_presets::presets};
+const EngineDescriptor descriptor{"trim", "Trim", 1, trim_table::parameters, trim_presets::presets};
 const EffectEngine trim_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, false};
 
 } // namespace

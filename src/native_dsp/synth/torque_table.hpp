@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/transport.hpp"
 
 #include <array>
@@ -207,9 +207,7 @@ inline constexpr std::array<ParameterDescriptor, 65 + step_count * step_paramete
 
 #undef TORQUE_STEP
 
-consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
-}
+consteval std::size_t index_of(std::string_view id) { return parameter_index(parameters, id); }
 
 inline constexpr std::size_t first_step = index_of("torque.seq.s1.note");
 
