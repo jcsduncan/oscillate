@@ -12,7 +12,9 @@ export HOME="$work/home"
 mkdir -p "$HOME"
 startup_timeout=120s
 # The project folder the sandbox may write (--filesystem=~/.oscillate:create).
+# --create needs the parent folder, as the app's own projects folder is.
 project="$HOME/.oscillate/projects/flatpak-smoke"
+mkdir -p "$(dirname "$project")"
 
 fail() {
   echo "flatpak-smoke: $*" >&2
