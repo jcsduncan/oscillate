@@ -112,7 +112,7 @@ void every_engine_sustains_generically() {
     const std::string name(engine->descriptor->id);
     require(on.left == irregular.left && on.right == irregular.right,
             name + ": pedals render identically under any block split");
-    if (name == "pulse") {
+    if (name == "pulse" || name == "stick") {
       continue; // Drum hits are one-shots: note-offs do not end them.
     }
     REQUIRE_GE(on.last.active_voices, off.last.active_voices, name + ": sustain keeps the voice");

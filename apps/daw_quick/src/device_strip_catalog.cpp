@@ -55,6 +55,10 @@ constexpr std::array styles{
         {"wren.breath.amount", "wren.breath.vibrato", "wren.tone.air", "wren.tone.space"}},
     DeviceStripStyle{
         "bow", "Strings", "#e0a96d", {"bow.perf.wheel", "bow.vibrato", "bow.tone", "bow.space"}},
+    DeviceStripStyle{"stick",
+                     "Acoustic drums",
+                     "#e0a96d",
+                     {"stick.perf.pedal", "stick.humanise", "stick.mic.room.level", "stick.level"}},
     DeviceStripStyle{"concert",
                      "Piano",
                      "#e8d9b8",

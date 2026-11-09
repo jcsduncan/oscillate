@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/stick">
+    <file>StickPanel.qml</file>
+    <file>StickTheme.qml</file>
+    <file>StickKit.qml</file>
+  </qresource>
+</RCC>

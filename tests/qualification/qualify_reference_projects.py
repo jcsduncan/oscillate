@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plays the light, heavy and pad reference projects and records their cost.
+"""Plays the light, heavy, pad and drums reference projects and records their cost.
 
 Runs oscillate_reference_project for each reference and buffer size, through
 the paced fake callback or, with --target-node, an explicitly named PipeWire
@@ -25,7 +25,7 @@ FIELDS = re.compile(r"(\w+)=(\S+)")
 AUDIO_THREADS = ("audio callback", "audio worker")
 # Spans that frame the work rather than doing it; reported apart from devices.
 FRAME_SPANS = ("audio.render", "graph.node", "graph.source", "pool.wait_for_helpers")
-REFERENCES = ("light", "heavy", "pad")
+REFERENCES = ("light", "heavy", "pad", "drums")
 BUFFER_SIZES = (64, 128)
 SAMPLE_RATE = 48_000
 PERCENT = 100
@@ -187,6 +187,8 @@ def run_one(args, reference: str, frames: int, repetition: int, serial: int | No
         ):
             if value:
                 command += [flag, str(value)]
+    if reference == "drums" and args.stick_kit:
+        command += ["--stick-kit", str(args.stick_kit)]
     completed = subprocess.run(
         command,
         env=dict(os.environ, TMPDIR=str(scratch)),
@@ -247,6 +249,11 @@ def main() -> int:
     parser.add_argument("--executable", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--references", nargs="+", choices=REFERENCES, default=list(REFERENCES))
+    parser.add_argument(
+        "--stick-kit",
+        type=Path,
+        help="an installed Stick kit folder the drums reference plays (default: synthetic)",
+    )
     parser.add_argument(
         "--frames", nargs="+", type=int, choices=BUFFER_SIZES, default=list(BUFFER_SIZES)
     )

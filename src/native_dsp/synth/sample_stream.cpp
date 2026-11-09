@@ -456,7 +456,7 @@ void Streams::service_slot(std::size_t index) noexcept {
     return;
   }
   const auto& pack = library->pack();
-  if (pack.channels() != channels_) {
+  if (pack.channels() > channels_) {
     slot.failed = true;
     failures_.fetch_add(1, std::memory_order_relaxed);
     return;
@@ -477,7 +477,7 @@ void Streams::service_slot(std::size_t index) noexcept {
     }
     const std::uint32_t at = slot.filled & ring_mask;
     const std::uint32_t frames = std::min({read_frames, remaining, ring_frames - at});
-    if (!read_exactly(pack.descriptor(), ring + std::size_t{at} * channels_,
+    if (!read_exactly(pack.descriptor(), ring + std::size_t{at} * pack.channels(),
                       std::size_t{frames} * bytes_per_frame,
                       (sample.offset + sample.resident + slot.filled) * bytes_per_frame)) {
       slot.failed = true;
@@ -524,6 +524,30 @@ SincTable::SincTable(double cutoff) : table_((phases + 1) * taps) {
       table_[row * taps + t] = static_cast<float>(coefficients[t] / sum);
     }
   }
+}
+
+const std::vector<SincTable>& speed_tables() {
+  static const auto* built = [] {
+    constexpr std::size_t count = speed_tables_per_octave * speed_table_octaves + 1;
+    auto* all = new std::vector<SincTable>();
+    all->reserve(count);
+    for (std::size_t t = 0; t < count; ++t) {
+      all->emplace_back(
+          SincTable::passband /
+          std::exp2(static_cast<double>(t) / static_cast<double>(speed_tables_per_octave)));
+    }
+    return all;
+  }();
+  return *built;
+}
+
+const SincTable& speed_table(const std::vector<SincTable>& tables, double step) noexcept {
+  if (step <= 1.0) {
+    return tables.front();
+  }
+  const auto t = static_cast<std::size_t>(
+      std::ceil(std::log2(step) * static_cast<double>(speed_tables_per_octave)));
+  return tables[std::min(t, tables.size() - 1)];
 }
 
 } // namespace oscillate::native_dsp::synth::sample_stream

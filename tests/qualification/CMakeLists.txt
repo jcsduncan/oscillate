@@ -30,10 +30,10 @@ oscillate_add_executable(oscillate_routed_32track_rehearsal SOURCES routed_32tra
 oscillate_add_executable(oscillate_streaming_32track_rehearsal SOURCES streaming_32track_rehearsal.cpp allocation_probe.cpp
   LIBS oscillate::application oscillate::audio_io)
 
-# The light, heavy and pad reference projects (docs/performance/reference-projects.md).
+# The light, heavy, pad and drums reference projects (docs/performance/reference-projects.md).
 oscillate_add_executable(oscillate_reference_project SOURCES reference_project.cpp allocation_probe.cpp
   LIBS oscillate::application oscillate::audio_io)
-# The pad reference plays Bow on its synthetic test library.
+# The pad and drums references play Bow and Stick on their synthetic test libraries.
 target_include_directories(oscillate_reference_project PRIVATE
   ${OSCILLATE_SOURCE_DIR}/tests/native_dsp)
 target_link_libraries(oscillate_reference_project PRIVATE oscillate::synth_engines)

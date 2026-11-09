@@ -115,3 +115,4 @@ never reused. 0070 was never assigned.
 | 0110 | [Heavy projects across the helpers: qualification with the live helpers, a helper per hardware thread up to seven, cheaper Forge and Shape spectra](0110-heavy-projects-across-the-helpers.md) | Accepted; implemented |
 | 0111 | [Bow: sampled strings, sections and solo, bowed from the mod wheel](0111-bow-sampled-strings.md) | Accepted |
 | 0112 | [Warp markers and the tempo lane on the arrangement](0112-warp-markers-and-tempo-lane-on-the-arrangement.md) | Accepted; implemented |
+| 0114 | [Stick: sampled multi-mic acoustic drums](0114-stick-sampled-drums.md) | Accepted; implemented |
