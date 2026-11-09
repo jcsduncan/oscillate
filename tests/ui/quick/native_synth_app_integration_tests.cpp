@@ -848,8 +848,9 @@ void automate_leads_to_the_automated_parameter() {
           "an unautomated synth did not lead to its first automatable parameter");
   constexpr std::string_view cutoff = "prism.filter.cutoff";
   const auto index = oscillate::native_dsp::find_parameter(*engine->descriptor, cutoff);
-  require(index.has_value(), "Prism has no cutoff");
-  const auto cutoff_default = engine->descriptor->parameters[index.value()].default_value;
+  if (!index)
+    throw std::runtime_error("Prism has no cutoff");
+  const auto cutoff_default = engine->descriptor->parameters[*index].default_value;
   require(session.value()
               ->automation()
               .add_automation_point(
