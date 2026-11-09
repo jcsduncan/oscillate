@@ -55,6 +55,8 @@ PYTHON = (
     # Read by scripts/packaging/test_package_flatpak.py.
     "packaging/flatpak/*",
     "assets/packaging/*.metainfo.xml",
+    # The metainfo's releases; a unit test compares it with the project version.
+    "CHANGELOG.md",
     "docs/dependencies/flatpak.md",
     "scripts/ci/python-tests.sh",
     ".github/workflows/python.yml",
@@ -68,6 +70,7 @@ PACKAGING = (
     "CMakePresets.json",
     "cmake/Features.cmake",
     "LICENSE",
+    "CHANGELOG.md",
     "assets/packaging/*",
     "packaging/flatpak/*",
     "third_party/notices/*",

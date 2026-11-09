@@ -74,20 +74,4 @@
       <caption>The piano roll, with velocity and pedal lanes</caption>
     </screenshot>
   </screenshots>
-  <releases>
-    <release version="0.2.0" date="2026-11-08">
-      <url type="details">https://github.com/jcsduncan/oscillate/releases/tag/v0.2.0</url>
-      <description>
-        <p>The first public pre-release.</p>
-        <ul>
-          <li>Arrangement, piano roll, mixer and automation lanes</li>
-          <li>MIDI recording from the computer keyboard, with overdub and metronome</li>
-          <li>Built-in instruments and effects, macros, racks and freeze</li>
-          <li>Linux VST3 instruments and effects</li>
-          <li>WAV, FLAC and MP3 import and export</li>
-          <li>Local crash reports and a diagnostics bundle</li>
-        </ul>
-      </description>
-    </release>
-  </releases>
 </component>
