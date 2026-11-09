@@ -336,6 +336,9 @@ class InventoryTests(unittest.TestCase):
                 (files / relative).parent.mkdir(parents=True, exist_ok=True)
                 (files / relative).write_bytes(b"\x7fELF")
             (files / "lib/libsndfile.so.1").symlink_to("libsndfile.so.1.0.37")
+            debug = files / "lib/debug/bin/oscillate.debug"
+            debug.parent.mkdir(parents=True)
+            debug.write_bytes(b"\x7fELF")
             offer = build_offer(load_manifest(), version=PROJECT_VERSION, commit=COMMIT)
             (files / OFFER_JSON).parent.mkdir(parents=True)
             (files / OFFER_JSON).write_text(json.dumps(offer))
@@ -352,6 +355,10 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(kinds[LIBSNDFILE_FILE], LIBRARY_ELF)
         self.assertEqual(kinds["bin/oscillate"], PROJECT_ELF)
         self.assertNotIn("lib/libsndfile.so.1", kinds)
+        self.assertNotIn("lib/debug/bin/oscillate.debug", kinds)
+        self.assertFalse(
+            [item for item in sidecar["payload"] if item["path"].startswith("lib/debug")]
+        )
         self.assertEqual(sidecar["unresolved"]["bin/oscillate"], ["libgone.so.2"])
         links = [item for item in sidecar["payload"] if "symlink" in item]
         self.assertEqual(

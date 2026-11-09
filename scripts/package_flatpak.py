@@ -82,6 +82,8 @@ PROJECT_ELF = "project"
 LIBRARY_ELF = "shared-library"
 OTHER_ELF = "other"
 ELF_MAGIC = b"\x7fELF"
+# flatpak-builder's split debug info, exported as the app's .Debug extension.
+DEBUG_DIR = Path("lib/debug")
 READ_CHUNK_BYTES = 1 << 20
 FILE_MODE = 0o644
 # Printed between the SONAME and the ldd output of one ELF in the sandbox.
@@ -390,9 +392,19 @@ def classify_elf(path: str, soname: str | None) -> dict:
     return {"path": path, "kind": OTHER_ELF, "soname": soname}
 
 
+def shipped_files(files: Path) -> list[Path]:
+    """Every path under /app the app ships; the split debug info goes to the
+    separate .Debug extension."""
+    return [
+        path
+        for path in sorted(files.rglob("*"))
+        if DEBUG_DIR not in path.relative_to(files).parents
+    ]
+
+
 def payload(files: Path) -> list[dict]:
     entries = []
-    for path in sorted(files.rglob("*")):
+    for path in shipped_files(files):
         relative = str(path.relative_to(files))
         if path.is_symlink():
             entries.append({"path": relative, "symlink": str(path.readlink())})
@@ -445,7 +457,7 @@ def inventory(build_dir: Path, manifest: Path, report=elf_report) -> dict:
     files = build_dir / "files"
     elf_files = []
     unresolved = {}
-    for path in sorted(files.rglob("*")):
+    for path in shipped_files(files):
         if not is_elf(path):
             continue
         relative = str(path.relative_to(files))
