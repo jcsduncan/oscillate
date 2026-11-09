@@ -60,7 +60,30 @@ Rectangle {
     color: Theme.tempoLaneGround
     clip: true
     Accessible.role: Accessible.Graphic
-    Accessible.name: "Project tempo lane. Drag across bars to draw a ramp, drag a point to move it, double-click to add or remove a point, right-click for its shape."
+    Accessible.name: "Project tempo lane. Drag across bars to draw a ramp, drag a point to move it, double-click to add or remove a point, right-click for its shape. With the keyboard: Left and Right pick a point, Up and Down change its tempo, Insert adds a point a bar later, Delete removes it."
+
+    // Keyboard editing, expanded: the picked point (index into points).
+    property int keyIndex: 0
+    readonly property var keyPoint: keyIndex >= 0 && keyIndex < points.length ? points[keyIndex] : null
+    activeFocusOnTab: expanded
+    Keys.onShortcutOverride: event => event.accepted = expanded
+        && [Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down, Qt.Key_Insert, Qt.Key_Delete].includes(event.key)
+    Keys.onLeftPressed: keyIndex = Math.max(0, keyIndex - 1)
+    Keys.onRightPressed: keyIndex = Math.min(points.length - 1, keyIndex + 1)
+    Keys.onUpPressed: if (keyPoint) controller.move_point(keyPoint.tick, keyPoint.bar, keyPoint.bpm + bpmStep)
+    Keys.onDownPressed: if (keyPoint) controller.move_point(keyPoint.tick, keyPoint.bar, keyPoint.bpm - bpmStep)
+    Keys.onPressed: event => {
+        if (!keyPoint)
+            return
+        if (event.key === Qt.Key_Insert) {
+            controller.add_point(Math.floor(keyPoint.bar + barEpsilon) + 1, keyPoint.bpm)
+            event.accepted = true
+        } else if (event.key === Qt.Key_Delete && !keyPoint.initial) {
+            controller.remove_point(keyPoint.tick)
+            keyIndex = Math.max(0, keyIndex - 1)
+            event.accepted = true
+        }
+    }
 
     function barAt(x) { return viewStartBar + x / Math.max(1e-9, pxPerBar) }
     function xAt(bar) { return (bar - viewStartBar) * pxPerBar }
@@ -244,7 +267,8 @@ Rectangle {
                 width: Theme.tempoLanePointSize
                 height: Theme.tempoLanePointSize
                 radius: width / 2
-                color: Theme.canvas
+                // The point the keyboard edits, while the lane has focus.
+                color: lane.activeFocus && lane.keyIndex === point.index ? Theme.tempoLaneCurve : Theme.canvas
                 border.color: Theme.tempoLaneCurve
                 border.width: Theme.strokeBold
             }

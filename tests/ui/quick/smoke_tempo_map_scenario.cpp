@@ -34,6 +34,8 @@ constexpr int drag_steps = 6;
 // Positions and tempi read back from the lane.
 constexpr double bar_tolerance = 1e-6;
 constexpr double bpm_tolerance = 0.051;
+// What Up adds to the picked point's tempo.
+constexpr double keyboard_step_bpm = 0.1;
 
 [[nodiscard]] QVariantList lane_points(oscillate::quick::ProjectBridge& bridge) {
   return bridge.tempo_lane()->property("points").toList();
@@ -188,6 +190,35 @@ bool edit_tempo_map(oscillate::quick::ProjectBridge& bridge, QQuickWindow* windo
   if (bridge.revision() != before_add + 2 || lane_points(bridge).size() != 3) {
     std::cerr << "Tempo lane smoke: double-click did not remove the point\n";
     return false;
+  }
+
+  // The keyboard: Right picks the ramp's start, Up raises it a tenth,
+  // Insert adds a point a bar later and Delete removes the picked one, each
+  // one edit that undoes.
+  lane->forceActiveFocus();
+  QTest::keyClick(window, Qt::Key_Right);
+  const auto before_keys = bridge.revision();
+  QTest::keyClick(window, Qt::Key_Up);
+  QCoreApplication::processEvents();
+  if (bridge.revision() != before_keys + 1 ||
+      std::abs(lane_point(bridge, 1).value(QStringLiteral("bpm")).toDouble() - opening_bpm -
+               keyboard_step_bpm) > bpm_tolerance) {
+    std::cerr << "Tempo lane smoke: Up did not raise the picked point in one edit\n";
+    return false;
+  }
+  bridge.undo();
+  for (const auto key : {Qt::Key_Insert, Qt::Key_Delete}) {
+    const auto count = lane_points(bridge).size();
+    const auto before_key = bridge.revision();
+    QTest::keyClick(window, key);
+    QCoreApplication::processEvents();
+    if (bridge.revision() != before_key + 1 ||
+        lane_points(bridge).size() != count + (key == Qt::Key_Insert ? 1 : -1)) {
+      std::cerr << "Tempo lane smoke: a key did not add or remove one point\n";
+      return false;
+    }
+    bridge.undo();
+    lane->forceActiveFocus();
   }
 
   // The project controls edit the opening tempo and meter, keeping the ramps.
