@@ -31,25 +31,25 @@ Rectangle {
     property var history: []
     property bool libraryOpen: false
 
-    // The designed size and the layout's spacing.
-    readonly property real designedWidth: 1240
-    readonly property real designedHeight: 760
-    readonly property real margin: 24
-    readonly property real gap: 14
-    readonly property real pickerHeight: 40
-    readonly property real modeWidth: 236
-    readonly property real articulationWidth: 236
-    readonly property real knobsHeight: 128
+    // The designed size and the layout's spacing, from the theme.
+    readonly property real designedWidth: theme.panelWidth
+    readonly property real designedHeight: theme.panelHeight
+    readonly property real margin: theme.panelMargin
+    readonly property real gap: theme.panelGap
+    readonly property real pickerHeight: theme.pickerHeight
+    readonly property real modeWidth: theme.modeWidth
+    readonly property real articulationWidth: theme.articulationWidth
+    readonly property real knobsHeight: theme.knobsHeight
     readonly property int knobCount: 6
-    readonly property real stripHeight: 92
-    readonly property real keyGap: 1
-    readonly property real keyRadius: 3
+    readonly property real stripHeight: theme.stripHeight
+    readonly property real keyGap: theme.keyGap
+    readonly property real keyRadius: theme.keyRadius
     // The bow display's span: its history fills while notes play.
-    readonly property real historySeconds: 6
-    readonly property real pollLiveMs: 33
+    readonly property real historySeconds: theme.historySeconds
+    readonly property real pollLiveMs: theme.pollLiveMs
     readonly property real msPerSecond: 1000
     readonly property int historyLength: Math.round(historySeconds * msPerSecond / pollLiveMs)
-    readonly property real pollIdleMs: 250
+    readonly property real pollIdleMs: theme.pollIdleMs
     readonly property real pickerY: header.y + header.height + gap
     readonly property real bodyY: pickerY + pickerHeight + gap
     readonly property real stripY: height - margin - stripHeight

@@ -1,3 +1,4 @@
+#include "bow_test_library.hpp"
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_dsp/pedal_latch.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
@@ -93,6 +94,8 @@ void soft_restrike_and_capacity() {
 // Every engine: a note released under the sustain pedal keeps sounding
 // until the lift, and renders identically under any block split.
 void every_engine_sustains_generically() {
+  // Bow plays its synthetic library; without one it is silent.
+  (void)bow_test::install();
   for (const auto* engine : engines()) {
     if (engine->models_pedals) {
       continue;

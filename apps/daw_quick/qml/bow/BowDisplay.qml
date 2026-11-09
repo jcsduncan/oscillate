@@ -17,10 +17,10 @@ Kit.PlotFrame {
     // The vibrato line's band at the bottom, as a share of the height.
     readonly property real vibratoBase: 0.08
     readonly property real vibratoSpan: 0.28
-    readonly property real dynamicsWidth: 2.5
-    readonly property real vibratoWidth: 1.5
-    readonly property real dotRadius: 5
-    readonly property real dotEdge: 2
+    readonly property real dynamicsWidth: theme.dynamicsStroke
+    readonly property real vibratoWidth: theme.vibratoStroke
+    readonly property real dotRadius: theme.playheadRadius
+    readonly property real dotEdge: theme.playheadEdge
     readonly property var shown: live && history.length > 1 ? history
         : [{ dynamics: wheel, vibrato: 0 }, { dynamics: wheel, vibrato: 0 }]
     readonly property real lastDynamics: shown[shown.length - 1].dynamics

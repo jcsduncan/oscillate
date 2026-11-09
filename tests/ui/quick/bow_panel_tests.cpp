@@ -64,17 +64,25 @@ constexpr int e4 = 64;
 constexpr int g4 = 67;
 constexpr std::size_t pizzicato = static_cast<std::size_t>(bow::Articulation::pizzicato);
 
-std::vector<float> bow_frame(bool latched, std::vector<int> held,
-                             std::size_t articulation = pizzicato, float dynamics = frame_wheel,
-                             float vibrato = frame_vibrato) {
+// What a telemetry frame says is playing.
+struct Playing {
+  bool latched = false;
+  std::vector<int> held;
+  std::size_t articulation = pizzicato;
+  float dynamics = frame_wheel;
+  float vibrato = frame_vibrato;
+};
+
+std::vector<float> bow_frame(const Playing& playing) {
+  const auto& held = playing.held;
   namespace t = bow::telemetry;
   std::vector<float> frame(t::size, 0.0F);
   frame[t::library] = static_cast<float>(static_cast<int>(bow::library::State::ready));
   frame[t::notes] = frame_notes;
-  frame[t::articulation] = static_cast<float>(articulation);
-  frame[t::latched] = latched ? 1.0F : 0.0F;
-  frame[t::dynamics] = dynamics;
-  frame[t::vibrato] = vibrato;
+  frame[t::articulation] = static_cast<float>(playing.articulation);
+  frame[t::latched] = playing.latched ? 1.0F : 0.0F;
+  frame[t::dynamics] = playing.dynamics;
+  frame[t::vibrato] = playing.vibrato;
   frame[t::voices] = frame_voices;
   frame[t::output_peak_db] = frame_peak_db;
   frame[t::held_count] = static_cast<float>(held.size());
@@ -146,7 +154,7 @@ void controller_lays_out_the_keyboard() {
 void controller_decodes_bow_telemetry() {
   InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
-  adapter.set_telemetry(bow_frame(true, {c4, e4, g4}));
+  adapter.set_telemetry(bow_frame({.latched = true, .held = {c4, e4, g4}}));
   const auto live = controller.telemetry();
   require(live.value(QStringLiteral("live")).toBool() &&
               live.value(QStringLiteral("library")).toString() == QStringLiteral("ready") &&
@@ -307,7 +315,7 @@ void articulations_write_and_show_the_keyswitch() {
   require(controller.choice(QStringLiteral("bow.articulation")) ==
               static_cast<int>(bow::Articulation::tremolo),
           "a row picks its articulation");
-  adapter.set_telemetry(bow_frame(true, {c4, e4, g4}));
+  adapter.set_telemetry(bow_frame({.latched = true, .held = {c4, e4, g4}}));
   require(
       QTest::qWaitFor(
           [&] { return text_of(*panel, QStringLiteral("bowLatched")).startsWith("Latched by"); },
@@ -353,9 +361,11 @@ void screenshots_if_requested() {
     const double vibrato =
         vibrato_floor +
         vibrato_depth * std::max(0.0, std::sin(pi * (t - vibrato_start) * vibrato_stretch));
-    adapter.set_telemetry(bow_frame(false, {a3, c4, e4},
-                                    static_cast<std::size_t>(bow::Articulation::legato),
-                                    static_cast<float>(dynamics), static_cast<float>(vibrato)));
+    adapter.set_telemetry(
+        bow_frame({.held = {a3, c4, e4},
+                   .articulation = static_cast<std::size_t>(bow::Articulation::legato),
+                   .dynamics = static_cast<float>(dynamics),
+                   .vibrato = static_cast<float>(vibrato)}));
     QTest::qWait(poll_ms);
   }
   shoot_if_requested(*panel, QStringLiteral("bow.png"));

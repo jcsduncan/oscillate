@@ -32,14 +32,20 @@ Item {
     property bool wide: false
     property real wideShare: 0.5
     property int messageLines: 4
-    readonly property string state: library.state !== undefined ? library.state : "missing"
-    readonly property bool ready: state === "ready"
-    readonly property bool loading: state === "loading"
+    readonly property string libraryState: library.state !== undefined ? library.state : "missing"
+    readonly property bool ready: libraryState === "ready"
+    readonly property bool loading: libraryState === "loading"
     readonly property string command: library.install_command !== undefined ? library.install_command : ""
     readonly property string directory: library.directory !== undefined ? library.directory : ""
+    // Why it is missing, with the folder named rather than printed (the
+    // core's messages give the path; Show in folder opens it).
+    readonly property string why: {
+        const message = library.message !== undefined ? library.message : ""
+        return directory !== "" ? message.split(directory).join("its folder") : message
+    }
     readonly property bool showsCommand: !ready && !loading && command !== ""
     readonly property string stateText: ready ? "INSTALLED" : loading ? "LOADING"
-        : state === "invalid" ? "DAMAGED" : missingText
+        : libraryState === "invalid" ? "DAMAGED" : missingText
     readonly property real gap: theme.noticeGap
     signal reload()
 
@@ -50,7 +56,7 @@ Item {
     Accessible.name: notice.instrument + " " + notice.title.toLowerCase() + ": "
         + notice.stateText.toLowerCase()
     Accessible.description: notice.ready ? notice.library.name + ", " + notice.library.attribution
-        : notice.library.message !== undefined ? notice.library.message : ""
+        : notice.why
 
     // The state, and what the library is or why it is not there.
     Column {
@@ -122,8 +128,7 @@ Item {
             visible: !notice.ready
             text: notice.loading
                 ? notice.loadingText
-                : (notice.library.message !== undefined && notice.library.message !== ""
-                   ? notice.library.message + ". " : "")
+                : (notice.why !== "" ? notice.why + ". " : "")
                   + (notice.hint !== "" ? notice.hint
                      : notice.instrument + " is silent until its library is installed. It plays "
                        + (notice.library.required !== undefined ? notice.library.required : "") + ".")

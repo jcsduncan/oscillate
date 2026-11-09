@@ -335,6 +335,11 @@ void the_library_plate_guides_the_install() {
   require(text_of(*panel, QStringLiteral("fretLibraryState")) == QStringLiteral("NOT INSTALLED"),
           "the plate says it is not installed");
   require(!item(*panel, QStringLiteral("fretAttribution"))->isVisible(), "no credit yet");
+  const auto missing_directory =
+      controller.fret_library().value(QStringLiteral("directory")).toString();
+  require(!missing_directory.isEmpty() &&
+              !oscillate::test::panel_kit::shows_text(panel->root, missing_directory),
+          "the missing library's message names its folder, not its path");
   click(*panel, centre(item(*panel, QStringLiteral("fretCopyInstall"))));
   require(controller.clipboard_text() == qs(fret::library::install_command),
           "Copy puts the command on the clipboard");
@@ -355,7 +360,11 @@ void the_library_plate_guides_the_install() {
               !item(*panel, QStringLiteral("fretLibraryMessage"))->isVisible() &&
               !item(*panel, QStringLiteral("fretInstallCommand"))->isVisible(),
           "the library's own credit replaces the install steps");
+  const auto shown_directory =
+      controller.fret_library().value(QStringLiteral("directory")).toString();
   require(item(*panel, QStringLiteral("fretShowLibrary"))->isVisible() &&
+              !shown_directory.isEmpty() &&
+              !oscillate::test::panel_kit::shows_text(panel->root, shown_directory) &&
               !oscillate::test::panel_kit::shows_text(panel->root,
                                                       QString::fromStdString(directory.string())),
           "Show in folder stands in for the library's raw path");

@@ -137,6 +137,32 @@ KitTheme {
     choiceSpanLast: false
     choiceDisabledOpacity: disabledOpacity
 
+    // The panel: its designed size, margin and gaps; the section picker's
+    // height and the Solo or Section switch's width; the articulation
+    // card's width; the knob card's and the keyboard strip's heights, and a
+    // key's gap and corner.
+    property real panelWidth: 1240
+    property real panelHeight: 760
+    property real panelMargin: 24
+    property real panelGap: 14
+    property real pickerHeight: 40
+    property real modeWidth: 236
+    property real articulationWidth: 236
+    property real knobsHeight: 128
+    property real stripHeight: 92
+    property real keyGap: 1
+    property real keyRadius: 3
+    // The bow display's span, and how often the panel reads the engine
+    // while it plays and while it is idle.
+    property real historySeconds: 6
+    property real pollLiveMs: 33
+    property real pollIdleMs: 250
+    // The bow display's strokes and its playhead dot.
+    property real dynamicsStroke: 2.5
+    property real vibratoStroke: 1.5
+    property real playheadRadius: 5
+    property real playheadEdge: 2
+
     // Cards and their titles.
     property int cardPad: 16
     property int titleHeight: 18
