@@ -344,15 +344,33 @@ void PartialBank::set(double increment, double tilt, double odd, double stretch)
 
 // ---- Shimmer reverb ---------------------------------------------------------------
 
-void OctaveShifter::prepare(double rate) {
+void OctaveSweep::prepare(double rate) noexcept {
   window_ = std::round(0.05 * rate);
+  reset();
+}
+
+OctaveSweep::Taps OctaveSweep::taps() const noexcept {
+  // The delay falls by one frame per frame, so each tap reads at 2x speed.
+  const double second = phase_ + 0.5 >= 1.0 ? phase_ - 0.5 : phase_ + 0.5;
+  const double fade = std::sin(pi * phase_);
+  return {1.0 + window_ * (1.0 - phase_), 1.0 + window_ * (1.0 - second), fade * fade};
+}
+
+void OctaveSweep::advance() noexcept {
+  phase_ += 1.0 / window_;
+  if (phase_ >= 1.0) {
+    phase_ -= 1.0;
+  }
+}
+
+void OctaveShifter::prepare(double window) {
   // 8th-order Butterworth: the four section Qs.
   constexpr std::array<double, 4> q{0.5097956, 0.6013449, 0.8999762, 2.5629154};
   const double g = prewarp(0.2);
   for (std::size_t i = 0; i < q.size(); ++i) {
     band_coefficients_[i] = SvfCoefficients::make(g, 1.0 / q[i]);
   }
-  line_.prepare(static_cast<std::size_t>(window_) + 8);
+  line_.prepare(static_cast<std::size_t>(window) + 8);
   reset();
 }
 
@@ -361,25 +379,16 @@ void OctaveShifter::reset() noexcept {
     section.reset();
   }
   line_.reset();
-  phase_ = 0.0;
 }
 
-double OctaveShifter::process(double x) noexcept {
+double OctaveShifter::process(double x, const OctaveSweep::Taps& taps) noexcept {
   for (std::size_t i = 0; i < band_limit_.size(); ++i) {
     x = band_limit_[i].process(x, band_coefficients_[i]).low;
   }
   line_.write(x);
-  // The delay falls by one frame per frame, so each tap reads at 2x speed.
-  const double second = phase_ + 0.5 >= 1.0 ? phase_ - 0.5 : phase_ + 0.5;
-  const double a = line_.read(1.0 + window_ * (1.0 - phase_));
-  const double b = line_.read(1.0 + window_ * (1.0 - second));
-  const double fade = std::sin(pi * phase_);
-  const double value = fade * fade * a + (1.0 - fade * fade) * b;
-  phase_ += 1.0 / window_;
-  if (phase_ >= 1.0) {
-    phase_ -= 1.0;
-  }
-  return value;
+  const double a = line_.read(taps.first_delay);
+  const double b = line_.read(taps.second_delay);
+  return taps.first_weight * a + (1.0 - taps.first_weight) * b;
 }
 
 namespace {
@@ -390,9 +399,10 @@ constexpr double max_scale = 2.0;
 
 void ShimmerReverb::prepare(double rate) {
   rate_ = rate;
+  sweep_.prepare(rate);
   for (std::size_t i = 0; i < lines; ++i) {
     delays_[i].prepare(static_cast<std::size_t>(base_ms[i] * 1e-3 * rate * max_scale) + 64);
-    shifters_[i].prepare(rate);
+    shifters_[i].prepare(sweep_.window());
     lfo_increment_[i] = (0.11 + 0.07 * static_cast<double>(i)) / rate;
   }
   depth_ = 0.0003 * rate;
@@ -400,6 +410,7 @@ void ShimmerReverb::prepare(double rate) {
 }
 
 void ShimmerReverb::reset() noexcept {
+  sweep_.reset();
   for (std::size_t i = 0; i < lines; ++i) {
     delays_[i].reset();
     shifters_[i].reset();
@@ -439,9 +450,14 @@ StereoOut ShimmerReverb::process(double left, double right) noexcept {
   const double householder = 2.0 / static_cast<double>(lines) * sum;
   double wet_left = 0.0;
   double wet_right = 0.0;
+  const bool shifting = shimmer_ > 0.0;
+  const auto taps = shifting ? sweep_.taps() : OctaveSweep::Taps{};
+  if (shifting) {
+    sweep_.advance();
+  }
   for (std::size_t i = 0; i < lines; ++i) {
     const double mixed = m[i] - householder;
-    const double shifted = shimmer_ > 0.0 ? shifters_[i].process(mixed) : 0.0;
+    const double shifted = shifting ? shifters_[i].process(mixed, taps) : 0.0;
     const double feedback = gain_[i] * ((1.0 - shimmer_) * mixed + shimmer_ * shifted);
     const double input = (i % 2 == 0 ? left : right) * 0.5;
     delays_[i].write(feedback + input);

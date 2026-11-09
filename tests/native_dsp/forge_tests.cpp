@@ -1,6 +1,9 @@
 #include "effect_test_support.hpp"
 
+#include "oscillate/native_dsp/dsp/math.hpp"
 #include "oscillate/native_dsp/effects/forge.hpp"
+#include "oscillate/native_dsp/synth/filter.hpp"
+#include "oscillate/native_dsp/synth/oversampler.hpp"
 #include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/cases.hpp"
 #include "oscillate/test/check.hpp"
@@ -13,6 +16,7 @@
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <numbers>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -22,7 +26,7 @@
 // -90 dBFS, auto gain matching a -12 dBFS sine, colour transparent at low
 // level, the harmonic signature of each curve and of bias, the rectifier's
 // octave, a phase-aligned mix, click-free live model switches, the panel
-// curve and goldens.
+// curve, goldens, and the kernel against the shaper as first written.
 namespace {
 using namespace effect_test;
 namespace forge = oscillate::native_dsp::effects::forge;
@@ -262,6 +266,219 @@ void telemetry_draws_the_curve() {
   }
 }
 
+// The shaper as first written (ADR-0040): one channel at a time, one model
+// switch per sample, both antiderivatives on every oversampled step. The
+// kernel renders the same arithmetic faster, so it must match this to the
+// float output's rounding.
+namespace reference {
+constexpr std::size_t stages = 4;
+constexpr std::size_t factor = std::size_t{1} << stages;
+constexpr double bias_range = 0.75;
+constexpr double tube_negative = 0.5;
+constexpr double emphasis_hz = 700.0;
+constexpr double dc_hz = 5.0;
+constexpr double min_step = 1e-7;
+
+double log_cosh(double u) {
+  const double a = std::fabs(u);
+  return a + std::log1p(std::exp(-2.0 * a)) - std::numbers::ln2;
+}
+
+double fold_phase(double u) {
+  const double t = (u + 1.0) / 4.0;
+  return t - std::floor(t + 0.5);
+}
+
+double curve(int model, double u) {
+  if (model == models::tube)
+    return u >= 0.0 ? std::tanh(u) : std::tanh(tube_negative * u) / tube_negative;
+  if (model == models::transistor)
+    return u / std::sqrt(1.0 + u * u);
+  if (model == models::diode)
+    return std::copysign(1.0 - std::exp(-std::fabs(u)), u);
+  if (model == models::clip)
+    return std::clamp(u, -1.0, 1.0);
+  if (model == models::fold)
+    return 4.0 * std::fabs(fold_phase(u)) - 1.0;
+  if (model == models::sine_fold)
+    return std::sin(u);
+  if (model == models::rectify)
+    return std::fabs(std::tanh(u));
+  return std::tanh(u);
+}
+
+double antiderivative(int model, double u) {
+  const double a = std::fabs(u);
+  if (model == models::tube)
+    return u >= 0.0 ? log_cosh(u) : log_cosh(tube_negative * u) / (tube_negative * tube_negative);
+  if (model == models::transistor)
+    return std::sqrt(1.0 + u * u) - 1.0;
+  if (model == models::diode)
+    return a + std::exp(-a) - 1.0;
+  if (model == models::clip)
+    return a <= 1.0 ? 0.5 * u * u : a - 0.5;
+  if (model == models::fold) {
+    const double s = fold_phase(u);
+    return 8.0 * s * std::fabs(s) - 4.0 * s + 0.5;
+  }
+  if (model == models::sine_fold)
+    return 1.0 - std::cos(u);
+  if (model == models::rectify)
+    return std::copysign(log_cosh(u), u);
+  return log_cosh(u);
+}
+
+double antialiased(int model, double u, double previous) {
+  const double du = u - previous;
+  if (std::fabs(du) < min_step)
+    return curve(model, 0.5 * (u + previous));
+  return (antiderivative(model, u) - antiderivative(model, previous)) / du;
+}
+
+struct Shelf {
+  double b0 = 1.0;
+  double b1 = 0.0;
+  double a1 = 0.0;
+  double x1 = 0.0;
+  double y1 = 0.0;
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the kernel's Shelf::set.
+  void set(double n1, double n0, double d1, double d0, double k) {
+    const double a0 = d1 / k + d0;
+    b0 = (n1 / k + n0) / a0;
+    b1 = (n0 - n1 / k) / a0;
+    a1 = (d0 - d1 / k) / a0;
+  }
+  double process(double x) {
+    const double y = b0 * x + b1 * x1 - a1 * y1;
+    x1 = x;
+    y1 = y;
+    return y;
+  }
+};
+
+struct Resampler {
+  std::array<synth::Upsampler2x, stages> ups;
+  std::array<synth::Downsampler2x, stages> downs;
+  void up(double x, std::array<double, factor>& out) {
+    std::array<double, factor> in{};
+    out[0] = x;
+    for (std::size_t stage = 0, count = 1; stage < stages; ++stage, count *= 2) {
+      std::copy_n(out.begin(), count, in.begin());
+      for (std::size_t k = 0; k < count; ++k)
+        ups[stage].process(in[k], out[2 * k], out[2 * k + 1]);
+    }
+  }
+  double down(std::array<double, factor> in) {
+    for (std::size_t stage = stages, count = factor / 2; stage-- > 0; count /= 2) {
+      for (std::size_t k = 0; k < count; ++k)
+        in[k] = downs[stage].process(in[2 * k], in[2 * k + 1]);
+    }
+    return in[0];
+  }
+};
+
+// Fixed settings, as the kernel holds them once primed.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): parameter values, then audio.
+std::vector<double> channel(const std::vector<double>& values, const std::vector<double>& input) {
+  using oscillate::native_dsp::dsp::db_to_gain;
+  const int model = static_cast<int>(values[at("forge.model")]);
+  const double drive = db_to_gain(values[at("forge.drive")]);
+  const double bias = values[at("forge.bias")] * bias_range;
+  const double makeup =
+      values[at("forge.auto_gain")] != 0.0 ? db_to_gain(forge::makeup_db(values)) : 1.0;
+  const double mix = values[at("forge.mix")];
+  const double gain = db_to_gain(values[at("forge.output")]);
+  const double colour = db_to_gain(values[at("forge.colour")]);
+  const double k = std::tan(std::numbers::pi * emphasis_hz / rate);
+  const double dc_pole = std::exp(-2.0 * std::numbers::pi * dc_hz / rate);
+  const auto tone_coefficients = synth::make_filter_coefficients(
+      synth::FilterMode::lowpass_12, values[at("forge.tone")] / rate, 0.0, 1.0);
+  Shelf emphasis;
+  Shelf de_emphasis;
+  emphasis.set(colour, 1.0, 1.0, 1.0, k);
+  de_emphasis.set(1.0, 1.0, colour, 1.0, k);
+  synth::MultimodeFilter tone;
+  Resampler wet_path;
+  Resampler dry_path;
+  double previous_u = bias;
+  double previous_dry = 0.0;
+  double dc_x = 0.0;
+  double dc_y = 0.0;
+  const double offset = curve(model, bias);
+  std::vector<double> out(input.size());
+  std::array<double, factor> up{};
+  for (std::size_t i = 0; i < input.size(); ++i) {
+    const double x = static_cast<float>(input[i]);
+    wet_path.up(emphasis.process(x), up);
+    for (auto& sample : up) {
+      const double u = drive * sample + bias;
+      sample = antialiased(model, u, previous_u) - offset;
+      previous_u = u;
+    }
+    const double wet = de_emphasis.process(wet_path.down(up)) * makeup;
+    dry_path.up(x, up);
+    for (auto& sample : up) {
+      const double held = sample;
+      sample = 0.5 * (held + previous_dry);
+      previous_dry = held;
+    }
+    const double aligned = dry_path.down(up);
+    const double mixed = tone.process(aligned + (wet - aligned) * mix, tone_coefficients);
+    const double blocked = mixed - dc_x + dc_pole * dc_y;
+    dc_x = mixed;
+    dc_y = blocked;
+    out[i] = static_cast<float>(blocked * gain);
+  }
+  return out;
+}
+} // namespace reference
+
+void the_kernel_matches_the_reference_shaper() {
+  // Noise and a chord with silent gaps: the gaps exercise the antialiasing's
+  // midpoint branch and its return to full steps.
+  constexpr std::size_t frames = 24'000;
+  constexpr std::size_t gap = 1'500;
+  constexpr std::size_t gap_period = 6'000;
+  constexpr double tolerance = 1e-6;
+  auto input = noise(0.1, frames);
+  for (const double hz : {110.0, 277.18, 1'760.0}) {
+    const auto tone = sine(hz, 0.25, frames);
+    for (std::size_t i = 0; i < frames; ++i) {
+      input.left[i] += tone.left[i];
+      input.right[i] += 0.5 * tone.right[i];
+    }
+  }
+  for (std::size_t i = 0; i < frames; ++i) {
+    if (i % gap_period < gap) {
+      input.left[i] = 0.0;
+      input.right[i] = 0.0;
+    }
+  }
+  std::vector<std::pair<std::string, std::vector<double>>> settings;
+  for (const auto& entry : table().presets)
+    settings.emplace_back(std::string(entry.name), preset(table(), entry.name));
+  for (const int model : {models::tape, models::tube, models::transistor, models::diode,
+                          models::clip, models::fold, models::sine_fold, models::rectify}) {
+    auto values = shaper(model, 20.0, 0.3);
+    values[at("forge.mix")] = 0.7;
+    values[at("forge.colour")] = 6.0;
+    values[at("forge.tone")] = 12'000.0;
+    settings.emplace_back("model " + std::to_string(model) + " biased", values);
+  }
+  for (const auto& [name, values] : settings) {
+    auto runtime = make_effect(forge_engine(), values);
+    const auto out = process(*runtime, input, {.block = 0});
+    const auto left = reference::channel(values, input.left);
+    const auto right = reference::channel(values, input.right);
+    double worst = 0.0;
+    for (std::size_t i = 0; i < frames; ++i) {
+      worst =
+          std::max({worst, std::fabs(out.left[i] - left[i]), std::fabs(out.right[i] - right[i])});
+    }
+    REQUIRE_LT(worst, tolerance, name + " matches the reference shaper: " + std::to_string(worst));
+  }
+}
+
 struct Golden {
   std::string_view name;
   double level_db;
@@ -321,5 +538,7 @@ int main(int argc, char** argv) {
           {"live_model_switches_are_click_free", [] { live_model_switches_are_click_free(); }},
           {"telemetry_draws_the_curve", [] { telemetry_draws_the_curve(); }},
           {"presets_match_golden_fingerprints", [] { presets_match_golden_fingerprints(); }},
+          {"the_kernel_matches_the_reference_shaper",
+           [] { the_kernel_matches_the_reference_shaper(); }},
       });
 }

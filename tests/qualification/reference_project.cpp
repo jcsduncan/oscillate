@@ -10,6 +10,7 @@
 #include "oscillate/application/routed_audio_source.hpp"
 #include "oscillate/audio_io/pipewire_output.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
+#include "oscillate/engine/audio_worker_pool.hpp"
 #include "oscillate/foundation/trace.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
 
@@ -141,6 +142,8 @@ struct Options {
   std::optional<fs::path> trace;
   std::optional<fs::path> vst3_effect;
   std::optional<fs::path> vst3_instrument;
+  // Audio helpers; the live playback default when not given.
+  std::optional<std::size_t> workers;
   fs::path scratch;
 };
 
@@ -167,7 +170,7 @@ Options parse(int argc, char** argv) {
   constexpr std::string_view usage =
       "usage: oscillate_reference_project --reference light|heavy --frames 64|128 "
       "--scratch DIR [--seconds N] [--warmup BLOCKS] [--pipewire-target SERIAL] "
-      "[--trace FILE] [--vst3-effect BUNDLE] [--vst3-instrument BUNDLE]";
+      "[--trace FILE] [--vst3-effect BUNDLE] [--vst3-instrument BUNDLE] [--workers N]";
   if (argc % 2 == 0)
     throw std::runtime_error(std::string(usage));
   Options options;
@@ -194,6 +197,14 @@ Options parse(int argc, char** argv) {
       options.vst3_effect = fs::path(value);
     } else if (key == "--vst3-instrument") {
       options.vst3_instrument = fs::path(value);
+    } else if (key == "--workers") {
+      std::size_t workers = 0;
+      const auto parsed = std::from_chars(value.data(), value.data() + value.size(), workers);
+      if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() ||
+          workers > engine::AudioWorkerPool::max_workers)
+        throw std::runtime_error("--workers is 0 to " +
+                                 std::to_string(engine::AudioWorkerPool::max_workers));
+      options.workers = workers;
     } else {
       throw std::runtime_error(std::string(usage));
     }
@@ -543,6 +554,10 @@ void measure(const Options& options, const fs::path& root, const Vst3Parts& vst3
 #endif
   if (options.trace && !foundation::trace::start())
     throw std::runtime_error("cannot start the performance trace");
+  // The helpers live playback renders with (ADR-0048): a sink starts them at
+  // the callback's priority, the fake callback as ordinary threads.
+  engine::AudioWorkerPool workers(
+      options.workers.value_or(engine::AudioWorkerPool::default_worker_count()));
   app::RoutedPlaybackControl control(model, limits, provider.get());
   take(control.submit_current(), "graph");
   auto source = take(app::RoutedAudioSource::prepare(root, *model.snapshot(), control,
@@ -560,7 +575,7 @@ void measure(const Options& options, const fs::path& root, const Vst3Parts& vst3
         &allowed, [](const void* context) noexcept {
           return static_cast<const std::atomic<bool>*>(context)->load(std::memory_order_acquire);
         }};
-    audio::PipeWireOutput output(source->render_source(), cursor, permission);
+    audio::PipeWireOutput output(source->render_source(&workers), cursor, permission);
     take(output.start(sample_rate, static_cast<std::uint32_t>(options.frames),
                       *options.pipewire_target),
          "PipeWire start");
@@ -609,7 +624,8 @@ void measure(const Options& options, const fs::path& root, const Vst3Parts& vst3
               << " missing_frames=" << source_status.missing_frames
               << " worker_failed=" << source_status.worker_failed
               << " callback_blocks=" << status.measured_callback_blocks.value_or(0)
-              << " over_period=" << status.callback_over_period_blocks.value_or(0) << " max_us="
+              << " over_period=" << status.callback_over_period_blocks.value_or(0)
+              << " workers=" << status.realtime_workers << " max_us="
               << static_cast<double>(status.max_callback_duration_ns.value_or(0)) /
                      nanoseconds_per_microsecond
               << " xruns="
@@ -621,7 +637,8 @@ void measure(const Options& options, const fs::path& root, const Vst3Parts& vst3
         source_status.missing_frames != 0 || source_status.worker_failed)
       throw std::runtime_error("live playback failed a correctness check");
   } else {
-    const auto callback = source->render_source();
+    const auto callback = source->render_source(&workers);
+    workers.start_owned_threads(workers.wanted_workers());
     std::array<engine::StereoFrame, max_frames> stereo{};
     std::array<float, max_frames * stereo_channels> interleaved{};
     const auto frame_span = std::span(stereo).first(options.frames);
@@ -669,6 +686,8 @@ void measure(const Options& options, const fs::path& root, const Vst3Parts& vst3
     const auto wall_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - wall_started).count();
     const auto windows = sampler->finish();
+    const auto helpers = workers.attached_workers();
+    workers.stop_owned_threads();
     const auto source_status = source->status();
     std::ranges::sort(blocks);
     double total = 0.0;
@@ -678,7 +697,8 @@ void measure(const Options& options, const fs::path& root, const Vst3Parts& vst3
               << " mean_us=" << total / static_cast<double>(blocks.size())
               << " p50_us=" << percentile(blocks, median) << " p99_us=" << percentile(blocks, tail)
               << " max_us=" << blocks.back() << " over_period=" << over_period
-              << " period_us=" << period_us << " render_failures=" << render_failures
+              << " workers=" << helpers << " period_us=" << period_us
+              << " render_failures=" << render_failures
               << " missing_frames=" << source_status.missing_frames
               << " worker_failed=" << source_status.worker_failed
               << " audible_blocks=" << audible_blocks

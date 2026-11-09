@@ -55,7 +55,7 @@ never reused. 0070 was never assigned.
 | 0045 | [The development build](0045-development-build.md) | Accepted and implemented |
 | 0046 | [The workspace redesign](0046-workspace-redesign.md) | Accepted and implemented |
 | 0047 | [The classic processors become engines](0047-classic-processors-as-engines.md) | Accepted and implemented; convolution remains its own kind |
-| 0048 | [Parallel real-time rendering](0048-parallel-audio-rendering.md) | Accepted and implemented |
+| 0048 | [Parallel real-time rendering](0048-parallel-audio-rendering.md) | Superseded in part by ADR-0110 (default worker count); otherwise accepted and implemented |
 | 0049 | [Live graph switching and latency handover](0049-live-graph-switching.md) | Accepted and implemented; every chain switches live (ADR-0050); held path removed (ADR-0094) |
 | 0050 | [One chain per track](0050-one-chain-per-track.md) | Accepted and implemented; export has two VST3 renderers; superseded in part by ADR-0093 for MIDI while playing |
 | 0051 | [Automation drawn on the arrangement](0051-arrangement-automation.md) | Accepted and implemented; inspector forms to retire |
@@ -112,3 +112,4 @@ never reused. 0070 was never assigned.
 | 0104 | [Native engines share a neutral control layer](0104-native-processing-layers.md) | Accepted; implemented |
 | 0107 | [MP3 import decodes with libmpg123, scanning the whole stream](0107-mp3-decoding-with-libmpg123.md) | Accepted; implemented |
 | 0108 | [Edge: a clipper under a true-peak ceiling — linear-phase oversampling to 16×, antiderivative antialiasing, a BS.1770 guard](0108-edge-clipper.md) | Accepted; implemented |
+| 0110 | [Heavy projects across the helpers: qualification with the live helpers, a helper per hardware thread up to seven, cheaper Forge and Shape spectra](0110-heavy-projects-across-the-helpers.md) | Accepted; implemented |

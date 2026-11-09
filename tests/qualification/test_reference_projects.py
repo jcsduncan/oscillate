@@ -11,14 +11,15 @@ WORKLOAD = (
 )
 FAKE = (
     "result mode=fake frames=64 blocks=15000 mean_us=200 p50_us=180 p99_us=400 max_us=900 "
-    "over_period=0 period_us=1333.333 render_failures=0 missing_frames=0 worker_failed=0 "
+    "over_period=0 workers=3 period_us=1333.333 render_failures=0 missing_frames=0 worker_failed=0 "
     "audible_blocks=15100 callback_allocations=0 process_cpu_percent=85.5 cpu_window_p50=80 "
     "cpu_window_p99=120 cpu_window_max=130 cpu_windows=200 max_rss_kib=409600 cores=16"
 )
 LIVE = (
     "result mode=live frames=128 observed_frames=128 graph_rate=48000 completed_frames=969600 "
     "target_frames=969600 render_failures=0 missing_frames=0 worker_failed=0 callback_blocks=7575 "
-    "over_period=0 max_us=1200 xruns=unavailable period_us=2666.667 process_cpu_percent=90 "
+    "over_period=0 workers=3 max_us=1200 xruns=unavailable period_us=2666.667 "
+    "process_cpu_percent=90 "
     "cpu_window_p50=88 cpu_window_p99=110 cpu_window_max=115 cpu_windows=200 max_rss_kib=1024 "
     "cores=16"
 )
@@ -95,7 +96,9 @@ class Report(unittest.TestCase):
             **summarise(WORKLOAD + "\n" + FAKE, TRACE),
         }
         text = markdown({"host": "h", "cores": 16, "mode": "fake", "seconds": 20, "runs": [run]})
-        self.assertIn("| heavy | 64 | 1 | 180 | 400 | 900 | 30.0% | 0 | 85.5 | 120 | 400.0 |", text)
+        self.assertIn(
+            "| heavy | 64 | 1 | 3 | 180 | 400 | 900 | 30.0% | 0 | 85.5 | 120 | 400.0 |", text
+        )
         self.assertIn("| Nova | 2 | 50.0 |", text)
 
 

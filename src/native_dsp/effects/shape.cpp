@@ -2,12 +2,14 @@
 
 #include "dsp/fft.hpp"
 #include "effect_dsp.hpp"
+#include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
 #include "shape_presets.hpp"
 #include "shape_table.hpp"
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <complex>
 #include <cstddef>
@@ -16,6 +18,7 @@
 #include <numbers>
 #include <optional>
 #include <span>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -86,18 +89,25 @@ struct Cascade {
 
 using native_dsp::dsp::gain_to_db;
 
-// A display spectrum of a stereo signal, as an EQ draws behind its curve:
-// the mono sum through a 4-term Blackman-Harris window (longer at higher
-// rates, so the low end keeps its resolution), every quarter window, as
-// power per log band. A band narrower than a bin reads the nearest bin.
-// Powers are averaged over about 250 ms. Allocates only on construction.
-class DisplaySpectrum {
+// Display spectra of the EQ's input and output, as an EQ draws behind its
+// curve: each signal's mono sum through a 4-term Blackman-Harris window
+// (longer at higher rates, so the low end keeps its resolution), every
+// quarter window, as power per log band. A band narrower than a bin reads
+// the nearest bin. Powers are averaged over about 250 ms. Allocates only on
+// construction.
+//
+// One complex transform carries both signals (input as the real part,
+// output as the imaginary part), and each instance starts its hops at its
+// own point of the window, so the transforms of many EQs started together
+// fall in different blocks instead of all in one.
+class DisplaySpectra {
 public:
-  explicit DisplaySpectrum(double rate)
+  DisplaySpectra(double rate, std::size_t instance)
       : rate_(rate), size_(rate > 100'000.0  ? 16'384
                            : rate > 50'000.0 ? 8'192
                                              : 4'096),
-        hop_(size_ / 4), fft_(size_), window_(size_), ring_(size_, 0.0F), data_(size_) {
+        hop_(size_ / 4), stagger_(staggered(instance, hop_)), fft_(size_), window_(size_),
+        input_ring_(size_, 0.0F), output_ring_(size_, 0.0F), data_(size_) {
     double sum = 0.0;
     for (std::size_t i = 0; i < size_; ++i) {
       const double x = 2.0 * std::numbers::pi * static_cast<double>(i) / static_cast<double>(size_);
@@ -111,66 +121,100 @@ public:
     alpha_ = 1.0 - std::exp(-seconds_per_hop / 0.25);
     for (std::size_t b = 0; b <= spectrum_bands; ++b)
       edges_[b] = 20.0 * std::pow(1'000.0, static_cast<double>(b) / spectrum_bands);
-    power_.fill(0.0);
+    reset();
   }
 
-  void push(std::span<const engine::StereoFrame> audio) noexcept {
-    for (const auto& frame : audio) {
-      ring_[write_] = 0.5F * (frame.left + frame.right);
-      write_ = (write_ + 1) % size_;
-      if (++since_ == hop_) {
-        since_ = 0;
-        analyse();
-      }
+  // One frame of each signal's mono sum.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the EQ's input, then its output.
+  void push(float input, float output) noexcept {
+    input_ring_[write_] = input;
+    output_ring_[write_] = output;
+    write_ = (write_ + 1) % size_;
+    if (++since_ == hop_) {
+      since_ = 0;
+      analyse();
     }
   }
   void reset() noexcept {
-    std::ranges::fill(ring_, 0.0F);
-    power_.fill(0.0);
-    since_ = 0;
+    std::ranges::fill(input_ring_, 0.0F);
+    std::ranges::fill(output_ring_, 0.0F);
+    input_power_.fill(0.0);
+    output_power_.fill(0.0);
+    since_ = stagger_;
   }
-  [[nodiscard]] double db(std::size_t band) const noexcept {
-    return power_[band] > 1e-20 ? 10.0 * std::log10(power_[band]) : -200.0;
+  [[nodiscard]] double input_db(std::size_t band) const noexcept { return db(input_power_[band]); }
+  [[nodiscard]] double output_db(std::size_t band) const noexcept {
+    return db(output_power_[band]);
   }
 
 private:
+  // Spreads instances over a hop by the golden ratio, so any number of them
+  // stay apart.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): an instance number and a length.
+  [[nodiscard]] static std::size_t staggered(std::size_t instance, std::size_t hop) noexcept {
+    const double spread = static_cast<double>(instance) * std::numbers::phi;
+    return static_cast<std::size_t>((spread - std::floor(spread)) * static_cast<double>(hop));
+  }
+  [[nodiscard]] static double db(double power) noexcept {
+    return power > 1e-20 ? 10.0 * std::log10(power) : -200.0;
+  }
+
   void analyse() noexcept {
-    for (std::size_t i = 0; i < size_; ++i)
-      data_[i] = {ring_[(write_ + i) % size_] * window_[i], 0.0};
+    for (std::size_t i = 0; i < size_; ++i) {
+      const std::size_t at = (write_ + i) % size_;
+      data_[i] = {input_ring_[at] * window_[i], output_ring_[at] * window_[i]};
+    }
     fft_.forward(data_);
     const double bin_hz = rate_ / static_cast<double>(size_);
-    const auto bin_power = [&](std::size_t k) {
-      return std::norm(data_[std::min(k, size_ / 2)]) * scale_ * scale_;
+    // Z = X + iY for real x and y: X[k] = (Z[k] + conj Z[-k]) / 2 and
+    // Y[k] = (Z[k] - conj Z[-k]) / 2i.
+    const auto bin_powers = [&](std::size_t k) {
+      const std::size_t bin = std::min(k, size_ / 2);
+      const auto z = data_[bin];
+      const auto mirror = std::conj(data_[(size_ - bin) % size_]);
+      const double power = 0.25 * scale_ * scale_;
+      return std::pair{std::norm(z + mirror) * power, std::norm(z - mirror) * power};
     };
     for (std::size_t b = 0; b < spectrum_bands; ++b) {
       const auto low = static_cast<std::size_t>(std::ceil(edges_[b] / bin_hz));
       const auto high = static_cast<std::size_t>(std::floor(edges_[b + 1] / bin_hz));
-      double power = 0.0;
+      double input = 0.0;
+      double output = 0.0;
       if (high >= low) {
-        for (std::size_t k = low; k <= std::min(high, size_ / 2); ++k)
-          power = std::max(power, bin_power(k));
+        for (std::size_t k = low; k <= std::min(high, size_ / 2); ++k) {
+          const auto [in, out] = bin_powers(k);
+          input = std::max(input, in);
+          output = std::max(output, out);
+        }
       } else {
         const double centre = std::sqrt(edges_[b] * edges_[b + 1]) / bin_hz;
-        power = bin_power(static_cast<std::size_t>(std::lround(centre)));
+        std::tie(input, output) = bin_powers(static_cast<std::size_t>(std::lround(centre)));
       }
-      power_[b] += alpha_ * (power - power_[b]);
+      input_power_[b] += alpha_ * (input - input_power_[b]);
+      output_power_[b] += alpha_ * (output - output_power_[b]);
     }
   }
 
   double rate_;
   std::size_t size_;
   std::size_t hop_;
+  std::size_t stagger_;
   native_dsp::dsp::Fft fft_;
   std::vector<double> window_;
-  std::vector<float> ring_;
+  std::vector<float> input_ring_;
+  std::vector<float> output_ring_;
   std::vector<std::complex<double>> data_;
   std::array<double, spectrum_bands + 1> edges_{};
-  std::array<double, spectrum_bands> power_{};
+  std::array<double, spectrum_bands> input_power_{};
+  std::array<double, spectrum_bands> output_power_{};
   double scale_ = 1.0;
   double alpha_ = 1.0;
   std::size_t write_ = 0;
   std::size_t since_ = 0;
 };
+
+// Each new kernel's place among the staggered spectra.
+std::atomic<std::size_t> next_spectra_instance{0};
 
 class ShapeKernel final : public EffectKernel {
 public:
@@ -178,7 +222,8 @@ public:
       : sample_rate_(sample_rate), rate_(dsp::classic_rate(sample_rate)),
         hold_(std::exp(std::log(1e-3) / (peak_hold_seconds * sample_rate))),
         eq_(std::in_place, prepared), cascade_(canonical(initial)), wanted_(initial),
-        input_spectrum_(sample_rate), output_spectrum_(sample_rate) {}
+        mono_input_(engine::max_midi_block_frames),
+        spectra_(sample_rate, next_spectra_instance.fetch_add(1, std::memory_order_relaxed)) {}
 
   void control(std::span<const double> v, std::uint32_t, const Transport&) noexcept override {
     for (std::size_t b = 0; b < bands; ++b) {
@@ -199,12 +244,17 @@ public:
                std::span<const engine::StereoFrame>) noexcept override {
     primed_ = true;
     meter(input_, audio);
-    input_spectrum_.push(audio);
+    const auto input = std::span(mono_input_).first(std::min(audio.size(), mono_input_.size()));
+    for (std::size_t i = 0; i < input.size(); ++i) {
+      input[i] = 0.5F * (audio[i].left + audio[i].right);
+    }
     // The classic runtime reads only the state generation from its context.
     // NOLINTNEXTLINE(bugprone-unchecked-optional-access): eq_ is engaged from construction.
     eq_->process(audio, engine::BlockContext{0, generation_});
     meter(output_, audio);
-    output_spectrum_.push(audio);
+    for (std::size_t i = 0; i < input.size(); ++i) {
+      spectra_.push(input[i], 0.5F * (audio[i].left + audio[i].right));
+    }
   }
 
   void reset() noexcept override {
@@ -213,8 +263,7 @@ public:
     rebuild();
     input_ = {};
     output_ = {};
-    input_spectrum_.reset();
-    output_spectrum_.reset();
+    spectra_.reset();
   }
 
   [[nodiscard]] std::size_t telemetry(std::span<float> out) const noexcept override {
@@ -226,8 +275,8 @@ public:
       out[telemetry::output_peak + c] = static_cast<float>(gain_to_db(output_[c]));
     }
     for (std::size_t b = 0; b < spectrum_bands; ++b) {
-      out[telemetry::input_spectrum + b] = static_cast<float>(input_spectrum_.db(b));
-      out[telemetry::output_spectrum + b] = static_cast<float>(output_spectrum_.db(b));
+      out[telemetry::input_spectrum + b] = static_cast<float>(spectra_.input_db(b));
+      out[telemetry::output_spectrum + b] = static_cast<float>(spectra_.output_db(b));
     }
     return telemetry::size;
   }
@@ -372,8 +421,9 @@ private:
   bool primed_ = false;
   std::array<double, 2> input_{};
   std::array<double, 2> output_{};
-  DisplaySpectrum input_spectrum_;
-  DisplaySpectrum output_spectrum_;
+  // The input's mono sum while the EQ overwrites the block.
+  std::vector<float> mono_input_;
+  DisplaySpectra spectra_;
 };
 
 std::unique_ptr<EffectKernel> create_kernel(std::span<const double> values, double sample_rate) {

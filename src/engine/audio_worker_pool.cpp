@@ -7,6 +7,10 @@
 #include <algorithm>
 #include <bit>
 
+#if defined(__linux__)
+#include <sched.h>
+#endif
+
 #if defined(__x86_64__) || defined(__i386__)
 #include <immintrin.h>
 #endif
@@ -31,6 +35,18 @@ constexpr std::uint64_t pack(std::uint32_t batch, std::size_t count, std::size_t
   return (std::uint64_t{batch} << 40) | (std::uint64_t{count} << 20) | std::uint64_t{next};
 }
 
+// The CPUs this process may run on: its affinity mask, which a container
+// or taskset narrows, or every online CPU without one.
+std::size_t allowed_cpus() noexcept {
+#if defined(__linux__)
+  cpu_set_t allowed;
+  CPU_ZERO(&allowed);
+  if (sched_getaffinity(0, sizeof allowed, &allowed) == 0)
+    return static_cast<std::size_t>(CPU_COUNT(&allowed));
+#endif
+  return static_cast<std::size_t>(std::thread::hardware_concurrency());
+}
+
 } // namespace
 
 AudioWorkerPool::AudioWorkerPool(std::size_t wanted_workers) noexcept
@@ -39,9 +55,7 @@ AudioWorkerPool::AudioWorkerPool(std::size_t wanted_workers) noexcept
 AudioWorkerPool::~AudioWorkerPool() { stop_owned_threads(); }
 
 std::size_t AudioWorkerPool::default_worker_count() noexcept {
-  const auto threads = static_cast<std::size_t>(std::thread::hardware_concurrency());
-  const auto cores = std::max<std::size_t>(1, threads / 2);
-  return std::min(cores - 1, max_workers);
+  return default_workers_for(allowed_cpus());
 }
 
 void AudioWorkerPool::request_stop() noexcept {

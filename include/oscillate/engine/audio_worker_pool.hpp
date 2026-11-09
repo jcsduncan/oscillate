@@ -56,9 +56,17 @@ public:
   // Every worker must have returned from run_worker() and been joined.
   ~AudioWorkerPool();
 
-  // The default worker count for live playback on this machine: one fewer
-  // than the physical cores, assuming two hardware threads per core, capped.
+  // The most workers the default starts: the count measured to help
+  // (ADR-0048, ADR-0085, ADR-0110). OSCILLATE_AUDIO_WORKERS may ask for more.
+  static constexpr std::size_t default_worker_cap = 7;
+  // The default worker count for live playback on this machine:
+  // default_workers_for() the CPUs this process may run on.
   [[nodiscard]] static std::size_t default_worker_count() noexcept;
+  // One fewer than `cpus` (hardware threads, SMT siblings included), so the
+  // callback keeps one, and at most default_worker_cap.
+  [[nodiscard]] static constexpr std::size_t default_workers_for(std::size_t cpus) noexcept {
+    return cpus <= 1 ? 0 : (cpus - 1 < default_worker_cap ? cpus - 1 : default_worker_cap);
+  }
 
   [[nodiscard]] std::size_t wanted_workers() const noexcept { return wanted_; }
   [[nodiscard]] std::size_t attached_workers() const noexcept {
