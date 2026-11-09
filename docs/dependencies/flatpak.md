@@ -76,6 +76,15 @@ VST3 hosting is experimental. In the Flatpak:
   needs a host library the runtime lacks fails to load.
 - Plug-in editors embed X11 windows, so they need X11 or XWayland.
 
+## Metainfo
+
+The [metainfo template](../../assets/packaging/io.github.jcsduncan.Oscillate.metainfo.xml)
+has no `<releases>`. `package_flatpak.py stage` installs it to
+`/app/share/metainfo/` with the newest releases of
+[`CHANGELOG.md`](../../CHANGELOG.md), which Release Please writes:
+`package_appstream.py` turns each release's sections into a `<description>`
+and drops the scopes, pull request and commit links.
+
 ## Notices and source offer
 
 flatpak-builder installs each module's licence files under
@@ -96,7 +105,7 @@ sources.
 
 | Stage | Check |
 | --- | --- |
-| Lint | `flatpak-builder-lint manifest` on the Flathub form of the manifest, `flatpak-builder-lint appstream` and `appstreamcli validate` on the [metainfo](../../assets/packaging/io.github.jcsduncan.Oscillate.metainfo.xml), and `flatpak-builder-lint repo` on the built repository, screenshots mirrored as Flathub does. |
+| Lint | `flatpak-builder-lint manifest` on the Flathub form of the manifest, `flatpak-builder-lint appstream` and `appstreamcli validate` on the generated metainfo, and `flatpak-builder-lint repo` on the built repository, screenshots mirrored as Flathub does. |
 | Build | `stage` binds the build to the `flatpak` profile's switches, as the other packages are bound to theirs. |
 | Runtime dependencies | `package_flatpak.py inventory` resolves every ELF under `/app` in the SDK sandbox, `/app/lib` first on the library path; `package_dependencies.py verify --profile flatpak` fails on an unresolved library, a runtime other than the profile's, a library no declared module owns, or a bundled module without a licence file or a source-offer entry. |
 | Smoke | [`flatpak-smoke.sh`](../../tests/packaging/flatpak-smoke.sh) installs the bundle, creates and reopens a project with `--check-startup` offscreen, uninstalls with `--delete-data`, and checks that nothing is left. |
@@ -121,12 +130,11 @@ Flathub builds from its own repository, `flathub/io.github.jcsduncan.Oscillate`,
 which holds the manifest in Flathub's form: Oscillate's source is the release
 tag at its commit instead of the local tree. For a release `vX.Y.Z`:
 
-1. Add `<release version="X.Y.Z" date="YYYY-MM-DD">` with its notes to the
-   metainfo before tagging.
+1. Tag the release Release Please made, so `CHANGELOG.md` has its notes.
 2. Write the submission:
    `python3 -I scripts/package_flatpak.py flathub --tag vX.Y.Z --commit $(git rev-parse vX.Y.Z^{commit}) --output-dir build/flathub`.
-   It refuses a tag that is not the project version, or a version the
-   metainfo has no release for. It writes the manifest, its patches and
+   It refuses a tag that is not the project version, or a version
+   `CHANGELOG.md` has no release for. It writes the manifest, its patches and
    `flathub.json`, which limits the build to x86-64.
 3. For the first submission, open a pull request against the `new-pr` branch
    of `flathub/flathub` with those files; once accepted, Flathub creates the

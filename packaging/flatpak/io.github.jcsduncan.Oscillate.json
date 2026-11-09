@@ -88,7 +88,6 @@
         "cmake --install build/package-flatpak",
         "install -Dm644 assets/packaging/oscillate.desktop ${FLATPAK_DEST}/share/applications/oscillate.desktop",
         "install -Dm644 assets/packaging/oscillate.svg ${FLATPAK_DEST}/share/icons/hicolor/scalable/apps/oscillate.svg",
-        "install -Dm644 assets/packaging/io.github.jcsduncan.Oscillate.metainfo.xml ${FLATPAK_DEST}/share/metainfo/io.github.jcsduncan.Oscillate.metainfo.xml",
         "python3 -I scripts/package_flatpak.py stage --build-dir build/package-flatpak --prefix ${FLATPAK_DEST} --commit local --version-suffix local"
       ],
       "sources": [

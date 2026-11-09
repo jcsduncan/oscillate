@@ -14,8 +14,9 @@ concrete forms (docs/dependencies/flatpak.md):
                   the Flathub submission: the manifest building the tagged
                   commit, its patches and flathub.json
   stage --build-dir DIR --prefix /app --commit SHA (--release-tag | --version-suffix)
-                  run inside the Flatpak build: the feature list, notices and
-                  source offer under /app/share/doc/oscillate
+                  run inside the Flatpak build: the metainfo with its releases
+                  from CHANGELOG.md, and the feature list, notices and source
+                  offer under /app/share/doc/oscillate
   inventory --build-dir DIR --manifest FILE --output FILE
                   the sidecar of a finished flatpak-builder directory, which
                   package_dependencies.py verify checks against the profile
@@ -32,11 +33,11 @@ import re
 import shutil
 import subprocess
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 # Run as `python3 -I`, which leaves the script's directory off the path.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from package_appstream import CHANGELOG, METAINFO_NAME, load_releases, write_metainfo
 from package_notices import stage_notices
 from package_profiles import (
     FLATPAK_APP_ID,
@@ -54,7 +55,6 @@ from package_sources import OFFER_STATUS
 PROFILE = PROFILES["flatpak"]
 MANIFEST_DIR = Path("packaging/flatpak")
 MANIFEST = SOURCE_ROOT / MANIFEST_DIR / f"{FLATPAK_APP_ID}.json"
-METAINFO = SOURCE_ROOT / "assets/packaging" / f"{FLATPAK_APP_ID}.metainfo.xml"
 PATCH_DIR = "patches"
 PROJECT_MODULE = "oscillate"
 # Flathub builds every architecture a manifest does not exclude; the package
@@ -68,6 +68,8 @@ STAGE_COMMAND = (
 # What the manifest in the source tree passes: a local build has no commit.
 LOCAL_COMMIT = "local"
 LOCAL_VERSION_ARGS = ("--version-suffix", "local")
+# Where the metainfo, with its generated releases, goes under /app.
+METAINFO_DIR = Path("share/metainfo")
 # Where the package's documents go under /app.
 DOC_DIR = Path("share/doc/oscillate")
 THIRD_PARTY_DIR = DOC_DIR / "third-party"
@@ -180,10 +182,6 @@ def directory_source(template: dict, directory: Path) -> dict:
     return source
 
 
-def metainfo_versions(path: Path = METAINFO) -> list[str]:
-    return [release.get("version", "") for release in ET.parse(path).iter("release")]
-
-
 def project_version(cmakelists: Path = SOURCE_ROOT / "CMakeLists.txt") -> str:
     match = PROJECT_VERSION.search(cmakelists.read_text(encoding="utf-8"))
     if match is None:
@@ -197,16 +195,13 @@ def write_flathub(
     tag: str,
     commit: str,
     project: str | None = None,
-    metainfo: Path = METAINFO,
+    changelog: Path = CHANGELOG,
 ) -> Path:
     """The Flathub submission for one release tag of the project version
     (by default the one CMakeLists.txt declares)."""
     version = package_version(project or project_version(), tag, None)
-    if version not in metainfo_versions(metainfo):
-        raise ValueError(
-            f'{metainfo.name} has no <release version="{version}">; '
-            "add the release notes before submitting"
-        )
+    if version not in (release.version for release in load_releases(changelog)):
+        raise ValueError(f"{changelog.name} has no release {version} for the metainfo")
     manifest = concrete_manifest(
         load_manifest(),
         project_source=git_source(commit, tag),
@@ -343,11 +338,14 @@ def stage(
     release_tag: str | None,
     version_suffix: str | None,
 ) -> dict:
-    """Write the feature list, notices and source offer under prefix."""
+    """Write the metainfo, feature list, notices and source offer under prefix."""
     inputs = check_build(build_dir, PROFILE, release_tag=release_tag, version_suffix=version_suffix)
     for executable in PROJECT_EXECUTABLES:
         if not (prefix / executable).is_file():
             raise ValueError(f"{prefix / executable} is not installed")
+    metainfo = prefix / METAINFO_DIR / METAINFO_NAME
+    write_metainfo(metainfo)
+    metainfo.chmod(FILE_MODE)
     write_document(prefix / DOC_DIR / "README", feature_readme(PROFILE, inputs.version))
     licences = {
         module: sorted(path for path in (prefix / LICENCE_DIR / module).glob("*") if path.is_file())

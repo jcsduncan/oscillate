@@ -198,7 +198,8 @@ jobs:
       APP_ID: io.github.jcsduncan.Oscillate
       MANIFEST: build/flatpak/io.github.jcsduncan.Oscillate.json
       FLATHUB_MANIFEST: build/flathub/io.github.jcsduncan.Oscillate.json
-      METAINFO: assets/packaging/io.github.jcsduncan.Oscillate.metainfo.xml
+      # The metainfo as the package installs it, releases from CHANGELOG.md.
+      METAINFO: build/flatpak/io.github.jcsduncan.Oscillate.metainfo.xml
       BUILD_DIR: build/flatpak/app
       REPO: build/flatpak/repo
       STATE_DIR: .flatpak-builder
@@ -223,6 +224,7 @@ jobs:
           # shellcheck disable=SC2086
           python3 -I scripts/package_flatpak.py manifest --git-commit --commit "$commit" \
             $version_args --output "$FLATHUB_MANIFEST"
+          python3 -I scripts/package_appstream.py --output "$METAINFO"
       - name: Lint the manifest and metadata
         run: |
           flatpak-builder-lint manifest "$FLATHUB_MANIFEST"

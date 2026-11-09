@@ -11,13 +11,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import package_flatpak
+from package_appstream import METAINFO, METAINFO_NAME, load_releases
 from package_flatpak import (
     LIBRARY_ELF,
     LICENCE_DIR,
     LOCAL_COMMIT,
     LOCAL_VERSION_ARGS,
     MANIFEST,
-    METAINFO,
+    METAINFO_DIR,
     OFFER_JSON,
     OFFER_TEXT,
     OTHER_ELF,
@@ -54,6 +55,9 @@ COMMIT = "a" * 40
 TAG = "v1.2.3"
 PROJECT_VERSION = "1.2.3"
 SUFFIX = "ci.1.gabcdef0"
+# A release of the changelog fixture other than PROJECT_VERSION.
+EARLIER_VERSION = "1.2.2"
+RELEASE_DATE = "2026-11-09"
 DOC = SOURCE_ROOT / "docs/dependencies/flatpak.md"
 LIBSNDFILE = "libsndfile"
 LIBSNDFILE_SONAME = "libsndfile.so.1"
@@ -167,9 +171,9 @@ class FlathubTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="oscillate-flathub-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        self.metainfo = self.root / "metainfo.xml"
-        self.metainfo.write_text(
-            f'<component><releases><release version="{PROJECT_VERSION}"/></releases></component>'
+        self.changelog = self.root / "CHANGELOG.md"
+        self.changelog.write_text(
+            f"# Changelog\n\n## [{PROJECT_VERSION}]({PROJECT_URL}) ({RELEASE_DATE})\n"
         )
 
     def test_submission_has_the_manifest_its_patches_and_flathub_json(self):
@@ -178,7 +182,7 @@ class FlathubTests(unittest.TestCase):
             tag=TAG,
             commit=COMMIT,
             project=PROJECT_VERSION,
-            metainfo=self.metainfo,
+            changelog=self.changelog,
         )
         manifest = json.loads(output.read_text())
         self.assertEqual(project_module(manifest)["sources"][0]["commit"], COMMIT)
@@ -194,20 +198,25 @@ class FlathubTests(unittest.TestCase):
                 tag="v9.9.9",
                 commit=COMMIT,
                 project=PROJECT_VERSION,
-                metainfo=self.metainfo,
+                changelog=self.changelog,
             )
 
-    def test_a_version_without_release_notes_is_refused(self):
-        self.metainfo.write_text("<component><releases/></component>")
-        with self.assertRaisesRegex(ValueError, "no <release"):
+    def test_a_version_the_changelog_has_not_released_is_refused(self):
+        self.changelog.write_text(
+            f"# Changelog\n\n## [{EARLIER_VERSION}]({PROJECT_URL}) ({RELEASE_DATE})\n"
+        )
+        with self.assertRaisesRegex(ValueError, f"has no release {PROJECT_VERSION}"):
             write_flathub(
-                self.root, tag=TAG, commit=COMMIT, project=PROJECT_VERSION, metainfo=self.metainfo
+                self.root, tag=TAG, commit=COMMIT, project=PROJECT_VERSION, changelog=self.changelog
             )
 
 
 class MetainfoTests(unittest.TestCase):
     def setUp(self):
         self.root = ET.parse(METAINFO).getroot()
+
+    def test_the_template_leaves_the_releases_to_the_changelog(self):
+        self.assertIsNone(self.root.find("releases"))
 
     def test_ids_match_the_app(self):
         self.assertEqual(self.root.findtext("id"), FLATPAK_APP_ID)
@@ -296,6 +305,12 @@ class StageTests(unittest.TestCase):
         self.assertIn("/share/doc/oscillate/third-party/", notices)
         self.assertEqual(json.loads((self.prefix / OFFER_JSON).read_text()), offer)
         self.assertEqual((self.prefix / OFFER_TEXT).read_text(), offer_text(offer))
+        metainfo = ET.parse(self.prefix / METAINFO_DIR / METAINFO_NAME).getroot()
+        self.assertEqual(metainfo.findtext("id"), FLATPAK_APP_ID)
+        self.assertEqual(
+            [release.get("version") for release in metainfo.iter("release")],
+            [release.version for release in load_releases()],
+        )
 
     def test_a_bundled_module_without_a_licence_is_refused(self):
         self.licence.unlink()
