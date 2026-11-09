@@ -35,6 +35,11 @@ Item {
     readonly property int entryHeight: 28
     readonly property int keyPadding: 14
     readonly property int keyHeight: 22
+    // Up and Down scroll the list a row; Page Up and Page Down by its height.
+    readonly property int scrollStep: entryHeight
+
+    // Opened, the list holds keyboard focus so it scrolls straight away.
+    onVisibleChanged: if (visible) shortcutsList.forceActiveFocus()
 
     readonly property var groups: [
         { title: "Editing", items: [
@@ -128,7 +133,14 @@ Item {
                 Tip {}
             }
         }
+        // The list's focus ring, outside it so it does not scroll away.
+        FocusRing {
+            target: shortcutsList
+            targetRadius: Theme.controlRadius
+        }
         Flickable {
+            id: shortcutsList
+            objectName: "shortcutsList"
             x: overlay.titleX
             y: overlay.listY
             width: card.width - 2 * overlay.titleX
@@ -136,6 +148,30 @@ Item {
             contentHeight: content.implicitHeight
             clip: true
             boundsBehavior: Flickable.StopAtBounds
+            activeFocusOnTab: overlay.visible
+            Accessible.role: Accessible.List
+            Accessible.name: "Keyboard shortcuts list"
+            readonly property real maxContentY: Math.max(0, contentHeight - height)
+            function scrollTo(target) {
+                contentY = Math.max(0, Math.min(maxContentY, target))
+            }
+            Keys.onShortcutOverride: event => event.accepted = [Qt.Key_Up, Qt.Key_Down, Qt.Key_PageUp,
+                Qt.Key_PageDown, Qt.Key_Home, Qt.Key_End, Qt.Key_Space].indexOf(event.key) >= 0
+            Keys.onUpPressed: scrollTo(contentY - overlay.scrollStep)
+            Keys.onDownPressed: scrollTo(contentY + overlay.scrollStep)
+            Keys.onPressed: event => {
+                if (event.key === Qt.Key_PageUp)
+                    scrollTo(contentY - height)
+                else if (event.key === Qt.Key_PageDown || event.key === Qt.Key_Space)
+                    scrollTo(contentY + height)
+                else if (event.key === Qt.Key_Home)
+                    scrollTo(0)
+                else if (event.key === Qt.Key_End)
+                    scrollTo(maxContentY)
+                else
+                    return
+                event.accepted = true
+            }
             Grid {
                 id: content
                 width: parent.width

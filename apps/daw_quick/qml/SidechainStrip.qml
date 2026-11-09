@@ -71,6 +71,13 @@ Item {
         listening = on
         bridge.set_effect_key_listen(trackId, slotId, on)
     }
+    // The source menu opens with the current source focused: Up and Down
+    // move, Return or Space chooses, Escape closes; focus returns to the
+    // source button either way.
+    function closeMenuToButton() {
+        menuOpen = false
+        sourceButton.forceActiveFocus()
+    }
     onKeyedChanged: if (!keyed && listening) setListening(false)
     Connections {
         target: strip.bridge
@@ -108,6 +115,7 @@ Item {
         width: strip.sourceWidth; height: strip.controlHeight; radius: Theme.controlRadius
         color: sourceArea.containsMouse ? Qt.lighter(strip.raisedColor, Theme.hoverLighten) : strip.raisedColor
         border.color: activeFocus || strip.menuOpen ? strip.accentColor : strip.lineColor
+        border.width: activeFocus ? Theme.focusRingWidth : Theme.hairline
         activeFocusOnTab: strip.visible
         Accessible.role: Accessible.ComboBox
         Accessible.name: strip.keyed ? "Sidechain keyed from " + strip.state.keyName
@@ -246,6 +254,13 @@ Item {
     Rectangle {
         objectName: "sidechainSourceMenu"
         visible: strip.menuOpen
+        onVisibleChanged: {
+            if (!visible)
+                return
+            menuList.currentIndex = Math.max(0, menuList.model.findIndex(source => strip.keyed
+                ? source.id === strip.state.sourceId : source.id === ""))
+            menuList.forceActiveFocus()
+        }
         x: sourceButton.x
         y: -height - Theme.spaceXs
         z: 40
@@ -260,6 +275,19 @@ Item {
             anchors.margins: Theme.spaceXxs
             clip: true
             model: [{ id: "", name: "None (self)" }].concat(strip.state.sources || [])
+            keyNavigationEnabled: true
+            Keys.onShortcutOverride: event => event.accepted = event.key === Qt.Key_Space
+                || event.key === Qt.Key_Return || event.key === Qt.Key_Escape
+            Keys.onReturnPressed: chooseCurrent()
+            Keys.onSpacePressed: chooseCurrent()
+            Keys.onEscapePressed: strip.closeMenuToButton()
+            function chooseCurrent() {
+                if (currentIndex < 0 || currentIndex >= count)
+                    return
+                const sourceId = model[currentIndex].id
+                strip.closeMenuToButton()
+                strip.choose(sourceId)
+            }
             delegate: Rectangle {
                 id: choice
                 required property var modelData
@@ -270,6 +298,9 @@ Item {
                 readonly property bool current: strip.keyed ? modelData.id === strip.state.sourceId
                                                             : modelData.id === ""
                 color: choiceArea.containsMouse ? Theme.sourceMenuHover : "transparent"
+                // The keyboard's place in the menu.
+                border.color: ListView.isCurrentItem && menuList.activeFocus ? Theme.focusRing : "transparent"
+                border.width: Theme.focusRingWidth
                 Text {
                     x: strip.sourceTextX; width: parent.width - 2 * strip.sourceTextX
                     anchors.verticalCenter: parent.verticalCenter

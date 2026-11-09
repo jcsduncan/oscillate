@@ -67,6 +67,13 @@ Rectangle {
     readonly property int keyPickerRowHeight: 28
     readonly property int keyPickerColumns: 4
 
+    // A focused control takes Space and Return before the shell's bare-key
+    // shortcuts do (Space plays); an open menu or picker also takes Escape.
+    readonly property var buttonKeys: [Qt.Key_Space, Qt.Key_Return]
+    readonly property var menuKeys: [Qt.Key_Space, Qt.Key_Return, Qt.Key_Escape,
+                                     Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right]
+    function claimKeys(event, keys) { event.accepted = keys.indexOf(event.key) >= 0 }
+
     signal playbackRequested()
     signal stopRequested()
     signal mediaRequested()
@@ -245,7 +252,8 @@ Rectangle {
                     radius: Theme.radiusLg
                     color: current ? Theme.rowHighlight : viewTip.hovered ? Theme.browserChipHover : "transparent"
                     Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.fast } }
-                    border.color: activeFocus ? toolbar.accentColor : "transparent"
+                    border.color: activeFocus ? Theme.focusRing : "transparent"
+                    border.width: activeFocus ? Theme.focusRingWidth : Theme.hairline
                     activeFocusOnTab: true
                     Tip {
                         id: viewTip
@@ -256,6 +264,7 @@ Rectangle {
                     Accessible.role: Accessible.Button
                     Accessible.name: modelData.label + " view"
                     Accessible.checked: current
+                    Keys.onShortcutOverride: event => toolbar.claimKeys(event, toolbar.buttonKeys)
                     Keys.onReturnPressed: toolbar.viewRequested(modelData.key)
                     Keys.onSpacePressed: toolbar.viewRequested(modelData.key)
                     Text {
@@ -453,11 +462,17 @@ Rectangle {
                 color: on ? Qt.rgba(toolbar.amberColor.r, toolbar.amberColor.g, toolbar.amberColor.b, Theme.amberToggleAlpha)
                     : optionTip.hovered ? Qt.lighter(toolbar.raisedColor, Theme.hoverLighten) : toolbar.raisedColor
                 Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.fast } }
-                border.color: on ? toolbar.amberColor : toolbar.lineColor
+                border.color: activeFocus ? Theme.focusRing : on ? toolbar.amberColor : toolbar.lineColor
+                border.width: activeFocus ? Theme.focusRingWidth : Theme.hairline
+                function toggle() { toolbar.recording[modelData.key] = !on }
+                activeFocusOnTab: true
                 Tip { id: optionTip; text: recordOption.modelData.tip }
                 Accessible.role: Accessible.CheckBox
                 Accessible.name: modelData.label
                 Accessible.checked: on
+                Keys.onShortcutOverride: event => toolbar.claimKeys(event, toolbar.buttonKeys)
+                Keys.onReturnPressed: toggle()
+                Keys.onSpacePressed: toggle()
                 Text {
                     id: optionLabel
                     anchors.centerIn: parent
@@ -467,7 +482,7 @@ Rectangle {
                 }
                 MouseArea {
                     anchors.fill: parent
-                    onClicked: toolbar.recording[recordOption.modelData.key] = !recordOption.on
+                    onClicked: recordOption.toggle()
                 }
             }
         }
@@ -496,7 +511,12 @@ Rectangle {
             color: on ? Qt.rgba(toolbar.accentColor.r, toolbar.accentColor.g, toolbar.accentColor.b, Theme.accentToggleAlpha)
                 : keysTip.hovered ? Qt.lighter(toolbar.raisedColor, Theme.hoverLighten) : toolbar.raisedColor
             Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.fast } }
-            border.color: on ? toolbar.accentColor : toolbar.lineColor
+            border.color: activeFocus ? Theme.focusRing : on ? toolbar.accentColor : toolbar.lineColor
+            border.width: activeFocus ? Theme.focusRingWidth : Theme.hairline
+            activeFocusOnTab: true
+            Keys.onShortcutOverride: event => toolbar.claimKeys(event, toolbar.buttonKeys)
+            Keys.onReturnPressed: keyboard.toggle()
+            Keys.onSpacePressed: keyboard.toggle()
             Tip {
                 id: keysTip
                 text: "Play the selected instrument from the computer keyboard (A W S E D F…)"
@@ -564,7 +584,12 @@ Rectangle {
             color: on ? Qt.rgba(toolbar.accentColor.r, toolbar.accentColor.g, toolbar.accentColor.b, Theme.accentToggleAlpha)
                 : inKeyTip.hovered ? Qt.lighter(toolbar.raisedColor, Theme.hoverLighten) : toolbar.raisedColor
             Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.fast } }
-            border.color: on ? toolbar.accentColor : toolbar.lineColor
+            border.color: activeFocus ? Theme.focusRing : on ? toolbar.accentColor : toolbar.lineColor
+            border.width: activeFocus ? Theme.focusRingWidth : Theme.hairline
+            activeFocusOnTab: visible
+            Keys.onShortcutOverride: event => toolbar.claimKeys(event, toolbar.buttonKeys)
+            Keys.onReturnPressed: keyboard.toggle_in_key()
+            Keys.onSpacePressed: keyboard.toggle_in_key()
             Tip {
                 id: inKeyTip
                 text: inKeyToggle.hasKey
@@ -651,8 +676,10 @@ Rectangle {
                     activeFocusOnTab: true
                     Accessible.role: Accessible.Button
                     Accessible.name: "Project key " + (toolbar.bridge.projectKey || "not set")
+                    Keys.onShortcutOverride: event => toolbar.claimKeys(event, toolbar.buttonKeys)
                     Keys.onReturnPressed: toolbar.keyPickerOpen = !toolbar.keyPickerOpen
                     Keys.onSpacePressed: toolbar.keyPickerOpen = !toolbar.keyPickerOpen
+                    FocusRing { targetRadius: Theme.radiusLg }
                     Column {
                         id: keyColumn
                         leftPadding: toolbar.readoutPadding
@@ -790,8 +817,10 @@ Rectangle {
                 text: "Mix Check: find what pokes out in the mix, the track to blame and a fix"
                 shortcut: "Ctrl+Shift+M"
             }
-            border.color: activeFocus ? toolbar.accentColor : current ? toolbar.accentColor : Theme.fieldEdge
+            border.color: activeFocus || current ? Theme.focusRing : Theme.fieldEdge
+            border.width: activeFocus ? Theme.focusRingWidth : Theme.hairline
             activeFocusOnTab: true
+            Keys.onShortcutOverride: event => toolbar.claimKeys(event, toolbar.buttonKeys)
             Accessible.role: Accessible.Button
             Accessible.name: "Mix Check"
             Accessible.checked: current
@@ -819,8 +848,10 @@ Rectangle {
             color: exportTip.hovered ? Qt.lighter(toolbar.raisedColor, Theme.hoverLighten) : toolbar.raisedColor
             Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.hover } }
             Tip { id: exportTip; text: "Export the mix: file, format and rate"; shortcut: "Ctrl+Shift+E" }
-            border.color: activeFocus ? toolbar.accentColor : Theme.fieldEdge
+            border.color: activeFocus ? Theme.focusRing : Theme.fieldEdge
+            border.width: activeFocus ? Theme.focusRingWidth : Theme.hairline
             activeFocusOnTab: true
+            Keys.onShortcutOverride: event => toolbar.claimKeys(event, toolbar.buttonKeys)
             Accessible.role: Accessible.Button
             Accessible.name: "Export"
             Keys.onReturnPressed: toolbar.exportRequested()
@@ -848,8 +879,10 @@ Rectangle {
                                                                : toolbar.raisedColor
             Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.hover } }
             Tip { id: moreTip; text: "Inspector, master effects, plug-ins, media, versions, audio output and more" }
-            border.color: activeFocus || toolbar.compactMenuOpen ? toolbar.accentColor : Theme.fieldEdge
+            border.color: activeFocus || toolbar.compactMenuOpen ? Theme.focusRing : Theme.fieldEdge
+            border.width: activeFocus ? Theme.focusRingWidth : Theme.hairline
             activeFocusOnTab: visible
+            Keys.onShortcutOverride: event => toolbar.claimKeys(event, toolbar.buttonKeys)
             Accessible.role: Accessible.Button
             Accessible.name: "Project and audio settings"
             Accessible.description: "Inspector, master effects, plug-ins, media, versions, audio output and more"
@@ -887,10 +920,26 @@ Rectangle {
         y: toolbar.y + toolbar.height - 1
         z: 100
         visible: toolbar.visible && toolbar.compactMenuOpen
-        onVisibleChanged: if (visible) forceActiveFocus()
+        // Opens with the first entry focused; Up and Down move, Return or
+        // Space runs one, Escape closes and hands focus back to More.
+        onVisibleChanged: if (visible) focusEntry(0)
+        function focusEntry(index) {
+            const count = menuRepeater.count
+            if (count === 0) {
+                forceActiveFocus()
+                return
+            }
+            const entry = menuRepeater.itemAt((index + count) % count)
+            if (entry)
+                entry.forceActiveFocus()
+        }
         transformOrigin: Item.TopRight
         Reveal { target: compactMenu; fromScale: Motion.popScale }
-        Keys.onEscapePressed: toolbar.compactMenuOpen = false
+        Keys.onShortcutOverride: event => toolbar.claimKeys(event, toolbar.menuKeys)
+        Keys.onEscapePressed: {
+            toolbar.compactMenuOpen = false
+            compactMore.forceActiveFocus()
+        }
         width: toolbar.menuWidth
         height: menuColumn.implicitHeight + 2 * Theme.spaceXs
         radius: Theme.radiusXl
@@ -903,19 +952,26 @@ Rectangle {
             x: Theme.spaceXs
             y: Theme.spaceXs
             Repeater {
+                id: menuRepeater
                 model: toolbar.menuItems
                 delegate: Rectangle {
                     id: menuItem
                     required property var modelData
+                    required property int index
                     objectName: modelData.name
                     width: compactMenu.width - 2 * Theme.spaceXs
                     height: toolbar.menuRowHeight
                     radius: Theme.controlRadius
                     color: activeFocus || itemArea.containsMouse ? toolbar.panelColor : "transparent"
                     Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.hover } }
+                    border.color: activeFocus ? Theme.focusRing : "transparent"
+                    border.width: activeFocus ? Theme.focusRingWidth : Theme.hairline
                     activeFocusOnTab: compactMenu.visible
                     Accessible.role: Accessible.Button
                     Accessible.name: modelData.label
+                    Keys.onShortcutOverride: event => toolbar.claimKeys(event, toolbar.menuKeys)
+                    Keys.onUpPressed: compactMenu.focusEntry(index - 1)
+                    Keys.onDownPressed: compactMenu.focusEntry(index + 1)
                     Keys.onReturnPressed: toolbar.activateMenuItem(modelData.key)
                     Keys.onSpacePressed: toolbar.activateMenuItem(modelData.key)
                     Text {
@@ -954,13 +1010,33 @@ Rectangle {
         y: toolbar.y + toolbar.height - 1
         z: 100
         visible: toolbar.visible && toolbar.keyPickerOpen
+        // Opens with the key's tonic (or C) focused; the arrows move round
+        // the tonics, Return or Space chooses, Escape closes and hands focus
+        // back to the key readout.
         onVisibleChanged: {
             if (!visible)
                 return
             minor = toolbar.bridge.projectKey.endsWith("min")
-            forceActiveFocus()
+            const tonic = tonics.findIndex(name => toolbar.bridge.projectKey.startsWith(name + " "))
+            focusTonic(Math.max(0, tonic))
         }
-        Keys.onEscapePressed: toolbar.keyPickerOpen = false
+        function focusTonic(index) {
+            const count = tonicRepeater.count
+            if (count === 0) {
+                forceActiveFocus()
+                return
+            }
+            const button = tonicRepeater.itemAt(Math.max(0, Math.min(count - 1, index)))
+            if (button)
+                button.forceActiveFocus()
+        }
+        // Closes the picker after a keyboard choice, focus back on the readout.
+        function closeToReadout() {
+            toolbar.keyPickerOpen = false
+            keyReadout.forceActiveFocus()
+        }
+        Keys.onShortcutOverride: event => toolbar.claimKeys(event, toolbar.menuKeys)
+        Keys.onEscapePressed: closeToReadout()
         transformOrigin: Item.Top
         Reveal { target: keyPicker; fromScale: Motion.popScale }
         width: toolbar.keyPickerWidth
@@ -978,12 +1054,20 @@ Rectangle {
             radius: Theme.controlRadius
             color: current ? Theme.rowHighlight : pickerArea.containsMouse || activeFocus ? toolbar.panelColor : "transparent"
             Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.hover } }
-            border.color: current ? Theme.lineStrong : "transparent"
+            border.color: activeFocus ? Theme.focusRing : current ? Theme.lineStrong : "transparent"
+            border.width: activeFocus ? Theme.focusRingWidth : Theme.hairline
             activeFocusOnTab: keyPicker.visible
             Accessible.role: Accessible.Button
             Accessible.name: label
-            Keys.onReturnPressed: chosen()
-            Keys.onSpacePressed: chosen()
+            Keys.onShortcutOverride: event => toolbar.claimKeys(event, toolbar.menuKeys)
+            Keys.onReturnPressed: choose()
+            Keys.onSpacePressed: choose()
+            // A keyboard choice that closes the picker returns focus to the readout.
+            function choose() {
+                chosen()
+                if (!toolbar.keyPickerOpen)
+                    keyReadout.forceActiveFocus()
+            }
             Text {
                 anchors.centerIn: parent
                 text: pickerButton.label
@@ -1016,11 +1100,16 @@ Rectangle {
                 columns: toolbar.keyPickerColumns
                 spacing: Theme.spaceXs
                 Repeater {
+                    id: tonicRepeater
                     model: keyPicker.tonics
                     delegate: PickerButton {
                         required property string modelData
                         required property int index
                         objectName: "keyPickerTonic:" + modelData
+                        Keys.onLeftPressed: keyPicker.focusTonic(index - 1)
+                        Keys.onRightPressed: keyPicker.focusTonic(index + 1)
+                        Keys.onUpPressed: keyPicker.focusTonic(index - toolbar.keyPickerColumns)
+                        Keys.onDownPressed: keyPicker.focusTonic(index + toolbar.keyPickerColumns)
                         width: (pickerColumn.width - (toolbar.keyPickerColumns - 1) * Theme.spaceXs) / toolbar.keyPickerColumns
                         label: modelData
                         current: toolbar.bridge.projectKey === modelData + (keyPicker.minor ? " min" : " maj")

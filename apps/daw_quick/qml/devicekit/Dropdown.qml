@@ -11,7 +11,12 @@ Rectangle {
     required property string parameterId
     required property Menu menu
     property color accent: theme.dropdownAccent
+    // Mode-inactive (see Knob): still editable, with the reason given.
     property bool inactive: false
+    property string inactiveReason: ""
+    readonly property bool modeInactive: inactive
+    readonly property string controlState: !controller.editable ? "disabled"
+        : inactive ? "inactive" : "normal"
     property int fontSize: theme.dropdownTextSize
     readonly property var info: controller.parameter(parameterId)
     readonly property var choices: info.choices !== undefined ? info.choices : []
@@ -37,13 +42,14 @@ Rectangle {
     radius: theme.dropdownRadius
     color: theme.dropdownFill(dropdown)
     border.color: activeFocus ? accent : theme.dropdownEdge
-    opacity: !controller.editable ? theme.dropdownDisabledOpacity : inactive ? theme.dropdownMutedOpacity : 1
+    opacity: !controller.editable ? theme.dropdownDisabledOpacity : inactive ? theme.dropdownInactiveOpacity : 1
     activeFocusOnTab: controller.editable
     Accessible.role: Accessible.ComboBox
     Accessible.name: (theme.dropdownSpeaksGroup && info.group !== undefined ? info.group + " " : "")
         + (info.name !== undefined ? info.name : "")
     Accessible.description: (choices[current] !== undefined ? choices[current] : "")
         + (theme.knobNextNoteMark && nextNote ? ". Applies to new notes" : "")
+        + (inactive && inactiveReason !== "" ? ". Inactive: " + inactiveReason : "")
 
     function openMenu() {
         if (!controller.editable)
@@ -121,6 +127,11 @@ Rectangle {
     MouseArea {
         id: area
         anchors.fill: parent
+        // At least the kit's least hit size, however small the control draws.
+        anchors.leftMargin: -dropdown.theme.hitOutset(parent.width)
+        anchors.rightMargin: -dropdown.theme.hitOutset(parent.width)
+        anchors.topMargin: -dropdown.theme.hitOutset(parent.height)
+        anchors.bottomMargin: -dropdown.theme.hitOutset(parent.height)
         hoverEnabled: true
         enabled: dropdown.controller.editable
         onClicked: {

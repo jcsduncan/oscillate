@@ -119,13 +119,34 @@ Rectangle {
         trackMenu.visible = true
         trackMenu.forceActiveFocus()
     }
+    // The control that opened the palette, duck list or parameter chooser:
+    // Escape (or a keyboard choice) hands focus back to it.
+    property Item popupOpener: null
+    function rememberOpener() { popupOpener = trackPanel.Window.activeFocusItem }
+    function restoreOpener() {
+        const opener = popupOpener
+        popupOpener = null
+        if (opener && opener.visible)
+            opener.forceActiveFocus()
+    }
+    // A focused popup takes these keys before the shell's bare-key shortcuts
+    // (Space plays, Escape lets go of the selected clip).
+    readonly property var popupKeys: [Qt.Key_Space, Qt.Key_Return, Qt.Key_Escape,
+                                      Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right]
+    readonly property var buttonKeys: [Qt.Key_Space, Qt.Key_Return]
+    function claimKeys(event, keys) { event.accepted = keys.indexOf(event.key) >= 0 }
     function openDuck(track, point) {
+        rememberOpener()
         trackMenu.visible = false
         duckPopover.open(track, point)
     }
     function openColours(track, point) {
+        rememberOpener()
         trackMenu.visible = false
         colourPopover.track = track
+        const palette = trackPanel.theme.trackPalette
+        colourPopover.current = Math.max(0, palette.findIndex(colour =>
+            String(track.color).toLowerCase() === colour.toLowerCase()))
         colourPopover.x = Math.max(Theme.spaceXs, Math.min(trackPanel.width - colourPopover.width - Theme.spaceXs, point.x))
         colourPopover.y = Math.max(Theme.spaceXs, Math.min(trackPanel.height - colourPopover.height - Theme.spaceXs, point.y))
         colourPopover.visible = true
@@ -770,12 +791,13 @@ Rectangle {
                     height: Theme.trackSwatchSize
                     radius: Theme.radiusSm
                     color: outlined ? "transparent" : trackRow.trackColor
-                    border.width: outlined ? Theme.trackBusSwatchBorder : Theme.hairline
-                    border.color: swatchArea.containsMouse || activeFocus ? trackPanel.mainTextColor
+                    border.width: activeFocus ? Theme.focusRingWidth : outlined ? Theme.trackBusSwatchBorder : Theme.hairline
+                    border.color: activeFocus ? Theme.focusRing : swatchArea.containsMouse ? trackPanel.mainTextColor
                         : outlined ? trackRow.trackColor : Theme.canvas
                     activeFocusOnTab: true
                     Accessible.role: Accessible.Button
                     Accessible.name: "Colour of " + trackRow.modelData.name
+                    Keys.onShortcutOverride: event => trackPanel.claimKeys(event, trackPanel.buttonKeys)
                     Keys.onReturnPressed: trackPanel.openColours(trackRow.modelData,
                         colourSwatch.mapToItem(trackPanel, 0, colourSwatch.height + Theme.spaceXs))
                     Keys.onSpacePressed: trackPanel.openColours(trackRow.modelData,
@@ -839,8 +861,13 @@ Rectangle {
                     activeFocusOnTab: visible
                     Accessible.role: Accessible.Button
                     Accessible.name: "Duck everything to " + trackRow.modelData.name
+                    Keys.onShortcutOverride: event => trackPanel.claimKeys(event, trackPanel.buttonKeys)
                     Keys.onReturnPressed: trackPanel.openDuck(trackRow.modelData,
                         duckHint.mapToItem(trackPanel, 0, duckHint.height + Theme.spaceXs))
+                    Keys.onSpacePressed: trackPanel.openDuck(trackRow.modelData,
+                        duckHint.mapToItem(trackPanel, 0, duckHint.height + Theme.spaceXs))
+                    // Its edge is always accent, so focus shows as a ring outside it.
+                    FocusRing { targetRadius: duckHint.radius }
                     Text {
                         id: duckHintText
                         anchors.centerIn: parent
@@ -898,12 +925,15 @@ Rectangle {
                     radius: Theme.trackChooserRadius
                     color: overlayChooserArea.containsMouse ? Theme.buttonFace : Theme.trackChooserGround
                     Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.hover } }
-                    border.color: activeFocus ? trackPanel.accentColor : trackRow.trackColor
+                    border.color: activeFocus ? Theme.focusRing : trackRow.trackColor
+                    border.width: activeFocus ? Theme.focusRingWidth : Theme.hairline
                     activeFocusOnTab: trackRow.automationOpen
                     Accessible.role: Accessible.ComboBox
                     Accessible.name: "Automation shown on the clips: "
                         + (trackRow.automationOpen ? trackPanel.targetName(trackRow.modelData.id, trackRow.automationShown.overlay) : "")
+                    Keys.onShortcutOverride: event => trackPanel.claimKeys(event, trackPanel.buttonKeys)
                     Keys.onReturnPressed: chooser.openFor(trackRow.modelData.id, -1, trackRow.y + Theme.trackChooserMenuOffset)
+                    Keys.onSpacePressed: chooser.openFor(trackRow.modelData.id, -1, trackRow.y + Theme.trackChooserMenuOffset)
                     Text {
                         x: Theme.spaceSm
                         width: parent.width - Theme.trackChooserTextRightGap
@@ -1390,11 +1420,14 @@ Rectangle {
                         radius: Theme.trackButtonRadius
                         color: chooserArea.containsMouse ? Theme.buttonFace : "transparent"
                         Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.hover } }
-                        border.color: activeFocus ? trackPanel.accentColor : Theme.laneHeaderChooserEdge
+                        border.color: activeFocus ? Theme.focusRing : Theme.laneHeaderChooserEdge
+                        border.width: activeFocus ? Theme.focusRingWidth : Theme.hairline
                         activeFocusOnTab: true
                         Accessible.role: Accessible.ComboBox
                         Accessible.name: "Automated parameter: " + trackPanel.targetName(laneHeader.trackId, laneHeader.modelData.key)
+                        Keys.onShortcutOverride: event => trackPanel.claimKeys(event, trackPanel.buttonKeys)
                         Keys.onReturnPressed: chooser.openFor(laneHeader.trackId, laneHeader.index, laneHeader.y + Theme.laneHeaderMenuOffset)
+                        Keys.onSpacePressed: chooser.openFor(laneHeader.trackId, laneHeader.index, laneHeader.y + Theme.laneHeaderMenuOffset)
                         Text {
                             x: Theme.laneHeaderChooserTextX
                             width: parent.width - Theme.laneHeaderChooserTextRightGap
@@ -1493,12 +1526,52 @@ Rectangle {
                 }
                 return rows
             }
+            // The keyboard's row: Up and Down step over the group headings,
+            // Return or Space chooses, Escape closes; focus goes back to the
+            // chooser that opened the list.
+            property int current: -1
+            function chooseable(index) { return index >= 0 && index < targets.length && !targets[index].heading }
+            function step(direction) {
+                for (let index = current + direction; index >= 0 && index < targets.length; index += direction) {
+                    if (chooseable(index)) {
+                        current = index
+                        targetList.positionViewAtIndex(index, ListView.Contain)
+                        return
+                    }
+                }
+            }
+            function choose(index) {
+                if (!chooseable(index))
+                    return
+                const row = targets[index]
+                visible = false
+                if (row.action)
+                    trackPanel.automationLaneAdded(trackId)
+                else
+                    trackPanel.automationLaneChosen(trackId, laneIndex, row.key)
+            }
             function openFor(trackId, laneIndex, top) {
+                trackPanel.rememberOpener()
                 chooser.trackId = trackId
                 chooser.laneIndex = laneIndex
+                current = -1
+                step(1)
                 y = top
                 visible = true
                 forceActiveFocus()
+            }
+            Keys.onShortcutOverride: event => trackPanel.claimKeys(event, trackPanel.popupKeys)
+            Keys.onUpPressed: step(-1)
+            Keys.onDownPressed: step(1)
+            Keys.onReturnPressed: {
+                const index = current
+                trackPanel.restoreOpener()
+                choose(index)
+            }
+            Keys.onSpacePressed: {
+                const index = current
+                trackPanel.restoreOpener()
+                choose(index)
             }
             visible: false
             x: Theme.spaceLg
@@ -1508,7 +1581,10 @@ Rectangle {
             radius: Theme.radiusLg
             color: Theme.panelRaised
             border.color: Theme.controlEdge
-            Keys.onEscapePressed: visible = false
+            Keys.onEscapePressed: {
+                visible = false
+                trackPanel.restoreOpener()
+            }
             onActiveFocusChanged: if (!activeFocus && !targetList.activeFocus) visible = false
             ListView {
                 id: targetList
@@ -1519,10 +1595,13 @@ Rectangle {
                 delegate: Rectangle {
                     id: targetRow
                     required property var modelData
+                    required property int index
                     width: ListView.view.width
                     height: modelData.heading ? Theme.trackChooserHeadingHeight : Theme.trackChooserRowHeight
                     radius: Theme.radiusMd
                     color: !modelData.heading && targetArea.containsMouse ? Theme.trackChooserRowHover : "transparent"
+                    border.color: chooser.current === index && chooser.activeFocus ? Theme.focusRing : "transparent"
+                    border.width: Theme.focusRingWidth
                     Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.hover } }
                     Text {
                         x: targetRow.modelData.heading ? Theme.spaceXs : Theme.spaceLg
@@ -1541,14 +1620,7 @@ Rectangle {
                         anchors.fill: parent
                         enabled: !targetRow.modelData.heading
                         hoverEnabled: true
-                        onClicked: {
-                            if (targetRow.modelData.action)
-                                trackPanel.automationLaneAdded(chooser.trackId)
-                            else
-                                trackPanel.automationLaneChosen(chooser.trackId, chooser.laneIndex,
-                                                                targetRow.modelData.key)
-                            chooser.visible = false
-                        }
+                        onClicked: chooser.choose(targetRow.index)
                     }
                 }
             }
@@ -1878,12 +1950,31 @@ Rectangle {
                 if (other.id !== key.id && other.kind !== "return")
                     all[other.id] = true
             chosen = all
+            current = 0
             x = Math.max(Theme.spaceXs, Math.min(trackPanel.width - width - Theme.spaceXs, point.x))
             y = Math.max(Theme.spaceXs, Math.min(trackPanel.height - height - Theme.spaceXs, point.y))
             visible = true
             forceActiveFocus()
         }
         function close() { visible = false }
+        // The keyboard's row: Up and Down move, Space ticks or unticks it,
+        // Return ducks the ticked tracks, Escape closes; focus goes back to
+        // the control that opened the list.
+        property int current: 0
+        function step(direction) {
+            if (others.length === 0)
+                return
+            current = Math.max(0, Math.min(others.length - 1, current + direction))
+            const rowTop = current * Theme.duckRowHeight
+            if (rowTop < duckList.contentY)
+                duckList.contentY = rowTop
+            else if (rowTop + Theme.duckRowHeight > duckList.contentY + duckList.height)
+                duckList.contentY = rowTop + Theme.duckRowHeight - duckList.height
+        }
+        Keys.onShortcutOverride: event => trackPanel.claimKeys(event, trackPanel.popupKeys)
+        Keys.onUpPressed: step(-1)
+        Keys.onDownPressed: step(1)
+        Keys.onSpacePressed: if (current < others.length) toggle(others[current].id)
         function toggle(id) {
             const next = Object.assign({}, chosen)
             next[id] = !next[id]
@@ -1905,8 +1996,14 @@ Rectangle {
         border.color: trackPanel.lineColor
         Accessible.role: Accessible.Dialog
         Accessible.name: track ? "Duck tracks to " + track.name : "Duck tracks"
-        Keys.onEscapePressed: close()
-        Keys.onReturnPressed: duck()
+        Keys.onEscapePressed: {
+            close()
+            trackPanel.restoreOpener()
+        }
+        Keys.onReturnPressed: {
+            trackPanel.restoreOpener()
+            duck()
+        }
         onActiveFocusChanged: if (!activeFocus) close()
         Text {
             x: Theme.spaceLg
@@ -1920,6 +2017,7 @@ Rectangle {
             font.letterSpacing: Theme.capsLetterSpacing
         }
         Flickable {
+            id: duckList
             x: Theme.spaceSm
             y: Theme.trackPopoverTitleHeight
             width: parent.width - Theme.spaceLg
@@ -1932,11 +2030,14 @@ Rectangle {
                     delegate: Rectangle {
                         id: duckRow
                         required property var modelData
+                        required property int index
                         readonly property bool ticked: duckPopover.chosen[modelData.id] === true
                         width: duckPopover.width - Theme.spaceLg
                         height: Theme.duckRowHeight
                         radius: Theme.trackMenuEntryRadius
                         color: duckRowArea.containsMouse ? Theme.menuHover : "transparent"
+                        border.color: duckPopover.current === index && duckPopover.activeFocus ? Theme.focusRing : "transparent"
+                        border.width: Theme.focusRingWidth
                         Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.hover } }
                         Rectangle {
                             x: Theme.duckCheckX
@@ -2010,6 +2111,35 @@ Rectangle {
         objectName: "trackColourPopover"
         property var track: null
         function close() { visible = false }
+        // The keyboard's colour: the arrows move round the palette, Return
+        // or Space sets it, Escape closes; focus goes back to the swatch.
+        property int current: 0
+        readonly property int colourCount: trackPanel.theme.trackPalette.length
+        function move(offset) {
+            if (colourCount > 0)
+                current = Math.max(0, Math.min(colourCount - 1, current + offset))
+        }
+        function choose(index) {
+            const track = colourPopover.track
+            close()
+            if (track && index >= 0 && index < colourCount)
+                trackPanel.bridge.set_track_color(track.id, trackPanel.theme.trackPalette[index])
+        }
+        Keys.onShortcutOverride: event => trackPanel.claimKeys(event, trackPanel.popupKeys)
+        Keys.onLeftPressed: move(-1)
+        Keys.onRightPressed: move(1)
+        Keys.onUpPressed: move(-Theme.paletteColumns)
+        Keys.onDownPressed: move(Theme.paletteColumns)
+        Keys.onReturnPressed: {
+            const index = current
+            trackPanel.restoreOpener()
+            choose(index)
+        }
+        Keys.onSpacePressed: {
+            const index = current
+            trackPanel.restoreOpener()
+            choose(index)
+        }
         visible: false
         z: 41
         width: Theme.paletteColumns * (Theme.paletteSwatchSize + Theme.spaceXs) + 2 * Theme.spaceMd
@@ -2019,7 +2149,10 @@ Rectangle {
         border.color: trackPanel.lineColor
         Accessible.role: Accessible.Dialog
         Accessible.name: "Track colour"
-        Keys.onEscapePressed: close()
+        Keys.onEscapePressed: {
+            close()
+            trackPanel.restoreOpener()
+        }
         onActiveFocusChanged: if (!activeFocus) close()
         Grid {
             x: Theme.spaceMd
@@ -2031,14 +2164,22 @@ Rectangle {
                 delegate: Rectangle {
                     id: paletteSwatch
                     required property string modelData
+                    required property int index
                     readonly property bool chosen: !!colourPopover.track
                         && String(colourPopover.track.color).toLowerCase() === modelData.toLowerCase()
+                    readonly property bool keyed: colourPopover.current === index && colourPopover.activeFocus
+                    objectName: "trackPaletteSwatch:" + index
                     width: Theme.paletteSwatchSize
                     height: Theme.paletteSwatchSize
                     radius: Theme.trackButtonRadius
                     color: modelData
                     border.width: chosen || paletteArea.containsMouse ? Theme.strokeBold : 0
                     border.color: trackPanel.mainTextColor
+                    // The keyboard's colour, ringed just outside the swatch.
+                    FocusRing {
+                        targetRadius: paletteSwatch.radius
+                        visible: paletteSwatch.keyed
+                    }
                     Accessible.role: Accessible.Button
                     Accessible.name: "Colour " + modelData
                     MouseArea {
@@ -2048,12 +2189,7 @@ Rectangle {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            const track = colourPopover.track
-                            colourPopover.close()
-                            if (track)
-                                trackPanel.bridge.set_track_color(track.id, paletteSwatch.modelData)
-                        }
+                        onClicked: colourPopover.choose(paletteSwatch.index)
                     }
                 }
             }

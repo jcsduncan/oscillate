@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import "../devicekit" as Kit
+import "../shell" as Shell
 import "NovaContract.js" as Contract
 import Oscillate.Format
 
@@ -44,7 +45,8 @@ Rectangle {
     // goes to two columns.
     readonly property real overviewNarrowWidth: 1050
     // The zoom chips; the host keeps the choice across sessions.
-    readonly property var zoomSteps: [0.85, 1, 1.2, 1.4]
+    // The device panels' shared zoom steps (ADR-0103).
+    readonly property var zoomSteps: Shell.Theme.panelZoomSteps
     property real zoom: 1
     readonly property real headerHeight: 48
     readonly property real stripHeight: 28

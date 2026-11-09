@@ -46,6 +46,11 @@ Rectangle {
     MouseArea {
         id: arrowArea
         anchors.fill: parent
+        // At least the kit's least hit size, however small the control draws.
+        anchors.leftMargin: -arrow.theme.hitOutset(parent.width)
+        anchors.rightMargin: -arrow.theme.hitOutset(parent.width)
+        anchors.topMargin: -arrow.theme.hitOutset(parent.height)
+        anchors.bottomMargin: -arrow.theme.hitOutset(parent.height)
         enabled: arrow.controller.editable
         hoverEnabled: true
         onClicked: arrow.stepNow()
