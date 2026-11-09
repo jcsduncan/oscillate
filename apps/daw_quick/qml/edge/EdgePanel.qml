@@ -3,13 +3,14 @@ import QtQuick
 import Oscillate.Format
 import "../devicekit" as Kit
 
-// The Edge device panel: a clipper under a fixed 0 dBFS ceiling. On the
-// left the transfer curve, input against output, with the ceiling dashed
-// and the signal's dot on the curve, and under it how hard each of the last
-// sixteen beats clipped. On the right the Input, Shape and Output knobs;
-// oversampling with the latency it costs and the light filters; stereo
-// link, delta and the level-matched compare; and the meters: the input
-// peak, how far it is clipped and the output's true peak. Every control
+// The Edge device panel: a clipper under an adjustable true-peak ceiling.
+// On the left the transfer curve, input against output, with the ceiling
+// dashed and the signal's dot on the curve, and under it how hard each of
+// the last sixteen beats clipped. On the right the Input, Shape, Ceiling
+// and Output knobs; oversampling with the latency it costs and the light
+// filters; stereo link, delta and the level-matched compare; and the
+// meters: the input peak, how far it is clipped and the output's true
+// peak, the level bars marked at the ceiling. Every control
 // reads and writes through `controller` (NativeSynthDeviceController for
 // Edge); the readings come only from the telemetry (layout in edge.hpp).
 Rectangle {
@@ -50,6 +51,7 @@ Rectangle {
         ? controller.display("edge.oversampling").replace("x", "×") : ""
     readonly property bool matched: revision >= 0 && controller.choice("edge.match") === 1
     readonly property bool comparing: revision >= 0 && controller.choice("edge.compare") === 1
+    readonly property real ceilingDb: revision >= 0 ? controller.value("edge.ceiling") : 0
 
     objectName: "edgePanel"
     implicitWidth: theme.panelWidth
@@ -210,6 +212,7 @@ Rectangle {
                 anchors.fill: parent
                 theme: panel.theme
                 curve: panel.curve
+                ceilingDb: panel.ceilingDb
                 live: panel.playing
                 dotIn: panel.playing ? panel.live.dot_input : panel.silentDb
                 dotOut: panel.playing ? panel.live.dot_output : panel.silentDb
@@ -275,7 +278,7 @@ Rectangle {
         id: knobCard
         theme: panel.theme
         title: "CLIP"
-        note: "THE CEILING IS FIXED AT 0 dBFS"
+        note: "TRUE PEAK NEVER PASSES THE CEILING"
         x: panel.rightX
         y: panel.bodyY
         width: panel.rightWidth
@@ -288,12 +291,13 @@ Rectangle {
                 model: [
                     { id: "edge.input", hint: "drive into the ceiling" },
                     { id: "edge.shape", hint: "hard ← → soft" },
+                    { id: "edge.ceiling", hint: "where it clips" },
                     { id: "edge.output", hint: "after the clipper" }
                 ]
                 delegate: Column {
                     id: knobColumn
                     required property var modelData
-                    width: (knobCard.width - 2 * panel.theme.cardInset) / 3
+                    width: (knobCard.width - 2 * panel.theme.cardInset) / panel.knobCount
                     spacing: panel.theme.knobHintGap
                     Kit.Knob {
                         anchors.horizontalCenter: parent.horizontalCenter
@@ -314,6 +318,7 @@ Rectangle {
         }
     }
 
+    readonly property int knobCount: 4
     readonly property real controlsY: knobCard.y + knobCard.height + gap
 
     Kit.Card {
@@ -394,6 +399,8 @@ Rectangle {
         required property string valueName
         required property string value
         required property real level
+        // Where the ceiling sits on the bar, 0..1; none when negative.
+        property real mark: -1
         property color barColor: panel.theme.inkDim
         property color valueColor: panel.theme.ink
         property int valueSize: panel.theme.meterValueSize
@@ -424,6 +431,15 @@ Rectangle {
                 radius: parent.radius
                 color: meter.barColor
             }
+            Rectangle {
+                objectName: meter.valueName + "Ceiling"
+                visible: meter.mark >= 0
+                x: parent.width * meter.mark - width / 2
+                y: -panel.theme.ceilingMarkOverhang
+                width: panel.theme.ceilingMarkWidth
+                height: parent.height + 2 * panel.theme.ceilingMarkOverhang
+                color: panel.theme.accent
+            }
         }
     }
 
@@ -433,6 +449,7 @@ Rectangle {
         valueName: "edgeInPeak"
         value: panel.levelText(panel.inPeak, "dBFS")
         level: panel.playing ? panel.fraction(panel.inPeak, panel.barFloorDb, panel.barTopDb) : 0
+        mark: panel.fraction(panel.ceilingDb, panel.barFloorDb, panel.barTopDb)
     }
     Meter {
         title: "CLIPPED"
@@ -450,6 +467,7 @@ Rectangle {
         valueName: "edgeOutPeak"
         value: panel.levelText(panel.outPeak, "dBTP")
         level: panel.playing ? panel.fraction(panel.outPeak, panel.barFloorDb, panel.barTopDb) : 0
+        mark: panel.fraction(panel.ceilingDb, panel.barFloorDb, panel.barTopDb)
         barColor: panel.theme.live
     }
 

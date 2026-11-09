@@ -552,6 +552,8 @@ oscillate_add_case_tests(native_edge_contract oscillate_edge_tests
   shape_zero_is_a_hard_clip
   no_aliasing_at_16x
   true_peak_never_exceeds_0_dbtp
+  true_peak_never_exceeds_a_lowered_ceiling
+  true_peak_holds_while_the_ceiling_glides
   delta_nulls_with_the_output
   latency_is_reported_and_exact
   stereo_link_shares_the_gain

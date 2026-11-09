@@ -39,6 +39,11 @@ public:
   // Fails when the mailbox is full, the revision does not increase or a
   // value is invalid.
   [[nodiscard]] bool offer(std::span<const double> values, std::uint64_t revision) noexcept;
+  // Control only: whether offer(values, revision) would be taken now. The
+  // callback only frees room, so it stays true until this control producer
+  // offers something else.
+  [[nodiscard]] bool can_offer(std::span<const double> values,
+                               std::uint64_t revision) const noexcept;
   // Control only: a panel control mid-drag, heard like an offer but with no
   // saved revision, so applied_revision() keeps naming the last saved one.
   // Fails when the mailbox is full or a value is invalid.

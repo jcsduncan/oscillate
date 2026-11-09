@@ -60,6 +60,15 @@ bool ParameterControl::offer(std::span<const double> values, std::uint64_t revis
   return true;
 }
 
+bool ParameterControl::can_offer(std::span<const double> values,
+                                 std::uint64_t revision) const noexcept {
+  return revision != 0 && revision > mailbox_->offered && values.size() == count_ &&
+         valid_values(*descriptor_, values) &&
+         mailbox_->write.load(std::memory_order_relaxed) -
+                 mailbox_->read.load(std::memory_order_acquire) <
+             Mailbox::capacity;
+}
+
 bool ParameterControl::offer_live(std::span<const double> values) noexcept {
   return push(values, 0);
 }

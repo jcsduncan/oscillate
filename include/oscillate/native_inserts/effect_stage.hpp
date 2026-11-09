@@ -16,6 +16,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 // A built-in effect (ADR-0040) as an insert stage (ADR-0043): the generic
@@ -68,6 +69,17 @@ public:
   }
   [[nodiscard]] bool offer_live_values(std::span<const double> values) noexcept {
     return runtime_->offer_live_values(values);
+  }
+  // Control only: a saved edit prepared on every stage it reaches before
+  // any is committed, so they take it together or not at all.
+  [[nodiscard]] foundation::Result<native_dsp::effects::NativeEffectRuntime::PreparedOffer>
+  prepare_offer(std::span<const double> values, const project::NativeSynthDocument* document,
+                std::uint64_t revision) {
+    return runtime_->prepare_offer(values, document, revision);
+  }
+  [[nodiscard]] bool
+  commit_offer(native_dsp::effects::NativeEffectRuntime::PreparedOffer&& offer) noexcept {
+    return runtime_->commit_offer(std::move(offer));
   }
   [[nodiscard]] std::uint64_t applied_values_revision() const noexcept {
     return runtime_->applied_revision();

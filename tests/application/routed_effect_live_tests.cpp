@@ -197,24 +197,26 @@ void effect_documents_edit_live() {
 // A linked group's shape edit changes Pumps on two chains in one revision;
 // every stage takes it live, and a newer group edit supersedes an
 // unacknowledged one.
+// Two synth tracks, each with a Pump, the Pumps linked.
+project::Snapshot linked_pumps_project(const fs::path& root) {
+  auto session = take(app::ProjectSession::create(root));
+  std::vector<project::InsertSlotId> pumps;
+  for (int i = 0; i < 2; ++i) {
+    const auto track = take(session->instruments().add_synth_track());
+    REQUIRE_OK(session->midi_clips().add_midi_clip(track, {0}), "MIDI clip");
+    const auto clip = session->snapshot().tracks.back().midi_clips.front().id;
+    REQUIRE_OK(session->notes().add_note(clip, {0}, static_cast<std::uint8_t>(60 + i)), "note");
+    pumps.push_back(take(session->effects().add_effect_engine(track, 0, "pump")));
+  }
+  REQUIRE_OK(session->effects().link_native_effects(pumps), "Pumps linked");
+  REQUIRE_OK(session->saving().save(), "project did not save");
+  return session->snapshot();
+}
+
 void linked_effect_groups_edit_live() {
   Directory directory;
   const auto root = directory.path() / "song";
-  const auto saved = [&] {
-    auto session = take(app::ProjectSession::create(root));
-    std::vector<project::InsertSlotId> pumps;
-    for (int i = 0; i < 2; ++i) {
-      const auto track = take(session->instruments().add_synth_track());
-      REQUIRE_OK(session->midi_clips().add_midi_clip(track, {0}), "MIDI clip");
-      const auto clip = session->snapshot().tracks.back().midi_clips.front().id;
-      REQUIRE_OK(session->notes().add_note(clip, {0}, static_cast<std::uint8_t>(60 + i)), "note");
-      pumps.push_back(take(session->effects().add_effect_engine(track, 0, "pump")));
-    }
-    REQUIRE_OK(session->effects().link_native_effects(pumps), "Pumps linked");
-    REQUIRE_OK(session->saving().save(), "project did not save");
-    return session->snapshot();
-  }();
-  Live live(root, saved);
+  Live live(root, linked_pumps_project(root));
   REQUIRE_GT(live.render(40), 1e-3, "the pumped notes are audible");
   live.control.observe();
   const auto redraw = [&](double hold) {
@@ -245,6 +247,72 @@ void linked_effect_groups_edit_live() {
   live.control.observe();
   REQUIRE_EQ(live.control.status().active_graph_revision, second.snapshot->revision,
              "the newest group edit is audible once every stage has it");
+}
+
+// A linked edit is all or nothing: when the last linked Pump cannot take it
+// (its mailbox is full of panel drags), the edit fails and every Pump keeps
+// the published values, so none plays what the saved project does not show
+// as heard. Once the drags drain, a retry reaches them all.
+void a_refused_linked_edit_changes_no_stage() {
+  constexpr int settle_blocks = 80;
+  // Fewer offers than this always fill a mailbox (ParameterControl's holds
+  // four).
+  constexpr int most_drags = 16;
+  // The applied duck at full depth dips far under this; at depth 0 it is
+  // flat at unity, to the view's float rounding.
+  constexpr float ducked_below = 0.5F;
+  constexpr float flat_above = 0.99F;
+  Directory directory;
+  const auto root = directory.path() / "song";
+  Live live(root, linked_pumps_project(root));
+  REQUIRE_GT(live.render(settle_blocks), 1e-3, "the pumped notes are audible");
+  live.control.observe();
+  const auto& pump = *effects::pump::engine().descriptor;
+  const auto deepest_duck = [&](const project::Track& track) {
+    std::vector<float> frame;
+    REQUIRE_TRUE(live.control.active_effect_telemetry(track.id, track.effects.front().id, frame),
+                 "Pump telemetry");
+    const auto applied =
+        std::span(frame).subspan(effects::pump::telemetry::applied, effects::pump::view_points);
+    return *std::ranges::min_element(applied);
+  };
+  const auto tracks = live.model.snapshot()->tracks;
+  for (const auto& track : tracks)
+    REQUIRE_LT(deepest_duck(track), ducked_below, "each Pump ducks at full depth");
+
+  // Panel drags of the published values fill the last Pump's mailbox.
+  const auto& last = tracks.back();
+  const auto held = take(inserts::resolve_native_effect(
+                             std::get<project::NativeEffectPatch>(last.effects.front().processor)))
+                        .values;
+  int drags = 0;
+  while (drags < most_drags &&
+         live.control.set_live_effect_values(last.id, last.effects.front().id, pump, held))
+    ++drags;
+  REQUIRE_LT(drags, most_drags, "the last Pump's mailbox fills");
+
+  std::vector<project::Operation> commands;
+  for (const auto& track : tracks) {
+    const auto& slot = track.effects.front();
+    commands.push_back(project::SetNativeEffectSettings{
+        track.id, slot.id,
+        with_value(std::get<project::NativeEffectPatch>(slot.processor), "pump.depth", 0.0)});
+  }
+  auto applied = take(live.model.apply(commands));
+  REQUIRE_TRUE(!live.control.begin_edit(applied, "linked depth"), "the full Pump refuses it");
+  (void)live.render(settle_blocks);
+  live.control.observe();
+  for (const auto& track : tracks)
+    REQUIRE_LT(deepest_duck(track), ducked_below,
+               "no Pump took the refused edit: every one still ducks");
+
+  REQUIRE_OK(live.control.retry(), "the retry goes live");
+  (void)live.render(settle_blocks);
+  live.control.observe();
+  REQUIRE_EQ(live.control.status().active_graph_revision, applied.snapshot->revision,
+             "the retried edit is audible on every Pump");
+  for (const auto& track : tracks)
+    REQUIRE_GT(deepest_duck(track), flat_above, "every Pump took it");
 }
 
 void effect_automation_edits_live() {
@@ -540,6 +608,7 @@ int main() {
     track_effect_values_edit_live();
     effect_documents_edit_live();
     linked_effect_groups_edit_live();
+    a_refused_linked_edit_changes_no_stage();
     instrument_track_effect_takes_a_key("pump");
     pump_ducks_only_to_a_kick_you_can_hear(midi_trigger, "MIDI");
     pump_ducks_only_to_a_kick_you_can_hear(kick_audio_trigger, "Kick Audio");

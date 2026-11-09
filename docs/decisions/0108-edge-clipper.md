@@ -1,6 +1,6 @@
 # ADR-0108 — Edge: a clipper under a true-peak ceiling
 
-**Status:** Accepted; implemented. **Date:** 8 November 2026.
+**Status:** Accepted and implemented; superseded in part by [ADR-0113](0113-edge-adjustable-ceiling.md), which makes the 0 dBFS ceiling adjustable. **Date:** 8 November 2026.
 **Builds on:** ADR-0040 (native effect platform), ADR-0043 (one native insert path), ADR-0047 (Ceiling), ADR-0062 (denormals flushed).
 **Contract:** `include/oscillate/native_dsp/effects/edge.hpp`, the table `src/native_dsp/effects/edge_table.hpp`, the DSP `src/native_dsp/effects/edge_dsp.hpp`.
 

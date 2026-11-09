@@ -129,6 +129,9 @@ KitTheme {
     property real latencyY: 72
     property real meterBarHeight: 4
     property real meterBarRadius: 2
+    // The ceiling's mark on the level bars, standing this far proud of them.
+    property real ceilingMarkWidth: 2
+    property real ceilingMarkOverhang: 3
     property int meterValueSize: 15
     property int clippedValueSize: 22
 

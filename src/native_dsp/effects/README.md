@@ -109,11 +109,12 @@ compresses or expands above its threshold and lifts or pushes down below it.
 
 ### Edge
 
-Clipper for drums and the master: input drive into a fixed 0 dBFS ceiling,
-one shape from a hard flat top to a soft knee, 1x to 16x linear-phase
-oversampling, a true-peak guard that keeps the output at or under 0 dBTP,
-delta, stereo link and a level-matched compare.
-[ADR-0108](../../../docs/decisions/0108-edge-clipper.md)
+Clipper for drums and the master: input drive into a ceiling of −12 to
+0 dBFS, one shape from a hard flat top to a soft knee, 1x to 16x
+linear-phase oversampling, a true-peak guard that keeps the output at or
+under the ceiling, delta, stereo link and a level-matched compare.
+[ADR-0108](../../../docs/decisions/0108-edge-clipper.md),
+[ADR-0113](../../../docs/decisions/0113-edge-adjustable-ceiling.md)
 
 ![Edge panel](../../../docs/images/effects/edge.png)
 
