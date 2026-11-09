@@ -44,7 +44,8 @@ using test::require;
 // How long a UI wait may take before it counts as a hang (not a timing claim).
 constexpr int ui_wait_ms = 10'000;
 // Two seconds of a steady stereo tone: still playing when the edit lands.
-constexpr std::size_t source_frames = 2 * test::sample_rate_48k;
+constexpr std::size_t source_seconds = 2;
+constexpr std::size_t source_frames = source_seconds * test::sample_rate_48k;
 constexpr std::int16_t source_level = 6'000;
 // Where the clip moves, as a fraction of the visible arrangement.
 constexpr double edited_start = 1.0 / 16.0;
