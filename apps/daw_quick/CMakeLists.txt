@@ -66,6 +66,10 @@ set(oscillate_quick_core_sources
   src/true_peak_monitor.cpp
   src/true_peak_monitor.hpp
   src/project_bridge.cpp
+  src/project_bridge_composition.cpp
+  src/project_bridge_edits.cpp
+  src/project_bridge_meters.cpp
+  src/project_bridge_project.cpp
   src/project_bridge_autosave.cpp
   src/project_bridge_projection.cpp
   src/project_bridge_projection.hpp

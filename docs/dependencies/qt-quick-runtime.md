@@ -6,7 +6,7 @@
 
 ## Observed build and runtime
 
-The current Quick target in `apps/daw_quick/CMakeLists.txt` links `Qt6::Core`, `Qt6::Gui`, `Qt6::Qml`, `Qt6::Quick` and `Qt6::Widgets` dynamically. When `BUILD_TESTING=ON`, it **also links `Qt6::Test` into the executable** for smoke inputs. `Widgets` is a real dependency: `main.cpp` constructs `QApplication`, and `project_bridge.cpp` opens a project folder with `QFileDialog`. The bundled QML files import `QtQuick`; there is no source import of Quick Controls, Dialogs, Layouts or Multimedia. `qml.qrc` embeds the shell, welcome screen and four starter WAV files. The headless application and engine do not link Qt.
+The current Quick target in `apps/daw_quick/CMakeLists.txt` links `Qt6::Core`, `Qt6::Gui`, `Qt6::Qml`, `Qt6::Quick` and `Qt6::Widgets` dynamically. When `BUILD_TESTING=ON`, it **also links `Qt6::Test` into the executable** for smoke inputs. `Widgets` is a real dependency: `main.cpp` constructs `QApplication`, and `project_lifecycle_controller.cpp` opens a project folder with `QFileDialog`. The bundled QML files import `QtQuick`; there is no source import of Quick Controls, Dialogs, Layouts or Multimedia. `qml.qrc` embeds the shell, welcome screen and four starter WAV files. The headless application and engine do not link Qt.
 
 The native prototype now scans QML files named in `qml.qrc` and declares
 [`qml6-module-qtquick`](https://packages.ubuntu.com/resolute/qml6-module-qtquick)
