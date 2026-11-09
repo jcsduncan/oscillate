@@ -361,8 +361,12 @@ void true_peak_never_exceeds_a_lowered_ceiling() {
 // ceiling it went in under: its true peak never passes the highest ceiling
 // the glide moved through.
 void true_peak_holds_while_the_ceiling_glides() {
-  constexpr std::size_t frames = 24'000;
-  constexpr std::size_t glide_every = 1'500;
+  constexpr std::size_t frames = 48'000;
+  // Each ceiling holds 100 ms: long enough to settle after the glide and
+  // the latency, and be measured under the lower one.
+  constexpr std::size_t glide_every = 4'800;
+  constexpr auto settle =
+      static_cast<std::size_t>(oscillate::native_dsp::dsp::switch_fade_seconds * rate);
   const std::array<Stereo, 2> sources{scaled(noise(1.0, frames), twelve_db_over),
                                       sine(10'000.0, twelve_db_over, frames)};
   for (const std::size_t o : {x1, x16}) {
@@ -381,7 +385,19 @@ void true_peak_holds_while_the_ceiling_glides() {
                 runtime->offer_values((at_frame / glide_every) % 2 == 1 ? low : high, ++offers + 1),
                 "the ceiling moves");
           };
-          const double tp = true_peak(process(*runtime, then_silence(source, high), options));
+          const auto out = process(*runtime, then_silence(source, high), options);
+          const double tp = true_peak(out);
+          // Settled under the lower ceiling, the output stays under it.
+          const auto latency = engine().latency_frames(high, rate);
+          for (std::size_t from = glide_every; from < frames; from += 2 * glide_every) {
+            double settled = 0.0;
+            for (std::size_t i = from + latency + settle; i < from + glide_every + latency; ++i)
+              settled = std::max({settled, std::fabs(out.left[i]), std::fabs(out.right[i])});
+            REQUIRE_LE(settled, gain(low_ceiling_db),
+                       "under the lower ceiling once settled: factor " +
+                           std::to_string(edge::factors[o]) + ", filters " + std::to_string(f) +
+                           ": " + std::to_string(db(settled)));
+          }
           REQUIRE_LE(tp, gain(near_ceiling_db),
                      "true peak under the highest ceiling while it glides: factor " +
                          std::to_string(edge::factors[o]) + ", filters " + std::to_string(f) +
