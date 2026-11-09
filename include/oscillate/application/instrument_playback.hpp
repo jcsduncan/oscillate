@@ -102,9 +102,10 @@ public:
                  std::optional<std::uint64_t> target_serial = std::nullopt);
   // Stops/joins the output at a completed block, advances transport generation,
   // re-primes every audio feed from that exact sample and resumes via poll_start.
-  // The caller must run this non-real-time handoff off the UI event path if the
-  // device's stop/join may be slow. Failure after quiescence leaves playback
-  // stopped with a visible model-versus-graph status; the edit remains accepted.
+  // Like every call here, it runs on the control thread that owns the session:
+  // it replaces the run that thread reads. Failure after quiescence leaves
+  // playback stopped with a visible model-versus-graph status; the edit
+  // remains accepted.
   [[nodiscard]] foundation::Result<void>
   restart_prepared_after_edit(PreparedInstrumentPlayback prepared);
   [[nodiscard]] foundation::Result<void>

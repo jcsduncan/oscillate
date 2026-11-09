@@ -32,7 +32,6 @@ public:
     bool routed_preparing = false;
     bool direct_preparing = false;
     bool direct_playing = false;
-    bool audio_edit_stopping = false;
     std::optional<application::RevisionStatus> graph;
     std::optional<foundation::Error> plugin_fault;
   };

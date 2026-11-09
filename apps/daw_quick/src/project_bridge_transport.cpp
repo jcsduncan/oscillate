@@ -78,7 +78,6 @@ TransportController::PlaybackView ProjectBridge::playback_view(PlaybackViewOptio
   view.routed_preparing = routed_completion_ != nullptr;
   view.direct_preparing = playback_completion_ != nullptr;
   view.direct_playing = playback_ && playback_->playing();
-  view.audio_edit_stopping = audio_edit_completion_ && audio_edit_completion_->stopping_only;
   if (options.include_graph && routed_playback_)
     view.graph = observed_routed_graph_;
   else if (options.include_direct_graph && view.direct_playing)
@@ -479,8 +478,8 @@ void ProjectBridge::toggle_playback() {
     return;
   }
   if (audio_edit_completion_) {
-    audio_edit_completion_->stop_requested.store(true, std::memory_order_release);
-    set_playback_status(QStringLiteral("Stopping after the audio edit handoff"));
+    audio_edit_completion_->stop_requested = true;
+    set_playback_status(QStringLiteral("Stopping once the audio edit is prepared"));
     return;
   }
   if (!playback_enabled() || !playback_) {
@@ -567,38 +566,24 @@ void ProjectBridge::begin_live_audio_edit() {
     return;
   }
   auto completion = std::make_shared<AudioEditCompletion>();
-  auto* playback = playback_.get();
-  const auto hook = before_live_edit_handoff_;
-  auto* session = session_.get();
   try {
+    // The worker sees only the task, which holds its own snapshot: the
+    // handoff that touches the session and the playing run waits for the UI
+    // thread's poll.
     audio_edit_worker_ =
         audio_edit_runner_([task = std::make_shared<application::InstrumentPlaybackPreparation>(
                                 std::move(task).value()),
-                            completion, playback, hook, session] {
+                            completion] {
+          using Prepared = foundation::Result<application::PreparedInstrumentPlayback>;
           try {
-            auto prepared = std::move(*task).run();
-            if (!prepared) {
-              completion->result.emplace(foundation::Result<void>::failure(prepared.error()));
-            } else if (completion->stop_requested.load(std::memory_order_acquire)) {
-              playback->stop();
-              completion->result.emplace(foundation::Result<void>::success());
-            } else {
-              if (hook) {
-                hook(*session, prepared.value());
-              }
-              completion->result.emplace(
-                  playback->restart_prepared_after_edit(std::move(prepared).value()));
-            }
+            completion->result.emplace(std::move(*task).run());
           } catch (const std::exception& error) {
-            completion->result.emplace(foundation::Result<void>::failure(
-                {foundation::ErrorCode::internal,
-                 std::string("Audio edit handoff failed: ") + error.what()}));
+            completion->result.emplace(
+                Prepared::failure({foundation::ErrorCode::internal,
+                                   std::string("Audio edit preparation failed: ") + error.what()}));
           } catch (...) {
-            completion->result.emplace(foundation::Result<void>::failure(
-                {foundation::ErrorCode::internal, "Audio edit handoff failed unexpectedly"}));
-          }
-          if (completion->stop_requested.load(std::memory_order_acquire)) {
-            playback->stop();
+            completion->result.emplace(Prepared::failure(
+                {foundation::ErrorCode::internal, "Audio edit preparation failed unexpectedly"}));
           }
           completion->done.store(true, std::memory_order_release);
         });
