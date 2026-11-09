@@ -14,7 +14,6 @@ namespace oscillate::tools::breakdown {
 
 inline constexpr std::string_view flag = "--breakdown";
 // After the output directory: also render each instrument track alone.
-inline constexpr std::string_view stems_flag = "--stems";
 
 void render_set(const std::filesystem::path& output, bool stems);
 

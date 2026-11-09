@@ -474,23 +474,29 @@ std::vector<Note> chorale() {
   constexpr double breath = 0.15;
   constexpr double last_length = 6.0;
   std::vector<Note> notes;
-  for (std::size_t i = 0; i < chords.size(); ++i) {
-    const auto& chord = chords[i];
-    const bool last = i + 1 == chords.size();
-    const auto until = [&](double after) {
-      return last ? last_length : chords[i + 1].at + after - (chord.at + after) - breath;
-    };
-    // A voice that keeps its note across the change holds instead of striking again.
-    const auto held = [&](std::uint8_t k, auto pick) { return i > 0 && pick(chords[i - 1]) == k; };
-    if (!held(chord.top, [](const Chord& c) { return c.top; }))
-      notes.push_back({chord.at + top_after, until(top_after), chord.top, chord.velocity});
-    if (!held(chord.middle, [](const Chord& c) { return c.middle; }))
-      notes.push_back({chord.at + middle_after, until(middle_after), chord.middle,
-                       static_cast<std::uint8_t>(chord.velocity - 8)});
-    if (chord.low && !(i > 0 && chords[i - 1].low == chord.low))
-      notes.push_back({chord.at + low_after, until(low_after), *chord.low,
-                       static_cast<std::uint8_t>(chord.velocity - 6)});
-  }
+  // A voice that keeps its note across a change holds: it sounds from the
+  // chord that strikes it until the next chord that changes it.
+  const auto voice = [&](auto pick, double after, int velocity_offset) {
+    for (std::size_t i = 0; i < chords.size(); ++i) {
+      const std::optional<std::uint8_t> k = pick(chords[i]);
+      if (!k || (i > 0 && pick(chords[i - 1]) == k))
+        continue;
+      std::size_t next = i + 1;
+      while (next < chords.size() && pick(chords[next]) == k)
+        ++next;
+      const double length = next == chords.size()
+                                ? chords.back().at + last_length - chords[i].at - after
+                                : chords[next].at - chords[i].at - breath;
+      notes.push_back({chords[i].at + after, length, *k,
+                       static_cast<std::uint8_t>(chords[i].velocity + velocity_offset)});
+    }
+  };
+  constexpr int middle_softer = -8;
+  constexpr int low_softer = -6;
+  voice([](const Chord& c) { return std::optional<std::uint8_t>{c.top}; }, top_after, 0);
+  voice([](const Chord& c) { return std::optional<std::uint8_t>{c.middle}; }, middle_after,
+        middle_softer);
+  voice([](const Chord& c) { return c.low; }, low_after, low_softer);
   return notes;
 }
 

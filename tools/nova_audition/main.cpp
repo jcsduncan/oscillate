@@ -154,7 +154,7 @@ int main(int argc, char** argv) {
     return 0;
   }
   if (std::string_view(argv[1]) == tools::breakdown::flag) {
-    const bool stems = argc == 4 && std::string_view(argv[3]) == tools::breakdown::stems_flag;
+    const bool stems = tools::audition::stems_requested(argc, argv);
     if (argc != 3 && !stems)
       fail("usage: oscillate_nova_audition --breakdown <output directory> [--stems]");
     tools::breakdown::render_set(argv[2], stems);
@@ -162,7 +162,7 @@ int main(int argc, char** argv) {
   }
   if (std::string_view(argv[1]) == tools::keys::flag ||
       std::string_view(argv[1]) == tools::keys::breakdown_flag) {
-    const bool stems = argc == 4 && std::string_view(argv[3]) == tools::breakdown::stems_flag;
+    const bool stems = tools::audition::stems_requested(argc, argv);
     if (argc != 3 && !stems)
       fail("usage: oscillate_nova_audition --keys|--keys2 <output directory> [--stems]");
     const auto round = std::string_view(argv[1]) == tools::keys::flag
@@ -172,7 +172,7 @@ int main(int argc, char** argv) {
     return 0;
   }
   if (std::string_view(argv[1]) == tools::strings::flag) {
-    const bool stems = argc == 4 && std::string_view(argv[3]) == tools::breakdown::stems_flag;
+    const bool stems = tools::audition::stems_requested(argc, argv);
     if (argc != 3 && !stems)
       fail("usage: oscillate_nova_audition --strings <output directory> [--stems]");
     tools::strings::render_set(argv[2], stems);

@@ -273,6 +273,9 @@ constexpr auto arp_sequence = std::to_array<Value>({
 // library plays at one level: a held C major chord (C1 for basses) peaks
 // near -6 dBFS, or as near as the master's +6 dB reaches.
 
+// Utility: bass mono below about 120 Hz (p2, log 20..500 Hz).
+constexpr double mono_below_120_hz = 0.557;
+
 // Basses.
 constexpr auto rolling_reese = std::to_array<Value>({
     {"nova.master", 1.5},
@@ -297,7 +300,7 @@ constexpr auto rolling_reese = std::to_array<Value>({
     {"nova.global.portamento", 0.04},
     {"nova.fx.1.p0", 0.2},
     {"nova.fx.1.p7", 1.0 / 11.0},
-    {"nova.fx.2.p2", 0.557},
+    {"nova.fx.2.p2", mono_below_120_hz},
 });
 
 constexpr auto acid_line = std::to_array<Value>({
@@ -1642,7 +1645,7 @@ constexpr auto warm_sub_bed = std::to_array<Value>({
     {"nova.lfo.1.smooth", 0.5},
     {"nova.mod.0.amount", octaves_of_travel(0.4)},
     // Utility: bass mono below about 120 Hz (p2, log 20..500 Hz).
-    {"nova.fx.1.p2", 0.557},
+    {"nova.fx.1.p2", mono_below_120_hz},
     {"nova.analogue.on", 1.0},
     {"nova.analogue.age", 0.35},
     {"nova.analogue.seed", 909.0},
@@ -1651,9 +1654,6 @@ constexpr auto warm_sub_bed = std::to_array<Value>({
 
 // ---- Drop parts ---------------------------------------------------------------------------
 // What hits after a breakdown, ducked from the kick by a Pump on the track.
-
-// Utility: bass mono below about 120 Hz (p2, log 20..500 Hz).
-constexpr double mono_below_120_hz = 0.557;
 
 // A mono saw and sine sub for off-beat sixteenths: a ladder that opens on
 // each note and shuts within a sixteenth, so the line rolls rather than

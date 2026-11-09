@@ -23,6 +23,15 @@
 
 namespace oscillate::tools::audition {
 
+// The optional last argument that also writes each part as a stem.
+inline constexpr std::string_view stems_flag = "--stems";
+
+// True when the command line is `<mode> <output directory> --stems`.
+inline bool stems_requested(int argc, char** argv) {
+  constexpr int with_stems = 4;
+  return argc == with_stems && std::string_view(argv[with_stems - 1]) == stems_flag;
+}
+
 [[noreturn]] inline void fail(const std::string& message) {
   std::cerr << "nova audition: " << message << '\n';
   std::exit(1);
