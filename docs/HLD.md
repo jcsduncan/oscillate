@@ -141,7 +141,7 @@ The `plugin_ui` target (`src/app/plugin_ui`) owns the editor bridge. It provides
 
 `oscillate_synth_engines` holds:
 - the generic `NativeSynthRuntime`;
-- the engine registry (`src/native_dsp/synth/engines.cpp`): Prism, Ember, Nova, Pulse, Halo, Torque, Drift, Concert, Anvil, Crate, Knock, Fret and Wren;
+- the engine registry (`src/native_dsp/synth/engines.cpp`): Prism, Ember, Nova, Pulse, Halo, Torque, Drift, Concert, Anvil, Crate, Knock, Fret, Wren and Bow;
 
 The project binding (`native_inserts/instrument_binding.hpp`) and the `NativeSynthPlayer` that live playback and export render through (`native_inserts/synth_player.hpp`) sit above `native_dsp` in `native_inserts`: they compile automation lanes, the tempo map and the meter for the engines ([ADR-0104](decisions/0104-native-processing-layers.md)). Note effects read project ticks through a `FrameTicks` source the player supplies (`native_inserts::TempoTicks`), so no native engine evaluates a tempo or meter map.
 

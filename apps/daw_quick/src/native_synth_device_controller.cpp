@@ -23,6 +23,7 @@
 #include "oscillate/native_dsp/effects/strata.hpp"
 #include "oscillate/native_dsp/effects/temper.hpp"
 #include "oscillate/native_dsp/synth/anvil.hpp"
+#include "oscillate/native_dsp/synth/bow.hpp"
 #include "oscillate/native_dsp/synth/concert.hpp"
 #include "oscillate/native_dsp/synth/crate.hpp"
 #include "oscillate/native_dsp/synth/drift_engine.hpp"
@@ -38,6 +39,7 @@
 
 #include <QClipboard>
 #include <QCoreApplication>
+#include <QDesktopServices>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -52,6 +54,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -77,6 +80,23 @@ template <typename State> QString library_state_name(State state) {
     return QStringLiteral("ready");
   case State::invalid:
     return QStringLiteral("invalid");
+  case State::missing:
+    break;
+  }
+  return QStringLiteral("missing");
+}
+
+// Bow's library can also be loading (its first look reads in the
+// background).
+QString library_state_name(native_dsp::synth::bow::library::State state) {
+  using State = native_dsp::synth::bow::library::State;
+  switch (state) {
+  case State::ready:
+    return QStringLiteral("ready");
+  case State::invalid:
+    return QStringLiteral("invalid");
+  case State::loading:
+    return QStringLiteral("loading");
   case State::missing:
     break;
   }
@@ -123,6 +143,12 @@ QVariantMap fret_library_map(const native_dsp::synth::fret::library::Status& sta
   namespace fret = native_dsp::synth::fret;
   return sample_library_map(status, {fret::library::install_command, fret::library::name,
                                      fret::library::attribution, fret::first_key, fret::last_key});
+}
+
+QVariantMap bow_library_map(const native_dsp::synth::bow::library::Status& status) {
+  namespace bow = native_dsp::synth::bow;
+  return sample_library_map(status, {bow::library::install_command, bow::library::name,
+                                     bow::library::attribution, bow::first_key, bow::last_key});
 }
 
 QVariantMap wren_library_map(const native_dsp::synth::wren::library::Status& status) {
@@ -1381,6 +1407,30 @@ QVariantMap NativeSynthDeviceController::telemetry() {
     out[QStringLiteral("last_grace")] = at(t::last_grace) > 0.5;
     out[QStringLiteral("vibrato")] = at(t::vibrato) > 0.5;
     out[QStringLiteral("output_peak_db")] = at(t::output_peak_db);
+  } else if (id == "bow" && frame.size() >= synth::bow::telemetry::size) {
+    // bow.hpp: the articulation playing (latched by a keyswitch or not), the
+    // wheel as played, the newest note's vibrato, the voices and held keys.
+    namespace t = synth::bow::telemetry;
+    out[QStringLiteral("library")] = library_state_name(
+        static_cast<synth::bow::library::State>(static_cast<int>(at(t::library))));
+    out[QStringLiteral("notes")] = static_cast<int>(std::lround(at(t::notes)));
+    const auto articulation = static_cast<std::size_t>(
+        std::clamp<long>(std::lround(at(t::articulation)), 0,
+                         static_cast<long>(synth::bow::articulation_count) - 1));
+    out[QStringLiteral("articulation")] = static_cast<int>(articulation);
+    out[QStringLiteral("latched")] = at(t::latched) > 0.5;
+    out[QStringLiteral("dynamics")] = at(t::dynamics);
+    out[QStringLiteral("dynamic_name")] = text(synth::bow::dynamic_name(at(t::dynamics)));
+    out[QStringLiteral("vibrato")] = at(t::vibrato);
+    out[QStringLiteral("voices")] = static_cast<int>(std::lround(at(t::voices)));
+    out[QStringLiteral("output_peak_db")] = at(t::output_peak_db);
+    QVariantList held;
+    const auto count = std::min<std::size_t>(
+        t::held_slots, static_cast<std::size_t>(std::max<long>(0, std::lround(at(t::held_count)))));
+    for (std::size_t slot = 0; slot < count; ++slot) {
+      held.push_back(static_cast<int>(std::lround(at(t::held + slot))));
+    }
+    out[QStringLiteral("held")] = held;
   } else if (id == "knock" && frame.size() >= synth::knock::telemetry::size) {
     // knock.hpp: the latest hit's pad (-1 before any) and the hit count,
     // which the panel watches for new hits; each pad's peak this block.
@@ -1627,6 +1677,83 @@ QVariantMap NativeSynthDeviceController::wren_reload_library() {
     status = wren::library::load(wren::library::default_directory());
   }
   return wren_library_map(status);
+}
+
+QVariantMap NativeSynthDeviceController::bow_library() const {
+  namespace bow = native_dsp::synth::bow;
+  if (engine_.id != bow::engine().descriptor->id) {
+    return {};
+  }
+  return bow_library_map(bow::library::status());
+}
+
+QVariantMap NativeSynthDeviceController::bow_reload_library() {
+  namespace bow = native_dsp::synth::bow;
+  if (engine_.id != bow::engine().descriptor->id) {
+    return {};
+  }
+  // status() looks again whenever the library is missing or invalid.
+  auto status = bow::library::status();
+  if (status.state == bow::library::State::missing ||
+      status.state == bow::library::State::invalid) {
+    status = bow::library::load(bow::library::default_directory());
+  }
+  return bow_library_map(status);
+}
+
+QVariantMap NativeSynthDeviceController::bow_layout() const {
+  namespace bow = native_dsp::synth::bow;
+  if (engine_.id != bow::engine().descriptor->id) {
+    return {};
+  }
+  auto section = bow::Section::violas;
+  if (const auto at = native_dsp::find_parameter(*bow::engine().descriptor, "bow.section");
+      at && *at < values_.size()) {
+    section = static_cast<bow::Section>(
+        std::clamp<long>(std::lround(values_[*at]), 0, static_cast<long>(bow::section_count) - 1));
+  }
+  const auto range = bow::playable(section);
+  QVariantList switches;
+  for (int key = bow::first_keyswitch; key <= bow::last_keyswitch; ++key) {
+    switches.push_back(
+        QVariantMap{{QStringLiteral("key"), key}, {QStringLiteral("name"), key_name(key)}});
+  }
+  QVariantList dynamics;
+  for (std::size_t i = 0; i < bow::dynamic_names.size(); ++i) {
+    dynamics.push_back(QVariantMap{
+        {QStringLiteral("name"), text(bow::dynamic_names[i])},
+        {QStringLiteral("top"), i < bow::dynamic_tops.size() ? bow::dynamic_tops[i] : 1.0}});
+  }
+  return {{QStringLiteral("dynamics"), dynamics},
+          {QStringLiteral("first_key"), bow::first_key},
+          {QStringLiteral("last_key"), bow::last_key},
+          {QStringLiteral("low"), range.low},
+          {QStringLiteral("high"), range.high},
+          {QStringLiteral("low_name"), key_name(range.low)},
+          {QStringLiteral("high_name"), key_name(range.high)},
+          {QStringLiteral("keyswitches"), switches}};
+}
+
+QString NativeSynthDeviceController::library_folder(const QString& directory) const {
+  // The library's own folder when it exists, else its nearest existing
+  // parent, so the action opens somewhere before an install.
+  std::filesystem::path folder(directory.toStdString());
+  std::error_code error;
+  while (!folder.empty() && !std::filesystem::is_directory(folder, error)) {
+    const auto parent = folder.parent_path();
+    if (parent == folder) {
+      return {};
+    }
+    folder = parent;
+  }
+  return QString::fromStdString(folder.string());
+}
+
+void NativeSynthDeviceController::show_library_folder(const QString& directory) {
+  const auto folder = library_folder(directory);
+  if (!folder.isEmpty()) {
+    QDesktopServices::openUrl(QUrl::fromLocalFile(folder));
+  }
 }
 
 QVariantMap NativeSynthDeviceController::wren_phrase() const {

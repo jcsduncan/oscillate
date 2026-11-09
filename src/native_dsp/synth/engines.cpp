@@ -1,6 +1,7 @@
 #include "oscillate/native_dsp/synth/engines.hpp"
 
 #include "oscillate/native_dsp/synth/anvil.hpp"
+#include "oscillate/native_dsp/synth/bow.hpp"
 #include "oscillate/native_dsp/synth/concert.hpp"
 #include "oscillate/native_dsp/synth/crate.hpp"
 #include "oscillate/native_dsp/synth/drift_engine.hpp"
@@ -19,10 +20,10 @@
 namespace oscillate::native_dsp::synth {
 namespace {
 // NOLINTNEXTLINE(bugprone-throwing-static-initialization): engines are built from constant tables.
-const std::array<const SynthEngine*, 13> registry{
+const std::array<const SynthEngine*, 14> registry{
     &prism::engine(),  &ember::engine(), &nova::engine(),    &pulse::engine(), &halo::engine(),
     &torque::engine(), &drift::engine(), &concert::engine(), &anvil::engine(), &crate::engine(),
-    &knock::engine(),  &fret::engine(),  &wren::engine()};
+    &knock::engine(),  &fret::engine(),  &wren::engine(),    &bow::engine()};
 } // namespace
 
 std::span<const SynthEngine* const> engines() noexcept { return registry; }

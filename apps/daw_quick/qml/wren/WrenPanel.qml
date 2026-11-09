@@ -396,7 +396,7 @@ Rectangle {
         x: articulation.x
         y: panel.bodyY + panel.bodyHeight - height
         width: panel.rightWidth
-        height: libraryColumn.implicitHeight + 2 * panel.rightPad
+        height: notice.implicitHeight + 2 * panel.rightPad
         radius: panel.theme.cardRadius
         color: panel.theme.libraryCard
         border.color: panel.theme.cardEdge
@@ -405,120 +405,23 @@ Rectangle {
         Accessible.description: panel.ready ? panel.library.name + ", " + panel.library.attribution
                                             : panel.library.message !== undefined ? panel.library.message : ""
 
-        Column {
-            id: libraryColumn
+        Kit.LibraryNotice {
+            id: notice
             x: panel.rightPad
             y: panel.rightPad
             width: libraryPlate.width - 2 * panel.rightPad
-            spacing: panel.theme.captionGap
-
-            Row {
-                spacing: panel.theme.titleGap
-                CardTitle {
-                    title: "LIBRARY"
-                    dot: panel.ready ? panel.theme.live : panel.theme.warning
-                }
-                Text {
-                    objectName: "wrenLibraryState"
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: panel.ready ? "INSTALLED" : panel.library.state === "invalid" ? "DAMAGED" : "NOT INSTALLED"
-                    color: panel.ready ? panel.theme.inkDim : panel.theme.warning
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.smallSize
-                    font.letterSpacing: panel.theme.labelSpacing
-                }
-            }
-
-            // Installed: the library, its credit and how it plays.
-            Text {
-                objectName: "wrenLibraryName"
-                width: parent.width
-                visible: panel.ready
-                text: panel.ready ? panel.library.name : ""
-                color: panel.theme.ink
-                font.family: panel.theme.sans
-                font.pixelSize: panel.theme.bodySize
-                elide: Text.ElideRight
-            }
-            Text {
-                objectName: "wrenAttribution"
-                width: parent.width
-                visible: panel.ready
-                text: panel.ready ? panel.library.attribution : ""
-                color: panel.theme.tongued
-                font.family: panel.theme.sans
-                font.pixelSize: panel.theme.captionSize
-                wrapMode: Text.WordWrap
-            }
-            Text {
-                width: parent.width
-                visible: panel.ready
-                text: panel.ready
-                    ? "Free to use without restrictions. " + panel.library.samples + " notes, "
-                      + Format.quantity(panel.library.resident_mb, "MB", 0) + ", all in memory."
-                    : ""
-                color: panel.theme.inkDim
-                font.family: panel.theme.sans
-                font.pixelSize: panel.theme.captionSize
-                wrapMode: Text.WordWrap
-            }
-
-            // Missing or damaged: why, and how to install it.
-            Text {
-                objectName: "wrenLibraryMessage"
-                width: parent.width
-                visible: !panel.ready
-                text: (panel.library.message !== undefined ? panel.library.message + ". " : "")
-                    + "Wren is silent until its library is installed. It plays "
-                    + (panel.library.required !== undefined ? panel.library.required : "") + "."
-                color: panel.theme.inkDim
-                font.family: panel.theme.sans
-                font.pixelSize: panel.theme.captionSize
-                wrapMode: Text.WordWrap
-                maximumLineCount: panel.messageLines
-                elide: Text.ElideRight
-            }
-            Rectangle {
-                width: parent.width
-                height: command.implicitHeight + 2 * panel.theme.captionGap
-                visible: !panel.ready
-                radius: panel.theme.captionGap
-                color: panel.theme.lane
-                border.color: panel.theme.laneEdge
-                Text {
-                    id: command
-                    objectName: "wrenInstallCommand"
-                    x: panel.theme.captionGap
-                    y: panel.theme.captionGap
-                    width: parent.width - 2 * x
-                    text: panel.library.install_command !== undefined ? panel.library.install_command : ""
-                    color: panel.theme.tongued
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.smallSize
-                    wrapMode: Text.WrapAnywhere
-                    Accessible.role: Accessible.StaticText
-                    Accessible.name: "Install command"
-                    Accessible.description: text
-                }
-            }
-            Row {
-                visible: !panel.ready
-                spacing: panel.theme.captionGap
-                Kit.Button {
-                    theme: panel.theme
-                    objectName: "wrenCopyInstall"
-                    label: "Copy command"
-                    onClicked: panel.controller.set_clipboard_text(command.text)
-                }
-                Kit.Button {
-                    theme: panel.theme
-                    objectName: "wrenLibraryReload"
-                    label: "Look again"
-                    onClicked: {
-                        panel.controller.wren_reload_library()
-                        ++panel.libraryLook
-                    }
-                }
+            controller: panel.controller
+            theme: panel.theme
+            library: panel.library
+            instrument: "Wren"
+            messageLines: panel.messageLines
+            details: panel.ready
+                ? "Free to use without restrictions. " + panel.library.samples + " notes, "
+                  + Format.quantity(panel.library.resident_mb, "MB", 0) + ", all in memory."
+                : ""
+            onReload: {
+                panel.controller.wren_reload_library()
+                ++panel.libraryLook
             }
         }
     }

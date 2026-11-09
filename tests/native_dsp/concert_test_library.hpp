@@ -162,7 +162,7 @@ inline void write_library(const std::filesystem::path& directory, double note_se
   pack.close();
   std::ofstream manifest(directory / concert::library::manifest_file);
   manifest << concert::library::format_line << "\nname Concert test tones\n"
-           << "attribution Synthetic tones for oscillate's tests\n"
+           << "attribution Synthetic tones for Oscillate's tests\n"
            << "rate " << concert::library::pack_rate << "\npack concert.pack "
            << offset * 2 * sizeof(std::int16_t) << "\nlast_damped_key " << last_damped_key << "\n";
   for (const auto& line : lines) {

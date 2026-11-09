@@ -1091,15 +1091,23 @@ Rectangle {
                 font.pixelSize: panel.theme.heroSize
                 font.weight: Font.Medium
             }
-            Text {
+            // The shared library notice (issue #171): Crate has no library to
+            // install, so it names the sample it lacks and why.
+            Kit.LibraryNotice {
                 objectName: "crateDropHint"
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: panel.crate !== null && panel.crate.message !== "" ? panel.crate.message
-                    : "A break or a loop: Crate cuts it at each hit and lays the chops out on the pads"
-                color: panel.crate !== null && panel.crate.message !== "" && !panel.crate.busy
-                    ? panel.theme.warning : panel.theme.inkDim
-                font.family: panel.theme.sans
-                font.pixelSize: panel.theme.bodySize
+                width: panel.theme.dropNoticeWidth
+                controller: panel.controller
+                theme: panel.theme
+                library: ({ state: panel.crate !== null && panel.crate.busy ? "loading" : "missing",
+                            message: panel.crate !== null ? panel.crate.message : "" })
+                instrument: "Crate"
+                title: "SAMPLE"
+                missingText: "NONE LOADED"
+                loadingText: "Reading the sample and cutting it into chops."
+                hint: "Crate plays a sample of your own: a break or a loop, cut at each hit and laid "
+                    + "out on the pads."
+                canReload: false
             }
         }
         MouseArea {

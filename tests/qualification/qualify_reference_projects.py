@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plays the light and heavy reference projects and records their cost.
+"""Plays the light, heavy and pad reference projects and records their cost.
 
 Runs oscillate_reference_project for each reference and buffer size, through
 the paced fake callback or, with --target-node, an explicitly named PipeWire
@@ -25,7 +25,7 @@ FIELDS = re.compile(r"(\w+)=(\S+)")
 AUDIO_THREADS = ("audio callback", "audio worker")
 # Spans that frame the work rather than doing it; reported apart from devices.
 FRAME_SPANS = ("audio.render", "graph.node", "graph.source", "pool.wait_for_helpers")
-REFERENCES = ("light", "heavy")
+REFERENCES = ("light", "heavy", "pad")
 BUFFER_SIZES = (64, 128)
 SAMPLE_RATE = 48_000
 PERCENT = 100

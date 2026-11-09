@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/bow">
+    <file>BowPanel.qml</file>
+    <file>BowTheme.qml</file>
+    <file>BowDisplay.qml</file>
+  </qresource>
+</RCC>

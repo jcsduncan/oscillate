@@ -646,7 +646,7 @@ oscillate_add_test(NAME quick_native_synth_controller_contract
 set(oscillate_quick_panel_tests prism ember nova nova_editing nova_browser nova_fx nova_constellation
   nova_arp
   pulse halo torque
-  drift contour concert fret wren anvil crate knock relay orbit forge expanse vista pocket pump loudness lens scope tune
+  drift contour concert fret wren bow anvil crate knock relay orbit forge expanse vista pocket pump loudness lens scope tune
   trim signal shape press ceiling edge temper strata flyby dust chop deck devicekit)
 set(oscillate_quick_panel_sources)
 set(oscillate_quick_panel_declarations)

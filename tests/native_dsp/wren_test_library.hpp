@@ -167,7 +167,7 @@ inline void write_library(const std::filesystem::path& directory, const Keep& ke
   pack.close();
   std::ofstream manifest(directory / wren::library::manifest_file);
   manifest << wren::library::format_line << "\nname Wren test tones\n"
-           << "attribution Synthetic tones for oscillate's tests\n"
+           << "attribution Synthetic tones for Oscillate's tests\n"
            << "rate " << wren::library::pack_rate << "\nchannels " << wren::library::pack_channels
            << "\npack wren.pack " << offset * sizeof(std::int16_t) << "\n";
   for (const auto& line : lines) {

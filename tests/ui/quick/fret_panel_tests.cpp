@@ -1,5 +1,6 @@
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
+#include "panel_kit_checks.hpp"
 
 #include "../../native_dsp/fret_test_library.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
@@ -354,6 +355,10 @@ void the_library_plate_guides_the_install() {
               !item(*panel, QStringLiteral("fretLibraryMessage"))->isVisible() &&
               !item(*panel, QStringLiteral("fretInstallCommand"))->isVisible(),
           "the library's own credit replaces the install steps");
+  require(item(*panel, QStringLiteral("fretShowLibrary"))->isVisible() &&
+              !oscillate::test::panel_kit::shows_text(panel->root,
+                                                      QString::fromStdString(directory.string())),
+          "Show in folder stands in for the library's raw path");
 }
 
 void panel_covers_every_parameter() {

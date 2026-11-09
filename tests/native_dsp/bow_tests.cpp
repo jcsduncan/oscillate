@@ -306,6 +306,7 @@ void descriptor_registry_and_presets() {
                                                     "Pizzicato Ostinato", "Tremolo Swell",
                                                     "Solo Cello",         "Ensemble Legato"};
   const auto& descriptor = *bow::engine().descriptor;
+  REQUIRE_EQ(find_engine("bow"), &bow::engine(), "Bow is registered");
   REQUIRE_OK(validate_engine(descriptor), "the table validates");
   REQUIRE_EQ(descriptor.parameters.size(), parameters, "the ADR's thirteen parameters");
   REQUIRE_EQ(descriptor.presets.size(), presets.size(), "six presets");
