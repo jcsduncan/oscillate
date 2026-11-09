@@ -22,6 +22,7 @@ add_library(oscillate_application
   # The services ProjectSession composes.
   session/audio_clip_service.cpp
   session/audio_clip_service_conversion.cpp
+  session/audio_clip_service_processed.cpp
   session/automation_service.cpp
   session/clipboard_service.cpp
   session/edit_support.cpp
@@ -33,6 +34,7 @@ add_library(oscillate_application
   session/instrument_service.cpp
   session/media_repair_service.cpp
   session/midi_clip_service.cpp
+  session/midi_clip_service_merge.cpp
   session/note_service.cpp
   session/parameter_automation_service.cpp
   session/pedal_service.cpp
