@@ -2,7 +2,6 @@
 
 #include "clip_warp_controller.hpp"
 #include "loop_transport.hpp"
-#include "native_synth_automation_controller.hpp"
 #include "native_synth_device_controller.hpp"
 #include "oscillate/foundation/trace.hpp"
 #include "waveform_controller.hpp"
@@ -375,12 +374,8 @@ void ProjectBridge::poll_playback() {
     poll_routed_playback();
     if (native_synth_controller_)
       native_synth_controller_->refresh();
-    if (native_synth_automation_)
-      native_synth_automation_->refresh_playback_status();
     if (native_effect_controller_)
       native_effect_controller_->refresh();
-    if (native_effect_automation_)
-      native_effect_automation_->refresh_playback_status();
     if (clip_warp_)
       clip_warp_->refresh_playback();
     if (loop_transport_)

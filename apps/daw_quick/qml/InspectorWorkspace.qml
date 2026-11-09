@@ -22,7 +22,6 @@ Item {
 
     readonly property int inspectorWidth: contextPanelOpen ? (width >= Theme.inspectorWideBreakpoint ? Theme.inspectorWideWidth : Theme.inspectorNarrowWidth) : 0
     readonly property bool fxPanelActive: inspector.fxPanelActive
-    property alias selectedSendId: inspector.selectedSendId
 
     signal contextPanelRequested(bool effects)
     signal contextPanelCloseRequested()

@@ -12,6 +12,10 @@
 
 namespace oscillate::quick::detail {
 
+namespace {
+
+// One lane: its points (positions, values and segment shapes) and, for a
+// clip's lane, each point's clip fraction.
 QVariantMap automation_lane_projection(const project::Snapshot& snapshot,
                                        const project::AutomationLane& lane, std::size_t max_points,
                                        const project::Placement* placement) {
@@ -170,22 +174,7 @@ QVariantMap automation_lane_projection(const project::Snapshot& snapshot,
   return projection;
 }
 
-QVariantMap channel_automation_projection(const project::Snapshot& snapshot,
-                                          const project::Track& track) {
-  QVariantMap projection{{"present", false},
-                         {"timebase", QStringLiteral("Musical")},
-                         {"pointCount", 0},
-                         {"points", QVariantList{}}};
-  const auto lane = std::ranges::find_if(track.automation, [&track](const auto& candidate) {
-    const auto* target = std::get_if<project::TrackControlTarget>(&candidate.target);
-    return target && target->track == track.id &&
-           target->key == project::TrackControlTarget::Key::channel_level;
-  });
-  if (lane != track.automation.end())
-    projection.insert(
-        automation_lane_projection(snapshot, *lane, project::max_automation_points_per_lane));
-  return projection;
-}
+} // namespace
 
 QVariantMap clip_channel_automation_projection(const project::Snapshot& snapshot,
                                                const project::Track& track,
@@ -202,22 +191,6 @@ QVariantMap clip_channel_automation_projection(const project::Snapshot& snapshot
   if (lane != clip.automation.end())
     projection.insert(automation_lane_projection(
         snapshot, *lane, project::max_automation_points_per_lane, &clip.placement));
-  return projection;
-}
-
-QVariantMap send_automation_projection(const project::Snapshot& snapshot,
-                                       const project::Track& track, project::SendId send) {
-  QVariantMap projection{{"present", false},
-                         {"timebase", QStringLiteral("Musical")},
-                         {"pointCount", 0},
-                         {"points", QVariantList{}}};
-  const auto lane = std::ranges::find_if(track.automation, [send](const auto& candidate) {
-    const auto* target = std::get_if<project::SendGainTarget>(&candidate.target);
-    return target && target->send == send;
-  });
-  if (lane != track.automation.end()) {
-    projection.insert(automation_lane_projection(snapshot, *lane));
-  }
   return projection;
 }
 

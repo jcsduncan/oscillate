@@ -23,9 +23,10 @@ struct VerifiedPluginParameter {
   bool continuous_automatable{false};
 };
 
-// UI-thread commands and projection for track-owned VST3 parameter lanes on
-// the plugin selected in the VST3 editor. The bridge owns project lifecycle,
-// publishes each accepted revision and reports the live graph revision.
+// The VST3 editor's parameter list for the plugin it shows: names, saved
+// baselines and which parameters already have a lane. Automate creates a
+// lane and hands its key to the arrangement, where lanes are edited
+// (ADR-0051). The bridge owns project lifecycle and publishes each revision.
 class PluginAutomationController final : public QObject {
   Q_OBJECT
   Q_PROPERTY(QVariantMap view READ view NOTIFY changed)
@@ -35,14 +36,8 @@ public:
   using CanEdit = std::function<bool()>;
   using Report = std::function<void(QString)>;
   using Commit = std::function<void()>;
-  // nullopt while stopped; otherwise the revision the live graph renders
-  // (0 while the first graph is still being prepared).
-  using LiveRevision = std::function<std::optional<std::uint64_t>()>;
-  using LaneView =
-      std::function<QVariantMap(const project::Snapshot&, const project::AutomationLane&)>;
 
   PluginAutomationController(Session session, CanEdit can_edit, Report report, Commit commit,
-                             LiveRevision live_revision, LaneView lane_view,
                              QObject* parent = nullptr);
 
   [[nodiscard]] QVariantMap view() const { return view_; }
@@ -60,14 +55,10 @@ public:
   // view projects a bounded page of matches and reports the overflow.
   Q_INVOKABLE void set_parameter_filter(const QString& filter);
 
-  // Creates the lane from the saved baseline at bar 1, or selects it.
-  Q_INVOKABLE void automate(quint32 parameter_id);
-  Q_INVOKABLE void select_parameter(quint32 parameter_id);
-  Q_INVOKABLE void show_parameters();
-  Q_INVOKABLE void set_point(int zero_based_bar, double normalized_value);
-  Q_INVOKABLE void set_value(const QString& point_id, double normalized_value);
-  Q_INVOKABLE void remove_point(const QString& point_id);
-  Q_INVOKABLE void remove_lane();
+  // Creates the lane from the saved baseline at bar 1 when it has none, and
+  // returns its arrangement lane key ("vst3:<plugin>:<parameter>"), where it
+  // is edited (ADR-0051); empty when the parameter cannot be automated.
+  Q_INVOKABLE QString automate(quint32 parameter_id);
 
 signals:
   void changed();
@@ -76,7 +67,6 @@ private:
   struct Selection {
     project::TrackId track;
     project::PluginInstanceId plugin;
-    std::optional<std::uint32_t> parameter;
   };
   // Saved plugin and verified metadata for the current selection.
   struct PluginContext {
@@ -88,13 +78,7 @@ private:
     bool is_source{false};
     bool bypassed{false};
   };
-  struct LaneTarget {
-    project::TrackId track;
-    project::PluginInstanceId plugin;
-    std::uint32_t parameter;
-  };
 
-  [[nodiscard]] std::optional<LaneTarget> lane_target() const;
   [[nodiscard]] application::ProjectSession* editable_session();
   void failure(const QString& context, const foundation::Error& error);
   void accepted(const QString& action);
@@ -106,8 +90,6 @@ private:
   CanEdit can_edit_;
   Report report_;
   Commit commit_;
-  LiveRevision live_revision_;
-  LaneView lane_view_;
   std::optional<Selection> selection_;
   QString filter_;
   std::map<project::PluginInstanceId, std::vector<VerifiedPluginParameter>> verified_;

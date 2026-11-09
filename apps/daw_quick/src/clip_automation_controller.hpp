@@ -23,7 +23,6 @@ public:
   ClipAutomationController(Session session, CanEdit can_edit, Report report, Commit commit,
                            QObject* parent = nullptr);
 
-  Q_INVOKABLE void set_point(const QString& clip_id, int zero_based_bar, double value);
   Q_INVOKABLE void set_point_at_fraction(const QString& clip_id, double fraction, double value);
   Q_INVOKABLE void move_point(const QString& clip_id, const QString& point_id, double fraction,
                               double value);

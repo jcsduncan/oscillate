@@ -3,6 +3,7 @@
 #include "bar_ticks.hpp"
 
 #include "oscillate/automation/curve.hpp"
+#include "oscillate/foundation/value_text.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
@@ -14,6 +15,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
+#include <optional>
 #include <string>
 #include <utility>
 #include <variant>
@@ -110,6 +113,129 @@ const double fader_top_db = 20.0 * std::log10(4.0);
 
 [[nodiscard]] QString text(std::string_view value) {
   return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
+}
+
+// Unit prefixes a typed value may carry beyond the parameter's own unit.
+constexpr double unit_thousand = 1'000.0;
+constexpr double percent_scale = 100.0;
+constexpr double balance_percent = 100.0;
+// Amplitude decibels: 20 per decade of gain.
+constexpr double gain_decibels_per_decade = 20.0;
+
+// The leading number of `typed` (a true minus sign or "-", "inf" or "∞"
+// for an infinite magnitude) and the text after it, trimmed.
+struct TypedNumber {
+  double value = 0.0;
+  QString rest;
+};
+[[nodiscard]] std::optional<TypedNumber> leading_number(QString typed) {
+  typed = typed.trimmed();
+  typed.replace(QChar(0x2212), QLatin1Char('-'));
+  typed.replace(QStringLiteral("∞"), QStringLiteral("inf"));
+  bool negative = false;
+  if (typed.startsWith(QLatin1Char('-')) || typed.startsWith(QLatin1Char('+'))) {
+    negative = typed.startsWith(QLatin1Char('-'));
+    typed = typed.mid(1).trimmed();
+  }
+  const auto infinity_word = QStringLiteral("inf");
+  if (typed.startsWith(infinity_word, Qt::CaseInsensitive)) {
+    const auto infinite = std::numeric_limits<double>::infinity();
+    return TypedNumber{negative ? -infinite : infinite, typed.mid(infinity_word.size()).trimmed()};
+  }
+  qsizetype end = 0;
+  while (end < typed.size() &&
+         (typed[end].isDigit() || typed[end] == QLatin1Char('.') || typed[end] == QLatin1Char(',')))
+    ++end;
+  bool parsed = false;
+  auto number = typed.left(end).replace(QLatin1Char(','), QLatin1Char('.')).toDouble(&parsed);
+  if (!parsed)
+    return std::nullopt;
+  return TypedNumber{negative ? -number : number, typed.mid(end).trimmed()};
+}
+
+// A typed value in a feel's own units, as the lane's 0..1.
+[[nodiscard]] std::optional<double> lane_from_text(const Feel& feel, const QString& typed) {
+  switch (feel.kind) {
+  case Feel::Kind::mute: {
+    const auto word = typed.trimmed().toLower();
+    if (word == QStringLiteral("muted") || word == QStringLiteral("on") ||
+        word == QStringLiteral("1"))
+      return 1.0;
+    if (word == QStringLiteral("playing") || word == QStringLiteral("off") ||
+        word == QStringLiteral("0"))
+      return 0.0;
+    return std::nullopt;
+  }
+  case Feel::Kind::balance: {
+    auto word = typed.trimmed().toUpper();
+    if (word == QStringLiteral("C"))
+      return to_lane(feel, 0.0);
+    double side = 1.0;
+    if (word.startsWith(QLatin1Char('L')) || word.startsWith(QLatin1Char('R'))) {
+      side = word.startsWith(QLatin1Char('L')) ? -1.0 : 1.0;
+      word = word.mid(1);
+    }
+    const auto number = leading_number(word);
+    if (!number || !std::isfinite(number->value) || !number->rest.isEmpty() ||
+        std::abs(number->value) > balance_percent)
+      return std::nullopt;
+    return to_lane(feel, side * number->value / balance_percent);
+  }
+  case Feel::Kind::gain: {
+    const auto number = leading_number(typed);
+    if (!number || (!number->rest.isEmpty() &&
+                    number->rest.compare(QStringLiteral("dB"), Qt::CaseInsensitive) != 0))
+      return std::nullopt;
+    if (number->value == -std::numeric_limits<double>::infinity())
+      return 0.0;
+    if (!std::isfinite(number->value) || number->value > fader_top_db)
+      return std::nullopt;
+    return to_lane(feel, std::pow(10.0, number->value / gain_decibels_per_decade));
+  }
+  case Feel::Kind::parameter: {
+    const auto& parameter = *feel.parameter;
+    if (parameter.scale == native_dsp::ParameterScale::choice) {
+      for (std::size_t index = 0; index < parameter.choices.size(); ++index) {
+        if (text(parameter.choices[index]).compare(typed.trimmed(), Qt::CaseInsensitive) == 0)
+          return to_lane(feel, static_cast<double>(index));
+      }
+      return std::nullopt;
+    }
+    const auto number = leading_number(typed);
+    if (!number)
+      return std::nullopt;
+    const auto unit = text(parameter.unit);
+    auto value = number->value;
+    const auto& rest = number->rest;
+    if (unit == text(foundation::hertz_unit) &&
+        rest.compare(text(foundation::kilohertz_unit), Qt::CaseInsensitive) == 0)
+      value *= unit_thousand;
+    else if (unit == text(foundation::seconds_unit) && rest == text(foundation::milliseconds_unit))
+      value /= unit_thousand;
+    else if (unit == text(foundation::milliseconds_unit) && rest == text(foundation::seconds_unit))
+      value *= unit_thousand;
+    else if (!rest.isEmpty() && rest.compare(unit, Qt::CaseInsensitive) != 0)
+      return std::nullopt;
+    if (unit == text(foundation::percent_unit))
+      value /= percent_scale;
+    if (value == -std::numeric_limits<double>::infinity())
+      value = parameter.minimum;
+    if (!std::isfinite(value) || value < parameter.minimum || value > parameter.maximum)
+      return std::nullopt;
+    return to_lane(feel, value);
+  }
+  case Feel::Kind::normalised: {
+    const auto number = leading_number(typed);
+    if (!number || !std::isfinite(number->value) ||
+        (!number->rest.isEmpty() && number->rest != text(foundation::percent_unit)))
+      return std::nullopt;
+    const auto value = number->value / percent_scale;
+    if (value < 0.0 || value > 1.0)
+      return std::nullopt;
+    return value;
+  }
+  }
+  return std::nullopt;
 }
 
 [[nodiscard]] QString track_name(const project::Snapshot& snapshot, project::TrackId id) {
@@ -411,12 +537,16 @@ void ArrangementAutomationController::refresh() {
                                        {"shape", shape_name(point.to_next)},
                                        {"bend", bend_of(point)}});
         }
-        lanes.push_back(QVariantMap{{"laneId", QString::fromStdString(lane.id.to_string())},
-                                    {"key", key_of(lane.target)},
-                                    {"name", feel->name},
-                                    {"group", feel->group},
-                                    {"discrete", lane.domain.discrete},
-                                    {"points", points}});
+        lanes.push_back(
+            QVariantMap{{"laneId", QString::fromStdString(lane.id.to_string())},
+                        {"key", key_of(lane.target)},
+                        {"name", feel->name},
+                        {"group", feel->group},
+                        {"discrete", lane.domain.discrete},
+                        {"timebase", lane.timebase == project::AutomationTimebase::musical
+                                         ? QStringLiteral("Musical")
+                                         : QStringLiteral("Elapsed")},
+                        {"points", points}});
       }
       result.push_back(QVariantMap{{"trackId", QString::fromStdString(track.id.to_string())},
                                    {"lanes", lanes},
@@ -615,6 +745,100 @@ void ArrangementAutomationController::bend(const QString& lane_id, const QString
   if (!applied)
     return failure(applied.error());
   accepted(straight ? QStringLiteral("Curve straightened") : QStringLiteral("Curve bent"));
+}
+
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): QML calls this positionally.
+void ArrangementAutomationController::set_point_value(const QString& lane_id,
+                                                      const QString& point_id, double value) {
+  auto* session = editable_session();
+  const auto lane = project::AutomationLaneId::parse(lane_id.toStdString());
+  const auto point = project::AutomationPointId::parse(point_id.toStdString());
+  if (!session || !lane || !point || !std::isfinite(value) || value < 0.0 || value > 1.0) {
+    report_(QStringLiteral("Type a value the parameter can take"));
+    return;
+  }
+  const auto& snapshot = session->snapshot();
+  for (const auto& track : snapshot.tracks) {
+    const auto found =
+        std::ranges::find(track.automation, lane.value(), &project::AutomationLane::id);
+    if (found == track.automation.end())
+      continue;
+    const auto feel = feel_of(snapshot, track, found->target);
+    const auto saved =
+        std::ranges::find(found->points, point.value(), &project::AutomationPoint::id);
+    if (!feel || saved == found->points.end())
+      break;
+    const application::AutomationService::AutomationPointMove move{point.value(), saved->coordinate,
+                                                                   from_lane(*feel, value)};
+    auto moved = session->automation().move_automation_points(lane.value(), {&move, 1});
+    if (!moved)
+      return failure(moved.error());
+    accepted(QStringLiteral("%1 set to %2").arg(feel->name, text_of(*feel, move.value)));
+    return;
+  }
+  report_(QStringLiteral("That automation point is gone"));
+}
+
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): QML calls this positionally.
+void ArrangementAutomationController::reveal(const QString& track_id, const QString& key) {
+  const auto track = project::TrackId::parse(track_id.toStdString());
+  if (!track || !target_of(track.value(), key)) {
+    report_(QStringLiteral("That parameter cannot be automated on the arrangement"));
+    return;
+  }
+  emit revealRequested(track_id, key);
+}
+
+void ArrangementAutomationController::clear_lane(const QString& lane_id) {
+  auto* session = editable_session();
+  const auto lane = project::AutomationLaneId::parse(lane_id.toStdString());
+  if (!session || !lane)
+    return;
+  for (const auto& track : session->snapshot().tracks) {
+    const auto found =
+        std::ranges::find(track.automation, lane.value(), &project::AutomationLane::id);
+    if (found == track.automation.end())
+      continue;
+    std::vector<project::AutomationPointId> points;
+    points.reserve(found->points.size());
+    for (const auto& point : found->points)
+      points.push_back(point.id);
+    auto removed = session->automation().remove_automation_points(lane.value(), points);
+    if (!removed)
+      return failure(removed.error());
+    accepted(QStringLiteral("Automation lane cleared"));
+    return;
+  }
+  report_(QStringLiteral("That automation lane is gone"));
+}
+
+void ArrangementAutomationController::toggle_timebase(const QString& lane_id) {
+  auto* session = editable_session();
+  const auto lane = project::AutomationLaneId::parse(lane_id.toStdString());
+  if (!session || !lane)
+    return;
+  auto toggled = session->automation().toggle_automation_lane_timebase(lane.value());
+  if (!toggled)
+    return failure(toggled.error());
+  accepted(QStringLiteral("Automation timebase switched"));
+}
+
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): QML calls this positionally.
+double ArrangementAutomationController::value_from_text(const QString& track_id, const QString& key,
+                                                        const QString& typed) const {
+  constexpr double unreadable = -1.0;
+  const auto* session = session_();
+  const auto track = project::TrackId::parse(track_id.toStdString());
+  if (!session || !track)
+    return unreadable;
+  const auto& snapshot = session->snapshot();
+  const auto owner = std::ranges::find(snapshot.tracks, track.value(), &project::Track::id);
+  const auto target = target_of(track.value(), key);
+  if (owner == snapshot.tracks.end() || !target)
+    return unreadable;
+  const auto feel = feel_of(snapshot, *owner, *target);
+  const auto lane = feel ? lane_from_text(*feel, typed) : std::nullopt;
+  return lane ? std::clamp(*lane, 0.0, 1.0) : unreadable;
 }
 
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): QML calls this positionally.

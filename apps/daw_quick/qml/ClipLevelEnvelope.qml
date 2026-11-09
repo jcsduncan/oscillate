@@ -11,8 +11,27 @@ Item {
     readonly property var points: (clipData.channelAutomation || {}).points || []
     readonly property string laneId: (clipData.channelAutomation || {}).laneId || ""
     readonly property var axisMap: (clipData.channelAutomation || {}).axisMap || []
+    readonly property string timebase: (clipData.channelAutomation || {}).timebase || "Musical"
     // The level scale's top: gain 4 (+12 dB) at the curve's top edge.
     readonly property real maxLevel: 4
+    // Amplitude decibels: 20 per decade of gain.
+    readonly property real decibelsPerDecade: 20
+    // The point last pressed: its exact level is typed in the tools row.
+    property string selectedPoint: ""
+    function decibels(level) {
+        return level > 0 ? decibelsPerDecade * Math.log10(level) : -Infinity
+    }
+    // A typed level in dB ("-6", "−6 dB", "-inf") as a gain, or -1.
+    function levelFromText(typed) {
+        const cleaned = String(typed).trim().replace("−", "-").replace(/\s*dB$/i, "")
+        if (/^-?(inf|∞)$/i.test(cleaned))
+            return 0
+        const db = Number(cleaned)
+        if (cleaned.length === 0 || !Number.isFinite(db))
+            return -1
+        const level = Math.pow(10, db / decibelsPerDecade)
+        return level <= maxLevel ? level : -1
+    }
 
     // Match the shared automation evaluator's normalized segment equations.
     // The projected x coordinate is a clip fraction, so a lane whose timebase
@@ -91,12 +110,9 @@ Item {
                 const start = left.clipFraction * width
                 const span = (right.clipFraction - left.clipFraction) * width
                 if (span <= 0) continue
-                // A point carrying its segment shape is drawn from it; one
-                // without asks the controller by the point's stable id.
-                const saved = left.shapeIndex !== undefined ? left :
-                              envelope.bridge.trackAutomation.segment_curve(
-                                  envelope.laneId, left.id, savedRevision)
-                const shape = saved.present === false ? 0 : Number(saved.shapeIndex ?? 0)
+                // Each point carries its segment's shape.
+                const saved = left
+                const shape = Number(saved.shapeIndex ?? 0)
                 if (shape === 0) {
                     context.lineTo(start + span, yAt(left.value))
                 } else {
@@ -186,6 +202,7 @@ Item {
                 cursorShape: Qt.SizeAllCursor
                 enabled: envelope.bridge.audioEditEnabled
                 onPressed: {
+                    envelope.selectedPoint = handle.modelData.id
                     handle.forceActiveFocus()
                     handle.dragFraction = handle.modelData.clipFraction
                     handle.dragLevel = handle.modelData.value
@@ -208,6 +225,108 @@ Item {
                             handle.dragFraction, handle.dragLevel)
                 }
                 onCanceled: handle.dragging = false
+            }
+        }
+    }
+
+    // The envelope's tools, along its foot: the selected point's exact
+    // level (typed in dB), the timebase and Clear.
+    Row {
+        id: tools
+        objectName: "clipLevelTools"
+        visible: envelope.laneId.length > 0
+        anchors.right: parent.right
+        anchors.rightMargin: Theme.spaceSm
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Theme.spaceXxs
+        z: 3
+        spacing: Theme.spaceXs
+        Rectangle {
+            id: levelField
+            objectName: "clipLevelValueField"
+            property bool refused: false
+            readonly property var point: envelope.points.find(
+                candidate => candidate.id === envelope.selectedPoint) || null
+            visible: point !== null
+            width: Theme.automationValueFieldWidth
+            height: Theme.automationDrawHeight
+            radius: Theme.radiusMd
+            color: Theme.canvas
+            border.color: refused ? Theme.automationValueRefused
+                                  : levelInput.activeFocus ? Theme.focusRing : Theme.controlEdge
+            TextInput {
+                id: levelInput
+                objectName: "clipLevelValueInput"
+                anchors.fill: parent
+                anchors.leftMargin: Theme.spaceSm
+                anchors.rightMargin: Theme.spaceSm
+                verticalAlignment: TextInput.AlignVCenter
+                clip: true
+                text: levelField.point
+                      ? (Number.isFinite(envelope.decibels(levelField.point.value))
+                         ? envelope.decibels(levelField.point.value).toFixed(1) + " dB" : "-inf dB")
+                      : ""
+                color: Theme.chipText
+                font.pixelSize: Theme.typeSmall
+                selectByMouse: true
+                activeFocusOnTab: true
+                Accessible.role: Accessible.EditableText
+                Accessible.name: "Selected point's level in decibels"
+                onTextEdited: levelField.refused = false
+                function commit() {
+                    const level = envelope.levelFromText(text)
+                    if (level < 0) {
+                        levelField.refused = true
+                        return
+                    }
+                    envelope.bridge.clipAutomation.set_value(envelope.clipData.id,
+                                                             envelope.selectedPoint, level)
+                }
+                Keys.onReturnPressed: commit()
+                Keys.onEnterPressed: commit()
+            }
+        }
+        Repeater {
+            model: [["timebase", "Timebase: " + envelope.timebase,
+                     "Switch to " + (envelope.timebase === "Musical" ? "Elapsed" : "Musical")
+                     + " timebase: points keep their times"],
+                    ["clear", "Clear envelope", "Remove this clip's level envelope"]]
+            delegate: Rectangle {
+                id: choice
+                required property var modelData
+                objectName: choice.modelData[0] === "clear" ? "clipLevelClear" : "clipLevelTimebase"
+                width: choiceText.implicitWidth + Theme.spaceLg
+                height: Theme.automationDrawHeight
+                radius: Theme.radiusMd
+                color: choiceArea.containsMouse ? Theme.automationChoiceHover : Theme.panelRaised
+                border.color: Theme.controlEdge
+                activeFocusOnTab: true
+                Accessible.role: Accessible.Button
+                Accessible.name: choice.modelData[2]
+                function activate() {
+                    if (choice.modelData[0] === "clear") {
+                        envelope.selectedPoint = ""
+                        envelope.bridge.clipAutomation.remove_lane(envelope.clipData.id)
+                    } else {
+                        envelope.bridge.arrangementAutomation.toggle_timebase(envelope.laneId)
+                    }
+                }
+                Keys.onReturnPressed: activate()
+                Keys.onSpacePressed: activate()
+                Text {
+                    id: choiceText
+                    anchors.centerIn: parent
+                    text: choice.modelData[1]
+                    color: Theme.chipText
+                    font.pixelSize: Theme.typeSmall
+                }
+                MouseArea {
+                    Tip {}
+                    id: choiceArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: choice.activate()
+                }
             }
         }
     }

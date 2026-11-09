@@ -4,7 +4,7 @@
 
 ## Context
 
-ADR-0053 put tempo, Follow and the downbeat on every audio clip, and left warp markers in the docked clip editor and the tempo map in an inspector form. Mixing a DJ set needs both where the music is: markers on the clip being placed, and tempo ramps across the transitions.
+ADR-0053 put tempo, Follow and the downbeat on every audio clip, and left warp markers in the docked clip editor and the tempo map in an inspector form. Mixing a DJ set needs both where the music is: markers on the clip being placed, and tempo ramps across the transitions. The automation forms in the inspector and the device editors duplicated the lanes ADR-0051 draws on the arrangement.
 
 ## Decision
 
@@ -49,6 +49,15 @@ Tempo edits switch live as any tempo change does (ADR-0098, ADR-0101); export re
 Hovered, an audio clip that follows the project shows how far the project tempo stretches it, in amber past ±6%.
 
 The inspector's tempo map form is retired. The opening tempo and meter stay in the project controls.
+
+### The automation forms (#104)
+The inspector and device-editor automation forms are retired; the arrangement lanes are the only automation editor (ADR-0051).
+- A point's right-click menu takes its exact value in the parameter's own units.
+- A right-click off the points switches the lane's timebase or clears the lane.
+- A device editor's Automate shows that parameter's lane over its track's clips.
+- A clip's level envelope has its own tools for an exact dB level, the timebase and Clear.
+
+Each of these is one undo step.
 
 ## Consequences
 - The tempo ramp needs no schema change: ramps were already tempo map events with shapes.

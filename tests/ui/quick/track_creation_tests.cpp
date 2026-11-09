@@ -1,8 +1,8 @@
+#include "arrangement_automation_controller.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/plugins/vst3_scan.hpp"
 #include "oscillate/test/check.hpp"
 #include "project_bridge.hpp"
-#include "track_automation_controller.hpp"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <condition_variable>
 #include <cstdint>
 #include <filesystem>
@@ -392,98 +393,115 @@ void run() {
               original_pan,
           "balance pointer drag required more than one Undo step");
   reopened_bridge.redo();
-  inspector_scroll->setProperty("contentY", 600.0);
-  QCoreApplication::processEvents();
-  auto* channel_add =
-      find_item(reopened_window->contentItem(), QStringLiteral("channelAutomationAddPoint"));
-  require(channel_add && channel_add->isVisible(),
-          "selected track lacks a channel automation editor");
-  const auto channel_revision = reopened_bridge.revision();
-  channel_add->forceActiveFocus();
-  QTest::keyClick(reopened_window, Qt::Key_Return);
-  require(reopened_bridge.revision() == channel_revision + 1 &&
-              reopened_bridge.tracks()
-                      .front()
-                      .toMap()
-                      .value(QStringLiteral("channelAutomation"))
-                      .toMap()
-                      .value(QStringLiteral("pointCount"))
-                      .toInt() == 1,
-          "keyboard channel automation did not create one point");
+  // Track automation is drawn on the arrangement (ADR-0051): the inspector
+  // keeps no channel automation form, and the lanes carry what it offered.
+  require(find_item(reopened_window->contentItem(), QStringLiteral("channelAutomationEditor")) ==
+              nullptr,
+          "the inspector still shows a channel automation form");
   const auto channel_track_id =
       reopened_bridge.tracks().front().toMap().value(QStringLiteral("id")).toString();
-  auto* automation =
-      static_cast<quick::TrackAutomationController*>(reopened_bridge.track_automation());
-  for (const int zero_based_bar : {1, 2, 3, 4, 16})
-    automation->set_point(channel_track_id, zero_based_bar, 0.5);
-  const auto channel_lane =
-      reopened_bridge.tracks().front().toMap().value(QStringLiteral("channelAutomation")).toMap();
-  const auto projected_points = channel_lane.value(QStringLiteral("points")).toList();
-  require(channel_lane.value(QStringLiteral("pointCount")).toInt() == 6 &&
-              projected_points.size() == 6 &&
-              projected_points.back().toMap().value(QStringLiteral("position")).toString() ==
-                  QStringLiteral("BAR 17 · BEAT 1"),
-          "channel editor projection truncated a longer automation lane");
-  // The editor opens on its graph; exact positions and segment shapes are in
-  // the point list behind its view toggle.
-  auto* view_toggle =
-      find_item(reopened_window->contentItem(), QStringLiteral("channelAutomationViewToggle"));
-  require(view_toggle && view_toggle->isVisible(), "channel editor has no point-list toggle");
-  view_toggle->forceActiveFocus();
-  QTest::keyClick(reopened_window, Qt::Key_Return);
-  QCoreApplication::processEvents();
-  auto* channel_list =
-      find_item(reopened_window->contentItem(), QStringLiteral("channelAutomationPointList"));
-  require(channel_list && channel_list->property("count").toInt() == 6,
-          "channel editor did not expose the full scrollable point list");
+  auto* arrangement_lanes = static_cast<quick::ArrangementAutomationController*>(
+      reopened_bridge.arrangement_automation());
+  const auto level_lane = [&] {
+    for (const auto& entry : arrangement_lanes->tracks()) {
+      const auto track = entry.toMap();
+      if (track.value(QStringLiteral("trackId")).toString() != channel_track_id)
+        continue;
+      for (const auto& lane : track.value(QStringLiteral("lanes")).toList()) {
+        if (lane.toMap().value(QStringLiteral("key")).toString() == QStringLiteral("level"))
+          return lane.toMap();
+      }
+    }
+    return QVariantMap{};
+  };
+  constexpr double half_lane = 0.5;
+  const auto channel_revision = reopened_bridge.revision();
+  for (const double zero_based_bar : {0.0, 1.0, 2.0, 3.0, 4.0, 16.0})
+    require(!arrangement_lanes
+                 ->add_point(channel_track_id, QStringLiteral("level"), zero_based_bar, half_lane)
+                 .isEmpty(),
+            "a level point was refused on the arrangement lane");
+  auto channel_lane = level_lane();
+  const auto points = channel_lane.value(QStringLiteral("points")).toList();
+  constexpr int added_points = 6;
+  require(reopened_bridge.revision() == channel_revision + added_points &&
+              points.size() == added_points,
+          "each level point was not its own undo step");
   const auto lane_id = channel_lane.value(QStringLiteral("laneId")).toString();
-  const auto first_id = projected_points.front().toMap().value(QStringLiteral("id")).toString();
-  auto* next_shape = find_item(channel_list, QStringLiteral("automationShapeNext"));
-  require(next_shape && next_shape->isVisible(), "channel segment shape control is missing");
+  const auto first_id = points.front().toMap().value(QStringLiteral("id")).toString();
+
+  // Typed value: the parameter's own units, one undo step.
+  const auto typed = arrangement_lanes->value_from_text(channel_track_id, QStringLiteral("level"),
+                                                        QStringLiteral("-6 dB"));
+  require(typed > 0.0 && typed < 1.0 &&
+              arrangement_lanes->value_text(channel_track_id, QStringLiteral("level"), typed) ==
+                  QStringLiteral("−6.0 dB") &&
+              arrangement_lanes->value_from_text(channel_track_id, QStringLiteral("level"),
+                                                 QStringLiteral("loud")) < 0.0,
+          "a typed level did not read in decibels");
+  const auto before_value = reopened_bridge.revision();
+  arrangement_lanes->set_point_value(lane_id, first_id, typed);
+  const auto first_after = level_lane().value(QStringLiteral("points")).toList().front().toMap();
+  require(reopened_bridge.revision() == before_value + 1 &&
+              first_after.value(QStringLiteral("text")).toString() == QStringLiteral("−6.0 dB") &&
+              first_after.value(QStringLiteral("bar")).toDouble() == 0.0,
+          "a typed point value was not one edit in place");
+  reopened_bridge.undo();
+  constexpr double lane_tolerance = 1e-9;
+  require(std::abs(level_lane()
+                       .value(QStringLiteral("points"))
+                       .toList()
+                       .front()
+                       .toMap()
+                       .value(QStringLiteral("value"))
+                       .toDouble() -
+                   half_lane) < lane_tolerance,
+          "the typed value did not undo");
+  reopened_bridge.redo();
+
+  // Curves: a shape and the Ctrl-drag bow, each one edit.
   const auto before_shape = reopened_bridge.revision();
-  next_shape->forceActiveFocus();
-  QTest::keyClick(reopened_window, Qt::Key_Return);
-  const auto shape = automation->segment_curve(lane_id, first_id, reopened_bridge.revision());
+  arrangement_lanes->set_curve(lane_id, first_id, QStringLiteral("quadratic"));
   require(reopened_bridge.revision() == before_shape + 1 &&
-              shape.value(QStringLiteral("shapeIndex")).toInt() == 2,
-          "keyboard curve action did not save a quadratic segment");
-  automation->set_segment_curve(
-      lane_id, first_id, {{"shapeIndex", 5}, {"x1", 0.9}, {"y1", 0.1}, {"x2", 0.2}, {"y2", 0.8}});
-  require(reopened_bridge.revision() == before_shape + 1,
-          "invalid Bézier handle order changed the project");
-  automation->set_segment_curve(
-      lane_id, first_id, {{"shapeIndex", 5}, {"x1", 0.1}, {"y1", 0.2}, {"x2", 0.8}, {"y2", 0.9}});
-  const auto custom = automation->segment_curve(lane_id, first_id, reopened_bridge.revision());
+              level_lane()
+                      .value(QStringLiteral("points"))
+                      .toList()
+                      .front()
+                      .toMap()
+                      .value(QStringLiteral("shape")) == QStringLiteral("quadratic"),
+          "a lane curve choice did not save one quadratic segment");
+  constexpr double bow = 0.25;
+  constexpr double bow_tolerance = 1e-9;
+  arrangement_lanes->bend(lane_id, first_id, bow);
   require(reopened_bridge.revision() == before_shape + 2 &&
-              custom.value(QStringLiteral("shapeIndex")).toInt() == 5 &&
-              custom.value(QStringLiteral("x1")).toDouble() == 0.1 &&
-              custom.value(QStringLiteral("y2")).toDouble() == 0.9,
-          "Bézier handles did not round-trip through the Quick controller");
-  auto* x1_handle = find_item(channel_list, QStringLiteral("automationHandleX1"));
-  auto* apply_handles = find_item(channel_list, QStringLiteral("automationApplyHandles"));
-  require(x1_handle && apply_handles && apply_handles->isVisible() &&
-              x1_handle->setProperty("text", QStringLiteral("0.125")),
-          "Bézier handle editor is missing");
-  apply_handles->forceActiveFocus();
-  QTest::keyClick(reopened_window, Qt::Key_Return);
-  require(reopened_bridge.revision() == before_shape + 3 &&
-              automation->segment_curve(lane_id, first_id, reopened_bridge.revision())
-                      .value(QStringLiteral("x1"))
-                      .toDouble() == 0.125,
-          "keyboard Bézier Apply did not save the edited handle");
-  auto* timebase =
-      find_item(reopened_window->contentItem(), QStringLiteral("channelAutomationTimebase"));
-  require(timebase && timebase->isVisible(), "channel automation timebase control is missing");
+              std::abs(level_lane()
+                           .value(QStringLiteral("points"))
+                           .toList()
+                           .front()
+                           .toMap()
+                           .value(QStringLiteral("bend"))
+                           .toDouble() -
+                       bow) < bow_tolerance,
+          "a lane bow did not save one Bezier segment");
+
+  // Timebase: one edit, keeping every point.
+  const auto timebase_before = channel_lane.value(QStringLiteral("timebase"));
   const auto timebase_revision = reopened_bridge.revision();
-  timebase->forceActiveFocus();
-  QTest::keyClick(reopened_window, Qt::Key_Return);
-  const auto changed_lane =
-      reopened_bridge.tracks().front().toMap().value(QStringLiteral("channelAutomation")).toMap();
+  arrangement_lanes->toggle_timebase(lane_id);
+  const auto changed_lane = level_lane();
   require(reopened_bridge.revision() == timebase_revision + 1 &&
-              changed_lane.value(QStringLiteral("timebase")) !=
-                  channel_lane.value(QStringLiteral("timebase")) &&
-              changed_lane.value(QStringLiteral("pointCount")).toInt() == 6,
-          "keyboard timebase edit did not retain the channel automation points");
+              changed_lane.value(QStringLiteral("timebase")) != timebase_before &&
+              changed_lane.value(QStringLiteral("points")).toList().size() == added_points,
+          "the lane timebase switch did not retain the level points");
+
+  // Clear: the whole lane as one edit.
+  const auto clear_revision = reopened_bridge.revision();
+  arrangement_lanes->clear_lane(lane_id);
+  require(reopened_bridge.revision() == clear_revision + 1 && level_lane().isEmpty(),
+          "clearing the lane was not one edit");
+  reopened_bridge.undo();
+  require(level_lane().value(QStringLiteral("points")).toList().size() == added_points,
+          "clearing the lane did not undo");
   auto* master_row = find_item(reopened_window->contentItem(), QStringLiteral("masterTrackRow"));
   require(master_row && master_row->isVisible(), "pinned master row disappeared");
   master_row->forceActiveFocus();

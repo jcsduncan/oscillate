@@ -98,17 +98,15 @@ parameter_ids(const project::Track& track, const project::Vst3PluginInstance& pl
 
 PluginAutomationController::PluginAutomationController(Session session, CanEdit can_edit,
                                                        Report report, Commit commit,
-                                                       LiveRevision live_revision,
-                                                       LaneView lane_view, QObject* parent)
+                                                       QObject* parent)
     : QObject(parent), session_(std::move(session)), can_edit_(std::move(can_edit)),
-      report_(std::move(report)), commit_(std::move(commit)),
-      live_revision_(std::move(live_revision)), lane_view_(std::move(lane_view)) {
+      report_(std::move(report)), commit_(std::move(commit)) {
   view_ = project_view();
 }
 
 void PluginAutomationController::select_plugin(project::TrackId track,
                                                project::PluginInstanceId plugin) {
-  selection_ = Selection{track, plugin, std::nullopt};
+  selection_ = Selection{track, plugin};
   filter_.clear();
   refresh();
 }
@@ -215,13 +213,11 @@ QVariantMap PluginAutomationController::describe(const PluginContext& context,
 }
 
 QVariantMap PluginAutomationController::project_view() const {
-  QVariantMap result{{"active", false}, {"parameterSelected", false}};
+  QVariantMap result{{"active", false}};
   const auto context = plugin_context();
   // A plugin context implies a selection.
   if (!context || !selection_)
     return result;
-  const auto& selection = *selection_;
-  const auto& snapshot = session_()->snapshot();
   const auto& track = *context->track;
   const auto& plugin = *context->plugin;
   const auto ids = parameter_ids(track, plugin, context->host_order);
@@ -237,8 +233,7 @@ QVariantMap PluginAutomationController::project_view() const {
       lanes.push_back(QVariantMap{{"parameterId", target->parameter_id},
                                   {"name", parameter_name(context->verified, target->parameter_id)},
                                   {"laneId", QString::fromStdString(lane.id.to_string())},
-                                  {"pointCount", static_cast<int>(lane.points.size())},
-                                  {"selected", selection.parameter == target->parameter_id}});
+                                  {"pointCount", static_cast<int>(lane.points.size())}});
   }
 
   // An exact ID match leads; other matches keep host order.
@@ -279,62 +274,6 @@ QVariantMap PluginAutomationController::project_view() const {
                  {"resultStatus", result_status(parameters.size(), match_count, total, filter_)},
                  {"lanes", lanes},
                  {"laneCount", lane_count}});
-  if (!selection.parameter)
-    return result;
-
-  const auto parameter = *selection.parameter;
-  auto selected = describe(*context, parameter);
-  const auto* lane = parameter_lane(track, plugin.id, parameter);
-  QVariantMap lane_view{{"present", false},
-                        {"laneId", QString()},
-                        {"timebase", QStringLiteral("Musical")},
-                        {"pointCount", 0},
-                        {"points", QVariantList{}}};
-  if (lane != nullptr)
-    lane_view.insert(lane_view_(snapshot, *lane));
-
-  QString state;
-  QString status;
-  const auto revision = snapshot.revision;
-  if (lane == nullptr) {
-    state = QStringLiteral("none");
-    status = QStringLiteral("No saved lane. Add a point to create one from the saved baseline.");
-  } else if (plugin.missing) {
-    state = QStringLiteral("missing");
-    status = QStringLiteral("Saved lane is not rendered: the plugin is missing. Relink it to "
-                            "use this automation.");
-  } else if (context->bypassed) {
-    state = QStringLiteral("bypassed");
-    status = QStringLiteral("Saved lane is not rendered while this effect is bypassed.");
-  } else if (!selected.value(QStringLiteral("verified")).toBool()) {
-    state = QStringLiteral("unverified");
-    status = context->is_source
-                 ? QStringLiteral("Saved lane; this instrument parameter is not verified "
-                                  "here, so it is not shown as active automation.")
-                 : QStringLiteral("Saved lane; scan the plugin and open its editor to "
-                                  "verify this parameter before relying on it.");
-  } else if (!selected.value(QStringLiteral("automatable")).toBool()) {
-    state = QStringLiteral("unsupported");
-    status = QStringLiteral("Saved lane is not rendered: the plugin reports this parameter as "
-                            "stepped or not automatable.");
-  } else if (const auto live = live_revision_(); !live) {
-    state = QStringLiteral("stopped");
-    status = QStringLiteral("Saved in revision %1; applies when playback starts.").arg(revision);
-  } else if (*live == revision) {
-    state = QStringLiteral("active");
-    status = QStringLiteral("Active in live audio at revision %1.").arg(revision);
-  } else {
-    state = QStringLiteral("pending");
-    status = QStringLiteral("Saved in revision %1 but not active: live audio still plays "
-                            "revision %2. Stop and Play to apply.")
-                 .arg(revision)
-                 .arg(*live);
-  }
-  result.insert({{"parameterSelected", true},
-                 {"parameter", selected},
-                 {"lane", lane_view},
-                 {"renderState", state},
-                 {"renderStatus", status}});
   return result;
 }
 
@@ -353,38 +292,13 @@ void PluginAutomationController::accepted(const QString& action) {
   const auto revision = session_()->snapshot().revision;
   commit_();
   refresh();
-  report_(live_revision_()
-              ? QStringLiteral("%1 · revision %2 saved; Stop and Play to apply it to live audio")
-                    .arg(action)
-                    .arg(revision)
-              : QStringLiteral("%1 · revision %2").arg(action).arg(revision));
+  report_(QStringLiteral("%1 · revision %2").arg(action).arg(revision));
 }
 
-std::optional<PluginAutomationController::LaneTarget>
-PluginAutomationController::lane_target() const {
-  if (!selection_ || !selection_->parameter)
-    return std::nullopt;
-  return LaneTarget{selection_->track, selection_->plugin, *selection_->parameter};
-}
-
-void PluginAutomationController::select_parameter(quint32 parameter_id) {
-  if (!selection_)
-    return;
-  selection_->parameter = parameter_id;
-  refresh();
-}
-
-void PluginAutomationController::show_parameters() {
-  if (!selection_)
-    return;
-  selection_->parameter.reset();
-  refresh();
-}
-
-void PluginAutomationController::automate(quint32 parameter_id) {
+QString PluginAutomationController::automate(quint32 parameter_id) {
   if (!selection_) {
     report_(QStringLiteral("Open a VST3 plugin before automating a parameter"));
-    return;
+    return {};
   }
   const auto plugin = *selection_;
   // Look up the full plugin set, not the filtered page, so a parameter that the
@@ -394,100 +308,32 @@ void PluginAutomationController::automate(quint32 parameter_id) {
                            : std::vector<std::uint32_t>{};
   if (!context || std::ranges::find(ids, parameter_id) == ids.end()) {
     report_(QStringLiteral("Parameter %1 is not available on this plugin").arg(parameter_id));
-    return;
+    return {};
   }
+  // The arrangement's lane key for this parameter (ArrangementAutomationController).
+  const auto key = QStringLiteral("vst3:%1:%2")
+                       .arg(QString::fromStdString(plugin.plugin.to_string()))
+                       .arg(parameter_id);
   const auto description = describe(*context, parameter_id);
-  if (description.value(QStringLiteral("lanePresent")).toBool()) {
-    select_parameter(parameter_id);
-    return;
-  }
+  if (description.value(QStringLiteral("lanePresent")).toBool())
+    return key;
   if (!description.value(QStringLiteral("canAutomate")).toBool()) {
     report_(QStringLiteral("%1: %2").arg(description.value(QStringLiteral("name")).toString(),
                                          description.value(QStringLiteral("note")).toString()));
-    return;
+    return {};
   }
   auto* current = editable_session();
   if (current == nullptr)
-    return;
+    return {};
   const auto result = current->parameter_automation().set_vst3_parameter_automation_point(
       plugin.track, plugin.plugin, parameter_id, 0,
       description.value(QStringLiteral("baseline")).toDouble());
-  if (!result)
-    return failure(QStringLiteral("Plugin automation"), result.error());
-  selection_ = Selection{plugin.track, plugin.plugin, parameter_id};
+  if (!result) {
+    failure(QStringLiteral("Plugin automation"), result.error());
+    return {};
+  }
   accepted(QStringLiteral("Plugin automation lane created from the saved baseline"));
-}
-
-void PluginAutomationController::set_point(int zero_based_bar, double normalized_value) {
-  const auto target = lane_target();
-  if (!target) {
-    report_(QStringLiteral("Select a plugin parameter to automate"));
-    return;
-  }
-  if (zero_based_bar < 0 || zero_based_bar >= 65'536 || !std::isfinite(normalized_value) ||
-      normalized_value < 0.0 || normalized_value > 1.0) {
-    report_(QStringLiteral("Plugin point needs a bar from 1 to 65536 and a value from 0 to 1"));
-    return;
-  }
-  auto* current = editable_session();
-  if (current == nullptr)
-    return;
-  const auto result = current->parameter_automation().set_vst3_parameter_automation_point(
-      target->track, target->plugin, target->parameter, zero_based_bar, normalized_value);
-  if (!result)
-    return failure(QStringLiteral("Plugin automation"), result.error());
-  accepted(QStringLiteral("Plugin automation point saved"));
-}
-
-void PluginAutomationController::set_value(const QString& point_id, double normalized_value) {
-  const auto point = project::AutomationPointId::parse(point_id.toStdString());
-  const auto target = lane_target();
-  if (!target || !point || !std::isfinite(normalized_value) || normalized_value < 0.0 ||
-      normalized_value > 1.0) {
-    report_(QStringLiteral("Select a plugin point and a value from 0 to 1"));
-    return;
-  }
-  auto* current = editable_session();
-  if (current == nullptr)
-    return;
-  const auto result = current->parameter_automation().set_vst3_parameter_automation_value(
-      target->track, target->plugin, target->parameter, point.value(), normalized_value);
-  if (!result)
-    return failure(QStringLiteral("Plugin automation"), result.error());
-  accepted(QStringLiteral("Plugin automation value changed"));
-}
-
-void PluginAutomationController::remove_point(const QString& point_id) {
-  const auto point = project::AutomationPointId::parse(point_id.toStdString());
-  const auto target = lane_target();
-  if (!target || !point) {
-    report_(QStringLiteral("Select a plugin point to remove"));
-    return;
-  }
-  auto* current = editable_session();
-  if (current == nullptr)
-    return;
-  const auto result = current->parameter_automation().remove_vst3_parameter_automation_point(
-      target->track, target->plugin, target->parameter, point.value());
-  if (!result)
-    return failure(QStringLiteral("Plugin automation"), result.error());
-  accepted(QStringLiteral("Plugin automation point removed"));
-}
-
-void PluginAutomationController::remove_lane() {
-  const auto target = lane_target();
-  if (!target) {
-    report_(QStringLiteral("Select a plugin lane to remove"));
-    return;
-  }
-  auto* current = editable_session();
-  if (current == nullptr)
-    return;
-  const auto result = current->parameter_automation().remove_vst3_parameter_automation_lane(
-      target->track, target->plugin, target->parameter);
-  if (!result)
-    return failure(QStringLiteral("Plugin automation"), result.error());
-  accepted(QStringLiteral("Plugin automation lane removed"));
+  return key;
 }
 
 } // namespace oscillate::quick

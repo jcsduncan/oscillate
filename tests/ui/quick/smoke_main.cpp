@@ -1,3 +1,4 @@
+#include "arrangement_automation_controller.hpp"
 #include "note_tools_controller.hpp"
 #include "project_bridge.hpp"
 #include "smoke_audio_backend_scenario.hpp"
@@ -1393,186 +1394,94 @@ int run(int argc, char** argv) {
       return 1;
     }
     const auto send_id = sends.front().toMap().value(QStringLiteral("id")).toString();
-    const auto second_send_id = sends.back().toMap().value(QStringLiteral("id")).toString();
-    if (window)
-      window->setProperty("selectedTrack", 0);
-    QCoreApplication::processEvents();
-    auto* bar =
-        window ? first_visible_item(window->contentItem(), QStringLiteral("sendAutomationBarInput"))
-               : nullptr;
-    auto* gain = window ? first_visible_item(window->contentItem(),
-                                             QStringLiteral("sendAutomationGainInput"))
-                        : nullptr;
-    auto* add =
-        window ? first_visible_item(window->contentItem(), QStringLiteral("sendAutomationAddPoint"))
-               : nullptr;
-    if (!bar || !gain || !add || !add->isEnabled() ||
-        count_visible_items(window->contentItem(), QStringLiteral("sendAutomationChoice")) != 2) {
-      std::cerr << "Send automation smoke: selected send editor controls missing\n";
+    // Send gain is automated on the arrangement lane "send:<id>" (ADR-0051);
+    // the inspector keeps no send automation form.
+    if (window && first_visible_item(window->contentItem(),
+                                     QStringLiteral("sendAutomationEditor")) != nullptr) {
+      std::cerr << "Send automation smoke: the inspector still shows a send automation form\n";
       return 1;
     }
-    qsizetype first_index = 0;
-    qsizetype second_index = 1;
-    auto* first_choice = nth_visible_item(window->contentItem(),
-                                          QStringLiteral("sendAutomationChoice"), first_index);
-    auto* second_choice = nth_visible_item(window->contentItem(),
-                                           QStringLiteral("sendAutomationChoice"), second_index);
-    if (!first_choice || !second_choice) {
-      std::cerr << "Send automation smoke: send selection controls missing\n";
-      return 1;
-    }
-    second_choice->forceActiveFocus();
-    QTest::keyClick(window, Qt::Key_Return);
-    QCoreApplication::processEvents();
-    if (engine.rootObjects().front()->property("selectedSendId").toString() != second_send_id) {
-      std::cerr << "Send automation smoke: keyboard send selection failed\n";
-      return 1;
-    }
-    first_choice->forceActiveFocus();
-    QTest::keyClick(window, Qt::Key_Return);
-    QCoreApplication::processEvents();
-    if (engine.rootObjects().front()->property("selectedSendId").toString() != send_id) {
-      std::cerr << "Send automation smoke: returning to first send failed\n";
-      return 1;
-    }
+    auto* lanes = qobject_cast<oscillate::quick::ArrangementAutomationController*>(
+        bridge.arrangement_automation());
+    const auto send_key = QStringLiteral("send:") + send_id;
+    const auto send_lane = [&] {
+      for (const auto& entry : lanes->tracks()) {
+        for (const auto& item : entry.toMap().value(QStringLiteral("lanes")).toList()) {
+          if (item.toMap().value(QStringLiteral("key")).toString() == send_key)
+            return item.toMap();
+        }
+      }
+      return QVariantMap{};
+    };
+    const auto first_send_points = [&] {
+      return send_lane().value(QStringLiteral("points")).toList();
+    };
+    // Gains typed as the lane reads them: -12 dB, then -2.5 dB.
+    const auto quiet = lanes->value_from_text(source, send_key, QStringLiteral("-12 dB"));
+    const auto louder = lanes->value_from_text(source, send_key, QStringLiteral("-2.5 dB"));
+    const auto quiet_text = QStringLiteral("−12.0 dB");
+    const auto louder_text = QStringLiteral("−2.5 dB");
+    constexpr double second_bar = 1.0;
     const auto initial = bridge.revision();
-    bar->setProperty("text", QStringLiteral("2"));
-    gain->setProperty("text", QStringLiteral("0.25"));
-    QCoreApplication::processEvents();
-    add->forceActiveFocus();
-    QTest::keyClick(window, Qt::Key_Return);
-    QCoreApplication::processEvents();
-    sends = bridge.tracks().front().toMap().value(QStringLiteral("sends")).toList();
-    auto lane = sends.front().toMap().value(QStringLiteral("automation")).toMap();
+    const auto point_id = lanes->add_point(source, send_key, second_bar, quiet);
+    auto lane = send_lane();
     auto points = lane.value(QStringLiteral("points")).toList();
-    if (bridge.revision() != initial + 1 || !lane.value(QStringLiteral("present")).toBool() ||
+    if (bridge.revision() != initial + 1 || point_id.isEmpty() ||
         lane.value(QStringLiteral("timebase")).toString() != QStringLiteral("Musical") ||
         points.size() != 1 ||
-        points.front().toMap().value(QStringLiteral("value")).toDouble() != 0.25 ||
-        count_visible_items(window->contentItem(), QStringLiteral("sendAutomationPointRow")) != 1) {
-      std::cerr << "Send automation smoke: keyboard add failed: " << bridge.status().toStdString()
+        points.front().toMap().value(QStringLiteral("text")).toString() != quiet_text) {
+      std::cerr << "Send automation smoke: lane add failed: " << bridge.status().toStdString()
                 << '\n';
       return 1;
     }
-    const auto point_id = points.front().toMap().value(QStringLiteral("id")).toString();
-    const auto first_send_points = [&bridge] {
-      const auto sends = bridge.tracks().front().toMap().value(QStringLiteral("sends")).toList();
-      return sends.front()
-          .toMap()
-          .value(QStringLiteral("automation"))
-          .toMap()
-          .value(QStringLiteral("points"))
-          .toList();
-    };
-    for (const int extra_bar : std::array{0, 2, 3}) {
-      bridge.set_send_automation_point(send_id, extra_bar, 0.5);
-    }
-    points = first_send_points();
-    gain->setProperty("text", QStringLiteral("0.60"));
-    QCoreApplication::processEvents();
-    if (points.size() != 4 || !add->isEnabled()) {
-      std::cerr << "Send automation smoke: four-point replacement was disabled\n";
-      return 1;
-    }
-    add->forceActiveFocus();
-    QTest::keyClick(window, Qt::Key_Return);
-    QCoreApplication::processEvents();
-    points = first_send_points();
-    const auto replaced = std::ranges::find_if(points, [&point_id](const auto& item) {
-      return item.toMap().value(QStringLiteral("id")).toString() == point_id;
-    });
-    if (replaced == points.end() ||
-        replaced->toMap().value(QStringLiteral("value")).toDouble() != 0.6) {
-      std::cerr << "Send automation smoke: four-point replacement changed identity or value\n";
-      return 1;
-    }
-    bar->setProperty("text", QStringLiteral("5"));
-    QCoreApplication::processEvents();
-    if (add->isEnabled()) {
-      std::cerr << "Send automation smoke: fifth point was enabled in bounded editor\n";
+    const auto lane_id = lane.value(QStringLiteral("laneId")).toString();
+    for (const double extra_bar : std::array{0.0, 2.0, 3.0, 4.0})
+      lanes->add_point(source, send_key, extra_bar, quiet);
+    if (first_send_points().size() != 5) {
+      std::cerr << "Send automation smoke: the lane held fewer points than were drawn\n";
       return 1;
     }
     bridge.undo();
-    for (const auto& item : points) {
+    QStringList extras;
+    for (const auto& item : first_send_points()) {
       const auto id = item.toMap().value(QStringLiteral("id")).toString();
-      if (id != point_id) {
-        bridge.remove_send_automation_point(send_id, id);
-      }
+      if (id != point_id)
+        extras.push_back(id);
     }
+    lanes->remove_points(lane_id, extras);
     const auto before_value = bridge.revision();
-    bridge.set_send_automation_value(send_id, point_id, 0.75);
+    lanes->set_point_value(lane_id, point_id, louder);
     if (bridge.revision() != before_value + 1 ||
-        first_send_points().front().toMap().value(QStringLiteral("value")).toDouble() != 0.75) {
-      std::cerr << "Send automation smoke: point value edit failed\n";
+        first_send_points().front().toMap().value(QStringLiteral("text")).toString() !=
+            louder_text) {
+      std::cerr << "Send automation smoke: typed point value failed\n";
       return 1;
     }
     bridge.undo();
     points = first_send_points();
     if (points.size() != 1 ||
         points.front().toMap().value(QStringLiteral("id")).toString() != point_id ||
-        points.front().toMap().value(QStringLiteral("value")).toDouble() != 0.25) {
+        points.front().toMap().value(QStringLiteral("text")).toString() != quiet_text) {
       std::cerr << "Send automation smoke: undo changed point identity\n";
       return 1;
     }
     bridge.redo();
-    auto* remove =
-        first_visible_item(window->contentItem(), QStringLiteral("sendAutomationRemovePoint"));
-    if (!remove) {
-      std::cerr << "Send automation smoke: remove control missing\n";
-      return 1;
-    }
-    remove->forceActiveFocus();
-    QTest::keyClick(window, Qt::Key_Return);
-    QCoreApplication::processEvents();
-    points = first_send_points();
-    if (!points.empty()) {
+    lanes->remove_points(lane_id, {point_id});
+    if (!first_send_points().empty()) {
       std::cerr << "Send automation smoke: remove point failed\n";
       return 1;
     }
     bridge.undo();
-    auto* clear =
-        first_visible_item(window->contentItem(), QStringLiteral("sendAutomationClearLane"));
-    if (!clear) {
-      std::cerr << "Send automation smoke: clear lane control missing\n";
-      return 1;
-    }
-    clear->forceActiveFocus();
-    QTest::keyClick(window, Qt::Key_Return);
-    QCoreApplication::processEvents();
-    if (first_send_points().size() != 0 || bridge.tracks()
-                                               .front()
-                                               .toMap()
-                                               .value(QStringLiteral("sends"))
-                                               .toList()
-                                               .front()
-                                               .toMap()
-                                               .value(QStringLiteral("automation"))
-                                               .toMap()
-                                               .value(QStringLiteral("present"))
-                                               .toBool()) {
+    const auto before_clear = bridge.revision();
+    lanes->clear_lane(lane_id);
+    if (bridge.revision() != before_clear + 1 || !send_lane().isEmpty()) {
       std::cerr << "Send automation smoke: clear lane did not remove lane\n";
       return 1;
     }
     bridge.undo();
-    auto* timebase =
-        first_visible_item(window->contentItem(), QStringLiteral("sendAutomationTimebase"));
-    if (!timebase || !timebase->isEnabled()) {
-      std::cerr << "Send automation smoke: timebase action missing\n";
-      return 1;
-    }
     const auto before_timebase = bridge.revision();
-    timebase->forceActiveFocus();
-    QTest::keyClick(window, Qt::Key_Return);
-    QCoreApplication::processEvents();
-    lane = bridge.tracks()
-               .front()
-               .toMap()
-               .value(QStringLiteral("sends"))
-               .toList()
-               .front()
-               .toMap()
-               .value(QStringLiteral("automation"))
-               .toMap();
+    lanes->toggle_timebase(lane_id);
+    lane = send_lane();
     points = lane.value(QStringLiteral("points")).toList();
     if (bridge.revision() != before_timebase + 1 ||
         lane.value(QStringLiteral("timebase")).toString() != QStringLiteral("Elapsed") ||
@@ -1596,16 +1505,24 @@ int run(int argc, char** argv) {
   }
   if (smoke_verify_send_automation) {
     const auto sends = bridge.tracks().front().toMap().value(QStringLiteral("sends")).toList();
-    const auto lane = sends.size() == 2
-                          ? sends.front().toMap().value(QStringLiteral("automation")).toMap()
-                          : QVariantMap{};
+    const auto send_key =
+        sends.size() == 2
+            ? QStringLiteral("send:") + sends.front().toMap().value(QStringLiteral("id")).toString()
+            : QString();
+    auto* lanes = qobject_cast<oscillate::quick::ArrangementAutomationController*>(
+        bridge.arrangement_automation());
+    QVariantMap lane;
+    for (const auto& entry : lanes->tracks()) {
+      for (const auto& item : entry.toMap().value(QStringLiteral("lanes")).toList()) {
+        if (item.toMap().value(QStringLiteral("key")).toString() == send_key)
+          lane = item.toMap();
+      }
+    }
     const auto points = lane.value(QStringLiteral("points")).toList();
-    auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().front());
-    if (!lane.value(QStringLiteral("present")).toBool() ||
-        lane.value(QStringLiteral("timebase")).toString() != QStringLiteral("Elapsed") ||
+    if (lane.value(QStringLiteral("timebase")).toString() != QStringLiteral("Elapsed") ||
         points.size() != 1 ||
-        points.front().toMap().value(QStringLiteral("value")).toDouble() != 0.75 || !window ||
-        count_visible_items(window->contentItem(), QStringLiteral("sendAutomationPointRow")) != 1) {
+        points.front().toMap().value(QStringLiteral("text")).toString() !=
+            QStringLiteral("−2.5 dB")) {
       std::cerr << "Send automation smoke: saved send lane did not reopen\n";
       return 1;
     }

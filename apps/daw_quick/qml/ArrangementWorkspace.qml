@@ -165,6 +165,17 @@ Item {
         keys[index] = key
         setAutomationView(trackId, { open: true, overlay: shown.overlay, keys: keys })
     }
+    // Opens a track's automation with `key` over its clips (a device
+    // editor's Automate action), keeping its other lanes below.
+    function showAutomation(trackId, key) {
+        const shown = automationView[trackId] || { open: true, overlay: key, keys: [] }
+        setAutomationView(trackId, { open: true, overlay: key,
+                                     keys: shown.keys.filter(existing => existing !== key) })
+    }
+    Connections {
+        target: workspace.bridge.arrangementAutomation
+        function onRevealRequested(trackId, key) { workspace.showAutomation(trackId, key) }
+    }
     function hideAutomationLane(trackId, index) {
         const shown = automationView[trackId]
         if (!shown)

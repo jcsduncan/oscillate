@@ -466,18 +466,8 @@ void ProjectBridge::open_native_synth_editor(const QString& track_id) {
     native_synth_knock_ = knock.get();
     native_synth_panel_model_ = std::move(knock);
   }
-  native_synth_automation_ = std::make_unique<NativeSynthAutomationController>(
-      *session_, parsed.value(), *engine,
-      [this](std::uint64_t) {
-        refresh();
-        submit_playback_edit();
-      },
-      [this]() -> std::optional<application::RevisionStatus> {
-        if (!live_run())
-          return std::nullopt;
-        return live_run()->status();
-      },
-      this, [this]() { schedule_background_save(); });
+  native_synth_automation_ =
+      std::make_unique<NativeSynthAutomationController>(*session_, parsed.value(), *engine, this);
   native_synth_editor_open_ = true;
   emit nativeSynthControllerChanged();
 }

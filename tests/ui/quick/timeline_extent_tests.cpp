@@ -1,9 +1,9 @@
+#include "arrangement_automation_controller.hpp"
 #include "automation_projection.hpp"
 #include "loop_transport.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/test/check.hpp"
 #include "project_bridge.hpp"
-#include "track_automation_controller.hpp"
 #include "workspace_layout_controller.hpp"
 
 #include <QApplication>
@@ -128,6 +128,8 @@ void run() {
   }
   auto reopened = oscillate::application::ProjectSession::open(root);
   require(reopened.has_value(), "trimmed project did not reopen");
+  // The bridge owns the session; this reads its saved state.
+  const auto* project = reopened.value().get();
   oscillate::quick::ProjectBridge bridge(directory.path().toStdString());
   bridge.set_project(std::move(reopened).value(), root);
   const auto track_id = bridge.tracks().front().toMap().value(QStringLiteral("id")).toString();
@@ -275,20 +277,21 @@ void run() {
   QCoreApplication::processEvents();
   require(bridge.tracks().size() == tracks_before_convert,
           "one undo did not remove the converted sampler track");
-  window->setProperty("selectedClipId", QString::fromStdString(clip_id.to_string()));
+  const auto clip_key = QString::fromStdString(clip_id.to_string());
+  window->setProperty("selectedClipId", clip_key);
   window->setProperty("contextPanelOpen", true);
   QCoreApplication::processEvents();
-  auto* clip_editor =
-      find_item(window->contentItem(), QStringLiteral("clipChannelAutomationEditor"));
-  require(clip_editor && clip_editor->isVisible(),
-          "selected audio clip has no level-envelope editor");
-  auto* bar_input = find_item(clip_editor, QStringLiteral("channelAutomationBarInput"));
-  auto* add_point = find_item(clip_editor, QStringLiteral("channelAutomationAddPoint"));
-  require(bar_input && add_point && bar_input->setProperty("text", QStringLiteral("21")),
-          "clip envelope bar input is unavailable");
+  // The clip's level envelope is edited on the arrangement only (ADR-0051).
+  require(find_item(window->contentItem(), QStringLiteral("clipChannelAutomationEditor")) ==
+              nullptr,
+          "the inspector still shows a clip level envelope form");
   const auto envelope_revision = bridge.revision();
-  add_point->forceActiveFocus();
-  QTest::keyClick(window, Qt::Key_Return);
+  constexpr double clip_start = 0.0;
+  constexpr double unity_level = 1.0;
+  require(QMetaObject::invokeMethod(bridge.clip_automation(), "set_point_at_fraction",
+                                    Q_ARG(QString, clip_key), Q_ARG(double, clip_start),
+                                    Q_ARG(double, unity_level)),
+          "clip envelope point at the clip start was not callable");
   const auto envelope = bridge.tracks()
                             .front()
                             .toMap()
@@ -421,78 +424,80 @@ void run() {
               std::abs(progress_at(5, 0.5, {{"x1", 0.0}, {"y1", 1.0}, {"x2", 1.0}, {"y2", 1.0}}) -
                        0.875) < 1e-6,
           "graphical segment shapes diverged from the shared evaluator's equations");
-  auto* curve_controller =
-      qobject_cast<oscillate::quick::TrackAutomationController*>(bridge.track_automation());
-  require(curve_controller != nullptr, "segment curve controller missing");
-  const auto curve_revision = bridge.revision();
-  curve_controller->set_segment_curve(
-      lane_id, first_point,
-      {{"shapeIndex", 5}, {"x1", 0.2}, {"y1", 0.3}, {"x2", 0.8}, {"y2", 0.7}});
-  require(bridge.revision() == curve_revision + 1,
-          "clip segment did not accept an undoable graphical Bézier setup");
-  auto* graphical_handle = find_item(clip_editor, QStringLiteral("automationGraphHandleX1Y1"));
-  require(graphical_handle && graphical_handle->isVisible(),
-          "clip segment does not show a keyboard-accessible Bézier handle");
-  graphical_handle->forceActiveFocus();
-  const auto before_nudge = bridge.revision();
-  QTest::keyClick(window, Qt::Key_Right);
-  const auto edited = curve_controller->segment_curve(lane_id, first_point, bridge.revision());
-  require(bridge.revision() == before_nudge + 1 &&
-              std::abs(edited.value(QStringLiteral("x1")).toDouble() - 0.225) < 1e-8,
-          "graphical handle keyboard nudge did not save one undoable curve edit");
-  bridge.undo();
-  require(std::abs(curve_controller->segment_curve(lane_id, first_point, bridge.revision())
-                       .value(QStringLiteral("x1"))
-                       .toDouble() -
-                   0.2) < 1e-8,
-          "graphical handle edit did not undo as one operation");
-  bridge.redo();
-  graphical_handle = find_item(clip_editor, QStringLiteral("automationGraphHandleX1Y1"));
-  require(graphical_handle != nullptr, "graphical handle disappeared after redo");
-  auto pointer_start =
-      graphical_handle
-          ->mapToScene({graphical_handle->width() / 2.0, graphical_handle->height() / 2.0})
-          .toPoint();
-  auto* inspector_scroll = find_item(window->contentItem(), QStringLiteral("inspectorScroll"));
-  require(inspector_scroll != nullptr, "inspector scroll area missing");
-  inspector_scroll->setProperty("contentY", inspector_scroll->property("contentY").toDouble() +
-                                                pointer_start.y() - 350.0);
-  QCoreApplication::processEvents();
-  pointer_start =
-      graphical_handle
-          ->mapToScene({graphical_handle->width() / 2.0, graphical_handle->height() / 2.0})
-          .toPoint();
-  require(pointer_start.y() > 0 && pointer_start.y() < window->height(),
-          "graphical Bézier handle could not be scrolled into view");
-  const auto before_pointer = bridge.revision();
-  QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, pointer_start);
-  QTest::mouseMove(window, pointer_start + QPoint(9, -3));
-  QCoreApplication::processEvents();
-  QTest::mouseMove(window, pointer_start + QPoint(18, -6));
-  auto* segment_view = graphical_handle->parentItem();
-  const auto pointer_preview = [&] {
-    return segment_view->property("previewX1").toDouble() > 0.225;
+  // Ctrl-drag on the lane bows a segment: a Bezier with its handles on the
+  // thirds, lifted together (ArrangementAutomationController::bend).
+  auto* lanes = qobject_cast<oscillate::quick::ArrangementAutomationController*>(
+      bridge.arrangement_automation());
+  require(lanes != nullptr, "arrangement automation controller missing");
+  constexpr double segment_bow = 0.3;
+  constexpr double third = 1.0 / 3.0;
+  constexpr double handle_tolerance = 1e-6;
+  const auto saved_first = [&] {
+    return project->snapshot().tracks.front().clips.front().automation.front().points.front();
   };
-  if (!QTest::qWaitFor(pointer_preview, 150)) {
-    QTest::mouseMove(window, pointer_start + QPoint(20, -6));
-    require(QTest::qWaitFor(pointer_preview, 1'000),
-            "pointer drag did not preview the graphical Bézier handle");
-  }
-  require(bridge.revision() == before_pointer,
-          "pointer preview published intermediate automation revisions");
-  QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, pointer_start + QPoint(20, -6));
-  const auto dragged_x1 = curve_controller->segment_curve(lane_id, first_point, bridge.revision())
-                              .value(QStringLiteral("x1"))
-                              .toDouble();
-  require(bridge.revision() == before_pointer + 1 && dragged_x1 > 0.225,
-          "pointer release did not commit one Bézier handle edit");
+  const auto curve_revision = bridge.revision();
+  lanes->bend(lane_id, first_point, segment_bow);
+  require(bridge.revision() == curve_revision + 1 &&
+              saved_first().to_next == oscillate::project::AutomationShape::bezier &&
+              std::abs(saved_first().handles.x1 - third) < handle_tolerance &&
+              std::abs(saved_first().handles.y1 - (third + segment_bow)) < handle_tolerance,
+          "bowing the clip segment did not save one undoable Bezier");
   bridge.undo();
-  require(std::abs(curve_controller->segment_curve(lane_id, first_point, bridge.revision())
-                       .value(QStringLiteral("x1"))
-                       .toDouble() -
-                   0.225) < 1e-8,
-          "pointer handle edit did not undo as one operation");
+  require(saved_first().to_next != oscillate::project::AutomationShape::bezier,
+          "the clip segment bow did not undo as one operation");
   bridge.redo();
+  const auto dragged_x1 = saved_first().handles.x1;
+
+  // Pressing a point selects it; its exact level is typed in the tools row.
+  QList<QQuickItem*> typed_handles;
+  find_items(window->contentItem(), QStringLiteral("clipLevelPointHandle"), typed_handles);
+  require(typed_handles.size() == 2, "clip level handles are missing before the value field");
+  const auto typed_at =
+      typed_handles[1]
+          ->mapToScene({typed_handles[1]->width() / 2.0, typed_handles[1]->height() / 2.0})
+          .toPoint();
+  const auto before_select = bridge.revision();
+  QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, typed_at);
+  QCoreApplication::processEvents();
+  require(bridge.revision() == before_select, "selecting a clip level point changed it");
+  auto* level_field = find_item(window->contentItem(), QStringLiteral("clipLevelValueField"));
+  auto* level_input = find_item(window->contentItem(), QStringLiteral("clipLevelValueInput"));
+  require(level_field && level_input && level_field->isVisible(),
+          "a selected clip level point offered no exact value field");
+  constexpr double typed_decibels = -6.0;
+  constexpr double decibels_per_decade = 20.0;
+  constexpr double level_tolerance = 1e-6;
+  const auto before_typed = bridge.revision();
+  level_input->setProperty("text", QStringLiteral("-6 dB"));
+  require(QMetaObject::invokeMethod(level_input, "commit"), "typed level commit not callable");
+  const auto typed_point =
+      project->snapshot().tracks.front().clips.front().automation.front().points[1];
+  require(bridge.revision() == before_typed + 1 &&
+              std::abs(typed_point.value - std::pow(10.0, typed_decibels / decibels_per_decade)) <
+                  level_tolerance,
+          "a typed clip level was not saved as one edit");
+  bridge.undo();
+  require(
+      std::abs(project->snapshot().tracks.front().clips.front().automation.front().points[1].value -
+               std::pow(10.0, typed_decibels / decibels_per_decade)) > level_tolerance,
+      "a typed clip level did not undo");
+  bridge.redo();
+
+  // The envelope's tools also switch its timebase and clear it.
+  auto* timebase = find_item(window->contentItem(), QStringLiteral("clipLevelTimebase"));
+  require(timebase && timebase->isVisible(), "the clip envelope offers no timebase switch");
+  const auto timebase_before =
+      project->snapshot().tracks.front().clips.front().automation.front().timebase;
+  const auto before_timebase = bridge.revision();
+  require(QMetaObject::invokeMethod(timebase, "activate"), "timebase action not callable");
+  require(bridge.revision() == before_timebase + 1 &&
+              project->snapshot().tracks.front().clips.front().automation.front().timebase !=
+                  timebase_before,
+          "the envelope's timebase did not switch as one edit");
+  bridge.undo();
+  require(project->snapshot().tracks.front().clips.front().automation.front().timebase ==
+              timebase_before,
+          "the envelope's timebase switch did not undo");
   bridge.save();
   auto arrangement_reader = oscillate::persistence::ProjectStore::open_reader(root);
   require(arrangement_reader.has_value(), "arrangement envelope reader failed");
@@ -533,6 +538,18 @@ void run() {
   require(bridge.revision() == before_keyboard + 1 &&
               keyboard_lane.value(QStringLiteral("pointCount")).toInt() == 3,
           "keyboard level edit did not add a point inside the selected clip");
+
+  // Clear removes the whole envelope as one edit.
+  auto* clear = find_item(window->contentItem(), QStringLiteral("clipLevelClear"));
+  require(clear && clear->isVisible(), "the clip envelope offers no Clear");
+  const auto before_clear = bridge.revision();
+  require(QMetaObject::invokeMethod(clear, "activate"), "clear action not callable");
+  require(bridge.revision() == before_clear + 1 &&
+              project->snapshot().tracks.front().clips.front().automation.empty(),
+          "Clear did not remove the clip's envelope as one edit");
+  bridge.undo();
+  require(project->snapshot().tracks.front().clips.front().automation.size() == 1,
+          "clearing the clip envelope did not undo");
 }
 
 void placeholder_inserts_above_itself() {
@@ -856,126 +873,17 @@ void automation_lane_count_marks_the_track() {
   lane_count_reads(Lanes::clip_and_track, 3, QStringLiteral("3 automation lanes"));
 }
 
-void channel_graph_places_and_drags_saved_points() {
-  QTemporaryDir directory;
-  require(directory.isValid(), "channel graph temporary directory unavailable");
-  const auto root = std::filesystem::path(directory.path().toStdString()) / "project";
-  auto created = oscillate::application::ProjectSession::create(root);
-  require(created.has_value(), "channel graph project creation failed");
-  const auto source = std::filesystem::path(directory.path().toStdString()) / "source.wav";
-  write_source(source);
-  const int fd = ::open(source.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
-  require(fd >= 0, "channel graph source open failed");
-  require(created.value()->imports().import_wav_audio(fd).has_value(),
-          "channel graph import failed");
-  (void)::close(fd);
-  oscillate::quick::ProjectBridge bridge(directory.path().toStdString());
-  bridge.set_project(std::move(created).value(), root);
-  const auto track = bridge.tracks().front().toMap();
-  const auto track_id = track.value(QStringLiteral("id")).toString();
-  QQuickWindow window;
-  window.setWidth(400);
-  window.setHeight(240);
+// Automation is edited on the arrangement (ADR-0051): the inspector's and
+// the device editors' automation forms are gone from the app's resources.
+void retired_automation_forms_are_gone() {
   QQmlEngine engine;
-  QQmlComponent component(&engine, QUrl(QStringLiteral("qrc:/ChannelAutomationGraph.qml")));
-  auto* graph = qobject_cast<QQuickItem*>(component.createWithInitialProperties(
-      {{QStringLiteral("bridge"), QVariant::fromValue(static_cast<QObject*>(&bridge))},
-       {QStringLiteral("trackId"), track_id},
-       {QStringLiteral("lane"), track.value(QStringLiteral("channelAutomation"))},
-       {QStringLiteral("accentColor"), QColor(QStringLiteral("#84dca4"))},
-       {QStringLiteral("lineColor"), QColor(QStringLiteral("#202e27"))},
-       {QStringLiteral("textColor"), QColor(QStringLiteral("#b4c2b8"))}}));
-  require(graph != nullptr, "channel graph component failed to load");
-  graph->setParentItem(window.contentItem());
-  graph->setWidth(320);
-  graph->setHeight(151);
-  window.show();
-  QCoreApplication::processEvents();
-  auto* surface = find_item(graph, QStringLiteral("channelGraphAddSurface"));
-  require(surface != nullptr && surface->isVisible(), "channel graph add surface missing");
-  const auto before_add = bridge.revision();
-  const auto add_position =
-      surface->mapToScene({surface->width() * 2.5 / 16.0, surface->height() / 2.0}).toPoint();
-  QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, add_position);
-  require(bridge.revision() == before_add + 1, "graph click did not create one revision");
-  auto lane = bridge.tracks().front().toMap().value(QStringLiteral("channelAutomation")).toMap();
-  auto points = lane.value(QStringLiteral("points")).toList();
-  require(points.size() == 1 && points.front().toMap().value(QStringLiteral("bar")).toInt() == 2 &&
-              std::abs(points.front().toMap().value(QStringLiteral("value")).toDouble() - 2.0) <
-                  0.1,
-          "graph click did not snap to bar three at the selected level");
-  const auto point_id = points.front().toMap().value(QStringLiteral("id")).toString();
-  graph->setProperty("lane", lane);
-  QCoreApplication::processEvents();
-  auto* handle = find_item(graph, QStringLiteral("channelGraphPointHandle"));
-  require(handle != nullptr && handle->isVisible(), "channel graph point handle missing");
-  const auto start = handle->mapToScene({handle->width() / 2.0, handle->height() / 2.0}).toPoint();
-  const auto before_drag = bridge.revision();
-  QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, start);
-  QTest::mouseMove(&window, start + QPoint(8, -8));
-  QCoreApplication::processEvents();
-  QTest::mouseMove(&window, start + QPoint(10, -22));
-  require(QTest::qWaitFor([&] { return handle->property("previewLevel").toDouble() > 2.3; }, 1'000),
-          "graph drag did not preview a higher level");
-  QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, start + QPoint(10, -22));
-  lane = bridge.tracks().front().toMap().value(QStringLiteral("channelAutomation")).toMap();
-  points = lane.value(QStringLiteral("points")).toList();
-  require(bridge.revision() == before_drag + 1 && points.size() == 1 &&
-              points.front().toMap().value(QStringLiteral("id")).toString() == point_id &&
-              points.front().toMap().value(QStringLiteral("bar")).toInt() == 2 &&
-              points.front().toMap().value(QStringLiteral("value")).toDouble() > 2.3,
-          "graph level drag did not commit one undoable stable-ID edit");
-  bridge.undo();
-  const auto restored = bridge.tracks()
-                            .front()
-                            .toMap()
-                            .value(QStringLiteral("channelAutomation"))
-                            .toMap()
-                            .value(QStringLiteral("points"))
-                            .toList();
-  require(restored.size() == 1 &&
-              std::abs(restored.front().toMap().value(QStringLiteral("value")).toDouble() - 2.0) <
-                  0.1,
-          "graph drag undo did not restore the prior level");
-  graph->setProperty("lane",
-                     bridge.tracks().front().toMap().value(QStringLiteral("channelAutomation")));
-  QCoreApplication::processEvents();
-  handle = find_item(graph, QStringLiteral("channelGraphPointHandle"));
-  require(handle != nullptr, "graph point handle missing after undo");
-  const auto moved_start =
-      handle->mapToScene({handle->width() / 2.0, handle->height() / 2.0}).toPoint();
-  const auto before_two_dimensional_drag = bridge.revision();
-  QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, moved_start);
-  QTest::mouseMove(&window, moved_start + QPoint(45, -20));
-  require(QTest::qWaitFor(
-              [&] {
-                return handle->property("previewBar").toDouble() >= 4.0 &&
-                       handle->property("previewLevel").toDouble() > 2.3;
-              },
-              1'000),
-          "graph drag did not preview both bar and level");
-  QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, moved_start + QPoint(45, -20));
-  lane = bridge.tracks().front().toMap().value(QStringLiteral("channelAutomation")).toMap();
-  points = lane.value(QStringLiteral("points")).toList();
-  require(bridge.revision() == before_two_dimensional_drag + 1 && points.size() == 1 &&
-              points.front().toMap().value(QStringLiteral("id")).toString() == point_id &&
-              points.front().toMap().value(QStringLiteral("bar")).toInt() == 4 &&
-              points.front().toMap().value(QStringLiteral("value")).toDouble() > 2.3,
-          "graph 2D drag did not commit one stable-ID edit");
-  bridge.undo();
-  const auto moved_back = bridge.tracks()
-                              .front()
-                              .toMap()
-                              .value(QStringLiteral("channelAutomation"))
-                              .toMap()
-                              .value(QStringLiteral("points"))
-                              .toList();
-  require(moved_back.size() == 1 &&
-              moved_back.front().toMap().value(QStringLiteral("bar")).toInt() == 2 &&
-              std::abs(moved_back.front().toMap().value(QStringLiteral("value")).toDouble() - 2.0) <
-                  0.1,
-          "graph 2D drag undo did not restore bar and level together");
-  delete graph;
+  for (const auto* form :
+       {"ChannelAutomationEditor", "ChannelAutomationGraph", "PluginAutomationEditor",
+        "NativeSynthAutomationEditor", "AutomationSegmentControls", "AutomationTimebaseAction"}) {
+    const auto url = QUrl(QStringLiteral("qrc:/%1.qml").arg(QString::fromLatin1(form)));
+    QQmlComponent component(&engine, url);
+    require(component.isError(), std::string("a retired automation form still ships: ") + form);
+  }
 }
 
 } // namespace
@@ -1020,7 +928,7 @@ int main(int argc, char** argv) {
     placeholder_inserts_above_itself();
     clip_curve_x_follows_shared_tempo_map();
     automation_lane_count_marks_the_track();
-    channel_graph_places_and_drags_saved_points();
+    retired_automation_forms_are_gone();
     save_during_background_save_runs_after_it();
   } catch (const std::exception& error) {
     qCritical("Timeline extent test: %s", error.what());

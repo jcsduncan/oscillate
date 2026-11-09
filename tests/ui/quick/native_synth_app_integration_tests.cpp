@@ -1,3 +1,4 @@
+#include "arrangement_automation_controller.hpp"
 #include "native_synth_automation_controller.hpp"
 #include "native_synth_device_controller.hpp"
 #include "panel_fit_checks.hpp"
@@ -392,30 +393,41 @@ void engine_is_reachable_and_saves_from_the_app(std::string_view engine_id,
     require(controller != nullptr && controller->editable() &&
                 controller->engine_id() == QString::fromStdString(std::string(engine_id)),
             "selected synth editor is not editable");
+    // The panel keeps no automation form: Automate shows the synth's lane
+    // on the arrangement, where it is drawn (ADR-0051).
     auto* automation =
         qobject_cast<quick::NativeSynthAutomationController*>(bridge.native_synth_automation());
-    require(automation != nullptr && !automation->parameters().empty(),
-            "native synth automation editor is unavailable");
-    require(window->findChild<QObject*>(QStringLiteral("nativeSynthAutomationToggle")) != nullptr &&
-                window->findChild<QObject*>(QStringLiteral("nativeSynthAutomationEditor")) !=
+    require(automation != nullptr && automation->track_id() == track.value("id").toString(),
+            "the synth's arrangement lane target is unavailable");
+    const auto first_key =
+        QStringLiteral("synth:") +
+        QString::fromStdString(
+            std::string(std::ranges::find_if(engine->descriptor->parameters, [](const auto& item) {
+                          return item.automatable;
+                        })->id));
+    require(automation->lane_key() == first_key,
+            "an unautomated synth did not offer its first automatable parameter");
+    require(window->findChild<QObject*>(QStringLiteral("nativeSynthAutomationEditor")) == nullptr &&
+                window->findChild<QObject*>(QStringLiteral("nativeSynthAutomationToggle")) ==
                     nullptr,
-            "synth automation controls are absent from the in-app editor");
-    auto* automation_toggle = qobject_cast<QQuickItem*>(
-        window->findChild<QObject*>(QStringLiteral("nativeSynthAutomationToggle")));
-    auto* automation_editor =
-        window->findChild<QObject*>(QStringLiteral("nativeSynthAutomationEditor"));
+            "the synth panel still carries an automation form");
+    auto* show_automation = qobject_cast<QQuickItem*>(
+        window->findChild<QObject*>(QStringLiteral("nativeSynthShowAutomation")));
+    require(show_automation != nullptr && show_automation->isVisible(),
+            "the synth panel has no Automate action");
+    const auto before_show = bridge.revision();
     QTest::mouseClick(
         window, Qt::LeftButton, Qt::NoModifier,
-        automation_toggle
-            ->mapToScene(QPointF(automation_toggle->width() / 2, automation_toggle->height() / 2))
+        show_automation
+            ->mapToScene(QPointF(show_automation->width() / 2, show_automation->height() / 2))
             .toPoint());
-    require(automation_editor->property("visible").toBool(),
-            "synth automation editor did not open in the DAW");
-    auto* automation_status =
-        window->findChild<QObject*>(QStringLiteral("nativeSynthAutomationPlaybackStatus"));
-    require(automation_status != nullptr && automation_status->property("text").toString().contains(
-                                                QStringLiteral("Ready for next playback")),
-            "stopped synth automation editor did not show its application state");
+    QCoreApplication::processEvents();
+    auto* overlay = qobject_cast<QQuickItem*>(
+        window->findChild<QObject*>(QStringLiteral("arrangementAutomationOverlay")));
+    require(bridge.revision() == before_show && window->property("currentView") == "arrange" &&
+                overlay != nullptr && overlay->isVisible() &&
+                overlay->property("laneKey").toString() == first_key,
+            "Automate did not show the synth's lane over its clips, without an edit");
     const auto parameter = QString::fromStdString(std::string(cutoff_id));
     controller->set_normalised(parameter, 0.62);
     require(std::fabs(controller->normalised(parameter) - 0.62) < 1e-9,
@@ -426,58 +438,49 @@ void engine_is_reachable_and_saves_from_the_app(std::string_view engine_id,
     bridge.redo();
     require(std::fabs(controller->normalised(parameter) - 0.62) < 1e-9,
             "redo did not restore the synth edit");
-    automation->select_parameter(parameter);
-    require(automation->selected_parameter() == parameter,
-            "continuous synth parameter cannot be selected for automation");
-    auto* add_point_button = qobject_cast<QQuickItem*>(
-        window->findChild<QObject*>(QStringLiteral("nativeSynthAutomationAddPoint")));
-    require(add_point_button != nullptr, "synth automation add control is absent");
-    QTest::mouseClick(
-        window, Qt::LeftButton, Qt::NoModifier,
-        add_point_button
-            ->mapToScene(QPointF(add_point_button->width() / 2, add_point_button->height() / 2))
-            .toPoint());
-    require(automation->lane().value("present").toBool(),
-            "synth automation UI did not create a lane");
-    require(automation->remove_lane(), "UI-created synth lane could not be removed");
-    const auto discrete =
-        std::ranges::find_if(engine->descriptor->parameters, [](const auto& item) {
-          return item.automatable && oscillate::native_dsp::is_discrete(item);
-        });
-    require(discrete != engine->descriptor->parameters.end(), "synth has no discrete parameter");
-    const auto discrete_id = QString::fromStdString(std::string(discrete->id));
-    automation->select_parameter(discrete_id);
-    require(automation->selected_parameter() == discrete_id && automation->set_point(0, 1.0) &&
-                automation->lane().value("present").toBool() && automation->remove_lane(),
-            "stepped synth parameter could not be automated");
-    automation->select_parameter(parameter);
-    require(!automation->set_point(-1, 0.5) && !automation->set_point(0, 1.01),
-            "invalid automation values changed the project");
+    // The cutoff's lane on the arrangement: added, typed and cleared there.
+    auto* lanes =
+        qobject_cast<quick::ArrangementAutomationController*>(bridge.arrangement_automation());
+    const auto track_key = track.value("id").toString();
+    const auto cutoff_key = QStringLiteral("synth:") + parameter;
+    const auto cutoff_lane = [&] {
+      for (const auto& entry : lanes->tracks()) {
+        for (const auto& item : entry.toMap().value("lanes").toList()) {
+          if (item.toMap().value("key").toString() == cutoff_key)
+            return item.toMap();
+        }
+      }
+      return QVariantMap{};
+    };
+    constexpr double quarter_travel = 0.25;
+    constexpr double three_quarter_travel = 0.75;
     const auto revision = bridge.revision();
-    require(automation->set_point(0, 0.25), "synth automation lane could not be created");
-    const auto lane = automation->lane();
-    require(lane.value("present").toBool() && lane.value("points").toList().size() == 1 &&
-                bridge.revision() > revision,
-            "synth automation lane was not projected");
-    const auto point_id = lane.value("points").toList().front().toMap().value("id").toString();
-    require(automation->set_value(point_id, 0.75), "synth automation point could not be edited");
+    const auto point_id = lanes->add_point(track_key, cutoff_key, 0.0, quarter_travel);
+    require(!point_id.isEmpty() && bridge.revision() == revision + 1 &&
+                cutoff_lane().value("points").toList().size() == 1,
+            "the synth cutoff lane was not created on the arrangement");
+    require(automation->lane_key() == cutoff_key,
+            "Automate does not lead to the synth's automated parameter");
+    const auto lane_id = cutoff_lane().value("laneId").toString();
+    const auto typed = lanes->value_from_text(
+        track_key, cutoff_key, lanes->value_text(track_key, cutoff_key, three_quarter_travel));
+    // The text is rounded to the display's decimals.
+    constexpr double display_rounding = 0.01;
+    require(std::fabs(typed - three_quarter_travel) < display_rounding,
+            "a synth value did not read back from its own text");
+    lanes->set_point_value(lane_id, point_id, three_quarter_travel);
     require(
-        std::fabs(
-            automation->lane().value("points").toList().front().toMap().value("value").toDouble() -
-            0.75) < 1e-9,
+        std::fabs(cutoff_lane().value("points").toList().front().toMap().value("value").toDouble() -
+                  three_quarter_travel) < 1e-9,
         "edited synth automation value was not projected");
-    require(automation->toggle_timebase() &&
-                automation->lane().value("timebase").toString() == QStringLiteral("Elapsed"),
+    lanes->toggle_timebase(lane_id);
+    require(cutoff_lane().value("timebase").toString() == QStringLiteral("Elapsed"),
             "synth automation timebase did not change");
-    require(automation->toggle_timebase(), "synth automation timebase could not be restored");
-    require(!automation->remove_point(QStringLiteral("not-an-id")),
-            "invalid synth automation point was accepted");
-    require(automation->remove_point(point_id) && automation->lane().value("present").toBool() &&
-                automation->lane().value("points").toList().empty(),
-            "removing a synth point did not leave an empty lane");
-    require(automation->remove_lane() && !automation->lane().value("present").toBool(),
-            "synth automation lane could not be cleared");
-    require(automation->set_point(0, 0.75), "synth lane could not be recreated");
+    lanes->toggle_timebase(lane_id);
+    lanes->clear_lane(lane_id);
+    require(cutoff_lane().isEmpty(), "synth automation lane could not be cleared");
+    bridge.undo();
+    require(cutoff_lane().value("points").toList().size() == 1, "clearing the lane did not undo");
     bridge.close_native_synth_editor();
     QCoreApplication::processEvents();
     require(bridge.native_synth_controller() == nullptr, "synth editor did not close");
@@ -813,69 +816,42 @@ void pulse_drum_lanes_share_the_piano_roll_and_saved_notes() {
           "Pulse identity or edited MIDI notes were lost on reopen");
 }
 
-void automation_edits_report_saved_and_audible_revisions() {
+// The panel's Automate leads to the synth's automated parameter, else to its
+// first automatable one, as the arrangement keys its lanes.
+void automate_leads_to_the_automated_parameter() {
   QTemporaryDir directory;
-  require(directory.isValid(), "synth automation status scratch directory unavailable");
-  const auto root = std::filesystem::path(directory.path().toStdString()) / "automation-status";
+  require(directory.isValid(), "synth automation target scratch directory unavailable");
+  const auto root = std::filesystem::path(directory.path().toStdString()) / "automation-target";
   auto session = app::ProjectSession::create(root);
-  require(session.has_value(), "synth automation status project creation failed");
+  require(session.has_value(), "synth automation target project creation failed");
   const auto track = session.value()->instruments().add_synth_track();
-  require(track.has_value(), "synth automation status track creation failed");
+  require(track.has_value(), "synth automation target track creation failed");
   const auto* engine = native::find_engine("prism");
   require(engine != nullptr, "Prism engine is unavailable");
-  std::optional<app::RevisionStatus> active;
-  std::uint64_t submitted = 0;
-  quick::NativeSynthAutomationController editor(
-      *session.value(), track.value(), *engine,
-      [&](std::uint64_t revision) {
-        submitted = revision;
-        if (active) {
-          active->model_revision = revision;
-          active->application = app::PlaybackApplication::pending;
-        }
-      },
-      [&] { return active; });
-  require(editor.playback_status().contains(QStringLiteral("Ready for next playback")),
-          "stopped synth automation status is unclear");
-  editor.select_parameter(QStringLiteral("prism.filter.cutoff"));
-  active.emplace();
-  active->model_revision = session.value()->snapshot().revision;
-  active->active_graph_revision = active->model_revision;
-  active->application = app::PlaybackApplication::active;
-  require(editor.set_point(0, 0.25) && submitted == session.value()->snapshot().revision &&
-              active->active_graph_revision < submitted &&
-              editor.playback_status().contains(QStringLiteral("Applying project edit")),
-          "live synth automation lane edit did not report pending application");
-  const auto point_id =
-      editor.lane().value("points").toList().front().toMap().value("id").toString();
-  require(editor.set_value(point_id, 0.75) &&
-              editor.playback_status().contains(QStringLiteral("Applying project edit")) &&
-              editor.toggle_timebase() &&
-              editor.playback_status().contains(QStringLiteral("Applying project edit")),
-          "point or timebase edit lost the pending status");
-  QSignalSpy lane_updates(&editor, &quick::NativeSynthAutomationController::changed);
-  QSignalSpy status_updates(&editor,
-                            &quick::NativeSynthAutomationController::playbackStatusChanged);
-  active->active_graph_revision = session.value()->snapshot().revision;
-  active->application = app::PlaybackApplication::active;
-  editor.refresh_playback_status();
-  require(editor.playback_status().contains(QStringLiteral("Active in playback")) &&
-              status_updates.count() == 1 && lane_updates.count() == 0,
-          "accepted synth automation revision was not reported active");
-  editor.refresh_playback_status();
-  require(status_updates.count() == 1 && lane_updates.count() == 0,
-          "playback polling rebuilt the lane editor or repeated an unchanged status");
-  require(editor.remove_lane() &&
-              editor.playback_status().contains(QStringLiteral("Applying project edit")),
-          "lane removal was falsely reported audible");
-  active->application = app::PlaybackApplication::failed;
-  editor.refresh_playback_status();
-  require(editor.playback_status().contains(QStringLiteral("could not apply")),
-          "failed synth automation edit was not reported");
-  active.reset();
-  editor.refresh();
-  require(editor.playback_status().contains(QStringLiteral("Ready for next playback")),
-          "stopping playback did not clear the stale application status");
+  quick::NativeSynthAutomationController target(*session.value(), track.value(), *engine);
+  const auto first = std::ranges::find_if(engine->descriptor->parameters,
+                                          [](const auto& item) { return item.automatable; });
+  require(target.track_id() == QString::fromStdString(track.value().to_string()) &&
+              target.lane_key() ==
+                  QStringLiteral("synth:") + QString::fromStdString(std::string(first->id)),
+          "an unautomated synth did not lead to its first automatable parameter");
+  constexpr std::string_view cutoff = "prism.filter.cutoff";
+  const auto index = oscillate::native_dsp::find_parameter(*engine->descriptor, cutoff);
+  require(index.has_value(), "Prism has no cutoff");
+  const auto cutoff_default = engine->descriptor->parameters[*index].default_value;
+  require(session.value()
+              ->automation()
+              .add_automation_point(
+                  track.value(), project::NativeParameterTarget{track.value(), std::string(cutoff)},
+                  0, cutoff_default)
+              .has_value(),
+          "the cutoff lane fixture failed");
+  QSignalSpy updates(&target, &quick::NativeSynthAutomationController::changed);
+  target.refresh();
+  require(updates.count() == 1 &&
+              target.lane_key() ==
+                  QStringLiteral("synth:") + QString::fromStdString(std::string(cutoff)),
+          "Automate did not lead to the synth's automated parameter");
 }
 } // namespace
 
@@ -989,7 +965,7 @@ int main(int argc, char** argv) {
     all_registered_panels_open_in_the_daw();
     nova_window_resizes_and_zooms_in_the_daw();
     pulse_drum_lanes_share_the_piano_roll_and_saved_notes();
-    automation_edits_report_saved_and_audible_revisions();
+    automate_leads_to_the_automated_parameter();
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

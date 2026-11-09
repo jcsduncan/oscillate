@@ -26,7 +26,6 @@
 #include "recording_controller.hpp"
 #include "route_commands.hpp"
 #include "tempo_lane_controller.hpp"
-#include "track_automation_controller.hpp"
 #include "track_commands.hpp"
 #include "waveform_controller.hpp"
 
@@ -205,26 +204,8 @@ void ProjectBridge::create_mix_controllers() {
   const auto quiet = [this] { return edit_gate_open(); };
   const auto report = [this](QString message) { set_status(std::move(message)); };
   const auto commit = [this] { commit_edit(); };
-  track_automation_ =
-      std::make_unique<TrackAutomationController>(session, quiet, report, commit, this);
-  plugin_automation_ = std::make_unique<PluginAutomationController>(
-      session, quiet, report, commit,
-      [this]() -> std::optional<std::uint64_t> {
-        if (routed_playback_ && !routed_stop_completion_)
-          return routed_playback_->status().active_graph_revision;
-        if (playback_ && playback_->playing())
-          return playback_->status().active_graph_revision;
-        if (playback_active())
-          return 0;
-        return std::nullopt;
-      },
-      [](const project::Snapshot& snapshot, const project::AutomationLane& lane) {
-        return detail::automation_lane_projection(snapshot, lane,
-                                                  project::max_automation_points_per_lane);
-      },
-      this);
-  connect(this, &ProjectBridge::playbackChanged, plugin_automation_.get(),
-          &PluginAutomationController::refresh);
+  plugin_automation_ =
+      std::make_unique<PluginAutomationController>(session, quiet, report, commit, this);
   route_commands_ = std::make_unique<RouteCommands>(
       session, [this] { return route_edit_allowed(); }, report, commit, this);
   track_commands_ = std::make_unique<TrackCommands>(
