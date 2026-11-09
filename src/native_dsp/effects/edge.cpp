@@ -103,6 +103,9 @@ public:
     output_.settle(dsp::db_to_gain(v[p::output]), steps, jump);
     knee_.settle(edge_dsp::max_knee * v[p::shape], steps, jump);
     ceiling_.settle(dsp::db_to_gain(v[p::ceiling]), steps, jump);
+    if (jump) {
+      fill_aligned();
+    }
     link_.to(v[p::link] != 0.0, jump);
     delta_.to(v[p::delta] != 0.0, jump);
     compare_.to(v[p::compare] != 0.0, jump);
@@ -179,7 +182,7 @@ public:
     }
     magnitude_.reset();
     guard_.reset();
-    std::ranges::fill(aligned_, Aligned{});
+    fill_aligned();
     aligned_position_ = 0;
     previous_top_ = {};
     input_peak_ = {};
@@ -224,6 +227,12 @@ private:
     std::array<double, 2> driven{};
     double ceiling = 1.0;
   };
+
+  // Empties the aligned input. Its ceiling is the one in force: the
+  // filters ring ahead of the round trip, so the first frames out are
+  // heard before the first aligned frame in, and must come out under the
+  // ceiling that scaled them.
+  void fill_aligned() noexcept { std::ranges::fill(aligned_, Aligned{{}, {}, ceiling_.value}); }
 
   // Clips one frame through the oversampler into `y`; returns how far the
   // loudest top-rate sample was clipped (a ratio, 1 for none).
@@ -358,7 +367,7 @@ private:
   dsp::Ramp input_;
   dsp::Ramp output_;
   dsp::Ramp knee_;
-  dsp::Ramp ceiling_;
+  dsp::Ramp ceiling_{1.0, 0.0};
   Toggle link_;
   Toggle delta_;
   Toggle compare_;
