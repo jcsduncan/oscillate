@@ -1,7 +1,6 @@
 #include "project_bridge.hpp"
 
 #include "plugin_automation_controller.hpp"
-#include "tempo_map_commands.hpp"
 #include "waveform_controller.hpp"
 
 #include <QSettings>
@@ -208,7 +207,6 @@ void ProjectBridge::set_project(std::unique_ptr<application::ProjectSession> ses
   playhead_sample_ = bar_one_sample();
   waveform_root_ = root;
   waveform_->set_project(root);
-  tempo_map_commands_->reset_page();
   playback_ = std::make_unique<application::InstrumentPlayback>(*session_, audio_output_->factory(),
                                                                 audio_output_->buffer_frames());
   audio_edit_failure_.clear();

@@ -20,7 +20,7 @@ Rectangle {
     signal clipDeleted()
 
     width: Theme.clipMenuWidth
-    // Six actions, then a divider before the maintenance one.
+    // The actions, then a divider before the maintenance one.
     height: Theme.clipMenuTitleHeight + actionRows.count * Theme.clipMenuEntryStride + Theme.clipMenuDividerGap + Theme.spaceXs + extrasRow.implicitHeight + Theme.spaceSm
     radius: Theme.radiusXl
     color: raisedColor
@@ -50,6 +50,8 @@ Rectangle {
              hint: menu.timebase === "Musical" ? "Stays at its time when the tempo changes"
                                                : "Moves with the bars when the tempo changes",
              action: "timebase", keys: ""},
+            {name: "Ramp to this track's tempo", hint: "Tempo ramps across the transition to its BPM",
+             action: "ramp", keys: ""},
             {name: "Take its groove…", hint: "Measure its kick, hats or percussion for the groove pool",
              action: "groove", keys: ""},
             {name: "Convert to sampler", hint: "Crate on a new MIDI track, chopped at its hits",
@@ -67,6 +69,7 @@ Rectangle {
                 : modelData.action === "duplicate" ? "duplicateAudioClipActionRow"
                 : modelData.action === "split" ? "splitAudioClipActionRow"
                 : modelData.action === "timebase" ? "toggleAudioClipTimebaseActionRow"
+                : modelData.action === "ramp" ? "rampToClipTempoActionRow"
                 : modelData.action === "groove" ? "extractGrooveActionRow"
                 : modelData.action === "sampler" ? "convertAudioClipToSamplerActionRow"
                 : "deleteAudioClipActionRow"
@@ -113,6 +116,7 @@ Rectangle {
                     : entry.modelData.action === "duplicate" ? "duplicateAudioClipAction"
                     : entry.modelData.action === "split" ? "splitAudioClipAction"
                     : entry.modelData.action === "timebase" ? "toggleAudioClipTimebaseAction"
+                    : entry.modelData.action === "ramp" ? "rampToClipTempoAction"
                     : entry.modelData.action === "groove" ? "extractGrooveAction"
                     : entry.modelData.action === "sampler" ? "convertAudioClipToSamplerAction"
                     : "deleteAudioClipAction"
@@ -131,6 +135,8 @@ Rectangle {
                         menu.bridge.split_audio_clip_at_playhead(clip)
                     else if (entry.modelData.action === "timebase")
                         menu.bridge.toggle_audio_clip_timebase(clip)
+                    else if (entry.modelData.action === "ramp")
+                        menu.bridge.tempoLane.ramp_to_clip(clip)
                     else if (entry.modelData.action === "groove")
                         menu.bridge.grooveCapture.open_for_clip(clip)
                     else if (entry.modelData.action === "sampler")

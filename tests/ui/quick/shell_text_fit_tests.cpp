@@ -39,10 +39,10 @@ using oscillate::test::require;
 constexpr int window_width = 1760;
 constexpr int window_height = 1000;
 constexpr double visible_bars = 32.0;
-// Demo tracks, top down: the Chords track carries Ember, Shape and Press;
-// the Arp track's first clip opens in the piano roll.
-constexpr int chords_track = 3;
-constexpr int arp_track = 4;
+// Demo tracks, top down: the Top Loop first, then the Chords track carries
+// Ember, Shape and Press; the Arp track's first clip opens in the piano roll.
+constexpr int chords_track = 4;
+constexpr int arp_track = 5;
 constexpr int chain_tab = 0;
 constexpr int notes_tab = 2;
 // Halfway into bar 99, past the song's end: a three-digit position readout.

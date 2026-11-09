@@ -25,7 +25,7 @@
 #include "project_bridge_projection.hpp"
 #include "recording_controller.hpp"
 #include "route_commands.hpp"
-#include "tempo_map_commands.hpp"
+#include "tempo_lane_controller.hpp"
 #include "track_automation_controller.hpp"
 #include "track_commands.hpp"
 #include "waveform_controller.hpp"
@@ -352,14 +352,13 @@ void ProjectBridge::create_song_controllers() {
   harmony_ = std::make_unique<HarmonyController>(
       HarmonyController::Hooks{.session = session, .can_edit = guarded, .commit = commit}, this);
   follow_project(harmony_.get(), &HarmonyController::project_changed);
-  tempo_map_commands_ = std::make_unique<TempoMapCommands>(
+  tempo_lane_ = std::make_unique<TempoLaneController>(
       session,
       [this] {
         return guarded_edit(
             QStringLiteral("Finish the current project operation before editing tempo"));
       },
-      [this](QString message) { set_status(std::move(message)); }, commit,
-      [this] { publish_tempo_map(); });
+      [this](QString message) { set_status(std::move(message)); }, commit, this);
 }
 
 // The project's background jobs: media repair, import, collection, export

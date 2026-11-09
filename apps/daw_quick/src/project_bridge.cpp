@@ -29,7 +29,7 @@
 #include "rack_library_controller.hpp"
 #include "recording_controller.hpp"
 #include "route_commands.hpp"
-#include "tempo_map_commands.hpp"
+#include "tempo_lane_controller.hpp"
 #include "track_automation_controller.hpp"
 #include "track_commands.hpp"
 #include "ui_contracts.hpp"
@@ -218,6 +218,7 @@ QObject* ProjectBridge::arrangement_automation() const noexcept {
 QObject* ProjectBridge::clip_warp() const noexcept { return clip_warp_.get(); }
 
 QObject* ProjectBridge::clip_tempo() const noexcept { return clip_tempo_.get(); }
+QObject* ProjectBridge::tempo_lane() const noexcept { return tempo_lane_.get(); }
 QObject* ProjectBridge::loop_transport() const noexcept { return loop_transport_.get(); }
 QObject* ProjectBridge::track_automation() const noexcept { return track_automation_.get(); }
 QObject* ProjectBridge::plugin_automation() const noexcept { return plugin_automation_.get(); }

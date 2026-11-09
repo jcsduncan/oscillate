@@ -74,7 +74,7 @@ class GrooveCaptureController;
 class ClayController;
 class MacroController;
 class RackLibraryController;
-class TempoMapCommands;
+class TempoLaneController;
 class WorkspaceLayoutController;
 class NativeSynthDeviceController;
 class NativeSynthAudition;
@@ -216,7 +216,8 @@ class ProjectBridge final : public QObject {
                  insertChainEditEnabledChanged)
   // The project's first tempo and meter: {projectBpm, projectMeter}.
   Q_PROPERTY(QVariantMap projectTiming READ project_timing NOTIFY projectTimingChanged)
-  Q_PROPERTY(QVariantMap tempoMap READ tempo_map NOTIFY tempoMapChanged)
+  // The tempo lane under the ruler (ADR-0112).
+  Q_PROPERTY(QObject* tempoLane READ tempo_lane CONSTANT)
   Q_PROPERTY(QVariantList routeTargets READ route_targets NOTIFY routingChanged)
   Q_PROPERTY(int routeTargetCount READ route_target_count NOTIFY routingChanged)
   Q_PROPERTY(double masterLevel READ master_level NOTIFY masterLevelChanged)
@@ -373,7 +374,7 @@ public:
   [[nodiscard]] QVariantList insert_chains() const { return insert_chains_; }
   [[nodiscard]] bool insert_chain_edit_enabled() const;
   [[nodiscard]] QVariantMap project_timing() const { return project_timing_; }
-  [[nodiscard]] QVariantMap tempo_map() const { return tempo_map_; }
+  [[nodiscard]] QObject* tempo_lane() const noexcept;
   [[nodiscard]] QVariantList route_targets() const { return route_targets_; }
   [[nodiscard]] int route_target_count() const { return route_target_count_; }
   [[nodiscard]] bool routing_active() const { return routing_active_; }
@@ -542,12 +543,8 @@ public:
   // `waveform` role).
   [[nodiscard]] QVariantList clip_waveform(const QString& clip_id) const;
   Q_INVOKABLE void rebuild_clip_waveform(const QString& clip_id);
-  Q_INVOKABLE void set_tempo_event_page(int page);
-  Q_INVOKABLE void add_tempo_event(int bar, int beat, double bpm, int shape_index);
-  Q_INVOKABLE void update_tempo_event(const QString& tick, double bpm, int shape_index);
   Q_INVOKABLE void set_initial_tempo_bpm(double bpm);
   Q_INVOKABLE void set_initial_meter(int numerator, int denominator);
-  Q_INVOKABLE void remove_tempo_event(const QString& tick);
   // Where the playhead is inside a MIDI clip while playing, in the clip's own
   // ticks (a looping clip wraps at its pattern length), or -1 when stopped or
   // outside the clip. QML re-reads it on playbackChanged.
@@ -718,7 +715,6 @@ signals:
   void namedRevisionApplied();
   void collectionChanged();
   void projectTimingChanged();
-  void tempoMapChanged();
   void availableProjectsChanged();
   void recoveryChoiceChanged();
   void statusChanged();
@@ -780,7 +776,6 @@ private:
   [[nodiscard]] bool route_edit_allowed();
   void refresh();
   void publish_project_timing();
-  void publish_tempo_map();
   void set_status(QString value);
   void finish_insert_chain_edit(const foundation::Result<void>& result, const QString& action);
   [[nodiscard]] bool live_routed_insert_edit_enabled() const;
@@ -1059,7 +1054,7 @@ private:
                          const std::vector<double>* values);
   // Every device controller shares the macro strip's MAP mode.
   void share_macro_map(NativeSynthDeviceController& controller);
-  std::unique_ptr<TempoMapCommands> tempo_map_commands_;
+  std::unique_ptr<TempoLaneController> tempo_lane_;
   std::unique_ptr<WorkspaceLayoutController> workspace_layout_;
   std::unique_ptr<ManagedMediaController> managed_media_;
   std::unique_ptr<ImportController> imports_;
@@ -1073,7 +1068,6 @@ private:
   QVariantMap project_timing_;
   // The lead bars the loop range was last placed for.
   int shown_lead_bars_ = 0;
-  QVariantMap tempo_map_;
   // Empty means the ordinary stopped message. Other messages remain opaque
   // presentation text; consumers use playbackState for decisions.
   QString playback_status_;

@@ -1,6 +1,6 @@
 # ADR-0112 — Warp markers and the tempo lane on the arrangement
 
-**Status:** Accepted. **Date:** 9 November 2026.
+**Status:** Accepted; implemented. **Date:** 9 November 2026.
 
 ## Context
 

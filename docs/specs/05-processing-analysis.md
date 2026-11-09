@@ -48,6 +48,19 @@ Its marker lane shows reviewed warp markers over the warp-mapped waveform and th
 - **Moving:** dragging or Alt+arrow keys move a marker between its neighbours; a drag saves once, on release.
 - **Deleting:** Delete removes the selected marker.
 
+On the arrangement, the selected audio clip shows its markers over its waveform, and the docked clip editor shows them with the same gestures (ADR-0112). Each gesture or command is one undo step:
+- **Pin:** hovering the band along the waveform's top shows a ghost on the nearest transient, else the nearest beat (Alt: any sample); a click pins it.
+- **Stretch:** dragging a marker stretches only the audio between its neighbours, with both segments' tempi shown and the waveform redrawn as it will play.
+- **Slide:** Shift-dragging keeps the marker in place and moves the audio under it; the new source frame stays between the neighbouring markers.
+- **Remove:** double-click.
+- **Right-click commands:**
+  - Set downbeat here;
+  - Straight from here: removes the later markers and keeps the previous segment's rate to the clip's end, changing the clip's length;
+  - Set tempo from this segment: the source tempo of the quarter notes the segment spans;
+  - Fix drift from here;
+  - Remove marker;
+  - Remove all after.
+
 Onset suggestions are durable review state (schema 1.29, on the source's tempo review):
 - A cancellable worker runs the warp transient detector on the whole verified source. Its result is stored as the source's generated onsets (bounded to 20,000, with a truncation flag) only if the project revision it captured is still current; otherwise it is reported stale and nothing is stored. Storing is one undoable revision.
 - The clip shows the generated onsets inside its trimmed range, minus any within 30 ms of a reviewed marker, as hollow suggestions.

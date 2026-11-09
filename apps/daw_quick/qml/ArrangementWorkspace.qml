@@ -38,6 +38,11 @@ Item {
     property var automationView: ({})
     // B, or the pencil on a lane header: drag paints the envelope.
     property bool automationDrawMode: false
+    // The tempo lane under the ruler (ADR-0112): a thin line, or expanded
+    // for drawing ramps. View state, not saved with the project.
+    property bool tempoLaneExpanded: false
+    readonly property int tempoLaneHeight: tempoLaneExpanded ? Theme.tempoLaneExpandedHeight
+                                                             : Theme.tempoLaneCollapsedHeight
     readonly property int automationLaneHeight: Theme.automationLaneHeight
     // While a track header is dragged (TrackListPanel): the tracks moving
     // (`ids`), where they would land (`busId`, empty for the master, and
@@ -218,6 +223,8 @@ Item {
         trackDrop: workspace.trackDrop
         automationView: workspace.automationView
         automationDrawMode: workspace.automationDrawMode
+        tempoLaneHeight: workspace.tempoLaneHeight
+        tempoLaneExpanded: workspace.tempoLaneExpanded
         panelColor: workspace.panelColor
         raisedColor: workspace.raisedColor
         lineColor: workspace.lineColor
@@ -241,6 +248,7 @@ Item {
         onAutomationLaneChosen: function(trackId, index, key) { workspace.setAutomationLaneKey(trackId, index, key) }
         onAutomationLaneHidden: function(trackId, index) { workspace.hideAutomationLane(trackId, index) }
         onAutomationDrawToggled: workspace.automationDrawMode = !workspace.automationDrawMode
+        onTempoLaneToggled: workspace.tempoLaneExpanded = !workspace.tempoLaneExpanded
     }
 
     ArrangementView {
@@ -261,6 +269,9 @@ Item {
         snapToBeat: workspace.snapToBeat
         automationView: workspace.automationView
         automationDrawMode: workspace.automationDrawMode
+        tempoLaneHeight: workspace.tempoLaneHeight
+        tempoLaneExpanded: workspace.tempoLaneExpanded
+        onTempoLaneExpandRequested: workspace.tempoLaneExpanded = true
         selectedClipId: workspace.selectedClipId
         selectedTrack: workspace.selectedTrack
         canvasColor: workspace.canvasColor

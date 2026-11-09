@@ -1,7 +1,7 @@
 #include "project_bridge_projection.hpp"
 #include "oscillate/application/midi_pedal_edit.hpp"
 #include "project_bridge.hpp"
-#include "tempo_map_commands.hpp"
+#include "tempo_lane_controller.hpp"
 
 #include "arrangement_automation_controller.hpp"
 #include "clip_tempo_controller.hpp"
@@ -176,38 +176,6 @@ static int arrangement_bar_extent(const project::Snapshot& snapshot) {
   return static_cast<int>(std::ceil(padded / visible_bars)) * visible_bars;
 }
 
-static int tempo_shape_index(timeline::TempoShape shape) {
-  switch (shape) {
-  case timeline::TempoShape::step:
-    return 0;
-  case timeline::TempoShape::linear_bpm:
-    return 1;
-  case timeline::TempoShape::ease_in:
-    return 2;
-  case timeline::TempoShape::ease_out:
-    return 3;
-  case timeline::TempoShape::ease_in_out:
-    return 4;
-  }
-  return 0;
-}
-
-static QString tempo_shape_name(timeline::TempoShape shape) {
-  switch (shape) {
-  case timeline::TempoShape::step:
-    return QStringLiteral("Step");
-  case timeline::TempoShape::linear_bpm:
-    return QStringLiteral("Linear BPM");
-  case timeline::TempoShape::ease_in:
-    return QStringLiteral("Ease in");
-  case timeline::TempoShape::ease_out:
-    return QStringLiteral("Ease out");
-  case timeline::TempoShape::ease_in_out:
-    return QStringLiteral("Ease in/out");
-  }
-  return QStringLiteral("Unknown");
-}
-
 } // namespace oscillate::quick::detail
 
 namespace oscillate::quick {
@@ -217,9 +185,6 @@ using detail::clip_channel_automation_projection;
 using detail::clip_projection;
 using detail::send_automation_projection;
 using detail::starter_sound_name;
-using detail::tempo_events_per_page;
-using detail::tempo_shape_index;
-using detail::tempo_shape_name;
 
 void ProjectBridge::refresh() {
   OSCILLATE_TRACE_SPAN("ui.refresh_projection");
@@ -487,7 +452,7 @@ void ProjectBridge::refresh() {
   }
   refresh_clip_waveforms();
   publish_project_timing();
-  publish_tempo_map();
+  tempo_lane_->refresh();
   plugin_automation_->refresh();
   arrangement_automation_->refresh();
   clip_warp_->refresh_snapshot();
@@ -626,50 +591,6 @@ void ProjectBridge::publish_project_timing() {
                                  .arg(snapshot.meter.events().front().numerator)
                                  .arg(snapshot.meter.events().front().denominator)}};
   emit projectTimingChanged();
-}
-
-void ProjectBridge::publish_tempo_map() {
-  const auto& snapshot = session_->snapshot();
-  const auto& events = snapshot.tempo.events();
-  const auto event_count = static_cast<int>(events.size());
-  const auto page_count =
-      std::max(1, (event_count + tempo_events_per_page - 1) / tempo_events_per_page);
-  tempo_map_commands_->clamp_page(page_count);
-  const auto first = tempo_map_commands_->page() * tempo_events_per_page;
-  const auto last = std::min(event_count, first + tempo_events_per_page);
-  QVariantList projected;
-  for (int index = first; index < last; ++index) {
-    const auto& event = events[static_cast<std::size_t>(index)];
-    const auto location = snapshot.meter.locate(event.tick);
-    QString position = QStringLiteral("TICK %1").arg(event.tick.value);
-    if (location) {
-      position =
-          QStringLiteral("BAR %1 · BEAT %2").arg(location.value().bar).arg(location.value().beat);
-      if (location.value().tick_within_beat != 0) {
-        position += QStringLiteral(" + %1 TICKS").arg(location.value().tick_within_beat);
-      }
-    }
-    const auto sample = snapshot.tempo.tick_to_sample(event.tick, snapshot.sample_rate);
-    const auto seconds =
-        sample ? static_cast<double>(sample.value().value) / snapshot.sample_rate : -1.0;
-    projected.push_back(
-        QVariantMap{{"tick", QString::number(event.tick.value)},
-                    {"position", position},
-                    {"bar", location ? QString::number(location.value().bar) : QString()},
-                    {"beat", location ? QString::number(location.value().beat) : QString()},
-                    {"bpm", event.bpm},
-                    {"shape", tempo_shape_name(event.shape_to_next)},
-                    {"shapeIndex", tempo_shape_index(event.shape_to_next)},
-                    {"initial", index == 0},
-                    {"last", index == event_count - 1},
-                    {"elapsedSeconds", seconds}});
-  }
-  tempo_map_ = QVariantMap{{"events", projected},
-                           {"eventCount", event_count},
-                           {"page", tempo_map_commands_->page()},
-                           {"pageCount", page_count},
-                           {"revision", static_cast<qulonglong>(snapshot.tempo.revision())}};
-  emit tempoMapChanged();
 }
 
 } // namespace oscillate::quick

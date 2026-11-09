@@ -576,8 +576,13 @@ void placeholder_inserts_above_itself() {
           "placeholder action did not append above the add row");
   const auto created_id = bridge.tracks()[2].toMap().value(QStringLiteral("id")).toString();
   require(window->property("selectedTrack").toInt() == 2, "newly created track was not selected");
-  require(std::abs(list->mapToScene({0, 0}).y() -
-                   (creation_row->mapToScene({0, 0}).y() + creation_row->height())) < 1.0,
+  // The tempo lane's header (ADR-0112) sits between the header row and the tracks.
+  auto* tempo_header = find_item(window->contentItem(), QStringLiteral("tempoLaneHeader"));
+  require(tempo_header != nullptr &&
+              std::abs(tempo_header->mapToScene({0, 0}).y() -
+                       (creation_row->mapToScene({0, 0}).y() + creation_row->height())) < 1.0 &&
+              std::abs(list->mapToScene({0, 0}).y() -
+                       (tempo_header->mapToScene({0, 0}).y() + tempo_header->height())) < 1.0,
           "track list header did not stay above the scrolling tracks");
   auto* master = find_item(window->contentItem(), QStringLiteral("masterTrackRow"));
   require(master && master->mapToScene({0, 0}).y() == list->mapToScene({0, 0}).y() + list->height(),

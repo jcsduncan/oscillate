@@ -1,5 +1,7 @@
 #include "arrangement_automation_controller.hpp"
 
+#include "bar_ticks.hpp"
+
 #include "oscillate/automation/curve.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
@@ -251,33 +253,6 @@ descriptor_of(const native_dsp::EngineDescriptor& engine, std::string_view id) {
       target);
 }
 
-// Zero-based fractional bars and project ticks, through the meter.
-[[nodiscard]] std::optional<std::int64_t> tick_of(const project::Snapshot& snapshot, double bar) {
-  if (!std::isfinite(bar) || bar < 0.0 || bar > 1'000'000.0)
-    return std::nullopt;
-  const auto whole = static_cast<std::int64_t>(std::floor(bar));
-  const auto start = snapshot.meter.tick_at({whole + 1, 1, 0});
-  const auto next = snapshot.meter.tick_at({whole + 2, 1, 0});
-  if (!start || !next)
-    return std::nullopt;
-  return start.value().value +
-         std::llround((bar - static_cast<double>(whole)) *
-                      static_cast<double>(next.value().value - start.value().value));
-}
-
-[[nodiscard]] std::optional<double> bar_of(const project::Snapshot& snapshot, std::int64_t tick) {
-  const auto located = snapshot.meter.locate({tick});
-  if (!located)
-    return std::nullopt;
-  const auto start = snapshot.meter.tick_at({located.value().bar, 1, 0});
-  const auto next = snapshot.meter.tick_at({located.value().bar + 1, 1, 0});
-  if (!start || !next || next.value().value <= start.value().value)
-    return std::nullopt;
-  return static_cast<double>(located.value().bar - 1) +
-         static_cast<double>(tick - start.value().value) /
-             static_cast<double>(next.value().value - start.value().value);
-}
-
 [[nodiscard]] QString shape_name(project::AutomationShape shape) {
   switch (shape) {
   case project::AutomationShape::hold:
@@ -426,7 +401,7 @@ void ArrangementAutomationController::refresh() {
               continue;
             tick = musical.value().value;
           }
-          const auto bar = bar_of(snapshot, tick);
+          const auto bar = bar_of_tick(snapshot, tick);
           if (!bar)
             continue;
           points.push_back(QVariantMap{{"id", QString::fromStdString(point.id.to_string())},
@@ -484,7 +459,7 @@ QString ArrangementAutomationController::add_point(const QString& track_id, cons
                            : snapshot.tracks.end();
   const auto feel =
       target && owner != snapshot.tracks.end() ? feel_of(snapshot, *owner, *target) : std::nullopt;
-  const auto tick = tick_of(snapshot, bar);
+  const auto tick = tick_of_bar(snapshot, bar);
   if (!feel || !tick || !std::isfinite(value)) {
     report_(QStringLiteral("Choose a parameter and a place on the timeline"));
     return {};
@@ -526,7 +501,7 @@ void ArrangementAutomationController::move_points(const QString& lane_id,
   for (const auto& entry : moves) {
     const auto map = entry.toMap();
     const auto point = project::AutomationPointId::parse(map.value("id").toString().toStdString());
-    const auto tick = tick_of(snapshot, map.value("bar").toDouble());
+    const auto tick = tick_of_bar(snapshot, map.value("bar").toDouble());
     const auto value = map.value("value").toDouble();
     if (!point || !tick || !std::isfinite(value)) {
       report_(QStringLiteral("An automation point moved off the timeline"));
@@ -574,14 +549,14 @@ void ArrangementAutomationController::draw(const QString& track_id, const QStrin
                            : snapshot.tracks.end();
   const auto feel =
       target && owner != snapshot.tracks.end() ? feel_of(snapshot, *owner, *target) : std::nullopt;
-  const auto from = tick_of(snapshot, from_bar);
-  const auto to = tick_of(snapshot, to_bar);
+  const auto from = tick_of_bar(snapshot, from_bar);
+  const auto to = tick_of_bar(snapshot, to_bar);
   if (!feel || !from || !to)
     return;
   std::vector<application::AutomationService::AutomationDrawPoint> drawn;
   for (const auto& entry : points) {
     const auto map = entry.toMap();
-    const auto tick = tick_of(snapshot, map.value("bar").toDouble());
+    const auto tick = tick_of_bar(snapshot, map.value("bar").toDouble());
     if (!tick)
       return;
     // Strokes may revisit a column; the last value there wins.
@@ -699,7 +674,7 @@ QVariantList ArrangementAutomationController::curve(const QString& lane_id, doub
         auto musical = snapshot.tempo.sample_to_tick({point.coordinate}, snapshot.sample_rate);
         tick = musical ? musical.value().value : 0;
       }
-      bars.push_back(bar_of(snapshot, tick).value_or(0.0));
+      bars.push_back(bar_of_tick(snapshot, tick).value_or(0.0));
     }
     result.reserve(samples);
     std::size_t segment = 0;

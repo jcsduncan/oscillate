@@ -100,6 +100,13 @@ public:
   Q_INVOKABLE void add_marker(double fraction);
   Q_INVOKABLE void move_marker(int index, double fraction);
   Q_INVOKABLE void remove_marker(int index);
+  // The arrangement's marker gestures and commands (ADR-0112). Slide: the
+  // audio playing at `fraction` moves under marker `index`, which stays.
+  Q_INVOKABLE void slide_marker(int index, double fraction);
+  Q_INVOKABLE void remove_markers_after(int index);
+  // Straight from here: the markers after `index` go and the tempo of the
+  // segment ending at it carries on to the clip's end.
+  Q_INVOKABLE void straighten_from(int index);
   // Analyses the whole source and stores the result as its onset review
   // (replacing earlier generated onsets, keeping dismissals).
   Q_INVOKABLE void request_suggestions();

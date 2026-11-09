@@ -14,6 +14,8 @@ Row {
     required property color accentColor
     required property string monoFamily
     required property bool editable
+    // The pointer is over the clip: show its stretch (ADR-0112).
+    property bool hovered: false
     signal tempoRequested(Item chip)
     signal modeRequested(Item chip)
     signal followToggled(bool follow)
@@ -21,6 +23,9 @@ Row {
     readonly property bool known: !!tempo && tempo.bpm > 0
     readonly property bool unsure: known && !tempo.corrected && tempo.confidence < 0.5
     readonly property bool follows: !!tempo && tempo.follow
+    // Percent the project tempo plays it faster (+) or slower than its own.
+    readonly property real stretch: follows && known ? tempo.stretch : 0
+    readonly property bool stretchShown: hovered && follows && known
 
     spacing: Theme.clipStripSpacing
     height: Theme.clipStripHeight
@@ -107,6 +112,18 @@ Row {
             Accessible.name: strip.follows ? "Follows the project tempo; switch to its own tempo"
                                            : "Plays at its own tempo; switch to follow the project tempo"
             onActivated: strip.followToggled(!strip.follows)
+        }
+        Chip {
+            objectName: "clipStretchChip"
+            visible: strip.stretchShown
+            accent: strip.accentColor
+            monoFamily: strip.monoFamily
+            editable: false
+            mono: true
+            label: (strip.stretch >= 0 ? "+" : "−") + Math.abs(strip.stretch).toFixed(1) + "%"
+            lit: Math.abs(strip.stretch) > Theme.stretchWarnPercent
+            tone: strip.amberColor
+            Accessible.name: "Stretched " + label + (lit ? ", far enough for artefacts" : "")
         }
         Chip {
             id: modeChip

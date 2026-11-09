@@ -658,6 +658,7 @@ Window {
 
     ArrangementWorkspace {
         id: workspace
+        objectName: "arrangementWorkspace"
         visible: projectBridge.projectOpen && shell.currentView === "arrange"
         theme: shell.kit
         x: shell.browserWidth
