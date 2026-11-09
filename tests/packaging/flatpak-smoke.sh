@@ -5,6 +5,15 @@
 # Usage: flatpak-smoke.sh BUNDLE.flatpak
 set -eu
 
+# Uninstalling with --delete-data talks to the D-Bus session bus, which needs
+# a machine ID; a desktop session has both, the bare container neither.
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+  if [ ! -s /etc/machine-id ]; then
+    tr -d - </proc/sys/kernel/random/uuid >/etc/machine-id
+  fi
+  exec dbus-run-session -- sh "$0" "$@"
+fi
+
 app=io.github.jcsduncan.Oscillate
 bundle=$(realpath "$1")
 work=$(mktemp -d)
@@ -25,12 +34,6 @@ run() {
   timeout "$startup_timeout" flatpak run --env=QT_QPA_PLATFORM=offscreen \
     --env=QT_QUICK_BACKEND=software "$app" "$@"
 }
-
-# Uninstalling with --delete-data starts a D-Bus session, which needs a
-# machine ID; a desktop has one, the bare container does not.
-if [ ! -s /etc/machine-id ]; then
-  tr -d - </proc/sys/kernel/random/uuid >/etc/machine-id
-fi
 
 flatpak install --system --noninteractive -y --bundle "$bundle"
 flatpak info --system "$app" >/dev/null || fail "not installed"
