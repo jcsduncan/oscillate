@@ -1,3 +1,4 @@
+#include "../native_dsp/bow_test_library.hpp"
 #include "../native_dsp/concert_test_library.hpp"
 #include "../native_dsp/fret_test_library.hpp"
 #include "../native_dsp/wren_test_library.hpp"
@@ -114,14 +115,13 @@ std::vector<float> export_nulls_against_live_playback(const synth::SynthEngine& 
     REQUIRE_OK(session->instruments().select_native_instrument(track, id, preset), "preset");
     REQUIRE_OK(session->midi_clips().add_midi_clip(track, {0}), "MIDI clip");
     const auto clip = session->snapshot().tracks.front().midi_clips.front().id;
-    REQUIRE_TRUE(
-        session->notes()
-            .add_note(clip, {0}, static_cast<std::uint8_t>(wren_test::sounding_key(id, 36)))
-            .has_value(),
-        "overlapping notes");
+    REQUIRE_TRUE(session->notes()
+                     .add_note(clip, {0}, static_cast<std::uint8_t>(bow_test::sounding_key(id, 36)))
+                     .has_value(),
+                 "overlapping notes");
     REQUIRE_TRUE(session->notes()
                      .add_note(clip, {timeline::ticks_per_quarter / 2},
-                               static_cast<std::uint8_t>(wren_test::sounding_key(id, 43)))
+                               static_cast<std::uint8_t>(bow_test::sounding_key(id, 43)))
                      .has_value(),
                  "overlapping notes");
     if (pedals) {
@@ -304,11 +304,12 @@ void parallel_live_playback_is_bit_identical() {
 
 int main() {
   try {
-    // Concert, Fret and Wren play their synthetic libraries, notes held whole in
+    // Concert, Fret, Wren and Bow play their synthetic libraries, notes held whole in
     // memory, so live playback never waits on the disk.
     (void)concert_test::install(concert_test::resident_note_seconds);
     (void)fret_test::install(fret_test::resident_note_seconds);
     (void)wren_test::install();
+    (void)bow_test::install();
     parallel_live_playback_is_bit_identical();
     for (const auto* engine : synth::engines()) {
       const auto plain = export_nulls_against_live_playback(*engine, 2);

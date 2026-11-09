@@ -734,6 +734,8 @@ QtObject {
     property int statusPad: 30
     property real statusLampX: 10
     property int statusLampSize: 8
+    // LibraryNotice: between its lines, buttons and the command's edge.
+    property int noticeGap: 8
     property real statusTextX: 22
     property real statusEdgeAlpha: 0.7
     property color statusPendingInk: inkDim

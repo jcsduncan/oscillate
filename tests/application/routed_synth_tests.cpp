@@ -1,3 +1,4 @@
+#include "../native_dsp/bow_test_library.hpp"
 #include "../native_dsp/concert_test_library.hpp"
 #include "../native_dsp/fret_test_library.hpp"
 #include "../native_dsp/wren_test_library.hpp"
@@ -391,7 +392,7 @@ void every_engine_plays_live() {
                  "engine selected");
       REQUIRE_OK(session->midi_clips().add_midi_clip(track, {0}), "MIDI clip was not added");
       const auto clip = session->snapshot().tracks.front().midi_clips.front().id;
-      const auto key = wren_test::sounding_key(engine->descriptor->id, 36);
+      const auto key = bow_test::sounding_key(engine->descriptor->id, 36);
       REQUIRE_OK(session->notes().add_note(clip, {0}, static_cast<std::uint8_t>(key)),
                  "note saved");
       REQUIRE_OK(session->saving().save(), "note saved");
@@ -628,11 +629,12 @@ void comp_plays_ahead_and_takes_live_edits() {
 
 int main() {
   try {
-    // Concert, Fret and Wren play their synthetic libraries, notes held whole in
+    // Concert, Fret, Wren and Bow play their synthetic libraries, notes held whole in
     // memory, so live playback never waits on the disk.
     (void)concert_test::install(concert_test::resident_note_seconds);
     (void)fret_test::install(fret_test::resident_note_seconds);
     (void)wren_test::install();
+    (void)bow_test::install();
     synth_track_plays_and_takes_live_edits_without_restart();
     native_automation_edits_apply_without_restarting_voices();
     native_automation_mailbox_retries_latest_saved_revision();

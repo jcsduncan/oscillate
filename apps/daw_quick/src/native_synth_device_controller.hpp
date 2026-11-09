@@ -222,6 +222,21 @@ public:
   // looks again after an install.
   Q_INVOKABLE QVariantMap wren_library() const;
   Q_INVOKABLE QVariantMap wren_reload_library();
+  // Bow's sample library (empty for other engines), as fret_library, its
+  // state also "loading" while the first look reads it in the background;
+  // bow_reload_library looks again after an install.
+  Q_INVOKABLE QVariantMap bow_library() const;
+  Q_INVOKABLE QVariantMap bow_reload_library();
+  // Bow's keyboard and dynamics (empty for other engines): {first_key,
+  // last_key, low, high (the section's playable keys), low_name, high_name,
+  // keyswitches: [{key, name}] in articulation order, dynamics: [{name,
+  // top}] from ppp, each up to its top on the wheel's 0..1}.
+  Q_INVOKABLE QVariantMap bow_layout() const;
+  // A sampled instrument's library folder for its "Show in folder" action:
+  // `directory` when it exists, else its nearest existing parent ("" when
+  // none); show_library_folder opens it in the file manager.
+  Q_INVOKABLE QString library_folder(const QString& directory) const;
+  Q_INVOKABLE void show_library_folder(const QString& directory);
   // Wren's phrase lane (empty for other engines): how Breath plays the first
   // wren_phrase_bars bars of this track's earliest MIDI clip, decided as the
   // kernel decides (wren::breath::decide with the project key, then
@@ -290,7 +305,10 @@ public:
   // or Wren {library (wren_library's state), notes (a count that changes with
   // every note), last_key (-1 before any), last_name ("D5"), last_velocity,
   // last_tongue ("t", "k" or "slur"), last_staccato, last_grace, vibrato,
-  // output_peak_db}.
+  // output_peak_db} or Bow {library (bow_library's state), notes,
+  // articulation (bow::Articulation), latched (chosen by a keyswitch),
+  // dynamics (the wheel, 0..1), dynamic_name ("mp"), vibrato (the newest
+  // note's, 0..1), voices, output_peak_db, held [keys]}.
   // live is false when nothing plays. Any non-empty frame also passes
   // through raw as {frame}, for panels that decode their layout themselves.
   // Engines with an output spectrum (Shape, Strata, Temper) also give

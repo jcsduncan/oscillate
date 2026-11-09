@@ -5,6 +5,7 @@
 #include "panel_text_checks.hpp"
 #include "project_bridge.hpp"
 
+#include "../../native_dsp/bow_test_library.hpp"
 #include "../../native_dsp/concert_test_library.hpp"
 #include "../../native_dsp/fret_test_library.hpp"
 #include "../../native_dsp/wren_test_library.hpp"
@@ -978,6 +979,7 @@ int main(int argc, char** argv) {
     }
     (void)fret_test::install(fret_test::resident_note_seconds);
     (void)wren_test::install();
+    (void)bow_test::install();
     live_notes_monitor_through_the_graph_while_stopped();
     concert_note_plays_from_the_quick_shell();
     engine_is_reachable_and_saves_from_the_app("prism", "prism.filter.cutoff",

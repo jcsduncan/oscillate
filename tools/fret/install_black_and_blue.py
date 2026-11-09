@@ -445,7 +445,7 @@ def build(source: Path, target: Path, jobs: int) -> None:
         f"{ATTRIBUTION}\n\n{NAME}, recorded and released by Karoryfer Samples\n"
         f"under the Creative Commons CC0 1.0 Universal dedication (see {INSTALLED_LICENCE}).\n"
         f"SFZ edition: {SOURCE_URL} (commit {PINNED_COMMIT}).\n"
-        f"Converted for oscillate's Fret: resampled from {SOURCE_RATE} Hz to {RATE} Hz, attack\n"
+        f"Converted for Oscillate's Fret: resampled from {SOURCE_RATE} Hz to {RATE} Hz, attack\n"
         "pre-roll trimmed to 2 ms, peak-normalised and dithered to 16-bit; the sound is\n"
         "otherwise unchanged.\n"
     )

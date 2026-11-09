@@ -112,5 +112,14 @@ shaping phrasing, vibrato, swells and grace notes.
 
 ![Wren panel](../../../docs/images/instruments/wren.png)
 
-Concert, Fret and Wren need their sample libraries, installed as the
+## Bow
+
+Sampled strings: VSCO 2 CE sections and University of Iowa solos, bowed
+live from the mod wheel, with legato, keyswitched articulations, Tone from
+sul tasto to sul ponticello and an ensemble of up to sixteen players.
+[ADR-0111](../../../docs/decisions/0111-bow-sampled-strings.md)
+
+![Bow panel](../../../docs/images/instruments/bow.png)
+
+Concert, Fret, Wren and Bow need their sample libraries, installed as the
 [README](../../../README.md#sample-libraries) describes.

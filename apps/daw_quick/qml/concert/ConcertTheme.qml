@@ -156,10 +156,6 @@ KitTheme {
     readoutValueY: 17
     readoutValueInk: gold
 
-    // The library's brass push buttons.
-    property real actionPad: 20
-    property real actionHeight: 24
-
     // The stereo plate: the width knob beside the perspective choice.
     property real stereoKnobX: 24
     property real stereoKnobY: 43

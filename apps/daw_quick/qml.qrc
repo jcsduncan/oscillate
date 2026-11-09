@@ -71,6 +71,7 @@
     <file alias="devicekit/FilterScope.qml">qml/devicekit/FilterScope.qml</file>
     <file alias="devicekit/FilterView.qml">qml/devicekit/FilterView.qml</file>
     <file alias="devicekit/KitTheme.qml">qml/devicekit/KitTheme.qml</file>
+    <file alias="devicekit/LibraryNotice.qml">qml/devicekit/LibraryNotice.qml</file>
     <file alias="devicekit/Fader.qml">qml/devicekit/Fader.qml</file>
     <file alias="devicekit/Knob.qml">qml/devicekit/Knob.qml</file>
     <file alias="devicekit/MacroMenu.qml">qml/devicekit/MacroMenu.qml</file>
@@ -140,6 +141,9 @@
     <file alias="fret/FretPanel.qml">qml/fret/FretPanel.qml</file>
     <file alias="fret/FretTheme.qml">qml/fret/FretTheme.qml</file>
     <file alias="fret/FretGroove.qml">qml/fret/FretGroove.qml</file>
+    <file alias="bow/BowPanel.qml">qml/bow/BowPanel.qml</file>
+    <file alias="bow/BowTheme.qml">qml/bow/BowTheme.qml</file>
+    <file alias="bow/BowDisplay.qml">qml/bow/BowDisplay.qml</file>
     <file alias="wren/WrenPanel.qml">qml/wren/WrenPanel.qml</file>
     <file alias="wren/WrenTheme.qml">qml/wren/WrenTheme.qml</file>
     <file alias="wren/WrenPhrase.qml">qml/wren/WrenPhrase.qml</file>

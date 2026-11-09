@@ -1,5 +1,6 @@
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
+#include "panel_kit_checks.hpp"
 
 #include "../../native_dsp/concert_test_library.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
@@ -213,6 +214,11 @@ void the_library_plate_guides_the_install() {
           "the install command is shown");
   require(!item(*panel, QStringLiteral("concertAttribution"))->isVisible(),
           "no installed attribution yet");
+  const auto missing_directory =
+      controller.concert_library().value(QStringLiteral("directory")).toString();
+  require(!missing_directory.isEmpty() &&
+              !oscillate::test::panel_kit::shows_text(panel->root, missing_directory),
+          "the missing library's message names its folder, not its path");
   click(*panel, centre(item(*panel, QStringLiteral("concertCopyInstall"))));
   require(controller.clipboard_text() == qs(concert::library::install_command),
           "Copy puts the command on the clipboard");
@@ -235,6 +241,14 @@ void the_library_plate_guides_the_install() {
   require(text_of(*panel, QStringLiteral("concertAttribution")) ==
               controller.concert_library().value(QStringLiteral("attribution")).toString(),
           "the attribution is the library's own");
+  const auto shown_directory =
+      controller.concert_library().value(QStringLiteral("directory")).toString();
+  require(item(*panel, QStringLiteral("concertShowLibrary"))->isVisible() &&
+              !shown_directory.isEmpty() &&
+              !oscillate::test::panel_kit::shows_text(panel->root, shown_directory) &&
+              !oscillate::test::panel_kit::shows_text(panel->root,
+                                                      QString::fromStdString(directory.string())),
+          "Show in folder stands in for the library's raw path");
 }
 
 void panel_covers_every_parameter() {

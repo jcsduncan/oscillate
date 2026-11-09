@@ -72,6 +72,14 @@ constexpr std::array looks{
                "ghost notes, staccato, behind-the-bridge plucks and string releases. Feel picks "
                "each note's velocity and articulation as it plays, so flat notes groove.",
                "bass guitar electric fingered sampled funk ghost notes slap groove"},
+    DeviceLook{"bow", "Instruments", S::samplers, "Strings", "St", "#e0a96d",
+               "Sampled string sections and solos, bowed live from the mod wheel", "",
+               "Sampled strings (VSCO 2 CE sections, University of Iowa MIS solos): violins, "
+               "violas, cellos, basses or the whole ensemble, sustain, legato, staccato, "
+               "pizzicato and tremolo on keyswitches. The mod wheel bows the dynamics live; Tone "
+               "runs from sul tasto to sul ponticello; Ensemble layers more players.",
+               "strings violin viola cello bass orchestra section pad legato pizzicato tremolo "
+               "sampled ensemble"},
     DeviceLook{"wren", "Instruments", S::winds, "Flute", "Fu", "#7fd6c2",
                "A sampled concert flute that breathes your notes like a flautist", "",
                "A sampled concert flute (University of Iowa MIS) in three dynamics, with and "

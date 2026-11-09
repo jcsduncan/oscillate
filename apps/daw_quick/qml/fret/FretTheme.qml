@@ -131,10 +131,7 @@ KitTheme {
     property int laneInset: 14
     property int laneFootInset: 10
 
-    // The install command's box: its text's horizontal and vertical inset.
-    property int commandPadX: 10
-    property int commandPadY: 7
-    // The missing library's message takes this share of the plate's width.
+    // The library notice's first column takes this share of the plate's width.
     property real libraryMessageShare: 0.42
 
     // The kit's Slider: its name and value over the rail, and an optional

@@ -406,7 +406,7 @@ def build(source: Path, target: Path, jobs: int) -> None:
         f"{ATTRIBUTION}\n\n{NAME} ({INSTRUMENT}), recorded and released by Alexander Holm\n"
         f"under the Creative Commons Attribution 3.0 Unported licence (see LICENSE).\n"
         f"SFZ mapping by kinwie: {SOURCE_URL} (commit {PINNED_COMMIT}).\n"
-        "Converted for oscillate's Concert: attack pre-roll trimmed to 2 ms, peak-normalised\n"
+        "Converted for Oscillate's Concert: attack pre-roll trimmed to 2 ms, peak-normalised\n"
         "and dithered to 16-bit; the sound is otherwise unchanged.\n"
     )
 

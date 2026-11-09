@@ -203,8 +203,8 @@ Rectangle {
     Plate {
         id: libraryPlate
         objectName: "concertLibrary"
-        title: "LIBRARY"
-        note: panel.ready ? "INSTALLED" : panel.library.state === "invalid" ? "DAMAGED" : "NOT INSTALLED"
+        // The notice names the plate itself.
+        title: ""
         x: panel.margin
         y: panel.rowAY
         width: panel.theme.libraryWidth
@@ -213,149 +213,37 @@ Rectangle {
         Accessible.name: "Piano library"
         Accessible.description: panel.ready ? panel.library.name + ", " + panel.library.attribution
                                             : panel.library.message !== undefined ? panel.library.message : ""
-        Column {
+        Kit.LibraryNotice {
+            id: notice
             x: panel.theme.plateInset
-            y: panel.theme.plateTextY
+            y: panel.theme.plateInset
             width: libraryPlate.width - 2 * panel.theme.plateInset
-            spacing: panel.theme.spaceSm
-            Text {
-                objectName: "concertLibraryName"
-                width: parent.width
-                text: panel.ready ? panel.library.name : "No piano to play"
-                color: panel.theme.ink
-                font.family: panel.theme.serif
-                font.pixelSize: panel.theme.typeHeading
-                wrapMode: Text.WordWrap
-            }
-            Text {
-                objectName: "concertLibraryMessage"
-                width: parent.width
-                visible: !panel.ready
-                text: (panel.library.message !== undefined ? panel.library.message + ". " : "")
-                    + "Concert is silent until its library is installed. It plays "
-                    + (panel.library.required !== undefined ? panel.library.required : "") + "."
-                color: panel.theme.inkDim
-                font.pixelSize: panel.theme.typeSmall
-                wrapMode: Text.WordWrap
-            }
-            Text {
-                visible: !panel.ready
-                text: "INSTALL FROM THE SOURCE TREE"
-                color: panel.theme.inkFaint
-                font.pixelSize: panel.theme.typeMicro
-                font.bold: true
-                font.letterSpacing: panel.theme.captionSpacing
-            }
-            Rectangle {
-                visible: !panel.ready
-                width: parent.width
-                height: command.implicitHeight + 2 * panel.theme.spaceSm
-                radius: panel.theme.radiusMd
-                color: panel.theme.well
-                border.color: panel.theme.wellEdge
-                Text {
-                    id: command
-                    objectName: "concertInstallCommand"
-                    x: panel.theme.spaceMd
-                    y: panel.theme.spaceSm
-                    width: parent.width - 2 * panel.theme.spaceMd
-                    text: panel.library.install_command !== undefined ? panel.library.install_command : ""
-                    color: panel.theme.gold
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeSmall
-                    wrapMode: Text.WrapAnywhere
-                }
-            }
-            Row {
-                visible: !panel.ready
-                spacing: panel.theme.spaceMd
-                LibraryAction {
-                    objectName: "concertCopyInstall"
-                    label: "COPY COMMAND"
-                    onActivated: panel.controller.set_clipboard_text(command.text)
-                }
-                LibraryAction {
-                    objectName: "concertLibraryReload"
-                    label: "LOOK AGAIN"
-                    onActivated: {
-                        panel.controller.concert_reload_library()
-                        ++panel.libraryLook
-                    }
-                }
-            }
-            Text {
-                objectName: "concertAttribution"
-                width: parent.width
-                visible: panel.ready
-                text: panel.ready ? panel.library.attribution : ""
-                color: panel.theme.gold
-                font.pixelSize: panel.theme.typeSmall
-                wrapMode: Text.WordWrap
-            }
-            Text {
-                width: parent.width
-                visible: panel.ready
-                text: panel.ready
-                    ? "Sixteen velocity layers, sampled every minor third, with key-release, "
-                      + "string-release and pedal recordings. " + Format.quantity(panel.library.resident_mb, "MB", 0)
-                      + " stay in memory; the rest streams from disk."
-                    : ""
-                color: panel.theme.inkDim
-                font.pixelSize: panel.theme.typeSmall
-                wrapMode: Text.WordWrap
-            }
-            Text {
-                width: parent.width
-                visible: panel.ready
-                text: panel.ready ? panel.library.directory : ""
-                color: panel.theme.inkFaint
-                font.family: panel.theme.mono
-                font.pixelSize: panel.theme.typeMicro
-                wrapMode: Text.WrapAnywhere
-            }
-            Text {
-                objectName: "concertUnderruns"
-                width: parent.width
-                visible: panel.live.live === true && panel.live.underruns > 0
-                text: panel.live.underruns > 0
-                    ? "The disk was late " + panel.live.underruns + " times: those notes dropped out."
-                    : ""
-                color: panel.theme.feltLifted
-                font.pixelSize: panel.theme.typeSmall
-                wrapMode: Text.WordWrap
+            controller: panel.controller
+            theme: panel.theme
+            library: panel.library
+            instrument: "Concert"
+            details: panel.ready
+                ? "Sixteen velocity layers, sampled every minor third, with key-release, "
+                  + "string-release and pedal recordings. " + Format.quantity(panel.library.resident_mb, "MB", 0)
+                  + " stay in memory; the rest streams from disk."
+                : ""
+            onReload: {
+                panel.controller.concert_reload_library()
+                ++panel.libraryLook
             }
         }
-    }
-
-    // A small brass push button for the library's actions.
-    component LibraryAction: Rectangle {
-        id: action
-        required property string label
-        signal activated()
-        width: actionText.implicitWidth + panel.theme.actionPad
-        height: panel.theme.actionHeight
-        radius: panel.theme.radiusMd
-        color: actionArea.containsMouse || activeFocus ? panel.theme.brassLo : panel.theme.plate
-        border.color: activeFocus ? panel.theme.gold : panel.theme.brass
-        activeFocusOnTab: true
-        Accessible.role: Accessible.Button
-        Accessible.name: label
-        Keys.onReturnPressed: activated()
-        Keys.onSpacePressed: activated()
         Text {
-            id: actionText
-            anchors.centerIn: parent
-            text: action.label
-            color: panel.theme.gold
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.captionSpacing
-        }
-        MouseArea {
-            id: actionArea
-            anchors.fill: parent
-            hoverEnabled: true
-            onClicked: action.activated()
+            objectName: "concertUnderruns"
+            x: notice.x
+            y: notice.y + notice.height + panel.theme.spaceSm
+            width: notice.width
+            visible: panel.ready && panel.live.live === true && panel.live.underruns > 0
+            text: panel.live.underruns > 0
+                ? "The disk was late " + panel.live.underruns + " times: those notes dropped out."
+                : ""
+            color: panel.theme.feltLifted
+            font.pixelSize: panel.theme.typeSmall
+            wrapMode: Text.WordWrap
         }
     }
 

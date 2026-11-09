@@ -1,5 +1,6 @@
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
+#include "panel_kit_checks.hpp"
 
 #include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/crate.hpp"
@@ -376,6 +377,9 @@ void without_a_sample_the_drop_zone_shows() {
   require(!item(*panel, QStringLiteral("crateWaveform"))->isVisible(),
           "no waveform without a sample");
   require(item(*panel, QStringLiteral("crateEra:0"))->isVisible(), "the header still shows");
+  require(item(*panel, QStringLiteral("crateLibraryState"))->property("text").toString() ==
+              QStringLiteral("NONE LOADED"),
+          "the shared notice says what is missing");
 }
 
 // With CRATE_PANEL_SCREENSHOT_DIR set: the panel on a cut sample, with a

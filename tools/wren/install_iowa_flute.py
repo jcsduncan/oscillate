@@ -1119,7 +1119,7 @@ def build(source: Path, target: Path, jobs: int) -> None:
         "There is no formal licence.\n\n"
         "Source: the 22 pre-2012 flute recordings linked from that page, each checked\n"
         "against a pinned SHA-256.\n"
-        f"Converted for oscillate's Wren: resampled from {SOURCE_RATE} Hz to {RATE} Hz, cut into\n"
+        f"Converted for Oscillate's Wren: resampled from {SOURCE_RATE} Hz to {RATE} Hz, cut into\n"
         "single notes, attack pre-roll trimmed to 2 ms, a loop crossfade baked into the\n"
         "steady part of each note, peak-normalised and dithered to 16-bit; the sound is\n"
         "otherwise unchanged.\n"

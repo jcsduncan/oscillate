@@ -49,6 +49,24 @@ inline bool inside(const QQuickItem& item, const QQuickItem* ancestor) {
   return false;
 }
 
+// Whether any shown text under root contains `needle` (a library's raw
+// path, which panels show only through Show in folder).
+inline bool shows_text(QQuickItem* root, const QString& needle) {
+  if (!shown(*root)) {
+    return false;
+  }
+  if (const auto text = root->property("text");
+      text.isValid() && text.toString().contains(needle)) {
+    return true;
+  }
+  for (QQuickItem* child : root->childItems()) {
+    if (shows_text(child, needle)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 inline QRectF scene_rect(const QQuickItem& item) {
   return item.mapRectToScene(item.boundingRect());
 }

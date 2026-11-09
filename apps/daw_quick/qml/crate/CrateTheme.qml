@@ -162,6 +162,8 @@ KitTheme {
     property real blurbLineHeight: 1.5
     // The empty drop zone's edge and the drop highlight's wash.
     property real dropEdgeWidth: 1.5
+    // The empty state's notice (the shared LibraryNotice), centred under its prompt.
+    property real dropNoticeWidth: 520
     property real dropWashAlpha: 0.08
     // DragValue (SWING, SENS): its side inset and corners.
     property real dragValueInset: 8

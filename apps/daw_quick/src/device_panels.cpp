@@ -20,6 +20,7 @@ constexpr std::array panels{
     DevicePanel{"concert", "qrc:/concert/ConcertPanel.qml", 1280, 656, ""},
     DevicePanel{"fret", "qrc:/fret/FretPanel.qml", 1280, 820, ""},
     DevicePanel{"wren", "qrc:/wren/WrenPanel.qml", 1280, 952, ""},
+    DevicePanel{"bow", "qrc:/bow/BowPanel.qml", 1240, 760, ""},
     // Nova names its own designed and minimum sizes.
     DevicePanel{"nova", "qrc:/nova/NovaPanel.qml", 0, 0, "zoom keyBase grooves", true},
     DevicePanel{"anvil", "qrc:/anvil/AnvilPanel.qml", 1440, 800, "anvil songScale"},

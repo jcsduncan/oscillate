@@ -1,10 +1,11 @@
-// The light and heavy reference projects for performance qualification
+// The light, heavy and pad reference projects for performance qualification
 // (docs/performance/reference-projects.md). Builds the project, saves and
 // reopens it, then plays it through the paced fake callback or an explicit
 // PipeWire target, measuring callback time and whole-process CPU. Driven by
 // qualify_reference_projects.py.
 
 #include "allocation_probe.hpp"
+#include "bow_test_library.hpp"
 
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/application/routed_audio_source.hpp"
@@ -131,7 +132,14 @@ constexpr double nanoseconds_per_second = 1e9;
 constexpr double nanoseconds_per_microsecond = 1'000.0;
 constexpr std::size_t bus_count = 2; // groups, and returns
 
-enum class Reference : std::uint8_t { light, heavy };
+// The pad: Bow's strings in four parts, one held chord note each, a fresh
+// bow every bar, as Warm Section plays them (Ensemble, twelve players).
+constexpr std::string_view pad_engine = "bow";
+constexpr std::size_t pad_preset = 1;
+constexpr std::size_t pad_parts = 4;
+
+enum class Reference : std::uint8_t { light, heavy, pad };
+constexpr std::array<std::string_view, 3> reference_names{"light", "heavy", "pad"};
 
 struct Options {
   Reference reference = Reference::light;
@@ -168,7 +176,7 @@ std::uint64_t number(std::string_view text) {
 
 Options parse(int argc, char** argv) {
   constexpr std::string_view usage =
-      "usage: oscillate_reference_project --reference light|heavy --frames 64|128 "
+      "usage: oscillate_reference_project --reference light|heavy|pad --frames 64|128 "
       "--scratch DIR [--seconds N] [--warmup BLOCKS] [--pipewire-target SERIAL] "
       "[--trace FILE] [--vst3-effect BUNDLE] [--vst3-instrument BUNDLE] [--workers N]";
   if (argc % 2 == 0)
@@ -178,9 +186,10 @@ Options parse(int argc, char** argv) {
     const std::string_view key(argv[index]);
     const std::string_view value(argv[index + 1]);
     if (key == "--reference") {
-      if (value != "light" && value != "heavy")
-        throw std::runtime_error("--reference is light or heavy");
-      options.reference = value == "light" ? Reference::light : Reference::heavy;
+      const auto found = std::ranges::find(reference_names, value);
+      if (found == reference_names.end())
+        throw std::runtime_error("--reference is light, heavy or pad");
+      options.reference = static_cast<Reference>(found - reference_names.begin());
     } else if (key == "--frames") {
       options.frames = number(value);
     } else if (key == "--seconds") {
@@ -375,6 +384,7 @@ Workload build_project(const fs::path& root, const fs::path& media, const Option
   const auto return_b =
       take(session->tracks().add_bus_track(project::TrackKind::return_bus), "bus");
   const bool heavy = options.reference == Reference::heavy;
+  const bool pad = options.reference == Reference::pad;
   bool vst3_instrument = false;
 #if defined(OSCILLATE_QUALIFICATION_VST3)
   vst3_instrument = vst3.instrument.has_value();
@@ -395,7 +405,7 @@ Workload build_project(const fs::path& root, const fs::path& media, const Option
       ++workload.native_inserts;
     }
   };
-  const auto audio_count = heavy ? heavy_audio_tracks : source_tracks;
+  const auto audio_count = pad ? 0 : heavy ? heavy_audio_tracks : source_tracks;
   for (std::size_t index = 0; index < audio_count; ++index) {
     const auto wav = write_wav(media, index, seconds);
     const int fd = ::open(wav.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
@@ -426,6 +436,31 @@ Workload build_project(const fs::path& root, const fs::path& media, const Option
           "MIDI clip");
       route(track, audio_count + index);
       chain(track, synth_track_chain);
+      ++workload.native_synths;
+    }
+  }
+  if (pad) {
+    // Bow plays its synthetic test library: reading it costs what reading
+    // the installed one does, and the run needs no download.
+    (void)bow_test::install();
+    for (std::size_t part = 0; part < pad_parts; ++part) {
+      const auto track =
+          take(session->instruments().add_native_instrument_track(pad_engine, pad_preset), "Bow");
+      std::vector<project::MidiNote> notes;
+      for (std::size_t bar = 0; bar < bars; ++bar) {
+        const auto start = static_cast<std::int64_t>(bar) * ticks_per_bar;
+        notes.push_back({take(project::NoteId::from_bits({0, bar + 1}), "note id"),
+                         {start},
+                         {start + ticks_per_bar},
+                         chord[part],
+                         note_velocity});
+      }
+      workload.notes += notes.size();
+      (void)take(
+          session->midi_clips().add_midi_clip_with_notes(
+              track, {0}, {static_cast<std::int64_t>(bars) * ticks_per_bar}, std::move(notes)),
+          "MIDI clip");
+      route(track, part);
       ++workload.native_synths;
     }
   }
@@ -740,7 +775,7 @@ void run(const Options& options) {
     const auto root = directory / "project";
     const auto workload = build_project(root, directory / "media", options, vst3);
     std::cout << "workload reference="
-              << (options.reference == Reference::light ? "light" : "heavy")
+              << reference_names[static_cast<std::size_t>(options.reference)]
               << " frames=" << options.frames << " measured_seconds=" << options.seconds
               << " warmup_blocks=" << options.warmup << " audio_tracks=" << workload.audio_tracks
               << " native_synths=" << workload.native_synths

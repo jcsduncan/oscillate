@@ -49,8 +49,6 @@ Rectangle {
     readonly property real laneHeight: 236
     readonly property real sliderColumnGap: 18
     readonly property int feelColumns: 5
-    // The library plate's text starts this far down, under its title.
-    readonly property real libraryBodyY: 50
     readonly property real rightPad: 18
     // The library's message, at most this many lines.
     readonly property int messageLines: 5
@@ -353,152 +351,39 @@ Rectangle {
         Accessible.description: panel.ready ? panel.library.name + ", " + panel.library.attribution
                                             : panel.library.message !== undefined ? panel.library.message : ""
 
-        Row {
+        Kit.LibraryNotice {
+            id: notice
             x: panel.cardPad
             y: panel.theme.spaceXl
-            spacing: panel.theme.titleGap
-            CardTitle {
-                title: "LIBRARY"
-                dot: panel.ready ? panel.theme.live : panel.theme.warning
-            }
-            Text {
-                objectName: "fretLibraryState"
-                anchors.verticalCenter: parent.verticalCenter
-                text: panel.ready ? "INSTALLED" : panel.library.state === "invalid" ? "DAMAGED" : "NOT INSTALLED"
-                color: panel.ready ? panel.theme.inkDim : panel.theme.warning
-                font.family: panel.theme.sans
-                font.pixelSize: panel.theme.typeBody
-                font.letterSpacing: panel.theme.labelSpacing
+            width: libraryPlate.width - 2 * panel.cardPad
+            controller: panel.controller
+            theme: panel.theme
+            library: panel.library
+            instrument: "Fret"
+            wide: true
+            wideShare: panel.theme.libraryMessageShare
+            messageLines: panel.messageLines
+            details: panel.ready
+                ? panel.library.samples + " samples: four pluck layers, ghosts, staccato, behind the bridge "
+                  + "and string releases. " + Format.quantity(panel.library.resident_mb, "MB", 0)
+                  + " stay in memory; the rest streams from disk."
+                : ""
+            onReload: {
+                panel.controller.fret_reload_library()
+                ++panel.libraryLook
             }
         }
-
-        // Installed: the library, its credit and how it plays.
-        Column {
-            x: panel.cardPad
-            y: panel.libraryBodyY
-            width: libraryPlate.width - 2 * panel.cardPad
-            spacing: panel.theme.spaceSm
-            visible: panel.ready
-            Text {
-                objectName: "fretLibraryName"
-                width: parent.width
-                text: panel.ready ? panel.library.name : ""
-                color: panel.theme.ink
-                font.family: panel.theme.sans
-                font.pixelSize: panel.theme.typeHeading
-                elide: Text.ElideRight
-            }
-            Text {
-                objectName: "fretAttribution"
-                width: parent.width
-                visible: panel.ready
-                text: panel.ready ? panel.library.attribution : ""
-                color: panel.theme.pluck
-                font.family: panel.theme.sans
-                font.pixelSize: panel.theme.typeLabel
-            }
-            Text {
-                width: parent.width
-                text: panel.ready
-                    ? panel.library.samples + " samples: four pluck layers, ghosts, staccato, behind the bridge "
-                      + "and string releases. " + Format.quantity(panel.library.resident_mb, "MB", 0)
-                      + " stay in memory; the rest streams from disk."
-                    : ""
-                color: panel.theme.inkDim
-                font.family: panel.theme.sans
-                font.pixelSize: panel.theme.typeLabel
-                wrapMode: Text.WordWrap
-            }
-            Text {
-                width: parent.width
-                text: panel.ready ? panel.library.directory : ""
-                color: panel.theme.inkFaint
-                font.family: panel.theme.mono
-                font.pixelSize: panel.theme.typeSmall
-                elide: Text.ElideMiddle
-            }
-            Text {
-                objectName: "fretUnderruns"
-                width: parent.width
-                visible: panel.live.live === true && panel.live.underruns > 0
-                text: panel.live.underruns > 0
-                    ? "The disk was late " + panel.live.underruns + " times: those notes dropped out." : ""
-                color: panel.theme.warning
-                font.family: panel.theme.sans
-                font.pixelSize: panel.theme.typeLabel
-            }
-        }
-
-        // Missing or damaged: why, and how to install it.
-        Item {
-            x: panel.cardPad
-            y: panel.libraryBodyY
-            width: libraryPlate.width - 2 * panel.cardPad
-            height: libraryPlate.height - y - panel.theme.spaceXl
-            visible: !panel.ready
-            Text {
-                id: missingText
-                objectName: "fretLibraryMessage"
-                width: parent.width * panel.theme.libraryMessageShare
-                text: (panel.library.message !== undefined ? panel.library.message + ". " : "")
-                    + "Fret is silent until its library is installed. It plays "
-                    + (panel.library.required !== undefined ? panel.library.required : "") + "."
-                color: panel.theme.inkDim
-                font.family: panel.theme.sans
-                font.pixelSize: panel.theme.typeLabel
-                wrapMode: Text.WordWrap
-                maximumLineCount: panel.messageLines
-                elide: Text.ElideRight
-            }
-            Column {
-                x: missingText.width + panel.theme.space2xl
-                width: parent.width - x
-                spacing: panel.theme.spaceMd
-                Text {
-                    text: "INSTALL FROM THE SOURCE TREE"
-                    color: panel.theme.inkFaint
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeSmall
-                    font.letterSpacing: panel.theme.labelSpacing
-                }
-                Rectangle {
-                    width: parent.width
-                    height: command.implicitHeight + 2 * panel.theme.commandPadY
-                    radius: panel.theme.radiusXl
-                    color: panel.theme.lane
-                    border.color: panel.theme.laneEdge
-                    Text {
-                        id: command
-                        objectName: "fretInstallCommand"
-                        x: panel.theme.commandPadX
-                        y: panel.theme.commandPadY
-                        width: parent.width - 2 * panel.theme.commandPadX
-                        text: panel.library.install_command !== undefined ? panel.library.install_command : ""
-                        color: panel.theme.pluck
-                        font.family: panel.theme.mono
-                        font.pixelSize: panel.theme.typeLabel
-                        wrapMode: Text.WrapAnywhere
-                    }
-                }
-                Row {
-                    spacing: panel.theme.spaceMd
-                    Kit.Button {
-                        theme: panel.theme
-                        objectName: "fretCopyInstall"
-                        label: "Copy command"
-                        onClicked: panel.controller.set_clipboard_text(command.text)
-                    }
-                    Kit.Button {
-                        theme: panel.theme
-                        objectName: "fretLibraryReload"
-                        label: "Look again"
-                        onClicked: {
-                            panel.controller.fret_reload_library()
-                            ++panel.libraryLook
-                        }
-                    }
-                }
-            }
+        Text {
+            objectName: "fretUnderruns"
+            x: notice.x
+            y: notice.y + notice.height + panel.theme.spaceSm
+            width: notice.width
+            visible: panel.ready && panel.live.live === true && panel.live.underruns > 0
+            text: panel.live.underruns > 0
+                ? "The disk was late " + panel.live.underruns + " times: those notes dropped out." : ""
+            color: panel.theme.warning
+            font.family: panel.theme.sans
+            font.pixelSize: panel.theme.typeLabel
         }
     }
 
