@@ -345,6 +345,9 @@ Item {
         border.color: Theme.controlEdge
         Accessible.role: Accessible.PopupMenu
         Accessible.name: "Warp marker commands"
+        // Escape closes the menu before the shell lets go of the clip.
+        onVisibleChanged: if (visible) forceActiveFocus()
+        Keys.onShortcutOverride: event => event.accepted = event.key === Qt.Key_Escape
         Keys.onEscapePressed: overlay.closeMenu()
         Column {
             id: menuColumn

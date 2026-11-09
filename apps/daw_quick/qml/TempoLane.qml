@@ -44,6 +44,13 @@ Rectangle {
     property string mode: ""
     property int dragIndex: -1
     property real pressX: 0
+    property real pressY: 0
+    // A point only moves once the pointer has really moved.
+    property bool dragged: false
+    // A double-click counts only when both presses were the left button on
+    // the lane (a right-click then a click in its menu is not one).
+    property int lastButton: Qt.NoButton
+    property bool leftTwice: false
     property real dragBar: 0
     property real dragBpm: 0
     property real rampFrom: 0
@@ -112,7 +119,14 @@ Rectangle {
     onVisibleBarsChanged: curve.requestPaint()
     Connections {
         target: lane.controller
-        function onChanged() { curve.requestPaint() }
+        // An undo or redo under a drag ends the drag: its index may now
+        // name another point.
+        function onChanged() {
+            lane.mode = ""
+            lane.dragIndex = -1
+            lane.menuIndex = -1
+            curve.requestPaint()
+        }
     }
 
     // BPM guides, expanded only.
@@ -203,7 +217,12 @@ Rectangle {
         x: Theme.spaceSm
         anchors.bottom: parent.bottom
         anchors.bottomMargin: Theme.spaceXxs
-        text: lane.controller.bpm_at(Math.max(0, lane.viewStartBar)).toFixed(2)
+        // Read again whenever the map changes (points notifies with it).
+        readonly property real bpm: {
+            lane.points
+            return lane.controller.bpm_at(Math.max(0, lane.viewStartBar))
+        }
+        text: bpm.toFixed(2)
         color: Theme.tempoLaneCurve
         font.pixelSize: Theme.typeMicro
         font.family: lane.monoFamily
@@ -281,6 +300,8 @@ Rectangle {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         onExited: lane.hoverX = -1
         onPressed: mouse => {
+            lane.leftTwice = lane.lastButton === Qt.LeftButton && mouse.button === Qt.LeftButton
+            lane.lastButton = mouse.button
             lane.menuIndex = -1
             if (!lane.expanded) {
                 lane.expandRequested()
@@ -294,6 +315,8 @@ Rectangle {
                 return
             }
             lane.pressX = mouse.x
+            lane.pressY = mouse.y
+            lane.dragged = false
             if (near >= 0) {
                 lane.mode = "point"
                 lane.dragIndex = near
@@ -310,6 +333,10 @@ Rectangle {
             lane.hoverX = mouse.x
             if (!pressed || lane.mode === "")
                 return
+            if (!lane.dragged && Math.abs(mouse.x - lane.pressX) < lane.dragSlop
+                    && Math.abs(mouse.y - lane.pressY) < lane.dragSlop)
+                return
+            lane.dragged = true
             const free = (mouse.modifiers & Qt.AltModifier) !== 0
             lane.dragBpm = lane.bpmAt(mouse.y, free)
             if (lane.mode === "point" && lane.points[lane.dragIndex].initial)
@@ -320,7 +347,7 @@ Rectangle {
         }
         onReleased: mouse => {
             const moved = Math.abs(mouse.x - lane.pressX) >= lane.dragSlop
-            if (lane.mode === "point") {
+            if (lane.mode === "point" && lane.dragged) {
                 const point = lane.points[lane.dragIndex]
                 if (point && (Math.abs(lane.dragBar - point.bar) > lane.barEpsilon || Math.abs(lane.dragBpm - point.bpm) > lane.bpmStep / 2))
                     lane.controller.move_point(point.tick, lane.dragBar, lane.dragBpm)
@@ -338,7 +365,7 @@ Rectangle {
             curve.requestPaint()
         }
         onDoubleClicked: mouse => {
-            if (!lane.expanded || mouse.button !== Qt.LeftButton)
+            if (!lane.expanded || mouse.button !== Qt.LeftButton || !lane.leftTwice)
                 return
             const near = lane.pointNear(mouse.x, mouse.y)
             const free = (mouse.modifiers & Qt.AltModifier) !== 0

@@ -1473,7 +1473,9 @@ Rectangle {
                         // The selected clip's warp markers (ADR-0112).
                         Loader {
                             id: warpMarkers
+                            // Level editing has the clip's surface to itself.
                             active: modelData.kind === "audio" && arrangement.selectedClipId === modelData.id
+                                    && !arrangement.levelEditMode
                             // Above the clip's right-click area, so its markers
                             // take their own right-click; the flag stays on top.
                             z: 21

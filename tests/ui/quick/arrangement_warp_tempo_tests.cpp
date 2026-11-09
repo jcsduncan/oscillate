@@ -293,7 +293,7 @@ double fraction_of(int beat_index, bool late) {
 // Pin, stretch, slide and remove, each one undoable edit.
 void markers_pin_stretch_slide_and_remove(Song& song, const Shell& shell) {
   auto& bridge = *song.bridge;
-  shell.wait_for(QStringLiteral("warpPinBand"));
+  (void)shell.wait_for(QStringLiteral("warpPinBand"));
   // Hovering the band shows the ghost; a click near a beat pins its kick.
   QTest::mouseMove(shell.window(), shell.beat(pinned_beat, Shell::band_y(), near_px));
   require(shell.item(QStringLiteral("warpMarkerGhost")) != nullptr, "no ghost under the pointer");

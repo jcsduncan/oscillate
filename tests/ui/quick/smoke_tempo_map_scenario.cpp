@@ -5,8 +5,10 @@
 #include "tempo_lane_controller.hpp"
 
 #include <QCoreApplication>
+#include <QGuiApplication>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QStyleHints>
 #include <QVariantMap>
 #ifdef OSCILLATE_QUICK_TEST_INPUT
 #include <QTest>
@@ -44,6 +46,7 @@ constexpr double bpm_tolerance = 0.051;
 
 #ifdef OSCILLATE_QUICK_TEST_INPUT
 // The window point of `bar` and `bpm` on the lane, as the lane draws them.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 [[nodiscard]] QPoint lane_point_at(QQuickItem* lane, double bar, double bpm) {
   const auto start = lane->property("viewStartBar").toDouble();
   const auto bars = lane->property("visibleBars").toDouble();
@@ -127,6 +130,8 @@ bool edit_tempo_map(oscillate::quick::ProjectBridge& bridge, QQuickWindow* windo
   const auto at_start = lane_point_at(lane, from_bar, opening_bpm);
   QTest::mouseClick(window, Qt::RightButton, {}, at_start);
   QCoreApplication::processEvents();
+  // A pause, so the click in the menu is not taken as a double-click.
+  QTest::qWait(QGuiApplication::styleHints()->mouseDoubleClickInterval());
   auto* straight = find_item(window->contentItem(), QStringLiteral("tempoShape_straight"));
   if (!straight) {
     std::cerr << "Tempo lane smoke: the shape menu did not open\n";

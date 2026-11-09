@@ -554,6 +554,9 @@ Rectangle {
         activeFocusOnTab: true
         Accessible.role: Accessible.Button
         Accessible.name: trackPanel.tempoLaneExpanded ? "Collapse the project tempo lane" : "Expand the project tempo lane to draw ramps"
+        border.color: activeFocus ? Theme.focusRing : "transparent"
+        border.width: activeFocus ? Theme.focusRingWidth : 0
+        Keys.onShortcutOverride: event => trackPanel.claimKeys(event, trackPanel.buttonKeys)
         Keys.onReturnPressed: trackPanel.tempoLaneToggled()
         Keys.onSpacePressed: trackPanel.tempoLaneToggled()
         Rectangle {
@@ -1747,7 +1750,7 @@ Rectangle {
     Text {
         visible: trackPanel.bridge.tracks.length === 0
         x: Theme.spaceXl
-        y: trackCreationRow.height + Theme.space2xl
+        y: trackCreationRow.height + trackPanel.tempoLaneHeight + Theme.space2xl
         width: parent.width - 2 * Theme.spaceXl
         text: "No tracks yet. Double-click an instrument in the browser, or use + Track."
         wrapMode: Text.WordWrap

@@ -547,6 +547,7 @@ Item {
                 editor.hoverX = editor.xAt(editor.snapped(mouse.x, (mouse.modifiers & Qt.AltModifier) !== 0))
             }
             onPressed: mouse => {
+                markerOverlay.closeMenu()
                 if ((mouse.modifiers & Qt.ShiftModifier) !== 0) {
                     selecting = true
                     editor.selectFrom = editor.fractionAt(mouse.x)

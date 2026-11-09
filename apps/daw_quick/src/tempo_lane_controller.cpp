@@ -212,6 +212,7 @@ QVariantList TempoLaneController::curve(double from_bar, double to_bar, int samp
   return values;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void TempoLaneController::add_point(double bar, double bpm) {
   auto* session = editable_session();
   if (!session)
@@ -238,6 +239,7 @@ void TempoLaneController::add_point(double bar, double bpm) {
          QStringLiteral("Tempo point %1 BPM").arg(bpm, 0, 'f', 2));
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void TempoLaneController::move_point(const QString& tick, double bar, double bpm) {
   auto* session = editable_session();
   if (!session)
@@ -269,6 +271,7 @@ void TempoLaneController::remove_point(const QString& tick) {
   finish(session->song().remove_tempo_event(*at), before, QStringLiteral("Tempo point removed"));
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void TempoLaneController::set_shape(const QString& tick, const QString& shape) {
   auto* session = editable_session();
   if (!session)
@@ -287,6 +290,7 @@ void TempoLaneController::set_shape(const QString& tick, const QString& shape) {
          QStringLiteral("Tempo ramp shape changed"));
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void TempoLaneController::ramp(double from_bar, double to_bar, double end_bpm,
                                const QString& shape) {
   auto* session = editable_session();
