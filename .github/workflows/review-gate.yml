@@ -13,6 +13,12 @@ name: Review gate
 on:
   check_run:
     types: [completed]
+  # A check run made by a workflow starts no other workflow, and GitHub runs
+  # the schedule far less often than asked, so the gate also re-evaluates
+  # whenever a pull request's CI workflow finishes.
+  workflow_run:
+    workflows: [Build, CodeQL, Docs, Lint, Packaging, PR title, Python, Tidy]
+    types: [completed]
   pull_request:
     types: [opened, synchronize, reopened]
   pull_request_review:
@@ -41,7 +47,7 @@ jobs:
        startsWith(github.event.check_run.check_suite.head_branch, 'release-please--'))
     # Job-level, so an event the condition skips can't cancel a run.
     concurrency:
-      group: review-gate-${{ github.event.pull_request.number || github.event.issue.number || github.event.check_run.pull_requests[0].number || github.run_id }}
+      group: review-gate-${{ github.event.pull_request.number || github.event.issue.number || github.event.check_run.pull_requests[0].number || github.event.workflow_run.pull_requests[0].number || github.run_id }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 10

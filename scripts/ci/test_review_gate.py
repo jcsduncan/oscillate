@@ -239,6 +239,15 @@ class EventTests(unittest.TestCase):
         github = FakeGitHub(commit_pulls=[NUMBER])
         self.assertEqual(review_gate.pull_numbers("check_run", event, github), [NUMBER])
 
+    def test_workflow_run_names_its_pulls(self):
+        event = {"workflow_run": {"head_sha": HEAD, "pull_requests": [{"number": NUMBER}]}}
+        self.assertEqual(review_gate.pull_numbers("workflow_run", event, FakeGitHub()), [NUMBER])
+
+    def test_workflow_run_without_pulls_looks_up_the_commit(self):
+        event = {"workflow_run": {"head_sha": HEAD, "pull_requests": []}}
+        github = FakeGitHub(commit_pulls=[NUMBER])
+        self.assertEqual(review_gate.pull_numbers("workflow_run", event, github), [NUMBER])
+
     def test_schedule_covers_every_open_pull(self):
         github = FakeGitHub(open_pulls=[NUMBER, NUMBER + 1])
         numbers = review_gate.pull_numbers("schedule", {}, github)
