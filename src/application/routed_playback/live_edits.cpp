@@ -59,36 +59,65 @@ using routed_playback::vst3_midi_edit_only;
   return masked == after;
 }
 
-// A built-in effect's values edit offered to its running stage (ADR-0043):
-// no rebuild, the kernel glides. Declines (false) when the stage is not the
-// one prepared for this slot or the values would change its latency.
+// A built-in effect's values edit prepared for its running stage (ADR-0043):
+// no rebuild, the kernel glides. Declines (nullopt) when the stage is not
+// the one prepared for this slot or the values would change its latency;
+// fails when the stage cannot take the offer now. Nothing is offered until
+// the prepared offer is committed.
+struct PreparedStageOffer {
+  native_inserts::NativeEffectStage* stage = nullptr;
+  native_dsp::effects::NativeEffectRuntime::PreparedOffer offer;
+};
+
+[[nodiscard]] Result<std::optional<PreparedStageOffer>>
+prepare_effect_values(engine::ProcessorRuntime* stage, const project::NativeEffectPatch& old_patch,
+                      const project::NativeEffectPatch& next, std::uint64_t revision) {
+  using R = Result<std::optional<PreparedStageOffer>>;
+  auto* runtime = dynamic_cast<native_inserts::NativeEffectStage*>(stage);
+  if (!runtime || next.engine != old_patch.engine ||
+      next.engine_version != old_patch.engine_version || next.generation <= old_patch.generation)
+    return R::success(std::nullopt);
+  auto resolved = native_inserts::resolve_native_effect(next);
+  if (!resolved)
+    return R::failure(resolved.error());
+  if (resolved.value().engine->descriptor != runtime->engine().descriptor)
+    return R::success(std::nullopt);
+  // `latency_frames` is fixed at creation; a latency change needs a rebuild.
+  // The stage's own rate makes the comparison exact.
+  if (resolved.value().engine->latency_frames(resolved.value().values, runtime->sample_rate()) !=
+      runtime->latency_frames())
+    return R::success(std::nullopt);
+  auto prepared = runtime->prepare_offer(
+      resolved.value().values, next.document != old_patch.document ? &next.document : nullptr,
+      revision);
+  if (!prepared)
+    return R::failure(prepared.error());
+  return R::success(PreparedStageOffer{runtime, std::move(prepared).value()});
+}
+
+[[nodiscard]] Result<void> commit_effect_values(PreparedStageOffer& prepared) {
+  if (!prepared.stage->commit_offer(std::move(prepared.offer)))
+    return Result<void>::failure(
+        {ErrorCode::internal, "An effect stage refused an edit it had prepared"});
+  return Result<void>::success();
+}
+
+// One stage's edit, prepared and committed at once.
 [[nodiscard]] Result<bool> offer_effect_values(engine::ProcessorRuntime* stage,
                                                const project::NativeEffectPatch& old_patch,
                                                const project::NativeEffectPatch& next,
                                                std::uint64_t revision,
                                                native_inserts::NativeEffectStage*& offered_to) {
-  auto* runtime = dynamic_cast<native_inserts::NativeEffectStage*>(stage);
-  if (!runtime || next.engine != old_patch.engine ||
-      next.engine_version != old_patch.engine_version || next.generation <= old_patch.generation)
+  auto prepared = prepare_effect_values(stage, old_patch, next, revision);
+  if (!prepared)
+    return Result<bool>::failure(prepared.error());
+  if (!prepared.value())
     return Result<bool>::success(false);
-  auto resolved = native_inserts::resolve_native_effect(next);
-  if (!resolved)
-    return Result<bool>::failure(resolved.error());
-  if (resolved.value().engine->descriptor != runtime->engine().descriptor)
-    return Result<bool>::success(false);
-  // `latency_frames` is fixed at creation; a latency change needs a rebuild.
-  // The stage's own rate makes the comparison exact.
-  if (resolved.value().engine->latency_frames(resolved.value().values, runtime->sample_rate()) !=
-      runtime->latency_frames())
-    return Result<bool>::success(false);
-  if (next.document != old_patch.document) {
-    if (auto offered = runtime->offer_document(next.document, revision); !offered)
-      return Result<bool>::failure(offered.error());
-  }
-  if (!runtime->offer_values(resolved.value().values, revision))
-    return Result<bool>::failure(
-        {ErrorCode::conflict, "Live effect parameter mailbox is full; retry the saved edit"});
-  offered_to = runtime;
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): engaged above.
+  auto& offer = *prepared.value();
+  if (auto committed = commit_effect_values(offer); !committed)
+    return Result<bool>::failure(committed.error());
+  offered_to = offer.stage;
   return Result<bool>::success(true);
 }
 
@@ -274,33 +303,26 @@ Result<bool> RoutedPlaybackControl::try_queue_live_effect_group(
         return Result<bool>::success(false);
       group.push_back({change.track->id, change.slot, stage});
     }
-    // Every stage must accept before any is offered, so a refusal leaves
-    // them all as they were and the edit rebuilds instead.
+    // Every stage prepares the edit before any is offered, so a stage that
+    // declines or refuses leaves them all as they were: a decline rebuilds,
+    // a refusal fails the edit with every stage still in step with the
+    // published project.
+    std::vector<PreparedStageOffer> offers;
+    offers.reserve(changes.size());
     for (std::size_t i = 0; i < changes.size(); ++i) {
       const auto& change = changes[i];
-      const auto& member = group[i];
-      auto resolved = native_inserts::resolve_native_effect(*change.next);
-      if (!resolved)
-        return Result<bool>::failure(resolved.error());
-      if (change.next->engine != change.old_patch->engine ||
-          change.next->engine_version != change.old_patch->engine_version ||
-          change.next->generation <= change.old_patch->generation ||
-          resolved.value().engine->descriptor != member.stage->engine().descriptor ||
-          resolved.value().engine->latency_frames(resolved.value().values,
-                                                  member.stage->sample_rate()) !=
-              member.stage->latency_frames())
+      auto prepared = prepare_effect_values(group[i].stage, *change.old_patch, *change.next,
+                                            snapshot->revision);
+      if (!prepared)
+        return Result<bool>::failure(prepared.error());
+      if (!prepared.value())
         return Result<bool>::success(false);
+      // NOLINTNEXTLINE(bugprone-unchecked-optional-access): engaged above.
+      offers.push_back(std::move(*prepared.value()));
     }
-    for (std::size_t i = 0; i < changes.size(); ++i) {
-      const auto& change = changes[i];
-      native_inserts::NativeEffectStage* offered = nullptr;
-      auto queued = offer_effect_values(group[i].stage, *change.old_patch, *change.next,
-                                        snapshot->revision, offered);
-      if (!queued)
-        return queued;
-      if (!queued.value())
-        return Result<bool>::failure(
-            {ErrorCode::internal, "A linked effect stage declined an accepted edit"});
+    for (auto& offer : offers) {
+      if (auto committed = commit_effect_values(offer); !committed)
+        return Result<bool>::failure(committed.error());
     }
     const auto first = changes.front().track;
     PendingNativeRevision pending{group.front().stage, first->id, first->effects,

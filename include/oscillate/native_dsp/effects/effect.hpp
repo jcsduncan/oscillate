@@ -116,6 +116,8 @@ enum class EffectProcessStatus : std::uint8_t {
 // One serialized control producer, one audio callback consumer: create on
 // control, process on exactly one callback.
 class NativeEffectRuntime {
+  struct DocumentOffer;
+
 public:
   [[nodiscard]] static foundation::Result<std::unique_ptr<NativeEffectRuntime>>
   create(const EffectEngine& engine, std::span<const double> values, double sample_rate);
@@ -149,6 +151,26 @@ public:
   // block start. Revisions must not decrease (a retry may repeat one).
   [[nodiscard]] foundation::Result<void>
   offer_document(const project::NativeSynthDocument& document, std::uint64_t revision);
+
+  // One saved edit's values, and its document when `document` is set,
+  // checked and compiled as offer_values and offer_document would take
+  // them, with nothing offered yet.
+  struct PreparedOffer {
+    std::unique_ptr<DocumentOffer> document_offer;
+    project::NativeSynthDocument document;
+    std::vector<double> values;
+    std::uint64_t revision = 0;
+  };
+  // Control only. Fails as those offers would (a full mailbox, a revision
+  // that does not increase, a document that does not compile).
+  [[nodiscard]] foundation::Result<PreparedOffer>
+  prepare_offer(std::span<const double> values, const project::NativeSynthDocument* document,
+                std::uint64_t revision);
+  // Control only: offers a prepared edit. With no other offer to this
+  // runtime since it was prepared, it is always taken, so several runtimes
+  // take one edit together or none does (ADR-0058's linked effects). False
+  // only when that was broken.
+  [[nodiscard]] bool commit_offer(PreparedOffer&& offer) noexcept;
   // Control only: the keying tracks' note-ons, sorted and unique, adopted
   // at the next block start. False when they are the ones offered last
   // (nothing to do).
@@ -167,6 +189,11 @@ private:
   NativeEffectRuntime(const EffectEngine& engine, std::unique_ptr<EffectKernel> kernel,
                       std::span<const double> values, double sample_rate);
   void adopt_document() noexcept;
+  // Control only: the document compiled as an offer at `revision` (null
+  // for an engine without one), and published once compiled.
+  [[nodiscard]] foundation::Result<std::unique_ptr<DocumentOffer>>
+  compile_document(const project::NativeSynthDocument& document, std::uint64_t revision) const;
+  void publish_document(std::unique_ptr<DocumentOffer> offer) noexcept;
   void adopt_key_notes() noexcept;
 
   // Compiled documents in offer order. Control owns them and retires those
