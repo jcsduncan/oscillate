@@ -7,7 +7,7 @@
 #include "oscillate/application/tempo_cache.hpp"
 #include "oscillate/media/source_rate_reader.hpp"
 #include "oscillate/midi_file/smf.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "session_state.hpp"
 
 #include <algorithm>
@@ -383,12 +383,12 @@ Result<void> ImportService::finish_native_synth_media_import(
     next.parameters = std::move(state->values);
     next.document.labels = std::move(state->labels);
   }
-  auto resolved = native_dsp::synth::resolve_native_instrument(next);
+  auto resolved = native_inserts::resolve_native_instrument(next);
   if (!resolved)
     return Result<void>::failure(resolved.error());
   if (state) {
     // Stored in canonical form: only non-default values.
-    auto canonical = native_dsp::synth::make_native_patch(
+    auto canonical = native_inserts::make_native_patch(
         *resolved.value().engine, resolved.value().values, std::move(next.document));
     if (!canonical)
       return Result<void>::failure(canonical.error());

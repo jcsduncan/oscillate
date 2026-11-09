@@ -5,7 +5,7 @@
 
 #include "oscillate/application/project_session.hpp"
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
-#include "oscillate/plugins/project_binding.hpp"
+#include "oscillate/application/vst3/project_binding.hpp"
 #include "oscillate/plugins/vst3_bundle_loader.hpp"
 #include "oscillate/plugins/vst3_catalogue.hpp"
 #include "oscillate/plugins/vst3_effect_host.hpp"

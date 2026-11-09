@@ -3,8 +3,8 @@
 #include "oscillate/analysis/tempo.hpp"
 #include "oscillate/media/audio_reader.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/persistence/effect_preset.hpp"
 #include "oscillate/timeline/bar_grid.hpp"
 
@@ -349,7 +349,7 @@ void SessionNativeSynthAdapter::apply_state(std::span<const double> values,
                                             project::NativeSynthDocument document,
                                             std::optional<std::uint64_t> gesture) {
   // The engine's canonical sparse values for these dense ones.
-  auto patch = native_dsp::synth::make_native_patch(*engine_, values, std::move(document));
+  auto patch = native_inserts::make_native_patch(*engine_, values, std::move(document));
   if (!patch) {
     message_ = patch.error().message;
     return;
@@ -631,7 +631,7 @@ void SessionNativeSynthAdapter::finish_import() {
     if (plan.values || plan.labels) {
       application::NativeSynthMediaState next{patch->parameters, patch->document.labels};
       if (plan.values) {
-        auto sparse = native_dsp::synth::make_native_patch(*engine_, *plan.values, patch->document);
+        auto sparse = native_inserts::make_native_patch(*engine_, *plan.values, patch->document);
         if (sparse) {
           next.values = std::move(sparse.value().parameters);
         } else {
@@ -857,7 +857,7 @@ std::optional<std::string> SessionNativeSynthAdapter::preset_text() const {
   if (!values)
     return std::nullopt;
   if (!slot_) {
-    auto patch = native_dsp::synth::make_native_patch(*engine_, values.value(), document());
+    auto patch = native_inserts::make_native_patch(*engine_, values.value(), document());
     if (!patch)
       return std::nullopt;
     project::NativeEffectPatch preset;
@@ -889,7 +889,7 @@ bool SessionNativeSynthAdapter::submit_preset_text(std::string_view text) {
     project::NativeInstrumentPatch instrument{patch.value().engine, patch.value().engine_version,
                                               patch.value().parameters, patch.value().document};
     // Checked whole before anything changes.
-    if (auto resolved = native_dsp::synth::resolve_native_instrument(instrument); !resolved) {
+    if (auto resolved = native_inserts::resolve_native_instrument(instrument); !resolved) {
       message_ = resolved.error().message;
       return false;
     }

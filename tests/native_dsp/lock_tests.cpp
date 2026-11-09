@@ -3,7 +3,7 @@
 #include "oscillate/native_dsp/synth/lock.hpp"
 #include "oscillate/native_dsp/synth/nova.hpp"
 #include "oscillate/native_dsp/synth/nova/parameters.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/cases.hpp"
 #include "oscillate/test/check.hpp"
@@ -31,6 +31,7 @@
 // under it. Both render alike for any block split with Lock working.
 namespace {
 using namespace synth_test;
+using namespace oscillate::native_inserts;
 namespace anvil = oscillate::native_dsp::synth::anvil;
 namespace nova = oscillate::native_dsp::synth::nova;
 

@@ -8,6 +8,7 @@
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_dsp/note_effects/note_effect.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
+#include "oscillate/native_inserts/tempo_ticks.hpp"
 #include "oscillate/test/cases.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/temp_dir.hpp"
@@ -185,9 +186,9 @@ void applied_rhythm_plays_what_comp_played() {
   const auto end = frame_of(5 * bar);
   std::multiset<Event> live;
   std::multiset<std::tuple<std::uint64_t, int>> open;
+  const oscillate::native_inserts::TempoTicks ticks(state.tempo, state.sample_rate);
   for (std::int64_t frame = first; frame < end + end / 4; frame += block) {
-    const fx::NoteClock clock(state.tempo, state.sample_rate, static_cast<std::uint64_t>(frame),
-                              block);
+    const fx::NoteClock clock(ticks, static_cast<std::uint64_t>(frame), block);
     const auto copied = input.copy_block(
         events, {frame}, block, 1, std::span(buffer).first(engine::HeldNotes::block_capacity));
     REQUIRE_EQ(copied.status, engine::BlockMidiStatus::ready, "the plan's notes copy");

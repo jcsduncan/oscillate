@@ -12,8 +12,8 @@
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/project/lookup.hpp"
 #include "session_state.hpp"
 
@@ -632,7 +632,7 @@ Result<void> SongService::apply_arrangement(const arrange::Plan& plan) {
       if (preset == presets.end())
         return R::failure(
             {ErrorCode::not_found, "Nova preset not found: " + std::string(facts.nova_preset)});
-      auto patch = native_dsp::synth::native_patch_for_preset(
+      auto patch = native_inserts::native_patch_for_preset(
           *nova, static_cast<std::size_t>(preset - presets.begin()));
       if (!patch)
         return R::failure(patch.error());

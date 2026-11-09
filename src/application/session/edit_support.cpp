@@ -8,8 +8,8 @@
 #include "oscillate/automation/curve.hpp"
 #include "oscillate/midi_file/smf.hpp"
 #include "oscillate/native_dsp/note_effects/note_effect.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/project/lookup.hpp"
 #include <algorithm>
 #include <cmath>
@@ -435,7 +435,7 @@ foundation::Result<NativeTrack> native_track(const project::Snapshot& snapshot,
   if (track->kind != project::TrackKind::instrument || patch == nullptr) {
     return Result::failure({foundation::ErrorCode::unavailable, "Track has no built-in synth"});
   }
-  auto resolved = native_dsp::synth::resolve_native_instrument(*patch);
+  auto resolved = native_inserts::resolve_native_instrument(*patch);
   if (!resolved) {
     return Result::failure(resolved.error());
   }

@@ -5,7 +5,7 @@
 
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/project/model.hpp"
 #include "oscillate/timeline/timing.hpp"
@@ -159,7 +159,8 @@ struct Song {
     const auto track = id<project::TrackId>(next_track++);
     operations.emplace_back(project::AddTrack{track, project::TrackKind::instrument});
     operations.emplace_back(project::SetNativeInstrumentPatch{
-        track, take(synth::native_patch_for_preset(*engine, preset_index(*engine, voice.preset)))});
+        track, take(native_inserts::native_patch_for_preset(*engine,
+                                                            preset_index(*engine, voice.preset)))});
     operations.emplace_back(project::SetTrackName{track, std::move(voice.name)});
     operations.emplace_back(project::SetTrackColor{track, voice.colour});
     operations.emplace_back(project::SetTrackLevelPan{track, voice.level, voice.pan});

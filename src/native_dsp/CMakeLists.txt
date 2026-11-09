@@ -55,13 +55,12 @@ target_include_directories(oscillate_note_effects PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../../include>
 )
 target_link_libraries(oscillate_note_effects PUBLIC oscillate::native_control oscillate::engine
-  oscillate::timeline oscillate::foundation)
+  oscillate::foundation)
 oscillate_target_defaults(oscillate_note_effects)
 
 # The generic synth runtime plus the built-in engines (Prism first).
 # Concert streams its samples from disk on a thread of its own (ADR-0071).
 add_library(oscillate_synth_engines synth/runtime.cpp synth/prism.cpp synth/engines.cpp
-                                           synth/project_binding.cpp synth/player.cpp
                                            synth/ember.cpp
                                            synth/pulse.cpp
                                            synth/halo.cpp synth/torque.cpp
@@ -96,7 +95,7 @@ target_include_directories(oscillate_synth_engines PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../../include>
 )
 target_link_libraries(oscillate_synth_engines PUBLIC oscillate::native_control oscillate::native_synth
-  oscillate::engine oscillate::automation_project oscillate::timeline oscillate::note_effects
+  oscillate::engine
   PRIVATE oscillate::dsp_primitives oscillate::native_effects oscillate::native_dsp
   # Crate reads its samples through the warp engine's band-limited reader.
   oscillate::warp_dsp Threads::Threads)

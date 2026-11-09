@@ -4,8 +4,8 @@
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 
 #include <QVariantMap>
 
@@ -227,7 +227,7 @@ descriptor_of(const native_dsp::EngineDescriptor& engine, std::string_view id) {
           const auto* patch = std::get_if<project::NativeInstrumentPatch>(&track.instrument_source);
           if (patch == nullptr)
             return std::nullopt;
-          auto resolved = native_dsp::synth::resolve_native_instrument(*patch);
+          auto resolved = native_inserts::resolve_native_instrument(*patch);
           if (!resolved)
             return std::nullopt;
           const auto& engine = *resolved.value().engine->descriptor;
@@ -364,7 +364,7 @@ constexpr double max_bend = 2.0 / 3.0;
     add_group(text(engine.name), std::move(items));
   };
   if (const auto* patch = std::get_if<project::NativeInstrumentPatch>(&track.instrument_source)) {
-    if (auto resolved = native_dsp::synth::resolve_native_instrument(*patch))
+    if (auto resolved = native_inserts::resolve_native_instrument(*patch))
       add_engine(
           *resolved.value().engine->descriptor,
           [&](std::string_view id) {

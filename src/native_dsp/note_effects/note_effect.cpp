@@ -27,30 +27,19 @@ using foundation::Result;
 const std::array<const NoteEffectEngine*, 6> registry{&arp_engine,    &chord_engine, &echo_engine,
                                                       &random_engine, &scale_engine, &comp_engine};
 
-[[nodiscard]] bool tick_of(const timeline::TempoMap& tempo, std::uint32_t rate, std::uint64_t frame,
-                           std::int64_t& tick) noexcept {
-  if (frame > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
-    return false;
-  timeline::TickPosition position{};
-  if (!tempo.sample_to_tick_rt({static_cast<std::int64_t>(frame)}, rate, position))
-    return false;
-  tick = position.value;
-  return true;
-}
-
 // Chain stages make notes under their own clip ids, one per stage.
 constexpr std::uint64_t generated_clip_tag = 0x4e4f'5445'4658'0000ULL; // "NOTEFX"
 
 } // namespace
 
-NoteClock::NoteClock(const timeline::TempoMap& tempo, std::uint32_t sample_rate,
-                     std::uint64_t first_frame, std::uint32_t frames) noexcept
-    : tempo_(&tempo), sample_rate_(sample_rate), first_frame_(first_frame), frames_(frames) {
-  if (frames == 0 || sample_rate == 0)
+NoteClock::NoteClock(const FrameTicks& ticks, std::uint64_t first_frame,
+                     std::uint32_t frames) noexcept
+    : ticks_(&ticks), first_frame_(first_frame), frames_(frames) {
+  if (frames == 0)
     return;
-  valid_ = tick_of(tempo, sample_rate, first_frame, first_tick_) &&
-           tick_of(tempo, sample_rate, first_frame + frames - 1, last_tick_) &&
-           (first_frame == 0 || tick_of(tempo, sample_rate, first_frame - 1, previous_tick_));
+  valid_ = ticks.tick_of(first_frame, first_tick_) &&
+           ticks.tick_of(first_frame + frames - 1, last_tick_) &&
+           (first_frame == 0 || ticks.tick_of(first_frame - 1, previous_tick_));
 }
 
 std::int64_t NoteClock::tick_at(std::uint32_t offset) const noexcept {
@@ -59,7 +48,7 @@ std::int64_t NoteClock::tick_at(std::uint32_t offset) const noexcept {
   if (offset + 1 >= frames_)
     return last_tick_;
   std::int64_t tick = 0;
-  return tick_of(*tempo_, sample_rate_, first_frame_ + offset, tick) ? tick : last_tick_;
+  return ticks_->tick_of(first_frame_ + offset, tick) ? tick : last_tick_;
 }
 
 std::uint32_t NoteClock::offset_of(std::int64_t tick) const noexcept {
@@ -98,8 +87,7 @@ std::size_t copy_ahead(std::span<const engine::ScheduledMidiEvent> events, const
   for (auto event = first; event != events.end() && count < output.size(); ++event) {
     std::int64_t previous = clock.last_tick();
     if (static_cast<std::uint64_t>(event->sample.value) > end_frame &&
-        !tick_of(clock.tempo(), clock.sample_rate(),
-                 static_cast<std::uint64_t>(event->sample.value) - 1, previous))
+        !clock.ticks().tick_of(static_cast<std::uint64_t>(event->sample.value) - 1, previous))
       break;
     if (previous >= limit)
       break;

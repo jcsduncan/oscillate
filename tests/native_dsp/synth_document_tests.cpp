@@ -1,6 +1,6 @@
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/native_dsp/synth/runtime.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/check.hpp"
 #include "synth_test_support.hpp"
@@ -19,6 +19,7 @@
 // compiled document, so the tests can hear exactly when a document arrives.
 namespace {
 using namespace synth_test;
+using namespace oscillate::native_inserts;
 
 constexpr std::array<ParameterDescriptor, 1> probe_parameters{{
     {"probe.gain", "Gain", "Probe", "", ParameterScale::linear, 0.0, 1.0, 1.0},

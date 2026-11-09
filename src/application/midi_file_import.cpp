@@ -2,7 +2,7 @@
 #include "oscillate/foundation/midi.hpp"
 
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 
 #include <algorithm>
 #include <array>
@@ -441,7 +441,7 @@ Result<MidiImportPlan> plan_midi_import(const project::Snapshot& snapshot,
         destination = id.value();
         const auto& engine =
             group.channel == drum_channel && drum_engine ? *drum_engine : default_engine;
-        auto patch = native_dsp::synth::native_patch_for_preset(engine, std::nullopt);
+        auto patch = native_inserts::native_patch_for_preset(engine, std::nullopt);
         if (!patch)
           return Plan::failure(patch.error());
         plan.operations.emplace_back(

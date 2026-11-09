@@ -1,4 +1,4 @@
-#include "oscillate/plugins/project_binding.hpp"
+#include "oscillate/application/vst3/project_binding.hpp"
 #include "oscillate/plugins/vst3_bundle_loader.hpp"
 #include "oscillate/plugins/vst3_scan.hpp"
 #include "oscillate/test/allocation_counter.hpp"

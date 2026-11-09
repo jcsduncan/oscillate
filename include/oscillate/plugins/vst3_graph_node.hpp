@@ -1,9 +1,9 @@
 #pragma once
 
-#include "oscillate/automation_project/preparation.hpp"
 #include "oscillate/engine/graph.hpp"
-#include "oscillate/plugins/project_binding.hpp"
-#include "oscillate/timeline/timing.hpp"
+#include "oscillate/plugins/vst3_binding_status.hpp"
+#include "oscillate/plugins/vst3_bundle_loader.hpp"
+#include "oscillate/plugins/vst3_tempo.hpp"
 
 #include <atomic>
 #include <cstdint>
@@ -155,18 +155,44 @@ struct PreparedVst3GraphNode {
   }
 };
 
-// Control side only. engine_instance_id is allocated by the graph composition
-// owner and must be unique among all nodes; it is not a truncated project UUID.
-// Failure returns no node so the caller can keep the prior graph active and
-// report the binding diagnostic. A successful factory is single-use; retain
-// the request for compatible graph revisions, and rebind for replacement.
-[[nodiscard]] PreparedVst3GraphNode prepare_vst3_graph_node(
-    const project::Vst3PluginInstance& saved, const ScanResult& scanned,
-    std::uint64_t engine_instance_id, const timeline::TempoMap& tempo, double sample_rate,
-    std::uint32_t max_block_frames, Vst3ProcessingMode mode = Vst3ProcessingMode::realtime,
-    std::vector<automation_project::PreparedTargetAutomation> automation = {},
-    std::uint64_t automation_key = 0, bool fixed_latency_verified = false,
-    std::span<const std::uint32_t> qualified_manual_ids = {}, bool routed_sidechain = false,
-    std::optional<std::vector<Vst3QualifiedManualBlock>> qualified_blocks = std::nullopt);
+// One automated parameter's values, read on the callback: the host's
+// prepared automation lane (ADR-0104), so the plugins module evaluates no
+// project automation itself. evaluate_block writes one value per frame from
+// project sample `first`; false when it cannot.
+class Vst3ParameterCurve {
+public:
+  virtual ~Vst3ParameterCurve() = default;
+  [[nodiscard]] virtual bool evaluate_block(std::int64_t first,
+                                            std::span<double> output) const noexcept = 0;
+};
+
+struct Vst3AutomationLane {
+  std::uint32_t parameter_id{0};
+  std::shared_ptr<const Vst3ParameterCurve> curve;
+};
+
+// What a VST3 graph runtime is made from, prepared on control. Automation
+// lanes are sorted by parameter, one per parameter, each a continuous,
+// writable parameter of the loaded instance.
+struct Vst3GraphRuntimeInputs {
+  std::unique_ptr<LoadedVst3Effect> effect;
+  std::shared_ptr<std::atomic<Vst3GraphRuntimeStatus>> status;
+  std::uint32_t max_frames{0};
+  Vst3Tempo tempo;
+  std::uint32_t sample_rate{0};
+  std::vector<Vst3AutomationLane> automation;
+  std::uint32_t event_capacity{0};
+  std::shared_ptr<Vst3ManualEventSlot> manual_events;
+  bool routed_sidechain{false};
+};
+
+// Control side only: the single-use node request that creates the runtime.
+// engine_instance_id is allocated by the graph composition owner and must be
+// nonzero and unique among all nodes. Incomplete inputs (a missing effect,
+// status, slot, clock or curve, no boundary at sample 0, or lanes out of
+// parameter order) make no runtime.
+[[nodiscard]] engine::NodeRequest make_vst3_graph_request(std::uint64_t engine_instance_id,
+                                                          std::uint64_t compatibility_key,
+                                                          Vst3GraphRuntimeInputs inputs);
 
 } // namespace oscillate::plugins

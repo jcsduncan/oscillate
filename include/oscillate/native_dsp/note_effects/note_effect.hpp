@@ -30,19 +30,27 @@ inline constexpr std::size_t block_event_capacity = engine::HeldNotes::instrumen
 // crowded block drops new notes rather than strand old ones.
 inline constexpr std::size_t note_off_reserve = 256;
 
+// The project tick of a project frame: the host's conversion through the
+// shared tempo map (native_inserts::TempoTicks), so note effects never
+// evaluate a tempo map themselves. Callback safe; false when the frame
+// cannot be placed.
+class FrameTicks {
+public:
+  virtual ~FrameTicks() = default;
+  [[nodiscard]] virtual bool tick_of(std::uint64_t frame, std::int64_t& tick) const noexcept = 0;
+};
+
 // The musical clock of one block. A frame's tick is the shared tempo map's
 // exact conversion of its project frame, so a step lands on the same frame
 // however the blocks are split. Callback safe.
 class NoteClock {
 public:
-  NoteClock(const timeline::TempoMap& tempo, std::uint32_t sample_rate, std::uint64_t first_frame,
-            std::uint32_t frames) noexcept;
+  NoteClock(const FrameTicks& ticks, std::uint64_t first_frame, std::uint32_t frames) noexcept;
   // False when the tempo map could not place the block (the block fails).
   [[nodiscard]] bool valid() const noexcept { return valid_; }
   [[nodiscard]] std::uint32_t frames() const noexcept { return frames_; }
   [[nodiscard]] std::uint64_t first_frame() const noexcept { return first_frame_; }
-  [[nodiscard]] const timeline::TempoMap& tempo() const noexcept { return *tempo_; }
-  [[nodiscard]] std::uint32_t sample_rate() const noexcept { return sample_rate_; }
+  [[nodiscard]] const FrameTicks& ticks() const noexcept { return *ticks_; }
   // The tick of a frame of the block.
   [[nodiscard]] std::int64_t tick_at(std::uint32_t offset) const noexcept;
   // The tick of the frame before the block (-1 at the song's start): events
@@ -59,8 +67,7 @@ public:
   [[nodiscard]] std::uint32_t offset_of(std::int64_t tick) const noexcept;
 
 private:
-  const timeline::TempoMap* tempo_;
-  std::uint32_t sample_rate_;
+  const FrameTicks* ticks_;
   std::uint64_t first_frame_;
   std::uint32_t frames_;
   bool valid_ = false;

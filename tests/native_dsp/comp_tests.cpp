@@ -1,6 +1,7 @@
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_dsp/note_effects/note_effect.hpp"
-#include "oscillate/native_dsp/synth/player.hpp"
+#include "oscillate/native_inserts/synth_player.hpp"
+#include "oscillate/native_inserts/tempo_ticks.hpp"
 #include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/cases.hpp"
 #include "oscillate/test/check.hpp"
@@ -32,7 +33,6 @@
 namespace {
 
 namespace fx = oscillate::native_dsp::note_effects;
-namespace synth = oscillate::native_dsp::synth;
 namespace engine = oscillate::engine;
 namespace project = oscillate::project;
 namespace timeline = oscillate::timeline;
@@ -56,6 +56,12 @@ const timeline::TempoMap& tempo() {
   static const auto map =
       take(timeline::TempoMap::create({{{0}, 120.0, timeline::TempoShape::step}}, 1));
   return map;
+}
+
+// The clock source the player gives the note effects.
+const oscillate::native_inserts::TempoTicks& ticks() {
+  static const oscillate::native_inserts::TempoTicks source(tempo(), rate);
+  return source;
 }
 
 // Chords as held notes (MIDI keys): the bass first.
@@ -156,7 +162,7 @@ std::vector<Note> run(const std::vector<double>& dense, const std::vector<Note>&
         in.push_back(block_event(note, frame));
     }
     std::ranges::sort(in, event_less);
-    const fx::NoteClock clock(tempo(), rate, frame, frames);
+    const fx::NoteClock clock(ticks(), frame, frames);
     require(clock.valid(), "the clock places the block");
     const auto seen = blind ? 0 : fx::copy_ahead(plan, clock, ahead);
     const fx::NoteParameters parameters(dense, {}, std::span(ahead).first(seen));
@@ -441,7 +447,7 @@ void the_lookahead_sees_a_dotted_eighth() {
                                 {128 + 18'000, true, 65, 90, played_clip, {0, 4}}};
   const auto plan = scheduled(input);
   std::vector<fx::AheadEvent> ahead(fx::ahead_event_capacity);
-  const fx::NoteClock clock(tempo(), rate, 0, 128);
+  const fx::NoteClock clock(ticks(), 0, 128);
   const auto seen = fx::copy_ahead(plan, clock, ahead);
   REQUIRE_EQ(seen, 2, "the block's own events and those past a dotted 8th are not seen");
   REQUIRE_EQ(ahead[0].key, 62, "the first event after the block carries the block's last tick");
@@ -480,7 +486,7 @@ void the_chain_hands_stages_the_notes_ahead() {
     }
     std::sort(events.begin(), events.begin() + static_cast<std::ptrdiff_t>(count), event_less);
     const fx::StageControls control{true, dense, {}};
-    const fx::NoteClock clock(tempo(), rate, frame, 128);
+    const fx::NoteClock clock(ticks(), frame, 128);
     const auto seen = fx::copy_ahead(plan, clock, ahead);
     const auto out = chain->process(events, count, scratch, clock, std::span(&control, 1),
                                     std::span(ahead).first(seen));
@@ -554,9 +560,9 @@ double peak(const std::vector<double>& x, std::size_t begin, std::size_t end) {
 std::vector<double> render(const project::Snapshot& state, std::uint32_t block,
                            std::uint64_t total) {
   const auto plan = take(engine::compile_midi_events(state));
-  auto player =
-      take(synth::NativeSynthPlayer::prepare(state, state.tracks[0], plan.instruments()[0], {},
-                                             8'192, std::numeric_limits<std::uint64_t>::max()));
+  auto player = take(oscillate::native_inserts::NativeSynthPlayer::prepare(
+      state, state.tracks[0], plan.instruments()[0], {}, 8'192,
+      std::numeric_limits<std::uint64_t>::max()));
   std::vector<engine::StereoFrame> buffer;
   std::vector<double> out;
   for (std::uint64_t frame = 0; frame < total; frame += block) {
@@ -593,9 +599,9 @@ void a_comp_edit_goes_live_without_a_gap() {
   const auto before = comp_project({am7, am7}, 16, 0.0, 100.0, 1);
   const auto after = comp_project({am7, am7}, 16, 0.0, 80.0, 2);
   const auto plan = take(engine::compile_midi_events(before));
-  auto player =
-      take(synth::NativeSynthPlayer::prepare(before, before.tracks[0], plan.instruments()[0], {},
-                                             128, std::numeric_limits<std::uint64_t>::max()));
+  auto player = take(oscillate::native_inserts::NativeSynthPlayer::prepare(
+      before, before.tracks[0], plan.instruments()[0], {}, 128,
+      std::numeric_limits<std::uint64_t>::max()));
   std::vector<engine::StereoFrame> buffer(128);
   std::vector<double> out;
   for (std::uint64_t frame = 0; frame < 2 * bar; frame += 128) {

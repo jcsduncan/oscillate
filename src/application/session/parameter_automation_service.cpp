@@ -6,8 +6,8 @@
 #include "oscillate/application/midi_note_tools.hpp"
 #include "oscillate/application/tempo_cache.hpp"
 #include "oscillate/midi_file/smf.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "session_state.hpp"
 
 #include <algorithm>
@@ -72,8 +72,7 @@ ParameterAutomationService::set_native_automation_point(project::TrackId track_i
   if (!found) {
     return Result::failure(found.error());
   }
-  auto domain =
-      native_dsp::synth::native_automation_domain(*found.value().resolved.engine, parameter);
+  auto domain = native_inserts::native_automation_domain(*found.value().resolved.engine, parameter);
   if (!domain) {
     return Result::failure(domain.error());
   }

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "oscillate/application/routed_playback_control.hpp"
-#include "oscillate/plugins/vst3_graph_node.hpp"
+#include "oscillate/application/vst3/graph_node.hpp"
 
 #include <cstddef>
 #include <cstdint>

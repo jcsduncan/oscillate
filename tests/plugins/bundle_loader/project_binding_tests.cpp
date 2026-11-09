@@ -1,4 +1,4 @@
-#include "oscillate/plugins/project_binding.hpp"
+#include "oscillate/application/vst3/project_binding.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <algorithm>

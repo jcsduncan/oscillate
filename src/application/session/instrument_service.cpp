@@ -9,7 +9,7 @@
 #include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
 #include "oscillate/native_dsp/synth/lock.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "session_state.hpp"
 
 #include <algorithm>
@@ -58,7 +58,7 @@ InstrumentService::add_native_instrument_track(std::string_view engine,
   if (!id) {
     return Result::failure(id.error());
   }
-  auto patch = native_dsp::synth::native_patch_for_preset(*found, preset);
+  auto patch = native_inserts::native_patch_for_preset(*found, preset);
   if (!patch) {
     return Result::failure(patch.error());
   }
@@ -79,7 +79,7 @@ InstrumentService::select_native_instrument(project::TrackId track, std::string_
   if (found == nullptr) {
     return Result::failure({foundation::ErrorCode::not_found, "Built-in synth not found"});
   }
-  auto patch = native_dsp::synth::native_patch_for_preset(*found, preset);
+  auto patch = native_inserts::native_patch_for_preset(*found, preset);
   if (!patch) {
     return Result::failure(patch.error());
   }
@@ -109,8 +109,8 @@ foundation::Result<void> InstrumentService::set_native_instrument_values(
   if (!found) {
     return Result::failure(found.error());
   }
-  auto patch = native_dsp::synth::make_native_patch(*found.value().resolved.engine, values,
-                                                    found.value().resolved.document);
+  auto patch = native_inserts::make_native_patch(*found.value().resolved.engine, values,
+                                                 found.value().resolved.document);
   if (!patch) {
     return Result::failure(patch.error());
   }
@@ -141,12 +141,12 @@ foundation::Result<void> InstrumentService::set_native_instrument_state(
   // form (only non-default values).
   project::NativeInstrumentPatch candidate{current.engine, current.engine_version,
                                            std::move(values), std::move(document)};
-  auto resolved = native_dsp::synth::resolve_native_instrument(candidate);
+  auto resolved = native_inserts::resolve_native_instrument(candidate);
   if (!resolved) {
     return Result::failure(resolved.error());
   }
-  auto patch = native_dsp::synth::make_native_patch(
-      *resolved.value().engine, resolved.value().values, std::move(resolved.value().document));
+  auto patch = native_inserts::make_native_patch(*resolved.value().engine, resolved.value().values,
+                                                 std::move(resolved.value().document));
   if (!patch) {
     return Result::failure(patch.error());
   }
@@ -218,7 +218,7 @@ foundation::Result<void> InstrumentService::lock_kick_and_bass(project::TrackId 
     const double value = on ? on_value : synth::lock_choice_off;
     auto values = track.resolved.values;
     values[*index] = value;
-    auto patch = synth::make_native_patch(engine, values, track.resolved.document);
+    auto patch = native_inserts::make_native_patch(engine, values, track.resolved.document);
     if (!patch) {
       return Result::failure(patch.error());
     }
@@ -281,7 +281,7 @@ InstrumentService::set_native_synth_document(project::TrackId track,
     return Result::success();
   }
   patch.document = std::move(document);
-  if (auto resolved = native_dsp::synth::resolve_native_instrument(patch); !resolved) {
+  if (auto resolved = native_inserts::resolve_native_instrument(patch); !resolved) {
     return Result::failure(resolved.error());
   }
   auto applied =

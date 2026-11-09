@@ -1,12 +1,12 @@
 #include "format_oracle.hpp"
 #include "insert_fixtures.hpp"
 #include "oscillate/application/vst3/offline_export.hpp"
+#include "oscillate/application/vst3/project_binding.hpp"
 #include "oscillate/export/offline_master.hpp"
 #include "oscillate/native_dsp/compressor.hpp"
 #include "oscillate/native_dsp/eq.hpp"
 #include "oscillate/native_dsp/limiter.hpp"
 #include "oscillate/persistence/store.hpp"
-#include "oscillate/plugins/project_binding.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <algorithm>

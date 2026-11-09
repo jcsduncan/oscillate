@@ -69,9 +69,6 @@
     "plugin_ui": { "path": "src/app/plugin_ui", "allowed": ["plugins"] }
   },
   "exceptions": [
-    { "module": "native_dsp", "target": "oscillate::automation_project", "issue": 129 },
-    { "module": "native_dsp", "target": "oscillate::timeline", "issue": 129 },
-    { "module": "native_dsp", "target": "oscillate::media", "issue": 131 },
-    { "module": "plugins", "target": "oscillate::automation_project", "issue": 133 }
+    { "module": "native_dsp", "target": "oscillate::media", "issue": 131 }
   ]
 }

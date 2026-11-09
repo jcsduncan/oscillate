@@ -1,5 +1,5 @@
+#include "oscillate/application/vst3/graph_node.hpp"
 #include "oscillate/engine/routed_publisher.hpp"
-#include "oscillate/plugins/vst3_graph_node.hpp"
 #include "oscillate/test/allocation_counter.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/tolerances.hpp"

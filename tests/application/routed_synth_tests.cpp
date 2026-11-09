@@ -6,7 +6,7 @@
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/test/allocation_counter.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/temp_dir.hpp"
@@ -123,12 +123,13 @@ void synth_track_plays_and_takes_live_edits_without_restart() {
              "the saved revision is active");
 
   // A panel edit to the playing synth is offered live, not by a restart.
-  auto values = take(synth::resolve_native_instrument(std::get<project::NativeInstrumentPatch>(
-                         model.snapshot()->tracks.front().instrument_source)))
+  auto values = take(oscillate::native_inserts::resolve_native_instrument(
+                         std::get<project::NativeInstrumentPatch>(
+                             model.snapshot()->tracks.front().instrument_source)))
                     .values;
   values[index("prism.filter.cutoff")] = 300.0;
   values[index("prism.osc1.unison")] = 4; // Next-note: deferred, never a reset.
-  auto patch = take(synth::make_native_patch(synth::default_engine(), values));
+  auto patch = take(oscillate::native_inserts::make_native_patch(synth::default_engine(), values));
   auto edited = take(model.apply({project::SetNativeInstrumentPatch{track, patch}}));
   REQUIRE_OK(control.begin_edit(edited, "synth cutoff"),
              "synth edit was accepted by the live path");
@@ -415,15 +416,16 @@ void every_engine_plays_live() {
     REQUIRE_GT(sounded, 1e-3, std::string(engine->descriptor->id) + " is audible");
     control.observe();
     const auto track = saved.tracks.front().id;
-    auto values = take(synth::resolve_native_instrument(std::get<project::NativeInstrumentPatch>(
-                           model.snapshot()->tracks.front().instrument_source)))
+    auto values = take(oscillate::native_inserts::resolve_native_instrument(
+                           std::get<project::NativeInstrumentPatch>(
+                               model.snapshot()->tracks.front().instrument_source)))
                       .values;
     const auto edited_id = automated_parameter(*engine);
     const auto edited_index =
         take(oscillate::native_dsp::find_parameter(*engine->descriptor, edited_id));
     values[edited_index] =
         oscillate::native_dsp::from_normalised(engine->descriptor->parameters[edited_index], 0.25);
-    auto patch = take(synth::make_native_patch(*engine, values));
+    auto patch = take(oscillate::native_inserts::make_native_patch(*engine, values));
     auto edited = take(model.apply({project::SetNativeInstrumentPatch{track, patch}}));
     REQUIRE_OK(control.begin_edit(edited, "synth parameter"),
                "live edit accepted without a restart");
@@ -463,7 +465,8 @@ void engine_switch_keeps_old_sound_and_reports_saved_state_until_source_replaced
 
   const auto* ember = synth::find_engine("ember");
   REQUIRE_NE(ember, nullptr, "Ember is registered");
-  const auto ember_patch = take(synth::native_patch_for_preset(*ember, std::nullopt));
+  const auto ember_patch =
+      take(oscillate::native_inserts::native_patch_for_preset(*ember, std::nullopt));
   auto candidate = saved;
   candidate.revision = saved.revision + 1;
   candidate.tracks.front().instrument_source = ember_patch;

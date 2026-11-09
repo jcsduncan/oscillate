@@ -1,6 +1,7 @@
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_dsp/note_effects/note_effect.hpp"
-#include "oscillate/native_dsp/synth/player.hpp"
+#include "oscillate/native_inserts/synth_player.hpp"
+#include "oscillate/native_inserts/tempo_ticks.hpp"
 #include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/cases.hpp"
 #include "oscillate/test/check.hpp"
@@ -31,7 +32,6 @@ namespace tolerance = oscillate::test::tolerance;
 namespace {
 
 namespace fx = oscillate::native_dsp::note_effects;
-namespace synth = oscillate::native_dsp::synth;
 namespace engine = oscillate::engine;
 namespace project = oscillate::project;
 namespace timeline = oscillate::timeline;
@@ -49,6 +49,12 @@ const timeline::TempoMap& tempo() {
   static const auto map =
       take(timeline::TempoMap::create({{{0}, 120.0, timeline::TempoShape::step}}, 1));
   return map;
+}
+
+// The clock source the player gives the note effects.
+const oscillate::native_inserts::TempoTicks& ticks() {
+  static const oscillate::native_inserts::TempoTicks source(tempo(), rate);
+  return source;
 }
 
 struct Note {
@@ -125,7 +131,7 @@ std::vector<Note> run(std::string_view id, const std::vector<double>& dense,
         in.push_back(block_event(note, frame));
     }
     std::ranges::sort(in, event_less);
-    const fx::NoteClock clock(tempo(), rate, frame, frames);
+    const fx::NoteClock clock(ticks(), frame, frames);
     require(clock.valid(), "the clock places the block");
     const fx::NoteParameters parameters(dense, {});
     const auto count = kernel->process(in, out, clock, parameters);
@@ -429,7 +435,7 @@ void the_chain_releases_what_it_made() {
   std::vector<engine::BlockMidiEvent> scratch(fx::block_event_capacity);
   std::vector<fx::StageControls> controls{{true, arp_values, {}}, {true, scale_values, {}}};
   events[0] = block_event({0, true, 60, 100, played_clip, {0, 1}}, 0);
-  const fx::NoteClock first(tempo(), rate, 0, 128);
+  const fx::NoteClock first(ticks(), 0, 128);
   auto out = chain->process(events, 1, scratch, first, controls);
   REQUIRE_EQ(out.size(), 1, "the arp's note passes the scale: C moves up a step to D");
   REQUIRE_EQ(out[0].key, 62, "the arp's note passes the scale: C moves up a step to D");
@@ -437,7 +443,7 @@ void the_chain_releases_what_it_made() {
              "the arp's note passes the scale: C moves up a step to D");
   // Switched off mid-note, the arp releases the note it was sounding.
   controls[0].enabled = false;
-  const fx::NoteClock second(tempo(), rate, 128, 128);
+  const fx::NoteClock second(ticks(), 128, 128);
   out = chain->process(events, 0, scratch, second, controls);
   REQUIRE_EQ(out.size(), 1, "switching the arp off ends its note, through the scale");
   REQUIRE_EQ(out[0].kind, engine::MidiEventKind::note_off,
@@ -482,9 +488,9 @@ project::Snapshot arp_project(bool arp) {
 std::vector<double> render(const project::Snapshot& state, std::uint32_t block,
                            std::uint64_t total) {
   const auto plan = take(engine::compile_midi_events(state));
-  auto player =
-      take(synth::NativeSynthPlayer::prepare(state, state.tracks[0], plan.instruments()[0], {},
-                                             8'192, std::numeric_limits<std::uint64_t>::max()));
+  auto player = take(oscillate::native_inserts::NativeSynthPlayer::prepare(
+      state, state.tracks[0], plan.instruments()[0], {}, 8'192,
+      std::numeric_limits<std::uint64_t>::max()));
   std::vector<engine::StereoFrame> buffer;
   std::vector<double> out;
   for (std::uint64_t frame = 0; frame < total; frame += block) {
@@ -529,8 +535,8 @@ void the_player_arpeggiates_live_notes() {
   auto state = arp_project(true);
   state.tracks[0].midi_clips.clear();
   const engine::InstrumentEvents empty{state.tracks[0].id, {}};
-  auto player = take(synth::NativeSynthPlayer::prepare(state, state.tracks[0], empty, {}, 128,
-                                                       std::numeric_limits<std::uint64_t>::max()));
+  auto player = take(oscillate::native_inserts::NativeSynthPlayer::prepare(
+      state, state.tracks[0], empty, {}, 128, std::numeric_limits<std::uint64_t>::max()));
   require(player.queue_live_note(57, 100, true), "a live note is queued");
   std::vector<engine::StereoFrame> buffer(128);
   std::vector<double> out;

@@ -4,8 +4,8 @@
 #include "oscillate/automation_project/preparation.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 
 #include <QVariantMap>
 
@@ -231,9 +231,10 @@ void MacroController::begin_turn(int index) {
       std::string_view id;
       if (const auto* native = std::get_if<project::NativeParameterTarget>(&mapping.destination)) {
         const auto* patch = std::get_if<project::NativeInstrumentPatch>(&owner->instrument_source);
-        auto resolved = patch ? synth::resolve_native_instrument(*patch)
-                              : foundation::Result<synth::ResolvedNativeInstrument>::failure(
-                                    {foundation::ErrorCode::not_found, "no synth"});
+        auto resolved = patch
+                            ? native_inserts::resolve_native_instrument(*patch)
+                            : foundation::Result<native_inserts::ResolvedNativeInstrument>::failure(
+                                  {foundation::ErrorCode::not_found, "no synth"});
         if (!resolved)
           continue;
         descriptor = resolved.value().engine->descriptor;

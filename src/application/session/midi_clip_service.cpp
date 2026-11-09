@@ -7,7 +7,7 @@
 #include "oscillate/application/tempo_cache.hpp"
 #include "oscillate/foundation/midi.hpp"
 #include "oscillate/midi_file/smf.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/project/lookup.hpp"
 #include "session_state.hpp"
 
@@ -649,11 +649,11 @@ MidiClipService::move_midi_clip_to_track(project::ClipId clip, project::TrackId 
                                       const project::NativeParameterTarget& native) {
       if (destination_patch == nullptr)
         return false;
-      auto resolved = native_dsp::synth::resolve_native_instrument(*destination_patch);
+      auto resolved = native_inserts::resolve_native_instrument(*destination_patch);
       if (!resolved)
         return false;
-      auto domain = native_dsp::synth::native_automation_domain(*resolved.value().engine,
-                                                                native.parameter_id);
+      auto domain =
+          native_inserts::native_automation_domain(*resolved.value().engine, native.parameter_id);
       return domain && domain.value() == lane.domain;
     };
     for (auto& lane : moved.automation) {

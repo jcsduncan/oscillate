@@ -24,7 +24,7 @@
 namespace oscillate::native_dsp {
 class ConvolutionRuntime;
 } // namespace oscillate::native_dsp
-namespace oscillate::native_dsp::synth {
+namespace oscillate::native_inserts {
 class NativeSynthPlayer;
 }
 namespace oscillate::persistence {
@@ -129,7 +129,7 @@ public:
 // and all.
 struct KeptPlayer {
   project::TrackId track;
-  std::shared_ptr<native_dsp::synth::NativeSynthPlayer> player;
+  std::shared_ptr<native_inserts::NativeSynthPlayer> player;
   // Nonzero when the edit changes what the player plays (its notes, lanes or
   // the tempo): the plan staged for this revision plays from the block the
   // replacement source takes over (ADR-0098).
@@ -438,7 +438,7 @@ private:
     native_inserts::NativeEffectStage* stage = nullptr;
   };
   struct PendingNativeRevision {
-    std::variant<native_dsp::synth::NativeSynthRuntime*, native_dsp::synth::NativeSynthPlayer*,
+    std::variant<native_dsp::synth::NativeSynthRuntime*, native_inserts::NativeSynthPlayer*,
                  native_inserts::NativeEffectStage*>
         runtime;
     std::optional<project::TrackId> track;
@@ -547,7 +547,7 @@ private:
   RoutedAudioSource* live_source_ = nullptr;
   // The players a pending instrument edit was offered to (its runtime is the
   // first); the revision is applied when all have rendered it.
-  std::vector<native_dsp::synth::NativeSynthPlayer*> pending_players_;
+  std::vector<native_inserts::NativeSynthPlayer*> pending_players_;
   // The VST3 instruments it was offered to (ADR-0101): each one's applied
   // plan revision, and its track.
   std::vector<std::function<std::uint64_t()>> pending_vst3_;

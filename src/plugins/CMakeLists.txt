@@ -51,7 +51,6 @@ endif()
 
 add_subdirectory(effect_host)
 add_subdirectory(bundle_loader)
-add_subdirectory(project_binding)
 add_subdirectory(graph_node)
 
 oscillate_add_executable(oscillate_vst3_scan_helper
