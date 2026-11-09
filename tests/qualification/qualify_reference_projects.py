@@ -178,6 +178,8 @@ def run_one(args, reference: str, frames: int, repetition: int, serial: int | No
         command += ["--trace", str(trace_path)]
     if serial is not None:
         command += ["--pipewire-target", str(serial)]
+    if args.workers is not None:
+        command += ["--workers", str(args.workers)]
     if reference == "heavy":
         for flag, value in (
             ("--vst3-effect", args.vst3_effect),
@@ -208,14 +210,14 @@ def markdown(evidence: dict) -> str:
         f"Host: {evidence['host']}, {evidence['cores']} logical CPUs. "
         f"Mode: {evidence['mode']}. {evidence['seconds']} s measured per run.",
         "",
-        "| Reference | Frames | Run | Callback p50 µs | p99 µs | max µs | p99 of period | "
-        "Over period | Process CPU % | CPU p99 % (100 ms) | Peak RSS MiB |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Reference | Frames | Run | Helpers | Callback p50 µs | p99 µs | max µs "
+        "| p99 of period | Over period | Process CPU % | CPU p99 % (100 ms) | Peak RSS MiB |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for run in evidence["runs"]:
         result = run["result"]
         lines.append(
-            f"| {run['reference']} | {run['frames']} | {run['repetition']} "
+            f"| {run['reference']} | {run['frames']} | {run['repetition']} | {result['workers']} "
             f"| {result.get('p50_us', '')} | {result.get('p99_us', '')} | {result['max_us']} "
             f"| {result.get('p99_period_percent', '')}% | {result['over_period']} "
             f"| {result['process_cpu_percent']} | {result['cpu_window_p99']} "
@@ -255,6 +257,9 @@ def main() -> int:
     parser.add_argument("--target-node", help="play on this PipeWire Audio/Sink node name")
     parser.add_argument("--vst3-effect", type=Path, help="heavy: a VST3 effect bundle")
     parser.add_argument("--vst3-instrument", type=Path, help="heavy: a VST3 instrument bundle")
+    parser.add_argument(
+        "--workers", type=int, help="audio helpers (default: the live playback default)"
+    )
     args = parser.parse_args()
     args.executable = args.executable.resolve()
     if not args.executable.is_file():

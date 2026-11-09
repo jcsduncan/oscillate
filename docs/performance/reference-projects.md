@@ -25,7 +25,13 @@ without the VST3 host plays a second Ember in place of the VST3 instrument.
 plays each project at 64 and 128 frames and writes `results.json` and
 `results.md`. Through the fake callback, timing and CPU cover the blocks after
 100 warm-up blocks; on a sink they cover the whole playback, warm-up included.
+Both render with the audio helpers live playback uses: by default one fewer
+than the hardware threads the process may run on, at most seven (ADR-0048,
+ADR-0110), started
+as ordinary threads for the fake callback and at the callback's priority on a
+sink. `--workers N` sets another count, 0 for the callback alone.
 
+- **Helpers:** the audio helpers that rendered with the callback.
 - **Callback time:** p50, p99 and maximum of each block's render, and the
   blocks over their period. Through the paced fake callback the player times
   each block itself; on a PipeWire sink the times come from the trace's

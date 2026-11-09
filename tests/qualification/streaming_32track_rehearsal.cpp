@@ -4,6 +4,7 @@
 #include "oscillate/application/routed_audio_source.hpp"
 #include "oscillate/audio_io/pipewire_output.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
+#include "oscillate/engine/audio_worker_pool.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
 #include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/check.hpp"
@@ -619,6 +620,8 @@ void run_pipewire(const Options& options, const fs::path& root, const project::S
 #else
     (void)vst3;
 #endif
+    // The helpers live playback renders with (ADR-0048).
+    engine::AudioWorkerPool workers(engine::AudioWorkerPool::default_worker_count());
     app::RoutedPlaybackControl control(model, limits, provider.get());
     take(control.submit_current());
     auto source = take(
@@ -629,7 +632,7 @@ void run_pipewire(const Options& options, const fs::path& root, const project::S
         &allowed, [](const void* context) noexcept {
           return static_cast<const std::atomic<bool>*>(context)->load(std::memory_order_acquire);
         }};
-    audio::PipeWireOutput output(source->render_source(), cursor, permission);
+    audio::PipeWireOutput output(source->render_source(&workers), cursor, permission);
     take(output.start(sample_rate, static_cast<std::uint32_t>(options.frames), target_serial));
     const auto ready_by = std::chrono::steady_clock::now() + 5s;
     auto status = output.status();
@@ -890,6 +893,8 @@ void run(const Options& options) {
 #if defined(OSCILLATE_QUALIFICATION_VST3)
     provider = make_live_provider(snapshot, vst3);
 #endif
+    // The helpers live playback renders with (ADR-0048).
+    engine::AudioWorkerPool workers(engine::AudioWorkerPool::default_worker_count());
     app::RoutedPlaybackControl control(model, limits, provider.get());
     take(control.submit_current());
     auto source = take(
@@ -919,7 +924,8 @@ void run(const Options& options) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
     }
-    const auto callback = source->render_source();
+    const auto callback = source->render_source(&workers);
+    workers.start_owned_threads(workers.wanted_workers());
     audio::TransportCursor cursor;
     std::array<engine::StereoFrame, 128> stereo{};
     std::array<float, 256> interleaved{};
@@ -972,6 +978,7 @@ void run(const Options& options) {
             .count();
     const double process_cpu_us =
         1'000'000.0 * static_cast<double>(cpu_finished - cpu_started) / CLOCKS_PER_SEC;
+    workers.stop_owned_threads();
     const auto status = source->status();
     stop_instrument(provider.get(), vst3);
     const auto allocation_count = allocation_probe_count();
