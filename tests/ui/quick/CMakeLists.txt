@@ -167,6 +167,13 @@ oscillate_target_defaults(oscillate_quick_live_chain_edit_tests)
 oscillate_add_test(NAME quick_live_chain_edit_contract
   COMMAND oscillate_quick_live_chain_edit_tests)
 set_tests_properties(quick_live_chain_edit_contract PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+add_executable(oscillate_quick_live_audio_edit_tests live_audio_edit_tests.cpp)
+target_link_libraries(oscillate_quick_live_audio_edit_tests PRIVATE
+  oscillate_quick_test_core Qt6::Test)
+oscillate_target_defaults(oscillate_quick_live_audio_edit_tests)
+oscillate_add_test(NAME quick_live_audio_edit_contract
+  COMMAND oscillate_quick_live_audio_edit_tests)
+set_tests_properties(quick_live_audio_edit_contract PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
 if(TARGET oscillate_jack_realtime_export)
   add_executable(oscillate_quick_realtime_export_tests
     realtime_export_run_tests.cpp)
