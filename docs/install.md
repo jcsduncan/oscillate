@@ -1,7 +1,9 @@
 # Install
 
-Oscillate runs on Ubuntu 26.04 x86-64. Each release ships a `.deb` and an
-AppImage ([release packages](dependencies/release-packages.md)).
+Oscillate runs on Ubuntu 26.04 x86-64. Each release ships a `.deb`, an
+AppImage ([release packages](dependencies/release-packages.md)) and a
+Flatpak bundle for any x86-64 distribution with Flatpak
+([Flatpak](dependencies/flatpak.md)).
 
 ## From the apt repository
 
@@ -46,6 +48,23 @@ executable and run it:
 chmod +x Oscillate-<version>-x86_64.AppImage
 ./Oscillate-<version>-x86_64.AppImage
 ```
+
+## Flatpak
+
+Download `Oscillate-<version>-x86_64.flatpak` from the
+[releases](https://github.com/jcsduncan/oscillate/releases) and install it;
+Flatpak fetches the KDE runtime from Flathub:
+
+```sh
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak install --user Oscillate-<version>-x86_64.flatpak
+flatpak run io.github.jcsduncan.Oscillate
+```
+
+Projects are in `~/.oscillate/projects`, as with the other packages. The
+sandbox's permissions and the folder for sampled instrument libraries are in
+[Flatpak](dependencies/flatpak.md). To remove it:
+`flatpak uninstall --user --delete-data io.github.jcsduncan.Oscillate`.
 
 ## How the repository is published
 

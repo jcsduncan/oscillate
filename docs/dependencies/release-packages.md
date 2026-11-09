@@ -2,7 +2,8 @@
 
 Each release ships two Ubuntu 26.04 x86-64 packages, built by the
 [packaging workflow](../../.github/workflows/packaging.yml) in an
-`ubuntu:26.04` container and attached to the GitHub release:
+`ubuntu:26.04` container, and a [Flatpak](flatpak.md) bundle, all attached to
+the GitHub release:
 
 | File | Form |
 | --- | --- |
@@ -12,6 +13,9 @@ Each release ships two Ubuntu 26.04 x86-64 packages, built by the
 | `Oscillate-<version>-x86_64.AppImage.inventory.json` | AppImage sidecar: image hash, features and pinned tool and runtime. |
 | `Oscillate-<version>-x86_64.AppImage.NOTICES.txt` | The AppImage's third-party notices and licence texts in one file. |
 | `Oscillate-<version>-x86_64.AppImage.SOURCE-OFFER.txt` | The AppImage's written source offer, with a link to the exact source of every library and runtime component it bundles. |
+| `Oscillate-<version>-x86_64.flatpak` | Flatpak bundle on the `org.kde.Platform//6.10` runtime, which Flatpak installs from Flathub ([Flatpak](flatpak.md)). |
+| `Oscillate-<version>-x86_64.flatpak.inventory.json` | Flatpak sidecar: runtime, payload with hashes, each ELF's resolved libraries and owning module, and the source offer. |
+| `Oscillate-<version>-x86_64.flatpak.NOTICES.txt`, `.SOURCE-OFFER.txt` | The Flatpak's third-party notices and its written source offer. |
 | `Oscillate.AppDir.inventory.json` | The AppImage's payload: every file with hash and mode, each copied ELF's Ubuntu package and source package, its notices and its source offer. |
 | `SHA256SUMS` | Checksums of everything above. |
 
@@ -127,13 +131,13 @@ provenance and makes no licence conclusion, which belongs to G8.
 ## Runtime dependencies
 
 [`runtime-dependencies.json`](runtime-dependencies.json) lists, for each
-package, the Ubuntu 26.04 packages it needs at run time:
+package, its `platform` and what it needs at run time:
 
-| Field | `.deb` | AppImage |
-| --- | --- | --- |
-| `system` | The `Depends` field without versions; alternatives as `a \| b`. | The host packages the app's libraries link against and the AppDir leaves out: `libc6` and `libproxy1v5`. |
-| `bundled` | Empty: the `.deb` copies no library. | The package owning each library and Qt plugin copied into `usr/`. |
-| `conditional` | Empty: `Depends` brings them. | Host packages loaded at run time, not linked, with when they are needed: `libspa-0.2-modules`, whose SPA plugins the bundled PipeWire client loads for PipeWire output. |
+| Field | `.deb` | AppImage | Flatpak |
+| --- | --- | --- | --- |
+| `system` | The `Depends` field without versions; alternatives as `a \| b`. | The host packages the app's libraries link against and the AppDir leaves out: `libc6` and `libproxy1v5`. | The runtime, `org.kde.Platform//6.10`. |
+| `bundled` | Empty: the `.deb` copies no library. | The package owning each library and Qt plugin copied into `usr/`. | The manifest modules whose libraries it installs under `/app/lib`: `libsndfile`. |
+| `conditional` | Empty: `Depends` brings them. | Host packages loaded at run time, not linked, with when they are needed: `libspa-0.2-modules`, whose SPA plugins the bundled PipeWire client loads for PipeWire output. | Empty: the runtime carries PipeWire's plugins. |
 
 The lists are declared in each profile in
 [`package_profiles.py`](../../scripts/package_profiles.py) and the file is
@@ -150,7 +154,7 @@ packages are declared but not checked.
 | --- | --- |
 | Configure | CMake verifies the VST3 SDK manifest, interface headers and notices by digest. |
 | Package | Profile switches, source tree and version (a release tag must be `v<project version>`); x86-64 ELFs with no `RPATH` and no Qt Test; every library resolves. |
-| Runtime dependencies | [`package_dependencies.py`](../../scripts/package_dependencies.py) `verify`: the `.deb`'s `Depends`, and the AppDir's copied and host packages, match the profile; every package the AppDir copies from has a staged notice and a source-offer entry with the expected Launchpad link, and the offer lists the runtime sources. |
+| Runtime dependencies | [`package_dependencies.py`](../../scripts/package_dependencies.py) `verify`: the `.deb`'s `Depends`, the AppDir's copied and host packages, and the Flatpak's runtime and modules match the profile; every package the AppDir copies from has a staged notice and a source-offer entry with the expected Launchpad link, and the offer lists the runtime sources; every module the Flatpak bundles has a licence file and a pinned source-offer entry, and every library resolves. |
 | `.deb` | [`smoke_ubuntu_package.py`](../../tests/packaging/smoke_ubuntu_package.py): payload against the sidecar, notices, SBOM, QML runtime dependency, desktop entry. |
 | AppDir | [`smoke_appdir.py`](../../tests/packaging/smoke_appdir.py): payload tree, notices, source offer, SBOM, app startup with the Qt platform plugin loaded from the AppDir and nothing loaded from the host's Qt plugin directory, scanner helper reply, loader picking bundled libraries (libsndfile and LAME among them). |
 | AppImage | [`build-appimage.py`](../../scripts/build-appimage.py): pinned appimagetool 1.9.1 and type-2 runtime 20251108 by SHA-256 (downloaded with retries on server errors and timeouts, and cached between CI runs), runtime bytes unchanged outside appimagetool's MD5 slot, extracted payload, notices, source offer and SBOM. |

@@ -1,8 +1,10 @@
 name: Packaging
 
-# Builds the .deb and the AppImage (docs/dependencies/release-packages.md),
+# Builds the .deb, the AppImage and the Flatpak
+# (docs/dependencies/release-packages.md, docs/dependencies/flatpak.md),
 # installs, launches and removes each in a clean container, and attaches them,
-# with the AppImage's notices and source offer, to the GitHub release. The
+# with the AppImage's and the Flatpak's notices and source offers, to the
+# GitHub release. The
 # release tag that Release Please pushes starts it; a manual run with a tag
 # rebuilds and re-attaches that release's
 # packages. Pull requests build it only when a packaging input changes.
@@ -181,8 +183,133 @@ jobs:
           test "$#" -eq 1 && test -f "$1"
           sh tests/packaging/install-smoke.sh "$FORM" "$1"
 
+  flatpak:
+    needs: changes
+    if: needs.changes.outputs.packaging == 'true'
+    name: Build flatpak
+    runs-on: ubuntu-latest
+    # The Flathub action image: flatpak, flatpak-builder, the linter, and the
+    # KDE 6.10 runtime and SDK. Privileged, so bubblewrap can build.
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.10@sha256:62920cbbb53c4e047801562c0475d70393482de9698dfeac740aad99e6c674e6
+      options: --privileged
+    timeout-minutes: 150
+    env:
+      APP_ID: io.github.jcsduncan.Oscillate
+      MANIFEST: build/flatpak/io.github.jcsduncan.Oscillate.json
+      FLATHUB_MANIFEST: build/flathub/io.github.jcsduncan.Oscillate.json
+      METAINFO: assets/packaging/io.github.jcsduncan.Oscillate.metainfo.xml
+      BUILD_DIR: build/flatpak/app
+      REPO: build/flatpak/repo
+      STATE_DIR: .flatpak-builder
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      - name: Write the manifests
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          commit=$(git rev-parse HEAD)
+          if [ -n "$RELEASE_TAG" ]; then
+            version_args="--release-tag $RELEASE_TAG"
+          else
+            version_args="--version-suffix ci.${GITHUB_RUN_NUMBER}.g$(git rev-parse --short=7 HEAD)"
+          fi
+          # shellcheck disable=SC2086 # version_args is two words
+          python3 -I scripts/package_flatpak.py manifest --source-dir . --commit "$commit" \
+            $version_args --output "$MANIFEST"
+          # The form Flathub builds: Oscillate from its commit on GitHub.
+          # shellcheck disable=SC2086
+          python3 -I scripts/package_flatpak.py manifest --git-commit --commit "$commit" \
+            $version_args --output "$FLATHUB_MANIFEST"
+      - name: Lint the manifest and metadata
+        run: |
+          flatpak-builder-lint manifest "$FLATHUB_MANIFEST"
+          flatpak-builder-lint appstream "$METAINFO"
+          appstreamcli validate --no-net "$METAINFO"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .flatpak-builder
+          key: flatpak-builder-${{ hashFiles('packaging/flatpak/**') }}-${{ github.sha }}
+          restore-keys: |
+            flatpak-builder-${{ hashFiles('packaging/flatpak/**') }}-
+            flatpak-builder-
+      # Archives and git sources are fetched first, retried with backoff, so
+      # the build itself never downloads them.
+      - name: Download the sources
+        run: |
+          attempt=1
+          until flatpak-builder --download-only --disable-rofiles-fuse --state-dir="$STATE_DIR" \
+            "$BUILD_DIR" "$MANIFEST"; do
+            if [ "$attempt" -ge 4 ]; then
+              exit 1
+            fi
+            sleep $((attempt * 30))
+            attempt=$((attempt + 1))
+          done
+      # Screenshots are mirrored into the repository and the catalogue points
+      # at the mirror, as Flathub's build does, so the repository lint sees
+      # what Flathub's would.
+      - name: Build
+        run: |
+          flatpak-builder --disable-download --disable-rofiles-fuse --ccache --force-clean \
+            --state-dir="$STATE_DIR" --repo="$REPO" --default-branch=stable \
+            --mirror-screenshots-url=https://dl.flathub.org/media --compose-url-policy=full \
+            "$BUILD_DIR" "$MANIFEST"
+          ostree commit --repo="$REPO" --canonical-permissions --branch=screenshots/x86_64 \
+            "$BUILD_DIR/files/share/app-info/media"
+      - name: Lint the repository
+        run: flatpak-builder-lint repo "$REPO"
+      - name: Check the runtime dependencies, notices and source offer
+        run: |
+          python3 -I scripts/package_flatpak.py inventory --build-dir "$BUILD_DIR" \
+            --manifest "$MANIFEST" --output build/flatpak/inventory.json
+          python3 -I scripts/package_dependencies.py verify --profile flatpak \
+            --inventory build/flatpak/inventory.json
+      - name: Bundle
+        run: |
+          version=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' \
+            build/flatpak/inventory.json)
+          bundle="build/packages/Oscillate-$version-x86_64.flatpak"
+          mkdir -p build/packages
+          flatpak build-bundle --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo \
+            "$REPO" "$bundle" "$APP_ID" stable
+          cp build/flatpak/inventory.json "$bundle.inventory.json"
+          docs="$BUILD_DIR/files/share/doc/oscillate"
+          cp "$docs/third-party/NOTICES.txt" "$bundle.NOTICES.txt"
+          cp "$docs/SOURCE-OFFER.txt" "$bundle.SOURCE-OFFER.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages-flatpak
+          path: build/packages/
+          if-no-files-found: error
+
+  flatpak-smoke:
+    needs: flatpak
+    name: Install, launch and remove (flatpak)
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.10@sha256:62920cbbb53c4e047801562c0475d70393482de9698dfeac740aad99e6c674e6
+      options: --privileged
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages-flatpak
+          path: packages
+      - name: Smoke test
+        run: |
+          set -- packages/Oscillate-*-x86_64.flatpak
+          test "$#" -eq 1 && test -f "$1"
+          sh tests/packaging/flatpak-smoke.sh "$1"
+
   release:
-    needs: install-smoke
+    needs: [install-smoke, flatpak-smoke]
     if: inputs.tag || github.ref_type == 'tag'
     name: Attach to the release
     runs-on: ubuntu-latest

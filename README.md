@@ -61,7 +61,7 @@ sudo apt update
 sudo apt install oscillate
 ```
 
-The AppImage, the archive key's fingerprint and removal are in
+The AppImage, the Flatpak, the archive key's fingerprint and removal are in
 [Install](docs/install.md).
 
 ## Build

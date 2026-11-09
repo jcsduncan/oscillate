@@ -1,12 +1,12 @@
 # Install once with `pre-commit install`; see CONTRIBUTING.md.
 # Hooks run on staged files only, so files that predate the formatter are
 # left alone until someone edits them. CI runs the same hooks on the files a
-# pull request changes. Fuzz seeds are byte-exact inputs, so no hook
-# touches them. Revs are frozen to commits (update with
+# pull request changes. Fuzz seeds and upstream patches are byte-exact
+# inputs, so no hook touches them. Revs are frozen to commits (update with
 # `pre-commit autoupdate --freeze`).
 minimum_pre_commit_version: "4.0.0"
 default_install_hook_types: [pre-commit]
-exclude: ^(third_party/|docs/dependencies/notices/|assets/starter/.*\.wav$|tests/fuzz/corpus/)
+exclude: ^(third_party/|docs/dependencies/notices/|packaging/flatpak/patches/|assets/starter/.*\.wav$|tests/fuzz/corpus/)
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks

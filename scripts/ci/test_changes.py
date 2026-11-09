@@ -34,6 +34,8 @@ class ClassifyTests(unittest.TestCase):
             "scripts/package-deb.py",
             "scripts/package_sbom.py",
             "tests/packaging/install-smoke.sh",
+            "packaging/flatpak/io.github.jcsduncan.Oscillate.json",
+            "packaging/flatpak/patches/libsndfile/ogg-vorbis-error-checking-CVE-2024-50612.patch",
             "third_party/notices/vst3sdk/LICENSE.txt",
             "CMakePresets.json",
             ".github/workflows/packaging.yml",

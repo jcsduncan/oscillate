@@ -3,15 +3,17 @@
 
 The inventory (docs/dependencies/runtime-dependencies.json) lists, for each
 package profile in package_profiles.py, the Ubuntu packages it needs on the
-host and the ones it copies in. It is generated from the profiles:
+host and the ones it copies in; for the Flatpak, the runtime and the
+manifest modules whose libraries it installs. It is generated from the
+profiles:
 
   write                   rewrite the inventory from the profiles
   check                   fail when the checked-in inventory is out of date
   verify --profile P --inventory SIDECAR
-                          fail when a built package's sidecar (the .deb's
-                          inventory or the AppDir's) differs from profile P,
-                          or when a bundled package has no notice in the
-                          AppDir or no entry in its source offer
+                          fail when a built package's sidecar (the .deb's,
+                          the AppDir's or the Flatpak's inventory) differs
+                          from profile P, or when a bundled package has no
+                          notice or no entry in the package's source offer
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from pathlib import Path
 
 # Run as `python3 -I`, which leaves the script's directory off the path.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import package_flatpak
 from package_profiles import PROFILES, SOURCE_ROOT, Profile
 from package_sources import OFFER_JSON, OFFER_TEXT, offer_problems
 
@@ -32,7 +35,11 @@ INVENTORY_STATUS = "oscillate runtime dependencies"
 DEB_SIDECAR_STATUS = "oscillate .deb inventory"
 APPDIR_SIDECAR_STATUS = "oscillate AppDir inventory"
 # The sidecar that records each profile's package contents.
-SIDECAR_STATUS = {"deb": DEB_SIDECAR_STATUS, "appimage": APPDIR_SIDECAR_STATUS}
+SIDECAR_STATUS = {
+    "deb": DEB_SIDECAR_STATUS,
+    "appimage": APPDIR_SIDECAR_STATUS,
+    "flatpak": package_flatpak.SIDECAR_STATUS,
+}
 # Ubuntu's Depends syntax: "name (>= version)" with an optional ":arch".
 VERSION_CONSTRAINT = re.compile(r"\s*\([^)]*\)")
 ARCHITECTURE = re.compile(r":[a-z0-9]+$")
@@ -48,9 +55,9 @@ def inventory() -> dict:
     return {
         "status": INVENTORY_STATUS,
         "generated_from": "scripts/package_profiles.py",
-        "distribution": "Ubuntu 26.04 amd64",
         "profiles": {
             name: {
+                "platform": profile.platform,
                 "preset": profile.preset,
                 "system": sorted(profile.runtime.system),
                 "bundled": sorted(profile.runtime.bundled),
@@ -89,6 +96,8 @@ def observed(profile: Profile, sidecar: dict) -> tuple[list[str], list[str]]:
         raise ValueError(f"the {profile.name} profile is checked against the {expected!r} sidecar")
     if expected == DEB_SIDECAR_STATUS:
         return depends_groups(str(sidecar["depends"])), []
+    if expected == package_flatpak.SIDECAR_STATUS:
+        return package_flatpak.observed(sidecar)
     bundled = {
         package_name(str(record["package"]))
         for record in sidecar["elf_files"]
@@ -132,12 +141,14 @@ def redistribution_problems(sidecar: dict, bundled: list[str]) -> list[str]:
 
 def verify(profile: Profile, sidecar: dict) -> list[str]:
     """Differences from the profile's dependencies, and bundled packages left
-    out of the AppDir's notices or source offer."""
+    out of the AppDir's or the Flatpak's notices or source offer."""
     system, bundled = observed(profile, sidecar)
     problems = differences(f"{profile.name} system", profile.runtime.system, system)
     problems += differences(f"{profile.name} bundled", profile.runtime.bundled, bundled)
     if sidecar["status"] == APPDIR_SIDECAR_STATUS:
         problems += redistribution_problems(sidecar, bundled)
+    elif sidecar["status"] == package_flatpak.SIDECAR_STATUS:
+        problems += package_flatpak.redistribution_problems(sidecar, bundled)
     return problems
 
 

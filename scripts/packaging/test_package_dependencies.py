@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import package_flatpak
 from package_dependencies import (
     APPDIR_SIDECAR_STATUS,
     DEB_SIDECAR_STATUS,
@@ -20,6 +21,8 @@ from package_sources import OFFER_JSON, OFFER_TEXT, build_offer
 
 DEB = PROFILES["deb"]
 APPIMAGE = PROFILES["appimage"]
+FLATPAK = PROFILES["flatpak"]
+FLATPAK_LIBRARY = "lib/libsndfile.so.1.0.37"
 EXTRA_PACKAGE = "libextra1"
 AMD64 = ":amd64"
 COMBINED_NOTICES = "usr/share/doc/oscillate/third-party/NOTICES.txt"
@@ -68,6 +71,39 @@ def appdir_sidecar(bundled, host):
     }
 
 
+def flatpak_sidecar():
+    """A Flatpak sidecar on the profile's runtime with libsndfile built in,
+    its licence installed and its sources in the offer."""
+    (runtime,) = FLATPAK.runtime.system
+    (module,) = FLATPAK.runtime.bundled
+    licence = f"{package_flatpak.LICENCE_DIR}/{module}/COPYING"
+    offer = package_flatpak.build_offer(
+        package_flatpak.load_manifest(), version="1.0", commit=PROJECT_COMMIT
+    )
+    paths = [
+        "bin/oscillate",
+        FLATPAK_LIBRARY,
+        licence,
+        str(package_flatpak.COMBINED_NOTICES),
+        str(package_flatpak.OFFER_TEXT),
+        str(package_flatpak.OFFER_JSON),
+    ]
+    return {
+        "status": package_flatpak.SIDECAR_STATUS,
+        "runtime": runtime,
+        "payload": [{"path": path} for path in paths],
+        "elf_files": [
+            package_flatpak.classify_elf("bin/oscillate", None),
+            package_flatpak.classify_elf(FLATPAK_LIBRARY, "libsndfile.so.1"),
+        ],
+        "unresolved": {},
+        "licence_dir": str(package_flatpak.LICENCE_DIR),
+        "combined_notices": str(package_flatpak.COMBINED_NOTICES),
+        "offer_files": [str(package_flatpak.OFFER_TEXT), str(package_flatpak.OFFER_JSON)],
+        "source_offer": offer,
+    }
+
+
 class InventoryFileTests(unittest.TestCase):
     def test_checked_in_inventory_is_generated_from_the_profiles(self):
         self.assertEqual(INVENTORY.read_text(), encoded_inventory())
@@ -79,6 +115,8 @@ class InventoryFileTests(unittest.TestCase):
         self.assertIn("libc6", profiles["appimage"]["system"])
         self.assertIn("libspa-0.2-modules", profiles["appimage"]["conditional"])
         self.assertEqual(profiles["deb"]["conditional"], {})
+        self.assertEqual(profiles["flatpak"]["system"], ["org.kde.Platform//6.10"])
+        self.assertEqual(profiles["flatpak"]["bundled"], ["libsndfile"])
 
 
 class DependsParsingTests(unittest.TestCase):
@@ -164,11 +202,63 @@ class VerifyTests(unittest.TestCase):
         problems = verify(APPIMAGE, sidecar)
         self.assertEqual(problems, [f"notices: {OFFER_TEXT} is not in the package"])
 
+    def test_matching_flatpak_passes(self):
+        self.assertEqual(verify(FLATPAK, flatpak_sidecar()), [])
+
+    def test_flatpak_on_another_runtime_fails(self):
+        sidecar = flatpak_sidecar()
+        sidecar["runtime"] = "org.kde.Platform//6.9"
+        problems = verify(FLATPAK, sidecar)
+        self.assertEqual(len(problems), 2)
+        self.assertIn("flatpak system", problems[0])
+
+    def test_flatpak_library_no_module_owns_fails(self):
+        sidecar = flatpak_sidecar()
+        sidecar["elf_files"].append(
+            package_flatpak.classify_elf("lib/libextra.so.1", "libextra.so.1")
+        )
+        problems = verify(FLATPAK, sidecar)
+        self.assertIn("lib/libextra.so.1", problems[0])
+        self.assertIn("not declared", problems[0])
+
+    def test_flatpak_without_a_licence_for_a_bundled_module_fails(self):
+        sidecar = flatpak_sidecar()
+        sidecar["payload"] = [
+            item
+            for item in sidecar["payload"]
+            if not item["path"].startswith(str(package_flatpak.LICENCE_DIR))
+        ]
+        problems = verify(FLATPAK, sidecar)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("no licence file for libsndfile", problems[0])
+
+    def test_flatpak_without_a_source_entry_or_offer_text_fails(self):
+        sidecar = flatpak_sidecar()
+        sidecar["source_offer"]["modules"] = [
+            module
+            for module in sidecar["source_offer"]["modules"]
+            if module["module"] != "libsndfile"
+        ]
+        sidecar["payload"].remove({"path": str(package_flatpak.OFFER_TEXT)})
+        problems = verify(FLATPAK, sidecar)
+        self.assertEqual(len(problems), 2)
+        self.assertIn(f"{package_flatpak.OFFER_TEXT} is not in the package", problems[0])
+        self.assertIn("no source entry for libsndfile", problems[1])
+
+    def test_flatpak_with_an_unresolved_library_fails(self):
+        sidecar = flatpak_sidecar()
+        sidecar["unresolved"] = {"bin/oscillate": ["libjack.so.0"]}
+        self.assertEqual(
+            verify(FLATPAK, sidecar), ["bin/oscillate: unresolved libraries libjack.so.0"]
+        )
+
     def test_wrong_sidecar_for_the_profile_is_rejected(self):
         with self.assertRaises(ValueError):
             verify(APPIMAGE, deb_sidecar(DEB.runtime.system))
         with self.assertRaises(ValueError):
             verify(DEB, appdir_sidecar(APPIMAGE.runtime.bundled, APPIMAGE.runtime.system))
+        with self.assertRaises(ValueError):
+            verify(FLATPAK, deb_sidecar(DEB.runtime.system))
 
 
 if __name__ == "__main__":

@@ -57,6 +57,12 @@
       "binaryDir": "${sourceDir}/build/package-appimage"
     },
     {
+      "name": "package-flatpak",
+      "displayName": "Release build inside the Flatpak (docs/dependencies/flatpak.md)",
+      "inherits": "package-deb",
+      "binaryDir": "${sourceDir}/build/package-flatpak"
+    },
+    {
       "name": "vst3",
       "displayName": "VST3 scanner with pinned SDK",
       "inherits": "dev",
@@ -140,6 +146,7 @@
     { "name": "quick", "configurePreset": "quick" },
     { "name": "package-deb", "configurePreset": "package-deb" },
     { "name": "package-appimage", "configurePreset": "package-appimage" },
+    { "name": "package-flatpak", "configurePreset": "package-flatpak" },
     { "name": "vst3", "configurePreset": "vst3" },
     { "name": "codec", "configurePreset": "codec" },
     { "name": "coverage", "configurePreset": "coverage" },

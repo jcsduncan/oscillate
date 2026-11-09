@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.jcsduncan.Oscillate</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Oscillate</name>
+  <summary>Arrange, play and mix music</summary>
+  <developer id="io.github.jcsduncan">
+    <name>Chris Duncan</name>
+  </developer>
+  <description>
+    <p>
+      Oscillate is a digital audio workstation for Linux. Arrange audio and MIDI
+      clips on a timeline, play its built-in instruments, shape the sound with
+      its effects and mix the result into a finished track.
+    </p>
+    <ul>
+      <li>Arrangement with audio and MIDI clips, markers, tempo and time-signature maps</li>
+      <li>Piano roll with velocity and pedal lanes, and MIDI recording from the computer keyboard</li>
+      <li>Synthesisers, drum and sampled instruments, including the Nova wavetable synth</li>
+      <li>More than twenty effects, from EQ and compression to reverb, delay and tape texture</li>
+      <li>Mixer with buses, sends, sidechains, macros, racks and freeze</li>
+      <li>Tempo and key analysis, warping and pitch editing of audio</li>
+      <li>Export of the master and stems as WAV, FLAC or MP3</li>
+    </ul>
+    <p>
+      Oscillate plays through PipeWire, or through JACK by way of PipeWire's JACK
+      support. It is pre-release software.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.jcsduncan.Oscillate.desktop</launchable>
+  <provides>
+    <binary>oscillate</binary>
+  </provides>
+  <url type="homepage">https://github.com/jcsduncan/oscillate</url>
+  <url type="bugtracker">https://github.com/jcsduncan/oscillate/issues</url>
+  <url type="help">https://jcsduncan.github.io/oscillate/</url>
+  <url type="vcs-browser">https://github.com/jcsduncan/oscillate</url>
+  <url type="contribute">https://github.com/jcsduncan/oscillate/blob/main/CONTRIBUTING.md</url>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+  </categories>
+  <keywords>
+    <keyword>DAW</keyword>
+    <keyword>music</keyword>
+    <keyword>audio</keyword>
+    <keyword>MIDI</keyword>
+    <keyword>synthesizer</keyword>
+  </keywords>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">1024</display_length>
+  </requires>
+  <branding>
+    <color type="primary" scheme_preference="light">#78d5c5</color>
+    <color type="primary" scheme_preference="dark">#202638</color>
+  </branding>
+  <content_rating type="oars-1.1"/>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/jcsduncan/oscillate/v0.2.0/docs/images/app/arrangement.png</image>
+      <caption>The arrangement, with the selected track's device chain below</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/jcsduncan/oscillate/v0.2.0/docs/images/app/mixer.png</image>
+      <caption>The mixer, one strip per track with its inserts</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/jcsduncan/oscillate/v0.2.0/docs/images/app/piano-roll.png</image>
+      <caption>The piano roll, with velocity and pedal lanes</caption>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="0.2.0" date="2026-11-08">
+      <url type="details">https://github.com/jcsduncan/oscillate/releases/tag/v0.2.0</url>
+      <description>
+        <p>The first public pre-release.</p>
+        <ul>
+          <li>Arrangement, piano roll, mixer and automation lanes</li>
+          <li>MIDI recording from the computer keyboard, with overdub and metronome</li>
+          <li>Built-in instruments and effects, macros, racks and freeze</li>
+          <li>Linux VST3 instruments and effects</li>
+          <li>WAV, FLAC and MP3 import and export</li>
+          <li>Local crash reports and a diagnostics bundle</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+</component>
