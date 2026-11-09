@@ -52,7 +52,8 @@ private:
 };
 
 std::size_t cutoff() {
-  return *native_dsp::find_parameter(*synth::default_engine().descriptor, "prism.filter.cutoff");
+  return oscillate::test::take(
+      native_dsp::find_parameter(*synth::default_engine().descriptor, "prism.filter.cutoff"));
 }
 
 void edits_drags_cancels_and_status() {
@@ -244,7 +245,8 @@ void crate_state_media_and_clips() {
   const auto track =
       take(session->instruments().add_native_instrument_track(crate::engine_id, std::nullopt));
   quick::SessionNativeSynthAdapter adapter(*session, track, crate::engine());
-  const auto root = native_dsp::find_parameter(*crate::engine().descriptor, "crate.root").value();
+  const auto root =
+      oscillate::test::take(native_dsp::find_parameter(*crate::engine().descriptor, "crate.root"));
 
   project::NativeSynthDocument document;
   document.media.push_back(

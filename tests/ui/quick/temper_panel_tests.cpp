@@ -343,8 +343,10 @@ std::vector<float> frame_of(float cut_db, float band_gain_db) {
 
 void telemetry_drives_the_display() {
   auto values = defaults();
-  values[*oscillate::native_dsp::find_parameter(table(), "temper.band_on_1")] = 1.0;
-  values[*oscillate::native_dsp::find_parameter(table(), "temper.unmask")] = 1.0;
+  values[oscillate::test::take(
+      oscillate::native_dsp::find_parameter(table(), "temper.band_on_1"))] = 1.0;
+  values[oscillate::test::take(oscillate::native_dsp::find_parameter(table(), "temper.unmask"))] =
+      1.0;
   InMemoryNativeSynthAdapter adapter(values);
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);

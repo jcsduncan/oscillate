@@ -339,7 +339,8 @@ void the_constellation() {
   // KEEP MINE: the envelopes stay through a morph.
   click(*view, QStringLiteral("novaConstellationLock:env"));
   require(constellation->is_locked(QStringLiteral("env")), "envelopes are kept");
-  const auto attack = *oscillate::native_dsp::find_parameter(table(), "nova.env.1.attack");
+  const auto attack =
+      oscillate::test::take(oscillate::native_dsp::find_parameter(table(), "nova.env.1.attack"));
   const double kept = controller.current_values()[attack];
   drag(*view, end, start);
   require(controller.current_values()[attack] == kept, "the envelope stayed");

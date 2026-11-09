@@ -54,7 +54,7 @@ const oscillate::native_dsp::EngineDescriptor& table() {
 }
 
 std::size_t index(std::string_view id) {
-  return *oscillate::native_dsp::find_parameter(table(), id);
+  return oscillate::test::take(oscillate::native_dsp::find_parameter(table(), id));
 }
 
 int preset_index(std::string_view name) {

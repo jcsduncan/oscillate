@@ -366,7 +366,8 @@ std::vector<double> with(const Lanes& lanes, Values more) {
   auto dense = values(more);
   const auto* found = fx::find_engine("comp");
   for (const auto& [parameter, value] : lanes)
-    dense[*oscillate::native_dsp::find_parameter(*found->descriptor, parameter)] = value;
+    dense[oscillate::test::take(
+        oscillate::native_dsp::find_parameter(*found->descriptor, parameter))] = value;
   return dense;
 }
 

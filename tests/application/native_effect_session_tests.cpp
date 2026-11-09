@@ -77,7 +77,8 @@ void effects_are_added_edited_and_undone() {
              "values resolve to the engine defaults");
 
   // Two steps of one gesture are one undo step.
-  const auto cutoff = *native_dsp::find_parameter(*contour().descriptor, "contour.cutoff");
+  const auto cutoff =
+      oscillate::test::take(native_dsp::find_parameter(*contour().descriptor, "contour.cutoff"));
   auto values = defaults;
   values[cutoff] = 400.0;
   accepted(session->effects().set_native_effect_values(track, slot, values, 7));
@@ -149,8 +150,8 @@ void documents_travel_with_the_effect() {
   REQUIRE_EQ(classic.curves.front().id, "shape", "a new Pump starts with Classic Pump's shape");
 
   auto values = take(session->effects().native_effect_values(track, slot));
-  values[*native_dsp::find_parameter(*effects::find_engine("pump")->descriptor, "pump.depth")] =
-      0.5;
+  values[oscillate::test::take(
+      native_dsp::find_parameter(*effects::find_engine("pump")->descriptor, "pump.depth"))] = 0.5;
   accepted(session->effects().set_native_effect_values(track, slot, values));
   REQUIRE_EQ(take(session->effects().native_effect_document(track, slot)), classic,
              "a value edit keeps the shape");
@@ -363,8 +364,8 @@ void linked_effects_share_their_shape() {
   REQUIRE_EQ(take(session->effects().native_effect_document(keys, c)), drawn,
              "a drawn edit reaches every linked Pump");
   auto values = take(session->effects().native_effect_values(pad, a));
-  values[*native_dsp::find_parameter(*effects::find_engine("pump")->descriptor, "pump.depth")] =
-      0.25;
+  values[oscillate::test::take(
+      native_dsp::find_parameter(*effects::find_engine("pump")->descriptor, "pump.depth"))] = 0.25;
   accepted(session->effects().set_native_effect_values(pad, a, values));
   REQUIRE_NE(take(session->effects().native_effect_values(bass, b)), values,
              "knobs stay per instance and keep the link");
