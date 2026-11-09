@@ -567,7 +567,7 @@ QRectF scene_rect(QQuickItem* target) { return target->mapRectToScene(target->bo
 // readout has a box of its own and hides until a control is touched; the
 // status badge says its state in words and takes no focus.
 void the_header_keeps_preset_readout_and_status_apart() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto harness = load_header(controller);
   auto* header = item(*harness, "kitHeaderUnderTest");
@@ -608,7 +608,7 @@ void the_header_keeps_preset_readout_and_status_apart() {
 // knob fades whole; an inactive one keeps readable inkDim captions and says
 // why; a linked one keeps full contrast and wears the link badge.
 void control_states_read_apart() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto harness = load_header(controller);
   auto* theme = harness->root->property("theme").value<QObject*>();
