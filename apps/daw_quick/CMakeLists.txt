@@ -78,6 +78,8 @@ set(oscillate_quick_core_sources
   src/import_controller.cpp
   src/import_controller.hpp
   src/project_bridge_clips.cpp
+  src/project_bridge_selection.cpp
+  src/project_bridge_song.cpp
   src/project_bridge_inserts.cpp
   src/project_bridge_native_synth.cpp
   src/project_bridge_monitor.cpp
