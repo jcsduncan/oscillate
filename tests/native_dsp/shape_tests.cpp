@@ -146,7 +146,7 @@ void display_spectra_read_input_and_output_apart() {
   constexpr double tone_hz = 1'000.0;
   constexpr double amplitude = 0.5;
   constexpr double cut_hz = 8'000.0;
-  constexpr double steepest_slope = 7;
+  constexpr double steepest_slope = 3; // 96 dB an octave
   constexpr double tolerance_db = 1.0;
   constexpr double removed_db = -60.0;
   // Band b covers 20 * 1000^(b / bands) Hz up to the next.

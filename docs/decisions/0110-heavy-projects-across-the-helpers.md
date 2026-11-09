@@ -2,6 +2,7 @@
 
 **Status:** Accepted; implemented. **Date:** 9 November 2026.
 **Builds on:** ADR-0040 (native effect platform, Forge), ADR-0048 (audio worker pool), ADR-0061 (performance tracing), ADR-0085 (nested voice rendering).
+**Supersedes:** ADR-0048's default worker count.
 
 ## Context
 

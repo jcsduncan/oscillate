@@ -341,6 +341,7 @@ struct Shelf {
   double a1 = 0.0;
   double x1 = 0.0;
   double y1 = 0.0;
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the kernel's Shelf::set.
   void set(double n1, double n0, double d1, double d0, double k) {
     const double a0 = d1 / k + d0;
     b0 = (n1 / k + n0) / a0;
@@ -377,6 +378,7 @@ struct Resampler {
 };
 
 // Fixed settings, as the kernel holds them once primed.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): parameter values, then audio.
 std::vector<double> channel(const std::vector<double>& values, const std::vector<double>& input) {
   using oscillate::native_dsp::dsp::db_to_gain;
   const int model = static_cast<int>(values[at("forge.model")]);

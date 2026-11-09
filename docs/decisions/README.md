@@ -55,7 +55,7 @@ never reused. 0070 was never assigned.
 | 0045 | [The development build](0045-development-build.md) | Accepted and implemented |
 | 0046 | [The workspace redesign](0046-workspace-redesign.md) | Accepted and implemented |
 | 0047 | [The classic processors become engines](0047-classic-processors-as-engines.md) | Accepted and implemented; convolution remains its own kind |
-| 0048 | [Parallel real-time rendering](0048-parallel-audio-rendering.md) | Accepted and implemented |
+| 0048 | [Parallel real-time rendering](0048-parallel-audio-rendering.md) | Superseded in part by ADR-0110 (default worker count); otherwise accepted and implemented |
 | 0049 | [Live graph switching and latency handover](0049-live-graph-switching.md) | Accepted and implemented; every chain switches live (ADR-0050); held path removed (ADR-0094) |
 | 0050 | [One chain per track](0050-one-chain-per-track.md) | Accepted and implemented; export has two VST3 renderers; superseded in part by ADR-0093 for MIDI while playing |
 | 0051 | [Automation drawn on the arrangement](0051-arrangement-automation.md) | Accepted and implemented; inspector forms to retire |

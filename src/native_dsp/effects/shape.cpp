@@ -125,6 +125,7 @@ public:
   }
 
   // One frame of each signal's mono sum.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the EQ's input, then its output.
   void push(float input, float output) noexcept {
     input_ring_[write_] = input;
     output_ring_[write_] = output;
@@ -149,6 +150,7 @@ public:
 private:
   // Spreads instances over a hop by the golden ratio, so any number of them
   // stay apart.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): an instance number and a length.
   [[nodiscard]] static std::size_t staggered(std::size_t instance, std::size_t hop) noexcept {
     const double spread = static_cast<double>(instance) * std::numbers::phi;
     return static_cast<std::size_t>((spread - std::floor(spread)) * static_cast<double>(hop));

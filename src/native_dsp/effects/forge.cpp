@@ -272,6 +272,16 @@ template <typename F> decltype(auto) with_model(int model, F&& f) {
   return (antiderivative(model, u) - antiderivative(model, previous)) / du;
 }
 
+// One frame of a model switch: both curves, their offsets at the bias, and
+// the old curve's weight.
+struct Crossfade {
+  int model;
+  int fading;
+  double offset;
+  double fading_offset;
+  double weight;
+};
+
 // One channel's antialiasing history. The antiderivative at the previous
 // input is kept from the step that computed it, so a step evaluates the
 // antiderivative once: the same value antialiased() computes, in half the
@@ -297,6 +307,7 @@ struct Antialias {
   }
 
   // ad: the antiderivative at u.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): an input and its antiderivative.
   template <int M> [[nodiscard]] double step(double u, double ad) noexcept {
     const double du = u - previous_u;
     double y = 0.0;
@@ -322,12 +333,11 @@ struct Antialias {
   }
 
   // The crossfade between two curves after a model switch.
-  [[nodiscard]] double blend(int model, int fading, double u, double offset, double fading_offset,
-                             double weight) noexcept {
-    double y = antialiased(model, u, previous_u) - offset;
-    if (weight > 0.0) {
-      const double old = antialiased(fading, u, previous_u) - fading_offset;
-      y += (old - y) * weight;
+  [[nodiscard]] double blend(const Crossfade& fade, double u) noexcept {
+    double y = antialiased(fade.model, u, previous_u) - fade.offset;
+    if (fade.weight > 0.0) {
+      const double old = antialiased(fade.fading, u, previous_u) - fade.fading_offset;
+      y += (old - y) * fade.weight;
     }
     previous_u = u;
     forget();
@@ -574,6 +584,7 @@ private:
     const double weight = fade_.next();
     const double offset = curve(model_, controls.bias);
     const double fading_offset = weight > 0.0 ? curve(fading_model_, controls.bias) : 0.0;
+    const Crossfade fade{model_, fading_model_, offset, fading_offset, weight};
     Oversampled up{};
     oversample(frame, up);
     auto& left = channels_[0].antialias;
@@ -581,8 +592,7 @@ private:
     for (auto& sample : up) {
       const double u_left = controls.drive * sample.left + controls.bias;
       const double u_right = controls.drive * sample.right + controls.bias;
-      sample = {left.blend(model_, fading_model_, u_left, offset, fading_offset, weight),
-                right.blend(model_, fading_model_, u_right, offset, fading_offset, weight)};
+      sample = {left.blend(fade, u_left), right.blend(fade, u_right)};
     }
     finish(frame, controls, up);
   }

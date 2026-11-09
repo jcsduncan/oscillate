@@ -1,6 +1,6 @@
 # ADR-0048 — Parallel real-time rendering
 
-**Status:** Accepted and implemented. **Date:** 20 October 2026.
+**Status:** Superseded in part by ADR-0110 (default worker count); otherwise accepted and implemented. **Date:** 20 October 2026.
 
 ## Context
 
@@ -41,7 +41,7 @@ A render source carries an optional pool (`StereoRenderSource::workers`). The ou
 A worker that cannot be made real-time is not kept, because the callback would otherwise wait on a thread the desktop can preempt. Stopping joins the workers before the stream or client is destroyed. A callback still in flight then finishes its batch inline.
 
 ### Configuration and reporting
-- **Default worker count:** one fewer than the hardware threads the process may run on (its affinity mask, SMT siblings included), at most 7 (ADR-0110); 15 at most when overridden. `OSCILLATE_AUDIO_WORKERS` overrides it, and 0 restores single-thread rendering.
+- **Default worker count:** one fewer than the physical cores (hardware threads ÷ 2), at most 15. `OSCILLATE_AUDIO_WORKERS` overrides it, and 0 restores single-thread rendering.
 - **Reporting:** `OutputStatus::realtime_workers` reports how many workers run. The top bar's CPU readout shows the thread count while playing (for example "CPU ×8").
 - **Realtime export:** it runs through the same playback pool.
 
