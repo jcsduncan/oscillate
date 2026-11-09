@@ -4,8 +4,8 @@ import "shell"
 
 // A built-in effect's designed panel (ADR-0043), floating over the device
 // chain. `controller` is the slot's NativeSynthDeviceController; `automation`
-// edits its lanes (absent on the master, which owns no lanes yet);
-// `context` carries {trackName, keyName, sampleRate} for panels that name
+// names its lane on the arrangement (absent on the master, which owns no
+// lanes yet); `context` carries {trackName, keyName, sampleRate} for panels that name
 // their inputs; `panelModel` is the open panel's own model (Relay's echo
 // train), null for effects without one. The panel is looked up by engine id
 // in the device catalogue (controller.panel_url).
@@ -14,7 +14,10 @@ FloatingDeviceFrame {
     objectName: "nativeEffectEditorOverlay"
     required property var bridge
     required property var controller
+    // {trackId, laneKey} of the device on the arrangement, or null.
     required property var automation
+    // Show the lane `key` of track `trackId` on the arrangement.
+    signal automationRequested(string trackId, string key)
     required property var context
     required property var panelModel
     readonly property bool hasPanel: controller !== null && controller.panel_url !== ""
@@ -46,7 +49,6 @@ FloatingDeviceFrame {
     preferredY: docked ? height - dockHeight - Theme.editorDockedBottomGap : Theme.editorFloatingTop
     visible: controller !== null
     onControllerChanged: {
-        automationDrawer.visible = false
         loadPanel()
     }
     // A panel that needs its model waits for it; once made, the panel
@@ -150,9 +152,11 @@ FloatingDeviceFrame {
         }
     }
 
+    // Automation is drawn on the arrangement (ADR-0051): this opens the
+    // device's lane there, on its track.
     Rectangle {
         id: automationToggle
-        objectName: "nativeEffectAutomationToggle"
+        objectName: "nativeEffectShowAutomation"
         visible: editor.automation !== null
         x: Math.max(0, parent.width - width)
         y: parent.height - height
@@ -161,27 +165,20 @@ FloatingDeviceFrame {
         border.color: activeFocus ? editor.accentColor : Theme.editorButtonEdge
         activeFocusOnTab: editor.visible && visible
         Accessible.role: Accessible.Button
-        Accessible.name: "Toggle effect automation editor"
-        Keys.onReturnPressed: automationDrawer.visible = !automationDrawer.visible
-        Keys.onSpacePressed: automationDrawer.visible = !automationDrawer.visible
-        Text { anchors.centerIn: parent; text: "AUTOMATION"; color: Theme.editorButtonInk; font.pixelSize: Theme.typeSmall }
+        Accessible.name: "Show this effect's automation on the arrangement"
+        function activate() {
+            if (editor.automation !== null && editor.automation.laneKey.length > 0)
+                editor.automationRequested(editor.automation.trackId, editor.automation.laneKey)
+        }
+        Keys.onReturnPressed: activate()
+        Keys.onSpacePressed: activate()
+        Text { anchors.centerIn: parent; text: "AUTOMATE"; color: Theme.editorButtonInk; font.pixelSize: Theme.typeSmall }
         MouseArea {
+            Tip {}
             id: automationArea
             anchors.fill: parent
             hoverEnabled: true
-            onClicked: automationDrawer.visible = !automationDrawer.visible
+            onClicked: automationToggle.activate()
         }
-    }
-
-    NativeSynthAutomationEditor {
-        id: automationDrawer
-        objectName: "nativeEffectAutomationEditor"
-        visible: false
-        automation: editor.automation
-        x: Math.max(0, parent.width - width)
-        y: Theme.spaceXs
-        width: Theme.editorDrawerWidth
-        height: Math.min(Theme.editorDrawerMaxHeight, parent.height - 2 * Theme.spaceXs)
-        z: 2
     }
 }

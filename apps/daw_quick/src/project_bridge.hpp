@@ -59,7 +59,6 @@ class ClipWarpController;
 class LoopTransport;
 struct WarpPlaybackObservation;
 class PluginAutomationController;
-class TrackAutomationController;
 class RouteCommands;
 class ComputerKeyboard;
 class TrackCommands;
@@ -168,7 +167,6 @@ class ProjectBridge final : public QObject {
   Q_PROPERTY(QObject* clipWarp READ clip_warp CONSTANT)
   Q_PROPERTY(QObject* loopTransport READ loop_transport CONSTANT)
   Q_PROPERTY(QObject* performanceTrace READ performance_trace CONSTANT)
-  Q_PROPERTY(QObject* trackAutomation READ track_automation CONSTANT)
   Q_PROPERTY(QObject* pluginAutomation READ plugin_automation CONSTANT)
   Q_PROPERTY(QObject* routeCommands READ route_commands CONSTANT)
   Q_PROPERTY(QObject* trackCommands READ track_commands CONSTANT)
@@ -345,7 +343,6 @@ public:
   [[nodiscard]] PerformanceTrace* performance_trace() const noexcept {
     return performance_trace_.get();
   }
-  [[nodiscard]] QObject* track_automation() const noexcept;
   [[nodiscard]] QObject* plugin_automation() const noexcept;
   [[nodiscard]] QObject* route_commands() const noexcept;
   [[nodiscard]] QObject* track_commands() const noexcept;
@@ -656,12 +653,6 @@ public:
   // Puts Crate on the track (unless it already plays it) with a bundled
   // starter sound as its one chop.
   Q_INVOKABLE void bind_starter_sound(const QString& track_id, int sound_index);
-  Q_INVOKABLE void set_send_automation_point(const QString& send_id, int zero_based_bar,
-                                             double value);
-  Q_INVOKABLE void set_send_automation_value(const QString& send_id, const QString& point_id,
-                                             double value);
-  Q_INVOKABLE void remove_send_automation_point(const QString& send_id, const QString& point_id);
-  Q_INVOKABLE void remove_send_automation_lane(const QString& send_id);
   Q_INVOKABLE void move_effect_insert(const QString& track_id, const QString& slot_id, int index);
   Q_INVOKABLE void set_effect_insert_enabled(const QString& track_id, const QString& slot_id,
                                              bool enabled);
@@ -1032,7 +1023,6 @@ private:
   std::unique_ptr<BrowserPreviewController> browser_preview_;
   std::unique_ptr<LoopTransport> loop_transport_;
   std::unique_ptr<PerformanceTrace> performance_trace_ = std::make_unique<PerformanceTrace>();
-  std::unique_ptr<TrackAutomationController> track_automation_;
   std::unique_ptr<PluginAutomationController> plugin_automation_;
   std::unique_ptr<RouteCommands> route_commands_;
   std::unique_ptr<TrackCommands> track_commands_;

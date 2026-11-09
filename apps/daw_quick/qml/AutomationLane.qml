@@ -9,8 +9,9 @@ import "shell"
 // points or the selection (one undo step), drag a segment to move it up or
 // down, Ctrl-drag between two points to bow that segment (back near
 // straight, it is a line again), Shift-drag a box to select, double-click or
-// Delete to remove, right-click a point for its curve, and with Draw on,
-// paint the envelope. Lines are straight unless a curve is chosen.
+// Delete to remove, right-click a point for its curve and exact value,
+// right-click the lane for its timebase and Clear, and with Draw on, paint
+// the envelope. Lines are straight unless a curve is chosen.
 Rectangle {
     id: lane
     objectName: "automationLane"
@@ -52,6 +53,13 @@ Rectangle {
     property string readout: ""
     property string menuPoint: ""
     property real menuX: 0
+    // The lane's own menu (right-click off the points): timebase and Clear.
+    property bool menuLane: false
+    // The menu point's saved value, as the parameter writes it.
+    readonly property string menuPointText: {
+        const point = points.find(candidate => candidate.id === menuPoint)
+        return point ? point.text : ""
+    }
     // A Ctrl-drag bowing one segment: its first point, and its bow.
     property int bendIndex: -1
     property real bendFrom: 0
@@ -307,15 +315,17 @@ Rectangle {
         onPressed: function(mouse) {
             lane.forceActiveFocus()
             lane.menuPoint = ""
+            lane.menuLane = false
             const bar = lane.barAt(mouse.x)
             const value = lane.valueAt(mouse.y)
             const free = (mouse.modifiers & Qt.AltModifier) !== 0
             const near = lane.nearestPoint(mouse.x, mouse.y)
             if (mouse.button === Qt.RightButton) {
-                if (near.length > 0) {
+                lane.menuX = mouse.x
+                if (near.length > 0)
                     lane.menuPoint = near
-                    lane.menuX = mouse.x
-                }
+                else
+                    lane.menuLane = lane.laneData !== null
                 return
             }
             lane.pressBar = bar
@@ -549,6 +559,119 @@ Rectangle {
                                                           curveChoice.modelData[0])
                             lane.menuPoint = ""
                         }
+                    }
+                }
+            }
+            // The point's exact value, typed in the parameter's own units.
+            Rectangle {
+                id: valueField
+                objectName: "automationPointValueField"
+                property bool refused: false
+                width: Theme.automationValueFieldWidth
+                height: Theme.automationChoiceHeight
+                radius: Theme.radiusMd
+                color: Theme.canvas
+                border.color: refused ? Theme.automationValueRefused
+                                      : valueInput.activeFocus ? Theme.focusRing : Theme.controlEdge
+                TextInput {
+                    id: valueInput
+                    objectName: "automationPointValueInput"
+                    anchors.fill: parent
+                    anchors.leftMargin: Theme.spaceSm
+                    anchors.rightMargin: Theme.spaceSm
+                    verticalAlignment: TextInput.AlignVCenter
+                    clip: true
+                    text: lane.menuPointText
+                    color: lane.textColor
+                    font.pixelSize: Theme.typeSmall
+                    font.family: lane.monoFamily
+                    selectByMouse: true
+                    activeFocusOnTab: true
+                    Accessible.role: Accessible.EditableText
+                    Accessible.name: "Point value"
+                    onTextEdited: valueField.refused = false
+                    function commit() {
+                        if (!lane.laneData)
+                            return
+                        const value = lane.controller.value_from_text(lane.trackId, lane.laneKey, text)
+                        if (value < 0) {
+                            valueField.refused = true
+                            return
+                        }
+                        lane.controller.set_point_value(lane.laneData.laneId, lane.menuPoint, value)
+                        lane.menuPoint = ""
+                    }
+                    Keys.onReturnPressed: commit()
+                    Keys.onEnterPressed: commit()
+                    Keys.onEscapePressed: lane.menuPoint = ""
+                }
+            }
+        }
+    }
+
+    // The lane's own menu: its timebase and Clear.
+    Rectangle {
+        objectName: "automationLaneMenu"
+        visible: lane.menuLane && lane.laneData !== null
+        x: Math.max(0, Math.min(lane.width - width, lane.menuX))
+        y: Theme.spaceXxs
+        width: laneRow.implicitWidth + Theme.spaceMd
+        height: lane.height - Theme.spaceXs
+        radius: Theme.radiusLg
+        color: Theme.panelRaised
+        border.color: Theme.controlEdge
+        z: 3
+        Row {
+            id: laneRow
+            anchors.centerIn: parent
+            spacing: Theme.spaceXs
+            Repeater {
+                model: lane.laneData
+                    ? [["timebase", "Timebase: " + lane.laneData.timebase,
+                        "Switch to " + (lane.laneData.timebase === "Musical" ? "Elapsed" : "Musical")
+                        + " timebase: points keep their times"],
+                       ["clear", "Clear lane", "Remove every point of this lane"]]
+                    : []
+                delegate: Rectangle {
+                    id: laneChoice
+                    required property var modelData
+                    objectName: laneChoice.modelData[0] === "clear" ? "automationClearLane"
+                                                                     : "automationTimebaseToggle"
+                    width: laneChoiceText.implicitWidth + Theme.spaceLg
+                    height: Theme.automationChoiceHeight
+                    radius: Theme.radiusMd
+                    color: laneChoiceArea.containsMouse ? Theme.automationChoiceHover : Theme.canvas
+                    Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.hover } }
+                    border.color: Theme.controlEdge
+                    activeFocusOnTab: true
+                    Accessible.role: Accessible.Button
+                    Accessible.name: laneChoice.modelData[2]
+                    function activate() {
+                        if (!lane.laneData)
+                            return
+                        if (laneChoice.modelData[0] === "clear") {
+                            lane.controller.clear_lane(lane.laneData.laneId)
+                            lane.selection = []
+                        } else {
+                            lane.controller.toggle_timebase(lane.laneData.laneId)
+                        }
+                        lane.menuLane = false
+                    }
+                    Keys.onReturnPressed: activate()
+                    Keys.onSpacePressed: activate()
+                    Text {
+                        id: laneChoiceText
+                        anchors.centerIn: parent
+                        text: laneChoice.modelData[1]
+                        color: lane.textColor
+                        font.pixelSize: Theme.typeSmall
+                    }
+                    MouseArea {
+                        Tip { text: laneChoice.modelData[2] }
+                        id: laneChoiceArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: laneChoice.activate()
                     }
                 }
             }

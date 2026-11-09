@@ -11,7 +11,6 @@ Rectangle {
     required property color dimColor
     required property color accentColor
     readonly property var automation: projectBridge.pluginAutomation.view
-    readonly property bool automationMode: Boolean(automation.active) && Boolean(automation.parameterSelected)
     color: panelColor
     border.color: lineColor
     // Editor values keyed by stable parameter ID, built once per editor change.
@@ -67,7 +66,7 @@ Rectangle {
     property var keyboardParameterId: undefined
 
     function restoreRowFocus() {
-        if (keyboardParameterId === undefined || automationMode)
+        if (keyboardParameterId === undefined)
             return
         // Recreated rows leave focus on the view, a row root or nowhere; any
         // other focused control means the user moved on.
@@ -96,7 +95,7 @@ Rectangle {
 
     Shortcut {
         sequences: [StandardKey.Find]
-        enabled: editorPanel.visible && !editorPanel.automationMode
+        enabled: editorPanel.visible
         onActivated: searchInput.forceActiveFocus()
     }
 
@@ -136,22 +135,6 @@ Rectangle {
             onClicked: editorPanel.editor.native ? projectBridge.vst3Editor.apply_vst3_insert_editor() : projectBridge.vst3Editor.discard_vst3_insert_editor()
         }
     }
-    PluginAutomationEditor {
-        objectName: "pluginAutomationEditor"
-        x: Theme.spaceLg
-        y: editorPanel.messageY
-        width: parent.width - 2 * Theme.spaceLg
-        height: parent.height - y - Theme.spaceMd
-        visible: editorPanel.automationMode
-        bridge: projectBridge
-        controller: projectBridge.pluginAutomation
-        view: editorPanel.automation
-        panelColor: editorPanel.panelColor
-        lineColor: editorPanel.lineColor
-        textColor: editorPanel.textColor
-        dimColor: editorPanel.dimColor
-        accentColor: editorPanel.accentColor
-    }
     // During playback the message distinguishes a saved edit from an audible one.
     Text {
         id: editorMessage
@@ -159,7 +142,6 @@ Rectangle {
         x: Theme.spaceLg
         y: editorPanel.messageY
         width: parent.width - 2 * Theme.spaceLg
-        visible: !editorPanel.automationMode
         wrapMode: Text.WordWrap
         text: editorPanel.editor.liveStatus || editorPanel.editor.message || ""
         color: editorPanel.editor.liveStatus ? editorPanel.textColor : editorPanel.dimColor
@@ -169,7 +151,6 @@ Rectangle {
         x: Theme.spaceLg
         y: editorPanel.browserTop
         width: parent.width - 2 * Theme.spaceLg
-        visible: !editorPanel.automationMode
         elide: Text.ElideRight
         text: (editorPanel.editor.editable ? "PARAMETERS · ENTER A VALUE FROM 0 TO 1"
                                            : "PARAMETER REFERENCES · READ ONLY")
@@ -184,7 +165,6 @@ Rectangle {
         width: parent.width - 2 * Theme.spaceLg
         height: editorPanel.searchHeight
         radius: Theme.radiusMd
-        visible: !editorPanel.automationMode
         color: editorPanel.panelColor
         border.color: searchInput.activeFocus ? editorPanel.accentColor : editorPanel.lineColor
         TextInput {
@@ -236,7 +216,6 @@ Rectangle {
         x: Theme.spaceLg
         y: editorPanel.browserTop + editorPanel.resultsOffset
         width: parent.width - 2 * Theme.spaceLg
-        visible: !editorPanel.automationMode
         elide: Text.ElideRight
         text: editorPanel.resultStatus
         color: editorPanel.automation.resultsLimited || parameterList.count === 0
@@ -252,7 +231,6 @@ Rectangle {
         y: editorPanel.browserTop + editorPanel.listOffset
         width: parent.width - 2 * Theme.spaceLg
         height: parent.height - y - Theme.spaceMd
-        visible: !editorPanel.automationMode
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         Accessible.role: Accessible.List
@@ -323,8 +301,8 @@ Rectangle {
                 border.color: activeFocus ? editorPanel.accentColor : editorPanel.lineColor
                 activeFocusOnTab: enabled
                 Accessible.role: Accessible.Button
-                Accessible.name: (parameterRow.lanePresent ? "Edit automation lane for "
-                                                           : "Create automation lane for ")
+                Accessible.name: (parameterRow.lanePresent ? "Show the automation lane on the arrangement for "
+                                                           : "Create an automation lane on the arrangement for ")
                                  + parameterRow.modelData.name
                 Accessible.description: parameterRow.modelData.note || ""
                 Accessible.onPressAction: activate()
@@ -335,8 +313,11 @@ Rectangle {
                 Keys.onDownPressed: editorPanel.focusRow(parameterRow.index + 1)
                 onActiveFocusChanged: parameterRow.reveal(activeFocus)
                 function activate() {
-                    if (enabled)
-                        projectBridge.pluginAutomation.automate(parameterRow.modelData.id)
+                    if (!enabled)
+                        return
+                    const key = projectBridge.pluginAutomation.automate(parameterRow.modelData.id)
+                    if (key.length > 0)
+                        projectBridge.arrangementAutomation.reveal(editorPanel.automation.trackId, key)
                 }
                 Text {
                     anchors.centerIn: parent
@@ -404,7 +385,7 @@ Rectangle {
         x: Theme.spaceLg
         y: parameterList.y + Theme.spaceMd
         width: parent.width - 2 * Theme.spaceLg
-        visible: !editorPanel.automationMode && parameterList.count === 0
+        visible: parameterList.count === 0
         wrapMode: Text.WordWrap
         horizontalAlignment: Text.AlignHCenter
         text: searchInput.text.trim().length > 0

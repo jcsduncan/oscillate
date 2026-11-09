@@ -27,23 +27,6 @@ void ClipAutomationController::accepted(const QString& action) {
   report_(QStringLiteral("%1 · revision %2").arg(action).arg(revision));
 }
 
-void ClipAutomationController::set_point(const QString& clip_id, int zero_based_bar, double value) {
-  auto* current = editable_session();
-  if (!current)
-    return;
-  const auto clip = project::ClipId::parse(clip_id.toStdString());
-  if (!clip || zero_based_bar < 0 || zero_based_bar >= 65'536 || !std::isfinite(value) ||
-      value < 0.0 || value > 4.0) {
-    report_(QStringLiteral("Clip channel point needs a bar from 1 to 65536 and level from 0 to 4"));
-    return;
-  }
-  const auto result =
-      current->automation().set_audio_clip_channel_level_point(clip.value(), zero_based_bar, value);
-  if (!result)
-    return failure(result.error());
-  accepted(QStringLiteral("Clip channel point added"));
-}
-
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): QML invokes both numeric values directly.
 void ClipAutomationController::set_point_at_fraction(const QString& clip_id, double fraction,
                                                      double value) {

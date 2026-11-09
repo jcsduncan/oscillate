@@ -63,7 +63,6 @@
     <file alias="InspectorWorkspace.qml">qml/InspectorWorkspace.qml</file>
     <file alias="NativeSynthSourceCard.qml">qml/NativeSynthSourceCard.qml</file>
     <file alias="NativeSynthEditorOverlay.qml">qml/NativeSynthEditorOverlay.qml</file>
-    <file alias="NativeSynthAutomationEditor.qml">qml/NativeSynthAutomationEditor.qml</file>
     <file alias="devicekit/Card.qml">qml/devicekit/Card.qml</file>
     <file alias="devicekit/CurveEditor.qml">qml/devicekit/CurveEditor.qml</file>
     <file alias="devicekit/Dropdown.qml">qml/devicekit/Dropdown.qml</file>
@@ -191,12 +190,10 @@
     <file alias="nova/NovaTheme.qml">qml/nova/NovaTheme.qml</file>
     <file alias="nova/NovaVoiceLanes.js">qml/nova/NovaVoiceLanes.js</file>
     <file alias="nova/NovaVoicesPage.qml">qml/nova/NovaVoicesPage.qml</file>
-    <file alias="AutomationTimebaseAction.qml">qml/AutomationTimebaseAction.qml</file>
     <file alias="ClipEditor.qml">qml/ClipEditor.qml</file>
     <file alias="ClipStrip.qml">qml/ClipStrip.qml</file>
     <file alias="ClipTempoPopover.qml">qml/ClipTempoPopover.qml</file>
     <file alias="AutomationLane.qml">qml/AutomationLane.qml</file>
-    <file alias="AutomationSegmentControls.qml">qml/AutomationSegmentControls.qml</file>
     <file alias="Vst3InsertEditorPanel.qml">qml/Vst3InsertEditorPanel.qml</file>
     <file alias="Vst3NativeEditorOverlay.qml">qml/Vst3NativeEditorOverlay.qml</file>
     <file alias="Vst3RecoveryPanel.qml">qml/Vst3RecoveryPanel.qml</file>
@@ -226,9 +223,6 @@
     <file alias="DockedBrowser.qml">qml/DockedBrowser.qml</file>
     <file alias="RoutingInspector.qml">qml/RoutingInspector.qml</file>
     <file alias="ChannelControls.qml">qml/ChannelControls.qml</file>
-    <file alias="ChannelAutomationEditor.qml">qml/ChannelAutomationEditor.qml</file>
-    <file alias="ChannelAutomationGraph.qml">qml/ChannelAutomationGraph.qml</file>
-    <file alias="PluginAutomationEditor.qml">qml/PluginAutomationEditor.qml</file>
     <file alias="LoopControls.qml">qml/LoopControls.qml</file>
     <file alias="WarpEditor.qml">qml/WarpEditor.qml</file>
     <file alias="WarpMarkerLane.qml">qml/WarpMarkerLane.qml</file>

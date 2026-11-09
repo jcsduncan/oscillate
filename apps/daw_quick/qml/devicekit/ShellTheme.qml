@@ -880,60 +880,9 @@ KitTheme {
     readonly property int automationDrawHeight: 18
     readonly property int automationChoiceHeight: 22
     readonly property color automationChoiceHover: "#22303c"
-    // The segment shape editor and its Bézier handles.
-    readonly property int automationSegmentHeight: 70
-    readonly property int automationSegmentBezierHeight: 120
-    readonly property int automationShapeButtonSize: 24
-    readonly property int automationShapeLabelX: 29
-    readonly property int automationPreviewX: 9
-    readonly property int automationPreviewY: 32
-    readonly property int automationPreviewHeight: 32
-    readonly property int automationHandleSize: 10
-    readonly property int automationHandleHitOutset: 5
-    readonly property int automationFieldWidth: 42
-    readonly property int automationFieldHeight: 25
-    readonly property int automationFieldLabelRise: 13
-    readonly property int automationFieldsY: 86
-    readonly property int automationFieldSpacing: 3
-    readonly property int automationApplyMinWidth: 27
-    readonly property int automationApplyReserve: 180
-    readonly property color automationApplyFill: "#234239"
-    // The automation timebase switch.
-    readonly property int automationTimebaseHeight: 20
-    readonly property color automationTimebaseFill: "#203c38"
-    readonly property color automationTimebaseUnavailable: "#30343b"
-    readonly property color automationTimebaseUnavailableEdge: "#51565d"
-    readonly property color automationTimebaseUnavailableText: "#90959d"
-    // The channel automation editor and graph.
-    readonly property int automationFieldRadius: 5
-    readonly property int automationFieldInset: 5
-    readonly property color automationActionDisabled: "#30343b"
-    readonly property color automationInactiveWarning: "#e0a03a"
-    readonly property color automationGraphGround: "#18231f"
-    readonly property int automationGraphPagerWidth: 18
-    readonly property int automationGraphPagerStride: 21
-    readonly property int automationGraphPlotTop: 24
-    readonly property int automationGraphHandleSize: 11
-    readonly property int automationGraphHandleRadius: 6
-    // The plugin automation editor.
-    readonly property int automationControlHeight: 24
-    readonly property int automationFieldTextInset: 5
-    // The native synth automation panel.
-    readonly property color synthAutomationGround: "#15202c"
-    readonly property color synthAutomationEdge: "#61758b"
-    readonly property color synthAutomationFocusEdge: "#8ac5ec"
-    readonly property color synthAutomationActionHover: "#35556a"
-    readonly property color synthAutomationAction: "#293b4c"
-    readonly property color synthAutomationActionUnavailable: "#25303a"
-    readonly property color synthAutomationText: "#e1edf7"
-    readonly property color synthAutomationTextUnavailable: "#8496a8"
-    readonly property color synthAutomationField: "#253545"
-    readonly property color synthAutomationLabel: "#dce9f5"
-    readonly property color synthAutomationSummary: "#aec4d8"
-    readonly property color synthAutomationWarning: "#f0bf80"
-    readonly property color synthAutomationOk: "#9bd5b3"
-    readonly property color synthAutomationNote: "#8199af"
-    readonly property int synthAutomationInset: 14
+    // A point's typed value in its menu, and the edge of a value it refused.
+    readonly property int automationValueFieldWidth: 76
+    readonly property color automationValueRefused: "#e0a03a"
     // -- end automation
     // END arrangement tokens
 
@@ -1336,15 +1285,12 @@ KitTheme {
     readonly property int editorFloatingTop: 76
     readonly property int editorDockedInset: 12
     readonly property int editorDockedBottomGap: 34
-    // The DOCK and AUTOMATION buttons, and the room between them.
+    // The DOCK and AUTOMATE buttons, and the room between them.
     readonly property int editorButtonHeight: 30
     readonly property int editorDockButtonWidth: 76
     readonly property int editorAutomationButtonWidth: 112
     readonly property int editorButtonGap: 120
     readonly property real editorButtonRadius: 5
-    // The automation drawer and its inset from the window's top and bottom.
-    readonly property int editorDrawerWidth: 300
-    readonly property int editorDrawerMaxHeight: 540
     // The effect window's sidechain strip.
     readonly property int editorSidechainHeight: 30
     readonly property int editorSidechainRightGap: 200

@@ -66,22 +66,34 @@ Rectangle {
     property int keyIndex: 0
     readonly property var keyPoint: keyIndex >= 0 && keyIndex < points.length ? points[keyIndex] : null
     activeFocusOnTab: expanded
-    Keys.onShortcutOverride: event => event.accepted = expanded
-        && [Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down, Qt.Key_Insert, Qt.Key_Delete].includes(event.key)
-    Keys.onLeftPressed: keyIndex = Math.max(0, keyIndex - 1)
-    Keys.onRightPressed: keyIndex = Math.min(points.length - 1, keyIndex + 1)
-    Keys.onUpPressed: if (keyPoint) controller.move_point(keyPoint.tick, keyPoint.bar, keyPoint.bpm + bpmStep)
-    Keys.onDownPressed: if (keyPoint) controller.move_point(keyPoint.tick, keyPoint.bar, keyPoint.bpm - bpmStep)
+    // Only the bare keys: modified ones stay the shell's shortcuts.
+    readonly property var editKeys: [Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down, Qt.Key_Insert, Qt.Key_Delete]
+    Keys.onShortcutOverride: event => event.accepted = expanded && event.modifiers === Qt.NoModifier
+        && editKeys.includes(event.key)
     Keys.onPressed: event => {
+        if (event.modifiers !== Qt.NoModifier || !editKeys.includes(event.key))
+            return
+        event.accepted = true
+        if (event.key === Qt.Key_Left) {
+            keyIndex = Math.max(0, keyIndex - 1)
+            return
+        }
+        if (event.key === Qt.Key_Right) {
+            keyIndex = Math.min(points.length - 1, keyIndex + 1)
+            return
+        }
         if (!keyPoint)
             return
+        if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+            controller.move_point(keyPoint.tick, keyPoint.bar,
+                                  keyPoint.bpm + (event.key === Qt.Key_Up ? bpmStep : -bpmStep))
+            return
+        }
         if (event.key === Qt.Key_Insert) {
             controller.add_point(Math.floor(keyPoint.bar + barEpsilon) + 1, keyPoint.bpm)
-            event.accepted = true
-        } else if (event.key === Qt.Key_Delete && !keyPoint.initial) {
+        } else if (!keyPoint.initial) {
             controller.remove_point(keyPoint.tick)
             keyIndex = Math.max(0, keyIndex - 1)
-            event.accepted = true
         }
     }
 

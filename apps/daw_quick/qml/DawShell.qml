@@ -30,7 +30,6 @@ Window {
     readonly property int browserWidth: projectBridge.projectOpen && currentView === "arrange" ? Theme.browserDockWidth : 0
     readonly property int inspectorWidth: inspectorWorkspace.inspectorWidth
     readonly property bool fxPanelActive: inspectorWorkspace.fxPanelActive
-    property alias selectedSendId: inspectorWorkspace.selectedSendId
     property alias exportFormatMenuOpen: exportDialog.exportFormatMenuOpen
     property alias exportRateMenuOpen: exportDialog.exportRateMenuOpen
     property alias exportMoreOpen: exportDialog.moreOpen
@@ -982,6 +981,9 @@ Window {
         automation: projectBridge.nativeSynthAutomation
         panelModel: projectBridge.nativeSynthPanelModel
         onCloseRequested: projectBridge.close_native_synth_editor()
+        onAutomationRequested: function(trackId, key) {
+            projectBridge.arrangementAutomation.reveal(trackId, key)
+        }
     }
 
     NativeEffectEditorOverlay {
@@ -999,6 +1001,15 @@ Window {
         context: projectBridge.nativeEffectContext
         panelModel: projectBridge.nativeEffectPanelModel
         onCloseRequested: projectBridge.close_native_effect_editor()
+        onAutomationRequested: function(trackId, key) {
+            projectBridge.arrangementAutomation.reveal(trackId, key)
+        }
+    }
+
+    // A device editor's Automate: the arrangement shows that lane.
+    Connections {
+        target: projectBridge.arrangementAutomation
+        function onRevealRequested() { shell.currentView = "arrange" }
     }
 
     // Opening a device panel brings the device chain forward in the dock.

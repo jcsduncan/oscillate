@@ -22,12 +22,11 @@ Rectangle {
     readonly property int inset: 23
     readonly property int effectsScrollThreshold: 200
     readonly property int sourceCardExtra: 180
-    readonly property int sendAutomationBlockHeight: 309
     readonly property int masterRoutingHeight: 110
     readonly property int routingBaseHeight: 352
     readonly property int routingSendRowHeight: 29
-    readonly property int routingTrackExtra: 405
-    readonly property int clipAnalysisHeight: 730
+    readonly property int routingTrackExtra: 95
+    readonly property int clipAnalysisHeight: 420
     readonly property int clipAnalysisGap: 20
     readonly property int baseContentHeight: 1520
     readonly property int headerRuleY: 64
@@ -52,31 +51,7 @@ Rectangle {
     readonly property int masterControlsHeight: 55
     readonly property int keyReviewY: 290
     readonly property int keyReviewHeight: 225
-    readonly property int clipAutomationY: 520
-    readonly property int clipAutomationHeight: 300
-    readonly property int warpY: 830
-    readonly property int sendAutomationY: 290
-    // Send gain automation rows.
-    readonly property int sendChoiceY: 19
-    readonly property int sendChoiceGap: 3
-    readonly property int sendControlHeight: 25
-    readonly property int sendFieldHeight: 26
-    readonly property int sendStatusY: 50
-    readonly property int sendFieldLabelY: 84
-    readonly property int sendFieldY: 99
-    readonly property int sendBarFieldWidth: 44
-    readonly property int sendGainFieldX: 53
-    readonly property int sendGainFieldWidth: 55
-    readonly property int sendAddPointX: 116
-    readonly property int sendPointsLabelY: 135
-    readonly property int sendPointRowY: 154
-    readonly property int sendPointRowPitch: 30
-    readonly property int sendPointRowHeight: 27
-    readonly property int sendPointTextRight: 95
-    readonly property int sendPointValueRight: 88
-    readonly property int sendPointRemoveSize: 27
-    readonly property int sendClearLaneY: 280
-    readonly property int sendClearLaneWidth: 85
+    readonly property int warpY: 520
     // Quick actions, below everything else.
     readonly property int quickActionsGap: 30
     readonly property int quickActionsHeight: 1490
@@ -89,7 +64,6 @@ Rectangle {
     readonly property int actionHeight: 38
     readonly property int exportGap: 10
     readonly property bool fxPanelActive: inspectorFlickable.contentY > effectsScrollThreshold
-    property string selectedSendId: ""
     // The export dialog lives in the shell; this quick action opens it.
     signal exportRequested()
     readonly property var currentInsertChain: {
@@ -105,17 +79,6 @@ Rectangle {
         && selectedTrack < bridge.tracks.length
         && bridge.tracks[selectedTrack].nativeSourceReady
     readonly property int sourcePanelOffset: nativeSynthTrackSelected ? sourceCardExtra : 0
-    readonly property var currentSend: {
-        const sends = currentRouteTrack.sends || [];
-        return sends.find(send => send.id === selectedSendId) || sends[0] || null;
-    }
-    readonly property var currentSendAutomation: currentSend ? currentSend.automation : ({
-            present: false,
-            timebase: "Musical",
-            pointCount: 0,
-            points: []
-        })
-    readonly property int sendAutomationHeight: currentSend ? sendAutomationBlockHeight : 0
     readonly property int routingInspectorHeight: selectedTrack === -2 ? masterRoutingHeight : routingBaseHeight + (currentRouteTrack.sendCount || 0) * routingSendRowHeight + (currentRouteTrack.id ? routingTrackExtra : 0)
     readonly property int analysisOrAutomationHeight: inspector.selectedAudioClip() ? clipAnalysisHeight + warpEditor.implicitHeight + clipAnalysisGap : 0
     color: panel
@@ -124,7 +87,6 @@ Rectangle {
             inspector.bridge.vst3Editor.apply_vst3_insert_editor();
         else
             inspector.bridge.vst3Editor.discard_vst3_insert_editor();
-        selectedSendId = "";
         showSection(selectedTrack === -2);
     }
     function selectedAudioClip() {
@@ -147,7 +109,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         contentWidth: width
-        contentHeight: inspector.baseContentHeight + inspector.sourcePanelOffset + inspector.routingInspectorHeight + inspector.analysisOrAutomationHeight + inspector.sendAutomationHeight
+        contentHeight: inspector.baseContentHeight + inspector.sourcePanelOffset + inspector.routingInspectorHeight + inspector.analysisOrAutomationHeight
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         Rectangle {
@@ -317,7 +279,7 @@ Rectangle {
             textDim: inspector.textDim
             accent: inspector.accent
         }
-KeyReviewPanel {
+        KeyReviewPanel {
             objectName: "keyReviewPanel"
             visible: inspector.selectedAudioClip() !== null
             x: inspector.inset
@@ -330,22 +292,6 @@ KeyReviewPanel {
             accent: inspector.accent
             amber: inspector.amber
             lineColor: inspector.line
-        }
-        ChannelAutomationEditor {
-            objectName: "clipChannelAutomationEditor"
-            visible: inspector.selectedAudioClip() !== null
-            x: inspector.inset
-            y: inspector.clipAutomationY + inspector.sourcePanelOffset + inspector.routingInspectorHeight
-            width: parent.width - 2 * inspector.inset
-            height: inspector.clipAutomationHeight
-            bridge: inspector.bridge
-            track: inspector.currentRouteTrack
-            clip: inspector.selectedAudioClip()
-            panelRaised: inspector.panelRaised
-            lineColor: inspector.line
-            textMain: inspector.textMain
-            textDim: inspector.textDim
-            accent: inspector.accent
         }
         WarpEditor {
             id: warpEditor
@@ -364,287 +310,8 @@ KeyReviewPanel {
             amber: inspector.amber
         }
         Item {
-            id: sendAutomationEditor
-            objectName: "sendAutomationEditor"
-            visible: inspector.currentSend !== null
-            x: inspector.inset
-            y: inspector.sendAutomationY + inspector.sourcePanelOffset + inspector.routingInspectorHeight + inspector.analysisOrAutomationHeight
-            width: parent.width - 2 * inspector.inset
-            height: inspector.sendAutomationHeight
-            Text {
-                text: "SEND GAIN AUTOMATION"
-                color: inspector.textDim
-                font.pixelSize: Theme.typeSmall
-                font.bold: true
-                font.letterSpacing: Theme.trackingLg
-            }
-            AutomationTimebaseAction {
-                objectName: "sendAutomationTimebase"
-                x: parent.width - width
-                bridge: inspector.bridge
-                laneId: inspector.currentSendAutomation.laneId || ""
-                timebase: inspector.currentSendAutomation.timebase
-                accentColor: inspector.accent
-            }
-            Repeater {
-                model: inspector.currentRouteTrack.sends || []
-                delegate: Rectangle {
-                    id: sendChoice
-                    objectName: "sendAutomationChoice"
-                    required property var modelData
-                    required property int index
-                    x: index * (sendAutomationEditor.width / Math.max(1, inspector.currentRouteTrack.sends.length))
-                    y: inspector.sendChoiceY
-                    width: sendAutomationEditor.width / Math.max(1, inspector.currentRouteTrack.sends.length) - inspector.sendChoiceGap
-                    height: inspector.sendControlHeight
-                    radius: Theme.controlRadius
-                    color: inspector.currentSend && inspector.currentSend.id === modelData.id ? inspector.accent : inspector.panelRaised
-                    border.color: activeFocus ? inspector.accent : inspector.line
-                    activeFocusOnTab: true
-                    Accessible.role: Accessible.Button
-                    Accessible.name: "Edit send gain automation to " + modelData.destinationName
-                    function activate() {
-                        inspector.selectedSendId = modelData.id;
-                    }
-                    Keys.onReturnPressed: activate()
-                    Keys.onSpacePressed: activate()
-                    Text {
-                        anchors.centerIn: parent
-                        width: parent.width - Theme.spaceMd
-                        elide: Text.ElideRight
-                        horizontalAlignment: Text.AlignHCenter
-                        text: sendChoice.modelData.destinationName
-                        color: inspector.currentSend && inspector.currentSend.id === sendChoice.modelData.id ? Theme.onAccentText : inspector.textMain
-                        font.pixelSize: Theme.typeCaption
-                    }
-                    MouseArea {
-                        Tip {}
-                        anchors.fill: parent
-                        onClicked: sendChoice.activate()
-                    }
-                }
-            }
-            Text {
-                y: inspector.sendStatusY
-                width: parent.width
-                wrapMode: Text.WordWrap
-                text: !inspector.bridge.playbackStatusIsDefault ? inspector.bridge.playbackStatus : "Save to keep edits. Start playback to hear this send lane."
-                color: inspector.textDim
-                font.pixelSize: Theme.typeCaption
-            }
-            Text {
-                x: 0
-                y: inspector.sendFieldLabelY
-                text: "BAR"
-                color: inspector.textDim
-                font.pixelSize: Theme.typeCaption
-            }
-            Rectangle {
-                x: 0
-                y: inspector.sendFieldY
-                width: inspector.sendBarFieldWidth
-                height: inspector.sendFieldHeight
-                radius: Theme.controlRadius
-                color: inspector.panelRaised
-                border.color: inspector.line
-                TextInput {
-                    id: sendAutomationBarInput
-                    objectName: "sendAutomationBarInput"
-                    anchors.fill: parent
-                    anchors.margins: Theme.fieldPadding
-                    text: "1"
-                    color: inspector.textMain
-                    font.pixelSize: Theme.typeBody
-                    validator: IntValidator {
-                        bottom: 1
-                        top: 16
-                    }
-                    activeFocusOnTab: true
-                    Accessible.name: "Send automation bar, 1 to 16"
-                }
-            }
-            Text {
-                x: inspector.sendGainFieldX
-                y: inspector.sendFieldLabelY
-                text: "GAIN"
-                color: inspector.textDim
-                font.pixelSize: Theme.typeCaption
-            }
-            Rectangle {
-                x: inspector.sendGainFieldX
-                y: inspector.sendFieldY
-                width: inspector.sendGainFieldWidth
-                height: inspector.sendFieldHeight
-                radius: Theme.controlRadius
-                color: inspector.panelRaised
-                border.color: inspector.line
-                TextInput {
-                    id: sendAutomationGainInput
-                    objectName: "sendAutomationGainInput"
-                    anchors.fill: parent
-                    anchors.margins: Theme.fieldPadding
-                    text: "1.00"
-                    color: inspector.textMain
-                    font.pixelSize: Theme.typeBody
-                    validator: DoubleValidator {
-                        bottom: 0
-                        top: 4
-                        decimals: 2
-                        locale: "C"
-                    }
-                    activeFocusOnTab: true
-                    Accessible.name: "Send automation gain, 0 to 4"
-                }
-            }
-            Rectangle {
-                id: sendAutomationAddPoint
-                objectName: "sendAutomationAddPoint"
-                x: inspector.sendAddPointX
-                y: inspector.sendFieldY
-                width: parent.width - inspector.sendAddPointX
-                height: inspector.sendFieldHeight
-                radius: Theme.controlRadius
-                color: enabled ? inspector.accent : inspector.panelRaised
-                enabled: inspector.currentSend !== null && (inspector.currentSendAutomation.pointCount < 4 || inspector.currentSendAutomation.points.some(point => point.bar === Number(sendAutomationBarInput.text) - 1)) && sendAutomationBarInput.acceptableInput && sendAutomationBarInput.text.length > 0 && sendAutomationGainInput.acceptableInput && sendAutomationGainInput.text.length > 0
-                activeFocusOnTab: enabled
-                Accessible.role: Accessible.Button
-                Accessible.name: "Add send gain point"
-                function activate() {
-                    inspector.bridge.set_send_automation_point(inspector.currentSend.id, Number(sendAutomationBarInput.text) - 1, Number(sendAutomationGainInput.text));
-                }
-                Keys.onReturnPressed: activate()
-                Keys.onSpacePressed: activate()
-                Text {
-                    anchors.centerIn: parent
-                    text: "ADD POINT"
-                    color: parent.enabled ? Theme.onAccentText : inspector.textDim
-                    font.pixelSize: Theme.typeCaption
-                    font.bold: true
-                }
-                MouseArea {
-                    Tip {}
-                    anchors.fill: parent
-                    enabled: parent.enabled
-                    onClicked: sendAutomationAddPoint.activate()
-                }
-            }
-            Text {
-                y: inspector.sendPointsLabelY
-                text: inspector.currentSendAutomation.pointCount > 4 ? "Showing first four of " + inspector.currentSendAutomation.pointCount + " points" : inspector.currentSendAutomation.pointCount + " POINT" + (inspector.currentSendAutomation.pointCount === 1 ? "" : "S")
-                color: inspector.textDim
-                font.pixelSize: Theme.typeCaption
-            }
-            Repeater {
-                model: inspector.currentSendAutomation.points
-                delegate: Item {
-                    id: sendPointRow
-                    objectName: "sendAutomationPointRow"
-                    required property var modelData
-                    required property int index
-                    y: inspector.sendPointRowY + index * inspector.sendPointRowPitch
-                    width: sendAutomationEditor.width
-                    height: inspector.sendPointRowHeight
-                    Text {
-                        width: parent.width - inspector.sendPointTextRight
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: sendPointRow.modelData.position
-                        color: inspector.textMain
-                        elide: Text.ElideRight
-                        font.pixelSize: Theme.typeSmall
-                    }
-                    Rectangle {
-                        x: parent.width - inspector.sendPointValueRight
-                        width: inspector.sendGainFieldWidth
-                        height: inspector.sendControlHeight
-                        radius: Theme.controlRadius
-                        color: inspector.panelRaised
-                        border.color: inspector.line
-                        TextInput {
-                            objectName: "sendAutomationValueInput"
-                            anchors.fill: parent
-                            anchors.margins: Theme.fieldPadding
-                            text: Number(sendPointRow.modelData.value).toFixed(2)
-                            color: inspector.textMain
-                            font.pixelSize: Theme.typeSmall
-                            validator: DoubleValidator {
-                                bottom: 0
-                                top: 4
-                                decimals: 2
-                                locale: "C"
-                            }
-                            activeFocusOnTab: true
-                            Accessible.name: "Send gain at " + sendPointRow.modelData.position
-                            onEditingFinished: {
-                                if (acceptableInput && text.length > 0)
-                                    inspector.bridge.set_send_automation_value(inspector.currentSend.id, sendPointRow.modelData.id, Number(text));
-                            }
-                        }
-                    }
-                    Rectangle {
-                        objectName: "sendAutomationRemovePoint"
-                        x: parent.width - inspector.sendPointRemoveSize
-                        width: inspector.sendPointRemoveSize
-                        height: inspector.sendControlHeight
-                        radius: Theme.controlRadius
-                        color: inspector.panelRaised
-                        border.color: activeFocus ? inspector.accent : inspector.line
-                        activeFocusOnTab: true
-                        Accessible.role: Accessible.Button
-                        Accessible.name: "Remove send point at " + sendPointRow.modelData.position
-                        function activate() {
-                            inspector.bridge.remove_send_automation_point(inspector.currentSend.id, sendPointRow.modelData.id);
-                        }
-                        Keys.onReturnPressed: activate()
-                        Keys.onSpacePressed: activate()
-                        Text {
-                            anchors.centerIn: parent
-                            text: "×"
-                            color: inspector.textMain
-                            font.pixelSize: Theme.typeSubtitle
-                        }
-                        MouseArea {
-                            Tip {}
-                            anchors.fill: parent
-                            onClicked: parent.activate()
-                        }
-                    }
-                }
-            }
-            Rectangle {
-                id: sendAutomationClearLane
-                objectName: "sendAutomationClearLane"
-                visible: inspector.currentSendAutomation.present
-                y: inspector.sendClearLaneY
-                width: inspector.sendClearLaneWidth
-                height: inspector.sendControlHeight
-                radius: Theme.controlRadius
-                color: inspector.panelRaised
-                border.color: activeFocus ? inspector.accent : inspector.line
-                activeFocusOnTab: visible
-                Accessible.role: Accessible.Button
-                Accessible.name: "Clear send automation lane"
-                function activate() {
-                    sendAutomationBarInput.forceActiveFocus();
-                    inspector.bridge.remove_send_automation_lane(inspector.currentSend.id);
-                }
-                Keys.onReturnPressed: activate()
-                Keys.onSpacePressed: activate()
-                Text {
-                    anchors.centerIn: parent
-                    text: "CLEAR LANE"
-                    color: inspector.textDim
-                    font.pixelSize: Theme.typeCaption
-                }
-                MouseArea {
-                    Tip {}
-                    anchors.fill: parent
-                    onClicked: sendAutomationClearLane.activate()
-                }
-            }
-        }
-        Item {
             x: 0
-            y: inspector.sourcePanelOffset + inspector.routingInspectorHeight + inspector.quickActionsGap + inspector.analysisOrAutomationHeight + inspector.sendAutomationHeight
+            y: inspector.sourcePanelOffset + inspector.routingInspectorHeight + inspector.quickActionsGap + inspector.analysisOrAutomationHeight
             width: parent.width
             height: inspector.quickActionsHeight
             Rectangle {

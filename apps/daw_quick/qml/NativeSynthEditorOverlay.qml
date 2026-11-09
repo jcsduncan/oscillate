@@ -8,7 +8,10 @@ FloatingDeviceFrame {
     objectName: "nativeSynthEditorOverlay"
     required property var bridge
     required property var controller
+    // {trackId, laneKey} of the device on the arrangement, or null.
     required property var automation
+    // Show the lane `key` of track `trackId` on the arrangement.
+    signal automationRequested(string trackId, string key)
     // The open panel's own model (bridge.nativeSynthPanelModel: Anvil's
     // waveform preview, Knock's pads), null for engines without one.
     property var panelModel: null
@@ -112,7 +115,6 @@ FloatingDeviceFrame {
     minimumSurfaceHeight: minimumWindowHeight
     visible: controller !== null
     onControllerChanged: {
-        automationDrawer.visible = false
         loadPanel()
     }
     // The size and zoom last chosen, from the workspace preferences.
@@ -228,37 +230,33 @@ FloatingDeviceFrame {
         }
     }
 
+    // Automation is drawn on the arrangement (ADR-0051): this opens the
+    // device's lane there, on its track.
     Rectangle {
         id: automationToggle
-        objectName: "nativeSynthAutomationToggle"
+        objectName: "nativeSynthShowAutomation"
+        visible: editor.automation !== null
         x: Math.max(0, parent.width - width)
         y: parent.height - height
         width: Theme.editorAutomationButtonWidth; height: Theme.editorButtonHeight; radius: Theme.editorButtonRadius
         color: automationArea.containsMouse ? editor.buttonHoverColor : editor.buttonColor
         border.color: activeFocus ? editor.accentColor : editor.buttonBorderColor
-        activeFocusOnTab: editor.visible
+        activeFocusOnTab: editor.visible && visible
         Accessible.role: Accessible.Button
-        Accessible.name: "Toggle synthesizer automation editor"
-        Keys.onReturnPressed: automationDrawer.visible = !automationDrawer.visible
-        Keys.onSpacePressed: automationDrawer.visible = !automationDrawer.visible
-        Text { anchors.centerIn: parent; text: "AUTOMATION"; color: editor.textColor; font.pixelSize: Theme.typeSmall }
+        Accessible.name: "Show this synthesizer's automation on the arrangement"
+        function activate() {
+            if (editor.automation !== null && editor.automation.laneKey.length > 0)
+                editor.automationRequested(editor.automation.trackId, editor.automation.laneKey)
+        }
+        Keys.onReturnPressed: activate()
+        Keys.onSpacePressed: activate()
+        Text { anchors.centerIn: parent; text: "AUTOMATE"; color: editor.textColor; font.pixelSize: Theme.typeSmall }
         MouseArea {
+            Tip {}
             id: automationArea
             anchors.fill: parent
             hoverEnabled: true
-            onClicked: automationDrawer.visible = !automationDrawer.visible
+            onClicked: automationToggle.activate()
         }
-    }
-
-    NativeSynthAutomationEditor {
-        id: automationDrawer
-        objectName: "nativeSynthAutomationEditor"
-        visible: false
-        automation: editor.automation
-        x: Math.max(0, parent.width - width)
-        y: Theme.spaceXs
-        width: Theme.editorDrawerWidth
-        height: Math.min(Theme.editorDrawerMaxHeight, parent.height - 2 * Theme.spaceXs)
-        z: 2
     }
 }

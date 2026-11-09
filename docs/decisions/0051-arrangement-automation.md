@@ -1,6 +1,6 @@
 # ADR-0051 — Automation drawn on the arrangement
 
-**Status:** Accepted and implemented. The inspector automation forms remain until the lanes have replaced every use. **Date:** 21 October 2026.
+**Status:** Accepted and implemented. The lanes are the only automation editor. **Date:** 21 October 2026.
 
 ## Context
 
@@ -39,12 +39,13 @@ Its `curve()` samples the curve exactly as it plays, using the engine's shapes i
   - Dragging a line between points moves that segment up or down.
   - Shift-drag box-selects.
   - Double-click or Delete removes.
-  - Right-click picks a point's curve: Line, Ease, Exp, Slow or Step.
+  - Right-click picks a point's curve: Line, Ease, Exp, Slow or Step, and takes its exact value, typed in the parameter's own units ("−6 dB", "L 20", "1.2 kHz", a choice's name).
+  - Right-click off the points switches the lane's timebase (Musical follows tempo changes; Elapsed keeps clock time, points keeping their times) or clears it.
   - **B** (or ✎ Draw) paints the envelope.
 - A gesture previews locally and commits once on release, so each gesture is exactly one undo step.
 - Only the visible bars are drawn, keeping a 3000-bar set responsive.
 
 ## Consequences
 - Automation is edited where the music is, with one undo step per gesture.
-- The inspector automation editors are now redundant. They will be removed once the lanes cover the clip-automation cases too.
+- The inspector and device-editor automation forms are gone. A device editor's Automate shows that parameter's lane over its track's clips; a clip's level envelope carries its own tools for an exact level, the timebase and Clear.
 - Which lanes are shown is view state, held per session in `ArrangementWorkspace` and not saved with the project.

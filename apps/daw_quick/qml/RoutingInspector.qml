@@ -40,8 +40,6 @@ Item {
     readonly property int sidechainHintY: 218
     readonly property int channelControlsY: 250
     readonly property int channelControlsHeight: 100
-    readonly property int automationY: 362
-    readonly property int automationHeight: 300
     readonly property var mainOptions: {
         const options = [{ id: "", name: "Master", kind: "master" }]
         for (const target of destinations) {
@@ -322,20 +320,6 @@ Item {
         y: routing.channelControlsY + (routing.track.sendCount || 0) * routing.sendRowPitch
         width: routing.width
         height: routing.channelControlsHeight
-        bridge: routing.bridge
-        track: routing.track
-        panelRaised: routing.panelRaised
-        lineColor: routing.lineColor
-        textMain: routing.textMain
-        textDim: routing.textDim
-        accent: routing.accent
-    }
-    ChannelAutomationEditor {
-        objectName: "channelAutomationEditor"
-        visible: routing.track.id !== ""
-        y: routing.automationY + (routing.track.sendCount || 0) * routing.sendRowPitch
-        width: routing.width
-        height: routing.automationHeight
         bridge: routing.bridge
         track: routing.track
         panelRaised: routing.panelRaised

@@ -58,7 +58,7 @@ never reused. 0070 was never assigned.
 | 0048 | [Parallel real-time rendering](0048-parallel-audio-rendering.md) | Superseded in part by ADR-0110 (default worker count); otherwise accepted and implemented |
 | 0049 | [Live graph switching and latency handover](0049-live-graph-switching.md) | Accepted and implemented; every chain switches live (ADR-0050); held path removed (ADR-0094) |
 | 0050 | [One chain per track](0050-one-chain-per-track.md) | Accepted and implemented; export has two VST3 renderers; superseded in part by ADR-0093 for MIDI while playing |
-| 0051 | [Automation drawn on the arrangement](0051-arrangement-automation.md) | Accepted and implemented; inspector forms to retire |
+| 0051 | [Automation drawn on the arrangement](0051-arrangement-automation.md) | Accepted and implemented |
 | 0052 | [Constant-tempo and key analysis](0052-constant-tempo-and-key-analysis.md) | Accepted; implemented; downbeat rule in ADR-0053 |
 | 0053 | [The clip strip](0053-clip-strip.md) | Accepted; implemented; warp markers on the arrangement and the tempo lane in ADR-0112 |
 | 0054 | [Live controls, granular UI updates and meters on their own clock](0054-live-controls-and-granular-updates.md) | Accepted; implemented |

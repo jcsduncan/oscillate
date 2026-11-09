@@ -194,6 +194,93 @@ int edit_arrangement_automation(oscillate::quick::ProjectBridge& bridge, QQuickW
     std::cerr << "Arrangement automation smoke: dragging a bow back did not straighten it\n";
     return 1;
   }
+  // Right-click a point: its exact value, typed in the parameter's units.
+  QTest::mouseClick(window, Qt::RightButton, {}, lane_point(lane, 5.0, 0.2));
+  QCoreApplication::processEvents();
+  auto* value_input = find_item(window->contentItem(), QStringLiteral("automationPointValueInput"));
+  if (!value_input || !value_input->isVisible()) {
+    std::cerr << "Arrangement automation smoke: right-clicking a point offered no value field\n";
+    return 1;
+  }
+  const auto before_value = bridge.revision();
+  value_input->setProperty("text", QStringLiteral("nonsense"));
+  QMetaObject::invokeMethod(value_input, "commit");
+  if (bridge.revision() != before_value) {
+    std::cerr << "Arrangement automation smoke: an unreadable value changed the lane\n";
+    return 1;
+  }
+  value_input->setProperty("text", QStringLiteral("-6 dB"));
+  QMetaObject::invokeMethod(value_input, "commit");
+  QCoreApplication::processEvents();
+  points = level_points(bridge, track_id);
+  if (bridge.revision() != before_value + 1 ||
+      points.front().toMap().value(QStringLiteral("text")).toString() !=
+          QStringLiteral("−6.0 dB") ||
+      !near(points.front().toMap().value(QStringLiteral("bar")).toDouble(), 5.0, 1e-9)) {
+    std::cerr << "Arrangement automation smoke: a typed value was not one edit in place\n";
+    return 1;
+  }
+  bridge.undo();
+  if (!near(
+          level_points(bridge, track_id).front().toMap().value(QStringLiteral("value")).toDouble(),
+          0.2, 0.02)) {
+    std::cerr << "Arrangement automation smoke: undo did not restore the typed point\n";
+    return 1;
+  }
+  // Right-click the lane off its points: the timebase and Clear.
+  QTest::mouseClick(window, Qt::RightButton, {}, lane_point(lane, 8.5, 0.9));
+  QCoreApplication::processEvents();
+  auto* timebase = find_item(window->contentItem(), QStringLiteral("automationTimebaseToggle"));
+  if (!timebase || !timebase->isVisible()) {
+    std::cerr << "Arrangement automation smoke: the lane menu has no timebase switch\n";
+    return 1;
+  }
+  const auto before_timebase = bridge.revision();
+  QMetaObject::invokeMethod(timebase, "activate");
+  QCoreApplication::processEvents();
+  if (bridge.revision() != before_timebase + 1 || level_points(bridge, track_id).size() != 2) {
+    std::cerr << "Arrangement automation smoke: the timebase switch was not one edit\n";
+    return 1;
+  }
+  // On the elapsed lane, a typed value keeps the point where it is.
+  {
+    constexpr double elapsed_value = 0.3;
+    constexpr double place_tolerance = 1e-6;
+    const auto before = level_points(bridge, track_id).front().toMap();
+    const auto before_elapsed_value = bridge.revision();
+    controller->set_point_value(lane_id, before.value(QStringLiteral("id")).toString(),
+                                elapsed_value);
+    QCoreApplication::processEvents();
+    const auto after = level_points(bridge, track_id).front().toMap();
+    if (bridge.revision() != before_elapsed_value + 1 ||
+        !near(after.value(QStringLiteral("bar")).toDouble(),
+              before.value(QStringLiteral("bar")).toDouble(), place_tolerance) ||
+        !near(after.value(QStringLiteral("value")).toDouble(), elapsed_value, place_tolerance)) {
+      std::cerr << "Arrangement automation smoke: a typed value moved an elapsed lane's point\n";
+      return 1;
+    }
+    bridge.undo();
+  }
+  bridge.undo();
+  QTest::mouseClick(window, Qt::RightButton, {}, lane_point(lane, 8.5, 0.9));
+  QCoreApplication::processEvents();
+  auto* clear = find_item(window->contentItem(), QStringLiteral("automationClearLane"));
+  if (!clear || !clear->isVisible()) {
+    std::cerr << "Arrangement automation smoke: the lane menu has no Clear\n";
+    return 1;
+  }
+  const auto before_clear = bridge.revision();
+  QMetaObject::invokeMethod(clear, "activate");
+  QCoreApplication::processEvents();
+  if (bridge.revision() != before_clear + 1 || !level_points(bridge, track_id).isEmpty()) {
+    std::cerr << "Arrangement automation smoke: Clear did not empty the lane in one edit\n";
+    return 1;
+  }
+  bridge.undo();
+  if (level_points(bridge, track_id).size() != 2) {
+    std::cerr << "Arrangement automation smoke: undo did not bring the cleared lane back\n";
+    return 1;
+  }
   QTest::keyClick(window, Qt::Key_A);
   QCoreApplication::processEvents();
   if (find_item(window->contentItem(), QStringLiteral("arrangementAutomationOverlay"))) {

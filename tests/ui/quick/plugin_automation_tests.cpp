@@ -1,6 +1,6 @@
+#include "../../../apps/daw_quick/src/arrangement_automation_controller.hpp"
 #include "../../../apps/daw_quick/src/plugin_automation_controller.hpp"
 #include "../../../apps/daw_quick/src/project_bridge.hpp"
-#include "../../../apps/daw_quick/src/track_automation_controller.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/plugins/vst3_scan.hpp"
 #include "oscillate/test/check.hpp"
@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -193,12 +194,29 @@ QVariantMap parameter_entry(const QVariantMap& view, quint32 id) {
   return {};
 }
 
-QVariantList lane_points(const QVariantMap& view) {
-  return view.value(QStringLiteral("lane")).toMap().value(QStringLiteral("points")).toList();
+// A lane on the arrangement, by its key ("vst3:<plugin>:<parameter>"), or
+// empty when the track has none.
+QVariantMap arrangement_lane(quick::ProjectBridge& bridge, const QString& key) {
+  auto* lanes =
+      qobject_cast<quick::ArrangementAutomationController*>(bridge.arrangement_automation());
+  for (const auto& entry : lanes->tracks()) {
+    for (const auto& lane : entry.toMap().value(QStringLiteral("lanes")).toList()) {
+      if (lane.toMap().value(QStringLiteral("key")).toString() == key)
+        return lane.toMap();
+    }
+  }
+  return {};
 }
 
-QString render_state(const QVariantMap& view) {
-  return view.value(QStringLiteral("renderState")).toString();
+QVariantList arrangement_points(quick::ProjectBridge& bridge, const QString& key) {
+  return arrangement_lane(bridge, key).value(QStringLiteral("points")).toList();
+}
+
+// The overlay the shell shows over a track's clips: its lane key, or empty.
+QString overlay_key(QQuickWindow& window) {
+  auto* overlay = find_item(window.contentItem(), QStringLiteral("arrangementAutomationOverlay"));
+  return overlay != nullptr && overlay->isVisible() ? overlay->property("laneKey").toString()
+                                                    : QString();
 }
 
 std::unique_ptr<QQmlApplicationEngine> load_shell(quick::ProjectBridge& bridge) {
@@ -236,6 +254,9 @@ const project::AutomationLane* instrument_lane(const project::Snapshot& snapshot
 }
 
 void effect_parameter_lane_contract() {
+  // The value typed into a lane point, read back on reopen.
+  constexpr double typed_value = 0.4;
+  constexpr double typed_tolerance = 1e-9;
   Directory directory;
   oscillate::plugins::Vst3Scanner scanner(VST3_HELPER_PATH);
   const auto scanned = scanner.scan(VST3_CONNECTED_BUNDLE);
@@ -264,7 +285,7 @@ void effect_parameter_lane_contract() {
   const auto track_id = QString::fromStdString(track.to_string());
   const auto slot_id = QString::fromStdString(slot.to_string());
 
-  QString lane_id;
+  QString lane_id_saved;
   QString kept_point;
   {
     auto bridge = held_bridge(directory.root());
@@ -291,103 +312,59 @@ void effect_parameter_lane_contract() {
             "verified effect parameter was not offered by name with its saved baseline");
 
     const auto initial_revision = bridge->revision();
-    controller->automate(999);
-    controller->set_point(0, 0.5);
-    require(bridge->revision() == initial_revision,
-            "unknown parameter or unselected lane changed the project");
+    require(controller->automate(999).isEmpty() && bridge->revision() == initial_revision,
+            "an unknown parameter changed the project");
+    // AUTO creates the lane from the saved baseline and shows it on the
+    // arrangement, where it is edited (ADR-0051); the panel has no form.
+    require(find_item(window.contentItem(), QStringLiteral("pluginAutomationEditor")) == nullptr,
+            "the VST3 panel still carries an automation form");
+    const auto key =
+        QStringLiteral("vst3:%1:101").arg(QString::fromStdString(plugin.value().to_string()));
     activate(require_item(window, QStringLiteral("vst3ParameterAutomate_101")));
-    view = controller->view();
-    require(bridge->revision() == initial_revision + 1 &&
-                view.value(QStringLiteral("parameterSelected")).toBool() &&
-                lane_points(view).size() == 1 &&
-                lane_points(view).front().toMap().value(QStringLiteral("value")).toDouble() ==
-                    0.25 &&
-                lane_points(view).front().toMap().value(QStringLiteral("bar")).toInt() == 0 &&
-                render_state(view) == QStringLiteral("stopped"),
-            "parameter action did not create one lane from the saved baseline");
-    auto* status = require_item(window, QStringLiteral("pluginAutomationStatus"));
-    require(require_item(window, QStringLiteral("pluginAutomationEditor"))->isVisible() &&
-                status->property("text").toString().contains(
-                    QStringLiteral("applies when playback starts")),
-            "lane editor or stopped render status not visible");
+    auto points = arrangement_points(*bridge, key);
+    constexpr double baseline = 0.25;
+    require(
+        bridge->revision() == initial_revision + 1 && points.size() == 1 &&
+            points.front().toMap().value(QStringLiteral("value")).toDouble() == baseline &&
+            points.front().toMap().value(QStringLiteral("bar")).toDouble() == 0.0 &&
+            parameter_entry(controller->view(), 101).value(QStringLiteral("lanePresent")).toBool(),
+        "parameter action did not create one lane from the saved baseline");
+    require(QTest::qWaitFor([&] { return overlay_key(window) == key; }, 5'000),
+            "the parameter's lane was not shown over its track's clips");
 
-    controller->set_point(1, 1.5);
-    require(bridge->revision() == initial_revision + 1, "invalid point value changed the project");
-    require_item(window, QStringLiteral("pluginAutomationBarInput"))
-        ->setProperty("text", QStringLiteral("3"));
-    require_item(window, QStringLiteral("pluginAutomationValueInput"))
-        ->setProperty("text", QStringLiteral("0.8"));
-    activate(require_item(window, QStringLiteral("pluginAutomationAddPoint")));
-    view = controller->view();
-    require(lane_points(view).size() == 2 &&
-                lane_points(view).back().toMap().value(QStringLiteral("bar")).toInt() == 2 &&
-                QTest::qWaitFor(
-                    [&] {
-                      return visible_count(window, QStringLiteral("pluginAutomationPointRow")) == 2;
-                    },
-                    5'000),
-            "numeric point entry did not add a visible bar-3 point");
+    auto* lanes =
+        qobject_cast<quick::ArrangementAutomationController*>(bridge->arrangement_automation());
+    const auto lane_id = arrangement_lane(*bridge, key).value(QStringLiteral("laneId")).toString();
+    constexpr double third_bar = 2.0;
+    constexpr double late_value = 0.8;
+    require(!lanes->add_point(track_id, key, third_bar, late_value).isEmpty() &&
+                arrangement_points(*bridge, key).size() == 2,
+            "a second plugin point was not drawn on the lane");
     const auto first_point =
-        lane_points(view).front().toMap().value(QStringLiteral("id")).toString();
+        arrangement_points(*bridge, key).front().toMap().value(QStringLiteral("id")).toString();
     const auto curve_revision = bridge->revision();
-    activate(require_item(window, QStringLiteral("automationShapeNext")));
-    auto* curve_controller =
-        qobject_cast<quick::TrackAutomationController*>(bridge->track_automation());
-    const auto curve_lane_id = controller->view()
-                                   .value(QStringLiteral("lane"))
-                                   .toMap()
-                                   .value(QStringLiteral("laneId"))
-                                   .toString();
-    require(bridge->revision() == curve_revision + 1 && curve_controller != nullptr &&
-                curve_controller->segment_curve(curve_lane_id, first_point, bridge->revision())
-                        .value(QStringLiteral("shapeIndex"))
-                        .toInt() == 2,
-            "plugin automation segment control did not save its shape");
-    controller->set_value(first_point, 0.3);
-    require(lane_points(controller->view()).front().toMap().value(QStringLiteral("value")) == 0.3,
+    lanes->set_curve(lane_id, first_point, QStringLiteral("quadratic"));
+    require(bridge->revision() == curve_revision + 1, "the lane curve did not save its shape");
+    // A plug-in value reads as a percentage of its travel.
+    const auto typed = lanes->value_from_text(track_id, key, QStringLiteral("40%"));
+    require(std::abs(typed - typed_value) < typed_tolerance, "a typed plugin value did not read");
+    lanes->set_point_value(lane_id, first_point, typed);
+    require(std::abs(arrangement_points(*bridge, key)
+                         .front()
+                         .toMap()
+                         .value(QStringLiteral("value"))
+                         .toDouble() -
+                     typed_value) < typed_tolerance,
             "numeric point value edit failed");
-
-    bridge->toggle_playback();
-    require(QTest::qWaitFor(
-                [&] {
-                  return bridge->playback_active() &&
-                         render_state(controller->view()) == QStringLiteral("active");
-                },
-                15'000),
-            "verified lane did not report active once the live graph matched: " +
-                bridge->playback_status().toStdString() + " / " +
-                render_state(controller->view()).toStdString());
-    controller->set_value(first_point, 0.4);
-    require(QTest::qWaitFor(
-                [&] {
-                  return render_state(controller->view()) == QStringLiteral("pending") &&
-                         status->property("text").toString().contains(
-                             QStringLiteral("Stop and Play to apply"));
-                },
-                5'000),
-            "lane edit during playback was presented as live");
-    bridge->toggle_playback();
-    require(QTest::qWaitFor([&] { return !bridge->playback_active(); }, 15'000) &&
-                QTest::qWaitFor(
-                    [&] { return render_state(controller->view()) == QStringLiteral("stopped"); },
-                    5'000),
-            "stopped transport did not return the lane to saved status");
-
-    std::vector<QQuickItem*> removes;
-    collect_items(window.contentItem(), QStringLiteral("pluginAutomationRemovePoint"), removes);
-    require(removes.size() == 2, "visible point removal actions missing");
-    std::ranges::sort(removes, {},
-                      [](const QQuickItem* item) { return item->mapToScene({0, 0}).y(); });
-    activate(removes.back());
-    view = controller->view();
-    require(lane_points(view).size() == 1 &&
-                lane_points(view).front().toMap().value(QStringLiteral("id")) == first_point,
-            "visible point removal did not remove the selected point");
-    lane_id = view.value(QStringLiteral("lane")).toMap().value(QStringLiteral("laneId")).toString();
+    const auto last_point =
+        arrangement_points(*bridge, key).back().toMap().value(QStringLiteral("id")).toString();
+    lanes->remove_points(lane_id, {last_point});
+    points = arrangement_points(*bridge, key);
+    require(points.size() == 1 &&
+                points.front().toMap().value(QStringLiteral("id")).toString() == first_point,
+            "point removal did not remove the chosen point");
+    lane_id_saved = lane_id;
     kept_point = first_point;
-    activate(require_item(window, QStringLiteral("pluginAutomationBack")));
-    require(!controller->view().value(QStringLiteral("parameterSelected")).toBool(),
-            "back action did not return to parameters");
     bridge->save();
     bridge->vst3_editor()->discard_vst3_insert_editor();
   }
@@ -396,12 +373,12 @@ void effect_parameter_lane_contract() {
   require(reopened.has_value(), "effect automation project did not reopen");
   const auto& lane = only_lane(reopened.value()->snapshot());
   const auto* target = std::get_if<project::Vst3ParameterTarget>(&lane.target);
-  require(QString::fromStdString(lane.id.to_string()) == lane_id && target != nullptr &&
+  require(QString::fromStdString(lane.id.to_string()) == lane_id_saved && target != nullptr &&
               target->plugin == plugin.value() && target->parameter_id == 101 &&
               lane.domain.default_value == 0.25 && lane.points.size() == 1 &&
               lane.points.front().to_next == project::AutomationShape::quadratic &&
               QString::fromStdString(lane.points.front().id.to_string()) == kept_point &&
-              lane.points.front().value == 0.4,
+              std::abs(lane.points.front().value - typed_value) < typed_tolerance,
           "effect lane identity, baseline or point ID did not survive reopen");
   {
     auto bridge = held_bridge(directory.root());
@@ -424,26 +401,29 @@ void effect_parameter_lane_contract() {
                 },
                 5'000),
             "reopened lane is not visible on its parameter action");
+    const auto key =
+        QStringLiteral("vst3:%1:101").arg(QString::fromStdString(plugin.value().to_string()));
     const auto revision = bridge->revision();
     activate(action);
-    const auto view = controller->view();
     require(bridge->revision() == revision &&
-                lane_points(view).front().toMap().value(QStringLiteral("id")).toString() ==
-                    kept_point,
-            "existing lane was not selected without a project edit");
-    activate(require_item(window, QStringLiteral("pluginAutomationRemoveLane")));
-    require(!controller->view()
-                    .value(QStringLiteral("lane"))
-                    .toMap()
-                    .value(QStringLiteral("present"))
-                    .toBool() &&
+                QTest::qWaitFor([&] { return overlay_key(window) == key; }, 5'000) &&
+                arrangement_points(*bridge, key)
+                        .front()
+                        .toMap()
+                        .value(QStringLiteral("id"))
+                        .toString() == kept_point,
+            "an existing lane was not shown without a project edit");
+    auto* lanes =
+        qobject_cast<quick::ArrangementAutomationController*>(bridge->arrangement_automation());
+    lanes->clear_lane(arrangement_lane(*bridge, key).value(QStringLiteral("laneId")).toString());
+    require(arrangement_lane(*bridge, key).isEmpty() &&
                 !parameter_entry(controller->view(), 101)
                      .value(QStringLiteral("lanePresent"))
                      .toBool() &&
                 bridge->revision() == revision + 1,
             "lane removal was not one project edit");
     bridge->undo();
-    require(lane_points(controller->view()).size() == 1, "lane removal did not undo");
+    require(arrangement_points(*bridge, key).size() == 1, "lane removal did not undo");
     bridge->vst3_editor()->discard_vst3_insert_editor();
   }
 }
@@ -509,24 +489,26 @@ void instrument_and_missing_reference_contract() {
             "instrument source reference was not identified by stable ID");
     const auto revision = bridge->revision();
     activate(require_item(window, QStringLiteral("vst3ParameterAutomate_1")));
-    require_item(window, QStringLiteral("pluginAutomationBarInput"))
-        ->setProperty("text", QStringLiteral("2"));
-    require_item(window, QStringLiteral("pluginAutomationValueInput"))
-        ->setProperty("text", QStringLiteral("0.9"));
-    activate(require_item(window, QStringLiteral("pluginAutomationAddPoint")));
-    view = controller->view();
-    require(bridge->revision() == revision + 2 && lane_points(view).size() == 2 &&
-                render_state(view) == QStringLiteral("unverified") &&
-                require_item(window, QStringLiteral("pluginAutomationStatus"))
-                    ->property("text")
+    const auto key =
+        QStringLiteral("vst3:%1:1").arg(QString::fromStdString(saved_source.id.to_string()));
+    auto* lanes =
+        qobject_cast<quick::ArrangementAutomationController*>(bridge->arrangement_automation());
+    constexpr double second_bar = 1.0;
+    constexpr double late_value = 0.9;
+    require(!lanes->add_point(track_id, key, second_bar, late_value).isEmpty(),
+            "an instrument parameter point was refused on the arrangement");
+    auto points = arrangement_points(*bridge, key);
+    require(bridge->revision() == revision + 2 && points.size() == 2 &&
+                parameter_entry(controller->view(), 1)
+                    .value(QStringLiteral("note"))
                     .toString()
-                    .contains(QStringLiteral("not shown as active")),
-            "unverified instrument lane was presented as active");
-    const auto removed = lane_points(view).front().toMap().value(QStringLiteral("id")).toString();
-    controller->remove_point(removed);
-    view = controller->view();
-    require(lane_points(view).size() == 1, "instrument point removal failed");
-    source_point = lane_points(view).front().toMap().value(QStringLiteral("id")).toString();
+                    .startsWith(QStringLiteral("Unverified")),
+            "an unverified instrument lane was not described as unverified");
+    const auto lane_id = arrangement_lane(*bridge, key).value(QStringLiteral("laneId")).toString();
+    lanes->remove_points(lane_id, {points.front().toMap().value(QStringLiteral("id")).toString()});
+    points = arrangement_points(*bridge, key);
+    require(points.size() == 1, "instrument point removal failed");
+    source_point = points.front().toMap().value(QStringLiteral("id")).toString();
 
     bridge->vst3_editor()->open_vst3_insert_editor(
         track_id, QString::fromStdString(missing_slot.to_string()));
@@ -536,9 +518,16 @@ void instrument_and_missing_reference_contract() {
                 parameter_entry(view, 7).value(QStringLiteral("name")) ==
                     QStringLiteral("Parameter 7"),
             "absent plugin reference was not retained by stable ID");
+    const auto missing_revision = bridge->revision();
     activate(require_item(window, QStringLiteral("vst3ParameterAutomate_7")));
-    require(render_state(controller->view()) == QStringLiteral("unverified"),
-            "absent plugin lane was presented as renderable");
+    require(
+        bridge->revision() == missing_revision + 1 &&
+            parameter_entry(controller->view(), 7).value(QStringLiteral("lanePresent")).toBool() &&
+            parameter_entry(controller->view(), 7)
+                .value(QStringLiteral("note"))
+                .toString()
+                .startsWith(QStringLiteral("Unverified")),
+        "an absent plugin's lane was not created and described as unverified");
     bridge->save();
     bridge->vst3_editor()->discard_vst3_insert_editor();
   }
@@ -613,8 +602,8 @@ void verified_instrument_parameter_contract() {
             "instrument value was not captured as a saved automation baseline");
     activate(require_item(window, QStringLiteral("vst3ParameterAutomate_1")));
     const auto* lane = instrument_lane(project_session->snapshot(), track.value(), plugin_id);
-    require(render_state(controller->view()) == QStringLiteral("stopped") && lane != nullptr &&
-                lane->domain.default_value == 0.65,
+    require(parameter_entry(controller->view(), 1).value(QStringLiteral("lanePresent")).toBool() &&
+                lane != nullptr && lane->domain.default_value == 0.65,
             "verified instrument lane did not start at its saved value");
     bridge->save();
     bridge->vst3_editor()->discard_vst3_insert_editor();
@@ -766,7 +755,7 @@ void browse_large_plugin(quick::ProjectBridge& bridge, QQuickWindow& window,
           "Escape did not clear the parameter search");
 
   // Ctrl+F returns to search; a lane created from a found row keeps its ID
-  // and the search survives the trip into the lane editor and back. Filtering
+  // and the search survives showing it on the arrangement. Filtering
   // recycles delegates, so resolve a row that is on the restored first page.
   require_item(window, QStringLiteral("vst3ParameterValue_1"))->forceActiveFocus();
   QTest::keyClick(&window, Qt::Key_F, Qt::ControlModifier);
@@ -776,18 +765,15 @@ void browse_large_plugin(quick::ProjectBridge& bridge, QQuickWindow& window,
     return;
   activate(require_item(window, QStringLiteral("vst3ParameterAutomate_%1").arg(last_id)));
   view = controller.view();
-  require(
-      view.value(QStringLiteral("parameterSelected")).toBool() &&
-          view.value(QStringLiteral("parameter")).toMap().value(QStringLiteral("id")).toUInt() ==
-              last_id &&
-          lane_points(view).size() == 1 &&
-          lane_points(view).front().toMap().value(QStringLiteral("value")).toDouble() == 0.4,
-      "lane from a searched parameter did not keep its stable ID and baseline");
-  activate(require_item(window, QStringLiteral("pluginAutomationBack")));
-  view = controller.view();
+  const auto found = parameter_entry(view, last_id);
+  constexpr double found_baseline = 0.4;
+  require(found.value(QStringLiteral("lanePresent")).toBool() &&
+              found.value(QStringLiteral("pointCount")).toInt() == 1 &&
+              found.value(QStringLiteral("baseline")).toDouble() == found_baseline,
+          "lane from a searched parameter did not keep its stable ID and baseline");
   require(view.value(QStringLiteral("filter")).toString() == QString::number(last_id) &&
               require_item(window, QStringLiteral("vst3ParameterRow_%1").arg(last_id))->isVisible(),
-          "returning from the lane editor lost the parameter search");
+          "showing the lane on the arrangement lost the parameter search");
 }
 
 void large_effect_parameter_browser_contract() {

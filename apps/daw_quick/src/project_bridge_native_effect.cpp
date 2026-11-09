@@ -193,17 +193,7 @@ void ProjectBridge::open_native_effect_editor(const QString& path_id, const QStr
   }
   if (track) {
     native_effect_automation_ = std::make_unique<NativeSynthAutomationController>(
-        *session_, track->id, slot.value(), *engine,
-        [this](std::uint64_t) {
-          refresh();
-          submit_playback_edit();
-        },
-        [this]() -> std::optional<application::RevisionStatus> {
-          if (!live_run())
-            return std::nullopt;
-          return live_run()->status();
-        },
-        this, [this]() { schedule_background_save(); });
+        *session_, track->id, slot.value(), *engine, this);
   }
   native_effect_context_ =
       QVariantMap{{QStringLiteral("pathId"), path_id}, {QStringLiteral("slotId"), slot_id}};

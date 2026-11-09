@@ -40,8 +40,6 @@ set(oscillate_quick_core_sources
   src/track_routing_view.cpp
   src/track_routing_view.hpp
   src/clip_automation_controller.hpp
-  src/track_automation_controller.cpp
-  src/track_automation_controller.hpp
   src/plugin_automation_controller.cpp
   src/plugin_automation_controller.hpp
   src/track_commands.cpp
@@ -217,8 +215,6 @@ set(oscillate_quick_shared_sources
   src/bar_ticks.hpp
   src/tempo_worker.cpp
   src/tempo_worker.hpp
-  src/track_automation_controller.cpp
-  src/track_automation_controller.hpp
   src/track_commands.cpp
   src/track_commands.hpp
   src/track_routing_view.cpp

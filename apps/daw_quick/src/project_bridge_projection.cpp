@@ -180,10 +180,8 @@ static int arrangement_bar_extent(const project::Snapshot& snapshot) {
 
 namespace oscillate::quick {
 using detail::arrangement_bar_extent;
-using detail::channel_automation_projection;
 using detail::clip_channel_automation_projection;
 using detail::clip_projection;
-using detail::send_automation_projection;
 using detail::starter_sound_name;
 
 void ProjectBridge::refresh() {
@@ -351,8 +349,7 @@ void ProjectBridge::refresh() {
                                ? QString::fromStdString(send.target_insert->to_string())
                                : QString()},
           {"targetName", target_name},
-          {"gain", send.gain},
-          {"automation", send_automation_projection(snapshot, track, send.id)}});
+          {"gain", send.gain}});
     }
     const auto* native_patch =
         std::get_if<project::NativeInstrumentPatch>(&track.instrument_source);
@@ -415,7 +412,6 @@ void ProjectBridge::refresh() {
         // Freeze (ADR-0059): the track plays its render; devices are greyed.
         {"frozen", track.frozen.has_value()},
         {"vst3Plugins", vst3_plugins},
-        {"channelAutomation", channel_automation_projection(snapshot, track)},
         // Every saved lane the track holds, its clips' included: the track
         // list marks a track with automation before its lanes are shown.
         {"automationLaneCount", detail::automation_lane_count(track)},
