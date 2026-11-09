@@ -47,10 +47,9 @@ Rectangle {
     property real pressY: 0
     // A point only moves once the pointer has really moved.
     property bool dragged: false
-    // A double-click counts only when both presses were the left button on
-    // the lane (a right-click then a click in its menu is not one).
-    property int lastButton: Qt.NoButton
-    property bool leftTwice: false
+    // A double-click counts only when its first press was the left button
+    // on the expanded lane (Qt sends no press for its second).
+    property bool leftOnExpanded: false
     property real dragBar: 0
     property real dragBpm: 0
     property real rampFrom: 0
@@ -300,8 +299,7 @@ Rectangle {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         onExited: lane.hoverX = -1
         onPressed: mouse => {
-            lane.leftTwice = lane.lastButton === Qt.LeftButton && mouse.button === Qt.LeftButton
-            lane.lastButton = mouse.button
+            lane.leftOnExpanded = lane.expanded && mouse.button === Qt.LeftButton
             lane.menuIndex = -1
             if (!lane.expanded) {
                 lane.expandRequested()
@@ -365,7 +363,7 @@ Rectangle {
             curve.requestPaint()
         }
         onDoubleClicked: mouse => {
-            if (!lane.expanded || mouse.button !== Qt.LeftButton || !lane.leftTwice)
+            if (!lane.expanded || mouse.button !== Qt.LeftButton || !lane.leftOnExpanded)
                 return
             const near = lane.pointNear(mouse.x, mouse.y)
             const free = (mouse.modifiers & Qt.AltModifier) !== 0

@@ -505,12 +505,13 @@ void dock_tabs_follow_whether_the_track_holds_clips(Song& song, const Shell& she
     bus_return = kind == QStringLiteral("return") ? index : bus_return;
   }
   require(group >= 0 && bus_return >= 0, "the fixture's buses are missing");
-  shell.window()->setProperty("selectedTrack", 0);
-  dock->setProperty("activeTab", dock_clip_tab);
-  QCoreApplication::processEvents();
-  require(shell.wait_for(QStringLiteral("dockTabClip"))->property("available").toBool(),
-          "the loop's track does not offer its clip");
   for (const int track : {master_track, group, bus_return}) {
+    // From the loop's track with its Clip tab open.
+    shell.window()->setProperty("selectedTrack", 0);
+    dock->setProperty("activeTab", dock_clip_tab);
+    QCoreApplication::processEvents();
+    require(shell.wait_for(QStringLiteral("dockTabClip"))->property("available").toBool(),
+            "the loop's track does not offer its clip");
     shell.window()->setProperty("selectedTrack", track);
     QCoreApplication::processEvents();
     require(dock->property("activeTab").toInt() == chain_tab,

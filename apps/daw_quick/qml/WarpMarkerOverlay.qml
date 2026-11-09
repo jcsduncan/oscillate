@@ -142,7 +142,11 @@ Item {
         const bpm = segmentBpm(at)
         return bpm * (bounds.next - dragTo) / Math.max(1e-9, bounds.next - at)
     }
-    function closeMenu() { menuIndex = -1 }
+    // Closing gives the focus back, so the shell's Escape works again.
+    function closeMenu() {
+        menuIndex = -1
+        menu.focus = false
+    }
 
     // The pin band: hover for the ghost, click to pin.
     MouseArea {
@@ -348,7 +352,7 @@ Item {
         Accessible.name: "Warp marker commands"
         // Escape closes the menu before the shell lets go of the clip.
         onVisibleChanged: if (visible) forceActiveFocus()
-        Keys.onShortcutOverride: event => event.accepted = event.key === Qt.Key_Escape
+        Keys.onShortcutOverride: event => event.accepted = visible && event.key === Qt.Key_Escape
         Keys.onEscapePressed: overlay.closeMenu()
         Column {
             id: menuColumn
