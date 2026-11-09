@@ -28,14 +28,14 @@ constexpr int macro_count = static_cast<int>(project::max_macros_per_track);
 struct Described {
   QString device;
   QString parameter;
-  const synth::ParameterDescriptor* descriptor = nullptr;
+  const native_dsp::ParameterDescriptor* descriptor = nullptr;
 };
 
-[[nodiscard]] const synth::ParameterDescriptor*
-find_descriptor(const synth::EngineDescriptor* engine, std::string_view id) {
+[[nodiscard]] const native_dsp::ParameterDescriptor*
+find_descriptor(const native_dsp::EngineDescriptor* engine, std::string_view id) {
   if (engine == nullptr)
     return nullptr;
-  const auto index = synth::find_parameter(*engine, id);
+  const auto index = native_dsp::find_parameter(*engine, id);
   return index ? &engine->parameters[*index] : nullptr;
 }
 
@@ -43,7 +43,7 @@ find_descriptor(const synth::EngineDescriptor* engine, std::string_view id) {
                                  const project::MacroDestination& destination) {
   Described described;
   std::string_view id;
-  const synth::EngineDescriptor* engine = nullptr;
+  const native_dsp::EngineDescriptor* engine = nullptr;
   if (const auto* native = std::get_if<project::NativeParameterTarget>(&destination)) {
     id = native->parameter_id;
     if (const auto* patch = std::get_if<project::NativeInstrumentPatch>(&track.instrument_source)) {
@@ -95,7 +95,7 @@ find_descriptor(const synth::EngineDescriptor* engine, std::string_view id) {
 [[nodiscard]] double position_of(const Described& described, const project::MacroMapping& mapping,
                                  double value) {
   if (described.descriptor != nullptr)
-    return synth::to_normalised(*described.descriptor, value);
+    return native_dsp::to_normalised(*described.descriptor, value);
   const auto span = mapping.domain.maximum - mapping.domain.minimum;
   return span > 0.0 ? std::clamp((value - mapping.domain.minimum) / span, 0.0, 1.0) : 0.0;
 }
@@ -104,15 +104,15 @@ find_descriptor(const synth::EngineDescriptor* engine, std::string_view id) {
                               double position) {
   position = std::clamp(position, 0.0, 1.0);
   if (described.descriptor != nullptr)
-    return synth::sanitise(*described.descriptor,
-                           synth::from_normalised(*described.descriptor, position));
+    return native_dsp::sanitise(*described.descriptor,
+                                native_dsp::from_normalised(*described.descriptor, position));
   return mapping.domain.minimum + position * (mapping.domain.maximum - mapping.domain.minimum);
 }
 
 [[nodiscard]] QString text_of(const Described& described, const project::MacroMapping& mapping,
                               double value) {
   if (described.descriptor != nullptr)
-    return QString::fromStdString(synth::format_value(*described.descriptor, value));
+    return QString::fromStdString(native_dsp::format_value(*described.descriptor, value));
   auto text = QString::number(value, 'g', 3);
   if (!mapping.domain.unit.empty() && mapping.domain.unit != "normalized")
     text += QLatin1Char(' ') + QString::fromStdString(mapping.domain.unit);
@@ -226,7 +226,7 @@ void MacroController::begin_turn(int index) {
     turn.value = macro.value;
     for (const auto& mapping : macro.mappings) {
       std::optional<project::InsertSlotId> slot;
-      const synth::EngineDescriptor* descriptor = nullptr;
+      const native_dsp::EngineDescriptor* descriptor = nullptr;
       std::vector<double> base;
       std::string_view id;
       if (const auto* native = std::get_if<project::NativeParameterTarget>(&mapping.destination)) {
@@ -257,7 +257,7 @@ void MacroController::begin_turn(int index) {
         slot = target.slot;
         id = target.parameter_id;
       }
-      const auto parameter = synth::find_parameter(*descriptor, id);
+      const auto parameter = native_dsp::find_parameter(*descriptor, id);
       if (!parameter)
         continue;
       auto device = std::ranges::find(turn.devices, slot, &TurnDevice::slot);

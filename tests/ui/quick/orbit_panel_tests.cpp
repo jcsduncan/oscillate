@@ -2,7 +2,7 @@
 #include "native_synth_device_controller.hpp"
 
 #include "oscillate/native_dsp/effects/orbit.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QColor>
@@ -34,12 +34,11 @@
 namespace {
 using oscillate::quick::InMemoryNativeSynthAdapter;
 using oscillate::quick::NativeSynthDeviceController;
-namespace synth = oscillate::native_dsp::synth;
 namespace orbit = oscillate::native_dsp::effects::orbit;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *orbit::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *orbit::engine().descriptor; }
 
 int preset_index(std::string_view name) {
   for (std::size_t i = 0; i < table().presets.size(); ++i) {
@@ -51,8 +50,8 @@ int preset_index(std::string_view name) {
 }
 
 std::vector<double> preset(std::string_view name) {
-  return synth::preset_values(table(),
-                              table().presets[static_cast<std::size_t>(preset_index(name))])
+  return oscillate::native_dsp::preset_values(
+             table(), table().presets[static_cast<std::size_t>(preset_index(name))])
       .value();
 }
 
@@ -71,7 +70,7 @@ std::vector<float> frame(float left, float right, float sweep_left, float sweep_
 }
 
 void controller_decodes_orbit_telemetry() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   require(controller.engine_id() == QStringLiteral("orbit"), "the controller is Orbit's");
   require(!controller.telemetry().value(QStringLiteral("live")).toBool(), "nothing playing");
@@ -164,7 +163,7 @@ QString text_of(Panel& panel, const QString& name) {
 }
 
 void panel_covers_every_parameter() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(panel->root->implicitWidth() >= 1100 && panel->root->implicitHeight() >= 680,
@@ -181,7 +180,7 @@ void panel_covers_every_parameter() {
 
 // Helper sentences are set in sentence case, never in capitals.
 void helper_sentences_are_in_sentence_case() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   for (const char* name : {"orbitToneNote", "orbitVoiceNote"}) {
@@ -198,7 +197,7 @@ void helper_sentences_are_in_sentence_case() {
 // chorus, flanger and phaser, voices for chorus, stages and centre for the
 // phaser; ensemble and tremolo explain themselves instead.
 void each_mode_shows_its_own_controls() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   auto* theme = panel->root->property("theme").value<QObject*>();
@@ -249,7 +248,7 @@ void each_mode_shows_its_own_controls() {
 }
 
 void controls_edit_through_the_controller() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   const double depth = controller.value(QStringLiteral("orbit.depth"));
@@ -268,7 +267,7 @@ void controls_edit_through_the_controller() {
 }
 
 void presets_and_status() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(text_of(*panel, QStringLiteral("orbitPresetName")) == QStringLiteral("Classic Chorus"),

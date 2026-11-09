@@ -4,7 +4,7 @@
 #include "native_synth_visuals.hpp"
 
 #include "oscillate/native_dsp/effects/contour.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/prism.hpp"
 #include "oscillate/test/check.hpp"
 
@@ -42,9 +42,9 @@ namespace q = oscillate::quick;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *contour::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *contour::engine().descriptor; }
 std::size_t index(std::string_view id) {
-  const auto found = synth::find_parameter(table(), id);
+  const auto found = oscillate::native_dsp::find_parameter(table(), id);
   if (!found) {
     throw std::runtime_error("missing Contour parameter");
   }
@@ -54,7 +54,7 @@ std::size_t index(std::string_view id) {
 std::vector<double> preset(std::string_view name) {
   for (const auto& entry : table().presets) {
     if (entry.name == name) {
-      auto values = synth::preset_values(table(), entry);
+      auto values = oscillate::native_dsp::preset_values(table(), entry);
       if (!values.has_value()) {
         throw std::runtime_error("invalid Contour preset");
       }
@@ -126,12 +126,13 @@ void the_sketch_is_the_real_filter() {
   require(std::fabs(sketch_at(moved, 4'000.0) - sketch_at(lp, 1'000.0)) < 0.5,
           "the live cutoff redraws the same shape higher");
   const auto& prism = *synth::prism::engine().descriptor;
-  require(q::contour_response(prism, points, synth::default_values(prism), 0.0).empty(),
-          "only Contour has this sketch");
+  require(
+      q::contour_response(prism, points, oscillate::native_dsp::default_values(prism), 0.0).empty(),
+      "only Contour has this sketch");
 }
 
 void the_controller_decodes_telemetry() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   require(controller.contour_response(64, 0.0).size() == 64, "the sketch reaches QML");
   require(!controller.telemetry()[QStringLiteral("live")].toBool(), "nothing playing");
@@ -227,7 +228,7 @@ QString text_of(Panel& panel, const QString& name) {
 }
 
 void panel_covers_every_parameter() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(panel->root->implicitWidth() >= 1100 && panel->root->implicitHeight() >= 600,
@@ -248,7 +249,7 @@ void panel_covers_every_parameter() {
 }
 
 void the_model_bank_switches_models() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(text_of(*panel, QStringLiteral("contourModelCaption")).contains(QStringLiteral("24")),
@@ -274,7 +275,7 @@ void the_model_bank_switches_models() {
 }
 
 void controls_edit_with_gestures() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
 
@@ -344,7 +345,7 @@ void controls_edit_with_gestures() {
 }
 
 void presets_and_status() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(text_of(*panel, QStringLiteral("contourPresetName")) == QStringLiteral("Warm Low-Pass"),

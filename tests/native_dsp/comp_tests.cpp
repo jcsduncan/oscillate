@@ -72,9 +72,9 @@ using Values = std::initializer_list<std::pair<std::string_view, double>>;
 std::vector<double> values(Values set = {}) {
   const auto* found = fx::find_engine("comp");
   REQUIRE_NE(found, nullptr, "comp is registered");
-  auto dense = synth::default_values(*found->descriptor);
+  auto dense = oscillate::native_dsp::default_values(*found->descriptor);
   const auto put = [&](std::string_view parameter, double value) {
-    const auto index = synth::find_parameter(*found->descriptor, parameter);
+    const auto index = oscillate::native_dsp::find_parameter(*found->descriptor, parameter);
     REQUIRE_OK(index, std::string(parameter) + " exists");
     dense[*index] = value;
   };
@@ -366,7 +366,8 @@ std::vector<double> with(const Lanes& lanes, Values more) {
   auto dense = values(more);
   const auto* found = fx::find_engine("comp");
   for (const auto& [parameter, value] : lanes)
-    dense[*synth::find_parameter(*found->descriptor, parameter)] = value;
+    dense[oscillate::test::take(
+        oscillate::native_dsp::find_parameter(*found->descriptor, parameter))] = value;
   return dense;
 }
 

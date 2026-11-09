@@ -33,12 +33,12 @@ QString text(std::string_view value) {
   return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
 }
 
-const synth::EngineDescriptor& table() { return *knock::engine().descriptor; }
+const native_dsp::EngineDescriptor& table() { return *knock::engine().descriptor; }
 
 // The chosen label of choice parameter `id`, or nothing.
-std::optional<std::string_view> choice_label(const synth::EngineDescriptor& engine,
+std::optional<std::string_view> choice_label(const native_dsp::EngineDescriptor& engine,
                                              std::span<const double> values, std::string_view id) {
-  const auto index = synth::find_parameter(engine, id);
+  const auto index = native_dsp::find_parameter(engine, id);
   if (!index || *index >= values.size())
     return std::nullopt;
   const auto& choices = engine.parameters[*index].choices;
@@ -74,8 +74,8 @@ std::string knock_pad_parameter(std::size_t pad, std::string_view control) {
   return id;
 }
 
-std::string knock_pad_label(const synth::EngineDescriptor& engine, std::span<const double> values,
-                            std::size_t pad) {
+std::string knock_pad_label(const native_dsp::EngineDescriptor& engine,
+                            std::span<const double> values, std::size_t pad) {
   if (pad >= knock::pad_count || values.size() != engine.parameters.size())
     return {};
   const auto material = choice_label(engine, values, knock_pad_parameter(pad, material_control));
@@ -133,7 +133,7 @@ QString KnockPanelModel::pad_parameter(int pad, const QString& control) const {
   if (pad < 0 || pad >= pad_count())
     return {};
   const auto id = knock_pad_parameter(static_cast<std::size_t>(pad), control.toStdString());
-  return synth::find_parameter(table(), id) ? QString::fromStdString(id) : QString{};
+  return native_dsp::find_parameter(table(), id) ? QString::fromStdString(id) : QString{};
 }
 
 QVariantList KnockPanelModel::modes(int pad) const {

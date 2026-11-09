@@ -4,7 +4,7 @@
 
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/flyby.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QCoreApplication>
@@ -37,12 +37,11 @@ namespace {
 using oscillate::quick::InMemoryNativeSynthAdapter;
 using oscillate::quick::NativeSynthDeviceController;
 using oscillate::quick::NativeSynthGesture;
-namespace synth = oscillate::native_dsp::synth;
 namespace flyby = oscillate::native_dsp::effects::flyby;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *flyby::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *flyby::engine().descriptor; }
 
 QString qs(std::string_view text) {
   return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
@@ -132,7 +131,7 @@ bool wait_for_text(Panel& panel, const QString& name, const QString& text) {
   return QTest::qWaitFor([&] { return text_of(panel, name) == text; }, 1000);
 }
 
-std::vector<double> defaults() { return synth::default_values(table()); }
+std::vector<double> defaults() { return oscillate::native_dsp::default_values(table()); }
 
 // Clicks segment choice `index` of `count`.
 void pick(Panel& panel, const QString& id, int index, int count) {
@@ -356,7 +355,7 @@ void screenshots_if_requested() {
   const std::size_t shots = std::min<std::size_t>(4, table().presets.size());
   for (std::size_t s = 0; s < shots; ++s) {
     const auto& entry = table().presets[s];
-    auto resolved = synth::preset_values(table(), entry);
+    auto resolved = oscillate::native_dsp::preset_values(table(), entry);
     require(resolved.has_value(), "preset resolves");
     const auto values = resolved.value();
     InMemoryNativeSynthAdapter adapter(values);

@@ -2,7 +2,7 @@
 
 #include "oscillate/analysis/tempo.hpp"
 #include "oscillate/media/audio_reader.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/persistence/effect_preset.hpp"
@@ -161,7 +161,7 @@ std::vector<double> SessionNativeSynthAdapter::values() const {
     }
   }
   // Read-only placeholder in this panel's own table: status() says why.
-  return native_dsp::synth::default_values(descriptor_);
+  return native_dsp::default_values(descriptor_);
 }
 
 void SessionNativeSynthAdapter::apply(std::span<const double> values,

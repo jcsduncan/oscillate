@@ -22,10 +22,8 @@
 
 namespace oscillate::quick {
 
-std::vector<double> contour_response(const native_dsp::synth::EngineDescriptor& engine,
-                                     std::size_t points, std::span<const double> values,
-                                     double cutoff_hz) {
-  namespace synth = native_dsp::synth;
+std::vector<double> contour_response(const native_dsp::EngineDescriptor& engine, std::size_t points,
+                                     std::span<const double> values, double cutoff_hz) {
   namespace effects = native_dsp::effects;
   const auto& contour = effects::contour::engine();
   if (engine.id != contour.descriptor->id || values.size() != engine.parameters.size() ||
@@ -34,7 +32,7 @@ std::vector<double> contour_response(const native_dsp::synth::EngineDescriptor& 
   }
   std::vector<double> patch(values.begin(), values.end());
   const auto set = [&](std::string_view id, double value) {
-    if (const auto index = synth::find_parameter(engine, id)) {
+    if (const auto index = native_dsp::find_parameter(engine, id)) {
       const auto& p = engine.parameters[*index];
       patch[*index] = std::clamp(value, p.minimum, p.maximum);
     }
@@ -101,7 +99,7 @@ std::vector<double> contour_response(const native_dsp::synth::EngineDescriptor& 
   // Combs keep each slice's loudest bin, since their peaks are narrower than
   // a slice; every other model reads its exact frequency, so notches show
   // their depth.
-  const auto model = synth::find_parameter(engine, "contour.model");
+  const auto model = native_dsp::find_parameter(engine, "contour.model");
   const bool comb = model && patch[*model] >= 9.0;
   std::vector<double> out(points);
   for (std::size_t p = 0; p < points; ++p) {
@@ -128,8 +126,8 @@ std::vector<double> contour_response(const native_dsp::synth::EngineDescriptor& 
   return out;
 }
 
-std::vector<double> shape_response(const native_dsp::synth::EngineDescriptor& engine,
-                                   std::size_t points, std::span<const double> values, int band) {
+std::vector<double> shape_response(const native_dsp::EngineDescriptor& engine, std::size_t points,
+                                   std::span<const double> values, int band) {
   namespace shape = native_dsp::effects::shape;
   if (engine.id != shape::engine().descriptor->id || values.size() != engine.parameters.size() ||
       points < 2 || band >= static_cast<int>(shape::bands)) {
@@ -162,9 +160,8 @@ std::vector<double> shape_response(const native_dsp::synth::EngineDescriptor& en
   return response;
 }
 
-std::vector<double> press_transfer(const native_dsp::synth::EngineDescriptor& engine,
-                                   double floor_db, std::span<const double> values,
-                                   std::size_t points) {
+std::vector<double> press_transfer(const native_dsp::EngineDescriptor& engine, double floor_db,
+                                   std::span<const double> values, std::size_t points) {
   namespace press = native_dsp::effects::press;
   if (engine.id != press::engine().descriptor->id || values.size() != engine.parameters.size() ||
       points < 2 || !(floor_db < 0.0)) {
@@ -184,7 +181,7 @@ std::vector<double> press_transfer(const native_dsp::synth::EngineDescriptor& en
 
 namespace {
 
-[[nodiscard]] bool is_edge(const native_dsp::synth::EngineDescriptor& engine,
+[[nodiscard]] bool is_edge(const native_dsp::EngineDescriptor& engine,
                            std::span<const double> values) {
   return engine.id == native_dsp::effects::edge::engine().descriptor->id &&
          values.size() == engine.parameters.size();
@@ -192,10 +189,10 @@ namespace {
 
 } // namespace
 
-std::vector<double> edge_transfer(const native_dsp::synth::EngineDescriptor& engine,
+std::vector<double> edge_transfer(const native_dsp::EngineDescriptor& engine,
                                   std::span<const double> values, double from_db, double to_db,
                                   std::size_t points) {
-  const auto shape = native_dsp::synth::find_parameter(engine, "edge.shape");
+  const auto shape = native_dsp::find_parameter(engine, "edge.shape");
   if (!is_edge(engine, values) || !shape || points < 2 || !(to_db > from_db)) {
     return {};
   }
@@ -210,8 +207,8 @@ std::vector<double> edge_transfer(const native_dsp::synth::EngineDescriptor& eng
   return curve;
 }
 
-double edge_latency_ms(const native_dsp::synth::EngineDescriptor& engine,
-                       std::span<const double> values, double sample_rate) {
+double edge_latency_ms(const native_dsp::EngineDescriptor& engine, std::span<const double> values,
+                       double sample_rate) {
   constexpr double milliseconds_per_second = 1'000.0;
   if (!is_edge(engine, values) || !(sample_rate > 0.0)) {
     return 0.0;
@@ -225,14 +222,14 @@ namespace {
 constexpr double sketch_low_hz = 20.0;
 constexpr double sketch_span = 1'000.0;
 
-[[nodiscard]] bool is_strata(const native_dsp::synth::EngineDescriptor& engine,
+[[nodiscard]] bool is_strata(const native_dsp::EngineDescriptor& engine,
                              std::span<const double> values) {
   return engine.id == native_dsp::effects::strata::engine().descriptor->id &&
          values.size() == engine.parameters.size();
 }
 } // namespace
 
-std::vector<double> strata_transfer(const native_dsp::synth::EngineDescriptor& engine,
+std::vector<double> strata_transfer(const native_dsp::EngineDescriptor& engine,
                                     std::span<const double> values, int band, double floor_db,
                                     std::size_t points) {
   namespace strata = native_dsp::effects::strata;
@@ -251,7 +248,7 @@ std::vector<double> strata_transfer(const native_dsp::synth::EngineDescriptor& e
   return out;
 }
 
-std::vector<double> strata_crossovers(const native_dsp::synth::EngineDescriptor& engine,
+std::vector<double> strata_crossovers(const native_dsp::EngineDescriptor& engine,
                                       std::span<const double> values, double sample_rate) {
   if (!is_strata(engine, values) || !(sample_rate > 0.0)) {
     return {};
@@ -261,9 +258,9 @@ std::vector<double> strata_crossovers(const native_dsp::synth::EngineDescriptor&
           layout.crossovers.begin() + static_cast<std::ptrdiff_t>(layout.bands - 1)};
 }
 
-std::vector<std::vector<double>>
-strata_band_shapes(const native_dsp::synth::EngineDescriptor& engine,
-                   std::span<const double> values, double sample_rate, std::size_t points) {
+std::vector<std::vector<double>> strata_band_shapes(const native_dsp::EngineDescriptor& engine,
+                                                    std::span<const double> values,
+                                                    double sample_rate, std::size_t points) {
   namespace strata = native_dsp::effects::strata;
   if (!is_strata(engine, values) || !(sample_rate > 0.0) || points < 2) {
     return {};
@@ -281,9 +278,8 @@ strata_band_shapes(const native_dsp::synth::EngineDescriptor& engine,
   return out;
 }
 
-std::vector<native_dsp::synth::NamedValue>
-strata_ott_values(const native_dsp::synth::EngineDescriptor& engine,
-                  std::span<const double> values) {
+std::vector<native_dsp::NamedValue> strata_ott_values(const native_dsp::EngineDescriptor& engine,
+                                                      std::span<const double> values) {
   if (!is_strata(engine, values)) {
     return {};
   }

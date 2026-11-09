@@ -3,7 +3,7 @@
 
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/trim.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QAccessible>
@@ -42,12 +42,11 @@ namespace {
 using oscillate::quick::InMemoryNativeSynthAdapter;
 using oscillate::quick::NativeSynthDeviceController;
 using oscillate::quick::NativeSynthGesture;
-namespace synth = oscillate::native_dsp::synth;
 namespace trim = oscillate::native_dsp::effects::trim;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *trim::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *trim::engine().descriptor; }
 
 struct Harness {
   QQmlEngine engine;
@@ -165,7 +164,7 @@ void expect(const InMemoryNativeSynthAdapter& adapter, std::size_t& from,
 }
 
 void each_action_is_one_undo_step() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto harness = load(controller);
   auto& window = *harness->window;
@@ -248,7 +247,7 @@ void each_action_is_one_undo_step() {
 }
 
 void read_only_panels_edit_nothing() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   oscillate::quick::NativeSynthPanelStatus status;
   status.editable = false;
   status.message = "Locked";
@@ -418,12 +417,12 @@ void cells_in(QQuickItem* root, std::vector<QQuickItem*>& cells) {
 
 void every_segmented_choice_fills_its_selection() {
   const QString root = QStringLiteral(OSCILLATE_QUICK_QML_DIR);
-  const auto law = synth::find_parameter(table(), "trim.law");
+  const auto law = oscillate::native_dsp::find_parameter(table(), "trim.law");
   if (!law) {
     throw std::runtime_error("Trim has no pan law");
   }
   const double law_default = table().parameters[*law].default_value;
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   QQmlEngine engine;
   QQmlComponent harness(&engine);

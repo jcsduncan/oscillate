@@ -7,7 +7,7 @@
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_dsp/note_effects/note_effect.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/test/cases.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/temp_dir.hpp"
@@ -35,7 +35,6 @@ namespace engine = oscillate::engine;
 namespace foundation = oscillate::foundation;
 namespace fx = oscillate::native_dsp::note_effects;
 namespace project = oscillate::project;
-namespace synth = oscillate::native_dsp::synth;
 namespace timeline = oscillate::timeline;
 namespace fs = std::filesystem;
 
@@ -100,7 +99,8 @@ struct Song {
   }
   [[nodiscard]] double value(std::string_view id) const {
     const auto resolved = take(fx::resolve_note_effect(insert()));
-    return resolved.values[take(synth::find_parameter(*resolved.engine->descriptor, id))];
+    return resolved
+        .values[take(oscillate::native_dsp::find_parameter(*resolved.engine->descriptor, id))];
   }
 };
 

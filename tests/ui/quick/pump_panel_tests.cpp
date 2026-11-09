@@ -4,7 +4,7 @@
 #include "oscillate/engine/graph.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/pump.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/project/model.hpp"
 #include "oscillate/test/check.hpp"
 
@@ -44,7 +44,6 @@ namespace {
 using oscillate::quick::InMemoryNativeSynthAdapter;
 using oscillate::quick::NativeSynthDeviceController;
 using oscillate::quick::NativeSynthGesture;
-namespace synth = oscillate::native_dsp::synth;
 namespace effects = oscillate::native_dsp::effects;
 namespace pump = oscillate::native_dsp::effects::pump;
 namespace engine = oscillate::engine;
@@ -53,7 +52,7 @@ namespace project = oscillate::project;
 using oscillate::test::require;
 
 const effects::EffectEngine& pump_engine() { return pump::engine(); }
-const synth::EngineDescriptor& table() { return *pump_engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *pump_engine().descriptor; }
 
 std::size_t preset_index(std::string_view name) {
   for (std::size_t i = 0; i < table().presets.size(); ++i) {
@@ -65,7 +64,7 @@ std::size_t preset_index(std::string_view name) {
 }
 
 std::vector<double> preset(std::string_view name) {
-  return synth::preset_values(table(), table().presets[preset_index(name)]).value();
+  return oscillate::native_dsp::preset_values(table(), table().presets[preset_index(name)]).value();
 }
 
 project::NativeSynthDocument shape_of(std::string_view preset_name) {

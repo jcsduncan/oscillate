@@ -1,7 +1,7 @@
 #include "native_synth_session_adapter.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/crate.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/timeline/timing.hpp"
 
@@ -52,7 +52,8 @@ private:
 };
 
 std::size_t cutoff() {
-  return *synth::find_parameter(*synth::default_engine().descriptor, "prism.filter.cutoff");
+  return oscillate::test::take(
+      native_dsp::find_parameter(*synth::default_engine().descriptor, "prism.filter.cutoff"));
 }
 
 void edits_drags_cancels_and_status() {
@@ -72,7 +73,7 @@ void edits_drags_cancels_and_status() {
       });
 
   auto values = adapter.values();
-  require(values == synth::default_values(*synth::default_engine().descriptor),
+  require(values == native_dsp::default_values(*synth::default_engine().descriptor),
           "the adapter reads the synth's dense values");
 
   values[cutoff()] = 1'000.0;
@@ -131,7 +132,7 @@ void a_panel_for_another_engine_is_read_only() {
   auto session = take(application::ProjectSession::create(directory.path() / "song"));
   const auto plain = take(session->instruments().add_synth_track());
   // A second engine view of the same track: a copied descriptor with another id.
-  synth::EngineDescriptor other = *synth::default_engine().descriptor;
+  native_dsp::EngineDescriptor other = *synth::default_engine().descriptor;
   other.id = "other";
   other.name = "Other";
   const synth::SynthEngine other_engine{&other, synth::default_engine().create_kernel,
@@ -140,7 +141,8 @@ void a_panel_for_another_engine_is_read_only() {
   auto status = adapter.status();
   require(!status.editable && status.message.find("prism") != std::string::npos,
           "a panel for another engine explains why it cannot edit");
-  require(adapter.values() == synth::default_values(other), "it shows its own table's defaults");
+  require(adapter.values() == native_dsp::default_values(other),
+          "it shows its own table's defaults");
   const auto revision = session->snapshot().revision;
   adapter.submit(adapter.values(), quick::NativeSynthGesture::single);
   require(session->snapshot().revision == revision, "it never edits the other engine's patch");
@@ -243,7 +245,8 @@ void crate_state_media_and_clips() {
   const auto track =
       take(session->instruments().add_native_instrument_track(crate::engine_id, std::nullopt));
   quick::SessionNativeSynthAdapter adapter(*session, track, crate::engine());
-  const auto root = synth::find_parameter(*crate::engine().descriptor, "crate.root").value();
+  const auto root =
+      oscillate::test::take(native_dsp::find_parameter(*crate::engine().descriptor, "crate.root"));
 
   project::NativeSynthDocument document;
   document.media.push_back(

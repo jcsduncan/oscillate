@@ -2,7 +2,7 @@
 #include "native_synth_device_controller.hpp"
 #include "native_synth_visuals.hpp"
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/prism.hpp"
 #include "oscillate/native_dsp/synth/pulse.hpp"
 #include "oscillate/test/check.hpp"
@@ -49,9 +49,13 @@ constexpr std::size_t cowbell = 8;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *synth::pulse::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() {
+  return *synth::pulse::engine().descriptor;
+}
 
-std::size_t index(std::string_view id) { return *synth::find_parameter(table(), id); }
+std::size_t index(std::string_view id) {
+  return oscillate::test::take(oscillate::native_dsp::find_parameter(table(), id));
+}
 
 int preset_index(std::string_view name) {
   for (std::size_t i = 0; i < table().presets.size(); ++i) {
@@ -74,7 +78,7 @@ QString pad_parameter(std::size_t pad, std::string_view control) {
 
 void pad_visuals_follow_the_kernel_laws() {
   namespace q = oscillate::quick;
-  auto values = synth::default_values(table());
+  auto values = oscillate::native_dsp::default_values(table());
 
   // Kick: body falls 60 dB at Decay, the 3 ms click is long gone by then.
   const double decay = values[index("pulse.kick.decay")];
@@ -135,7 +139,7 @@ void pad_visuals_follow_the_kernel_laws() {
 
   // Other engines and pads out of range draw nothing.
   const auto& prism = *synth::prism::engine().descriptor;
-  const auto prism_values = synth::default_values(prism);
+  const auto prism_values = oscillate::native_dsp::default_values(prism);
   require(q::pulse_pad_envelope(prism, prism_values, kick, 1.0, 8).empty() &&
               q::pulse_pad_pitch(prism, prism_values, kick, 1.0, 8).empty(),
           "only Pulse has pad sketches");
@@ -143,7 +147,7 @@ void pad_visuals_follow_the_kernel_laws() {
 }
 
 void controller_exposes_pad_sketches() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   require(!controller.has_filter_response(), "Pulse draws no synth filter");
   require(controller.pad_envelope(0, 1.0, 64).size() == 64, "pad envelope reaches QML");
@@ -153,7 +157,7 @@ void controller_exposes_pad_sketches() {
   require(controller.pad_envelope(-1, 1.0, 64).isEmpty(), "negative pads are rejected");
 
   const auto& prism = *synth::prism::engine().descriptor;
-  InMemoryNativeSynthAdapter prism_adapter(synth::default_values(prism));
+  InMemoryNativeSynthAdapter prism_adapter(oscillate::native_dsp::default_values(prism));
   NativeSynthDeviceController prism_controller(prism, prism_adapter);
   require(prism_controller.pad_envelope(0, 1.0, 64).isEmpty() &&
               prism_controller.pad_band(0, 64).isEmpty(),
@@ -238,7 +242,7 @@ void select_pad(Panel& panel, int pad) {
 }
 
 void panel_covers_every_parameter() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(panel->root->implicitWidth() >= 1200 && panel->root->implicitHeight() >= 680,
@@ -259,7 +263,7 @@ void panel_covers_every_parameter() {
 }
 
 void pads_select_the_editor_and_trigger() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   QSignalSpy triggered(panel->root, SIGNAL(padTriggered(int)));
@@ -332,7 +336,7 @@ void pads_select_the_editor_and_trigger() {
 }
 
 void controls_edit_with_gestures_and_keys() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
 
@@ -407,7 +411,7 @@ void controls_edit_with_gestures_and_keys() {
 }
 
 void kit_browser_and_status() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(item(*panel, QStringLiteral("pulseKitName"))->property("text").toString() ==
@@ -452,7 +456,7 @@ std::vector<float> pulse_frame(float reduction, int pad, float level) {
 // The glue meter and the pads follow the running kit (ADR-0037); with no
 // telemetry the meter rests and the pads are dark.
 void meter_and_pads_follow_live_telemetry() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   auto* meter = item(*panel, QStringLiteral("pulseGlueMeter"));
@@ -496,7 +500,7 @@ void screenshots_if_requested() {
                           Shot{"909 Techno", 0, "/pulse_909_techno.png"},
                           Shot{"909 Techno", 6, "/pulse_909_techno_hat.png"},
                           Shot{"Trap", 4, "/pulse_trap_clap.png"}}) {
-    auto values = synth::preset_values(
+    auto values = oscillate::native_dsp::preset_values(
                       table(), table().presets[static_cast<std::size_t>(preset_index(shot.preset))])
                       .value();
     InMemoryNativeSynthAdapter adapter(values);
@@ -508,7 +512,7 @@ void screenshots_if_requested() {
     require(panel->window->grabWindow().save(path, "PNG"), "screenshot saved");
     std::cout << "wrote " << path.toStdString() << '\n';
   }
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   auto frame = pulse_frame(9.0F, 0, 0.9F);

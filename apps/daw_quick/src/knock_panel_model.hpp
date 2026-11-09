@@ -3,7 +3,7 @@
 #include "native_synth_device_controller.hpp"
 #include "native_synth_panel_adapter.hpp"
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <QObject>
 #include <QString>
@@ -27,7 +27,7 @@ class KnockPatternsModel;
 // A pad named by its sound, as the pads and the piano roll show it: the
 // resonator's material and the striker, "Wood · Stick". Empty when `values`
 // are not Knock's (a different table, or a pad out of range).
-[[nodiscard]] std::string knock_pad_label(const native_dsp::synth::EngineDescriptor& engine,
+[[nodiscard]] std::string knock_pad_label(const native_dsp::EngineDescriptor& engine,
                                           std::span<const double> values, std::size_t pad);
 
 // A key's name with C1 at MIDI 36, as Knock's pads are named: "C♯1".

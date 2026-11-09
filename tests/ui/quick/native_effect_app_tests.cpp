@@ -6,7 +6,7 @@
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/timeline/timing.hpp"
 
@@ -49,8 +49,6 @@ namespace engine = oscillate::engine;
 namespace effects = oscillate::native_dsp::effects;
 namespace project = oscillate::project;
 namespace quick = oscillate::quick;
-namespace synth = oscillate::native_dsp::synth;
-
 using oscillate::test::require;
 
 // A fake device the test drives block by block on the UI thread, so a live
@@ -137,10 +135,10 @@ void catalogue_lists_every_engine() {
 }
 
 // The first continuous, automatable, live parameter: a knob.
-const synth::ParameterDescriptor& knob(const effects::EffectEngine& effect) {
+const oscillate::native_dsp::ParameterDescriptor& knob(const effects::EffectEngine& effect) {
   for (const auto& parameter : effect.descriptor->parameters) {
-    if (parameter.automatable && !synth::is_discrete(parameter) &&
-        parameter.timing == synth::ParameterTiming::live)
+    if (parameter.automatable && !oscillate::native_dsp::is_discrete(parameter) &&
+        parameter.timing == oscillate::native_dsp::ParameterTiming::live)
       return parameter;
   }
   throw std::runtime_error("effect has no knob");

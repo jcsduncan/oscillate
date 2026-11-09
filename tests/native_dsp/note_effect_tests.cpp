@@ -83,9 +83,9 @@ std::vector<double> values(std::string_view id,
                            std::initializer_list<std::pair<std::string_view, double>> set = {}) {
   const auto* found = fx::find_engine(id);
   REQUIRE_NE(found, nullptr, "engine registered");
-  auto dense = synth::default_values(*found->descriptor);
+  auto dense = oscillate::native_dsp::default_values(*found->descriptor);
   for (const auto& [parameter, value] : set) {
-    const auto index = synth::find_parameter(*found->descriptor, parameter);
+    const auto index = oscillate::native_dsp::find_parameter(*found->descriptor, parameter);
     REQUIRE_OK(index, "parameter exists");
     dense[*index] = value;
   }
@@ -175,10 +175,10 @@ void the_registry_is_complete() {
   std::set<std::string_view> ids;
   for (const auto* engine : all) {
     ids.insert(engine->descriptor->id);
-    REQUIRE_OK(synth::validate_engine(*engine->descriptor),
+    REQUIRE_OK(oscillate::native_dsp::validate_engine(*engine->descriptor),
                std::string(engine->descriptor->id) + " has a valid table");
     for (const auto& preset : engine->descriptor->presets)
-      REQUIRE_OK(synth::preset_values(*engine->descriptor, preset),
+      REQUIRE_OK(oscillate::native_dsp::preset_values(*engine->descriptor, preset),
                  std::string(preset.name) + " resolves");
     require(!engine->descriptor->presets.empty(), "every note effect has presets");
   }

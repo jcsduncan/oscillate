@@ -32,7 +32,7 @@ namespace facts = native_dsp::synth::crate;
 // its meter.
 constexpr double sample_beats_per_bar = 4.0;
 constexpr double seconds_per_minute = 60.0;
-using native_dsp::synth::EngineDescriptor;
+using native_dsp::EngineDescriptor;
 using native_dsp::synth::SynthMediaAsset;
 
 // The global parameters the panel writes (spec 09 §2.1).
@@ -71,7 +71,7 @@ const project::NativeLabel* find_label(const project::NativeSynthDocument& docum
 }
 
 std::optional<std::size_t> parameter_index(const EngineDescriptor& engine, std::string_view id) {
-  return native_dsp::synth::find_parameter(engine, id);
+  return native_dsp::find_parameter(engine, id);
 }
 
 void set_value(const EngineDescriptor& engine, std::vector<double>& values, std::string_view id,

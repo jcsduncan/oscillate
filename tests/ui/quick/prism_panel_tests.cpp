@@ -2,7 +2,7 @@
 #include "native_synth_device_controller.hpp"
 #include "panel_fit_checks.hpp"
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/prism.hpp"
 #include "oscillate/test/check.hpp"
 
@@ -32,10 +32,12 @@ namespace synth = oscillate::native_dsp::synth;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *synth::prism::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() {
+  return *synth::prism::engine().descriptor;
+}
 
 std::size_t index(std::string_view id) {
-  const auto found = synth::find_parameter(table(), id);
+  const auto found = oscillate::native_dsp::find_parameter(table(), id);
   if (!found) {
     throw std::runtime_error("unknown parameter " + std::string(id));
   }
@@ -54,7 +56,7 @@ int preset_index(std::string_view name) {
 // ---- Controller ---------------------------------------------------------------
 
 void model_is_driven_by_the_engine_table() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   const auto cutoff = controller.parameter(QStringLiteral("prism.filter.cutoff"));
   require(cutoff.value(QStringLiteral("name")).toString() == QStringLiteral("Cutoff") &&
@@ -87,7 +89,7 @@ void model_is_driven_by_the_engine_table() {
 }
 
 void edits_round_trip_through_the_adapter() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   const QString cutoff = QStringLiteral("prism.filter.cutoff");
   const int revision = controller.revision();
@@ -125,7 +127,7 @@ void edits_round_trip_through_the_adapter() {
 }
 
 void drags_are_coalesced_gestures() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   const QString resonance = QStringLiteral("prism.filter.resonance");
   controller.begin_gesture(resonance);
@@ -149,12 +151,13 @@ void drags_are_coalesced_gestures() {
 }
 
 void presets_apply_and_cycle() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   const int acid = preset_index("Acid");
   controller.apply_preset(acid);
   const auto expected =
-      synth::preset_values(table(), table().presets[static_cast<std::size_t>(acid)]).value();
+      oscillate::native_dsp::preset_values(table(), table().presets[static_cast<std::size_t>(acid)])
+          .value();
   require(adapter.values() == expected, "preset values reach the project");
   require(controller.preset_name() == QStringLiteral("Acid") &&
               controller.preset_category() == QStringLiteral("Bass") &&
@@ -182,7 +185,7 @@ void presets_apply_and_cycle() {
 }
 
 void status_reports_deferral_and_failures() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   require(controller.status_text() == QStringLiteral("Live"), "live by default");
   adapter.set_status({.saved_revision = 3, .audible_revision = 3, .deferred_changes = true});
@@ -209,7 +212,7 @@ void status_reports_deferral_and_failures() {
 }
 
 void filter_response_matches_the_prototypes() {
-  auto values = synth::default_values(table());
+  auto values = oscillate::native_dsp::default_values(table());
   values[index("prism.filter.resonance")] = 0.0;
   values[index("prism.filter.cutoff")] = 1'000.0;
   InMemoryNativeSynthAdapter adapter(values);
@@ -314,7 +317,7 @@ QQuickItem* item(Panel& panel, const QString& name) {
 }
 
 void panel_loads_and_edits_through_the_controller() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller, false);
   oscillate::test::panel_fit::require_knob_labels_apart(panel->root, "Prism");
@@ -393,7 +396,7 @@ void screenshots_if_requested() {
   }
   QDir().mkpath(QString::fromLocal8Bit(directory));
   for (const bool light : {false, true}) {
-    auto values = synth::preset_values(
+    auto values = oscillate::native_dsp::preset_values(
                       table(), table().presets[static_cast<std::size_t>(preset_index("Supersaw"))])
                       .value();
     values[index("prism.mod1.source")] = 2;
@@ -411,7 +414,7 @@ void screenshots_if_requested() {
     std::cout << "wrote " << path.toStdString() << '\n';
   }
   // The patch a new track starts with.
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller, false);
   QTest::qWait(50);

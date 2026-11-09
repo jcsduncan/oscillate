@@ -135,7 +135,7 @@ void trimmed_tail_ends_with_the_sound() {
   {
     const auto& table = *effects::find_engine("dust")->descriptor;
     auto values = take(session->effects().native_effect_values(synth, dust));
-    const auto bed = oscillate::native_dsp::synth::find_parameter(table, "dust.mix.bed");
+    const auto bed = oscillate::native_dsp::find_parameter(table, "dust.mix.bed");
     REQUIRE_TRUE(bed, "Dust has a bed level");
     values[*bed] = bed_level_db;
     accepted(session->effects().set_native_effect_values(synth, dust, values));

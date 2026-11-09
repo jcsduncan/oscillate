@@ -5,9 +5,6 @@
 
 namespace oscillate::quick {
 namespace {
-
-namespace synth = native_dsp::synth;
-
 // Synths first, then effects, each with its accent colour.
 constexpr std::array styles{
     DeviceStripStyle{
@@ -157,21 +154,21 @@ const DeviceStripStyle& device_strip_style(std::string_view engine_id) noexcept 
   return found == styles.end() ? neutral : *found;
 }
 
-std::vector<std::string> device_strip_parameters(const synth::EngineDescriptor& engine) {
+std::vector<std::string> device_strip_parameters(const native_dsp::EngineDescriptor& engine) {
   constexpr std::size_t slots = 4;
   std::vector<std::string> result;
   const auto taken = [&](std::string_view id) {
     return std::ranges::find(result, id) != result.end();
   };
   for (const auto id : device_strip_style(engine.id).parameters) {
-    if (!id.empty() && synth::find_parameter(engine, id) && !taken(id))
+    if (!id.empty() && native_dsp::find_parameter(engine, id) && !taken(id))
       result.emplace_back(id);
   }
   for (const auto& parameter : engine.parameters) {
     if (result.size() >= slots)
       break;
-    if (parameter.automatable && !synth::is_discrete(parameter) &&
-        parameter.timing == synth::ParameterTiming::live && !taken(parameter.id))
+    if (parameter.automatable && !native_dsp::is_discrete(parameter) &&
+        parameter.timing == native_dsp::ParameterTiming::live && !taken(parameter.id))
       result.emplace_back(parameter.id);
   }
   if (result.size() > slots)

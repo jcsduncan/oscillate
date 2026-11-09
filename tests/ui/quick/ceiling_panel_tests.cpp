@@ -6,7 +6,7 @@
 #include "oscillate/engine/graph.hpp"
 #include "oscillate/native_dsp/effects/ceiling.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QColor>
@@ -43,14 +43,13 @@
 namespace {
 using oscillate::quick::InMemoryNativeSynthAdapter;
 using oscillate::quick::NativeSynthDeviceController;
-namespace synth = oscillate::native_dsp::synth;
 namespace effects = oscillate::native_dsp::effects;
 namespace ceiling = oscillate::native_dsp::effects::ceiling;
 namespace engine = oscillate::engine;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *ceiling::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *ceiling::engine().descriptor; }
 int preset_index(std::string_view name) {
   for (std::size_t i = 0; i < table().presets.size(); ++i) {
     if (table().presets[i].name == name) {
@@ -63,7 +62,7 @@ int preset_index(std::string_view name) {
 std::vector<double> preset(std::string_view name) {
   for (const auto& entry : table().presets) {
     if (entry.name == name) {
-      return synth::preset_values(table(), entry).value();
+      return oscillate::native_dsp::preset_values(table(), entry).value();
     }
   }
   throw std::runtime_error("missing preset " + std::string(name));
@@ -328,7 +327,7 @@ void the_real_ceiling_holds_the_output() {
 void gain_drives_the_mix_into_the_ceiling() {
   auto values = preset("Default");
   const auto gain = std::ranges::find(table().parameters, std::string_view{"ceiling.gain"},
-                                      &synth::ParameterDescriptor::id);
+                                      &oscillate::native_dsp::ParameterDescriptor::id);
   require(gain != table().parameters.end(), "Ceiling has a gain");
   values[static_cast<std::size_t>(gain - table().parameters.begin())] = 12.0;
   const double quiet = std::pow(10.0, -12.0 / 20.0);

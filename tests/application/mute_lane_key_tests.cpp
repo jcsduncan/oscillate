@@ -5,7 +5,7 @@
 #include "oscillate/export/offline_master.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/pump.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/temp_dir.hpp"
@@ -39,7 +39,6 @@ namespace foundation = oscillate::foundation;
 namespace persistence = oscillate::persistence;
 namespace project = oscillate::project;
 namespace timeline = oscillate::timeline;
-namespace synth = oscillate::native_dsp::synth;
 namespace effects = oscillate::native_dsp::effects;
 namespace fs = std::filesystem;
 namespace tolerance = oscillate::test::tolerance;
@@ -130,8 +129,8 @@ Song song(const fs::path& root, double trigger) {
   const auto slot = take(session->effects().add_effect_engine(bass, 0, "pump", hard_gate_preset));
   (void)take(session->routing().add_sidechain(kick, bass, slot, 1.0));
   auto values = take(session->effects().native_effect_values(bass, slot));
-  const auto trigger_index =
-      synth::find_parameter(*effects::find_engine("pump")->descriptor, "pump.trigger");
+  const auto trigger_index = oscillate::native_dsp::find_parameter(
+      *effects::find_engine("pump")->descriptor, "pump.trigger");
   REQUIRE_TRUE(trigger_index.has_value(), "Pump has a trigger parameter");
   values[*trigger_index] = trigger;
   REQUIRE_OK(session->effects().set_native_effect_values(bass, slot, values), "Pump's trigger");

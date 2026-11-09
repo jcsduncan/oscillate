@@ -5,8 +5,8 @@
 // resolve as documented, and Evolve keeps changing every four bars.
 
 #include "oscillate/application/knock_patterns.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/knock.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <algorithm>
@@ -179,7 +179,7 @@ void library_is_complete() {
         entries, [&](const patterns::LibraryEntry& entry) { return entry.kit == preset.name; });
     REQUIRE_EQ(kit_loops, static_cast<std::ptrdiff_t>(patterns::loops_per_kit),
                "every kit has its two loops: " + std::string(preset.name));
-    const auto values = synth::preset_values(table, preset);
+    const auto values = oscillate::native_dsp::preset_values(table, preset);
     REQUIRE_OK(values, "kit values");
     const auto roles = patterns::roles_of(values.value());
     for (const auto& entry : entries) {

@@ -3,7 +3,7 @@
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/export/offline_master.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/temp_dir.hpp"
@@ -38,7 +38,6 @@ namespace audio = oscillate::audio_io;
 namespace engine = oscillate::engine;
 namespace effects = oscillate::native_dsp::effects;
 namespace exporting = oscillate::exporting;
-namespace synth = oscillate::native_dsp::synth;
 namespace foundation = oscillate::foundation;
 namespace persistence = oscillate::persistence;
 namespace project = oscillate::project;
@@ -84,8 +83,8 @@ constexpr double null_tolerance = 1e-6;
 // The effect's first continuous, automatable, live parameter.
 std::string automated_parameter(const effects::EffectEngine& engine) {
   for (const auto& parameter : engine.descriptor->parameters) {
-    if (parameter.automatable && !synth::is_discrete(parameter) &&
-        parameter.timing == synth::ParameterTiming::live)
+    if (parameter.automatable && !oscillate::native_dsp::is_discrete(parameter) &&
+        parameter.timing == oscillate::native_dsp::ParameterTiming::live)
       return std::string(parameter.id);
   }
   return {};
@@ -132,11 +131,12 @@ std::vector<float> export_nulls_against_live(const effects::EffectEngine& effect
     const auto parameter = automated_parameter(effect);
     if (placement == Placement::track && !parameter.empty()) {
       const auto& table = *effect.descriptor;
-      const auto& descriptor = table.parameters[*synth::find_parameter(table, parameter)];
+      const auto& descriptor =
+          table.parameters[*oscillate::native_dsp::find_parameter(table, parameter)];
       (void)take(session->parameter_automation().set_effect_automation_point(
-          track, slot, parameter, 0, synth::from_normalised(descriptor, 0.25)));
+          track, slot, parameter, 0, oscillate::native_dsp::from_normalised(descriptor, 0.25)));
       (void)take(session->parameter_automation().set_effect_automation_point(
-          track, slot, parameter, 1, synth::from_normalised(descriptor, 0.75)));
+          track, slot, parameter, 1, oscillate::native_dsp::from_normalised(descriptor, 0.75)));
     }
     REQUIRE_OK(session->saving().save(), "project saved");
     return session->snapshot();
@@ -172,8 +172,9 @@ std::vector<float> export_nulls_against_live(const effects::EffectEngine& effect
     Gate gate;
     auto model = take(project::ProjectModel::open(saved, gate));
     app::RoutedPlaybackControl control(
-        model, limits(block_frames, effect.latency_frames(synth::default_values(*effect.descriptor),
-                                                          static_cast<double>(saved.sample_rate))));
+        model, limits(block_frames, effect.latency_frames(
+                                        oscillate::native_dsp::default_values(*effect.descriptor),
+                                        static_cast<double>(saved.sample_rate))));
     auto submitted = control.submit_current();
     REQUIRE_OK(submitted, submitted ? "" : "live graph prepared: " + submitted.error().message);
     auto source =
@@ -187,7 +188,7 @@ std::vector<float> export_nulls_against_live(const effects::EffectEngine& effect
     // the effect's own, as the engine reports it for the saved values.
     const auto latency = control.master_output_latency_frames();
     REQUIRE_EQ(latency,
-               effect.latency_frames(synth::default_values(*effect.descriptor),
+               effect.latency_frames(oscillate::native_dsp::default_values(*effect.descriptor),
                                      static_cast<double>(saved.sample_rate)),
                "the live route's latency is the effect's: " + std::to_string(latency));
     const std::size_t offset = 2 * static_cast<std::size_t>(latency);

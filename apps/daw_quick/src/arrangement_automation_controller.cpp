@@ -2,8 +2,8 @@
 
 #include "oscillate/automation/curve.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 
@@ -30,7 +30,7 @@ struct Feel {
     parameter,
     normalised
   } kind = Kind::normalised;
-  const native_dsp::synth::ParameterDescriptor* parameter = nullptr;
+  const native_dsp::ParameterDescriptor* parameter = nullptr;
   QString name;
   QString group;
 };
@@ -50,7 +50,7 @@ const double fader_top_db = 20.0 * std::log10(4.0);
   case Feel::Kind::balance:
     return (value + 1.0) / 2.0;
   case Feel::Kind::parameter:
-    return native_dsp::synth::to_normalised(*feel.parameter, value);
+    return native_dsp::to_normalised(*feel.parameter, value);
   case Feel::Kind::mute:
   case Feel::Kind::normalised:
     break;
@@ -71,7 +71,7 @@ const double fader_top_db = 20.0 * std::log10(4.0);
   case Feel::Kind::mute:
     return lane >= 0.5 ? 1.0 : 0.0;
   case Feel::Kind::parameter:
-    return native_dsp::synth::from_normalised(*feel.parameter, lane);
+    return native_dsp::from_normalised(*feel.parameter, lane);
   case Feel::Kind::normalised:
     break;
   }
@@ -99,7 +99,7 @@ const double fader_top_db = 20.0 * std::log10(4.0);
   case Feel::Kind::mute:
     return value >= 0.5 ? QStringLiteral("Muted") : QStringLiteral("Playing");
   case Feel::Kind::parameter:
-    return QString::fromStdString(native_dsp::synth::format_value(*feel.parameter, value));
+    return QString::fromStdString(native_dsp::format_value(*feel.parameter, value));
   case Feel::Kind::normalised:
     break;
   }
@@ -176,9 +176,9 @@ const double fader_top_db = 20.0 * std::log10(4.0);
   return std::nullopt;
 }
 
-[[nodiscard]] const native_dsp::synth::ParameterDescriptor*
-descriptor_of(const native_dsp::synth::EngineDescriptor& engine, std::string_view id) {
-  const auto index = native_dsp::synth::find_parameter(engine, id);
+[[nodiscard]] const native_dsp::ParameterDescriptor*
+descriptor_of(const native_dsp::EngineDescriptor& engine, std::string_view id) {
+  const auto index = native_dsp::find_parameter(engine, id);
   if (!index)
     return nullptr;
   const auto& parameter = engine.parameters[*index];
@@ -353,7 +353,7 @@ constexpr double max_bend = 2.0 / 3.0;
       });
     });
   };
-  const auto add_engine = [&](const native_dsp::synth::EngineDescriptor& engine, auto make_key,
+  const auto add_engine = [&](const native_dsp::EngineDescriptor& engine, auto make_key,
                               auto make_destination) {
     QVariantList items;
     for (const auto& parameter : engine.parameters) {

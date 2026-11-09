@@ -4,8 +4,8 @@
 //   oscillate_application_mix_check_tests [case...]
 #include "oscillate/application/mix_check.hpp"
 #include "oscillate/application/project_session.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/check.hpp"
@@ -289,7 +289,7 @@ void nova_sub_is_not_rumble() {
   REQUIRE_NE(engine, nullptr, "Nova is built in");
   auto values = take(song.session->instruments().native_instrument_values(bass));
   const auto set = [&](std::string_view id, double value) {
-    const auto index = oscillate::native_dsp::synth::find_parameter(*engine->descriptor, id);
+    const auto index = oscillate::native_dsp::find_parameter(*engine->descriptor, id);
     REQUIRE_OK(index, "Nova has " + std::string(id));
     values[*index] = value;
   };

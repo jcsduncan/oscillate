@@ -3,8 +3,8 @@
 #include "nova_constellation.hpp"
 
 #include "oscillate/application/sound_map.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/nova.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/persistence/effect_preset.hpp"
 #include "oscillate/test/check.hpp"
@@ -62,7 +62,7 @@ template <typename T> T take(oscillate::foundation::Result<T> result) {
 }
 
 const synth::SynthEngine& nova() { return synth::nova::engine(); }
-const synth::EngineDescriptor& table() { return *nova().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *nova().descriptor; }
 
 // Holds values and a document as a track would, writes presets in the real
 // file format and records each submission's gesture.
@@ -339,7 +339,8 @@ void the_constellation() {
   // KEEP MINE: the envelopes stay through a morph.
   click(*view, QStringLiteral("novaConstellationLock:env"));
   require(constellation->is_locked(QStringLiteral("env")), "envelopes are kept");
-  const auto attack = *synth::find_parameter(table(), "nova.env.1.attack");
+  const auto attack =
+      oscillate::test::take(oscillate::native_dsp::find_parameter(table(), "nova.env.1.attack"));
   const double kept = controller.current_values()[attack];
   drag(*view, end, start);
   require(controller.current_values()[attack] == kept, "the envelope stayed");

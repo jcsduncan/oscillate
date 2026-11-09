@@ -1,8 +1,8 @@
 #include "native_synth_device_controller.hpp"
 #include "native_synth_panel_adapter.hpp"
 
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/nova.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QCoreApplication>
@@ -45,13 +45,13 @@ namespace synth = oscillate::native_dsp::synth;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *synth::nova::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *synth::nova::engine().descriptor; }
 
 // Accepts every edit, and writes a preset as its values, one per line, so
 // user presets save and load without a project.
 class PresetAdapter final : public NativeSynthPanelAdapter {
 public:
-  PresetAdapter() : values_(synth::default_values(table())) {}
+  PresetAdapter() : values_(oscillate::native_dsp::default_values(table())) {}
   [[nodiscard]] std::vector<double> values() const override { return values_; }
   void submit(std::span<const double> values, NativeSynthGesture) override {
     values_.assign(values.begin(), values.end());
