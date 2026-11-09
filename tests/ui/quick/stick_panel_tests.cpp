@@ -57,6 +57,7 @@ constexpr float frame_hits = 7.0F;
 constexpr float frame_voices = 5.0F;
 constexpr float frame_peak_db = -9.0F;
 constexpr float frame_pedal = 0.3F;
+constexpr double pedal_tolerance = 1e-6;
 constexpr float loud_db = -6.0F;
 constexpr float quiet_db = -40.0F;
 constexpr float silent_db = -120.0F;
@@ -168,7 +169,8 @@ void controller_decodes_stick_telemetry() {
               live.value(QStringLiteral("voices")).toInt() == static_cast<int>(frame_voices),
           "the library, hits and voices decode");
   require(live.value(QStringLiteral("last_piece")).toInt() == static_cast<int>(snare) &&
-              std::fabs(live.value(QStringLiteral("pedal")).toDouble() - frame_pedal) < 1e-6,
+              std::fabs(live.value(QStringLiteral("pedal")).toDouble() - frame_pedal) <
+                  pedal_tolerance,
           "the last piece and the pedal decode");
   const auto levels = live.value(QStringLiteral("piece_levels")).toList();
   const auto meters = live.value(QStringLiteral("mic_db")).toList();

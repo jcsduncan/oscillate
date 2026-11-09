@@ -129,6 +129,7 @@ inline double mic_level(std::size_t m, std::string_view piece) {
 
 // The hit's own value on mic `m` at `frame`: its power's amplitude, a
 // phase of its own and its decay.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a power, a round robin, then a mic.
 inline double hit_value(const StrokeSpec& s, std::size_t power, std::size_t robin, std::size_t m,
                         double frame) {
   const double t = frame / rate;

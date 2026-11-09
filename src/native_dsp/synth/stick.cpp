@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <numbers>
@@ -287,7 +288,7 @@ public:
       if (mapped->articulation == Articulation::pedal) {
         choke_hats(choke_margin);
       }
-      started = start(piece, mapped->articulation, strike, 1.0, 0.0);
+      started = start(piece, mapped->articulation, strike, 1.0);
     }
     if (started) {
       ++hits_;
@@ -384,6 +385,7 @@ private:
     std::uint64_t delay = 0;
     double level_db = 0.0;
     Striker striker = Striker::stick;
+    double openness = 0.0; // A hat's, as played.
   };
 
   // ---- The kit and its mics ------------------------------------------------------------------
@@ -548,23 +550,25 @@ private:
       above = below;
     }
     choke_hats(openness + choke_margin);
+    Strike hat = strike;
+    hat.openness = openness;
     const double low = openness_of(below).value_or(0.0);
     const double high = openness_of(above).value_or(0.0);
     const double f = high > low ? (openness - low) / (high - low) : 0.0;
     bool started = false;
     if (f < 1.0) {
-      started = start(Piece::hihat, below, strike, std::cos(quarter_turn * f), openness);
+      started = start(Piece::hihat, below, hat, std::cos(quarter_turn * f));
     }
     if (f > 0.0 && above != below) {
-      started = start(Piece::hihat, above, strike, std::sin(quarter_turn * f), openness) || started;
+      started = start(Piece::hihat, above, hat, std::sin(quarter_turn * f)) || started;
     }
     return started;
   }
 
   // Starts a hit of a stroke: the one recorded nearest the power its
   // velocity asks for, or a seeded round robin among its neighbours.
-  bool start(Piece piece, Articulation articulation, const Strike& strike, double weight,
-             double openness) noexcept {
+  // `weight` scales it (a hat's share of a crossfade).
+  bool start(Piece piece, Articulation articulation, const Strike& strike, double weight) noexcept {
     const auto& stroke = library_->stroke(piece, articulation, strike.striker);
     if (stroke.count == 0 || weight <= silent_gain) {
       return false;
@@ -622,7 +626,7 @@ private:
     v.sample = &library_->stream(chosen);
     v.resident = library_->resident(chosen);
     v.piece = piece;
-    v.openness = openness;
+    v.openness = strike.openness;
     const double tune = values_[st::piece_index(piece, st::piece::tune)];
     v.step = base_step_ * std::exp2(tune / semitones_per_octave);
     v.exact = v.step == 1.0;
@@ -634,8 +638,8 @@ private:
     set_decay(v);
     // A hat played less open than its recording rings shorter.
     const double recorded = openness_of(articulation).value_or(0.0);
-    if (piece == Piece::hihat && recorded > openness) {
-      const double share = openness / recorded;
+    if (piece == Piece::hihat && recorded > strike.openness) {
+      const double share = strike.openness / recorded;
       v.hat_step = decay_step(std::max(shortest_hat_seconds * rate_, share * v.length));
     }
     v.weights[0] = piece_weights_[static_cast<std::size_t>(piece)];
@@ -726,7 +730,7 @@ private:
         transport_.beat_at_block_start + static_cast<double>(frames_since_tick_) * per_frame;
     const double place = std::fmod(std::max(0.0, beat), seed_cycle_beats);
     const auto step = static_cast<std::uint64_t>(std::llround(place * beat_resolution));
-    constexpr auto keys = static_cast<std::uint64_t>(last_key + 1);
+    constexpr auto keys = static_cast<std::uint64_t>(last_key) + 1;
     return native_dsp::dsp::splitmix64(step * keys + static_cast<std::uint64_t>(key));
   }
 
@@ -780,6 +784,7 @@ private:
     return starved;
   }
 
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a voice's slot, then a frame count.
   void render_voice(std::size_t slot, std::size_t frames, double since) noexcept {
     auto& v = voices_[slot];
     std::size_t first = 0;
@@ -946,10 +951,16 @@ std::unique_ptr<SynthKernel> create_kernel(double sample_rate) {
   return std::make_unique<StickKernel>(sample_rate);
 }
 
-// Control: the kit these values play starts loading.
+// Control: the kit these values play starts loading. A failure to start
+// leaves the kit as it was, to be fetched again at the next offer.
 void fetch_content(std::span<const double> values) noexcept {
-  if (values.size() == st::parameters.size()) {
+  if (values.size() != st::parameters.size()) {
+    return;
+  }
+  try {
     detail::fetch(static_cast<Kit>(choice(values[p::kit], kit_count)));
+  } catch (const std::exception&) {
+    return;
   }
 }
 

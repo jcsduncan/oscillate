@@ -133,6 +133,8 @@ DEFAULT_JOBS = 4
 # What Stick keeps in memory of each hit (stick_library.hpp), for the report.
 RESIDENT_FRAMES = 4_096
 DOWNLOAD_CHUNK = 1 << 20
+# A stalled download gives up after this long without data.
+DOWNLOAD_TIMEOUT_SECONDS = 60
 DOWNLOADS = "downloads"
 
 # ---- The kits -----------------------------------------------------------------------------------
@@ -364,7 +366,10 @@ def download(kit: Kit, folder: Path) -> Path:
     if have < kit.size:
         request = urllib.request.Request(kit.url, headers={"Range": f"bytes={have}-"})
         print(f"downloading {kit.url} ({kit.size / 2**20:.0f} MiB) to {target}")
-        with urllib.request.urlopen(request) as response, target.open("ab") as file:
+        with (
+            urllib.request.urlopen(request, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response,
+            target.open("ab") as file,
+        ):
             if have and response.status != 206:
                 file.truncate(0)
                 have = 0
@@ -406,10 +411,16 @@ def member(archive: zipfile.ZipFile, base: PurePosixPath, relative: str) -> str:
 
 
 def read_xml(archive: zipfile.ZipFile, name: str) -> ElementTree.Element:
+    """A kit XML file, bounded in size; one declaring a document type or
+    entities (which no kit needs, and which could expand without bound) is
+    refused."""
     info = archive.getinfo(name)
     if info.file_size > MAX_XML_BYTES:
         raise SystemExit(f"{name} is too large")
-    return ElementTree.fromstring(archive.read(info))
+    data = archive.read(info)
+    if b"<!DOCTYPE" in data or b"<!ENTITY" in data:
+        raise SystemExit(f"{name} declares a document type")
+    return ElementTree.fromstring(data)
 
 
 @dataclass

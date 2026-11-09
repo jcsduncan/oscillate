@@ -18,10 +18,12 @@ The audio tracks play generated WAVs (two partials and a click per beat). The
 VST3 parts default to the repository's synthetic fixtures; on the reference
 machine the heavy project uses Surge XT and Surge XT Effects instead. A build
 without the VST3 host plays a second Ember in place of the VST3 instrument.
-The pad's Bow and the drums' Stick play their synthetic test libraries,
-which cost what the installed ones do to read (Stick's hits stream past
-their resident starts), so the run needs no download. `--stick-kit DIR`
-plays an installed kit in the drums instead.
+The pad's Bow plays its synthetic test library, which costs what the
+installed one does to read, so the run needs no download. The drums' Stick
+plays its synthetic kit, whose hits stream past their resident starts as an
+installed kit's do; it has nine mics where DRS Studio has 13 and Muldjord 15,
+and Stick mixes every mic, so measure an installed kit with `--stick-kit DIR`
+(a kit's folder), which the results name.
 
 ## What a run reports
 

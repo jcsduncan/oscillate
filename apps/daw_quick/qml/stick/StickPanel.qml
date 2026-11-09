@@ -32,8 +32,14 @@ Rectangle {
     readonly property var groups: (layout.groups !== undefined ? layout.groups : [])
         .filter(g => g.channels > 0 || !panel.ready)
     property bool libraryOpen: false
-    // The piece whose controls show: the snare until another is picked.
-    property int selected: 1
+    // The piece whose controls show: the snare until another is picked, and
+    // again when the kit chosen lacks the one picked (every kit has a snare).
+    readonly property int snarePiece: 1
+    property int selected: snarePiece
+    onPiecesChanged: {
+        if (selected < pieces.length && pieces[selected].present === false)
+            selected = snarePiece
+    }
     readonly property var piece: selected < pieces.length ? pieces[selected] : ({ id: "snare", name: "Snare" })
     readonly property bool kitHasBrushes: pieces.some(p => p.brushes === true)
 

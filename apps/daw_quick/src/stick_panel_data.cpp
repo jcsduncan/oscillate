@@ -70,8 +70,10 @@ constexpr std::uint32_t every_articulation = (1U << stick::articulation_count) -
 
 QString key_name(int key) {
   const int pitches = static_cast<int>(pitch_names.size());
+  // A whole octave number; the formatter gives a negative one its minus sign.
+  const int octave = key / pitches + octave_of_key_zero;
   return text(pitch_names[static_cast<std::size_t>(key % pitches)]) +
-         QString::fromStdString(foundation::format_number(key / pitches + octave_of_key_zero, 0));
+         QString::fromStdString(foundation::format_number(octave, 0));
 }
 
 // The key a piece's plain stroke plays (the hi-hat's at the pedal), the

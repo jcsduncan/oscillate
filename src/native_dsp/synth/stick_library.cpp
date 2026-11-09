@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cmath>
 #include <condition_variable>
+#include <exception>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -114,6 +115,7 @@ Result<std::unique_ptr<Library>> Library::open(const std::filesystem::path& dire
     if (key == "channels") {
       if (channels != 0 || !parse_number(rest, channels) || channels == 0 || channels > max_mics) {
         error = "The drum kit's channel count is not supported";
+        return true;
       }
       mic_seen.assign(channels, false);
       library->mics_.assign(channels, Mic{});
@@ -292,20 +294,29 @@ public:
     if (s.reader.joinable()) {
       s.reader.join();
     }
+    const auto before = s.state.load(std::memory_order_relaxed);
     s.reading = true;
     s.state.store(library::State::loading, std::memory_order_relaxed);
     try {
       s.reader = std::thread([this, &s, directory] {
-        auto outcome = registry().load(directory);
+        // A failed read reports the kit invalid rather than ending the process.
+        sample_stream::Outcome outcome;
+        try {
+          outcome = registry().load(directory);
+        } catch (const std::exception& error) {
+          outcome.state = sample_stream::State::invalid;
+          outcome.message = error.what();
+          outcome.directory = directory;
+        }
         std::lock_guard done(mutex_);
         record(s, directory, outcome);
         s.reading = false;
         finished_.notify_all();
       });
-    } catch (const std::system_error&) {
-      // No thread: read it here instead.
+    } catch (const std::exception&) {
+      // No thread: the kit is as it was, and the next look tries again.
       s.reading = false;
-      attempt(s, directory);
+      s.state.store(before, std::memory_order_relaxed);
     }
     return s.reading;
   }

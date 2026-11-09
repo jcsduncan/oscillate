@@ -291,22 +291,27 @@ void descriptor_registry_and_presets() {
   require(parameter("stick.perf.pedal").automatable, "the hi-hat pedal is an automation lane");
   require(!parameter("stick.snare.tune").automatable, "Tune is read as a hit starts");
   // The General MIDI map, its toms spread over the kit's.
-  const auto mapped = [](int key, std::size_t toms) { return stick::map_key(key, toms); };
-  REQUIRE_EQ(mapped(kick, 3)->piece, stick::Piece::kick, "C2 (36) is the kick");
-  REQUIRE_EQ(mapped(sidestick, 3)->articulation, stick::Articulation::sidestick,
+  // A key the map plays: required, and then read.
+  const auto mapped = [](int key, std::size_t toms) {
+    const auto found = stick::map_key(key, toms);
+    REQUIRE_TRUE(found.has_value(), "key " + std::to_string(key) + " is mapped");
+    return found.value_or(stick::Mapped{});
+  };
+  REQUIRE_EQ(mapped(kick, 3).piece, stick::Piece::kick, "C2 (36) is the kick");
+  REQUIRE_EQ(mapped(sidestick, 3).articulation, stick::Articulation::sidestick,
              "C#2 is the side-stick");
-  const bool hat_follows_pedal = mapped(hat_at_pedal, 3)->at_pedal;
+  const bool hat_follows_pedal = mapped(hat_at_pedal, 3).at_pedal;
   REQUIRE_TRUE(hat_follows_pedal, "F#2 plays the hat at the pedal");
-  REQUIRE_EQ(mapped(hat_open, 3)->articulation, stick::Articulation::open, "A#2 is open");
+  REQUIRE_EQ(mapped(hat_open, 3).articulation, stick::Articulation::open, "A#2 is open");
   constexpr int high_tom = 50;
   constexpr int low_floor = 41;
   constexpr int low_mid = 47;
-  REQUIRE_EQ(mapped(high_tom, 3)->piece, stick::Piece::tom1, "D3 the highest tom");
-  REQUIRE_EQ(mapped(low_floor, 3)->piece, stick::Piece::tom3, "F2 the lowest of three");
-  REQUIRE_EQ(mapped(low_floor, 4)->piece, stick::Piece::tom4, "or of four");
-  REQUIRE_EQ(mapped(low_mid, 2)->piece, stick::Piece::tom1, "two toms split the six keys");
-  REQUIRE_FALSE(mapped(low_floor, 0).has_value(), "no toms, no tom keys");
-  REQUIRE_FALSE(mapped(stick::last_key + 1, 3).has_value(), "nothing above the map");
+  REQUIRE_EQ(mapped(high_tom, 3).piece, stick::Piece::tom1, "D3 the highest tom");
+  REQUIRE_EQ(mapped(low_floor, 3).piece, stick::Piece::tom3, "F2 the lowest of three");
+  REQUIRE_EQ(mapped(low_floor, 4).piece, stick::Piece::tom4, "or of four");
+  REQUIRE_EQ(mapped(low_mid, 2).piece, stick::Piece::tom1, "two toms split the six keys");
+  REQUIRE_FALSE(stick::map_key(low_floor, 0).has_value(), "no toms, no tom keys");
+  REQUIRE_FALSE(stick::map_key(stick::last_key + 1, 3).has_value(), "nothing above the map");
   require(stick::plays(stick::Piece::ride, stick::Articulation::bell) &&
               !stick::plays(stick::Piece::kick, stick::Articulation::bell),
           "only the rides have bells");
@@ -356,6 +361,7 @@ std::vector<std::vector<double>> repeated(const std::vector<double>& values, std
   auto runtime = make_runtime(stick::engine(), values);
   const auto x = mono(render(*runtime, events, notes * apart));
   std::vector<std::vector<double>> hits;
+  hits.reserve(notes);
   for (std::size_t n = 0; n < notes; ++n) {
     hits.emplace_back(x.begin() + static_cast<std::ptrdiff_t>(n * apart),
                       x.begin() + static_cast<std::ptrdiff_t>(n * apart + window));

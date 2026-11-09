@@ -82,7 +82,7 @@ The kits are 2–5 GB of multi-channel audio, too much to hold. Stick streams th
 | E2 (40) | snare, rimshot | F3 (53) | ride bell |
 | F♯2 (42) | hi-hat at the pedal's openness | G3 (55) | the second ride's bell |
 | G♯2 (44) | hi-hat pedal | A3 (57) | crash 2 |
-| F2–D3 (41, 43, 45, 47, 48, 50) | the toms, high to low | B3 (59) | ride 2 |
+| F2–D3 (41, 43, 45, 47, 48, 50) | the toms, the lowest key the lowest tom | B3 (59) | ride 2 |
 
   - The six tom keys split evenly over the kit's toms: DRS Studio's three take two each.
   - G3 is the splash in General MIDI; Stick plays Muldjord's second ride bell there, as that kit's own map does.

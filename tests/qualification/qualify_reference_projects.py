@@ -204,7 +204,17 @@ def run_one(args, reference: str, frames: int, repetition: int, serial: int | No
     summary = summarise(completed.stdout, trace)
     if trace_path.is_file() and not args.keep_traces:
         trace_path.unlink()
-    return {"reference": reference, "frames": frames, "repetition": repetition, **summary}
+    run = {"reference": reference, "frames": frames, "repetition": repetition, **summary}
+    if reference == "drums":
+        # The kit the drums played: an installed one's folder, or the synthetic kit.
+        run["stick_kit"] = str(args.stick_kit) if args.stick_kit else "synthetic"
+    return run
+
+
+def label(run: dict) -> str:
+    """The run's reference, with the drums' kit."""
+    kit = run.get("stick_kit")
+    return f"{run['reference']} ({Path(kit).name})" if kit else run["reference"]
 
 
 def markdown(evidence: dict) -> str:
@@ -219,7 +229,7 @@ def markdown(evidence: dict) -> str:
     for run in evidence["runs"]:
         result = run["result"]
         lines.append(
-            f"| {run['reference']} | {run['frames']} | {run['repetition']} | {result['workers']} "
+            f"| {label(run)} | {run['frames']} | {run['repetition']} | {result['workers']} "
             f"| {result.get('p50_us', '')} | {result.get('p99_us', '')} | {result['max_us']} "
             f"| {result.get('p99_period_percent', '')}% | {result['over_period']} "
             f"| {result['process_cpu_percent']} | {result['cpu_window_p99']} "
@@ -231,7 +241,7 @@ def markdown(evidence: dict) -> str:
             continue
         lines += [
             "",
-            f"Devices, {run['reference']} at {run['frames']} frames (run {run['repetition']}):",
+            f"Devices, {label(run)} at {run['frames']} frames (run {run['repetition']}):",
             "",
             "| Device | Instances | % of one core | Mean µs | p99 µs | Max µs |",
             "| --- | ---: | ---: | ---: | ---: | ---: |",

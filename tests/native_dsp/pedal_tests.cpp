@@ -5,6 +5,7 @@
 #include "oscillate/native_dsp/synth/prism.hpp"
 #include "oscillate/native_inserts/synth_player.hpp"
 #include "oscillate/test/check.hpp"
+#include "stick_test_library.hpp"
 #include "synth_test_support.hpp"
 
 #include <cmath>
@@ -96,6 +97,8 @@ void soft_restrike_and_capacity() {
 void every_engine_sustains_generically() {
   // Bow plays its synthetic library; without one it is silent.
   (void)bow_test::install();
+  // Stick plays its synthetic kit, never one installed on the machine.
+  (void)stick_test::install(stick_test::resident_seconds);
   for (const auto* engine : engines()) {
     if (engine->models_pedals) {
       continue;
