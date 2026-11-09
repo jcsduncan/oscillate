@@ -82,6 +82,7 @@ Item {
     readonly property real sparkReachRange: 12
 
     objectName: "dustRecord"
+    readonly property string plotExemptReason: "a picture of the record turning on its platter, worn and sparking; no axes to scale"
     implicitWidth: theme.recordWidth
     implicitHeight: theme.recordHeight
 

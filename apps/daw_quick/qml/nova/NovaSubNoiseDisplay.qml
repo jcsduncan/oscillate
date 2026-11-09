@@ -25,6 +25,8 @@ Rectangle {
     readonly property int sampleStep: 2
 
     objectName: "novaSubNoiseDisplay"
+    // A picture of the two sources at their levels, not a measured plot.
+    readonly property string plotExemptReason: "a sketch of the sub's shape and the noise texture at their levels, with no measured axes"
     radius: panel.theme.displayRadius
     color: panel.theme.wellFill
     border.color: panel.theme.line

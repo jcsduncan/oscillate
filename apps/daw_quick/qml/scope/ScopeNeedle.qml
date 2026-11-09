@@ -24,6 +24,7 @@ Item {
     }
 
     objectName: "scopeNeedle"
+    readonly property string plotExemptReason: "a meter dial with its own printed scale (ms early and late)"
 
     function angleAt(p) {
         return -Math.PI / 2 + p * sweep

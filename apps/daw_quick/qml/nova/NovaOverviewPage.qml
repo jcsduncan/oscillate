@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import "../devicekit" as Kit
 import "NovaContract.js" as Contract
 
 // The overview (ADR-0076 revision 2), page 0: the whole synth on one page.
@@ -15,7 +16,7 @@ import "NovaContract.js" as Contract
 // page scrolls.
 //
 // Every card (NovaModuleCard) shows its display and every control its
-// module has; a module that is off fades. ⤢ or a double-click on a title
+// module has; a module that is off fades, and OSC C folds to its header. ⤢ or a double-click on a title
 // opens that card large over the grid, under a scrim (`panel.focusModule`);
 // Esc, ⤢ again or a click on the scrim restores it. The MODULATION card
 // holds a tab per source: a click selects it (`panel.modTab`) and its
@@ -142,8 +143,9 @@ Item {
         x: cell.expanded ? page.expandInset : page.columnX(cell.area[0])
         y: cell.expanded ? page.expandedTop + page.expandInset : page.rowY(cell.area[1])
         width: cell.expanded ? scroller.width - 2 * page.expandInset : page.spanWidth(cell.area[0], cell.area[2])
+        // A folded card keeps its header's height at the top of its area.
         height: cell.expanded ? Math.max(scroller.height - 2 * page.expandInset, cell.implicitHeight)
-                              : page.rowHeight(cell.area[1])
+                              : cell.collapsed ? cell.implicitHeight : page.rowHeight(cell.area[1])
         z: cell.expanded ? page.expandedZ : 0
     }
     // An oscillator: its display by type, and its controls.
@@ -213,7 +215,8 @@ Item {
 
             OscCell { id: oscA; key: "a" }
             OscCell { id: oscB; key: "b" }
-            OscCell { id: oscC; key: "c" }
+            // OSC C folds to its header while it is off.
+            OscCell { id: oscC; key: "c"; collapsible: true }
 
             Cell {
                 id: subNoise
@@ -320,18 +323,39 @@ Item {
                     height: modulation.body.height - y
                     sourceComponent: modulation.envelope ? envelopeEditor : lfoEditor
                 }
+                // Each editor in its plot frame: level up, and for an LFO
+                // the cycle across (an envelope's time axis is compressed
+                // per stage, so it has no time scale).
                 Component {
                     id: envelopeEditor
-                    NovaEnvelopeView {
-                        panel: page.panel
-                        envelope: modulation.envelope ? modulation.source : Contract.ampEnvelope
+                    Kit.PlotFrame {
+                        theme: page.panel.theme
+                        live: page.panel.live
+                        yUnit: "%"
+                        yTicks: envelopeView.levelTicks
+                        NovaEnvelopeView {
+                            id: envelopeView
+                            anchors.fill: parent
+                            panel: page.panel
+                            envelope: modulation.envelope ? modulation.source : Contract.ampEnvelope
+                        }
                     }
                 }
                 Component {
                     id: lfoEditor
-                    NovaCurveEditor {
-                        panel: page.panel
-                        lfo: modulation.envelope ? Contract.lfoSources[0] : modulation.source
+                    Kit.PlotFrame {
+                        theme: page.panel.theme
+                        live: page.panel.live
+                        xUnit: "%"
+                        yUnit: "%"
+                        xTicks: curveEditor.xTicks
+                        yTicks: curveEditor.yTicks
+                        NovaCurveEditor {
+                            id: curveEditor
+                            anchors.fill: parent
+                            panel: page.panel
+                            lfo: modulation.envelope ? Contract.lfoSources[0] : modulation.source
+                        }
                     }
                 }
                 Loader {
@@ -374,6 +398,8 @@ Item {
                 z: page.scrimZ
                 color: page.panel.theme.scrim
                 MouseArea {
+                    // Esc, or ⤢ on the large card, restores it from the keyboard.
+                    readonly property string keyboardAlternative: "Esc, or the large card's ⤢ button"
                     anchors.fill: parent
                     onClicked: page.panel.restore()
                     onWheel: wheel => wheel.accepted = false

@@ -6,9 +6,10 @@ import "../devicekit" as Kit
 
 // One sequencer step: its note (an interval from the held root, drawn as a
 // note name from C), octave, gate (off, on or tie), accent and slide. The
-// cell takes focus: Up/Down change the note (Shift: octave), Return or Space
-// cycle the gate, A toggles accent, S toggles slide, Delete resets the step,
-// Left/Right move between steps.
+// strip of steps is one Tab stop; the focused cell is its cursor: Up/Down
+// change the note (Shift: octave), Return or Space cycle the gate, A toggles
+// accent, S toggles slide, Delete resets the step, Left/Right ask the strip
+// to move the cursor (moveRequested).
 Rectangle {
     id: cell
     required property var controller
@@ -19,6 +20,7 @@ Rectangle {
     // The live playhead: this step is sounding, and whether its gate is open.
     property bool playing: false
     property bool gateOpen: false
+    signal moveRequested(int delta)
     readonly property string base: "torque.seq.s" + step + "."
     readonly property int note: controller.revision >= 0 ? Math.round(controller.value(base + "note")) : 0
     readonly property int octave: controller.revision >= 0 ? Math.round(controller.value(base + "octave")) : 0
@@ -41,9 +43,8 @@ Rectangle {
     color: activeFocus ? theme.buttonHi : theme.button
     border.color: playing || activeFocus ? theme.accent : gate === 0 ? theme.wellEdge
         : Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, theme.stepEdgeAlpha)
-    border.width: playing ? theme.strokeBold : theme.hairline
+    border.width: playing || activeFocus ? theme.strokeBold : theme.hairline
     opacity: !editable ? theme.stepDisabledOpacity : inPattern ? 1 : theme.stepOutsideOpacity
-    activeFocusOnTab: editable
     Accessible.role: Accessible.Grouping
     Accessible.name: "Step " + step + (playing ? ", playing" : "")
     Accessible.description: (gate === 0 ? "rest" : gate === 2 ? "tie" : noteName + " " + Format.signed_number(note, 0))
@@ -91,9 +92,7 @@ Rectangle {
         } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
             resetStep()
         } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
-            const next = cell.nextItemInFocusChain(event.key === Qt.Key_Right)
-            if (next && next.objectName.startsWith("torqueStep:"))
-                next.forceActiveFocus()
+            cell.moveRequested(event.key === Qt.Key_Right ? 1 : -1)
         } else {
             return
         }
@@ -209,45 +208,54 @@ Rectangle {
         }
     }
 
-    // Octave: down, centre, up.
-    Row {
+    // Octave: down, centre, up. Three keys do not fit the hit size side by
+    // side, so the row is one target: a press picks the key under it.
+    Item {
         id: octaves
         objectName: "torqueStepControl:" + cell.base + "octave"
+        readonly property var choices: [-1, 0, 1]
+        readonly property real spacing: cell.theme.spaceXxs
         x: cell.theme.stepInset
         y: noteWell.y + noteWell.height + cell.theme.stepRowGap
-        spacing: cell.theme.spaceXxs
+        width: cell.width - 2 * cell.theme.stepInset
+        height: cell.theme.octaveKeyHeight
         Accessible.role: Accessible.Grouping
         Accessible.name: "Step " + cell.step + " octave"
-        Repeater {
-            model: [-1, 0, 1]
-            delegate: Rectangle {
-                id: octaveKey
-                required property int modelData
-                readonly property bool on: cell.octave === modelData
-                width: (cell.width - 2 * cell.theme.stepInset - 2 * octaves.spacing) / 3
-                height: cell.theme.octaveKeyHeight
-                radius: cell.theme.radiusSm
-                color: on ? Qt.rgba(cell.theme.accent.r, cell.theme.accent.g, cell.theme.accent.b, cell.theme.octaveOnAlpha)
-                          : cell.theme.well
-                border.color: on ? cell.theme.accent : cell.theme.wellEdge
-                Accessible.role: Accessible.RadioButton
-                Accessible.name: modelData < 0 ? "Octave down" : modelData > 0 ? "Octave up" : "No octave"
-                Accessible.checked: on
-                Text {
-                    anchors.centerIn: parent
-                    text: octaveKey.modelData < 0 ? "−" : octaveKey.modelData > 0 ? "+" : "0"
-                    color: octaveKey.on ? cell.theme.accent : cell.theme.inkFaint
-                    font.pixelSize: cell.theme.typeBody
-                    font.bold: true
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: cell.editable
-                    onClicked: {
-                        cell.forceActiveFocus()
-                        cell.setOctave(octaveKey.modelData)
+        Row {
+            anchors.fill: parent
+            spacing: octaves.spacing
+            Repeater {
+                model: octaves.choices
+                delegate: Rectangle {
+                    id: octaveKey
+                    required property int modelData
+                    readonly property bool on: cell.octave === modelData
+                    width: (octaves.width - (octaves.choices.length - 1) * octaves.spacing) / octaves.choices.length
+                    height: octaves.height
+                    radius: cell.theme.radiusSm
+                    color: on ? Qt.rgba(cell.theme.accent.r, cell.theme.accent.g, cell.theme.accent.b, cell.theme.octaveOnAlpha)
+                              : cell.theme.well
+                    border.color: on ? cell.theme.accent : cell.theme.wellEdge
+                    Accessible.role: Accessible.RadioButton
+                    Accessible.name: modelData < 0 ? "Octave down" : modelData > 0 ? "Octave up" : "No octave"
+                    Accessible.checked: on
+                    Text {
+                        anchors.centerIn: parent
+                        text: octaveKey.modelData < 0 ? "−" : octaveKey.modelData > 0 ? "+" : "0"
+                        color: octaveKey.on ? cell.theme.accent : cell.theme.inkFaint
+                        font.pixelSize: cell.theme.typeBody
+                        font.bold: true
                     }
                 }
+            }
+        }
+        MouseArea {
+            anchors.fill: parent
+            enabled: cell.editable
+            onClicked: mouse => {
+                cell.forceActiveFocus()
+                const index = Math.floor(mouse.x / octaves.width * octaves.choices.length)
+                cell.setOctave(octaves.choices[Math.max(0, Math.min(octaves.choices.length - 1, index))])
             }
         }
     }

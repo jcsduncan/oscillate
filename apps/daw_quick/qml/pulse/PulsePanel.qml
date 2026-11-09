@@ -102,146 +102,65 @@ Rectangle {
 
     // ---- Header ---------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.theme.headerTop
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
-
-        Row {
-            id: stripes
-            y: panel.theme.stripesTop
-            spacing: panel.theme.stripeGap
-            Repeater {
-                model: panel.theme.padColours
-                delegate: Rectangle {
-                    required property color modelData
-                    width: panel.theme.stripeWidth
-                    height: panel.theme.stripeHeight
-                    radius: panel.theme.stripeRadius
-                    color: modelData
-                    border.color: panel.theme.stripeEdge
-                    transform: Matrix4x4 {
-                        matrix: Qt.matrix4x4(1, panel.theme.stripeSlant, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)
+        controller: panel.controller
+        theme: panel.theme
+        // The kit list highlights in the pads' orange.
+        opener: function(display) {
+            menu.openPresets(display, panel.controller, panel.theme.orange)
+        }
+        // Four slanted colour stripes, the italic wordmark and its tagline.
+        brand: Component {
+            Item {
+                implicitWidth: wordmark.x + Math.max(wordmark.implicitWidth,
+                                                     tagline.x - wordmark.x + tagline.implicitWidth)
+                implicitHeight: panel.theme.headerHeight
+                Row {
+                    id: stripes
+                    y: panel.theme.stripesTop
+                    spacing: panel.theme.stripeGap
+                    Repeater {
+                        model: panel.theme.padColours
+                        delegate: Rectangle {
+                            required property color modelData
+                            width: panel.theme.stripeWidth
+                            height: panel.theme.stripeHeight
+                            radius: panel.theme.stripeRadius
+                            color: modelData
+                            border.color: panel.theme.stripeEdge
+                            transform: Matrix4x4 {
+                                matrix: Qt.matrix4x4(1, panel.theme.stripeSlant, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)
+                            }
+                        }
                     }
                 }
-            }
-        }
-        Text {
-            id: wordmark
-            x: stripes.width + panel.theme.wordmarkGap
-            y: panel.theme.wordmarkTop
-            text: "PULSE"
-            color: panel.theme.ink
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Black
-            font.italic: true
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        Text {
-            x: wordmark.x + panel.theme.taglineIndent
-            y: wordmark.y + wordmark.height - panel.theme.taglineRise
-            text: "ANALOG RHYTHM COMPOSER"
-            color: panel.theme.red
-            font.pixelSize: panel.theme.typeCaption
-            font.bold: true
-            font.letterSpacing: panel.theme.taglineSpacing
-        }
-
-        Row {
-            id: browser
-            anchors.centerIn: parent
-            spacing: panel.theme.spaceSm
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "pulseKitPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: kitBox
-                objectName: "pulseKitBox"
-                width: panel.theme.kitBoxWidth
-                height: panel.theme.kitBoxHeight
-                radius: panel.theme.radiusMd
-                color: panel.theme.lcd
-                border.color: activeFocus ? panel.theme.red : panel.theme.strip
-                border.width: activeFocus ? panel.theme.strokeBold : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Kit"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openKits() {
-                    if (panel.controller.editable)
-                        menu.openPresets(kitBox, panel.controller, panel.theme.orange)
-                }
-                Keys.onReturnPressed: openKits()
-                Keys.onSpacePressed: openKits()
                 Text {
-                    x: panel.theme.kitBoxInset
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "KIT · " + panel.controller.preset_category.toUpperCase()
-                    color: panel.theme.orange
-                    font.pixelSize: panel.theme.typeCaption
+                    id: wordmark
+                    objectName: "pulseWordmark"
+                    x: stripes.width + panel.theme.wordmarkGap
+                    text: "PULSE"
+                    color: panel.theme.wordmarkInk
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.weight: panel.theme.wordmarkWeight
+                    font.italic: true
+                    font.letterSpacing: panel.theme.wordmarkSpacing
+                }
+                Text {
+                    id: tagline
+                    objectName: "pulseSubtitle"
+                    x: wordmark.x + panel.theme.taglineIndent
+                    y: wordmark.y + wordmark.height - panel.theme.taglineRise
+                    text: "ANALOG RHYTHM COMPOSER"
+                    color: panel.theme.subtitleInk
+                    font.pixelSize: panel.theme.subtitleSize
                     font.bold: true
-                    font.letterSpacing: panel.theme.kitCaptionSpacing
-                }
-                Text {
-                    objectName: "pulseKitName"
-                    anchors.centerIn: parent
-                    width: parent.width - panel.theme.kitNameReserve
-                    horizontalAlignment: Text.AlignHCenter
-                    text: panel.controller.preset_name
-                    color: panel.theme.lcdText
-                    font.pixelSize: panel.theme.typeHeading
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.space2xl
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: panel.controller.preset_modified
-                    text: "EDITED"
-                    color: panel.theme.stripDim
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.legendSpacing
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.kitChevronInset
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.stripDim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        kitBox.forceActiveFocus()
-                        kitBox.openKits()
-                    }
+                    font.letterSpacing: panel.theme.subtitleSpacing
                 }
             }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "pulseKitNext"
-                direction: 1
-            }
-        }
-
-        Kit.StatusBadge {
-            id: status
-            objectName: "pulseStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
         }
     }
 
@@ -339,26 +258,43 @@ Rectangle {
             }
         }
 
-        PulseEnvelopeView {
+        // Both displays draw the selected pad's settings: PREVIEW.
+        Kit.PlotFrame {
+            objectName: "pulseEnvelopeFrame"
             x: panel.theme.editorDisplayX
             y: panel.theme.plateBodyTop
             width: editor.width - x - panel.theme.spaceLg
             height: panel.theme.envelopeHeight
-            controller: panel.controller
             theme: panel.theme
-            pad: panel.selectedPad
-            decayId: panel.padPrefix + "decay"
-            accent: panel.selectedPad >= panel.firstCreamPad ? panel.theme.yellow : panel.theme.orange
+            xTicks: envelope.timeTicks
+            xUnit: "s"
+            PulseEnvelopeView {
+                id: envelope
+                anchors.fill: parent
+                controller: panel.controller
+                theme: panel.theme
+                pad: panel.selectedPad
+                decayId: panel.padPrefix + "decay"
+                accent: panel.selectedPad >= panel.firstCreamPad ? panel.theme.yellow : panel.theme.orange
+            }
         }
-        PulseShapeView {
+        Kit.PlotFrame {
+            objectName: "pulseShapeFrame"
             x: panel.theme.editorDisplayX
             y: panel.theme.shapeTop
             width: editor.width - x - panel.theme.spaceLg
             height: editor.height - y - panel.theme.spaceLg
-            controller: panel.controller
             theme: panel.theme
-            pad: panel.selectedPad
-            accent: panel.theme.yellow
+            xTicks: shapeView.timeTicks
+            xUnit: shapeView.timeUnit
+            PulseShapeView {
+                id: shapeView
+                anchors.fill: parent
+                controller: panel.controller
+                theme: panel.theme
+                pad: panel.selectedPad
+                accent: panel.theme.yellow
+            }
         }
     }
 
@@ -555,6 +491,7 @@ Rectangle {
                     font.bold: true
                 }
                 MouseArea {
+                    readonly property string keyboardAlternative: "the pads below take Tab focus; the arrow keys select a pad"
                     anchors.fill: parent
                     onClicked: panel.selectPad(label.index)
                 }

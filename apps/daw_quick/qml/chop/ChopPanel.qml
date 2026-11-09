@@ -33,6 +33,13 @@ Rectangle {
     readonly property real lane: theme.laneHeight
     readonly property real laneGap: theme.spaceSm
     readonly property real knobSpacing: theme.knobSpacing
+    // chop.mode's choices (chop_table::modes): Gate, Repeat, Gate + repeat.
+    readonly property int modeGate: 0
+    readonly property int modeRepeat: 1
+    readonly property int mode: revision >= 0 ? controller.choice("chop.mode") : modeGate
+    // Why knobs go quiet in a mode: Repeat has no gate, Gate no repeats.
+    readonly property string gateOffReason: mode === modeRepeat ? "The gate is off in Repeat mode" : ""
+    readonly property string repeatOffReason: mode === modeGate ? "Repeats are off in Gate mode" : ""
 
     objectName: "chopPanel"
     implicitWidth: theme.panelWidth
@@ -43,12 +50,6 @@ Rectangle {
     Accessible.role: Accessible.Pane
     Accessible.name: "Chop gate and stutter"
 
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        return info.name === undefined ? "" : (info.group + " · " + info.name).toUpperCase()
-    }
     function reseed() {
         const info = controller.parameter("chop.seed")
         theme.lastTouched = "chop.seed"
@@ -96,107 +97,75 @@ Rectangle {
 
     // ---- Header ----------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
-        y: panel.margin
+        y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        // The blade: a coral tile with a notch cut from its right side, then
+        // the wordmark.
+        brand: Component {
+            Row {
+                spacing: panel.theme.wordmarkGap
+                Rectangle {
+                    id: glyph
+                    // The notch: where it starts across and down the tile, and its size.
+                    readonly property real notchX: 0.55
+                    readonly property real notchY: 0.35
+                    readonly property real notchWidth: 0.45
+                    readonly property real notchHeight: 0.3
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: panel.theme.glyphSize
+                    height: panel.theme.glyphSize
+                    radius: panel.theme.radiusLg
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0; color: panel.theme.blade }
+                        GradientStop { position: 1; color: panel.theme.blade2 }
+                    }
+                    Rectangle {
+                        x: parent.width * glyph.notchX
+                        y: parent.height * glyph.notchY
+                        width: parent.width * glyph.notchWidth
+                        height: parent.height * glyph.notchHeight
+                        color: panel.theme.plate
+                    }
+                }
+                Text {
+                    objectName: "chopWordmark"
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Chop"
+                    color: panel.theme.ink
+                    font.family: panel.theme.sans
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.weight: Font.ExtraBold
+                }
+            }
+        }
 
-        // The blade: a coral tile with a notch cut from its right side.
-        Rectangle {
-            id: glyph
-            // The notch: where it starts across and down the tile, and its size.
-            readonly property real notchX: 0.55
-            readonly property real notchY: 0.35
-            readonly property real notchWidth: 0.45
-            readonly property real notchHeight: 0.3
-            width: panel.theme.glyphSize
-            height: panel.theme.glyphSize
-            radius: panel.theme.radiusLg
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0; color: panel.theme.blade }
-                GradientStop { position: 1; color: panel.theme.blade2 }
-            }
-            Rectangle {
-                x: parent.width * glyph.notchX
-                y: parent.height * glyph.notchY
-                width: parent.width * glyph.notchWidth
-                height: parent.height * glyph.notchHeight
-                color: panel.theme.plate
-            }
-        }
-        Text {
-            id: wordmark
-            x: glyph.width + panel.theme.wordmarkGap
-            anchors.verticalCenter: glyph.verticalCenter
-            text: "Chop"
-            color: panel.theme.ink
-            font.family: panel.theme.sans
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.ExtraBold
-        }
-        Row {
-            x: wordmark.x + wordmark.implicitWidth + panel.theme.segmentsGap
-            anchors.verticalCenter: glyph.verticalCenter
-            spacing: panel.theme.spaceLg
-            Kit.Segment {
-                width: panel.theme.modeSegmentWidth
-                controller: panel.controller
-                theme: panel.theme
-                parameterId: "chop.mode"
-                labels: ["Gate", "Repeat", "Gate + repeat"]
-            }
-            Kit.Segment {
-                width: panel.theme.stepsSegmentWidth
-                controller: panel.controller
-                theme: panel.theme
-                parameterId: "chop.steps"
-                labels: ["16 steps", "32"]
-            }
-            Kit.Segment {
-                width: panel.theme.divisionSegmentWidth
-                controller: panel.controller
-                theme: panel.theme
-                parameterId: "chop.division"
-            }
-        }
-        Column {
-            anchors.right: status.left
-            anchors.rightMargin: panel.theme.readoutMargin
-            anchors.verticalCenter: glyph.verticalCenter
-            width: panel.theme.readoutWidth
-            Text {
-                objectName: "chopReadout"
-                width: parent.width
-                horizontalAlignment: Text.AlignRight
-                text: panel.readoutName(panel.theme.lastTouched)
-                color: panel.theme.inkFaint
-                font.family: panel.theme.sans
-                font.pixelSize: panel.theme.typeCaption
-                font.bold: true
-                font.letterSpacing: panel.theme.readoutSpacing
-                elide: Text.ElideLeft
-            }
-            Text {
-                objectName: "chopReadoutValue"
-                width: parent.width
-                horizontalAlignment: Text.AlignRight
-                text: panel.theme.lastTouched === "" || panel.revision < 0 ? ""
-                    : panel.controller.display(panel.theme.lastTouched)
-                color: panel.theme.blade
-                font.family: panel.theme.mono
-                font.pixelSize: panel.theme.typeEmphasis
-            }
-        }
-        Kit.StatusBadge {
-            id: status
-            objectName: "chopStatus"
+        // Mode, steps and division: the header's second row.
+        Kit.Segment {
+            width: panel.theme.modeSegmentWidth
             controller: panel.controller
             theme: panel.theme
-            anchors.right: parent.right
-            anchors.verticalCenter: glyph.verticalCenter
+            parameterId: "chop.mode"
+            labels: ["Gate", "Repeat", "Gate + repeat"]
+        }
+        Kit.Segment {
+            width: panel.theme.stepsSegmentWidth
+            controller: panel.controller
+            theme: panel.theme
+            parameterId: "chop.steps"
+            labels: ["16 steps", "32"]
+        }
+        Kit.Segment {
+            width: panel.theme.divisionSegmentWidth
+            controller: panel.controller
+            theme: panel.theme
+            parameterId: "chop.division"
         }
     }
 
@@ -228,22 +197,37 @@ Rectangle {
 
     // ---- The pattern -------------------------------------------------------------------
 
-    ChopHero {
-        id: hero
+    // The pattern along its beats; LIVE while the bass plays through it,
+    // a PREVIEW of the gate over a flat bar before.
+    Kit.PlotFrame {
+        id: heroFrame
         x: panel.margin
         y: patterns.y + patterns.height + panel.gap
         width: panel.width - 2 * panel.margin
         height: panel.theme.heroHeight
-        controller: panel.controller
         theme: panel.theme
-        live: panel.live
-        stepCount: panel.stepCount
+        live: panel.playing
+        xUnit: "beat"
+        xTicks: {
+            const ticks = []
+            for (let beat = 0; beat * Gate.beatSteps < panel.stepCount; ++beat)
+                ticks.push({ at: beat * Gate.beatSteps / panel.stepCount, label: Format.number(beat + 1, 0) })
+            return ticks
+        }
+        ChopHero {
+            id: hero
+            anchors.fill: parent
+            controller: panel.controller
+            theme: panel.theme
+            live: panel.live
+            stepCount: panel.stepCount
+        }
     }
 
     Column {
         id: lanes
         x: panel.margin
-        y: hero.y + hero.height + panel.gap
+        y: heroFrame.y + heroFrame.height + panel.gap
         width: panel.width - 2 * panel.margin
         spacing: panel.laneGap
         Repeater {
@@ -275,6 +259,8 @@ Rectangle {
         height: panel.height - y - panel.margin
         theme: panel.theme
         title: "EDGES · GROOVE · REPEAT · OUTPUT"
+        note: panel.gateOffReason !== "" ? panel.gateOffReason : panel.repeatOffReason
+        noteColor: panel.theme.inkDim
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
             y: panel.theme.knobRowY
@@ -282,6 +268,8 @@ Rectangle {
             PanelKnob { parameterId: "chop.smooth" }
             PanelKnob {
                 parameterId: "chop.shape"
+                inactive: panel.gateOffReason !== ""
+                inactiveReason: panel.gateOffReason
                 valueText: panel.revision >= 0 ? Gate.shapeText(panel.controller.value("chop.shape")) : ""
             }
             PanelKnob {
@@ -293,9 +281,23 @@ Rectangle {
                 valueText: panel.revision >= 0
                     ? Format.quantity(Math.round(panel.controller.value("chop.rotate")) % panel.stepCount, "steps", 0) : ""
             }
-            PanelKnob { parameterId: "chop.repeat_pitch"; accent: panel.theme.violet }
-            PanelKnob { parameterId: "chop.repeat_decay"; accent: panel.theme.violet }
-            PanelKnob { parameterId: "chop.depth" }
+            PanelKnob {
+                parameterId: "chop.repeat_pitch"
+                accent: panel.theme.violet
+                inactive: panel.repeatOffReason !== ""
+                inactiveReason: panel.repeatOffReason
+            }
+            PanelKnob {
+                parameterId: "chop.repeat_decay"
+                accent: panel.theme.violet
+                inactive: panel.repeatOffReason !== ""
+                inactiveReason: panel.repeatOffReason
+            }
+            PanelKnob {
+                parameterId: "chop.depth"
+                inactive: panel.gateOffReason !== ""
+                inactiveReason: panel.gateOffReason
+            }
             PanelKnob { parameterId: "chop.mix" }
             PanelKnob { parameterId: "chop.seed"; accent: panel.theme.teal }
         }
@@ -307,5 +309,11 @@ Rectangle {
         repeat: true
         running: panel.visible
         onTriggered: panel.live = panel.controller.telemetry()
+    }
+
+    Kit.Menu {
+        id: menu
+        anchors.fill: parent
+        theme: panel.theme
     }
 }

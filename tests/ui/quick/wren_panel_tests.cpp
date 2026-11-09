@@ -85,7 +85,7 @@ constexpr int wait_ms = 1'000;
 constexpr int settle_ms = 400;
 // The designed panel: the mockup's width less its audition row.
 constexpr double designed_width = 1280.0;
-constexpr double designed_height = 900.0;
+constexpr double designed_height = 952.0;
 // A telemetry frame's notes count and output peak.
 constexpr float frame_notes = 7.0F;
 constexpr float frame_peak_db = -12.0F;

@@ -1,7 +1,7 @@
 import QtQuick
 
 // The LCD's frequency strip: a log axis from 20 Hz to 20 kHz with decade
-// lines. A tone stands as a marker at its frequency; a sweep fills from
+// lines (labelled by the PlotFrame around it, from `ticks`). A tone stands as a marker at its frequency; a sweep fills from
 // 20 Hz to where it is now, with a cursor; noise and impulses draw their
 // spectrum's slope per octave (pink level, white and impulses rising
 // 3 dB an octave in octave bands).
@@ -16,6 +16,12 @@ Canvas {
     property bool live: false
     readonly property real lowHz: 20
     readonly property real highHz: 20000
+    // The marked frequencies (Hz) and the decades among them, drawn stronger.
+    readonly property var marks: [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]
+    readonly property var decades: [100, 1000, 10000]
+    readonly property real kilo: 1000
+    // The marks as the frame's ticks: "20", "1k".
+    readonly property var ticks: marks.map(f => ({ at: at(f), label: f >= kilo ? (f / kilo) + "k" : "" + f }))
     // Grid lines sit on pixel centres.
     readonly property real pixelCentre: 0.5
     // The tone's glow peaks at its centre.
@@ -39,31 +45,21 @@ Canvas {
         const t = theme
         const w = width
         const top = t.axisTop
-        const bottom = height - t.axisLabelBand
+        const bottom = height
         const h = bottom - top
         const ink = on ? t.lcdInk : t.lcdDim
         // Decades and their halves.
         ctx.lineWidth = t.hairline
         ctx.font = t.typeCaption + "px " + t.mono
-        ctx.textAlign = "center"
-        const marks = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]
         for (const f of marks) {
             const x = Math.round(at(f) * (w - 1)) + pixelCentre
-            const decade = f === 100 || f === 1000 || f === 10000
+            const decade = decades.indexOf(f) >= 0
             ctx.strokeStyle = decade ? t.lcdGridStrong : t.lcdGrid
             ctx.beginPath()
             ctx.moveTo(x, top)
             ctx.lineTo(x, bottom)
             ctx.stroke()
-            ctx.fillStyle = on ? t.lcdDim : t.lcdGhost
-            ctx.textAlign = f === 20 ? "left" : f === 20000 ? "right" : "center"
-            ctx.fillText(f >= 1000 ? (f / 1000) + "k" : "" + f, x, height - t.axisLabelBaseline)
         }
-        ctx.strokeStyle = t.lcdGrid
-        ctx.beginPath()
-        ctx.moveTo(0, bottom + pixelCentre)
-        ctx.lineTo(w, bottom + pixelCentre)
-        ctx.stroke()
         if (!on)
             return
 

@@ -96,6 +96,7 @@ Item {
             parameterId: warp.key + ".amount"
             label: "WARP " + warp.slot
             inactive: card.controller.revision >= 0 && card.controller.choice(warp.key + ".mode") === 0
+            inactiveReason: inactive ? "Warp " + warp.slot + " is Off" : ""
         }
         Mode {
             anchors.horizontalCenter: parent.horizontalCenter
@@ -250,7 +251,12 @@ Item {
             visible: active
             sourceComponent: Primary {
                 Knob { parameterId: card.base + ".level"; label: "LEVEL" }
-                Knob { parameterId: card.base + ".pw"; label: "PW"; inactive: !card.pulse }
+                Knob {
+                    parameterId: card.base + ".pw"
+                    label: "PW"
+                    inactive: !card.pulse
+                    inactiveReason: inactive ? "Pulse width shapes the Pulse wave only" : ""
+                }
                 Knob { parameterId: card.base + ".sync"; label: "SYNC" }
                 Knob { parameterId: card.base + ".drift"; label: "DRIFT" }
                 Knob { parameterId: card.base + ".pan"; label: "PAN" }

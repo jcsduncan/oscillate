@@ -271,27 +271,27 @@ Rectangle {
         visible: bay.character === 0
         Rectangle {
             anchors.centerIn: parent
-            anchors.verticalCenterOffset: bay.theme.readoutOffset
-            width: parent.width - bay.theme.readoutInset
-            height: bay.theme.readoutHeight
+            anchors.verticalCenterOffset: bay.theme.dspReadoutOffset
+            width: parent.width - bay.theme.dspReadoutInset
+            height: bay.theme.dspReadoutHeight
             radius: bay.theme.radiusMd
-            color: bay.theme.readoutBody
-            border.color: bay.theme.readoutEdge
+            color: bay.theme.dspReadoutBody
+            border.color: bay.theme.dspReadoutEdge
             Text {
                 anchors.centerIn: parent
-                anchors.verticalCenterOffset: bay.theme.readoutValueOffset
+                anchors.verticalCenterOffset: bay.theme.dspReadoutValueOffset
                 text: Format.milliseconds(bay.timeMs)
                 color: bay.theme.accent
                 font.family: bay.theme.mono
-                font.pixelSize: bay.theme.readoutValueSize
+                font.pixelSize: bay.theme.dspReadoutValueSize
                 font.bold: true
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: bay.theme.readoutCaptionBottom
+                anchors.bottomMargin: bay.theme.dspReadoutCaptionBottom
                 text: "64-BIT LINE · LAGRANGE READ"
-                color: bay.theme.readoutCaptionInk
+                color: bay.theme.dspReadoutCaptionInk
                 font.pixelSize: bay.theme.finePrintSize
                 font.bold: true
                 font.letterSpacing: bay.theme.finePrintSpacing

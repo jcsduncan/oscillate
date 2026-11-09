@@ -119,9 +119,11 @@ KitTheme {
     property real cellMinWidth: 74
     property real cellHeightPad: 34
 
-    // Header: the orbit mark, the wordmark and its tagline.
+    // Header (Kit.DeviceHeader): the orbit mark beside the wordmark over
+    // its tagline (the panel's own brand), the preset browser and, once a
+    // control is touched, its readout.
     property real headerY: 12
-    property real headerHeight: 52
+    headerHeight: 52
     property real markSize: 44
     property real markRingWidth: 40
     property real markRingHeight: 16
@@ -133,34 +135,24 @@ KitTheme {
     property real markMoonX: 36
     property real markMoonY: 13
     property real markMoonSize: 6
-    property int wordmarkSize: 29
-    property real wordmarkSpacing: 9
+    wordmarkSize: 29
+    wordmarkSpacing: 9
     property real taglineIndent: 2
-    property real taglineGap: 1
-    property real taglineSpacing: 1.7
-    property real statusY: 12
-
-    // The preset display: category and name on the left, the last-touched
-    // readout right of a divider.
-    property real browserX: 320
-    property real browserY: 4
-    property real presetDisplayWidth: 470
-    property real presetDisplayHeight: 40
-    property real presetDisplayRadius: 7
-    property real focusStroke: 1.5
-    property real presetTextX: 12
-    property real presetCaptionY: 4
-    property real presetCategorySpacing: 1.2
-    property real presetNameY: 15
-    property real presetNameWidth: 210
-    property real presetDividerX: 232
-    property real presetDividerInset: 7
-    property real presetReadoutX: 242
-    // Room kept right of the readout for the chevron.
-    property real presetReadoutRight: 24
-    property real readoutSpacing: 1
-    property real presetValueY: 16
-    property real presetChevronMargin: 9
+    subtitleGap: 1
+    subtitleSpacing: 1.7
+    subtitleInk: accent
+    headerBrowserX: 320
+    presetDisplayWidth: 250
+    presetDisplayHeight: 40
+    presetDisplayRadius: 7
+    presetTextX: 12
+    presetTagY: 4
+    presetNameY: 15
+    presetChevronMargin: 9
+    readoutWidth: 220
+    readoutTextX: 12
+    readoutNameY: 4
+    readoutValueY: 16
 
     // Mode tabs, each with a tiny orbit glyph.
     property real tabsY: 76
@@ -187,8 +179,6 @@ KitTheme {
     property real skyInsetY: 14
     property real sweepReadoutGap: 14
     property int readoutSize: 20
-    property real liveLampGap: 7
-    property real liveLampSize: 7
     property real sweepInset: 6
     property real sweepCaptionX: 24
     property real sweepCaptionY: 132
@@ -201,8 +191,6 @@ KitTheme {
     property real motionChoicesY: 36
     property real motionChoiceWidth: 196
     property real motionFootY: 190
-    // The division while the rate runs free.
-    property real unsyncedOpacity: 0.4
     property real voiceWidth: 410
     property real voiceChoiceWidth: 240
     property real voiceNoteX: 18

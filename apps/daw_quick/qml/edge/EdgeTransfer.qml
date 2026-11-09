@@ -1,9 +1,10 @@
 import QtQuick
-import Oscillate.Format
 
 // Edge's transfer display: the input level (after Input gain, dBFS) across,
 // the output level up, the 0 dBFS ceiling dashed, the line the curve leaves
 // dotted, the curve from the engine, and a dot where the signal sits now.
+// It fills its Kit.PlotFrame's plot area; the frame draws the scales from
+// inTicks/outTicks at inAt/outAt.
 Item {
     id: plot
     required property EdgeTheme theme
@@ -19,17 +20,18 @@ Item {
     readonly property real outMax: 3
     readonly property var inTicks: [-24, -12, 0, 12]
     readonly property var outTicks: [-24, -12, -6, 0]
-    readonly property real leftEdge: theme.plotLeft
-    readonly property real rightEdge: width - theme.plotRight
-    readonly property real topEdge: theme.plotTop
-    readonly property real bottomEdge: height - theme.plotBottom
-
+    // Where an input or output level sits across or up the plot, 0..1.
+    function inAt(db) {
+        return (db - inMin) / (inMax - inMin)
+    }
+    function outAt(db) {
+        return (Math.max(outMin, Math.min(outMax, db)) - outMin) / (outMax - outMin)
+    }
     function px(db) {
-        return leftEdge + (db - inMin) / (inMax - inMin) * (rightEdge - leftEdge)
+        return inAt(db) * width
     }
     function py(db) {
-        const clamped = Math.max(outMin, Math.min(outMax, db))
-        return bottomEdge - (clamped - outMin) / (outMax - outMin) * (bottomEdge - topEdge)
+        return (1 - outAt(db)) * height
     }
 
     onCurveChanged: canvas.requestPaint()
@@ -38,7 +40,6 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: plot.theme.radiusXl
         color: plot.theme.screen
     }
     Canvas {
@@ -52,14 +53,14 @@ Item {
             ctx.strokeStyle = t.grid
             for (const db of plot.inTicks) {
                 ctx.beginPath()
-                ctx.moveTo(plot.px(db), plot.topEdge)
-                ctx.lineTo(plot.px(db), plot.bottomEdge)
+                ctx.moveTo(plot.px(db), 0)
+                ctx.lineTo(plot.px(db), plot.height)
                 ctx.stroke()
             }
             for (const db of plot.outTicks) {
                 ctx.beginPath()
-                ctx.moveTo(plot.leftEdge, plot.py(db))
-                ctx.lineTo(plot.rightEdge, plot.py(db))
+                ctx.moveTo(0, plot.py(db))
+                ctx.lineTo(plot.width, plot.py(db))
                 ctx.stroke()
             }
             // Output = input, as far as the plot reaches.
@@ -73,8 +74,8 @@ Item {
             ctx.setLineDash([t.dashOn, t.dashOff])
             ctx.strokeStyle = t.accent
             ctx.beginPath()
-            ctx.moveTo(plot.leftEdge, plot.py(0))
-            ctx.lineTo(plot.rightEdge, plot.py(0))
+            ctx.moveTo(0, plot.py(0))
+            ctx.lineTo(plot.width, plot.py(0))
             ctx.stroke()
             ctx.setLineDash([])
             const points = plot.curve
@@ -93,38 +94,15 @@ Item {
             }
         }
     }
+    // The ceiling's name, at the left where the curve runs below it.
     Text {
         objectName: "edgeCeilingLabel"
-        x: plot.rightEdge - width - plot.theme.spaceXs
+        x: plot.theme.spaceSm
         y: plot.py(0) - height - plot.theme.spaceXxs
-        text: "0 dBFS"
+        text: "CEILING 0 dBFS"
         color: plot.theme.accent
         font.family: plot.theme.mono
         font.pixelSize: plot.theme.typeSmall
-    }
-    Repeater {
-        model: plot.outTicks
-        delegate: Text {
-            required property var modelData
-            x: plot.theme.spaceXs
-            y: plot.py(modelData) - plot.theme.plotLabelLift
-            text: Format.signed_number(modelData, 0)
-            color: plot.theme.inkFaint
-            font.family: plot.theme.mono
-            font.pixelSize: plot.theme.typeCaption
-        }
-    }
-    Repeater {
-        model: plot.inTicks
-        delegate: Text {
-            required property var modelData
-            x: Math.min(plot.rightEdge - width, Math.max(plot.leftEdge, plot.px(modelData) - width / 2))
-            y: plot.bottomEdge + plot.theme.spaceXs
-            text: Format.signed_number(modelData, 0)
-            color: plot.theme.inkFaint
-            font.family: plot.theme.mono
-            font.pixelSize: plot.theme.typeCaption
-        }
     }
     Rectangle {
         objectName: "edgeDot"

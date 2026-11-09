@@ -215,7 +215,7 @@ KitTheme {
     // Small bold captions, tags and readout names.
     property real tagSpacing: 1.2
     property real captionSpacing: 1.3
-    property real readoutSpacing: 1
+    readoutSpacing: 1
 
     // Section plates: an engraved title with a tick before it and a note after.
     property real plateInset: 14
@@ -230,28 +230,21 @@ KitTheme {
     property real plateNoteGap: 10
     property real plateNoteY: 12
 
-    // The header: the wordmark with its accent rule and subtitle.
+    // The header (Kit.DeviceHeader): the wordmark over its subtitle, the
+    // preset browser and, once a control is touched, its readout.
     property real headerY: 10
-    property real headerHeight: 52
-    property int wordmarkSize: 28
-    property real wordmarkSpacing: 9
-    property real wordmarkRuleWidth: 28
-    property real subtitleX: 36
-    property real subtitleSpacing: 1.6
-
-    // The preset display: category and name, a divider, the readout.
-    property real browserX: 250
-    property real presetDisplayWidth: 470
-    property real presetDisplayHeight: 40
-    property real presetDisplayRadius: 5
-    property real presetFocusStroke: 1.5
-    property real presetNameY: 15
-    property real presetNameWidth: 210
-    property real presetDividerX: 232
-    property real presetDividerInset: 7
-    property real presetReadoutX: 242
-    property real presetValueY: 16
-    property real presetChevronMargin: 9
+    headerHeight: 52
+    wordmarkSize: 28
+    wordmarkSpacing: 9
+    subtitleSpacing: 1.6
+    headerBrowserX: 250
+    presetDisplayWidth: 250
+    presetDisplayHeight: 40
+    presetDisplayRadius: 5
+    presetNameY: 15
+    presetChevronMargin: 9
+    readoutWidth: 220
+    readoutValueY: 16
 
     // Rows of plates.
     property real rowAY: 72
@@ -327,10 +320,10 @@ KitTheme {
     property color liveTrace: "#c9fff4"
     property real screenInset: 10
     property real screenTop: 30
-    property real screenPlotLeft: 36
+    property real screenPlotLeft: 10
     property real screenPlotTop: 34
     property real screenPlotRight: 14
-    property real screenPlotBottom: 24
+    property real screenPlotBottom: 10
     property var screenSetDash: [4, 3]
     property var screenCutoffDash: [2, 3]
     property real screenSetTraceAlpha: 0.45
@@ -350,11 +343,11 @@ KitTheme {
     property real screenRulerOffset: 9
     property real screenRulerStroke: 3
     property real screenRulerTickRise: 4
-    property real screenScaleGap: 5
     property real screenCaptionX: 12
     property real screenCaptionY: 8
     property real screenCaptionSpacing: 1.6
-    property real screenReadoutRight: 14
+    // Clear of the frame's LIVE / PREVIEW chip in the screen's corner.
+    property real screenReadoutRight: 104
     property real screenReadoutY: 6
     property real screenReadoutSpacing: 14
     property real screenReadoutGap: 5

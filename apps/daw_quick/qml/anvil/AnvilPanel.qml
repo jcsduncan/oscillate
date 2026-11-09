@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Oscillate.Contracts
 import Oscillate.Format
 import "../devicekit" as Kit
 import "../shell" as Shell
@@ -48,11 +47,10 @@ Rectangle {
     readonly property bool tailTuned: tailInKey && Math.abs(tail.cents) <= tunedCents
 
     // Live state (anvil.hpp telemetry): the position in the hit (0..1 of
-    // the kick, -1 idle), the last note and velocity, and the peak in dB.
+    // the kick, -1 idle) and the peak in dB.
     property var tele: ({ live: false })
     readonly property var frame: tele.live === true && tele.frame !== undefined ? tele.frame : []
     readonly property real phase: frame.length > 0 ? frame[0] : -1
-    readonly property int lastNote: frame.length > 1 ? Math.round(frame[1]) : -1
     readonly property real livePeakDb: frame.length > 3 ? frame[3] : silentDb
 
     // The tempo without a preview; a tail this near its note reads as
@@ -71,20 +69,10 @@ Rectangle {
     // Layout: the panel's designed size and where each region sits.
     readonly property real designedWidth: 1440
     readonly property real designedHeight: 800
-    readonly property real headerHeight: 72
-    readonly property real wordmarkY: 10
-    readonly property real subtitleGap: 1
-    // The header's row of wells and buttons.
-    readonly property real headerRowY: 14
-    readonly property real headerRowHeight: 44
-    readonly property real presetX: 196
-    readonly property real presetWidth: 420
-    readonly property real displayTextX: 14
-    readonly property real displayCaptionY: 6
-    readonly property real presetNameY: 18
-    readonly property real presetNameRight: 40
-    readonly property real noteCardX: 700
+    // The header's second row: the tail-note card, Pitch from and Tune to key.
     readonly property real noteCardWidth: 236
+    readonly property real noteCardHeight: 44
+    readonly property real noteCaptionY: 6
     readonly property real tailNoteY: 17
     readonly property real tailDetailX: 92
     readonly property real tailDetailY: 7
@@ -96,10 +84,10 @@ Rectangle {
     readonly property real tuneButtonWidth: 118
     readonly property real peakGap: 3
     readonly property real hitWidth: 92
-    // The body: layers left, the editor and beat in the centre, the chosen
-    // layer's controls right.
-    readonly property real bodyY: 84
-    readonly property real bodyHeight: 506
+    // The body, between the header and the master strip: layers left, the
+    // editor and beat in the centre, the chosen layer's controls right.
+    readonly property real bodyY: header.y + header.height + theme.spaceLg
+    readonly property real bodyHeight: masterY - theme.spaceLg - bodyY
     readonly property real layerColumnWidth: 196
     readonly property real layerCardHeight: 76
     readonly property real layerDotSize: 10
@@ -114,14 +102,18 @@ Rectangle {
     readonly property real centreWidth: 952
     readonly property real tabWidth: 86
     readonly property real tabHeight: 30
-    readonly property real readoutY: 8
-    readonly property real readoutWidth: 560
+    readonly property real curveReadoutY: 8
+    readonly property real curveReadoutWidth: 560
     readonly property real tabRuleY: 31
     readonly property real curveY: 38
-    readonly property real curveHeight: 330
+    readonly property real curveHeight: 296
     // The beat's note sits this much above its label's row.
     readonly property real beatNoteRaise: 1
     readonly property real beatGap: 18
+    // One beat in ms at the tempo, and the beat ticks as fractions of it.
+    readonly property real msPerMinute: 60000
+    readonly property real beatMs: tempo > 0 ? msPerMinute / tempo : 0
+    readonly property var beatTickFractions: [0, 0.25, 0.5, 0.75, 1]
     readonly property real controlsX: 1196
     readonly property real controlsWidth: 228
     readonly property real controlsPad: 10
@@ -151,9 +143,9 @@ Rectangle {
     readonly property real lockX: 960
     // Wide enough for the Lock choice's longest label on each of its tiles.
     readonly property real lockWidth: Math.max(theme.lockMinWidth, lockChoice.fitWidth)
-    readonly property real lastHitRight: 18
 
-    // A curve gesture's readout, until a control is touched again.
+    // A curve gesture's readout over the editor, until a control is touched
+    // again (the touched control reads in the header).
     property string gestureName: ""
     property string gestureValue: ""
     // The transient's path field: shown while typing one.
@@ -194,13 +186,7 @@ Rectangle {
             }
         }
     }
-    function readoutText() {
-        const id = theme.lastTouched
-        if (id !== "") {
-            const info = controller.parameter(id)
-            return (info.group !== undefined && info.group !== info.name ? info.group + " " : "")
-                + (info.name !== undefined ? info.name : "") + " · " + controller.display(id)
-        }
+    function curveReadoutText() {
         if (gestureName !== "")
             return gestureName + " · " + gestureValue
         return curve.hoverText !== "" ? curve.hoverText
@@ -289,119 +275,49 @@ Rectangle {
         font.letterSpacing: panel.theme.labelSpacing
     }
 
+    // A layer that is off says so in words (never only by fading).
+    component OffChip: Rectangle {
+        width: offText.implicitWidth + panel.theme.offChipPad
+        height: panel.theme.offChipHeight
+        radius: panel.theme.offChipRadius
+        color: "transparent"
+        border.color: panel.theme.offChipEdge
+        Text {
+            id: offText
+            anchors.centerIn: parent
+            text: panel.theme.offChip
+            color: panel.theme.offChipInk
+            font.family: panel.theme.sans
+            font.pixelSize: panel.theme.offChipSize
+            font.bold: true
+            font.letterSpacing: panel.theme.offChipSpacing
+        }
+    }
+
     // ---- Header ---------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.theme.spaceXl
-        y: 0
+        y: panel.theme.headerY
         width: panel.width - 2 * panel.theme.spaceXl
-        height: panel.headerHeight
-
-        Text {
-            id: wordmark
-            y: panel.wordmarkY
-            text: "ANVIL"
-            color: panel.theme.wordmark
-            font.family: panel.theme.sans
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Bold
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        Text {
-            y: wordmark.y + wordmark.height + panel.subtitleGap
-            text: "KICK SYNTH"
-            color: panel.theme.inkDim
-            font.family: panel.theme.sans
-            font.pixelSize: panel.theme.subtitleSize
-            font.bold: true
-            font.letterSpacing: panel.theme.subtitleSpacing
-        }
-
-        Row {
-            x: panel.presetX
-            y: panel.headerRowY
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                objectName: "anvilPresetPrevious"
-                controller: panel.controller
-                theme: panel.theme
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "anvilPresetDisplay"
-                width: panel.presetWidth
-                height: panel.headerRowHeight
-                radius: panel.theme.wellRadius
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                Keys.onReturnPressed: panel.openPresets()
-                Keys.onSpacePressed: panel.openPresets()
-                Text {
-                    x: panel.displayTextX
-                    y: panel.displayCaptionY
-                    text: (panel.controller.preset_category !== "" ? panel.controller.preset_category : "Custom").toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.subtitleSize
-                    font.bold: true
-                    font.letterSpacing: panel.theme.presetCategorySpacing
-                }
-                Text {
-                    objectName: "anvilPresetName"
-                    x: panel.displayTextX
-                    y: panel.presetNameY
-                    width: display.width - panel.presetNameRight
-                    text: panel.controller.preset_name !== "" ? panel.controller.preset_name : "Custom kick"
-                    color: panel.theme.ink
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.presetNameSize
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.spaceLg
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.inkDim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        panel.openPresets()
-                    }
-                    Shell.Tip { text: "Presets" }
-                }
-            }
-            Kit.PresetArrow {
-                objectName: "anvilPresetNext"
-                controller: panel.controller
-                theme: panel.theme
-                direction: 1
-            }
-        }
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        wordmark: "ANVIL"
+        subtitle: "KICK SYNTH"
 
         // The tail's note, against the song's key.
         Rectangle {
             id: noteCard
-            x: panel.noteCardX
-            y: panel.headerRowY
             width: panel.noteCardWidth
-            height: panel.headerRowHeight
+            height: panel.noteCardHeight
             radius: panel.theme.wellRadius
             color: panel.theme.well
             border.color: panel.theme.wellEdge
             Label {
                 x: panel.theme.spaceLg
-                y: panel.displayCaptionY
+                y: panel.noteCaptionY
                 text: "TAIL NOTE"
             }
             Text {
@@ -437,63 +353,60 @@ Rectangle {
                 elide: Text.ElideRight
             }
         }
-
-        Row {
-            x: noteCard.x + noteCard.width + panel.theme.spaceLg
-            y: panel.headerRowY
-            spacing: panel.theme.spaceMd
-            Column {
-                spacing: panel.theme.spaceXxs
-                Label { text: "PITCH FROM" }
-                Seg {
-                    parameterId: "anvil.key"
-                    width: panel.keyChoiceWidth
-                    labels: ["FIXED", "NOTE PLAYED"]
-                }
-            }
-            Kit.Button {
-                theme: panel.theme
-                objectName: "anvilTuneToKey"
-                interactive: panel.controller.editable
-                y: panel.tuneButtonY
-                width: panel.tuneButtonWidth
-                label: "TUNE TO KEY"
-                on: panel.songScale.length > 0 && !panel.tailTuned
-                active: panel.songScale.length > 0 && panel.tailHz > 0
-                tip: panel.songScale.length > 0
-                    ? "Tune the kick so its tail lands on the nearest note of the song's key"
-                    : "Set the song's key in the toolbar first"
-                onClicked: panel.tuneToKey()
+        Column {
+            spacing: panel.theme.spaceXxs
+            Label { text: "PITCH FROM" }
+            Seg {
+                parameterId: "anvil.key"
+                width: panel.keyChoiceWidth
+                labels: ["FIXED", "NOTE PLAYED"]
             }
         }
+        Kit.Button {
+            theme: panel.theme
+            objectName: "anvilTuneToKey"
+            interactive: panel.controller.editable
+            y: panel.tuneButtonY
+            width: panel.tuneButtonWidth
+            label: "TUNE TO KEY"
+            on: panel.songScale.length > 0 && !panel.tailTuned
+            active: panel.songScale.length > 0 && panel.tailHz > 0
+            tip: panel.songScale.length > 0
+                ? "Tune the kick so its tail lands on the nearest note of the song's key"
+                : "Set the song's key in the toolbar first"
+            onClicked: panel.tuneToKey()
+        }
+    }
 
-        Row {
-            anchors.right: parent.right
-            y: panel.headerRowY
-            spacing: panel.theme.spaceMd
-            Column {
-                spacing: panel.peakGap
-                Label { text: "PEAK" }
-                Text {
-                    objectName: "anvilPeak"
-                    text: Format.decibels(panel.frame.length > 3 ? panel.livePeakDb
-                           : panel.anvil !== null ? panel.anvil.peak_db : panel.silentDb)
-                    color: panel.theme.ink
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeLabel
-                }
+    // The peak and the audition, in the header's first row before its status.
+    Row {
+        x: header.x + header.status.x - header.theme.headerGap - width
+        y: header.y
+        height: header.rowHeight
+        spacing: panel.theme.spaceMd
+        Column {
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: panel.peakGap
+            Label { text: "PEAK" }
+            Text {
+                objectName: "anvilPeak"
+                text: Format.decibels(panel.frame.length > 3 ? panel.livePeakDb
+                       : panel.anvil !== null ? panel.anvil.peak_db : panel.silentDb)
+                color: panel.theme.ink
+                font.family: panel.theme.mono
+                font.pixelSize: panel.theme.typeLabel
             }
-            Kit.Button {
-                theme: panel.theme
-                objectName: "anvilHit"
-                interactive: panel.controller.editable
-                width: panel.hitWidth
-                height: panel.headerRowHeight
-                label: "▶ HIT"
-                on: true
-                tip: "Play one hit"
-                onClicked: panel.hitRequested()
-            }
+        }
+        Kit.Button {
+            theme: panel.theme
+            objectName: "anvilHit"
+            interactive: panel.controller.editable
+            width: panel.hitWidth
+            height: header.rowHeight
+            label: "▶ HIT"
+            on: true
+            tip: "Play one hit"
+            onClicked: panel.hitRequested()
         }
     }
 
@@ -520,7 +433,6 @@ Rectangle {
                 radius: panel.theme.layerCardRadius
                 color: chosen ? panel.theme.selected : panel.theme.plate
                 border.color: chosen ? panel.theme.accent : layerArea.containsMouse ? panel.theme.plateHi : panel.theme.plateEdge
-                opacity: powered ? 1 : panel.theme.unpoweredOpacity
                 activeFocusOnTab: true
                 Accessible.role: Accessible.Button
                 Accessible.name: modelData.name + " layer"
@@ -539,6 +451,7 @@ Rectangle {
                     color: layerCard.modelData.color
                 }
                 Text {
+                    id: layerName
                     x: panel.layerNameX
                     y: panel.layerNameY
                     text: layerCard.modelData.name
@@ -546,6 +459,12 @@ Rectangle {
                     font.family: panel.theme.sans
                     font.pixelSize: panel.theme.layerNameSize
                     font.bold: true
+                }
+                OffChip {
+                    objectName: "anvilLayerOff:" + layerCard.modelData.id
+                    x: layerCard.width - width - panel.theme.spaceLg
+                    anchors.verticalCenter: layerName.verticalCenter
+                    visible: !layerCard.powered
                 }
                 Text {
                     x: panel.theme.spaceLg
@@ -651,12 +570,12 @@ Rectangle {
             }
         }
         Text {
-            objectName: "anvilReadout"
+            objectName: "anvilCurveReadout"
             anchors.right: parent.right
-            y: panel.readoutY
-            width: panel.readoutWidth
+            y: panel.curveReadoutY
+            width: panel.curveReadoutWidth
             horizontalAlignment: Text.AlignRight
-            text: panel.readoutText()
+            text: panel.curveReadoutText()
             color: panel.theme.inkDim
             font.family: panel.theme.mono
             font.pixelSize: panel.theme.typeBody
@@ -669,21 +588,33 @@ Rectangle {
             color: panel.theme.seam
         }
 
-        AnvilCurve {
-            id: curve
+        // The curve over the kick it makes (rendered from the settings),
+        // LIVE while a hit plays its playhead across it.
+        Kit.PlotFrame {
+            id: curveFrame
             y: panel.curveY
             width: parent.width
             height: panel.curveHeight
-            panel: panel
-            curveId: panel.curveId
-            kick: panel.kickPeaks
-            kickSeconds: panel.kickSeconds
-            phase: panel.phase
+            theme: panel.theme
+            live: panel.phase >= 0
+            xUnit: "ms"
+            yUnit: curve.yUnit
+            xTicks: curve.xTicks
+            yTicks: curve.yTicks
+            AnvilCurve {
+                id: curve
+                anchors.fill: parent
+                panel: panel
+                curveId: panel.curveId
+                kick: panel.kickPeaks
+                kickSeconds: panel.kickSeconds
+                phase: panel.phase
+            }
         }
 
         Label {
             id: beatLabel
-            y: curve.y + curve.height + panel.theme.spaceLg
+            y: curveFrame.y + curveFrame.height + panel.theme.spaceLg
             text: "ONE BEAT AT " + Format.number(panel.tempo, 0) + " BPM"
         }
         Text {
@@ -694,12 +625,21 @@ Rectangle {
             font.family: panel.theme.sans
             font.pixelSize: panel.theme.typeBody
         }
-        Rectangle {
-            id: beat
-            objectName: "anvilBeat"
+        // The beat in ms, a tick each quarter of it.
+        Kit.PlotFrame {
             y: beatLabel.y + panel.beatGap
             width: parent.width
             height: centre.height - y
+            theme: panel.theme
+            live: panel.phase >= 0
+            xUnit: "ms"
+            xTicks: beat.width > 0 ? panel.beatTickFractions.map(f => ({
+                at: (panel.theme.beatInset + f * (beat.width - 2 * panel.theme.beatInset)) / beat.width,
+                label: Format.number(f * panel.beatMs, 0) })) : []
+        Rectangle {
+            id: beat
+            objectName: "anvilBeat"
+            anchors.fill: parent
             radius: panel.theme.wellRadius
             color: panel.theme.well
             border.color: panel.theme.wellEdge
@@ -751,6 +691,7 @@ Rectangle {
                 opacity: panel.theme.beatPlayheadOpacity
             }
         }
+        }
     }
 
     // ---- The chosen layer -----------------------------------------------------------
@@ -763,9 +704,14 @@ Rectangle {
         width: panel.controlsWidth
         height: panel.bodyHeight
         theme: panel.theme
-        title: panel.layerOf(panel.selectedLayer).name.toUpperCase()
-        note: panel.selectedLayer === "rumble" ? "TUNED" : panel.selectedLayer === "sub" ? "TAIL NOTE" : ""
-        noteColor: panel.layerOf(panel.selectedLayer).color
+        // A layer that is off collapses to its title, its ON switch and a note.
+        readonly property var chosen: panel.layerOf(panel.selectedLayer)
+        readonly property bool off: chosen.power !== ""
+            && panel.revision >= 0 && panel.controller.choice(chosen.power) !== 1
+        title: chosen.name.toUpperCase()
+        note: off ? panel.theme.offChip
+            : panel.selectedLayer === "rumble" ? "TUNED" : panel.selectedLayer === "sub" ? "TAIL NOTE" : ""
+        noteColor: off ? panel.theme.inkDim : chosen.color
 
         Kit.Toggle {
             x: parent.width - width - panel.controlsPad
@@ -830,7 +776,8 @@ Rectangle {
                 Cell {
                     parameterId: "anvil.length"
                     accent: panel.theme.body
-                    visible: panel.lengthMode !== 1
+                    inactive: panel.lengthMode === 1
+                    inactiveReason: inactive ? "Length follows the Sync division" : ""
                 }
                 Cell { parameterId: "anvil.body.level"; accent: panel.theme.body }
                 Cell { parameterId: "anvil.body.harmonics"; accent: panel.theme.body }
@@ -928,13 +875,25 @@ Rectangle {
                 }
             }
         }
+        Text {
+            objectName: "anvilLayerOffNote"
+            x: panel.controlsPad
+            y: panel.controlsY
+            width: parent.width - 2 * panel.controlsPad
+            visible: layerCardPanel.off
+            text: "The " + layerCardPanel.chosen.name.toLowerCase() + " is off: switch it on to hear and shape it."
+            wrapMode: Text.WordWrap
+            color: panel.theme.inkDim
+            font.family: panel.theme.sans
+            font.pixelSize: panel.theme.typeBody
+        }
         // Sub.
         Column {
             x: panel.controlsPad
             y: panel.controlsY
             width: parent.width - 2 * panel.controlsPad
             spacing: panel.controlsSpacing
-            visible: panel.selectedLayer === "sub"
+            visible: panel.selectedLayer === "sub" && !layerCardPanel.off
             Grid {
                 columns: panel.knobColumns
                 rowSpacing: panel.theme.spaceSm
@@ -957,7 +916,7 @@ Rectangle {
             y: panel.controlsY
             width: parent.width - 2 * panel.controlsPad
             spacing: panel.controlsSpacing
-            visible: panel.selectedLayer === "rumble"
+            visible: panel.selectedLayer === "rumble" && !layerCardPanel.off
             Grid {
                 columns: panel.knobColumns
                 rowSpacing: panel.theme.spaceSm
@@ -1067,51 +1026,6 @@ Rectangle {
                 font.pixelSize: panel.theme.typeBody
             }
         }
-        Column {
-            // The last hit takes the row's room after Lock.
-            x: panel.lockX + panel.lockWidth + panel.theme.lastHitGap
-            y: panel.masterCaptionY
-            width: parent.width - panel.lastHitRight - x
-            spacing: panel.theme.spaceSm
-            Label { text: "LAST HIT" }
-            Text {
-                objectName: "anvilLastHit"
-                width: parent.width
-                text: panel.lastNote >= 0
-                    ? Contracts.note_name(panel.lastNote, Contracts.sharp, Contracts.scientific_middle_c) + " · velocity "
-                      + Math.round(panel.frame.length > 2 ? panel.frame[2] : 0)
-                    : "Nothing playing"
-                color: panel.theme.ink
-                font.family: panel.theme.mono
-                font.pixelSize: panel.theme.typeLabel
-            }
-            Text {
-                width: parent.width
-                text: panel.controller.status_text
-                color: panel.controller.status_detail !== "" ? panel.theme.warning : panel.theme.inkFaint
-                font.family: panel.theme.sans
-                font.pixelSize: panel.theme.typeBody
-                elide: Text.ElideRight
-            }
-        }
-    }
-
-    function openPresets() {
-        if (!controller.editable)
-            return
-        const items = []
-        const categories = controller.preset_categories
-        const presets = controller.presets
-        for (let c = 0; c < categories.length; ++c) {
-            items.push({ label: categories[c], value: -1, header: true })
-            for (let i = 0; i < presets.length; ++i)
-                if (presets[i].category === categories[c])
-                    items.push({ label: presets[i].name, value: presets[i].index })
-        }
-        menu.open(display, items, controller.preset_index, theme.accent, value => {
-            if (typeof value === "number" && value >= 0)
-                controller.apply_preset(value)
-        })
     }
 
     Kit.Menu {

@@ -97,31 +97,54 @@ KitTheme {
     property int panelWidth: 1240
     property real panelRadius: 12
     property real sectionGap: 10
-    property real headerHeight: 54
+    headerHeight: 54
     property real sourceRowHeight: 266
     property real shapeRowHeight: 206
     property real playRowHeight: 180
 
-    // Header: the prism glyph, the wordmark and its tagline, the preset box
-    // with its category chip, and the next-note legend.
+    // Header (Kit.DeviceHeader): the prism glyph before the wordmark, the
+    // tagline under it; a rounded preset display and readout; the next-note
+    // legend under the status badge.
     property real glyphWidth: 34
     property real glyphHeight: 30
     property real glyphStroke: 1.6
-    property real wordmarkY: 9
-    property int wordmarkSize: 21
-    property real wordmarkSpacing: 5
+    wordmarkSize: 21
+    wordmarkWeight: Font.Bold
+    wordmarkSpacing: 5
+    wordmarkInk: text
+    subtitleGap: -taglineLift
+    subtitleSpacing: 1.6
+    subtitleInk: faint
     property real taglineX: 1
     property real taglineLift: 2
-    property real taglineSpacing: 1.6
-    property real presetBoxWidth: 300
-    property real presetBoxHeight: 30
-    property real presetChipHeight: 18
-    property color presetChipFill: Qt.rgba(osc1.r, osc1.g, osc1.b, 0.14)
+    headerBrowserX: 220
+    presetDisplayWidth: 300
+    presetDisplayHeight: 36
+    presetDisplayRadius: radiusXl
+    presetFill: panel
+    presetEdge: line
+    presetFocusStroke: hairline
+    presetTextX: spaceLg
+    presetTagY: 3
+    presetTagSize: typeCaption
+    presetTagInk: osc1
     // Letter spacing of the small capital tags (category, EDITED).
-    property real presetTagSpacing: 1
-    // Width the preset name leaves for the chip and the tags beside it.
-    property real presetNameClearance: 150
-    property real presetChevronRight: 9
+    presetTagSpacing: 1
+    presetNameY: 15
+    presetNameSize: typeSubtitle
+    presetNameInk: text
+    presetChevronMargin: 9
+    presetChevronInk: dim
+    readoutWidth: 220
+    readoutFill: panel
+    readoutEdge: line
+    readoutRadius: radiusXl
+    readoutTextX: spaceLg
+    readoutNameY: 3
+    readoutNameInk: dim
+    readoutValueY: 15
+    readoutValueInk: osc1
+    property real legendGap: spaceSm
     property real legendSpacing: 5
     property real nextNoteMarkRotation: 45
 
@@ -189,8 +212,6 @@ KitTheme {
     property real filterGridAlpha: 0.7
     property real filterZeroAlpha: 0.9
     property var filterZeroDash: [3, 3]
-    property real filterLabelGap: 3
-    property real filterLabelLift: 6
     property real filterFillAlpha: 0.30
     property real filterFillEndAlpha: 0.02
     property real filterLineWidth: 2

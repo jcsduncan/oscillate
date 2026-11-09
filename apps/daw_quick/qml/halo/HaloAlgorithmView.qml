@@ -44,6 +44,7 @@ Rectangle {
     readonly property real straightTolerance: 0.5
 
     objectName: "haloAlgorithmView"
+    readonly property string plotExemptReason: "a routing diagram of the algorithm's operators, not a plot with axes"
     radius: theme.radiusMd
     color: theme.lcd
     border.color: theme.lcdEdge

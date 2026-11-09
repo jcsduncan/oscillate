@@ -52,6 +52,14 @@ Item {
 
     objectName: "novaArpPage"
 
+    // A Euclidean knob: mode-inactive outside Euclidean mode, which the
+    // EUCLIDEAN label also says.
+    component EuclidKnob: NovaKnob {
+        panel: page.panel
+        size: "sm"
+        inactive: !page.euclidean
+        inactiveReason: inactive ? "The rhythm acts in Euclidean mode only" : ""
+    }
     component Label: Text {
         color: page.theme.faint
         font.family: page.theme.sans
@@ -98,6 +106,20 @@ Item {
             y: page.theme.arpPageCardBodyTop
             width: arpCard.width - 2 * page.theme.arpPageCardPadding
             spacing: page.theme.spaceLg
+            // One Tab stop for the modes: the arrows step through them, the
+            // current one ringed while the row has the keys.
+            activeFocusOnTab: page.controller.editable
+            Accessible.role: Accessible.Grouping
+            Accessible.name: "Arp mode"
+            Accessible.description: page.modeName + ". Arrow keys step the mode"
+            function stepMode(direction) {
+                page.controller.step("nova.arp.mode", direction, false)
+                page.panel.touchId("nova.arp.mode", "ARP MODE")
+            }
+            Keys.onLeftPressed: stepMode(-1)
+            Keys.onUpPressed: stepMode(-1)
+            Keys.onRightPressed: stepMode(1)
+            Keys.onDownPressed: stepMode(1)
             Repeater {
                 model: {
                     const groups = []
@@ -130,6 +152,7 @@ Item {
                                 color: on ? page.theme.soft(accent) : modeArea.containsMouse ? page.theme.hover
                                                                                              : page.theme.wellFill
                                 border.color: on ? accent : page.theme.line2
+                                border.width: on && modes.activeFocus ? page.theme.strokeBold : page.theme.hairline
                                 Accessible.role: Accessible.RadioButton
                                 Accessible.name: modelData.name
                                 Accessible.checked: on
@@ -145,6 +168,10 @@ Item {
                                 MouseArea {
                                     id: modeArea
                                     anchors.fill: parent
+                                    // Taller to the least hit size; the gaps
+                                    // above and below hold no other target.
+                                    anchors.topMargin: -page.theme.hitOutset(parent.height)
+                                    anchors.bottomMargin: -page.theme.hitOutset(parent.height)
                                     hoverEnabled: true
                                     enabled: page.controller.editable
                                     onClicked: {
@@ -172,6 +199,7 @@ Item {
                 parameterId: "nova.arp.strum"
                 label: "STRUM"
                 inactive: page.modeName !== "Strum"
+                inactiveReason: inactive ? "Strum acts in Strum mode only" : ""
             }
             NovaKnob { panel: page.panel; parameterId: "nova.arp.groove_amount"; label: "GROOVE" }
             NovaKnob { panel: page.panel; parameterId: "nova.arp.seed"; label: "SEED" }
@@ -208,10 +236,48 @@ Item {
                 height: page.theme.arpPageFillHeight
                 radius: page.theme.radiusLg
                 color: on ? page.theme.soft(page.theme.pk) : fillArea.containsMouse ? page.theme.hover : page.theme.wellFill
-                border.color: on ? page.theme.pk : page.theme.line2
+                border.color: activeFocus || on ? page.theme.pk : page.theme.line2
+                border.width: activeFocus ? page.theme.strokeBold : page.theme.hairline
+                activeFocusOnTab: page.controller.editable
                 Accessible.role: Accessible.Button
                 Accessible.name: "Fill (hold)"
                 Accessible.checked: on
+                function hold() {
+                    page.controller.begin_gesture("nova.arp.fill")
+                    page.controller.set_value("nova.arp.fill", 1)
+                    page.panel.touchId("nova.arp.fill", "FILL")
+                }
+                function letGo() {
+                    page.controller.set_value("nova.arp.fill", 0)
+                    page.controller.end_gesture("nova.arp.fill")
+                }
+                // Space or Return held plays the fill, as a held press does;
+                // losing the keys mid-hold lets it go.
+                property bool keyHeld: false
+                Keys.onPressed: event => {
+                    if (event.key !== Qt.Key_Space && event.key !== Qt.Key_Return)
+                        return
+                    if (!event.isAutoRepeat && !keyHeld) {
+                        keyHeld = true
+                        hold()
+                    }
+                    event.accepted = true
+                }
+                Keys.onReleased: event => {
+                    if (event.key !== Qt.Key_Space && event.key !== Qt.Key_Return)
+                        return
+                    if (!event.isAutoRepeat && keyHeld) {
+                        keyHeld = false
+                        letGo()
+                    }
+                    event.accepted = true
+                }
+                onActiveFocusChanged: {
+                    if (!activeFocus && keyHeld) {
+                        keyHeld = false
+                        letGo()
+                    }
+                }
                 Text {
                     id: fillText
                     anchors.centerIn: parent
@@ -227,15 +293,8 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     enabled: page.controller.editable
-                    onPressed: {
-                        page.controller.begin_gesture("nova.arp.fill")
-                        page.controller.set_value("nova.arp.fill", 1)
-                        page.panel.touchId("nova.arp.fill", "FILL")
-                    }
-                    onReleased: {
-                        page.controller.set_value("nova.arp.fill", 0)
-                        page.controller.end_gesture("nova.arp.fill")
-                    }
+                    onPressed: fill.hold()
+                    onReleased: fill.letGo()
                     onCanceled: page.controller.cancel_gesture("nova.arp.fill")
                 }
                 Kit.Tip {
@@ -286,10 +345,9 @@ Item {
             x: harmony.column
             y: page.theme.arpPageEuclidKnobsTop
             spacing: page.theme.spaceMd
-            opacity: page.euclidean ? 1 : page.theme.arpPageInactiveOpacity
-            NovaKnob { panel: page.panel; parameterId: "nova.arp.euclid.hits"; label: "HITS"; size: "sm" }
-            NovaKnob { panel: page.panel; parameterId: "nova.arp.euclid.steps"; label: "STEPS"; size: "sm" }
-            NovaKnob { panel: page.panel; parameterId: "nova.arp.euclid.rotate"; label: "ROTATE"; size: "sm" }
+            EuclidKnob { parameterId: "nova.arp.euclid.hits"; label: "HITS" }
+            EuclidKnob { parameterId: "nova.arp.euclid.steps"; label: "STEPS" }
+            EuclidKnob { parameterId: "nova.arp.euclid.rotate"; label: "ROTATE" }
         }
         // The rhythm as a ring: a lit dot per hit.
         Item {
@@ -418,6 +476,10 @@ Item {
                 color: mutateArea.containsMouse ? page.theme.soft(page.theme.vi, page.theme.arpPageMutateHoverAlpha)
                                                 : page.theme.soft(page.theme.vi)
                 border.color: page.theme.vi
+                border.width: activeFocus ? page.theme.strokeBold : page.theme.hairline
+                activeFocusOnTab: page.controller.editable
+                Keys.onSpacePressed: page.arp.mutate(page.arp.mutation + 1)
+                Keys.onReturnPressed: page.arp.mutate(page.arp.mutation + 1)
                 Accessible.role: Accessible.Button
                 Accessible.name: "Mutate"
                 Text {
@@ -441,12 +503,15 @@ Item {
             Text {
                 objectName: "novaArpMutateBack"
                 anchors.verticalCenter: parent.verticalCenter
+                width: page.theme.minHitSize
+                height: page.theme.minHitSize
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
                 text: "‹"
                 color: page.theme.dim
                 font.pixelSize: page.theme.typeTitle
                 MouseArea {
                     anchors.fill: parent
-                    anchors.margins: -page.theme.spaceXs
                     enabled: page.controller.editable && page.arp !== null && page.arp.mutation > 0
                     onClicked: page.arp.mutate(page.arp.mutation - 1)
                 }
@@ -455,6 +520,24 @@ Item {
                 objectName: "novaArpMutation"
                 anchors.verticalCenter: parent.verticalCenter
                 width: page.theme.arpPageMutationWidth
+                // The seed steps with the arrow keys, as ‹ and › do.
+                activeFocusOnTab: page.controller.editable
+                Accessible.role: Accessible.SpinBox
+                Accessible.name: "Mutation seed"
+                Accessible.description: text
+                Keys.onLeftPressed: if (page.arp.mutation > 0) page.arp.mutate(page.arp.mutation - 1)
+                Keys.onDownPressed: if (page.arp.mutation > 0) page.arp.mutate(page.arp.mutation - 1)
+                Keys.onRightPressed: page.arp.mutate(page.arp.mutation + 1)
+                Keys.onUpPressed: page.arp.mutate(page.arp.mutation + 1)
+                Rectangle {
+                    visible: parent.activeFocus
+                    anchors.fill: parent
+                    anchors.margins: -page.theme.spaceXxs
+                    radius: page.theme.radiusMd
+                    color: "transparent"
+                    border.color: page.theme.vi
+                    border.width: page.theme.strokeBold
+                }
                 horizontalAlignment: Text.AlignHCenter
                 text: page.arp === null || page.arp.mutation === 0 ? "PATTERN" : "SEED " + page.arp.mutation
                 color: page.theme.text
@@ -464,12 +547,15 @@ Item {
             Text {
                 objectName: "novaArpMutateNext"
                 anchors.verticalCenter: parent.verticalCenter
+                width: page.theme.minHitSize
+                height: page.theme.minHitSize
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
                 text: "›"
                 color: page.theme.dim
                 font.pixelSize: page.theme.typeTitle
                 MouseArea {
                     anchors.fill: parent
-                    anchors.margins: -page.theme.spaceXs
                     enabled: page.controller.editable
                     onClicked: page.arp.mutate(page.arp.mutation + 1)
                 }
@@ -484,9 +570,28 @@ Item {
                 height: page.theme.arpPageAmountHeight
                 radius: height / 2
                 color: page.theme.wellFill
-                border.color: page.theme.line2
+                border.color: activeFocus ? page.theme.vi : page.theme.line2
+                border.width: activeFocus ? page.theme.strokeBold : page.theme.hairline
+                activeFocusOnTab: true
                 Accessible.role: Accessible.Slider
                 Accessible.name: "Mutate amount"
+                Accessible.description: page.arp !== null ? Format.fraction(page.arp.amount) : ""
+                function nudge(direction, coarse) {
+                    if (page.arp === null)
+                        return
+                    const step = coarse ? page.theme.arpPageAmountKeyCoarseStep : page.theme.arpPageAmountKeyStep
+                    page.arp.amount = Math.max(0, Math.min(1, page.arp.amount + direction * step))
+                }
+                Keys.onPressed: event => {
+                    const coarse = (event.modifiers & Qt.ShiftModifier) !== 0
+                    if (event.key === Qt.Key_Right || event.key === Qt.Key_Up)
+                        nudge(1, coarse)
+                    else if (event.key === Qt.Key_Left || event.key === Qt.Key_Down)
+                        nudge(-1, coarse)
+                    else
+                        return
+                    event.accepted = true
+                }
                 Rectangle {
                     width: Math.max(height, parent.width * (page.arp !== null ? page.arp.amount : 0))
                     height: parent.height
@@ -496,7 +601,10 @@ Item {
                 }
                 MouseArea {
                     anchors.fill: parent
-                    anchors.margins: -page.theme.arpPageAmountSlop
+                    anchors.leftMargin: -page.theme.arpPageAmountSlop
+                    anchors.rightMargin: -page.theme.arpPageAmountSlop
+                    anchors.topMargin: -page.theme.hitOutset(parent.height)
+                    anchors.bottomMargin: -page.theme.hitOutset(parent.height)
                     preventStealing: true
                     function set(x) {
                         page.arp.amount = Math.max(0, Math.min(1, (x - page.theme.arpPageAmountSlop) / amount.width))

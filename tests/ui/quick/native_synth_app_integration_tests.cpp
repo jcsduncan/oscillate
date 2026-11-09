@@ -543,13 +543,23 @@ void all_registered_panels_open_in_the_daw() {
     // As the effects' app contract checks: every label shows whole, and no
     // text is drawn over other text or clipped.
     oscillate::test::panel_fit::require_text_fits(panel, id.toStdString());
-    // Every fixed-size panel scales with its window's zoom chips (ADR-0103);
-    // Nova reflows at its own chips' zoom (nova_window_resizes_and_zooms).
-    if (!bridge.native_synth_controller()->property("panel_reflows").toBool()) {
-      oscillate::test::panel_kit::require_panel_zoom(*window, id.toStdString(),
-                                                     QStringLiteral("nativeSynthFloatingFrame"),
-                                                     QStringLiteral("nativeSynthPanelHost"));
-    }
+    // The panel is built from the kit's shared parts: one header with its
+    // own readout and the one status badge; inactive and linked controls
+    // say why. A touched control's readout fits the header too.
+    require(!engine->descriptor->parameters.empty(), "the instrument has parameters");
+    const auto touched =
+        QString::fromStdString(std::string(engine->descriptor->parameters.front().id));
+    oscillate::test::panel_kit::require_device_header(panel, id.toStdString(), touched);
+    oscillate::test::panel_kit::require_control_states(panel, id.toStdString());
+    oscillate::test::panel_kit::require_plot_frames(panel, id.toStdString());
+    oscillate::test::panel_kit::require_pointer_controls(panel, id.toStdString());
+    oscillate::test::panel_kit::with_touched(panel, touched, [&] {
+      oscillate::test::panel_fit::require_text_fits(panel,
+                                                    id.toStdString() + " (a control touched)");
+    });
+    oscillate::test::panel_kit::require_panel_zoom(*window, id.toStdString(),
+                                                   QStringLiteral("nativeSynthFloatingFrame"),
+                                                   QStringLiteral("nativeSynthPanelHost"));
   }
 }
 
@@ -565,8 +575,8 @@ QQuickItem* find_visible(QQuickItem* root, const QString& name) {
 }
 
 // ADR-0076: the floating instrument window resizes from its corner grip and
-// Nova reflows to it (its laid-out width follows the window); Nova's zoom
-// chips scale the panel. Both are kept in the workspace preferences, which
+// Nova reflows to it (its laid-out width follows the window); the window's
+// panel zoom chips (ADR-0103) scale the panel. Both are kept in the workspace preferences, which
 // this test returns to their defaults so the other tests see a fresh window.
 void nova_window_resizes_and_zooms_in_the_daw() {
   QTemporaryDir directory;
@@ -626,14 +636,14 @@ void nova_window_resizes_and_zooms_in_the_daw() {
     QCoreApplication::processEvents();
   };
 
-  click_named(panel, QStringLiteral("novaZoom:100"));
+  click_named(frame, QStringLiteral("panelZoom:100"));
   const double full = host->scale();
-  click_named(panel, QStringLiteral("novaZoom:90"));
+  click_named(frame, QStringLiteral("panelZoom:90"));
   require(host->scale() < full - 0.05 && std::fabs(host->scale() - 0.9) < 0.01,
           "the 90% chip draws the panel at 90%");
   require(std::fabs(layout->property("panelZoom").toDouble() - 0.9) < 1e-9,
           "the zoom is kept in the workspace preferences");
-  click_named(panel, QStringLiteral("novaZoom:100"));
+  click_named(frame, QStringLiteral("panelZoom:100"));
   require(std::fabs(host->scale() - full) < 1e-9, "100% restores the scale");
 
   // Narrow the window from its grip: Nova lays itself out narrower, at the

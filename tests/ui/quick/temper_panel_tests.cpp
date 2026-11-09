@@ -222,8 +222,10 @@ void header_and_cards_write_their_parameters() {
   auto* stereo = item(*panel, QStringLiteral("temperSegment:temper.stereo"));
   click(*panel, scene(stereo, stereo->width() * 1.5 / 5.0, stereo->height() / 2));
   require(controller.choice(QStringLiteral("temper.stereo")) == 1, "MID picks Mid");
-  require(item(*panel, QStringLiteral("temperKnob:temper.link"))->property("inactive").toBool(),
-          "Link rests unless both channels are processed");
+  auto* link = item(*panel, QStringLiteral("temperKnob:temper.link"));
+  require(link->property("inactive").toBool(), "Link rests unless both channels are processed");
+  require(!link->property("inactiveReason").toString().isEmpty(), "and the knob says why");
+  require(item(*panel, QStringLiteral("temperLinkNote"))->isVisible(), "as does the Stereo card");
 }
 
 void sensitivity_nodes_drag_as_one_gesture() {

@@ -379,7 +379,8 @@ void panel_covers_every_parameter() {
     }
     require(shown, "no control for " + id.toStdString());
   }
-  require(text_of(*panel, QStringLiteral("driftCloudCaption")).contains(QStringLiteral("NOT LIVE")),
+  require(item(*panel, QStringLiteral("driftCloudFrame"))->property("chipText").toString() ==
+              QStringLiteral("PREVIEW"),
           "the cloud says it is a preview");
   require(
       item(*panel, QStringLiteral("driftKnob:drift.blur"))->property("diameter").toInt() >
@@ -564,16 +565,17 @@ void cloud_shows_live_grains() {
   auto panel = load_panel(controller);
   auto* cloud = item(*panel, QStringLiteral("driftCloudView"));
   QTest::qWait(300);
-  require(
-      !cloud->property("live").toBool() &&
-          text_of(*panel, QStringLiteral("driftCloudCaption")).contains(QStringLiteral("NOT LIVE")),
-      "no telemetry: the settings preview");
+  auto* frame = item(*panel, QStringLiteral("driftCloudFrame"));
+  require(!cloud->property("live").toBool() &&
+              frame->property("chipText").toString() == QStringLiteral("PREVIEW") &&
+              !item(*panel, QStringLiteral("driftCloudCaption"))->isVisible(),
+          "no telemetry: the settings preview");
   adapter.set_telemetry(drift_frame(5, false));
   require(QTest::qWaitFor([&] { return cloud->property("live").toBool(); }, 1000),
           "live grains arrive");
   require(cloud->property("grains").toList().size() == 5 &&
-              text_of(*panel, QStringLiteral("driftCloudCaption")) ==
-                  QStringLiteral("LIVE · 5 GRAINS"),
+              frame->property("chipText").toString() == QStringLiteral("LIVE") &&
+              text_of(*panel, QStringLiteral("driftCloudCaption")) == QStringLiteral("5 GRAINS"),
           "the cloud draws the five live grains");
   const auto first = cloud->property("grains").toList().front().toMap();
   require(std::fabs(first.value(QStringLiteral("position")).toDouble() - 0.2) < 1e-6 &&
@@ -587,10 +589,9 @@ void cloud_shows_live_grains() {
                           1000),
           "a frozen voice frosts the live cloud");
   adapter.set_telemetry({});
-  require(
-      QTest::qWaitFor([&] { return !cloud->property("live").toBool(); }, 1000) &&
-          text_of(*panel, QStringLiteral("driftCloudCaption")).contains(QStringLiteral("NOT LIVE")),
-      "telemetry gone: back to the preview");
+  require(QTest::qWaitFor([&] { return !cloud->property("live").toBool(); }, 1000) &&
+              frame->property("chipText").toString() == QStringLiteral("PREVIEW"),
+          "telemetry gone: back to the preview");
 }
 
 void screenshots_if_requested() {

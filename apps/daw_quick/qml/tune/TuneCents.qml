@@ -38,6 +38,7 @@ Item {
     readonly property real needleOvershoot: 2
 
     objectName: "tuneCentsNeedle"
+    readonly property string plotExemptReason: "a tuner's needle dial with its own printed cents scale, not an x/y plot"
 
     function angleAt(p) {
         return -Math.PI / 2 + p * sweep

@@ -88,40 +88,43 @@ KitTheme {
     // Tracking for the readout's parameter name and the display's hint.
     property real capsTightSpacing: 1.2
 
-    // The header: ember lamp, wordmark, preset well, mode/phase, chips.
+    // The header (Kit.DeviceHeader): the ember lamp and wordmark over the
+    // subtitle, the preset browser, the readout and the status badge, with
+    // Soft/Hard, the phase, its latency and Delta in the second row.
     property real headerY: 10
-    property real headerHeight: 52
+    headerHeight: 46
+    headerBrowserX: 196
     property real emberY: 12
     property real emberSize: 10
-    property int wordmarkSize: 25
-    property real wordmarkSpacing: 8
-    property real subtitleGap: 3
-    property real subtitleSpacing: 2.4
-    property real browserX: 196
-    property real browserY: 5
-    property real presetWidth: 330
-    property real presetHeight: 42
-    property real focusStroke: 1.5
-    property real presetCaptionY: 5
-    property real presetNameY: 16
-    property real presetNameWidth: 160
-    property real presetDividerX: 180
-    property real presetReadoutX: 190
-    property real presetValueY: 17
-    property real presetChevronMargin: 9
-    // Top of the segments, the latency chip and Delta.
-    property real headerControlY: 13
+    wordmarkInk: glacier
+    wordmarkSize: 25
+    wordmarkSpacing: 8
+    subtitleGap: 3
+    subtitleInk: inkDim
+    subtitleSpacing: 2.4
+    presetDisplayWidth: 210
+    presetDisplayRadius: radiusLg
+    presetTagY: 5
+    presetTagSpacing: capsSpacing
+    presetNameY: 16
+    presetNameSize: typeSubtitle
+    presetNameBold: false
+    presetChevronMargin: 9
+    presetChevronInk: inkDim
+    readoutWidth: 200
+    readoutRadius: radiusLg
+    readoutNameY: 5
+    readoutSpacing: capsTightSpacing
+    readoutValueY: 17
+    readoutValueSize: typeEmphasis
     property real modeWidth: 120
     property real phaseWidth: 270
-    property real headerChipGap: 10
     property real chipWidth: 76
     property real chipHeight: 26
     property real buttonRadius: 5
-    property real statusY: 14
 
     // The display card and the screen inside it.
-    property real displayY: 70
-    property real displayHeight: 410
+    property real displayHeight: 380
     property real cardInset: 10
     property real cardBodyY: 28
     property real plotLeft: 40
@@ -129,9 +132,12 @@ KitTheme {
     property real plotRight: 16
     property real plotBottom: 28
     property real heatHeight: 92
+    // The plot's frame: its scales as the screen drew them.
+    plotTickInk: inkFaint
+    plotTickSize: typeCaption
+    plotChipFill: screen
     // Where the screen's glow fades into the screen colour.
     property real screenGlowEnd: 0.7
-    property real scaleLabelGap: 5
     property real displayCaptionSpacing: 1.6
     property real spectrumInAlpha: 0.55
     property real spectrumOutAlpha: 0.8
@@ -150,7 +156,7 @@ KitTheme {
     property real listenGlowAlpha: 0.15
     property real listenGlowStroke: 7
     // Sensitivity node diamonds and band handles.
-    property real nodeHitSize: 18
+    property real nodeHitSize: minHitSize
     property real nodeDiamond: 11
     property real nodeDiamondPressed: 13
     property real nodeStroke: 1.6
@@ -170,9 +176,9 @@ KitTheme {
     property real bandChipSize: 26
     property real kindWidth: 276
     property int bandKnobDiameter: 30
+    // The band's On switch, centred on the card title's line.
+    property real inspectorSwitchY: 7
     // From the inspector's right edge.
-    property real inspectorSwitchRight: 220
-    property real inspectorSwitchY: 46
     property real removeRight: 104
     property real removeWidth: 88
     property real removeHeight: 28
@@ -182,6 +188,8 @@ KitTheme {
     property real cardLowerY: 66
     // A card's note sits this far above its bottom.
     property real cardNoteBottom: 30
+    // A note beside a knob sits this far below the knob's top.
+    property real cardNoteDrop: 8
     property real suppressWidth: 310
     property real timeWidth: 170
     property real splitWidth: 236

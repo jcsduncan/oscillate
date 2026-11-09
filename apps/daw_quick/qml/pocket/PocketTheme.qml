@@ -63,21 +63,19 @@ KitTheme {
     property real caseMidStop: 0.35
     // Space between plates.
     property real plateGap: 10
-    // A focused well's edge.
-    property real focusStroke: 1.5
-    // Dimmed controls whose setting does not apply.
-    property real unusedOpacity: 0.45
     // Small spaced-caps captions and stat names.
     property real captionSpacing: 1.4
     property real statSpacing: 1.3
     property real keySpacing: 1.2
 
-    // Header: the wordmark, its kick-to-bass underline and the subtitle.
+    // The header (Kit.DeviceHeader): the wordmark over its kick-to-bass
+    // underline and subtitle, the preset browser and, once a control is
+    // touched, its readout.
     property real headerY: 10
-    property real headerHeight: 54
-    property real wordmarkY: 2
-    property int wordmarkSize: 27
-    property real wordmarkSpacing: 10
+    headerHeight: 54
+    wordmarkSize: 27
+    wordmarkSpacing: 10
+    wordmarkInk: glacier
     // Underline and subtitle sit this far in from the wordmark's left edge.
     property real wordmarkInset: 2
     property real underlineGap: 1
@@ -85,28 +83,23 @@ KitTheme {
     property real underlineTrim: 10
     property real underlineHeight: 2
     property real underlineRadius: 1
-    property real subtitleGap: 7
-    property real subtitleSpacing: 2.4
-
-    // The preset browser and its display well.
-    property real browserX: 230
-    property real browserY: 5
-    property real presetDisplayWidth: 560
-    property real presetDisplayHeight: 42
-    property real presetTextX: 14
-    property real presetCaptionY: 5
-    property real presetNameY: 16
-    property real presetNameWidth: 250
-    property real presetNameSpacing: 0.6
-    property real presetDividerX: 276
-    // The divider's gap from the well's top and bottom.
-    property real presetDividerInset: 8
-    property real readoutX: 288
-    property real readoutValueY: 17
-    // Room kept right of the readout for the chevron.
-    property real readoutRight: 26
-    property real chevronMargin: 10
-    property real statusY: 14
+    subtitleGap: 7
+    subtitleSpacing: 2.4
+    subtitleInk: inkDim
+    headerBrowserX: 230
+    presetDisplayWidth: 300
+    presetDisplayHeight: 42
+    presetDisplayRadius: radiusLg
+    presetTextX: 14
+    presetTagY: 5
+    presetTagSpacing: captionSpacing
+    presetNameY: 16
+    presetNameBold: false
+    presetChevronMargin: 10
+    presetChevronInk: inkDim
+    readoutWidth: 260
+    readoutSpacing: keySpacing
+    readoutValueY: 17
 
     // Rows: the map and meters, the waveforms, the controls.
     property real rowAY: 76
@@ -182,9 +175,8 @@ KitTheme {
     // Gutters for the axis labels, shared so the map and waves line up.
     property real plotLeft: 40
     property real plotRight: 14
-    // Axis labels' gap from the plot edge.
-    property real axisLabelGap: 6
-    property real timeLabelGap: 4
+    // The plot frame's axis labels sit in the same left gutter.
+    plotGutterLeft: plotLeft
 
     // The masking map.
     property int mapWidth: 880
@@ -226,13 +218,12 @@ KitTheme {
     property real gripRise: 22
     property real gripPad: 14
     property real gripHeight: 17
-    property real handleGrabWidth: 16
+    property real handleGrabWidth: minHitSize
 
     // The waveforms.
     property int wavesWidth: 1200
     property int wavesHeight: 110
     property real wavesPlotTop: 6
-    property real wavesPlotBottom: 18
     // The gap between the kick and bass lanes.
     property real laneGap: 3
     // Room between an envelope's peak and its lane edge.

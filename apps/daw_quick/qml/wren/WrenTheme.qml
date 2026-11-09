@@ -72,11 +72,9 @@ KitTheme {
     sans: "Inter"
     mono: "JetBrains Mono"
 
-    // Type sizes: the wordmark, the subtitle and preset name, body text and
-    // tile names, captions and hints, small print, and a style tile's name.
-    property int wordmarkSize: 30
-    property real wordmarkSpacing: 6
-    property int subtitleSize: 14
+    // Type sizes: the preset name, body text and tile names, captions and
+    // hints, small print, and a style tile's name.
+    property int nameSize: 14
     property int bodySize: 13
     property int captionSize: 12
     property int smallSize: 11
@@ -150,6 +148,40 @@ KitTheme {
     choiceSpanLast: false
     choiceDisabledOpacity: disabledOpacity
 
+    // The header (Kit.DeviceHeader): the bold wordmark over the flute it
+    // plays, the preset tile (a touch target, as are its arrows) and, once
+    // a control is touched, its readout.
+    wordmarkSize: 30
+    wordmarkWeight: Font.Bold
+    wordmarkSpacing: 6
+    subtitleSize: fineSize
+    subtitleSpacing: 0.4
+    subtitleInk: inkDim
+    arrowWidth: touch
+    arrowHeight: touch
+    arrowRadius: tileRadius
+    presetDisplayWidth: 220
+    presetDisplayHeight: touch
+    presetDisplayRadius: tileRadius
+    presetFill: tile
+    presetEdge: tileEdge
+    presetFocusStroke: focusBorder
+    presetTextX: tilePad
+    presetTagY: spaceSm
+    presetTagInk: inkDim
+    presetNameY: 20
+    presetNameSize: nameSize
+    presetNameBold: false
+    presetChevronMargin: tilePad
+    presetChevronInk: inkDim
+    presetChevronSize: captionSize
+    readoutWidth: 160
+    readoutFill: tile
+    readoutEdge: tileEdge
+    readoutRadius: tileRadius
+    readoutNameY: spaceSm
+    readoutValueY: 20
+
     // Cards and their title dots.
     property int cardPad: 20
     property int titleHeight: 20
@@ -159,7 +191,7 @@ KitTheme {
     // The header's output meter, dBFS.
     property real meterFloorDb: -60
     property real meterCeilDb: 6
-    property int meterWidth: 120
+    property int meterWidth: 100
     property int meterHeight: 8
 
     // The colour of a note in the lane, by whether it is short.

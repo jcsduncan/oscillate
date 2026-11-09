@@ -20,6 +20,7 @@ Rectangle {
     readonly property real reduction: Math.max(0, Math.min(30, -duckDb))
 
     objectName: "relayVu"
+    readonly property string plotExemptReason: "a VU meter face with its own printed VU scale"
     onVuChanged: needle = vu
     Component.onCompleted: needle = vu
     radius: theme.radiusLg

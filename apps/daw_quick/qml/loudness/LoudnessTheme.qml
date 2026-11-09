@@ -70,38 +70,37 @@ KitTheme {
     // A focused or alarmed edge.
     property real focusStroke: 1.5
 
-    // ---- Header ------------------------------------------------------------
+    // ---- Header (Kit.DeviceHeader) ------------------------------------------
+    // The wordmark over its accent rule and the standards tagline; the
+    // delivery-target browser; once a control is touched, its readout.
     property real headerTop: 10
-    property real headerHeight: 54
-    property int wordmarkSize: 27
-    property real wordmarkSpacing: 9
+    headerHeight: 54
+    headerBrowserX: 250
+    wordmarkSize: 27
+    wordmarkSpacing: 9
+    wordmarkInk: glacier
     // The accent rule under the wordmark: its gap below, thickness, and how
     // much shorter than the word it runs.
     property real underlineGap: 1
     property real underlineWidth: 2
     property real underlineTrim: 10
-    property real taglineGap: 7
-    property real taglineSpacing: 2.4
-    // The preset browser.
-    property real browserX: 250
-    property real browserY: 5
-    property real presetWidth: 540
-    property real presetHeight: 42
-    property real presetInset: 14
-    property real presetCaptionY: 5
-    property real presetCaptionSpacing: 1.4
-    property real presetNameY: 16
-    property real presetNameWidth: 250
-    property real presetNameSpacing: 0.4
-    property real presetDividerX: 276
-    property real presetDividerInset: 8
-    property real readoutX: 288
-    property real readoutValueY: 17
-    // Room right of the readout for the chevron.
-    property real readoutRight: 26
-    property real readoutSpacing: 1.2
-    property real chevronMargin: 10
-    property real statusTop: 14
+    subtitleGap: 7
+    subtitleSpacing: 2.4
+    subtitleInk: inkDim
+    // The preset browser: category over a light-weight name.
+    presetDisplayWidth: 280
+    presetDisplayRadius: radiusLg
+    presetTextX: 14
+    presetTagY: 5
+    presetTagSpacing: 1.4
+    presetNameY: 16
+    presetNameBold: false
+    presetChevronMargin: 10
+    presetChevronInk: inkDim
+    readoutTextX: 14
+    readoutNameY: 5
+    readoutValueY: 17
+    readoutSpacing: 1.2
 
     // ---- Plates ------------------------------------------------------------
     // The readings row, the history row, and the first control under a
@@ -189,12 +188,8 @@ KitTheme {
     property real scaleLabelLift: 6
 
     // ---- History ------------------------------------------------------------
-    // The plot's margins: the LUFS labels on the left, the time labels below.
-    property real historyScaleWidth: 44
-    property real historyTop: 8
-    property real historyRight: 10
-    property real historyBottom: 22
-    property real timeLabelGap: 5
+    // The plot frame's left gutter fits a LUFS label with its unit.
+    plotGutterLeft: 52
     property color toleranceFill: Qt.rgba(onTarget.r, onTarget.g, onTarget.b, 0.10)
     property color targetLine: Qt.rgba(accent.r, accent.g, accent.b, 0.8)
     property var targetDash: [5, 4]

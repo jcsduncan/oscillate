@@ -6,7 +6,9 @@ import Oscillate.Format
 // The MATRIX page (NOVA-UI-12): one row per route, including those made by
 // dragging. Source, aux source (a multiplier), amount (bipolar bar, the
 // route's flat parameter), curve (drag to bend), UNI/BI, destination,
-// output scale and delete; + ADD ROUTE and a source filter.
+// output scale and delete; + ADD ROUTE and a source filter. From the
+// keyboard every control takes Tab: Return opens a menu, the arrows move a
+// bar or bend the curve (Shift coarser), Delete returns it to its default.
 NovaCard {
     id: matrix
     // "", "env.", "lfo.", "macro.", "perf" or "voice.".
@@ -19,6 +21,18 @@ NovaCard {
     titleColor: panel.theme.vi
     sub: "EVERY ROUTE, INCLUDING THOSE MADE BY DRAGGING · UP TO 256"
 
+    // An arrow key's direction (+1 or -1) and whether Shift makes it coarse,
+    // or 0 for any other key.
+    function keyDirection(event) {
+        if (event.key === Qt.Key_Right || event.key === Qt.Key_Up)
+            return 1
+        if (event.key === Qt.Key_Left || event.key === Qt.Key_Down)
+            return -1
+        return 0
+    }
+    function keyStep(event) {
+        return (event.modifiers & Qt.ShiftModifier) !== 0 ? panel.theme.matrixKeyCoarseStep : panel.theme.matrixKeyStep
+    }
     function matches(source) {
         if (filter === "")
             return true
@@ -202,7 +216,25 @@ NovaCard {
                 height: matrix.panel.theme.controlRowHeight
                 radius: matrix.panel.theme.radiusLg
                 color: matrix.panel.theme.wellFill
-                border.color: matrix.panel.theme.viBorder
+                border.color: activeFocus ? matrix.panel.theme.vi : matrix.panel.theme.viBorder
+                border.width: activeFocus ? matrix.panel.theme.strokeBold : matrix.panel.theme.hairline
+                activeFocusOnTab: matrix.controller.editable
+                Accessible.role: Accessible.ComboBox
+                Accessible.name: "Route source"
+                Accessible.description: matrix.panel.sourceName(row.modelData.source)
+                function open() {
+                    matrix.panel.menu.open(sourceChip, matrix.sourceItems(false), row.modelData.source,
+                                           matrix.panel.theme.vi,
+                                           value => matrix.doc.set_route(row.slot, { source: value }))
+                }
+                Keys.onReturnPressed: open()
+                Keys.onSpacePressed: open()
+                // The whole chip opens the menu; the ✥ handle over it drags.
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: matrix.controller.editable
+                    onClicked: sourceChip.open()
+                }
                 Row {
                     id: sourceRow
                     x: matrix.panel.theme.spaceXs
@@ -219,13 +251,6 @@ NovaCard {
                         font.family: matrix.panel.theme.sans
                         font.pixelSize: matrix.panel.theme.typeSmall
                         font.weight: Font.Bold
-                        MouseArea {
-                            anchors.fill: parent
-                            enabled: matrix.controller.editable
-                            onClicked: matrix.panel.menu.open(sourceChip, matrix.sourceItems(false), row.modelData.source,
-                                                              matrix.panel.theme.vi,
-                                                              value => matrix.doc.set_route(row.slot, { source: value }))
-                        }
                     }
                 }
             }
@@ -257,7 +282,24 @@ NovaCard {
                 height: matrix.panel.theme.matrixAmountHeight
                 radius: matrix.panel.theme.radiusMd
                 color: matrix.panel.theme.wellFill
-                border.color: matrix.panel.theme.line
+                border.color: activeFocus ? matrix.panel.theme.vi : matrix.panel.theme.line
+                border.width: activeFocus ? matrix.panel.theme.strokeBold : matrix.panel.theme.hairline
+                activeFocusOnTab: matrix.controller.editable
+                Accessible.role: Accessible.Slider
+                Accessible.name: "Route amount"
+                Accessible.description: Format.fraction(row.amount)
+                Keys.onPressed: event => {
+                    const direction = matrix.keyDirection(event)
+                    if (direction !== 0)
+                        matrix.controller.set_value(row.modelData.amount_id,
+                            Math.max(-1, Math.min(1, row.amount + direction * matrix.keyStep(event))))
+                    else if (event.key === Qt.Key_Delete)
+                        matrix.controller.set_value(row.modelData.amount_id, 0)
+                    else
+                        return
+                    matrix.panel.touchRoute(row.modelData, null)
+                    event.accepted = true
+                }
                 Rectangle {
                     x: row.amount < 0 ? parent.width / 2 * (1 + row.amount) : parent.width / 2
                     y: matrix.panel.theme.matrixAmountInset
@@ -277,6 +319,8 @@ NovaCard {
                     property real startX: 0
                     property real startValue: 0
                     anchors.fill: parent
+                    anchors.topMargin: -matrix.panel.theme.hitOutset(parent.height)
+                    anchors.bottomMargin: -matrix.panel.theme.hitOutset(parent.height)
                     preventStealing: true
                     cursorShape: Qt.SizeHorCursor
                     enabled: matrix.controller.editable
@@ -314,6 +358,31 @@ NovaCard {
                 height: matrix.curveHeight
                 readonly property real tension: row.modelData.tension
                 onTensionChanged: requestPaint()
+                activeFocusOnTab: matrix.controller.editable
+                Accessible.role: Accessible.Slider
+                Accessible.name: "Route curve"
+                Accessible.description: Format.fraction(tension) + ". Up and Down bend it, Delete straightens it"
+                Keys.onPressed: event => {
+                    if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+                        // Up bends as a drag up does.
+                        const direction = event.key === Qt.Key_Up ? -1 : 1
+                        matrix.doc.set_route(row.slot, { tension: Math.max(-1, Math.min(1,
+                            tension + direction * matrix.panel.theme.matrixBendKeyStep)) })
+                    } else if (event.key === Qt.Key_Delete) {
+                        matrix.doc.set_route(row.slot, { tension: 0 })
+                    } else {
+                        return
+                    }
+                    event.accepted = true
+                }
+                Rectangle {
+                    visible: curve.activeFocus
+                    anchors.fill: parent
+                    radius: matrix.panel.theme.radiusMd
+                    color: "transparent"
+                    border.color: matrix.panel.theme.vi
+                    border.width: matrix.panel.theme.strokeBold
+                }
                 onPaint: {
                     const ctx = getContext("2d")
                     ctx.reset()
@@ -333,6 +402,8 @@ NovaCard {
                     property real startY: 0
                     property real startTension: 0
                     anchors.fill: parent
+                    anchors.topMargin: -matrix.panel.theme.hitOutset(parent.height)
+                    anchors.bottomMargin: -matrix.panel.theme.hitOutset(parent.height)
                     preventStealing: true
                     cursorShape: Qt.SizeVerCursor
                     enabled: matrix.controller.editable
@@ -382,12 +453,32 @@ NovaCard {
                 }
             }
             MouseArea {
+                id: destinationArea
                 anchors.fill: destination
+                anchors.topMargin: -matrix.panel.theme.hitOutset(destination.height)
+                anchors.bottomMargin: -matrix.panel.theme.hitOutset(destination.height)
                 enabled: matrix.controller.editable
                 cursorShape: Qt.PointingHandCursor
-                onClicked: matrix.panel.menu.open(destination, matrix.destinationItems(), row.modelData.destination,
-                                                  matrix.panel.theme.vi,
-                                                  value => matrix.doc.set_route(row.slot, { destination: value }))
+                activeFocusOnTab: matrix.controller.editable
+                Accessible.role: Accessible.ComboBox
+                Accessible.name: "Route destination"
+                Accessible.description: matrix.panel.destinationName(row.modelData.destination)
+                function open() {
+                    matrix.panel.menu.open(destination, matrix.destinationItems(), row.modelData.destination,
+                                           matrix.panel.theme.vi,
+                                           value => matrix.doc.set_route(row.slot, { destination: value }))
+                }
+                Keys.onReturnPressed: open()
+                Keys.onSpacePressed: open()
+                onClicked: open()
+                Rectangle {
+                    visible: destinationArea.activeFocus
+                    anchors.fill: parent
+                    radius: matrix.panel.theme.radiusMd
+                    color: "transparent"
+                    border.color: matrix.panel.theme.vi
+                    border.width: matrix.panel.theme.strokeBold
+                }
             }
 
             // Output scale (document data): a small bar.
@@ -400,7 +491,20 @@ NovaCard {
                 height: matrix.panel.theme.matrixScaleHeight
                 radius: height / 2
                 color: matrix.panel.theme.wellFill
-                border.color: matrix.panel.theme.line
+                border.color: activeFocus ? matrix.panel.theme.vi : matrix.panel.theme.line
+                border.width: activeFocus ? matrix.panel.theme.strokeBold : matrix.panel.theme.hairline
+                activeFocusOnTab: matrix.controller.editable
+                Accessible.role: Accessible.Slider
+                Accessible.name: "Route output scale"
+                Accessible.description: Format.fraction(row.modelData.scale)
+                Keys.onPressed: event => {
+                    const direction = matrix.keyDirection(event)
+                    if (direction === 0)
+                        return
+                    matrix.doc.set_route(row.slot, { scale: Math.max(0, Math.min(1,
+                        row.modelData.scale + direction * matrix.keyStep(event))) })
+                    event.accepted = true
+                }
                 Rectangle {
                     width: parent.width * row.modelData.scale
                     height: parent.height
@@ -410,7 +514,10 @@ NovaCard {
                 }
                 MouseArea {
                     anchors.fill: parent
-                    anchors.margins: -matrix.panel.theme.matrixScaleHit
+                    anchors.leftMargin: -matrix.panel.theme.matrixScaleHit
+                    anchors.rightMargin: -matrix.panel.theme.matrixScaleHit
+                    anchors.topMargin: -matrix.panel.theme.hitOutset(parent.height)
+                    anchors.bottomMargin: -matrix.panel.theme.hitOutset(parent.height)
                     preventStealing: true
                     cursorShape: Qt.SizeHorCursor
                     enabled: matrix.controller.editable

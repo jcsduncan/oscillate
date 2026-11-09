@@ -40,6 +40,7 @@ Item {
     readonly property real previewFalloff: 3
 
     objectName: "vistaScope"
+    readonly property string plotExemptReason: "a vectorscope: its M/S and L/R axes are lettered on the glass and its scale follows the level, so it has no unit scale; the card note says signal or preview"
     implicitWidth: theme.scopeDefaultSize
     implicitHeight: theme.scopeDefaultSize
 

@@ -107,32 +107,38 @@ KitTheme {
         return Font.Bold
     }
 
-    // The panel: its size and corners, the header (wordmark, kit box and
+    // The panel: its size and corners, the header (Kit.DeviceHeader: the
+    // wordmark over its tagline, the kit browser, the readout and the
     // status) and the two columns.
     property int panelWidth: 1400
     property int panelHeight: 940
     property real panelRadius: 14
-    property int headerHeight: 64
-    property real wordmarkTop: 10
-    property int wordmarkSize: 30
-    property real wordmarkSpacing: 3
-    property real taglineGap: 1
-    property real taglineSpacing: 2.4
-    property real kitBoxX: 214
-    property real kitBoxTop: 12
-    property int kitBoxWidth: 360
-    property int kitBoxHeight: 40
-    property real kitBoxRadius: 9
-    property real kitBoxInset: 14
-    property real kitBoxCaptionTop: 5
-    property real kitBoxCaptionSpacing: 1.4
-    property real kitBoxNameTop: 17
-    // The kit name stops this far short of the box's right edge (the ▾).
-    property real kitBoxNameReserve: 40
-    property real statusTop: 14
-    property int statusWidth: 420
-    property real statusGap: 3
-    property int leftColumnWidth: 430
+    property real headerY: 4
+    headerHeight: 60
+    wordmarkSize: 30
+    wordmarkWeight: Font.Black
+    wordmarkSpacing: 3
+    subtitleGap: 1
+    subtitleSpacing: 2.4
+    subtitleInk: inkDim
+    headerBrowserX: 214
+    presetDisplayWidth: 360
+    presetDisplayHeight: arrowHeight
+    presetDisplayRadius: 9
+    presetEdge: line
+    presetTextX: 14
+    presetTagY: 5
+    presetTagSpacing: 1.4
+    presetNameY: 17
+    presetChevronMargin: spaceLg
+    presetChevronInk: inkDim
+    readoutEdge: line
+    readoutTextX: presetTextX
+    readoutNameY: presetTagY
+    readoutValueY: presetNameY
+    // Wide enough for the pattern grid's sixteen steps at the least hit
+    // size, beside the lock and the lane names.
+    property int leftColumnWidth: 488
 
     // Section labels and the notes under the cards.
     property real labelSpacing: 2
@@ -194,11 +200,16 @@ KitTheme {
     // key of parts.
     property real modesInset: 10
     property real modesKeyGap: 10
+    // Between the title and the key.
+    property real modesKeyLead: spaceXl
     property int modesKeyDot: 8
     property real modeBarWidth: 3
     property real modeBarAlpha: 0.9
     property real modeHaloAlpha: 0.25
     property real modeRestingAlpha: 0.28
+    // Its frame's frequency ticks: the mono captions the view drew before.
+    plotTickInk: inkFaint
+    plotTickSize: typeSmall
 
     // Patterns: tabs, tiles and pills, action buttons, the generator's
     // settings, the loop library and the working pattern's grid.
@@ -221,23 +232,31 @@ KitTheme {
     property real settingColumnGap: 14
     property real generateRowGap: 10
     property real styleSpacing: 3
-    property int loopsPaneHeight: 176
+    // As tall as the generator's styles, settings and bars.
+    property int loopsPaneHeight: 150
     property int loopCellHeight: 42
     property real loopCellGap: 5
     property real loopMetaTop: 21
     // The thumbnail beside the meta line, under the name.
     property real loopThumbTop: 18
     // The pattern grid: the lane-name column's least width, and the least
-    // width a step cell keeps however long a lane's name.
+    // width a step cell keeps however long a lane's name (its hit size).
     property real laneNameMinWidth: 62
-    property real laneCellMinWidth: 10
+    property real laneCellMinWidth: minHitSize
     property int loopThumbWidth: 54
     property int loopThumbHeight: 16
     // A plain hit in a thumbnail; accents are drawn solid.
     property real thumbHitAlpha: 0.55
-    property real laneSpacing: 3
-    property int laneHeight: 18
+    // A lane's row (each cell's hit area) and the lock beside it; the
+    // drawn cells leave these gaps between lanes and between steps.
+    property int laneHeight: minHitSize
+    property int laneLockWidth: minHitSize
+    property real laneGap: 3
+    property real stepGap: 2
     property real lockStroke: 1.5
+    // The keyboard cursor's ring on the focused grid.
+    property color gridCursorInk: ink
+    property real gridCursorStroke: strokeBold
     // A step cell's opacity for a plain hit and a ghost (accents are solid).
     property real cellHitOpacity: 0.62
     property real cellGhostOpacity: 0.32

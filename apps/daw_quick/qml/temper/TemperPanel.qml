@@ -94,17 +94,6 @@ Rectangle {
     function levelText(db) {
         return Format.signed_quantity(db <= floorDb ? -Infinity : db, "dBFS")
     }
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        if (info.name === undefined)
-            return ""
-        return (info.group + " · " + info.name).toUpperCase()
-    }
-    function readoutValue(id) {
-        return id === "" || revision < 0 ? "" : controller.display(id)
-    }
     // The loudest the key is anywhere, 0..1 over floorDb..0 dBFS.
     function keyLevel() {
         if (!keyed || !live.sidechain_spectrum)
@@ -134,154 +123,53 @@ Rectangle {
 
     // ---- Header ----------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
-
-        Rectangle {
-            id: ember
-            y: panel.theme.emberY
-            width: panel.theme.emberSize
-            height: panel.theme.emberSize
-            radius: width / 2
-            color: panel.theme.cut
-            border.color: panel.theme.cutHot
-        }
-        Text {
-            id: wordmark
-            x: ember.width + panel.theme.spaceMd
-            y: 0
-            text: "TEMPER"
-            color: panel.theme.glacier
-            font.family: panel.theme.sans
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Light
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        Text {
-            x: wordmark.x + panel.theme.spaceXxs
-            y: wordmark.y + wordmark.height + panel.theme.subtitleGap
-            text: "RESONANCE · DYNAMIC EQ"
-            color: panel.theme.inkDim
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.subtitleSpacing
-        }
-
-        Row {
-            id: browser
-            x: panel.theme.browserX
-            y: panel.theme.browserY
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "temperPresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "temperPresetDisplay"
-                width: panel.theme.presetWidth
-                height: panel.theme.presetHeight
-                radius: panel.theme.radiusLg
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                border.width: activeFocus ? panel.theme.focusStroke : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.accent)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
-                Text {
-                    x: panel.theme.spaceLg
-                    y: panel.theme.presetCaptionY
-                    text: panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.capsSpacing
-                }
-                Text {
-                    objectName: "temperPresetName"
-                    x: panel.theme.spaceLg
-                    y: panel.theme.presetNameY
-                    width: panel.theme.presetNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeSubtitle
-                    elide: Text.ElideRight
-                }
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        // The ember lamp before the wordmark is Temper's mark.
+        brand: Component {
+            Row {
+                spacing: panel.theme.spaceMd
                 Rectangle {
-                    x: panel.theme.presetDividerX
-                    y: panel.theme.spaceMd
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.theme.spaceMd
-                    color: panel.theme.wellEdge
+                    y: panel.theme.emberY
+                    width: panel.theme.emberSize
+                    height: panel.theme.emberSize
+                    radius: width / 2
+                    color: panel.theme.cut
+                    border.color: panel.theme.cutHot
                 }
-                Text {
-                    objectName: "temperReadout"
-                    x: panel.theme.presetReadoutX
-                    y: panel.theme.presetCaptionY
-                    width: display.width - x - panel.theme.space2xl
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.capsTightSpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "temperReadoutValue"
-                    x: panel.theme.presetReadoutX
-                    y: panel.theme.presetValueY
-                    width: display.width - x - panel.theme.space2xl
-                    text: panel.readoutValue(panel.theme.lastTouched)
-                    color: panel.theme.accent
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeEmphasis
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.presetChevronMargin
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.inkDim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
+                Column {
+                    spacing: panel.theme.subtitleGap
+                    Text {
+                        objectName: "temperWordmark"
+                        text: "TEMPER"
+                        color: panel.theme.wordmarkInk
+                        font.family: panel.theme.wordmarkFont
+                        font.pixelSize: panel.theme.wordmarkSize
+                        font.weight: panel.theme.wordmarkWeight
+                        font.letterSpacing: panel.theme.wordmarkSpacing
+                    }
+                    Text {
+                        objectName: "temperSubtitle"
+                        x: panel.theme.spaceXxs
+                        text: "RESONANCE · DYNAMIC EQ"
+                        color: panel.theme.subtitleInk
+                        font.pixelSize: panel.theme.subtitleSize
+                        font.bold: true
+                        font.letterSpacing: panel.theme.subtitleSpacing
                     }
                 }
             }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "temperPresetNext"
-                direction: 1
-            }
         }
 
+        // Soft or Hard, the phase and the latency it costs, and Delta.
         Kit.Segment {
             id: modeSegment
-            x: browser.x + browser.width + panel.theme.spaceXl
-            y: panel.theme.headerControlY
             width: panel.theme.modeWidth
             height: panel.theme.segmentHeight
             controller: panel.controller
@@ -291,8 +179,6 @@ Rectangle {
         }
         Kit.Segment {
             id: phaseSegment
-            x: modeSegment.x + modeSegment.width + panel.theme.spaceLg
-            y: panel.theme.headerControlY
             width: Math.max(panel.theme.phaseWidth, Math.ceil(fitWidth))
             height: panel.theme.segmentHeight
             controller: panel.controller
@@ -302,8 +188,6 @@ Rectangle {
         }
         Rectangle {
             id: latencyChip
-            x: phaseSegment.x + phaseSegment.width + panel.theme.headerChipGap
-            y: panel.theme.headerControlY
             width: panel.theme.chipWidth
             height: panel.theme.chipHeight
             radius: height / 2
@@ -321,8 +205,6 @@ Rectangle {
         Rectangle {
             id: delta
             objectName: "temperDelta"
-            x: latencyChip.x + latencyChip.width + panel.theme.headerChipGap
-            y: panel.theme.headerControlY
             width: panel.theme.chipWidth
             height: panel.theme.chipHeight
             radius: panel.theme.buttonRadius
@@ -353,19 +235,11 @@ Rectangle {
                 onClicked: delta.flip()
             }
         }
-
-        Kit.StatusBadge {
-            objectName: "temperStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: panel.theme.statusY
-        }
     }
 
     // ---- The display -----------------------------------------------------------------
 
-    readonly property real displayY: theme.displayY
+    readonly property real displayY: header.y + header.height + gap
     readonly property real displayHeight: theme.displayHeight
 
     Kit.Card {
@@ -403,13 +277,33 @@ Rectangle {
         objectName: "temperInspector"
         theme: panel.theme
         title: "BAND " + (panel.selected + 1)
-        note: panel.selectedOn ? "DYNAMIC · MOVES WITH ITS LEVEL" : "OFF · DOUBLE-CLICK THE SCREEN OR SWITCH IT ON"
-        noteColor: panel.selectedOn ? panel.theme.bands[panel.selected] : panel.theme.inkFaint
         x: panel.margin
         y: panel.inspectorY
         width: panel.width - 2 * panel.margin
         height: panel.inspectorHeight
 
+        // The band's On switch sits by its title, its note after it. With no
+        // note of its own the card's fitWidth ends a title margin past the title.
+        Kit.Switch {
+            id: bandSwitch
+            x: inspector.fitWidth - panel.theme.cardTitleX + panel.theme.cardNoteGap
+            y: panel.theme.inspectorSwitchY
+            controller: panel.controller
+            theme: panel.theme
+            parameterId: panel.bandId(panel.selected, "on")
+            accent: panel.theme.bands[panel.selected]
+            label: panel.selectedOn ? "ON" : "OFF"
+        }
+        Text {
+            objectName: "temperInspectorNote"
+            x: bandSwitch.x + bandSwitch.width + panel.theme.cardNoteGap
+            anchors.verticalCenter: bandSwitch.verticalCenter
+            text: panel.selectedOn ? "DYNAMIC · MOVES WITH ITS LEVEL" : "OFF · DOUBLE-CLICK THE SCREEN OR SWITCH IT ON"
+            color: panel.selectedOn ? panel.theme.bands[panel.selected] : panel.theme.inkDim
+            font.pixelSize: panel.theme.cardNoteSize
+            font.bold: panel.theme.cardNoteBold
+            font.letterSpacing: panel.theme.cardNoteSpacing
+        }
         Row {
             id: chips
             objectName: "temperBands"
@@ -487,6 +381,7 @@ Rectangle {
                     accent: panel.theme.bands[panel.selected]
                     diameter: panel.theme.bandKnobDiameter
                     inactive: !panel.selectedOn
+                    inactiveReason: inactive ? "Band " + (panel.selected + 1) + " is off" : ""
                 }
             }
         }
@@ -511,15 +406,6 @@ Rectangle {
                 font.family: panel.theme.mono
                 font.pixelSize: panel.theme.typeCaption
             }
-        }
-        Kit.Switch {
-            x: inspector.width - panel.theme.inspectorSwitchRight
-            y: panel.theme.inspectorSwitchY
-            controller: panel.controller
-            theme: panel.theme
-            parameterId: panel.bandId(panel.selected, "on")
-            accent: panel.theme.bands[panel.selected]
-            label: panel.selectedOn ? "ON" : "OFF"
         }
         Rectangle {
             id: remove
@@ -658,12 +544,23 @@ Rectangle {
             labels: ["ST", "MID", "SIDE", "L", "R"]
         }
         PanelKnob {
+            id: linkKnob
             x: panel.theme.spaceLg
             y: panel.theme.cardLowerY
             parameterId: "temper.link"
             accent: panel.theme.cut
             // Linking only means something with both channels processed.
             inactive: panel.revision >= 0 && panel.controller.choice("temper.stereo") !== 0
+            inactiveReason: inactive ? "Link needs Stereo on ST" : ""
+        }
+        Note {
+            objectName: "temperLinkNote"
+            x: linkKnob.x + linkKnob.width + panel.theme.spaceMd
+            y: linkKnob.y + panel.theme.cardNoteDrop
+            width: stereoCard.width - x - panel.theme.spaceLg
+            visible: linkKnob.inactive
+            text: linkKnob.inactiveReason
+            color: panel.theme.inkDim
         }
     }
     Kit.Card {
@@ -717,6 +614,7 @@ Rectangle {
                     parameterId: modelData
                     accent: panel.theme.side
                     inactive: !panel.unmaskOn
+                    inactiveReason: inactive ? "Unmask is off" : ""
                 }
             }
         }

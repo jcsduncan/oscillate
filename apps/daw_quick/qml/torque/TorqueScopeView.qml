@@ -4,6 +4,8 @@ import Oscillate.Format
 
 // An oscilloscope sketch of the current model's oscillator: two cycles of
 // the mix the kernel runs. The Sub model adds its pitch drop as an inset.
+// The panel frames it (Kit.PlotFrame): `timeTicks` and `timeUnit` label
+// the axis along its foot, the cycles, or the drop's time while it shows.
 Rectangle {
     id: scope
     required property var controller
@@ -25,6 +27,16 @@ Rectangle {
     // The inset's gap below the wave and its inner vertical padding.
     readonly property real dropGap: 8
     readonly property real dropPad: 3
+    readonly property bool showsDrop: model === 3 && dropStart > 0.01
+    // The cycles drawn, and the drop's span in milliseconds.
+    readonly property int cycles: 2
+    readonly property real msPerSecond: 1000
+    // The axis ticks: each cycle's start, or the drop's start, middle and end.
+    readonly property var tickFractions: [0, 0.5, 1]
+    readonly property string timeUnit: showsDrop ? "ms" : "cycles"
+    readonly property var timeTicks: width > 0 ? tickFractions.map(at => ({
+        at: (theme.spaceMd + at * (width - 2 * theme.spaceMd)) / width,
+        label: showsDrop ? Format.number(at * dropSeconds * msPerSecond, 0) : Format.number(at * cycles, 0) })) : []
 
     objectName: "torqueScopeView"
     radius: theme.radiusLg
@@ -43,7 +55,7 @@ Rectangle {
             const ctx = getContext("2d")
             ctx.reset()
             const w = width
-            const h = scope.model === 3 && scope.dropStart > 0.01 ? height * scope.waveShare : height
+            const h = scope.showsDrop ? height * scope.waveShare : height
             const mid = h / 2
             ctx.strokeStyle = scope.theme.grid
             ctx.lineWidth = scope.theme.hairline
@@ -65,8 +77,8 @@ Rectangle {
                 const n = c.length
                 const trace = () => {
                     ctx.beginPath()
-                    for (let i = 0; i <= 2 * n; ++i) {
-                        const x = i / (2 * n) * w
+                    for (let i = 0; i <= scope.cycles * n; ++i) {
+                        const x = i / (scope.cycles * n) * w
                         const y = mid - c[i % n] * (mid - scope.tracePad)
                         if (i === 0)
                             ctx.moveTo(x, y)
@@ -113,29 +125,32 @@ Rectangle {
         font.bold: true
         font.letterSpacing: scope.theme.scopeTitleSpacing
     }
+    // The drop's caption and its depth, in the inset (the frame's chip
+    // takes the top-right corner; the axis gives the drop's time).
     Text {
-        objectName: "torqueDropReadout"
-        visible: scope.model === 3 && scope.dropStart > 0.01
-        anchors.right: parent.right
-        anchors.rightMargin: scope.theme.scopeTitleX
-        y: scope.theme.scopeReadoutY
-        text: "DROP " + Format.semitones(scope.dropStart)
-        color: scope.theme.ink
-        font.family: scope.theme.mono
-        font.pixelSize: scope.theme.typeCaption
-        font.bold: true
-    }
-    Text {
-        visible: scope.model === 3 && scope.dropStart > 0.01
+        id: dropLabel
+        visible: scope.showsDrop
         x: scope.theme.dropLabelX
         y: scope.theme.scopeCanvasTop
            + (scope.height - scope.theme.scopeCanvasTop - scope.theme.spaceMd) * scope.waveShare
            + scope.theme.dropLabelDrop
-        text: "PITCH DROP · " + Format.seconds(scope.dropSeconds)
+        text: "PITCH DROP"
         color: scope.theme.inkFaint
         font.pixelSize: scope.theme.typeMicro
         font.bold: true
         font.letterSpacing: scope.theme.dropLabelSpacing
+    }
+    Text {
+        objectName: "torqueDropReadout"
+        visible: scope.showsDrop
+        anchors.right: parent.right
+        anchors.rightMargin: scope.theme.dropLabelX
+        anchors.baseline: dropLabel.baseline
+        text: Format.semitones(scope.dropStart)
+        color: scope.theme.ink
+        font.family: scope.theme.mono
+        font.pixelSize: scope.theme.typeMicro
+        font.bold: true
     }
     onCycleChanged: canvas.requestPaint()
     onDropChanged: canvas.requestPaint()

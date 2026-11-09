@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
 import "../devicekit" as Kit
 
 // The Ember device panel: a warm vintage poly between walnut cheeks. Every
@@ -18,6 +19,10 @@ Rectangle {
     readonly property real headerHeight: theme.headerHeight
     readonly property real row1Y: margin + headerHeight + theme.spaceMd
     readonly property real row1Height: theme.row1Height
+    // The filter scope's scales, labelled by its frame: decades [Hz, label]
+    // and levels (dB).
+    readonly property var scopeHzMarks: [[100, "100"], [1000, "1k"], [10000, "10k"]]
+    readonly property var scopeDbMarks: [0, -24]
     readonly property real row2Y: row1Y + row1Height + gap
     readonly property real row2Height: theme.row2Height
 
@@ -67,177 +72,92 @@ Rectangle {
 
     // ---- Header ---------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.originX
         y: panel.margin
         width: panel.inner
-        height: panel.headerHeight
-
-        Canvas {
-            id: flame
-            x: 0
-            anchors.verticalCenter: parent.verticalCenter
-            width: panel.theme.flameWidth
-            height: panel.theme.flameHeight
-            // The flame outline in its box: a start point, then cubic Bezier
-            // segments as [control 1, control 2, end] coordinates.
-            readonly property var outlineStart: [13, 1]
-            readonly property var outline: [[20, 10, 25, 16, 22, 24], [20, 30, 6, 31, 4, 23],
-                                             [2, 17, 8, 14, 9, 8], [11, 12, 12, 14, 14, 15],
-                                             [15, 10, 14, 5, 13, 1]]
-            // The hollow at the flame's heart: centre x, y and radii.
-            readonly property var hollow: [10, 20, 7, 8]
-            onPaint: {
-                const ctx = getContext("2d")
-                ctx.reset()
-                const glow = ctx.createLinearGradient(0, height, 0, 0)
-                glow.addColorStop(0, panel.theme.ember)
-                glow.addColorStop(1, panel.theme.gold)
-                ctx.fillStyle = glow
-                ctx.beginPath()
-                ctx.moveTo(outlineStart[0], outlineStart[1])
-                for (const segment of outline)
-                    ctx.bezierCurveTo(segment[0], segment[1], segment[2], segment[3], segment[4], segment[5])
-                ctx.fill()
-                ctx.fillStyle = panel.theme.canvas
-                ctx.beginPath()
-                ctx.ellipse(hollow[0], hollow[1], hollow[2], hollow[3])
-                ctx.fill()
-            }
-        }
-        Text {
-            id: wordmark
-            x: flame.width + panel.theme.wordmarkGap
-            y: panel.theme.wordmarkTop
-            text: "EMBER"
-            color: panel.theme.cream
-            font.pixelSize: panel.theme.wordmarkSize
-            font.bold: true
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        Text {
-            x: wordmark.x + 1
-            y: wordmark.y + wordmark.height - 1
-            text: "VINTAGE POLY SYNTHESIZER"
-            color: panel.theme.amber
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.taglineSpacing
-        }
-
-        Row {
-            id: browser
-            anchors.centerIn: parent
-            spacing: panel.theme.spaceSm
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "emberPresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: presetBox
-                objectName: "emberPresetBox"
-                width: panel.theme.presetBoxWidth
-                height: panel.theme.presetBoxHeight
-                radius: panel.theme.radiusSm
-                color: panel.theme.engraving
-                border.color: activeFocus ? panel.theme.amber : panel.theme.line
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", modified" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(presetBox, panel.controller, panel.theme.amber)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
-                // A small amber "display" look, like a patch readout.
-                Text {
-                    x: panel.theme.spaceMd
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        // The drawn flame before the wordmark, the amber tagline under it.
+        brand: Component {
+            Row {
+                spacing: panel.theme.wordmarkGap
+                Canvas {
+                    id: flame
                     anchors.verticalCenter: parent.verticalCenter
-                    text: panel.controller.preset_category.toUpperCase()
-                    color: panel.theme.amber
-                    font.pixelSize: panel.theme.typeCaption
-                    font.bold: true
-                    font.letterSpacing: panel.theme.presetCategorySpacing
+                    width: panel.theme.flameWidth
+                    height: panel.theme.flameHeight
+                    // The flame outline in its box: a start point, then cubic Bezier
+                    // segments as [control 1, control 2, end] coordinates.
+                    readonly property var outlineStart: [13, 1]
+                    readonly property var outline: [[20, 10, 25, 16, 22, 24], [20, 30, 6, 31, 4, 23],
+                                                     [2, 17, 8, 14, 9, 8], [11, 12, 12, 14, 14, 15],
+                                                     [15, 10, 14, 5, 13, 1]]
+                    // The hollow at the flame's heart: centre x, y and radii.
+                    readonly property var hollow: [10, 20, 7, 8]
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.reset()
+                        const glow = ctx.createLinearGradient(0, height, 0, 0)
+                        glow.addColorStop(0, panel.theme.ember)
+                        glow.addColorStop(1, panel.theme.gold)
+                        ctx.fillStyle = glow
+                        ctx.beginPath()
+                        ctx.moveTo(outlineStart[0], outlineStart[1])
+                        for (const segment of outline)
+                            ctx.bezierCurveTo(segment[0], segment[1], segment[2], segment[3], segment[4], segment[5])
+                        ctx.fill()
+                        ctx.fillStyle = panel.theme.canvas
+                        ctx.beginPath()
+                        ctx.ellipse(hollow[0], hollow[1], hollow[2], hollow[3])
+                        ctx.fill()
+                    }
                 }
-                Text {
-                    objectName: "emberPresetName"
-                    anchors.centerIn: parent
-                    width: parent.width - panel.theme.presetNameReserve
-                    horizontalAlignment: Text.AlignHCenter
-                    text: panel.controller.preset_name
-                    color: panel.theme.gold
-                    font.pixelSize: panel.theme.typeSubtitle
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.presetEditedRight
+                Column {
                     anchors.verticalCenter: parent.verticalCenter
-                    visible: panel.controller.preset_modified
-                    text: "EDITED"
-                    color: panel.theme.dim
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.captionSpacing
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.spaceMd
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.dim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        presetBox.forceActiveFocus()
-                        presetBox.openPresets()
+                    spacing: panel.theme.subtitleGap
+                    Text {
+                        objectName: "emberWordmark"
+                        text: "EMBER"
+                        color: panel.theme.wordmarkInk
+                        font.pixelSize: panel.theme.wordmarkSize
+                        font.weight: panel.theme.wordmarkWeight
+                        font.letterSpacing: panel.theme.wordmarkSpacing
+                    }
+                    Text {
+                        objectName: "emberSubtitle"
+                        x: panel.theme.taglineIndent
+                        text: "VINTAGE POLY SYNTHESIZER"
+                        color: panel.theme.subtitleInk
+                        font.pixelSize: panel.theme.subtitleSize
+                        font.bold: true
+                        font.letterSpacing: panel.theme.subtitleSpacing
                     }
                 }
             }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "emberPresetNext"
-                direction: 1
-            }
         }
+    }
 
-        Kit.StatusBadge {
-            id: status
-            objectName: "emberStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: panel.theme.spaceXs
+    // The legend for the next-note mark on knobs, under the status badge.
+    Row {
+        anchors.right: header.right
+        anchors.rightMargin: panel.theme.spaceXxs
+        y: header.y + header.status.y + header.status.height + panel.theme.noteHintGap
+        spacing: panel.theme.spaceXs
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            width: panel.theme.noteHintMarkSize
+            height: panel.theme.noteHintMarkSize
+            rotation: panel.theme.noteHintMarkRotation
+            color: "transparent"
+            border.color: panel.theme.dim
         }
-        Row {
-            anchors.right: parent.right
-            anchors.rightMargin: panel.theme.spaceXxs
-            y: status.y + status.height + panel.theme.noteHintGap
-            spacing: panel.theme.spaceXs
-            Rectangle {
-                anchors.verticalCenter: parent.verticalCenter
-                width: panel.theme.noteHintMarkSize
-                height: panel.theme.noteHintMarkSize
-                rotation: panel.theme.noteHintMarkRotation
-                color: "transparent"
-                border.color: panel.theme.dim
-            }
-            Text {
-                text: "Applies to new notes"
-                color: panel.theme.faint
-                font.pixelSize: panel.theme.typeCaption
-            }
+        Text {
+            text: "Applies to new notes"
+            color: panel.theme.faint
+            font.pixelSize: panel.theme.typeCaption
         }
     }
 
@@ -452,14 +372,59 @@ Rectangle {
             width: panel.theme.filterTypeWidth
             height: panel.theme.stripControlHeight
         }
-        Kit.FilterScope {
-            objectName: "emberFilterView"
-            controller: panel.controller
-            theme: panel.theme
+        // The filter drawn from its settings (a PREVIEW); focused, the
+        // arrow keys set the cutoff (Left/Right) and resonance (Up/Down).
+        Kit.PlotFrame {
+            id: filterFrame
             x: 0
             y: 0
             width: parent.width
             height: panel.theme.filterScopeHeight
+            theme: panel.theme
+            live: false
+            xUnit: "Hz"
+            yUnit: "dB"
+            xTicks: panel.controller.revision >= 0 ? panel.scopeHzMarks.map(mark => ({
+                at: panel.controller.fraction_of(mark[0]), label: mark[1] })) : []
+            yTicks: {
+                const t = panel.theme
+                const h = filterFrame.plotArea.height
+                const plot = h - 2 * t.hairline - t.scopeTopPad - t.scopeBottomPad
+                if (!(plot > 0))
+                    return []
+                return panel.scopeDbMarks.map(db => ({
+                    at: 1 - (t.hairline + t.scopeTopPad + plot * (t.scopeCeilingDb - db)
+                             / (t.scopeCeilingDb - t.scopeFloorDb)) / h,
+                    label: Format.signed_number(db, 0) }))
+            }
+            Kit.FilterScope {
+                id: filterScope
+                objectName: "emberFilterView"
+                anchors.fill: parent
+                controller: panel.controller
+                theme: panel.theme
+                border.color: activeFocus ? panel.theme.amber : panel.theme.viewEdge
+                activeFocusOnTab: panel.controller.editable
+                Accessible.description: "Left and Right set the cutoff, Up and Down the resonance"
+                Keys.onPressed: event => {
+                    if (!panel.controller.editable)
+                        return
+                    const fine = (event.modifiers & Qt.ShiftModifier) !== 0
+                    if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+                        panel.controller.step("ember.filter.cutoff", event.key === Qt.Key_Right ? 1 : -1, fine)
+                        panel.theme.lastTouched = "ember.filter.cutoff"
+                    } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+                        panel.controller.step("ember.filter.resonance", event.key === Qt.Key_Up ? 1 : -1, fine)
+                        panel.theme.lastTouched = "ember.filter.resonance"
+                    } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
+                        panel.controller.reset_to_default("ember.filter.cutoff")
+                        panel.theme.lastTouched = "ember.filter.cutoff"
+                    } else {
+                        return
+                    }
+                    event.accepted = true
+                }
+            }
         }
         Row {
             y: panel.theme.filterFaderY
@@ -566,6 +531,7 @@ Rectangle {
                     label: modelData === "ember.amp.velocity" ? "Vel" : modelData.charAt(10).toUpperCase()
                     // The amp's own ADSR only shapes sound in Own mode.
                     active: modelData === "ember.amp.velocity" || panel.ampMode === panel.ampOwnMode
+                    inactiveReason: "The amp ADSR shapes the sound only in Own mode"
                     width: amp.bodyWidth / ampFaders.count
                     height: panel.theme.tallFaderHeight
                 }
@@ -705,6 +671,7 @@ Rectangle {
                 accent: panel.theme.teal
                 label: "Detune"
                 active: panel.voiceMode === panel.unisonMode
+                inactiveReason: active ? "" : "Detune applies in Unison mode"
             }
             Kit.Knob {
                 controller: panel.controller
@@ -833,15 +800,24 @@ Rectangle {
                 }
             }
         }
-        EmberCircuitView {
-            objectName: "emberCircuitView"
-            theme: panel.theme
-            live: panel.live
+        // Each card's pitch error in cents, LIVE from the engine's cards.
+        Kit.PlotFrame {
             y: panel.theme.circuitViewY
             width: parent.width
             // The well gives up height so the note below it stays whole.
             height: Math.min(panel.theme.displayWellHeight,
                              circuitNote.y - panel.theme.circuitViewY - panel.theme.spaceSm)
+            theme: panel.theme
+            live: circuitView.reporting
+            yUnit: "ct"
+            yTicks: circuitView.centsTicks
+            EmberCircuitView {
+                id: circuitView
+                objectName: "emberCircuitView"
+                anchors.fill: parent
+                theme: panel.theme
+                live: panel.live
+            }
         }
         Text {
             id: circuitNote
@@ -851,7 +827,7 @@ Rectangle {
             width: parent.width
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
-            text: "Each card's VCO B (bars) and crystal DCO A (ticks) against perfect pitch."
+            text: "Cards 1–8: each one's VCO B (bars) and crystal DCO A (ticks) against perfect pitch."
             color: panel.theme.faint
             font.pixelSize: panel.theme.typeMicro
         }

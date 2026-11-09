@@ -95,6 +95,10 @@ Kit.Knob {
         return (theme.knobStartDegrees + theme.knobSweepDegrees * Math.max(0, Math.min(1, at))) * Math.PI / 180
     }
 
+    // Return types a value, as a click on the value does.
+    Keys.onReturnPressed: beginEdit()
+    Keys.onEnterPressed: beginEdit()
+
     onUsed: panel.touch(knob)
     onMenuRequested: panel.openKnobMenu(knob)
     onHoveredChanged: {
@@ -200,6 +204,11 @@ Kit.Knob {
         MouseArea {
             objectName: "novaKnobType:" + knob.parameterId
             anchors.fill: parent
+            // At least the kit's least hit size, however short the value reads.
+            anchors.topMargin: -knob.theme.hitOutset(parent.height)
+            anchors.bottomMargin: -knob.theme.hitOutset(parent.height)
+            anchors.leftMargin: -knob.theme.hitOutset(parent.width)
+            anchors.rightMargin: -knob.theme.hitOutset(parent.width)
             enabled: knob.formatter === null && knob.controller.editable
             cursorShape: Qt.IBeamCursor
             onClicked: knob.beginEdit()

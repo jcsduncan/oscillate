@@ -77,12 +77,6 @@ Rectangle {
         }
         return ""
     }
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        return info.name === undefined ? "" : (info.group + " · " + info.name).toUpperCase()
-    }
 
     component Note: Text {
         color: panel.theme.inkFaint
@@ -98,175 +92,82 @@ Rectangle {
 
     // ---- Header ----------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
+        // Flyby's presets are scenes.
+        presetTag: "SCENE · " + panel.controller.preset_category.toUpperCase()
+            + (panel.controller.preset_modified ? " · EDITED" : "")
         id: header
         x: panel.margin
         y: panel.theme.headerTop
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
-
-        Text {
-            id: wordmark
-            y: 0
-            text: "FLY<font color=\"" + panel.theme.path + "\">BY</font>"
-            textFormat: Text.StyledText
-            color: panel.theme.glacier
-            font.family: panel.theme.display
-            font.pixelSize: panel.theme.wordmarkSize
-            font.bold: true
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        Text {
-            x: panel.theme.spaceXxs
-            y: wordmark.y + wordmark.height + panel.theme.spaceXxs
-            objectName: "flybyTagline"
-            text: "SOUND IN MOTION · DOPPLER · DISTANCE · EARS"
-            color: panel.theme.inkDim
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.taglineSpacing
-            // Kept clear of the preset browser: a wider fallback font steps
-            // the size down rather than running under it.
-            width: browser.x - x - panel.theme.spaceSm
-            fontSizeMode: Text.HorizontalFit
-            minimumPixelSize: panel.theme.typeFitFloor
-        }
-        Row {
-            id: browser
-            x: panel.theme.browserX
-            y: panel.theme.browserY
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "flybyPresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "flybyPresetDisplay"
-                width: panel.theme.presetWidth
-                height: panel.theme.presetHeight
-                radius: panel.theme.radiusLg
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Scene"
-                Accessible.description: panel.controller.preset_name
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.accent)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        // FLY in glacier, BY in the path's amber, over the tagline.
+        brand: Component {
+            Item {
+                implicitWidth: wordmark.implicitWidth
+                implicitHeight: tagline.y + tagline.height
                 Text {
-                    x: panel.theme.spaceLg
-                    y: panel.theme.presetCaptionY
-                    text: "SCENE · " + panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
+                    id: wordmark
+                    objectName: "flybyWordmark"
+                    text: "FLY<font color=\"" + panel.theme.path + "\">BY</font>"
+                    textFormat: Text.StyledText
+                    color: panel.theme.wordmarkInk
+                    font.family: panel.theme.wordmarkFont
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.weight: panel.theme.wordmarkWeight
+                    font.letterSpacing: panel.theme.wordmarkSpacing
+                }
+                Text {
+                    id: tagline
+                    objectName: "flybyTagline"
+                    x: panel.theme.spaceXxs
+                    y: wordmark.height + panel.theme.subtitleGap
+                    text: "SOUND IN MOTION · DOPPLER · DISTANCE · EARS"
+                    color: panel.theme.subtitleInk
+                    font.pixelSize: panel.theme.subtitleSize
                     font.bold: true
-                    font.letterSpacing: panel.theme.presetCaptionSpacing
+                    font.letterSpacing: panel.theme.subtitleSpacing
+                    // Kept clear of the preset browser: a wider fallback font
+                    // steps the size down rather than running under it.
+                    width: panel.theme.headerBrowserX - x - panel.theme.headerGap
+                    fontSizeMode: Text.HorizontalFit
+                    minimumPixelSize: panel.theme.typeFitFloor
                 }
-                Text {
-                    objectName: "flybyPresetName"
-                    x: panel.theme.spaceLg
-                    y: panel.theme.presetNameY
-                    width: panel.theme.presetNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeSubtitle
-                    elide: Text.ElideRight
-                }
-                Rectangle {
-                    x: panel.theme.presetDividerX
-                    y: panel.theme.presetDividerInset
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.theme.presetDividerInset
-                    color: panel.theme.wellEdge
-                }
-                Text {
-                    objectName: "flybyReadout"
-                    x: panel.theme.readoutX
-                    y: panel.theme.presetCaptionY
-                    width: display.width - x - panel.theme.readoutRight
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.readoutSpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "flybyReadoutValue"
-                    x: panel.theme.readoutX
-                    y: panel.theme.readoutValueY
-                    width: display.width - x - panel.theme.readoutRight
-                    text: panel.theme.lastTouched === "" || panel.revision < 0 ? ""
-                        : panel.controller.display(panel.theme.lastTouched)
-                    color: panel.theme.accent
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeEmphasis
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.chevronMargin
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.inkDim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
-                    }
-                }
-            }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "flybyPresetNext"
-                direction: 1
             }
         }
-        // In and out, held peaks.
-        Row {
-            anchors.right: parent.right
-            y: panel.theme.meterTop
+    }
+    // In and out, held peaks, left of the status badge.
+    Row {
+        x: header.x + header.status.x - panel.theme.headerGap - width
+        y: header.y + (header.rowHeight - height) / 2
+        height: panel.theme.meterHeight
+        spacing: panel.theme.spaceXs
+        Kit.PeakMeter {
+            objectName: "flybyMeterIn"
+            theme: panel.theme
+            width: panel.theme.meterWidth
             height: panel.theme.meterHeight
-            spacing: panel.theme.spaceXs
-            Kit.PeakMeter {
-                objectName: "flybyMeterIn"
-                theme: panel.theme
-                width: panel.theme.meterWidth
-                height: panel.theme.meterHeight
-                live: panel.playing
-                peakDb: panel.playing ? Number(panel.live.input_peak) : panel.silentDb
-            }
-            Item { width: panel.theme.spaceXs; height: 1 }
-            Kit.PeakMeter {
-                objectName: "flybyMeterOutLeft"
-                theme: panel.theme
-                width: panel.theme.meterWidth
-                height: panel.theme.meterHeight
-                live: panel.playing
-                peakDb: panel.playing ? Number(panel.live.output_peak_left) : panel.silentDb
-            }
-            Kit.PeakMeter {
-                objectName: "flybyMeterOutRight"
-                theme: panel.theme
-                width: panel.theme.meterWidth
-                height: panel.theme.meterHeight
-                live: panel.playing
-                peakDb: panel.playing ? Number(panel.live.output_peak_right) : panel.silentDb
-            }
+            live: panel.playing
+            peakDb: panel.playing ? Number(panel.live.input_peak) : panel.silentDb
+        }
+        Item { width: panel.theme.spaceXs; height: 1 }
+        Kit.PeakMeter {
+            objectName: "flybyMeterOutLeft"
+            theme: panel.theme
+            width: panel.theme.meterWidth
+            height: panel.theme.meterHeight
+            live: panel.playing
+            peakDb: panel.playing ? Number(panel.live.output_peak_left) : panel.silentDb
+        }
+        Kit.PeakMeter {
+            objectName: "flybyMeterOutRight"
+            theme: panel.theme
+            width: panel.theme.meterWidth
+            height: panel.theme.meterHeight
+            live: panel.playing
+            peakDb: panel.playing ? Number(panel.live.output_peak_right) : panel.silentDb
         }
     }
 
@@ -282,13 +183,22 @@ Rectangle {
         color: panel.theme.chart
         border.color: panel.theme.plateEdge
         clip: true
-        FlybyMap {
-            id: map
+        // The chart in metres from you; LIVE while the engine moves the
+        // source, else a PREVIEW of the path from its settings.
+        Kit.PlotFrame {
             anchors.fill: parent
             anchors.margins: panel.theme.hairline
-            controller: panel.controller
             theme: panel.theme
-            live: panel.live
+            live: map.playing
+            yUnit: "m"
+            yTicks: map.metreTicks
+            FlybyMap {
+                id: map
+                anchors.fill: parent
+                controller: panel.controller
+                theme: panel.theme
+                live: panel.live
+            }
         }
         Flow {
             x: panel.theme.spaceLg
@@ -377,6 +287,7 @@ Rectangle {
                 PanelKnob {
                     parameterId: "flyby.radius"
                     inactive: !panel.orbit
+                    inactiveReason: inactive ? "Radius sets an Orbit path" : ""
                 }
                 PanelKnob { parameterId: "flyby.height" }
             }
@@ -414,10 +325,13 @@ Rectangle {
                 PanelKnob {
                     parameterId: "flyby.speed"
                     inactive: panel.run === panel.runSync || panel.run === panel.runPosition
+                    inactiveReason: panel.run === panel.runSync ? "Speed follows Sync's Length"
+                        : panel.run === panel.runPosition ? "Position places the pass, not Speed" : ""
                 }
                 PanelKnob {
                     parameterId: "flyby.position"
                     inactive: panel.run !== panel.runPosition
+                    inactiveReason: inactive ? "Position works in the Position run mode" : ""
                 }
             }
             Column {

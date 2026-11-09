@@ -80,7 +80,7 @@ KitTheme {
     mono: "DejaVu Sans Mono"
     serif: "DejaVu Serif"
 
-    // The control last touched, read back in the display.
+    // The control last touched, read back in the header.
     lastTouched: ""
 
     // The case: its size, corner and the lacquer's diagonal reflection.
@@ -93,8 +93,9 @@ KitTheme {
     // The layout: header, then three rows of plates.
     property real plateGap: 10
     property real headerY: 10
-    property real headerHeight: 52
-    property real rowAY: 72
+    headerHeight: 52
+    // Between the header and the first row of plates.
+    property real headerContentGap: 10
     property real rowAHeight: 268
     property real rowBHeight: 150
     property real rowCHeight: 128
@@ -120,32 +121,40 @@ KitTheme {
     property real cellWidth: 78
     property real cellCaptionHeight: 34
 
-    // The wordmark and its brass rule.
-    property int wordmarkSize: 28
-    property real wordmarkSpacing: 9
+    // The header (Kit.DeviceHeader): the gold serif wordmark over its brass
+    // rule and subtitle; the preset display and, once touched, the readout.
+    wordmarkFont: serif
+    wordmarkSize: 28
+    wordmarkWeight: Font.Normal
+    wordmarkSpacing: 9
+    wordmarkInk: gold
+    subtitleGap: 6
+    subtitleSpacing: 2.2
+    subtitleInk: inkDim
     property real wordmarkInset: 2
     property real wordmarkRuleGap: 1
     property real wordmarkRuleTrim: 10
-    property real wordmarkSubtitleGap: 6
-    property real wordmarkSubtitleSpacing: 2.2
-
-    // The preset display: category and name, then the touched control.
-    property real browserX: 252
-    property real displayWidth: 560
-    property real displayHeight: 42
-    property real displayRadius: 5
-    property real focusStroke: 1.5
-    property real displayCaptionY: 5
-    property real displayNameY: 16
-    property real displayNameWidth: 250
-    property real displayDividerX: 276
-    property real displayDividerInset: 8
-    property real displayReadoutX: 288
-    property real displayValueY: 17
-    property real displayReadoutRight: 26
-    property real displayChevronMargin: 10
-    property real readoutSpacing: 1
-    property real statusY: 13
+    headerBrowserX: 252
+    presetDisplayWidth: 300
+    presetDisplayHeight: 42
+    presetDisplayRadius: 5
+    presetEdge: wellEdge
+    presetTextX: plateInset
+    presetTagY: 5
+    presetTagSpacing: captionSpacing
+    presetNameY: 16
+    presetNameFont: serif
+    presetNameSize: typeTitle
+    presetNameBold: false
+    presetChevronMargin: 10
+    presetChevronInk: brass
+    readoutWidth: 240
+    readoutRadius: 5
+    readoutTextX: plateInset
+    readoutNameY: 5
+    readoutSpacing: 1
+    readoutValueY: 17
+    readoutValueInk: gold
 
     // The library's brass push buttons.
     property real actionPad: 20

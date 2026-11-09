@@ -219,7 +219,7 @@ void panel_covers_every_parameter_and_edits() {
   require(controller.choice(QStringLiteral("ember.vco.sync")) == 1, "toggle turns sync on");
 
   // Preset menu: open, then choose with the keyboard.
-  auto* box = item(*panel, QStringLiteral("emberPresetBox"));
+  auto* box = item(*panel, QStringLiteral("emberPresetDisplay"));
   auto* menu = item(*panel, QStringLiteral("emberMenu"));
   QTest::mouseClick(panel->window.get(), Qt::LeftButton, Qt::NoModifier,
                     box->mapToScene(QPointF(box->width() / 2, box->height() / 2)).toPoint());
@@ -280,13 +280,15 @@ void controls_follow_their_modes() {
           "Own mode lights the amp ADSR");
 
   controller.set_choice(QStringLiteral("ember.voice.mode"), 0);
-  // An inactive knob keeps its opacity and dims its face (the kit's
-  // mode-inactive state), so read the state, not the opacity.
   const auto inactive = [&](const char* name) {
     return item(*panel, QString::fromLatin1(name))->property("modeInactive").toBool();
   };
-  require(!visible("emberDropdown:ember.voice.chord") && inactive("emberKnob:ember.voice.detune"),
-          "chord and detune stay out of the way in poly");
+  require(!visible("emberDropdown:ember.voice.chord") && inactive("emberKnob:ember.voice.detune") &&
+              !item(*panel, QStringLiteral("emberKnob:ember.voice.detune"))
+                   ->property("inactiveReason")
+                   .toString()
+                   .isEmpty(),
+          "chord and detune stay out of the way in poly, and detune says why");
   controller.set_choice(QStringLiteral("ember.voice.mode"), 2);
   require(visible("emberDropdown:ember.voice.chord"), "chord shape shows in Chord mode");
   controller.set_choice(QStringLiteral("ember.voice.mode"), 1);

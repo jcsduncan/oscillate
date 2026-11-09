@@ -142,37 +142,40 @@ KitTheme {
     property real cellWidthPad: 30
     property real cellHeightPad: 36
 
-    // The header: wordmark, its heat rule, subtitle, preset well, status.
+    // The header (Kit.DeviceHeader): the heat-lit wordmark over its rule and
+    // subtitle, the preset browser and, once a control is touched, its readout.
     property real headerY: 10
-    property real headerHeight: 52
-    property int wordmarkSize: 30
-    property real wordmarkSpacing: 10
+    headerHeight: 52
+    headerBrowserX: 232
+    wordmarkSize: 30
+    wordmarkWeight: Font.Bold
+    wordmarkSpacing: 10
     property color wordmarkShadow: "#000000"
     property real ruleGap: 1
     // The rule runs this much shorter than the wordmark.
     property real ruleTrim: 12
     // Where the rule turns from amber to ember.
     property real ruleEmberStop: 0.6
-    property real subtitleGap: 7
-    property real subtitleSpacing: 1.8
-    property real browserX: 232
-    property real browserY: 4
-    property real presetWidth: 520
-    property real presetHeight: 42
-    property real presetTextX: 14
-    property real presetCaptionY: 5
-    property real presetNameY: 16
-    property real presetNameWidth: 230
-    property real presetDividerX: 256
-    // The divider's inset from the well's top and bottom.
-    property real presetDividerInset: 8
-    property real presetReadoutX: 268
-    property real presetReadoutSpacing: 1
-    // The readout's room from the well's right edge (clear of the chevron).
-    property real presetReadoutRight: 26
-    property real presetValueY: 17
-    property real presetChevronMargin: 10
-    property real statusY: 13
+    subtitleGap: 7
+    subtitleSpacing: 1.8
+    subtitleInk: inkDim
+    presetDisplayWidth: 300
+    presetDisplayHeight: 42
+    presetDisplayRadius: wellRadius
+    presetFocusStroke: focusStroke
+    presetTextX: 14
+    presetTagY: 5
+    presetTagSpacing: capsTightSpacing
+    presetNameY: 16
+    presetNameSize: typeTitle
+    presetChevronMargin: 10
+    presetChevronInk: copper
+    readoutWidth: 230
+    readoutRadius: wellRadius
+    readoutTextX: 14
+    readoutNameY: 5
+    readoutValueY: 17
+    readoutValueInk: amber
 
     // The top row: the curve selector, the forge, the levels.
     property real rowAY: 72

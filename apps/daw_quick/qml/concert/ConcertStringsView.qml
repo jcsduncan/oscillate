@@ -54,6 +54,7 @@ Item {
         return count
     }
     objectName: "concertStringsView"
+    readonly property string plotExemptReason: "a picture of the piano's strings, dampers, keys and pedals, not a plot with axes"
     Accessible.role: Accessible.Graphic
     Accessible.name: "Strings, dampers and pedals"
     Accessible.description: live
@@ -257,8 +258,8 @@ Item {
         objectName: "concertStringsCaption"
         x: view.theme.spaceXs
         y: 0
-        text: view.live ? "LIVE · " + view.ringing + (view.ringing === 1 ? " KEY RINGING" : " KEYS RINGING")
-                        : "RING PREVIEW · NOT LIVE"
+        text: view.live ? "PLAYING · " + view.ringing + (view.ringing === 1 ? " KEY RINGING" : " KEYS RINGING")
+                        : "RING PREVIEW"
         color: view.live ? view.theme.gold : view.theme.inkFaint
         font.pixelSize: view.theme.typeMicro
         font.bold: true

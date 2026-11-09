@@ -201,6 +201,8 @@ Rectangle {
                     accent: card.accent
                     inactive: (cell.modelData === "fine" && card.fixedMode)
                         || (cell.modelData === "fixed" && !card.fixedMode)
+                    inactiveReason: !inactive ? ""
+                        : card.fixedMode ? "Fine applies in Ratio mode" : "Fixed applies in Fixed mode"
                 }
             }
         }
@@ -217,6 +219,7 @@ Rectangle {
         // Lengths from here on read to one decimal.
         readonly property real longSeconds: 10
         objectName: "haloEnvelope:" + (card.op - 1)
+        readonly property string plotExemptReason: "a thumbnail of the operator's envelope: its rates and levels read on the knobs below it, its length in seconds in its corner"
         x: card.theme.spaceMd
         y: card.theme.operatorEnvelopeY
         width: card.width - 2 * card.theme.spaceMd

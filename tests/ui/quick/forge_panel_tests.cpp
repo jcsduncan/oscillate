@@ -305,8 +305,11 @@ void the_forge_goes_live() {
           "the running curve is drawn");
   require(std::fabs(view->property("inputPeak").toDouble() - 0.25 * std::sqrt(2.0)) < 1e-6,
           "the input's peak rides the curve");
-  require(text_of(*panel, QStringLiteral("forgeCurveCaption")).startsWith(QStringLiteral("LIVE")),
-          "the caption says live");
+  require(item(*panel, QStringLiteral("forgeCurveFrame"))->property("chipText").toString() ==
+                  QStringLiteral("LIVE") &&
+              text_of(*panel, QStringLiteral("forgeCurveCaption"))
+                  .startsWith(QStringLiteral("INPUT PEAK")),
+          "the frame says live and the caption reads the input's peak");
   require(text_of(*panel, QStringLiteral("forgeMeterValue:in")) == QStringLiteral("−12.0") &&
               text_of(*panel, QStringLiteral("forgeMeterValue:out")) == QStringLiteral("−14.0"),
           "the meters read in dBFS");

@@ -468,13 +468,13 @@ void kits_apply() {
   auto panel = load_panel(controller, &model);
   require(table().presets.size() >= 2, "Knock has kits");
   const auto kit_name = [&] {
-    return item(*panel, QStringLiteral("knockKitName"))->property("text").toString();
+    return item(*panel, QStringLiteral("knockPresetName"))->property("text").toString();
   };
 
   controller.apply_preset(0);
   QCoreApplication::processEvents();
   require(kit_name() == qs(table().presets[0].name), "the header names the kit");
-  click(*panel, item(*panel, QStringLiteral("knockKitNext")));
+  click(*panel, item(*panel, QStringLiteral("knockPresetNext")));
   require(controller.preset_name() == qs(table().presets[1].name), "next steps the kit");
   require(kit_name() == qs(table().presets[1].name), "the header follows");
   const auto expected = oscillate::native_dsp::preset_values(table(), table().presets[1]).value();
@@ -484,11 +484,11 @@ void kits_apply() {
                                            table(), expected, static_cast<std::size_t>(pad))),
             "the pads are renamed by the kit");
   }
-  click(*panel, item(*panel, QStringLiteral("knockKitPrevious")));
+  click(*panel, item(*panel, QStringLiteral("knockPresetPrevious")));
   require(controller.preset_name() == qs(table().presets[0].name), "previous steps back");
 
   auto* menu = item(*panel, QStringLiteral("knockMenu"));
-  click(*panel, item(*panel, QStringLiteral("knockKitBox")));
+  click(*panel, item(*panel, QStringLiteral("knockPresetDisplay")));
   require(menu->isVisible(), "the kit menu opens");
   QTest::keyClick(panel->window.get(), Qt::Key_Down);
   QTest::keyClick(panel->window.get(), Qt::Key_Return);
@@ -665,6 +665,22 @@ void patterns_load_roll_mutate_and_lock() {
   click(*panel, item(*panel, QStringLiteral("knockCell:0:1")));
   require(patterns_model->cell(0, 0, 1) == (kind + 1) % static_cast<int>(patterns::cell_kinds),
           "a cell click steps the cell");
+
+  // The grid is one Tab stop: the click put its cursor there; the arrows
+  // move it, Space cycles the cell, Home reaches the lane's lock.
+  require(item(*panel, QStringLiteral("knockGrid"))->hasActiveFocus(),
+          "a cell click focuses the grid");
+  const int next_kind = patterns_model->cell(0, 0, 2);
+  QTest::keyClick(panel->window.get(), Qt::Key_Right);
+  QTest::keyClick(panel->window.get(), Qt::Key_Space);
+  require(patterns_model->cell(0, 0, 2) == (next_kind + 1) % static_cast<int>(patterns::cell_kinds),
+          "Right then Space cycles the next cell");
+  const bool lane_locked = patterns_model->locked()[0].toBool();
+  QTest::keyClick(panel->window.get(), Qt::Key_Home);
+  QTest::keyClick(panel->window.get(), Qt::Key_Space);
+  require(patterns_model->locked()[0].toBool() != lane_locked, "Space on the lock toggles it");
+  QTest::keyClick(panel->window.get(), Qt::Key_Space);
+  require(patterns_model->locked()[0].toBool() == lane_locked, "and back");
 
   // The generator: bars and a style reshape the loop; bar tabs page it.
   click(*panel, item(*panel, QStringLiteral("knockTabGenerate")));

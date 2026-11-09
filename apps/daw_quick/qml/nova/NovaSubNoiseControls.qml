@@ -105,7 +105,7 @@ Item {
             Knob { parameterId: "nova.sub.level"; label: "SUB" }
             Knob { parameterId: "nova.sub.octave"; label: "OCT" }
             Knob { parameterId: "nova.noise.level"; label: "NOISE" }
-            Knob { parameterId: "nova.noise.am.amount"; label: "AM"; inactive: controls.amOff }
+            Knob { parameterId: "nova.noise.am.amount"; label: "AM"; inactive: controls.amOff; inactiveReason: "AM needs a source" }
         }
 
         Rectangle {
@@ -135,7 +135,7 @@ Item {
             NovaKnobGroup {
                 panel: controls.panel
                 label: "AM"
-                Small { parameterId: "nova.noise.am.curve"; label: "CURVE"; inactive: controls.amOff }
+                Small { parameterId: "nova.noise.am.curve"; label: "CURVE"; inactive: controls.amOff; inactiveReason: "AM needs a source" }
                 NovaSegs {
                     anchors.verticalCenter: parent.verticalCenter
                     panel: controls.panel

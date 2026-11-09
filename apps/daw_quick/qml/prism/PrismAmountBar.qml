@@ -68,6 +68,11 @@ Rectangle {
     }
     MouseArea {
         anchors.fill: parent
+        // At least the kit's least hit size, however thin the bar draws.
+        anchors.leftMargin: -bar.theme.hitOutset(parent.width)
+        anchors.rightMargin: -bar.theme.hitOutset(parent.width)
+        anchors.topMargin: -bar.theme.hitOutset(parent.height)
+        anchors.bottomMargin: -bar.theme.hitOutset(parent.height)
         enabled: bar.controller.editable
         preventStealing: true
         cursorShape: Qt.SizeHorCursor

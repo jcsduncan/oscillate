@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Oscillate.Contracts
 import Oscillate.Format
+import "../devicekit" as Kit
 
 // Lens's hero: the spectrum on a log frequency axis (20 Hz to 20 kHz,
 // labelled decades) and a dB axis whose range and ceiling the panel sets.
@@ -60,6 +61,30 @@ Item {
     readonly property real py: theme.spectrumTop
     readonly property real pw: width - px - (showDifference ? theme.differenceScaleWidth : theme.spectrumRightPad)
     readonly property real ph: height - py - theme.spectrumAxisHeight
+
+    // The scales the frame labels, from this view's own mapping: the
+    // 1-2-5 marks of each decade, and a dB line every levelStep from the
+    // ceiling down (finer over a short range).
+    readonly property var frequencyMarks: [[20, "20"], [50, "50"], [100, "100"], [200, "200"], [500, "500"],
+                                           [1000, "1k"], [2000, "2k"], [5000, "5k"], [10000, "10k"], [20000, "20k"]]
+    readonly property var levelSteps: [[60, 6], [90, 10], [Infinity, 12]]
+    readonly property real levelStep: {
+        for (const pair of levelSteps) {
+            if (rangeDb <= pair[0])
+                return pair[1]
+        }
+        return levelSteps[levelSteps.length - 1][1]
+    }
+    readonly property var levelMarks: {
+        const marks = []
+        for (let db = Math.floor(topDb / levelStep) * levelStep; db >= bottomDb; db -= levelStep)
+            marks.push(db)
+        return marks
+    }
+    readonly property var frequencyTicks: pw > 0
+        ? frequencyMarks.map(mark => ({ at: (xOf(mark[0]) - px) / pw, label: mark[1] })) : []
+    readonly property var levelTicks: ph > 0
+        ? levelMarks.map(db => ({ at: 1 - (yOf(db) - py) / ph, label: Format.number(db, 0) })) : []
 
     objectName: "lensSpectrum"
     implicitWidth: theme.spectrumWidth
@@ -136,182 +161,45 @@ Item {
     onWidthChanged: plot.requestPaint()
     onHeightChanged: plot.requestPaint()
 
-    Canvas {
-        id: plot
-        anchors.fill: parent
-        renderStrategy: Canvas.Cooperative
-        // The curve through every point, or dashed (every other run of
-        // `dash` points drawn).
-        function trace(ctx, values, dash) {
-            let started = false
-            for (let j = 0; j < values.length; ++j) {
-                const v = values[j]
-                const drawn = v > -199 && !isNaN(v) && (dash === 0 || Math.floor(j / dash) % 2 === 0)
-                if (!drawn) {
-                    started = false
-                    continue
-                }
-                const x = spectrum.xOf(spectrum.pointHz(j))
-                const y = spectrum.yOf(v)
-                if (!started) {
-                    ctx.moveTo(x, y)
-                    started = true
-                } else {
-                    ctx.lineTo(x, y)
-                }
-            }
-        }
-        onPaint: {
-            const ctx = getContext("2d")
-            ctx.reset()
-            const t = spectrum.theme
-            const left = spectrum.px
-            const right = spectrum.px + spectrum.pw
-            const top = spectrum.py
-            const bottom = spectrum.py + spectrum.ph
-            // The well: a faint glow toward the top.
-            const well = ctx.createLinearGradient(0, top, 0, bottom)
-            well.addColorStop(0, t.wellGlow)
-            well.addColorStop(1, t.well)
-            ctx.fillStyle = well
-            ctx.fillRect(left, top, spectrum.pw, spectrum.ph)
+    // The plot's frame: frequency along the bottom, level up the left;
+    // LIVE while the mix plays, else a PREVIEW of a typical mix through
+    // the settings. The canvas spans the whole view (the difference scale
+    // right of the plot too), placed back at the view's origin from
+    // inside the frame.
+    Kit.PlotFrame {
+        id: frame
+        objectName: "lensSpectrumFrame"
+        x: spectrum.px - spectrum.theme.plotGutterLeft
+        y: spectrum.py
+        width: spectrum.pw + spectrum.theme.plotGutterLeft
+        height: spectrum.ph + spectrum.theme.plotGutterBottom
+        theme: spectrum.theme
+        live: spectrum.live
+        xUnit: "Hz"
+        yUnit: "dB"
+        xTicks: spectrum.frequencyTicks
+        yTicks: spectrum.levelTicks
 
-            // Frequency grid: every 1-2-5, decades and their labels strong.
-            ctx.lineWidth = t.hairline
-            ctx.font = t.typeCaption + "px '" + t.mono + "'"
-            ctx.textBaseline = "top"
-            ctx.textAlign = "center"
-            for (let decade = 10; decade <= 10000; decade *= 10) {
-                for (let m = 1; m <= 9; ++m) {
-                    const hz = decade * m
-                    if (hz < spectrum.lowHz || hz > spectrum.highHz)
-                        continue
-                    const x = Math.round(spectrum.xOf(hz)) + t.hairline / 2
-                    ctx.strokeStyle = m === 1 ? t.gridStrong : t.grid
-                    ctx.beginPath()
-                    ctx.moveTo(x, top)
-                    ctx.lineTo(x, bottom)
-                    ctx.stroke()
-                    if (m === 1 || m === 2 || m === 5) {
-                        ctx.fillStyle = m === 1 ? t.inkDim : t.gridText
-                        ctx.fillText(hz >= 1000 ? (hz / 1000) + "k" : String(hz), x, bottom + t.spaceSm)
-                    }
-                }
-            }
-
-            // Level grid.
-            const step = spectrum.rangeDb <= 60 ? 6 : spectrum.rangeDb <= 90 ? 10 : 12
-            ctx.textAlign = "right"
-            ctx.textBaseline = "middle"
-            const first = Math.floor(spectrum.topDb / step) * step
-            for (let db = first; db >= spectrum.bottomDb; db -= step) {
-                const y = Math.round(spectrum.yOf(db)) + t.hairline / 2
-                ctx.strokeStyle = db === 0 ? t.gridStrong : t.grid
-                ctx.beginPath()
-                ctx.moveTo(left, y)
-                ctx.lineTo(right, y)
-                ctx.stroke()
-                ctx.fillStyle = db === 0 ? t.inkDim : t.gridText
-                ctx.fillText(Format.number(db, 0), left - t.spaceSm, y)
-            }
-
-            // The overlay first, so the live curve reads over it.
-            if (spectrum.showOverlay && spectrum.overlay.length > 0) {
-                ctx.strokeStyle = t.overlay
-                ctx.globalAlpha = t.overlayAlpha
-                ctx.lineWidth = t.overlayStroke
-                ctx.beginPath()
-                trace(ctx, spectrum.overlay, spectrum.overlayDash)
-                ctx.stroke()
-                ctx.globalAlpha = 1
-            }
-
-            // Curve A: a filled gradient, a soft glow and a bright line.
-            const a = spectrum.curveA
-            if (a.length > 0) {
-                ctx.beginPath()
-                let first = true
-                let lastX = left
-                for (let j = 0; j < a.length; ++j) {
-                    const x = spectrum.xOf(spectrum.pointHz(j))
-                    const y = spectrum.yOf(a[j] > -199 ? a[j] : spectrum.bottomDb)
-                    if (first) {
-                        ctx.moveTo(x, bottom)
-                        ctx.lineTo(x, y)
-                        first = false
-                    } else {
-                        ctx.lineTo(x, y)
-                    }
-                    lastX = x
-                }
-                ctx.lineTo(lastX, bottom)
-                ctx.closePath()
-                const fill = ctx.createLinearGradient(0, top, 0, bottom)
-                fill.addColorStop(0, Qt.rgba(t.primary.r, t.primary.g, t.primary.b, t.primaryFillTopAlpha))
-                fill.addColorStop(t.primaryFillMidStop,
-                                  Qt.rgba(t.primaryDeep.r, t.primaryDeep.g, t.primaryDeep.b, t.primaryFillMidAlpha))
-                fill.addColorStop(1, Qt.rgba(t.primaryDeep.r, t.primaryDeep.g, t.primaryDeep.b, t.primaryFillBottomAlpha))
-                ctx.fillStyle = fill
-                ctx.fill()
-                ctx.lineJoin = "round"
-                ctx.strokeStyle = Qt.rgba(t.primary.r, t.primary.g, t.primary.b, t.primaryGlowAlpha)
-                ctx.lineWidth = t.primaryGlowWidth
-                ctx.beginPath()
-                trace(ctx, a, 0)
-                ctx.stroke()
-                ctx.strokeStyle = t.primary
-                ctx.lineWidth = t.primaryStroke
-                ctx.beginPath()
-                trace(ctx, a, 0)
-                ctx.stroke()
-            }
-
-            // Curve B.
-            if (spectrum.showB && spectrum.curveB.length > 0) {
-                ctx.strokeStyle = Qt.rgba(t.secondary.r, t.secondary.g, t.secondary.b, t.secondaryGlowAlpha)
-                ctx.lineWidth = t.secondaryGlowWidth
-                ctx.beginPath()
-                trace(ctx, spectrum.curveB, 0)
-                ctx.stroke()
-                ctx.strokeStyle = t.secondary
-                ctx.lineWidth = t.secondaryStroke
-                ctx.beginPath()
-                trace(ctx, spectrum.curveB, 0)
-                ctx.stroke()
-            }
-
-            // The peak hold.
-            if (spectrum.showHold && spectrum.hold.length > 0) {
-                ctx.strokeStyle = Qt.rgba(t.hold.r, t.hold.g, t.hold.b, t.holdAlpha)
-                ctx.lineWidth = t.hairline
-                ctx.beginPath()
-                trace(ctx, spectrum.hold, 0)
-                ctx.stroke()
-            }
-
-            // The difference, on its own scale about the middle.
-            if (spectrum.showDifference && spectrum.difference.length > 0) {
-                const mid = Math.round(spectrum.yOfDifference(0)) + t.hairline / 2
-                ctx.strokeStyle = Qt.rgba(t.difference.r, t.difference.g, t.difference.b, t.differenceAxisAlpha)
-                ctx.lineWidth = t.hairline
-                for (let x = left; x < right; x += t.differenceDashPeriod) {
-                    ctx.beginPath()
-                    ctx.moveTo(x, mid)
-                    ctx.lineTo(Math.min(right, x + t.differenceDashLength), mid)
-                    ctx.stroke()
-                }
-                ctx.strokeStyle = t.difference
-                ctx.lineWidth = t.differenceStroke
-                ctx.beginPath()
+        Canvas {
+            id: plot
+            x: -spectrum.px
+            y: -spectrum.py
+            width: spectrum.width
+            height: spectrum.height
+            renderStrategy: Canvas.Cooperative
+            // The curve through every point, or dashed (every other run of
+            // `dash` points drawn).
+            function trace(ctx, values, dash) {
                 let started = false
-                for (let j = 0; j < spectrum.difference.length; ++j) {
-                    const d = spectrum.difference[j]
-                    if (isNaN(d)) {
+                for (let j = 0; j < values.length; ++j) {
+                    const v = values[j]
+                    const drawn = v > -199 && !isNaN(v) && (dash === 0 || Math.floor(j / dash) % 2 === 0)
+                    if (!drawn) {
                         started = false
                         continue
                     }
                     const x = spectrum.xOf(spectrum.pointHz(j))
-                    const y = spectrum.yOfDifference(d)
+                    const y = spectrum.yOf(v)
                     if (!started) {
                         ctx.moveTo(x, y)
                         started = true
@@ -319,67 +207,216 @@ Item {
                         ctx.lineTo(x, y)
                     }
                 }
-                ctx.stroke()
-                ctx.fillStyle = t.difference
-                ctx.textAlign = "left"
-                ctx.textBaseline = "middle"
-                ctx.font = t.typeCaption + "px '" + t.mono + "'"
-                const range = spectrum.differenceRange
-                for (const d of [range, range / 2, 0, -range / 2, -range]) {
-                    ctx.fillText(Format.signed_number(d, 0), right + t.spaceSm, spectrum.yOfDifference(d))
-                }
-                ctx.fillText("Δ dB", right + t.spaceSm, top + t.spaceXs)
             }
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                const t = spectrum.theme
+                const left = spectrum.px
+                const right = spectrum.px + spectrum.pw
+                const top = spectrum.py
+                const bottom = spectrum.py + spectrum.ph
+                // The well: a faint glow toward the top.
+                const well = ctx.createLinearGradient(0, top, 0, bottom)
+                well.addColorStop(0, t.wellGlow)
+                well.addColorStop(1, t.well)
+                ctx.fillStyle = well
+                ctx.fillRect(left, top, spectrum.pw, spectrum.ph)
 
-            // Resonances: a marker on each, notes on the strongest five.
-            ctx.font = "bold " + t.typeCaption + "px '" + t.sans + "'"
-            ctx.textAlign = "center"
-            ctx.textBaseline = "bottom"
-            for (let k = 0; k < spectrum.peaks.length; ++k) {
-                const peak = spectrum.peaks[k]
-                if (!(peak.hz > 0))
-                    continue
-                const x = spectrum.xOf(peak.hz)
-                const y = Math.max(top + t.spaceXs, spectrum.yOf(peak.db) - t.resonanceLift)
-                ctx.fillStyle = t.resonance
-                ctx.beginPath()
-                ctx.moveTo(x - t.resonanceMarkHalfWidth, y - t.resonanceMarkHeight)
-                ctx.lineTo(x + t.resonanceMarkHalfWidth, y - t.resonanceMarkHeight)
-                ctx.lineTo(x, y - 1)
-                ctx.closePath()
-                ctx.fill()
-                if (k < spectrum.notedPeaks) {
-                    ctx.fillStyle = t.ink
-                    ctx.fillText(spectrum.note(peak.hz).name, x, y - t.resonanceLabelLift)
-                }
-            }
-
-            // The hover crosshair.
-            if (spectrum.hoverPoint >= 0) {
-                const x = Math.round(spectrum.hoverX) + t.hairline / 2
-                ctx.strokeStyle = Qt.rgba(t.glacier.r, t.glacier.g, t.glacier.b, t.crosshairAlpha)
+                // Frequency grid: every 1-9 of each decade, decades strong (the
+                // frame labels the 1-2-5 marks).
                 ctx.lineWidth = t.hairline
-                ctx.beginPath()
-                ctx.moveTo(x, top)
-                ctx.lineTo(x, bottom)
-                ctx.stroke()
-                if (a.length > spectrum.hoverPoint && a[spectrum.hoverPoint] > -199) {
-                    ctx.fillStyle = t.glacier
-                    ctx.beginPath()
-                    ctx.arc(x, spectrum.yOf(a[spectrum.hoverPoint]), t.crosshairDotRadius, 0, Math.PI * 2)
-                    ctx.fill()
+                for (let decade = 10; decade <= 10000; decade *= 10) {
+                    for (let m = 1; m <= 9; ++m) {
+                        const hz = decade * m
+                        if (hz < spectrum.lowHz || hz > spectrum.highHz)
+                            continue
+                        const x = Math.round(spectrum.xOf(hz)) + t.hairline / 2
+                        ctx.strokeStyle = m === 1 ? t.gridStrong : t.grid
+                        ctx.beginPath()
+                        ctx.moveTo(x, top)
+                        ctx.lineTo(x, bottom)
+                        ctx.stroke()
+                    }
                 }
+
+                // Level grid, at the frame's ticks.
+                for (const db of spectrum.levelMarks) {
+                    const y = Math.round(spectrum.yOf(db)) + t.hairline / 2
+                    ctx.strokeStyle = db === 0 ? t.gridStrong : t.grid
+                    ctx.beginPath()
+                    ctx.moveTo(left, y)
+                    ctx.lineTo(right, y)
+                    ctx.stroke()
+                }
+
+                // The overlay first, so the live curve reads over it.
+                if (spectrum.showOverlay && spectrum.overlay.length > 0) {
+                    ctx.strokeStyle = t.overlay
+                    ctx.globalAlpha = t.overlayAlpha
+                    ctx.lineWidth = t.overlayStroke
+                    ctx.beginPath()
+                    trace(ctx, spectrum.overlay, spectrum.overlayDash)
+                    ctx.stroke()
+                    ctx.globalAlpha = 1
+                }
+
+                // Curve A: a filled gradient, a soft glow and a bright line.
+                const a = spectrum.curveA
+                if (a.length > 0) {
+                    ctx.beginPath()
+                    let first = true
+                    let lastX = left
+                    for (let j = 0; j < a.length; ++j) {
+                        const x = spectrum.xOf(spectrum.pointHz(j))
+                        const y = spectrum.yOf(a[j] > -199 ? a[j] : spectrum.bottomDb)
+                        if (first) {
+                            ctx.moveTo(x, bottom)
+                            ctx.lineTo(x, y)
+                            first = false
+                        } else {
+                            ctx.lineTo(x, y)
+                        }
+                        lastX = x
+                    }
+                    ctx.lineTo(lastX, bottom)
+                    ctx.closePath()
+                    const fill = ctx.createLinearGradient(0, top, 0, bottom)
+                    fill.addColorStop(0, Qt.rgba(t.primary.r, t.primary.g, t.primary.b, t.primaryFillTopAlpha))
+                    fill.addColorStop(t.primaryFillMidStop,
+                                      Qt.rgba(t.primaryDeep.r, t.primaryDeep.g, t.primaryDeep.b, t.primaryFillMidAlpha))
+                    fill.addColorStop(1, Qt.rgba(t.primaryDeep.r, t.primaryDeep.g, t.primaryDeep.b, t.primaryFillBottomAlpha))
+                    ctx.fillStyle = fill
+                    ctx.fill()
+                    ctx.lineJoin = "round"
+                    ctx.strokeStyle = Qt.rgba(t.primary.r, t.primary.g, t.primary.b, t.primaryGlowAlpha)
+                    ctx.lineWidth = t.primaryGlowWidth
+                    ctx.beginPath()
+                    trace(ctx, a, 0)
+                    ctx.stroke()
+                    ctx.strokeStyle = t.primary
+                    ctx.lineWidth = t.primaryStroke
+                    ctx.beginPath()
+                    trace(ctx, a, 0)
+                    ctx.stroke()
+                }
+
+                // Curve B.
+                if (spectrum.showB && spectrum.curveB.length > 0) {
+                    ctx.strokeStyle = Qt.rgba(t.secondary.r, t.secondary.g, t.secondary.b, t.secondaryGlowAlpha)
+                    ctx.lineWidth = t.secondaryGlowWidth
+                    ctx.beginPath()
+                    trace(ctx, spectrum.curveB, 0)
+                    ctx.stroke()
+                    ctx.strokeStyle = t.secondary
+                    ctx.lineWidth = t.secondaryStroke
+                    ctx.beginPath()
+                    trace(ctx, spectrum.curveB, 0)
+                    ctx.stroke()
+                }
+
+                // The peak hold.
+                if (spectrum.showHold && spectrum.hold.length > 0) {
+                    ctx.strokeStyle = Qt.rgba(t.hold.r, t.hold.g, t.hold.b, t.holdAlpha)
+                    ctx.lineWidth = t.hairline
+                    ctx.beginPath()
+                    trace(ctx, spectrum.hold, 0)
+                    ctx.stroke()
+                }
+
+                // The difference, on its own scale about the middle.
+                if (spectrum.showDifference && spectrum.difference.length > 0) {
+                    const mid = Math.round(spectrum.yOfDifference(0)) + t.hairline / 2
+                    ctx.strokeStyle = Qt.rgba(t.difference.r, t.difference.g, t.difference.b, t.differenceAxisAlpha)
+                    ctx.lineWidth = t.hairline
+                    for (let x = left; x < right; x += t.differenceDashPeriod) {
+                        ctx.beginPath()
+                        ctx.moveTo(x, mid)
+                        ctx.lineTo(Math.min(right, x + t.differenceDashLength), mid)
+                        ctx.stroke()
+                    }
+                    ctx.strokeStyle = t.difference
+                    ctx.lineWidth = t.differenceStroke
+                    ctx.beginPath()
+                    let started = false
+                    for (let j = 0; j < spectrum.difference.length; ++j) {
+                        const d = spectrum.difference[j]
+                        if (isNaN(d)) {
+                            started = false
+                            continue
+                        }
+                        const x = spectrum.xOf(spectrum.pointHz(j))
+                        const y = spectrum.yOfDifference(d)
+                        if (!started) {
+                            ctx.moveTo(x, y)
+                            started = true
+                        } else {
+                            ctx.lineTo(x, y)
+                        }
+                    }
+                    ctx.stroke()
+                    ctx.fillStyle = t.difference
+                    ctx.textAlign = "left"
+                    ctx.textBaseline = "middle"
+                    ctx.font = t.typeCaption + "px '" + t.mono + "'"
+                    const range = spectrum.differenceRange
+                    for (const d of [range, range / 2, 0, -range / 2, -range]) {
+                        ctx.fillText(Format.signed_number(d, 0), right + t.spaceSm, spectrum.yOfDifference(d))
+                    }
+                    ctx.fillText("Δ dB", right + t.spaceSm, top + t.spaceXs)
+                }
+
+                // Resonances: a marker on each, notes on the strongest five.
+                ctx.font = "bold " + t.typeCaption + "px '" + t.sans + "'"
+                ctx.textAlign = "center"
+                ctx.textBaseline = "bottom"
+                for (let k = 0; k < spectrum.peaks.length; ++k) {
+                    const peak = spectrum.peaks[k]
+                    if (!(peak.hz > 0))
+                        continue
+                    const x = spectrum.xOf(peak.hz)
+                    const y = Math.max(top + t.spaceXs, spectrum.yOf(peak.db) - t.resonanceLift)
+                    ctx.fillStyle = t.resonance
+                    ctx.beginPath()
+                    ctx.moveTo(x - t.resonanceMarkHalfWidth, y - t.resonanceMarkHeight)
+                    ctx.lineTo(x + t.resonanceMarkHalfWidth, y - t.resonanceMarkHeight)
+                    ctx.lineTo(x, y - 1)
+                    ctx.closePath()
+                    ctx.fill()
+                    if (k < spectrum.notedPeaks) {
+                        ctx.fillStyle = t.ink
+                        ctx.fillText(spectrum.note(peak.hz).name, x, y - t.resonanceLabelLift)
+                    }
+                }
+
+                // The hover crosshair.
+                if (spectrum.hoverPoint >= 0) {
+                    const x = Math.round(spectrum.hoverX) + t.hairline / 2
+                    ctx.strokeStyle = Qt.rgba(t.glacier.r, t.glacier.g, t.glacier.b, t.crosshairAlpha)
+                    ctx.lineWidth = t.hairline
+                    ctx.beginPath()
+                    ctx.moveTo(x, top)
+                    ctx.lineTo(x, bottom)
+                    ctx.stroke()
+                    if (a.length > spectrum.hoverPoint && a[spectrum.hoverPoint] > -199) {
+                        ctx.fillStyle = t.glacier
+                        ctx.beginPath()
+                        ctx.arc(x, spectrum.yOf(a[spectrum.hoverPoint]), t.crosshairDotRadius, 0, Math.PI * 2)
+                        ctx.fill()
+                    }
+                }
+                ctx.strokeStyle = t.wellEdge
+                ctx.lineWidth = t.hairline
+                ctx.strokeRect(left + t.hairline / 2, top + t.hairline / 2, spectrum.pw - t.hairline, spectrum.ph - t.hairline)
             }
-            ctx.strokeStyle = t.wellEdge
-            ctx.lineWidth = t.hairline
-            ctx.strokeRect(left + t.hairline / 2, top + t.hairline / 2, spectrum.pw - t.hairline, spectrum.ph - t.hairline)
         }
     }
 
-    // The cursor readout, top right of the plot.
+    // The cursor readout, top left of the plot (the frame's chip holds the
+    // top right).
     Rectangle {
         visible: spectrum.hoverPoint >= 0
-        x: spectrum.px + spectrum.pw - width - spectrum.theme.spaceMd
+        x: spectrum.px + spectrum.theme.spaceMd
         y: spectrum.py + spectrum.theme.spaceMd
         width: readout.implicitWidth + spectrum.theme.cursorReadoutPad
         height: spectrum.theme.cursorReadoutHeight

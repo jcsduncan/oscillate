@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Oscillate.Format
+import "../devicekit" as Kit
 import "TemperCurves.js" as Curves
 
 // The hero display, 20 Hz to 20 kHz. Behind: the live spectra (in as a
@@ -11,8 +12,8 @@ import "TemperCurves.js" as Curves
 // curve with a diamond per node. Drag a diamond to move where Temper
 // listens; drag a band's node for its frequency and range, scroll over it
 // for Q, double-click it to switch it on or off. Double-click the empty
-// screen to switch on the next free band there. Under the plot, the
-// reduction history.
+// screen to switch on the next free band there. A focused diamond moves
+// with the arrow keys. Under the plot, the reduction history.
 Rectangle {
     id: view
     required property var controller
@@ -42,6 +43,21 @@ Rectangle {
     readonly property int points: 200
     // The dB grid's step on the curve scale.
     readonly property real gridStepDb: 6
+    // The frequencies the frame labels, and the gain scale's ticks (0 dB
+    // first, so it carries the unit).
+    readonly property var scaleHz: [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]
+    readonly property real kilo: 1000
+    readonly property var xTicks: revision >= 0 ? scaleHz.map(hz => ({ at: controller.fraction_of(hz),
+        label: hz >= kilo ? (hz / kilo) + "k" : "" + hz })) : []
+    readonly property var yTicks: {
+        const ticks = []
+        for (let db = 0; db <= topDb; db += gridStepDb)
+            ticks.push(db)
+        for (let db = -gridStepDb; db >= bottomDb; db -= gridStepDb)
+            ticks.push(db)
+        return ticks.map(db => ({ at: (db - bottomDb) / (topDb - bottomDb),
+                                  label: Format.signed_number(db, 0) }))
+    }
     // Offsets that centre a 1 px line on a pixel and overlap filled cells.
     readonly property real pixelCentre: 0.5
     // A square turned to a diamond for the sensitivity nodes.
@@ -142,185 +158,172 @@ Rectangle {
         }
     }
 
-    Canvas {
-        id: canvas
-        anchors.fill: parent
-        renderStrategy: Canvas.Cooperative
-        onPaint: {
-            const ctx = getContext("2d")
-            ctx.reset()
-            const t = view.theme
-            const x0 = view.plotX
-            const y0 = view.plotY
-            const w = view.plotW
-            const h = view.plotH
-            ctx.lineWidth = t.hairline
-            for (const hz of [30, 40, 50, 60, 70, 80, 90, 200, 300, 400, 500, 600, 700, 800, 900,
-                              2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000]) {
-                const x = Math.round(view.xOf(hz)) + view.pixelCentre
-                ctx.strokeStyle = t.grid
-                ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + h); ctx.stroke()
-            }
-            for (const hz of [100, 1000, 10000]) {
-                const x = Math.round(view.xOf(hz)) + view.pixelCentre
-                ctx.strokeStyle = t.gridStrong
-                ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + h); ctx.stroke()
-            }
-            for (let db = view.topDb; db >= view.bottomDb; db -= view.gridStepDb) {
-                const y = Math.round(view.yOf(db)) + view.pixelCentre
-                ctx.strokeStyle = db === 0 ? t.zero : t.grid
-                ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + w, y); ctx.stroke()
-            }
-            ctx.save()
-            ctx.beginPath()
-            ctx.rect(x0, y0, w, h)
-            ctx.clip()
-            ctx.lineJoin = "round"
-            // Display band i sits at the centre of its log band.
-            const bandX = (i, n) => x0 + (i + 0.5) / n * w
-            const spectrum = (bands, style) => {
-                const n = bands.length
-                if (n < 2)
-                    return
-                ctx.beginPath()
-                if (style === "fill")
-                    ctx.moveTo(x0, y0 + h)
-                for (let i = 0; i < n; ++i) {
-                    const x = bandX(i, n)
-                    const y = view.spectrumY(Number(bands[i]))
-                    if (i === 0 && style !== "fill")
-                        ctx.moveTo(x, y)
-                    else
-                        ctx.lineTo(x, y)
-                }
-                if (style === "fill") {
-                    ctx.lineTo(x0 + w, y0 + h)
-                    ctx.closePath()
-                    ctx.fillStyle = t.spectrumIn
-                    ctx.globalAlpha = t.spectrumInAlpha
-                    ctx.fill()
-                } else if (style === "side") {
-                    ctx.setLineDash(t.sideDash)
-                    ctx.strokeStyle = t.side
-                    ctx.lineWidth = t.sideStroke
-                    ctx.stroke()
-                    ctx.setLineDash([])
-                } else {
-                    ctx.strokeStyle = t.spectrumOut
-                    ctx.globalAlpha = t.spectrumOutAlpha
-                    ctx.lineWidth = t.spectrumOutStroke
-                    ctx.stroke()
-                }
-                ctx.globalAlpha = 1
-            }
-            spectrum(view.spectrumIn, "fill")
-            spectrum(view.spectrumSide, "side")
-            spectrum(view.spectrumOut, "line")
-
-            // The cut now, hanging from 0 dB.
-            const zeroY = view.yOf(0)
-            const g = view.gain
-            if (g.length > 1) {
-                const n = g.length
-                ctx.beginPath()
-                ctx.moveTo(x0, zeroY)
-                for (let i = 0; i < n; ++i)
-                    ctx.lineTo(bandX(i, n), view.yOf(Math.min(0, Number(g[i]))))
-                ctx.lineTo(x0 + w, zeroY)
-                ctx.closePath()
-                const fill = ctx.createLinearGradient(0, zeroY, 0, view.yOf(view.bottomDb))
-                fill.addColorStop(0, Qt.rgba(t.cut.r, t.cut.g, t.cut.b, t.cutFillTopAlpha))
-                fill.addColorStop(1, Qt.rgba(t.cutHot.r, t.cutHot.g, t.cutHot.b, t.cutFillDeepAlpha))
-                ctx.fillStyle = fill
-                ctx.fill()
-                ctx.beginPath()
-                for (let i = 0; i < n; ++i) {
-                    const y = view.yOf(Math.min(0, Number(g[i])))
-                    if (i === 0) ctx.moveTo(bandX(i, n), y); else ctx.lineTo(bandX(i, n), y)
-                }
-                ctx.strokeStyle = t.cut
-                ctx.lineWidth = t.cutStroke
-                ctx.stroke()
-            }
-
-            // Each band: its full range dashed, its gain now filled.
-            const pointX = i => x0 + i / (view.points - 1) * w
-            for (let b = 0; b < view.bandCount; ++b) {
-                const r = view.bandCurves[b]
-                if (r.length < 2)
-                    continue
-                const tone = t.bands[b]
-                const chosen = b === view.selected
-                ctx.beginPath()
-                for (let i = 0; i < r.length; ++i) {
-                    if (i === 0) ctx.moveTo(pointX(i), view.yOf(r[i])); else ctx.lineTo(pointX(i), view.yOf(r[i]))
-                }
-                ctx.setLineDash(t.bandRangeDash)
-                ctx.strokeStyle = tone
-                ctx.globalAlpha = chosen ? t.bandRangeChosenAlpha : t.bandRangeAlpha
+    // The plot in its frame: frequency and gain ticks, LIVE while playing.
+    // The frame's plot area is the plot rectangle; the canvas draws in the
+    // view's coordinates, shifted onto it.
+    Kit.PlotFrame {
+        x: view.plotX - view.theme.plotGutterLeft
+        y: view.plotY
+        width: view.plotW + view.theme.plotGutterLeft
+        height: view.plotH + view.theme.plotGutterBottom
+        theme: view.theme
+        live: view.playing
+        xTicks: view.xTicks
+        xUnit: "Hz"
+        yTicks: view.yTicks
+        yUnit: "dB"
+        Canvas {
+            id: canvas
+            anchors.fill: parent
+            renderStrategy: Canvas.Cooperative
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                ctx.translate(-view.plotX, -view.plotY)
+                const t = view.theme
+                const x0 = view.plotX
+                const y0 = view.plotY
+                const w = view.plotW
+                const h = view.plotH
                 ctx.lineWidth = t.hairline
-                ctx.stroke()
-                ctx.setLineDash([])
-                const range = view.controller.value(view.bandId(b, "range"))
-                const now = b < view.bandGain.length ? Number(view.bandGain[b]) : 0
-                if (range !== 0 && now !== 0) {
-                    const scale = now / range
+                for (const hz of [30, 40, 50, 60, 70, 80, 90, 200, 300, 400, 500, 600, 700, 800, 900,
+                                  2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000]) {
+                    const x = Math.round(view.xOf(hz)) + view.pixelCentre
+                    ctx.strokeStyle = t.grid
+                    ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + h); ctx.stroke()
+                }
+                for (const hz of [100, 1000, 10000]) {
+                    const x = Math.round(view.xOf(hz)) + view.pixelCentre
+                    ctx.strokeStyle = t.gridStrong
+                    ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + h); ctx.stroke()
+                }
+                for (let db = view.topDb; db >= view.bottomDb; db -= view.gridStepDb) {
+                    const y = Math.round(view.yOf(db)) + view.pixelCentre
+                    ctx.strokeStyle = db === 0 ? t.zero : t.grid
+                    ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + w, y); ctx.stroke()
+                }
+                ctx.save()
+                ctx.beginPath()
+                ctx.rect(x0, y0, w, h)
+                ctx.clip()
+                ctx.lineJoin = "round"
+                // Display band i sits at the centre of its log band.
+                const bandX = (i, n) => x0 + (i + 0.5) / n * w
+                const spectrum = (bands, style) => {
+                    const n = bands.length
+                    if (n < 2)
+                        return
+                    ctx.beginPath()
+                    if (style === "fill")
+                        ctx.moveTo(x0, y0 + h)
+                    for (let i = 0; i < n; ++i) {
+                        const x = bandX(i, n)
+                        const y = view.spectrumY(Number(bands[i]))
+                        if (i === 0 && style !== "fill")
+                            ctx.moveTo(x, y)
+                        else
+                            ctx.lineTo(x, y)
+                    }
+                    if (style === "fill") {
+                        ctx.lineTo(x0 + w, y0 + h)
+                        ctx.closePath()
+                        ctx.fillStyle = t.spectrumIn
+                        ctx.globalAlpha = t.spectrumInAlpha
+                        ctx.fill()
+                    } else if (style === "side") {
+                        ctx.setLineDash(t.sideDash)
+                        ctx.strokeStyle = t.side
+                        ctx.lineWidth = t.sideStroke
+                        ctx.stroke()
+                        ctx.setLineDash([])
+                    } else {
+                        ctx.strokeStyle = t.spectrumOut
+                        ctx.globalAlpha = t.spectrumOutAlpha
+                        ctx.lineWidth = t.spectrumOutStroke
+                        ctx.stroke()
+                    }
+                    ctx.globalAlpha = 1
+                }
+                spectrum(view.spectrumIn, "fill")
+                spectrum(view.spectrumSide, "side")
+                spectrum(view.spectrumOut, "line")
+
+                // The cut now, hanging from 0 dB.
+                const zeroY = view.yOf(0)
+                const g = view.gain
+                if (g.length > 1) {
+                    const n = g.length
                     ctx.beginPath()
                     ctx.moveTo(x0, zeroY)
-                    for (let i = 0; i < r.length; ++i)
-                        ctx.lineTo(pointX(i), view.yOf(r[i] * scale))
+                    for (let i = 0; i < n; ++i)
+                        ctx.lineTo(bandX(i, n), view.yOf(Math.min(0, Number(g[i]))))
                     ctx.lineTo(x0 + w, zeroY)
                     ctx.closePath()
-                    ctx.fillStyle = tone
-                    ctx.globalAlpha = chosen ? t.bandGainChosenAlpha : t.bandGainAlpha
+                    const fill = ctx.createLinearGradient(0, zeroY, 0, view.yOf(view.bottomDb))
+                    fill.addColorStop(0, Qt.rgba(t.cut.r, t.cut.g, t.cut.b, t.cutFillTopAlpha))
+                    fill.addColorStop(1, Qt.rgba(t.cutHot.r, t.cutHot.g, t.cutHot.b, t.cutFillDeepAlpha))
+                    ctx.fillStyle = fill
                     ctx.fill()
+                    ctx.beginPath()
+                    for (let i = 0; i < n; ++i) {
+                        const y = view.yOf(Math.min(0, Number(g[i])))
+                        if (i === 0) ctx.moveTo(bandX(i, n), y); else ctx.lineTo(bandX(i, n), y)
+                    }
+                    ctx.strokeStyle = t.cut
+                    ctx.lineWidth = t.cutStroke
+                    ctx.stroke()
                 }
-                ctx.globalAlpha = 1
-            }
 
-            // Where Temper listens, glowing.
-            const l = t.listen
-            ctx.beginPath()
-            for (let i = 0; i < view.points; ++i) {
-                const y = view.yOf(Curves.sensitivityDb(view.nodes, view.hzOfPoint(i)))
-                if (i === 0) ctx.moveTo(pointX(i), y); else ctx.lineTo(pointX(i), y)
-            }
-            ctx.strokeStyle = Qt.rgba(l.r, l.g, l.b, t.listenGlowAlpha)
-            ctx.lineWidth = t.listenGlowStroke
-            ctx.stroke()
-            ctx.strokeStyle = l
-            ctx.lineWidth = t.strokeBold
-            ctx.stroke()
-            ctx.restore()
-        }
-    }
+                // Each band: its full range dashed, its gain now filled.
+                const pointX = i => x0 + i / (view.points - 1) * w
+                for (let b = 0; b < view.bandCount; ++b) {
+                    const r = view.bandCurves[b]
+                    if (r.length < 2)
+                        continue
+                    const tone = t.bands[b]
+                    const chosen = b === view.selected
+                    ctx.beginPath()
+                    for (let i = 0; i < r.length; ++i) {
+                        if (i === 0) ctx.moveTo(pointX(i), view.yOf(r[i])); else ctx.lineTo(pointX(i), view.yOf(r[i]))
+                    }
+                    ctx.setLineDash(t.bandRangeDash)
+                    ctx.strokeStyle = tone
+                    ctx.globalAlpha = chosen ? t.bandRangeChosenAlpha : t.bandRangeAlpha
+                    ctx.lineWidth = t.hairline
+                    ctx.stroke()
+                    ctx.setLineDash([])
+                    const range = view.controller.value(view.bandId(b, "range"))
+                    const now = b < view.bandGain.length ? Number(view.bandGain[b]) : 0
+                    if (range !== 0 && now !== 0) {
+                        const scale = now / range
+                        ctx.beginPath()
+                        ctx.moveTo(x0, zeroY)
+                        for (let i = 0; i < r.length; ++i)
+                            ctx.lineTo(pointX(i), view.yOf(r[i] * scale))
+                        ctx.lineTo(x0 + w, zeroY)
+                        ctx.closePath()
+                        ctx.fillStyle = tone
+                        ctx.globalAlpha = chosen ? t.bandGainChosenAlpha : t.bandGainAlpha
+                        ctx.fill()
+                    }
+                    ctx.globalAlpha = 1
+                }
 
-    // Frequency and gain scales.
-    Repeater {
-        model: [{ hz: 20, text: "20" }, { hz: 50, text: "50" }, { hz: 100, text: "100" },
-                { hz: 200, text: "200" }, { hz: 500, text: "500" }, { hz: 1000, text: "1k" },
-                { hz: 2000, text: "2k" }, { hz: 5000, text: "5k" }, { hz: 10000, text: "10k" },
-                { hz: 20000, text: "20k" }]
-        delegate: Text {
-            required property var modelData
-            x: Math.min(view.xOf(modelData.hz) - implicitWidth / 2, view.plotX + view.plotW - implicitWidth)
-            y: view.plotY + view.plotH + view.theme.scaleLabelGap
-            text: modelData.text
-            color: view.theme.inkFaint
-            font.family: view.theme.mono
-            font.pixelSize: view.theme.typeCaption
-        }
-    }
-    Repeater {
-        model: [18, 12, 6, 0, -6, -12, -18]
-        delegate: Text {
-            required property var modelData
-            x: view.plotX - implicitWidth - view.theme.spaceSm
-            y: view.yOf(modelData) - implicitHeight / 2
-            text: Format.signed_number(modelData, 0)
-            color: modelData === 0 ? view.theme.inkDim : view.theme.inkFaint
-            font.family: view.theme.mono
-            font.pixelSize: view.theme.typeCaption
+                // Where Temper listens, glowing.
+                const l = t.listen
+                ctx.beginPath()
+                for (let i = 0; i < view.points; ++i) {
+                    const y = view.yOf(Curves.sensitivityDb(view.nodes, view.hzOfPoint(i)))
+                    if (i === 0) ctx.moveTo(pointX(i), y); else ctx.lineTo(pointX(i), y)
+                }
+                ctx.strokeStyle = Qt.rgba(l.r, l.g, l.b, t.listenGlowAlpha)
+                ctx.lineWidth = t.listenGlowStroke
+                ctx.stroke()
+                ctx.strokeStyle = l
+                ctx.lineWidth = t.strokeBold
+                ctx.stroke()
+                ctx.restore()
+            }
         }
     }
     Text {
@@ -354,6 +357,7 @@ Rectangle {
         width: view.plotW
         height: view.plotH
         enabled: view.controller.editable
+        readonly property string keyboardAlternative: "the band chips and the inspector's ON switch switch a band on; its FREQ and RANGE knobs place it"
         onDoubleClicked: mouse => view.addBandAt(mouse.x + x, mouse.y + y)
     }
 
@@ -374,10 +378,35 @@ Rectangle {
             y: hy - height / 2
             width: view.theme.nodeHitSize
             height: view.theme.nodeHitSize
+            activeFocusOnTab: view.controller.editable
             Accessible.role: Accessible.Slider
             Accessible.name: "Listen " + (index + 1)
             Accessible.description: view.revision < 0 ? ""
                 : view.controller.display(freqId) + ", " + view.controller.display(gainId)
+            // Left and Right move it in frequency, Up and Down in level
+            // (Shift for fine steps); Delete returns its level to 0 dB.
+            function nudge(id, direction, event) {
+                view.controller.step(id, direction, (event.modifiers & Qt.ShiftModifier) !== 0)
+                view.theme.lastTouched = id
+                event.accepted = true
+            }
+            Keys.onLeftPressed: event => nudge(freqId, -1, event)
+            Keys.onRightPressed: event => nudge(freqId, 1, event)
+            Keys.onUpPressed: event => nudge(gainId, 1, event)
+            Keys.onDownPressed: event => nudge(gainId, -1, event)
+            Keys.onDeletePressed: {
+                view.controller.reset_to_default(gainId)
+                view.theme.lastTouched = gainId
+            }
+            // The focus ring around the diamond.
+            Rectangle {
+                anchors.fill: parent
+                visible: node.activeFocus
+                radius: width / 2
+                color: "transparent"
+                border.color: view.theme.listen
+                border.width: view.theme.strokeBold
+            }
             Rectangle {
                 anchors.centerIn: parent
                 width: nodeGrab.pressed ? view.theme.nodeDiamondPressed : view.theme.nodeDiamond
@@ -395,6 +424,7 @@ Rectangle {
                 preventStealing: true
                 cursorShape: Qt.SizeAllCursor
                 onPressed: mouse => {
+                    node.forceActiveFocus()
                     const p = mapToItem(view, mouse.x, mouse.y)
                     node.grabX = p.x - node.hx
                     node.grabY = p.y - node.hy
@@ -460,8 +490,9 @@ Rectangle {
             }
             MouseArea {
                 anchors.fill: parent
-                anchors.margins: -view.theme.spaceXs
+                anchors.margins: -Math.max(view.theme.spaceXs, view.theme.hitOutset(parent.width))
                 enabled: view.controller.editable
+                readonly property string keyboardAlternative: "the band chips pick the band; the inspector's FREQ, RANGE and Q knobs and ON switch set it"
                 hoverEnabled: true
                 preventStealing: true
                 cursorShape: Qt.SizeAllCursor

@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Oscillate.Format
+import "../devicekit" as Kit
 
 // The transfer screen: output level against a steady input level, from
 // -60 to 0 dBFS in and -60 to +12 dB out at one scale, through the
@@ -9,7 +9,8 @@ import Oscillate.Format
 // a shaded band either side of the threshold. While the track plays, the
 // operating point sits at the input peak, lowered by the reduction the
 // compressor applies. Drag sideways for the threshold; scroll for the
-// ratio (Shift for fine).
+// ratio (Shift for fine). The shared plot frame labels both axes and says
+// LIVE while the track plays.
 Rectangle {
     id: view
     required property var controller
@@ -32,6 +33,21 @@ Rectangle {
     readonly property real pixelCentre: 0.5
     readonly property bool pointShown: playing && inputDb > floorDb
     readonly property real pointOut: inputDb - reductionDb + makeup
+    // Labelled levels on both axes, and the grid's step.
+    readonly property real scaleStep: 12
+    readonly property real gridStep: 6
+    readonly property var xTicks: {
+        const ticks = []
+        for (let db = floorDb; db <= 0; db += scaleStep)
+            ticks.push({ at: (db - floorDb) / (0 - floorDb), label: String(db) })
+        return ticks
+    }
+    readonly property var yTicks: {
+        const ticks = []
+        for (let db = floorDb; db <= topDb; db += scaleStep)
+            ticks.push({ at: (db - floorDb) / (topDb - floorDb), label: db > 0 ? "+" + db : String(db) })
+        return ticks
+    }
 
     objectName: "pressTransfer"
     radius: theme.transferRadius
@@ -62,154 +78,127 @@ Rectangle {
         return c[i] + (c[i + 1] - c[i]) * (f - i)
     }
 
-    Canvas {
-        id: canvas
-        anchors.fill: parent
-        renderStrategy: Canvas.Cooperative
-        onPaint: {
-            const ctx = getContext("2d")
-            ctx.reset()
-            const t = view.theme
-            const x0 = view.plotX
-            const y0 = view.plotY
-            const w = view.plotW
-            const h = view.plotH
-            // Grid every 6 dB, 0 dB stronger.
-            ctx.lineWidth = t.hairline
-            for (let db = view.floorDb; db <= 0; db += 6) {
-                const x = Math.round(view.xOf(db)) + view.pixelCentre
-                ctx.strokeStyle = db === 0 ? t.gridStrong : t.grid
-                ctx.beginPath()
-                ctx.moveTo(x, y0)
-                ctx.lineTo(x, y0 + h)
-                ctx.stroke()
-            }
-            for (let db = view.topDb; db >= view.floorDb; db -= 6) {
-                const y = Math.round(view.yOf(db)) + view.pixelCentre
-                ctx.strokeStyle = db === 0 ? t.gridStrong : t.grid
-                ctx.beginPath()
-                ctx.moveTo(x0, y)
-                ctx.lineTo(x0 + w, y)
-                ctx.stroke()
-            }
-            ctx.save()
-            ctx.beginPath()
-            ctx.rect(x0, y0, w, h)
-            ctx.clip()
-            // The knee, either side of the threshold.
-            const a = t.knee
-            if (view.knee > 0) {
-                const kx0 = view.xOf(view.threshold - view.knee / 2)
-                const kx1 = view.xOf(view.threshold + view.knee / 2)
-                ctx.fillStyle = Qt.rgba(a.r, a.g, a.b, t.kneeFillAlpha)
-                ctx.fillRect(kx0, y0, kx1 - kx0, h)
-            }
-            // Unity, dashed.
-            ctx.setLineDash([t.unityDash, t.unityDash])
-            ctx.strokeStyle = t.unity
-            ctx.beginPath()
-            ctx.moveTo(view.xOf(view.floorDb), view.yOf(view.floorDb))
-            ctx.lineTo(view.xOf(0), view.yOf(0))
-            ctx.stroke()
-            // The threshold.
-            const tx = Math.round(view.xOf(view.threshold)) + view.pixelCentre
-            ctx.strokeStyle = Qt.rgba(a.r, a.g, a.b, t.thresholdLineAlpha)
-            ctx.beginPath()
-            ctx.moveTo(tx, y0)
-            ctx.lineTo(tx, y0 + h)
-            ctx.stroke()
-            ctx.setLineDash([])
-            // The curve, glowing.
-            const c = view.curve
-            if (c.length > 1) {
-                const acc = t.accent
-                ctx.lineJoin = "round"
-                ctx.beginPath()
-                for (let i = 0; i < c.length; ++i) {
-                    const x = x0 + i / (c.length - 1) * w
-                    if (i === 0)
-                        ctx.moveTo(x, view.yOf(c[i]))
-                    else
-                        ctx.lineTo(x, view.yOf(c[i]))
-                }
-                ctx.strokeStyle = Qt.rgba(acc.r, acc.g, acc.b, t.curveGlowAlpha)
-                ctx.lineWidth = t.curveGlowWidth
-                ctx.stroke()
-                ctx.strokeStyle = Qt.rgba(acc.r, acc.g, acc.b, t.curveHaloAlpha)
-                ctx.lineWidth = t.curveHaloWidth
-                ctx.stroke()
-                ctx.strokeStyle = acc
-                ctx.lineWidth = t.curveWidth
-                ctx.stroke()
-            }
-            // The operating point and its cross-hair.
-            if (view.pointShown) {
-                const px = view.xOf(view.inputDb)
-                const py = view.yOf(view.pointOut)
-                const p = t.operating
-                ctx.strokeStyle = Qt.rgba(p.r, p.g, p.b, t.operatingCrossAlpha)
+    Kit.PlotFrame {
+        id: frame
+        x: view.plotX - gutterLeft
+        y: view.plotY
+        width: view.plotW + gutterLeft
+        height: view.plotH + gutterBottom
+        theme: view.theme
+        live: view.playing
+        xTicks: view.xTicks
+        xUnit: "dBFS"
+        yTicks: view.yTicks
+        yUnit: "dB out"
+
+        // Draws in the screen's coordinates, shifted onto the frame's plot area.
+        Canvas {
+            id: canvas
+            anchors.fill: parent
+            renderStrategy: Canvas.Cooperative
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                ctx.translate(-view.plotX, -view.plotY)
+                const t = view.theme
+                const x0 = view.plotX
+                const y0 = view.plotY
+                const w = view.plotW
+                const h = view.plotH
+                // Grid every 6 dB, 0 dB stronger.
                 ctx.lineWidth = t.hairline
+                for (let db = view.floorDb; db <= 0; db += view.gridStep) {
+                    const x = Math.round(view.xOf(db)) + view.pixelCentre
+                    ctx.strokeStyle = db === 0 ? t.gridStrong : t.grid
+                    ctx.beginPath()
+                    ctx.moveTo(x, y0)
+                    ctx.lineTo(x, y0 + h)
+                    ctx.stroke()
+                }
+                for (let db = view.topDb; db >= view.floorDb; db -= view.gridStep) {
+                    const y = Math.round(view.yOf(db)) + view.pixelCentre
+                    ctx.strokeStyle = db === 0 ? t.gridStrong : t.grid
+                    ctx.beginPath()
+                    ctx.moveTo(x0, y)
+                    ctx.lineTo(x0 + w, y)
+                    ctx.stroke()
+                }
+                ctx.save()
                 ctx.beginPath()
-                ctx.moveTo(px, y0 + h)
-                ctx.lineTo(px, py)
-                ctx.lineTo(x0, py)
+                ctx.rect(x0, y0, w, h)
+                ctx.clip()
+                // The knee, either side of the threshold.
+                const a = t.knee
+                if (view.knee > 0) {
+                    const kx0 = view.xOf(view.threshold - view.knee / 2)
+                    const kx1 = view.xOf(view.threshold + view.knee / 2)
+                    ctx.fillStyle = Qt.rgba(a.r, a.g, a.b, t.kneeFillAlpha)
+                    ctx.fillRect(kx0, y0, kx1 - kx0, h)
+                }
+                // Unity, dashed.
+                ctx.setLineDash([t.unityDash, t.unityDash])
+                ctx.strokeStyle = t.unity
+                ctx.beginPath()
+                ctx.moveTo(view.xOf(view.floorDb), view.yOf(view.floorDb))
+                ctx.lineTo(view.xOf(0), view.yOf(0))
                 ctx.stroke()
-                ctx.fillStyle = Qt.rgba(p.r, p.g, p.b, t.operatingHaloAlpha)
+                // The threshold.
+                const tx = Math.round(view.xOf(view.threshold)) + view.pixelCentre
+                ctx.strokeStyle = Qt.rgba(a.r, a.g, a.b, t.thresholdLineAlpha)
                 ctx.beginPath()
-                ctx.arc(px, py, t.operatingHaloRadius, 0, Math.PI * 2)
-                ctx.fill()
-                ctx.fillStyle = p
-                ctx.beginPath()
-                ctx.arc(px, py, t.operatingDotRadius, 0, Math.PI * 2)
-                ctx.fill()
+                ctx.moveTo(tx, y0)
+                ctx.lineTo(tx, y0 + h)
+                ctx.stroke()
+                ctx.setLineDash([])
+                // The curve, glowing.
+                const c = view.curve
+                if (c.length > 1) {
+                    const acc = t.accent
+                    ctx.lineJoin = "round"
+                    ctx.beginPath()
+                    for (let i = 0; i < c.length; ++i) {
+                        const x = x0 + i / (c.length - 1) * w
+                        if (i === 0)
+                            ctx.moveTo(x, view.yOf(c[i]))
+                        else
+                            ctx.lineTo(x, view.yOf(c[i]))
+                    }
+                    ctx.strokeStyle = Qt.rgba(acc.r, acc.g, acc.b, t.curveGlowAlpha)
+                    ctx.lineWidth = t.curveGlowWidth
+                    ctx.stroke()
+                    ctx.strokeStyle = Qt.rgba(acc.r, acc.g, acc.b, t.curveHaloAlpha)
+                    ctx.lineWidth = t.curveHaloWidth
+                    ctx.stroke()
+                    ctx.strokeStyle = acc
+                    ctx.lineWidth = t.curveWidth
+                    ctx.stroke()
+                }
+                // The operating point and its cross-hair.
+                if (view.pointShown) {
+                    const px = view.xOf(view.inputDb)
+                    const py = view.yOf(view.pointOut)
+                    const p = t.operating
+                    ctx.strokeStyle = Qt.rgba(p.r, p.g, p.b, t.operatingCrossAlpha)
+                    ctx.lineWidth = t.hairline
+                    ctx.beginPath()
+                    ctx.moveTo(px, y0 + h)
+                    ctx.lineTo(px, py)
+                    ctx.lineTo(x0, py)
+                    ctx.stroke()
+                    ctx.fillStyle = Qt.rgba(p.r, p.g, p.b, t.operatingHaloAlpha)
+                    ctx.beginPath()
+                    ctx.arc(px, py, t.operatingHaloRadius, 0, Math.PI * 2)
+                    ctx.fill()
+                    ctx.fillStyle = p
+                    ctx.beginPath()
+                    ctx.arc(px, py, t.operatingDotRadius, 0, Math.PI * 2)
+                    ctx.fill()
+                }
+                ctx.restore()
             }
-            ctx.restore()
-        }
+    }
     }
 
-    // Scales: input along the bottom, output up the side.
-    Repeater {
-        model: [-60, -48, -36, -24, -12, 0]
-        delegate: Text {
-            required property int modelData
-            x: Math.min(view.xOf(modelData) - implicitWidth / 2, view.plotX + view.plotW - implicitWidth)
-            y: view.plotY + view.plotH + view.theme.scaleGap
-            text: Format.number(modelData, 0)
-            color: modelData === 0 ? view.theme.inkDim : view.theme.inkFaint
-            font.family: view.theme.mono
-            font.pixelSize: view.theme.typeCaption
-        }
-    }
-    Repeater {
-        model: [12, 0, -12, -24, -36, -48, -60]
-        delegate: Text {
-            required property int modelData
-            x: view.plotX - implicitWidth - view.theme.scaleSideGap
-            y: view.yOf(modelData) - implicitHeight / 2
-            text: Format.signed_number(modelData, 0)
-            color: modelData === 0 ? view.theme.inkDim : view.theme.inkFaint
-            font.family: view.theme.mono
-            font.pixelSize: view.theme.typeCaption
-        }
-    }
-    Text {
-        x: view.plotX + view.plotW - implicitWidth
-        y: view.plotY + view.plotH + view.theme.axisTitleGap
-        text: "IN dBFS"
-        color: view.theme.inkFaint
-        font.pixelSize: view.theme.axisTitleSize
-        font.bold: true
-        font.letterSpacing: view.theme.tagSpacing
-    }
-    Text {
-        x: view.theme.outTitleX
-        y: view.theme.outTitleY
-        text: "OUT dB"
-        color: view.theme.inkFaint
-        font.pixelSize: view.theme.axisTitleSize
-        font.bold: true
-        font.letterSpacing: view.theme.tagSpacing
-    }
     Row {
         anchors.right: parent.right
         anchors.rightMargin: view.theme.screenReadoutRight
@@ -266,6 +255,7 @@ Rectangle {
     MouseArea {
         id: dragArea
         objectName: "pressTransferDrag"
+        readonly property string keyboardAlternative: "the Threshold and Ratio knobs set the same parameters from the keyboard"
         x: view.plotX
         y: view.plotY
         width: view.plotW

@@ -73,20 +73,30 @@ KitTheme {
     property int panelHeight: 760
     property real panelRadius: 12
     property real panelMargin: 14
-    // Header: the blade glyph, the wordmark and the choice segments.
-    property real headerHeight: 30
+    // The header (Kit.DeviceHeader): the blade glyph and wordmark, the
+    // preset browser, the readout once a control is touched, the status;
+    // mode, steps and division in its second row.
+    property real headerY: panelMargin
+    headerHeight: 36
+    headerBrowserX: 130
+    headerModeGap: spaceSm
     property real glyphSize: 26
     property real wordmarkGap: 10
-    property int wordmarkSize: 24
-    // From the wordmark to the segments.
-    property real segmentsGap: 22
+    wordmarkSize: 24
+    arrowHeight: 34
+    presetDisplayWidth: 260
+    presetTagY: 3
+    presetNameY: 14
+    presetNameSize: typeEmphasis
+    readoutWidth: 220
+    readoutNameY: 3
+    readoutNameSize: typeCaption
+    readoutSpacing: 1.2
+    readoutValueY: 15
+    readoutValueSize: typeEmphasis
     property real modeSegmentWidth: 300
     property real stepsSegmentWidth: 140
     property real divisionSegmentWidth: 170
-    // The last-touched readout at the header's right.
-    property real readoutWidth: 220
-    property real readoutMargin: 14
-    property real readoutSpacing: 1.2
     // Pattern preset chips.
     property real chipHeight: 28
     // The chip's width beyond its label.
@@ -109,7 +119,8 @@ KitTheme {
     // A repeat mark's inset from its step's left and its baseline from the bottom.
     property real repeatMarkInset: 4
     property real repeatMarkBaseline: 8
-    // The "play to see" hint at the hero's top right.
+    // The "play to see" hint at the hero's top left (the frame's chip
+    // is at its right).
     property real hintInset: 10
     property real hintY: 8
     property real hintSpacing: 1.4

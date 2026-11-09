@@ -44,20 +44,9 @@ Rectangle {
     Accessible.role: Accessible.Pane
     Accessible.name: "Concert grand piano"
 
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        if (info.name === undefined)
-            return ""
-        return (info.group === info.name ? info.name : info.group + " · " + info.name).toUpperCase()
-    }
-    function readoutValue(id) {
-        return id === "" || controller.revision < 0 ? "" : controller.display(id)
-    }
-
     // The lacquer's reflection: a soft diagonal sheen across the case.
     Canvas {
+        readonly property string plotExemptReason: "the case's decorative sheen, not a plot"
         // The sheen's run down the case and where its band peaks and fades.
         readonly property real sheenDepth: 0.6
         readonly property real sheenPeak: 0.28
@@ -157,165 +146,58 @@ Rectangle {
 
     // ---- Header ---------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
-
-        Text {
-            id: wordmark
-            y: panel.theme.spaceXxs
-            text: "CONCERT"
-            color: panel.theme.gold
-            font.family: panel.theme.serif
-            font.pixelSize: panel.theme.wordmarkSize
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        Rectangle {
-            x: wordmark.x + panel.theme.wordmarkInset
-            y: wordmark.y + wordmark.height + panel.theme.wordmarkRuleGap
-            width: wordmark.implicitWidth - panel.theme.wordmarkRuleTrim
-            height: panel.theme.hairline
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0; color: panel.theme.brassHi }
-                GradientStop { position: 1; color: Qt.rgba(panel.theme.brass.r, panel.theme.brass.g, panel.theme.brass.b, 0) }
-            }
-        }
-        Text {
-            x: wordmark.x + panel.theme.wordmarkInset
-            y: wordmark.y + wordmark.height + panel.theme.wordmarkSubtitleGap
-            text: "SAMPLED GRAND"
-            color: panel.theme.inkDim
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.wordmarkSubtitleSpacing
-        }
-
-        // Preset browser and readout.
-        Row {
-            id: browser
-            x: panel.theme.browserX
-            y: panel.theme.spaceXs
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "concertPresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "concertPresetDisplay"
-                width: panel.theme.displayWidth
-                height: panel.theme.displayHeight
-                radius: panel.theme.displayRadius
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.gold : panel.theme.wellEdge
-                border.width: activeFocus ? panel.theme.focusStroke : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.gold)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        // The gold serif wordmark over its brass rule, the subtitle under it.
+        brand: Component {
+            Item {
+                implicitWidth: wordmark.implicitWidth
+                implicitHeight: subtitle.y + subtitle.implicitHeight
                 Text {
-                    x: panel.theme.plateInset
-                    y: panel.theme.displayCaptionY
-                    text: panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.captionSpacing
-                }
-                Text {
-                    objectName: "concertPresetName"
-                    x: panel.theme.plateInset
-                    y: panel.theme.displayNameY
-                    width: panel.theme.displayNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.family: panel.theme.serif
-                    font.pixelSize: panel.theme.typeTitle
-                    elide: Text.ElideRight
+                    id: wordmark
+                    objectName: "concertWordmark"
+                    text: "CONCERT"
+                    color: panel.theme.wordmarkInk
+                    font.family: panel.theme.wordmarkFont
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.weight: panel.theme.wordmarkWeight
+                    font.letterSpacing: panel.theme.wordmarkSpacing
                 }
                 Rectangle {
-                    x: panel.theme.displayDividerX
-                    y: panel.theme.displayDividerInset
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.theme.displayDividerInset
-                    color: panel.theme.wellEdge
-                }
-                Text {
-                    objectName: "concertReadout"
-                    x: panel.theme.displayReadoutX
-                    y: panel.theme.displayCaptionY
-                    width: display.width - x - panel.theme.displayReadoutRight
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.readoutSpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "concertReadoutValue"
-                    x: panel.theme.displayReadoutX
-                    y: panel.theme.displayValueY
-                    width: display.width - x - panel.theme.displayReadoutRight
-                    text: panel.readoutValue(panel.theme.lastTouched)
-                    color: panel.theme.gold
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeSubtitle
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.displayChevronMargin
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.brass
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
+                    x: panel.theme.wordmarkInset
+                    y: wordmark.height + panel.theme.wordmarkRuleGap
+                    width: wordmark.implicitWidth - panel.theme.wordmarkRuleTrim
+                    height: panel.theme.hairline
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0; color: panel.theme.brassHi }
+                        GradientStop { position: 1; color: Qt.rgba(panel.theme.brass.r, panel.theme.brass.g, panel.theme.brass.b, 0) }
                     }
                 }
+                Text {
+                    id: subtitle
+                    objectName: "concertSubtitle"
+                    x: panel.theme.wordmarkInset
+                    y: wordmark.height + panel.theme.subtitleGap
+                    text: "SAMPLED GRAND"
+                    color: panel.theme.subtitleInk
+                    font.pixelSize: panel.theme.subtitleSize
+                    font.bold: true
+                    font.letterSpacing: panel.theme.subtitleSpacing
+                }
             }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "concertPresetNext"
-                direction: 1
-            }
-        }
-
-        Kit.StatusBadge {
-            id: status
-            objectName: "concertStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: panel.theme.statusY
         }
     }
 
     // ---- The library and the strings -----------------------------------------------------
 
-    readonly property real rowAY: theme.rowAY
+    readonly property real rowAY: header.y + header.height + theme.headerContentGap
     readonly property real rowAHeight: theme.rowAHeight
 
     Plate {

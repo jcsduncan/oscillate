@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Oscillate.Format
+import "../devicekit" as Kit
 
 // The decay landscape: the reverb's energy over time (across) and frequency
 // (up), drawn as aurora curtains under the night sky. It is computed from
@@ -174,6 +175,27 @@ Item {
         return padTop + plotHeight * (1 - f)
     }
     function hzAtFraction(f) { return minHz * Math.pow(maxHz / minHz, f) }
+    // The field's scales, labelled by its frame: decades of frequency up,
+    // and seconds across at the finest step that keeps to maxTimeTicks.
+    readonly property var decadeMarks: [[100, "100"], [1000, "1k"], [10000, "10k"]]
+    readonly property var timeSteps: [0.05, 0.1, 0.2, 0.25, 0.5, 1, 2, 5, 10]
+    readonly property real timeStep: {
+        for (const step of timeSteps) {
+            if (span / step <= theme.maxTimeTicks)
+                return step
+        }
+        return timeSteps[timeSteps.length - 1]
+    }
+    // Rounding a tick's time may carry past the span's end by this much.
+    readonly property real timeSlack: 1e-9
+    readonly property var frequencyTicks: plotHeight > 0
+        ? decadeMarks.map(mark => ({ at: 1 - (yAt(mark[0]) - padTop) / plotHeight, label: mark[1] })) : []
+    readonly property var timeTicks: {
+        const ticks = []
+        for (let s = 0; s <= span + timeSlack; s += timeStep)
+            ticks.push({ at: s / span, label: Format.number(s) })
+        return ticks
+    }
     function secondsText(s) {
         if (!isFinite(s))
             return "∞"
@@ -209,273 +231,268 @@ Item {
         border.color: view.theme.seam
     }
 
-    Canvas {
-        id: field
-        anchors.fill: parent
-        renderStrategy: Canvas.Cooperative
-        onPaint: {
-            const ctx = getContext("2d")
-            ctx.reset()
-            const t = view.theme
-            const x0 = view.padLeft
-            const y0 = view.padTop
-            const w = view.plotWidth
-            const h = view.plotHeight
-            ctx.save()
-            ctx.beginPath()
-            ctx.rect(x0, y0, w, h)
-            ctx.clip()
+    // The field's frame: frequency up the left, time along the bottom,
+    // LIVE while the reverb's levels light the sky, else a PREVIEW from the
+    // settings. The canvas spans the whole view (the early strip under the
+    // field too), placed back at the view's origin from inside the frame.
+    Kit.PlotFrame {
+        id: frame
+        objectName: "expanseLandscapeFrame"
+        x: view.padLeft - view.theme.plotGutterLeft
+        y: view.padTop
+        width: view.plotWidth + view.theme.plotGutterLeft
+        height: view.plotHeight + view.theme.plotGutterBottom
+        theme: view.theme
+        live: view.live
+        yUnit: "Hz"
+        xUnit: "s"
+        yTicks: view.frequencyTicks
+        xTicks: view.timeTicks
 
-            // Faint grid: decades of frequency.
-            ctx.lineWidth = t.hairline
-            for (const hz of [100, 1000, 10000]) {
-                const y = Math.round(view.yAt(hz)) + t.hairline / 2
-                ctx.strokeStyle = t.fieldGrid
+        Canvas {
+            id: field
+            x: -view.padLeft
+            y: -view.padTop
+            width: view.width
+            height: view.height
+            renderStrategy: Canvas.Cooperative
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                const t = view.theme
+                const x0 = view.padLeft
+                const y0 = view.padTop
+                const w = view.plotWidth
+                const h = view.plotHeight
+                ctx.save()
                 ctx.beginPath()
-                ctx.moveTo(x0, y)
-                ctx.lineTo(x0 + w, y)
-                ctx.stroke()
-            }
+                ctx.rect(x0, y0, w, h)
+                ctx.clip()
 
-            // The curtains: one vertical gradient per column, its stops the
-            // energy left at each frequency.
-            const stops = 16
-            const rt = []
-            const shimmerRt = []
-            for (let k = 0; k < stops; ++k) {
-                const f = k / (stops - 1)
-                rt.push(view.rtAt(view.hzAtFraction(f)))
-                const source = view.hzAtFraction(f) / view.shimmerRatio
-                shimmerRt.push(source >= view.minHz ? view.rtAt(source) : 0)
-            }
-            const onset = view.predelay
-            const step = 2
-            const level = Math.max(t.curtainLevelFloor, view.lateLevel)
-            // The curtain's folds: a slow ripple of brightness across it.
-            const fold = (x, f) => 0.74 + 0.26 * (0.5 + 0.5 * Math.sin(x * 0.05 + f * 7 + 2.2 * Math.sin(x * 0.011)))
-            const column = (x, alphaAt) => {
-                const g = ctx.createLinearGradient(0, y0 + h, 0, y0)
+                // Faint grid: decades of frequency.
+                ctx.lineWidth = t.hairline
+                for (const hz of [100, 1000, 10000]) {
+                    const y = Math.round(view.yAt(hz)) + t.hairline / 2
+                    ctx.strokeStyle = t.fieldGrid
+                    ctx.beginPath()
+                    ctx.moveTo(x0, y)
+                    ctx.lineTo(x0 + w, y)
+                    ctx.stroke()
+                }
+
+                // The curtains: one vertical gradient per column, its stops the
+                // energy left at each frequency.
+                const stops = 16
+                const rt = []
+                const shimmerRt = []
                 for (let k = 0; k < stops; ++k) {
                     const f = k / (stops - 1)
-                    g.addColorStop(f, alphaAt(k, f))
+                    rt.push(view.rtAt(view.hzAtFraction(f)))
+                    const source = view.hzAtFraction(f) / view.shimmerRatio
+                    shimmerRt.push(source >= view.minHz ? view.rtAt(source) : 0)
                 }
-                ctx.fillStyle = g
-                ctx.fillRect(x0 + x, y0, step, h)
-            }
-            for (let x = 0; x < w; x += step) {
-                const since = view.span * (x + step / 2) / w - onset
-                if (since <= 0)
-                    continue
-                const b = view.bloom(since)
-                column(x, (k, f) => {
-                    const left = isFinite(rt[k]) ? Math.max(0, 1 - since / rt[k]) : 1
-                    return view.auroraAt(f, t.curtainAlpha * Math.pow(left, 1.5) * b * level * fold(x, f))
-                })
-            }
-            // Shimmer: a magenta ghost curtain lifted by the interval, building
-            // as the tail recirculates through the pitch shifter.
-            if (view.shimmer > 0.001 && view.shimmerRatio > 1) {
-                ctx.globalCompositeOperation = "lighter"
-                const m = t.auroraMagenta
+                const onset = view.predelay
+                const step = 2
+                const level = Math.max(t.curtainLevelFloor, view.lateLevel)
+                // The curtain's folds: a slow ripple of brightness across it.
+                const fold = (x, f) => 0.74 + 0.26 * (0.5 + 0.5 * Math.sin(x * 0.05 + f * 7 + 2.2 * Math.sin(x * 0.011)))
+                const column = (x, alphaAt) => {
+                    const g = ctx.createLinearGradient(0, y0 + h, 0, y0)
+                    for (let k = 0; k < stops; ++k) {
+                        const f = k / (stops - 1)
+                        g.addColorStop(f, alphaAt(k, f))
+                    }
+                    ctx.fillStyle = g
+                    ctx.fillRect(x0 + x, y0, step, h)
+                }
                 for (let x = 0; x < w; x += step) {
                     const since = view.span * (x + step / 2) / w - onset
                     if (since <= 0)
                         continue
-                    const build = 1 - Math.exp(-since / 0.35)
+                    const b = view.bloom(since)
                     column(x, (k, f) => {
-                        const r = shimmerRt[k]
-                        const left = r === 0 ? 0 : isFinite(r) ? Math.max(0, 1 - since / r) : 1
-                        return Qt.rgba(m.r, m.g, m.b, t.shimmerCurtainAlpha * Math.sqrt(view.shimmer) * build
-                                       * Math.pow(left, 1.3) * Math.sqrt(f) * fold(x + 37, f))
+                        const left = isFinite(rt[k]) ? Math.max(0, 1 - since / rt[k]) : 1
+                        return view.auroraAt(f, t.curtainAlpha * Math.pow(left, 1.5) * b * level * fold(x, f))
                     })
                 }
-                ctx.globalCompositeOperation = "source-over"
-            }
-
-            // Pre-delay: the quiet before the space answers.
-            const xp = view.xAt(onset)
-            if (xp > x0 + 1) {
-                ctx.fillStyle = t.predelayShade
-                ctx.fillRect(x0, y0, xp - x0, h)
-                ctx.strokeStyle = t.predelayEdge
-                ctx.setLineDash(t.predelayDash)
-                ctx.beginPath()
-                ctx.moveTo(xp + t.hairline / 2, y0)
-                ctx.lineTo(xp + t.hairline / 2, y0 + h)
-                ctx.stroke()
-                ctx.setLineDash([])
-            }
-
-            // Crossovers: where the low and high decays take over.
-            ctx.setLineDash(t.crossoverDash)
-            ctx.lineWidth = t.hairline
-            for (const hz of [view.lowFreq, view.highFreq]) {
-                const y = Math.round(view.yAt(hz)) + t.hairline / 2
-                ctx.strokeStyle = t.crossoverLine
-                ctx.beginPath()
-                ctx.moveTo(x0, y)
-                ctx.lineTo(x0 + w, y)
-                ctx.stroke()
-            }
-            ctx.setLineDash([])
-
-            // Iso-decay lines (-20, -40 dB) and the RT60 line itself, rippled
-            // by the modulation.
-            if (!view.frozen) {
-                const wobble = view.modDepth * t.rtWobble
-                for (const [drop, alpha, width] of [[20, t.isoLineAlpha, t.hairline], [40, t.isoLineAlpha, t.hairline],
-                                                    [60, t.rtLineAlpha, t.rtLineWidth]]) {
-                    ctx.strokeStyle = Qt.rgba(t.star.r, t.star.g, t.star.b, alpha)
-                    ctx.lineWidth = width
-                    ctx.beginPath()
-                    const rows = 64
-                    for (let i = 0; i <= rows; ++i) {
-                        const f = i / rows
-                        const hz = view.hzAtFraction(f)
-                        const y = y0 + h * (1 - f)
-                        const x = view.xAt(onset + view.rtAt(hz) * drop / 60)
-                            + wobble * Math.sin(i * 0.9 + drop)
-                        if (i === 0)
-                            ctx.moveTo(x, y)
-                        else
-                            ctx.lineTo(x, y)
-                    }
-                    ctx.stroke()
-                }
-                // Shimmer's copy of the RT60 line, lifted by the interval.
-                if (view.shimmer > 0.001) {
+                // Shimmer: a magenta ghost curtain lifted by the interval, building
+                // as the tail recirculates through the pitch shifter.
+                if (view.shimmer > 0.001 && view.shimmerRatio > 1) {
+                    ctx.globalCompositeOperation = "lighter"
                     const m = t.auroraMagenta
-                    ctx.strokeStyle = Qt.rgba(m.r, m.g, m.b, t.shimmerLineAlpha + t.shimmerLineAlphaRange * view.shimmer)
-                    ctx.lineWidth = t.shimmerLineWidth
-                    ctx.setLineDash(t.shimmerDash)
-                    ctx.beginPath()
-                    let started = false
-                    const rows = 64
-                    for (let i = 0; i <= rows; ++i) {
-                        const hz = view.hzAtFraction(i / rows)
-                        const source = hz / view.shimmerRatio
-                        if (source < view.minHz || source > view.maxHz)
+                    for (let x = 0; x < w; x += step) {
+                        const since = view.span * (x + step / 2) / w - onset
+                        if (since <= 0)
                             continue
-                        const x = view.xAt(onset + view.rtAt(source))
-                        const y = view.yAt(hz)
-                        if (!started) {
-                            ctx.moveTo(x, y)
-                            started = true
-                        } else {
-                            ctx.lineTo(x, y)
-                        }
+                        const build = 1 - Math.exp(-since / 0.35)
+                        column(x, (k, f) => {
+                            const r = shimmerRt[k]
+                            const left = r === 0 ? 0 : isFinite(r) ? Math.max(0, 1 - since / r) : 1
+                            return Qt.rgba(m.r, m.g, m.b, t.shimmerCurtainAlpha * Math.sqrt(view.shimmer) * build
+                                           * Math.pow(left, 1.3) * Math.sqrt(f) * fold(x + 37, f))
+                        })
                     }
+                    ctx.globalCompositeOperation = "source-over"
+                }
+
+                // Pre-delay: the quiet before the space answers.
+                const xp = view.xAt(onset)
+                if (xp > x0 + 1) {
+                    ctx.fillStyle = t.predelayShade
+                    ctx.fillRect(x0, y0, xp - x0, h)
+                    ctx.strokeStyle = t.predelayEdge
+                    ctx.setLineDash(t.predelayDash)
+                    ctx.beginPath()
+                    ctx.moveTo(xp + t.hairline / 2, y0)
+                    ctx.lineTo(xp + t.hairline / 2, y0 + h)
                     ctx.stroke()
                     ctx.setLineDash([])
                 }
-            }
 
-            // Frozen: a frost over the held field.
-            if (view.frozen) {
-                const frost = ctx.createLinearGradient(x0, 0, x0 + w, 0)
-                frost.addColorStop(0, t.frostStart)
-                frost.addColorStop(1, t.frostEnd)
-                ctx.fillStyle = frost
-                ctx.fillRect(x0, y0, w, h)
-            }
-            ctx.restore()
+                // Crossovers: where the low and high decays take over.
+                ctx.setLineDash(t.crossoverDash)
+                ctx.lineWidth = t.hairline
+                for (const hz of [view.lowFreq, view.highFreq]) {
+                    const y = Math.round(view.yAt(hz)) + t.hairline / 2
+                    ctx.strokeStyle = t.crossoverLine
+                    ctx.beginPath()
+                    ctx.moveTo(x0, y)
+                    ctx.lineTo(x0 + w, y)
+                    ctx.stroke()
+                }
+                ctx.setLineDash([])
 
-            // Axes: frequency on the left, time underneath.
-            ctx.fillStyle = t.inkFaint
-            ctx.font = t.typeMicro + "px '" + t.sans + "'"
-            ctx.textAlign = "right"
-            ctx.textBaseline = "middle"
-            for (const [hz, label] of [[100, "100"], [1000, "1k"], [10000, "10k"]])
-                ctx.fillText(label, x0 - t.axisLabelGap, view.yAt(hz))
-            ctx.fillText("Hz", x0 - t.axisLabelGap, y0 + t.spaceSm)
-            const choices = [0.05, 0.1, 0.2, 0.25, 0.5, 1, 2, 5, 10]
-            let tick = choices[choices.length - 1]
-            for (const c of choices) {
-                if (view.span / c <= t.maxTimeTicks) {
-                    tick = c
-                    break
+                // Iso-decay lines (-20, -40 dB) and the RT60 line itself, rippled
+                // by the modulation.
+                if (!view.frozen) {
+                    const wobble = view.modDepth * t.rtWobble
+                    for (const [drop, alpha, width] of [[20, t.isoLineAlpha, t.hairline], [40, t.isoLineAlpha, t.hairline],
+                                                        [60, t.rtLineAlpha, t.rtLineWidth]]) {
+                        ctx.strokeStyle = Qt.rgba(t.star.r, t.star.g, t.star.b, alpha)
+                        ctx.lineWidth = width
+                        ctx.beginPath()
+                        const rows = 64
+                        for (let i = 0; i <= rows; ++i) {
+                            const f = i / rows
+                            const hz = view.hzAtFraction(f)
+                            const y = y0 + h * (1 - f)
+                            const x = view.xAt(onset + view.rtAt(hz) * drop / 60)
+                                + wobble * Math.sin(i * 0.9 + drop)
+                            if (i === 0)
+                                ctx.moveTo(x, y)
+                            else
+                                ctx.lineTo(x, y)
+                        }
+                        ctx.stroke()
+                    }
+                    // Shimmer's copy of the RT60 line, lifted by the interval.
+                    if (view.shimmer > 0.001) {
+                        const m = t.auroraMagenta
+                        ctx.strokeStyle = Qt.rgba(m.r, m.g, m.b, t.shimmerLineAlpha + t.shimmerLineAlphaRange * view.shimmer)
+                        ctx.lineWidth = t.shimmerLineWidth
+                        ctx.setLineDash(t.shimmerDash)
+                        ctx.beginPath()
+                        let started = false
+                        const rows = 64
+                        for (let i = 0; i <= rows; ++i) {
+                            const hz = view.hzAtFraction(i / rows)
+                            const source = hz / view.shimmerRatio
+                            if (source < view.minHz || source > view.maxHz)
+                                continue
+                            const x = view.xAt(onset + view.rtAt(source))
+                            const y = view.yAt(hz)
+                            if (!started) {
+                                ctx.moveTo(x, y)
+                                started = true
+                            } else {
+                                ctx.lineTo(x, y)
+                            }
+                        }
+                        ctx.stroke()
+                        ctx.setLineDash([])
+                    }
+                }
+
+                // Frozen: a frost over the held field.
+                if (view.frozen) {
+                    const frost = ctx.createLinearGradient(x0, 0, x0 + w, 0)
+                    frost.addColorStop(0, t.frostStart)
+                    frost.addColorStop(1, t.frostEnd)
+                    ctx.fillStyle = frost
+                    ctx.fillRect(x0, y0, w, h)
+                }
+                ctx.restore()
+
+                // The early reflections, magnified on their own strip: the
+                // pre-delay's quiet, then the space's taps as stars, brighter for
+                // louder ones, and the late field's onset.
+                const sy = view.stripTop
+                const sh = view.stripHeight
+                ctx.fillStyle = t.stripFill
+                ctx.fillRect(x0, sy, w, sh)
+                ctx.strokeStyle = t.seam
+                ctx.lineWidth = t.hairline
+                ctx.strokeRect(x0 + t.hairline / 2, sy + t.hairline / 2, w - t.hairline, sh - t.hairline)
+                ctx.fillStyle = t.inkFaint
+                ctx.font = "bold " + t.stripLabelSize + "px '" + t.sans + "'"
+                ctx.textAlign = "right"
+                ctx.textBaseline = "middle"
+                ctx.fillText("EARLY", x0 - t.spaceSm, sy + sh / 2)
+                const taps = view.reflections()
+                const stripSpan = view.earlySpan
+                const sx = s => x0 + w * Math.min(1, s / stripSpan)
+                const xpre = sx(onset)
+                if (xpre > x0 + 1) {
+                    ctx.fillStyle = t.stripPredelayShade
+                    ctx.fillRect(x0 + t.hairline, sy + t.hairline, xpre - x0 - t.hairline, sh - 2 * t.hairline)
+                }
+                ctx.strokeStyle = t.stripOnset
+                ctx.beginPath()
+                ctx.moveTo(xpre + t.hairline / 2, sy + t.stripOnsetInset)
+                ctx.lineTo(xpre + t.hairline / 2, sy + sh - t.stripOnsetInset)
+                ctx.stroke()
+                let loudest = 0
+                for (const tap of taps)
+                    loudest = Math.max(loudest, Math.abs(tap.gain))
+                const presence = t.tapPresenceFloor + (1 - t.tapPresenceFloor) * view.earlyLevel
+                for (const tap of taps) {
+                    const x = sx(tap.seconds) + t.hairline / 2
+                    const strength = Math.abs(tap.gain) / loudest
+                    const yb = sy + sh - t.tapBase
+                    const len = t.tapMinLength + (sh - t.tapLengthInset) * strength
+                    const g = ctx.createLinearGradient(0, yb, 0, yb - len)
+                    g.addColorStop(0, Qt.rgba(t.star.r, t.star.g, t.star.b, t.tapAlpha * presence))
+                    g.addColorStop(1, t.tapFade)
+                    ctx.strokeStyle = g
+                    ctx.lineWidth = t.tapWidth
+                    ctx.beginPath()
+                    ctx.moveTo(x, yb)
+                    ctx.lineTo(x, yb - len)
+                    ctx.stroke()
+                    const halo = ctx.createRadialGradient(x, yb - len, 0, x, yb - len, t.tapHaloRadius)
+                    halo.addColorStop(0, Qt.rgba(t.star.r, t.star.g, t.star.b, t.tapHaloAlpha * presence))
+                    halo.addColorStop(1, t.starFade)
+                    ctx.fillStyle = halo
+                    ctx.beginPath()
+                    ctx.arc(x, yb - len, t.tapHaloRadius, 0, Math.PI * 2)
+                    ctx.fill()
+                }
+                ctx.fillStyle = t.inkFaint
+                ctx.font = t.typeMicro + "px '" + t.sans + "'"
+                ctx.textAlign = "right"
+                ctx.textBaseline = "top"
+                ctx.fillText(Format.seconds(stripSpan), x0 + w - t.spaceXs, sy + t.stripTextY)
+                if (taps.length === 0) {
+                    ctx.textAlign = "left"
+                    ctx.fillText("NO EARLY REFLECTIONS · A PLATE ANSWERS AT ONCE", xpre + t.spaceMd, sy + t.stripNoteY)
                 }
             }
-            ctx.textAlign = "center"
-            ctx.textBaseline = "top"
-            for (let s = 0; s <= view.span + 1e-9; s += tick) {
-                const x = view.xAt(s)
-                ctx.fillStyle = t.timeTick
-                ctx.fillRect(x, y0 + h, t.hairline, t.timeTickLength)
-                ctx.fillStyle = t.inkFaint
-                ctx.fillText(s === 0 ? "0" : view.secondsText(s), Math.min(x, x0 + w - t.timeLabelInset),
-                             y0 + h + t.axisLabelGap)
+            Connections {
+                target: view
+                function onRevisionChanged() { field.requestPaint() }
+                function onWidthChanged() { field.requestPaint() }
+                function onHeightChanged() { field.requestPaint() }
             }
-
-            // The early reflections, magnified on their own strip: the
-            // pre-delay's quiet, then the space's taps as stars, brighter for
-            // louder ones, and the late field's onset.
-            const sy = view.stripTop
-            const sh = view.stripHeight
-            ctx.fillStyle = t.stripFill
-            ctx.fillRect(x0, sy, w, sh)
-            ctx.strokeStyle = t.seam
-            ctx.lineWidth = t.hairline
-            ctx.strokeRect(x0 + t.hairline / 2, sy + t.hairline / 2, w - t.hairline, sh - t.hairline)
-            ctx.fillStyle = t.inkFaint
-            ctx.font = "bold " + t.stripLabelSize + "px '" + t.sans + "'"
-            ctx.textAlign = "right"
-            ctx.textBaseline = "middle"
-            ctx.fillText("EARLY", x0 - t.spaceSm, sy + sh / 2)
-            const taps = view.reflections()
-            const stripSpan = view.earlySpan
-            const sx = s => x0 + w * Math.min(1, s / stripSpan)
-            const xpre = sx(onset)
-            if (xpre > x0 + 1) {
-                ctx.fillStyle = t.stripPredelayShade
-                ctx.fillRect(x0 + t.hairline, sy + t.hairline, xpre - x0 - t.hairline, sh - 2 * t.hairline)
-            }
-            ctx.strokeStyle = t.stripOnset
-            ctx.beginPath()
-            ctx.moveTo(xpre + t.hairline / 2, sy + t.stripOnsetInset)
-            ctx.lineTo(xpre + t.hairline / 2, sy + sh - t.stripOnsetInset)
-            ctx.stroke()
-            let loudest = 0
-            for (const tap of taps)
-                loudest = Math.max(loudest, Math.abs(tap.gain))
-            const presence = t.tapPresenceFloor + (1 - t.tapPresenceFloor) * view.earlyLevel
-            for (const tap of taps) {
-                const x = sx(tap.seconds) + t.hairline / 2
-                const strength = Math.abs(tap.gain) / loudest
-                const yb = sy + sh - t.tapBase
-                const len = t.tapMinLength + (sh - t.tapLengthInset) * strength
-                const g = ctx.createLinearGradient(0, yb, 0, yb - len)
-                g.addColorStop(0, Qt.rgba(t.star.r, t.star.g, t.star.b, t.tapAlpha * presence))
-                g.addColorStop(1, t.tapFade)
-                ctx.strokeStyle = g
-                ctx.lineWidth = t.tapWidth
-                ctx.beginPath()
-                ctx.moveTo(x, yb)
-                ctx.lineTo(x, yb - len)
-                ctx.stroke()
-                const halo = ctx.createRadialGradient(x, yb - len, 0, x, yb - len, t.tapHaloRadius)
-                halo.addColorStop(0, Qt.rgba(t.star.r, t.star.g, t.star.b, t.tapHaloAlpha * presence))
-                halo.addColorStop(1, t.starFade)
-                ctx.fillStyle = halo
-                ctx.beginPath()
-                ctx.arc(x, yb - len, t.tapHaloRadius, 0, Math.PI * 2)
-                ctx.fill()
-            }
-            ctx.fillStyle = t.inkFaint
-            ctx.font = t.typeMicro + "px '" + t.sans + "'"
-            ctx.textAlign = "right"
-            ctx.textBaseline = "top"
-            ctx.fillText(Format.seconds(stripSpan), x0 + w - t.spaceXs, sy + t.stripTextY)
-            if (taps.length === 0) {
-                ctx.textAlign = "left"
-                ctx.fillText("NO EARLY REFLECTIONS · A PLATE ANSWERS AT ONCE", xpre + t.spaceMd, sy + t.stripNoteY)
-            }
-        }
-        Connections {
-            target: view
-            function onRevisionChanged() { field.requestPaint() }
-            function onWidthChanged() { field.requestPaint() }
-            function onHeightChanged() { field.requestPaint() }
         }
     }
 
@@ -548,9 +565,8 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: view.padRight
         y: view.theme.spaceSm
-        text: view.frozen ? "FROZEN · HOLDING"
-            : view.live ? "LIVE · LATE " + Format.decibels(view.lateDb)
-            : "FROM SETTINGS"
+        visible: view.frozen || view.live
+        text: view.frozen ? "FROZEN · HOLDING" : "LATE " + Format.decibels(view.lateDb)
         color: view.frozen ? view.theme.ice : view.live ? view.theme.aurora : view.theme.inkFaint
         font.pixelSize: view.theme.typeMicro
         font.bold: true

@@ -132,17 +132,6 @@ Rectangle {
         return { playing: false, a: a, b: pairView ? b : [], overlay: [], hold: hold, peaks: [], hops: 0 }
     }
 
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        if (info.name === undefined)
-            return ""
-        return (info.group === info.name ? info.name : info.group + " · " + info.name).toUpperCase()
-    }
-    function readoutValue(id) {
-        return id === "" || revision < 0 ? "" : controller.display(id)
-    }
     // "A1 +12c 55.4 Hz −8.1 dB"
     function resonanceText(peak) {
         return spectrum.noteText(peak.hz) + " " + spectrum.hzText(peak.hz) + " " + spectrum.dbText(peak.db)
@@ -163,16 +152,22 @@ Rectangle {
         required property string label
         property bool on: false
         signal pressed()
-        width: buttonText.implicitWidth + 2 * panel.theme.spaceMd
+        // At least the kit's least hit size each way.
+        width: Math.max(panel.theme.minHitSize, buttonText.implicitWidth + 2 * panel.theme.spaceMd)
         height: panel.theme.buttonHeight
         radius: height / 2
         color: on ? Qt.rgba(panel.theme.accent.r, panel.theme.accent.g, panel.theme.accent.b, panel.theme.buttonOnFillAlpha)
             : buttonArea.pressed ? panel.theme.button : panel.theme.buttonHi
-        border.color: on ? Qt.rgba(panel.theme.accent.r, panel.theme.accent.g, panel.theme.accent.b, panel.theme.buttonOnEdgeAlpha)
+        border.color: activeFocus ? panel.theme.accent
+            : on ? Qt.rgba(panel.theme.accent.r, panel.theme.accent.g, panel.theme.accent.b, panel.theme.buttonOnEdgeAlpha)
             : buttonArea.containsMouse ? panel.theme.wellEdge : panel.theme.seam
+        activeFocusOnTab: true
         Accessible.role: Accessible.Button
         Kit.HoverTip { theme: panel.theme }
         Accessible.name: label
+        Accessible.onPressAction: button.pressed()
+        Keys.onReturnPressed: button.pressed()
+        Keys.onSpacePressed: button.pressed()
         Text {
             id: buttonText
             anchors.centerIn: parent
@@ -192,162 +187,54 @@ Rectangle {
 
     // ---- Header ---------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
-
-        Text {
-            id: wordmark
-            y: panel.theme.spaceXxs
-            text: "LENS"
-            color: panel.theme.glacier
-            font.family: panel.theme.sans
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Light
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        // A spectrum's sweep under the name.
-        Rectangle {
-            x: wordmark.x + panel.theme.spaceXxs
-            y: wordmark.y + wordmark.height + panel.theme.hairline
-            width: wordmark.implicitWidth - panel.theme.wordmarkRuleTrim
-            height: panel.theme.strokeBold
-            radius: panel.theme.strokeBold / 2
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0; color: panel.theme.primaryDeep }
-                GradientStop { position: panel.theme.wordmarkSweepStop; color: panel.theme.primary }
-                GradientStop { position: 1; color: panel.theme.glacier }
-            }
-        }
-        Text {
-            x: wordmark.x + panel.theme.spaceXxs
-            y: wordmark.y + wordmark.height + panel.theme.subtitleGap
-            text: "SPECTRUM ANALYSER"
-            color: panel.theme.inkDim
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.subtitleSpacing
-        }
-
-        Row {
-            id: browser
-            x: panel.theme.browserX
-            y: panel.theme.browserY
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "lensPresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "lensPresetDisplay"
-                width: panel.theme.presetDisplayWidth
-                height: panel.theme.presetDisplayHeight
-                radius: panel.theme.radiusLg
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                border.width: activeFocus ? panel.theme.focusStroke : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.accent)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        brand: Component {
+            Item {
+                implicitWidth: wordmark.implicitWidth
+                implicitHeight: subtitle.y + subtitle.implicitHeight
                 Text {
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetCaptionY
-                    text: panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.captionSpacing
+                    id: wordmark
+                    objectName: "lensWordmark"
+                    text: "LENS"
+                    color: panel.theme.wordmarkInk
+                    font.family: panel.theme.wordmarkFont
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.weight: panel.theme.wordmarkWeight
+                    font.letterSpacing: panel.theme.wordmarkSpacing
                 }
-                Text {
-                    objectName: "lensPresetName"
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetNameY
-                    width: panel.theme.presetNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeHeading
-                    font.letterSpacing: panel.theme.presetNameSpacing
-                    elide: Text.ElideRight
-                }
+                // A spectrum's sweep under the name.
                 Rectangle {
-                    x: panel.theme.presetDividerX
-                    y: panel.theme.spaceMd
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.theme.spaceMd
-                    color: panel.theme.wellEdge
-                }
-                Text {
-                    objectName: "lensReadout"
-                    x: panel.theme.readoutX
-                    y: panel.theme.presetCaptionY
-                    width: display.width - x - panel.theme.readoutRight
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.captionTightSpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "lensReadoutValue"
-                    x: panel.theme.readoutX
-                    y: panel.theme.readoutValueY
-                    width: display.width - x - panel.theme.readoutRight
-                    text: panel.readoutValue(panel.theme.lastTouched)
-                    color: panel.theme.accent
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeSubtitle
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.chevronMargin
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.inkDim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
+                    x: panel.theme.spaceXxs
+                    y: wordmark.height + panel.theme.hairline
+                    width: wordmark.implicitWidth - panel.theme.wordmarkRuleTrim
+                    height: panel.theme.strokeBold
+                    radius: panel.theme.strokeBold / 2
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0; color: panel.theme.primaryDeep }
+                        GradientStop { position: panel.theme.wordmarkSweepStop; color: panel.theme.primary }
+                        GradientStop { position: 1; color: panel.theme.glacier }
                     }
                 }
+                Text {
+                    id: subtitle
+                    objectName: "lensSubtitle"
+                    x: panel.theme.spaceXxs
+                    y: wordmark.height + panel.theme.subtitleGap
+                    text: "SPECTRUM ANALYSER"
+                    color: panel.theme.subtitleInk
+                    font.pixelSize: panel.theme.subtitleSize
+                    font.bold: true
+                    font.letterSpacing: panel.theme.subtitleSpacing
+                }
             }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "lensPresetNext"
-                direction: 1
-            }
-        }
-
-        Kit.StatusBadge {
-            id: status
-            objectName: "lensStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: panel.theme.statusY
         }
     }
 
@@ -361,7 +248,7 @@ Rectangle {
         theme: panel.theme
         id: spectrumPlate
         title: "SPECTRUM"
-        note: panel.frozen ? "FROZEN" : panel.playing ? "LIVE" : "PREVIEW · A TYPICAL MIX THROUGH THESE SETTINGS"
+        note: panel.frozen ? "FROZEN" : panel.playing ? "" : "A TYPICAL MIX THROUGH THESE SETTINGS"
         noteColor: panel.frozen ? panel.theme.freeze : panel.playing ? panel.theme.live : panel.theme.inkFaint
         x: panel.margin
         y: panel.rowAY
@@ -643,6 +530,8 @@ Rectangle {
             theme: panel.theme
             plotX: spectrum.px
             plotWidth: spectrum.pw
+            // Every row was measured from the running device, frozen or not.
+            live: true
             topDb: panel.ceilingDb
             rangeDb: panel.rangeDb
         }
@@ -874,6 +763,7 @@ Rectangle {
             label: "Decay"
             diameter: panel.theme.decayKnobDiameter
             inactive: !panel.holdOn
+            inactiveReason: panel.holdOn ? "" : "Peak Hold is off"
         }
     }
 
@@ -909,8 +799,13 @@ Rectangle {
             radius: panel.theme.radiusLg
             opacity: panel.overlayOn ? 1 : panel.theme.idleOpacity
             color: differenceArea.pressed ? panel.theme.button : panel.theme.buttonHi
-            border.color: on && panel.overlayOn ? Qt.rgba(panel.theme.difference.r, panel.theme.difference.g,
-                                                         panel.theme.difference.b, panel.theme.buttonOnEdgeAlpha) : panel.theme.seam
+            border.color: activeFocus ? panel.theme.accent
+                : on && panel.overlayOn ? Qt.rgba(panel.theme.difference.r, panel.theme.difference.g,
+                                                  panel.theme.difference.b, panel.theme.buttonOnEdgeAlpha) : panel.theme.seam
+            activeFocusOnTab: true
+            Keys.onReturnPressed: panel.showDifference = !panel.showDifference
+            Keys.onSpacePressed: panel.showDifference = !panel.showDifference
+            Accessible.onToggleAction: panel.showDifference = !panel.showDifference
             Accessible.role: Accessible.CheckBox
             Kit.HoverTip { theme: panel.theme }
             Accessible.name: "Difference curve"

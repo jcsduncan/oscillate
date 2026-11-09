@@ -21,7 +21,7 @@ Rectangle {
 
     readonly property real margin: theme.spaceXl
     readonly property real gap: theme.sectionGap
-    readonly property real headerHeight: theme.headerHeight
+    readonly property real headerHeight: header.height
     readonly property real topHeight: theme.topRowHeight
     readonly property real shelfHeight: theme.shelfHeight
     readonly property real footHeight: theme.footRowHeight
@@ -91,13 +91,6 @@ Rectangle {
         theme.lastTouched = seedId
         controller.set_value(seedId, Math.min(high, next))
     }
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        return info.name === undefined ? "" : (info.group + " · " + info.name).toUpperCase()
-    }
-
     component Note: Text {
         color: panel.theme.inkFaint
         font.pixelSize: panel.theme.noteSize
@@ -112,165 +105,46 @@ Rectangle {
 
     // ---- Header ----------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
-        y: panel.margin - panel.theme.spaceSm
+        y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.headerHeight
-
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        wordmark: "DUST"
+        subtitle: "CRACKLE · HISS · RAIN · ROOM TONE · AGE"
+    }
+    // Out, held peaks, just before the status badge.
+    Row {
+        x: header.x + header.status.x - width - panel.theme.headerGap
+        y: header.y + (header.rowHeight - height) / 2
+        height: panel.theme.outMeterHeight
+        spacing: panel.theme.spaceXs
         Text {
-            id: wordmark
-            text: "DUST"
-            color: panel.theme.amber
-            font.family: panel.theme.display
-            font.pixelSize: panel.theme.wordmarkSize
-            font.bold: true
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        Text {
-            x: panel.theme.spaceXxs
-            y: wordmark.y + wordmark.height + 1
-            text: "CRACKLE · HISS · RAIN · ROOM TONE · AGE"
-            color: panel.theme.inkDim
+            anchors.verticalCenter: parent.verticalCenter
+            text: "OUT"
+            color: panel.theme.inkFaint
             font.pixelSize: panel.theme.typeMicro
             font.bold: true
-            font.letterSpacing: panel.theme.taglineSpacing
+            font.letterSpacing: panel.theme.captionSpacing
         }
-        Row {
-            x: panel.theme.presetX
-            y: panel.theme.presetTop
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "dustPresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "dustPresetDisplay"
-                width: panel.theme.presetWidth
-                height: panel.theme.presetHeight
-                radius: panel.theme.radiusLg
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.accent)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
-                Text {
-                    x: panel.theme.spaceLg
-                    y: panel.theme.presetCaptionTop
-                    text: "PRESET · " + panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.captionSpacing
-                }
-                Text {
-                    objectName: "dustPresetName"
-                    x: panel.theme.spaceLg
-                    y: panel.theme.presetNameTop
-                    width: panel.theme.presetNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeSubtitle
-                    elide: Text.ElideRight
-                }
-                Rectangle {
-                    x: panel.theme.presetDividerX
-                    y: panel.theme.spaceMd
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.theme.spaceMd
-                    color: panel.theme.wellEdge
-                }
-                Text {
-                    objectName: "dustReadout"
-                    x: panel.theme.presetReadoutX
-                    y: panel.theme.presetCaptionTop
-                    width: display.width - x - panel.theme.space2xl
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.readoutSpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "dustReadoutValue"
-                    x: panel.theme.presetReadoutX
-                    y: panel.theme.presetValueTop
-                    width: display.width - x - panel.theme.space2xl
-                    text: panel.theme.lastTouched === "" || panel.revision < 0 ? ""
-                        : panel.controller.display(panel.theme.lastTouched)
-                    color: panel.theme.accent
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeEmphasis
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.presetChevronInset
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.inkDim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
-                    }
-                }
-            }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "dustPresetNext"
-                direction: 1
-            }
-        }
-        // Out, held peaks.
-        Row {
-            anchors.right: parent.right
-            y: panel.theme.spaceXs
+        Kit.PeakMeter {
+            objectName: "dustMeterOutLeft"
+            theme: panel.theme
+            width: panel.theme.outMeterWidth
             height: panel.theme.outMeterHeight
-            spacing: panel.theme.spaceXs
-            Text {
-                anchors.verticalCenter: parent.verticalCenter
-                text: "OUT"
-                color: panel.theme.inkFaint
-                font.pixelSize: panel.theme.typeMicro
-                font.bold: true
-                font.letterSpacing: panel.theme.captionSpacing
-            }
-            Kit.PeakMeter {
-                objectName: "dustMeterOutLeft"
-                theme: panel.theme
-                width: panel.theme.outMeterWidth
-                height: panel.theme.outMeterHeight
-                live: panel.playing
-                peakDb: panel.playing ? Number(panel.live.output_peak[0]) : panel.silentPeakDb
-            }
-            Kit.PeakMeter {
-                objectName: "dustMeterOutRight"
-                theme: panel.theme
-                width: panel.theme.outMeterWidth
-                height: panel.theme.outMeterHeight
-                live: panel.playing
-                peakDb: panel.playing ? Number(panel.live.output_peak[1]) : panel.silentPeakDb
-            }
+            live: panel.playing
+            peakDb: panel.playing ? Number(panel.live.output_peak[0]) : panel.silentPeakDb
+        }
+        Kit.PeakMeter {
+            objectName: "dustMeterOutRight"
+            theme: panel.theme
+            width: panel.theme.outMeterWidth
+            height: panel.theme.outMeterHeight
+            live: panel.playing
+            peakDb: panel.playing ? Number(panel.live.output_peak[1]) : panel.silentPeakDb
         }
     }
 

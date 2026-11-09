@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import Oscillate.Format
+import "../devicekit" as Kit
 
 // The last 0.7 s, as Pocket hears it, drawn as envelopes in two lanes on
 // one time axis: the kick in amber on top, and below it the bass coming in
@@ -9,7 +9,8 @@ import Oscillate.Format
 // Columns are (min, max) pairs, oldest first; each envelope holds its peak
 // over +-6 columns (16 ms, longer than a sub's period) so a 40 Hz wave reads
 // as its level, not its cycles. Each lane scales to its own loudest peak,
-// easing down slowly so the picture does not jump.
+// easing down slowly so the picture does not jump. The shared plot frame
+// labels the time axis and says LIVE or PREVIEW.
 Item {
     id: waves
     required property PocketTheme theme
@@ -44,10 +45,23 @@ Item {
     readonly property var inEnvelope: envelope(bassIn)
     readonly property var outEnvelope: envelope(bassOut)
 
-    readonly property real px: theme.plotLeft
-    readonly property real py: theme.wavesPlotTop
-    readonly property real pw: width - px - theme.plotRight
-    readonly property real ph: height - py - theme.wavesPlotBottom
+    // The plot's own coordinates: the frame's plot area, which sits right
+    // of the lane keys.
+    readonly property real px: 0
+    readonly property real py: 0
+    readonly property real pw: frame.plotArea.width
+    readonly property real ph: frame.plotArea.height
+    // A time tick every this many milliseconds back from now.
+    readonly property real tickStepMs: 100
+    readonly property real msPerSecond: 1000
+    // The time ticks, oldest first, for the frame.
+    readonly property var xTicks: {
+        const ticks = []
+        const span = seconds * msPerSecond
+        for (let ms = Math.floor(span / tickStepMs) * tickStepMs; ms >= 0; ms -= tickStepMs)
+            ticks.push({ at: 1 - ms / span, label: ms === 0 ? "now" : String(-ms) })
+        return ticks
+    }
     // The kick lane takes the top third, the bass the rest.
     readonly property real kickShare: 0.34
     readonly property real kickHeight: Math.round(ph * kickShare)
@@ -78,101 +92,108 @@ Item {
     onBassOutChanged: plot.requestPaint()
     onWidthChanged: plot.requestPaint()
 
-    Canvas {
-        id: plot
-        anchors.fill: parent
-        renderStrategy: Canvas.Cooperative
-        // A symmetric band of +-envelope about `mid`, or (with `inner`) the
-        // ring between two envelopes.
-        function band(ctx, mid, k, outer, inner) {
-            const n = outer.length
-            if (n === 0)
-                return
-            const xOf = i => waves.px + waves.pw * (i + 0.5) / n
-            for (const sign of [-1, 1]) {
-                ctx.beginPath()
-                ctx.moveTo(xOf(0), mid + sign * outer[0] * k)
-                for (let i = 1; i < n; ++i)
-                    ctx.lineTo(xOf(i), mid + sign * outer[i] * k)
-                for (let i = n - 1; i >= 0; --i)
-                    ctx.lineTo(xOf(i), mid + sign * (inner ? inner[i] : 0) * k)
-                ctx.closePath()
-                ctx.fill()
+    Kit.PlotFrame {
+        id: frame
+        x: waves.theme.plotLeft
+        y: waves.theme.wavesPlotTop
+        width: waves.width - x - waves.theme.plotRight
+        height: waves.height - y
+        theme: waves.theme
+        live: waves.live
+        xTicks: waves.xTicks
+        xUnit: "ms"
+
+        Canvas {
+            id: plot
+            anchors.fill: parent
+            renderStrategy: Canvas.Cooperative
+            // A symmetric band of +-envelope about `mid`, or (with `inner`) the
+            // ring between two envelopes.
+            function band(ctx, mid, k, outer, inner) {
+                const n = outer.length
+                if (n === 0)
+                    return
+                const xOf = i => waves.px + waves.pw * (i + 0.5) / n
+                for (const sign of [-1, 1]) {
+                    ctx.beginPath()
+                    ctx.moveTo(xOf(0), mid + sign * outer[0] * k)
+                    for (let i = 1; i < n; ++i)
+                        ctx.lineTo(xOf(i), mid + sign * outer[i] * k)
+                    for (let i = n - 1; i >= 0; --i)
+                        ctx.lineTo(xOf(i), mid + sign * (inner ? inner[i] : 0) * k)
+                    ctx.closePath()
+                    ctx.fill()
+                }
             }
-        }
-        function edge(ctx, mid, k, values) {
-            const n = values.length
-            if (n === 0)
-                return
-            const xOf = i => waves.px + waves.pw * (i + 0.5) / n
-            for (const sign of [-1, 1]) {
-                ctx.beginPath()
-                ctx.moveTo(xOf(0), mid + sign * values[0] * k)
-                for (let i = 1; i < n; ++i)
-                    ctx.lineTo(xOf(i), mid + sign * values[i] * k)
-                ctx.stroke()
+            function edge(ctx, mid, k, values) {
+                const n = values.length
+                if (n === 0)
+                    return
+                const xOf = i => waves.px + waves.pw * (i + 0.5) / n
+                for (const sign of [-1, 1]) {
+                    ctx.beginPath()
+                    ctx.moveTo(xOf(0), mid + sign * values[0] * k)
+                    for (let i = 1; i < n; ++i)
+                        ctx.lineTo(xOf(i), mid + sign * values[i] * k)
+                    ctx.stroke()
+                }
             }
-        }
-        onPaint: {
-            const ctx = getContext("2d")
-            ctx.reset()
-            const t = waves.theme
-            ctx.fillStyle = t.well
-            ctx.fillRect(waves.px, waves.py, waves.pw, waves.ph)
-            // Time ticks every 100 ms back from now.
-            ctx.lineWidth = t.hairline
-            ctx.font = t.typeMicro + "px '" + t.mono + "'"
-            ctx.textAlign = "center"
-            ctx.textBaseline = "top"
-            for (let ms = 0; ms <= waves.seconds * 1000; ms += 100) {
-                const x = Math.round(waves.px + waves.pw * (1 - ms / 1000 / waves.seconds)) + 0.5
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                const t = waves.theme
+                ctx.fillStyle = t.well
+                ctx.fillRect(waves.px, waves.py, waves.pw, waves.ph)
+                // A grid line at each time tick (the frame labels them).
+                ctx.lineWidth = t.hairline
                 ctx.strokeStyle = t.grid
+                for (const tick of waves.xTicks) {
+                    const x = Math.round(waves.px + waves.pw * tick.at) + 0.5
+                    ctx.beginPath()
+                    ctx.moveTo(x, waves.py)
+                    ctx.lineTo(x, waves.py + waves.ph)
+                    ctx.stroke()
+                }
+                // The lane divider and centre lines.
+                const kickMid = waves.py + waves.kickHeight / 2
+                const bassMid = waves.bassTop + waves.bassHeight / 2
+                ctx.strokeStyle = t.seam
                 ctx.beginPath()
-                ctx.moveTo(x, waves.py)
-                ctx.lineTo(x, waves.py + waves.ph)
+                ctx.moveTo(waves.px, Math.round(waves.bassTop - t.laneGap / 2) + 0.5)
+                ctx.lineTo(waves.px + waves.pw, Math.round(waves.bassTop - t.laneGap / 2) + 0.5)
                 ctx.stroke()
-                ctx.fillStyle = t.inkFaint
-                ctx.fillText(ms === 0 ? "now" : Format.milliseconds(-ms), x, waves.py + waves.ph + t.timeLabelGap)
-            }
-            // The lane divider and centre lines.
-            const kickMid = waves.py + waves.kickHeight / 2
-            const bassMid = waves.bassTop + waves.bassHeight / 2
-            ctx.strokeStyle = t.seam
-            ctx.beginPath()
-            ctx.moveTo(waves.px, Math.round(waves.bassTop - t.laneGap / 2) + 0.5)
-            ctx.lineTo(waves.px + waves.pw, Math.round(waves.bassTop - t.laneGap / 2) + 0.5)
-            ctx.stroke()
-            ctx.strokeStyle = t.grid
-            for (const y of [kickMid, bassMid]) {
+                ctx.strokeStyle = t.grid
+                for (const y of [kickMid, bassMid]) {
+                    ctx.beginPath()
+                    ctx.moveTo(waves.px, Math.round(y) + 0.5)
+                    ctx.lineTo(waves.px + waves.pw, Math.round(y) + 0.5)
+                    ctx.stroke()
+                }
+                ctx.save()
                 ctx.beginPath()
-                ctx.moveTo(waves.px, Math.round(y) + 0.5)
-                ctx.lineTo(waves.px + waves.pw, Math.round(y) + 0.5)
-                ctx.stroke()
+                ctx.rect(waves.px, waves.py, waves.pw, waves.ph)
+                ctx.clip()
+                // Kick lane.
+                const kk = (waves.kickHeight / 2 - t.envelopeHeadroom) / waves.kickScale
+                ctx.fillStyle = Qt.rgba(t.kick.r, t.kick.g, t.kick.b, t.kickFillAlpha)
+                band(ctx, kickMid, kk, waves.kickEnvelope)
+                ctx.strokeStyle = t.kick
+                edge(ctx, kickMid, kk, waves.kickEnvelope)
+                // Bass lane: what came in, what went out, and the cut between.
+                const bk = (waves.bassHeight / 2 - t.envelopeHeadroom) / waves.bassScale
+                ctx.fillStyle = Qt.rgba(t.bass.r, t.bass.g, t.bass.b, t.bassOutAlpha)
+                band(ctx, bassMid, bk, waves.outEnvelope)
+                ctx.fillStyle = Qt.rgba(t.cleared.r, t.cleared.g, t.cleared.b, t.cutFillAlpha)
+                band(ctx, bassMid, bk, waves.inEnvelope, waves.outEnvelope)
+                ctx.lineWidth = t.bassInStroke
+                ctx.strokeStyle = t.bass
+                edge(ctx, bassMid, bk, waves.inEnvelope)
+                ctx.restore()
+                ctx.strokeStyle = t.wellEdge
+                ctx.lineWidth = t.hairline
+                ctx.strokeRect(waves.px + 0.5, waves.py + 0.5, waves.pw - 1, waves.ph - 1)
             }
-            ctx.save()
-            ctx.beginPath()
-            ctx.rect(waves.px, waves.py, waves.pw, waves.ph)
-            ctx.clip()
-            // Kick lane.
-            const kk = (waves.kickHeight / 2 - t.envelopeHeadroom) / waves.kickScale
-            ctx.fillStyle = Qt.rgba(t.kick.r, t.kick.g, t.kick.b, t.kickFillAlpha)
-            band(ctx, kickMid, kk, waves.kickEnvelope)
-            ctx.strokeStyle = t.kick
-            edge(ctx, kickMid, kk, waves.kickEnvelope)
-            // Bass lane: what came in, what went out, and the cut between.
-            const bk = (waves.bassHeight / 2 - t.envelopeHeadroom) / waves.bassScale
-            ctx.fillStyle = Qt.rgba(t.bass.r, t.bass.g, t.bass.b, t.bassOutAlpha)
-            band(ctx, bassMid, bk, waves.outEnvelope)
-            ctx.fillStyle = Qt.rgba(t.cleared.r, t.cleared.g, t.cleared.b, t.cutFillAlpha)
-            band(ctx, bassMid, bk, waves.inEnvelope, waves.outEnvelope)
-            ctx.lineWidth = t.bassInStroke
-            ctx.strokeStyle = t.bass
-            edge(ctx, bassMid, bk, waves.inEnvelope)
-            ctx.restore()
-            ctx.strokeStyle = t.wellEdge
-            ctx.lineWidth = t.hairline
-            ctx.strokeRect(waves.px + 0.5, waves.py + 0.5, waves.pw - 1, waves.ph - 1)
-        }
+    }
     }
 
     // The keys, beside each lane.
@@ -200,14 +221,14 @@ Item {
     }
     Key {
         x: waves.theme.waveKeyX
-        y: waves.py + waves.kickHeight / 2 - height / 2
+        y: frame.y + waves.py + waves.kickHeight / 2 - height / 2
         name: "KICK"
         fill: waves.theme.kick
         edge: waves.theme.kick
     }
     Column {
         x: waves.theme.waveKeyX
-        y: waves.bassTop + waves.bassHeight / 2 - height / 2
+        y: frame.y + waves.bassTop + waves.bassHeight / 2 - height / 2
         spacing: waves.theme.waveKeyGap
         Key {
             name: "IN"

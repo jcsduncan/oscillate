@@ -86,15 +86,39 @@ KitTheme {
     // Small captions over controls.
     property int labelSize: typeCaption
     property real labelSpacing: 1.6
-    // The header's wordmark and the line under it.
-    property int wordmarkSize: 30
-    property real wordmarkSpacing: 8
-    property int subtitleSize: typeMicro
-    property real subtitleSpacing: 2.4
-    // The preset display and the tail-note card: dark wells.
+    // The header (Kit.DeviceHeader): the ember wordmark over its subtitle,
+    // the preset browser and readout in dark wells, the status at the
+    // right; the tail-note card, Pitch from and Tune to key in its second row.
+    property real headerY: 10
+    headerHeight: 44
+    headerBrowserX: 196
+    wordmarkInk: wordmark
+    wordmarkSize: 30
+    wordmarkWeight: Font.Bold
+    wordmarkSpacing: 8
+    subtitleGap: 1
+    subtitleInk: inkDim
+    subtitleSize: typeMicro
+    subtitleSpacing: 2.4
+    arrowHeight: headerHeight
+    presetDisplayWidth: 360
+    presetDisplayHeight: headerHeight
+    presetDisplayRadius: wellRadius
+    presetTextX: 14
+    presetTagY: 6
+    presetTagSize: subtitleSize
+    presetTagSpacing: 1.4
+    presetNameY: 18
+    presetNameBold: false
+    presetNameSize: typeHeading
+    presetChevronInk: inkDim
+    presetChevronMargin: spaceLg
+    readoutRadius: wellRadius
+    readoutTextX: 14
+    readoutNameY: 6
+    readoutValueY: 20
+    // The preset display, the readout and the tail-note card: dark wells.
     property real wellRadius: 9
-    property real presetCategorySpacing: 1.4
-    property int presetNameSize: typeHeading
     property int tailNoteSize: 19
     // The panel's own push buttons.
     property int buttonHeight: 30
@@ -106,7 +130,16 @@ KitTheme {
     property real layerCardRadius: 10
     property int layerNameSize: typeEmphasis
     property int levelBarHeight: 4
-    property real unpoweredOpacity: 0.5
+    // A layer that is off: a small OFF chip on its card, and the controls
+    // card collapsed to its title with a note in inkDim.
+    property string offChip: "OFF"
+    property real offChipHeight: 16
+    property real offChipPad: 10
+    property real offChipRadius: radiusSm
+    property int offChipSize: typeMicro
+    property real offChipSpacing: 1.2
+    property color offChipInk: inkDim
+    property color offChipEdge: plateHi
     property real hintLineHeight: 1.2
     // The curve tabs.
     property real tabSpacing: 1.4
@@ -158,13 +191,6 @@ KitTheme {
     }
 
     lastTouched: ""
-
-    // The plate behind each plot label, so the kick drawn across the plot
-    // never runs through it: its padding around the text and its opacity.
-    property real labelPlatePad: 2
-    property real labelPlateAlpha: 0.85
-    // The master row: Lock is at least this wide, and the last hit starts
-    // this far after it.
+    // The master row: Lock is at least this wide.
     property real lockMinWidth: 170
-    property real lastHitGap: spaceXl
 }

@@ -37,8 +37,9 @@
 // the subtitle and latency follow the oversampling; the switches and the
 // level-matched compare edit their parameters; the transfer curve comes
 // from the engine; the telemetry decodes into the meters, the dot and the
-// beat history; the real Edge's readings reach the panel; presets and
-// status; and screenshots on request.
+// beat history, with the plots' chips saying LIVE or PREVIEW; the real
+// Edge's readings reach the panel; presets and status; and screenshots on
+// request.
 namespace {
 using oscillate::quick::InMemoryNativeSynthAdapter;
 using oscillate::quick::NativeSynthDeviceController;
@@ -313,6 +314,8 @@ void telemetry_decodes_into_the_meters() {
   auto panel = load_panel(controller);
   require(text_of(*panel, QStringLiteral("edgeClipped")) == QStringLiteral("—"),
           "a dash with nothing measured");
+  require(text_of(*panel, QStringLiteral("edgePlotChipText")) == QStringLiteral("PREVIEW"),
+          "idle, the plots preview the settings");
   std::vector<float> frame(t::size, 0.0F);
   frame[t::input_peak] = in_db;
   constexpr float quieter_db = 1.0F;
@@ -343,6 +346,8 @@ void telemetry_decodes_into_the_meters() {
       text_of(*panel, QStringLiteral("edgeLatency")).startsWith(QStringLiteral("Latency 3.1 ms ·")),
       "the running latency");
   require(item(*panel, QStringLiteral("edgeDot"))->isVisible(), "the dot shows");
+  require(text_of(*panel, QStringLiteral("edgePlotChipText")) == QStringLiteral("LIVE"),
+          "playing, the plots are live");
   oscillate::test::panel_fit::require_text_fits(panel->root, "edge playing");
   adapter.set_telemetry({});
   require(wait_for_text(*panel, QStringLiteral("edgeClipped"), QStringLiteral("—")),

@@ -8,7 +8,8 @@ import "NovaContract.js" as Contract
 // for the attack, hold, decay or release time, up and down for the sustain
 // (the decay's node does both). Drag up or down on a segment between nodes
 // to bend it. Each drag is one undo step. A dot rides the newest voice's
-// stage.
+// stage. Its holder frames it (Kit.PlotFrame) with `levelTicks`; the time
+// axis is compressed per stage, so it has no time scale.
 Kit.EnvelopeView {
     id: view
     required property var panel
@@ -42,6 +43,12 @@ Kit.EnvelopeView {
     // The plot's level range, top to bottom, in the view.
     readonly property real levelTop: theme.envelopePlotTop + theme.envelopeHeadroom
     readonly property real levelSpan: height - levelTop - theme.envelopePlotBottom
+    // The level scale its plot frame shows (percent of full level), each
+    // tick's place up the view.
+    readonly property var levelPercents: [0, 50, 100]
+    readonly property real percent: 100
+    readonly property var levelTicks: height > 0
+        ? levelPercents.map(p => ({ at: 1 - plotY(p / percent) / height, label: String(p) })) : []
 
     objectName: "novaEnvelopeView:" + envelope
     controller: panel.controller
@@ -134,6 +141,7 @@ Kit.EnvelopeView {
 
     MouseArea {
         objectName: "novaEnvelopeDrag:" + view.envelope
+        readonly property string keyboardAlternative: "the envelope's knobs beside it: times, sustain and curves"
         property string curveId: ""
         property real startY: 0
         property real startValue: 0

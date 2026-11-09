@@ -12,7 +12,6 @@ Canvas {
     required property DeckTheme theme
 
     readonly property int revision: controller.revision
-    readonly property real hertzPerKilohertz: 1000
     readonly property real minDb: -40
     readonly property real maxDb: 6
     readonly property var levels: revision >= 0 ? [band("low"), band("mid"), band("high")] : [1, 1, 1]
@@ -30,6 +29,15 @@ Canvas {
         const db = controller.value("deck." + name)
         return db <= minDb ? 0 : Math.pow(10, db / 20)
     }
+    // The scales the frame around the screen labels, from this view's own
+    // mapping: frequency marks [Hz, label] and levels in dB.
+    readonly property var frequencyMarks: [[20, "20"], [100, "100"], [1000, "1k"], [10000, "10k"], [20000, "20k"]]
+    readonly property var levelMarks: [6, 0, -12, -24, -40]
+    readonly property var frequencyTicks: width > 0
+        ? frequencyMarks.map(mark => ({ at: xOf(mark[0]) / width, label: mark[1] })) : []
+    readonly property var levelTicks: height > 0
+        ? levelMarks.map(db => ({ at: 1 - yOf(db) / height, label: Format.signed_number(db, 0) })) : []
+
     function xOf(hz) { return width * Math.log(hz / 20) / Math.log(1000) }
     function yOf(db) { return height * (maxDb - Math.max(minDb, Math.min(maxDb, db))) / (maxDb - minDb) }
 
@@ -135,32 +143,5 @@ Canvas {
             ctx.stroke()
         }
         ctx.setLineDash([])
-    }
-
-    // Frequency and level captions.
-    Repeater {
-        model: [100, 1000, 10000]
-        delegate: Text {
-            required property var modelData
-            x: view.xOf(modelData) + view.theme.spaceXs
-            y: view.height - view.theme.responseCaptionBottom
-            text: modelData >= view.hertzPerKilohertz ? Format.number(modelData / view.hertzPerKilohertz, 0) + "k"
-                                                      : Format.number(modelData, 0)
-            color: view.theme.inkFaint
-            font.pixelSize: view.theme.typeMicro
-            font.family: view.theme.mono
-        }
-    }
-    Repeater {
-        model: [6, 0, -12, -24]
-        delegate: Text {
-            required property var modelData
-            x: view.theme.spaceXs
-            y: view.yOf(modelData) + view.theme.spaceXxs
-            text: Format.signed_number(modelData, 0)
-            color: view.theme.inkFaint
-            font.pixelSize: view.theme.typeMicro
-            font.family: view.theme.mono
-        }
     }
 }

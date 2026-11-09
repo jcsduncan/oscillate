@@ -208,13 +208,13 @@ Rectangle {
 
     // ---- Header ----------------------------------------------------------------------------
 
+    // The header's band: its own fill, squared off against the body.
     Rectangle {
-        id: header
+        id: headerBand
         width: parent.width
-        height: panel.theme.headerHeight
+        height: header.y + header.height + panel.theme.headerBottom
         color: panel.theme.headerFill
         radius: panel.radius
-        // Square off the header's lower corners against the body.
         Rectangle {
             y: parent.height - parent.radius
             width: parent.width
@@ -227,14 +227,21 @@ Rectangle {
             height: panel.theme.hairline
             color: panel.theme.line
         }
+    }
 
-        Row {
-            id: headerLeft
-            x: panel.theme.gutter
-            height: parent.height
-            spacing: panel.theme.headerGap
+    // CRATE | the sample and what it is | readout | status, with ERA and
+    // TIME in the second row. Crate has no presets: the sample takes the
+    // browser's place.
+    Kit.DeviceHeader {
+        id: header
+        x: panel.theme.gutter
+        y: panel.theme.headerY
+        width: panel.width - 2 * panel.theme.gutter
+        controller: panel.controller
+        theme: panel.theme
+        presets: false
+        brand: Component {
             Row {
-                anchors.verticalCenter: parent.verticalCenter
                 spacing: panel.theme.headerItemGap
                 Text {
                     id: wordmark
@@ -247,84 +254,85 @@ Rectangle {
                     font.letterSpacing: panel.theme.wordmarkSpacing
                 }
                 Mono {
+                    objectName: "crateSubtitle"
                     anchors.baseline: wordmark.baseline
                     text: "CHOP SAMPLER"
                     font.letterSpacing: panel.theme.taglineSpacing
                 }
             }
-            // The sample: its name and what it is.
-            Rectangle {
-                objectName: "crateSampleBox"
-                anchors.verticalCenter: parent.verticalCenter
-                width: sampleRow.implicitWidth + 2 * panel.theme.sampleBoxInset
-                height: panel.theme.sampleBoxHeight
-                radius: panel.theme.radiusLg
-                color: panel.theme.caseColor
-                border.color: panel.theme.line2
-                Row {
-                    id: sampleRow
-                    x: panel.theme.sampleBoxInset
+        }
+        centre: Component {
+            Row {
+                spacing: panel.theme.headerItemGap
+                // The sample: its name and what it is.
+                Rectangle {
+                    objectName: "crateSampleBox"
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: panel.theme.headerItemGap
-                    // A record: a ringed disc with a spindle hole.
-                    Rectangle {
+                    width: sampleRow.implicitWidth + 2 * panel.theme.sampleBoxInset
+                    height: panel.theme.sampleBoxHeight
+                    radius: panel.theme.radiusLg
+                    color: panel.theme.caseColor
+                    border.color: panel.theme.line2
+                    Row {
+                        id: sampleRow
+                        x: panel.theme.sampleBoxInset
                         anchors.verticalCenter: parent.verticalCenter
-                        width: panel.theme.recordIconSize
-                        height: width
-                        radius: width / 2
-                        color: "transparent"
-                        border.color: panel.theme.inkDim
-                        border.width: panel.theme.recordIconStroke
+                        spacing: panel.theme.headerItemGap
+                        // A record: a ringed disc with a spindle hole.
                         Rectangle {
-                            anchors.centerIn: parent
-                            width: panel.theme.recordIconHole
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: panel.theme.recordIconSize
                             height: width
                             radius: width / 2
-                            color: panel.theme.inkDim
+                            color: "transparent"
+                            border.color: panel.theme.inkDim
+                            border.width: panel.theme.recordIconStroke
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: panel.theme.recordIconHole
+                                height: width
+                                radius: width / 2
+                                color: panel.theme.inkDim
+                            }
+                        }
+                        Text {
+                            objectName: "crateSampleName"
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: panel.hasSample ? panel.crate.sample_name : "No sample"
+                            color: panel.hasSample ? panel.theme.ink : panel.theme.inkDim
+                            font.family: panel.theme.mono
+                            font.pixelSize: panel.theme.bodySize
+                            width: Math.min(implicitWidth, panel.theme.sampleNameWidth)
+                            elide: Text.ElideMiddle
+                        }
+                        Text {
+                            objectName: "crateSampleInfo"
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: panel.crate !== null && panel.crate.busy
+                                ? (panel.crate.message !== "" ? panel.crate.message : "Loading…")
+                                : Contract.infoLine(panel.crate)
+                            visible: text !== ""
+                            color: panel.crate !== null && panel.crate.busy ? panel.theme.accent : panel.theme.inkDim
+                            font.family: panel.theme.sans
+                            font.pixelSize: panel.theme.bodySize
                         }
                     }
-                    Text {
-                        objectName: "crateSampleName"
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: panel.hasSample ? panel.crate.sample_name : "No sample"
-                        color: panel.hasSample ? panel.theme.ink : panel.theme.inkDim
-                        font.family: panel.theme.mono
-                        font.pixelSize: panel.theme.bodySize
-                        width: Math.min(implicitWidth, panel.theme.sampleNameWidth)
-                        elide: Text.ElideMiddle
-                    }
-                    Text {
-                        objectName: "crateSampleInfo"
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: panel.crate !== null && panel.crate.busy
-                            ? (panel.crate.message !== "" ? panel.crate.message : "Loading…")
-                            : Contract.infoLine(panel.crate)
-                        visible: text !== ""
-                        color: panel.crate !== null && panel.crate.busy ? panel.theme.accent : panel.theme.inkDim
-                        font.family: panel.theme.sans
-                        font.pixelSize: panel.theme.bodySize
-                    }
                 }
-            }
-            Text {
-                objectName: "crateMessage"
-                anchors.verticalCenter: parent.verticalCenter
-                visible: panel.crate !== null && !panel.crate.busy && panel.crate.message !== ""
-                text: panel.crate !== null ? panel.crate.message : ""
-                // What room the ERA and TIME choices leave.
-                width: Math.max(0, Math.min(implicitWidth, headerRight.x - x - headerLeft.x - panel.theme.gutter))
-                elide: Text.ElideRight
-                color: panel.theme.warning
-                font.family: panel.theme.sans
-                font.pixelSize: panel.theme.bodySize
+                Text {
+                    objectName: "crateMessage"
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: panel.crate !== null && !panel.crate.busy && panel.crate.message !== ""
+                    text: panel.crate !== null ? panel.crate.message : ""
+                    width: Math.min(implicitWidth, panel.theme.messageWidth)
+                    elide: Text.ElideRight
+                    color: panel.theme.warning
+                    font.family: panel.theme.sans
+                    font.pixelSize: panel.theme.bodySize
+                }
             }
         }
 
         Row {
-            id: headerRight
-            anchors.right: parent.right
-            anchors.rightMargin: panel.theme.gutter
-            height: parent.height
             spacing: panel.theme.headerItemGap
             Caption { text: "ERA"; anchors.verticalCenter: parent.verticalCenter }
             CrateSegs {
@@ -338,7 +346,9 @@ Rectangle {
                 enabled: panel.crate !== null && panel.controller.editable
                 onPicked: index => panel.crate.set_era(index)
             }
-            Item { width: panel.theme.spaceXxs; height: 1 }
+        }
+        Row {
+            spacing: panel.theme.headerItemGap
             Caption { text: "TIME"; anchors.verticalCenter: parent.verticalCenter }
             CrateSegs {
                 objectName: "crateTime"
@@ -357,7 +367,7 @@ Rectangle {
     Item {
         id: chopSection
         visible: panel.hasSample
-        y: header.height
+        y: headerBand.height
         width: parent.width
         height: panel.theme.modeBarTop + panel.theme.buttonHeight + panel.theme.waveGap + panel.theme.waveHeight
             + panel.theme.waveBottom
@@ -483,15 +493,23 @@ Rectangle {
             }
         }
 
-        CrateWaveform {
-            id: waveform
+        // Time across; LIVE while a chop sounds (its playhead moves).
+        Kit.PlotFrame {
             x: panel.theme.gutter
             y: modeBar.y + modeBar.height + panel.theme.waveGap
             width: parent.width - 2 * panel.theme.gutter
             height: panel.theme.waveHeight
-            crate: panel.crate
             theme: panel.theme
-            frame: panel.frame
+            live: panel.live
+            xUnit: "s"
+            xTicks: waveform.timeTicks
+            CrateWaveform {
+                id: waveform
+                anchors.fill: parent
+                crate: panel.crate
+                theme: panel.theme
+                frame: panel.frame
+            }
         }
 
         Rectangle {
@@ -641,13 +659,42 @@ Rectangle {
                         font.pixelSize: panel.theme.titleSize
                         font.weight: Font.DemiBold
                     }
-                    // The chop's name: double-click to rename it.
+                    // The chop's name: double-click it, or Return or F2 while
+                    // it has focus, to rename it.
                     Item {
                         id: nameBox
                         anchors.verticalCenter: parent.verticalCenter
                         width: renaming ? panel.theme.chopNameWidth : chopName.width
                         height: chopName.implicitHeight + panel.theme.spaceXs
                         property bool renaming: false
+                        readonly property bool renamable: panel.selectedChop !== null && panel.controller.editable
+                        function beginRename() {
+                            if (!renamable)
+                                return
+                            nameField.text = panel.selectedChop.name
+                            renaming = true
+                            nameField.forceActiveFocus()
+                        }
+                        activeFocusOnTab: renamable && !renaming
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Rename chop: " + chopName.text
+                        Accessible.onPressAction: beginRename()
+                        Keys.onReturnPressed: beginRename()
+                        Keys.onEnterPressed: beginRename()
+                        Keys.onPressed: event => {
+                            if (event.key === Qt.Key_F2) {
+                                beginRename()
+                                event.accepted = true
+                            }
+                        }
+                        Rectangle {
+                            visible: nameBox.activeFocus
+                            anchors.fill: parent
+                            radius: panel.theme.radiusMd
+                            color: "transparent"
+                            border.color: panel.theme.accent
+                            border.width: panel.theme.focusEdgeWidth
+                        }
                         Text {
                             id: chopName
                             objectName: "crateChopName"
@@ -661,12 +708,13 @@ Rectangle {
                             font.pixelSize: panel.theme.nameSize
                             MouseArea {
                                 anchors.fill: parent
-                                enabled: panel.selectedChop !== null && panel.controller.editable
-                                onDoubleClicked: {
-                                    nameField.text = panel.selectedChop.name
-                                    nameBox.renaming = true
-                                    nameField.forceActiveFocus()
-                                }
+                                // At least the kit's least hit size round the name.
+                                anchors.leftMargin: -panel.theme.hitOutset(parent.width)
+                                anchors.rightMargin: -panel.theme.hitOutset(parent.width)
+                                anchors.topMargin: -panel.theme.hitOutset(parent.height)
+                                anchors.bottomMargin: -panel.theme.hitOutset(parent.height)
+                                enabled: nameBox.renamable
+                                onDoubleClicked: nameBox.beginRename()
                                 Kit.HoverTip { theme: panel.theme; text: "Double-click to rename this chop" }
                             }
                         }
@@ -794,13 +842,20 @@ Rectangle {
                                       + " · R " + Format.milliseconds(panel.controller.value(ids.release))
                             }
                         }
-                        CrateEnvelopeView {
+                        Kit.PlotFrame {
                             width: parent.width
                             height: panel.theme.viewHeight
-                            controller: panel.controller
                             theme: panel.theme
-                            ids: panel.chopIds
-                            colour: panel.selectedColour
+                            yUnit: "%"
+                            yTicks: envelopeView.levelTicks
+                            CrateEnvelopeView {
+                                id: envelopeView
+                                anchors.fill: parent
+                                controller: panel.controller
+                                theme: panel.theme
+                                ids: panel.chopIds
+                                colour: panel.selectedColour
+                            }
                         }
                         Row {
                             id: envelopeRow
@@ -859,16 +914,37 @@ Rectangle {
                                 tileNames: Contract.filterModes.map((label, index) => "crateFilterMode:" + index)
                             }
                         }
-                        CrateFilterView {
+                        Kit.PlotFrame {
                             width: parent.width
                             height: panel.theme.filterCurveHeight
-                            controller: panel.controller
                             theme: panel.theme
-                            ids: panel.chopIds
-                            colour: panel.selectedColour
+                            xUnit: "Hz"
+                            yUnit: "dB"
+                            xTicks: filterView.frequencyTicks
+                            yTicks: filterView.levelTicks
+                            CrateFilterView {
+                                id: filterView
+                                anchors.fill: parent
+                                controller: panel.controller
+                                theme: panel.theme
+                                ids: panel.chopIds
+                                colour: panel.selectedColour
+                                Text {
+                                    objectName: "crateFilterOffNote"
+                                    anchors.centerIn: parent
+                                    visible: filterRow.off
+                                    text: "Filter is Off: cutoff and resonance do nothing"
+                                    color: panel.theme.inkDim
+                                    font.family: panel.theme.sans
+                                    font.pixelSize: panel.theme.labelSize
+                                }
+                            }
                         }
                         Row {
                             id: filterRow
+                            // Off: cutoff and resonance do nothing (choke still does).
+                            readonly property bool off: panel.chopIds.filter !== undefined
+                                && panel.controller.revision >= 0 && panel.controller.choice(panel.chopIds.filter) === 0
                             width: parent.width
                             readonly property real cell: width / Contract.filterKnobs.length
                             Repeater {
@@ -886,6 +962,8 @@ Rectangle {
                                         parameterId: panel.chopIds[filterCell.modelData] !== undefined ? panel.chopIds[filterCell.modelData] : ""
                                         colour: panel.selectedColour
                                         formatter: filterCell.modelData === "choke" ? Contract.formatChoke : null
+                                        inactive: filterRow.off && filterCell.modelData !== "choke"
+                                        inactiveReason: inactive ? "Filter is Off" : ""
                                     }
                                 }
                             }
@@ -986,7 +1064,7 @@ Rectangle {
         objectName: "crateDropZone"
         visible: !panel.hasSample
         x: panel.theme.gutter
-        y: header.height + panel.theme.gutter
+        y: headerBand.height + panel.theme.gutter
         width: parent.width - 2 * panel.theme.gutter
         height: parent.height - y - panel.theme.gutter
         radius: panel.theme.cardRadius

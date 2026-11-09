@@ -35,6 +35,7 @@ Item {
     readonly property real centre: Math.max(-fullRotation, Math.min(fullRotation, speakerAngle * rotation / fullRotation + balanceSwing * balance))
 
     objectName: "vistaStage"
+    readonly property string plotExemptReason: "a picture of the image between the two speakers, not a plot with axes"
     implicitWidth: theme.stageDefaultWidth
     implicitHeight: theme.stageDefaultHeight
 

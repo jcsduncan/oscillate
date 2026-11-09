@@ -24,8 +24,13 @@ Item {
     readonly property real level: playing && panel.live.band_level ? panel.live.band_level[band] : -200
     readonly property bool pointShown: playing && level > floorDb
     readonly property real pointOut: outputAt(level)
-    // Grid lines sit on pixel centres.
+    // Grid lines sit on pixel centres, every gridStepDb.
     readonly property real pixelCentre: 0.5
+    readonly property real gridStepDb: 10
+    // The levels the frame labels on both axes; the first carries the unit.
+    readonly property var levelMarks: [floorDb, -40, -20, 0]
+    readonly property var inputTicks: levelMarks.map(db => ({ at: (db - floorDb) / -floorDb, label: String(db) }))
+    readonly property var outputTicks: inputTicks
 
     objectName: "strataTransfer"
 
@@ -70,7 +75,7 @@ Item {
             ctx.reset()
             ctx.strokeStyle = view.theme.grid
             ctx.lineWidth = view.theme.hairline
-            for (let db = -50; db < 0; db += 10) {
+            for (let db = view.floorDb + view.gridStepDb; db < 0; db += view.gridStepDb) {
                 const x = Math.round(view.xOf(db)) + view.pixelCentre
                 const y = Math.round(view.yOf(db)) + view.pixelCentre
                 ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke()
@@ -121,8 +126,11 @@ Item {
         border.width: view.theme.strokeBold
         MouseArea {
             id: handleArea
+            // The band card's knobs set the same values from the keyboard.
+            readonly property string keyboardAlternative: "the band card's Threshold, Above and Below knobs"
             anchors.fill: parent
-            anchors.margins: -view.theme.handleHitSlop
+            // A grab ring round the handle, never under the kit's least hit size.
+            anchors.margins: -Math.max(view.theme.handleHitSlop, view.theme.hitOutset(knobHandle.width))
             enabled: view.controller.editable
             onPressed: knobHandle.began()
             onPositionChanged: (mouse) => {

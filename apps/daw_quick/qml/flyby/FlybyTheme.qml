@@ -74,32 +74,35 @@ KitTheme {
     // The column of cards beside the chart.
     property real sideWidth: 392
 
-    // ---- Header ------------------------------------------------------------
+    // ---- Header (Kit.DeviceHeader) -----------------------------------------
     property real headerTop: 10
-    property real headerHeight: 52
-    property int wordmarkSize: 27
-    property real wordmarkSpacing: 5
-    property real taglineSpacing: 1.6
-    // The preset browser.
-    property real browserX: 300
-    property real browserY: 5
-    property real presetWidth: 360
-    property real presetHeight: 42
-    // Caption rows (top) and value rows inside the preset display.
-    property real presetCaptionY: 5
-    property real presetNameY: 16
-    property real presetNameWidth: 170
-    property real presetCaptionSpacing: 1.4
-    property real presetDividerX: 192
-    property real presetDividerInset: 8
-    property real readoutX: 202
-    property real readoutValueY: 17
-    // Room right of the readout for the chevron.
-    property real readoutRight: 24
-    property real readoutSpacing: 1.2
-    property real chevronMargin: 9
+    headerHeight: 52
+    headerBrowserX: 300
+    wordmarkFont: display
+    wordmarkSize: 27
+    wordmarkWeight: Font.Bold
+    wordmarkSpacing: 5
+    wordmarkInk: glacier
+    subtitleInk: inkDim
+    subtitleSpacing: 1.6
+    arrowNoun: "scene"
+    presetDisplayWidth: 260
+    presetDisplayHeight: 42
+    presetDisplayRadius: radiusLg
+    presetTagY: 5
+    presetTagSpacing: 1.4
+    presetNameY: 16
+    presetNameSize: typeSubtitle
+    presetNameBold: false
+    presetChevronMargin: 9
+    presetChevronInk: inkDim
+    readoutWidth: 220
+    readoutRadius: radiusLg
+    readoutNameY: 5
+    readoutSpacing: 1.2
+    readoutValueY: 17
+    readoutValueSize: typeEmphasis
     // The in/out peak meters.
-    property real meterTop: 4
     property real meterWidth: 8
     property real meterHeight: 44
 
@@ -152,4 +155,6 @@ KitTheme {
     property real pointHandleSize: 10
     property real pointStroke: 1.5
     property real pointGrabMargin: 7
+    // The focus ring's gap round a focused point.
+    property real pointFocusGap: 4
 }

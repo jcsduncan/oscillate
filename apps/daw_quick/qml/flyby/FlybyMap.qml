@@ -60,6 +60,12 @@ Item {
     // Wavefronts redraw at about 30 frames a second.
     readonly property int frameInterval: 33
 
+    // The chart's scale for its frame: metres in front (+) and behind (-)
+    // at half the view each way, the centre being you.
+    readonly property var metreTicks: height > 0
+        ? [view / 2, 0, -view / 2].map(m => ({ at: 0.5 + m * pxPerMetre / height,
+                                               label: Format.signed_number(m, wholeMetres) })) : []
+
     objectName: "flybyMap"
     clip: true
 
@@ -283,8 +289,42 @@ Item {
             color: end ? map.theme.ink : map.theme.handleFill
             border.color: map.theme.ink
             border.width: map.theme.pointStroke
-            Accessible.role: Accessible.Graphic
+            // Keys: Left/Right move the point across, Up/Down along the
+            // chart (Shift: fine); Delete puts it back.
+            activeFocusOnTab: map.controller.editable
+            Accessible.role: Accessible.Slider
             Accessible.name: map.controller.parameter(xId).name + " and Y"
+            Accessible.description: "Arrow keys move the point"
+            Keys.onPressed: event => {
+                if (!map.controller.editable)
+                    return
+                const fine = (event.modifiers & Qt.ShiftModifier) !== 0
+                if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+                    map.controller.step(handle.xId, event.key === Qt.Key_Right ? 1 : -1, fine)
+                    map.theme.lastTouched = handle.xId
+                } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+                    map.controller.step(handle.yId, event.key === Qt.Key_Up ? 1 : -1, fine)
+                    map.theme.lastTouched = handle.yId
+                } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
+                    map.controller.reset_to_default(handle.xId)
+                    map.controller.reset_to_default(handle.yId)
+                    map.theme.lastTouched = handle.xId
+                } else {
+                    return
+                }
+                event.accepted = true
+            }
+            // The focus ring round the point.
+            Rectangle {
+                visible: handle.activeFocus
+                anchors.centerIn: parent
+                width: parent.width + 2 * map.theme.pointFocusGap
+                height: width
+                radius: width / 2
+                color: "transparent"
+                border.color: map.theme.accent
+                border.width: map.theme.pointStroke
+            }
             MouseArea {
                 anchors.fill: parent
                 anchors.margins: -map.theme.pointGrabMargin
@@ -292,6 +332,7 @@ Item {
                 cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                 preventStealing: true
                 onPressed: {
+                    handle.forceActiveFocus()
                     map.dragging = true
                     map.controller.begin_gesture(handle.xId)
                     map.theme.lastTouched = handle.xId
@@ -325,15 +366,5 @@ Item {
         font.family: map.theme.mono
         font.pixelSize: map.theme.typeSmall
         lineHeight: map.theme.legendLineHeight
-    }
-    Text {
-        objectName: "flybyScale"
-        anchors.right: parent.right
-        anchors.rightMargin: map.theme.spaceLg
-        y: map.theme.chartLabelTop
-        text: "±" + Format.quantity(map.view, "m", map.wholeMetres)
-        color: map.theme.inkFaint
-        font.family: map.theme.mono
-        font.pixelSize: map.theme.typeSmall
     }
 }

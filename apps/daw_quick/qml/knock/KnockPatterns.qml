@@ -131,6 +131,15 @@ Item {
             onClicked: tile.clicked()
         }
     }
+    // The pattern grid's keyboard cursor: a ring over a lock or a cell.
+    component CursorRing: Rectangle {
+        anchors.fill: parent
+        z: 1
+        radius: area.theme.radiusMd
+        color: "transparent"
+        border.color: area.theme.gridCursorInk
+        border.width: area.theme.gridCursorStroke
+    }
     component Action: Rectangle {
         id: action
         property string text: ""
@@ -586,18 +595,26 @@ Item {
 
     // ---- The grid ---------------------------------------------------------------------
 
+    // One Tab stop: the arrow keys move a cursor over the locks (column -1)
+    // and the cells, Space or Return toggles the lock or cycles the cell.
+    // Each cell's hit area is a whole lane row by a whole step; the drawn
+    // cell sits inside it, leaving the lane and step gaps.
     Column {
         id: grid
         objectName: "knockGrid"
         y: barRow.y + barRow.height + area.theme.spaceMd
         width: parent.width
-        spacing: area.theme.laneSpacing
-        readonly property real lockWidth: 16
+        spacing: 0
+        activeFocusOnTab: area.ready
+        readonly property real lockWidth: area.theme.laneLockWidth
+        // The cursor: a lane, and a step or -1 for the lane's lock.
+        property int cursorLane: 0
+        property int cursorStep: 0
         // The name column is as wide as the longest lane name, short of
         // squeezing the steps below laneCellMinWidth; a name longer still
         // is elided, its tooltip showing it whole.
         readonly property real nameRoom: area.steps > 0
-            ? width - lockWidth - nameGap - (area.theme.laneCellMinWidth + gap) * area.steps : width
+            ? width - lockWidth - nameGap - area.theme.laneCellMinWidth * area.steps : width
         readonly property real nameWidth: {
             let widest = area.theme.laneNameMinWidth
             for (let lane = 0; lane < area.lanes; ++lane)
@@ -612,9 +629,52 @@ Item {
         }
         // Between the lane's name and its first cell.
         readonly property real nameGap: 8
-        readonly property real gap: 2
         readonly property real cellWidth: area.steps > 0
-            ? (width - lockWidth - nameWidth - nameGap - gap * (area.steps - 1)) / area.steps : 0
+            ? (width - lockWidth - nameWidth - nameGap) / area.steps : 0
+        readonly property int cursorKind: area.cells[cursorLane * area.steps + cursorStep] !== undefined
+            ? area.cells[cursorLane * area.steps + cursorStep] : 0
+
+        Accessible.role: Accessible.Table
+        Accessible.name: "Pattern grid"
+        Accessible.description: !area.ready ? ""
+            : cursorStep < 0
+                ? area.laneName(cursorLane) + " lock, " + (area.locks[cursorLane] === true ? "on" : "off")
+                : area.laneName(cursorLane) + " step " + (cursorStep + 1) + ", "
+                    + area.patterns.cell_names[cursorKind]
+
+        // Moves the cursor to a lane and step (-1: the lock), kept in the grid.
+        function moveTo(lane, step) {
+            cursorLane = Math.max(0, Math.min(area.lanes - 1, lane))
+            cursorStep = Math.max(-1, Math.min(area.steps - 1, step))
+        }
+        // Toggles the lock or cycles the cell under the cursor.
+        function activate() {
+            if (cursorStep < 0)
+                area.patterns.set_locked(cursorLane, area.locks[cursorLane] !== true)
+            else
+                area.patterns.cycle_cell(cursorLane, cursorStep)
+        }
+        Keys.onPressed: event => {
+            if (!area.ready)
+                return
+            if (event.key === Qt.Key_Left)
+                moveTo(cursorLane, cursorStep - 1)
+            else if (event.key === Qt.Key_Right)
+                moveTo(cursorLane, cursorStep + 1)
+            else if (event.key === Qt.Key_Up)
+                moveTo(cursorLane - 1, cursorStep)
+            else if (event.key === Qt.Key_Down)
+                moveTo(cursorLane + 1, cursorStep)
+            else if (event.key === Qt.Key_Home)
+                moveTo(cursorLane, -1)
+            else if (event.key === Qt.Key_End)
+                moveTo(cursorLane, area.steps - 1)
+            else if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                activate()
+            else
+                return
+            event.accepted = true
+        }
 
         Repeater {
             model: area.lanes
@@ -632,13 +692,12 @@ Item {
                     objectName: "knockLock:" + laneRow.lane
                     width: grid.lockWidth
                     height: parent.height
-                    activeFocusOnTab: area.ready
                     Accessible.role: Accessible.CheckBox
                     Accessible.name: "Keep " + area.laneName(laneRow.lane) + " when rolling"
                     Accessible.checked: laneRow.locked
-                    Keys.onSpacePressed: area.patterns.set_locked(laneRow.lane, !laneRow.locked)
+                    readonly property bool cursor: grid.cursorLane === laneRow.lane && grid.cursorStep < 0
                     readonly property color ink: laneRow.locked ? area.theme.body
-                        : (activeFocus ? area.theme.ink : area.theme.inkFaint)
+                        : (cursor && grid.activeFocus ? area.theme.ink : area.theme.inkFaint)
                     // The padlock: a ring for the shackle over the body.
                     readonly property real shackleX: 4
                     readonly property real shackleY: 3
@@ -647,28 +706,38 @@ Item {
                     readonly property real bodyY: 8
                     readonly property real bodyWidth: 12
                     readonly property real bodyHeight: 8
-                    Rectangle {
-                        x: lock.shackleX
-                        y: lock.shackleY
-                        width: lock.shackleSize
-                        height: lock.shackleSize
-                        radius: lock.shackleSize / 2
-                        color: "transparent"
-                        border.color: lock.ink
-                        border.width: area.theme.lockStroke
+                    Item {
+                        anchors.centerIn: parent
+                        width: 2 * lock.bodyX + lock.bodyWidth
+                        height: lock.bodyY + lock.bodyHeight
+                        Rectangle {
+                            x: lock.shackleX
+                            y: lock.shackleY
+                            width: lock.shackleSize
+                            height: lock.shackleSize
+                            radius: lock.shackleSize / 2
+                            color: "transparent"
+                            border.color: lock.ink
+                            border.width: area.theme.lockStroke
+                        }
+                        Rectangle {
+                            x: lock.bodyX
+                            y: lock.bodyY
+                            width: lock.bodyWidth
+                            height: lock.bodyHeight
+                            radius: area.theme.radiusXs
+                            color: laneRow.locked ? lock.ink : area.theme.panel
+                            border.color: lock.ink
+                        }
                     }
-                    Rectangle {
-                        x: lock.bodyX
-                        y: lock.bodyY
-                        width: lock.bodyWidth
-                        height: lock.bodyHeight
-                        radius: area.theme.radiusXs
-                        color: laneRow.locked ? lock.ink : area.theme.panel
-                        border.color: lock.ink
-                    }
+                    CursorRing { visible: lock.cursor && grid.activeFocus }
                     MouseArea {
                         anchors.fill: parent
-                        onClicked: area.patterns.set_locked(laneRow.lane, !laneRow.locked)
+                        onClicked: {
+                            grid.moveTo(laneRow.lane, -1)
+                            grid.forceActiveFocus()
+                            area.patterns.set_locked(laneRow.lane, !laneRow.locked)
+                        }
                         Shell.Tip { text: laneRow.locked ? "Locked: kept when rolling" : "Lock this lane" }
                     }
                 }
@@ -686,10 +755,10 @@ Item {
                     Shell.Tip {}
                 }
                 Row {
-                    spacing: grid.gap
+                    spacing: 0
                     Repeater {
                         model: area.steps
-                        delegate: Rectangle {
+                        delegate: Item {
                             id: cell
                             required property int index
                             readonly property int step: index
@@ -699,13 +768,6 @@ Item {
                             objectName: "knockCell:" + laneRow.lane + ":" + step
                             width: grid.cellWidth
                             height: laneRow.height
-                            radius: area.theme.radiusMd
-                            clip: true
-                            // off, hit, accent, ghost, chance, ratchet
-                            color: kind === 0 ? (beat ? area.theme.line : area.theme.panel2)
-                                : kind === 4 || kind === 5 ? area.theme.panel2 : area.theme.strike
-                            opacity: kind === 1 ? area.theme.cellHitOpacity : kind === 3 ? area.theme.cellGhostOpacity : 1
-                            border.color: kind === 0 ? area.theme.line : area.theme.strike
                             Accessible.role: Accessible.Button
                             Accessible.name: area.laneName(laneRow.lane) + " step " + (step + 1)
                             Accessible.description: area.ready ? area.patterns.cell_names[kind] : ""
@@ -717,36 +779,59 @@ Item {
                             readonly property real hatchReach: 3
                             readonly property real ratchetStroke: 0.42
                             readonly property real ratchetSecondX: 0.58
-                            // Chance: a hatch.
-                            Repeater {
-                                model: cell.kind === 4 ? cell.hatchCount : 0
-                                delegate: Rectangle {
-                                    required property int index
-                                    x: index * cell.width / cell.hatchCount
-                                    y: -cell.height
-                                    width: area.theme.strokeBold
-                                    height: cell.height * cell.hatchReach
-                                    rotation: cell.hatchAngle
+                            Rectangle {
+                                id: face
+                                x: area.theme.stepGap / 2
+                                y: area.theme.laneGap / 2
+                                width: cell.width - area.theme.stepGap
+                                height: cell.height - area.theme.laneGap
+                                radius: area.theme.radiusMd
+                                clip: true
+                                // off, hit, accent, ghost, chance, ratchet
+                                color: cell.kind === 0 ? (cell.beat ? area.theme.line : area.theme.panel2)
+                                    : cell.kind === 4 || cell.kind === 5 ? area.theme.panel2 : area.theme.strike
+                                opacity: cell.kind === 1 ? area.theme.cellHitOpacity
+                                    : cell.kind === 3 ? area.theme.cellGhostOpacity : 1
+                                border.color: cell.kind === 0 ? area.theme.line : area.theme.strike
+                                // Chance: a hatch.
+                                Repeater {
+                                    model: cell.kind === 4 ? cell.hatchCount : 0
+                                    delegate: Rectangle {
+                                        required property int index
+                                        x: index * face.width / cell.hatchCount
+                                        y: -face.height
+                                        width: area.theme.strokeBold
+                                        height: face.height * cell.hatchReach
+                                        rotation: cell.hatchAngle
+                                        color: area.theme.strike
+                                    }
+                                }
+                                // Ratchet: two strokes with a gap between.
+                                Rectangle {
+                                    visible: cell.kind === 5
+                                    width: face.width * cell.ratchetStroke
+                                    height: face.height
+                                    color: area.theme.strike
+                                }
+                                Rectangle {
+                                    visible: cell.kind === 5
+                                    x: face.width * cell.ratchetSecondX
+                                    width: face.width * cell.ratchetStroke
+                                    height: face.height
                                     color: area.theme.strike
                                 }
                             }
-                            // Ratchet: two strokes with a gap between.
-                            Rectangle {
-                                visible: cell.kind === 5
-                                width: cell.width * cell.ratchetStroke
-                                height: cell.height
-                                color: area.theme.strike
-                            }
-                            Rectangle {
-                                visible: cell.kind === 5
-                                x: cell.width * cell.ratchetSecondX
-                                width: cell.width * cell.ratchetStroke
-                                height: cell.height
-                                color: area.theme.strike
+                            CursorRing {
+                                visible: grid.activeFocus && grid.cursorLane === laneRow.lane
+                                    && grid.cursorStep === cell.step
                             }
                             MouseArea {
                                 anchors.fill: parent
-                                onClicked: area.patterns.cycle_cell(laneRow.lane, cell.step)
+                                onClicked: {
+                                    grid.moveTo(laneRow.lane, cell.step)
+                                    grid.forceActiveFocus()
+                                    area.patterns.cycle_cell(laneRow.lane, cell.step)
+                                }
                             }
                         }
                     }

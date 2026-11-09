@@ -37,7 +37,10 @@ Rectangle {
     implicitHeight: chipHeight
     radius: panel.theme.chipRadius
     color: selected ? accent : panel.theme.soft(accent, fillAlpha)
-    border.color: selected ? accent : panel.theme.soft(accent, edgeAlpha)
+    // While focused, a bold edge in the text colour (a selected tab is
+    // already filled in the accent).
+    border.color: activeFocus ? panel.theme.text : selected ? accent : panel.theme.soft(accent, edgeAlpha)
+    border.width: activeFocus ? panel.theme.strokeBold : panel.theme.hairline
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
     Accessible.name: text + (focusKey !== "" ? ": click to edit, " : ": ") + "drag onto a knob to modulate it"

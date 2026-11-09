@@ -61,17 +61,6 @@ Rectangle {
     function louder(pair) {
         return Math.max(pair[0], pair[1])
     }
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        if (info.name === undefined)
-            return ""
-        return (info.group + " · " + info.name).toUpperCase()
-    }
-    function readoutValue(id) {
-        return id === "" || revision < 0 ? "" : controller.display(id)
-    }
     // What the curve does, in a line.
     function summary() {
         if (ratio <= 1.0001)
@@ -94,190 +83,74 @@ Rectangle {
 
     // ---- Header ----------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
-
-        Text {
-            id: wordmark
-            y: panel.theme.wordmarkY
-            text: "PRESS"
-            color: panel.theme.glacier
-            font.family: panel.theme.sans
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Light
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        Rectangle {
-            x: wordmark.x + panel.theme.wordmarkInset
-            y: wordmark.y + wordmark.height + panel.theme.underlineGap
-            width: wordmark.implicitWidth - panel.theme.underlineTrim
-            height: panel.theme.strokeBold
-            radius: height / 2
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0; color: panel.theme.accent }
-                GradientStop { position: 1; color: panel.theme.reduction }
-            }
-        }
-        Text {
-            x: wordmark.x + panel.theme.wordmarkInset
-            y: wordmark.y + wordmark.height + panel.theme.subtitleGap
-            text: "COMPRESSOR · " + (panel.keyed ? "KEYED" : "SELF-KEYED")
-            color: panel.theme.inkDim
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.subtitleSpacing
-        }
-
-        Row {
-            id: browser
-            x: panel.theme.browserX
-            y: panel.theme.browserY
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "pressPresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "pressPresetDisplay"
-                width: panel.theme.presetDisplayWidth
-                height: panel.theme.presetDisplayHeight
-                radius: panel.theme.radiusLg
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                border.width: activeFocus ? panel.theme.focusStroke : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.accent)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        brand: Component {
+            Item {
+                implicitWidth: wordmark.implicitWidth
+                implicitHeight: subtitle.y + subtitle.implicitHeight
                 Text {
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetCategoryY
-                    text: panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.captionSpacing
-                }
-                Text {
-                    objectName: "pressPresetName"
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetNameY
-                    width: panel.theme.presetNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeHeading
-                    font.letterSpacing: panel.theme.presetNameSpacing
-                    elide: Text.ElideRight
+                    id: wordmark
+                    objectName: "pressWordmark"
+                    text: "PRESS"
+                    color: panel.theme.wordmarkInk
+                    font.family: panel.theme.wordmarkFont
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.weight: panel.theme.wordmarkWeight
+                    font.letterSpacing: panel.theme.wordmarkSpacing
                 }
                 Rectangle {
-                    x: panel.theme.presetDividerX
-                    y: panel.theme.presetDividerInset
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.theme.presetDividerInset
-                    color: panel.theme.wellEdge
-                }
-                Text {
-                    objectName: "pressReadout"
-                    x: panel.theme.readoutX
-                    y: panel.theme.presetCategoryY
-                    width: display.width - x - panel.theme.readoutRight
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.tagSpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "pressReadoutValue"
-                    x: panel.theme.readoutX
-                    y: panel.theme.readoutValueY
-                    width: display.width - x - panel.theme.readoutRight
-                    text: panel.readoutValue(panel.theme.lastTouched)
-                    color: panel.theme.accent
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeSubtitle
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.chevronMargin
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.inkDim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
+                    x: panel.theme.wordmarkInset
+                    y: wordmark.height + panel.theme.underlineGap
+                    width: wordmark.implicitWidth - panel.theme.underlineTrim
+                    height: panel.theme.strokeBold
+                    radius: height / 2
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0; color: panel.theme.accent }
+                        GradientStop { position: 1; color: panel.theme.reduction }
                     }
                 }
+                Text {
+                    id: subtitle
+                    objectName: "pressSubtitle"
+                    x: panel.theme.wordmarkInset
+                    y: wordmark.height + panel.theme.subtitleGap
+                    text: "COMPRESSOR · " + (panel.keyed ? "KEYED" : "SELF-KEYED")
+                    color: panel.theme.subtitleInk
+                    font.pixelSize: panel.theme.subtitleSize
+                    font.bold: true
+                    font.letterSpacing: panel.theme.subtitleSpacing
+                }
             }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "pressPresetNext"
-                direction: 1
-            }
-        }
-
-        Kit.StatusBadge {
-            id: status
-            objectName: "pressStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: panel.theme.statusY
         }
     }
 
     // The key: lit when another track's sidechain send drives the detector.
+    // A tag, not a status: left of the header's status badge.
     Rectangle {
         id: keyedBadge
         objectName: "pressKeyed"
         visible: panel.keyed
-        x: header.x + header.width - status.width - width - panel.theme.keyedBadgeGap
-        y: header.y + panel.theme.statusY
-        width: keyedText.implicitWidth + panel.theme.statusPad
+        x: header.x + header.status.x - width - panel.theme.keyedBadgeGap
+        y: header.y + (header.rowHeight - height) / 2
+        width: keyedText.implicitWidth + panel.theme.keyedBadgePad
         height: panel.theme.statusHeight
         radius: height / 2
         color: Qt.rgba(panel.theme.key.r, panel.theme.key.g, panel.theme.key.b, panel.theme.keyedFillAlpha)
         border.color: Qt.rgba(panel.theme.key.r, panel.theme.key.g, panel.theme.key.b, panel.theme.statusEdgeAlpha)
         Accessible.role: Accessible.StaticText
         Accessible.name: "Keyed from " + panel.keyName
-        Rectangle {
-            x: panel.theme.statusLampX
-            anchors.verticalCenter: parent.verticalCenter
-            width: panel.theme.statusLampSize
-            height: panel.theme.statusLampSize
-            radius: width / 2
-            color: panel.theme.key
-        }
         Text {
             id: keyedText
             objectName: "pressKeyedText"
-            x: panel.theme.statusTextX
-            anchors.verticalCenter: parent.verticalCenter
+            anchors.centerIn: parent
             text: "KEYED · " + panel.keyName.toUpperCase()
             color: panel.theme.key
             font.pixelSize: panel.theme.typeSmall
@@ -554,6 +427,7 @@ Rectangle {
             diameter: panel.theme.dialDiameter
             readout: true
             inactive: !panel.highPass
+            inactiveReason: panel.highPass ? "" : "The detector's high-pass is off"
         }
         Note {
             x: panel.theme.cardPad

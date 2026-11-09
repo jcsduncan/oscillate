@@ -1,5 +1,6 @@
 import QtQuick
 import Oscillate.Format
+import "../devicekit" as Kit
 
 // A scrolling spectrogram under the spectrum, on the same frequency axis:
 // one row per new analysis, newest at the top, levels coloured from night
@@ -22,6 +23,13 @@ Item {
     readonly property int columns: Math.max(1, Math.round(plotWidth / theme.spectrogramColumnWidth))
     // Newest first, as raw dB points.
     property var history: []
+    // Whether rows are arriving (the mix plays and the picture is not
+    // frozen).
+    property bool live: false
+    // The age of the oldest row the strip shows, for the frame's time
+    // scale: newest (NOW) at the top.
+    readonly property real spanSeconds: visibleRows / pollsPerSecond
+    readonly property var timeTicks: [{ at: 0, label: Format.number(-spanSeconds) }, { at: 1, label: "NOW" }]
 
     readonly property real lowHz: 20
     readonly property real highHz: 20000
@@ -68,43 +76,59 @@ Item {
     onWidthChanged: canvas.requestPaint()
     onHeightChanged: canvas.requestPaint()
 
-    Canvas {
-        id: canvas
-        anchors.fill: parent
-        renderStrategy: Canvas.Cooperative
-        onPaint: {
-            const ctx = getContext("2d")
-            ctx.reset()
-            ctx.fillStyle = gram.theme.well
-            ctx.fillRect(0, 0, width, height)
-            const x0 = gram.plotX
-            const w = gram.plotWidth
-            const n = gram.columns
-            const bottom = gram.topDb - gram.rangeDb
-            // Which point each column shows.
-            const point = []
-            for (let c = 0; c < n; ++c)
-                point.push(Math.round((gram.points - 1) * (c + 0.5) / n))
-            for (let r = 0; r < gram.history.length; ++r) {
-                const row = gram.history[r]
-                const y = r * gram.rowHeight
-                let start = 0
-                let level = -1
-                for (let c = 0; c <= n; ++c) {
-                    let next = -1
-                    if (c < n) {
-                        const v = Math.max(0, Math.min(1, (row[point[c]] - bottom) / gram.rangeDb))
-                        next = Math.round(v * (gram.levels - 1))
-                    }
-                    if (next !== level) {
-                        // The darkest level is the background already.
-                        if (level > 0) {
-                            ctx.fillStyle = gram.colours[level]
-                            const left = x0 + w * start / n
-                            ctx.fillRect(left, y, x0 + w * c / n - left + gram.theme.spectrogramOverlap, gram.rowHeight)
+    // The strip's frame: its age in seconds up the left, on the
+    // spectrum's frequency axis (labelled under the spectrum above).
+    Kit.PlotFrame {
+        id: frame
+        objectName: "lensSpectrogramFrame"
+        x: gram.plotX - gram.theme.plotGutterLeft
+        width: gram.plotWidth + gram.theme.plotGutterLeft
+        height: gram.height
+        theme: gram.theme
+        live: gram.live
+        yUnit: "s"
+        yTicks: gram.timeTicks
+
+        Canvas {
+            id: canvas
+            x: -gram.plotX
+            width: gram.width
+            height: gram.height
+            renderStrategy: Canvas.Cooperative
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                ctx.fillStyle = gram.theme.well
+                ctx.fillRect(0, 0, width, height)
+                const x0 = gram.plotX
+                const w = gram.plotWidth
+                const n = gram.columns
+                const bottom = gram.topDb - gram.rangeDb
+                // Which point each column shows.
+                const point = []
+                for (let c = 0; c < n; ++c)
+                    point.push(Math.round((gram.points - 1) * (c + 0.5) / n))
+                for (let r = 0; r < gram.history.length; ++r) {
+                    const row = gram.history[r]
+                    const y = r * gram.rowHeight
+                    let start = 0
+                    let level = -1
+                    for (let c = 0; c <= n; ++c) {
+                        let next = -1
+                        if (c < n) {
+                            const v = Math.max(0, Math.min(1, (row[point[c]] - bottom) / gram.rangeDb))
+                            next = Math.round(v * (gram.levels - 1))
                         }
-                        start = c
-                        level = next
+                        if (next !== level) {
+                            // The darkest level is the background already.
+                            if (level > 0) {
+                                ctx.fillStyle = gram.colours[level]
+                                const left = x0 + w * start / n
+                                ctx.fillRect(left, y, x0 + w * c / n - left + gram.theme.spectrogramOverlap, gram.rowHeight)
+                            }
+                            start = c
+                            level = next
+                        }
                     }
                 }
             }
@@ -117,23 +141,5 @@ Item {
         height: gram.height
         color: "transparent"
         border.color: gram.theme.wellEdge
-    }
-    Text {
-        x: gram.plotX - width - gram.theme.spaceSm
-        y: gram.theme.hairline
-        text: "NOW"
-        color: gram.theme.inkDim
-        font.pixelSize: gram.theme.typeMicro
-        font.bold: true
-        font.letterSpacing: gram.theme.captionTightSpacing
-    }
-    Text {
-        x: gram.plotX - width - gram.theme.spaceSm
-        y: gram.height - height - gram.theme.hairline
-        // One row per poll, pollsPerSecond a second.
-        text: Format.seconds(-gram.visibleRows / gram.pollsPerSecond)
-        color: gram.theme.gridText
-        font.family: gram.theme.mono
-        font.pixelSize: gram.theme.typeMicro
     }
 }

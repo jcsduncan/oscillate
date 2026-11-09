@@ -65,7 +65,7 @@ KitTheme {
         return fader.activeFocus ? led : Qt.darker(fader.accent, faderCapRimDarken)
     }
     arrowWidth: 30
-    arrowHeight: 32
+    arrowHeight: presetDisplayHeight
     arrowRadius: 4
     arrowPrevious: "◀"
     arrowNext: "▶"
@@ -194,7 +194,9 @@ KitTheme {
     envelopeMargin: 1
     envelopePlotSide: 8
     envelopePlotTop: 22
-    envelopePlotBottom: 18
+    // The scale sits under the LCD (Kit.PlotFrame), so the plot needs no
+    // room for labels at its foot.
+    envelopePlotBottom: envelopePlotSide
     envelopeLineWidth: 1.8
     envelopeLineJoin: "round"
     envelopeFillOverLine: false
@@ -213,7 +215,9 @@ KitTheme {
     envelopeLabelSpacing: 1.4
     envelopeLabelInset: 9
     envelopeLabelTop: 5
-    envelopeLabelBottom: 3
+    plotTickInk: envelopeLabelInk
+    plotTickSize: envelopeLabelSize
+    plotChipFill: lcd
 
     // ---- Faceplate layout ------------------------------------------------------
     property int panelWidth: 1240
@@ -232,9 +236,11 @@ KitTheme {
     property real plateBodyTop: 28
     property color dividerInk: Qt.rgba(0, 0, 0, 0.12)
 
-    // Header: four slanted colour stripes, the italic wordmark and tagline.
+    // Header (Kit.DeviceHeader): four slanted colour stripes, the italic
+    // wordmark and its tagline; the kit's LCD between moulded arrows, and
+    // the touched control's readout on a second LCD.
     property real headerTop: 10
-    property int headerHeight: 46
+    headerHeight: 46
     property real stripesTop: 6
     property real stripeGap: 3
     property int stripeWidth: 8
@@ -244,22 +250,41 @@ KitTheme {
     // Horizontal shear of each stripe per pixel of height.
     property real stripeSlant: -0.22
     property real wordmarkGap: 14
-    property real wordmarkTop: -1
-    property int wordmarkSize: 30
-    property real wordmarkSpacing: 3
+    wordmarkSize: 30
+    wordmarkWeight: Font.Black
+    wordmarkSpacing: 3
+    wordmarkInk: ink
     property real taglineIndent: 2
     property real taglineRise: 4
-    property real taglineSpacing: 2.4
-    // Letter spacing of small printed legends (EDITED, GR, strip names).
+    subtitleSize: typeCaption
+    subtitleSpacing: 2.4
+    subtitleInk: red
+    // Letter spacing of small printed legends (GR, strip names).
     property real legendSpacing: 1
 
-    // The kit display between the arrows.
-    property int kitBoxWidth: 330
-    property int kitBoxHeight: 32
-    property real kitBoxInset: 10
-    property real kitCaptionSpacing: 1.2
-    property real kitNameReserve: 170
-    property real kitChevronInset: 9
+    presetDisplayWidth: 330
+    presetDisplayHeight: 36
+    presetDisplayRadius: radiusMd
+    presetFill: lcd
+    presetEdge: strip
+    presetFocusStroke: strokeBold
+    presetTextX: 10
+    presetTagY: 3
+    presetTagInk: orange
+    presetTagSpacing: 1.2
+    presetNameY: 14
+    presetNameInk: lcdText
+    presetChevronMargin: 9
+    presetChevronInk: stripDim
+    readoutWidth: 220
+    readoutFill: lcd
+    readoutEdge: strip
+    readoutRadius: radiusMd
+    readoutTextX: 10
+    readoutNameY: 3
+    readoutNameInk: stripDim
+    readoutValueY: 15
+    readoutValueInk: orange
 
     // Selected pad editor.
     property int editorTop: 66

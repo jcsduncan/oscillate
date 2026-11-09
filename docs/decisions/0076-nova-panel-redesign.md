@@ -1,6 +1,7 @@
 # ADR-0076 — Nova panel: resize and reflow, a signal spine, a browser that lets you play
 
 **Status:** Accepted; implemented, including the first revision (decisions 8–12) and revision 2 (decisions 13–19, design [ui/nova-overview-mockup.html](../ui/nova-overview-mockup.html)), which supersedes decisions 4 and 8–9 for page 0, the spine and the header. **Date:** 31 October 2026.
+**Superseded in part by:** [ADR-0103](0103-shared-device-panel-parts.md), for the zoom chips (now the editor window's, for every panel) and the status line (its readout and Live badge are now in the shared device header).
 **Builds on:** ADR-0054 (UI update architecture), ADR-0057 (Nova), ADR-0073 (Nova Analogue).
 **Panel design:** [ui/nova-redesign-mockup.html](../ui/nova-redesign-mockup.html). **Next:** ADR-0077 (✦ Constellation) fills the place this ADR reserves for it.
 

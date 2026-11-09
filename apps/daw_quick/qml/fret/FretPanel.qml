@@ -43,7 +43,6 @@ Rectangle {
     readonly property real designedWidth: 1280
     readonly property real designedHeight: 820
     readonly property real headerY: 20
-    readonly property real headerHeight: 52
     readonly property real headerSpacing: 18
     readonly property real lastNoteWidth: 140
     readonly property real feelTitleHeight: 36
@@ -113,191 +112,93 @@ Rectangle {
 
     // ---- Header ---------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.headerHeight
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        wordmark: "FRET"
+        subtitle: "Black and Blue · fingered 5-string · B0 to E4"
+    }
 
-        Row {
+    // Beside the status badge: the latest note as Feel played it, and the
+    // output.
+    Row {
+        x: header.x + header.status.x - panel.headerSpacing - width
+        y: header.y
+        height: header.rowHeight
+        spacing: panel.headerSpacing
+
+        Column {
             anchors.verticalCenter: parent.verticalCenter
-            spacing: panel.theme.titleGap
+            width: panel.lastNoteWidth
+            spacing: panel.theme.spaceXxs
             Text {
-                id: wordmark
-                text: "FRET"
-                color: panel.theme.ink
-                font.family: panel.theme.sans
-                font.pixelSize: panel.theme.wordmarkSize
-                font.weight: Font.Bold
-                font.letterSpacing: panel.theme.wordmarkSpacing
-            }
-            Text {
-                objectName: "fretSubtitle"
-                anchors.baseline: wordmark.baseline
-                text: "Black and Blue · fingered 5-string · B0 to E4"
+                text: "LAST NOTE"
                 color: panel.theme.inkDim
                 font.family: panel.theme.sans
-                font.pixelSize: panel.theme.typeSubtitle
+                font.pixelSize: panel.theme.typeSmall
+                font.letterSpacing: panel.theme.labelSpacing
+            }
+            Row {
+                spacing: panel.theme.spaceMd
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: panel.theme.swatch
+                    height: panel.theme.swatch
+                    radius: panel.theme.radiusXs
+                    visible: lastNote.known
+                    color: panel.theme.articulationColor(panel.live.last_articulation)
+                    border.width: panel.live.last_pushed === true ? panel.theme.strokeBold : 0
+                    border.color: panel.theme.pushedRing
+                }
+                Text {
+                    id: lastNote
+                    objectName: "fretLastNote"
+                    readonly property bool known: panel.live.live === true && panel.live.last_key >= 0
+                    text: known ? panel.live.last_name + " · " + panel.live.last_velocity + " · "
+                                  + panel.live.last_articulation + (panel.live.last_pushed ? " · pushed" : "")
+                                : "—"
+                    color: panel.theme.ink
+                    font.family: panel.theme.mono
+                    font.pixelSize: panel.theme.typeLabel
+                }
             }
         }
 
         Row {
-            anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            spacing: panel.headerSpacing
-
-            Row {
-                spacing: panel.theme.spaceXs
-                Kit.PresetArrow {
-                    objectName: "fretPresetPrevious"
-                    controller: panel.controller
-                    theme: panel.theme
-                    direction: -1
-                }
+            spacing: panel.theme.captionGap
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "OUT"
+                color: panel.theme.inkDim
+                font.family: panel.theme.sans
+                font.pixelSize: panel.theme.typeLabel
+                font.letterSpacing: panel.theme.labelSpacing
+            }
+            Rectangle {
+                id: meter
+                objectName: "fretOutputMeter"
+                readonly property real peakDb: panel.live.live === true && panel.live.output_peak_db !== undefined
+                    ? panel.live.output_peak_db : panel.theme.meterFloorDb
+                readonly property real level: Math.max(0, Math.min(1,
+                    (peakDb - panel.theme.meterFloorDb) / (panel.theme.meterCeilDb - panel.theme.meterFloorDb)))
+                anchors.verticalCenter: parent.verticalCenter
+                width: panel.theme.meterWidth
+                height: panel.theme.meterHeight
+                radius: height / 2
+                color: panel.theme.track
+                clip: true
+                Accessible.role: Accessible.ProgressBar
+                Accessible.name: "Output level"
                 Rectangle {
-                    id: presetBox
-                    objectName: "fretPresetDisplay"
-                    width: panel.theme.presetWidth
-                    height: panel.theme.presetHeight
-                    radius: panel.theme.tileRadius
-                    color: panel.theme.tile
-                    border.color: activeFocus ? panel.theme.pluck : panel.theme.tileEdge
-                    activeFocusOnTab: true
-                    Accessible.role: Accessible.ComboBox
-                    Accessible.name: "Preset"
-                    Accessible.description: panel.controller.preset_name
-                        + (panel.controller.preset_modified ? ", edited" : "")
-                    function openPresets() {
-                        if (panel.controller.editable)
-                            menu.openPresets(presetBox, panel.controller, panel.theme.pluck)
-                    }
-                    Keys.onReturnPressed: openPresets()
-                    Keys.onSpacePressed: openPresets()
-                    Row {
-                        x: panel.theme.presetInset
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: panel.theme.captionGap
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: panel.controller.preset_modified ? "EDITED" : "PRESET"
-                            color: panel.theme.inkDim
-                            font.family: panel.theme.sans
-                            font.pixelSize: panel.theme.typeLabel
-                            font.letterSpacing: panel.theme.labelSpacing
-                        }
-                        Text {
-                            objectName: "fretPresetName"
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: presetBox.width - panel.theme.presetNameRoom
-                            text: panel.controller.preset_name !== "" ? panel.controller.preset_name : "Custom"
-                            color: panel.theme.ink
-                            font.family: panel.theme.sans
-                            font.pixelSize: panel.theme.typeSubtitle
-                            elide: Text.ElideRight
-                        }
-                    }
-                    Text {
-                        anchors.right: parent.right
-                        anchors.rightMargin: panel.theme.presetChevronInset
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "▾"
-                        color: panel.theme.inkDim
-                        font.pixelSize: panel.theme.typeLabel
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        enabled: panel.controller.editable
-                        onClicked: {
-                            presetBox.forceActiveFocus()
-                            presetBox.openPresets()
-                        }
-                    }
-                }
-                Kit.PresetArrow {
-                    objectName: "fretPresetNext"
-                    controller: panel.controller
-                    theme: panel.theme
-                    direction: 1
-                }
-            }
-
-            // The latest note as Feel played it.
-            Column {
-                anchors.verticalCenter: parent.verticalCenter
-                width: panel.lastNoteWidth
-                spacing: panel.theme.spaceXxs
-                Text {
-                    text: "LAST NOTE"
-                    color: panel.theme.inkDim
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeSmall
-                    font.letterSpacing: panel.theme.labelSpacing
-                }
-                Row {
-                    spacing: panel.theme.spaceMd
-                    Rectangle {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: panel.theme.swatch
-                        height: panel.theme.swatch
-                        radius: panel.theme.radiusXs
-                        visible: lastNote.known
-                        color: panel.theme.articulationColor(panel.live.last_articulation)
-                        border.width: panel.live.last_pushed === true ? panel.theme.strokeBold : 0
-                        border.color: panel.theme.pushedRing
-                    }
-                    Text {
-                        id: lastNote
-                        objectName: "fretLastNote"
-                        readonly property bool known: panel.live.live === true && panel.live.last_key >= 0
-                        text: known ? panel.live.last_name + " · " + panel.live.last_velocity + " · "
-                                      + panel.live.last_articulation + (panel.live.last_pushed ? " · pushed" : "")
-                                    : "—"
-                        color: panel.theme.ink
-                        font.family: panel.theme.mono
-                        font.pixelSize: panel.theme.typeLabel
-                    }
-                }
-            }
-
-            Kit.StatusBadge {
-                objectName: "fretStatus"
-                anchors.verticalCenter: parent.verticalCenter
-                controller: panel.controller
-                theme: panel.theme
-            }
-
-            Row {
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: panel.theme.captionGap
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "OUT"
-                    color: panel.theme.inkDim
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeLabel
-                    font.letterSpacing: panel.theme.labelSpacing
-                }
-                Rectangle {
-                    id: meter
-                    objectName: "fretOutputMeter"
-                    readonly property real peakDb: panel.live.live === true && panel.live.output_peak_db !== undefined
-                        ? panel.live.output_peak_db : panel.theme.meterFloorDb
-                    readonly property real level: Math.max(0, Math.min(1,
-                        (peakDb - panel.theme.meterFloorDb) / (panel.theme.meterCeilDb - panel.theme.meterFloorDb)))
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: panel.theme.meterWidth
-                    height: panel.theme.meterHeight
-                    radius: height / 2
-                    color: panel.theme.track
-                    clip: true
-                    Accessible.role: Accessible.ProgressBar
-                    Accessible.name: "Output level"
-                    Rectangle {
-                        width: parent.width * meter.level
-                        height: parent.height
-                        color: meter.peakDb > 0 ? panel.theme.warning : panel.theme.pluck
-                    }
+                    width: parent.width * meter.level
+                    height: parent.height
+                    color: meter.peakDb > 0 ? panel.theme.warning : panel.theme.pluck
                 }
             }
         }

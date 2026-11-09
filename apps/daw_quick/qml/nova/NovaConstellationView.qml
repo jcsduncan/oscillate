@@ -63,6 +63,9 @@ Item {
     readonly property real mixMinimumWidth: 80
     readonly property real mixReserve: 70
     readonly property int toastMs: 2600
+    // Keys move the morph cursor this share of the sky (Shift: the coarse share).
+    readonly property real keyStep: 0.02
+    readonly property real keyCoarseStep: 0.1
 
     // The cursor in sky pixels, or null; the stars it blends
     // [{key, weight, x, y, category}].
@@ -123,6 +126,17 @@ Item {
         near = blendAt(px, py)
         constellation.morph(near.map(n => ({ key: n.key, weight: n.weight })))
         sky.requestPaint()
+    }
+    // One arrow key's morph: the cursor (from the sky's centre the first
+    // time) moved by (dx, dy) shares of the sky, as one gesture.
+    function keyMorph(dx, dy) {
+        if (constellation === null || allStars.length === 0)
+            return
+        const from = cursor !== null ? cursor : [sky.width / 2, sky.height / 2]
+        constellation.begin_morph()
+        morphTo(Math.max(0, Math.min(sky.width, from[0] + dx * sky.width)),
+                Math.max(0, Math.min(sky.height, from[1] + dy * sky.height)))
+        constellation.end_morph()
     }
     function mixText() {
         const parts = constellation ? constellation.blend : []
@@ -241,9 +255,45 @@ Item {
         anchors.top: parent.top
         anchors.bottom: bar.top
         renderStrategy: Canvas.Cooperative
+        // A map of the presets by timbre, not a measured plot.
+        readonly property string plotExemptReason: "a map of the presets by timbre: brightness across and envelope length up are relative and unitless, labelled in words"
+        // Arrow keys move the morph cursor (Shift: further); Return loads the
+        // nearest star.
+        activeFocusOnTab: view.constellation !== null && view.allStars.length > 0
+        Accessible.role: Accessible.Graphic
+        Accessible.name: "Preset constellation"
+        Accessible.description: "Arrow keys move the morph cursor between presets; Return loads the nearest preset"
+        Keys.onPressed: event => {
+            const step = (event.modifiers & Qt.ShiftModifier) !== 0 ? view.keyCoarseStep : view.keyStep
+            if (event.key === Qt.Key_Left)
+                view.keyMorph(-step, 0)
+            else if (event.key === Qt.Key_Right)
+                view.keyMorph(step, 0)
+            else if (event.key === Qt.Key_Up)
+                view.keyMorph(0, -step)
+            else if (event.key === Qt.Key_Down)
+                view.keyMorph(0, step)
+            else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && view.near.length > 0) {
+                view.constellation.apply_star(view.near[0].key)
+                view.cursor = null
+                view.near = []
+                sky.requestPaint()
+            } else
+                return
+            event.accepted = true
+        }
         onWidthChanged: requestPaint()
         onHeightChanged: requestPaint()
         onPaint: view.paintSky(getContext("2d"))
+
+        // The focus ring while the keys move the cursor.
+        Rectangle {
+            visible: sky.activeFocus
+            anchors.fill: parent
+            color: "transparent"
+            border.color: view.theme.vi
+            border.width: view.theme.strokeBold
+        }
 
         MouseArea {
             objectName: "novaConstellationArea"
@@ -251,6 +301,7 @@ Item {
             enabled: view.constellation !== null && view.allStars.length > 0
             cursorShape: Qt.CrossCursor
             onPressed: mouse => {
+                sky.forceActiveFocus()
                 const hit = view.starAt(mouse.x, mouse.y)
                 if (hit) {
                     view.constellation.apply_star(hit.key)
@@ -342,7 +393,14 @@ Item {
         implicitHeight: view.theme.constellationChipHeight
         radius: view.theme.radiusMd
         color: active ? view.theme.soft(tone, view.theme.constellationChipFillAlpha) : "transparent"
-        border.color: active ? tone : view.theme.line
+        border.color: activeFocus || active ? tone : view.theme.line
+        border.width: activeFocus ? view.theme.strokeBold : view.theme.hairline
+        activeFocusOnTab: true
+        Accessible.role: Accessible.Button
+        Accessible.name: label
+        Accessible.checked: active
+        Keys.onReturnPressed: chip.clicked()
+        Keys.onSpacePressed: chip.clicked()
         Text {
             id: caption
             anchors.centerIn: parent

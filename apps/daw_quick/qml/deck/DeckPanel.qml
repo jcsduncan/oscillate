@@ -44,13 +44,6 @@ Rectangle {
 
     // A band's bottom stop, where it reads as fully cut.
     readonly property real bottomStopDb: -40
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        return info.name === undefined ? "" : (info.group + " · " + info.name).toUpperCase()
-    }
-    function readoutValue(id) { return id === "" || revision < 0 ? "" : controller.display(id) }
     // A band's shown state: KILLED, or its gain (−∞ at the bottom stop).
     function bandState(name) {
         if (revision < 0)
@@ -70,160 +63,54 @@ Rectangle {
 
     // ---- Header ----------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
-
-        Text {
-            id: wordmark
-            y: panel.theme.spaceXxs
-            text: "DECK"
-            color: panel.theme.glacier
-            font.family: panel.theme.sans
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Light
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        // The three band colours, as one rule.
-        Row {
-            x: wordmark.x + panel.theme.spaceXxs
-            y: wordmark.y + wordmark.height + panel.theme.wordmarkRuleGap
-            Repeater {
-                model: panel.theme.bands.length
-                delegate: Rectangle {
-                    required property int index
-                    width: (wordmark.implicitWidth - panel.theme.wordmarkRuleInset) / panel.theme.bands.length
-                    height: panel.theme.wordmarkRuleHeight
-                    color: panel.theme.bands[index]
-                }
-            }
-        }
-        Text {
-            x: wordmark.x + panel.theme.spaceXxs
-            y: wordmark.y + wordmark.height + panel.theme.subtitleGap
-            text: "DJ ISOLATOR · THREE BANDS"
-            color: panel.theme.inkDim
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.subtitleSpacing
-        }
-
-        Row {
-            x: panel.theme.presetX
-            y: panel.theme.presetY
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "deckPresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "deckPresetDisplay"
-                width: panel.theme.presetWidth
-                height: panel.theme.presetHeight
-                radius: panel.theme.radiusLg
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                border.width: activeFocus ? panel.theme.focusStroke : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.accent)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        // The wordmark over the three band colours as one rule.
+        brand: Component {
+            Item {
+                implicitWidth: Math.max(wordmark.implicitWidth, subtitle.x + subtitle.implicitWidth)
+                implicitHeight: subtitle.y + subtitle.implicitHeight
                 Text {
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetCaptionY
-                    text: panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.captionSpacing
+                    id: wordmark
+                    objectName: "deckWordmark"
+                    text: "DECK"
+                    color: panel.theme.wordmarkInk
+                    font.family: panel.theme.wordmarkFont
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.weight: panel.theme.wordmarkWeight
+                    font.letterSpacing: panel.theme.wordmarkSpacing
                 }
-                Text {
-                    objectName: "deckPresetName"
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetNameY
-                    width: panel.theme.presetNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeHeading
-                    font.letterSpacing: panel.theme.presetNameSpacing
-                    elide: Text.ElideRight
-                }
-                Rectangle {
-                    x: panel.theme.presetDividerX
-                    y: panel.theme.presetDividerInset
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.theme.presetDividerInset
-                    color: panel.theme.wellEdge
-                }
-                Text {
-                    objectName: "deckReadout"
-                    x: panel.theme.readoutX
-                    y: panel.theme.presetCaptionY
-                    width: display.width - x - panel.theme.readoutRight
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.readoutSpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "deckReadoutValue"
-                    x: panel.theme.readoutX
-                    y: panel.theme.readoutValueY
-                    width: display.width - x - panel.theme.readoutRight
-                    text: panel.readoutValue(panel.theme.lastTouched)
-                    color: panel.theme.accent
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeSubtitle
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.chevronMargin
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.inkDim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
+                Row {
+                    x: panel.theme.spaceXxs
+                    y: wordmark.height + panel.theme.wordmarkRuleGap
+                    Repeater {
+                        model: panel.theme.bands.length
+                        delegate: Rectangle {
+                            required property int index
+                            width: (wordmark.implicitWidth - panel.theme.wordmarkRuleInset) / panel.theme.bands.length
+                            height: panel.theme.wordmarkRuleHeight
+                            color: panel.theme.bands[index]
+                        }
                     }
                 }
+                Text {
+                    id: subtitle
+                    objectName: "deckSubtitle"
+                    x: panel.theme.spaceXxs
+                    y: wordmark.height + panel.theme.subtitleGap
+                    text: "DJ ISOLATOR · THREE BANDS"
+                    color: panel.theme.subtitleInk
+                    font.pixelSize: panel.theme.subtitleSize
+                    font.bold: true
+                    font.letterSpacing: panel.theme.subtitleSpacing
+                }
             }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "deckPresetNext"
-                direction: 1
-            }
-        }
-
-        Kit.StatusBadge {
-            objectName: "deckStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: panel.theme.statusY
         }
     }
 
@@ -242,14 +129,26 @@ Rectangle {
         y: panel.bodyY
         width: panel.leftWidth
         height: panel.theme.responseHeight
-        DeckResponse {
-            objectName: "deckResponse"
+        // Drawn from the settings (the bands' gains, kills and crossovers),
+        // so always a PREVIEW of what plays.
+        Kit.PlotFrame {
             x: panel.theme.screenInset
             y: panel.theme.cardBodyY
             width: responsePlate.width - 2 * panel.theme.screenInset
             height: responsePlate.height - panel.theme.cardBodyY - panel.theme.screenInset
-            controller: panel.controller
             theme: panel.theme
+            live: false
+            xUnit: "Hz"
+            yUnit: "dB"
+            xTicks: response.frequencyTicks
+            yTicks: response.levelTicks
+            DeckResponse {
+                id: response
+                objectName: "deckResponse"
+                anchors.fill: parent
+                controller: panel.controller
+                theme: panel.theme
+            }
         }
     }
 
@@ -367,6 +266,7 @@ Rectangle {
                         // The arc grows from the 0 dB detent.
                         origin: 40 / 46
                         inactive: bandRow.killed
+                        inactiveReason: bandRow.killed ? "Gain is ignored while the band is killed" : ""
                     }
                     Text {
                         x: panel.theme.bandTextX

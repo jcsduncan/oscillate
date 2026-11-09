@@ -46,6 +46,8 @@ Rectangle {
     // The length tiles, in bars under a caption that says so: seven
     // tiles leave no room for the word on each.
     readonly property var lengthTiles: ["1/16", "1/8", "1/4", "1/2", "1", "2", "4"]
+    // The first length (1 BAR) whose grid counts bars rather than beats.
+    readonly property int firstBarLength: 4
     readonly property var channelNames: ["MID", "SIDE", "LEFT", "RIGHT"]
     readonly property bool overlayOn: revision >= 0 && controller.choice("scope.overlay") === 1
     readonly property bool alignOn: revision >= 0 && controller.choice("scope.align") === 1
@@ -152,7 +154,7 @@ Rectangle {
         const labels = []
         if (sync) {
             const sixteenths = [1, 2, 4, 8, 16, 32, 64][Math.max(0, Math.min(6, length))]
-            const bars = length >= 4
+            const bars = length >= panel.firstBarLength
             const count = ["1", "e", "&", "a"]
             for (let i = 0; i <= sixteenths; ++i) {
                 const weight = bars && i % 16 === 0 ? 2 : i % 4 === 0 ? 1 : 0
@@ -180,22 +182,10 @@ Rectangle {
             for (let i = 0; i <= 10; ++i) {
                 lines.push({ at: i / 10, weight: i === 5 ? 1 : 0 })
                 if (i % 2 === 0 && i < 10 && windowMs > 0)
-                    labels.push({ at: i / 10, text: i === 0 ? "0" : msText(windowMs * i / 10) })
+                    labels.push({ at: i / 10, text: i === 0 ? "0" : Format.number(windowMs * i / 10) })
             }
         }
         return { lines: lines, labels: labels }
-    }
-
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        if (info.name === undefined)
-            return ""
-        return (info.group === info.name ? info.name : info.group + " · " + info.name).toUpperCase()
-    }
-    function readoutValue(id) {
-        return id === "" || revision < 0 ? "" : controller.display(id)
     }
 
     // A plate: a fine bevel along the top, the title in spaced caps.
@@ -208,160 +198,53 @@ Rectangle {
 
     // ---- Header ----------------------------------------------------------------------
 
-    Item {
+    // The wordmark is underlined in the two inks, track to sidechain.
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
-
-        Text {
-            id: wordmark
-            y: panel.theme.wordmarkY
-            text: "SCOPE"
-            color: panel.theme.glacier
-            font.family: panel.theme.sans
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Light
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        Rectangle {
-            x: wordmark.x + panel.theme.wordmarkInset
-            y: wordmark.y + wordmark.height + panel.theme.underlineGap
-            width: wordmark.implicitWidth - panel.theme.underlineTrim
-            height: panel.theme.strokeBold
-            radius: height / 2
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0; color: panel.theme.trace }
-                GradientStop { position: 1; color: panel.theme.key }
-            }
-        }
-        Text {
-            x: wordmark.x + panel.theme.wordmarkInset
-            y: wordmark.y + wordmark.height + panel.theme.subtitleGap
-            text: "OSCILLOSCOPE · ALIGNMENT"
-            color: panel.theme.inkDim
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.subtitleSpacing
-        }
-
-        Row {
-            id: browser
-            x: panel.theme.browserX
-            y: panel.theme.browserY
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "scopePresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "scopePresetDisplay"
-                width: panel.theme.presetDisplayWidth
-                height: panel.theme.presetDisplayHeight
-                radius: panel.theme.radiusLg
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                border.width: activeFocus ? panel.theme.focusStroke : panel.theme.hairline
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                Accessible.description: panel.controller.preset_name
-                    + (panel.controller.preset_modified ? ", edited" : "")
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.accent)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        brand: Component {
+            Item {
+                implicitWidth: wordmark.implicitWidth
+                implicitHeight: subtitle.y + subtitle.implicitHeight
                 Text {
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetCategoryY
-                    text: panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.captionSpacing
-                }
-                Text {
-                    objectName: "scopePresetName"
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetNameY
-                    width: panel.theme.presetNameWidth
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeHeading
-                    font.letterSpacing: panel.theme.presetNameSpacing
-                    elide: Text.ElideRight
+                    id: wordmark
+                    objectName: "scopeWordmark"
+                    text: "SCOPE"
+                    color: panel.theme.wordmarkInk
+                    font.family: panel.theme.wordmarkFont
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.weight: panel.theme.wordmarkWeight
+                    font.letterSpacing: panel.theme.wordmarkSpacing
                 }
                 Rectangle {
-                    x: panel.theme.presetDividerX
-                    y: panel.theme.presetDividerInset
-                    width: panel.theme.hairline
-                    height: parent.height - 2 * panel.theme.presetDividerInset
-                    color: panel.theme.wellEdge
-                }
-                Text {
-                    objectName: "scopeReadout"
-                    x: panel.theme.readoutX
-                    y: panel.theme.presetCategoryY
-                    width: display.width - x - panel.theme.readoutRight
-                    text: panel.readoutName(panel.theme.lastTouched)
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.tagSpacing
-                    elide: Text.ElideRight
-                }
-                Text {
-                    objectName: "scopeReadoutValue"
-                    x: panel.theme.readoutX
-                    y: panel.theme.readoutValueY
-                    width: display.width - x - panel.theme.readoutRight
-                    text: panel.readoutValue(panel.theme.lastTouched)
-                    color: panel.theme.accent
-                    font.family: panel.theme.mono
-                    font.pixelSize: panel.theme.typeSubtitle
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.chevronMargin
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.inkDim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
+                    x: wordmark.x + panel.theme.wordmarkInset
+                    y: wordmark.y + wordmark.height + panel.theme.underlineGap
+                    width: wordmark.implicitWidth - panel.theme.underlineTrim
+                    height: panel.theme.strokeBold
+                    radius: height / 2
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0; color: panel.theme.trace }
+                        GradientStop { position: 1; color: panel.theme.key }
                     }
                 }
+                Text {
+                    id: subtitle
+                    objectName: "scopeSubtitle"
+                    x: wordmark.x + panel.theme.wordmarkInset
+                    y: wordmark.y + wordmark.height + panel.theme.subtitleGap
+                    text: "OSCILLOSCOPE · ALIGNMENT"
+                    color: panel.theme.subtitleInk
+                    font.pixelSize: panel.theme.subtitleSize
+                    font.bold: true
+                    font.letterSpacing: panel.theme.subtitleSpacing
+                }
             }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "scopePresetNext"
-                direction: 1
-            }
-        }
-
-        Kit.StatusBadge {
-            id: status
-            objectName: "scopeStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: panel.theme.statusY
         }
     }
 
@@ -435,6 +318,7 @@ Rectangle {
             overlay: panel.overlayOn
             lines: panel.grid.lines
             labels: panel.grid.labels
+            timeUnit: !panel.synced ? "ms" : panel.lengthIndex >= panel.firstBarLength ? "bars" : "beats"
         }
     }
 

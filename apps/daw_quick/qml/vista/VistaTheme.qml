@@ -71,38 +71,37 @@ KitTheme {
     // Small spaced-caps captions over controls.
     property real captionSpacing: 1.4
 
-    // Header: the wordmark, the preset browser and the status badge.
+    // The header (Kit.DeviceHeader): the wordmark over its fading underline
+    // and subtitle, the preset browser and, once a control is touched, its
+    // readout.
     property real headerY: 10
-    property int headerHeight: 54
-    property real wordmarkY: 2
-    property int wordmarkSize: 27
-    property real wordmarkSpacing: 12
+    headerHeight: 54
+    wordmarkInk: glacier
+    wordmarkSize: 27
+    wordmarkSpacing: 12
     // The underline and subtitle sit just in from the wordmark's edge.
     property real wordmarkIndent: 2
     property real wordmarkUnderlineGap: 1
     property color wordmarkFade: Qt.rgba(steel.r, steel.g, steel.b, 0.1)
-    property real subtitleGap: 7
-    property real subtitleSpacing: 2.6
-    property real browserX: 220
-    property real browserY: 5
-    property int presetDisplayWidth: 560
-    property int presetDisplayHeight: 42
-    property real presetFocusStroke: 1.5
-    property real presetTextX: 14
-    // The small caption row (category, last-touched name) and the large row below.
-    property real presetCaptionY: 5
-    property real presetNameY: 16
-    property int presetNameWidth: 250
-    property real presetNameSpacing: 0.6
-    property real presetDividerX: 276
-    property real presetDividerInset: 8
-    property real readoutX: 288
-    property real readoutValueY: 17
-    // Room kept clear for the chevron at the readout's right.
-    property real readoutRight: 26
-    property real readoutSpacing: 1.2
-    property real presetChevronMargin: 10
-    property real statusY: 14
+    subtitleGap: 7
+    subtitleSpacing: 2.6
+    subtitleInk: inkDim
+    headerBrowserX: 220
+    presetDisplayWidth: 276
+    presetDisplayHeight: 42
+    presetDisplayRadius: radiusLg
+    presetTextX: 14
+    presetTagY: 5
+    presetTagSpacing: captionSpacing
+    presetNameY: 16
+    presetNameBold: false
+    presetChevronMargin: 10
+    presetChevronInk: inkDim
+    readoutWidth: 260
+    readoutTextX: 14
+    readoutNameY: 5
+    readoutValueY: 17
+    readoutSpacing: 1.2
 
     // The image row: vectorscope, bands, overall width.
     property real imageRowY: 76
@@ -217,11 +216,10 @@ KitTheme {
     // ---- Band strip ---------------------------------------------------------------------
     property int bandsDefaultWidth: 600
     property int bandsDefaultHeight: 260
-    // The plot area's insets within the strip.
-    property real bandsPlotLeft: 40
+    // The plot frame's insets within the strip: room above for the band
+    // names, and at the right.
     property real bandsPlotTop: 26
     property real bandsPlotRight: 12
-    property real bandsPlotBottom: 26
     // The dashed line at 100% width.
     property var bandsUnityDash: [4, 3]
     property color monoShade: Qt.rgba(steel.r, steel.g, steel.b, 0.16)
@@ -252,7 +250,7 @@ KitTheme {
     property int chipHeight: 16
     // Crossover handles.
     property int handleWidth: 56
-    property real handleGrabWidth: 14
+    property real handleGrabWidth: minHitSize
     property real gripPad: 12
     property int gripHeight: 16
 }

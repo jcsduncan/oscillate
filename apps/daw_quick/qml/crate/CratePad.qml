@@ -29,8 +29,8 @@ Rectangle {
     implicitHeight: theme.padHeight
     radius: theme.padRadius
     color: selected ? theme.padSelected : theme.padFill
-    border.color: selected || sounding ? tint : theme.padEdge
-    border.width: selected || sounding ? theme.padActiveEdgeWidth : theme.hairline
+    border.color: activeFocus ? theme.accent : selected || sounding ? tint : theme.padEdge
+    border.width: activeFocus ? theme.focusEdgeWidth : selected || sounding ? theme.padActiveEdgeWidth : theme.hairline
     opacity: empty ? theme.padEmptyOpacity : 1
     activeFocusOnTab: !empty
     Accessible.role: Accessible.Button
@@ -38,13 +38,15 @@ Rectangle {
         + ", " + Contract.noteName(key)
     Accessible.description: (selected ? "Selected. " : "") + "Press to select and play"
     Keys.onPressed: event => {
-        if (event.key === Qt.Key_Space && !event.isAutoRepeat && !empty) {
+        if ((event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                && !event.isAutoRepeat && !empty) {
             pad.pressedPad()
             event.accepted = true
         }
     }
     Keys.onReleased: event => {
-        if (event.key === Qt.Key_Space && !event.isAutoRepeat && !empty) {
+        if ((event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                && !event.isAutoRepeat && !empty) {
             pad.releasedPad()
             event.accepted = true
         }
@@ -119,6 +121,8 @@ Rectangle {
     MouseArea {
         anchors.fill: parent
         enabled: !pad.empty
+        // An empty pad takes no click (and no Tab stop).
+        acceptedButtons: pad.empty ? Qt.NoButton : Qt.LeftButton
         onPressed: pad.pressedPad()
         onReleased: pad.releasedPad()
         onCanceled: pad.releasedPad()

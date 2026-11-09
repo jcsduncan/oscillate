@@ -236,7 +236,7 @@ KitTheme {
     property int panelWidth: 1240
     property real cheekWidth: 26
     property real panelMargin: 10
-    property real headerHeight: 50
+    headerHeight: 50
     property real row1Height: 296
     property real row2Height: 318
 
@@ -252,20 +252,45 @@ KitTheme {
     // Grain lines cycle through this many alpha steps.
     property int grainAlphaCycle: 3
 
-    // Header: flame, wordmark, preset display and status.
+    // Header (Kit.DeviceHeader): the drawn flame before the wordmark, the
+    // amber tagline under it; an engraved preset display and readout.
     property real flameWidth: 26
     property real flameHeight: 32
     property real wordmarkGap: 10
-    property real wordmarkTop: 6
-    property int wordmarkSize: 22
-    property real wordmarkSpacing: 6
-    property real taglineSpacing: 2
-    property real presetBoxWidth: 310
-    property real presetBoxHeight: 28
-    property real presetCategorySpacing: 1.2
-    // Room the category and EDITED legends leave beside the preset name.
-    property real presetNameReserve: 150
-    property real presetEditedRight: 22
+    wordmarkSize: 22
+    wordmarkWeight: Font.Bold
+    wordmarkSpacing: 6
+    wordmarkInk: cream
+    subtitleGap: -spaceXxs
+    subtitleSpacing: 2
+    subtitleInk: amber
+    property real taglineIndent: 1
+    headerBrowserX: 220
+    presetDisplayWidth: 310
+    presetDisplayHeight: 36
+    presetDisplayRadius: radiusSm
+    presetFill: engraving
+    presetEdge: line
+    presetFocusStroke: hairline
+    presetTextX: spaceMd
+    presetTagY: 3
+    presetTagSize: typeCaption
+    presetTagInk: amber
+    presetNameY: 15
+    presetNameSize: typeSubtitle
+    presetNameInk: gold
+    presetChevronMargin: spaceMd
+    presetChevronInk: dim
+    readoutWidth: 220
+    readoutFill: engraving
+    readoutEdge: line
+    readoutRadius: radiusSm
+    readoutTextX: spaceMd
+    readoutNameY: 3
+    readoutNameInk: dim
+    readoutValueY: 15
+    readoutValueInk: gold
+    // The next-note legend under the status badge.
     property real noteHintGap: 5
     property real noteHintMarkSize: 5
     property real noteHintMarkRotation: 45

@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import "../devicekit" as Kit
-import "../shell" as Shell
 import Oscillate.Format
 
 // The Knock percussion panel (ADR-0068): eight
@@ -239,141 +238,59 @@ Rectangle {
 
     // ---- Header ---------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.theme.spaceXl
-        y: 0
+        y: panel.theme.headerY
         width: panel.width - 2 * panel.theme.spaceXl
-        height: panel.theme.headerHeight
-
-        Row {
-            id: wordmark
-            y: panel.theme.wordmarkTop
-            Repeater {
-                model: ["KN", "O", "CK"]
-                delegate: Text {
-                    required property string modelData
-                    required property int index
-                    text: modelData
-                    color: index === 1 ? panel.theme.strike : panel.theme.ink
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.wordmarkSize
-                    font.weight: Font.Black
-                    font.letterSpacing: panel.theme.wordmarkSpacing
-                }
-            }
-        }
-        Text {
-            y: wordmark.y + wordmark.height + panel.theme.taglineGap
-            text: "MODELLED PERCUSSION"
-            color: panel.theme.inkDim
-            font.family: panel.theme.sans
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.taglineSpacing
-        }
-
-        Row {
-            x: panel.theme.kitBoxX
-            y: panel.theme.kitBoxTop
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                objectName: "knockKitPrevious"
-                controller: panel.controller
-                theme: panel.theme
-                direction: -1
-            }
-            Rectangle {
-                id: kitBox
-                objectName: "knockKitBox"
-                width: panel.theme.kitBoxWidth
-                height: panel.theme.kitBoxHeight
-                radius: panel.theme.kitBoxRadius
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.strike : panel.theme.line
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Kit"
-                Accessible.description: panel.controller.preset_name
-                Keys.onReturnPressed: panel.openKits()
-                Keys.onSpacePressed: panel.openKits()
-                Text {
-                    x: panel.theme.kitBoxInset
-                    y: panel.theme.kitBoxCaptionTop
-                    text: "KIT" + (panel.controller.preset_category !== "" ? " · " + panel.controller.preset_category.toUpperCase() : "")
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.kitBoxCaptionSpacing
-                }
-                Text {
-                    objectName: "knockKitName"
-                    x: panel.theme.kitBoxInset
-                    y: panel.theme.kitBoxNameTop
-                    width: kitBox.width - panel.theme.kitBoxNameReserve
-                    text: panel.controller.preset_name !== "" ? panel.controller.preset_name : "Custom kit"
-                    color: panel.theme.ink
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeHeading
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.spaceLg
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.inkDim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        kitBox.forceActiveFocus()
-                        panel.openKits()
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        // KNOCK with its O in the strike colour, over its tagline.
+        brand: Component {
+            Column {
+                spacing: panel.theme.subtitleGap
+                Row {
+                    objectName: "knockWordmark"
+                    readonly property string text: "KNOCK"
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: text
+                    Repeater {
+                        model: ["KN", "O", "CK"]
+                        delegate: Text {
+                            required property string modelData
+                            required property int index
+                            text: modelData
+                            color: index === 1 ? panel.theme.strike : panel.theme.wordmarkInk
+                            font.family: panel.theme.wordmarkFont
+                            font.pixelSize: panel.theme.wordmarkSize
+                            font.weight: panel.theme.wordmarkWeight
+                            font.letterSpacing: panel.theme.wordmarkSpacing
+                        }
                     }
-                    Shell.Tip { text: "Kits" }
+                }
+                Text {
+                    objectName: "knockSubtitle"
+                    text: "MODELLED PERCUSSION"
+                    color: panel.theme.subtitleInk
+                    font.family: panel.theme.sans
+                    font.pixelSize: panel.theme.subtitleSize
+                    font.bold: true
+                    font.letterSpacing: panel.theme.subtitleSpacing
                 }
             }
-            Kit.PresetArrow {
-                objectName: "knockKitNext"
-                controller: panel.controller
-                theme: panel.theme
-                direction: 1
-            }
         }
-
-        Column {
-            anchors.right: parent.right
-            y: panel.theme.statusTop
-            width: panel.theme.statusWidth
-            spacing: panel.theme.statusGap
-            Text {
-                objectName: "knockStatus"
-                readonly property color tone: panel.controller.deferred ? panel.theme.warning
-                    : panel.controller.status_detail !== "" ? panel.theme.warning : panel.theme.inkFaint
-                width: parent.width
-                horizontalAlignment: Text.AlignRight
-                text: panel.controller.status_text
-                color: tone
-                font.family: panel.theme.sans
-                font.pixelSize: panel.theme.typeBody
-                elide: Text.ElideRight
-            }
-            Text {
-                objectName: "knockPeak"
-                width: parent.width
-                horizontalAlignment: Text.AlignRight
-                text: panel.tele.live === true && panel.tele.output_peak_db !== undefined
-                    ? "OUT " + Format.decibels(panel.tele.output_peak_db) : ""
-                color: panel.theme.inkDim
-                font.family: panel.theme.mono
-                font.pixelSize: panel.theme.typeBody
-            }
-        }
+    }
+    // The kit's output peak, in the header's open space before the status.
+    Text {
+        objectName: "knockPeak"
+        x: header.x + header.status.x - width - panel.theme.headerGap
+        y: header.y + (header.rowHeight - height) / 2
+        text: panel.tele.live === true && panel.tele.output_peak_db !== undefined
+            ? "OUT " + Format.decibels(panel.tele.output_peak_db) : ""
+        color: panel.theme.inkDim
+        font.family: panel.theme.mono
+        font.pixelSize: panel.theme.typeBody
     }
 
     // ---- Pads and the global strip ------------------------------------------------
@@ -381,7 +298,7 @@ Rectangle {
     Item {
         id: left
         x: panel.theme.spaceXl
-        y: header.height + panel.theme.spaceMd
+        y: header.y + header.height + panel.theme.spaceMd
         width: panel.theme.leftColumnWidth
         height: panel.height - y - panel.theme.spaceXl
 
@@ -489,7 +406,7 @@ Rectangle {
     Item {
         id: right
         x: left.x + left.width + panel.theme.spaceXl
-        y: header.height + panel.theme.spaceMd
+        y: header.y + header.height + panel.theme.spaceMd
         width: panel.width - x - panel.theme.spaceXl
         height: panel.height - y - panel.theme.spaceXl
 
@@ -515,23 +432,33 @@ Rectangle {
                 placeMin: panel.knock !== null ? panel.knock.place_min : -1
                 placeMax: panel.knock !== null ? panel.knock.place_max : 1
             }
-            KnockModes {
+            // The modes on their frequency axis: LIVE while a hit rings
+            // them, PREVIEW (what the next hit rings) at rest.
+            Kit.PlotFrame {
                 x: panel.theme.hairline
                 y: stereo.y + stereo.height
                 width: parent.width - 2 * panel.theme.hairline
                 height: parent.height - y - panel.theme.hairline
                 theme: panel.theme
-                modes: panel.selectedModes
-                // The model's range; the view's own until the model is set.
-                Binding on minHz {
-                    when: panel.knock !== null
-                    value: panel.knock?.view_min_hz
+                xTicks: modesView.frequencyTicks
+                xUnit: "Hz"
+                live: modesView.ringing
+                KnockModes {
+                    id: modesView
+                    anchors.fill: parent
+                    theme: panel.theme
+                    modes: panel.selectedModes
+                    // The model's range; the view's own until the model is set.
+                    Binding on minHz {
+                        when: panel.knock !== null
+                        value: panel.knock?.view_min_hz
+                    }
+                    Binding on maxHz {
+                        when: panel.knock !== null
+                        value: panel.knock?.view_max_hz
+                    }
+                    hitAt: panel.padHitAt[panel.selectedPad] !== undefined ? panel.padHitAt[panel.selectedPad] : -1
                 }
-                Binding on maxHz {
-                    when: panel.knock !== null
-                    value: panel.knock?.view_max_hz
-                }
-                hitAt: panel.padHitAt[panel.selectedPad] !== undefined ? panel.padHitAt[panel.selectedPad] : -1
             }
         }
 
@@ -610,7 +537,7 @@ Rectangle {
                 height: chain.height
                 title: "Striker"
                 dot: panel.theme.strike
-                Pick { parameterId: panel.padId("striker.type"); columns: 4; accent: panel.theme.strike }
+                Pick { parameterId: panel.padId("striker.type"); columns: 2; accent: panel.theme.strike }
                 Slide { parameterId: panel.padId("striker.hardness"); accent: panel.theme.strike }
                 Slide { parameterId: panel.padId("striker.position"); accent: panel.theme.strike }
                 Slide { parameterId: panel.padId("striker.click"); accent: panel.theme.strike }
@@ -763,12 +690,6 @@ Rectangle {
                 Slide { parameterId: panel.padId("room"); accent: panel.theme.ink }
             }
         }
-    }
-
-    function openKits() {
-        if (!controller.editable)
-            return
-        menu.openPresets(kitBox, controller, theme.strike)
     }
 
     Kit.Menu {

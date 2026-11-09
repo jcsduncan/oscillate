@@ -48,11 +48,6 @@ function frequencyGrid(ctx, t, W, H) {
         ctx.lineTo(x, H)
         ctx.stroke()
     }
-    ctx.fillStyle = t.faint
-    ctx.font = t.typeCaption + "px \"" + t.mono + "\""
-    ctx.fillText("100", x01(100) * W + t.fxAxisLabelGap, H - t.fxLabelLift)
-    ctx.fillText("1k", x01(1000) * W + t.fxAxisLabelGap, H - t.fxLabelLift)
-    ctx.fillText("10k", x01(10000) * W + t.fxAxisLabelGap, H - t.fxLabelLift)
 }
 function glow(ctx, t, color) {
     ctx.strokeStyle = t.soft(color, t.glowAlpha)
@@ -295,8 +290,9 @@ function taps(ctx, t, W, H, m) {
             ctx.fillRect(x - w / 2, H / 2, w, h)
         level *= feedback
     }
-    label(ctx, t, "L", W - t.fxSideLabelInset, t.fxSideLabelTop, "center")
-    label(ctx, t, "R", W - t.fxSideLabelInset, H - t.fxLabelLift, "center")
+    // On the left: the plot frame's LIVE / PREVIEW chip holds the top right.
+    label(ctx, t, "L", t.fxSideLabelInset, t.fxSideLabelTop, "center")
+    label(ctx, t, "R", t.fxSideLabelInset, H - t.fxLabelLift, "center")
 }
 
 // The reverb's decay envelope in seconds, after its pre-delay. The view
@@ -306,14 +302,23 @@ var decayViewMargin = 1.2
 var decayViewMaximum = 32
 var decayTickAbove = 8
 var decayTicks = 4
+// The decay view's span in seconds, and the seconds between its ticks.
+function decaySpan(m) {
+    const seconds = Contract.expo(0.1, 30)(m.p[1])
+    const pre = 0.25 * m.p[3]
+    return Math.max(1, Math.min(decayViewMaximum, (pre + seconds) * decayViewMargin))
+}
+function decayTickStep(span) {
+    return span > decayTickAbove ? Math.ceil(span / decayTicks) : 1
+}
 function decay(ctx, t, W, H, m) {
     const seconds = Contract.expo(0.1, 30)(m.p[1])
     const pre = 0.25 * m.p[3]
-    const span = Math.max(1, Math.min(decayViewMaximum, (pre + seconds) * decayViewMargin))
+    const span = decaySpan(m)
     const px = pre / span * W
     ctx.fillStyle = t.soft(t.am, t.fxPreDelayAlpha)
     ctx.fillRect(0, 0, px, H)
-    const ticks = span > decayTickAbove ? Math.ceil(span / decayTicks) : 1
+    const ticks = decayTickStep(span)
     for (let s = ticks; s < span; s += ticks) {
         const x = s / span * W
         ctx.strokeStyle = t.gridLine
@@ -321,7 +326,6 @@ function decay(ctx, t, W, H, m) {
         ctx.moveTo(x, 0)
         ctx.lineTo(x, H)
         ctx.stroke()
-        label(ctx, t, Contract.seconds(s), x - t.fxAxisLabelGap, H - t.fxLabelLift, "right")
     }
     // −60 dB over the decay time; damping darkens the tail's fill.
     ctx.beginPath()
@@ -566,5 +570,101 @@ function paint(ctx, t, W, H, m) {
     case "shift": shift(ctx, t, W, H, m); break
     case "flyby": flyby(ctx, t, W, H, m); break
     default: stereo(ctx, t, W, H, m)
+    }
+}
+
+// ---- Scales (Kit.PlotFrame) -------------------------------------------------------------
+
+// Each visual's axes for its plot frame: { x, y } when it has a scale, or
+// { exempt: why } for a picture without measured axes. The ticks a scale
+// shows are at the same places the painters above draw their grids.
+var frequencyMarks = [{ hz: 100, label: "100" }, { hz: 1000, label: "1k" }, { hz: 10000, label: "10k" }]
+var filterTicksDb = [-24, 0, 12]
+var eqTicksDb = [-12, 0, 12]
+var bandTicksDb = [-12, 0, 12]
+var dynamicsTicksDb = [-60, -30, 0]
+// The shaper's input and output, as a share of full scale (-1..1).
+var transferTicks = [-1, 0, 1]
+var percent = 100
+function axes(visual) {
+    switch (visual) {
+    case "transfer": case "response": case "eq": case "comb": case "dynamics":
+        return { x: true, y: true }
+    case "shift": case "taps": case "decay":
+        return { x: true, y: false }
+    case "bands":
+        return { x: false, y: true }
+    case "voices":
+        return { exempt: "a picture of the chorus voices across the stereo field; their pan reads on the knobs" }
+    case "stereo":
+        return { exempt: "a picture of the stereo image's width and lean; no measured axis" }
+    case "impulse":
+        return { exempt: "a sketch of the impulse's shape from its settings, not a measured response" }
+    case "flyby":
+        return { exempt: "a map from above; its distances are printed on it in metres" }
+    default:
+        return { exempt: "no module in the slot" }
+    }
+}
+function signed(v) { return v > 0 ? "+" + v : String(v) }
+function hzTicks() {
+    return frequencyMarks.map(mark => ({ at: x01(mark.hz), label: mark.label }))
+}
+function dbTicks(list, top, bottom) {
+    return list.map(d => ({ at: (d - bottom) / (top - bottom), label: signed(d) }))
+}
+// The ticks for visual `visual` drawn from slot model `m` (theme `t`) on a
+// W x H plot:
+// { xTicks, xUnit, yTicks, yUnit } (empty where the visual has no axis).
+function scale(visual, m, t, W, H) {
+    const none = { xTicks: [], xUnit: "", yTicks: [], yUnit: "" }
+    if (m === null || W <= 0 || H <= 0)
+        return none
+    switch (visual) {
+    case "transfer": {
+        const across = transferTicks.map(v => ({ at: (v + 1) / 2, label: signed(v * percent) }))
+        const up = transferTicks.map(v => ({ at: 0.5 + v * transferAmplitude, label: signed(v * percent) }))
+        return { xTicks: across, xUnit: "%", yTicks: up, yUnit: "%" }
+    }
+    case "response": case "comb":
+        return { xTicks: hzTicks(), xUnit: "Hz", yTicks: dbTicks(filterTicksDb, filterTopDb, filterBottomDb), yUnit: "dB" }
+    case "eq":
+        return { xTicks: hzTicks(), xUnit: "Hz", yTicks: dbTicks(eqTicksDb, eqViewDb, -eqViewDb), yUnit: "dB" }
+    case "shift":
+        return { xTicks: hzTicks(), xUnit: "Hz", yTicks: [], yUnit: "" }
+    case "dynamics": {
+        // The curve spans the width left of the gain-reduction meter.
+        const D = (W - t.fxGrMeterWidth - t.fxGrMeterGap) / W
+        const share = d => (d - compressorFloorDb) / -compressorFloorDb
+        return { xTicks: dynamicsTicksDb.map(d => ({ at: share(d) * D, label: signed(d) })), xUnit: "dB",
+                 yTicks: dynamicsTicksDb.map(d => ({ at: share(d), label: signed(d) })), yUnit: "dB" }
+    }
+    case "bands": {
+        const reach = (H / 2 - t.fxBandHeadroom) / H
+        return { xTicks: [], xUnit: "",
+                 yTicks: bandTicksDb.map(d => ({ at: 0.5 + d / bandViewDb * reach, label: signed(d) })), yUnit: "dB" }
+    }
+    case "taps": {
+        if (m.synced) {
+            const beats = []
+            for (let b = 0; b <= delayViewBeats; ++b)
+                beats.push({ at: b / delayViewBeats, label: String(b) })
+            return { xTicks: beats, xUnit: "beats", yTicks: [], yUnit: "" }
+        }
+        const times = []
+        for (let at = 0; at <= delayViewMs; at += delayGridMs)
+            times.push({ at: at / delayViewMs, label: String(at) })
+        return { xTicks: times, xUnit: "ms", yTicks: [], yUnit: "" }
+    }
+    case "decay": {
+        const span = decaySpan(m)
+        const step = decayTickStep(span)
+        const times = [{ at: 0, label: "0" }]
+        for (let s = step; s < span; s += step)
+            times.push({ at: s / span, label: String(s) })
+        return { xTicks: times, xUnit: "s", yTicks: [], yUnit: "" }
+    }
+    default:
+        return none
     }
 }

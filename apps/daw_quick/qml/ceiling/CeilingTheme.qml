@@ -67,35 +67,37 @@ KitTheme {
     property real cardContentY: 34
     property real noteBottom: 26
     property real captionSpacing: 1.4
-    property real focusStroke: 1.5
     // A control with nothing to act on.
     property real idleOpacity: 0.45
 
-    // The header: wordmark, preset browser and status.
+    // The header (Kit.DeviceHeader): the wordmark over its accent rule and
+    // the latency line, the preset browser and, once a control is touched,
+    // its readout.
     property real headerY: 10
-    property real headerHeight: 54
-    property int wordmarkSize: 27
-    property real wordmarkSpacing: 9
+    headerHeight: 54
+    wordmarkSize: 27
+    wordmarkSpacing: 9
+    wordmarkInk: glacier
     // How much shorter than the wordmark its accent rule is.
     property real wordmarkRuleTrim: 10
-    property real latencyGap: 7
-    property real latencySpacing: 1.6
-    property real browserX: 250
-    property real browserY: 5
-    property real presetDisplayWidth: 540
-    property real presetDisplayHeight: 42
-    property real presetTextX: 14
-    property real presetCaptionY: 5
-    property real presetNameY: 16
-    property real presetNameWidth: 250
-    property real presetNameSpacing: 0.4
-    property real presetDividerX: 276
-    property real readoutX: 288
-    property real readoutValueY: 17
-    property real readoutRight: 26
-    property real readoutSpacing: 1.2
-    property real chevronMargin: 10
-    property real statusY: 14
+    subtitleGap: 7
+    subtitleSpacing: 1.6
+    subtitleInk: inkDim
+    headerBrowserX: 250
+    presetDisplayWidth: 276
+    presetDisplayHeight: 42
+    presetDisplayRadius: radiusLg
+    presetTextX: 14
+    presetTagY: 5
+    presetTagSpacing: captionSpacing
+    presetNameY: 16
+    presetNameBold: false
+    presetChevronMargin: 10
+    presetChevronInk: inkDim
+    readoutWidth: 226
+    readoutNameY: 5
+    readoutValueY: 17
+    readoutSpacing: 1.2
 
     // Row A: the reduction history and the level meters.
     property real rowAY: 76
@@ -103,13 +105,6 @@ KitTheme {
     property real meterPlateWidth: 250
     property real historyY: 30
     property real historyBottomTrim: 40
-    // The history's dB scale on the left, margin on the right, time axis below.
-    property real historyScaleWidth: 40
-    property real historyRightPad: 10
-    property real historyAxisHeight: 22
-    // Lifts a dB label to centre it on its grid line.
-    property real historyLabelLift: 6
-    property real historyTimeGap: 5
     property real reductionColumnWidth: 150
     property real reductionColumnInner: 140
     property real reductionColumnY: 44

@@ -41,8 +41,14 @@ Rectangle {
     Accessible.role: Accessible.Dialog
     Accessible.name: swapIndex >= 0 ? "Swap effect" : "Add effect"
 
+    // Esc closes the browser from any control in it.
+    Keys.onEscapePressed: close()
+
     // Swallow clicks so they do not reach the dismiss layer below.
-    MouseArea { anchors.fill: parent }
+    MouseArea {
+        readonly property string pointerOnlyReason: "swallows clicks on the browser's bare plate so they do not close it"
+        anchors.fill: parent
+    }
 
     Rectangle {
         x: browser.panel.theme.fxBrowserPad
@@ -92,9 +98,14 @@ Rectangle {
                 height: browser.panel.theme.fxCategoryHeight
                 radius: browser.panel.theme.fxCategoryRadius
                 color: on ? browser.panel.theme.soft(browser.panel.theme.pk) : "transparent"
+                border.color: activeFocus ? browser.panel.theme.pk : "transparent"
+                border.width: browser.panel.theme.strokeBold
+                activeFocusOnTab: true
                 Accessible.role: Accessible.PageTab
                 Accessible.name: modelData
                 Accessible.checked: on
+                Keys.onReturnPressed: browser.category = modelData
+                Keys.onSpacePressed: browser.category = modelData
                 Text {
                     x: browser.panel.theme.fxTileInset
                     anchors.verticalCenter: parent.verticalCenter
@@ -137,7 +148,11 @@ Rectangle {
                     height: browser.panel.theme.fxTileHeight
                     radius: browser.panel.theme.fxTileRadius
                     color: browser.panel.theme.card
-                    border.color: tileArea.containsMouse || isCurrent ? browser.panel.theme.pk : browser.panel.theme.line
+                    border.color: tileArea.containsMouse || isCurrent || activeFocus ? browser.panel.theme.pk : browser.panel.theme.line
+                    border.width: activeFocus ? browser.panel.theme.strokeBold : browser.panel.theme.hairline
+                    activeFocusOnTab: true
+                    Keys.onReturnPressed: browser.choose(modelData.id)
+                    Keys.onSpacePressed: browser.choose(modelData.id)
                     Accessible.role: Accessible.Button
                     Accessible.name: modelData.name
                     Accessible.description: modelData.blurb

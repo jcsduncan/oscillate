@@ -70,6 +70,8 @@ Rectangle {
     readonly property real fineScale: 0.25
 
     objectName: "novaOscDisplay:" + osc
+    // A picture of the source, not a measured plot.
+    readonly property string plotExemptReason: "a picture of the oscillator's wave, table frames or sample; the position reads on the POS knob"
     radius: panel.theme.displayRadius
     color: panel.theme.wellFill
     border.color: panel.theme.line
@@ -263,6 +265,7 @@ Rectangle {
     MouseArea {
         id: scan
         objectName: "novaOscScan:" + view.osc
+        readonly property string keyboardAlternative: "the card's POS knob"
         property real startX: 0
         property real startValue: 0
         property bool active: false

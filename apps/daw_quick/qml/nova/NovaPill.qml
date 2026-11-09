@@ -25,7 +25,8 @@ Rectangle {
     implicitHeight: panel.theme.pillHeight
     radius: panel.theme.radiusLg
     color: on ? panel.theme.soft(accent) : area.containsMouse ? panel.theme.hover : panel.theme.wellFill
-    border.color: on ? accent : panel.theme.line2
+    border.color: activeFocus || on ? accent : panel.theme.line2
+    border.width: activeFocus ? panel.theme.strokeBold : panel.theme.hairline
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
     Kit.HoverTip { theme: pill.panel.theme }
@@ -56,6 +57,11 @@ Rectangle {
     MouseArea {
         id: area
         anchors.fill: parent
+        // At least the kit's least hit size, however small the pill draws.
+        anchors.leftMargin: -pill.panel.theme.hitOutset(parent.width)
+        anchors.rightMargin: -pill.panel.theme.hitOutset(parent.width)
+        anchors.topMargin: -pill.panel.theme.hitOutset(parent.height)
+        anchors.bottomMargin: -pill.panel.theme.hitOutset(parent.height)
         hoverEnabled: true
         onClicked: pill.activate()
     }

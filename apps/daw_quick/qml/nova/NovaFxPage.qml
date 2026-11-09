@@ -402,11 +402,20 @@ Item {
                     height: page.busTabHeight
                     radius: page.panel.theme.fxRackTileRadius
                     color: on ? page.panel.theme.selectedFill : page.panel.theme.card
-                    border.color: page.dragBus === index ? page.panel.theme.am : on ? page.panel.theme.pk : page.panel.theme.line
-                    border.width: page.dragBus === index ? page.panel.theme.strokeBold : page.panel.theme.hairline
+                    border.color: page.dragBus === index ? page.panel.theme.am : on || activeFocus ? page.panel.theme.pk : page.panel.theme.line
+                    border.width: page.dragBus === index || activeFocus ? page.panel.theme.strokeBold : page.panel.theme.hairline
+                    activeFocusOnTab: true
                     Accessible.role: Accessible.PageTab
                     Accessible.name: modelData.name
                     Accessible.checked: on
+                    // Return or Space shows the bus; Left and Right step to the next one.
+                    function show(at) {
+                        page.panel.fxChain = Contract.fxChains[at].id
+                    }
+                    Keys.onReturnPressed: show(index)
+                    Keys.onSpacePressed: show(index)
+                    Keys.onLeftPressed: if (index > 0) { show(index - 1); busTabs.itemAt(index - 1).forceActiveFocus() }
+                    Keys.onRightPressed: if (index + 1 < busTabs.count) { show(index + 1); busTabs.itemAt(index + 1).forceActiveFocus() }
                     Text {
                         x: page.panel.theme.fxBusTextX
                         y: page.panel.theme.fxBusNameTop
@@ -568,9 +577,13 @@ Item {
                 height: page.addHeight
                 radius: page.panel.theme.fxRackTileRadius
                 color: addArea.containsMouse ? page.panel.theme.hoverDeep : "transparent"
-                border.color: addArea.containsMouse ? page.panel.theme.pk : page.panel.theme.line2
+                border.color: addArea.containsMouse || activeFocus ? page.panel.theme.pk : page.panel.theme.line2
+                border.width: activeFocus ? page.panel.theme.strokeBold : page.panel.theme.hairline
+                activeFocusOnTab: page.controller.editable
                 Accessible.role: Accessible.Button
                 Accessible.name: "Add effect"
+                Keys.onReturnPressed: page.openBrowser(addButton, -1)
+                Keys.onSpacePressed: page.openBrowser(addButton, -1)
                 Row {
                     anchors.centerIn: parent
                     spacing: page.panel.theme.spaceMd
@@ -786,6 +799,7 @@ Item {
 
     // Clicks outside an open popover close it.
     MouseArea {
+        readonly property string keyboardAlternative: "Esc closes the open browser or name prompt"
         anchors.fill: parent
         visible: browser.visible || namePrompt.visible
         z: 49

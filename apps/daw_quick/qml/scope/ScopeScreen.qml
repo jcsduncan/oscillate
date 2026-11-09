@@ -1,5 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Oscillate.Format
+import "../devicekit" as Kit
 
 // The phosphor screen: 480 min/max columns for the track (green) and the
 // sidechain (cyan) overlaid, swept left to right with the beam at the
@@ -19,6 +21,8 @@ Item {
     // labels as {at, text}.
     property var lines: []
     property var labels: []
+    // The time axis's unit: beats or bars when synced, ms when free.
+    property string timeUnit: ""
     readonly property int columns: 480
 
     objectName: "scopeScreen"
@@ -37,15 +41,27 @@ Item {
     }
 
     readonly property real padX: theme.screenPadX
+    readonly property real padLeft: theme.screenPadLeft
     readonly property real padTop: theme.screenPadTop
     readonly property real padBottom: theme.screenPadBottom
-    readonly property real plotX: padX
+    readonly property real plotX: padLeft
     readonly property real plotY: padTop
-    readonly property real plotW: width - 2 * padX
+    readonly property real plotW: width - padLeft - padX
     readonly property real plotH: height - padTop - padBottom
 
     // The graticule: amplitude divisions, and ticks along the centre line.
     readonly property int divisions: 8
+    // The amplitude scale, in percent of full scale, every second division.
+    readonly property real fullScalePercent: 100
+    readonly property int divisionsPerLabel: 2
+    readonly property var amplitudeTicks: {
+        const ticks = []
+        for (let i = 0; i <= divisions; i += divisionsPerLabel) {
+            const percent = fullScalePercent * (2 * i / divisions - 1)
+            ticks.push({ at: i / divisions, label: Format.signed_number(percent, 0) })
+        }
+        return ticks
+    }
     readonly property int centreTicks: 40
 
     // Amplitude graticule: eight divisions, the centre line stronger.
@@ -85,85 +101,83 @@ Item {
             color: screen.theme.gridStrong
         }
     }
-    Repeater {
-        model: screen.labels
-        delegate: Text {
-            required property var modelData
-            x: Math.max(screen.plotX, Math.min(screen.plotX + screen.plotW - width,
-                screen.plotX + screen.plotW * modelData.at - width / 2))
-            y: screen.plotY + screen.plotH + screen.theme.screenLabelGap
-            text: modelData.text
-            color: screen.theme.graticuleInk
-            font.family: screen.theme.mono
-            font.pixelSize: screen.theme.typeSmall
-        }
-    }
-
-    Canvas {
-        id: traces
-        objectName: "scopeTraces"
-        x: screen.plotX
+    // The plot's frame round the traces: time along, amplitude up.
+    Kit.PlotFrame {
+        objectName: "scopeScreenFrame"
+        theme: screen.theme
+        x: screen.plotX - gutterLeft
         y: screen.plotY
-        width: screen.plotW
-        height: screen.plotH
-        renderStrategy: Canvas.Cooperative
-        function envelope(ctx, data, from, to) {
-            const n = screen.columns
-            const half = height / 2
-            const dx = width / n
-            ctx.beginPath()
-            for (let c = from; c <= to; ++c) {
-                const top = half - Math.max(-1, Math.min(1, data[2 * c + 1])) * half
-                if (c === from)
-                    ctx.moveTo(c * dx + dx / 2, top)
-                else
-                    ctx.lineTo(c * dx + dx / 2, top)
+        width: screen.plotW + gutterLeft
+        height: screen.plotH + gutterBottom
+        live: screen.live
+        xTicks: screen.labels.map(l => ({ at: l.at, label: l.text }))
+        xUnit: screen.timeUnit
+        yTicks: screen.amplitudeTicks
+        yUnit: "%"
+
+        Canvas {
+            id: traces
+            objectName: "scopeTraces"
+            anchors.fill: parent
+            renderStrategy: Canvas.Cooperative
+            function envelope(ctx, data, from, to) {
+                const n = screen.columns
+                const half = height / 2
+                const dx = width / n
+                ctx.beginPath()
+                for (let c = from; c <= to; ++c) {
+                    const top = half - Math.max(-1, Math.min(1, data[2 * c + 1])) * half
+                    if (c === from)
+                        ctx.moveTo(c * dx + dx / 2, top)
+                    else
+                        ctx.lineTo(c * dx + dx / 2, top)
+                }
+                for (let c = to; c >= from; --c) {
+                    const bottom = half - Math.max(-1, Math.min(1, data[2 * c])) * half
+                    ctx.lineTo(c * dx + dx / 2, bottom)
+                }
+                ctx.closePath()
             }
-            for (let c = to; c >= from; --c) {
-                const bottom = half - Math.max(-1, Math.min(1, data[2 * c])) * half
-                ctx.lineTo(c * dx + dx / 2, bottom)
+            function drawTrace(ctx, data, colour, glow, alphaScale) {
+                if (data.length < 2 * screen.columns)
+                    return
+                // Twenty-column chunks, brightest just behind the beam.
+                const chunk = 20
+                for (let from = 0; from < screen.columns; from += chunk) {
+                    const to = Math.min(screen.columns - 1, from + chunk)
+                    const centre = (from + to) / 2
+                    const age = ((screen.writeColumn - centre) % screen.columns + screen.columns) % screen.columns
+                    const fresh = 1 - age / screen.columns
+                    const t = screen.theme
+                    const a = alphaScale * (t.traceFreshFloor + t.traceFreshGain * fresh)
+                    envelope(ctx, data, from, to)
+                    ctx.fillStyle = Qt.rgba(glow.r, glow.g, glow.b, t.traceFillAlpha * a)
+                    ctx.fill()
+                    ctx.lineWidth = t.traceGlowWidth
+                    ctx.strokeStyle = Qt.rgba(glow.r, glow.g, glow.b, t.traceGlowAlpha * a)
+                    ctx.stroke()
+                    ctx.lineWidth = t.traceLineWidth
+                    ctx.strokeStyle = Qt.rgba(colour.r, colour.g, colour.b, t.traceLineAlpha * a)
+                    ctx.stroke()
+                }
             }
-            ctx.closePath()
-        }
-        function drawTrace(ctx, data, colour, glow, alphaScale) {
-            if (data.length < 2 * screen.columns)
-                return
-            // Twenty-column chunks, brightest just behind the beam.
-            const chunk = 20
-            for (let from = 0; from < screen.columns; from += chunk) {
-                const to = Math.min(screen.columns - 1, from + chunk)
-                const centre = (from + to) / 2
-                const age = ((screen.writeColumn - centre) % screen.columns + screen.columns) % screen.columns
-                const fresh = 1 - age / screen.columns
-                const t = screen.theme
-                const a = alphaScale * (t.traceFreshFloor + t.traceFreshGain * fresh)
-                envelope(ctx, data, from, to)
-                ctx.fillStyle = Qt.rgba(glow.r, glow.g, glow.b, t.traceFillAlpha * a)
-                ctx.fill()
-                ctx.lineWidth = t.traceGlowWidth
-                ctx.strokeStyle = Qt.rgba(glow.r, glow.g, glow.b, t.traceGlowAlpha * a)
-                ctx.stroke()
-                ctx.lineWidth = t.traceLineWidth
-                ctx.strokeStyle = Qt.rgba(colour.r, colour.g, colour.b, t.traceLineAlpha * a)
-                ctx.stroke()
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                if (!screen.live)
+                    return
+                ctx.lineJoin = "round"
+                if (screen.overlay)
+                    drawTrace(ctx, screen.key, screen.theme.key, screen.theme.keyGlow, screen.theme.keyTraceAlpha)
+                drawTrace(ctx, screen.track, screen.theme.trace, screen.theme.traceGlow, 1)
             }
-        }
-        onPaint: {
-            const ctx = getContext("2d")
-            ctx.reset()
-            if (!screen.live)
-                return
-            ctx.lineJoin = "round"
-            if (screen.overlay)
-                drawTrace(ctx, screen.key, screen.theme.key, screen.theme.keyGlow, screen.theme.keyTraceAlpha)
-            drawTrace(ctx, screen.track, screen.theme.trace, screen.theme.traceGlow, 1)
-        }
-        Connections {
-            target: screen
-            function onTrackChanged() { traces.requestPaint() }
-            function onKeyChanged() { traces.requestPaint() }
-            function onOverlayChanged() { traces.requestPaint() }
-            function onLiveChanged() { traces.requestPaint() }
+            Connections {
+                target: screen
+                function onTrackChanged() { traces.requestPaint() }
+                function onKeyChanged() { traces.requestPaint() }
+                function onOverlayChanged() { traces.requestPaint() }
+                function onLiveChanged() { traces.requestPaint() }
+            }
         }
     }
 

@@ -58,6 +58,7 @@ KitTheme {
     property real historyLitDb: 1.0
     property color historyQuiet: "#3a4254"
     property real historyMinBar: 2
+    // The gap between two beats' bars.
     property real historyGap: 6
 
     // The panel's layout.
@@ -69,37 +70,49 @@ KitTheme {
     property real cardContentY: 34
     property real captionSpacing: 1.2
 
-    // The header: the mark, the wordmark and its subtitle, then the status,
-    // the preset and the compare.
+    // The header (Kit.DeviceHeader): the mark beside the wordmark and its
+    // subtitle, the preset browser, the readout once a control is touched,
+    // then the compare and the status.
     property real headerY: 12
-    property real headerHeight: 46
+    headerHeight: 46
     property real markSize: 30
     property real markStroke: 2
     // The mark's flat-topped wave, as fractions of its size.
     property var markPoints: [[0.25, 0.68], [0.4, 0.36], [0.6, 0.36], [0.75, 0.68]]
     property real markGap: 12
-    property int wordmarkSize: 17
-    property real wordmarkSpacing: 2.2
-    property real subtitleSpacing: 1
-    property real presetWidth: 230
-    property real presetHeight: 32
-    property real presetTextX: 12
-    property real presetArrowGap: 4
-    property real headerSpacing: 10
+    wordmarkSize: 17
+    wordmarkWeight: Font.Bold
+    wordmarkSpacing: 2.2
+    wordmarkInk: glacier
+    subtitleSize: typeSmall
+    subtitleSpacing: 1
+    subtitleInk: accent
+    // Clear of the widest subtitle (16× oversampled), so the browser stays put.
+    headerBrowserX: 262
+    presetDisplayWidth: 230
+    presetDisplayHeight: 36
+    presetDisplayRadius: radiusXl
+    presetFill: button
+    presetTextX: 12
+    presetTagY: 3
+    presetNameY: 15
+    presetNameSize: typeLabel
+    presetNameBold: false
+    presetChevronInk: inkDim
+    arrowHeight: 36
+    readoutValueY: 16
     property real compareWidth: 110
 
     // The body: the transfer card on the left, the controls on the right.
     property real bodyY: 70
     property real transferWidth: 420
-    property real plotHeight: 300
-    property real plotLeft: 34
-    property real plotRight: 10
-    property real plotTop: 10
-    property real plotBottom: 22
-    property real plotLabelLift: 6
-    property real historyHeight: 34
-    property real historyY: 342
-    property real historyCaptionGap: 6
+    // The transfer's frame; under it the clip history's frame, its bars
+    // under the frame's chip row.
+    property real plotHeight: 294
+    property real historyFrameGap: 10
+    property real historyBarsHeight: 44
+    // The frames' scales: room for "−24 dBFS" left of the plot.
+    plotGutterLeft: 50
 
     property real knobsHeight: 164
     property int knobDiameterLarge: 62
@@ -110,6 +123,8 @@ KitTheme {
     property real toggleTrackWidth: 34
     property real toggleTrackHeight: 18
     property real toggleKnobInset: 2
+    // The focus ring's gap outside the switch's track.
+    property real toggleFocusGap: 3
     property real segmentRowY: 32
     property real latencyY: 72
     property real meterBarHeight: 4

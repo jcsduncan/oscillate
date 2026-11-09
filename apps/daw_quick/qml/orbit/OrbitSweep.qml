@@ -39,6 +39,19 @@ Canvas {
     readonly property int gridDivisions: 4
     readonly property int traceSteps: 160
     readonly property real liveMarkerInset: 8
+    // The LFO cycles drawn.
+    readonly property int cycles: 2
+    // The cycles' time at each grid division, for the plot frame.
+    readonly property var cycleTicks: {
+        const pad = theme.sweepPad
+        const ticks = []
+        for (let k = 0; k <= gridDivisions; ++k) {
+            const f = k / gridDivisions
+            ticks.push({ at: width > 0 ? (pad + (width - 2 * pad) * f) / width : f,
+                         label: String(cycles * f) })
+        }
+        return ticks
+    }
 
     objectName: "orbitSweep"
     renderStrategy: Canvas.Cooperative
@@ -52,6 +65,7 @@ Canvas {
     onLfoLeftChanged: requestPaint()
     onLfoRightChanged: requestPaint()
     onWidthChanged: requestPaint()
+    onHeightChanged: requestPaint()
     Connections {
         target: sweep.theme
         function onAccentChanged() { sweep.requestPaint() }
@@ -167,7 +181,7 @@ Canvas {
             const steps = traceSteps
             for (let s = 0; s <= steps; ++s) {
                 const px = pad + (w - 2 * pad) * s / steps
-                const py = mid - amp * wave(2 * s / steps + shift)
+                const py = mid - amp * wave(cycles * s / steps + shift)
                 if (s === 0)
                     ctx.moveTo(px, py)
                 else
@@ -182,7 +196,7 @@ Canvas {
         // Where each channel is now: on the first cycle in preview, as a
         // level live (the LFO's phase is not published).
         const marker = (value, cycle, color) => {
-            const px = live ? w - pad - liveMarkerInset : pad + (w - 2 * pad) * (cycle / 2)
+            const px = live ? w - pad - liveMarkerInset : pad + (w - 2 * pad) * (cycle / cycles)
             const py = mid - amp * value
             const g = ctx.createRadialGradient(px, py, 0, px, py, t.markerGlowRadius)
             g.addColorStop(0, rgba(color, t.markerGlowAlpha))

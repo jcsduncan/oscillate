@@ -29,6 +29,19 @@ Rectangle {
     readonly property var pitchLabelHz: [50, 200, 1000]
     readonly property var bandGridHz: [100, 1000, 10000]
     readonly property int bandGridRows: 4
+    // The frame's scale: the sweep's time in ms, or the band's frequency.
+    readonly property real msPerSecond: 1000
+    readonly property var sweepTickMs: [0, 100, 200, 300]
+    readonly property var bandTickText: ["100", "1k", "10k"]
+    readonly property string timeUnit: pitched ? "ms" : "Hz"
+    // A share across the plot, as a share of the view's width.
+    function frameAt(f) {
+        const inset = theme.hairline + plotLeft
+        return width <= 0 ? f : (inset + f * (width - 2 * inset)) / width
+    }
+    readonly property var timeTicks: pitched
+        ? sweepTickMs.map(ms => ({ at: frameAt(ms / (sweepSeconds * msPerSecond)), label: "" + ms }))
+        : bandGridHz.map((hz, i) => ({ at: frameAt(controller.fraction_of(hz)), label: bandTickText[i] }))
     // The plot inside the canvas, which sits one hairline in from the frame.
     readonly property real plotLeft: theme.envelopePlotSide
     readonly property real plotTop: theme.envelopePlotTop
@@ -123,6 +136,7 @@ Rectangle {
     }
 
     Text {
+        id: caption
         x: view.theme.envelopeLabelInset
         y: view.theme.envelopeLabelTop
         text: view.pitched ? "PITCH DROP" : "NOISE BAND"
@@ -131,9 +145,9 @@ Rectangle {
         font.bold: true
         font.letterSpacing: view.theme.envelopeLabelSpacing
     }
+    // Beside the caption, clear of the frame's PREVIEW chip.
     Text {
-        anchors.right: parent.right
-        anchors.rightMargin: view.theme.envelopeLabelInset
+        x: caption.x + caption.width + view.theme.envelopeLabelInset
         y: view.theme.envelopeLabelTop
         visible: view.pitched
         text: view.pitched ? Format.hertz(view.pitch[0]) + " → " + Format.hertz(view.pitch[view.pitch.length - 1]) : ""
@@ -151,22 +165,6 @@ Rectangle {
             text: modelData >= 1000 ? (modelData / 1000) + "k" : modelData
             color: view.theme.envelopeLabelInk
             font.pixelSize: view.theme.typeMicro
-        }
-    }
-    Repeater {
-        model: view.pitched ? ["0", "300 ms"] : ["100", "1k", "10k"]
-        delegate: Text {
-            required property int index
-            required property string modelData
-            x: view.pitched ? (index === 0 ? view.theme.envelopeLabelInset
-                                           : view.width - implicitWidth - view.theme.envelopeLabelInset)
-                            : view.theme.envelopeLabelInset + (view.width - 2 * view.theme.envelopeLabelInset)
-                              * view.controller.fraction_of(view.bandGridHz[index]) - implicitWidth / 2
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: view.theme.envelopeLabelBottom
-            text: modelData
-            color: view.theme.envelopeLabelInk
-            font.pixelSize: view.theme.envelopeLabelSize
         }
     }
 }

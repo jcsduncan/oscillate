@@ -163,6 +163,14 @@ Rectangle {
         font.pixelSize: panel.theme.typeCaption
         wrapMode: Text.WordWrap
     }
+    // The accent edge round a focused card-wide control.
+    component FocusRing: Rectangle {
+        anchors.fill: parent
+        color: "transparent"
+        radius: panel.theme.cardRadius
+        border.color: panel.theme.accent
+        border.width: panel.theme.focusEdgeWidth
+    }
     component Button: Rectangle {
         id: button
         required property string label
@@ -173,8 +181,16 @@ Rectangle {
         height: panel.theme.buttonHeight
         radius: panel.theme.buttonRadius
         color: lit ? Qt.rgba(tone.r, tone.g, tone.b, panel.theme.buttonLitAlpha) : panel.theme.well
-        border.color: lit ? tone : panel.theme.plateHi
+        border.color: activeFocus ? panel.theme.accent : lit ? tone : panel.theme.plateHi
+        border.width: activeFocus ? panel.theme.focusEdgeWidth : panel.theme.hairline
         opacity: panel.controller.editable ? 1 : panel.theme.buttonDisabledOpacity
+        activeFocusOnTab: panel.controller.editable
+        Accessible.role: Accessible.Button
+        Accessible.name: label
+        Accessible.checked: lit
+        Accessible.onPressAction: clicked()
+        Keys.onReturnPressed: clicked()
+        Keys.onSpacePressed: clicked()
         Text {
             id: buttonText
             anchors.centerIn: parent
@@ -193,167 +209,96 @@ Rectangle {
 
     // ---- Header ----------------------------------------------------------------------
 
-    Item {
+    Kit.DeviceHeader {
         id: header
         x: panel.margin
         y: panel.theme.headerY
         width: panel.width - 2 * panel.margin
-        height: panel.theme.headerHeight
-
-        Text {
-            id: wordmark
-            y: panel.theme.wordmarkY
-            text: "STRATA"
-            color: panel.theme.glacier
-            font.family: panel.theme.sans
-            font.pixelSize: panel.theme.wordmarkSize
-            font.weight: Font.Light
-            font.letterSpacing: panel.theme.wordmarkSpacing
-        }
-        Row {
-            x: wordmark.x + panel.theme.wordmarkInset
-            y: wordmark.y + wordmark.height + panel.theme.underlineGap
-            spacing: panel.theme.spaceXxs
-            Repeater {
-                model: panel.maxBands
-                delegate: Rectangle {
-                    required property int index
-                    width: (wordmark.implicitWidth - panel.theme.underlineTrim) / panel.maxBands
-                    height: panel.theme.strokeBold
-                    radius: height / 2
-                    color: panel.theme.band(index)
-                }
-            }
-        }
-        Text {
-            x: wordmark.x + panel.theme.wordmarkInset
-            y: wordmark.y + wordmark.height + panel.theme.subtitleGap
-            text: "MULTIBAND DYNAMICS · " + (panel.ott ? "OTT" : panel.bandCount + " BANDS")
-                + (panel.keyed ? " · KEYED" : "")
-            color: panel.theme.inkDim
-            font.pixelSize: panel.theme.typeMicro
-            font.bold: true
-            font.letterSpacing: panel.theme.subtitleSpacing
-        }
-
-        Row {
-            id: browser
-            x: panel.theme.browserX
-            y: panel.theme.browserY
-            spacing: panel.theme.spaceXs
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "strataPresetPrevious"
-                direction: -1
-            }
-            Rectangle {
-                id: display
-                objectName: "strataPresetDisplay"
-                width: panel.theme.presetDisplayWidth
-                height: panel.theme.presetDisplayHeight
-                radius: panel.theme.radiusLg
-                color: panel.theme.well
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                activeFocusOnTab: true
-                Accessible.role: Accessible.ComboBox
-                Accessible.name: "Preset"
-                function openPresets() {
-                    if (panel.controller.editable)
-                        menu.openPresets(display, panel.controller, panel.theme.accent)
-                }
-                Keys.onReturnPressed: openPresets()
-                Keys.onSpacePressed: openPresets()
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        brand: Component {
+            Item {
+                implicitWidth: wordmark.implicitWidth
+                implicitHeight: subtitle.y + subtitle.implicitHeight
                 Text {
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetCategoryY
-                    text: panel.controller.preset_category.toUpperCase()
-                        + (panel.controller.preset_modified ? " · EDITED" : "")
-                    color: panel.theme.inkFaint
-                    font.pixelSize: panel.theme.typeMicro
-                    font.bold: true
-                    font.letterSpacing: panel.theme.captionSpacing
+                    id: wordmark
+                    objectName: "strataWordmark"
+                    text: "STRATA"
+                    color: panel.theme.wordmarkInk
+                    font.family: panel.theme.wordmarkFont
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.weight: panel.theme.wordmarkWeight
+                    font.letterSpacing: panel.theme.wordmarkSpacing
                 }
-                Text {
-                    objectName: "strataPresetName"
-                    x: panel.theme.presetTextX
-                    y: panel.theme.presetNameY
-                    width: display.width - panel.theme.presetNameRight
-                    text: panel.controller.preset_name
-                    color: panel.theme.ink
-                    font.family: panel.theme.sans
-                    font.pixelSize: panel.theme.typeHeading
-                    elide: Text.ElideRight
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: panel.theme.chevronMargin
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: panel.theme.inkDim
-                    font.pixelSize: panel.theme.typeBody
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: panel.controller.editable
-                    onClicked: {
-                        display.forceActiveFocus()
-                        display.openPresets()
+                Row {
+                    x: panel.theme.wordmarkInset
+                    y: wordmark.height + panel.theme.underlineGap
+                    spacing: panel.theme.spaceXxs
+                    Repeater {
+                        model: panel.maxBands
+                        delegate: Rectangle {
+                            required property int index
+                            width: (wordmark.implicitWidth - panel.theme.underlineTrim) / panel.maxBands
+                            height: panel.theme.strokeBold
+                            radius: height / 2
+                            color: panel.theme.band(index)
+                        }
                     }
                 }
-            }
-            Kit.PresetArrow {
-                controller: panel.controller
-                theme: panel.theme
-                objectName: "strataPresetNext"
-                direction: 1
-            }
-        }
-
-        Row {
-            x: browser.x + browser.width + panel.theme.modeRowGap
-            y: panel.theme.modeRowY
-            spacing: panel.theme.modeRowSpacing
-            Kit.Segment {
-                controller: panel.controller
-                theme: panel.theme
-                parameterId: "strata.mode"
-                labels: ["BANDS", "OTT"]
-                width: panel.theme.modeSegmentWidth
-            }
-            Kit.Segment {
-                controller: panel.controller
-                theme: panel.theme
-                parameterId: "strata.phase"
-                labels: ["MIN PHASE", "LINEAR"]
-                width: panel.theme.phaseSegmentWidth
-            }
-            Text {
-                objectName: "strataLatency"
-                anchors.verticalCenter: parent.verticalCenter
-                readonly property real ms: panel.playing ? panel.live.latency_ms : -1
-                text: ms >= 0 ? Format.milliseconds(ms) + " LATENCY"
-                              : "LATENCY WHEN PLAYING"
-                color: panel.theme.inkFaint
-                font.family: panel.theme.mono
-                font.pixelSize: panel.theme.typeCaption
-            }
-            Kit.Switch {
-                controller: panel.controller
-                theme: panel.theme
-                parameterId: "strata.delta"
-                label: "Δ LISTEN"
-                accent: panel.theme.key
+                Text {
+                    id: subtitle
+                    objectName: "strataSubtitle"
+                    x: panel.theme.wordmarkInset
+                    y: wordmark.height + panel.theme.subtitleGap
+                    text: "MULTIBAND DYNAMICS · " + (panel.ott ? "OTT" : panel.bandCount + " BANDS")
+                        + (panel.keyed ? " · KEYED" : "")
+                    color: panel.theme.subtitleInk
+                    font.pixelSize: panel.theme.subtitleSize
+                    font.bold: true
+                    font.letterSpacing: panel.theme.subtitleSpacing
+                }
             }
         }
 
+        // The mode, phase, latency and delta row, and what keys the bands.
+        Kit.Segment {
+            controller: panel.controller
+            theme: panel.theme
+            parameterId: "strata.mode"
+            labels: ["BANDS", "OTT"]
+            width: panel.theme.modeSegmentWidth
+        }
+        Kit.Segment {
+            controller: panel.controller
+            theme: panel.theme
+            parameterId: "strata.phase"
+            labels: ["MIN PHASE", "LINEAR"]
+            width: panel.theme.phaseSegmentWidth
+        }
+        Text {
+            objectName: "strataLatency"
+            anchors.verticalCenter: parent.verticalCenter
+            readonly property real ms: panel.playing ? panel.live.latency_ms : -1
+            text: ms >= 0 ? Format.milliseconds(ms) + " LATENCY"
+                          : "LATENCY WHEN PLAYING"
+            color: panel.theme.inkFaint
+            font.family: panel.theme.mono
+            font.pixelSize: panel.theme.typeCaption
+        }
+        Kit.Switch {
+            anchors.verticalCenter: parent.verticalCenter
+            controller: panel.controller
+            theme: panel.theme
+            parameterId: "strata.delta"
+            label: "Δ LISTEN"
+            accent: panel.theme.key
+        }
         Rectangle {
             id: keyedBadge
             objectName: "strataKeyed"
             visible: panel.keyed
-            anchors.right: status.left
-            anchors.rightMargin: panel.theme.keyedBadgeGap
-            y: panel.theme.statusY
+            anchors.verticalCenter: parent.verticalCenter
             width: keyedText.implicitWidth + panel.theme.keyedBadgePad
             height: panel.theme.statusHeight
             radius: height / 2
@@ -369,22 +314,15 @@ Rectangle {
                 font.bold: true
             }
         }
-        Kit.StatusBadge {
-            id: status
-            objectName: "strataStatus"
-            controller: panel.controller
-            theme: panel.theme
-            anchors.right: parent.right
-            y: panel.theme.statusY
-        }
     }
 
     // ---- Band strip ------------------------------------------------------------------
 
     Item {
         id: strip
-        x: panel.margin + panel.theme.stripInset
-        y: panel.theme.stripY
+        // Over the spectrum's plot, right of its frame's level scale.
+        x: panel.margin + panel.theme.stripInset + spectrumFrame.gutterLeft
+        y: header.y + header.height + panel.theme.stripGap
         width: spectrum.width
         height: panel.theme.stripHeight
 
@@ -403,7 +341,18 @@ Rectangle {
                 height: panel.theme.tabHeight
                 radius: panel.theme.radiusLg
                 color: chosen ? Qt.rgba(tone.r, tone.g, tone.b, panel.theme.tabChosenAlpha) : panel.theme.plate
-                border.color: chosen ? tone : panel.theme.plateHi
+                border.color: activeFocus ? panel.theme.accent : chosen ? tone : panel.theme.plateHi
+                border.width: activeFocus ? panel.theme.focusEdgeWidth : panel.theme.hairline
+                // Return or Space selects the band; Left and Right select its neighbours.
+                activeFocusOnTab: true
+                Accessible.role: Accessible.PageTab
+                Accessible.name: "Band " + (index + 1)
+                Accessible.selected: chosen
+                Accessible.onPressAction: panel.selected = tab.index
+                Keys.onReturnPressed: panel.selected = tab.index
+                Keys.onSpacePressed: panel.selected = tab.index
+                Keys.onLeftPressed: panel.selected = Math.max(0, panel.selected - 1)
+                Keys.onRightPressed: panel.selected = Math.min(panel.bandCount - 1, panel.selected + 1)
                 MouseArea {
                     anchors.fill: parent
                     onClicked: panel.selected = tab.index
@@ -440,6 +389,19 @@ Rectangle {
                             height: panel.theme.flagSize
                             radius: panel.theme.radiusMd
                             color: on ? tab.tone : panel.theme.well
+                            border.color: panel.theme.accent
+                            border.width: activeFocus ? panel.theme.focusEdgeWidth : 0
+                            function toggle() {
+                                panel.theme.lastTouched = flag.parameterId
+                                panel.controller.set_choice(flag.parameterId, flag.on ? 0 : 1)
+                            }
+                            activeFocusOnTab: panel.controller.editable
+                            Accessible.role: Accessible.CheckBox
+                            Accessible.name: panel.controller.parameter(parameterId).name
+                            Accessible.checked: on
+                            Accessible.onToggleAction: toggle()
+                            Keys.onReturnPressed: toggle()
+                            Keys.onSpacePressed: toggle()
                             Text {
                                 anchors.centerIn: parent
                                 text: flag.modelData[1]
@@ -450,10 +412,7 @@ Rectangle {
                             MouseArea {
                                 anchors.fill: parent
                                 enabled: panel.controller.editable
-                                onClicked: {
-                                    panel.theme.lastTouched = flag.parameterId
-                                    panel.controller.set_choice(flag.parameterId, flag.on ? 0 : 1)
-                                }
+                                onClicked: flag.toggle()
                             }
                         }
                     }
@@ -465,6 +424,15 @@ Rectangle {
                         height: panel.theme.flagSize
                         radius: panel.theme.radiusMd
                         color: panel.theme.well
+                        border.color: panel.theme.accent
+                        border.width: activeFocus ? panel.theme.focusEdgeWidth : 0
+                        activeFocusOnTab: panel.controller.editable && visible
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Remove band " + (tab.index + 1)
+                        Accessible.onPressAction: panel.removeBand(tab.index)
+                        Keys.onReturnPressed: panel.removeBand(tab.index)
+                        Keys.onSpacePressed: panel.removeBand(tab.index)
+                        Keys.onDeletePressed: panel.removeBand(tab.index)
                         Text {
                             anchors.centerIn: parent
                             text: "×"
@@ -489,18 +457,28 @@ Rectangle {
         theme: panel.theme
         title: ""
         x: panel.margin
-        y: panel.theme.spectrumY
+        y: strip.y + strip.height + panel.theme.spectrumGap
         width: panel.width - 2 * panel.margin
         height: panel.theme.spectrumHeight
-        StrataSpectrum {
-            id: spectrum
+        Kit.PlotFrame {
+            id: spectrumFrame
             x: panel.theme.spectrumInset
             y: panel.theme.spectrumInset
             width: spectrumCard.width - 2 * panel.theme.spectrumInset
             height: spectrumCard.height - panel.theme.spectrumFoot
-            panel: panel
-            controller: panel.controller
             theme: panel.theme
+            live: panel.playing
+            xUnit: "Hz"
+            yUnit: "dB"
+            xTicks: spectrum.frequencyTicks
+            yTicks: spectrum.levelTicks
+            StrataSpectrum {
+                id: spectrum
+                anchors.fill: parent
+                panel: panel
+                controller: panel.controller
+                theme: panel.theme
+            }
         }
         Note {
             x: panel.theme.spectrumNoteX
@@ -540,15 +518,26 @@ Rectangle {
         y: panel.rowY
         width: panel.theme.transferCardWidth
         height: panel.rowHeight
-        StrataTransfer {
+        // Input across, output up; LIVE while the band's level dot rides it.
+        Kit.PlotFrame {
             x: panel.theme.cardPad
             y: panel.theme.cardContentY
             width: transferCard.width - 2 * panel.theme.cardPad
             height: transferCard.height - panel.theme.cardContentY - panel.theme.cardPad
-            panel: panel
-            controller: panel.controller
             theme: panel.theme
-            band: panel.selected
+            live: panel.playing
+            xUnit: "dB"
+            yUnit: "dB"
+            xTicks: transfer.inputTicks
+            yTicks: transfer.outputTicks
+            StrataTransfer {
+                id: transfer
+                anchors.fill: parent
+                panel: panel
+                controller: panel.controller
+                theme: panel.theme
+                band: panel.selected
+            }
         }
     }
 
@@ -567,8 +556,6 @@ Rectangle {
             id: knobs
             x: panel.theme.cardPad
             y: panel.theme.bandKnobsY
-            // In OTT mode these are the band's own values, not what plays.
-            opacity: panel.ott ? panel.theme.ottOverrideOpacity : 1
             columns: 4
             columnSpacing: panel.theme.knobColumnSpacing
             rowSpacing: panel.theme.spaceSm
@@ -582,6 +569,10 @@ Rectangle {
                     diameter: panel.theme.bandKnobDiameter
                     readout: true
                     accent: panel.bandTone
+                    // In OTT mode OTT drives the band: these are its own
+                    // values until a touch takes over.
+                    linked: panel.ott
+                    linkReason: panel.ott ? "Set by OTT" : ""
                 }
             }
         }
@@ -589,7 +580,6 @@ Rectangle {
             x: panel.theme.cardPad
             y: knobs.y + knobs.height + panel.theme.bandRowsGap
             spacing: panel.theme.spaceMd
-            opacity: knobs.opacity
             Row {
                 spacing: panel.theme.spaceMd
                 Caption { text: "PROCESS"; width: panel.theme.bandRowCaptionWidth; anchors.verticalCenter: parent.verticalCenter }
@@ -625,14 +615,22 @@ Rectangle {
         }
         // In OTT mode the first touch writes OTT out as bands.
         MouseArea {
+            id: takeOverArea
             objectName: "strataTakeOver"
             anchors.fill: parent
             visible: panel.ott
             enabled: panel.controller.editable
+            activeFocusOnTab: visible && enabled
+            Accessible.role: Accessible.Button
+            Accessible.name: "Take the bands over from OTT"
+            Accessible.onPressAction: panel.takeOver()
+            Keys.onReturnPressed: panel.takeOver()
+            Keys.onSpacePressed: panel.takeOver()
             onPressed: (mouse) => {
                 panel.takeOver()
                 mouse.accepted = true
             }
+            FocusRing { visible: takeOverArea.activeFocus }
         }
     }
 
@@ -648,7 +646,7 @@ Rectangle {
         y: panel.rowY
         width: Math.max(panel.theme.ottCardWidth, Math.ceil(fitWidth))
         height: panel.rowHeight
-        opacity: panel.ott ? 1 : panel.theme.ottIdleOpacity
+        readonly property string idleReason: panel.ott ? "" : "OTT drives the bands only in OTT mode"
         Kit.Knob {
             anchors.horizontalCenter: parent.horizontalCenter
             y: panel.theme.cardContentY
@@ -657,6 +655,8 @@ Rectangle {
             parameterId: "strata.ott.depth"
             diameter: panel.theme.ottDepthDiameter
             readout: true
+            inactive: !panel.ott
+            inactiveReason: ottCard.idleReason
         }
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
@@ -668,6 +668,8 @@ Rectangle {
                 parameterId: "strata.ott.time"
                 diameter: panel.theme.smallKnobDiameter
                 readout: true
+                inactive: !panel.ott
+                inactiveReason: ottCard.idleReason
             }
             Kit.Knob {
                 controller: panel.controller
@@ -675,18 +677,28 @@ Rectangle {
                 parameterId: "strata.ott.balance"
                 diameter: panel.theme.smallKnobDiameter
                 readout: true
+                inactive: !panel.ott
+                inactiveReason: ottCard.idleReason
                 accent: panel.theme.live
             }
         }
         MouseArea {
+            id: engageArea
             objectName: "strataEngageOtt"
             anchors.fill: parent
             visible: !panel.ott
             enabled: panel.controller.editable
+            activeFocusOnTab: visible && enabled
+            Accessible.role: Accessible.Button
+            Accessible.name: "Drive the bands with OTT"
+            Accessible.onPressAction: panel.engageOtt()
+            Keys.onReturnPressed: panel.engageOtt()
+            Keys.onSpacePressed: panel.engageOtt()
             onPressed: (mouse) => {
                 panel.engageOtt()
                 mouse.accepted = true
             }
+            FocusRing { visible: engageArea.activeFocus }
         }
     }
 

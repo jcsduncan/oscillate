@@ -44,18 +44,6 @@ Rectangle {
     Accessible.role: Accessible.Pane
     Accessible.name: "Relay delay"
 
-    function readoutName(id) {
-        if (id === "")
-            return "TOUCH A CONTROL"
-        const info = controller.parameter(id)
-        if (info.name === undefined)
-            return ""
-        return (info.group === info.name ? info.name : info.group + " · " + info.name).toUpperCase()
-    }
-    function readoutValue(id) {
-        return id === "" || controller.revision < 0 ? "" : controller.display(id)
-    }
-
     // An olive plate with brass screws and a stencilled title.
     component Plate: Rectangle {
         id: plate
@@ -120,6 +108,7 @@ Rectangle {
         required property string parameterId
         property int diameter: panel.theme.knobDiameter
         property bool inactive: false
+        property string inactiveReason: ""
         property string label: ""
         width: Math.max(diameter + panel.theme.cellWidthPad, panel.theme.cellMinWidth)
         height: diameter + panel.theme.cellHeightPad
@@ -131,6 +120,7 @@ Rectangle {
             parameterId: cell.parameterId
             diameter: cell.diameter
             inactive: cell.inactive
+            inactiveReason: cell.inactiveReason
             label: cell.label !== "" ? cell.label : cellKnob.info.name !== undefined ? cellKnob.info.name : ""
         }
     }
@@ -144,161 +134,81 @@ Rectangle {
 
     // ---- Header ---------------------------------------------------------
 
-    Text {
-        id: wordmark
-        x: panel.margin + panel.theme.wordmarkInset
-        y: panel.theme.wordmarkY
-        text: "Relay"
-        color: panel.theme.brassLo
-        font.family: panel.theme.serif
-        font.pixelSize: panel.theme.wordmarkSize
-        font.bold: true
-        font.italic: true
-    }
-    Text {
-        x: wordmark.x + wordmark.implicitWidth + panel.theme.subtitleGap
-        y: panel.theme.subtitleY
-        text: "STEREO ECHO MACHINE"
-        color: panel.theme.inkDim
-        font.pixelSize: panel.theme.typeSmall
-        font.bold: true
-        font.letterSpacing: panel.theme.subtitleSpacing
-    }
-    Text {
-        x: wordmark.x + wordmark.implicitWidth + panel.theme.subtitleGap
-        y: panel.theme.modelLineY
-        text: "NATIVE · MODEL R-1"
-        color: panel.theme.inkFaint
-        font.pixelSize: panel.theme.typeMicro
-        font.bold: true
-        font.letterSpacing: panel.theme.modelLineSpacing
-    }
+    Kit.DeviceHeader {
+        id: header
+        x: panel.margin
+        y: panel.theme.headerY
+        width: panel.width - 2 * panel.margin
+        controller: panel.controller
+        theme: panel.theme
+        menu: menu
+        // The italic serif wordmark, with the subtitle and model line beside it.
+        brand: Component {
+            Row {
+                leftPadding: panel.theme.wordmarkInset
+                spacing: panel.theme.brandSubtitleGap
+                Text {
+                    objectName: "relayWordmark"
+                    text: "Relay"
+                    color: panel.theme.wordmarkInk
+                    font.family: panel.theme.wordmarkFont
+                    font.pixelSize: panel.theme.wordmarkSize
+                    font.bold: true
+                    font.italic: true
+                }
+                Column {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: panel.theme.subtitleGap
+                    Text {
+                        objectName: "relaySubtitle"
+                        text: "STEREO ECHO MACHINE"
+                        color: panel.theme.subtitleInk
+                        font.pixelSize: panel.theme.subtitleSize
+                        font.bold: true
+                        font.letterSpacing: panel.theme.subtitleSpacing
+                    }
+                    Text {
+                        text: "NATIVE · MODEL R-1"
+                        color: panel.theme.inkFaint
+                        font.pixelSize: panel.theme.typeMicro
+                        font.bold: true
+                        font.letterSpacing: panel.theme.modelLineSpacing
+                    }
+                }
+            }
+        }
 
-    Item {
-        id: characterSwitch
-        x: panel.theme.characterX
-        y: panel.theme.headerControlY
-        width: panel.theme.characterWidth
-        height: panel.theme.characterHeight
-        Text {
-            id: characterCaption
-            anchors.verticalCenter: parent.verticalCenter
-            text: "CHARACTER"
-            color: panel.theme.inkDim
-            font.pixelSize: panel.theme.typeCaption
-            font.bold: true
-            font.letterSpacing: panel.theme.characterCaptionSpacing
-        }
-        Kit.Segment {
-            x: characterCaption.implicitWidth + panel.theme.characterSegmentGap
-            anchors.verticalCenter: parent.verticalCenter
-            width: parent.width - x
-            height: panel.theme.characterSegmentHeight
-            controller: panel.controller
-            theme: panel.theme
-            parameterId: "relay.character"
-        }
-    }
-
-    // Preset browser.
-    Row {
-        id: presets
-        anchors.right: parent.right
-        anchors.rightMargin: panel.margin
-        y: panel.theme.headerControlY
-        spacing: panel.theme.spaceXs
-        component Arrow: Rectangle {
-            id: arrow
-            required property string glyph
-            required property int direction
-            width: panel.theme.presetArrowWidth
-            height: panel.theme.presetHeight
-            radius: panel.theme.radiusSm
-            gradient: Gradient {
-                GradientStop { position: 0; color: arrowArea.pressed ? panel.theme.brass : panel.theme.brassHi }
-                GradientStop { position: 1; color: panel.theme.brassLo }
-            }
-            border.color: panel.theme.brassShadowEdge
-            Accessible.role: Accessible.Button
-            Kit.HoverTip { theme: panel.theme }
-            Accessible.name: direction < 0 ? "Previous preset" : "Next preset"
+        // The character switch, in the header's second row.
+        Item {
+            id: characterSwitch
+            width: panel.theme.characterWidth
+            height: panel.theme.characterHeight
             Text {
-                anchors.centerIn: parent
-                text: arrow.glyph
-                color: panel.theme.brassInk
-                font.pixelSize: panel.theme.typeLabel
-                font.bold: true
-            }
-            MouseArea {
-                id: arrowArea
-                anchors.fill: parent
-                enabled: panel.controller.editable
-                onClicked: panel.controller.step_preset(arrow.direction)
-            }
-        }
-        Arrow {
-            objectName: "relayPresetPrevious"
-            glyph: "◀"
-            direction: -1
-        }
-        Rectangle {
-            id: presetDisplay
-            objectName: "relayPresetDisplay"
-            width: panel.theme.presetDisplayWidth
-            height: panel.theme.presetHeight
-            radius: panel.theme.radiusSm
-            color: panel.theme.screen
-            border.color: panel.theme.brassLo
-            border.width: panel.theme.presetDisplayStroke
-            Accessible.role: Accessible.ComboBox
-            Accessible.name: "Preset " + panel.controller.preset_name
-            Text {
-                objectName: "relayPresetName"
-                x: panel.theme.presetTextX
-                y: panel.theme.presetNameY
-                width: parent.width - panel.theme.presetNameRight
-                text: panel.controller.preset_name !== "" ? panel.controller.preset_name : "Custom"
-                color: panel.theme.screenGlow
-                font.family: panel.theme.mono
-                font.pixelSize: panel.theme.typeEmphasis
-                font.bold: true
-                elide: Text.ElideRight
-            }
-            Text {
-                x: panel.theme.presetTextX
-                y: panel.theme.presetCategoryY
-                text: (panel.controller.preset_category !== "" ? panel.controller.preset_category.toUpperCase() : "USER")
-                      + (panel.controller.preset_modified ? " · EDITED" : "")
-                color: panel.controller.preset_modified ? panel.theme.accent : panel.theme.presetCategoryInk
-                font.pixelSize: panel.theme.typeMicro
-                font.bold: true
-                font.letterSpacing: panel.theme.tagSpacing
-            }
-            Text {
-                anchors.right: parent.right
-                anchors.rightMargin: panel.theme.chevronMargin
+                id: characterCaption
                 anchors.verticalCenter: parent.verticalCenter
-                text: "▾"
-                color: panel.theme.brass
-                font.pixelSize: panel.theme.typeBody
+                text: "CHARACTER"
+                color: panel.theme.inkDim
+                font.pixelSize: panel.theme.typeCaption
+                font.bold: true
+                font.letterSpacing: panel.theme.characterCaptionSpacing
             }
-            MouseArea {
-                anchors.fill: parent
-                enabled: panel.controller.editable
-                onClicked: menu.openPresets(presetDisplay, panel.controller, panel.theme.accent)
+            Kit.Segment {
+                x: characterCaption.implicitWidth + panel.theme.characterSegmentGap
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - x
+                height: panel.theme.characterSegmentHeight
+                controller: panel.controller
+                theme: panel.theme
+                parameterId: "relay.character"
             }
-        }
-        Arrow {
-            objectName: "relayPresetNext"
-            glyph: "▶"
-            direction: 1
         }
     }
 
     // Brass trim under the header.
     Rectangle {
+        id: trim
         x: panel.margin
-        y: panel.theme.trimY
+        y: header.y + header.height + panel.theme.trimGap
         width: panel.width - 2 * panel.margin
         height: panel.theme.trimHeight
         radius: height / 2
@@ -315,7 +225,7 @@ Rectangle {
     RelayCharacterBay {
         id: bay
         x: panel.margin
-        y: panel.theme.heroY
+        y: trim.y + trim.height + panel.theme.heroGap
         width: panel.theme.bayWidth
         height: panel.theme.heroHeight
         controller: panel.controller
@@ -347,8 +257,8 @@ Rectangle {
 
     // ---- Controls -------------------------------------------------------
 
-    readonly property real plateTop: theme.plateRowY
-    readonly property real plateHeight: theme.plateRowHeight
+    readonly property real plateTop: bay.y + bay.height + theme.plateRowGap
+    readonly property real plateHeight: height - plateTop - margin
 
     Plate {
         id: timePlate
@@ -407,6 +317,7 @@ Rectangle {
             parameterId: "relay.offset"
             label: "R Offset"
             inactive: panel.routing === 2
+            inactiveReason: inactive ? "Offset needs Stereo or Ping-Pong routing" : ""
         }
         Column {
             x: panel.theme.platePad
@@ -456,6 +367,7 @@ Rectangle {
             Cell {
                 parameterId: "relay.drive"
                 inactive: panel.character === 0
+                inactiveReason: inactive ? "Drive needs the Tape or Analog character" : ""
             }
             Cell { parameterId: "relay.diffusion" }
         }
@@ -480,13 +392,17 @@ Rectangle {
         width: panel.theme.wowPlateWidth
         height: panel.plateHeight
         title: "WOW"
-        note: "& FLUTTER"
+        note: panel.wowOff ? "NO DEPTH" : "& FLUTTER"
         Column {
             anchors.horizontalCenter: parent.horizontalCenter
             y: panel.theme.plateBodyY
             spacing: panel.theme.cellRowSpacing
             Cell { parameterId: "relay.mod_depth"; diameter: panel.theme.smallDialDiameter }
-            Cell { parameterId: "relay.mod_rate"; inactive: panel.wowOff }
+            Cell {
+                parameterId: "relay.mod_rate"
+                inactive: panel.wowOff
+                inactiveReason: inactive ? "Rate needs some Wow depth" : ""
+            }
         }
     }
 
@@ -497,6 +413,7 @@ Rectangle {
         width: panel.width - panel.margin - x
         height: panel.plateHeight
         title: "OUTPUT"
+        note: panel.routing === 2 ? "WIDTH OFF IN MONO" : ""
         Grid {
             x: panel.theme.outputGridX
             y: panel.theme.plateBodyY
@@ -504,60 +421,14 @@ Rectangle {
             columnSpacing: panel.theme.outputColumnSpacing
             rowSpacing: panel.theme.cellRowSpacing
             Cell { parameterId: "relay.ducking"; diameter: panel.theme.smallDialDiameter }
-            Cell { parameterId: "relay.width"; diameter: panel.theme.smallDialDiameter; inactive: panel.routing === 2 }
+            Cell {
+                parameterId: "relay.width"
+                diameter: panel.theme.smallDialDiameter
+                inactive: panel.routing === 2
+                inactiveReason: inactive ? "Width does nothing in Mono routing" : ""
+            }
             Cell { parameterId: "relay.mix"; diameter: panel.theme.smallDialDiameter }
             Cell { parameterId: "relay.output"; diameter: panel.theme.smallDialDiameter }
-        }
-    }
-
-    // ---- Nameplate readout ---------------------------------------------
-
-    Rectangle {
-        id: nameplate
-        x: panel.margin
-        y: panel.plateTop + panel.plateHeight + panel.gap
-        width: panel.width - 2 * panel.margin
-        height: panel.height - y - panel.theme.nameplateBottom
-        radius: panel.theme.radiusMd
-        gradient: Gradient {
-            GradientStop { position: 0; color: panel.theme.brassHi }
-            GradientStop { position: 1; color: panel.theme.brass }
-        }
-        border.color: panel.theme.brassLo
-        Text {
-            x: panel.theme.nameplatePad
-            anchors.verticalCenter: parent.verticalCenter
-            objectName: "relayReadout"
-            text: panel.readoutName(panel.theme.lastTouched)
-            color: panel.theme.nameplateInk
-            font.pixelSize: panel.theme.typeCaption
-            font.bold: true
-            font.letterSpacing: panel.theme.nameplateSpacing
-        }
-        Text {
-            x: panel.theme.nameplateValueX
-            anchors.verticalCenter: parent.verticalCenter
-            objectName: "relayReadoutValue"
-            text: panel.readoutValue(panel.theme.lastTouched)
-            color: panel.theme.nameplateValueInk
-            font.family: panel.theme.mono
-            font.pixelSize: panel.theme.typeLabel
-            font.bold: true
-        }
-        Text {
-            id: status
-            objectName: "relayStatus"
-            property color tone: panel.controller.deferred ? panel.theme.warning
-                               : panel.controller.pending ? panel.theme.inkDim : panel.theme.nameplateInk
-            anchors.right: parent.right
-            anchors.rightMargin: panel.theme.nameplatePad
-            anchors.verticalCenter: parent.verticalCenter
-            text: panel.controller.status_text !== "" ? panel.controller.status_text.toUpperCase()
-                                                      : "SERIAL Nº 0040"
-            color: tone
-            font.pixelSize: panel.theme.typeCaption
-            font.bold: true
-            font.letterSpacing: panel.theme.nameplateSpacing
         }
     }
 

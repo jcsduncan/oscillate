@@ -22,6 +22,7 @@ Rectangle {
     readonly property int rowCount: history.length
 
     objectName: "temperHeatmap"
+    readonly property string plotExemptReason: "shares the frequency axis of the display above it; its rows are polls, newest at the top, not a timed scale"
     color: theme.heatCold
     border.color: theme.wellEdge
     Accessible.role: Accessible.Graphic

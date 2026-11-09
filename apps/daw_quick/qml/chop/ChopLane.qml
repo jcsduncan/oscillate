@@ -32,6 +32,10 @@ Item {
     property string gestureId: ""
     property int lastStep: -1
     property real lastValue: 0
+    // The step the keys edit while the lane has focus.
+    property int keyStep: 0
+    // A shorter pattern keeps the key step on a step it still shows.
+    onStepCountChanged: keyStep = Math.max(0, Math.min(stepCount - 1, keyStep))
 
     objectName: "chopLane:" + field
     Accessible.role: Accessible.Grouping
@@ -98,8 +102,33 @@ Item {
         height: lane.height
         radius: lane.theme.laneRadius
         color: lane.theme.well
-        border.color: lane.theme.wellEdge
+        border.color: activeFocus ? lane.theme.accent : lane.theme.wellEdge
         clip: true
+        // Keys: Left/Right pick a step, Up/Down set it (Shift: fine),
+        // Delete resets it.
+        activeFocusOnTab: lane.controller.editable
+        Accessible.role: Accessible.Slider
+        Accessible.name: lane.title + " lane, step " + (lane.keyStep + 1)
+        Accessible.description: lane.revision >= 0 ? lane.controller.display(Gate.stepId(lane.keyStep, lane.field)) : ""
+        Keys.onPressed: event => {
+            if (!lane.controller.editable)
+                return
+            const id = Gate.stepId(lane.keyStep, lane.field)
+            if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+                lane.keyStep = Math.max(0, Math.min(lane.stepCount - 1,
+                                                    lane.keyStep + (event.key === Qt.Key_Right ? 1 : -1)))
+                lane.theme.lastTouched = Gate.stepId(lane.keyStep, lane.field)
+            } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+                lane.controller.step(id, event.key === Qt.Key_Up ? 1 : -1, (event.modifiers & Qt.ShiftModifier) !== 0)
+                lane.theme.lastTouched = id
+            } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
+                lane.controller.reset_to_default(id)
+                lane.theme.lastTouched = id
+            } else {
+                return
+            }
+            event.accepted = true
+        }
 
         Repeater {
             model: lane.stepCount
@@ -155,6 +184,17 @@ Item {
                         color: lane.tint
                     }
                 }
+                // The step the keys edit, while the lane has focus.
+                Rectangle {
+                    visible: cells.activeFocus && cell.index === lane.keyStep
+                    x: lane.theme.cellInset
+                    y: lane.theme.cellInset
+                    width: parent.width - lane.cellGap - lane.theme.cellInset
+                    height: parent.height - 2 * lane.theme.cellInset
+                    color: "transparent"
+                    border.color: lane.theme.accent
+                    border.width: lane.theme.strokeBold
+                }
                 Rectangle {
                     visible: lane.stepped && Math.round(cell.value) === 0
                     x: lane.theme.blockInset
@@ -174,6 +214,7 @@ Item {
             cursorShape: Qt.CrossCursor
             onPressed: mouse => {
                 const step = lane.stepFromX(mouse.x)
+                lane.keyStep = step
                 lane.gestureId = Gate.stepId(step, lane.field)
                 lane.lastStep = -1
                 lane.controller.begin_gesture(lane.gestureId)

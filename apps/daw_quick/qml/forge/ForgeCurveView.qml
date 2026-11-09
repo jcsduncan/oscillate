@@ -1,5 +1,6 @@
 import QtQuick
 import Oscillate.Format
+import "../devicekit" as Kit
 
 // The forge itself: the static transfer curve, input along the bottom and
 // output up the side, drawn as molten metal whose colour and glow follow the
@@ -59,9 +60,20 @@ Item {
     readonly property real barShare: 0.56
     readonly property real barHalo: 2
     readonly property real barNumberDrop: 10
-    // The axis legends' gap below the square and beside it.
-    readonly property real legendDrop: 14
-    readonly property real legendSide: 10
+
+    // The transfer square inside the canvas (which sits a hairline in from
+    // the well): its side and its top-left corner, in canvas pixels.
+    readonly property real canvasWidth: width - 2 * theme.hairline
+    readonly property real canvasHeight: height - 2 * theme.hairline
+    readonly property real squareSize: Math.max(0, Math.min(canvasWidth * squareShare,
+                                                            canvasHeight - 2 * pad - squareFoot))
+    readonly property real squareX: (canvasWidth - squareSize) / 2
+    readonly property real squareY: (canvasHeight - squareSize) / 2
+    // The square's scale for its frame: input across and output up, in
+    // full scale (FS: ±1 is a full-scale sample), zero first so it carries
+    // the unit.
+    readonly property var levelMarks: [[0, "0"], [-1, "−1"], [1, "+1"]]
+    readonly property var levelTicks: levelMarks.map(mark => ({ at: (mark[0] / range + 1) / 2, label: mark[1] }))
 
     objectName: "forgeCurveView"
     Accessible.role: Accessible.Graphic
@@ -120,233 +132,242 @@ Item {
         border.color: view.theme.wellEdge
     }
 
-    Canvas {
-        id: canvas
-        anchors.fill: parent
-        anchors.margins: view.theme.hairline
-        renderStrategy: Canvas.Cooperative
-        onPaint: {
-            const ctx = getContext("2d")
-            ctx.reset()
-            const t = view.theme
-            const w = width
-            const h = height
-            const pad = view.pad
-            const size = Math.min(w * view.squareShare, h - 2 * pad - view.squareFoot)
-            const ox = (w - size) / 2
-            const oy = (h - size) / 2
-            const sx = x => ox + (x / view.range + 1) / 2 * size
-            const sy = y => oy + (1 - (y / view.range + 1) / 2) * size
-            const hot = t.heat(view.heat)
+    // The transfer square's frame: input along the bottom, output up the
+    // side; LIVE while the input rides the curve, else a PREVIEW of the
+    // settings. The canvas spans the whole well (the wave and harmonics
+    // beside the square too), placed back at the well's origin from
+    // inside the frame.
+    Kit.PlotFrame {
+        id: frame
+        objectName: "forgeCurveFrame"
+        x: view.theme.hairline + view.squareX - view.theme.plotGutterLeft
+        y: view.theme.hairline + view.squareY
+        width: view.squareSize + view.theme.plotGutterLeft
+        height: view.squareSize + view.theme.plotGutterBottom
+        theme: view.theme
+        live: view.live
+        xUnit: "FS"
+        yUnit: "FS"
+        xTicks: view.levelTicks
+        yTicks: view.levelTicks
 
-            // Forge-light: a glow rising from below, brighter with heat and,
-            // live, with the output.
-            const breath = view.live ? Math.min(1, view.outputLevel * view.breathGain) : 0
-            const glow = ctx.createRadialGradient(w / 2, h * view.lightCentre, 0,
-                                                  w / 2, h * view.lightCentre, h * view.lightReach)
-            glow.addColorStop(0, Qt.rgba(hot.r, hot.g * t.forgeLightGreen, hot.b * t.forgeLightBlue,
-                t.forgeLightAlpha + t.forgeLightHeatAlpha * view.heat + t.forgeLightBreathAlpha * breath))
-            glow.addColorStop(t.forgeLightMidStop, Qt.rgba(hot.r, hot.g * t.forgeLightMidGreen, hot.b * t.forgeLightMidBlue,
-                t.forgeLightMidAlpha + t.forgeLightMidHeatAlpha * view.heat))
-            glow.addColorStop(1, Qt.rgba(0, 0, 0, 0))
-            ctx.fillStyle = glow
-            ctx.fillRect(0, 0, w, h)
+        Canvas {
+            id: canvas
+            x: -view.squareX
+            y: -view.squareY
+            width: view.canvasWidth
+            height: view.canvasHeight
+            renderStrategy: Canvas.Cooperative
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                const t = view.theme
+                const w = width
+                const h = height
+                const pad = view.pad
+                const size = view.squareSize
+                const ox = view.squareX
+                const oy = view.squareY
+                const sx = x => ox + (x / view.range + 1) / 2 * size
+                const sy = y => oy + (1 - (y / view.range + 1) / 2) * size
+                const hot = t.heat(view.heat)
 
-            // Grid: quarters, the unit square and the axes.
-            ctx.lineWidth = t.hairline
-            for (let k = -view.gridQuarters; k <= view.gridQuarters; ++k) {
-                const v = k / view.gridQuarters
-                ctx.strokeStyle = k === 0 ? t.gridStrong : t.grid
-                ctx.beginPath()
-                ctx.moveTo(sx(v), sy(-1))
-                ctx.lineTo(sx(v), sy(1))
-                ctx.moveTo(sx(-1), sy(v))
-                ctx.lineTo(sx(1), sy(v))
-                ctx.stroke()
-            }
-            ctx.strokeStyle = t.gridStrong
-            ctx.strokeRect(sx(-1), sy(1), sx(1) - sx(-1), sy(-1) - sy(1))
-            // Unity: what goes in comes out.
-            ctx.setLineDash(t.unityDash)
-            ctx.strokeStyle = Qt.rgba(t.inkFaint.r, t.inkFaint.g, t.inkFaint.b, t.unityAlpha)
-            ctx.beginPath()
-            ctx.moveTo(sx(-1), sy(-1))
-            ctx.lineTo(sx(1), sy(1))
-            ctx.stroke()
-            ctx.setLineDash([])
+                // Forge-light: a glow rising from below, brighter with heat and,
+                // live, with the output.
+                const breath = view.live ? Math.min(1, view.outputLevel * view.breathGain) : 0
+                const glow = ctx.createRadialGradient(w / 2, h * view.lightCentre, 0,
+                                                      w / 2, h * view.lightCentre, h * view.lightReach)
+                glow.addColorStop(0, Qt.rgba(hot.r, hot.g * t.forgeLightGreen, hot.b * t.forgeLightBlue,
+                    t.forgeLightAlpha + t.forgeLightHeatAlpha * view.heat + t.forgeLightBreathAlpha * breath))
+                glow.addColorStop(t.forgeLightMidStop, Qt.rgba(hot.r, hot.g * t.forgeLightMidGreen, hot.b * t.forgeLightMidBlue,
+                    t.forgeLightMidAlpha + t.forgeLightMidHeatAlpha * view.heat))
+                glow.addColorStop(1, Qt.rgba(0, 0, 0, 0))
+                ctx.fillStyle = glow
+                ctx.fillRect(0, 0, w, h)
 
-            const n = view.points.length
-            if (n < 2)
-                return
-            const path = () => {
-                ctx.beginPath()
-                for (let i = 0; i < n; ++i) {
-                    const x = -1 + 2 * i / (n - 1)
-                    const y = Math.max(-view.range, Math.min(view.range, view.points[i]))
-                    if (i === 0)
-                        ctx.moveTo(sx(x), sy(y))
-                    else
-                        ctx.lineTo(sx(x), sy(y))
-                }
-            }
-            // Molten fill between the curve and zero.
-            ctx.save()
-            path()
-            ctx.lineTo(sx(1), sy(0))
-            ctx.lineTo(sx(-1), sy(0))
-            ctx.closePath()
-            const fill = ctx.createLinearGradient(0, sy(1), 0, sy(-1))
-            fill.addColorStop(0, Qt.rgba(hot.r, hot.g, hot.b, t.moltenFillAlpha))
-            fill.addColorStop(0.5, Qt.rgba(hot.r, hot.g, hot.b, t.moltenFillMidAlpha))
-            fill.addColorStop(1, Qt.rgba(hot.r, hot.g, hot.b, t.moltenFillAlpha))
-            ctx.fillStyle = fill
-            ctx.fill()
-            ctx.restore()
-            // The curve: layered strokes for a glow, then a bright core.
-            ctx.lineJoin = "round"
-            ctx.lineCap = "round"
-            for (const [width, alpha] of t.curveLayers) {
-                path()
-                ctx.strokeStyle = Qt.rgba(hot.r, hot.g, hot.b, alpha * (t.curveGlowBase + t.curveGlowHeat * view.heat))
-                ctx.lineWidth = width
-                ctx.stroke()
-            }
-            path()
-            ctx.strokeStyle = Qt.rgba(t.whiteHot.r, t.whiteHot.g, t.whiteHot.b,
-                t.curveCoreAlpha + t.curveCoreHeatAlpha * view.heat)
-            ctx.lineWidth = t.curveCoreStroke
-            ctx.stroke()
-
-            // Live: the input's peak as sparks on the curve.
-            if (view.live && view.inputPeak > view.sparkFloor) {
-                for (const sign of [-1, 1]) {
-                    const x = sign * Math.min(1, view.inputPeak)
-                    const y = view.curveAt(x)
-                    const px = sx(x)
-                    const py = sy(Math.max(-view.range, Math.min(view.range, y)))
-                    ctx.strokeStyle = Qt.rgba(t.amber.r, t.amber.g, t.amber.b, t.sparkLineAlpha)
-                    ctx.lineWidth = t.hairline
-                    ctx.setLineDash(t.sparkDash)
+                // Grid: quarters, the unit square and the axes.
+                ctx.lineWidth = t.hairline
+                for (let k = -view.gridQuarters; k <= view.gridQuarters; ++k) {
+                    const v = k / view.gridQuarters
+                    ctx.strokeStyle = k === 0 ? t.gridStrong : t.grid
                     ctx.beginPath()
-                    ctx.moveTo(px, sy(-1))
-                    ctx.lineTo(px, sy(1))
+                    ctx.moveTo(sx(v), sy(-1))
+                    ctx.lineTo(sx(v), sy(1))
+                    ctx.moveTo(sx(-1), sy(v))
+                    ctx.lineTo(sx(1), sy(v))
                     ctx.stroke()
-                    ctx.setLineDash([])
-                    const spark = ctx.createRadialGradient(px, py, 0, px, py, t.sparkRadius)
-                    spark.addColorStop(0, t.sparkCore)
-                    spark.addColorStop(t.sparkMidStop, Qt.rgba(hot.r, hot.g, hot.b, t.sparkMidAlpha))
-                    spark.addColorStop(1, Qt.rgba(hot.r, hot.g, hot.b, 0))
-                    ctx.fillStyle = spark
-                    ctx.beginPath()
-                    ctx.arc(px, py, t.sparkRadius, 0, Math.PI * 2)
-                    ctx.fill()
                 }
-            }
-
-            // Side readouts: one cycle through the curve, and its harmonics.
-            const sideWidth = ox - 2 * pad - view.squareFoot
-            const sideTop = oy + view.sideTopGap
-            const sideHeight = size - view.sideTopGap
-            if (sideWidth > view.sideMinWidth) {
-                ctx.font = "bold " + t.typeMicro + "px '" + t.sans + "'"
-                ctx.textAlign = "left"
-                ctx.fillStyle = t.inkFaint
-                ctx.fillText("WAVE · −6 dBFS SINE", pad, view.sideCaptionY)
-                ctx.fillText("HARMONICS · dBFS", ox + size + pad + view.harmonicsGap, view.sideCaptionY)
-                // Wave.
-                const wx = pad
-                const wy = sideTop + sideHeight / 2
-                const wh = sideHeight / 2 - view.waveInset
-                ctx.strokeStyle = t.grid
-                ctx.lineWidth = t.hairline
-                ctx.strokeRect(wx, sideTop, sideWidth, sideHeight)
+                ctx.strokeStyle = t.gridStrong
+                ctx.strokeRect(sx(-1), sy(1), sx(1) - sx(-1), sy(-1) - sy(1))
+                // Unity: what goes in comes out.
+                ctx.setLineDash(t.unityDash)
+                ctx.strokeStyle = Qt.rgba(t.inkFaint.r, t.inkFaint.g, t.inkFaint.b, t.unityAlpha)
                 ctx.beginPath()
-                ctx.moveTo(wx, wy)
-                ctx.lineTo(wx + sideWidth, wy)
-                ctx.stroke()
-                const wave = view.wave
-                const trace = (values, scale) => {
-                    ctx.beginPath()
-                    for (let i = 0; i <= values.length; ++i) {
-                        const v = Math.max(-view.waveSpan, Math.min(view.waveSpan, values[i % values.length] * scale))
-                        const px = wx + sideWidth * i / values.length
-                        const py = wy - v * wh / view.waveSpan
-                        if (i === 0)
-                            ctx.moveTo(px, py)
-                        else
-                            ctx.lineTo(px, py)
-                    }
-                }
-                const sine = []
-                for (let i = 0; i < wave.length; ++i)
-                    sine.push(view.probe * Math.sin(2 * Math.PI * i / wave.length))
-                ctx.setLineDash(t.sineDash)
-                trace(sine, 1)
-                ctx.strokeStyle = Qt.rgba(t.inkDim.r, t.inkDim.g, t.inkDim.b, t.sineAlpha)
-                ctx.lineWidth = t.hairline
+                ctx.moveTo(sx(-1), sy(-1))
+                ctx.lineTo(sx(1), sy(1))
                 ctx.stroke()
                 ctx.setLineDash([])
-                for (const [width, alpha] of t.waveLayers) {
-                    trace(wave, 1)
-                    ctx.strokeStyle = Qt.rgba(hot.r, hot.g, hot.b, alpha)
+
+                const n = view.points.length
+                if (n < 2)
+                    return
+                const path = () => {
+                    ctx.beginPath()
+                    for (let i = 0; i < n; ++i) {
+                        const x = -1 + 2 * i / (n - 1)
+                        const y = Math.max(-view.range, Math.min(view.range, view.points[i]))
+                        if (i === 0)
+                            ctx.moveTo(sx(x), sy(y))
+                        else
+                            ctx.lineTo(sx(x), sy(y))
+                    }
+                }
+                // Molten fill between the curve and zero.
+                ctx.save()
+                path()
+                ctx.lineTo(sx(1), sy(0))
+                ctx.lineTo(sx(-1), sy(0))
+                ctx.closePath()
+                const fill = ctx.createLinearGradient(0, sy(1), 0, sy(-1))
+                fill.addColorStop(0, Qt.rgba(hot.r, hot.g, hot.b, t.moltenFillAlpha))
+                fill.addColorStop(0.5, Qt.rgba(hot.r, hot.g, hot.b, t.moltenFillMidAlpha))
+                fill.addColorStop(1, Qt.rgba(hot.r, hot.g, hot.b, t.moltenFillAlpha))
+                ctx.fillStyle = fill
+                ctx.fill()
+                ctx.restore()
+                // The curve: layered strokes for a glow, then a bright core.
+                ctx.lineJoin = "round"
+                ctx.lineCap = "round"
+                for (const [width, alpha] of t.curveLayers) {
+                    path()
+                    ctx.strokeStyle = Qt.rgba(hot.r, hot.g, hot.b, alpha * (t.curveGlowBase + t.curveGlowHeat * view.heat))
                     ctx.lineWidth = width
                     ctx.stroke()
                 }
-                // Harmonics: odd in amber, even in copper.
-                const hx = ox + size + pad + view.harmonicsGap
-                const floor = view.harmonicFloorDb
-                ctx.strokeStyle = t.grid
-                ctx.lineWidth = t.hairline
-                ctx.strokeRect(hx, sideTop, sideWidth, sideHeight)
-                ctx.textAlign = "right"
-                ctx.font = t.typeMicro + "px '" + t.mono + "'"
-                for (const db of view.harmonicMarksDb) {
-                    const py = sideTop + sideHeight * (db / floor)
-                    ctx.strokeStyle = t.grid
-                    ctx.beginPath()
-                    ctx.moveTo(hx, py)
-                    ctx.lineTo(hx + sideWidth, py)
-                    ctx.stroke()
-                    ctx.fillStyle = t.inkFaint
-                    ctx.fillText(Format.number(db, 0), hx - view.markLabelOffset, py + view.markLabelOffset)
-                }
-                const bars = view.harmonics
-                const slot = sideWidth / bars.length
-                ctx.textAlign = "center"
-                for (let k = 0; k < bars.length; ++k) {
-                    const level = Math.max(0, Math.min(1, 1 - bars[k] / floor))
-                    const bh = (sideHeight - view.barHalo) * level
-                    const bx = hx + slot * k + slot * view.barStart
-                    const bw = slot * view.barShare
-                    const colour = k % 2 === 0 ? t.heat(t.heatGlowBase + t.heatGlowRange * view.heat) : t.copper
-                    if (bh > 0.5) {
-                        ctx.fillStyle = Qt.rgba(colour.r, colour.g, colour.b, t.harmonicHaloAlpha)
-                        ctx.fillRect(bx - view.barHalo, sideTop + sideHeight - bh - view.barHalo,
-                                     bw + 2 * view.barHalo, bh + view.barHalo)
-                        const bar = ctx.createLinearGradient(0, sideTop + sideHeight - bh, 0, sideTop + sideHeight)
-                        bar.addColorStop(0, colour)
-                        bar.addColorStop(1, Qt.rgba(colour.r, colour.g, colour.b, t.harmonicFootAlpha))
-                        ctx.fillStyle = bar
-                        ctx.fillRect(bx, sideTop + sideHeight - bh, bw, bh)
+                path()
+                ctx.strokeStyle = Qt.rgba(t.whiteHot.r, t.whiteHot.g, t.whiteHot.b,
+                    t.curveCoreAlpha + t.curveCoreHeatAlpha * view.heat)
+                ctx.lineWidth = t.curveCoreStroke
+                ctx.stroke()
+
+                // Live: the input's peak as sparks on the curve.
+                if (view.live && view.inputPeak > view.sparkFloor) {
+                    for (const sign of [-1, 1]) {
+                        const x = sign * Math.min(1, view.inputPeak)
+                        const y = view.curveAt(x)
+                        const px = sx(x)
+                        const py = sy(Math.max(-view.range, Math.min(view.range, y)))
+                        ctx.strokeStyle = Qt.rgba(t.amber.r, t.amber.g, t.amber.b, t.sparkLineAlpha)
+                        ctx.lineWidth = t.hairline
+                        ctx.setLineDash(t.sparkDash)
+                        ctx.beginPath()
+                        ctx.moveTo(px, sy(-1))
+                        ctx.lineTo(px, sy(1))
+                        ctx.stroke()
+                        ctx.setLineDash([])
+                        const spark = ctx.createRadialGradient(px, py, 0, px, py, t.sparkRadius)
+                        spark.addColorStop(0, t.sparkCore)
+                        spark.addColorStop(t.sparkMidStop, Qt.rgba(hot.r, hot.g, hot.b, t.sparkMidAlpha))
+                        spark.addColorStop(1, Qt.rgba(hot.r, hot.g, hot.b, 0))
+                        ctx.fillStyle = spark
+                        ctx.beginPath()
+                        ctx.arc(px, py, t.sparkRadius, 0, Math.PI * 2)
+                        ctx.fill()
                     }
-                    ctx.fillStyle = k % 2 === 0 ? t.inkDim : t.inkFaint
-                    ctx.font = "bold " + t.scaleTextSize + "px '" + t.sans + "'"
-                    ctx.fillText((k + 1).toString(), bx + bw / 2, sideTop + sideHeight + view.barNumberDrop)
+                }
+
+                // Side readouts: one cycle through the curve, and its harmonics.
+                const sideWidth = ox - 2 * pad - view.squareFoot
+                const sideTop = oy + view.sideTopGap
+                const sideHeight = size - view.sideTopGap
+                if (sideWidth > view.sideMinWidth) {
+                    ctx.font = "bold " + t.typeMicro + "px '" + t.sans + "'"
+                    ctx.textAlign = "left"
+                    ctx.fillStyle = t.inkFaint
+                    ctx.fillText("WAVE · −6 dBFS SINE", pad, view.sideCaptionY)
+                    ctx.fillText("HARMONICS · dBFS", ox + size + pad + view.harmonicsGap, view.sideCaptionY)
+                    // Wave.
+                    const wx = pad
+                    const wy = sideTop + sideHeight / 2
+                    const wh = sideHeight / 2 - view.waveInset
+                    ctx.strokeStyle = t.grid
+                    ctx.lineWidth = t.hairline
+                    ctx.strokeRect(wx, sideTop, sideWidth, sideHeight)
+                    ctx.beginPath()
+                    ctx.moveTo(wx, wy)
+                    ctx.lineTo(wx + sideWidth, wy)
+                    ctx.stroke()
+                    const wave = view.wave
+                    const trace = (values, scale) => {
+                        ctx.beginPath()
+                        for (let i = 0; i <= values.length; ++i) {
+                            const v = Math.max(-view.waveSpan, Math.min(view.waveSpan, values[i % values.length] * scale))
+                            const px = wx + sideWidth * i / values.length
+                            const py = wy - v * wh / view.waveSpan
+                            if (i === 0)
+                                ctx.moveTo(px, py)
+                            else
+                                ctx.lineTo(px, py)
+                        }
+                    }
+                    const sine = []
+                    for (let i = 0; i < wave.length; ++i)
+                        sine.push(view.probe * Math.sin(2 * Math.PI * i / wave.length))
+                    ctx.setLineDash(t.sineDash)
+                    trace(sine, 1)
+                    ctx.strokeStyle = Qt.rgba(t.inkDim.r, t.inkDim.g, t.inkDim.b, t.sineAlpha)
+                    ctx.lineWidth = t.hairline
+                    ctx.stroke()
+                    ctx.setLineDash([])
+                    for (const [width, alpha] of t.waveLayers) {
+                        trace(wave, 1)
+                        ctx.strokeStyle = Qt.rgba(hot.r, hot.g, hot.b, alpha)
+                        ctx.lineWidth = width
+                        ctx.stroke()
+                    }
+                    // Harmonics: odd in amber, even in copper.
+                    const hx = ox + size + pad + view.harmonicsGap
+                    const floor = view.harmonicFloorDb
+                    ctx.strokeStyle = t.grid
+                    ctx.lineWidth = t.hairline
+                    ctx.strokeRect(hx, sideTop, sideWidth, sideHeight)
+                    ctx.textAlign = "right"
+                    ctx.font = t.typeMicro + "px '" + t.mono + "'"
+                    for (const db of view.harmonicMarksDb) {
+                        const py = sideTop + sideHeight * (db / floor)
+                        ctx.strokeStyle = t.grid
+                        ctx.beginPath()
+                        ctx.moveTo(hx, py)
+                        ctx.lineTo(hx + sideWidth, py)
+                        ctx.stroke()
+                        ctx.fillStyle = t.inkFaint
+                        ctx.fillText(Format.number(db, 0), hx - view.markLabelOffset, py + view.markLabelOffset)
+                    }
+                    const bars = view.harmonics
+                    const slot = sideWidth / bars.length
+                    ctx.textAlign = "center"
+                    for (let k = 0; k < bars.length; ++k) {
+                        const level = Math.max(0, Math.min(1, 1 - bars[k] / floor))
+                        const bh = (sideHeight - view.barHalo) * level
+                        const bx = hx + slot * k + slot * view.barStart
+                        const bw = slot * view.barShare
+                        const colour = k % 2 === 0 ? t.heat(t.heatGlowBase + t.heatGlowRange * view.heat) : t.copper
+                        if (bh > 0.5) {
+                            ctx.fillStyle = Qt.rgba(colour.r, colour.g, colour.b, t.harmonicHaloAlpha)
+                            ctx.fillRect(bx - view.barHalo, sideTop + sideHeight - bh - view.barHalo,
+                                         bw + 2 * view.barHalo, bh + view.barHalo)
+                            const bar = ctx.createLinearGradient(0, sideTop + sideHeight - bh, 0, sideTop + sideHeight)
+                            bar.addColorStop(0, colour)
+                            bar.addColorStop(1, Qt.rgba(colour.r, colour.g, colour.b, t.harmonicFootAlpha))
+                            ctx.fillStyle = bar
+                            ctx.fillRect(bx, sideTop + sideHeight - bh, bw, bh)
+                        }
+                        ctx.fillStyle = k % 2 === 0 ? t.inkDim : t.inkFaint
+                        ctx.font = "bold " + t.scaleTextSize + "px '" + t.sans + "'"
+                        ctx.fillText((k + 1).toString(), bx + bw / 2, sideTop + sideHeight + view.barNumberDrop)
+                    }
                 }
             }
-
-            // Axis legends.
-            ctx.font = "bold " + t.typeMicro + "px '" + t.sans + "'"
-            ctx.fillStyle = t.inkFaint
-            ctx.textAlign = "center"
-            ctx.fillText("IN", sx(0), sy(-1) + view.legendDrop)
-            ctx.fillText("−1", sx(-1), sy(-1) + view.legendDrop)
-            ctx.fillText("+1", sx(1), sy(-1) + view.legendDrop)
-            ctx.save()
-            ctx.translate(sx(-1) - view.legendSide, sy(0))
-            ctx.rotate(-Math.PI / 2)
-            ctx.fillText("OUT", 0, 0)
-            ctx.restore()
         }
     }
 
@@ -355,7 +376,7 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         y: view.theme.spaceMd
         text: view.live
-            ? "LIVE · INPUT PEAK " + (view.inputPeak > 0.00001
+            ? "INPUT PEAK " + (view.inputPeak > 0.00001
                                       ? Format.quantity(20 * Math.log(view.inputPeak) / Math.LN10, "dBFS")
                                       : "SILENT")
             : "TRANSFER CURVE · " + view.modelName.toUpperCase()
