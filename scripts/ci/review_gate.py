@@ -234,9 +234,10 @@ def pull_numbers(event_name: str, event: dict, source: "GitHub") -> list[int]:
     if event_name == "issue_comment":
         issue = event["issue"]
         return [issue["number"]] if "pull_request" in issue else []
-    if event_name == "check_run":
-        numbers = [pull["number"] for pull in event["check_run"].get("pull_requests") or []]
-        return numbers or source.pulls_for_commit(event["check_run"]["head_sha"])
+    if event_name in ("check_run", "workflow_run"):
+        run = event[event_name]
+        numbers = [pull["number"] for pull in run.get("pull_requests") or []]
+        return numbers or source.pulls_for_commit(run["head_sha"])
     return source.open_pulls()
 
 
