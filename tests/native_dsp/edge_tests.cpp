@@ -365,8 +365,11 @@ void true_peak_holds_while_the_ceiling_glides() {
   // Each ceiling holds 100 ms: long enough to settle after the glide and
   // the latency, and be measured under the lower one.
   constexpr std::size_t glide_every = 4'800;
-  constexpr auto settle =
-      static_cast<std::size_t>(oscillate::native_dsp::dsp::switch_fade_seconds * rate);
+  // The ceiling glides over its parameter's glide time, adopted at the
+  // next control tick.
+  const auto settle =
+      static_cast<std::size_t>(table().parameters[at("edge.ceiling")].glide_seconds * rate +
+                               oscillate::native_dsp::control_interval_frames);
   const std::array<Stereo, 2> sources{scaled(noise(1.0, frames), twelve_db_over),
                                       sine(10'000.0, twelve_db_over, frames)};
   for (const std::size_t o : {x1, x16}) {
