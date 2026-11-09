@@ -38,9 +38,9 @@ Fix drift fits the kicks from the chosen bar in two passes. The second pass numb
 - Hovering a ramp shows "126.00 → 128.00 over 8 bars · S-curve".
 
 `SongService` gains three commands, each one undo step:
-- `set_tempo_ramp`: keeps the tempo playing at the ramp's start, removes the points inside, and holds the end tempo until the next later point.
+- `set_tempo_ramp`: keeps the tempo playing at the ramp's start, removes the points inside, and always holds the end tempo until the next later point. A ramp that starts inside an eased segment ends that segment at the tempo playing there, over the shorter span.
 - `move_tempo_event`.
-- `ramp_to_clip_tempo`: "Ramp to this track's tempo" in an audio clip's menu. It ramps, with an S-curve, from the bar nearest the clip's start to the bar nearest where the latest audio already playing into it ends. It ends at the clip's reviewed BPM, so the track plays unstretched once the mix lands.
+- `ramp_to_clip_tempo`: "Ramp to this track's tempo" in an audio clip's menu. It ramps, with an S-curve, from the bar nearest the clip's start to the bar nearest where the latest audio already playing into it ends, or the clip itself ends if that is sooner. The ramp lasts at least one bar. It ends at the clip's reviewed BPM, so the track plays unstretched once the mix lands.
 
 The last tempo point always holds, since there is no later tempo for it to move towards; removing a ramp's end leaves the point before it holding.
 

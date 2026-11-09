@@ -977,7 +977,16 @@ void a_drawn_ramp_is_one_step_and_clips_follow_it() {
   constexpr std::int64_t ramp_from = 4 * quarter;
   constexpr std::int64_t ramp_to = 12 * quarter;
   constexpr std::int64_t inside_ramp = 8 * quarter;
+  constexpr std::int64_t moved_point = 10 * quarter;
+  // A later point, and one at the ramp's end that ramps towards it: the
+  // drawn ramp's end must hold all the same.
+  constexpr std::int64_t after_ramp = 16 * quarter;
+  constexpr double later_bpm = 110.0;
   auto& tempo = song.session->song();
+  REQUIRE_OK(tempo.set_tempo_event({after_ramp}, later_bpm, timeline::TempoShape::step),
+             "fixture tempo event was refused");
+  REQUIRE_OK(tempo.set_tempo_event({ramp_to}, other_bpm, timeline::TempoShape::linear_bpm),
+             "fixture tempo event was refused");
   REQUIRE_OK(tempo.set_tempo_event({inside_ramp}, other_bpm, timeline::TempoShape::step),
              "fixture tempo event was refused");
   const auto before = song.session->snapshot().tempo.events();
@@ -1000,7 +1009,7 @@ void a_drawn_ramp_is_one_step_and_clips_follow_it() {
       "a drawn ramp was refused");
   REQUIRE_EQ(song.session->snapshot().revision, revision + 1, "a drawn ramp was not one edit");
   const auto& events = song.session->snapshot().tempo.events();
-  REQUIRE_EQ(events.size(), 3, "the ramp kept a point inside it");
+  REQUIRE_EQ(events.size(), 4, "the ramp kept a point inside it or lost the one after it");
   REQUIRE_EQ(events[1].tick.value, ramp_from, "the ramp does not start where it was drawn");
   REQUIRE_EQ(events[1].bpm, opening_bpm, "the ramp did not start from the tempo playing there");
   REQUIRE_EQ(events[1].shape_to_next, timeline::TempoShape::linear_bpm, "the ramp lost its shape");
@@ -1024,9 +1033,11 @@ void a_drawn_ramp_is_one_step_and_clips_follow_it() {
                "the ramp did not undo exactly");
 
   // Dragging a point is one edit; the first point stays at the start.
-  REQUIRE_OK(tempo.move_tempo_event({inside_ramp}, {ramp_to}, ramp_end_bpm),
+  REQUIRE_FALSE(tempo.move_tempo_event({inside_ramp}, {ramp_to}, ramp_end_bpm),
+                "a tempo point moved onto another");
+  REQUIRE_OK(tempo.move_tempo_event({inside_ramp}, {moved_point}, ramp_end_bpm),
              "moving a tempo point was refused");
-  REQUIRE_EQ(song.session->snapshot().tempo.events().back().tick.value, ramp_to,
+  REQUIRE_EQ(song.session->snapshot().tempo.events()[1].tick.value, moved_point,
              "the tempo point did not move");
   REQUIRE_FALSE(tempo.move_tempo_event({0}, {ramp_from}, opening_bpm),
                 "the opening tempo point left the start");
@@ -1038,6 +1049,7 @@ void a_drawn_ramp_is_one_step_and_clips_follow_it() {
   REQUIRE_OK(
       tempo.set_tempo_ramp({ramp_from}, {ramp_to}, ramp_end_bpm, timeline::TempoShape::ease_in_out),
       "an S-curve ramp was refused");
+  REQUIRE_OK(tempo.remove_tempo_event({after_ramp}), "removing the last point was refused");
   REQUIRE_OK(tempo.remove_tempo_event({ramp_to}), "removing a ramp's end was refused");
   REQUIRE_EQ(song.session->snapshot().tempo.events().back().shape_to_next,
              timeline::TempoShape::step, "the last tempo point still ramps to nothing");

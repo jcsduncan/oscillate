@@ -327,16 +327,11 @@ foundation::Result<void> SongService::set_tempo_ramp(timeline::TickPosition from
       return Result::failure(
           {foundation::ErrorCode::invalid_argument, "The ramp's start is outside the song"});
   }
-  std::optional<timeline::TempoShape> end_shape;
-  if (const auto existing = std::ranges::find(events, to, &timeline::TempoEvent::tick);
-      existing != events.end())
-    end_shape = existing->shape_to_next;
   std::erase_if(events, [&](const timeline::TempoEvent& event) {
     return event.tick >= from && event.tick <= to;
   });
   const auto at = std::ranges::lower_bound(events, from, {}, &timeline::TempoEvent::tick);
-  events.insert(at, {{from, start_bpm, shape},
-                     {to, end_bpm, end_shape.value_or(timeline::TempoShape::step)}});
+  events.insert(at, {{from, start_bpm, shape}, {to, end_bpm, timeline::TempoShape::step}});
   return replace_tempo(std::move(events));
 }
 

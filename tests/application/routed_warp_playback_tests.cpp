@@ -554,8 +554,9 @@ void saved_marker_and_tempo_ramp_match_live_export() {
 // ADR-0112: a ramp drawn on the tempo lane (S-curve, 120 -> 90 BPM over four
 // quarter notes) under a musical clip whose warp marker was then slid, as the
 // arrangement makes them. The saved export and the live route must agree
-// sample for sample at both callback sizes, and the slide made while playing
-// is captured as a live source edit that primes the exact handoff block.
+// sample for sample at both callback sizes. A slide made while playing is
+// captured as a live source edit whose replacement source primes the block
+// it takes over at; its audio is the saved project's, compared above.
 void drawn_ramp_and_slid_marker_match_live_export() {
   constexpr std::uint32_t rate = oscillate::test::sample_rate_48k;
   constexpr auto beat = timeline::ticks_per_quarter;
@@ -564,6 +565,8 @@ void drawn_ramp_and_slid_marker_match_live_export() {
   // The slid audio: what played this many frames before the marker.
   constexpr std::uint64_t slide_frames = 1'000;
   constexpr std::size_t handoff_block = 64;
+  // How long the clip plays before the slide arrives.
+  constexpr std::size_t blocks_before_slide = 16;
   constexpr std::size_t stream_budget = 262'144;
   Song song(rate, rate, [](std::uint32_t frame) { return tone_with_clicks(frame, rate); });
   REQUIRE_OK(song.session->song().set_tempo_ramp({0}, {4 * beat}, ramp_end_bpm,
@@ -584,7 +587,7 @@ void drawn_ramp_and_slid_marker_match_live_export() {
   auto active =
       take(app::RoutedAudioSource::prepare(song.root, *model.snapshot(), control, stream_budget));
   Player player(*active, handoff_block, stream_budget);
-  player.play_until(handoff_block * 16);
+  player.play_until(handoff_block * blocks_before_slide);
   const auto layout = take(app::clip_warp_layout(*model.snapshot(), song.clip));
   const auto slid = take(app::slide_warp_marker(
       *model.snapshot(), song.clip,
