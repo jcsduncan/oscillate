@@ -153,6 +153,7 @@ Real-time contract:
 - Kernels are created and sized on control, and never allocate on the callback.
 - Control values are adopted at fixed control ticks aligned to project frames, so any block split renders identically and export equals live playback.
 - A kernel that streams content from disk (the Concert, Fret and Wren sample libraries; ADR-0071, ADR-0088, ADR-0089) reads it on a worker thread into preallocated rings; offline renders call `await_content` between blocks so they never outrun the disk, and the callback never waits.
+- Bow's library ([ADR-0111](decisions/0111-bow-sampled-strings.md)) is read on a background thread at the first look; a kernel is silent until it adopts it while idle, and offline renders wait for the read in `await_content`.
 - Automation lanes, stepped lanes ([ADR-0034](decisions/0034-stepped-native-automation.md)) and pedal events ([ADR-0035](decisions/0035-pedals-in-midi-clips.md)) are delivered sample-accurately.
 - Telemetry goes through a bounded lock-free buffer for panels ([ADR-0037](decisions/0037-synth-telemetry.md)).
 - Structural parameter changes switch live ([ADR-0038](decisions/0038-live-structural-switching.md)).

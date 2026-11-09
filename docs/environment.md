@@ -14,13 +14,14 @@ for ordinary use.
 | `OSCILLATE_CONCERT_LIBRARY` | `src/native_dsp/synth/concert_library.cpp` | Directory of Concert's piano library. |
 | `OSCILLATE_FRET_LIBRARY` | `src/native_dsp/synth/fret_library.cpp` | Directory of Fret's bass library. |
 | `OSCILLATE_WREN_LIBRARY` | `src/native_dsp/synth/wren_library.cpp` | Directory of Wren's flute library. |
+| `OSCILLATE_BOW_LIBRARY` | `src/native_dsp/synth/bow_library.cpp` | Directory of Bow's strings library. |
 | `XDG_DATA_HOME` | presets, grooves, racks, traces, sample libraries | Base for user data; defaults to `~/.local/share`. |
 | `XDG_CACHE_HOME` | shared source-analysis cache, Nova preset map | Base for disposable caches; defaults to `~/.cache`. |
 | `XDG_STATE_HOME` | log files, crash reports | Base for the log and crash-report directories; defaults to `~/.local/state`. |
 | `HOME` | project library, VST3 scan roots, fallbacks above | Used when the XDG variables are unset. |
 
-The sample-library installers in `tools/concert`, `tools/fret` and
-`tools/wren` write to the same directory the instrument reads, so set the
+The sample-library installers in `tools/concert`, `tools/fret`, `tools/wren`
+and `tools/bow` write to the same directory the instrument reads, so set the
 variable for both or for neither. See the README's
 [optional sample libraries](../README.md#sample-libraries).
 
@@ -33,7 +34,7 @@ variable for both or for neither. See the README's
 | `$XDG_DATA_HOME/oscillate/grooves/` | User grooves. |
 | `$XDG_DATA_HOME/oscillate/racks/` | User device racks. |
 | `$XDG_DATA_HOME/oscillate/traces/` | Performance traces saved from the command palette. |
-| `$XDG_DATA_HOME/oscillate/instruments/` | Installed sample libraries (Concert, Fret, Wren). |
+| `$XDG_DATA_HOME/oscillate/instruments/` | Installed sample libraries (Concert, Fret, Wren, Bow). |
 | `$XDG_STATE_HOME/oscillate/logs/` | The application log, `oscillate.log`, also written to stderr. It rotates at 1 MiB, keeping `oscillate.1.log` to `oscillate.4.log`. Status messages, Qt and QML warnings, device start and stop, VST3 scan failures with the plugin's stderr, and audio-callback events (silenced blocks, xruns) go here. |
 | `$XDG_STATE_HOME/oscillate/diagnostics/` | [Diagnostics bundles](diagnostics.md) saved from the command palette or `oscillate --save-diagnostics`, one `oscillate-diagnostics-<time>.zip` each. Nothing here is sent anywhere. |
 | `$XDG_STATE_HOME/oscillate/crash-reports/` | Local [crash reports](crash-reports.md): `session.txt` (this session's description), `crashed` (the marker a crash leaves) and one `oscillate-crash-<time>.txt` per crash. Nothing here is sent anywhere. |

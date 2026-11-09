@@ -88,4 +88,16 @@ struct Corner {
   return {n0 / d0, n1 / d0, n2 / d0, d1 / d0, d2 / d0};
 }
 
+// The RBJ peaking EQ: exactly `gain` at the corner, unity far from it, its
+// bandwidth set by `q`. The corner is held below 0.45 of the rate.
+[[nodiscard]] inline BiquadCoefficients rbj_peak(double gain, Corner at, double q) noexcept {
+  const double a = std::sqrt(gain);
+  const double w = 2.0 * std::numbers::pi * std::min(at.hz, nyquist_guard * at.rate) / at.rate;
+  const double c = std::cos(w);
+  const double alpha = std::sin(w) / (2.0 * q);
+  const double a0 = 1.0 + alpha / a;
+  return {(1.0 + alpha * a) / a0, -2.0 * c / a0, (1.0 - alpha * a) / a0, -2.0 * c / a0,
+          (1.0 - alpha / a) / a0};
+}
+
 } // namespace oscillate::native_dsp::dsp

@@ -94,16 +94,17 @@ Machine-specific paths go in `CMakeUserPresets.json` (ignored by Git).
 
 ## Sample libraries
 
-Concert, Fret and Wren need sample libraries that are not in this repository.
-The installers download a pinned release, verify it and convert it. They need
-Python 3 and ffmpeg (with libsoxr for Fret and Wren); Concert and Fret also
-need git.
+Concert, Fret, Wren and Bow need sample libraries that are not in this
+repository. The installers download a pinned release, verify it and convert
+it. They need Python 3 and ffmpeg (with libsoxr for Fret and Wren); Concert,
+Fret and Bow also need git.
 
 | Instrument | Library | Licence | Installer | Location override |
 | --- | --- | --- | --- | --- |
 | Concert | Salamander Grand Piano V3 | CC-BY 3.0 | `python3 -I tools/concert/install_salamander.py` | `OSCILLATE_CONCERT_LIBRARY` |
 | Fret | Karoryfer Black and Blue Basses (darkblack) | CC0 1.0 | `python3 -I tools/fret/install_black_and_blue.py` | `OSCILLATE_FRET_LIBRARY` |
 | Wren | University of Iowa Musical Instrument Samples, flute | free use, no formal licence | `python3 -I tools/wren/install_iowa_flute.py` | `OSCILLATE_WREN_LIBRARY` |
+| Bow | VSCO 2 Community Edition strings; University of Iowa Musical Instrument Samples, solo strings | CC0 1.0; free use, no formal licence | `python3 -I tools/bow/install_strings.py` | `OSCILLATE_BOW_LIBRARY` |
 
 Default location: `$XDG_DATA_HOME/oscillate/instruments/`
 (`~/.local/share/oscillate/instruments/` when `XDG_DATA_HOME` is unset). An override must be set for both the installer and the
