@@ -3,8 +3,8 @@
 #include "oscillate/application/session/effect_service.hpp"
 #include "oscillate/foundation/error.hpp"
 #include "oscillate/foundation/id.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/project/model.hpp"
 
 #include <algorithm>
@@ -123,7 +123,7 @@ foundation::Result<project::Placement> audio_placement_at(const project::Placeme
 // The track's built-in synth and its resolved dense values, or why not.
 struct NativeTrack {
   const project::Track* track;
-  native_dsp::synth::ResolvedNativeInstrument resolved;
+  native_inserts::ResolvedNativeInstrument resolved;
 };
 
 foundation::Result<NativeTrack> native_track(const project::Snapshot& snapshot,

@@ -123,11 +123,11 @@ oscillate_add_test_executable(oscillate_telemetry_tests SOURCES telemetry_tests.
   TEST native_synth_telemetry_contract)
 
 oscillate_add_test_executable(oscillate_pedal_tests SOURCES pedal_tests.cpp
-  LIBS oscillate::synth_engines
+  LIBS oscillate::synth_engines oscillate::native_inserts
   TEST native_pedal_contract)
 
 oscillate_add_test_executable(oscillate_note_effect_tests SOURCES note_effect_tests.cpp
-  LIBS oscillate::synth_engines)
+  LIBS oscillate::synth_engines oscillate::native_inserts)
 oscillate_add_case_tests(native_note_effect_contract oscillate_note_effect_tests
   CASES the_registry_is_complete the_arp_plays_up_on_the_sixteenth_grid
         the_arp_modes_order_the_notes the_arp_swings_starts_at_once_and_latches
@@ -137,7 +137,7 @@ oscillate_add_case_tests(native_note_effect_contract oscillate_note_effect_tests
 
 # Comp (ADR-0083, ADR-0084): held notes played in a rhythm.
 oscillate_add_test_executable(oscillate_comp_tests SOURCES comp_tests.cpp
-  LIBS oscillate::synth_engines)
+  LIBS oscillate::synth_engines oscillate::native_inserts)
 oscillate_add_case_tests(native_comp_contract oscillate_comp_tests
   CASES comp_plays_held_notes_on_its_lanes comp_holds_its_input_and_passes_strangers
         comp_pushes_changes_by_chance comp_top_lane_runs_its_own_length
@@ -147,7 +147,7 @@ oscillate_add_case_tests(native_comp_contract oscillate_comp_tests
         comp_motion_keeps_a_loop_moving comp_density_thins_and_fills)
 
 oscillate_add_test_executable(oscillate_synth_document_tests SOURCES synth_document_tests.cpp
-  LIBS oscillate::synth_engines
+  LIBS oscillate::synth_engines oscillate::native_inserts
   TEST native_synth_document_contract)
 
 oscillate_add_test_executable(oscillate_concert_tests SOURCES concert_tests.cpp
@@ -205,7 +205,7 @@ oscillate_add_case_tests(native_anvil_contract oscillate_anvil_tests
 
 # Kick & Bass Lock (ADR-0072): Anvil and Nova following each other.
 oscillate_add_test_executable(oscillate_lock_tests SOURCES lock_tests.cpp
-  LIBS oscillate::synth_engines)
+  LIBS oscillate::synth_engines oscillate::native_inserts)
 oscillate_add_case_tests(native_lock_contract oscillate_lock_tests
   CASES
   nova_lock_off_is_untouched
@@ -667,7 +667,7 @@ oscillate_add_test_executable(oscillate_native_effect_stage_tests SOURCES native
   TEST native_effect_stage_contract)
 
 oscillate_add_test_executable(oscillate_nova_render_tests SOURCES nova_render_tests.cpp
-  LIBS oscillate::synth_engines)
+  LIBS oscillate::synth_engines oscillate::native_inserts)
 oscillate_add_case_tests(native_nova_render_contract oscillate_nova_render_tests
   CASES
   analog_pad
@@ -682,11 +682,11 @@ oscillate_add_case_tests(native_nova_render_contract oscillate_nova_render_tests
   voices_on_helpers)
 
 oscillate_add_test_executable(oscillate_nova_engine_tests SOURCES nova_engine_tests.cpp
-  LIBS oscillate::synth_engines
+  LIBS oscillate::synth_engines oscillate::native_inserts
   TEST native_nova_engine_contract)
 
 oscillate_add_test_executable(oscillate_nova_analogue_tests SOURCES nova_analogue_tests.cpp
-  LIBS oscillate::synth_engines)
+  LIBS oscillate::synth_engines oscillate::native_inserts)
 oscillate_add_case_tests(native_nova_analogue_contract oscillate_nova_analogue_tests
   CASES
   off_ignores_every_analogue_setting

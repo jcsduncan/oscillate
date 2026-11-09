@@ -1,11 +1,15 @@
-#include "oscillate/native_dsp/synth/project_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 
 #include "oscillate/native_dsp/synth/engines.hpp"
 
 #include <string>
 #include <utility>
 
-namespace oscillate::native_dsp::synth {
+namespace oscillate::native_inserts {
+
+using namespace native_dsp;
+using namespace native_dsp::synth;
+
 namespace {
 
 using foundation::ErrorCode;
@@ -127,4 +131,4 @@ Result<project::AutomationDomain> native_automation_domain(const SynthEngine& en
                          : project::AutomationScale::linear});
 }
 
-} // namespace oscillate::native_dsp::synth
+} // namespace oscillate::native_inserts

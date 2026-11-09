@@ -5,8 +5,8 @@
 #include "oscillate/application/comp_patterns.hpp"
 #include "oscillate/automation_project/preparation.hpp"
 #include "oscillate/native_dsp/note_effects/note_effect.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/persistence/rack_file.hpp"
 #include "oscillate/project/lookup.hpp"
 #include "session_state.hpp"
@@ -108,11 +108,10 @@ destination_domain(const project::Track& track, const project::MacroDestination&
     const auto* patch = std::get_if<project::NativeInstrumentPatch>(&track.instrument_source);
     if (native->track != track.id || patch == nullptr)
       return R::failure({ErrorCode::unavailable, "The track has no built-in synth to map"});
-    auto resolved = native_dsp::synth::resolve_native_instrument(*patch);
+    auto resolved = native_inserts::resolve_native_instrument(*patch);
     if (!resolved)
       return R::failure(resolved.error());
-    return native_dsp::synth::native_automation_domain(*resolved.value().engine,
-                                                       native->parameter_id);
+    return native_inserts::native_automation_domain(*resolved.value().engine, native->parameter_id);
   }
   const auto& target = std::get<project::NativeEffectParameterTarget>(destination);
   const auto owner = owner_of(track, target);
@@ -142,7 +141,7 @@ destination_domain(const project::Track& track, const project::MacroDestination&
 mapped_parameter_edits(const project::Track& track, const project::Macro& macro, double value) {
   using R = Result<std::vector<project::Operation>>;
   std::vector<project::Operation> operations;
-  std::optional<native_dsp::synth::ResolvedNativeInstrument> instrument;
+  std::optional<native_inserts::ResolvedNativeInstrument> instrument;
   std::vector<std::pair<const project::EffectInsert*, native_inserts::ResolvedNativeEffect>>
       effects;
   std::vector<project::NoteEffectInsert> notes;
@@ -153,13 +152,13 @@ mapped_parameter_edits(const project::Track& track, const project::Macro& macro,
         const auto* patch = std::get_if<project::NativeInstrumentPatch>(&track.instrument_source);
         if (patch == nullptr)
           return R::failure({ErrorCode::unavailable, "The mapped synth is gone"});
-        auto resolved = native_dsp::synth::resolve_native_instrument(*patch);
+        auto resolved = native_inserts::resolve_native_instrument(*patch);
         if (!resolved)
           return R::failure(resolved.error());
         instrument = std::move(resolved).value();
       }
       auto index =
-          native_dsp::synth::native_parameter_index(*instrument->engine, native->parameter_id);
+          native_inserts::native_parameter_index(*instrument->engine, native->parameter_id);
       if (!index)
         return R::failure(index.error());
       instrument->values[index.value()] = plain;
@@ -203,8 +202,8 @@ mapped_parameter_edits(const project::Track& track, const project::Macro& macro,
       parameter->value = plain;
   }
   if (instrument) {
-    auto patch = native_dsp::synth::make_native_patch(*instrument->engine, instrument->values,
-                                                      instrument->document);
+    auto patch = native_inserts::make_native_patch(*instrument->engine, instrument->values,
+                                                   instrument->document);
     if (!patch)
       return R::failure(patch.error());
     if (patch.value() != std::get<project::NativeInstrumentPatch>(track.instrument_source))
@@ -300,7 +299,7 @@ Result<void> TrackDeviceService::load_track_rack(project::TrackId track,
     return Result<void>::failure({ErrorCode::not_found, "Track not found"});
   // The engines check the rack's values and documents before anything moves.
   if (rack.instrument) {
-    if (auto resolved = native_dsp::synth::resolve_native_instrument(*rack.instrument); !resolved)
+    if (auto resolved = native_inserts::resolve_native_instrument(*rack.instrument); !resolved)
       return Result<void>::failure(resolved.error());
   }
   for (const auto& effect : rack.effects) {

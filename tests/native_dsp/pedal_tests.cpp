@@ -1,8 +1,8 @@
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_dsp/pedal_latch.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/player.hpp"
 #include "oscillate/native_dsp/synth/prism.hpp"
+#include "oscillate/native_inserts/synth_player.hpp"
 #include "oscillate/test/check.hpp"
 #include "synth_test_support.hpp"
 
@@ -182,7 +182,7 @@ project::Snapshot chase_project(bool pedal) {
 std::vector<double> play(const project::Snapshot& state, std::uint64_t begin, std::uint64_t end,
                          std::uint64_t warm, std::uint64_t generation) {
   const auto plan = take(oscillate::engine::compile_midi_events(state));
-  auto player = take(oscillate::native_dsp::synth::NativeSynthPlayer::prepare(
+  auto player = take(oscillate::native_inserts::NativeSynthPlayer::prepare(
       state, state.tracks[0], plan.instruments()[0], {}, 128,
       std::numeric_limits<std::uint64_t>::max()));
   std::vector<oscillate::engine::StereoFrame> buffer(128);
@@ -232,7 +232,7 @@ void players_take_live_notes() {
   state.tracks[0].midi_clips.clear();
   const auto plan = take(oscillate::engine::compile_midi_events(state));
   const oscillate::engine::InstrumentEvents empty{state.tracks[0].id, {}};
-  auto player = take(oscillate::native_dsp::synth::NativeSynthPlayer::prepare(
+  auto player = take(oscillate::native_inserts::NativeSynthPlayer::prepare(
       state, state.tracks[0], plan.instruments().empty() ? empty : plan.instruments()[0], {}, 128,
       std::numeric_limits<std::uint64_t>::max()));
   std::vector<oscillate::engine::StereoFrame> buffer(128);

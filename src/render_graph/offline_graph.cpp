@@ -1,8 +1,8 @@
 #include "oscillate/render_graph/offline_graph.hpp"
 
-#include "oscillate/native_dsp/synth/player.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/native_inserts/native_stage.hpp"
+#include "oscillate/native_inserts/synth_player.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/render_graph/insert_preflight.hpp"
 #include "oscillate/routing/project_route_plan.hpp"
@@ -418,7 +418,7 @@ foundation::Result<OfflineGraph> prepare_offline_graph(const project::Snapshot& 
 }
 
 struct OfflineInstrument::Player {
-  native_dsp::synth::NativeSynthPlayer player;
+  native_inserts::NativeSynthPlayer player;
 };
 
 OfflineInstrument::OfflineInstrument(std::unique_ptr<Player> player) noexcept
@@ -441,7 +441,7 @@ OfflineInstrument::prepare(const project::Snapshot& snapshot,
   auto media = source_prep::load_synth_media(store, snapshot, patch->document);
   if (!media)
     return R::failure(media.error());
-  auto player = native_dsp::synth::NativeSynthPlayer::prepare(
+  auto player = native_inserts::NativeSynthPlayer::prepare(
       snapshot, track, events, automation, max_frames, std::numeric_limits<std::uint64_t>::max(),
       std::move(media).value());
   if (!player)
@@ -464,7 +464,7 @@ std::uint64_t OfflineInstrument::tail_frames() const noexcept {
 
 foundation::Result<std::uint64_t>
 instrument_tail_frames(const project::NativeInstrumentPatch& patch, std::uint32_t sample_rate) {
-  auto resolved = native_dsp::synth::resolve_native_instrument(patch);
+  auto resolved = native_inserts::resolve_native_instrument(patch);
   if (!resolved)
     return foundation::Result<std::uint64_t>::failure(resolved.error());
   return foundation::Result<std::uint64_t>::success(resolved.value().engine->tail_frames(

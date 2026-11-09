@@ -166,7 +166,7 @@ Result<std::unique_ptr<RoutedAudioSource>> RoutedAudioSource::prepare_with_layou
       if (!media)
         return fail(media.error().code,
                     "Built-in synth media is unavailable: " + media.error().message);
-      auto player = native_dsp::synth::NativeSynthPlayer::prepare(
+      auto player = native_inserts::NativeSynthPlayer::prepare(
           snapshot, track, events == midi.value().instruments().end() ? empty : *events,
           automation.value(), max_frames, limit.value(), std::move(media).value());
       if (!player)
@@ -174,7 +174,7 @@ Result<std::unique_ptr<RoutedAudioSource>> RoutedAudioSource::prepare_with_layou
                     "Built-in synth is unavailable: " + player.error().message);
       synths.push_back(
           {static_cast<std::size_t>(slot - layout.begin()),
-           std::make_shared<native_dsp::synth::NativeSynthPlayer>(std::move(player).value())});
+           std::make_shared<native_inserts::NativeSynthPlayer>(std::move(player).value())});
     }
   }
 
@@ -392,7 +392,7 @@ Result<std::unique_ptr<RoutedAudioSource>> RoutedAudioSource::prepare_with_layou
 }
 
 // The player that plays the track's instrument, never one ringing out.
-native_dsp::synth::NativeSynthPlayer*
+native_inserts::NativeSynthPlayer*
 RoutedAudioSource::playing_synth(project::TrackId track) const noexcept {
   const auto found = std::ranges::find_if(synths_, [track](const SynthSlot& synth) {
     return synth.player->track() == track && !synth.retiring;
@@ -406,7 +406,7 @@ RoutedAudioSource::synth_runtime(project::TrackId track) noexcept {
   return player == nullptr ? nullptr : player->runtime().get();
 }
 
-std::shared_ptr<native_dsp::synth::NativeSynthPlayer>
+std::shared_ptr<native_inserts::NativeSynthPlayer>
 RoutedAudioSource::shared_synth_player(project::TrackId track) const {
   const auto found = std::ranges::find_if(synths_, [track](const SynthSlot& synth) {
     return synth.player->track() == track && !synth.retiring;
@@ -414,7 +414,7 @@ RoutedAudioSource::shared_synth_player(project::TrackId track) const {
   return found == synths_.end() ? nullptr : found->player;
 }
 
-native_dsp::synth::NativeSynthPlayer*
+native_inserts::NativeSynthPlayer*
 RoutedAudioSource::synth_player(project::TrackId track) noexcept {
   return playing_synth(track);
 }

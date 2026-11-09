@@ -3,7 +3,7 @@
 
 #include "oscillate/audio_io/pipewire_output.hpp"
 #include "oscillate/foundation/trace.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/project/frozen_view.hpp"
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
 #include "oscillate/application/vst3/stage_provider.hpp"

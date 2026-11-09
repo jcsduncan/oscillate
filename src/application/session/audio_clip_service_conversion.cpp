@@ -5,7 +5,7 @@
 #include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/crate.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/processing/clip_frame_plan.hpp"
 #include "oscillate/source_prep/synth_media.hpp"
 #include "session_state.hpp"
@@ -109,7 +109,7 @@ Result<project::ClipId> AudioClipService::add_clay_midi_clip(std::optional<proje
     auto id = numbered_id<project::TrackId>(next_track_number());
     if (!id)
       return R::failure(id.error());
-    auto made = native_dsp::synth::native_patch_for_preset(*engine, std::nullopt);
+    auto made = native_inserts::native_patch_for_preset(*engine, std::nullopt);
     if (!made)
       return R::failure(made.error());
     chosen = id.value();
@@ -119,7 +119,7 @@ Result<project::ClipId> AudioClipService::add_clay_midi_clip(std::optional<proje
     operations.emplace_back(project::SetNativeInstrumentPatch{*chosen, patch});
   }
   const auto target = *chosen;
-  auto resolved = native_dsp::synth::resolve_native_instrument(patch);
+  auto resolved = native_inserts::resolve_native_instrument(patch);
   if (!resolved)
     return R::failure(resolved.error());
   const auto& engine = *resolved.value().engine;
@@ -141,7 +141,7 @@ Result<project::ClipId> AudioClipService::add_clay_midi_clip(std::optional<proje
   if (!midi.bends.empty() && range != nullptr) {
     const auto parameter =
         std::string(engine.descriptor->id) + std::string(clay::bend_parameter_suffix);
-    auto domain = native_dsp::synth::native_automation_domain(engine, parameter);
+    auto domain = native_inserts::native_automation_domain(engine, parameter);
     if (!domain)
       return R::failure(domain.error());
     const auto [lane_number, point_number] = next_automation_numbers();
@@ -292,7 +292,7 @@ Result<SamplerConversion> AudioClipService::convert_audio_clip_to_sampler(projec
   document.regions = std::move(sample.value().regions);
   document.labels = std::move(sample.value().labels);
   auto patch =
-      native_dsp::synth::make_native_patch(*engine, sample.value().values, std::move(document));
+      native_inserts::make_native_patch(*engine, sample.value().values, std::move(document));
   if (!patch)
     return R::failure(patch.error());
 

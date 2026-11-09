@@ -6,7 +6,7 @@
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/media/prefetch.hpp"
 #include "oscillate/media/source_rate_reader.hpp"
-#include "oscillate/native_dsp/synth/player.hpp"
+#include "oscillate/native_inserts/synth_player.hpp"
 #include "oscillate/processing/warp_live_reader.hpp"
 #include "oscillate/project/clip_fade.hpp"
 
@@ -143,9 +143,9 @@ public:
   synth_runtime(project::TrackId track) noexcept;
   // Control only. The player retains its runtime and voices while a prepared
   // native automation plan is offered to the callback.
-  [[nodiscard]] native_dsp::synth::NativeSynthPlayer* synth_player(project::TrackId track) noexcept;
+  [[nodiscard]] native_inserts::NativeSynthPlayer* synth_player(project::TrackId track) noexcept;
   // Control only: the same player, shared, for a replacement source to keep.
-  [[nodiscard]] std::shared_ptr<native_dsp::synth::NativeSynthPlayer>
+  [[nodiscard]] std::shared_ptr<native_inserts::NativeSynthPlayer>
   shared_synth_player(project::TrackId track) const;
   // Control only: every synth player re-offers the notes its engine follows
   // (Kick & Bass Lock, ADR-0072) from `snapshot`. A player that fails keeps
@@ -200,7 +200,7 @@ private:
   // only one of them renders it in any block.
   struct SynthSlot {
     std::size_t slot_index;
-    std::shared_ptr<native_dsp::synth::NativeSynthPlayer> player;
+    std::shared_ptr<native_inserts::NativeSynthPlayer> player;
     // As KeptPlayer: a plan released at take-over, and a player that rings
     // out until retire_end (callback-owned, set at take-over) and then stops.
     std::uint64_t staged_revision = 0;
@@ -322,7 +322,7 @@ private:
   // kept players' staged plans play from it and retiring ones ring out.
   bool took_over_ = false;
   void take_over(engine::BlockContext block) noexcept;
-  [[nodiscard]] native_dsp::synth::NativeSynthPlayer*
+  [[nodiscard]] native_inserts::NativeSynthPlayer*
   playing_synth(project::TrackId track) const noexcept;
   bool stream_hold_ = false; // callback-owned
   static_assert(std::atomic<std::uint64_t>::is_always_lock_free);

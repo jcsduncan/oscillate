@@ -3,7 +3,7 @@
 #include "saved_processing.hpp"
 #include "vst3_editor_commit.hpp"
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
-#include "oscillate/plugins/project_binding.hpp"
+#include "oscillate/application/vst3/project_binding.hpp"
 #include "vst3_editor_attachment.hpp"
 #endif
 

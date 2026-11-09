@@ -5,7 +5,7 @@
 #include "oscillate/application/sound_map.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/nova.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/persistence/effect_preset.hpp"
 #include "oscillate/test/check.hpp"
 
@@ -101,7 +101,7 @@ public:
     return true;
   }
   [[nodiscard]] std::optional<std::string> preset_text() const override {
-    auto patch = take(synth::make_native_patch(nova(), values_, document_));
+    auto patch = take(oscillate::native_inserts::make_native_patch(nova(), values_, document_));
     project::NativeEffectPatch saved;
     saved.engine = patch.engine;
     saved.engine_version = patch.engine_version;

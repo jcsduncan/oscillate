@@ -1,5 +1,4 @@
 #include "oscillate/plugins/vst3_graph_node.hpp"
-#include "oscillate/plugins/vst3_tempo_plan.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -294,91 +293,19 @@ namespace {
 using detail::maximum_live_sample;
 using detail::TempoBoundary;
 
-class KeyBuilder {
-public:
-  void add(std::uint64_t value) noexcept {
-    for (unsigned index = 0; index < 8; ++index) {
-      value_ ^= value & 0xffU;
-      value_ *= 1099511628211ULL;
-      value >>= 8U;
-    }
-  }
-  void add(std::string_view value) noexcept {
-    add(value.size());
-    for (const auto character : value) {
-      value_ ^= static_cast<unsigned char>(character);
-      value_ *= 1099511628211ULL;
-    }
-  }
-  void add(std::span<const std::uint8_t> value) noexcept {
-    add(value.size());
-    for (const auto byte : value) {
-      value_ ^= byte;
-      value_ *= 1099511628211ULL;
-    }
-  }
-  [[nodiscard]] std::uint64_t value() const noexcept { return value_ == 0 ? 1 : value_; }
-
-private:
-  std::uint64_t value_{14695981039346656037ULL};
-};
-
-struct ProcessingFormat {
-  double sample_rate;
-  std::uint32_t max_block_frames;
-  double tempo_bpm;
-  std::uint64_t tempo_revision;
-  Vst3ProcessingMode mode;
-  bool routed_sidechain;
-};
-
-[[nodiscard]] std::uint64_t compatibility_key(const project::Vst3PluginInstance& saved,
-                                              ProcessingFormat format,
-                                              std::uint64_t automation_key) noexcept {
-  KeyBuilder key;
-  key.add(saved.class_id);
-  key.add(saved.vendor);
-  key.add(saved.name);
-  key.add(saved.version);
-  key.add(saved.binary_sha256);
-  key.add(saved.component_state);
-  key.add(static_cast<std::uint64_t>(saved.controller_state.has_value()));
-  if (saved.controller_state)
-    key.add(*saved.controller_state);
-  for (const auto& parameter : saved.parameters) {
-    key.add(parameter.id);
-    key.add(std::bit_cast<std::uint64_t>(parameter.normalized_value));
-  }
-  key.add(std::bit_cast<std::uint64_t>(format.sample_rate));
-  key.add(format.max_block_frames);
-  key.add(std::bit_cast<std::uint64_t>(format.tempo_bpm));
-  key.add(format.tempo_revision);
-  key.add(static_cast<std::uint64_t>(format.mode));
-  key.add(static_cast<std::uint64_t>(format.routed_sidechain));
-  key.add(automation_key);
-  return key.value();
-}
-
 class Vst3GraphRuntime final : public engine::SidechainProcessorRuntime {
 public:
-  Vst3GraphRuntime(std::unique_ptr<LoadedVst3Effect> effect, std::uint32_t max_frames,
-                   timeline::TempoMap tempo, std::vector<TempoBoundary> tempo_boundaries,
-                   std::uint32_t sample_rate,
-                   std::shared_ptr<std::atomic<Vst3GraphRuntimeStatus>> status,
-                   std::vector<automation_project::PreparedTargetAutomation> automation,
-                   std::uint32_t event_capacity, std::shared_ptr<Vst3ManualEventSlot> manual_events,
-                   bool routed_sidechain)
-      : effect_(std::move(effect)), input_left_(max_frames), input_right_(max_frames),
-        output_left_(max_frames), output_right_(max_frames),
-        sidechain_left_(routed_sidechain ? max_frames : 0),
-        sidechain_right_(routed_sidechain ? max_frames : 0), tempo_(std::move(tempo)),
-        tempo_boundaries_(std::move(tempo_boundaries)), sample_rate_(sample_rate),
-        status_(std::move(status)), automation_(std::move(automation)),
-        manual_events_(std::move(manual_events)), automation_values_(max_frames),
-        event_capacity_(event_capacity), routed_sidechain_(routed_sidechain) {
-    has_ramps_ = std::ranges::any_of(tempo_.events(), [](const auto& event) {
-      return event.shape_to_next != timeline::TempoShape::step;
-    });
+  explicit Vst3GraphRuntime(Vst3GraphRuntimeInputs inputs)
+      : effect_(std::move(inputs.effect)), input_left_(inputs.max_frames),
+        input_right_(inputs.max_frames), output_left_(inputs.max_frames),
+        output_right_(inputs.max_frames),
+        sidechain_left_(inputs.routed_sidechain ? inputs.max_frames : 0),
+        sidechain_right_(inputs.routed_sidechain ? inputs.max_frames : 0),
+        tempo_boundaries_(std::move(inputs.tempo.boundaries)),
+        tempo_clock_(std::move(inputs.tempo.clock)), has_ramps_(inputs.tempo.ramps),
+        status_(std::move(inputs.status)), automation_(std::move(inputs.automation)),
+        manual_events_(std::move(inputs.manual_events)), automation_values_(inputs.max_frames),
+        event_capacity_(inputs.event_capacity), routed_sidechain_(inputs.routed_sidechain) {
     events_.reserve(event_capacity_);
   }
   ~Vst3GraphRuntime() override { manual_events_->retire(); }
@@ -451,8 +378,7 @@ private:
               ? available
               : std::min(available, static_cast<std::size_t>(next->sample - position));
       double bpm = (next - 1)->bpm;
-      if (has_ramps_ &&
-          !tempo_.bpm_at_sample_rt({static_cast<std::int64_t>(position)}, sample_rate_, bpm)) {
+      if (has_ramps_ && !tempo_clock_->bpm_at(static_cast<std::int64_t>(position), bpm)) {
         status_->store(Vst3GraphRuntimeStatus::process_failed, std::memory_order_release);
         if (manual)
           manual_events_->finish(false, -1);
@@ -492,16 +418,14 @@ private:
 
   [[nodiscard]] bool render_segment(std::size_t offset, std::size_t count, std::int64_t position,
                                     double bpm, std::optional<Vst3ParameterEvent> manual) noexcept {
-    timeline::TickPosition tick{};
-    if (!tempo_.sample_to_tick_rt({position}, sample_rate_, tick))
+    double quarter_notes = 0.0;
+    if (!tempo_clock_->quarter_notes_at(position, quarter_notes))
       return false;
     events_.clear();
     for (const auto& lane : automation_) {
-      const auto* target = std::get_if<project::Vst3ParameterTarget>(&lane.target());
-      if (target == nullptr ||
-          !lane.evaluate_block({position}, std::span(automation_values_).first(count)))
+      if (!lane.curve->evaluate_block(position, std::span(automation_values_).first(count)))
         return false;
-      const auto id = target->parameter_id;
+      const auto id = lane.parameter_id;
       for (std::size_t frame = 0; frame < count; ++frame) {
         if (frame != 0 && automation_values_[frame] == automation_values_[frame - 1])
           continue;
@@ -522,8 +446,7 @@ private:
         {std::span(input_left_).subspan(offset, count),
          std::span(input_right_).subspan(offset, count),
          std::span(output_left_).subspan(offset, count),
-         std::span(output_right_).subspan(offset, count), position,
-         static_cast<double>(tick.value) / timeline::ticks_per_quarter, bpm, true,
+         std::span(output_right_).subspan(offset, count), position, quarter_notes, bpm, true,
          routed_sidechain_ ? std::span(sidechain_left_).subspan(offset, count)
                            : std::span<const float>{},
          routed_sidechain_ ? std::span(sidechain_right_).subspan(offset, count)
@@ -545,12 +468,11 @@ private:
   std::vector<float> output_right_;
   std::vector<float> sidechain_left_;
   std::vector<float> sidechain_right_;
-  timeline::TempoMap tempo_;
   std::vector<TempoBoundary> tempo_boundaries_;
-  std::uint32_t sample_rate_;
+  std::shared_ptr<const Vst3TempoClock> tempo_clock_;
   bool has_ramps_{false};
   std::shared_ptr<std::atomic<Vst3GraphRuntimeStatus>> status_;
-  std::vector<automation_project::PreparedTargetAutomation> automation_;
+  std::vector<Vst3AutomationLane> automation_;
   std::shared_ptr<Vst3ManualEventSlot> manual_events_;
   std::vector<double> automation_values_;
   std::uint32_t event_capacity_;
@@ -558,159 +480,19 @@ private:
   bool routed_sidechain_;
 };
 
-struct FactoryState {
-  std::unique_ptr<LoadedVst3Effect> effect;
-  std::shared_ptr<std::atomic<Vst3GraphRuntimeStatus>> status;
-  std::uint32_t max_frames{0};
-  timeline::TempoMap tempo;
-  std::vector<TempoBoundary> tempo_boundaries;
-  std::uint32_t sample_rate{0};
-  std::vector<automation_project::PreparedTargetAutomation> automation;
-  std::uint32_t event_capacity{0};
-  std::shared_ptr<Vst3ManualEventSlot> manual_events;
-  bool routed_sidechain{false};
-};
-
 } // namespace
 
-PreparedVst3GraphNode
-prepare_vst3_graph_node(const project::Vst3PluginInstance& saved, const ScanResult& scanned,
-                        std::uint64_t engine_instance_id, const timeline::TempoMap& tempo,
-                        double sample_rate, std::uint32_t max_block_frames, Vst3ProcessingMode mode,
-                        std::vector<automation_project::PreparedTargetAutomation> automation,
-                        std::uint64_t automation_key, bool fixed_latency_verified,
-                        std::span<const std::uint32_t> qualified_manual_ids, bool routed_sidechain,
-                        std::optional<std::vector<Vst3QualifiedManualBlock>> qualified_blocks) {
-  PreparedVst3GraphNode result;
-  if (!std::isfinite(sample_rate) || sample_rate < 8'000 || sample_rate > 384'000 ||
-      sample_rate != std::floor(sample_rate)) {
-    result.binding_status = Vst3BindingStatus::timing_unsupported;
-    result.diagnostic = "VST3 effect requires a finite integral sample rate";
-    return result;
-  }
-  auto tempo_boundaries =
-      detail::compile_vst3_tempo(tempo, static_cast<std::uint32_t>(sample_rate));
-  if (!tempo_boundaries) {
-    result.binding_status = Vst3BindingStatus::timing_unsupported;
-    result.diagnostic = tempo_boundaries.error().message;
-    return result;
-  }
-  if (engine_instance_id == 0) {
-    result.binding_status = Vst3BindingStatus::identity_mismatch;
-    result.diagnostic = "Graph processor ID must be nonzero";
-    return result;
-  }
-  // Size the host before loading so admission and preallocation agree.
-  const auto event_budget = vst3_automation_event_budget(automation.size(), max_block_frames);
-  if (!automation.empty() && (!event_budget || automation_key == 0)) {
-    result.binding_status = Vst3BindingStatus::automation_unavailable;
-    result.diagnostic = "VST3 automation exceeds the bounded event budget or lacks a key";
-    return result;
-  }
-  // A zero block size has no budget; host creation reports that failure.
-  const auto event_capacity = event_budget.value_or(1U);
-  auto binding = bind_vst3_project_effect(saved, scanned, sample_rate, max_block_frames, mode,
-                                          event_capacity, routed_sidechain);
-  result.binding_status = binding.status;
-  result.unresolved_parameter_ids = std::move(binding.unresolved_parameter_ids);
-  result.diagnostic = std::move(binding.diagnostic);
-  if (!binding.ready())
-    return result;
-  const auto latency_check = binding.effect->host().check_prepared_latency();
-  if (latency_check.status != Vst3LatencyCheckStatus::stable) {
-    result.binding_status = Vst3BindingStatus::timing_unsupported;
-    result.diagnostic =
-        "VST3 processor latency changed, requested a restart or could not be verified";
-    return result;
-  }
-  result.routed_sidechain = binding.effect->host().routed_sidechain_enabled();
-  for (const auto& lane : automation) {
-    const auto* target = std::get_if<project::Vst3ParameterTarget>(&lane.target());
-    const auto parameter = target ? std::ranges::find(binding.effect->host().parameters(),
-                                                      target->parameter_id, &Vst3ParameterInfo::id)
-                                  : binding.effect->host().parameters().end();
-    if (!target || target->plugin != saved.id ||
-        parameter == binding.effect->host().parameters().end() || parameter->step_count != 0 ||
-        binding.effect->host().parameter_precision(target->parameter_id) !=
-            Vst3ParameterPrecision::sample_offsets_forwarded) {
-      result.binding_status = Vst3BindingStatus::automation_unavailable;
-      result.diagnostic = "Saved VST3 automation targets an unavailable or repeated parameter";
-      return result;
-    }
-  }
-  std::ranges::sort(automation, {}, [](const auto& lane) {
-    return std::get<project::Vst3ParameterTarget>(lane.target()).parameter_id;
-  });
-  for (std::size_t index = 1; index < automation.size(); ++index) {
-    if (std::get<project::Vst3ParameterTarget>(automation[index - 1].target()).parameter_id ==
-        std::get<project::Vst3ParameterTarget>(automation[index].target()).parameter_id) {
-      result.binding_status = Vst3BindingStatus::automation_unavailable;
-      result.diagnostic = "Saved VST3 automation repeats a parameter";
-      return result;
-    }
-  }
-  result.latency_samples = binding.effect->host().latency_samples();
-  result.finite_tail_samples = binding.effect->host().finite_tail_samples();
-  result.runtime_status =
-      std::make_shared<std::atomic<Vst3GraphRuntimeStatus>>(Vst3GraphRuntimeStatus::ready);
-  const auto key = compatibility_key(saved,
-                                     {sample_rate, max_block_frames, tempo.events().front().bpm,
-                                      tempo.revision(), mode, routed_sidechain},
-                                     automation_key);
-  std::vector<std::uint32_t> eligible;
-  for (const auto& parameter : binding.effect->host().parameters()) {
-    if (parameter.step_count == 0 && !parameter.read_only &&
-        binding.effect->host().parameter_precision(parameter.id) ==
-            Vst3ParameterPrecision::sample_offsets_forwarded)
-      eligible.push_back(parameter.id);
-  }
-  std::ranges::sort(eligible);
-  if (!qualified_manual_ids.empty()) {
-    // Only controls actually exposed as continuous, writable and sample-offset
-    // capable by this loaded instance can pass the caller's evidence record.
-    std::erase_if(eligible, [qualified_manual_ids](std::uint32_t id) {
-      return std::ranges::find(qualified_manual_ids, id) == qualified_manual_ids.end();
-    });
-  }
-  if (qualified_blocks) {
-    for (auto& block : *qualified_blocks) {
-      std::ranges::sort(block.parameter_ids);
-      auto unique = std::ranges::unique(block.parameter_ids);
-      block.parameter_ids.erase(unique.begin(), unique.end());
-      std::erase_if(block.parameter_ids, [&eligible](std::uint32_t id) {
-        return !std::ranges::binary_search(eligible, id);
-      });
-    }
-    std::erase_if(eligible, [&qualified_blocks](std::uint32_t id) {
-      return !std::ranges::any_of(*qualified_blocks, [id](const auto& block) {
-        return block.block_frames != 0 && std::ranges::binary_search(block.parameter_ids, id);
-      });
-    });
-  }
-  std::vector<std::uint32_t> automated;
-  automated.reserve(automation.size());
-  for (const auto& lane : automation)
-    automated.push_back(std::get<project::Vst3ParameterTarget>(lane.target()).parameter_id);
-  result.manual_events = std::make_shared<Vst3ManualEventSlot>(
-      Vst3InstanceKey{.instance_id = engine_instance_id, .compatibility_key = key},
-      std::move(eligible), std::move(automated), fixed_latency_verified,
-      std::move(qualified_blocks));
-  auto factory = std::make_shared<FactoryState>(
-      FactoryState{std::move(binding.effect), result.runtime_status, max_block_frames, tempo,
-                   std::move(tempo_boundaries).value(), static_cast<std::uint32_t>(sample_rate),
-                   std::move(automation), event_capacity, result.manual_events, routed_sidechain});
-  result.request = {.instance_id = engine_instance_id,
-                    .compatibility_key = key,
-                    .create_runtime = [factory]() -> std::unique_ptr<engine::ProcessorRuntime> {
-                      if (!factory->effect)
-                        return {};
-                      return std::make_unique<Vst3GraphRuntime>(
-                          std::move(factory->effect), factory->max_frames, factory->tempo,
-                          std::move(factory->tempo_boundaries), factory->sample_rate,
-                          factory->status, std::move(factory->automation), factory->event_capacity,
-                          factory->manual_events, factory->routed_sidechain);
-                    }};
-  return result;
+engine::NodeRequest make_vst3_graph_request(std::uint64_t engine_instance_id,
+                                            std::uint64_t compatibility_key,
+                                            Vst3GraphRuntimeInputs inputs) {
+  auto factory = std::make_shared<Vst3GraphRuntimeInputs>(std::move(inputs));
+  return {.instance_id = engine_instance_id,
+          .compatibility_key = compatibility_key,
+          .create_runtime = [factory]() -> std::unique_ptr<engine::ProcessorRuntime> {
+            if (!factory->effect)
+              return {};
+            return std::make_unique<Vst3GraphRuntime>(std::move(*factory));
+          }};
 }
 
 } // namespace oscillate::plugins

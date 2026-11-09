@@ -4,6 +4,7 @@
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_dsp/note_effects/note_effect.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
+#include "oscillate/native_inserts/tempo_ticks.hpp"
 
 #include <algorithm>
 #include <array>
@@ -173,8 +174,9 @@ render_notes(std::span<const project::NativeInstrumentParameter> parameters,
   const auto last_frame = static_cast<std::uint64_t>(last.value().value);
   if (last_frame - first_frame > max_render_seconds * sample_rate)
     return R::failure({ErrorCode::resource_exhausted, "The range is too long to play Comp over"});
+  const native_inserts::TempoTicks ticks(tempo, sample_rate);
   for (auto frame = first_frame; frame <= last_frame; frame += render_block) {
-    const fx::NoteClock clock(tempo, sample_rate, frame, render_block);
+    const fx::NoteClock clock(ticks, frame, render_block);
     if (!clock.valid())
       return R::failure({ErrorCode::invalid_argument, "The tempo map cannot place the range"});
     const auto copied = input_notes.copy_block(events, {static_cast<std::int64_t>(frame)},

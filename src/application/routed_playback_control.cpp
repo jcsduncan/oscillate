@@ -7,8 +7,8 @@
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/foundation/trace.hpp"
 #include "oscillate/native_dsp/convolution_runtime.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/native_inserts/native_stage.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/routing/route_gain_blocks.hpp"
@@ -1688,7 +1688,7 @@ void RoutedPlaybackControl::unbind_live_source() noexcept {
   // the retired synth runtime while its final mailbox offer is pending.
   if (pending_native_revision_ && (std::holds_alternative<native_dsp::synth::NativeSynthRuntime*>(
                                        pending_native_revision_->runtime) ||
-                                   std::holds_alternative<native_dsp::synth::NativeSynthPlayer*>(
+                                   std::holds_alternative<native_inserts::NativeSynthPlayer*>(
                                        pending_native_revision_->runtime))) {
     pending_native_revision_.reset();
   }
@@ -1779,7 +1779,7 @@ RoutedPlaybackControl::try_queue_live_synth(std::shared_ptr<const project::Snaps
                       std::get<native_dsp::synth::NativeSynthRuntime*>(
                           pending_native_revision_->runtime) != runtime))
     return Result<bool>::success(false);
-  auto resolved = native_dsp::synth::resolve_native_instrument(*patch);
+  auto resolved = native_inserts::resolve_native_instrument(*patch);
   if (!resolved)
     return Result<bool>::failure(resolved.error());
   if (resolved.value().engine->descriptor != runtime->engine().descriptor)
@@ -1817,8 +1817,8 @@ RoutedPlaybackControl::try_queue_live_synth(std::shared_ptr<const project::Snaps
 Result<bool>
 RoutedPlaybackControl::try_queue_live_players(std::shared_ptr<const project::Snapshot> snapshot) {
   const bool superseding =
-      pending_native_revision_ && std::holds_alternative<native_dsp::synth::NativeSynthPlayer*>(
-                                      pending_native_revision_->runtime);
+      pending_native_revision_ &&
+      std::holds_alternative<native_inserts::NativeSynthPlayer*>(pending_native_revision_->runtime);
   // Compared with what plays, so a superseded offer's tracks are re-offered.
   const auto* previous = published_snapshot_.get();
   if (!previous || publisher_.active_revision() == 0 || publisher_.has_pending() ||
@@ -1882,7 +1882,7 @@ RoutedPlaybackControl::try_queue_live_players(std::shared_ptr<const project::Sna
       return Result<bool>::success(false);
     stages.push_back(&*stage);
   }
-  std::vector<native_dsp::synth::NativeSynthPlayer*> players;
+  std::vector<native_inserts::NativeSynthPlayer*> players;
   players.reserve(changed.size());
   for (const auto* track : changed) {
     auto* player = live_source_ ? live_source_->synth_player(track->id) : nullptr;
@@ -1909,7 +1909,7 @@ RoutedPlaybackControl::try_queue_live_players(std::shared_ptr<const project::Sna
     return Result<bool>::failure(limit.error());
   // Every plan is built and checked before any player gets one, so the
   // edit reaches all of its tracks or none.
-  std::vector<native_dsp::synth::NativeSynthPlayer::PreparedPlan> plans;
+  std::vector<native_inserts::NativeSynthPlayer::PreparedPlan> plans;
   try {
     plans.reserve(changed.size());
     for (std::size_t index = 0; index < changed.size(); ++index) {
@@ -2666,7 +2666,7 @@ Result<std::vector<KeptPlayer>> RoutedPlaybackControl::keep_players(const projec
     return Kept::failure(limit.error());
   // Every plan is built before any player gets one, so a failure leaves
   // them all as they were.
-  std::vector<std::pair<std::size_t, native_dsp::synth::NativeSynthPlayer::PreparedPlan>> plans;
+  std::vector<std::pair<std::size_t, native_inserts::NativeSynthPlayer::PreparedPlan>> plans;
   for (const auto& before : published.tracks) {
     auto player = live_source_->shared_synth_player(before.id);
     const auto after = std::ranges::find(next.tracks, before.id, &project::Track::id);
@@ -2858,7 +2858,7 @@ void RoutedPlaybackControl::observe() {
                    using Runtime = std::remove_pointer_t<decltype(runtime)>;
                    if constexpr (std::is_same_v<Runtime, native_dsp::synth::NativeSynthRuntime>)
                      return runtime->applied_revision();
-                   else if constexpr (std::is_same_v<Runtime, native_dsp::synth::NativeSynthPlayer>)
+                   else if constexpr (std::is_same_v<Runtime, native_inserts::NativeSynthPlayer>)
                      return players_applied();
                    else if constexpr (std::is_same_v<Runtime, native_inserts::NativeEffectStage>)
                      // A revision offers either values or lanes; the other stays older.
@@ -2871,7 +2871,7 @@ void RoutedPlaybackControl::observe() {
                  pending_native_revision_->snapshot->revision) {
     if (std::holds_alternative<native_dsp::synth::NativeSynthRuntime*>(
             pending_native_revision_->runtime) ||
-        std::holds_alternative<native_dsp::synth::NativeSynthPlayer*>(
+        std::holds_alternative<native_inserts::NativeSynthPlayer*>(
             pending_native_revision_->runtime)) {
       published_snapshot_ = std::move(pending_native_revision_->snapshot);
       source_snapshot_ = published_snapshot_;

@@ -7,7 +7,7 @@
 #include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
 #include "oscillate/native_dsp/synth/lock.hpp"
-#include "oscillate/native_dsp/synth/player.hpp"
+#include "oscillate/native_inserts/synth_player.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/temp_dir.hpp"
@@ -217,7 +217,8 @@ void lock_is_offered_only_beside_an_anvil_track() {
 
 // ---- The player follows a bass edit -------------------------------------------------
 
-std::vector<float> render_kick(synth::NativeSynthPlayer& player, std::uint64_t frames) {
+std::vector<float> render_kick(oscillate::native_inserts::NativeSynthPlayer& player,
+                               std::uint64_t frames) {
   constexpr std::size_t block = 128;
   std::vector<engine::StereoFrame> buffer;
   std::vector<float> out;
@@ -230,13 +231,14 @@ std::vector<float> render_kick(synth::NativeSynthPlayer& player, std::uint64_t f
   return out;
 }
 
-synth::NativeSynthPlayer kick_player(const project::Snapshot& snapshot, project::TrackId kick) {
+oscillate::native_inserts::NativeSynthPlayer kick_player(const project::Snapshot& snapshot,
+                                                         project::TrackId kick) {
   const auto plan = take(engine::compile_midi_events(snapshot));
   const auto events = std::ranges::find(plan.instruments(), kick, &engine::InstrumentEvents::track);
   REQUIRE_NE(events, plan.instruments().end(), "the kick has events");
   const auto& track = *std::ranges::find(snapshot.tracks, kick, &project::Track::id);
-  return take(synth::NativeSynthPlayer::prepare(snapshot, track, *events, {}, 128,
-                                                std::numeric_limits<std::uint64_t>::max()));
+  return take(oscillate::native_inserts::NativeSynthPlayer::prepare(
+      snapshot, track, *events, {}, 128, std::numeric_limits<std::uint64_t>::max()));
 }
 
 // A kick player kept across a bass edit tunes to the new notes once it is

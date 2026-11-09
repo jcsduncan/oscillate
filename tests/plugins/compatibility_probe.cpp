@@ -1,5 +1,5 @@
+#include "oscillate/application/vst3/project_binding.hpp"
 #include "oscillate/persistence/store.hpp"
-#include "oscillate/plugins/project_binding.hpp"
 #include "oscillate/plugins/vst3_scan.hpp"
 
 #include <nlohmann/json.hpp>

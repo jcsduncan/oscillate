@@ -8,8 +8,8 @@
 #include "oscillate/midi_file/smf.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "session_state.hpp"
 
 #include <algorithm>
@@ -269,8 +269,8 @@ foundation::Result<project::TrackId> TrackService::duplicate_track(project::Trac
       return Result::failure(renamed.error());
     operations.emplace_back(project::InsertVst3Plugin{copy, 0, std::move(renamed).value()});
   } else if (placeholder) {
-    auto patch = native_dsp::synth::native_patch_for_preset(native_dsp::synth::default_engine(),
-                                                            std::nullopt);
+    auto patch =
+        native_inserts::native_patch_for_preset(native_dsp::synth::default_engine(), std::nullopt);
     if (!patch)
       return Result::failure(patch.error());
     operations.emplace_back(project::SetNativeInstrumentPatch{copy, std::move(patch).value()});

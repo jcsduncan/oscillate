@@ -3,7 +3,7 @@
 #include "oscillate/application/routed_source_selection.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/test/allocation_counter.hpp"
 #include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/cases.hpp"
@@ -701,7 +701,8 @@ const synth::SynthEngine& other_engine() {
 
 void instrument_change_rings_out_the_old_one() {
   Song song;
-  const auto patch = take(synth::native_patch_for_preset(other_engine(), std::nullopt));
+  const auto patch =
+      take(oscillate::native_inserts::native_patch_for_preset(other_engine(), std::nullopt));
   Run run(song.root, song.saved);
   play_with(run, [&](Run& playing) {
     return playing.source_edit({project::SetNativeInstrumentPatch{song.track, patch}},

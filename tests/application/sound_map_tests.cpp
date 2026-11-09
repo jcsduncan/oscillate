@@ -6,7 +6,7 @@
 #include "oscillate/application/sound_map.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/nova.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/persistence/effect_preset.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/temp_dir.hpp"
@@ -214,7 +214,8 @@ void renders_are_deterministic_and_ordered() {
 
   // A user preset's text is the same sound.
   const auto sound = factory("Warm Pad");
-  auto patch = take(synth::make_native_patch(nova(), sound.values, sound.document));
+  auto patch =
+      take(oscillate::native_inserts::make_native_patch(nova(), sound.values, sound.document));
   project::NativeEffectPatch saved;
   saved.engine = patch.engine;
   saved.engine_version = patch.engine_version;

@@ -3,7 +3,7 @@
 #include "oscillate/application/vst3/offline_export.hpp"
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/export/offline_master.hpp"
-#include "oscillate/native_dsp/synth/player.hpp"
+#include "oscillate/native_inserts/synth_player.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/test/check.hpp"
 #include "vst3_export_fixtures.hpp"

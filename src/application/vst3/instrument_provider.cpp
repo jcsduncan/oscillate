@@ -1,12 +1,12 @@
 #include "oscillate/application/vst3/instrument_provider.hpp"
 #include "oscillate/foundation/midi.hpp"
 
+#include "oscillate/application/vst3/project_binding.hpp"
+#include "oscillate/application/vst3/tempo_plan.hpp"
 #include "oscillate/automation_project/preparation.hpp"
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_dsp/synth/plan_mailbox.hpp"
-#include "oscillate/plugins/project_binding.hpp"
 #include "oscillate/plugins/vst3_bundle_loader.hpp"
-#include "oscillate/plugins/vst3_tempo_plan.hpp"
 #include "oscillate/routing/project_route_plan.hpp"
 
 #include <algorithm>

@@ -1,7 +1,7 @@
 #include "oscillate/native_dsp/synth/nova.hpp"
 #include "oscillate/native_dsp/synth/nova/analogue.hpp"
 #include "oscillate/native_dsp/synth/nova/parameters.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/cases.hpp"
 #include "oscillate/test/check.hpp"
@@ -27,6 +27,7 @@ namespace {
 // The smallest seeded offset the seed searches accept as audible, in cents.
 constexpr double audible_cents = 2.0;
 using namespace synth_test;
+using namespace oscillate::native_inserts;
 namespace nova = oscillate::native_dsp::synth::nova;
 
 struct Patch {

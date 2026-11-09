@@ -57,15 +57,15 @@ The process contains the UI, model, engine, and default plugin host. Plugin scan
 | `warp_dsp` | In-house stretch and pitch engine ([ADR-0026](decisions/0026-continuous-warp-stream.md)) | `foundation`, vendored PFFFT |
 | `clay_dsp` | Note analysis and resynthesis of audio for Clay ([ADR-0081](decisions/0081-clay-note-editing.md)) | `foundation`, `warp_dsp` |
 | `processing` | Warp maps, clip frame plans, verified source views, warp render cache, Clay sources | `foundation`, `media`, `project`, `warp_dsp`, `clay_dsp`, `persistence` |
-| `plugins` | VST3 discovery, instance lifecycle, state, parameter metadata, graph nodes | `foundation`, engine processor interface (see §3.1) |
+| `plugins` | VST3 discovery, instance lifecycle, state, parameter metadata, the graph runtime fed neutral tempo and parameter-curve inputs ([ADR-0104](decisions/0104-native-processing-layers.md)) | `foundation`, engine processor interface |
 | `native_dsp` | DSP primitives, built-in processors, the neutral control layer the native engines share ([ADR-0104](decisions/0104-native-processing-layers.md)), the native synth platform (§8.1), note effects, the native effect platform (§8.2) and the optional convolution core | engine processor interface, `warp_dsp` (Crate's sample reader) (see §3.1) |
-| `native_inserts` | Preparing native effect and instrument stages for every chain builder ([ADR-0043](decisions/0043-one-native-insert-path.md)) | `project`, `engine`, `routing`, `native_dsp`, `automation_project`, `timeline` |
+| `native_inserts` | Preparing native effect and instrument stages for every chain builder ([ADR-0043](decisions/0043-one-native-insert-path.md)); the built-in instruments' project binding and `NativeSynthPlayer`, which compile automation lanes and the tempo map for native engines ([ADR-0104](decisions/0104-native-processing-layers.md)) | `project`, `engine`, `routing`, `native_dsp`, `automation_project`, `timeline` |
 | `track_chain` | One chain per track: instrument then inserts, prepared for live playback and export ([ADR-0050](decisions/0050-one-chain-per-track.md)) | `project`, `engine`, `routing`, `native_inserts` |
 | `persistence` | Manifest codec and schema migrations, committed asset references, generations, recovery | `project`, `media`, `codec` |
 | `source_prep` | Bounded control/worker decode of integrity-checked managed audio, for synth media slots and export | `engine`, `persistence`, `media`, `project` |
 | `render_graph` | The offline graph builder ([ADR-0090](decisions/0090-render-graph-builder.md)): which saved inserts an offline render admits, and a snapshot's track chains (through `track_chain`), routed mixer (through `routing::graph_nodes`, as live playback builds it), master chain and built-in instruments, prepared for export; VST3 stages come from a preparer the plugin host supplies | `project`, `engine`, `routing`, `automation_project`, `timeline`, `native_dsp`, `native_inserts`, `track_chain`, `source_prep`, `persistence` |
 | `export` | Offline render of the graph `render_graph` prepares, JACK real-time capture and format writers | `engine`, `routing`, `project`, `media`, `source_prep`, `persistence`, `processing`, `audio_io`, `render_graph`, the `native_dsp` loudness and true-peak meters |
-| `application` | Command dispatch, revisioned read models, recording, plugin browser/scan status, lifecycle services; the VST3 adapters that bind plugin hosts to routed playback, the session and offline export (`src/application/vst3`) | all modules above |
+| `application` | Command dispatch, revisioned read models, recording, plugin browser/scan status, lifecycle services; the VST3 adapters that bind saved plugin instances to loaded hosts and graph nodes, and those to routed playback, the session and offline export (`src/application/vst3`) | all modules above |
 | `plugin_ui` (`src/app/plugin_ui`) | UI-thread VST3 run loop (`qt_vst3_run_loop`), editor attachment and X11 embedding | `plugins`, Qt |
 | `apps/daw_quick` | Composition root, Qt Quick views and adapters, device setup, accessibility, diagnostics display | any module (the composition root); no module depends on it |
 
@@ -75,9 +75,7 @@ The composition root (`apps/daw_quick`) wires runtime services across modules. T
 
 These deviations are known, each with its issue. The link-level ones are the exceptions in `cmake/module_dependencies.json`; the check fails once one of them is no longer needed, so fixing a violation means removing its exception and its entry here.
 
-1. **native_dsp reaches above the engine interface** ([#129](https://github.com/jcsduncan/oscillate/issues/129)). `oscillate_synth_engines` links `automation_project` and `timeline`: the synth player compiles automation lanes and resolves project patches (`project_binding.cpp`). `oscillate_note_effects` links `timeline`.
-2. **Convolution is still its own insert kind** ([#131](https://github.com/jcsduncan/oscillate/issues/131)). Every other built-in processor is a native effect engine on the shared insert path ([ADR-0047](decisions/0047-classic-processors-as-engines.md)), but the optional convolution reverb keeps type-specific branches in the routed playback control, the offline graph builder (`render_graph`) and the native insert stage. `convolution_ir` reads impulse responses through `media`.
-3. **plugins reaches project types** ([#133](https://github.com/jcsduncan/oscillate/issues/133)). `vst3_project_binding` binds saved `project` plugin instances, and `vst3_graph_node` takes prepared `automation_project` lanes and a `timeline` tempo map, so `plugins` depends on more than `foundation` and the engine processor interface.
+1. **Convolution is still its own insert kind** ([#131](https://github.com/jcsduncan/oscillate/issues/131)). Every other built-in processor is a native effect engine on the shared insert path ([ADR-0047](decisions/0047-classic-processors-as-engines.md)), but the optional convolution reverb keeps type-specific branches in the routed playback control, the offline graph builder (`render_graph`) and the native insert stage. `convolution_ir` reads impulse responses through `media`.
 
 ## 4. State and command flow
 
@@ -144,8 +142,8 @@ The `plugin_ui` target (`src/app/plugin_ui`) owns the editor bridge. It provides
 `oscillate_synth_engines` holds:
 - the generic `NativeSynthRuntime`;
 - the engine registry (`src/native_dsp/synth/engines.cpp`): Prism, Ember, Nova, Pulse, Halo, Torque, Drift, Concert, Anvil, Crate, Knock, Fret and Wren;
-- the project binding;
-- the `NativeSynthPlayer` used by live playback and export.
+
+The project binding (`native_inserts/instrument_binding.hpp`) and the `NativeSynthPlayer` that live playback and export render through (`native_inserts/synth_player.hpp`) sit above `native_dsp` in `native_inserts`: they compile automation lanes, the tempo map and the meter for the engines ([ADR-0104](decisions/0104-native-processing-layers.md)). Note effects read project ticks through a `FrameTicks` source the player supplies (`native_inserts::TempoTicks`), so no native engine evaluates a tempo or meter map.
 
 Each engine is a versioned parameter table (`EngineDescriptor`), factory presets and a `SynthKernel` (control tick, note on/off, pedal, render, reset, telemetry).
 

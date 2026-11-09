@@ -1,7 +1,7 @@
 #include "oscillate/export/offline_master.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/project/model.hpp"
 #include "oscillate/timeline/timing.hpp"
@@ -69,7 +69,7 @@ struct Composer {
     const auto track = id<project::TrackId>(next_track++);
     operations.emplace_back(project::AddTrack{track, project::TrackKind::instrument});
     operations.emplace_back(project::SetNativeInstrumentPatch{
-        track, take(synth::native_patch_for_preset(*engine, preset))});
+        track, take(oscillate::native_inserts::native_patch_for_preset(*engine, preset))});
     operations.emplace_back(project::SetTrackName{track, std::move(name)});
     operations.emplace_back(project::SetTrackColor{track, color});
     operations.emplace_back(project::SetTrackLevelPan{track, level, pan});
@@ -98,12 +98,13 @@ struct Composer {
     if (engine == nullptr) {
       throw std::runtime_error("missing native synth for automation");
     }
-    project::AutomationLane lane{id<project::AutomationLaneId>(next_lane++),
-                                 project::NativeParameterTarget{track, std::string(parameter)},
-                                 take(synth::native_automation_domain(*engine, parameter)),
-                                 project::AutomationTimebase::musical,
-                                 {},
-                                 1};
+    project::AutomationLane lane{
+        id<project::AutomationLaneId>(next_lane++),
+        project::NativeParameterTarget{track, std::string(parameter)},
+        take(oscillate::native_inserts::native_automation_domain(*engine, parameter)),
+        project::AutomationTimebase::musical,
+        {},
+        1};
     for (const auto& [at_bar, value] : moves) {
       lane.points.push_back({id<project::AutomationPointId>(next_point++), at_bar * bar, value,
                              project::AutomationShape::linear});

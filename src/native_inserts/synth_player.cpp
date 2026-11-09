@@ -1,6 +1,7 @@
-#include "oscillate/native_dsp/synth/player.hpp"
+#include "oscillate/native_inserts/synth_player.hpp"
 
-#include "oscillate/native_dsp/synth/project_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
+#include "oscillate/native_inserts/tempo_ticks.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -16,7 +17,11 @@
 #include <variant>
 #include <vector>
 
-namespace oscillate::native_dsp::synth {
+namespace oscillate::native_inserts {
+
+using namespace native_dsp;
+using namespace native_dsp::synth;
+
 namespace {
 
 using foundation::ErrorCode;
@@ -527,8 +532,8 @@ bool NativeSynthPlayer::render(std::span<engine::StereoFrame> output, std::uint6
               first, std::span(plan->note_lane_values[lane]).first(frames)))
         return false;
     }
-    const note_effects::NoteClock clock(*plan->tempo, sample_rate_, project_frame,
-                                        static_cast<std::uint32_t>(frames));
+    const TempoTicks ticks(*plan->tempo, sample_rate_);
+    const note_effects::NoteClock clock(ticks, project_frame, static_cast<std::uint32_t>(frames));
     if (!clock.valid())
       return false;
     if (restarted)
@@ -635,4 +640,4 @@ std::size_t NativeSynthPlayer::merge_live_notes(std::size_t count) noexcept {
                       });
   return count;
 }
-} // namespace oscillate::native_dsp::synth
+} // namespace oscillate::native_inserts

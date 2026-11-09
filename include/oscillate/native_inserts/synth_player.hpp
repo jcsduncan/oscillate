@@ -20,7 +20,7 @@
 #include <span>
 #include <vector>
 
-namespace oscillate::native_dsp::synth {
+namespace oscillate::native_inserts {
 
 // One instrument track's built-in synth with its MIDI, automation lanes and
 // musical position. Live routed playback and offline export both render
@@ -36,7 +36,8 @@ public:
   prepare(const project::Snapshot& snapshot, const project::Track& track,
           const engine::InstrumentEvents& events,
           std::span<const automation_project::PreparedTargetAutomation> automation,
-          std::size_t max_frames, std::uint64_t last_safe_automation_sample, SynthMedia media = {});
+          std::size_t max_frames, std::uint64_t last_safe_automation_sample,
+          native_dsp::synth::SynthMedia media = {});
 
   // Callback safe and additive. Fails, leaving output untouched, for blocks
   // larger than max_frames, MIDI overflow, automation beyond its safe range
@@ -46,7 +47,7 @@ public:
                             std::uint64_t transport_generation,
                             engine::AudioWorkerPool* workers = nullptr) noexcept;
   // Offline renders only, before each render: waits until the synth's
-  // streamed content is ready (NativeSynthRuntime::await_content).
+  // streamed content is ready (native_dsp::synth::NativeSynthRuntime::await_content).
   void await_content() noexcept {
     if (runtime_) {
       runtime_->await_content();
@@ -111,7 +112,8 @@ public:
 
   [[nodiscard]] project::TrackId track() const noexcept { return track_; }
   // Live control offers panel values here; shared so control can keep it alive.
-  [[nodiscard]] const std::shared_ptr<NativeSynthRuntime>& runtime() const noexcept {
+  [[nodiscard]] const std::shared_ptr<native_dsp::synth::NativeSynthRuntime>&
+  runtime() const noexcept {
     return runtime_;
   }
   [[nodiscard]] const std::vector<double>& values() const noexcept { return values_; }
@@ -159,7 +161,7 @@ private:
     std::vector<std::shared_ptr<const automation_project::PreparedTargetAutomation>> evaluators;
     std::vector<std::uint32_t> parameters;
     std::vector<std::vector<double>> values;
-    std::vector<ParameterLane> lanes;
+    std::vector<native_dsp::ParameterLane> lanes;
     // Note effects (ADR-0059), per stage in chain order: values, switches
     // and the lanes of automated parameters (macro lanes), whose buffers
     // note_lane_values hold in note_evaluators' order.
@@ -167,8 +169,8 @@ private:
     std::vector<std::shared_ptr<const automation_project::PreparedTargetAutomation>>
         note_evaluators;
     std::vector<std::vector<double>> note_lane_values;
-    std::vector<std::vector<ParameterLane>> note_lanes;
-    std::vector<note_effects::StageControls> note_controls;
+    std::vector<std::vector<native_dsp::ParameterLane>> note_lanes;
+    std::vector<native_dsp::note_effects::StageControls> note_controls;
   };
   [[nodiscard]] foundation::Result<std::unique_ptr<Plan>>
   make_plan(const project::Snapshot& snapshot, const project::Track& track,
@@ -179,10 +181,11 @@ private:
   project::TrackId track_;
   std::uint32_t sample_rate_ = 0;
   std::size_t max_frames_ = 0;
-  std::shared_ptr<NativeSynthRuntime> runtime_;
+  std::shared_ptr<native_dsp::synth::NativeSynthRuntime> runtime_;
   std::vector<double> values_;
   // Boxed: the player moves, its atomics cannot.
-  std::unique_ptr<PlanMailbox<Plan>> plans_ = std::make_unique<PlanMailbox<Plan>>();
+  std::unique_ptr<native_dsp::synth::PlanMailbox<Plan>> plans_ =
+      std::make_unique<native_dsp::synth::PlanMailbox<Plan>>();
   // Callback only: the events the last rendered block used, so the first
   // block of a new plan can hand its sounding notes over.
   const engine::InstrumentEvents* rendered_events_ = nullptr;
@@ -217,11 +220,11 @@ private:
   void commit_live_notes() noexcept;
   // The track's note effects (ADR-0059), when it has any: their events
   // run through note_scratch_ before the synth sees them.
-  std::shared_ptr<note_effects::NoteEffectChain> note_effects_;
+  std::shared_ptr<native_dsp::note_effects::NoteEffectChain> note_effects_;
   std::vector<engine::BlockMidiEvent> note_scratch_;
   // The track's notes just after each block, for the note effects (Comp's
   // pushes see the next chord coming).
-  std::vector<note_effects::AheadEvent> note_ahead_;
+  std::vector<native_dsp::note_effects::AheadEvent> note_ahead_;
   // Room for a chase of every pedal ahead of the block's own pedal events.
   std::vector<engine::BlockPedalEvent> block_pedals_;
   bool rendered_ = false;
@@ -232,4 +235,4 @@ private:
   std::unique_ptr<std::atomic<bool>> retired_ = std::make_unique<std::atomic<bool>>(false);
 };
 
-} // namespace oscillate::native_dsp::synth
+} // namespace oscillate::native_inserts

@@ -10,8 +10,8 @@
 #include "oscillate/native_dsp/note_effects/note_effect.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
 #include "oscillate/native_dsp/synth/lock.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #if OSCILLATE_HAVE_CODEC
 #include "oscillate/codec/encoded_reader.hpp"
 #endif
@@ -246,7 +246,7 @@ constexpr int confirmed_sub_octaves = 2;
     sources = drift_sources;
   if (sources.empty())
     return at_key;
-  auto resolved = native_dsp::synth::resolve_native_instrument(*patch);
+  auto resolved = native_inserts::resolve_native_instrument(*patch);
   if (!resolved)
     return at_key;
   const auto& descriptor = *resolved.value().engine->descriptor;

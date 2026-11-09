@@ -1,6 +1,15 @@
 # Application-owned VST3 adapters: they bind plugins-module hosts to the
 # routed playback control, the project session and the offline exporters, so
 # plugins and export never depend on application.
+# Saved project VST3 instances bound to loaded hosts, and graph nodes built
+# from them with the project's tempo map and automation (ADR-0104).
+oscillate_add_library(vst3_project_binding SOURCES project_binding.cpp
+  PUBLIC oscillate::vst3_bundle_loader oscillate::project)
+
+oscillate_add_library(vst3_graph_node SOURCES graph_node.cpp
+  PUBLIC oscillate::vst3_project_binding oscillate::vst3_graph_runtime oscillate::automation_project
+         oscillate::timeline)
+
 oscillate_add_library(vst3_track_insert SOURCES track_insert_provider.cpp
   PUBLIC oscillate::vst3_graph_node oscillate::application)
 

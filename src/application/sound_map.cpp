@@ -6,7 +6,7 @@
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/foundation/file_io.hpp"
 #include "oscillate/native_dsp/spectrum.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/persistence/effect_preset.hpp"
 
 #include <nlohmann/json.hpp>
@@ -68,7 +68,7 @@ constexpr double max_flux = 2.0;
 }
 
 [[nodiscard]] Result<Sound> resolved(const project::NativeInstrumentPatch& patch) {
-  auto instrument = native_dsp::synth::resolve_native_instrument(patch);
+  auto instrument = native_inserts::resolve_native_instrument(patch);
   if (!instrument)
     return Result<Sound>::failure(instrument.error());
   return Result<Sound>::success(
@@ -281,7 +281,7 @@ Features measure(std::span<const engine::StereoFrame> frames, std::uint32_t samp
 }
 
 Result<Sound> factory_sound(const native_dsp::synth::SynthEngine& engine, std::size_t preset) {
-  auto patch = native_dsp::synth::native_patch_for_preset(engine, preset);
+  auto patch = native_inserts::native_patch_for_preset(engine, preset);
   if (!patch)
     return Result<Sound>::failure(patch.error());
   return resolved(patch.value());
@@ -384,7 +384,7 @@ std::uint64_t fnv1a(std::string_view bytes, std::uint64_t basis) noexcept {
 
 Result<std::uint64_t> sound_key(const native_dsp::synth::SynthEngine& engine, const Sound& sound,
                                 Register phrase) {
-  auto patch = native_dsp::synth::make_native_patch(engine, sound.values, sound.document);
+  auto patch = native_inserts::make_native_patch(engine, sound.values, sound.document);
   if (!patch)
     return Result<std::uint64_t>::failure(patch.error());
   project::NativeEffectPatch saved;

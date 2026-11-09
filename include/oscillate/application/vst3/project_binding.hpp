@@ -1,5 +1,6 @@
 #pragma once
 
+#include "oscillate/plugins/vst3_binding_status.hpp"
 #include "oscillate/plugins/vst3_bundle_loader.hpp"
 #include "oscillate/project/model.hpp"
 
@@ -8,19 +9,9 @@
 #include <string>
 #include <vector>
 
+// Binding saved project plugin instances to loaded hosts lives with the
+// application (ADR-0104): the plugins module never sees project types.
 namespace oscillate::plugins {
-
-enum class Vst3BindingStatus : std::uint8_t {
-  ready,
-  scan_unavailable,
-  identity_mismatch,
-  load_failed,
-  state_rejected,
-  parameter_values_unapplied,
-  activation_failed,
-  timing_unsupported,
-  automation_unavailable,
-};
 
 struct Vst3ProjectBindingResult {
   Vst3BindingStatus status{Vst3BindingStatus::scan_unavailable};

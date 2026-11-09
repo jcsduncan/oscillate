@@ -6,8 +6,8 @@
 #include "oscillate/application/midi_note_tools.hpp"
 #include "oscillate/application/tempo_cache.hpp"
 #include "oscillate/midi_file/smf.hpp"
-#include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
+#include "oscillate/native_inserts/instrument_binding.hpp"
 #include "session_state.hpp"
 
 #include <algorithm>
@@ -524,8 +524,8 @@ AutomationService::automation_domain(project::TrackId track_id,
           auto found = native_track(state, track_id);
           if (!found)
             return Result::failure(found.error());
-          return native_dsp::synth::native_automation_domain(*found.value().resolved.engine,
-                                                             item.parameter_id);
+          return native_inserts::native_automation_domain(*found.value().resolved.engine,
+                                                          item.parameter_id);
         } else if constexpr (std::is_same_v<Target, project::MacroTarget>) {
           if (item.track != track_id || item.index >= track->macros.size())
             return Result::failure(
