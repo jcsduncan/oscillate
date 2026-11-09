@@ -103,6 +103,21 @@ adds an opt-in runner for one explicitly selected ALSA sink, paired `pw-top`
 node/driver error samples, local thresholds and a JSON evidence file. It never
 selects a physical output automatically; the release G7 gate remains open.
 
+## Reference projects
+
+`oscillate_reference_project` and `qualify_reference_projects.py` build the
+light and heavy reference projects and measure callback time, whole-process
+CPU and per-device cost at 64 and 128 frames, through the fake callback or a
+named PipeWire sink. See [reference projects](../../docs/performance/reference-projects.md).
+The main build adds these programs with `-DOSCILLATE_BUILD_QUALIFICATION=ON`.
+
+## VST3 compatibility matrix
+
+`oscillate_vst3_matrix_probe` and `qualify_vst3_matrix.py` run the scan, load,
+render, state, editor, save/reopen and export checks over the pinned free
+plug-ins in `vst3_matrix_plugins.json`. CI runs them weekly; see the
+[matrix procedure](../../docs/qualification/vst3-compatibility-matrix.md).
+
 ## Desktop playback controller
 
 ```sh

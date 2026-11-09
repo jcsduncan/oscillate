@@ -2,7 +2,9 @@
 
 #include "oscillate/engine/graph.hpp"
 #include "oscillate/native_dsp/compressor.hpp"
+#include "oscillate/native_dsp/dsp/math.hpp"
 #include "oscillate/native_dsp/effects/contour.hpp"
+#include "oscillate/native_dsp/effects/edge.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/press.hpp"
 #include "oscillate/native_dsp/effects/shape.hpp"
@@ -54,7 +56,7 @@ std::vector<double> contour_response(const native_dsp::synth::EngineDescriptor& 
   }
   std::vector<std::complex<double>> response(length);
   std::vector<engine::StereoFrame> block(512);
-  const synth::SynthTransport transport{0.0, 0.0, 0.0, 4.0};
+  const native_dsp::Transport transport{0.0, 0.0, 0.0, 4.0};
   for (std::size_t start = 0; start < length; start += block.size()) {
     std::ranges::fill(block, engine::StereoFrame{0.0F, 0.0F});
     if (start == 0) {
@@ -178,6 +180,44 @@ std::vector<double> press_transfer(const native_dsp::synth::EngineDescriptor& en
                     settings.makeup_db);
   }
   return curve;
+}
+
+namespace {
+
+[[nodiscard]] bool is_edge(const native_dsp::synth::EngineDescriptor& engine,
+                           std::span<const double> values) {
+  return engine.id == native_dsp::effects::edge::engine().descriptor->id &&
+         values.size() == engine.parameters.size();
+}
+
+} // namespace
+
+std::vector<double> edge_transfer(const native_dsp::synth::EngineDescriptor& engine,
+                                  std::span<const double> values, double from_db, double to_db,
+                                  std::size_t points) {
+  const auto shape = native_dsp::synth::find_parameter(engine, "edge.shape");
+  if (!is_edge(engine, values) || !shape || points < 2 || !(to_db > from_db)) {
+    return {};
+  }
+  std::vector<double> curve;
+  curve.reserve(points);
+  for (std::size_t i = 0; i < points; ++i) {
+    const double db =
+        from_db + (to_db - from_db) * static_cast<double>(i) / static_cast<double>(points - 1);
+    curve.push_back(native_dsp::dsp::gain_to_db(
+        native_dsp::effects::edge::clip(native_dsp::dsp::db_to_gain(db), values[*shape])));
+  }
+  return curve;
+}
+
+double edge_latency_ms(const native_dsp::synth::EngineDescriptor& engine,
+                       std::span<const double> values, double sample_rate) {
+  constexpr double milliseconds_per_second = 1'000.0;
+  if (!is_edge(engine, values) || !(sample_rate > 0.0)) {
+    return 0.0;
+  }
+  const auto frames = native_dsp::effects::edge::engine().latency_frames(values, sample_rate);
+  return static_cast<double>(frames) / sample_rate * milliseconds_per_second;
 }
 
 namespace {

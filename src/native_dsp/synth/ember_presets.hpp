@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -380,7 +380,7 @@ inline constexpr std::array silk_pad{
     V{"ember.out.level", 3},
 };
 
-inline constexpr std::array<SynthPreset, 32> presets{{
+inline constexpr std::array<Preset, 32> presets{{
     {"Init", "Init", init},
     {"Ember Default", "Keys", {}},
     {"Juno Strings", "Strings", juno_strings},

@@ -113,7 +113,7 @@ inline Stereo process(effects::NativeEffectRuntime& runtime, const Stereo& input
     }
     const double beats_per_frame = options.bpm / 60.0 / options.rate;
     const double beat = static_cast<double>(start + position) * beats_per_frame;
-    const SynthTransport transport{beat, beats_per_frame, beat / 4.0, 4.0};
+    const Transport transport{beat, beats_per_frame, beat / 4.0, 4.0};
     const auto status =
         runtime.process(buffer, side, start + position, options.generation, transport, {});
     REQUIRE_EQ(status, effects::EffectProcessStatus::rendered, "effect block renders");

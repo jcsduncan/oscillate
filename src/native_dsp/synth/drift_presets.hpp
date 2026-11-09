@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -129,7 +129,7 @@ inline constexpr std::array init{
     V{"drift.out.level", -5},
 };
 
-inline constexpr std::array<SynthPreset, 16> presets{{
+inline constexpr std::array<Preset, 16> presets{{
     {"Nebula", "Pad", {}},
     {"Glass Rain", "Texture", glass_rain},
     {"Frozen Choir", "Frozen", frozen_choir},

@@ -520,6 +520,27 @@ oscillate_add_case_tests(native_strata_contract oscillate_strata_tests
   the_callback_never_allocates
   telemetry_feeds_the_panel)
 
+# Edge (ADR-0108): the clipper.
+oscillate_add_test_executable(oscillate_edge_tests SOURCES edge_tests.cpp
+  LIBS oscillate::native_effects)
+oscillate_add_case_tests(native_edge_contract oscillate_edge_tests
+  CASES
+  descriptor_registry_and_presets
+  shape_zero_is_a_hard_clip
+  no_aliasing_at_16x
+  true_peak_never_exceeds_0_dbtp
+  delta_nulls_with_the_output
+  latency_is_reported_and_exact
+  stereo_link_shares_the_gain
+  compare_is_level_matched
+  any_block_split_renders_the_same
+  export_equals_live
+  hostile_input_stays_finite
+  presets_stay_restrained
+  a_seek_starts_clean
+  the_callback_never_allocates
+  telemetry_feeds_the_panel)
+
 # Dust (ADR-0069): background texture and age.
 oscillate_add_test_executable(oscillate_dust_tests SOURCES dust_tests.cpp
   LIBS oscillate::native_effects)

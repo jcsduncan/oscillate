@@ -116,7 +116,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t frames_to_next_tick,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     const auto steps = static_cast<double>(frames_to_next_tick);
     read_values(v);
     depth_.to(v[p::depth], steps, !primed_);
@@ -469,7 +469,7 @@ private:
   bool primed_ = false;
 
   // The song position: the anchor's frame and beat and the tempo since.
-  SynthTransport pending_{};
+  Transport pending_{};
   bool pending_valid_ = false;
   bool anchored_ = false;
   bool tempo_known_ = false;
@@ -512,8 +512,7 @@ std::uint64_t tail_frames(std::span<const double> values, double sample_rate) {
 
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"chop", "Chop", 1, chop_table::parameters,
-                                         chop_presets::presets};
+const EngineDescriptor descriptor{"chop", "Chop", 1, chop_table::parameters, chop_presets::presets};
 const EffectEngine chop_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, false};
 
 // The pattern and step are spread by two odd gammas before SplitMix64.

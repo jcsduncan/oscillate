@@ -320,7 +320,7 @@ struct NoteGenerator::State {
   void track_passed(std::span<const GeneratedNote> out) noexcept;
   void release_passed(arp_detail::Emitter& out) noexcept;
   [[nodiscard]] std::size_t process(std::span<const GeneratedNote> played,
-                                    const SynthTransport& transport, std::uint32_t frames,
+                                    const Transport& transport, std::uint32_t frames,
                                     std::span<GeneratedNote, max_generated_notes> out) noexcept;
 };
 

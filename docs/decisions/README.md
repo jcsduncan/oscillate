@@ -50,7 +50,7 @@ never reused. 0070 was never assigned.
 | 0040 | [A generic native effect platform](0040-native-effect-platform.md) | Accepted; implemented (integration completed under ADR-0043) |
 | 0041 | [Pocket, a kick and bass masking resolver](0041-pocket-kick-bass.md) | Accepted; phase 1 built |
 | 0042 | [A native utility suite](0042-native-utility-suite.md) | Accepted; all six built |
-| 0043 | [One native insert path](0043-one-native-insert-path.md) | Superseded by ADR-0090 for export's link to native_inserts and by ADR-0092 for native_inserts' dependencies; otherwise implemented, classic kinds follow in ADR-0047 |
+| 0043 | [One native insert path](0043-one-native-insert-path.md) | Superseded by ADR-0090 for export's link to native_inserts, by ADR-0092 for native_inserts' dependencies and by ADR-0104 for the transport type; otherwise implemented, classic kinds follow in ADR-0047 |
 | 0044 | [Lumen: wavetable synth (third native engine)](0044-lumen-wavetable-synth.md) | Superseded by ADR-0057 |
 | 0045 | [The development build](0045-development-build.md) | Accepted and implemented |
 | 0046 | [The workspace redesign](0046-workspace-redesign.md) | Accepted and implemented |
@@ -109,4 +109,6 @@ never reused. 0070 was never assigned.
 | 0101 | [VST3 instruments and effects follow live edits](0101-vst3-live-edits.md) | Accepted; implemented |
 | 0102 | [A track render plays in slices that keep its clips' channel lanes](0102-renders-play-in-slices.md) | Accepted; implemented |
 | 0103 | [Device panels share one header, status badge, control states, plot frame and zoom](0103-shared-device-panel-parts.md) | Accepted |
+| 0104 | [Native engines share a neutral control layer](0104-native-processing-layers.md) | Accepted; implemented |
 | 0107 | [MP3 import decodes with libmpg123, scanning the whole stream](0107-mp3-decoding-with-libmpg123.md) | Accepted; implemented |
+| 0108 | [Edge: a clipper under a true-peak ceiling — linear-phase oversampling to 16×, antiderivative antialiasing, a BS.1770 guard](0108-edge-clipper.md) | Accepted; implemented |

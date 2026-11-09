@@ -1,7 +1,7 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 
 #include <array>
 #include <cstddef>
@@ -208,8 +208,6 @@ inline constexpr std::array<ParameterDescriptor, 89> parameters{{
 }};
 
 // Compile-time index lookup: a misspelt id fails to compile.
-consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
-}
+consteval std::size_t index_of(std::string_view id) { return parameter_index(parameters, id); }
 
 } // namespace oscillate::native_dsp::synth::prism_table

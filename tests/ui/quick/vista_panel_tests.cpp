@@ -397,7 +397,7 @@ std::vector<float> real_telemetry(const std::vector<double>& values, double rho)
       const double right = 0.5 * (rho * la + std::sqrt(1.0 - rho * rho) * lb);
       frame = {static_cast<float>(left), static_cast<float>(right)};
     }
-    const synth::SynthTransport transport{0.0, 0.0, 0.0, 4.0};
+    const oscillate::native_dsp::Transport transport{0.0, 0.0, 0.0, 4.0};
     require(runtime->process(block, {}, position, 1, transport, {}) ==
                 effects::EffectProcessStatus::rendered,
             "Vista renders");

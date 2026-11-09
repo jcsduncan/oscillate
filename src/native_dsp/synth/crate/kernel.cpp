@@ -7,7 +7,7 @@
 #include "oscillate/native_dsp/synth/modulation.hpp"
 #include "oscillate/native_dsp/synth/oversampler.hpp"
 #include "oscillate/native_dsp/synth/shaping.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 #include "oscillate/warp_dsp/bandlimited.hpp"
 #include "table.hpp"
 
@@ -371,7 +371,7 @@ public:
   }
 
   void control(std::span<const double> values, std::uint32_t frames_to_next_tick,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     const bool first = !controlled_;
     controlled_ = true;
     std::ranges::copy(values, values_.begin());
@@ -503,7 +503,7 @@ public:
     return telemetry::size;
   }
 
-  void adopt_document(const SynthDocumentState& state) noexcept override {
+  void adopt_document(const DocumentState& state) noexcept override {
     const auto& next = static_cast<const CrateState&>(state);
     const SampleData* sample = next.sample.get();
     if (sample != sample_) {

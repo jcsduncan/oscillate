@@ -149,8 +149,8 @@ chop_to_midi(std::span<const project::NativeRegion> regions, std::uint64_t frame
 // Every per-chop parameter of `chop_slots` back at its default, in `values`
 // (dense, in the engine's table order): a chop that is gone, or new in a
 // slot, starts plain (spec 09 §3).
-void reset_chop_slots(const native_dsp::synth::EngineDescriptor& engine,
-                      std::vector<double>& values, std::span<const std::uint32_t> chop_slots);
+void reset_chop_slots(const native_dsp::EngineDescriptor& engine, std::vector<double>& values,
+                      std::span<const std::uint32_t> chop_slots);
 
 // A newly loaded sample's patch state (spec 09 §3): regions for `starts`
 // with none carried over, the chop slots of the previous regions
@@ -163,7 +163,7 @@ struct SampleState {
   std::vector<project::NativeLabel> labels;
 };
 [[nodiscard]] foundation::Result<SampleState>
-new_sample_state(const native_dsp::synth::EngineDescriptor& engine, std::vector<double> values,
+new_sample_state(const native_dsp::EngineDescriptor& engine, std::vector<double> values,
                  std::span<const std::uint32_t> previous_slots, const ChopStarts& starts,
                  const SampleAudio& audio, std::optional<double> bpm, std::string name);
 

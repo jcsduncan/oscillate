@@ -7,9 +7,9 @@
 // Pitch points take Hz; amp and drive points take 0..1; each point is
 // x:y:tension. `--list` prints each preset's output level and `--dump NAME`
 // every value of one preset.
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/anvil.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/runtime.hpp"
 
 #include <algorithm>
@@ -62,7 +62,7 @@ void write_wav(const std::string& path, const std::vector<float>& interleaved) {
   std::fclose(file);
 }
 
-std::optional<std::size_t> preset_index(const synth::EngineDescriptor& table,
+std::optional<std::size_t> preset_index(const native_dsp::EngineDescriptor& table,
                                         std::string_view name) {
   for (std::size_t i = 0; i < table.presets.size(); ++i) {
     if (table.presets[i].name == name)
@@ -115,7 +115,7 @@ std::vector<float> render(const synth::SynthEngine& engine, std::span<const doub
     std::ranges::stable_sort(events, {}, &engine::BlockMidiEvent::offset);
     std::ranges::fill(block, engine::StereoFrame{0.0F, 0.0F});
     const double first_beat = static_cast<double>(start) / beat;
-    const synth::SynthTransport transport{first_beat, 1.0 / beat, first_beat / 4.0, 4.0};
+    const native_dsp::Transport transport{first_beat, 1.0 / beat, first_beat / 4.0, 4.0};
     (void)runtime->process(std::span(block).first(frames), events, start, 1, transport, {});
     for (std::size_t i = 0; i < frames; ++i) {
       out.push_back(block[i].left);
@@ -144,7 +144,7 @@ int main(int argc, char** argv) {
   const std::string first = argv[1];
   if (first == "--list" || first == "--dump") {
     for (std::size_t i = 0; i < table.presets.size(); ++i) {
-      const auto values = synth::preset_values(table, table.presets[i]).value();
+      const auto values = native_dsp::preset_values(table, table.presets[i]).value();
       if (first == "--list") {
         std::cout << table.presets[i].name << '\t' << values[*value_index("anvil.output")] << '\n';
       } else if (argc > 2 && table.presets[i].name == argv[2]) {
@@ -160,7 +160,7 @@ int main(int argc, char** argv) {
       const auto index = preset_index(table, parts.front());
       if (!index)
         throw std::runtime_error("no preset " + parts.front());
-      auto values = synth::preset_values(table, table.presets[*index]).value();
+      auto values = native_dsp::preset_values(table, table.presets[*index]).value();
       auto document = engine.preset_document(*index);
       std::string file = parts.front();
       for (std::size_t k = 1; k < parts.size(); ++k) {

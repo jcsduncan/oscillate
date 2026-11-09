@@ -334,7 +334,7 @@ std::vector<std::vector<float>> real_telemetry(const std::vector<double>& values
     const std::size_t size = std::min<std::size_t>(160, input.size() - position);
     block.assign(input.begin() + static_cast<std::ptrdiff_t>(position),
                  input.begin() + static_cast<std::ptrdiff_t>(position + size));
-    const synth::SynthTransport transport{0.0, 0.0, 0.0, 4.0};
+    const oscillate::native_dsp::Transport transport{0.0, 0.0, 0.0, 4.0};
     require(runtime->process(block, {}, position, 1, transport, {}) ==
                 effects::EffectProcessStatus::rendered,
             "Press renders");

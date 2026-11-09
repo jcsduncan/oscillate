@@ -1,12 +1,16 @@
 cmake_minimum_required(VERSION 3.28)
-project(oscillate_live_qualification LANGUAGES CXX)
 
-# This project is intentionally separate from ordinary CTest. The live Python
+# These targets are intentionally separate from ordinary CTest. The live Python
 # harness needs PipeWire and a named disposable target; the standalone 32-track
 # rehearsals default to an engine or fake callback. The managed-WAV rehearsal
 # also has an explicit-target live mode, excluded from ordinary CTest.
-set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../.. oscillate)
+# Configured on its own, this directory is a project around the whole tree;
+# the main build adds it, excluded from `all`, with OSCILLATE_BUILD_QUALIFICATION.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  project(oscillate_live_qualification LANGUAGES CXX)
+  set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+  add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../.. oscillate)
+endif()
 
 oscillate_add_executable(oscillate_desktop_playback_fixture SOURCES desktop_playback_fixture.cpp
   LIBS oscillate::application)
@@ -24,6 +28,10 @@ oscillate_add_executable(oscillate_routed_32track_rehearsal SOURCES routed_32tra
   LIBS oscillate::engine oscillate::native_dsp)
 
 oscillate_add_executable(oscillate_streaming_32track_rehearsal SOURCES streaming_32track_rehearsal.cpp allocation_probe.cpp
+  LIBS oscillate::application oscillate::audio_io)
+
+# The light and heavy reference projects (docs/performance/reference-projects.md).
+oscillate_add_executable(oscillate_reference_project SOURCES reference_project.cpp allocation_probe.cpp
   LIBS oscillate::application oscillate::audio_io)
 
 if(OSCILLATE_BUILD_QUICK_UI AND TARGET oscillate_jack_realtime_export)
@@ -46,6 +54,19 @@ if(OSCILLATE_BUILD_VST3_SCANNER)
       oscillate::vst3_manual_effect_edit oscillate::vst3_bundle_loader oscillate::plugins
     DEFINITIONS VST3_QUALIFICATION_HELPER="$<TARGET_FILE:oscillate_vst3_scan_helper>"
     DEPENDS oscillate_vst3_scan_helper)
+
+  # One row of the VST3 compatibility matrix (qualify_vst3_matrix.py). With
+  # the Quick UI configured it also attaches each plug-in's X11 editor.
+  oscillate_add_executable(oscillate_vst3_matrix_probe EXCLUDE_FROM_ALL
+    SOURCES vst3_matrix_probe.cpp allocation_probe.cpp
+    LIBS oscillate::application oscillate::vst3_offline_export oscillate::vst3_bundle_loader
+      oscillate::plugins oscillate::persistence
+    DEFINITIONS VST3_QUALIFICATION_HELPER="$<TARGET_FILE:oscillate_vst3_scan_helper>"
+    DEPENDS oscillate_vst3_scan_helper)
+  if(TARGET oscillate::plugin_ui)
+    target_link_libraries(oscillate_vst3_matrix_probe PRIVATE oscillate::plugin_ui)
+    target_compile_definitions(oscillate_vst3_matrix_probe PRIVATE OSCILLATE_MATRIX_EDITOR=1)
+  endif()
 
   set(_qual_vst3_root "${CMAKE_CURRENT_BINARY_DIR}/fixtures")
   add_library(oscillate_qualification_gain_fixture MODULE
@@ -72,6 +93,16 @@ if(OSCILLATE_BUILD_VST3_SCANNER)
     VST3_QUALIFICATION_GAIN_BUNDLE="${_qual_vst3_root}/LoadedGain.vst3"
     VST3_QUALIFICATION_INSTRUMENT_BUNDLE="${_qual_vst3_root}/TimedInstrument.vst3")
   add_dependencies(oscillate_streaming_32track_rehearsal
+    oscillate_qualification_gain_fixture oscillate_qualification_instrument_fixture
+    oscillate_vst3_scan_helper)
+  target_link_libraries(oscillate_reference_project PRIVATE
+    oscillate::vst3_track_insert oscillate::vst3_instrument_provider)
+  target_compile_definitions(oscillate_reference_project PRIVATE
+    OSCILLATE_QUALIFICATION_VST3=1
+    VST3_QUALIFICATION_HELPER="$<TARGET_FILE:oscillate_vst3_scan_helper>"
+    VST3_QUALIFICATION_GAIN_BUNDLE="${_qual_vst3_root}/LoadedGain.vst3"
+    VST3_QUALIFICATION_INSTRUMENT_BUNDLE="${_qual_vst3_root}/TimedInstrument.vst3")
+  add_dependencies(oscillate_reference_project
     oscillate_qualification_gain_fixture oscillate_qualification_instrument_fixture
     oscillate_vst3_scan_helper)
 endif()

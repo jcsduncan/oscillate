@@ -275,10 +275,10 @@ Result<void> validate_document(const project::NativeSynthDocument& document) {
   return R::success();
 }
 
-Result<std::shared_ptr<const SynthDocumentState>>
+Result<std::shared_ptr<const DocumentState>>
 prepare_document(const project::NativeSynthDocument& document, const SynthMedia& media,
-                 double sample_rate, const SynthDocumentState* previous) {
-  using R = Result<std::shared_ptr<const SynthDocumentState>>;
+                 double sample_rate, const DocumentState* previous) {
+  using R = Result<std::shared_ptr<const DocumentState>>;
   (void)sample_rate; // Voices read at the source rate; nothing is resampled here.
   if (auto valid = validate_document(document); !valid)
     return R::failure(valid.error());
@@ -289,7 +289,7 @@ prepare_document(const project::NativeSynthDocument& document, const SynthMedia&
       state->sample_bpm = parse_bpm(label.text).value_or(0.0);
   }
   if (document.media.empty())
-    return R::success(std::shared_ptr<const SynthDocumentState>(std::move(state)));
+    return R::success(std::shared_ptr<const DocumentState>(std::move(state)));
 
   const auto& slot = document.media.front();
   state->sample_key = key_of(slot);
@@ -330,7 +330,7 @@ prepare_document(const project::NativeSynthDocument& document, const SynthMedia&
     state->chop_of_slot[regions[i].slot] = static_cast<std::int8_t>(state->chops.size());
     state->chops.push_back({regions[i].slot, start, end});
   }
-  return R::success(std::shared_ptr<const SynthDocumentState>(std::move(state)));
+  return R::success(std::shared_ptr<const DocumentState>(std::move(state)));
 }
 
 project::NativeSynthDocument preset_document(std::optional<std::size_t> preset) {

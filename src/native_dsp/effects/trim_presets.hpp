@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -17,7 +17,7 @@ inline constexpr std::array mono_panner{V{"trim.law", 1}};
 inline constexpr std::array headroom{V{"trim.dc", 1}, V{"trim.rotate", 1}};
 inline constexpr std::array minus_six{V{"trim.gain", -6}};
 
-inline constexpr std::array<synth::SynthPreset, 6> presets{{
+inline constexpr std::array<Preset, 6> presets{{
     {"Unity", "Utility", {}},
     {"Mono Check", "Monitor", mono_check},
     {"Side Solo", "Monitor", side_solo},

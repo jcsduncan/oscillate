@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -19,8 +19,8 @@
 // their number.
 namespace oscillate::native_dsp::effects::strata_table {
 
-using S = synth::ParameterScale;
-using T = synth::ParameterTiming;
+using S = ParameterScale;
+using T = ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array off_on{"Off"sv, "On"sv};
@@ -36,7 +36,7 @@ enum Key : std::uint8_t { band_key, input_key, sidechain_key };
 inline constexpr std::array learn_states{"Off"sv, "Learn"sv};
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
-inline constexpr double g = synth::effect_glide_seconds;
+inline constexpr double g = effect_glide_seconds;
 
 // Ranges shared by every band.
 inline constexpr double threshold_min = -60.0;
@@ -90,7 +90,7 @@ inline constexpr std::size_t global_count = 18;
 inline constexpr std::size_t band_count = 6;
 inline constexpr std::size_t first_band = global_count;
 
-inline constexpr std::array<synth::ParameterDescriptor, 96> parameters{{
+inline constexpr std::array<ParameterDescriptor, 96> parameters{{
     {"strata.input", "Input", "Global", "dB", S::linear, -24, 24, 0, {}, T::live, g},
     {"strata.output", "Output", "Global", "dB", S::linear, -24, 24, 0, {}, T::live, g},
     {"strata.mix", "Mix", "Global", "%", S::linear, 0, 1, 1, {}, T::live, g},
@@ -192,7 +192,7 @@ inline constexpr std::array<synth::ParameterDescriptor, 96> parameters{{
 static_assert(parameters.size() == global_count + band_count * band::size);
 
 consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
+  return parameter_index(parameters, id);
 }
 
 // Band `b`'s (from 0) parameter `field` (strata_table::band).

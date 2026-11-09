@@ -91,7 +91,7 @@ public:
     reset();
   }
 
-  void control(std::span<const double> v, std::uint32_t, const SynthTransport&) noexcept override {
+  void control(std::span<const double> v, std::uint32_t, const Transport&) noexcept override {
     mode_ = static_cast<int>(v[p::mode]);
     reference_ = v[p::reference];
   }
@@ -454,8 +454,7 @@ std::unique_ptr<EffectKernel> create_kernel(std::span<const double>, double samp
 std::uint64_t tail_frames(std::span<const double>, double) { return 1; }
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"tune", "Tune", 1, tune_table::parameters,
-                                         tune_presets::presets};
+const EngineDescriptor descriptor{"tune", "Tune", 1, tune_table::parameters, tune_presets::presets};
 const EffectEngine tune_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, false};
 
 } // namespace

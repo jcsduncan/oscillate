@@ -1,7 +1,7 @@
 #pragma once
 
 #include "oscillate/native_dsp/eq.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -17,8 +17,8 @@
 // automated: never rename or reuse one.
 namespace oscillate::native_dsp::effects::shape_table {
 
-using S = synth::ParameterScale;
-using T = synth::ParameterTiming;
+using S = ParameterScale;
+using T = ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::size_t bands = 8;
@@ -36,9 +36,9 @@ inline constexpr std::array<std::size_t, slopes.size()> slope_stages{1, 2, 4, 8}
 static_assert(slope_stages.back() == eq_max_pass_stages);
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
-inline constexpr double g = synth::effect_glide_seconds;
+inline constexpr double g = effect_glide_seconds;
 
-inline constexpr std::array<synth::ParameterDescriptor, bands * per_band> parameters{{
+inline constexpr std::array<ParameterDescriptor, bands * per_band> parameters{{
     {"shape.on_1", "On", "Band 1", "", S::choice, 0, 1, 0, off_on, T::live, 0},
     {"shape.kind_1", "Kind", "Band 1", "", S::choice, 0, last(kinds.size()), Kind::high_pass, kinds,
      T::live, 0},
@@ -155,9 +155,7 @@ inline constexpr std::array<synth::ParameterDescriptor, bands * per_band> parame
      0},
 }};
 
-consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
-}
+consteval std::size_t index_of(std::string_view id) { return parameter_index(parameters, id); }
 
 // Band b (from 0) is the six parameters from b * per_band, in this order.
 inline constexpr std::size_t on = 0;

@@ -454,7 +454,7 @@ std::vector<std::vector<float>> real_telemetry(const std::vector<double>& values
     const auto to = static_cast<std::ptrdiff_t>(position + size);
     block.assign(input.voice.begin() + from, input.voice.begin() + to);
     key.assign(input.kick.begin() + from, input.kick.begin() + to);
-    const synth::SynthTransport transport{0.0, 0.0, 0.0, 4.0};
+    const oscillate::native_dsp::Transport transport{0.0, 0.0, 0.0, 4.0};
     require(runtime->process(block, key, position, 1, transport, {}) ==
                 effects::EffectProcessStatus::rendered,
             "Temper renders");

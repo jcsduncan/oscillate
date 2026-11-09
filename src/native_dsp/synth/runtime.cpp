@@ -107,7 +107,7 @@ NativeSynthRuntime::create(const SynthEngine& engine, std::span<const double> va
   if (!same_managed_media(document, media)) {
     return R::failure({ErrorCode::invalid_argument, "synth media do not match the document"});
   }
-  std::shared_ptr<const SynthDocumentState> state;
+  std::shared_ptr<const DocumentState> state;
   if (engine.prepare_document != nullptr) {
     auto prepared = engine.prepare_document(document, media, sample_rate, nullptr);
     if (!prepared) {
@@ -249,10 +249,10 @@ std::uint64_t NativeSynthRuntime::applied_revision() const noexcept {
 }
 
 void NativeSynthRuntime::tick(std::uint32_t frames_to_next_tick, std::size_t block_offset,
-                              const SynthTransport& transport,
+                              const Transport& transport,
                               std::span<const ParameterLane> lanes) noexcept {
   const auto effective = control_.tick(lanes, block_offset);
-  SynthTransport at_tick = transport;
+  Transport at_tick = transport;
   const double beats = transport.beats_per_frame * static_cast<double>(block_offset);
   at_tick.beat_at_block_start += beats;
   at_tick.bar_at_block_start += beats / transport.beats_per_bar;
@@ -263,7 +263,7 @@ SynthProcessReport NativeSynthRuntime::process(std::span<engine::StereoFrame> ou
                                                std::span<const engine::BlockMidiEvent> events,
                                                std::uint64_t project_frame,
                                                std::uint64_t transport_generation,
-                                               const SynthTransport& transport,
+                                               const Transport& transport,
                                                std::span<const ParameterLane> lanes) noexcept {
   return process(output, events, {}, project_frame, transport_generation, transport, lanes);
 }
@@ -306,7 +306,7 @@ SynthProcessReport NativeSynthRuntime::process(std::span<engine::StereoFrame> ou
                                                std::span<const engine::BlockPedalEvent> pedals,
                                                std::uint64_t project_frame,
                                                std::uint64_t transport_generation,
-                                               const SynthTransport& transport,
+                                               const Transport& transport,
                                                std::span<const ParameterLane> lanes) noexcept {
   // The engine's display name is a string literal, so it names the span;
   // the instance number tells two of the same engine apart.

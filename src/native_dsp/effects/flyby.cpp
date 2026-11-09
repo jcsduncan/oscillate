@@ -290,7 +290,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t frames,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     path_.set(v);
     transport_ = transport;
     run_ = static_cast<int>(v[p::run]);
@@ -602,7 +602,7 @@ private:
   dsp::Delay dry_right_;
   std::array<std::pair<double, double>, control_interval_frames> dry_{};
   Path path_;
-  SynthTransport transport_{};
+  Transport transport_{};
   std::span<const KeyNote> notes_{};
   std::uint64_t frame_ = 0;
   double free_seconds_ = 0.0;
@@ -682,8 +682,7 @@ std::uint32_t latency_frames(std::span<const double>, double sample_rate) {
   return margin_frames(sample_rate);
 }
 
-const synth::EngineDescriptor descriptor{"flyby", "Flyby", 1, t::parameters,
-                                         flyby_presets::presets};
+const EngineDescriptor descriptor{"flyby", "Flyby", 1, t::parameters, flyby_presets::presets};
 // Keyable (a sidechain route names the tracks whose notes start Once), as
 // Pump is; the key's audio itself is not read.
 const EffectEngine flyby_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, true,

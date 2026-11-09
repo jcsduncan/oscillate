@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -113,7 +113,7 @@ inline constexpr std::array weather_tags{"rain"sv, "wind"sv, "field"sv};
 inline constexpr std::array space_tags{"room"sv, "hum"sv, "machine"sv};
 inline constexpr std::array dub_tags{"dub"sv, "vinyl"sv, "room"sv};
 
-inline constexpr std::array<synth::SynthPreset, 16> presets{{
+inline constexpr std::array<Preset, 16> presets{{
     {"Dusty 33", "Vinyl", {}, vinyl_tags},
     {"Worn 78", "Vinyl", worn_78, vinyl_tags},
     {"Fresh 45", "Vinyl", fresh_45, vinyl_tags},

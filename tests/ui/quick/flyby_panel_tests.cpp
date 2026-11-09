@@ -335,7 +335,7 @@ std::vector<float> real_telemetry(const std::vector<double>& values, double seco
     const std::size_t size = std::min(block_frames, input.size() - position);
     const auto from = static_cast<std::ptrdiff_t>(position);
     block.assign(input.begin() + from, input.begin() + from + static_cast<std::ptrdiff_t>(size));
-    const synth::SynthTransport transport{0.0, 0.0, 0.0, 4.0};
+    const oscillate::native_dsp::Transport transport{0.0, 0.0, 0.0, 4.0};
     require(runtime->process(block, {}, position, 1, transport, {}) ==
                 effects::EffectProcessStatus::rendered,
             "Flyby renders");

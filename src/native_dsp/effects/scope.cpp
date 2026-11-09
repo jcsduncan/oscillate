@@ -64,7 +64,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     const bool sync = v[p::sync] != 0.0 && transport.beats_per_frame > 0.0;
     const auto length = static_cast<std::size_t>(v[p::length]);
     if (sync) {
@@ -316,8 +316,8 @@ std::unique_ptr<EffectKernel> create_kernel(std::span<const double>, double samp
 std::uint64_t tail_frames(std::span<const double>, double) { return 1; }
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"scope", "Scope", 1, scope_table::parameters,
-                                         scope_presets::presets};
+const EngineDescriptor descriptor{"scope", "Scope", 1, scope_table::parameters,
+                                  scope_presets::presets};
 const EffectEngine scope_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, true};
 
 } // namespace

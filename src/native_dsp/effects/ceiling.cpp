@@ -45,7 +45,7 @@ public:
   // is as if created with it). The lookahead stays the instance's (its
   // latency): the classic runtime refuses any other.
   // NOLINTNEXTLINE(bugprone-exception-escape): only bad_alloc can escape preparing; fatal here.
-  void control(std::span<const double> v, std::uint32_t, const SynthTransport&) noexcept override {
+  void control(std::span<const double> v, std::uint32_t, const Transport&) noexcept override {
     gain_ = dsp::db_to_gain(v[p::gain]);
     LimiterSettings wanted = settings_for(v);
     wanted.lookahead_ms = offered_.lookahead_ms;
@@ -154,8 +154,8 @@ std::uint32_t latency_frames(std::span<const double> values, double sample_rate)
   return prepared ? prepared.value().latency_frames() : 0;
 }
 
-const synth::EngineDescriptor descriptor{"ceiling", "Ceiling", 1, ceiling_table::parameters,
-                                         ceiling_presets::presets};
+const EngineDescriptor descriptor{"ceiling", "Ceiling", 1, ceiling_table::parameters,
+                                  ceiling_presets::presets};
 const EffectEngine ceiling_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames,
                                   false};
 

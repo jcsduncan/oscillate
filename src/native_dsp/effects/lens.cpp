@@ -133,7 +133,7 @@ public:
     reset();
   }
 
-  void control(std::span<const double> v, std::uint32_t, const SynthTransport&) noexcept override {
+  void control(std::span<const double> v, std::uint32_t, const Transport&) noexcept override {
     const int view = as_int(v[p::view]);
     const int resolution = as_int(v[p::resolution]);
     const int smoothing = as_int(v[p::smoothing]);
@@ -525,8 +525,7 @@ std::unique_ptr<EffectKernel> create_kernel(std::span<const double>, double samp
 std::uint64_t tail_frames(std::span<const double>, double) { return 1; }
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"lens", "Lens", 1, lens_table::parameters,
-                                         lens_presets::presets};
+const EngineDescriptor descriptor{"lens", "Lens", 1, lens_table::parameters, lens_presets::presets};
 const EffectEngine lens_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, true};
 
 } // namespace

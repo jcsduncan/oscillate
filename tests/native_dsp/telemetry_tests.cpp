@@ -32,7 +32,7 @@ using namespace synth_test;
 // frame would mix two values.
 class CountingKernel final : public SynthKernel {
 public:
-  void control(std::span<const double>, std::uint32_t, const SynthTransport&) noexcept override {}
+  void control(std::span<const double>, std::uint32_t, const Transport&) noexcept override {}
   void note_on(const NoteEvent&) noexcept override {}
   void note_off(const NoteEvent&) noexcept override {}
   void render(std::span<engine::StereoFrame>) noexcept override {}

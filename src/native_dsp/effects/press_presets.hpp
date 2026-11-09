@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -29,7 +29,7 @@ inline constexpr std::array bass{V{"press.threshold", -22}, V{"press.ratio", 5},
                                  V{"press.attack", 20}, V{"press.release", 150},
                                  V{"press.makeup", 3}};
 
-inline constexpr std::array<synth::SynthPreset, 6> presets{{
+inline constexpr std::array<Preset, 6> presets{{
     {"Default", "Utility", {}},
     {"Gentle Glue", "Bus", gentle_glue},
     {"Vocal", "Vocal", vocal},

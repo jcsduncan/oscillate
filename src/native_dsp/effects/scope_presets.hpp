@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -19,7 +19,7 @@ inline constexpr std::array waveform{V{"scope.sync", 0}, V{"scope.time", 20}, V{
 inline constexpr std::array full_band_align{V{"scope.align_band", 0}};
 inline constexpr std::array stereo_side{V{"scope.channel", 1}, V{"scope.overlay", 0}};
 
-inline constexpr std::array<synth::SynthPreset, 6> presets{{
+inline constexpr std::array<Preset, 6> presets{{
     {"Kick and Bass", "Alignment", {}},
     {"Bar View", "Groove", bar_view},
     {"Sixteenth Detail", "Groove", sixteenth},

@@ -254,7 +254,7 @@ constexpr int confirmed_sub_octaves = 2;
   const auto value = [&](std::string_view id) -> std::optional<double> {
     if (id.empty())
       return std::nullopt;
-    const auto index = native_dsp::synth::find_parameter(descriptor, id);
+    const auto index = native_dsp::find_parameter(descriptor, id);
     return index && *index < values.size() ? std::optional<double>(values[*index]) : std::nullopt;
   };
   std::vector<double> offsets;
@@ -865,7 +865,7 @@ struct Builder {
                                        std::string_view id) {
     const auto* found = native_dsp::effects::find_engine(engine);
     const auto index =
-        found == nullptr ? std::nullopt : native_dsp::synth::find_parameter(*found->descriptor, id);
+        found == nullptr ? std::nullopt : native_dsp::find_parameter(*found->descriptor, id);
     return index && *index < values.size() ? values[*index] : 0.0;
   }
   // One parameter of a built-in effect engine.
@@ -877,7 +877,7 @@ struct Builder {
     const auto* found = native_dsp::effects::find_engine(parameter.engine);
     const auto index = found == nullptr
                            ? std::nullopt
-                           : native_dsp::synth::find_parameter(*found->descriptor, parameter.id);
+                           : native_dsp::find_parameter(*found->descriptor, parameter.id);
     return index ? found->descriptor->parameters[*index].minimum : mix::silence_db;
   }
   [[nodiscard]] static std::vector<double> default_values(std::string_view engine) {

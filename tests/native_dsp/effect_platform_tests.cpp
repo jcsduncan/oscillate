@@ -189,7 +189,7 @@ void constant_lanes_equal_the_same_value() {
       // The transport process() renders the expected output with.
       const double beats_per_frame = 120.0 / 60.0 / 48'000.0;
       const double beat = static_cast<double>(position) * beats_per_frame;
-      const SynthTransport transport{beat, beats_per_frame, beat / 4.0, 4.0};
+      const Transport transport{beat, beats_per_frame, beat / 4.0, 4.0};
       REQUIRE_EQ(runtime->process(buffer, {}, position, 1, transport, std::span(&lane, 1)),
                  effects::EffectProcessStatus::rendered, "a lane block renders");
       for (std::size_t i = 0; i < size; ++i) {
@@ -208,7 +208,7 @@ void bad_blocks_are_rejected_untouched() {
     auto runtime = make_effect(*engine, default_values(table));
     std::vector<engine::StereoFrame> audio(64, {0.25F, -0.25F});
     const auto original = audio;
-    const SynthTransport transport{0.0, 0.0, 0.0, 4.0};
+    const Transport transport{0.0, 0.0, 0.0, 4.0};
     std::vector<engine::StereoFrame> empty;
     REQUIRE_EQ(runtime->process(empty, {}, 0, 1, transport, {}),
                effects::EffectProcessStatus::invalid_block, "an empty block is rejected");
@@ -312,7 +312,7 @@ void the_callback_never_allocates() {
     auto runtime = make_effect(engine, values);
     std::vector<engine::StereoFrame> buffer(256);
     std::vector<engine::StereoFrame> side(256, {0.3F, 0.3F});
-    const SynthTransport transport{0.0, 120.0 / 60.0 / 48'000.0, 0.0, 4.0};
+    const Transport transport{0.0, 120.0 / 60.0 / 48'000.0, 0.0, 4.0};
     auto later = values;
     const auto& first = engine.descriptor->parameters[0];
     later[0] = values[0] == first.minimum ? first.maximum : first.minimum;

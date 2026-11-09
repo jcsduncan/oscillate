@@ -58,7 +58,7 @@ The process contains the UI, model, engine, and default plugin host. Plugin scan
 | `clay_dsp` | Note analysis and resynthesis of audio for Clay ([ADR-0081](decisions/0081-clay-note-editing.md)) | `foundation`, `warp_dsp` |
 | `processing` | Warp maps, clip frame plans, verified source views, warp render cache, Clay sources | `foundation`, `media`, `project`, `warp_dsp`, `clay_dsp`, `persistence` |
 | `plugins` | VST3 discovery, instance lifecycle, state, parameter metadata, graph nodes | `foundation`, engine processor interface (see §3.1) |
-| `native_dsp` | DSP primitives, built-in processors, the native synth platform (§8.1), note effects, the native effect platform (§8.2) and the optional convolution core | engine processor interface, `warp_dsp` (Crate's sample reader) (see §3.1) |
+| `native_dsp` | DSP primitives, built-in processors, the neutral control layer the native engines share ([ADR-0104](decisions/0104-native-processing-layers.md)), the native synth platform (§8.1), note effects, the native effect platform (§8.2) and the optional convolution core | engine processor interface, `warp_dsp` (Crate's sample reader) (see §3.1) |
 | `native_inserts` | Preparing native effect and instrument stages for every chain builder ([ADR-0043](decisions/0043-one-native-insert-path.md)) | `project`, `engine`, `routing`, `native_dsp`, `automation_project`, `timeline` |
 | `track_chain` | One chain per track: instrument then inserts, prepared for live playback and export ([ADR-0050](decisions/0050-one-chain-per-track.md)) | `project`, `engine`, `routing`, `native_inserts` |
 | `persistence` | Manifest codec and schema migrations, committed asset references, generations, recovery | `project`, `media`, `codec` |
@@ -76,9 +76,8 @@ The composition root (`apps/daw_quick`) wires runtime services across modules. T
 These deviations are known, each with its issue. The link-level ones are the exceptions in `cmake/module_dependencies.json`; the check fails once one of them is no longer needed, so fixing a violation means removing its exception and its entry here.
 
 1. **native_dsp reaches above the engine interface** ([#129](https://github.com/jcsduncan/oscillate/issues/129)). `oscillate_synth_engines` links `automation_project` and `timeline`: the synth player compiles automation lanes and resolves project patches (`project_binding.cpp`). `oscillate_note_effects` links `timeline`.
-2. **The native effect platform reuses synth types** ([#130](https://github.com/jcsduncan/oscillate/issues/130)). `native_effects` uses `synth::ParameterControl`, `TelemetryBuffer` and `SynthTransport`. This is an intended reuse, but the shared parameter/telemetry layer should become a neutral `native_dsp` component instead of living in the synth namespace. Both sides are inside `native_dsp`, so the link check can't see this one.
-3. **Convolution is still its own insert kind** ([#131](https://github.com/jcsduncan/oscillate/issues/131)). Every other built-in processor is a native effect engine on the shared insert path ([ADR-0047](decisions/0047-classic-processors-as-engines.md)), but the optional convolution reverb keeps type-specific branches in the routed playback control, the offline graph builder (`render_graph`) and the native insert stage. `convolution_ir` reads impulse responses through `media`.
-4. **plugins reaches project types** ([#133](https://github.com/jcsduncan/oscillate/issues/133)). `vst3_project_binding` binds saved `project` plugin instances, and `vst3_graph_node` takes prepared `automation_project` lanes and a `timeline` tempo map, so `plugins` depends on more than `foundation` and the engine processor interface.
+2. **Convolution is still its own insert kind** ([#131](https://github.com/jcsduncan/oscillate/issues/131)). Every other built-in processor is a native effect engine on the shared insert path ([ADR-0047](decisions/0047-classic-processors-as-engines.md)), but the optional convolution reverb keeps type-specific branches in the routed playback control, the offline graph builder (`render_graph`) and the native insert stage. `convolution_ir` reads impulse responses through `media`.
+3. **plugins reaches project types** ([#133](https://github.com/jcsduncan/oscillate/issues/133)). `vst3_project_binding` binds saved `project` plugin instances, and `vst3_graph_node` takes prepared `automation_project` lanes and a `timeline` tempo map, so `plugins` depends on more than `foundation` and the engine processor interface.
 
 ## 4. State and command flow
 
@@ -138,6 +137,8 @@ The `plugin_ui` target (`src/app/plugin_ui`) owns the editor bridge. It provides
 
 ### 8.1 Native synth platform
 
+`oscillate_native_control` is the neutral layer synths and effects are built on ([ADR-0104](decisions/0104-native-processing-layers.md)): parameter tables and presets, parameter control and lanes, telemetry, the musical `Transport` a kernel sees at each control tick, tempo-synced divisions and the compiled-document base. Note effects use only its parameter tables and lanes, and time their steps with their own `NoteClock`. It depends only on `foundation`.
+
 `oscillate_native_synth` holds the reusable, engine-agnostic DSP blocks: oscillators, oversampling, filters, chorus, wavetable, FM, drum, bass, grain and modal primitives. It depends only on `foundation`. `oscillate_note_effects` holds the MIDI note effects ([ADR-0059](decisions/0059-play-and-sparkle.md)).
 
 `oscillate_synth_engines` holds:
@@ -160,7 +161,7 @@ Real-time contract:
 
 ### 8.2 Native effect platform
 
-`oscillate_native_effects` (`src/native_dsp/effects/`, [ADR-0040](decisions/0040-native-effect-platform.md)) provides one generic `NativeEffectRuntime` and an `EffectEngine` registry (`src/native_dsp/effects/registry.cpp`): Contour, Forge, Orbit, Relay, Expanse, Vista, Deck, Pocket, Pump, Chop, Temper, Strata, Flyby, Dust, Lens, Loudness, Scope, Tune, Trim, Signal, Shape, Press and Ceiling. Effects with editable curves or shapes carry a document as synths do ([ADR-0058](decisions/0058-pump-volume-shaper.md)).
+`oscillate_native_effects` (`src/native_dsp/effects/`, [ADR-0040](decisions/0040-native-effect-platform.md)) provides one generic `NativeEffectRuntime` and an `EffectEngine` registry (`src/native_dsp/effects/registry.cpp`): Contour, Forge, Orbit, Relay, Expanse, Vista, Deck, Pocket, Pump, Chop, Temper, Strata, Edge, Flyby, Dust, Lens, Loudness, Scope, Tune, Trim, Signal, Shape, Press and Ceiling. Effects with editable curves or shapes carry a document as synths do ([ADR-0058](decisions/0058-pump-volume-shaper.md)).
 
 Each engine supplies:
 - a parameter table and factory presets;
@@ -168,7 +169,7 @@ Each engine supplies:
 - tail and latency functions;
 - `sidechain` and `generator` flags.
 
-The runtime shares the synths' parameter control, lanes and telemetry. Its real-time contract matches §8.1: no callback allocation, project-frame-aligned control ticks, block-split invariance, and reset on a transport-generation change.
+The runtime uses the same neutral parameter control, lanes, telemetry and transport as the synths (`oscillate_native_control`). Its real-time contract matches §8.1: no callback allocation, project-frame-aligned control ticks, block-split invariance, and reset on a transport-generation change.
 
 **Integration.** Every native effect uses one insert type, an adapter to the sidechain processor runtime, and the chain builder in `native_inserts`/`track_chain` that live playback and export share ([ADR-0043](decisions/0043-one-native-insert-path.md), [ADR-0050](decisions/0050-one-chain-per-track.md)). Live playback can render one heavy synth's voices on free audio helpers ([ADR-0085](decisions/0085-nested-voice-rendering.md)); denormals are flushed at every render entry ([ADR-0062](decisions/0062-denormals-flushed.md)).
 

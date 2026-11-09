@@ -1,7 +1,7 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 
 #include <array>
 #include <cstddef>
@@ -12,8 +12,8 @@
 // are persisted and automated: never rename or reuse one.
 namespace oscillate::native_dsp::effects::relay_table {
 
-using S = synth::ParameterScale;
-using T = synth::ParameterTiming;
+using S = ParameterScale;
+using T = ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array characters{"Digital"sv, "Tape"sv, "Analog"sv};
@@ -21,12 +21,12 @@ enum Character : std::uint8_t { digital, tape, analog };
 inline constexpr std::array routings{"Stereo"sv, "Ping-Pong"sv, "Mono"sv};
 enum Routing : std::uint8_t { stereo, ping_pong, mono };
 inline constexpr std::array off_on{"Off"sv, "On"sv};
-inline constexpr const auto& divisions = synth::sync_divisions;
+inline constexpr const auto& divisions = sync_divisions;
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
-inline constexpr double g = synth::effect_glide_seconds;
+inline constexpr double g = effect_glide_seconds;
 
-inline constexpr std::array<synth::ParameterDescriptor, 17> parameters{{
+inline constexpr std::array<ParameterDescriptor, 17> parameters{{
     {"relay.character", "Character", "Delay", "", S::choice, 0, last(characters.size()), 0,
      characters, T::live, 0},
     {"relay.routing", "Routing", "Delay", "", S::choice, 0, last(routings.size()), 0, routings,
@@ -59,8 +59,6 @@ inline constexpr std::array<synth::ParameterDescriptor, 17> parameters{{
     {"relay.output", "Output", "Output", "dB", S::linear, -24, 12, 0, {}, T::live, g},
 }};
 
-consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
-}
+consteval std::size_t index_of(std::string_view id) { return parameter_index(parameters, id); }
 
 } // namespace oscillate::native_dsp::effects::relay_table

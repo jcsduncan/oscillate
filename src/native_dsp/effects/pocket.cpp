@@ -275,7 +275,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t frames,
-               const SynthTransport&) noexcept override {
+               const Transport&) noexcept override {
     if (!primed_) {
       // Lookahead is the instance's fixed latency (EffectEngine::latency_frames).
       lookahead_frames_ = static_cast<std::size_t>(std::lround(
@@ -658,8 +658,8 @@ std::uint32_t latency_frames(std::span<const double> v, double sample_rate) {
       pocket_table::lookahead_ms[static_cast<std::size_t>(v[p::lookahead])] * 1e-3 * sample_rate));
 }
 
-const synth::EngineDescriptor descriptor{"pocket", "Pocket", 1, pocket_table::parameters,
-                                         pocket_presets::presets};
+const EngineDescriptor descriptor{"pocket", "Pocket", 1, pocket_table::parameters,
+                                  pocket_presets::presets};
 const EffectEngine pocket_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, true};
 
 } // namespace

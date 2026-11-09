@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -113,7 +113,7 @@ inline constexpr std::array live_tags{"live"sv, "tracking"sv};
 inline constexpr std::array room_tags{"room"sv, "resonance"sv};
 inline constexpr std::array stereo_tags{"stereo"sv, "side"sv};
 
-inline constexpr std::array<synth::SynthPreset, 16> presets{{
+inline constexpr std::array<Preset, 16> presets{{
     {"Default", "Utility", {}},
     {"Tame Harshness", "Vocal", tame_harshness, vocal_tags},
     {"De-Ess", "Vocal", de_ess, de_ess_tags},

@@ -192,7 +192,7 @@ void the_callback_never_allocates() {
       buffer[i] = {static_cast<float>(input.left[i]), static_cast<float>(input.right[i])};
       side[i] = buffer[i];
     }
-    const SynthTransport transport{0.0, beats_per_second / rate, 0.0, beats_per_bar};
+    const Transport transport{0.0, beats_per_second / rate, 0.0, beats_per_bar};
     counted_allocations = 0;
     counting_allocations = true;
     for (std::size_t n = 0; n < allocation_blocks; ++n) {

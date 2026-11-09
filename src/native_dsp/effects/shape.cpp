@@ -180,7 +180,7 @@ public:
         eq_(std::in_place, prepared), cascade_(canonical(initial)), wanted_(initial),
         input_spectrum_(sample_rate), output_spectrum_(sample_rate) {}
 
-  void control(std::span<const double> v, std::uint32_t, const SynthTransport&) noexcept override {
+  void control(std::span<const double> v, std::uint32_t, const Transport&) noexcept override {
     for (std::size_t b = 0; b < bands; ++b) {
       wanted_[b] = band_stages(v, b, sample_rate_);
     }
@@ -400,8 +400,8 @@ std::uint64_t tail_frames(std::span<const double> values, double sample_rate) {
 }
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"shape", "Shape", 1, shape_table::parameters,
-                                         shape_presets::presets};
+const EngineDescriptor descriptor{"shape", "Shape", 1, shape_table::parameters,
+                                  shape_presets::presets};
 const EffectEngine shape_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, false};
 
 } // namespace

@@ -4,10 +4,13 @@
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/engine/synth_media.hpp"
 #include "oscillate/foundation/error.hpp"
+#include "oscillate/native_dsp/document_state.hpp"
+#include "oscillate/native_dsp/parameter_control.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/pedal_latch.hpp"
 #include "oscillate/native_dsp/synth/lock.hpp"
-#include "oscillate/native_dsp/synth/parameter_control.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/telemetry.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 #include "oscillate/project/model.hpp"
 
 #include <array>
@@ -26,17 +29,6 @@ class AudioWorkerPool;
 } // namespace oscillate::engine
 
 namespace oscillate::native_dsp::synth {
-
-// Musical position for tempo-synced modulation. beats_per_frame == 0 means
-// no tempo is known and 120 BPM is assumed. Beats are quarter notes; bars
-// follow the project's meter (zero-based, continuous across meter changes),
-// and beats_per_bar is the bar length in quarter notes at the playhead.
-struct SynthTransport {
-  double beat_at_block_start = 0.0;
-  double beats_per_frame = 0.0;
-  double bar_at_block_start = 0.0;
-  double beats_per_bar = 4.0;
-};
 
 struct NoteEvent {
   foundation::IdBits clip;
@@ -60,13 +52,6 @@ using engine::SynthMedia;
 using engine::SynthMediaAsset;
 using engine::SynthMediaEntry;
 
-// An engine's compiled structured state (routes, curves, chains, sequences,
-// media): immutable, built on control, read by its kernel on the callback.
-class SynthDocumentState {
-public:
-  virtual ~SynthDocumentState() = default;
-};
-
 // Engine-specific DSP. Created and destroyed on control; every other member
 // runs only on the one callback that owns the runtime.
 class SynthKernel {
@@ -77,7 +62,7 @@ public:
   // frames_to_next_tick lets the kernel ramp its per-frame state across the
   // interval. transport is evaluated at the tick frame.
   virtual void control(std::span<const double> values, std::uint32_t frames_to_next_tick,
-                       const SynthTransport& transport) noexcept = 0;
+                       const Transport& transport) noexcept = 0;
   virtual void note_on(const NoteEvent& event) noexcept = 0;
   virtual void note_off(const NoteEvent& event) noexcept = 0;
   // Additive. frames never spans a control tick or a note event.
@@ -96,7 +81,7 @@ public:
   // At a block start (and once on control before the first block): the
   // engine's own compiled document, valid until the next adoption. Engines
   // without a document never see this.
-  virtual void adopt_document(const SynthDocumentState& state) noexcept { (void)state; }
+  virtual void adopt_document(const DocumentState& state) noexcept { (void)state; }
   // A pedal's new value, 0..1, for engines that model their pedals
   // (SynthEngine::models_pedals). Others get generic pedals from the
   // runtime and never see this.
@@ -150,9 +135,9 @@ struct SynthEngine {
   // first): reuse what has not changed, such as built tables or effect
   // instances whose sound must carry on. The kernel may still be reading
   // `previous` until it adopts the result.
-  foundation::Result<std::shared_ptr<const SynthDocumentState>> (*prepare_document)(
+  foundation::Result<std::shared_ptr<const DocumentState>> (*prepare_document)(
       const project::NativeSynthDocument& document, const SynthMedia& media, double sample_rate,
-      const SynthDocumentState* previous) = nullptr;
+      const DocumentState* previous) = nullptr;
   // The document a factory preset, or the defaults (nullopt), start with;
   // empty when null.
   project::NativeSynthDocument (*preset_document)(std::optional<std::size_t> preset) = nullptr;
@@ -200,14 +185,14 @@ public:
   [[nodiscard]] SynthProcessReport
   process(std::span<engine::StereoFrame> output, std::span<const engine::BlockMidiEvent> events,
           std::uint64_t project_frame, std::uint64_t transport_generation,
-          const SynthTransport& transport, std::span<const ParameterLane> lanes) noexcept;
+          const Transport& transport, std::span<const ParameterLane> lanes) noexcept;
   // With pedals (ADR-0035): sorted, in range, values 0..1. At the same frame
   // pedals act before notes. A transport-generation change resets the
   // pedals with the voices; the caller chases held pedals at offset 0.
   [[nodiscard]] SynthProcessReport
   process(std::span<engine::StereoFrame> output, std::span<const engine::BlockMidiEvent> events,
           std::span<const engine::BlockPedalEvent> pedals, std::uint64_t project_frame,
-          std::uint64_t transport_generation, const SynthTransport& transport,
+          std::uint64_t transport_generation, const Transport& transport,
           std::span<const ParameterLane> lanes) noexcept;
 
   // Control only. The latest accepted offer is adopted at the next block;
@@ -273,7 +258,7 @@ private:
   // it adopted until the next adoption.
   struct DocumentOffer {
     std::uint64_t revision = 0;
-    std::shared_ptr<const SynthDocumentState> state;
+    std::shared_ptr<const DocumentState> state;
   };
   struct DocumentMailbox {
     std::atomic<const DocumentOffer*> offered{nullptr};
@@ -283,8 +268,8 @@ private:
   void adopt_project_key() noexcept;
   void apply_pedal(const engine::BlockPedalEvent& event) noexcept;
   void apply_note(const engine::BlockMidiEvent& event) noexcept;
-  void tick(std::uint32_t frames_to_next_tick, std::size_t block_offset,
-            const SynthTransport& transport, std::span<const ParameterLane> lanes) noexcept;
+  void tick(std::uint32_t frames_to_next_tick, std::size_t block_offset, const Transport& transport,
+            std::span<const ParameterLane> lanes) noexcept;
 
   SynthEngine engine_;
   std::unique_ptr<SynthKernel> kernel_;

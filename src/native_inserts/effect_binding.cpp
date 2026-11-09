@@ -9,8 +9,6 @@ namespace {
 using foundation::ErrorCode;
 using foundation::Result;
 namespace effects = native_dsp::effects;
-namespace synth = native_dsp::synth;
-
 } // namespace
 
 Result<ResolvedNativeEffect> resolve_native_effect(const project::NativeEffectPatch& patch) {
@@ -28,12 +26,12 @@ Result<ResolvedNativeEffect> resolve_native_effect(const project::NativeEffectPa
     // Version 1 is the only released table; later versions add upgraders here.
     return R::failure({ErrorCode::unsupported, "No upgrade path for this effect patch version"});
   }
-  std::vector<synth::NamedValue> saved;
+  std::vector<native_dsp::NamedValue> saved;
   saved.reserve(patch.parameters.size());
   for (const auto& parameter : patch.parameters) {
     saved.push_back({parameter.id, parameter.value});
   }
-  auto values = synth::resolve_values(*engine->descriptor, saved);
+  auto values = native_dsp::resolve_values(*engine->descriptor, saved);
   if (!values) {
     return R::failure(values.error());
   }
@@ -60,7 +58,7 @@ Result<project::NativeEffectPatch> make_native_effect_patch(const effects::Effec
   patch.engine = std::string(table.id);
   patch.engine_version = table.version;
   patch.document = std::move(document);
-  for (auto& entry : synth::sparse_values(table, values)) {
+  for (auto& entry : native_dsp::sparse_values(table, values)) {
     patch.parameters.push_back({std::move(entry.id), entry.value});
   }
   // Round-trip through the resolver so only valid patches leave here.
@@ -78,12 +76,12 @@ native_effect_patch_for_preset(const effects::EffectEngine& engine,
   auto document = engine.preset_document != nullptr ? engine.preset_document(preset)
                                                     : project::NativeSynthDocument{};
   if (!preset) {
-    return make_native_effect_patch(engine, synth::default_values(table), std::move(document));
+    return make_native_effect_patch(engine, native_dsp::default_values(table), std::move(document));
   }
   if (*preset >= table.presets.size()) {
     return R::failure({ErrorCode::not_found, "Effect preset not found"});
   }
-  auto values = synth::preset_values(table, table.presets[*preset]);
+  auto values = native_dsp::preset_values(table, table.presets[*preset]);
   if (!values) {
     return R::failure(values.error());
   }
@@ -93,7 +91,7 @@ native_effect_patch_for_preset(const effects::EffectEngine& engine,
 Result<std::size_t> native_effect_parameter_index(const effects::EffectEngine& engine,
                                                   std::string_view parameter_id) {
   using R = Result<std::size_t>;
-  const auto index = synth::find_parameter(*engine.descriptor, parameter_id);
+  const auto index = native_dsp::find_parameter(*engine.descriptor, parameter_id);
   if (!index) {
     return R::failure({ErrorCode::not_found, "Unknown " + std::string(engine.descriptor->name) +
                                                  " parameter '" + std::string(parameter_id) + "'"});
@@ -115,13 +113,13 @@ native_effect_automation_domain(const effects::EffectEngine& engine,
     return R::failure(index.error());
   }
   const auto& parameter = engine.descriptor->parameters[index.value()];
-  const bool discrete = synth::is_discrete(parameter);
+  const bool discrete = native_dsp::is_discrete(parameter);
   const auto steps =
       discrete ? static_cast<std::uint32_t>(parameter.maximum - parameter.minimum) : 0U;
   return R::success({project::AutomationRepresentation::physical, std::string(parameter.id),
                      std::string(parameter.unit), parameter.minimum, parameter.maximum,
                      parameter.default_value, discrete, steps,
-                     !discrete && parameter.scale == synth::ParameterScale::logarithmic
+                     !discrete && parameter.scale == native_dsp::ParameterScale::logarithmic
                          ? project::AutomationScale::logarithmic
                          : project::AutomationScale::linear});
 }

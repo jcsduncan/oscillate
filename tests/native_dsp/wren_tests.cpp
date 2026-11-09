@@ -43,6 +43,7 @@ using oscillate::test::counting_allocations;
 namespace {
 
 using namespace oscillate;
+using namespace oscillate::native_dsp;
 using namespace oscillate::native_dsp::synth;
 using namespace synth_test;
 namespace library = wren::library;
@@ -776,7 +777,7 @@ void the_callback_does_not_allocate() {
     for (std::uint64_t b = 1; b < blocks; ++b) {
       const auto hit = b / every;
       const double beat = static_cast<double>(b * block) / (seconds_per_beat * rate);
-      const SynthTransport transport{beat, 1.0 / (seconds_per_beat * rate), beat / 4.0, 4.0};
+      const Transport transport{beat, 1.0 / (seconds_per_beat * rate), beat / 4.0, 4.0};
       events[0].note_id_bits = {0, hit - 1};
       events[0].key = static_cast<std::uint8_t>(a4 + static_cast<int>((hit + keys - 1) % keys));
       events[1].note_id_bits = {0, hit};

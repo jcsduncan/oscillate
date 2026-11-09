@@ -611,7 +611,7 @@ void the_callback_never_allocates() {
   all[at("dust.mix.seed")] = 7.0;
   (void)process(*runtime, silence(1'024), {.rate = rate});
   require(runtime->offer_values(all, 1), "every layer is switched on");
-  const SynthTransport transport{0.0, 120.0 / 60.0 / rate, 0.0, 4.0};
+  const Transport transport{0.0, 120.0 / 60.0 / rate, 0.0, 4.0};
   counted_allocations = 0;
   counting_allocations = true;
   for (std::uint64_t block = 0; block < 400; ++block) {

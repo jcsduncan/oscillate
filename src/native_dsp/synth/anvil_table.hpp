@@ -1,8 +1,8 @@
 #pragma once
 
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/lock.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 
 #include <array>
 #include <cstddef>
@@ -108,7 +108,7 @@ inline constexpr std::array<ParameterDescriptor, 38> parameters{{
 }};
 
 consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
+  return parameter_index(parameters, id);
 }
 
 } // namespace oscillate::native_dsp::synth::anvil_table

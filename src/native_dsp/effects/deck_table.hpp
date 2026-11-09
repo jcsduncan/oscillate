@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -10,8 +10,8 @@
 // never rename or reuse one.
 namespace oscillate::native_dsp::effects::deck_table {
 
-using S = synth::ParameterScale;
-using T = synth::ParameterTiming;
+using S = ParameterScale;
+using T = ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array off_on{"Off"sv, "On"sv};
@@ -19,9 +19,9 @@ inline constexpr std::array off_on{"Off"sv, "On"sv};
 // A band at its bottom stop is silent: a full kill, as on a DJ mixer.
 inline constexpr double kill_db = -40.0;
 inline constexpr double boost_db = 6.0;
-inline constexpr double g = synth::effect_glide_seconds;
+inline constexpr double g = effect_glide_seconds;
 
-inline constexpr std::array<synth::ParameterDescriptor, 9> parameters{{
+inline constexpr std::array<ParameterDescriptor, 9> parameters{{
     {"deck.low", "Low", "Bands", "dB", S::linear, kill_db, boost_db, 0, {}, T::live, g},
     {"deck.mid", "Mid", "Bands", "dB", S::linear, kill_db, boost_db, 0, {}, T::live, g},
     {"deck.high", "High", "Bands", "dB", S::linear, kill_db, boost_db, 0, {}, T::live, g},
@@ -43,8 +43,6 @@ inline constexpr std::array<synth::ParameterDescriptor, 9> parameters{{
     {"deck.gain", "Gain", "Output", "dB", S::linear, -24, 12, 0, {}, T::live, g},
 }};
 
-consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
-}
+consteval std::size_t index_of(std::string_view id) { return parameter_index(parameters, id); }
 
 } // namespace oscillate::native_dsp::effects::deck_table

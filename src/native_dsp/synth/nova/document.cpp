@@ -134,10 +134,10 @@ Result<void> validate_document(const project::NativeSynthDocument& document) {
   return validate_analogue_lanes(document.voice_lanes);
 }
 
-Result<std::shared_ptr<const SynthDocumentState>>
+Result<std::shared_ptr<const DocumentState>>
 prepare_document(const project::NativeSynthDocument& document, const SynthMedia& media,
-                 double sample_rate, const SynthDocumentState* previous_state) {
-  using R = Result<std::shared_ptr<const SynthDocumentState>>;
+                 double sample_rate, const DocumentState* previous_state) {
+  using R = Result<std::shared_ptr<const DocumentState>>;
   if (auto valid = validate_document(document); !valid)
     return R::failure(valid.error());
   const auto* previous = static_cast<const NovaState*>(previous_state);

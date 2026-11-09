@@ -56,7 +56,7 @@ public:
   // are offered, and the runtime crossfades its gain over 64 frames. A
   // refused offer (its mailbox full) is retried next tick.
   // NOLINTNEXTLINE(bugprone-exception-escape): only bad_alloc can escape preparing; fatal here.
-  void control(std::span<const double> v, std::uint32_t, const SynthTransport&) noexcept override {
+  void control(std::span<const double> v, std::uint32_t, const Transport&) noexcept override {
     const CompressorSettings wanted = settings_for(v);
     if (same(wanted, offered_)) {
       return;
@@ -168,8 +168,8 @@ std::unique_ptr<EffectKernel> create_kernel(std::span<const double> values, doub
 std::uint64_t tail_frames(std::span<const double>, double) { return 0; }
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"press", "Press", 1, press_table::parameters,
-                                         press_presets::presets};
+const EngineDescriptor descriptor{"press", "Press", 1, press_table::parameters,
+                                  press_presets::presets};
 const EffectEngine press_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, true};
 
 } // namespace

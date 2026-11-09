@@ -77,7 +77,7 @@ constexpr std::array<V, 1> dorian{{{"scale.scale", 2}}};
 constexpr std::array<V, 1> third_up{{{"scale.transpose", 2}}};
 constexpr std::array<V, 1> octave_down{{{"scale.octave", -1}}};
 
-constexpr std::array<synth::SynthPreset, 9> presets{{
+constexpr std::array<Preset, 9> presets{{
     {"C Major", "Keys", {}},
     {"C Minor", "Keys", c_minor},
     {"A Minor", "Keys", a_minor},

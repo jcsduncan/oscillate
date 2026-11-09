@@ -1,7 +1,7 @@
 #pragma once
 
 #include "oscillate/native_dsp/effects/effect.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -82,7 +82,7 @@ struct Layout {
 // The plain values OTT mode runs, as the band parameters (and Bands, the
 // crossovers and Mode = Bands) that reproduce it: a panel taking over a
 // band writes these first, so the sound does not change.
-[[nodiscard]] std::vector<synth::NamedValue> ott_values(std::span<const double> values);
+[[nodiscard]] std::vector<NamedValue> ott_values(std::span<const double> values);
 
 // The magnitude of band `band` of the layout at `hz` (the minimum-phase
 // split's; the linear-phase bank matches it in magnitude closely), for

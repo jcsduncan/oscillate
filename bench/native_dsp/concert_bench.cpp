@@ -1,5 +1,5 @@
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/concert.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/runtime.hpp"
 
 #include <algorithm>
@@ -20,6 +20,7 @@
 // streamer thread does alongside a real callback.
 namespace {
 using namespace oscillate;
+using namespace oscillate::native_dsp;
 using namespace oscillate::native_dsp::synth;
 
 void run(const char* label, int notes, bool pedal, std::size_t block) {

@@ -2,9 +2,9 @@
 
 #include "edit_support.hpp"
 #include "oscillate/application/crate_chops.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/crate.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/processing/clip_frame_plan.hpp"
 #include "oscillate/source_prep/synth_media.hpp"
@@ -31,7 +31,7 @@ namespace facts = native_dsp::synth::crate;
 
 // The engine's "Bend Range" parameter, by name: engines name its id
 // differently ("nova.global.bend_range", "ember.voice.bend", ...).
-[[nodiscard]] const native_dsp::synth::ParameterDescriptor*
+[[nodiscard]] const native_dsp::ParameterDescriptor*
 bend_range_parameter(const native_dsp::synth::SynthEngine& engine) {
   for (const auto& parameter : engine.descriptor->parameters)
     if (parameter.name == clay::bend_range_name)
@@ -283,9 +283,9 @@ Result<SamplerConversion> AudioClipService::convert_audio_clip_to_sampler(projec
 
   // The patch a sample loaded on the panel gets: its chops, root and labels.
   auto name = clip.name.empty() ? owner.name : clip.name;
-  auto sample = chops::new_sample_state(*engine->descriptor,
-                                        native_dsp::synth::default_values(*engine->descriptor), {},
-                                        starts.value(), audio, source_bpm(state, source->id), name);
+  auto sample =
+      chops::new_sample_state(*engine->descriptor, native_dsp::default_values(*engine->descriptor),
+                              {}, starts.value(), audio, source_bpm(state, source->id), name);
   if (!sample)
     return R::failure(sample.error());
   const auto ordered = chops::region_starts(sample.value().regions);

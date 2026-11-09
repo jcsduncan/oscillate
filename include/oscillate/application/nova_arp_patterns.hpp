@@ -1,8 +1,8 @@
 #pragma once
 
 #include "oscillate/foundation/error.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/nova/arp.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/persistence/groove_file.hpp"
 
 #include <array>
@@ -79,7 +79,7 @@ using LaneLocks = std::array<bool, nova::arp_lane_count>;
 // mode and groove stay, and nothing outside nova.arp.* changes. Fails for a
 // pattern that does not parse or values that do not fit the table.
 [[nodiscard]] foundation::Result<std::vector<double>>
-apply(const native_dsp::synth::EngineDescriptor& table, std::span<const double> current,
+apply(const native_dsp::EngineDescriptor& table, std::span<const double> current,
       const PatternSpec& pattern, const LaneLocks& locks = {});
 
 // A seeded variation of `base` (a pattern as loaded): with `amount` 0..1 of
@@ -89,7 +89,7 @@ apply(const native_dsp::synth::EngineDescriptor& table, std::span<const double> 
 // other). nova.arp.seed takes the seed, so chance rolls change too. Seed 0
 // returns `base`. Same base, seed and amount, same result.
 inline constexpr double default_mutation_amount = 0.35;
-[[nodiscard]] std::vector<double> mutate(const native_dsp::synth::EngineDescriptor& table,
+[[nodiscard]] std::vector<double> mutate(const native_dsp::EngineDescriptor& table,
                                          std::span<const double> base, std::uint32_t seed,
                                          double amount, const LaneLocks& locks = {});
 
@@ -97,14 +97,14 @@ inline constexpr double default_mutation_amount = 0.35;
 // arp_groove_steps steps on its grid. Fails for a grid the arp lacks
 // (arp_groove_grids) or an invalid template. clear_groove sets no groove.
 [[nodiscard]] foundation::Result<std::vector<double>>
-apply_groove(const native_dsp::synth::EngineDescriptor& table, std::span<const double> current,
+apply_groove(const native_dsp::EngineDescriptor& table, std::span<const double> current,
              const persistence::GrooveTemplate& groove);
-[[nodiscard]] std::vector<double> clear_groove(const native_dsp::synth::EngineDescriptor& table,
+[[nodiscard]] std::vector<double> clear_groove(const native_dsp::EngineDescriptor& table,
                                                std::span<const double> current);
 
 // The arp's settings in a set of values, as the kernel reads them (for the
 // panel's period readout and the tests).
-[[nodiscard]] nova::ArpSettings settings_of(const native_dsp::synth::EngineDescriptor& table,
+[[nodiscard]] nova::ArpSettings settings_of(const native_dsp::EngineDescriptor& table,
                                             std::span<const double> values);
 
 } // namespace oscillate::application::nova_arp

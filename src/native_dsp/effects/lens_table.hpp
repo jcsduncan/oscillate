@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -12,8 +12,8 @@
 // reuse one.
 namespace oscillate::native_dsp::effects::lens_table {
 
-using S = synth::ParameterScale;
-using T = synth::ParameterTiming;
+using S = ParameterScale;
+using T = ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array views{"Mid"sv,   "Side"sv,       "Left"sv,
@@ -32,7 +32,7 @@ inline constexpr std::array off_on{"Off"sv, "On"sv};
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
 
-inline constexpr std::array<synth::ParameterDescriptor, 9> parameters{{
+inline constexpr std::array<ParameterDescriptor, 9> parameters{{
     {"lens.view", "View", "Analysis", "", S::choice, 0, last(views.size()), 0, views, T::live, 0},
     {"lens.resolution", "Resolution", "Analysis", "", S::choice, 0, last(resolutions.size()), 1,
      resolutions, T::live, 0},
@@ -47,8 +47,6 @@ inline constexpr std::array<synth::ParameterDescriptor, 9> parameters{{
     {"lens.freeze", "Freeze", "Display", "", S::choice, 0, 1, 0, off_on, T::live, 0},
 }};
 
-consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
-}
+consteval std::size_t index_of(std::string_view id) { return parameter_index(parameters, id); }
 
 } // namespace oscillate::native_dsp::effects::lens_table

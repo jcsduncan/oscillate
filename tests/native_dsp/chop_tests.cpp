@@ -384,7 +384,7 @@ void the_callback_never_allocates() {
   for (std::uint64_t block = 0; block < 2'000; ++block) {
     const std::uint64_t frame = 4'096 + block * buffer.size();
     const double beat = static_cast<double>(frame) * beats_per_frame;
-    const SynthTransport transport{beat, beats_per_frame, beat / 4.0, 4.0};
+    const Transport transport{beat, beats_per_frame, beat / 4.0, 4.0};
     (void)runtime->process(buffer, {}, frame, block < 1'000 ? 1U : 2U, transport, {});
   }
   counting_allocations = false;

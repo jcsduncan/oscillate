@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "strata_table.hpp"
 
 #include <array>
@@ -117,7 +117,7 @@ inline constexpr std::array ott_tags{"ott"sv, "squash"sv, "upward"sv};
 inline constexpr std::array master_tags{"master"sv, "linear phase"sv, "polish"sv};
 inline constexpr std::array pad_tags{"pad"sv, "mud"sv, "mid"sv};
 
-inline constexpr std::array<synth::SynthPreset, 7> presets{{
+inline constexpr std::array<Preset, 7> presets{{
     {"Init", "Utility", {}, init_tags},
     {"Glue the drums", "Drums", glue_the_drums, glue_tags},
     {"Tame the bass", "Bass", tame_the_bass, bass_tags},

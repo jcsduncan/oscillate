@@ -155,7 +155,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t frames,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     const bool jump = !primed_;
     const double steps = std::max(1.0, static_cast<double>(frames));
     const auto seed = static_cast<std::uint64_t>(v[p::mix_seed]);
@@ -298,7 +298,7 @@ private:
   }
 
   // The rain's room runs while the rain sounds and until its tail ends.
-  void control_room(std::uint32_t frames, const SynthTransport& transport) noexcept {
+  void control_room(std::uint32_t frames, const Transport& transport) noexcept {
     const bool rain = layers_[static_cast<std::size_t>(Layer::rain)].active;
     if (rain) {
       room_left_ = room_tail_;
@@ -592,7 +592,7 @@ std::uint32_t latency_frames(std::span<const double>, double sample_rate) {
   return latency_of(sample_rate);
 }
 
-const synth::EngineDescriptor descriptor{"dust", "Dust", 1, t::parameters, dust_presets::presets};
+const EngineDescriptor descriptor{"dust", "Dust", 1, t::parameters, dust_presets::presets};
 // A generator that reads a sidechain and is keyed by notes, as Pump is.
 const EffectEngine dust_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, true,
                                true,        nullptr,        nullptr,      nullptr,         true};

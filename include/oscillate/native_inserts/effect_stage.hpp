@@ -5,8 +5,8 @@
 #include "oscillate/foundation/error.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/synth/plan_mailbox.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
 #include "oscillate/project/model.hpp"
+#include "oscillate/timeline/bar_grid.hpp"
 #include "oscillate/timeline/timing.hpp"
 
 #include <atomic>
@@ -124,12 +124,12 @@ private:
     std::uint64_t revision = 0;
     // The project's tempo and meter: a tempo change is a new plan.
     std::shared_ptr<const timeline::TempoMap> tempo;
-    native_dsp::synth::BarGrid bars;
+    timeline::BarGrid bars;
     std::uint64_t last_safe_sample = 0;
     std::vector<std::shared_ptr<const automation_project::PreparedTargetAutomation>> evaluators;
     std::vector<std::uint32_t> parameters;
     std::vector<std::vector<double>> values;
-    std::vector<native_dsp::synth::ParameterLane> lanes;
+    std::vector<native_dsp::ParameterLane> lanes;
   };
   [[nodiscard]] foundation::Result<std::unique_ptr<AutomationPlan>>
   make_automation_plan(const project::Snapshot& snapshot,

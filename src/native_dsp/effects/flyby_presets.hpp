@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -56,7 +56,7 @@ inline constexpr std::array vehicle_tags{"vehicle"sv, "doppler"sv};
 inline constexpr std::array orbit_tags{"orbit"sv, "circle"sv};
 inline constexpr std::array music_tags{"sync"sv, "throw"sv};
 
-inline constexpr std::array<synth::SynthPreset, 11> presets{{
+inline constexpr std::array<Preset, 11> presets{{
     {"Train", "Vehicle", {}, vehicle_tags},
     {"Car Pass", "Vehicle", car_pass, vehicle_tags},
     {"Racing", "Vehicle", racing, vehicle_tags},

@@ -3,6 +3,7 @@
 #include "oscillate/native_dsp/effects/contour.hpp"
 #include "oscillate/native_dsp/effects/deck.hpp"
 #include "oscillate/native_dsp/effects/dust.hpp"
+#include "oscillate/native_dsp/effects/edge.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/expanse.hpp"
 #include "oscillate/native_dsp/effects/flyby.hpp"
@@ -29,12 +30,13 @@ namespace oscillate::native_dsp::effects {
 namespace {
 // The classic processors' engines (ADR-0047) come last.
 // NOLINTNEXTLINE(bugprone-throwing-static-initialization): engines are built from constant tables.
-const std::array<const EffectEngine*, 23> registry{
-    &contour::engine(),  &forge::engine(),  &orbit::engine(),  &relay::engine(), &expanse::engine(),
-    &vista::engine(),    &deck::engine(),   &pocket::engine(), &pump::engine(),  &chop::engine(),
-    &temper::engine(),   &strata::engine(), &flyby::engine(),  &dust::engine(),  &lens::engine(),
-    &loudness::engine(), &scope::engine(),  &tune::engine(),   &trim::engine(),  &signal::engine(),
-    &shape::engine(),    &press::engine(),  &ceiling::engine()};
+const std::array<const EffectEngine*, 24> registry{
+    &contour::engine(),  &forge::engine(), &orbit::engine(),  &relay::engine(),
+    &expanse::engine(),  &vista::engine(), &deck::engine(),   &pocket::engine(),
+    &pump::engine(),     &chop::engine(),  &temper::engine(), &strata::engine(),
+    &edge::engine(),     &flyby::engine(), &dust::engine(),   &lens::engine(),
+    &loudness::engine(), &scope::engine(), &tune::engine(),   &trim::engine(),
+    &signal::engine(),   &shape::engine(), &press::engine(),  &ceiling::engine()};
 } // namespace
 
 std::span<const EffectEngine* const> engines() noexcept { return registry; }

@@ -72,7 +72,7 @@ public:
       lfo.reset();
   }
 
-  void adopt_document(const SynthDocumentState& state) noexcept override {
+  void adopt_document(const DocumentState& state) noexcept override {
     state_ = static_cast<const NovaState*>(&state);
     rack_.adopt(*state_->fx);
     generator_.adopt(state_->clips);
@@ -83,7 +83,7 @@ public:
   void locate(std::uint64_t project_frame) noexcept override { frame_ = project_frame; }
 
   void control(std::span<const double> values, std::uint32_t frames_to_next_tick,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     values_ = values;
     transport_ = transport;
     since_tick_ = 0;
@@ -246,7 +246,7 @@ public:
       return;
     const auto started = std::chrono::steady_clock::now();
     // The block's transport, advanced from the last tick.
-    SynthTransport transport = transport_;
+    Transport transport = transport_;
     const double beats = transport_.beats_per_frame * since_tick_;
     transport.beat_at_block_start += beats;
     transport.bar_at_block_start += beats / std::max(1e-9, transport_.beats_per_bar);
@@ -582,7 +582,7 @@ private:
   double rate_;
   const NovaState* state_ = nullptr;
   std::span<const double> values_{};
-  SynthTransport transport_{};
+  Transport transport_{};
   std::uint32_t since_tick_ = 0;
   std::uint32_t tick_frames_ = control_interval_frames;
   double free_seconds_ = 0.0;

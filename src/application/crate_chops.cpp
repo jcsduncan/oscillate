@@ -587,11 +587,11 @@ std::string utf8_prefix(std::string text, std::size_t bytes) {
   return text;
 }
 
-void reset_chop_slots(const native_dsp::synth::EngineDescriptor& engine,
-                      std::vector<double>& values, std::span<const std::uint32_t> chop_slots) {
+void reset_chop_slots(const native_dsp::EngineDescriptor& engine, std::vector<double>& values,
+                      std::span<const std::uint32_t> chop_slots) {
   for (const auto slot : chop_slots) {
     for (const auto control : native_dsp::synth::crate::chop_controls) {
-      const auto index = native_dsp::synth::find_parameter(
+      const auto index = native_dsp::find_parameter(
           engine, native_dsp::synth::crate::chop_parameter_id(slot, control));
       if (index && *index < values.size())
         values[*index] = engine.parameters[*index].default_value;
@@ -599,7 +599,7 @@ void reset_chop_slots(const native_dsp::synth::EngineDescriptor& engine,
   }
 }
 
-foundation::Result<SampleState> new_sample_state(const native_dsp::synth::EngineDescriptor& engine,
+foundation::Result<SampleState> new_sample_state(const native_dsp::EngineDescriptor& engine,
                                                  std::vector<double> values,
                                                  std::span<const std::uint32_t> previous_slots,
                                                  const ChopStarts& starts, const SampleAudio& audio,
@@ -614,7 +614,7 @@ foundation::Result<SampleState> new_sample_state(const native_dsp::synth::Engine
   for (const auto& region : made.value().regions)
     chop_slots.push_back(region.slot);
   reset_chop_slots(engine, values, chop_slots);
-  if (const auto root = native_dsp::synth::find_parameter(engine, root_parameter);
+  if (const auto root = native_dsp::find_parameter(engine, root_parameter);
       root && *root < values.size())
     values[*root] = static_cast<double>(detect_root(audio));
   SampleState state;

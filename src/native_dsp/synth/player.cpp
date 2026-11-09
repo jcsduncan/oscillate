@@ -231,7 +231,7 @@ Result<std::unique_ptr<NativeSynthPlayer::Plan>> NativeSynthPlayer::make_plan(
   auto plan = std::make_unique<Plan>();
   plan->revision = snapshot.revision;
   plan->tempo = std::make_shared<const timeline::TempoMap>(snapshot.tempo);
-  plan->bars = BarGrid(snapshot.meter);
+  plan->bars = timeline::BarGrid(snapshot.meter);
   plan->events = std::make_shared<const engine::InstrumentEvents>(events);
   plan->spans = std::make_shared<const engine::NoteSpans>(events);
   plan->last_safe_sample = last_safe_automation_sample;
@@ -538,7 +538,7 @@ bool NativeSynthPlayer::render(std::span<engine::StereoFrame> output, std::uint6
                                    plan->note_controls, std::span(note_ahead_).first(ahead));
   }
   // Musical position for tempo-synced modulation, at the block start.
-  SynthTransport transport;
+  Transport transport;
   timeline::TickPosition tick{};
   double bpm = 0.0;
   if (plan->tempo->sample_to_tick_rt(first, sample_rate_, tick) &&

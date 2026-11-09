@@ -316,7 +316,7 @@ private:
   std::vector<double> values_;
   std::vector<engine::StereoFrame> scratch_;
   Resampler resampler_;
-  SynthTransport transport_{};
+  Transport transport_{};
   double base_rate_ = 48'000.0;
   std::uint32_t remaining_ = 0;
   std::uint32_t issued_ = 0;

@@ -389,7 +389,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t frames,
-               const SynthTransport&) noexcept override {
+               const Transport&) noexcept override {
     const bool jump = !primed_;
     const double steps = std::max<double>(1.0, frames);
     layout_ = layout_for(v, rate_);
@@ -757,8 +757,7 @@ std::uint32_t latency_frames(std::span<const double> values, double sample_rate)
   return frames_for(values, sample_rate).latency;
 }
 
-const synth::EngineDescriptor descriptor{"strata", "Strata", 1, t::parameters,
-                                         strata_presets::presets};
+const EngineDescriptor descriptor{"strata", "Strata", 1, t::parameters, strata_presets::presets};
 const EffectEngine strata_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, true};
 
 } // namespace
@@ -829,8 +828,8 @@ Band band_for(std::span<const double> v, std::size_t b) noexcept {
   return band;
 }
 
-std::vector<synth::NamedValue> ott_values(std::span<const double> v) {
-  std::vector<synth::NamedValue> out;
+std::vector<NamedValue> ott_values(std::span<const double> v) {
+  std::vector<NamedValue> out;
   const auto id = [](std::size_t index) { return std::string(t::parameters[index].id); };
   out.push_back({id(p::mode), static_cast<double>(t::Mode::bands_mode)});
   out.push_back({id(p::bands), static_cast<double>(ott_bands - 1)});

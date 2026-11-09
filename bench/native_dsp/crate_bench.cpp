@@ -1,5 +1,5 @@
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/crate.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/runtime.hpp"
 
 #include <algorithm>
@@ -20,6 +20,7 @@
 // era, for ten seconds at 48 kHz; reports the callback's share of a core.
 namespace {
 using namespace oscillate;
+using namespace oscillate::native_dsp;
 using namespace oscillate::native_dsp::synth;
 
 constexpr double rate = 48'000.0;
@@ -86,7 +87,7 @@ void run(const Load& load, std::size_t block) {
   for (std::size_t b = 0; b < blocks; ++b) {
     std::fill(buffer.begin(), buffer.end(), engine::StereoFrame{0.0F, 0.0F});
     const double beat = static_cast<double>(b * block) * beats_per_frame;
-    const SynthTransport transport{beat, beats_per_frame, beat / 4.0, 4.0};
+    const Transport transport{beat, beats_per_frame, beat / 4.0, 4.0};
     const auto events = b == 0 ? std::span<const engine::BlockMidiEvent>(notes)
                                : std::span<const engine::BlockMidiEvent>{};
     const auto t0 = std::chrono::steady_clock::now();

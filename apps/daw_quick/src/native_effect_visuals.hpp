@@ -37,6 +37,15 @@ contour_response(const native_dsp::synth::EngineDescriptor& engine, std::size_t 
                                                  double floor_db, std::span<const double> values,
                                                  std::size_t points);
 
+// Edge (native effect) sketches, empty or 0 for other engines: the static
+// curve's output in dBFS for `points` inputs evenly spaced from `from_db` to
+// `to_db`, and the latency in milliseconds at `sample_rate`.
+[[nodiscard]] std::vector<double> edge_transfer(const native_dsp::synth::EngineDescriptor& engine,
+                                                std::span<const double> values, double from_db,
+                                                double to_db, std::size_t points);
+[[nodiscard]] double edge_latency_ms(const native_dsp::synth::EngineDescriptor& engine,
+                                     std::span<const double> values, double sample_rate);
+
 // Strata (native effect) sketches, empty for other engines:
 //  - strata_transfer: band `band`'s static curve, output dB (makeup
 //    included) at `points` steady levels evenly spaced from `floor_db` to 0;

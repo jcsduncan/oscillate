@@ -10,9 +10,9 @@
 #include "oscillate/native_dsp/synth/oscillator.hpp"
 #include "oscillate/native_dsp/synth/oversampler.hpp"
 #include "oscillate/native_dsp/synth/shaping.hpp"
-#include "oscillate/native_dsp/synth/tempo_sync.hpp"
 #include "oscillate/native_dsp/synth/vintage_effects.hpp"
 #include "oscillate/native_dsp/synth/voice_pool.hpp"
+#include "oscillate/native_dsp/transport.hpp"
 #include "torque_presets.hpp"
 #include "torque_table.hpp"
 
@@ -182,7 +182,7 @@ public:
   }
 
   void control(std::span<const double> values, std::uint32_t frames_to_next_tick,
-               const SynthTransport& transport) noexcept override {
+               const Transport& transport) noexcept override {
     values_ = values;
     frames_ = frames_to_next_tick;
     beats_per_frame_ = transport.beats_per_frame > 0.0 ? transport.beats_per_frame : 2.0 / rate_;

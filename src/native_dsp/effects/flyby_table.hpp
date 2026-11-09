@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -17,8 +17,8 @@
 // rename or reuse one.
 namespace oscillate::native_dsp::effects::flyby_table {
 
-using S = synth::ParameterScale;
-using T = synth::ParameterTiming;
+using S = ParameterScale;
+using T = ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array paths{"Pass"sv, "Orbit"sv};
@@ -46,9 +46,9 @@ inline constexpr double reach = 150.0;
 inline constexpr std::size_t points = 4;
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
-inline constexpr double g = synth::effect_glide_seconds;
+inline constexpr double g = effect_glide_seconds;
 
-inline constexpr std::array<synth::ParameterDescriptor, 27> parameters{{
+inline constexpr std::array<ParameterDescriptor, 27> parameters{{
     {"flyby.path", "Path", "Path", "", S::choice, 0, last(paths.size()), 0, paths, T::live, 0},
     {"flyby.x1", "Start X", "Path", "m", S::linear, -reach, reach, -90, {}, T::live, g},
     {"flyby.y1", "Start Y", "Path", "m", S::linear, -reach, reach, 14, {}, T::live, g},
@@ -87,7 +87,7 @@ inline constexpr std::array<synth::ParameterDescriptor, 27> parameters{{
 }};
 
 consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
+  return parameter_index(parameters, id);
 }
 
 } // namespace oscillate::native_dsp::effects::flyby_table

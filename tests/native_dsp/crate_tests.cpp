@@ -654,7 +654,7 @@ void full_load_does_not_allocate() {
     events[0].kind = b % 2 == 0 ? engine::MidiEventKind::note_on : engine::MidiEventKind::note_off;
     events[0].key = static_cast<std::uint8_t>(36 + (b / 2) % 32);
     const double beat = static_cast<double>(b * 128) * beats_per_frame;
-    const SynthTransport transport{beat, beats_per_frame, beat / 4.0, 4.0};
+    const Transport transport{beat, beats_per_frame, beat / 4.0, 4.0};
     (void)runtime->process(buffer, events, b * 128, b < 400 ? 1 : 2, transport, {});
   }
   counting_allocations = false;

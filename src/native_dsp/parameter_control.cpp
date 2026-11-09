@@ -1,4 +1,4 @@
-#include "oscillate/native_dsp/synth/parameter_control.hpp"
+#include "oscillate/native_dsp/parameter_control.hpp"
 
 #include "oscillate/foundation/trace.hpp"
 
@@ -9,7 +9,7 @@
 #include <span>
 #include <vector>
 
-namespace oscillate::native_dsp::synth {
+namespace oscillate::native_dsp {
 
 namespace {
 
@@ -165,18 +165,4 @@ std::span<const double> ParameterControl::tick(std::span<const ParameterLane> la
   return effective_;
 }
 
-bool TelemetryBuffer::read(std::vector<float>& out) {
-  if ((middle_.load(std::memory_order_acquire) & fresh) != 0) {
-    const auto previous = middle_.exchange(front_, std::memory_order_acq_rel);
-    front_ = static_cast<std::uint8_t>(previous & 3U);
-    any_ = true;
-  }
-  if (!any_) {
-    return false;
-  }
-  const auto& slot = frames_[front_];
-  out.assign(slot.values.begin(), slot.values.begin() + static_cast<std::ptrdiff_t>(slot.size));
-  return true;
-}
-
-} // namespace oscillate::native_dsp::synth
+} // namespace oscillate::native_dsp

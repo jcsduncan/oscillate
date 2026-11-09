@@ -171,7 +171,7 @@ This section describes the built platform. Items marked *later* are open work, t
 - **Validation is split.**
   - *The model* checks structure, limits and media identity. Limits: 256 routes, 64 curves × 64 points, 4 chains × 8 slots, 8 sequences × 512 notes, 32 media slots, 32 labels of up to 64 bytes. A managed slot must match a managed source record exactly, so that source cannot be removed while the slot uses it.
   - *The engine* checks meaning through `SynthEngine::validate_document`. This runs inside `resolve_native_instrument`, so every command and every prepared source checks it.
-- **Engine hooks** (`runtime.hpp`): `validate_document`, `prepare_document(document, media, rate)` (which compiles the document into an immutable `SynthDocumentState`), `preset_document(optional preset)`, and `SynthKernel::adopt_document`. Engines without these accept only an empty document.
+- **Engine hooks** (`runtime.hpp`): `validate_document`, `prepare_document(document, media, rate)` (which compiles the document into an immutable `DocumentState`), `preset_document(optional preset)`, and `SynthKernel::adopt_document`. Engines without these accept only an empty document.
 - **Codec.** The patch payload carries a `"document"` object; every field is required. `ConvolutionIrReference` is now the shared `ManagedAudioReference`.
 - **Session.** `native_synth_document(track)` and `set_native_synth_document(track, document, gesture)`: the whole document is replaced as one undo step, and steps with the same gesture coalesce. Value edits keep the document. *Later:* add route, curve and slot helpers in the panel layer, as plain document transforms.
 

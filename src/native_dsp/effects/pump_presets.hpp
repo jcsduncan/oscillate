@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -91,7 +91,7 @@ inline constexpr std::array bar_fill{V{"pump.pattern", 4}, V{"pump.step.4", 1}};
 inline constexpr std::array morph_pump{V{"pump.slot", 5}, V{"pump.morph", 0.5}};
 inline constexpr std::array<V, 0> init{};
 
-inline constexpr std::array<synth::SynthPreset, 20> presets{{
+inline constexpr std::array<Preset, 20> presets{{
     {"Classic Pump", "House", classic_pump},
     {"Fast Pump", "House", fast_pump},
     {"Long Tail", "EDM", long_tail_values},

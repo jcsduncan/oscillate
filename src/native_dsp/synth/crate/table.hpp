@@ -1,7 +1,7 @@
 #pragma once
 
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/crate.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 
 #include <cstddef>
 #include <optional>

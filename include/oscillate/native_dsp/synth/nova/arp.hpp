@@ -349,7 +349,7 @@ public:
   // offset (offs before ons at one frame), and returns how many. When
   // neither the arp nor the sequencer is on, played notes pass through.
   [[nodiscard]] std::size_t process(std::span<const GeneratedNote> played,
-                                    const SynthTransport& transport, std::uint32_t frames,
+                                    const Transport& transport, std::uint32_t frames,
                                     std::span<GeneratedNote, max_generated_notes> out) noexcept;
   // 08a §6 offsets 77..79 and the arp block.
   [[nodiscard]] int playing_clip() const noexcept;

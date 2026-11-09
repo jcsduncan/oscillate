@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -24,7 +24,7 @@ inline constexpr std::array transients{V{"lens.resolution", 0}, V{"lens.average"
 inline constexpr std::array long_term{V{"lens.average", 3}, V{"lens.smoothing", 3},
                                       V{"lens.tilt", 2}, V{"lens.hold", 0}};
 
-inline constexpr std::array<synth::SynthPreset, 7> presets{{
+inline constexpr std::array<Preset, 7> presets{{
     {"Mix", "Mixing", {}},
     {"Mastering", "Mastering", mastering},
     {"Low End", "Mixing", low_end},

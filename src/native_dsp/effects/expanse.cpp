@@ -594,7 +594,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t frames,
-               const SynthTransport&) noexcept override {
+               const Transport&) noexcept override {
     const int mode = as_int(v[p::mode]);
     const bool jump = !primed_;
     if (jump) {
@@ -913,8 +913,8 @@ std::uint64_t tail_frames(std::span<const double> v, double sample_rate) {
 
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"expanse", "Expanse", 1, expanse_table::parameters,
-                                         expanse_presets::presets};
+const EngineDescriptor descriptor{"expanse", "Expanse", 1, expanse_table::parameters,
+                                  expanse_presets::presets};
 const EffectEngine expanse_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames,
                                   false};
 

@@ -221,7 +221,7 @@ public:
   }
 
   void control(std::span<const double> v, std::uint32_t frames,
-               const SynthTransport&) noexcept override {
+               const Transport&) noexcept override {
     const int model = as_int(v[p::model]);
     if (!primed_) {
       model_ = model;
@@ -390,8 +390,8 @@ std::uint64_t tail_frames(std::span<const double>, double sample_rate) {
 
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"forge", "Forge", 1, forge_table::parameters,
-                                         forge_presets::presets};
+const EngineDescriptor descriptor{"forge", "Forge", 1, forge_table::parameters,
+                                  forge_presets::presets};
 const EffectEngine forge_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames, false};
 
 } // namespace

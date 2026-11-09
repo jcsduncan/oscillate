@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -346,7 +346,7 @@ inline constexpr std::array init_v{
     V{"anvil.velocity.drive", 0}, V{"anvil.output", 0},
 };
 
-inline constexpr std::array<SynthPreset, 25> presets{{
+inline constexpr std::array<Preset, 25> presets{{
     {"Warehouse Rumble", "Techno", warehouse_v},
     {"Berlin Dry", "Techno", berlin_v},
     {"Industrial Hammer", "Techno", hammer_v},

@@ -17,10 +17,21 @@ target_include_directories(oscillate_native_dsp PUBLIC
 target_link_libraries(oscillate_native_dsp PUBLIC oscillate::engine PRIVATE oscillate::dsp_primitives)
 oscillate_target_defaults(oscillate_native_dsp)
 
+# The neutral layer every table-driven native engine (synth, effect, note
+# effect) is built on: parameter tables, parameter control and lanes,
+# telemetry, the musical transport and compiled-document state.
+add_library(oscillate_native_control parameters.cpp parameter_control.cpp telemetry.cpp)
+add_library(oscillate::native_control ALIAS oscillate_native_control)
+target_include_directories(oscillate_native_control PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../../include>
+)
+target_link_libraries(oscillate_native_control PUBLIC oscillate::foundation)
+oscillate_target_defaults(oscillate_native_control)
+
 # Reusable building blocks for native synth engines. Engine-agnostic: no
 # project model, persistence or Qt types.
 add_library(oscillate_native_synth synth/oscillator.cpp synth/oversampler.cpp synth/chorus.cpp
-                                          synth/parameters.cpp synth/parameter_control.cpp synth/vintage_effects.cpp
+                                          synth/vintage_effects.cpp
                                           synth/wavetable.cpp synth/drum_dsp.cpp
                                           synth/fm.cpp synth/bass_dsp.cpp
                                           synth/grain_dsp.cpp
@@ -43,7 +54,7 @@ add_library(oscillate::note_effects ALIAS oscillate_note_effects)
 target_include_directories(oscillate_note_effects PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../../include>
 )
-target_link_libraries(oscillate_note_effects PUBLIC oscillate::native_synth oscillate::engine
+target_link_libraries(oscillate_note_effects PUBLIC oscillate::native_control oscillate::engine
   oscillate::timeline oscillate::foundation)
 oscillate_target_defaults(oscillate_note_effects)
 
@@ -53,7 +64,7 @@ add_library(oscillate_synth_engines synth/runtime.cpp synth/prism.cpp synth/engi
                                            synth/project_binding.cpp synth/player.cpp
                                            synth/ember.cpp
                                            synth/pulse.cpp
-                                           synth/halo.cpp synth/torque.cpp synth/tempo_sync.cpp
+                                           synth/halo.cpp synth/torque.cpp
                                            synth/drift_engine.cpp synth/concert.cpp
                                            synth/concert_library.cpp synth/sample_stream.cpp
                                            synth/anvil.cpp
@@ -84,8 +95,8 @@ add_library(oscillate::synth_engines ALIAS oscillate_synth_engines)
 target_include_directories(oscillate_synth_engines PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../../include>
 )
-target_link_libraries(oscillate_synth_engines PUBLIC oscillate::native_synth oscillate::engine
-  oscillate::automation_project oscillate::timeline oscillate::note_effects
+target_link_libraries(oscillate_synth_engines PUBLIC oscillate::native_control oscillate::native_synth
+  oscillate::engine oscillate::automation_project oscillate::timeline oscillate::note_effects
   PRIVATE oscillate::dsp_primitives oscillate::native_effects oscillate::native_dsp
   # Crate reads its samples through the warp engine's band-limited reader.
   oscillate::warp_dsp Threads::Threads)
@@ -96,6 +107,7 @@ oscillate_target_defaults(oscillate_synth_engines)
 # production optimization so auditioning (and the DSP oracle tests) do not
 # depend on -O0 throughput. See oscillate_optimize_in_debug.
 oscillate_optimize_in_debug(oscillate_native_dsp)
+oscillate_optimize_in_debug(oscillate_native_control)
 oscillate_optimize_in_debug(oscillate_native_synth)
 oscillate_optimize_in_debug(oscillate_synth_engines)
 oscillate_optimize_in_debug(oscillate_note_effects)
@@ -134,13 +146,15 @@ add_library(oscillate_native_effects effects/runtime.cpp effects/registry.cpp
                                             effects/tune.cpp effects/trim.cpp
                                             effects/signal.cpp effects/shape.cpp
                                             effects/press.cpp effects/ceiling.cpp
-                                            effects/strata.cpp)
+                                            effects/strata.cpp
+                                            # Edge's oversampler and guard (ADR-0108).
+                                            effects/edge.cpp effects/edge_dsp.cpp)
 add_library(oscillate::native_effects ALIAS oscillate_native_effects)
 target_include_directories(oscillate_native_effects PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../../include>
 )
-target_link_libraries(oscillate_native_effects PUBLIC oscillate::native_synth oscillate::engine
-  oscillate::native_dsp PRIVATE oscillate::dsp_primitives)
+target_link_libraries(oscillate_native_effects PUBLIC oscillate::native_control oscillate::native_synth
+  oscillate::engine oscillate::native_dsp PRIVATE oscillate::dsp_primitives)
 oscillate_target_defaults(oscillate_native_effects)
 oscillate_optimize_in_debug(oscillate_native_effects)
 

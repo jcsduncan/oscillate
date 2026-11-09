@@ -1,8 +1,8 @@
 #pragma once
 
 #include "fret_table.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/fret_feel.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -69,7 +69,7 @@ inline constexpr std::array soul_tags{"bass"sv, "soul"sv, "warm"sv};
 inline constexpr std::array muted_tags{"bass"sv, "muted"sv, "thumb"sv};
 inline constexpr std::array bridge_tags{"bass"sv, "bridge"sv, "bite"sv};
 
-inline constexpr std::array<SynthPreset, 6> presets{{
+inline constexpr std::array<Preset, 6> presets{{
     {"Funk Pocket", "Bass", {}, funk_tags},
     {"Straight DI", "Bass", straight_di, clean_tags},
     {"Driving Rock", "Bass", driving_rock, rock_tags},

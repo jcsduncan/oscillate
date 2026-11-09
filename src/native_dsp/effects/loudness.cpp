@@ -93,7 +93,7 @@ public:
     clear_statistics();
   }
 
-  void control(std::span<const double> v, std::uint32_t, const SynthTransport&) noexcept override {
+  void control(std::span<const double> v, std::uint32_t, const Transport&) noexcept override {
     // Switching Integrate either way starts the statistics afresh.
     const bool integrate = v[p::integrate] != 0.0;
     if (primed_ && integrate != integrating_) {
@@ -302,8 +302,8 @@ std::unique_ptr<EffectKernel> create_kernel(std::span<const double>, double samp
 std::uint64_t tail_frames(std::span<const double>, double) { return 1; }
 std::uint32_t latency_frames(std::span<const double>, double) { return 0; }
 
-const synth::EngineDescriptor descriptor{"loudness", "Loudness", 1, loudness_table::parameters,
-                                         loudness_presets::presets};
+const EngineDescriptor descriptor{"loudness", "Loudness", 1, loudness_table::parameters,
+                                  loudness_presets::presets};
 const EffectEngine loudness_engine{&descriptor, &create_kernel, &tail_frames, &latency_frames,
                                    false};
 

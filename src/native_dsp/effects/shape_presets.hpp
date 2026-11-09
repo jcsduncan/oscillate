@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -28,7 +28,7 @@ inline constexpr std::array vocal{
     V{"shape.gain_3", -2}, V{"shape.on_5", 1},    V{"shape.freq_5", 3'000}, V{"shape.gain_5", 2},
     V{"shape.on_7", 1},    V{"shape.gain_7", 2}};
 
-inline constexpr std::array<synth::SynthPreset, 8> presets{{
+inline constexpr std::array<Preset, 8> presets{{
     {"Flat", "Utility", {}},
     {"Low Cut", "Utility", low_cut},
     {"Clean Ends", "Utility", clean_ends},
