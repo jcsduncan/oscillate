@@ -207,13 +207,14 @@ struct TypedNumber {
     const auto unit = text(parameter.unit);
     auto value = number->value;
     const auto& rest = number->rest;
-    if (unit == text(foundation::hertz_unit) &&
-        rest.compare(text(foundation::kilohertz_unit), Qt::CaseInsensitive) == 0)
+    const bool larger_unit =
+        (unit == text(foundation::hertz_unit) &&
+         rest.compare(text(foundation::kilohertz_unit), Qt::CaseInsensitive) == 0) ||
+        (unit == text(foundation::milliseconds_unit) && rest == text(foundation::seconds_unit));
+    if (larger_unit)
       value *= unit_thousand;
     else if (unit == text(foundation::seconds_unit) && rest == text(foundation::milliseconds_unit))
       value /= unit_thousand;
-    else if (unit == text(foundation::milliseconds_unit) && rest == text(foundation::seconds_unit))
-      value *= unit_thousand;
     else if (!rest.isEmpty() && rest.compare(unit, Qt::CaseInsensitive) != 0)
       return std::nullopt;
     if (unit == text(foundation::percent_unit))
@@ -768,7 +769,16 @@ void ArrangementAutomationController::set_point_value(const QString& lane_id,
         std::ranges::find(found->points, point.value(), &project::AutomationPoint::id);
     if (!feel || saved == found->points.end())
       break;
-    const application::AutomationService::AutomationPointMove move{point.value(), saved->coordinate,
+    // The point keeps its place: an elapsed lane's coordinate is a sample,
+    // which the session takes as the tick playing there.
+    auto tick = saved->coordinate;
+    if (found->timebase == project::AutomationTimebase::elapsed) {
+      const auto musical = snapshot.tempo.sample_to_tick({saved->coordinate}, snapshot.sample_rate);
+      if (!musical)
+        return failure(musical.error());
+      tick = musical.value().value;
+    }
+    const application::AutomationService::AutomationPointMove move{point.value(), tick,
                                                                    from_lane(*feel, value)};
     auto moved = session->automation().move_automation_points(lane.value(), {&move, 1});
     if (!moved)

@@ -45,6 +45,11 @@
 #include <variant>
 
 namespace {
+// How long the arrangement may take to show a revealed lane.
+constexpr int overlay_timeout_ms = 5'000;
+// Normalised values read back from the lanes.
+constexpr double value_tolerance = 1e-9;
+QQuickItem* find_visible(QQuickItem* root, const QString& name);
 namespace app = oscillate::application;
 namespace native = oscillate::native_dsp::synth;
 namespace project = oscillate::project;
@@ -421,13 +426,19 @@ void engine_is_reachable_and_saves_from_the_app(std::string_view engine_id,
         show_automation
             ->mapToScene(QPointF(show_automation->width() / 2, show_automation->height() / 2))
             .toPoint());
-    QCoreApplication::processEvents();
-    auto* overlay = qobject_cast<QQuickItem*>(
-        window->findChild<QObject*>(QStringLiteral("arrangementAutomationOverlay")));
+    QQuickItem* overlay = nullptr;
+    (void)QTest::qWaitFor(
+        [&] {
+          overlay =
+              find_visible(window->contentItem(), QStringLiteral("arrangementAutomationOverlay"));
+          return overlay != nullptr;
+        },
+        overlay_timeout_ms);
     require(bridge.revision() == before_show && window->property("currentView") == "arrange" &&
                 overlay != nullptr && overlay->isVisible() &&
                 overlay->property("laneKey").toString() == first_key,
-            "Automate did not show the synth's lane over its clips, without an edit");
+            "Automate did not show the synth's lane over its clips, without an edit: " +
+                bridge.status().toStdString());
     const auto parameter = QString::fromStdString(std::string(cutoff_id));
     controller->set_normalised(parameter, 0.62);
     require(std::fabs(controller->normalised(parameter) - 0.62) < 1e-9,
@@ -471,7 +482,7 @@ void engine_is_reachable_and_saves_from_the_app(std::string_view engine_id,
     lanes->set_point_value(lane_id, point_id, three_quarter_travel);
     require(
         std::fabs(cutoff_lane().value("points").toList().front().toMap().value("value").toDouble() -
-                  three_quarter_travel) < 1e-9,
+                  three_quarter_travel) < value_tolerance,
         "edited synth automation value was not projected");
     lanes->toggle_timebase(lane_id);
     require(cutoff_lane().value("timebase").toString() == QStringLiteral("Elapsed"),
@@ -501,7 +512,7 @@ void engine_is_reachable_and_saves_from_the_app(std::string_view engine_id,
   }
   require(std::fabs(values.value()[*index] - oscillate::native_dsp::from_normalised(
                                                  engine->descriptor->parameters[*index], 0.62)) <
-              1e-9,
+              value_tolerance,
           "edited synth cutoff did not survive save and reopen");
   const auto& lanes = reopened.value()->snapshot().tracks.front().automation;
   const auto lane = std::ranges::find_if(lanes, [&](const project::AutomationLane& item) {
@@ -511,7 +522,7 @@ void engine_is_reachable_and_saves_from_the_app(std::string_view engine_id,
   require(lane != lanes.end() && lane->points.size() == 1 &&
               std::fabs(oscillate::native_dsp::to_normalised(engine->descriptor->parameters[*index],
                                                              lane->points.front().value) -
-                        0.75) < 1e-9,
+                        0.75) < value_tolerance,
           "synth automation did not survive save and reopen");
 }
 
@@ -838,7 +849,7 @@ void automate_leads_to_the_automated_parameter() {
   constexpr std::string_view cutoff = "prism.filter.cutoff";
   const auto index = oscillate::native_dsp::find_parameter(*engine->descriptor, cutoff);
   require(index.has_value(), "Prism has no cutoff");
-  const auto cutoff_default = engine->descriptor->parameters[*index].default_value;
+  const auto cutoff_default = engine->descriptor->parameters[index.value()].default_value;
   require(session.value()
               ->automation()
               .add_automation_point(

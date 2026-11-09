@@ -311,9 +311,9 @@ QString PluginAutomationController::automate(quint32 parameter_id) {
     return {};
   }
   // The arrangement's lane key for this parameter (ArrangementAutomationController).
-  const auto key = QStringLiteral("vst3:%1:%2")
-                       .arg(QString::fromStdString(plugin.plugin.to_string()))
-                       .arg(parameter_id);
+  auto key = QStringLiteral("vst3:%1:%2")
+                 .arg(QString::fromStdString(plugin.plugin.to_string()))
+                 .arg(parameter_id);
   const auto description = describe(*context, parameter_id);
   if (description.value(QStringLiteral("lanePresent")).toBool())
     return key;

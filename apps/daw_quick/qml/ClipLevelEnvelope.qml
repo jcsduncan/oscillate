@@ -24,11 +24,12 @@ Item {
     // A typed level in dB ("-6", "−6 dB", "-inf") as a gain, or -1.
     function levelFromText(typed) {
         const cleaned = String(typed).trim().replace("−", "-").replace(/\s*dB$/i, "")
-        if (/^-?(inf|∞)$/i.test(cleaned))
+        // As the lanes read gain: silence only as -inf, else a signed decimal.
+        if (/^-(inf|∞)$/i.test(cleaned))
             return 0
-        const db = Number(cleaned)
-        if (cleaned.length === 0 || !Number.isFinite(db))
+        if (!/^[-+]?(\d+\.?\d*|\.\d+)$/.test(cleaned))
             return -1
+        const db = Number(cleaned)
         const level = Math.pow(10, db / decibelsPerDecade)
         return level <= maxLevel ? level : -1
     }

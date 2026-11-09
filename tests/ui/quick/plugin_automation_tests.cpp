@@ -254,6 +254,9 @@ const project::AutomationLane* instrument_lane(const project::Snapshot& snapshot
 }
 
 void effect_parameter_lane_contract() {
+  // The value typed into a lane point, read back on reopen.
+  constexpr double typed_value = 0.4;
+  constexpr double typed_tolerance = 1e-9;
   Directory directory;
   oscillate::plugins::Vst3Scanner scanner(VST3_HELPER_PATH);
   const auto scanned = scanner.scan(VST3_CONNECTED_BUNDLE);
@@ -344,8 +347,6 @@ void effect_parameter_lane_contract() {
     require(bridge->revision() == curve_revision + 1, "the lane curve did not save its shape");
     // A plug-in value reads as a percentage of its travel.
     const auto typed = lanes->value_from_text(track_id, key, QStringLiteral("40%"));
-    constexpr double typed_value = 0.4;
-    constexpr double typed_tolerance = 1e-9;
     require(std::abs(typed - typed_value) < typed_tolerance, "a typed plugin value did not read");
     lanes->set_point_value(lane_id, first_point, typed);
     require(std::abs(arrangement_points(*bridge, key)
@@ -377,7 +378,7 @@ void effect_parameter_lane_contract() {
               lane.domain.default_value == 0.25 && lane.points.size() == 1 &&
               lane.points.front().to_next == project::AutomationShape::quadratic &&
               QString::fromStdString(lane.points.front().id.to_string()) == kept_point &&
-              std::abs(lane.points.front().value - 0.4) < 1e-9,
+              std::abs(lane.points.front().value - typed_value) < typed_tolerance,
           "effect lane identity, baseline or point ID did not survive reopen");
   {
     auto bridge = held_bridge(directory.root());

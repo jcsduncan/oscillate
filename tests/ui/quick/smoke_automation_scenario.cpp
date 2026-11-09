@@ -242,6 +242,25 @@ int edit_arrangement_automation(oscillate::quick::ProjectBridge& bridge, QQuickW
     std::cerr << "Arrangement automation smoke: the timebase switch was not one edit\n";
     return 1;
   }
+  // On the elapsed lane, a typed value keeps the point where it is.
+  {
+    constexpr double elapsed_value = 0.3;
+    constexpr double place_tolerance = 1e-6;
+    const auto before = level_points(bridge, track_id).front().toMap();
+    const auto before_elapsed_value = bridge.revision();
+    controller->set_point_value(lane_id, before.value(QStringLiteral("id")).toString(),
+                                elapsed_value);
+    QCoreApplication::processEvents();
+    const auto after = level_points(bridge, track_id).front().toMap();
+    if (bridge.revision() != before_elapsed_value + 1 ||
+        !near(after.value(QStringLiteral("bar")).toDouble(),
+              before.value(QStringLiteral("bar")).toDouble(), place_tolerance) ||
+        !near(after.value(QStringLiteral("value")).toDouble(), elapsed_value, place_tolerance)) {
+      std::cerr << "Arrangement automation smoke: a typed value moved an elapsed lane's point\n";
+      return 1;
+    }
+    bridge.undo();
+  }
   bridge.undo();
   QTest::mouseClick(window, Qt::RightButton, {}, lane_point(lane, 8.5, 0.9));
   QCoreApplication::processEvents();

@@ -201,9 +201,14 @@ void require_track_chrome(QQuickWindow& window, bool has_track) {
   require(creation_row && add_button && master && track_list && creation_row->isVisible() &&
               add_button->isVisible() && master->isVisible() && track_list->isVisible(),
           "project did not show the add control and pinned master");
-  // TRACKS and + Track head the list; the master is pinned below it.
+  // TRACKS and + Track head the list, then the tempo lane's header; the
+  // master is pinned below it.
+  auto* tempo_header = find_item(window.contentItem(), QStringLiteral("tempoLaneHeader"));
+  require(tempo_header != nullptr, "the track list has no tempo lane header");
   const auto list_y = track_list->mapToScene({0, 0}).y();
-  require(list_y == creation_row->mapToScene({0, 0}).y() + creation_row->height() &&
+  require(tempo_header->mapToScene({0, 0}).y() ==
+                  creation_row->mapToScene({0, 0}).y() + creation_row->height() &&
+              list_y == tempo_header->mapToScene({0, 0}).y() + tempo_header->height() &&
               master->mapToScene({0, 0}).y() == list_y + track_list->height() &&
               (find_item(window.contentItem(), QStringLiteral("trackRow")) != nullptr) == has_track,
           "track list header and pinned master are out of place");
@@ -493,6 +498,23 @@ void run() {
               changed_lane.value(QStringLiteral("timebase")) != timebase_before &&
               changed_lane.value(QStringLiteral("points")).toList().size() == added_points,
           "the lane timebase switch did not retain the level points");
+  // On the elapsed lane a typed value keeps the point where it is.
+  {
+    constexpr double elapsed_value = 0.25;
+    constexpr double bar_tolerance = 1e-6;
+    const auto before = changed_lane.value(QStringLiteral("points")).toList().front().toMap();
+    const auto value_revision = reopened_bridge.revision();
+    arrangement_lanes->set_point_value(lane_id, before.value(QStringLiteral("id")).toString(),
+                                       elapsed_value);
+    const auto after = level_lane().value(QStringLiteral("points")).toList().front().toMap();
+    require(reopened_bridge.revision() == value_revision + 1 &&
+                std::abs(after.value(QStringLiteral("bar")).toDouble() -
+                         before.value(QStringLiteral("bar")).toDouble()) < bar_tolerance &&
+                std::abs(after.value(QStringLiteral("value")).toDouble() - elapsed_value) <
+                    bar_tolerance,
+            "a typed value moved an elapsed lane's point");
+    reopened_bridge.undo();
+  }
 
   // Clear: the whole lane as one edit.
   const auto clear_revision = reopened_bridge.revision();
