@@ -460,6 +460,9 @@ void ProjectBridge::poll_playback() {
     return;
   }
   playback_->observe();
+  // A live edit retires the clip workers it replaced: join them as they
+  // finish, so the next edit is not held behind them.
+  (void)playback_->poll_retirement();
   playhead_sample_ = playback_->completed_sample();
   if (const auto failure = playback_->source_failure()) {
     playback_->stop();

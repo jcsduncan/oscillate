@@ -194,6 +194,10 @@ void handoff_runs_on_the_ui_thread() {
   require(hook_thread == ui_thread, "the handoff hook ran off the UI thread");
   require(ThreadedOutput::off_ui_stops.load() == 0,
           "the handoff stopped the playing output off the UI thread");
+  // The workers the edit replaced retire while playback carries on.
+  require(QTest::qWaitFor([&] { return bridge->audio_edit_enabled(); }, ui_wait_ms),
+          "a second live edit stayed disabled after the first: " +
+              bridge->playback_status().toStdString());
   bridge->toggle_playback();
   wait_stopped(*bridge);
   require(ThreadedOutput::off_ui_stops.load() == 0, "Stop ran off the UI thread");
