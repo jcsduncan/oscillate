@@ -78,6 +78,7 @@ constexpr std::size_t key_sections = key_order / 2;
 
 // The RBJ second-order high-pass or low-pass at `hz`, held below the
 // Nyquist guard.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): named at every call.
 [[nodiscard]] BiquadCoefficients pass(bool high, double hz, double rate, double q) noexcept {
   const double w =
       2.0 * std::numbers::pi * std::min(hz, native_dsp::dsp::nyquist_guard * rate) / rate;

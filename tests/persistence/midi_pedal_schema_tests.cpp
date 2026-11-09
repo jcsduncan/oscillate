@@ -92,7 +92,7 @@ void pedals_and_controller_state_round_trip_together() {
 }
 
 void other_schemas_are_rejected() {
-  for (const int minor : {46, 48}) {
+  for (const int minor : {47, 49}) {
     auto other = encoded(snapshot(pedals()));
     other["schema"]["minor"] = minor;
     require(!detail::decode_manifest(other.dump()), "another schema minor is rejected");

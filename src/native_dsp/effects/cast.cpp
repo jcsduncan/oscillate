@@ -91,6 +91,7 @@ constexpr std::array<Bundled, 10> bundled{{
     {{"spring", "Spring", "Springs"}, 3.0},
 }};
 
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization): built from a constant table.
 const std::array<BuiltinIr, bundled.size()> builtin_list = [] {
   std::array<BuiltinIr, bundled.size()> list{};
   for (std::size_t i = 0; i < bundled.size(); ++i) {
@@ -277,13 +278,13 @@ Result<void> validate_document(const project::NativeSynthDocument& document) {
     if (slot == nullptr) {
       continue;
     }
-    identity += std::string(id) + "=";
+    identity += std::string(id) + '=';
     if (const auto* builtin = std::get_if<project::NativeBuiltinMedia>(&slot->media)) {
       identity += "builtin:" + builtin->name;
     } else {
       identity += "file:" + std::get<project::ManagedAudioReference>(slot->media).sha256;
     }
-    identity += ";";
+    identity += ';';
   }
   return identity.empty() ? "builtin:" + std::string(default_ir) : identity;
 }

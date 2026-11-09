@@ -365,7 +365,7 @@ Result<NativeSynthMediaImportTask> ImportService::begin_native_effect_media_impo
   if (effect_patch(snapshot(), path, effect) == nullptr)
     return Result<NativeSynthMediaImportTask>::failure(
         {ErrorCode::unavailable, "No built-in effect in that slot"});
-  return begin_media_import(NativeEffectMediaTarget{std::move(path), effect}, slot, input_fd);
+  return begin_media_import(NativeEffectMediaTarget{path, effect}, slot, input_fd);
 }
 
 Result<NativeSynthMediaImportTask>
@@ -387,7 +387,7 @@ ImportService::begin_media_import(NativeMediaTarget target, std::string_view slo
   if (!stage)
     return R::failure(stage.error());
   return R::success(NativeSynthMediaImportTask(std::move(stage).value(), wav, snapshot().revision,
-                                               std::move(target), std::string(slot)));
+                                               target, std::string(slot)));
 }
 
 Result<std::vector<project::Operation>>
@@ -532,7 +532,7 @@ Result<void> ImportService::import_native_synth_media(
 Result<void> ImportService::import_native_effect_media(project::SignalPathId path,
                                                        project::InsertSlotId effect,
                                                        std::string_view slot, int input_fd) {
-  auto task = begin_native_effect_media_import(std::move(path), effect, slot, input_fd);
+  auto task = begin_native_effect_media_import(path, effect, slot, input_fd);
   if (!task)
     return Result<void>::failure(task.error());
   // An impulse response is short: staging it here is a brief read and hash.

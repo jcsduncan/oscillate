@@ -50,6 +50,7 @@ constexpr std::size_t half_second = second / 2;
 constexpr double off = 0.0;
 constexpr double on = 1.0;
 constexpr double full_wet = 1.0;
+constexpr double half_mix = 0.5;
 // Every tier boundary of the partition layout and the taps either side.
 constexpr std::array<std::size_t, 10> boundary_taps{0,     63,    64,     1'023,  1'024,
                                                     4'095, 4'096, 16'383, 16'384, 20'479};
@@ -105,6 +106,7 @@ struct TestIr {
 };
 
 // A sparse IR: the boundary taps and random ones, with random signs.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): named at every call.
 TestIr sparse_ir(std::size_t count, std::uint64_t seed) {
   oscillate::native_dsp::dsp::Xorshift64Star random(seed);
   TestIr ir;
@@ -234,6 +236,7 @@ double max_difference(const Stereo& a, const Stereo& b, std::size_t from = 0) {
 
 double rms_from(const std::vector<double>& x, std::size_t from) { return rms(x, from, x.size()); }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): named at every call.
 double peak_of(const Stereo& x, std::size_t from = 0, std::size_t to = 0) {
   const std::size_t end = to == 0 ? x.size() : std::min(to, x.size());
   double worst = 0.0;
@@ -540,6 +543,19 @@ void the_mix_is_equal_power() {
   const auto expected = direct_convolution(ir, input);
   REQUIRE_LT(max_difference(process(*wet, input), expected), oracle_tolerance,
              "mix 100 % is only the wet");
+  // Halfway, each side at cos and sin of a quarter turn: equal power.
+  auto half_values = raw_values();
+  half_values[at("cast.mix")] = half_mix;
+  auto half = make(half_values, load(ir));
+  const double side = std::cos(half_mix * std::numbers::pi / 2.0);
+  const double other = std::sin(half_mix * std::numbers::pi / 2.0);
+  Stereo blend{std::vector<double>(input.size()), std::vector<double>(input.size())};
+  for (std::size_t i = 0; i < input.size(); ++i) {
+    blend.left[i] = side * input.left[i] + other * expected.left[i];
+    blend.right[i] = side * input.right[i] + other * expected.right[i];
+  }
+  REQUIRE_LT(max_difference(process(*half, input), blend), oracle_tolerance,
+             "mix 50 % is cos and sin of a quarter turn");
 }
 
 void a_new_ir_crossfades_in() {
@@ -617,14 +633,14 @@ void hostile_input_stays_finite() {
   input.left[1] = std::numeric_limits<double>::denorm_min();
   input.left[2] = std::numeric_limits<double>::max();
   input.right[3] = -std::numeric_limits<double>::max();
-  const auto out = process(*runtime, input);
-  (void)out;
-  // Saturated floats are infinite in single precision; the effect must not
-  // turn silence afterwards into NaN forever: a reset clears it.
-  runtime = make_effect(engine(), defaults());
-  const auto calm = process(*runtime, noise(test_amplitude, half_second));
+  (void)process(*runtime, input);
+  // A seek (a new transport generation) clears whatever the overflow left.
+  constexpr std::uint64_t after_seek = 2;
+  const auto calm =
+      process(*runtime, noise(test_amplitude, half_second), {.generation = after_seek});
   for (std::size_t i = 0; i < calm.size(); ++i) {
-    REQUIRE_TRUE(std::isfinite(calm.left[i]) && std::isfinite(calm.right[i]), "finite");
+    REQUIRE_TRUE(std::isfinite(calm.left[i]) && std::isfinite(calm.right[i]),
+                 "finite after a seek");
   }
 }
 

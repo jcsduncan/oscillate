@@ -189,6 +189,7 @@ std::unique_ptr<CompiledIr> CompiledIr::build(std::span<const std::vector<float>
   return ir;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): named at every call.
 Convolver::Tier::Tier(std::size_t tier, std::size_t partitions)
     : fft(2 * tiers[tier].block), index(tier), block(tiers[tier].block), offset(tiers[tier].offset),
       capacity(std::max<std::size_t>(1, partitions)), time(2 * block), work(2 * block) {
@@ -273,8 +274,8 @@ void Convolver::run_head(std::span<const float> in_left, std::span<const float> 
                          std::span<float> out_left, std::span<float> out_right) noexcept {
   constexpr std::size_t kept = head_taps - 1;
   const std::size_t frames = in_left.size();
-  std::copy(in_left.begin(), in_left.end(), head_history_[0].begin() + kept);
-  std::copy(in_right.begin(), in_right.end(), head_history_[1].begin() + kept);
+  std::ranges::copy(in_left, head_history_[0].begin() + kept);
+  std::ranges::copy(in_right, head_history_[1].begin() + kept);
   const std::array<float*, 2> out{out_left.data(), out_right.data()};
   const auto render = [&](const CompiledIr& ir, std::size_t i, std::array<float, 2>& y) {
     for (const Route& route : routes(ir.routing())) {

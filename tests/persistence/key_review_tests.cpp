@@ -169,7 +169,7 @@ void codec_and_store_contract() {
   malformed["project"]["source_key_reviews"].push_back(
       malformed["project"]["source_key_reviews"][0]);
   require(!detail::decode_manifest(malformed.dump()), "duplicate review accepted");
-  for (const int minor : {46, 48}) {
+  for (const int minor : {47, 49}) {
     malformed = value;
     malformed["schema"]["minor"] = minor;
     require(!detail::decode_manifest(malformed.dump()), "another schema minor accepted");

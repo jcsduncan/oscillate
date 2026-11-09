@@ -91,6 +91,7 @@ Stereo constant(std::size_t count, double level = steady) {
 Stereo silence(std::size_t count) { return constant(count, 0.0); }
 
 // A sine at `hz` on [from, to), silence elsewhere.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): named at every call.
 Stereo burst(std::size_t count, std::size_t from, std::size_t to, double amplitude,
              double hz = tone_hz) {
   Stereo out = silence(count);

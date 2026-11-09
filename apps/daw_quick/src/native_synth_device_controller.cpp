@@ -2001,6 +2001,7 @@ QVariantList NativeSynthDeviceController::cast_irs() const {
   return out;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): named at every call.
 bool NativeSynthDeviceController::choose_media(const QString& slot, const QString& title) {
   if (qobject_cast<QApplication*>(QCoreApplication::instance()) == nullptr) {
     return false;

@@ -64,8 +64,8 @@ NativeEffectRuntime::create(const EffectEngine& engine, std::span<const double> 
   runtime->compiled_values_.assign(values.begin(), values.end());
   if (state) {
     runtime->documents_.push_back(std::make_unique<DocumentOffer>(0, std::move(state)));
-    runtime->published_ = runtime->documents_.back().get();
-    runtime->document_mailbox_->applied.store(runtime->published_, std::memory_order_release);
+    runtime->document_mailbox_->applied.store(runtime->documents_.back().get(),
+                                              std::memory_order_release);
   }
   return R::success(std::move(runtime));
 }
@@ -117,7 +117,8 @@ bool NativeEffectRuntime::recompile_for_values(std::span<const double> values,
     }
     compiled_values_.assign(values.begin(), values.end());
     return true;
-  } catch (const std::bad_alloc&) {
+  } catch (...) {
+    // A compile that cannot finish leaves the playing document in place.
     return false;
   }
 }
@@ -141,18 +142,24 @@ bool NativeEffectRuntime::offer_live_values(std::span<const double> values) noex
 
 void NativeEffectRuntime::publish_document(std::unique_ptr<DocumentOffer> offer) noexcept {
   // The room for the new offer was reserved when it was compiled. An offer
-  // the callback never took is replaced; one it took is the one it adopted
-  // or is adopting now. Every other offer is retired.
+  // the callback never took is replaced and retired. Every offer published
+  // after the one the callback adopted may be in its hands (it takes an
+  // offer before it records it as adopted), so only older ones retire.
   const DocumentOffer* newest = offer.get();
   documents_.push_back(std::move(offer));
   const auto* untaken = document_mailbox_->offered.exchange(newest, std::memory_order_acq_rel);
   const auto* applied = document_mailbox_->applied.load(std::memory_order_acquire);
-  const DocumentOffer* in_flight = untaken == nullptr ? published_ : nullptr;
+  const auto adopted = std::ranges::find_if(
+      documents_, [applied](const auto& kept) { return kept.get() == applied; });
+  const auto first_kept = adopted == documents_.end() ? documents_.begin() : adopted;
+  const auto older = static_cast<std::size_t>(first_kept - documents_.begin());
+  std::size_t index = 0;
   std::erase_if(documents_, [&](const auto& kept) {
     const auto* held = kept.get();
-    return held != newest && held != applied && held != in_flight;
+    const bool retire = held != newest && (index < older || held == untaken);
+    ++index;
+    return retire;
   });
-  published_ = newest;
 }
 
 Result<void> NativeEffectRuntime::offer_document(const project::NativeSynthDocument& document,

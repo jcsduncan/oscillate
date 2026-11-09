@@ -229,10 +229,9 @@ private:
   void publish_document(std::unique_ptr<DocumentOffer> offer) noexcept;
   void adopt_key_notes() noexcept;
 
-  // Compiled documents in offer order. Control owns them and retires every
-  // one but the newest, the one the callback adopted and the one it may be
-  // adopting; the callback reads the one it adopted until the next
-  // adoption.
+  // Compiled documents in offer order. Control owns them and retires those
+  // published before the one the callback adopted, and any it never took;
+  // the callback reads the one it adopted until the next adoption.
   struct DocumentOffer {
     std::uint64_t revision = 0;
     std::shared_ptr<const DocumentState> state;
@@ -250,7 +249,6 @@ private:
   engine::SynthMedia media_;                              // Control only.
   std::vector<double> compiled_values_;                   // Control only.
   std::vector<std::unique_ptr<DocumentOffer>> documents_; // Control only.
-  const DocumentOffer* published_ = nullptr;              // Control only.
   std::unique_ptr<DocumentMailbox> document_mailbox_ = std::make_unique<DocumentMailbox>();
   // Key notes in offer order (control owns them): the callback reads the
   // one it adopted until it adopts the newest.

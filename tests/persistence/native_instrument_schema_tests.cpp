@@ -124,7 +124,7 @@ void malformed_manifests_are_rejected() {
   const auto json = Json::parse(encoded);
 
   auto future = json;
-  future["schema"]["minor"] = 48;
+  future["schema"]["minor"] = 49;
   require(!detail::decode_manifest(future.dump()), "future schema is rejected");
 
   for (const char* missing : {"engine", "engine_version", "parameters", "document"}) {

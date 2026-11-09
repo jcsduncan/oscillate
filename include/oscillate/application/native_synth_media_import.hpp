@@ -54,7 +54,7 @@ private:
   friend class ImportService;
   NativeSynthMediaImportTask(persistence::WavStageTask stage, bool wav, std::uint64_t revision,
                              NativeMediaTarget target, std::string slot)
-      : stage_(std::move(stage)), wav_(wav), origin_revision_(revision), target_(std::move(target)),
+      : stage_(std::move(stage)), wav_(wav), origin_revision_(revision), target_(target),
         slot_(std::move(slot)) {}
 
   persistence::WavStageTask stage_;
@@ -83,7 +83,7 @@ private:
   friend class ImportService;
   PreparedNativeSynthMediaImport(persistence::StagedWav stage, bool wav, std::uint64_t revision,
                                  NativeMediaTarget target, std::string slot)
-      : stage_(std::move(stage)), wav_(wav), origin_revision_(revision), target_(std::move(target)),
+      : stage_(std::move(stage)), wav_(wav), origin_revision_(revision), target_(target),
         slot_(std::move(slot)) {}
 
   persistence::StagedWav stage_;
@@ -99,7 +99,7 @@ NativeSynthMediaImportTask::run(const std::stop_token& stop) && {
   if (!staged)
     return foundation::Result<PreparedNativeSynthMediaImport>::failure(staged.error());
   return foundation::Result<PreparedNativeSynthMediaImport>::success(PreparedNativeSynthMediaImport(
-      std::move(staged).value(), wav_, origin_revision_, std::move(target_), std::move(slot_)));
+      std::move(staged).value(), wav_, origin_revision_, target_, std::move(slot_)));
 }
 
 } // namespace oscillate::application

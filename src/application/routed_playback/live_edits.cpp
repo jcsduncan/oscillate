@@ -15,6 +15,7 @@
 #include <memory>
 #include <new>
 #include <optional>
+#include <string>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -65,6 +66,17 @@ using routed_playback::vst3_midi_edit_only;
 // change its latency;
 // fails when the stage cannot take the offer now. Nothing is offered until
 // the prepared offer is committed.
+// A document's managed media slots: the ones a stage decodes when it is
+// built. Bundled media change live.
+[[nodiscard]] std::vector<std::pair<std::string, project::ManagedAudioReference>>
+managed_media(const project::NativeSynthDocument& document) {
+  std::vector<std::pair<std::string, project::ManagedAudioReference>> managed;
+  for (const auto& slot : document.media)
+    if (const auto* reference = std::get_if<project::ManagedAudioReference>(&slot.media))
+      managed.emplace_back(slot.id, *reference);
+  return managed;
+}
+
 struct PreparedStageOffer {
   native_inserts::NativeEffectStage* stage = nullptr;
   native_dsp::effects::NativeEffectRuntime::PreparedOffer offer;
@@ -78,7 +90,7 @@ prepare_effect_values(engine::ProcessorRuntime* stage, const project::NativeEffe
   // New managed media need decoding into a new stage (ADR-0115).
   if (!runtime || next.engine != old_patch.engine ||
       next.engine_version != old_patch.engine_version || next.generation <= old_patch.generation ||
-      next.document.media != old_patch.document.media)
+      managed_media(next.document) != managed_media(old_patch.document))
     return R::success(std::nullopt);
   auto resolved = native_inserts::resolve_native_effect(next);
   if (!resolved)
