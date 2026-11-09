@@ -3,7 +3,7 @@
 #include "native_synth_device_controller.hpp"
 #include "native_synth_panel_adapter.hpp"
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <QObject>
 #include <QVariantList>
@@ -27,7 +27,7 @@ struct RelayEcho {
 
 // Relay's line lengths for `values` (dense, in table order) at a tempo and
 // meter, clamped to the engine's range: {left, right} in seconds.
-[[nodiscard]] std::array<double, 2> relay_times(const native_dsp::synth::EngineDescriptor& engine,
+[[nodiscard]] std::array<double, 2> relay_times(const native_dsp::EngineDescriptor& engine,
                                                 std::span<const double> values, double bpm,
                                                 double beats_per_bar);
 
@@ -36,9 +36,10 @@ struct RelayEcho {
 // (12 dB/oct Butterworth) and the character's loop filter, and each repeat
 // after the first scales by the feedback. Stops at `horizon` seconds,
 // `max_echoes` repeats, or -60 dB.
-[[nodiscard]] std::vector<RelayEcho>
-relay_echo_train(const native_dsp::synth::EngineDescriptor& engine, std::span<const double> values,
-                 double bpm, double beats_per_bar, double horizon, std::size_t max_echoes);
+[[nodiscard]] std::vector<RelayEcho> relay_echo_train(const native_dsp::EngineDescriptor& engine,
+                                                      std::span<const double> values, double bpm,
+                                                      double beats_per_bar, double horizon,
+                                                      std::size_t max_echoes);
 
 // Relay-specific panel state beside the generic device controller: the echo
 // train for the current values and Relay's decoded live state.

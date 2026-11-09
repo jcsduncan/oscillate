@@ -2,7 +2,7 @@
 #include "native_synth_device_controller.hpp"
 
 #include "../../native_dsp/wren_test_library.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/prism.hpp"
 #include "oscillate/native_dsp/synth/wren.hpp"
 #include "oscillate/native_dsp/synth/wren_breath.hpp"
@@ -51,7 +51,7 @@ namespace timeline = oscillate::timeline;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *wren::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *wren::engine().descriptor; }
 
 QString qs(std::string_view text) {
   return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
@@ -173,7 +173,7 @@ void controller_reports_a_missing_library() {
   const auto nowhere = wren_test::scratch_directory("wren-panel-library");
   std::filesystem::remove_all(nowhere);
   ::setenv(std::string(wren::library::directory_variable).c_str(), nowhere.c_str(), 1);
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   const auto library = controller.wren_library();
   require(library.value(QStringLiteral("state")).toString() == QStringLiteral("missing") &&
@@ -189,7 +189,7 @@ void controller_reports_a_missing_library() {
               library.value(QStringLiteral("last_key")).toInt() == wren::last_key,
           "and the keys it plays");
   const auto& prism = *synth::prism::engine().descriptor;
-  InMemoryNativeSynthAdapter other(synth::default_values(prism));
+  InMemoryNativeSynthAdapter other(oscillate::native_dsp::default_values(prism));
   NativeSynthDeviceController prism_controller(prism, other);
   require(prism_controller.wren_library().isEmpty() && prism_controller.wren_phrase().isEmpty(),
           "only Wren has a library and a phrase lane");
@@ -213,7 +213,7 @@ std::vector<float> wren_frame(int key, int velocity, breath::Tongue tongue, bool
 
 void controller_decodes_wren_telemetry() {
   constexpr int velocity = 92;
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   require(!controller.telemetry().value(QStringLiteral("live")).toBool(), "nothing plays");
   adapter.set_telemetry(wren_frame(d5, velocity, breath::Tongue::k, true, true, true));
@@ -274,7 +274,7 @@ void check_phrase(NativeSynthDeviceController& controller, std::string_view what
 }
 
 void controller_phrase_follows_breath() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   require(controller.wren_phrase().value(QStringLiteral("notes")).toList().isEmpty(),
           "no clip, no notes");
@@ -422,7 +422,7 @@ void shoot_if_requested(Panel& panel, const QString& name) {
 // Without its library the panel says why and how to install it; once
 // installed, Look Again finds it and the credit shows.
 void the_library_plate_guides_the_install() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(item(*panel, QStringLiteral("wrenLibraryMessage"))->isVisible() &&
@@ -462,7 +462,7 @@ void the_library_plate_guides_the_install() {
 // Every parameter has a control, each at least a touch target, and each
 // with an accessible name.
 void panel_covers_every_parameter() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(panel->root->implicitWidth() == designed_width &&
@@ -505,7 +505,7 @@ void panel_covers_every_parameter() {
 // The tiles and segments write their parameters; sliders step from the
 // keyboard.
 void tiles_and_sliders_write_their_parameters() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   const auto pick = [&](std::string_view id, std::string_view name) {
@@ -545,7 +545,7 @@ QQuickItem* lane_note(Panel& panel, std::size_t index) {
 // The lane draws the controller's phrase: each note coloured by whether it
 // is staccato, as tall as it is loud, with its wave, grace and slur arcs.
 void the_lane_draws_what_breath_plays() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(item(*panel, QStringLiteral("wrenPhraseHint"))->isVisible() &&
@@ -625,7 +625,7 @@ void the_lane_draws_what_breath_plays() {
 
 // The header's meter follows the output.
 void the_output_meter_reads_out_live() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   auto* meter = item(*panel, QStringLiteral("wrenOutputMeter"));
@@ -648,7 +648,7 @@ void screenshots_if_requested() {
     require(status.state == wren::library::State::ready,
             "the screenshot library loads: " + status.message);
   }
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   draw_line(adapter);
   auto panel = load_panel(controller);

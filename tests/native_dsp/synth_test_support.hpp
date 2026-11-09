@@ -5,7 +5,7 @@
 // preset fingerprints.
 
 #include "oscillate/native_dsp/dsp/math.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/runtime.hpp"
 #include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/check.hpp"

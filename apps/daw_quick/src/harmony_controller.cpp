@@ -164,12 +164,12 @@ constexpr auto phrase_bars = native_dsp::note_effects::comp_phrase_bars;
   return (harmony::pitch_class_set(chord) & ~mask) == 0;
 }
 
-[[nodiscard]] const native_dsp::synth::ParameterDescriptor* comp_parameter(std::string_view id) {
+[[nodiscard]] const native_dsp::ParameterDescriptor* comp_parameter(std::string_view id) {
   const auto* engine = fx::find_engine(application::comp::engine_id);
   if (engine == nullptr)
     return nullptr;
   const auto& parameters = engine->descriptor->parameters;
-  const auto found = std::ranges::find(parameters, id, &native_dsp::synth::ParameterDescriptor::id);
+  const auto found = std::ranges::find(parameters, id, &native_dsp::ParameterDescriptor::id);
   return found != parameters.end() ? &*found : nullptr;
 }
 
@@ -902,7 +902,7 @@ void HarmonyController::add_movement(int kind) {
   if (engine == nullptr)
     return;
   const auto& presets = engine->descriptor->presets;
-  const auto preset = std::ranges::find(presets, row.preset, &native_dsp::synth::SynthPreset::name);
+  const auto preset = std::ranges::find(presets, row.preset, &native_dsp::Preset::name);
   const auto& tracks = current->snapshot().tracks;
   const auto track = std::ranges::find(tracks, view->track, &project::Track::id);
   const auto added = current->effects().add_effect_engine(

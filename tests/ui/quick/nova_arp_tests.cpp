@@ -3,8 +3,8 @@
 #include "nova_arp.hpp"
 
 #include "oscillate/application/nova_arp_patterns.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/nova.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QCoreApplication>
@@ -48,7 +48,7 @@ constexpr int arp_page = 3;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *nova::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *nova::engine().descriptor; }
 
 struct Panel {
   QQmlEngine engine;
@@ -169,7 +169,7 @@ std::string label(const InMemoryNativeSynthAdapter& adapter, std::string_view id
 void every_factory_pattern_parses() {
   const auto patterns = arp::factory_patterns();
   require(patterns.size() >= 60, "about sixty factory patterns");
-  const auto defaults = synth::default_values(table());
+  const auto defaults = oscillate::native_dsp::default_values(table());
   std::set<std::string_view> names;
   for (const auto& pattern : patterns) {
     require(names.insert(pattern.name).second, "pattern names are unique");
@@ -187,7 +187,7 @@ void every_factory_pattern_parses() {
 }
 
 void loading_a_pattern_is_one_arp_edit() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   auto& arp_model = model(controller);
@@ -230,7 +230,7 @@ void loading_a_pattern_is_one_arp_edit() {
 }
 
 void lanes_paint_toggle_and_loop() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   const auto submissions = adapter.submissions().size();
@@ -259,7 +259,7 @@ void lanes_paint_toggle_and_loop() {
 }
 
 void mutate_is_seeded_and_returns() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   auto& arp_model = model(controller);
@@ -286,7 +286,7 @@ void mutate_is_seeded_and_returns() {
 }
 
 void the_groove_comes_from_the_pool() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   auto& arp_model = model(controller);

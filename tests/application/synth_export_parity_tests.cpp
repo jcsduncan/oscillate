@@ -5,8 +5,8 @@
 #include "oscillate/application/routed_audio_source.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/export/offline_master.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/temp_dir.hpp"
@@ -81,13 +81,13 @@ std::string automated_parameter(const synth::SynthEngine& engine) {
   // An engine with several filters names them filter.1, filter.2, ...
   for (const char* name : {".filter.cutoff", ".filter.1.cutoff"}) {
     const std::string cutoff = std::string(table.id) + name;
-    if (synth::find_parameter(table, cutoff)) {
+    if (oscillate::native_dsp::find_parameter(table, cutoff)) {
       return cutoff;
     }
   }
   for (const auto& parameter : table.parameters) {
-    if (parameter.automatable && !synth::is_discrete(parameter) &&
-        parameter.timing == synth::ParameterTiming::live) {
+    if (parameter.automatable && !oscillate::native_dsp::is_discrete(parameter) &&
+        parameter.timing == oscillate::native_dsp::ParameterTiming::live) {
       return std::string(parameter.id);
     }
   }
@@ -139,11 +139,12 @@ std::vector<float> export_nulls_against_live_playback(const synth::SynthEngine& 
               "pedal lanes");
     }
     const auto& parameter =
-        engine.descriptor->parameters[*synth::find_parameter(*engine.descriptor, cutoff)];
+        engine.descriptor
+            ->parameters[*oscillate::native_dsp::find_parameter(*engine.descriptor, cutoff)];
     (void)take(session->parameter_automation().set_native_automation_point(
-        track, cutoff, 0, synth::from_normalised(parameter, 0.3)));
+        track, cutoff, 0, oscillate::native_dsp::from_normalised(parameter, 0.3)));
     (void)take(session->parameter_automation().set_native_automation_point(
-        track, cutoff, 1, synth::from_normalised(parameter, 0.8)));
+        track, cutoff, 1, oscillate::native_dsp::from_normalised(parameter, 0.8)));
     // Stepped lanes on discrete parameters (ADR-0034).
     for (const auto& [id, value] : stepped) {
       (void)take(session->parameter_automation().set_native_automation_point(track, id, 0, value));

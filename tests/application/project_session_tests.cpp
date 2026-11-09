@@ -4,9 +4,9 @@
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/media/prefetch.hpp"
 #include "oscillate/media/source_rate_reader.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/anvil.hpp"
 #include "oscillate/native_dsp/synth/crate.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/project/clip_fade.hpp"
 #include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/cases.hpp"
@@ -1487,7 +1487,7 @@ void crate_sample_import_sets_state_in_one_step() {
   const auto values = session.value()->instruments().native_instrument_values(track.value());
   const auto& table = crate::engine().descriptor->parameters;
   const auto at = [&](std::string_view id) {
-    const auto index = native_dsp::synth::find_parameter(*crate::engine().descriptor, id);
+    const auto index = native_dsp::find_parameter(*crate::engine().descriptor, id);
     REQUIRE_OK(index, "Crate parameter missing");
     return *index;
   };

@@ -13,8 +13,6 @@
 
 namespace oscillate::quick {
 namespace {
-
-namespace synth = native_dsp::synth;
 namespace relay = native_dsp::effects::relay;
 
 // The kernel's loop constants (src/native_dsp/effects/relay.cpp).
@@ -27,9 +25,9 @@ constexpr double diffusion_ms = 12.3;
 constexpr double level_hz = 1'000.0;
 constexpr double bright_hz = 4'000.0;
 
-double value(const synth::EngineDescriptor& engine, std::span<const double> values,
+double value(const native_dsp::EngineDescriptor& engine, std::span<const double> values,
              std::string_view id) {
-  const auto index = synth::find_parameter(engine, id);
+  const auto index = native_dsp::find_parameter(engine, id);
   return index && *index < values.size() ? values[*index] : 0.0;
 }
 
@@ -56,7 +54,7 @@ double pass_gain(int character, double low_cut, double high_cut, double seconds,
 
 } // namespace
 
-std::array<double, 2> relay_times(const synth::EngineDescriptor& engine,
+std::array<double, 2> relay_times(const native_dsp::EngineDescriptor& engine,
                                   std::span<const double> values, double bpm,
                                   double beats_per_bar) {
   double seconds = value(engine, values, "relay.time") * 1e-3;
@@ -73,7 +71,7 @@ std::array<double, 2> relay_times(const synth::EngineDescriptor& engine,
   return {seconds, seconds * (1.0 + value(engine, values, "relay.offset"))};
 }
 
-std::vector<RelayEcho> relay_echo_train(const synth::EngineDescriptor& engine,
+std::vector<RelayEcho> relay_echo_train(const native_dsp::EngineDescriptor& engine,
                                         std::span<const double> values, double bpm,
                                         double beats_per_bar, double horizon,
                                         std::size_t max_echoes) {

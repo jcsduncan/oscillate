@@ -929,7 +929,7 @@ bool RoutedPlayback::set_live_send(project::TrackId track, project::SendId send,
 }
 
 bool RoutedPlayback::set_live_synth_values(project::TrackId track,
-                                           const native_dsp::synth::EngineDescriptor& engine,
+                                           const native_dsp::EngineDescriptor& engine,
                                            std::span<const double> values) noexcept {
   return control_ && !paused() && control_->set_live_synth_values(track, engine, values);
 }
@@ -941,7 +941,7 @@ bool RoutedPlayback::live_note(project::TrackId track, std::uint8_t key, std::ui
 
 bool RoutedPlayback::set_live_effect_values(std::optional<project::TrackId> track,
                                             project::InsertSlotId slot,
-                                            const native_dsp::synth::EngineDescriptor& engine,
+                                            const native_dsp::EngineDescriptor& engine,
                                             std::span<const double> values) noexcept {
   return control_ && !paused() && control_->set_live_effect_values(track, slot, engine, values);
 }

@@ -24,6 +24,7 @@
 // neutral native_dsp parameter control, stepped lanes, telemetry and
 // transport that synths use too.
 namespace oscillate::native_dsp::effects {
+
 // A note-on of a track keying an effect (EffectEngine::key_notes), at its
 // project frame.
 struct KeyNote {

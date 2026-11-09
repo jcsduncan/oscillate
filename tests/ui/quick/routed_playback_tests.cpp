@@ -6,8 +6,8 @@
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/eq.hpp"
 #include "oscillate/native_dsp/limiter.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/test/allocation_counter.hpp"
 #include "oscillate/test/check.hpp"
@@ -114,9 +114,9 @@ engine_patch(std::string_view engine_id,
              std::initializer_list<std::pair<std::string_view, double>> changes = {}) {
   const auto* engine = oscillate::native_dsp::effects::find_engine(engine_id);
   require(engine != nullptr, "built-in effect fixture engine is missing");
-  auto values = oscillate::native_dsp::synth::default_values(*engine->descriptor);
+  auto values = oscillate::native_dsp::default_values(*engine->descriptor);
   for (const auto& [id, value] : changes) {
-    const auto index = oscillate::native_dsp::synth::find_parameter(*engine->descriptor, id);
+    const auto index = oscillate::native_dsp::find_parameter(*engine->descriptor, id);
     require(index.has_value(), "built-in effect fixture names an unknown parameter");
     values[*index] = value;
   }
@@ -4129,7 +4129,7 @@ void native_synth_switch_rings_out_and_promotes_without_stopping() {
   const auto* ember = oscillate::native_dsp::synth::find_engine("ember");
   require(ember != nullptr, "Ember engine was not registered");
   const auto cutoff =
-      oscillate::native_dsp::synth::find_parameter(*ember->descriptor, "ember.filter.cutoff");
+      oscillate::native_dsp::find_parameter(*ember->descriptor, "ember.filter.cutoff");
   require(cutoff.has_value(), "Ember cutoff is absent");
   values[*cutoff] = 400.0;
   require(session->instruments().set_native_instrument_values(track, values).has_value() &&

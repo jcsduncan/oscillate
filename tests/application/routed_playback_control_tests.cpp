@@ -5,7 +5,7 @@
 #include "oscillate/native_dsp/effects/press.hpp"
 #include "oscillate/native_dsp/eq.hpp"
 #include "oscillate/native_dsp/limiter.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/test/allocation_counter.hpp"
 #include "oscillate/test/audio_constants.hpp"
@@ -102,9 +102,9 @@ project::NativeEffectPatch effect_patch(std::string_view engine_id,
   const auto* engine = native_dsp::effects::find_engine(engine_id);
   if (engine == nullptr)
     throw std::runtime_error("built-in effect is not registered");
-  auto dense = native_dsp::synth::default_values(*engine->descriptor);
+  auto dense = native_dsp::default_values(*engine->descriptor);
   for (const auto& [parameter, value] : values) {
-    const auto index = native_dsp::synth::find_parameter(*engine->descriptor, parameter);
+    const auto index = native_dsp::find_parameter(*engine->descriptor, parameter);
     if (!index)
       throw std::runtime_error("unknown built-in effect parameter " + parameter);
     dense[*index] = value;

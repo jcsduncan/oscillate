@@ -2,7 +2,7 @@
 
 #include "macro_map_state.hpp"
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/project/model.hpp"
 
 #include <QObject>
@@ -52,11 +52,11 @@ public:
     std::function<void()> save;
     // Live values for the running synth or effect, in table order; false
     // when nothing plays it.
-    std::function<bool(project::TrackId, const native_dsp::synth::EngineDescriptor&,
+    std::function<bool(project::TrackId, const native_dsp::EngineDescriptor&,
                        std::span<const double>)>
         live_synth;
-    std::function<bool(project::TrackId, project::InsertSlotId,
-                       const native_dsp::synth::EngineDescriptor&, std::span<const double>)>
+    std::function<bool(project::TrackId, project::InsertSlotId, const native_dsp::EngineDescriptor&,
+                       std::span<const double>)>
         live_effect;
     // Panels showing the synth (no slot) or effect follow these unsaved
     // values; null hands them back to the project.
@@ -102,7 +102,7 @@ private:
   // mapped parameter, the table index and the mapping.
   struct TurnDevice {
     std::optional<project::InsertSlotId> slot;
-    const native_dsp::synth::EngineDescriptor* descriptor = nullptr;
+    const native_dsp::EngineDescriptor* descriptor = nullptr;
     std::vector<double> base;
     std::vector<std::pair<std::size_t, project::MacroMapping>> mapped;
   };

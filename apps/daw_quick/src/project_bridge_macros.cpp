@@ -27,13 +27,12 @@ void ProjectBridge::create_macro_controllers() {
           [this] { return session_.get(); }, can_edit,
           [this](QString message) { set_status(std::move(message)); }, after_edit,
           [this] { schedule_background_save(); },
-          [this](project::TrackId track, const native_dsp::synth::EngineDescriptor& engine,
+          [this](project::TrackId track, const native_dsp::EngineDescriptor& engine,
                  std::span<const double> values) {
             return live_run() && live_run()->set_live_synth_values(track, engine, values);
           },
           [this](project::TrackId track, project::InsertSlotId slot,
-                 const native_dsp::synth::EngineDescriptor& engine,
-                 std::span<const double> values) {
+                 const native_dsp::EngineDescriptor& engine, std::span<const double> values) {
             return live_run() && live_run()->set_live_effect_values(track, slot, engine, values);
           },
           [this](project::TrackId track, std::optional<project::InsertSlotId> slot,

@@ -312,7 +312,7 @@ QVariantMap ProjectBridge::device_strip_info(const QString& engine_id) const {
   const auto id = engine_id.toStdString();
   const auto& style = device_strip_style(id);
   QVariantList parameters;
-  const native_dsp::synth::EngineDescriptor* table = nullptr;
+  const native_dsp::EngineDescriptor* table = nullptr;
   if (const auto* effect = native_dsp::effects::find_engine(id))
     table = effect->descriptor;
   else if (const auto* synth = native_dsp::synth::find_engine(id))

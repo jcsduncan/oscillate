@@ -10,9 +10,9 @@
 #include "../../native_dsp/wren_test_library.hpp"
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
 #include "oscillate/native_dsp/synth/knock.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QColor>
@@ -441,7 +441,7 @@ void engine_is_reachable_and_saves_from_the_app(std::string_view engine_id,
     require(automation->remove_lane(), "UI-created synth lane could not be removed");
     const auto discrete =
         std::ranges::find_if(engine->descriptor->parameters, [](const auto& item) {
-          return item.automatable && native::is_discrete(item);
+          return item.automatable && oscillate::native_dsp::is_discrete(item);
         });
     require(discrete != engine->descriptor->parameters.end(), "synth has no discrete parameter");
     const auto discrete_id = QString::fromStdString(std::string(discrete->id));
@@ -491,12 +491,13 @@ void engine_is_reachable_and_saves_from_the_app(std::string_view engine_id,
   const auto values = reopened.value()->instruments().native_instrument_values(track.value());
   require(values.has_value(), "saved synth patch is missing");
   const auto* engine = native::find_engine(engine_id);
-  const auto index = native::find_parameter(*engine->descriptor, cutoff_id);
+  const auto index = oscillate::native_dsp::find_parameter(*engine->descriptor, cutoff_id);
   if (!index) {
     throw std::runtime_error("the cutoff parameter is missing");
   }
-  require(std::fabs(values.value()[*index] -
-                    native::from_normalised(engine->descriptor->parameters[*index], 0.62)) < 1e-9,
+  require(std::fabs(values.value()[*index] - oscillate::native_dsp::from_normalised(
+                                                 engine->descriptor->parameters[*index], 0.62)) <
+              1e-9,
           "edited synth cutoff did not survive save and reopen");
   const auto& lanes = reopened.value()->snapshot().tracks.front().automation;
   const auto lane = std::ranges::find_if(lanes, [&](const project::AutomationLane& item) {
@@ -504,8 +505,8 @@ void engine_is_reachable_and_saves_from_the_app(std::string_view engine_id,
     return target && target->parameter_id == cutoff_id;
   });
   require(lane != lanes.end() && lane->points.size() == 1 &&
-              std::fabs(native::to_normalised(engine->descriptor->parameters[*index],
-                                              lane->points.front().value) -
+              std::fabs(oscillate::native_dsp::to_normalised(engine->descriptor->parameters[*index],
+                                                             lane->points.front().value) -
                         0.75) < 1e-9,
           "synth automation did not survive save and reopen");
 }

@@ -47,7 +47,7 @@ std::vector<double> NoteEffectAdapter::values() const {
     if (auto resolved = notefx::resolve_note_effect(*saved))
       return std::move(resolved.value().values);
   }
-  return native_dsp::synth::default_values(*engine_.descriptor);
+  return native_dsp::default_values(*engine_.descriptor);
 }
 
 bool NoteEffectAdapter::write(std::span<const double> values,
@@ -111,7 +111,7 @@ bool NoteEffectAdapter::submit_preset(std::size_t preset) {
   const auto& presets = engine_.descriptor->presets;
   if (preset >= presets.size())
     return false;
-  auto values = native_dsp::synth::preset_values(*engine_.descriptor, presets[preset]);
+  auto values = native_dsp::preset_values(*engine_.descriptor, presets[preset]);
   if (!values) {
     message_ = values.error().message;
     return true;
@@ -283,8 +283,8 @@ QString NoteEffectsController::add(const QString& track_id, const QString& engin
     const auto& presets = engine->descriptor->presets;
     if (static_cast<std::size_t>(preset) >= presets.size())
       return {};
-    auto values = native_dsp::synth::preset_values(*engine->descriptor,
-                                                   presets[static_cast<std::size_t>(preset)]);
+    auto values =
+        native_dsp::preset_values(*engine->descriptor, presets[static_cast<std::size_t>(preset)]);
     if (!values) {
       failed(QStringLiteral("MIDI effect preset"), values.error());
       return {};

@@ -4,7 +4,7 @@
 
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/relay.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QColor>
@@ -36,7 +36,6 @@ namespace {
 using oscillate::quick::InMemoryNativeSynthAdapter;
 using oscillate::quick::NativeSynthDeviceController;
 using oscillate::quick::RelayPanelModel;
-namespace synth = oscillate::native_dsp::synth;
 namespace effects = oscillate::native_dsp::effects;
 namespace relay = effects::relay;
 namespace q = oscillate::quick;
@@ -44,8 +43,10 @@ namespace engine = oscillate::engine;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *relay::engine().descriptor; }
-std::size_t index(std::string_view id) { return *synth::find_parameter(table(), id); }
+const oscillate::native_dsp::EngineDescriptor& table() { return *relay::engine().descriptor; }
+std::size_t index(std::string_view id) {
+  return oscillate::test::take(oscillate::native_dsp::find_parameter(table(), id));
+}
 
 int preset_index(std::string_view name) {
   for (std::size_t i = 0; i < table().presets.size(); ++i) {
@@ -57,8 +58,8 @@ int preset_index(std::string_view name) {
 }
 
 std::vector<double> preset(std::string_view name) {
-  return synth::preset_values(table(),
-                              table().presets[static_cast<std::size_t>(preset_index(name))])
+  return oscillate::native_dsp::preset_values(
+             table(), table().presets[static_cast<std::size_t>(preset_index(name))])
       .value();
 }
 
@@ -284,7 +285,7 @@ struct Fixture {
 };
 
 void panel_covers_every_parameter() {
-  Fixture f(synth::default_values(table()));
+  Fixture f(oscillate::native_dsp::default_values(table()));
   require(f.panel->root->implicitWidth() >= 1200 && f.panel->root->implicitHeight() >= 660,
           "panel has its designed size");
   for (const auto& p : table().parameters) {
@@ -298,7 +299,7 @@ void panel_covers_every_parameter() {
 }
 
 void sync_swaps_time_for_division() {
-  Fixture f(synth::default_values(table()));
+  Fixture f(oscillate::native_dsp::default_values(table()));
   auto& panel = *f.panel;
   auto* time = item(panel, QStringLiteral("relayKnob:relay.time"));
   auto* division = item(panel, QStringLiteral("relayDropdown:relay.division"));
@@ -322,7 +323,7 @@ void sync_swaps_time_for_division() {
 }
 
 void character_bay_and_echo_view_follow_the_values() {
-  Fixture f(synth::default_values(table()));
+  Fixture f(oscillate::native_dsp::default_values(table()));
   auto& panel = *f.panel;
   require(shown(item(panel, QStringLiteral("relayDigital"))) &&
               !shown(item(panel, QStringLiteral("relayReels"))),
@@ -361,7 +362,7 @@ void character_bay_and_echo_view_follow_the_values() {
 }
 
 void presets_and_status() {
-  Fixture f(synth::default_values(table()));
+  Fixture f(oscillate::native_dsp::default_values(table()));
   auto& panel = *f.panel;
   require(item(panel, QStringLiteral("relayPresetName"))->property("text").toString() ==
               QStringLiteral("Quarter Echo"),
@@ -455,10 +456,10 @@ void screenshots_if_requested() {
 // The feedback plate's note is a sentence in sentence case, shown whole
 // for every character.
 void feedback_note_fits_for_every_character() {
-  Fixture f(synth::default_values(table()));
+  Fixture f(oscillate::native_dsp::default_values(table()));
   auto* note = item(*f.panel, QStringLiteral("relayFeedbackNote"));
   const auto descriptor = std::ranges::find(table().parameters, std::string_view("relay.character"),
-                                            &synth::ParameterDescriptor::id);
+                                            &oscillate::native_dsp::ParameterDescriptor::id);
   require(descriptor != table().parameters.end(), "Relay has a character");
   const auto characters = static_cast<int>(descriptor->choices.size());
   for (int character = 0; character < characters; ++character) {

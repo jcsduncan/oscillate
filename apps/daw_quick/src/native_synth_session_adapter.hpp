@@ -122,7 +122,7 @@ public:
   [[nodiscard]] project::TrackId track() const noexcept { return track_; }
   // The synth engine; only for synth adapters (effect_slot() is empty).
   [[nodiscard]] const native_dsp::synth::SynthEngine& engine() const noexcept { return *engine_; }
-  [[nodiscard]] const native_dsp::synth::EngineDescriptor& descriptor() const noexcept {
+  [[nodiscard]] const native_dsp::EngineDescriptor& descriptor() const noexcept {
     return descriptor_;
   }
   [[nodiscard]] std::optional<project::InsertSlotId> effect_slot() const noexcept { return slot_; }
@@ -163,7 +163,7 @@ private:
   std::optional<project::InsertSlotId> slot_;
   const native_dsp::synth::SynthEngine* engine_ = nullptr;
   const native_dsp::effects::EffectEngine* effect_ = nullptr;
-  const native_dsp::synth::EngineDescriptor& descriptor_;
+  const native_dsp::EngineDescriptor& descriptor_;
   EditHook after_edit_;
   AudibleProbe audible_;
   TelemetryProbe telemetry_;

@@ -2,8 +2,8 @@
 #include "native_synth_device_controller.hpp"
 
 #include "../../native_dsp/concert_test_library.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/concert.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/prism.hpp"
 #include "oscillate/test/check.hpp"
 
@@ -40,7 +40,7 @@ namespace concert = synth::concert;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *concert::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *concert::engine().descriptor; }
 
 int preset_index(std::string_view name) {
   for (std::size_t i = 0; i < table().presets.size(); ++i) {
@@ -52,8 +52,8 @@ int preset_index(std::string_view name) {
 }
 
 std::vector<double> preset(std::string_view name) {
-  return synth::preset_values(table(),
-                              table().presets[static_cast<std::size_t>(preset_index(name))])
+  return oscillate::native_dsp::preset_values(
+             table(), table().presets[static_cast<std::size_t>(preset_index(name))])
       .value();
 }
 
@@ -69,7 +69,7 @@ void controller_reports_a_missing_library() {
   const auto nowhere = concert_test::scratch_directory("concert-panel-library");
   std::filesystem::remove_all(nowhere);
   ::setenv(std::string(concert::library::directory_variable).c_str(), nowhere.c_str(), 1);
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   const auto library = controller.concert_library();
   require(library.value(QStringLiteral("state")).toString() == QStringLiteral("missing") &&
@@ -87,7 +87,7 @@ void controller_reports_a_missing_library() {
               library.value(QStringLiteral("first_key")).toInt() == concert::first_key,
           "the keyboard's range reaches QML");
   const auto& prism = *synth::prism::engine().descriptor;
-  InMemoryNativeSynthAdapter other(synth::default_values(prism));
+  InMemoryNativeSynthAdapter other(oscillate::native_dsp::default_values(prism));
   NativeSynthDeviceController prism_controller(prism, other);
   require(prism_controller.concert_library().isEmpty(), "only Concert has a library");
 }
@@ -108,7 +108,7 @@ std::vector<float> concert_frame(double sustain, int ringing_key, float energy) 
 }
 
 void controller_decodes_concert_telemetry() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   require(!controller.telemetry().value(QStringLiteral("live")).toBool(), "nothing plays");
   auto frame = concert_frame(1.0, 60, -0.5F);
@@ -201,7 +201,7 @@ QString text_of(Panel& panel, const QString& name) {
 // Without its library the panel says why, what to install and how; once
 // installed, Look Again finds it and the attribution shows.
 void the_library_plate_guides_the_install() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(item(*panel, QStringLiteral("concertLibraryMessage"))->isVisible() &&
@@ -238,7 +238,7 @@ void the_library_plate_guides_the_install() {
 }
 
 void panel_covers_every_parameter() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(panel->root->implicitWidth() >= 1240 && panel->root->implicitHeight() >= 640,
@@ -257,7 +257,7 @@ void panel_covers_every_parameter() {
 }
 
 void presets_and_controls() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   auto* perspective = item(*panel, QStringLiteral("concertSegment:concert.perspective"));

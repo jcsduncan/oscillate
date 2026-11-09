@@ -8,8 +8,8 @@
 #include "native_synth_device_controller.hpp"
 
 #include "oscillate/application/crate_chops.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/crate.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/pulse.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/timeline/timing.hpp"
@@ -50,10 +50,10 @@ constexpr std::string_view identity =
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *crate::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *crate::engine().descriptor; }
 
 std::size_t index_of(std::string_view id) {
-  const auto index = synth::find_parameter(table(), id);
+  const auto index = oscillate::native_dsp::find_parameter(table(), id);
   require(index.has_value(), "Crate parameter exists");
   return *index;
 }
@@ -85,7 +85,7 @@ std::shared_ptr<const synth::SynthMediaAsset> clicks() {
 }
 
 struct Fixture {
-  InMemoryNativeSynthAdapter adapter{synth::default_values(table())};
+  InMemoryNativeSynthAdapter adapter{oscillate::native_dsp::default_values(table())};
   std::unique_ptr<NativeSynthDeviceController> device;
   CrateController* crate = nullptr;
 
@@ -104,7 +104,8 @@ struct Fixture {
 };
 
 void other_engines_have_no_crate() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(*synth::pulse::engine().descriptor));
+  InMemoryNativeSynthAdapter adapter(
+      oscillate::native_dsp::default_values(*synth::pulse::engine().descriptor));
   NativeSynthDeviceController device(*synth::pulse::engine().descriptor, adapter);
   require(device.crate() == nullptr, "Pulse has no Crate model");
 }

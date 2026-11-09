@@ -4,8 +4,8 @@
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/application/routed_audio_source.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/project_binding.hpp"
 #include "oscillate/test/allocation_counter.hpp"
 #include "oscillate/test/check.hpp"
@@ -69,7 +69,7 @@ engine::RoutedMixerLimits limits(std::size_t max_frames = 64) {
 }
 
 std::size_t index(std::string_view id) {
-  return take(synth::find_parameter(*synth::default_engine().descriptor, id));
+  return take(oscillate::native_dsp::find_parameter(*synth::default_engine().descriptor, id));
 }
 
 // A saved project with one Prism track playing a held C4 from the first beat.
@@ -368,11 +368,11 @@ void native_automation_mailbox_retries_latest_saved_revision() {
 std::string automated_parameter(const synth::SynthEngine& engine) {
   const auto& table = *engine.descriptor;
   std::string cutoff = std::string(table.id) + ".filter.cutoff";
-  if (synth::find_parameter(table, cutoff))
+  if (oscillate::native_dsp::find_parameter(table, cutoff))
     return cutoff;
   for (const auto& parameter : table.parameters) {
-    if (parameter.automatable && !synth::is_discrete(parameter) &&
-        parameter.timing == synth::ParameterTiming::live)
+    if (parameter.automatable && !oscillate::native_dsp::is_discrete(parameter) &&
+        parameter.timing == oscillate::native_dsp::ParameterTiming::live)
       return std::string(parameter.id);
   }
   throw std::runtime_error("engine has no automatable parameter");
@@ -419,9 +419,10 @@ void every_engine_plays_live() {
                            model.snapshot()->tracks.front().instrument_source)))
                       .values;
     const auto edited_id = automated_parameter(*engine);
-    const auto edited_index = take(synth::find_parameter(*engine->descriptor, edited_id));
+    const auto edited_index =
+        take(oscillate::native_dsp::find_parameter(*engine->descriptor, edited_id));
     values[edited_index] =
-        synth::from_normalised(engine->descriptor->parameters[edited_index], 0.25);
+        oscillate::native_dsp::from_normalised(engine->descriptor->parameters[edited_index], 0.25);
     auto patch = take(synth::make_native_patch(*engine, values));
     auto edited = take(model.apply({project::SetNativeInstrumentPatch{track, patch}}));
     REQUIRE_OK(control.begin_edit(edited, "synth parameter"),

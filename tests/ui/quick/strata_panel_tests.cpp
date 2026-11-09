@@ -4,7 +4,7 @@
 #include "oscillate/engine/graph.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/strata.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QCoreApplication>
@@ -37,17 +37,16 @@
 namespace {
 using oscillate::quick::InMemoryNativeSynthAdapter;
 using oscillate::quick::NativeSynthDeviceController;
-namespace synth = oscillate::native_dsp::synth;
 namespace effects = oscillate::native_dsp::effects;
 namespace strata = oscillate::native_dsp::effects::strata;
 namespace engine = oscillate::engine;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *strata::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *strata::engine().descriptor; }
 
 std::size_t index(std::string_view id) {
-  const auto found = synth::find_parameter(table(), id);
+  const auto found = oscillate::native_dsp::find_parameter(table(), id);
   if (!found) {
     throw std::runtime_error("unknown parameter " + std::string(id));
   }
@@ -57,7 +56,7 @@ std::size_t index(std::string_view id) {
 std::vector<double> preset(std::string_view name) {
   for (const auto& entry : table().presets) {
     if (entry.name == name) {
-      return synth::preset_values(table(), entry).value();
+      return oscillate::native_dsp::preset_values(table(), entry).value();
     }
   }
   throw std::runtime_error("missing preset " + std::string(name));

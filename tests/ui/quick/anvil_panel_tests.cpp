@@ -2,9 +2,9 @@
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
 
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/anvil.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/project/model.hpp"
 #include "oscillate/test/check.hpp"
 
@@ -51,10 +51,10 @@ const synth::SynthEngine& engine() {
   require(found != nullptr && found->descriptor != nullptr, "Anvil is registered");
   return *found;
 }
-const synth::EngineDescriptor& table() { return *engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *engine().descriptor; }
 
 std::unique_ptr<InMemoryNativeSynthAdapter> adapter_for(std::size_t preset) {
-  auto values = synth::preset_values(table(), table().presets[preset]).value();
+  auto values = oscillate::native_dsp::preset_values(table(), table().presets[preset]).value();
   auto adapter = std::make_unique<InMemoryNativeSynthAdapter>(std::move(values));
   if (engine().preset_document != nullptr)
     adapter->submit_document(engine().preset_document(preset), NativeSynthGesture::single);

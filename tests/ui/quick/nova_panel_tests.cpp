@@ -1,8 +1,8 @@
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
 
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/nova.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/project/model.hpp"
 #include "oscillate/timeline/timing.hpp"
 
@@ -144,7 +144,9 @@ constexpr int fx_slot_params = 16;
 class ContractTable {
 public:
   ContractTable() { build(); }
-  [[nodiscard]] const synth::EngineDescriptor& descriptor() const { return descriptor_; }
+  [[nodiscard]] const oscillate::native_dsp::EngineDescriptor& descriptor() const {
+    return descriptor_;
+  }
 
 private:
   std::string_view keep(std::string text) {
@@ -154,10 +156,11 @@ private:
   // A descriptor's fields, in its own order, as the tables list them.
   // NOLINTBEGIN(bugprone-easily-swappable-parameters)
   void add(std::string id, std::string name, std::string group, std::string_view unit,
-           synth::ParameterScale scale, double minimum, double maximum, double fallback,
-           std::span<const std::string_view> choices, bool automatable, double skew = 1.0) {
+           oscillate::native_dsp::ParameterScale scale, double minimum, double maximum,
+           double fallback, std::span<const std::string_view> choices, bool automatable,
+           double skew = 1.0) {
     // NOLINTEND(bugprone-easily-swappable-parameters)
-    synth::ParameterDescriptor p;
+    oscillate::native_dsp::ParameterDescriptor p;
     p.id = keep(std::move(id));
     p.name = keep(std::move(name));
     p.group = keep(std::move(group));
@@ -175,20 +178,22 @@ private:
   void lin(const std::string& id, const std::string& name, const std::string& group,
            std::string_view unit, double lo, double hi, double fallback, double skew = 1.0,
            bool automatable = true) {
-    add(id, name, group, unit, synth::ParameterScale::linear, lo, hi, fallback, {}, automatable,
-        skew);
+    add(id, name, group, unit, oscillate::native_dsp::ParameterScale::linear, lo, hi, fallback, {},
+        automatable, skew);
   }
   void log(const std::string& id, const std::string& name, const std::string& group,
            std::string_view unit, double lo, double hi, double fallback) {
-    add(id, name, group, unit, synth::ParameterScale::logarithmic, lo, hi, fallback, {}, true);
+    add(id, name, group, unit, oscillate::native_dsp::ParameterScale::logarithmic, lo, hi, fallback,
+        {}, true);
   }
   void step(const std::string& id, const std::string& name, const std::string& group,
             std::string_view unit, double lo, double hi, double fallback) {
-    add(id, name, group, unit, synth::ParameterScale::stepped, lo, hi, fallback, {}, false);
+    add(id, name, group, unit, oscillate::native_dsp::ParameterScale::stepped, lo, hi, fallback, {},
+        false);
   }
   void choice(const std::string& id, const std::string& name, const std::string& group,
               std::span<const std::string_view> choices, double fallback) {
-    add(id, name, group, "", synth::ParameterScale::choice, 0,
+    add(id, name, group, "", oscillate::native_dsp::ParameterScale::choice, 0,
         static_cast<double>(choices.size() - 1), fallback, choices, false);
   }
 
@@ -472,16 +477,16 @@ private:
   }
 
   std::deque<std::string> text_;
-  std::vector<synth::ParameterDescriptor> parameters_;
-  synth::EngineDescriptor descriptor_{};
+  std::vector<oscillate::native_dsp::ParameterDescriptor> parameters_;
+  oscillate::native_dsp::EngineDescriptor descriptor_{};
 };
 
-const synth::EngineDescriptor& contract_table() {
+const oscillate::native_dsp::EngineDescriptor& contract_table() {
   static const ContractTable contract;
   return contract.descriptor();
 }
 
-const synth::EngineDescriptor& table() { return *synth::nova::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *synth::nova::engine().descriptor; }
 
 // The engine's table is the contract's, in order: ids, scales, ranges,
 // defaults, choices, timing and automation.
@@ -678,9 +683,9 @@ project::NativeSynthDocument demo_document() {
 }
 
 std::vector<double> demo_values() {
-  auto values = synth::default_values(table());
+  auto values = oscillate::native_dsp::default_values(table());
   const auto set = [&](std::string_view id, double value) {
-    const auto index = synth::find_parameter(table(), id);
+    const auto index = oscillate::native_dsp::find_parameter(table(), id);
     require(index.has_value(), "demo value names a contract id");
     values[*index] = value;
   };
@@ -941,9 +946,9 @@ void collect_bound(QQuickItem* root, QSet<QString>& ids, std::vector<QString>& n
 // The stub is a valid engine table within the platform's limit, and the
 // panel loads at its designed size with every page reachable.
 void panel_loads_and_visits_every_page() {
-  require(synth::validate_engine(table()).has_value(), "the engine table is valid");
+  require(oscillate::native_dsp::validate_engine(table()).has_value(), "the engine table is valid");
   require(table().parameters.size() == 1515, "the engine table has 1515 parameters");
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(panel->root->implicitWidth() == panel->root->property("designedWidth").toDouble() &&
@@ -960,7 +965,7 @@ void panel_loads_and_visits_every_page() {
 // filters and ROUTING under them, MODULATION and MACROS at the foot. Each
 // card holds its display and its controls; the master level is on ROUTING.
 void overview_shows_every_module() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(panel->root->property("page").toInt() == 0, "the panel opens on MAIN");
@@ -1000,7 +1005,7 @@ void overview_shows_every_module() {
 // A card whose module is off fades to offOpacity and comes back when it is
 // switched on; its strip light turns grey. OSC B starts off.
 void an_off_module_fades() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   auto* a = item(*panel, QStringLiteral("novaModuleCard:a"));
@@ -1028,7 +1033,7 @@ void an_off_module_fades() {
 // under a scrim, with a bigger display; Esc, ⤢ again or a click on the
 // scrim restores it. `focusModule` names the large card.
 void expanding_a_card_in_place() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   auto* card = item(*panel, QStringLiteral("novaModuleCard:a"));
@@ -1070,7 +1075,7 @@ void expanding_a_card_in_place() {
 // The strip: a sound module's item shows MAIN, scrolled to its card, and
 // flashes the card; FX, VOICES and OUT open their pages.
 void the_strip_jumps_to_cards() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   for (const char* key : {"a", "b", "c", "subnoise", "filter1", "filter2", "fx", "voices", "out"}) {
@@ -1107,7 +1112,7 @@ void the_strip_jumps_to_cards() {
 // (`modTab`) and the card shows its editor and knobs; a macro's tab shows
 // the MACROS card; a performance source has nothing to edit.
 void a_mod_tab_selects_its_source() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(panel->root->property("modTab").toString() == QStringLiteral("env.1"),
@@ -1136,7 +1141,7 @@ void a_mod_tab_selects_its_source() {
 // The zoom chips set the zoom the host lays the panel out at; the
 // constellation button opens its place over the pages and closes the browser.
 void zoom_and_constellation() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(std::fabs(panel->root->property("zoom").toDouble() - 1.0) < 1e-9,
@@ -1168,7 +1173,7 @@ void zoom_and_constellation() {
 // two columns, as the mockup's "a b" "c n" "f1 f2" "r r" "mod mod"
 // "mac mac", and scrolls.
 void pages_reflow_with_the_panel() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   auto* overview = item(*panel, QStringLiteral("novaOverview"));
@@ -1215,7 +1220,7 @@ void pages_reflow_with_the_panel() {
 // (the typing keyboard's octave) with a velocity, held until released; a
 // black key plays its semitone; a key lights while it is held.
 void key_strip_plays_notes() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   QSignalSpy pressed(panel->root, SIGNAL(keyPressed(int, int)));
@@ -1248,7 +1253,7 @@ void key_strip_plays_notes() {
 // modulation tabs), the other pages and the effect buses. Route amounts, effect slot values
 // and performance inputs are reached through routes, cards and MIDI.
 void every_parameter_has_a_control() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   QSet<QString> ids;
@@ -1284,7 +1289,7 @@ void every_parameter_has_a_control() {
   }
   for (const auto& name : names) {
     const QString id = name.mid(name.indexOf(QLatin1Char(':')) + 1).section(QLatin1Char(':'), 0, 0);
-    require(synth::find_parameter(table(), id.toStdString()).has_value(),
+    require(oscillate::native_dsp::find_parameter(table(), id.toStdString()).has_value(),
             "control bound to an unknown id: " + name.toStdString());
   }
   require(find_item(panel->root, QStringLiteral("novaArpCell:nova.arp.lane.note.1")) != nullptr &&
@@ -1312,7 +1317,7 @@ void every_parameter_has_a_control() {
 // the readout confirms it, the ring drag sets its depth, hovering lists it
 // and the right-click menu removes it.
 void drag_to_modulate_and_edit_the_route() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   lay_out_tabs(*panel);
@@ -1385,7 +1390,7 @@ void drag_to_modulate_and_edit_the_route() {
 // The type menu in a card's header switches an oscillator, and its
 // controls follow the type.
 void switching_an_oscillator_type() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(find_item(panel->root, QStringLiteral("novaKnob:nova.osc.b.pw")) != nullptr,
@@ -1407,7 +1412,7 @@ void switching_an_oscillator_type() {
 
 // Dragging an LFO point is one document gesture: begin, updates, commit.
 void editing_an_lfo_point() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   lay_out_tabs(*panel);
@@ -1444,7 +1449,7 @@ void editing_an_lfo_point() {
 
 // A panel on the FX page whose Main chain holds these modules at uids 1, 2, ...
 struct FxRig {
-  InMemoryNativeSynthAdapter adapter{synth::default_values(table())};
+  InMemoryNativeSynthAdapter adapter{oscillate::native_dsp::default_values(table())};
   std::unique_ptr<NativeSynthDeviceController> controller;
   std::unique_ptr<Panel> panel;
 
@@ -1594,7 +1599,7 @@ void dragging_an_eq_node() {
 
 // ✎ EDIT opens the wavetable editor; DONE commits the table as one edit.
 void wavetable_editor_done() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   click(*panel, centre(item(*panel, QStringLiteral("novaEdit:a"))));
@@ -1655,7 +1660,7 @@ void telemetry_goes_live() {
 // per-voice sources are named and draggable; Re-roll, Flutter and the
 // voice cards are bound, and the lanes follow the cards.
 void voices_page_paints_lanes() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   show_page(*panel, 5);

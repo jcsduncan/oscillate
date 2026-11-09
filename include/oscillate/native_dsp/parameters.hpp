@@ -135,32 +135,3 @@ resolve_values(const EngineDescriptor& engine, std::span<const NamedValue> saved
                                                                     const Preset& preset);
 
 } // namespace oscillate::native_dsp
-
-// The parameter tables are the neutral native_dsp layer (ADR-0104). These
-// names keep the app and the tests building while they move to it, and go
-// with them.
-namespace oscillate::native_dsp::synth {
-
-using native_dsp::default_values;
-using native_dsp::effect_glide_seconds;
-using native_dsp::EngineDescriptor;
-using native_dsp::find_parameter;
-using native_dsp::format_value;
-using native_dsp::from_normalised;
-using native_dsp::is_discrete;
-using native_dsp::max_engine_parameters;
-using native_dsp::NamedValue;
-using native_dsp::parameter_index;
-using native_dsp::ParameterDescriptor;
-using native_dsp::ParameterScale;
-using native_dsp::ParameterTiming;
-using native_dsp::preset_values;
-using native_dsp::resolve_values;
-using native_dsp::sanitise;
-using native_dsp::sparse_values;
-using native_dsp::synth_glide_seconds;
-using native_dsp::to_normalised;
-using native_dsp::validate_engine;
-using SynthPreset = native_dsp::Preset;
-
-} // namespace oscillate::native_dsp::synth

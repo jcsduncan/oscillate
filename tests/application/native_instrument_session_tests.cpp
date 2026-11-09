@@ -1,6 +1,6 @@
 #include "oscillate/application/project_session.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/temp_dir.hpp"
 
@@ -37,9 +37,9 @@ public:
   Directory() : TempDir("oscillate-synth-session") {}
 };
 
-const synth::EngineDescriptor& prism() { return *synth::default_engine().descriptor; }
+const native_dsp::EngineDescriptor& prism() { return *synth::default_engine().descriptor; }
 
-std::size_t index(std::string_view id) { return take(synth::find_parameter(prism(), id)); }
+std::size_t index(std::string_view id) { return take(native_dsp::find_parameter(prism(), id)); }
 
 std::size_t preset(std::string_view name) {
   for (std::size_t i = 0; i < prism().presets.size(); ++i) {
@@ -69,7 +69,7 @@ void synth_track_defaults_edits_and_undo() {
   REQUIRE_TRUE(patch(*session, track).parameters.empty(),
                "a new synth track stores the default patch sparsely");
   REQUIRE_EQ(take(session->instruments().native_instrument_values(track)),
-             synth::default_values(prism()), "the panel reads dense defaults");
+             native_dsp::default_values(prism()), "the panel reads dense defaults");
 
   auto values = take(session->instruments().native_instrument_values(track));
   values[index("prism.filter.cutoff")] = 900.0;
@@ -80,7 +80,7 @@ void synth_track_defaults_edits_and_undo() {
   REQUIRE_EQ(patch(*session, track).parameters[0].value, 600.0, "only the changed value is saved");
   accepted(session->history().undo());
   REQUIRE_EQ(take(session->instruments().native_instrument_values(track)),
-             synth::default_values(prism()), "one gesture undoes as one step");
+             native_dsp::default_values(prism()), "one gesture undoes as one step");
 
   auto bad = values;
   bad[index("prism.filter.cutoff")] = 1e9;
@@ -95,7 +95,7 @@ void synth_track_defaults_edits_and_undo() {
 
   accepted(session->instruments().select_native_instrument(track, "prism", preset("Acid")));
   REQUIRE_EQ(take(session->instruments().native_instrument_values(track)),
-             synth::preset_values(prism(), prism().presets[preset("Acid")]).value(),
+             native_dsp::preset_values(prism(), prism().presets[preset("Acid")]).value(),
              "selecting a preset loads its values");
   require(!session->instruments().select_native_instrument(track, "nonexistent"),
           "unknown engines fail");

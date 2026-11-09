@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <cstddef>
@@ -13,8 +13,8 @@
 // reuse one.
 namespace oscillate::native_dsp::effects::edge_table {
 
-using S = synth::ParameterScale;
-using T = synth::ParameterTiming;
+using S = ParameterScale;
+using T = ParameterTiming;
 using namespace std::string_view_literals;
 
 inline constexpr std::array oversampling{"1x"sv, "2x"sv, "4x"sv, "8x"sv, "16x"sv};
@@ -24,9 +24,9 @@ enum Filters : std::uint8_t { linear_phase, light };
 inline constexpr std::array off_on{"Off"sv, "On"sv};
 
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
-inline constexpr double g = synth::effect_glide_seconds;
+inline constexpr double g = effect_glide_seconds;
 
-inline constexpr std::array<synth::ParameterDescriptor, 9> parameters{{
+inline constexpr std::array<ParameterDescriptor, 9> parameters{{
     {"edge.input", "Input", "Clip", "dB", S::linear, -12, 24, 0, {}, T::live, g},
     {"edge.shape", "Shape", "Clip", "%", S::linear, 0, 1, 0.25, {}, T::live, g},
     {"edge.output", "Output", "Output", "dB", S::linear, -24, 0, 0, {}, T::live, g},
@@ -40,8 +40,6 @@ inline constexpr std::array<synth::ParameterDescriptor, 9> parameters{{
     {"edge.match", "Level Match", "Output", "", S::choice, 0, 1, 1, off_on, T::live, 0},
 }};
 
-consteval std::size_t index_of(std::string_view id) {
-  return synth::parameter_index(parameters, id);
-}
+consteval std::size_t index_of(std::string_view id) { return parameter_index(parameters, id); }
 
 } // namespace oscillate::native_dsp::effects::edge_table

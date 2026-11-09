@@ -108,12 +108,13 @@ struct Fixture {
           macros->refresh();
         },
         [this] { ++saves; },
-        [this](project::TrackId, const synth::EngineDescriptor&, std::span<const double> values) {
+        [this](project::TrackId, const oscillate::native_dsp::EngineDescriptor&,
+               std::span<const double> values) {
           live_synth.emplace_back(values.begin(), values.end());
           return true;
         },
-        [this](project::TrackId, project::InsertSlotId, const synth::EngineDescriptor&,
-               std::span<const double> values) {
+        [this](project::TrackId, project::InsertSlotId,
+               const oscillate::native_dsp::EngineDescriptor&, std::span<const double> values) {
           live_effect.emplace_back(values.begin(), values.end());
           return true;
         },
@@ -206,8 +207,8 @@ void turning_is_heard_then_saved_once() {
   f.macros->cancel_turn(0);
   require(f.session->snapshot().revision == before_cancel && f.macros->turning() == -1,
           "a cancelled turn saves nothing");
-  const auto sub_index =
-      synth::find_parameter(*synth::find_engine("prism")->descriptor, "prism.sub.level");
+  const auto sub_index = oscillate::native_dsp::find_parameter(
+      *synth::find_engine("prism")->descriptor, "prism.sub.level");
   require(sub_index && std::abs(f.live_synth.back()[*sub_index] - saved_sub) < 1e-9,
           "the saved value plays again");
   require(std::abs(f.synth_panel->value(QStringLiteral("prism.sub.level")) - saved_sub) < 1e-9,

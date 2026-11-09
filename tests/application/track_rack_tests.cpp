@@ -1,7 +1,7 @@
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/automation_project/preparation.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/persistence/rack_file.hpp"
 #include "oscillate/test/check.hpp"
@@ -61,7 +61,7 @@ double synth_value(const application::ProjectSession& session, project::TrackId 
                    std::string_view id) {
   const auto values = take(session.instruments().native_instrument_values(track));
   const auto* engine = synth::find_engine("prism");
-  const auto index = synth::find_parameter(*engine->descriptor, id);
+  const auto index = oscillate::native_dsp::find_parameter(*engine->descriptor, id);
   REQUIRE_TRUE(index, "unknown prism parameter");
   return values[*index];
 }

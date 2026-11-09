@@ -207,14 +207,14 @@ public:
   // A built-in synth's or effect's panel values mid-drag
   // (RoutedPlaybackControl::set_live_synth_values).
   [[nodiscard]] bool set_live_synth_values(project::TrackId track,
-                                           const native_dsp::synth::EngineDescriptor& engine,
+                                           const native_dsp::EngineDescriptor& engine,
                                            std::span<const double> values) noexcept;
   // A live note on a track's synth (RoutedPlaybackControl::live_note).
   [[nodiscard]] bool live_note(project::TrackId track, std::uint8_t key, std::uint8_t velocity,
                                bool on) noexcept;
   [[nodiscard]] bool set_live_effect_values(std::optional<project::TrackId> track,
                                             project::InsertSlotId slot,
-                                            const native_dsp::synth::EngineDescriptor& engine,
+                                            const native_dsp::EngineDescriptor& engine,
                                             std::span<const double> values) noexcept;
   // Control sequencer only. The track's post-fader peak/RMS in the
   // callback-accepted graph; empty for a track that graph does not contain.

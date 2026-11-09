@@ -4,9 +4,9 @@
 #include "native_synth_device_controller.hpp"
 
 #include "oscillate/application/knock_patterns.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
 #include "oscillate/native_dsp/synth/knock.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QCoreApplication>
@@ -54,14 +54,14 @@ namespace knock = oscillate::native_dsp::synth::knock;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() {
+const oscillate::native_dsp::EngineDescriptor& table() {
   const auto* found = synth::find_engine("knock");
   require(found != nullptr && found->descriptor != nullptr, "Knock is registered");
   return *found->descriptor;
 }
 
 std::size_t index(std::string_view id) {
-  const auto found = synth::find_parameter(table(), id);
+  const auto found = oscillate::native_dsp::find_parameter(table(), id);
   require(found.has_value(), "missing parameter " + std::string(id));
   return *found;
 }
@@ -79,7 +79,7 @@ constexpr int pads = static_cast<int>(knock::pad_count);
 // ---- The model ------------------------------------------------------------------
 
 void the_model_names_and_designs_every_pad() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   KnockPanelModel model(controller);
 
@@ -154,7 +154,7 @@ void the_model_names_and_designs_every_pad() {
   require(up ? lowest(4) > before : lowest(4) < before, "the resonator follows its pitch");
 
   // The piano roll's names, from any values; others' values name nothing.
-  const auto values = synth::default_values(table());
+  const auto values = oscillate::native_dsp::default_values(table());
   require(!oscillate::quick::knock_pad_label(table(), values, 0).empty() &&
               oscillate::quick::knock_pad_label(table(), {}, 0).empty() &&
               oscillate::quick::knock_pad_label(table(), values, knock::pad_count).empty(),
@@ -251,7 +251,7 @@ QPoint on_rail(Panel& panel, QQuickItem* slider, double fraction) {
 }
 
 void panel_covers_every_parameter() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   KnockPanelModel model(controller);
   auto panel = load_panel(controller, &model);
@@ -277,7 +277,7 @@ void panel_covers_every_parameter() {
 }
 
 void pads_select_rebind_and_play() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   KnockPanelModel model(controller);
   auto panel = load_panel(controller, &model);
@@ -371,7 +371,7 @@ void pads_select_rebind_and_play() {
 }
 
 void global_decay_and_strip_write_their_ids() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   KnockPanelModel model(controller);
   auto panel = load_panel(controller, &model);
@@ -425,7 +425,7 @@ std::vector<float> knock_frame(int last_pad, int hits, int lit_pad, float level,
 // The pads flash from the running track's hits (ADR-0037) and the modes
 // view rings from the selected pad's.
 void telemetry_flashes_the_hit_pad() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   KnockPanelModel model(controller);
   auto panel = load_panel(controller, &model);
@@ -462,7 +462,7 @@ void telemetry_flashes_the_hit_pad() {
 }
 
 void kits_apply() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   KnockPanelModel model(controller);
   auto panel = load_panel(controller, &model);
@@ -477,7 +477,7 @@ void kits_apply() {
   click(*panel, item(*panel, QStringLiteral("knockKitNext")));
   require(controller.preset_name() == qs(table().presets[1].name), "next steps the kit");
   require(kit_name() == qs(table().presets[1].name), "the header follows");
-  const auto expected = synth::preset_values(table(), table().presets[1]).value();
+  const auto expected = oscillate::native_dsp::preset_values(table(), table().presets[1]).value();
   require(controller.current_values() == expected, "the kit's values are applied");
   for (int pad = 0; pad < pads; ++pad) {
     require(model.pad_labels()[pad] == qs(oscillate::quick::knock_pad_label(
@@ -500,7 +500,7 @@ void kits_apply() {
 // Width, Swing and Orbit (ADR-0068) bind to their ids: each pad's Width
 // card follows the selected pad, Swing and Orbit sit in the global strip.
 void width_swing_and_orbit_bind_their_ids() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   KnockPanelModel model(controller);
   auto panel = load_panel(controller, &model);
@@ -552,7 +552,7 @@ void width_swing_and_orbit_bind_their_ids() {
 // The stereo strip shows where each pad's latest hit landed (telemetry
 // first_place), the latest hit and any pad that moved since.
 void the_stereo_strip_shows_where_pads_land() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   KnockPanelModel model(controller);
   auto panel = load_panel(controller, &model);
@@ -611,7 +611,7 @@ bool lane_kept(const patterns::Pattern& before, const patterns::Pattern& after, 
 // Loops, the generator, locks and the grid: everything stays in the panel
 // until Write to clip.
 void patterns_load_roll_mutate_and_lock() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   KnockPanelModel model(controller, 48'000, &adapter);
   auto* patterns_model = model.pattern_model();
@@ -695,7 +695,7 @@ void patterns_load_roll_mutate_and_lock() {
 // Write to clip: a new clip at the playhead's bar, or the selected clip's
 // notes replaced; one undo step each.
 void write_to_clip_is_one_step() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   KnockPanelModel model(controller, 48'000, &adapter);
   auto* patterns_model = model.pattern_model();
@@ -751,7 +751,7 @@ void screenshots_if_requested() {
   QDir().mkpath(QString::fromLocal8Bit(directory));
   for (std::size_t preset = 0; preset < table().presets.size(); ++preset) {
     InMemoryNativeSynthAdapter adapter(
-        synth::preset_values(table(), table().presets[preset]).value());
+        oscillate::native_dsp::preset_values(table(), table().presets[preset]).value());
     NativeSynthDeviceController controller(table(), adapter);
     KnockPanelModel model(controller);
     auto panel = load_panel(controller, &model);

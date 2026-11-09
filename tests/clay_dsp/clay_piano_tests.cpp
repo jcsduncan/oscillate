@@ -53,7 +53,7 @@ using oscillate::test::require;
 [[nodiscard]] std::vector<float> play(std::span<const std::uint8_t> keys, double seconds) {
   const auto& engine = concert::engine();
   auto runtime =
-      synth_test::make_runtime(engine, native_dsp::synth::default_values(*engine.descriptor), rate);
+      synth_test::make_runtime(engine, native_dsp::default_values(*engine.descriptor), rate);
   const auto length = static_cast<std::uint64_t>(std::llround(seconds * rate));
   const auto frames = static_cast<std::size_t>(std::llround((seconds + tail_seconds) * rate));
   std::vector<synth_test::Event> events;
@@ -129,7 +129,7 @@ constexpr double timing_chord_seconds = 2.0;
 void time_a_take() {
   const auto& engine = concert::engine();
   auto runtime =
-      synth_test::make_runtime(engine, native_dsp::synth::default_values(*engine.descriptor), rate);
+      synth_test::make_runtime(engine, native_dsp::default_values(*engine.descriptor), rate);
   const std::array<std::span<const std::uint8_t>, 6> voicings{am7_close, am7_open, am9_close,
                                                               am9_open,  c_close,  c_open};
   std::vector<synth_test::Event> events;

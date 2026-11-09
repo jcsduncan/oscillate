@@ -6,10 +6,10 @@
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/native_dsp/effects/pump.hpp"
 
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/concert.hpp"
 #include "oscillate/native_dsp/synth/drift_engine.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/pulse.hpp"
 #include "oscillate/native_dsp/synth/torque.hpp"
 #include "oscillate/test/check.hpp"
@@ -43,39 +43,39 @@ using oscillate::test::require;
 
 // A tiny engine no panel has ever seen: the controller must need nothing else.
 constexpr std::array waves{"Soft"sv, "Hard"sv, "Noise"sv};
-constexpr std::array<synth::ParameterDescriptor, 3> parameters{{
+constexpr std::array<oscillate::native_dsp::ParameterDescriptor, 3> parameters{{
     {"fake.level",
      "Level",
      "Out",
      "%",
-     synth::ParameterScale::linear,
+     oscillate::native_dsp::ParameterScale::linear,
      0,
      1,
      0.5,
      {},
-     synth::ParameterTiming::live,
+     oscillate::native_dsp::ParameterTiming::live,
      0.02},
     {"fake.cutoff",
      "Cutoff",
      "Tone",
      "Hz",
-     synth::ParameterScale::logarithmic,
+     oscillate::native_dsp::ParameterScale::logarithmic,
      20,
      20'000,
      1'000,
      {},
-     synth::ParameterTiming::live,
+     oscillate::native_dsp::ParameterTiming::live,
      0.02},
-    {"fake.wave", "Wave", "Tone", "", synth::ParameterScale::choice, 0, 2, 0, waves,
-     synth::ParameterTiming::live, 0, false},
+    {"fake.wave", "Wave", "Tone", "", oscillate::native_dsp::ParameterScale::choice, 0, 2, 0, waves,
+     oscillate::native_dsp::ParameterTiming::live, 0, false},
 }};
 constexpr std::array bright_values{std::pair{"fake.cutoff"sv, 8'000.0}};
-constexpr std::array<synth::SynthPreset, 1> presets{{{"Bright", "Lead", bright_values}}};
-const synth::EngineDescriptor fake{"fake", "Fake", 1, parameters, presets};
+constexpr std::array<oscillate::native_dsp::Preset, 1> presets{{{"Bright", "Lead", bright_values}}};
+const oscillate::native_dsp::EngineDescriptor fake{"fake", "Fake", 1, parameters, presets};
 
 void any_engine_drives_the_panel_model() {
-  require(synth::validate_engine(fake).has_value(), "fixture engine is valid");
-  InMemoryNativeSynthAdapter adapter(synth::default_values(fake));
+  require(oscillate::native_dsp::validate_engine(fake).has_value(), "fixture engine is valid");
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(fake));
   NativeSynthDeviceController controller(fake, adapter);
 
   require(controller.engine_id() == QStringLiteral("fake") &&
@@ -131,7 +131,7 @@ void any_engine_drives_the_panel_model() {
 // Telemetry frames decode by each engine's documented layout (ADR-0037).
 void telemetry_decodes_each_engine() {
   {
-    InMemoryNativeSynthAdapter adapter(synth::default_values(fake));
+    InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(fake));
     NativeSynthDeviceController controller(fake, adapter);
     require(!controller.telemetry().value(QStringLiteral("live")).toBool(), "no frame: not live");
     adapter.set_telemetry({1.0F, 2.0F});
@@ -143,7 +143,7 @@ void telemetry_decodes_each_engine() {
   }
   {
     const auto& table = *synth::torque::engine().descriptor;
-    InMemoryNativeSynthAdapter adapter(synth::default_values(table));
+    InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table));
     NativeSynthDeviceController controller(table, adapter);
     std::vector<float> frame(synth::torque::telemetry::size);
     frame[synth::torque::telemetry::running] = 1.0F;
@@ -163,7 +163,7 @@ void telemetry_decodes_each_engine() {
   }
   {
     const auto& table = *synth::pulse::engine().descriptor;
-    InMemoryNativeSynthAdapter adapter(synth::default_values(table));
+    InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table));
     NativeSynthDeviceController controller(table, adapter);
     std::vector<float> frame(synth::pulse::telemetry::size);
     frame[synth::pulse::telemetry::gain_reduction] = 3.5F;
@@ -177,7 +177,7 @@ void telemetry_decodes_each_engine() {
   }
   {
     const auto& table = *synth::drift::engine().descriptor;
-    InMemoryNativeSynthAdapter adapter(synth::default_values(table));
+    InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table));
     NativeSynthDeviceController controller(table, adapter);
     namespace d = synth::drift::telemetry;
     std::vector<float> frame(d::first_grain + 2 * d::stride);
@@ -200,7 +200,7 @@ void telemetry_decodes_each_engine() {
   }
   {
     const auto& table = *synth::concert::engine().descriptor;
-    InMemoryNativeSynthAdapter adapter(synth::default_values(table));
+    InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table));
     NativeSynthDeviceController controller(table, adapter);
     namespace c = synth::concert::telemetry;
     std::vector<float> frame(c::size, 0.0F);

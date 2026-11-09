@@ -4,7 +4,7 @@
 
 #include "oscillate/native_dsp/effects/dust.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QCoreApplication>
@@ -36,12 +36,11 @@
 namespace {
 using oscillate::quick::InMemoryNativeSynthAdapter;
 using oscillate::quick::NativeSynthDeviceController;
-namespace synth = oscillate::native_dsp::synth;
 namespace dust = oscillate::native_dsp::effects::dust;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *dust::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *dust::engine().descriptor; }
 
 QString qs(std::string_view text) {
   return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
@@ -115,10 +114,11 @@ QString text_of(Panel& panel, const QString& name) {
   return item(panel, name)->property("text").toString();
 }
 
-std::vector<double> defaults() { return synth::default_values(table()); }
+std::vector<double> defaults() { return oscillate::native_dsp::default_values(table()); }
 
-const synth::ParameterDescriptor& parameter(std::string_view id) {
-  const auto found = std::ranges::find(table().parameters, id, &synth::ParameterDescriptor::id);
+const oscillate::native_dsp::ParameterDescriptor& parameter(std::string_view id) {
+  const auto found =
+      std::ranges::find(table().parameters, id, &oscillate::native_dsp::ParameterDescriptor::id);
   require(found != table().parameters.end(), "Dust has " + std::string(id));
   return *found;
 }
@@ -293,8 +293,8 @@ void presets_apply() {
           "the display names it");
   const int index = controller.preset_index();
   require(index >= 0 && static_cast<std::size_t>(index) < table().presets.size(), "a preset index");
-  const auto resolved =
-      synth::preset_values(table(), table().presets[static_cast<std::size_t>(index)]);
+  const auto resolved = oscillate::native_dsp::preset_values(
+      table(), table().presets[static_cast<std::size_t>(index)]);
   require(resolved.has_value(), "the preset resolves");
   const auto& values = resolved.value();
   for (std::size_t i = 0; i < table().parameters.size(); ++i) {
@@ -372,7 +372,7 @@ void screenshots_if_requested() {
   }
   QDir().mkpath(QString::fromLocal8Bit(directory));
   for (const auto& entry : table().presets) {
-    auto resolved = synth::preset_values(table(), entry);
+    auto resolved = oscillate::native_dsp::preset_values(table(), entry);
     require(resolved.has_value(), "preset resolves");
     const auto values = resolved.value();
     InMemoryNativeSynthAdapter adapter(values);

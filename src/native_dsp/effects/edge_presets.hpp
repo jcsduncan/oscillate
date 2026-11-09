@@ -1,6 +1,6 @@
 #pragma once
 
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 
 #include <array>
 #include <string_view>
@@ -34,7 +34,7 @@ inline constexpr std::array bus_tags{"drums"sv, "bus"sv, "glue"sv};
 inline constexpr std::array bass_tags{"808"sv, "bass"sv, "sub"sv};
 inline constexpr std::array master_tags{"master"sv, "loudness"sv};
 
-inline constexpr std::array<synth::SynthPreset, 5> presets{{
+inline constexpr std::array<Preset, 5> presets{{
     {"Default", "Init", {}},
     {"Kick Punch", "Drums", kick_punch, kick_tags},
     {"Drum Bus", "Drums", drum_bus, bus_tags},

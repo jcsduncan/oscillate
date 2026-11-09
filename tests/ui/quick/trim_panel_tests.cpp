@@ -6,7 +6,7 @@
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/trim.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/prism.hpp"
 #include "oscillate/native_dsp/synth/runtime.hpp"
 #include "oscillate/test/check.hpp"
@@ -51,7 +51,7 @@ namespace engine = oscillate::engine;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *trim::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *trim::engine().descriptor; }
 int preset_index(std::string_view name) {
   for (std::size_t i = 0; i < table().presets.size(); ++i) {
     if (table().presets[i].name == name) {
@@ -61,10 +61,11 @@ int preset_index(std::string_view name) {
   throw std::runtime_error("missing preset");
 }
 
-std::vector<double> preset_of(const synth::EngineDescriptor& descriptor, std::string_view name) {
+std::vector<double> preset_of(const oscillate::native_dsp::EngineDescriptor& descriptor,
+                              std::string_view name) {
   for (const auto& entry : descriptor.presets) {
     if (entry.name == name) {
-      return synth::preset_values(descriptor, entry).value();
+      return oscillate::native_dsp::preset_values(descriptor, entry).value();
     }
   }
   throw std::runtime_error("missing preset " + std::string(name));

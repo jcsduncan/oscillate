@@ -47,9 +47,9 @@ std::complex<double> section(FilterMode mode, double w, double q) {
   }
 }
 
-std::optional<double> value_of(const native_dsp::synth::EngineDescriptor& engine,
+std::optional<double> value_of(const native_dsp::EngineDescriptor& engine,
                                std::span<const double> values, std::string_view id) {
-  const auto index = native_dsp::synth::find_parameter(engine, id);
+  const auto index = native_dsp::find_parameter(engine, id);
   if (!index || *index >= values.size()) {
     return std::nullopt;
   }
@@ -78,7 +78,7 @@ double multimode_db(FilterMode mode, double w, double resonance) {
 // Prism: its multimode SVF pairs and the ladder, as the DSP derives them.
 class PrismVisuals final : public NativeSynthVisuals {
 public:
-  [[nodiscard]] double filter_response_db(const native_dsp::synth::EngineDescriptor& engine,
+  [[nodiscard]] double filter_response_db(const native_dsp::EngineDescriptor& engine,
                                           std::span<const double> values,
                                           double hz) const override {
     const auto mode_value = value_of(engine, values, "prism.filter.mode");
@@ -99,7 +99,7 @@ const PrismVisuals prism_visuals;
 // derives them from the same parameters.
 class EmberVisuals final : public NativeSynthVisuals {
 public:
-  [[nodiscard]] double filter_response_db(const native_dsp::synth::EngineDescriptor& engine,
+  [[nodiscard]] double filter_response_db(const native_dsp::EngineDescriptor& engine,
                                           std::span<const double> values,
                                           double hz) const override {
     const auto type = value_of(engine, values, "ember.filter.type");
@@ -159,7 +159,7 @@ struct PulsePadValues {
   double character;
 };
 
-std::optional<PulsePadValues> pulse_pad(const native_dsp::synth::EngineDescriptor& engine,
+std::optional<PulsePadValues> pulse_pad(const native_dsp::EngineDescriptor& engine,
                                         std::span<const double> values, std::size_t pad) {
   if (engine.id != "pulse" || pad >= pulse_pads) {
     return std::nullopt;
@@ -228,7 +228,7 @@ std::vector<double> wavetable_frame_points(std::size_t table, std::size_t frame,
   return result;
 }
 
-std::vector<double> pulse_pad_envelope(const native_dsp::synth::EngineDescriptor& engine,
+std::vector<double> pulse_pad_envelope(const native_dsp::EngineDescriptor& engine,
                                        std::span<const double> values, std::size_t pad,
                                        double seconds, std::size_t points) {
   const auto v = pulse_pad(engine, values, pad);
@@ -248,7 +248,7 @@ std::vector<double> pulse_pad_envelope(const native_dsp::synth::EngineDescriptor
   return result;
 }
 
-std::vector<double> pulse_pad_pitch(const native_dsp::synth::EngineDescriptor& engine,
+std::vector<double> pulse_pad_pitch(const native_dsp::EngineDescriptor& engine,
                                     std::span<const double> values, std::size_t pad, double seconds,
                                     std::size_t points) {
   const auto v = pulse_pad(engine, values, pad);
@@ -288,8 +288,8 @@ std::vector<double> pulse_pad_pitch(const native_dsp::synth::EngineDescriptor& e
   return result;
 }
 
-double pulse_pad_band_db(const native_dsp::synth::EngineDescriptor& engine,
-                         std::span<const double> values, std::size_t pad, double hz) {
+double pulse_pad_band_db(const native_dsp::EngineDescriptor& engine, std::span<const double> values,
+                         std::size_t pad, double hz) {
   const auto v = pulse_pad(engine, values, pad);
   if (!v || hz <= 0.0) {
     return 0.0;
@@ -335,7 +335,7 @@ namespace {
 // engine's type order Off, LP 12, LP 24, BP 12, HP 12, Ladder.
 class HaloVisuals final : public NativeSynthVisuals {
 public:
-  [[nodiscard]] double filter_response_db(const native_dsp::synth::EngineDescriptor& engine,
+  [[nodiscard]] double filter_response_db(const native_dsp::EngineDescriptor& engine,
                                           std::span<const double> values,
                                           double hz) const override {
     const auto type = value_of(engine, values, "halo.filter.type");
@@ -385,7 +385,7 @@ std::complex<double> diode_ladder_open_loop(std::complex<double> s) {
 
 class TorqueVisuals final : public NativeSynthVisuals {
 public:
-  [[nodiscard]] double filter_response_db(const native_dsp::synth::EngineDescriptor& engine,
+  [[nodiscard]] double filter_response_db(const native_dsp::EngineDescriptor& engine,
                                           std::span<const double> values,
                                           double hz) const override {
     const auto model = value_of(engine, values, "torque.model");
@@ -436,7 +436,7 @@ const TorqueVisuals torque_visuals;
 // the DSP derives it from the shared coefficients.
 class DriftVisuals final : public NativeSynthVisuals {
 public:
-  [[nodiscard]] double filter_response_db(const native_dsp::synth::EngineDescriptor& engine,
+  [[nodiscard]] double filter_response_db(const native_dsp::EngineDescriptor& engine,
                                           std::span<const double> values,
                                           double hz) const override {
     const auto type = value_of(engine, values, "drift.filter.type");
@@ -581,7 +581,7 @@ EnvelopeSketch adsr_sketch(double attack, double decay, double sustain, double r
 
 } // namespace
 
-EnvelopeSketch halo_operator_envelope(const native_dsp::synth::EngineDescriptor& engine,
+EnvelopeSketch halo_operator_envelope(const native_dsp::EngineDescriptor& engine,
                                       std::span<const double> values, std::size_t op,
                                       std::size_t points) {
   using native_dsp::synth::DxEnvelope;
@@ -643,7 +643,7 @@ EnvelopeSketch halo_operator_envelope(const native_dsp::synth::EngineDescriptor&
   return sketch;
 }
 
-std::vector<double> torque_oscillator_cycle(const native_dsp::synth::EngineDescriptor& engine,
+std::vector<double> torque_oscillator_cycle(const native_dsp::EngineDescriptor& engine,
                                             std::span<const double> values, std::size_t points) {
   std::vector<double> cycle;
   if (engine.id != "torque" || points < 2) {
@@ -733,7 +733,7 @@ std::vector<double> torque_oscillator_cycle(const native_dsp::synth::EngineDescr
   return cycle;
 }
 
-std::vector<double> torque_pitch_drop(const native_dsp::synth::EngineDescriptor& engine,
+std::vector<double> torque_pitch_drop(const native_dsp::EngineDescriptor& engine,
                                       std::span<const double> values, double seconds,
                                       std::size_t points) {
   std::vector<double> drop;
@@ -751,7 +751,7 @@ std::vector<double> torque_pitch_drop(const native_dsp::synth::EngineDescriptor&
   return drop;
 }
 
-std::vector<GrainPreview> drift_grain_cloud(const native_dsp::synth::EngineDescriptor& engine,
+std::vector<GrainPreview> drift_grain_cloud(const native_dsp::EngineDescriptor& engine,
                                             std::span<const double> values, double seconds,
                                             std::size_t max_grains) {
   std::vector<GrainPreview> grains;
@@ -836,7 +836,7 @@ std::vector<GrainPreview> drift_grain_cloud(const native_dsp::synth::EngineDescr
   return grains;
 }
 
-std::vector<PartialLine> drift_partial_spectrum(const native_dsp::synth::EngineDescriptor& engine,
+std::vector<PartialLine> drift_partial_spectrum(const native_dsp::EngineDescriptor& engine,
                                                 std::span<const double> values) {
   std::vector<PartialLine> lines;
   if (engine.id != "drift") {
@@ -873,7 +873,7 @@ std::vector<double> drift_grain_window(int shape, std::size_t points) {
   return window;
 }
 
-EnvelopeSketch drift_amp_envelope(const native_dsp::synth::EngineDescriptor& engine,
+EnvelopeSketch drift_amp_envelope(const native_dsp::EngineDescriptor& engine,
                                   std::span<const double> values, std::size_t points) {
   if (engine.id != "drift" || points < 2) {
     return {};

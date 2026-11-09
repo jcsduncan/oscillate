@@ -1,9 +1,9 @@
 #include "in_memory_native_synth_adapter.hpp"
 #include "native_synth_device_controller.hpp"
 
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/crate.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/project/model.hpp"
 #include "oscillate/test/check.hpp"
 
@@ -54,7 +54,7 @@ const synth::SynthEngine& engine() {
   require(found != nullptr && found->descriptor != nullptr, "Crate is registered");
   return *found;
 }
-const synth::EngineDescriptor& table() { return *engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() { return *engine().descriptor; }
 
 // The built-in pluck, cut into four chops whose slots are not in time order,
 // so the panel has to map chops to slots.
@@ -72,7 +72,7 @@ constexpr TestChop test_chops[] = {{0, 0, "other", "Pluck"},
 constexpr std::size_t chop_count = std::size(test_chops);
 
 std::unique_ptr<InMemoryNativeSynthAdapter> init_adapter() {
-  auto values = synth::preset_values(table(), table().presets[0]).value();
+  auto values = oscillate::native_dsp::preset_values(table(), table().presets[0]).value();
   return std::make_unique<InMemoryNativeSynthAdapter>(std::move(values));
 }
 

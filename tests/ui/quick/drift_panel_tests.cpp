@@ -2,9 +2,9 @@
 #include "native_synth_device_controller.hpp"
 #include "native_synth_visuals.hpp"
 
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/drift_engine.hpp"
 #include "oscillate/native_dsp/synth/grain_dsp.hpp"
-#include "oscillate/native_dsp/synth/parameters.hpp"
 #include "oscillate/native_dsp/synth/prism.hpp"
 #include "oscillate/test/check.hpp"
 
@@ -44,9 +44,13 @@ constexpr double pi = std::numbers::pi;
 
 using oscillate::test::require;
 
-const synth::EngineDescriptor& table() { return *synth::drift::engine().descriptor; }
+const oscillate::native_dsp::EngineDescriptor& table() {
+  return *synth::drift::engine().descriptor;
+}
 
-std::size_t index(std::string_view id) { return *synth::find_parameter(table(), id); }
+std::size_t index(std::string_view id) {
+  return oscillate::test::take(oscillate::native_dsp::find_parameter(table(), id));
+}
 
 int preset_index(std::string_view name) {
   for (std::size_t i = 0; i < table().presets.size(); ++i) {
@@ -58,8 +62,8 @@ int preset_index(std::string_view name) {
 }
 
 std::vector<double> preset(std::string_view name) {
-  return synth::preset_values(table(),
-                              table().presets[static_cast<std::size_t>(preset_index(name))])
+  return oscillate::native_dsp::preset_values(
+             table(), table().presets[static_cast<std::size_t>(preset_index(name))])
       .value();
 }
 
@@ -74,7 +78,7 @@ double response_db(std::vector<double> values, double hz) {
 }
 
 void filter_curve_follows_the_filter_types() {
-  auto values = synth::default_values(table());
+  auto values = oscillate::native_dsp::default_values(table());
   values[index("drift.filter.cutoff")] = 1'000.0;
   values[index("drift.filter.resonance")] = 0.0;
   values[index("drift.filter.type")] = 0; // LP 12, Q = 1/sqrt 2.
@@ -120,7 +124,7 @@ void grain_windows_follow_the_kernel() {
 }
 
 void partial_spectrum_follows_the_stiff_string_law() {
-  auto values = synth::default_values(table());
+  auto values = oscillate::native_dsp::default_values(table());
   values[index("drift.partials.tilt")] = 1.5;
   values[index("drift.partials.odd")] = 0.5;
   values[index("drift.partials.stretch")] = 0.001;
@@ -145,7 +149,7 @@ void partial_spectrum_follows_the_stiff_string_law() {
 // the playback rate. The preview must name the same grains.
 void cloud_preview_matches_the_scheduler() {
   constexpr double rate = 48'000.0;
-  auto values = synth::default_values(table());
+  auto values = oscillate::native_dsp::default_values(table());
   values[index("drift.grain.size")] = 0.05;
   values[index("drift.grain.density")] = 4.0;
   values[index("drift.grain.chaos")] = 0.0;
@@ -235,7 +239,7 @@ void cloud_preview_matches_the_scheduler() {
             "synced grains sit on the grid");
   }
   const auto& prism = *synth::prism::engine().descriptor;
-  const auto prism_values = synth::default_values(prism);
+  const auto prism_values = oscillate::native_dsp::default_values(prism);
   require(q::drift_grain_cloud(prism, prism_values, 2.0, 100).empty() &&
               q::drift_partial_spectrum(prism, prism_values).empty() &&
               q::drift_amp_envelope(prism, prism_values, 64).points.empty(),
@@ -243,7 +247,7 @@ void cloud_preview_matches_the_scheduler() {
 }
 
 void amp_envelope_runs_the_kernel_envelope() {
-  auto values = synth::default_values(table());
+  auto values = oscillate::native_dsp::default_values(table());
   values[index("drift.amp.attack")] = 0.5;
   values[index("drift.amp.decay")] = 1.0;
   values[index("drift.amp.sustain")] = 0.5;
@@ -260,7 +264,7 @@ void amp_envelope_runs_the_kernel_envelope() {
 }
 
 void controller_exposes_drift_sketches() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   require(controller.has_filter_response() && controller.filter_response(32).size() == 32,
           "Drift draws its filter");
@@ -273,7 +277,7 @@ void controller_exposes_drift_sketches() {
   require(first.contains(QStringLiteral("position")) && first.contains(QStringLiteral("reverse")),
           "grains carry their position and direction");
   const auto& prism = *synth::prism::engine().descriptor;
-  InMemoryNativeSynthAdapter prism_adapter(synth::default_values(prism));
+  InMemoryNativeSynthAdapter prism_adapter(oscillate::native_dsp::default_values(prism));
   NativeSynthDeviceController prism_controller(prism, prism_adapter);
   require(prism_controller.grain_cloud(2.0, 64).isEmpty() &&
               prism_controller.partial_spectrum().isEmpty() &&
@@ -361,7 +365,7 @@ QString text_of(Panel& panel, const QString& name) {
 }
 
 void panel_covers_every_parameter() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(panel->root->implicitWidth() >= 1240 && panel->root->implicitHeight() >= 780,
@@ -389,7 +393,7 @@ void panel_covers_every_parameter() {
 }
 
 void freeze_and_sync_switch() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   auto* freeze = item(*panel, QStringLiteral("driftToggle:drift.freeze"));
@@ -424,7 +428,7 @@ void freeze_and_sync_switch() {
 }
 
 void controls_edit_with_gestures_and_keys() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
 
@@ -505,7 +509,7 @@ void controls_edit_with_gestures_and_keys() {
 }
 
 void presets_and_status() {
-  InMemoryNativeSynthAdapter adapter(synth::default_values(table()));
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
   auto panel = load_panel(controller);
   require(text_of(*panel, QStringLiteral("driftPresetName")) == QStringLiteral("Nebula"),
