@@ -690,7 +690,7 @@ def iowa_jobs(source: Path) -> list[Job]:
 
 
 def decode(path: str, channels: int) -> list[array.array]:
-    """The recording at 44.1 kHz as one array of doubles per channel."""
+    """The recording as one array of doubles per channel (both sources are 44.1 kHz)."""
     raw = subprocess.run(
         [
             "ffmpeg",
@@ -700,7 +700,7 @@ def decode(path: str, channels: int) -> list[array.array]:
             "-i",
             path,
             "-af",
-            f"aformat=sample_fmts=dbl,aresample={RATE}:resampler=soxr",
+            "aformat=sample_fmts=dbl",
             "-ac",
             str(channels),
             "-ar",

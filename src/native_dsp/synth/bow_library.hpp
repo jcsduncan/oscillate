@@ -100,5 +100,8 @@ private:
 [[nodiscard]] sample_stream::Registry& registry();
 // The library new and idle kernels use; null while missing. Callback safe.
 [[nodiscard]] const Library* current() noexcept;
+// The library's state as last looked at (loading while the background read
+// runs), for kernels without a library to report. Callback safe.
+[[nodiscard]] library::State published_state() noexcept;
 
 } // namespace oscillate::native_dsp::synth::bow::detail

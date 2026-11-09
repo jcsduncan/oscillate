@@ -222,6 +222,26 @@ struct Reader {
 
 enum class Fade : std::uint8_t { none, linear, equal_power, release };
 
+// A point on a voice's envelope: its age, and the frames since the control
+// tick (where the wheel is read).
+struct Moment {
+  double age = 0.0;
+  double since_tick = 0.0;
+};
+
+// Where a read writes its left and right frames (null: it only moves on).
+struct Frames {
+  float* left = nullptr;
+  float* right = nullptr;
+};
+
+// A read's per-frame reading speeds, and the fastest each frame's grid
+// point allows (which picks the resampler's table).
+struct Speeds {
+  const double* steps = nullptr;
+  const double* peaks = nullptr;
+};
+
 // One player of one note.
 struct Voice {
   bool active = false;
@@ -573,10 +593,15 @@ public:
 private:
   static constexpr std::uint32_t telemetry_wrap = (1U << 24U) - 1U;
 
+  // An idle kernel takes up a library that has loaded since; without one it
+  // reports what the last look found (a background read may have ended
+  // missing or invalid).
   void adopt_library() noexcept {
     if (const auto* latest = detail::current(); latest != nullptr && latest != library_) {
       library_ = latest;
       state_ = library::State::ready;
+    } else if (library_ == nullptr) {
+      state_ = detail::published_state();
     }
   }
 
@@ -710,11 +735,11 @@ private:
   // dynamics fall between, each brought to the level the dynamics play at
   // (interpolated in dB between the layers' own), lifting toward silence at
   // the wheel's bottom.
-  void layer_weights(const Voice& v, double age, double since,
+  void layer_weights(const Voice& v, Moment at,
                      std::array<double, max_layers>& out) const noexcept {
     out.fill(0.0);
-    const double d = dynamics(v, since);
-    const double e = envelope(v, age);
+    const double d = dynamics(v, at.since_tick);
+    const double e = envelope(v, at.age);
     if (v.layers == 1) {
       out[0] = e * niente(d);
       return;
@@ -750,7 +775,7 @@ private:
 
   // The envelope from its first frame.
   void prime(Voice& v) const noexcept {
-    layer_weights(v, 0.0, static_cast<double>(frames_since_tick_), v.weight);
+    layer_weights(v, {0.0, static_cast<double>(frames_since_tick_)}, v.weight);
     v.speed = speed(v, 0.0);
     v.speed_peak = v.speed;
   }
@@ -760,7 +785,7 @@ private:
     const double next = static_cast<double>(v.age + envelope_step);
     constexpr auto steps = static_cast<double>(envelope_step);
     std::array<double, max_layers> target{};
-    layer_weights(v, next, since + steps, target);
+    layer_weights(v, {next, since + steps}, target);
     for (std::uint32_t l = 0; l < max_layers; ++l) {
       v.weight_step[l] = (target[l] - v.weight[l]) / steps;
     }
@@ -797,11 +822,12 @@ private:
   // Reads `count` frames of a take into `left`/`right` (null: only moves on),
   // stepping by `steps` per frame. A looping take jumps back to its loop start
   // on the frame it reaches its loop end, whatever the pass.
-  void read(Reader& r, const double* steps, const double* peaks, std::size_t count, float* left,
-            float* right) noexcept {
+  void read(Reader& r, Speeds speeds, std::size_t count, Frames out) noexcept {
+    float* const left = out.left;
+    float* const right = out.right;
     double fastest = 0.0;
     for (std::size_t i = 0; i < count; ++i) {
-      fastest = std::max(fastest, steps[i]);
+      fastest = std::max(fastest, speeds.steps[i]);
     }
     double peak = -1.0;
     const SincTable* table = &tables_.front();
@@ -827,14 +853,14 @@ private:
           const double base = std::floor(r.position);
           const auto at = static_cast<std::size_t>(static_cast<std::int64_t>(base) - first) -
                           static_cast<std::size_t>(SincTable::left);
-          if (peaks[done + i] != peak) {
-            peak = peaks[done + i];
+          if (speeds.peaks[done + i] != peak) {
+            peak = speeds.peaks[done + i];
             table = &table_for(tables_, r.ratio * peak);
           }
           table->read(scratch_left_.data() + at, scratch_right_.data() + at, r.position - base,
                       left[done + i], right[done + i]);
         }
-        r.position += steps[done + i];
+        r.position += speeds.steps[done + i];
         ++i;
         if (r.looping && r.position >= static_cast<double>(r.loop_end)) {
           r.position -= loop_length;
@@ -886,8 +912,8 @@ private:
       }
       const bool heard = std::any_of(weights[l].begin(), weights[l].begin() + count,
                                      [](double w) { return w != 0.0; });
-      read(r, steps.data(), peaks.data(), count, heard ? left.data() : nullptr,
-           heard ? right.data() : nullptr);
+      read(r, {steps.data(), peaks.data()}, count,
+           heard ? Frames{left.data(), right.data()} : Frames{});
       if (heard) {
         for (std::size_t i = 0; i < count; ++i) {
           mix_left_[first + i] += weights[l][i] * left[i] * v.pan_left;

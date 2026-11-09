@@ -82,6 +82,7 @@ std::size_t at(std::string_view id) {
   return static_cast<std::size_t>(&parameter(id) - all.data());
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a parameter id, then one of its choices.
 double choice_of(std::string_view id, std::string_view name) {
   const auto& choices = parameter(id).choices;
   for (std::size_t i = 0; i < choices.size(); ++i) {
@@ -209,7 +210,13 @@ void a_missing_library_is_silent_then_plays_once_installed() {
   ::setenv(std::string(library::directory_variable).c_str(), nowhere.c_str(), 1);
   const auto first = library::status();
   REQUIRE_EQ(first.state, library::State::loading, "the first look reads in the background");
+  // A Bow made while the read runs says what it found once it ends.
+  auto early = make_runtime(bow::engine(), dry());
   library::wait();
+  (void)render(*early, {}, block);
+  REQUIRE_EQ(telemetry_of(*early)[bow::telemetry::library],
+             static_cast<float>(library::State::missing),
+             "a Bow made while loading reports the library missing");
   const auto status = library::status();
   REQUIRE_EQ(status.state, library::State::missing, "without the library Bow says why");
   REQUIRE_TRUE(!status.message.empty(), "without the library Bow says why");
@@ -548,7 +555,7 @@ std::vector<Event> phrase() {
 void humanise_is_seeded() {
   install();
   const auto frames = frames_of(3.0);
-  const auto played = [&](std::vector<double> v) {
+  const auto played = [&](const std::vector<double>& v) {
     auto runtime = make_runtime(bow::engine(), v);
     return render(*runtime, phrase(), frames);
   };

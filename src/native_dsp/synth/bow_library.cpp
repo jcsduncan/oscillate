@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <condition_variable>
 #include <cstdlib>
@@ -277,6 +278,18 @@ sample_stream::Registry& registry() {
 const Library* current() noexcept { return static_cast<const Library*>(registry().current()); }
 
 namespace {
+std::atomic<library::State> published{library::State::missing};
+} // namespace
+
+library::State published_state() noexcept { return published.load(std::memory_order_relaxed); }
+
+// Records the state a look found and returns it.
+library::Status publish(library::Status status) {
+  published.store(status.state, std::memory_order_relaxed);
+  return status;
+}
+
+namespace {
 
 // The first look's background read: the library is a few hundred
 // megabytes, so the panel and the first Bow never wait for it.
@@ -297,8 +310,10 @@ public:
     if (!started_) {
       started_ = true;
       running_ = true;
+      published.store(library::State::loading, std::memory_order_relaxed);
       thread_ = std::thread([this, directory] {
-        (void)registry().status(directory);
+        (void)publish(
+            sample_stream::status_as<Library, library::Status>(registry().status(directory)));
         {
           std::lock_guard done(mutex_);
           running_ = false;
@@ -339,7 +354,7 @@ std::filesystem::path default_directory() {
 
 Status status() {
   if (const auto* ready = detail::current(); ready != nullptr) {
-    return ready->status();
+    return detail::publish(ready->status());
   }
   const auto directory = default_directory();
   if (detail::loader().loading(directory)) {
@@ -348,11 +363,13 @@ Status status() {
     loading.directory = directory;
     return loading;
   }
-  return sample_stream::status_as<detail::Library, Status>(detail::registry().status(directory));
+  return detail::publish(
+      sample_stream::status_as<detail::Library, Status>(detail::registry().status(directory)));
 }
 
 Status load(const std::filesystem::path& directory) {
-  return sample_stream::status_as<detail::Library, Status>(detail::registry().load(directory));
+  return detail::publish(
+      sample_stream::status_as<detail::Library, Status>(detail::registry().load(directory)));
 }
 
 void wait() { detail::loader().wait(); }

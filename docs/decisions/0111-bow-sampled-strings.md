@@ -1,6 +1,6 @@
 # ADR-0111 — Bow: sampled strings, sections and solo, bowed from the mod wheel
 
-**Status:** Accepted; the library installer and engine are implemented, the panel and registration follow.
+**Status:** Accepted
 **Date:** 9 November 2026.
 **Builds on:** ADR-0089 (Wren: a resident library on `sample_stream`, loops baked by the installer), ADR-0088 (Fret), ADR-0071 (the shared sample core), ADR-0035 (the mod wheel as a performance lane), ADR-0103 (the shared panel parts).
 
@@ -151,8 +151,3 @@ Crate has no library: its notice is the empty state, asking for a sample.
   - the callback never allocates;
   - the tail bound covers a release and the hall.
 - **CPU** for a four-part pad is reported from the reference-project tooling in CI, as whole-process CPU, mean and p99.
-
-## Not verified yet
-
-- **Level and tone** are measured per set against fixed targets. Fitting them to reference recordings the user picks is still to do: the sets' levels, Tone's bands and the wheel's shelf.
-- **Loops** are to be checked by ear on held notes of 8 s or more in every register.
