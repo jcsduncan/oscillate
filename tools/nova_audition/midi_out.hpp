@@ -75,12 +75,11 @@ inline void write(const std::filesystem::path& path, std::string_view name, doub
     events.push_back({tick(note.beat + note.length), 1, {note_off, note.key, 0}});
   }
   for (const auto& change : controls)
-    events.push_back(
-        {tick(change.beat),
-         0,
-         {control, change.controller,
-          static_cast<std::uint8_t>(std::lround(std::clamp(change.value, 0.0, 1.0) *
-                                                controller_max))}});
+    events.push_back({tick(change.beat),
+                      0,
+                      {control, change.controller,
+                       static_cast<std::uint8_t>(
+                           std::lround(std::clamp(change.value, 0.0, 1.0) * controller_max))}});
   std::ranges::stable_sort(events, [](const Event& a, const Event& b) {
     return a.tick != b.tick ? a.tick < b.tick : a.order < b.order;
   });

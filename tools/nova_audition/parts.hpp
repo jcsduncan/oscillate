@@ -23,7 +23,17 @@ inline constexpr std::int64_t quarter = timeline::ticks_per_quarter;
 inline constexpr int beats_per_bar = 4;
 
 // C minor, with the B natural of Hijaz on G.
-enum class Pitch : std::uint8_t { c = 0, d = 2, eb = 3, f = 5, g = 7, ab = 8, a = 9, bb = 10, b = 11 };
+enum class Pitch : std::uint8_t {
+  c = 0,
+  d = 2,
+  eb = 3,
+  f = 5,
+  g = 7,
+  ab = 8,
+  a = 9,
+  bb = 10,
+  b = 11
+};
 inline constexpr int keys_per_octave = 12;
 inline constexpr int octave_of_key_zero = -1; // Key 60 is C4.
 constexpr std::uint8_t key(Pitch pitch, int octave) {
@@ -66,9 +76,9 @@ inline std::vector<Note> held_part() {
 inline std::vector<Note> low_part() {
   using P = Pitch;
   return {
-      {0.0, 15.5, key(P::c, 3), medium},  {6.5, 8.0, key(P::g, 3), soft},
-      {17.5, 7.0, key(P::ab, 2), medium}, {25.25, 5.25, key(P::g, 2), medium},
-      {31.0, 8.5, key(P::c, 3), medium},  {33.5, 5.0, key(P::g, 3), soft},
+      {0.0, 15.5, key(P::c, 3), medium},   {6.5, 8.0, key(P::g, 3), soft},
+      {17.5, 7.0, key(P::ab, 2), medium},  {25.25, 5.25, key(P::g, 2), medium},
+      {31.0, 8.5, key(P::c, 3), medium},   {33.5, 5.0, key(P::g, 3), soft},
       {40.75, 7.25, key(P::c, 3), medium},
   };
 }
@@ -93,8 +103,7 @@ inline constexpr int flute_octaves = 1;
 inline constexpr double pad_level = 0.5;
 
 inline const Pad ney_breath{"nova", "Ney Breath", "Ambient Wash", wet, held_part};
-inline const Pad two_flutes{"wren", "Two Flutes", "Endless Cloud", cloud, held_part,
-                            flute_octaves};
+inline const Pad two_flutes{"wren", "Two Flutes", "Endless Cloud", cloud, held_part, flute_octaves};
 inline const Pad warm_sub_bed{"nova", "Warm Sub Bed", "Dark Hall", wet, low_part};
 
 struct PadTrack {
@@ -122,13 +131,12 @@ inline PadTrack add_pad(application::ProjectSession& session, const Pad& pad, do
       pad.engine, audition::preset_index(audition::synth(pad.engine), pad.preset)));
   std::vector<project::MidiNote> notes;
   for (const auto& note : pad.part()) {
-    const double end = cut_beat ? std::min(note.beat + note.length, *cut_beat)
-                                : note.beat + note.length;
+    const double end =
+        cut_beat ? std::min(note.beat + note.length, *cut_beat) : note.beat + note.length;
     if (end <= note.beat)
       continue;
     const auto shifted = static_cast<std::uint8_t>(note.key + pad.octaves * keys_per_octave);
-    notes.push_back({placeholder_note(), {ticks(note.beat)}, {ticks(end)}, shifted,
-                     note.velocity});
+    notes.push_back({placeholder_note(), {ticks(note.beat)}, {ticks(end)}, shifted, note.velocity});
   }
   const auto clip = take(session.midi_clips().add_midi_clip_with_notes(
       track, {0}, {ticks(clip_beats)}, std::move(notes)));
@@ -166,8 +174,11 @@ inline project::ClipId add_clip(application::ProjectSession& session, project::T
   for (const auto& note : notes) {
     length = std::max(length, note.beat + note.length);
     const auto shifted = static_cast<std::uint8_t>(note.key + octaves * keys_per_octave);
-    placed.push_back({placeholder_note(), {ticks(note.beat)}, {ticks(note.beat + note.length)},
-                      shifted, note.velocity});
+    placed.push_back({placeholder_note(),
+                      {ticks(note.beat)},
+                      {ticks(note.beat + note.length)},
+                      shifted,
+                      note.velocity});
   }
   return audition::take(session.midi_clips().add_midi_clip_with_notes(
       track, {ticks(start)}, {ticks(length)}, std::move(placed)));
@@ -206,8 +217,8 @@ inline void add_picked_pads(application::ProjectSession& session, double beats) 
     std::vector<Note> again;
     for (const auto& note : pad->part())
       if (note.beat < rest)
-        again.push_back({note.beat, std::min(note.length, rest - note.beat), note.key,
-                         note.velocity});
+        again.push_back(
+            {note.beat, std::min(note.length, rest - note.beat), note.key, note.velocity});
     add_clip(session, placed.track, part_beats, again, pad->octaves, rest);
   }
 }

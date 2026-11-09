@@ -197,16 +197,16 @@ std::vector<Note> seven_beat_phrase() {
 std::vector<Note> low_octaves_high_line() {
   constexpr double held = 6.0;
   return {
-      {0.75, held, key(P::c, 1), 34},       {0.75, held, key(P::c, 2), 30},
-      {18.25, held, key(P::ab, 1), 32},     {18.25, held, key(P::eb, 2), 26},
-      {26.0, 4.5, key(P::g, 1), 30},        {26.0, 4.5, key(P::d, 2), 24},
-      {31.75, held, key(P::c, 1), 34},      {31.75, held, key(P::c, 2), 30},
-      {41.5, held, key(P::c, 1), 30},       {41.5, held, key(P::c, 2), 26},
-      {5.5, 1.5, key(P::g, 6), 42},         {9.0, 1.0, key(P::f, 6), 36},
-      {10.5, 2.5, key(P::eb, 6), 40},       {14.75, 1.5, key(P::d, 6), 34},
-      {21.0, 1.5, key(P::c, 7), 38},        {22.25, 2.0, key(P::g, 6), 44},
-      {28.5, 1.0, key(P::b, 6), 40},        {29.75, 1.5, key(P::g, 6), 34},
-      {36.5, 2.0, key(P::eb, 6), 42},       {38.25, 1.0, key(P::d, 6), 32},
+      {0.75, held, key(P::c, 1), 34},   {0.75, held, key(P::c, 2), 30},
+      {18.25, held, key(P::ab, 1), 32}, {18.25, held, key(P::eb, 2), 26},
+      {26.0, 4.5, key(P::g, 1), 30},    {26.0, 4.5, key(P::d, 2), 24},
+      {31.75, held, key(P::c, 1), 34},  {31.75, held, key(P::c, 2), 30},
+      {41.5, held, key(P::c, 1), 30},   {41.5, held, key(P::c, 2), 26},
+      {5.5, 1.5, key(P::g, 6), 42},     {9.0, 1.0, key(P::f, 6), 36},
+      {10.5, 2.5, key(P::eb, 6), 40},   {14.75, 1.5, key(P::d, 6), 34},
+      {21.0, 1.5, key(P::c, 7), 38},    {22.25, 2.0, key(P::g, 6), 44},
+      {28.5, 1.0, key(P::b, 6), 40},    {29.75, 1.5, key(P::g, 6), 34},
+      {36.5, 2.0, key(P::eb, 6), 42},   {38.25, 1.0, key(P::d, 6), 32},
       {45.0, 2.5, key(P::c, 7), 36},
   };
 }
@@ -214,13 +214,13 @@ std::vector<Note> low_octaves_high_line() {
 // A short falling answer a few beats after each pad phrase enters, never
 // the same rhythm twice.
 std::vector<Note> felt_answers() {
-  return {{4.5, 0.75, key(P::eb, 6), 50},  {5.25, 1.25, key(P::d, 6), 42},
-          {6.5, 2.0, key(P::c, 6), 38},    {13.0, 0.5, key(P::g, 5), 44},
-          {13.5, 2.5, key(P::c, 6), 52},   {21.25, 1.25, key(P::c, 6), 46},
-          {22.5, 2.0, key(P::g, 5), 36},   {28.5, 0.5, key(P::d, 6), 48},
-          {29.0, 1.25, key(P::b, 5), 42},  {30.25, 1.5, key(P::ab, 5), 36},
-          {35.0, 0.75, key(P::f, 6), 46},  {35.75, 2.5, key(P::eb, 6), 40},
-          {44.0, 1.5, key(P::g, 5), 38},   {45.5, 2.5, key(P::c, 6), 44}};
+  return {{4.5, 0.75, key(P::eb, 6), 50}, {5.25, 1.25, key(P::d, 6), 42},
+          {6.5, 2.0, key(P::c, 6), 38},   {13.0, 0.5, key(P::g, 5), 44},
+          {13.5, 2.5, key(P::c, 6), 52},  {21.25, 1.25, key(P::c, 6), 46},
+          {22.5, 2.0, key(P::g, 5), 36},  {28.5, 0.5, key(P::d, 6), 48},
+          {29.0, 1.25, key(P::b, 5), 42}, {30.25, 1.5, key(P::ab, 5), 36},
+          {35.0, 0.75, key(P::f, 6), 46}, {35.75, 2.5, key(P::eb, 6), 40},
+          {44.0, 1.5, key(P::g, 5), 38},  {45.5, 2.5, key(P::c, 6), 44}};
 }
 
 // A two-note cell every three beats from the off-beat, drifting against
@@ -360,19 +360,19 @@ std::vector<Note> call_and_response() {
 // and two notes to close.
 std::vector<Note> singles_grown() {
   return {
-      {3.25, 1.5, key(P::g, 5), 44},   {6.75, 2.0, key(P::eb, 6), 40},
-      {11.5, 1.0, key(P::d, 6), 50},   {13.25, 3.0, key(P::c, 6), 42},
-      {18.25, 1.0, key(P::c, 6), 46},  {19.25, 1.0, key(P::eb, 6), 48},
-      {20.5, 2.5, key(P::g, 6), 50},   {20.58, 2.4, key(P::eb, 6), 42},
-      {23.5, 1.5, key(P::f, 6), 42},   {26.25, 0.75, key(P::d, 6), 48},
-      {27.0, 2.0, key(P::b, 5), 44},   {27.08, 1.9, key(P::d, 6), 46},
-      {29.75, 1.0, key(P::g, 5), 40},  {32.0, 1.0, key(P::c, 6), 50},
-      {33.0, 1.0, key(P::d, 6), 52},   {34.0, 1.0, key(P::eb, 6), 54},
-      {35.25, 2.5, key(P::g, 6), 58},  {35.33, 2.4, key(P::eb, 6), 48},
-      {38.0, 1.5, key(P::c, 7), 62},   {39.75, 1.0, key(P::g, 6), 52},
-      {41.5, 2.0, key(P::eb, 6), 50},  {41.58, 1.9, key(P::c, 6), 44},
-      {44.0, 1.5, key(P::d, 6), 44},   {46.0, 2.0, key(P::c, 6), 40},
-      {50.0, 2.5, key(P::g, 5), 36},   {55.5, 3.0, key(P::eb, 6), 30},
+      {3.25, 1.5, key(P::g, 5), 44},  {6.75, 2.0, key(P::eb, 6), 40},
+      {11.5, 1.0, key(P::d, 6), 50},  {13.25, 3.0, key(P::c, 6), 42},
+      {18.25, 1.0, key(P::c, 6), 46}, {19.25, 1.0, key(P::eb, 6), 48},
+      {20.5, 2.5, key(P::g, 6), 50},  {20.58, 2.4, key(P::eb, 6), 42},
+      {23.5, 1.5, key(P::f, 6), 42},  {26.25, 0.75, key(P::d, 6), 48},
+      {27.0, 2.0, key(P::b, 5), 44},  {27.08, 1.9, key(P::d, 6), 46},
+      {29.75, 1.0, key(P::g, 5), 40}, {32.0, 1.0, key(P::c, 6), 50},
+      {33.0, 1.0, key(P::d, 6), 52},  {34.0, 1.0, key(P::eb, 6), 54},
+      {35.25, 2.5, key(P::g, 6), 58}, {35.33, 2.4, key(P::eb, 6), 48},
+      {38.0, 1.5, key(P::c, 7), 62},  {39.75, 1.0, key(P::g, 6), 52},
+      {41.5, 2.0, key(P::eb, 6), 50}, {41.58, 1.9, key(P::c, 6), 44},
+      {44.0, 1.5, key(P::d, 6), 44},  {46.0, 2.0, key(P::c, 6), 40},
+      {50.0, 2.5, key(P::g, 5), 36},  {55.5, 3.0, key(P::eb, 6), 30},
       {55.58, 2.9, key(P::c, 6), 26},
   };
 }
@@ -428,8 +428,8 @@ std::vector<Note> cell_with_harmony() {
         static_cast<std::uint8_t>(velocities[index % velocities.size()] + (peak ? 8 : 0));
     const bool falling = start >= fall_from;
     notes.push_back({start, length, falling ? high : low, velocity});
-    notes.push_back({start + gap, length, falling ? low : high,
-                     static_cast<std::uint8_t>(velocity - 8)});
+    notes.push_back(
+        {start + gap, length, falling ? low : high, static_cast<std::uint8_t>(velocity - 8)});
     if (start >= third_from && start < fall_from)
       notes.push_back({start + 2 * gap, length, top, static_cast<std::uint8_t>(velocity - 4)});
   }
@@ -481,9 +481,7 @@ std::vector<Note> chorale() {
       return last ? last_length : chords[i + 1].at + after - (chord.at + after) - breath;
     };
     // A voice that keeps its note across the change holds instead of striking again.
-    const auto held = [&](std::uint8_t k, auto pick) {
-      return i > 0 && pick(chords[i - 1]) == k;
-    };
+    const auto held = [&](std::uint8_t k, auto pick) { return i > 0 && pick(chords[i - 1]) == k; };
     if (!held(chord.top, [](const Chord& c) { return c.top; }))
       notes.push_back({chord.at + top_after, until(top_after), chord.top, chord.velocity});
     if (!held(chord.middle, [](const Chord& c) { return c.middle; }))

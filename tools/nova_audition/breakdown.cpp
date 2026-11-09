@@ -28,14 +28,14 @@ using audition::done;
 using audition::fail;
 using audition::preset_index;
 using audition::take;
-using parts::beats_per_bar;
 using parts::add_clip;
 using parts::add_effect;
 using parts::add_track;
+using parts::beats_per_bar;
 using parts::key;
-using parts::set_effect_value;
 using parts::keys_per_octave;
 using parts::Note;
+using parts::set_effect_value;
 using parts::ticks;
 using P = parts::Pitch;
 
@@ -113,8 +113,7 @@ struct Point {
 void automate(Session& session, project::TrackId track, const project::AutomationTarget& target,
               const std::vector<Point>& points) {
   for (const auto& point : points)
-    take(session.automation().add_automation_point(track, target, ticks(point.beat),
-                                                   point.value));
+    take(session.automation().add_automation_point(track, target, ticks(point.beat), point.value));
 }
 
 project::AutomationTarget level_of(project::TrackId track) {
@@ -130,7 +129,7 @@ project::AutomationTarget effect_parameter(project::InsertSlotId slot, std::stri
 // The roots in the bass's octave, two bars each: C, A♭, E♭, B♭.
 const std::array<std::uint8_t, 4>& roots() {
   static const std::array<std::uint8_t, 4> list{key(P::c, 2), key(P::ab, 1), key(P::eb, 2),
-                                                 key(P::bb, 1)};
+                                                key(P::bb, 1)};
   return list;
 }
 
@@ -201,8 +200,7 @@ void riser_build(Session& session, const Pads& pads) {
   }
   const auto riser = add_track(session, nova, riser_preset, riser_level);
   set_synth_value(session, riser, nova, "nova.lfo.1.sync", lfo_two_bars);
-  add_clip(session, riser, build_start,
-           {{0.0, build_bars * beats_per_bar, key(P::c, 4), strong}});
+  add_clip(session, riser, build_start, {{0.0, build_bars * beats_per_bar, key(P::c, 4), strong}});
 }
 
 // The pads come back on C minor and swell as if reversed, washing fully
@@ -249,8 +247,7 @@ void swell_build(Session& session, const Pads& pads) {
     at.push_back(b);
   for (double b = beats_per_bar; b < beats_per_bar + 2; b += sixteenth)
     at.push_back(b);
-  for (double b = beats_per_bar + 2; b < build_bars * beats_per_bar - sixteenth;
-       b += thirty_second)
+  for (double b = beats_per_bar + 2; b < build_bars * beats_per_bar - sixteenth; b += thirty_second)
     at.push_back(b);
   std::vector<Note> roll;
   const double span = build_bars * beats_per_bar;
@@ -285,7 +282,6 @@ void hit_rolling(Session& session) {
   add_pump(session, track, bass_duck);
   add_clip(session, track, hit_start, rolling_bass());
 }
-
 
 const std::vector<Candidate>& candidates() {
   static const std::vector<Candidate> list{

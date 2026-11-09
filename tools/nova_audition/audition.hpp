@@ -46,8 +46,7 @@ public:
   }
 };
 
-inline std::size_t preset_index(const native_dsp::EngineDescriptor& engine,
-                                std::string_view name) {
+inline std::size_t preset_index(const native_dsp::EngineDescriptor& engine, std::string_view name) {
   for (std::size_t i = 0; i < engine.presets.size(); ++i)
     if (engine.presets[i].name == name)
       return i;

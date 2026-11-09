@@ -17,8 +17,8 @@
 #include "audition.hpp"
 #include "breakdown.hpp"
 #include "keys.hpp"
-#include "strings.hpp"
 #include "pads.hpp"
+#include "strings.hpp"
 
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"

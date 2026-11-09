@@ -139,7 +139,7 @@ constexpr double soft_tasto = 0.3;
 // Hijaz step; it resolves up to C.
 std::vector<Part> sul_tasto_voicings() {
   const std::vector<Note> violins{
-      {2.5, 13.5, key(P::g, 5), 40},  {19.0, 3.0, key(P::g, 5), 44},
+      {2.5, 13.5, key(P::g, 5), 40},   {19.0, 3.0, key(P::g, 5), 44},
       {22.0, 3.25, key(P::ab, 5), 46}, {26.0, 4.75, key(P::b, 5), 48},
       {32.0, 6.25, key(P::c, 6), 52},  {38.5, 2.0, key(P::d, 6), 50},
       {42.0, 5.5, key(P::c, 6), 46},   {50.5, 9.5, key(P::g, 5), 38},
@@ -160,8 +160,8 @@ std::vector<Part> sul_tasto_voicings() {
   const Values tasto{{"bow.tone", sul_tasto}};
   return {
       {"Violins I", "Sul Tasto Pad",
-       Values{{"bow.section", section(bow::Section::violins_1)}, {"bow.tone", sul_tasto}},
-       violins, breathe(violins, low, 0.5), 0.8},
+       Values{{"bow.section", section(bow::Section::violins_1)}, {"bow.tone", sul_tasto}}, violins,
+       breathe(violins, low, 0.5), 0.8},
       {"Violas", "Sul Tasto Pad", tasto, violas, breathe(violas, low, 0.45), 1.0},
       {"Cellos", "Sul Tasto Pad",
        Values{{"bow.section", section(bow::Section::cellos)}, {"bow.tone", sul_tasto}}, cellos,
@@ -206,11 +206,13 @@ std::vector<Part> hijaz_canon() {
     cello_peaks.push_back(peak - cello_trim);
   return {
       {"Violas", "Ensemble Legato",
-       Values{{"bow.section", section(bow::Section::violas)}, {"bow.players", 8.0},
+       Values{{"bow.section", section(bow::Section::violas)},
+              {"bow.players", 8.0},
               {"bow.tone", soft_tasto}},
        violas, phrase_arcs(violas, low, peaks), 1.0},
       {"Cellos", "Ensemble Legato",
-       Values{{"bow.section", section(bow::Section::cellos)}, {"bow.players", 6.0},
+       Values{{"bow.section", section(bow::Section::cellos)},
+              {"bow.players", 6.0},
               {"bow.tone", soft_tasto}},
        cellos, phrase_arcs(cellos, low, cello_peaks), 0.85},
   };
@@ -263,10 +265,10 @@ std::vector<Part> pizzicato_three_four() {
   // MIDI, gently.
   const std::vector<Point> wheel{{0.0, 0.4}, {36.0, 0.6}, {part_beats, 0.35}};
   return {
-      {"Cellos", "Pizzicato Ostinato",
-       Values{{"bow.section", section(bow::Section::cellos)}}, cellos, wheel, 1.0},
-      {"Basses", "Pizzicato Ostinato",
-       Values{{"bow.section", section(bow::Section::basses)}}, basses, wheel, 0.8},
+      {"Cellos", "Pizzicato Ostinato", Values{{"bow.section", section(bow::Section::cellos)}},
+       cellos, wheel, 1.0},
+      {"Basses", "Pizzicato Ostinato", Values{{"bow.section", section(bow::Section::basses)}},
+       basses, wheel, 0.8},
   };
 }
 
@@ -278,11 +280,15 @@ std::vector<Part> tremolo_rise() {
   const auto ks_legato = keyswitch(bow::Articulation::legato);
   const auto ks_tremolo = keyswitch(bow::Articulation::tremolo);
   const std::vector<Note> first{
-      {0.0, keyswitch_length, ks_legato, 64},     {6.0, 10.0, key(P::g, 5), 36},
-      {22.0, 8.0, key(P::ab, 5), 38},            {33.0, 10.0, key(P::c, 6), 40},
+      {0.0, keyswitch_length, ks_legato, 64},
+      {6.0, 10.0, key(P::g, 5), 36},
+      {22.0, 8.0, key(P::ab, 5), 38},
+      {33.0, 10.0, key(P::c, 6), 40},
       {rise_at - keyswitch_lead, keyswitch_length, ks_tremolo, 64},
-      {rise_at, 4.0, key(P::g, 5), 44},           {52.0, 4.0, key(P::ab, 5), 48},
-      {56.0, 4.0, key(P::b, 5), 52},              {60.0, 4.0, key(P::c, 6), 56},
+      {rise_at, 4.0, key(P::g, 5), 44},
+      {52.0, 4.0, key(P::ab, 5), 48},
+      {56.0, 4.0, key(P::b, 5), 52},
+      {60.0, 4.0, key(P::c, 6), 56},
   };
   const std::vector<Note> second{
       {0.0, keyswitch_length, ks_legato, 64},
@@ -323,21 +329,16 @@ std::vector<Part> tremolo_rise() {
 // back through B and A♭, and a last phrase settling on C.
 std::vector<Part> solo_cello() {
   const std::vector<Note> line{
-      {3.0, 1.5, key(P::g, 3), 50},   {4.5, 1.0, key(P::c, 4), 54},
-      {5.5, 0.5, key(P::d, 4), 52},   {6.0, 3.0, key(P::eb, 4), 58},
-      {9.0, 1.0, key(P::d, 4), 52},   {10.0, 3.5, key(P::c, 4), 50},
-      {17.0, 1.0, key(P::eb, 4), 54}, {18.0, 1.0, key(P::f, 4), 56},
-      {19.0, 2.5, key(P::g, 4), 60},  {21.5, 1.0, key(P::f, 4), 54},
-      {22.5, 2.5, key(P::eb, 4), 52}, {26.0, 1.0, key(P::d, 4), 56},
-      {27.0, 0.5, key(P::eb, 4), 52}, {27.5, 0.5, key(P::d, 4), 50},
-      {28.0, 1.0, key(P::b, 3), 56},  {29.0, 0.5, key(P::ab, 3), 50},
-      {29.5, 2.5, key(P::b, 3), 54},  {33.5, 1.0, key(P::c, 4), 58},
-      {34.5, 1.0, key(P::eb, 4), 62}, {35.5, 1.0, key(P::g, 4), 66},
-      {36.5, 3.0, key(P::c, 5), 72},  {39.5, 1.0, key(P::b, 4), 64},
-      {40.5, 1.0, key(P::ab, 4), 60}, {41.5, 3.0, key(P::g, 4), 58},
-      {46.0, 1.0, key(P::f, 4), 52},  {47.0, 1.0, key(P::eb, 4), 50},
-      {48.0, 2.0, key(P::d, 4), 50},  {50.0, 4.0, key(P::c, 4), 46},
-      {57.0, 1.5, key(P::eb, 4), 42}, {58.5, 4.5, key(P::c, 4), 38},
+      {3.0, 1.5, key(P::g, 3), 50},   {4.5, 1.0, key(P::c, 4), 54},   {5.5, 0.5, key(P::d, 4), 52},
+      {6.0, 3.0, key(P::eb, 4), 58},  {9.0, 1.0, key(P::d, 4), 52},   {10.0, 3.5, key(P::c, 4), 50},
+      {17.0, 1.0, key(P::eb, 4), 54}, {18.0, 1.0, key(P::f, 4), 56},  {19.0, 2.5, key(P::g, 4), 60},
+      {21.5, 1.0, key(P::f, 4), 54},  {22.5, 2.5, key(P::eb, 4), 52}, {26.0, 1.0, key(P::d, 4), 56},
+      {27.0, 0.5, key(P::eb, 4), 52}, {27.5, 0.5, key(P::d, 4), 50},  {28.0, 1.0, key(P::b, 3), 56},
+      {29.0, 0.5, key(P::ab, 3), 50}, {29.5, 2.5, key(P::b, 3), 54},  {33.5, 1.0, key(P::c, 4), 58},
+      {34.5, 1.0, key(P::eb, 4), 62}, {35.5, 1.0, key(P::g, 4), 66},  {36.5, 3.0, key(P::c, 5), 72},
+      {39.5, 1.0, key(P::b, 4), 64},  {40.5, 1.0, key(P::ab, 4), 60}, {41.5, 3.0, key(P::g, 4), 58},
+      {46.0, 1.0, key(P::f, 4), 52},  {47.0, 1.0, key(P::eb, 4), 50}, {48.0, 2.0, key(P::d, 4), 50},
+      {50.0, 4.0, key(P::c, 4), 46},  {57.0, 1.5, key(P::eb, 4), 42}, {58.5, 4.5, key(P::c, 4), 38},
   };
   const std::vector<double> peaks{0.55, 0.6, 0.58, 0.8, 0.5, 0.4};
   return {{"Solo Cello", "Solo Cello", Values{}, line, phrase_arcs(line, 0.22, peaks), 1.0}};
@@ -394,7 +395,8 @@ void add_part(Session& session, const Clip& clip, const Part& part) {
   const auto gain = parts::add_effect(session, track, trim, trim_unity);
   parts::set_effect_value(session, track, gain, trim, "trim.gain", trimmed);
   parts::add_clip(session, track, 0.0, part.notes, 0, part_beats);
-  const project::AutomationTarget wheel = project::NativeParameterTarget{track, std::string(wheel_id)};
+  const project::AutomationTarget wheel =
+      project::NativeParameterTarget{track, std::string(wheel_id)};
   for (const auto& point : part.wheel)
     take(session.automation().add_automation_point(track, wheel, ticks(point.beat), point.value));
 }
