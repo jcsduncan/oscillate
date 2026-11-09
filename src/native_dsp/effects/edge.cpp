@@ -26,6 +26,7 @@ using native_dsp::dsp::gain_to_db;
 namespace p {
 constexpr std::size_t input = index_of("edge.input");
 constexpr std::size_t shape = index_of("edge.shape");
+constexpr std::size_t ceiling = index_of("edge.ceiling");
 constexpr std::size_t output = index_of("edge.output");
 constexpr std::size_t oversampling = index_of("edge.oversampling");
 constexpr std::size_t filters = index_of("edge.filters");
@@ -101,6 +102,7 @@ public:
     input_.settle(dsp::db_to_gain(v[p::input]), steps, jump);
     output_.settle(dsp::db_to_gain(v[p::output]), steps, jump);
     knee_.settle(edge_dsp::max_knee * v[p::shape], steps, jump);
+    ceiling_.settle(dsp::db_to_gain(v[p::ceiling]), steps, jump);
     link_.to(v[p::link] != 0.0, jump);
     delta_.to(v[p::delta] != 0.0, jump);
     compare_.to(v[p::compare] != 0.0, jump);
@@ -126,17 +128,24 @@ public:
       const double input_gain = input_.next();
       const double output_gain = output_.next();
       const Curve curve = Curve::with_knee(knee_.next());
+      const double ceiling = ceiling_.next();
       const std::array<double, 2> driven{raw[0] * input_gain, raw[1] * input_gain};
       meter_input(driven);
 
+      // The clipper and the guard work under a ceiling of 1: the driven
+      // input is scaled by the ceiling on the way in and back on the way out.
       std::array<double, 2> y{};
-      block_ratio = std::max(block_ratio, clip(driven, curve, y));
+      block_ratio =
+          std::max(block_ratio, clip({driven[0] / ceiling, driven[1] / ceiling}, curve, y));
       block_guard = std::min(block_guard, guard_.process(y[0], y[1]));
 
-      // The input, aligned with the output: raw for Compare, driven for Delta.
-      aligned_[aligned_position_] = {raw, driven};
+      // The input, aligned with the output: raw for Compare, driven for
+      // Delta, and the ceiling it went in under.
+      aligned_[aligned_position_] = {raw, driven, ceiling};
       aligned_position_ = (aligned_position_ + 1) % aligned_.size();
       const Aligned& dry = aligned_[aligned_position_];
+      y[0] *= dry.ceiling;
+      y[1] *= dry.ceiling;
 
       const std::array<double, 2> out{y[0] * output_gain, y[1] * output_gain};
       meter_output(out);
@@ -192,7 +201,9 @@ public:
     }
     out[telemetry::clipped] = static_cast<float>(clipped_);
     out[telemetry::dot_input] = reading(dot_);
-    out[telemetry::dot_output] = reading(Curve::with_knee(knee_.value).magnitude(dot_));
+    const double ceiling = ceiling_.value;
+    out[telemetry::dot_output] =
+        reading(ceiling * Curve::with_knee(knee_.value).magnitude(dot_ / ceiling));
     out[telemetry::latency_ms] =
         static_cast<float>(static_cast<double>(latency_) / rate_ * milliseconds_per_second);
     out[telemetry::factor] = static_cast<float>(design_.factor);
@@ -211,6 +222,7 @@ private:
   struct Aligned {
     std::array<double, 2> raw{};
     std::array<double, 2> driven{};
+    double ceiling = 1.0;
   };
 
   // Clips one frame through the oversampler into `y`; returns how far the
@@ -346,6 +358,7 @@ private:
   dsp::Ramp input_;
   dsp::Ramp output_;
   dsp::Ramp knee_;
+  dsp::Ramp ceiling_;
   Toggle link_;
   Toggle delta_;
   Toggle compare_;
@@ -396,8 +409,12 @@ const EffectEngine edge_engine{&descriptor, &create_kernel, &tail_frames, &engin
 
 } // namespace
 
-double clip(double x, double shape) noexcept {
-  return Curve::with_knee(edge_dsp::max_knee * std::clamp(shape, 0.0, 1.0))(x);
+double clip(double x, double shape, double ceiling_db) noexcept {
+  const auto& range = edge_table::parameters[p::ceiling];
+  const double ceiling = dsp::db_to_gain(std::isfinite(ceiling_db)
+                                             ? std::clamp(ceiling_db, range.minimum, range.maximum)
+                                             : range.default_value);
+  return ceiling * Curve::with_knee(edge_dsp::max_knee * std::clamp(shape, 0.0, 1.0))(x / ceiling);
 }
 
 std::uint32_t latency_frames(std::size_t oversampling, std::size_t filters, double sample_rate) {

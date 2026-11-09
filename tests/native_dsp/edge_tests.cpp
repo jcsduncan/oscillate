@@ -28,9 +28,10 @@ namespace tolerance = oscillate::test::tolerance;
 using oscillate::test::counted_allocations;
 using oscillate::test::counting_allocations;
 
-// Edge (ADR-0108) against measured oracles: a hard clip at shape 0, no
-// aliasing above -100 dBFS at 16x, a true peak never over 0 dBTP, a delta
-// that nulls with the output against the aligned input, the reported
+// Edge (ADR-0108, ADR-0113) against measured oracles: a hard clip at the
+// ceiling at shape 0, no aliasing above -100 dBFS at 16x, a true peak never
+// over the ceiling, a delta that nulls with the output against the aligned
+// input at any ceiling, the reported
 // latency, stereo link, the level-matched compare, block splits, export
 // against live, hostile input, restrained presets, an allocation-free
 // callback and the panel's telemetry.
@@ -57,6 +58,11 @@ constexpr double one_second = rate;
 constexpr double half_second = rate / 2.0;
 constexpr double seconds_per_minute = 60.0;
 constexpr double ceiling = 1.0; // 0 dBTP
+// Lowered ceilings across edge.ceiling's range (-12 to 0 dBFS).
+constexpr double lowest_ceiling_db = -12.0;
+constexpr double low_ceiling_db = -6.0;
+constexpr double near_ceiling_db = -1.0;
+constexpr std::array lowered_ceilings_db{lowest_ceiling_db, low_ceiling_db, near_ceiling_db};
 const double twelve_db_over = oscillate::native_dsp::dsp::db_to_gain(12.0);
 constexpr double alias_floor_db = -100.0;
 // A tone well inside every filter's passband.
@@ -70,6 +76,13 @@ constexpr double knee_at_one = 0.6;
 constexpr double mid_shape = 0.5;
 
 std::vector<double> defaults() { return preset(table(), "Default"); }
+
+double gain(double decibels) { return oscillate::native_dsp::dsp::db_to_gain(decibels); }
+
+std::vector<double> under(std::vector<double> values, double ceiling_db) {
+  values[at("edge.ceiling")] = ceiling_db;
+  return values;
+}
 
 // Called with the named factor and filter indices below.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
@@ -165,7 +178,14 @@ double true_peak(const Stereo& s) {
 void descriptor_registry_and_presets() {
   REQUIRE_EQ(effects::find_engine("edge"), &engine(), "Edge is registered");
   require(!engine().sidechain && !engine().generator, "Edge is a plain insert");
-  REQUIRE_EQ(table().parameters.size(), 9, "the table's size");
+  REQUIRE_EQ(table().parameters.size(), 10, "the table's size");
+  REQUIRE_EQ(table().parameters[at("edge.ceiling")].default_value, 0.0, "the ceiling is 0 dBFS");
+  REQUIRE_EQ(table().parameters[at("edge.ceiling")].minimum, lowest_ceiling_db, "down to -12");
+  for (const auto& p : table().presets) {
+    for (const auto& [id, value] : p.values) {
+      require(id != "edge.ceiling", "presets stay at 0 dBFS: " + std::string(p.name));
+    }
+  }
   REQUIRE_EQ(table().presets.size(), 5, "Default and four presets");
   for (const auto* name : {"Default", "Kick Punch", "Drum Bus", "808", "Master"}) {
     const auto out = render(preset(table(), name), noise(0.5, 9'600));
@@ -190,39 +210,53 @@ void shape_zero_is_a_hard_clip() {
   constexpr double shape_step = 1.0 / shapes;
   for (std::size_t i = 0; i < points; ++i) {
     const double x = -span + 2.0 * span * static_cast<double>(i) / (points - 1);
-    REQUIRE_EQ(edge::clip(x, 0.0), std::clamp(x, -ceiling, ceiling), "shape 0 is a clamp");
+    REQUIRE_EQ(edge::clip(x, 0.0, 0.0), std::clamp(x, -ceiling, ceiling), "shape 0 is a clamp");
+    for (const double ceiling_db : lowered_ceilings_db) {
+      const double c = gain(ceiling_db);
+      REQUIRE_LT(std::fabs(edge::clip(x, 0.0, ceiling_db) - std::clamp(x, -c, c)),
+                 tolerance::double_rounding, "shape 0 is a clamp at the ceiling");
+    }
   }
   for (std::size_t s = 0; s <= shapes; ++s) {
     const double shape = static_cast<double>(s) * shape_step;
     double previous = -ceiling;
     for (std::size_t i = 0; i < points; ++i) {
       const double x = -span + 2.0 * span * static_cast<double>(i) / (points - 1);
-      const double y = edge::clip(x, shape);
+      const double y = edge::clip(x, shape, 0.0);
       REQUIRE_LE(std::fabs(y), ceiling, "under the ceiling");
       REQUIRE_GE(y, previous, "monotonic");
-      REQUIRE_EQ(edge::clip(-x, shape), -y, "odd");
+      REQUIRE_EQ(edge::clip(-x, shape, 0.0), -y, "odd");
+      REQUIRE_LE(std::fabs(edge::clip(x, shape, low_ceiling_db)),
+                 gain(low_ceiling_db) + tolerance::double_rounding, "under a lowered ceiling");
       previous = y;
     }
   }
   constexpr double under_knee = 1.0 - knee_at_one;
-  REQUIRE_EQ(edge::clip(under_knee, 1.0), under_knee, "linear up to the knee");
-  REQUIRE_LT(edge::clip(under_knee + shape_step, 1.0), under_knee + shape_step, "then rounded");
+  REQUIRE_EQ(edge::clip(under_knee, 1.0, 0.0), under_knee, "linear up to the knee");
+  REQUIRE_LT(edge::clip(under_knee + shape_step, 1.0, 0.0), under_knee + shape_step,
+             "then rounded");
 
+  // Through the kernel, a sine 6 dB over each ceiling.
   constexpr double six_db_over = 2.0;
   constexpr double least_guard_gain = 0.9;
-  const auto input = sine(tone_hz, six_db_over, static_cast<std::size_t>(one_second));
-  const auto v = with(x1, linear_phase, 0.0);
-  const auto out = render(v, input);
-  const auto latency = engine().latency_frames(v, rate);
-  const auto settled = static_cast<std::size_t>(half_second);
-  const double gain = peak(out.left, settled) / ceiling;
-  REQUIRE_GT(gain, least_guard_gain, "the guard's steady gain");
-  double worst = 0.0;
-  for (std::size_t i = settled; i < out.size(); ++i) {
-    const double expected = gain * std::clamp(input.left[i - latency], -ceiling, ceiling);
-    worst = std::max(worst, std::fabs(out.left[i] - expected));
+  for (const double ceiling_db : {0.0, low_ceiling_db, lowest_ceiling_db}) {
+    const double c = gain(ceiling_db);
+    const auto input = sine(tone_hz, six_db_over * c, static_cast<std::size_t>(one_second));
+    const auto v = under(with(x1, linear_phase, 0.0), ceiling_db);
+    const auto out = render(v, input);
+    const auto latency = engine().latency_frames(v, rate);
+    const auto settled = static_cast<std::size_t>(half_second);
+    const double guard = peak(out.left, settled) / c;
+    REQUIRE_GT(guard, least_guard_gain, "the guard's steady gain");
+    REQUIRE_LE(guard, 1.0, "at or under the ceiling");
+    double worst = 0.0;
+    for (std::size_t i = settled; i < out.size(); ++i) {
+      const double expected = guard * std::clamp(input.left[i - latency], -c, c);
+      worst = std::max(worst, std::fabs(out.left[i] - expected));
+    }
+    REQUIRE_LT(worst, tolerance::float_processing,
+               "a hard clip at " + std::to_string(ceiling_db) + " dB: " + std::to_string(worst));
   }
-  REQUIRE_LT(worst, tolerance::float_processing, "a hard clip: " + std::to_string(worst));
 }
 
 // The largest spectral line from 20 Hz to 20 kHz away from `hz`, in dBFS,
@@ -289,31 +323,67 @@ void true_peak_never_exceeds_0_dbtp() {
   }
 }
 
+// Under a lowered ceiling the true peak stays at or under it, and the
+// output meter reads it there.
+void true_peak_never_exceeds_a_lowered_ceiling() {
+  constexpr std::size_t frames = 24'000;
+  // Sources 12 dB over reach the ceiling: the guard leaves them this close.
+  constexpr double reaches_db = 1.0;
+  const std::array<Stereo, 3> sources{scaled(noise(1.0, frames), twelve_db_over),
+                                      kicks(frames, twelve_db_over),
+                                      sine(10'000.0, twelve_db_over, frames)};
+  for (const double ceiling_db : lowered_ceilings_db) {
+    for (const std::size_t o : {x1, x16}) {
+      for (std::size_t f = 0; f < filter_count; ++f) {
+        for (const double shape : {0.0, 1.0}) {
+          const auto v = under(with(o, f, shape), ceiling_db);
+          for (const auto& source : sources) {
+            auto runtime = make_effect(engine(), v, rate);
+            const auto out = process(*runtime, then_silence(source, v));
+            const double tp = true_peak(out);
+            REQUIRE_LE(tp, gain(ceiling_db),
+                       "true peak at or under " + std::to_string(ceiling_db) + " dBTP: factor " +
+                           std::to_string(edge::factors[o]) + ", filters " + std::to_string(f) +
+                           ": " + std::to_string(db(tp)));
+            REQUIRE_GT(tp, gain(ceiling_db - reaches_db), "and reaches it");
+            std::vector<float> frame;
+            REQUIRE_TRUE(runtime->read_telemetry(frame), "a telemetry frame");
+            REQUIRE_LE(frame[edge::telemetry::output_peak], static_cast<float>(ceiling_db),
+                       "the output meter reads under the ceiling");
+          }
+        }
+      }
+    }
+  }
+}
+
 // Delta is the driven input, delayed by the latency, less the output, both
 // after Output gain: output + delta is the input times both gains.
 void delta_nulls_with_the_output() {
   constexpr double input_db = 6.0;
   constexpr double output_db = -3.0;
   const auto input = kit(static_cast<std::size_t>(one_second), 1.0);
-  for (std::size_t o = 0; o < factor_count; ++o) {
-    auto v = with(o, linear_phase, mid_shape);
-    v[at("edge.input")] = input_db;
-    v[at("edge.output")] = output_db;
-    const auto out = render(v, input);
-    v[at("edge.delta")] = 1.0;
-    const auto removed = render(v, input);
-    const auto latency = engine().latency_frames(v, rate);
-    const double gain = oscillate::native_dsp::dsp::db_to_gain(input_db + output_db);
-    double worst = 0.0;
-    for (std::size_t i = latency; i < input.size(); ++i) {
-      for (const auto channel : {&Stereo::left, &Stereo::right}) {
-        const double sum = (out.*channel)[i] + (removed.*channel)[i];
-        worst = std::max(worst, std::fabs(sum - gain * (input.*channel)[i - latency]));
+  for (const double ceiling_db : {0.0, low_ceiling_db}) {
+    for (std::size_t o = 0; o < factor_count; ++o) {
+      auto v = under(with(o, linear_phase, mid_shape), ceiling_db);
+      v[at("edge.input")] = input_db;
+      v[at("edge.output")] = output_db;
+      const auto out = render(v, input);
+      v[at("edge.delta")] = 1.0;
+      const auto removed = render(v, input);
+      const auto latency = engine().latency_frames(v, rate);
+      const double both = gain(input_db + output_db);
+      double worst = 0.0;
+      for (std::size_t i = latency; i < input.size(); ++i) {
+        for (const auto channel : {&Stereo::left, &Stereo::right}) {
+          const double sum = (out.*channel)[i] + (removed.*channel)[i];
+          worst = std::max(worst, std::fabs(sum - both * (input.*channel)[i - latency]));
+        }
       }
+      REQUIRE_LT(worst, tolerance::float_processing,
+                 "output + delta = the aligned input: " + std::to_string(worst));
+      REQUIRE_GT(peak(removed.left), tolerance::coarse, "and the clipper removed something");
     }
-    REQUIRE_LT(worst, tolerance::float_processing,
-               "output + delta = the aligned input: " + std::to_string(worst));
-    REQUIRE_GT(peak(removed.left), tolerance::coarse, "and the clipper removed something");
   }
 }
 
@@ -412,13 +482,15 @@ void any_block_split_renders_the_same() {
   constexpr double hot = 2.0;
   const auto input = kit(20'000, hot);
   for (const auto* name : {"Default", "Kick Punch", "808", "Master"}) {
-    auto v = preset(table(), name);
-    v[at("edge.link")] = 0.0;
-    const auto a = render(v, input, 128);
-    const auto b = render(v, input, 0);
-    for (std::size_t i = 0; i < input.size(); ++i) {
-      require(a.left[i] == b.left[i] && a.right[i] == b.right[i],
-              std::string(name) + ": the split changed frame " + std::to_string(i));
+    for (const double ceiling_db : {0.0, low_ceiling_db}) {
+      auto v = under(preset(table(), name), ceiling_db);
+      v[at("edge.link")] = 0.0;
+      const auto a = render(v, input, 128);
+      const auto b = render(v, input, 0);
+      for (std::size_t i = 0; i < input.size(); ++i) {
+        require(a.left[i] == b.left[i] && a.right[i] == b.right[i],
+                std::string(name) + ": the split changed frame " + std::to_string(i));
+      }
     }
   }
 }
@@ -431,14 +503,16 @@ void export_equals_live() {
   constexpr double hot = 2.0;
   const auto input = kit(static_cast<std::size_t>(one_second), hot);
   for (const auto* name : {"Kick Punch", "Drum Bus", "808", "Master"}) {
-    const auto v = preset(table(), name);
-    auto live = make_effect(engine(), v, rate);
-    const auto played = process(*live, input, {.block = 128, .bpm = live_bpm});
-    auto offline = make_effect(engine(), v, rate);
-    const auto exported =
-        process(*offline, input, {.block = export_block, .generation = 2, .bpm = 0.0});
-    require(played.left == exported.left && played.right == exported.right,
-            std::string(name) + ": export equals live");
+    for (const double ceiling_db : {0.0, near_ceiling_db}) {
+      const auto v = under(preset(table(), name), ceiling_db);
+      auto live = make_effect(engine(), v, rate);
+      const auto played = process(*live, input, {.block = 128, .bpm = live_bpm});
+      auto offline = make_effect(engine(), v, rate);
+      const auto exported =
+          process(*offline, input, {.block = export_block, .generation = 2, .bpm = 0.0});
+      require(played.left == exported.left && played.right == exported.right,
+              std::string(name) + ": export equals live");
+    }
   }
 }
 
@@ -537,6 +611,7 @@ void the_callback_never_allocates() {
   changed[at("edge.shape")] = 0.0;
   changed[at("edge.link")] = 0.0;
   changed[at("edge.delta")] = 1.0;
+  changed[at("edge.ceiling")] = low_ceiling_db;
   require(runtime->offer_values(changed, 1), "new values are offered");
   std::vector<engine::StereoFrame> buffer(128, {0.9F, -0.9F});
   counted_allocations = 0;
@@ -597,6 +672,8 @@ int main(int argc, char** argv) {
           {"shape_zero_is_a_hard_clip", [] { shape_zero_is_a_hard_clip(); }},
           {"no_aliasing_at_16x", [] { no_aliasing_at_16x(); }},
           {"true_peak_never_exceeds_0_dbtp", [] { true_peak_never_exceeds_0_dbtp(); }},
+          {"true_peak_never_exceeds_a_lowered_ceiling",
+           [] { true_peak_never_exceeds_a_lowered_ceiling(); }},
           {"delta_nulls_with_the_output", [] { delta_nulls_with_the_output(); }},
           {"latency_is_reported_and_exact", [] { latency_is_reported_and_exact(); }},
           {"stereo_link_shares_the_gain", [] { stereo_link_shares_the_gain(); }},

@@ -169,8 +169,9 @@ private:
 // under `ceiling`: for each interval between two frames, the gain the
 // interval needs is held over every frame its interpolation reads and then
 // averaged over the attack, so the gain there is flat and under it. It
-// releases exponentially. It holds the output 0.01 dB under the 0 dBFS
-// ceiling. Both channels share the gain.
+// releases exponentially. It holds the output 0.01 dB under a ceiling of 1
+// (the kernel scales its signal by Edge's ceiling around it). Both channels
+// share the gain.
 class TruePeakGuard {
 public:
   // Control only.

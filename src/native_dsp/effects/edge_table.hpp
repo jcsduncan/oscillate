@@ -7,10 +7,10 @@
 #include <cstdint>
 #include <string_view>
 
-// Edge v1: a clipper under a fixed 0 dBFS ceiling (ADR-0108). Oversampling
-// and the filters set the latency, so they are not automatable: a change
-// rebuilds the route. Ids are persisted and automated: never rename or
-// reuse one.
+// Edge: a clipper under an adjustable true-peak ceiling (ADR-0108, ADR-0113).
+// Oversampling and the filters set the latency, so they are not automatable:
+// a change rebuilds the route. Ids are persisted and automated: never rename
+// or reuse one.
 namespace oscillate::native_dsp::effects::edge_table {
 
 using S = ParameterScale;
@@ -26,9 +26,10 @@ inline constexpr std::array off_on{"Off"sv, "On"sv};
 constexpr double last(std::size_t size) { return static_cast<double>(size - 1); }
 inline constexpr double g = effect_glide_seconds;
 
-inline constexpr std::array<ParameterDescriptor, 9> parameters{{
+inline constexpr std::array<ParameterDescriptor, 10> parameters{{
     {"edge.input", "Input", "Clip", "dB", S::linear, -12, 24, 0, {}, T::live, g},
     {"edge.shape", "Shape", "Clip", "%", S::linear, 0, 1, 0.25, {}, T::live, g},
+    {"edge.ceiling", "Ceiling", "Clip", "dB", S::linear, -12, 0, 0, {}, T::live, g},
     {"edge.output", "Output", "Output", "dB", S::linear, -24, 0, 0, {}, T::live, g},
     {"edge.oversampling", "Oversampling", "Quality", "", S::choice, 0, last(oversampling.size()),
      Oversampling::x8, oversampling, T::live, 0, false},

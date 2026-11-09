@@ -1,8 +1,10 @@
 import QtQuick
+import Oscillate.Format
 
 // Edge's transfer display: the input level (after Input gain, dBFS) across,
-// the output level up, the 0 dBFS ceiling dashed, the line the curve leaves
-// dotted, the curve from the engine, and a dot where the signal sits now.
+// the output level up, the ceiling (edge.ceiling) dashed, the line the
+// curve leaves dotted, the curve from the engine, and a dot where the signal
+// sits now.
 // It fills its Kit.PlotFrame's plot area; the frame draws the scales from
 // inTicks/outTicks at inAt/outAt.
 Item {
@@ -11,6 +13,8 @@ Item {
     // Output dB for inputs evenly spaced from inMin to inMax.
     property var curve: []
     property bool live: false
+    // The ceiling the curve holds under, dBFS.
+    property real ceilingDb: 0
     property real dotIn: -120
     property real dotOut: -120
 
@@ -35,6 +39,7 @@ Item {
     }
 
     onCurveChanged: canvas.requestPaint()
+    onCeilingDbChanged: canvas.requestPaint()
     onWidthChanged: canvas.requestPaint()
     onHeightChanged: canvas.requestPaint()
 
@@ -74,8 +79,8 @@ Item {
             ctx.setLineDash([t.dashOn, t.dashOff])
             ctx.strokeStyle = t.accent
             ctx.beginPath()
-            ctx.moveTo(0, plot.py(0))
-            ctx.lineTo(plot.width, plot.py(0))
+            ctx.moveTo(0, plot.py(plot.ceilingDb))
+            ctx.lineTo(plot.width, plot.py(plot.ceilingDb))
             ctx.stroke()
             ctx.setLineDash([])
             const points = plot.curve
@@ -98,8 +103,8 @@ Item {
     Text {
         objectName: "edgeCeilingLabel"
         x: plot.theme.spaceSm
-        y: plot.py(0) - height - plot.theme.spaceXxs
-        text: "CEILING 0 dBFS"
+        y: plot.py(plot.ceilingDb) - height - plot.theme.spaceXxs
+        text: "CEILING " + Format.number(plot.ceilingDb) + " dBFS"
         color: plot.theme.accent
         font.family: plot.theme.mono
         font.pixelSize: plot.theme.typeSmall
