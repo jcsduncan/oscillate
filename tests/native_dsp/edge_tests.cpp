@@ -357,6 +357,41 @@ void true_peak_never_exceeds_a_lowered_ceiling() {
   }
 }
 
+// While the ceiling glides, the output is the guarded signal times the
+// ceiling it went in under: its true peak never passes the highest ceiling
+// the glide moved through.
+void true_peak_holds_while_the_ceiling_glides() {
+  constexpr std::size_t frames = 24'000;
+  constexpr std::size_t glide_every = 1'500;
+  const std::array<Stereo, 2> sources{scaled(noise(1.0, frames), twelve_db_over),
+                                      sine(10'000.0, twelve_db_over, frames)};
+  for (const std::size_t o : {x1, x16}) {
+    for (std::size_t f = 0; f < filter_count; ++f) {
+      for (const double shape : {0.0, 1.0}) {
+        const auto high = under(with(o, f, shape), near_ceiling_db);
+        const auto low = under(with(o, f, shape), low_ceiling_db);
+        for (const auto& source : sources) {
+          auto runtime = make_effect(engine(), high, rate);
+          RenderOptions options;
+          for (std::uint64_t at_frame = glide_every; at_frame < frames; at_frame += glide_every)
+            options.at.push_back(at_frame);
+          std::uint64_t offers = 0;
+          options.before = [&](std::uint64_t at_frame) {
+            require(
+                runtime->offer_values((at_frame / glide_every) % 2 == 1 ? low : high, ++offers + 1),
+                "the ceiling moves");
+          };
+          const double tp = true_peak(process(*runtime, then_silence(source, high), options));
+          REQUIRE_LE(tp, gain(near_ceiling_db),
+                     "true peak under the highest ceiling while it glides: factor " +
+                         std::to_string(edge::factors[o]) + ", filters " + std::to_string(f) +
+                         ": " + std::to_string(db(tp)));
+        }
+      }
+    }
+  }
+}
+
 // Delta is the driven input, delayed by the latency, less the output, both
 // after Output gain: output + delta is the input times both gains.
 void delta_nulls_with_the_output() {
@@ -674,6 +709,8 @@ int main(int argc, char** argv) {
           {"true_peak_never_exceeds_0_dbtp", [] { true_peak_never_exceeds_0_dbtp(); }},
           {"true_peak_never_exceeds_a_lowered_ceiling",
            [] { true_peak_never_exceeds_a_lowered_ceiling(); }},
+          {"true_peak_holds_while_the_ceiling_glides",
+           [] { true_peak_holds_while_the_ceiling_glides(); }},
           {"delta_nulls_with_the_output", [] { delta_nulls_with_the_output(); }},
           {"latency_is_reported_and_exact", [] { latency_is_reported_and_exact(); }},
           {"stereo_link_shares_the_gain", [] { stereo_link_shares_the_gain(); }},
