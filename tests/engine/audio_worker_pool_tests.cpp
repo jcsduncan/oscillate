@@ -330,6 +330,23 @@ void parallel_mix_is_bit_identical() {
   }
 }
 
+// Every hardware thread but the callback's, SMT siblings included, up to the
+// cap: a four-thread machine gets three helpers, a sixteen-thread one seven.
+void default_workers_leave_the_callback_a_cpu() {
+  constexpr std::size_t small_machine = 4;
+  constexpr std::size_t large_machine = 16;
+  REQUIRE_EQ(AudioWorkerPool::default_workers_for(0), std::size_t{0}, "no CPU count");
+  REQUIRE_EQ(AudioWorkerPool::default_workers_for(1), std::size_t{0}, "one CPU");
+  REQUIRE_EQ(AudioWorkerPool::default_workers_for(small_machine), small_machine - 1,
+             "every other thread of a small machine");
+  REQUIRE_EQ(AudioWorkerPool::default_workers_for(large_machine),
+             AudioWorkerPool::default_worker_cap, "the cap on a large machine");
+  static_assert(AudioWorkerPool::default_worker_cap <= AudioWorkerPool::max_workers);
+  const auto workers = AudioWorkerPool::default_worker_count();
+  require(workers < std::max<unsigned>(1, std::thread::hardware_concurrency()) || workers == 0,
+          "the default leaves the callback a CPU");
+}
+
 } // namespace
 
 int main() {
@@ -344,6 +361,7 @@ int main() {
     nested_batches_run_every_task_once(1);
     nested_batches_run_every_task_once(5);
     parallel_mix_is_bit_identical();
+    default_workers_leave_the_callback_a_cpu();
   } catch (const std::exception& error) {
     std::cerr << "FAIL: " << error.what() << '\n';
     return 1;
