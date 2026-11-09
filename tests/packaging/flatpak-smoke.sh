@@ -26,6 +26,12 @@ run() {
     --env=QT_QUICK_BACKEND=software "$app" "$@"
 }
 
+# Uninstalling with --delete-data starts a D-Bus session, which needs a
+# machine ID; a desktop has one, the bare container does not.
+if [ ! -s /etc/machine-id ]; then
+  tr -d - </proc/sys/kernel/random/uuid >/etc/machine-id
+fi
+
 flatpak install --system --noninteractive -y --bundle "$bundle"
 flatpak info --system "$app" >/dev/null || fail "not installed"
 installed=$(flatpak info --system --show-location "$app")
