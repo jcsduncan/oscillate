@@ -75,6 +75,8 @@ add_library(oscillate_synth_engines synth/runtime.cpp synth/prism.cpp synth/engi
                                            synth/wren.cpp
                                            synth/wren_library.cpp
                                            synth/wren_played.cpp
+                                           synth/bow.cpp
+                                           synth/bow_library.cpp
                                            synth/crate/table.cpp synth/crate/document.cpp
                                            synth/crate/kernel.cpp
                                            synth/nova/parameters.cpp synth/nova/presets.cpp

@@ -311,6 +311,26 @@ oscillate_add_case_tests(native_wren_contract oscillate_wren_tests
   the_callback_does_not_allocate
   the_tail_bound_covers_a_released_note)
 
+oscillate_add_test_executable(oscillate_bow_tests SOURCES bow_tests.cpp
+  LIBS oscillate::synth_engines)
+oscillate_add_case_tests(native_bow_contract oscillate_bow_tests
+  CASES
+  a_missing_library_is_silent_then_plays_once_installed
+  malformed_libraries_are_rejected
+  descriptor_registry_and_presets
+  keys_are_in_tune_in_both_modes
+  the_wheel_crossfades_the_layers
+  legato_joins_past_the_attack_without_a_click
+  keyswitches_latch_the_articulation
+  ensemble_layers_and_voices_are_bounded
+  tone_runs_from_tasto_to_ponticello
+  vibrato_blooms_after_its_delay
+  humanise_is_seeded
+  block_splits_render_the_same
+  a_reset_plays_the_same_again
+  the_callback_does_not_allocate
+  the_tail_bound_covers_a_released_note)
+
 oscillate_add_test_executable(oscillate_wren_breath_tests SOURCES wren_breath_tests.cpp
   LIBS oscillate::synth_engines)
 oscillate_add_case_tests(native_wren_breath_contract oscillate_wren_breath_tests
