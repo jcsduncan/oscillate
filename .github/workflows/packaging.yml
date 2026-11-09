@@ -248,13 +248,15 @@ jobs:
             sleep $((attempt * 30))
             attempt=$((attempt + 1))
           done
-      # Screenshots are mirrored into the repository as Flathub does, so the
-      # repository lint sees what Flathub's would.
+      # Screenshots are mirrored into the repository and the catalogue points
+      # at the mirror, as Flathub's build does, so the repository lint sees
+      # what Flathub's would.
       - name: Build
         run: |
           flatpak-builder --disable-download --disable-rofiles-fuse --ccache --force-clean \
             --state-dir="$STATE_DIR" --repo="$REPO" --default-branch=stable \
-            --mirror-screenshots-url=https://dl.flathub.org/media "$BUILD_DIR" "$MANIFEST"
+            --mirror-screenshots-url=https://dl.flathub.org/media --compose-url-policy=full \
+            "$BUILD_DIR" "$MANIFEST"
           ostree commit --repo="$REPO" --canonical-permissions --branch=screenshots/x86_64 \
             "$BUILD_DIR/files/share/app-info/media"
       - name: Lint the repository
