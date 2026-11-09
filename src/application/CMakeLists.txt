@@ -61,6 +61,12 @@ add_library(oscillate_application
   revision_status.cpp
   routed_audio_source.cpp
   routed_playback_control.cpp
+  # The stages RoutedPlaybackControl composes.
+  routed_playback/edit_rules.cpp
+  routed_playback/graph.cpp
+  routed_playback/live_controls.cpp
+  routed_playback/live_edits.cpp
+  routed_playback/source_edits.cpp
   routed_source_selection.cpp
   source_analysis_cache_directory.cpp
   spectrum_monitor.cpp
