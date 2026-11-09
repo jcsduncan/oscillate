@@ -16,6 +16,12 @@
 namespace oscillate::project::detail {
 namespace {
 
+// An automation domain's bounds: its discrete steps and the lengths of its
+// semantic key and unit.
+constexpr std::uint32_t max_domain_steps = 16'384;
+constexpr std::size_t max_semantic_key_bytes = 128;
+constexpr std::size_t max_unit_bytes = 64;
+
 // A discrete domain's values sit on one of step_count + 1 evenly spaced steps
 // from minimum to maximum.
 constexpr double discrete_step_tolerance = 1e-9;
@@ -63,11 +69,12 @@ constexpr double discrete_step_tolerance = 1e-9;
     if (lane.settings_generation == 0 ||
         (lane.timebase != AutomationTimebase::musical &&
          lane.timebase != AutomationTimebase::elapsed) ||
-        !valid_text(domain.semantic_key, 128, true) || !valid_text(domain.unit, 64, false) ||
-        !std::isfinite(domain.minimum) || !std::isfinite(domain.maximum) ||
-        !std::isfinite(domain.default_value) || domain.minimum >= domain.maximum ||
-        domain.default_value < domain.minimum || domain.default_value > domain.maximum ||
-        domain.step_count > 16'384 || domain.discrete != (domain.step_count != 0) ||
+        !valid_text(domain.semantic_key, max_semantic_key_bytes, true) ||
+        !valid_text(domain.unit, max_unit_bytes, false) || !std::isfinite(domain.minimum) ||
+        !std::isfinite(domain.maximum) || !std::isfinite(domain.default_value) ||
+        domain.minimum >= domain.maximum || domain.default_value < domain.minimum ||
+        domain.default_value > domain.maximum || domain.step_count > max_domain_steps ||
+        domain.discrete != (domain.step_count != 0) ||
         (domain.discrete && !on_discrete_step(domain, domain.default_value)) ||
         static_cast<unsigned>(domain.scale) > static_cast<unsigned>(AutomationScale::decibel) ||
         (domain.scale != AutomationScale::linear && domain.discrete) ||
@@ -211,7 +218,7 @@ constexpr double discrete_step_tolerance = 1e-9;
       if (domain.representation != AutomationRepresentation::physical ||
           !std::isfinite(domain.minimum) || !std::isfinite(domain.maximum) ||
           !std::isfinite(domain.default_value) || domain.minimum >= domain.maximum ||
-          domain.step_count > 16'384 || domain.discrete != (domain.step_count != 0) ||
+          domain.step_count > max_domain_steps || domain.discrete != (domain.step_count != 0) ||
           static_cast<unsigned>(domain.scale) > static_cast<unsigned>(AutomationScale::decibel) ||
           (domain.scale != AutomationScale::linear && domain.discrete) ||
           (domain.scale == AutomationScale::logarithmic && !(domain.minimum > 0.0)) ||
