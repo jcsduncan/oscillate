@@ -1,0 +1,119 @@
+{
+  "id": "io.github.jcsduncan.Oscillate",
+  "runtime": "org.kde.Platform",
+  "runtime-version": "6.10",
+  "sdk": "org.kde.Sdk",
+  "command": "oscillate",
+  "rename-desktop-file": "oscillate.desktop",
+  "rename-icon": "oscillate",
+  "finish-args": [
+    "--share=ipc",
+    "--socket=wayland",
+    "--socket=fallback-x11",
+    "--device=dri",
+    "--socket=pulseaudio",
+    "--filesystem=xdg-run/pipewire-0",
+    "--filesystem=xdg-music",
+    "--filesystem=~/.oscillate:create",
+    "--filesystem=~/.vst3:ro"
+  ],
+  "cleanup": [
+    "/include",
+    "/lib/cmake",
+    "/lib/pkgconfig",
+    "/share/cmake",
+    "/share/doc/libsndfile",
+    "/share/pkgconfig"
+  ],
+  "modules": [
+    {
+      "name": "nlohmann-json",
+      "buildsystem": "cmake-ninja",
+      "config-opts": [
+        "-DJSON_BuildTests=OFF",
+        "-DJSON_Install=ON"
+      ],
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz",
+          "sha256": "42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa"
+        }
+      ]
+    },
+    {
+      "name": "libsndfile",
+      "buildsystem": "cmake-ninja",
+      "config-opts": [
+        "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+        "-DBUILD_SHARED_LIBS=ON",
+        "-DENABLE_EXTERNAL_LIBS=ON",
+        "-DENABLE_MPEG=ON",
+        "-DBUILD_PROGRAMS=OFF",
+        "-DBUILD_EXAMPLES=OFF",
+        "-DBUILD_TESTING=OFF",
+        "-DENABLE_CPACK=OFF",
+        "-DINSTALL_MANPAGES=OFF"
+      ],
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://github.com/libsndfile/libsndfile/releases/download/1.2.2/libsndfile-1.2.2.tar.xz",
+          "sha256": "3799ca9924d3125038880367bf1468e53a1b7e3686a934f098b7e1d286cdb80e"
+        },
+        {
+          "type": "patch",
+          "path": "patches/libsndfile/CVE-2024-50612-Update-mpeg_l3_encode.c.patch"
+        },
+        {
+          "type": "patch",
+          "path": "patches/libsndfile/CVE-2025-56226-src-ogg-better-error-checking-for-vorbis.-Fixes-1035.patch"
+        },
+        {
+          "type": "patch",
+          "path": "patches/libsndfile/CVE-2026-37555-ima_adpcm-fix-int-overflow-in-ima_reader_init.patch"
+        }
+      ]
+    },
+    {
+      "name": "oscillate",
+      "buildsystem": "simple",
+      "build-commands": [
+        "cmake --preset package-flatpak -DCMAKE_INSTALL_PREFIX=${FLATPAK_DEST} -DOSCILLATE_VST3_SDK_ROOT=${PWD}/vst3sdk -DOSCILLATE_SNDFILE_INCLUDE_DIR=${FLATPAK_DEST}/include -DOSCILLATE_SNDFILE_LIBRARY=${FLATPAK_DEST}/lib/libsndfile.so",
+        "cmake --build build/package-flatpak --parallel ${FLATPAK_BUILDER_N_JOBS} --target oscillate oscillate_vst3_scan_helper",
+        "cmake --install build/package-flatpak",
+        "install -Dm644 assets/packaging/oscillate.desktop ${FLATPAK_DEST}/share/applications/oscillate.desktop",
+        "install -Dm644 assets/packaging/oscillate.svg ${FLATPAK_DEST}/share/icons/hicolor/scalable/apps/oscillate.svg",
+        "install -Dm644 assets/packaging/io.github.jcsduncan.Oscillate.metainfo.xml ${FLATPAK_DEST}/share/metainfo/io.github.jcsduncan.Oscillate.metainfo.xml",
+        "python3 -I scripts/package_flatpak.py stage --build-dir build/package-flatpak --prefix ${FLATPAK_DEST} --commit local --version-suffix local"
+      ],
+      "sources": [
+        {
+          "type": "dir",
+          "path": "../..",
+          "skip": [
+            ".ccache",
+            ".flatpak-builder",
+            ".git",
+            "build"
+          ]
+        },
+        {
+          "type": "git",
+          "url": "https://github.com/steinbergmedia/vst3sdk.git",
+          "tag": "v3.8.1_build_84",
+          "commit": "3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96",
+          "disable-submodules": true,
+          "dest": "vst3sdk"
+        },
+        {
+          "type": "git",
+          "url": "https://github.com/steinbergmedia/vst3_pluginterfaces.git",
+          "tag": "v3.8.1_build_84",
+          "commit": "4f547e8e102b47de4a8b8aaf343c73b700786372",
+          "dest": "vst3sdk/pluginterfaces"
+        }
+      ]
+    }
+  ]
+}

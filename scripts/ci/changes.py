@@ -52,6 +52,10 @@ PYTHON = (
     "ruff.toml",
     # Generated from scripts/package_profiles.py; a unit test compares them.
     "docs/dependencies/runtime-dependencies.json",
+    # Read by scripts/packaging/test_package_flatpak.py.
+    "packaging/flatpak/*",
+    "assets/packaging/*.metainfo.xml",
+    "docs/dependencies/flatpak.md",
     "scripts/ci/python-tests.sh",
     ".github/workflows/python.yml",
 )
@@ -65,6 +69,7 @@ PACKAGING = (
     "cmake/Features.cmake",
     "LICENSE",
     "assets/packaging/*",
+    "packaging/flatpak/*",
     "third_party/notices/*",
     "third_party/pffft/LICENSE.txt",
     "docs/dependencies/notices/*",

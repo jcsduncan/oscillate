@@ -1,5 +1,4 @@
 {
-  "distribution": "Ubuntu 26.04 amd64",
   "generated_from": "scripts/package_profiles.py",
   "profiles": {
     "appimage": {
@@ -112,6 +111,7 @@
       "conditional": {
         "libspa-0.2-modules": "PipeWire output: the bundled PipeWire client loads its SPA support plugins from the host's PipeWire installation"
       },
+      "platform": "Ubuntu 26.04 amd64",
       "preset": "package-appimage",
       "system": [
         "libc6",
@@ -121,6 +121,7 @@
     "deb": {
       "bundled": [],
       "conditional": {},
+      "platform": "Ubuntu 26.04 amd64",
       "preset": "package-deb",
       "system": [
         "libc6",
@@ -139,6 +140,17 @@
         "libstdc++6",
         "libx11-6",
         "qml6-module-qtquick"
+      ]
+    },
+    "flatpak": {
+      "bundled": [
+        "libsndfile"
+      ],
+      "conditional": {},
+      "platform": "org.kde.Platform//6.10 x86_64 (Flatpak)",
+      "preset": "package-flatpak",
+      "system": [
+        "org.kde.Platform//6.10"
       ]
     }
   },

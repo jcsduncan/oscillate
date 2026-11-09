@@ -81,11 +81,18 @@ def cited_common_licenses(text: str) -> set[str]:
     return {cited.rstrip(".") for cited in COMMON_LICENSE_REFERENCE.findall(text)}
 
 
-def combined_text(stage_root: Path, inventory: dict[str, object]) -> str:
-    """Every staged notice in one text: project, runtime, Ubuntu packages, licences."""
+def combined_text(
+    stage_root: Path, inventory: dict[str, object], third_party_dir: Path = THIRD_PARTY_DIR
+) -> str:
+    """Every staged notice in one text: project, bundled libraries, runtime,
+    Ubuntu packages, licences."""
     sections = [
         (f"{item['component']} (compiled into Oscillate or its package)", item["path"])
         for item in inventory["project_notices"]
+    ]
+    sections += [
+        (f"{item['component']} (a library built into this package)", item["path"])
+        for item in inventory["bundled_notices"]
     ]
     sections += [
         (f"{item['component']} (linked statically into the AppImage runtime)", item["path"])
@@ -104,7 +111,7 @@ def combined_text(stage_root: Path, inventory: dict[str, object]) -> str:
     ]
     parts = [
         "Third-party notices for this Oscillate package. The individual files are in\n"
-        f"/{THIRD_PARTY_DIR}/, indexed by inventory.json.\n"
+        f"/{third_party_dir}/, indexed by inventory.json.\n"
     ]
     for title, path in sections:
         text = (stage_root / str(path)).read_text(encoding="utf-8", errors="replace")
@@ -121,13 +128,18 @@ def stage_notices(
     copied_elfs: list[dict[str, object]] | None = None,
     system_dependencies: str | None = None,
     common_licenses: Path = COMMON_LICENSES,
+    bundled_licences: dict[str, list[Path]] | None = None,
+    third_party_dir: Path = THIRD_PARTY_DIR,
 ) -> dict[str, object]:
     """Stage notices and a machine-checkable file-to-notice mapping.
 
     ``copied_elfs`` is the AppDir's actual non-project ELF list. The native
     package supplies an empty list because Ubuntu supplies its shared libs.
+    ``bundled_licences`` maps each library the package builds itself (the
+    Flatpak's manifest modules) to its licence files. ``third_party_dir`` is
+    where the notices go under ``stage_root``.
     """
-    doc_root = stage_root / "usr/share/doc/oscillate/third-party"
+    doc_root = stage_root / third_party_dir
     project_sources = {
         name: source_root / relative for name, relative in COMPILED_IN_NOTICES.items()
     }
@@ -193,7 +205,7 @@ def stage_notices(
             or copyright_path != (Path("/usr/share/doc") / package.split(":", 1)[0] / "copyright")
         ):
             raise ValueError(f"missing package notice evidence: {record['path']}")
-        staged_path = f"usr/share/doc/oscillate/third-party/ubuntu/{package}.copyright"
+        staged_path = str(third_party_dir / "ubuntu" / f"{package}.copyright")
         if package not in packages:
             copied = _copy_notice(copyright_path, stage_root / staged_path)
             packages[package] = {
@@ -226,7 +238,7 @@ def stage_notices(
             cited_as.setdefault(source.resolve().name, set()).add(cited)
     licence_texts = []
     for name, names in sorted(cited_as.items()):
-        destination = stage_root / COMMON_LICENSES_DIR / f"{name}.txt"
+        destination = doc_root / "common-licenses" / f"{name}.txt"
         copied = _copy_notice(common_licenses / name, destination)
         licence_texts.append(
             {
@@ -237,10 +249,27 @@ def stage_notices(
             }
         )
 
+    bundled_notices = []
+    for component, licences in sorted((bundled_licences or {}).items()):
+        if not licences:
+            raise ValueError(f"no licence file for the bundled library {component}")
+        for source in sorted(licences):
+            destination = doc_root / "bundled" / component / source.name
+            copied = _copy_notice(source, destination)
+            bundled_notices.append(
+                {
+                    "component": component,
+                    "path": str(destination.relative_to(stage_root)),
+                    "sha256": copied["sha256"],
+                    "source": str(source),
+                }
+            )
+
     inventory: dict[str, object] = {
         "schema": 1,
         "status": INVENTORY_STATUS,
         "project_notices": project_notices,
+        "bundled_notices": bundled_notices,
         "runtime_static_notices": runtime_static_notices,
         "copied_elfs": copied_files,
         "copied_library_packages": dict(sorted(packages.items())),
@@ -257,10 +286,11 @@ def stage_notices(
             else []
         ),
     }
-    combined = stage_root / COMBINED_NOTICES
-    combined.write_text(combined_text(stage_root, inventory), encoding="utf-8")
+    combined_path = third_party_dir / COMBINED_NOTICES.name
+    combined = stage_root / combined_path
+    combined.write_text(combined_text(stage_root, inventory, third_party_dir), encoding="utf-8")
     combined.chmod(0o644)
-    inventory["combined_notices"] = {"path": str(COMBINED_NOTICES), "sha256": sha256(combined)}
+    inventory["combined_notices"] = {"path": str(combined_path), "sha256": sha256(combined)}
     inventory_path = doc_root / "inventory.json"
     inventory_path.write_text(json.dumps(inventory, indent=2, sort_keys=True) + "\n")
     inventory_path.chmod(0o644)
