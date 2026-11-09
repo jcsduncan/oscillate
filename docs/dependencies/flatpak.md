@@ -51,12 +51,12 @@ real-time priority through the realtime portal, which needs no permission.
   hardware MIDI input, so no device permission is needed.
 - **Settings and caches** go to the sandbox's own folders under
   `~/.var/app/io.github.jcsduncan.Oscillate/`, as do logs and crash reports.
-- **Sampled instrument libraries** (Concert, Fret, Wren, Bow) are read from
+- **Sampled instrument libraries** (Concert, Fret, Wren, Bow, Stick) are read from
   `$XDG_DATA_HOME/oscillate/instruments/`, which in the sandbox is
   `~/.var/app/io.github.jcsduncan.Oscillate/data/oscillate/instruments/`.
   Copy an installed library there, or point the instrument's variable
   (`OSCILLATE_CONCERT_LIBRARY`, `OSCILLATE_FRET_LIBRARY`,
-  `OSCILLATE_WREN_LIBRARY`, `OSCILLATE_BOW_LIBRARY`) at it and grant read
+  `OSCILLATE_WREN_LIBRARY`, `OSCILLATE_BOW_LIBRARY`, `OSCILLATE_STICK_LIBRARY`) at it and grant read
   access, for example
   `flatpak override --user --filesystem=~/.local/share/oscillate/instruments:ro --env=OSCILLATE_CONCERT_LIBRARY=$HOME/.local/share/oscillate/instruments/concert/salamander-grand-v3 io.github.jcsduncan.Oscillate`.
 

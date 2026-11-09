@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plays the light, heavy and pad reference projects and records their cost.
+"""Plays the light, heavy, pad and drums reference projects and records their cost.
 
 Runs oscillate_reference_project for each reference and buffer size, through
 the paced fake callback or, with --target-node, an explicitly named PipeWire
@@ -25,7 +25,7 @@ FIELDS = re.compile(r"(\w+)=(\S+)")
 AUDIO_THREADS = ("audio callback", "audio worker")
 # Spans that frame the work rather than doing it; reported apart from devices.
 FRAME_SPANS = ("audio.render", "graph.node", "graph.source", "pool.wait_for_helpers")
-REFERENCES = ("light", "heavy", "pad")
+REFERENCES = ("light", "heavy", "pad", "drums")
 BUFFER_SIZES = (64, 128)
 SAMPLE_RATE = 48_000
 PERCENT = 100
@@ -187,6 +187,8 @@ def run_one(args, reference: str, frames: int, repetition: int, serial: int | No
         ):
             if value:
                 command += [flag, str(value)]
+    if reference == "drums" and args.stick_kit:
+        command += ["--stick-kit", str(args.stick_kit)]
     completed = subprocess.run(
         command,
         env=dict(os.environ, TMPDIR=str(scratch)),
@@ -202,7 +204,17 @@ def run_one(args, reference: str, frames: int, repetition: int, serial: int | No
     summary = summarise(completed.stdout, trace)
     if trace_path.is_file() and not args.keep_traces:
         trace_path.unlink()
-    return {"reference": reference, "frames": frames, "repetition": repetition, **summary}
+    run = {"reference": reference, "frames": frames, "repetition": repetition, **summary}
+    if reference == "drums":
+        # The kit the drums played: an installed one's folder, or the synthetic kit.
+        run["stick_kit"] = str(args.stick_kit) if args.stick_kit else "synthetic"
+    return run
+
+
+def label(run: dict) -> str:
+    """The run's reference, with the drums' kit."""
+    kit = run.get("stick_kit")
+    return f"{run['reference']} ({Path(kit).name})" if kit else run["reference"]
 
 
 def markdown(evidence: dict) -> str:
@@ -217,7 +229,7 @@ def markdown(evidence: dict) -> str:
     for run in evidence["runs"]:
         result = run["result"]
         lines.append(
-            f"| {run['reference']} | {run['frames']} | {run['repetition']} | {result['workers']} "
+            f"| {label(run)} | {run['frames']} | {run['repetition']} | {result['workers']} "
             f"| {result.get('p50_us', '')} | {result.get('p99_us', '')} | {result['max_us']} "
             f"| {result.get('p99_period_percent', '')}% | {result['over_period']} "
             f"| {result['process_cpu_percent']} | {result['cpu_window_p99']} "
@@ -229,7 +241,7 @@ def markdown(evidence: dict) -> str:
             continue
         lines += [
             "",
-            f"Devices, {run['reference']} at {run['frames']} frames (run {run['repetition']}):",
+            f"Devices, {label(run)} at {run['frames']} frames (run {run['repetition']}):",
             "",
             "| Device | Instances | % of one core | Mean µs | p99 µs | Max µs |",
             "| --- | ---: | ---: | ---: | ---: | ---: |",
@@ -247,6 +259,11 @@ def main() -> int:
     parser.add_argument("--executable", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--references", nargs="+", choices=REFERENCES, default=list(REFERENCES))
+    parser.add_argument(
+        "--stick-kit",
+        type=Path,
+        help="an installed Stick kit folder the drums reference plays (default: synthetic)",
+    )
     parser.add_argument(
         "--frames", nargs="+", type=int, choices=BUFFER_SIZES, default=list(BUFFER_SIZES)
     )

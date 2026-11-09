@@ -232,6 +232,12 @@ public:
   // keyswitches: [{key, name}] in articulation order, dynamics: [{name,
   // top}] from ppp, each up to its top on the wheel's 0..1}.
   Q_INVOKABLE QVariantMap bow_layout() const;
+  // Stick's chosen kit (empty for other engines): its library
+  // (stick_panel::library), looked at again after an install by
+  // stick_reload_library, and its mics and pieces (stick_panel::layout).
+  Q_INVOKABLE QVariantMap stick_library() const;
+  Q_INVOKABLE QVariantMap stick_reload_library();
+  Q_INVOKABLE QVariantMap stick_layout() const;
   // A sampled instrument's library folder for its "Show in folder" action:
   // `directory` when it exists, else its nearest existing parent ("" when
   // none); show_library_folder opens it in the file manager.
@@ -311,7 +317,8 @@ public:
   // output_peak_db} or Bow {library (bow_library's state), notes,
   // articulation (bow::Articulation), latched (chosen by a keyswitch),
   // dynamics (the wheel, 0..1), dynamic_name ("mp"), vibrato (the newest
-  // note's, 0..1), voices, output_peak_db, held [keys]}.
+  // note's, 0..1), voices, output_peak_db, held [keys]} or Stick
+  // (stick_panel::decode).
   // live is false when nothing plays. Any non-empty frame also passes
   // through raw as {frame}, for panels that decode their layout themselves.
   // Engines with an output spectrum (Shape, Strata, Temper) also give

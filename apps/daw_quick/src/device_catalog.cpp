@@ -61,6 +61,14 @@ constexpr std::array looks{
                "pitched note to a knock on a thing, a coupled second resonator and a body, with a "
                "finish for tight, modern hits. Velocity changes the tone, not only the level.",
                "perc percussion knock tap click foley conga bongo shaker rim top loop minimal"},
+    DeviceLook{"stick", "Drums", S::drums, "Acoustic drums", "Ak", "#e0a96d",
+               "A sampled acoustic kit, every hit on every mic", "",
+               "Three multi-mic acoustic kits from DrumGizmo.org on the General MIDI map. "
+               "Velocity picks the hit by its recorded power with round robins; the hi-hat pedal "
+               "opens the hat; the mic mixer sets each mic, with or without the bleed between "
+               "them; each piece has its own tune, decay, level, pan and sends.",
+               "drums acoustic kit sampled drumkit kick snare hihat toms cymbals ride brushes "
+               "funk break room"},
     DeviceLook{"crate", "Instruments", S::samplers, "Sampler", "Sm", "#d6c38f",
                "Chop a sample onto pads, with vintage character", "",
                "An MPC-style chopper: slice a sample automatically, play the chops from pads and "

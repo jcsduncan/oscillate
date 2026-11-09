@@ -140,11 +140,6 @@ constexpr std::uint64_t envelope_step = 16;
 // this many beats, so loops repeat and export equals playback.
 constexpr double beat_resolution = 65'536.0;
 constexpr double seed_cycle_beats = 8.0;
-// The resampler's tables: one per sixth of an octave of reading speed up to
-// five octaves, each cut off so reading that fast cannot alias.
-constexpr std::size_t tables_per_octave = 6;
-constexpr std::size_t table_octaves = 5;
-constexpr std::size_t table_count = tables_per_octave * table_octaves + 1;
 
 using native_dsp::dsp::db_to_gain;
 
@@ -182,29 +177,6 @@ using native_dsp::dsp::db_to_gain;
 // A seeded value in [-1, 1).
 [[nodiscard]] double signed_unit(std::uint64_t seed) noexcept {
   return 2.0 * native_dsp::dsp::unit_from_bits(native_dsp::dsp::splitmix64(seed)) - 1.0;
-}
-
-// The resampler's tables, shared by every Bow: built once on control.
-const std::vector<SincTable>& tables() {
-  static const auto* built = [] {
-    auto* all = new std::vector<SincTable>();
-    all->reserve(table_count);
-    for (std::size_t t = 0; t < table_count; ++t) {
-      all->emplace_back(SincTable::passband /
-                        std::exp2(static_cast<double>(t) / static_cast<double>(tables_per_octave)));
-    }
-    return all;
-  }();
-  return *built;
-}
-
-[[nodiscard]] const SincTable& table_for(const std::vector<SincTable>& all, double step) noexcept {
-  if (step <= 1.0) {
-    return all.front();
-  }
-  const auto t =
-      static_cast<std::size_t>(std::ceil(std::log2(step) * static_cast<double>(tables_per_octave)));
-  return all[std::min(t, all.size() - 1)];
 }
 
 // One recorded layer of a player, read from memory; a sustain loops.
@@ -286,7 +258,8 @@ class BowKernel final : public SynthKernel {
 public:
   BowKernel(double sample_rate, library::State state)
       : rate_(sample_rate), state_(state),
-        base_step_(static_cast<double>(library::pack_rate) / sample_rate), tables_(tables()),
+        base_step_(static_cast<double>(library::pack_rate) / sample_rate),
+        tables_(sample_stream::speed_tables()),
         room_(effects::expanse::engine().create_kernel(room_defaults(), sample_rate)) {
     room_values_ = room_defaults();
     declick_frames_ = std::max(1.0, declick_seconds * sample_rate);
@@ -855,7 +828,7 @@ private:
                           static_cast<std::size_t>(SincTable::left);
           if (speeds.peaks[done + i] != peak) {
             peak = speeds.peaks[done + i];
-            table = &table_for(tables_, r.ratio * peak);
+            table = &sample_stream::speed_table(tables_, r.ratio * peak);
           }
           table->read(scratch_left_.data() + at, scratch_right_.data() + at, r.position - base,
                       left[done + i], right[done + i]);
@@ -1034,7 +1007,7 @@ private:
 std::unique_ptr<SynthKernel> create_kernel(double sample_rate) {
   // Control: the first Bow starts reading the library, and the shared tables.
   const auto status = library::status();
-  (void)tables();
+  (void)sample_stream::speed_tables();
   return std::make_unique<BowKernel>(sample_rate, status.state);
 }
 

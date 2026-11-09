@@ -1,25 +1,29 @@
 # Reference projects
 
-Three generated projects measure what a session costs. Each is built
+Four generated projects measure what a session costs. Each is built
 from scratch by `oscillate_reference_project`
 ([source](../../tests/qualification/reference_project.cpp)), saved, reopened
 and played at 48 kHz. Nothing is read from a user's projects.
 
-| | Light | Heavy | Pad |
-| --- | --- | --- | --- |
-| Source tracks | 32 audio | 16 audio, 15 built-in synths, 1 VST3 instrument | 4 Bow |
-| Synths | none | Nova ×6, Prism ×2, Ember, Drift, Halo, Pulse, Torque, Anvil, Knock | Bow ×4, Warm Section (Ensemble, twelve players) |
-| Track effects | none | EQ and compressor per audio track; saturator and delay per synth; one VST3 effect | none |
-| MIDI | none | Bar-long four-note chords or an eighth-note line, at 120 BPM | One bar-long note per part, the four making a chord, at 120 BPM |
-| Routing | 2 groups, 2 returns, one send per track | the same | the same |
-| Master | EQ, compressor, reverb, limiter | the same | the same |
+| | Light | Heavy | Pad | Drums |
+| --- | --- | --- | --- | --- |
+| Source tracks | 32 audio | 16 audio, 15 built-in synths, 1 VST3 instrument | 4 Bow | 2 Stick |
+| Synths | none | Nova ×6, Prism ×2, Ember, Drift, Halo, Pulse, Torque, Anvil, Knock | Bow ×4, Warm Section (Ensemble, twelve players) | Stick ×2, Tight Funk and Dry Break |
+| Track effects | none | EQ and compressor per audio track; saturator and delay per synth; one VST3 effect | none | none |
+| MIDI | none | Bar-long four-note chords or an eighth-note line, at 120 BPM | One bar-long note per part, the four making a chord, at 120 BPM | A sixteenth-note funk groove (hats, ghost notes, an open hat), a crash every four bars and a tom fill before it, at 120 BPM |
+| Routing | 2 groups, 2 returns, one send per track | the same | the same | the same |
+| Master | EQ, compressor, reverb, limiter | the same | the same | the same |
 
 The audio tracks play generated WAVs (two partials and a click per beat). The
 VST3 parts default to the repository's synthetic fixtures; on the reference
 machine the heavy project uses Surge XT and Surge XT Effects instead. A build
 without the VST3 host plays a second Ember in place of the VST3 instrument.
 The pad's Bow plays its synthetic test library, which costs what the
-installed one does to read, so the run needs no download.
+installed one does to read, so the run needs no download. The drums' Stick
+plays its synthetic kit, whose hits stream past their resident starts as an
+installed kit's do; it has nine mics where DRS Studio has 13 and Muldjord 15,
+and Stick mixes every mic, so measure an installed kit with `--stick-kit DIR`
+(a kit's folder), which the results name.
 
 ## What a run reports
 
@@ -57,7 +61,7 @@ exposes it, and the trace's xrun instants.
 ## In CI
 
 The [reference performance workflow](../../.github/workflows/performance.yml)
-runs the three projects through the fake callback weekly on `main`, on demand
+runs the four projects through the fake callback weekly on `main`, on demand
 (`gh workflow run performance.yml -f seconds=60`) and on pull requests that
 change the harness. Its summary is `results.md`; the `reference-performance`
 artifact holds both files and the logs. Hosted runners are shared four-core

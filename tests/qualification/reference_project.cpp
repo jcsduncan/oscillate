@@ -1,4 +1,4 @@
-// The light, heavy and pad reference projects for performance qualification
+// The light, heavy, pad and drums reference projects for performance qualification
 // (docs/performance/reference-projects.md). Builds the project, saves and
 // reopens it, then plays it through the paced fake callback or an explicit
 // PipeWire target, measuring callback time and whole-process CPU. Driven by
@@ -6,6 +6,7 @@
 
 #include "allocation_probe.hpp"
 #include "bow_test_library.hpp"
+#include "stick_test_library.hpp"
 
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/application/routed_audio_source.hpp"
@@ -138,8 +139,14 @@ constexpr std::string_view pad_engine = "bow";
 constexpr std::size_t pad_preset = 1;
 constexpr std::size_t pad_parts = 4;
 
-enum class Reference : std::uint8_t { light, heavy, pad };
-constexpr std::array<std::string_view, 3> reference_names{"light", "heavy", "pad"};
+// The drums: Stick's studio kit in two parts, a busy funk groove (sixteenth
+// hats with an open one, ghost notes, a crash every four bars and a tom fill
+// before it) as Tight Funk and Dry Break play it.
+constexpr std::string_view drums_engine = "stick";
+constexpr std::array<std::size_t, 2> drums_presets{0, 1};
+
+enum class Reference : std::uint8_t { light, heavy, pad, drums };
+constexpr std::array<std::string_view, 4> reference_names{"light", "heavy", "pad", "drums"};
 
 struct Options {
   Reference reference = Reference::light;
@@ -153,6 +160,9 @@ struct Options {
   // Audio helpers; the live playback default when not given.
   std::optional<std::size_t> workers;
   fs::path scratch;
+  // The drums reference: an installed kit to play as the studio kit, in
+  // place of the synthetic one.
+  std::optional<fs::path> stick_kit;
 };
 
 template <typename T> T take(foundation::Result<T> result, std::string_view what) {
@@ -176,9 +186,10 @@ std::uint64_t number(std::string_view text) {
 
 Options parse(int argc, char** argv) {
   constexpr std::string_view usage =
-      "usage: oscillate_reference_project --reference light|heavy|pad --frames 64|128 "
+      "usage: oscillate_reference_project --reference light|heavy|pad|drums --frames 64|128 "
       "--scratch DIR [--seconds N] [--warmup BLOCKS] [--pipewire-target SERIAL] "
-      "[--trace FILE] [--vst3-effect BUNDLE] [--vst3-instrument BUNDLE] [--workers N]";
+      "[--trace FILE] [--vst3-effect BUNDLE] [--vst3-instrument BUNDLE] [--workers N] "
+      "[--stick-kit DIR]";
   if (argc % 2 == 0)
     throw std::runtime_error(std::string(usage));
   Options options;
@@ -188,7 +199,7 @@ Options parse(int argc, char** argv) {
     if (key == "--reference") {
       const auto found = std::ranges::find(reference_names, value);
       if (found == reference_names.end())
-        throw std::runtime_error("--reference is light, heavy or pad");
+        throw std::runtime_error("--reference is light, heavy, pad or drums");
       options.reference = static_cast<Reference>(found - reference_names.begin());
     } else if (key == "--frames") {
       options.frames = number(value);
@@ -206,6 +217,8 @@ Options parse(int argc, char** argv) {
       options.vst3_effect = fs::path(value);
     } else if (key == "--vst3-instrument") {
       options.vst3_instrument = fs::path(value);
+    } else if (key == "--stick-kit") {
+      options.stick_kit = fs::path(value);
     } else if (key == "--workers") {
       std::size_t workers = 0;
       const auto parsed = std::from_chars(value.data(), value.data() + value.size(), workers);
@@ -306,6 +319,64 @@ std::vector<project::MidiNote> synth_notes(std::size_t track, std::size_t bars) 
   return notes;
 }
 
+// The drums' groove, a bar of sixteenths: the key of each step's hand and
+// its velocity (0 rests), the kick under it, and a crash and a tom fill
+// every four bars.
+constexpr std::int64_t sixteenth_ticks = timeline::ticks_per_quarter / 4;
+constexpr std::size_t groove_steps = 16;
+constexpr std::uint8_t kick_key = 36;
+constexpr std::uint8_t snare_key = 38;
+constexpr std::uint8_t closed_hat_key = 42;
+constexpr std::uint8_t open_hat_key = 46;
+constexpr std::uint8_t crash_key = 49;
+constexpr std::array<std::uint8_t, 4> fill_keys{50, 48, 45, 43};
+constexpr std::uint8_t accent = 112;
+constexpr std::uint8_t ghost = 38;
+constexpr std::uint8_t hat_soft = 70;
+constexpr std::array<std::uint8_t, groove_steps> hand_keys{
+    closed_hat_key, closed_hat_key, closed_hat_key, snare_key,      snare_key,      closed_hat_key,
+    closed_hat_key, snare_key,      closed_hat_key, closed_hat_key, closed_hat_key, snare_key,
+    snare_key,      closed_hat_key, open_hat_key,   snare_key};
+constexpr std::array<std::uint8_t, groove_steps> hand_velocities{
+    accent, hat_soft, accent, ghost, accent, hat_soft, accent, ghost,
+    accent, hat_soft, accent, ghost, accent, hat_soft, accent, ghost};
+constexpr std::array<bool, groove_steps> kick_steps{true,  false, false, false, false, false,
+                                                    true,  false, true,  false, false, true,
+                                                    false, false, false, false};
+constexpr std::size_t bars_per_phrase = 4;
+constexpr std::size_t fill_from_step = 12;
+
+std::vector<project::MidiNote> groove_notes(std::size_t bars) {
+  std::vector<project::MidiNote> notes;
+  std::uint64_t serial = 1;
+  const auto add = [&](std::int64_t at, std::uint8_t key, std::uint8_t velocity) {
+    notes.push_back({take(project::NoteId::from_bits({0, serial++}), "note id"),
+                     {at},
+                     {at + sixteenth_ticks},
+                     key,
+                     velocity});
+  };
+  for (std::size_t bar = 0; bar < bars; ++bar) {
+    const bool fill = bar % bars_per_phrase == bars_per_phrase - 1;
+    for (std::size_t step = 0; step < groove_steps; ++step) {
+      const auto at = static_cast<std::int64_t>(bar) * ticks_per_bar +
+                      static_cast<std::int64_t>(step) * sixteenth_ticks;
+      if (fill && step >= fill_from_step) {
+        add(at, fill_keys[step - fill_from_step], accent);
+      } else {
+        add(at, hand_keys[step], hand_velocities[step]);
+      }
+      if (kick_steps[step]) {
+        add(at, kick_key, accent);
+      }
+      if (step == 0 && bar % bars_per_phrase == 0) {
+        add(at, crash_key, accent);
+      }
+    }
+  }
+  return notes;
+}
+
 #if defined(OSCILLATE_QUALIFICATION_VST3)
 // The VST3 instrument plays middle C on every eighth note: the synthetic
 // fixture instrument accepts no other key.
@@ -385,6 +456,7 @@ Workload build_project(const fs::path& root, const fs::path& media, const Option
       take(session->tracks().add_bus_track(project::TrackKind::return_bus), "bus");
   const bool heavy = options.reference == Reference::heavy;
   const bool pad = options.reference == Reference::pad;
+  const bool drums = options.reference == Reference::drums;
   bool vst3_instrument = false;
 #if defined(OSCILLATE_QUALIFICATION_VST3)
   vst3_instrument = vst3.instrument.has_value();
@@ -405,7 +477,7 @@ Workload build_project(const fs::path& root, const fs::path& media, const Option
       ++workload.native_inserts;
     }
   };
-  const auto audio_count = pad ? 0 : heavy ? heavy_audio_tracks : source_tracks;
+  const auto audio_count = pad || drums ? 0 : heavy ? heavy_audio_tracks : source_tracks;
   for (std::size_t index = 0; index < audio_count; ++index) {
     const auto wav = write_wav(media, index, seconds);
     const int fd = ::open(wav.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
@@ -455,6 +527,30 @@ Workload build_project(const fs::path& root, const fs::path& media, const Option
                          chord[part],
                          note_velocity});
       }
+      workload.notes += notes.size();
+      (void)take(
+          session->midi_clips().add_midi_clip_with_notes(
+              track, {0}, {static_cast<std::int64_t>(bars) * ticks_per_bar}, std::move(notes)),
+          "MIDI clip");
+      route(track, part);
+      ++workload.native_synths;
+    }
+  }
+  if (drums) {
+    // Stick plays its synthetic kit, whose hits stream as the installed
+    // ones do, unless a run names an installed kit.
+    if (options.stick_kit) {
+      const auto status = synth::stick::library::load(synth::stick::Kit::drs, *options.stick_kit);
+      if (status.state != synth::stick::library::State::ready)
+        throw std::runtime_error("the Stick kit did not load: " + status.message);
+    } else {
+      (void)stick_test::install();
+    }
+    for (std::size_t part = 0; part < drums_presets.size(); ++part) {
+      const auto track = take(
+          session->instruments().add_native_instrument_track(drums_engine, drums_presets[part]),
+          "Stick");
+      auto notes = groove_notes(bars);
       workload.notes += notes.size();
       (void)take(
           session->midi_clips().add_midi_clip_with_notes(

@@ -5,6 +5,7 @@
 #include "native_synth_document_model.hpp"
 #include "nova_arp.hpp"
 #include "nova_constellation.hpp"
+#include "stick_panel_data.hpp"
 #include "ui_contracts.hpp"
 
 #include "oscillate/foundation/trace.hpp"
@@ -35,6 +36,7 @@
 #include "oscillate/native_dsp/synth/knock.hpp"
 #include "oscillate/native_dsp/synth/nova.hpp"
 #include "oscillate/native_dsp/synth/pulse.hpp"
+#include "oscillate/native_dsp/synth/stick.hpp"
 #include "oscillate/native_dsp/synth/torque.hpp"
 #include "oscillate/native_dsp/synth/wren.hpp"
 #include "oscillate/native_dsp/synth/wren_breath.hpp"
@@ -1471,6 +1473,8 @@ QVariantMap NativeSynthDeviceController::telemetry() {
       held.push_back(static_cast<int>(std::lround(at(t::held + slot))));
     }
     out[QStringLiteral("held")] = held;
+  } else if (id == "stick") {
+    stick_panel::decode(frame, out);
   } else if (id == "knock" && frame.size() >= synth::knock::telemetry::size) {
     // knock.hpp: the latest hit's pad (-1 before any) and the hit count,
     // which the panel watches for new hits; each pad's peak this block.
@@ -1772,6 +1776,53 @@ QVariantMap NativeSynthDeviceController::bow_layout() const {
           {QStringLiteral("low_name"), key_name(range.low)},
           {QStringLiteral("high_name"), key_name(range.high)},
           {QStringLiteral("keyswitches"), switches}};
+}
+
+namespace {
+
+// The kit Stick's panel shows: the controller's value.
+native_dsp::synth::stick::Kit stick_kit(const native_dsp::EngineDescriptor& engine,
+                                        std::span<const double> values) {
+  namespace stick = native_dsp::synth::stick;
+  const auto at = native_dsp::find_parameter(engine, "stick.kit");
+  if (!at || *at >= values.size()) {
+    return stick::Kit::drs;
+  }
+  return static_cast<stick::Kit>(
+      std::clamp<long>(std::lround(values[*at]), 0, static_cast<long>(stick::kit_count) - 1));
+}
+
+} // namespace
+
+QVariantMap NativeSynthDeviceController::stick_library() const {
+  namespace stick = native_dsp::synth::stick;
+  if (engine_.id != stick::engine().descriptor->id) {
+    return {};
+  }
+  return stick_panel::library(stick_kit(engine_, values_));
+}
+
+QVariantMap NativeSynthDeviceController::stick_reload_library() {
+  namespace stick = native_dsp::synth::stick;
+  if (engine_.id != stick::engine().descriptor->id) {
+    return {};
+  }
+  const auto kit = stick_kit(engine_, values_);
+  // status() looks again whenever the kit is missing or invalid.
+  const auto status = stick::library::status(kit);
+  if (status.state == stick::library::State::missing ||
+      status.state == stick::library::State::invalid) {
+    (void)stick::library::load(kit, stick::library::kit_directory(kit));
+  }
+  return stick_panel::library(kit);
+}
+
+QVariantMap NativeSynthDeviceController::stick_layout() const {
+  namespace stick = native_dsp::synth::stick;
+  if (engine_.id != stick::engine().descriptor->id) {
+    return {};
+  }
+  return stick_panel::layout(stick_kit(engine_, values_));
 }
 
 QString NativeSynthDeviceController::library_folder(const QString& directory) const {

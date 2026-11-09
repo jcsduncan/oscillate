@@ -17,7 +17,7 @@ pipeline and VST3 host; Qt Quick user interface.
 | --- | --- |
 | Arrangement | Audio and MIDI clips; notes, velocity, pedals (sustain, sostenuto, soft); markers; tempo and time-signature maps; chords as notes in MIDI clips ([ADR-0084](docs/decisions/0084-chord-clips.md)); Standard MIDI File import |
 | MIDI recording | QWERTY keyboard input, overdub, metronome, one-bar count-in ([ADR-0086](docs/decisions/0086-midi-recording-and-click.md)) |
-| Instruments | Prism, Ember, Nova, Pulse, Halo, Torque, Drift, Anvil, Knock, Crate; sampled: Concert, Fret, Wren, Bow |
+| Instruments | Prism, Ember, Nova, Pulse, Halo, Torque, Drift, Anvil, Knock, Crate; sampled: Concert, Fret, Wren, Bow, Stick |
 | Effects | Contour, Forge, Orbit, Relay, Expanse, Cast, Vista, Deck, Pocket, Pump, Chop, Temper, Strata, Edge, Hush, Flyby, Dust, Shape, Press, Ceiling, Lens, Loudness, Scope, Tune, Trim, Signal |
 | Mixing | Per-track source → inserts → output; buses, sends, returns, sidechains, delay compensation, macros, racks, freeze |
 | Plugins | Linux VST3 instruments and effects; out-of-process scanning; saved state; X11-embedded editors |
@@ -94,7 +94,7 @@ Machine-specific paths go in `CMakeUserPresets.json` (ignored by Git).
 
 ## Sample libraries
 
-Concert, Fret, Wren and Bow need sample libraries that are not in this
+Concert, Fret, Wren, Bow and Stick need sample libraries that are not in this
 repository. The installers download a pinned release, verify it and convert
 it. They need Python 3 and ffmpeg (with libsoxr for Fret and Wren); Concert,
 Fret and Bow also need git.
@@ -105,6 +105,7 @@ Fret and Bow also need git.
 | Fret | Karoryfer Black and Blue Basses (darkblack) | CC0 1.0 | `python3 -I tools/fret/install_black_and_blue.py` | `OSCILLATE_FRET_LIBRARY` |
 | Wren | University of Iowa Musical Instrument Samples, flute | free use, no formal licence | `python3 -I tools/wren/install_iowa_flute.py` | `OSCILLATE_WREN_LIBRARY` |
 | Bow | VSCO 2 Community Edition strings; University of Iowa Musical Instrument Samples, solo strings | CC0 1.0; free use, no formal licence | `python3 -I tools/bow/install_strings.py` | `OSCILLATE_BOW_LIBRARY` |
+| Stick | DrumGizmo's DRSKit 2.1, MuldjordKit 3 and ShittyKit 1.2 (drum samples provided by DrumGizmo.org) | CC BY 4.0 | `python3 -I tools/stick/install_kits.py` (all three; `--kit drs`, `--kit muldjord` or `--kit garage` for one) | `OSCILLATE_STICK_LIBRARY` |
 
 Default location: `$XDG_DATA_HOME/oscillate/instruments/`
 (`~/.local/share/oscillate/instruments/` when `XDG_DATA_HOME` is unset). An override must be set for both the installer and the
