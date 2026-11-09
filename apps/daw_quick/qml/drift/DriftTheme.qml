@@ -310,6 +310,7 @@ KitTheme {
 
     // The framed filter view: its cutoff reading sits under the plot's chip,
     // and the curve under both.
-    filterViewReadoutY: plotChipRowHeight
-    filterViewTop: plotChipRowHeight + typeSmall + spaceXs
+    filterViewCaptionY: plotChipRowHeight
+    filterViewReadoutY: plotChipRowHeight + typeSmall + spaceXs
+    filterViewTop: plotChipRowHeight + 2 * (typeSmall + spaceXs)
 }

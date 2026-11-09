@@ -1334,7 +1334,7 @@ Rectangle {
                 parameterId: "pump.depth_mid"
                 diameter: panel.theme.bandKnobDiameter
                 inactive: !panel.threeBand
-                inactiveReason: panel.threeBand ? "" : "Only Three Band has a high band"
+                inactiveReason: panel.threeBand ? "" : "Only Three Band has a mid band"
             }
             Cell {
                 parameterId: "pump.depth_high"

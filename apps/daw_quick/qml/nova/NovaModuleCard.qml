@@ -40,6 +40,8 @@ Rectangle {
     readonly property alias body: body
     readonly property bool off: !panel.moduleOn(key)
     readonly property bool collapsed: collapsible && off
+    // A card folded while shown large gives the overview back.
+    onCollapsedChanged: if (collapsed && panel.focusModule === key) panel.restore()
     readonly property bool expanded: expandable && !collapsed && panel.focusModule === key
     readonly property bool flashing: flashPulse.running
     // The height the card takes in the grid. It is kept while the card is

@@ -34,6 +34,8 @@ Item {
     property real lastValue: 0
     // The step the keys edit while the lane has focus.
     property int keyStep: 0
+    // A shorter pattern keeps the key step on a step it still shows.
+    onStepCountChanged: keyStep = Math.max(0, Math.min(stepCount - 1, keyStep))
 
     objectName: "chopLane:" + field
     Accessible.role: Accessible.Grouping

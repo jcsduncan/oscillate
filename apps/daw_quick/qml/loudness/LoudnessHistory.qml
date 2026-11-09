@@ -81,7 +81,8 @@ Item {
         id: frame
         anchors.fill: parent
         theme: history.theme
-        live: history.running
+        // The traces are measured from the running device, kept after a stop.
+        live: true
         xTicks: history.xTicks
         xUnit: "s"
         yTicks: history.yTicks

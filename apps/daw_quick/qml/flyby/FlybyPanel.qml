@@ -93,6 +93,9 @@ Rectangle {
     // ---- Header ----------------------------------------------------------------------
 
     Kit.DeviceHeader {
+        // Flyby's presets are scenes.
+        presetTag: "SCENE · " + panel.controller.preset_category.toUpperCase()
+            + (panel.controller.preset_modified ? " · EDITED" : "")
         id: header
         x: panel.margin
         y: panel.theme.headerTop
@@ -134,13 +137,6 @@ Rectangle {
                 }
             }
         }
-    }
-    // Flyby's presets are scenes.
-    Binding {
-        target: header.browser
-        property: "tag"
-        value: "SCENE · " + panel.controller.preset_category.toUpperCase()
-            + (panel.controller.preset_modified ? " · EDITED" : "")
     }
     // In and out, held peaks, left of the status badge.
     Row {

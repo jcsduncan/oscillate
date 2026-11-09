@@ -530,7 +530,8 @@ Rectangle {
             theme: panel.theme
             plotX: spectrum.px
             plotWidth: spectrum.pw
-            live: panel.playing && !panel.frozen
+            // Every row was measured from the running device, frozen or not.
+            live: true
             topDb: panel.ceilingDb
             rangeDb: panel.rangeDb
         }

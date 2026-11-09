@@ -708,7 +708,8 @@ Rectangle {
         Kit.Segment {
             x: panel.theme.timingControlsX
             y: panel.theme.lookaheadY
-            width: timing.width - panel.theme.timingControlsX - panel.theme.spaceLg
+            // Never narrower than its labels need, whatever the font.
+            width: Math.max(fitWidth, timing.width - panel.theme.timingControlsX - panel.theme.spaceLg)
             height: panel.theme.lookaheadHeight
             controller: panel.controller
             theme: panel.theme

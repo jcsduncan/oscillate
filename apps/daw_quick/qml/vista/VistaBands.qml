@@ -383,9 +383,10 @@ Item {
                         strip.moveCrossover(handle.index + 1, handle.hz * factor)
                     else if (event.key === Qt.Key_Left || event.key === Qt.Key_Down)
                         strip.moveCrossover(handle.index + 1, handle.hz / factor)
-                    else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace)
+                    else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
                         strip.controller.reset_to_default(handle.parameterId)
-                    else
+                        strip.theme.lastTouched = handle.parameterId
+                    } else
                         return
                     event.accepted = true
                 }
@@ -460,6 +461,7 @@ Item {
                     }
                     onReleased: strip.controller.end_gesture(handle.parameterId)
                     onCanceled: strip.controller.cancel_gesture(handle.parameterId)
+                    onDoubleClicked: strip.controller.reset_to_default(handle.parameterId)
                 }
             }
         }

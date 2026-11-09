@@ -137,7 +137,13 @@ Item {
             required property int index
             objectName: frame.theme.prefix + "PlotTickY:" + index
             visible: frame.yLabelFits(index)
-            x: area.x - frame.theme.plotTickGap - implicitWidth
+            // Right-aligned in the gutter; a label wider than it (a wider
+            // font) steps its size down to fit rather than run past the frame.
+            x: 0
+            width: Math.max(0, area.x - frame.theme.plotTickGap)
+            horizontalAlignment: Text.AlignRight
+            fontSizeMode: Text.HorizontalFit
+            minimumPixelSize: frame.theme.typeFitFloor
             y: area.y + frame.yLabelTop(index)
             text: frame.tickLabel(frame.yTicks, index, frame.yUnit)
             color: frame.theme.plotTickInk

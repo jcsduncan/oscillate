@@ -244,7 +244,7 @@ Item {
             activeFocusOnTab: view.controller.editable
             Accessible.role: Accessible.Slider
             Accessible.name: "Crossover " + (index + 1)
-            Accessible.description: view.controller.display(parameterId)
+            Accessible.description: view.revision >= 0 ? view.controller.display(parameterId) : ""
             Keys.onPressed: (event) => {
                 const fine = (event.modifiers & Qt.ShiftModifier) !== 0
                 if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
