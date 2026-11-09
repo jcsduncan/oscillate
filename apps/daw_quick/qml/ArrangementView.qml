@@ -23,6 +23,10 @@ Rectangle {
     // Track id → {open, overlay, keys} (ArrangementWorkspace).
     required property var automationView
     required property bool automationDrawMode
+    // The tempo lane under the ruler (ADR-0112): its height, and whether it
+    // is expanded for editing.
+    required property int tempoLaneHeight
+    required property bool tempoLaneExpanded
     required property string selectedClipId
     required property int selectedTrack
     required property color canvasColor
@@ -97,6 +101,7 @@ Rectangle {
     signal clipOpened(string clipId)
     signal trackSelected(int index)
     signal automationDrawToggled()
+    signal tempoLaneExpandRequested()
 
     function submitViewport() {
         if (bridge && width > 0)
@@ -707,10 +712,29 @@ Rectangle {
             wheel.accepted = true
         }
     }
+    TempoLane {
+        y: arrangement.rulerHeight
+        width: arrangement.width
+        height: arrangement.tempoLaneHeight
+        z: 2
+        controller: arrangement.bridge.tempoLane
+        viewStartBar: arrangement.viewStartBar
+        visibleBars: arrangement.visibleBars
+        expanded: arrangement.tempoLaneExpanded
+        monoFamily: arrangement.theme.monoFamily
+        onExpandRequested: arrangement.tempoLaneExpandRequested()
+    }
+    Rectangle {
+        y: arrangement.rulerHeight + arrangement.tempoLaneHeight - height
+        z: 2
+        width: arrangement.width
+        height: Theme.hairline
+        color: arrangement.lineColor
+    }
     Item {
         id: arrangementTrackViewport
         objectName: "arrangementTrackViewport"
-        y: arrangement.rulerHeight
+        y: arrangement.rulerHeight + arrangement.tempoLaneHeight
         width: parent.width
         height: Math.max(0, parent.height - y - arrangement.masterRowHeight - arrangement.creationHeight
             - arrangement.elapsedRulerHeight
@@ -752,6 +776,9 @@ Rectangle {
                 readonly property color trackColor: arrangement.theme.trackColor(modelData, index)
                 // A clip being dragged out of this row draws above the others.
                 property bool lifted: false
+                // So does a row whose warp marker menu is open: the menu
+                // reaches over the rows below.
+                property bool menuRaised: false
                 readonly property bool carriesGroup: arrangement.groupDragging && arrangement.groupRows !== 0
                     && arrangement.groupTrackRows.indexOf(index) >= 0
                 readonly property var layoutEntry: arrangement.rowLayout[index] || null
@@ -759,7 +786,7 @@ Rectangle {
                 readonly property bool collapsed: isGroup && arrangement.bridge.collapsedBuses.includes(modelData.id)
                 // A folded bus hides its members' lanes.
                 visible: !(layoutEntry && layoutEntry.hidden)
-                z: lifted ? 10 : carriesGroup ? 9 : 0
+                z: lifted || menuRaised ? 10 : carriesGroup ? 9 : 0
                 x: 0
                 y: (arrangement.rowLayout[index] ? arrangement.rowLayout[index].top : index * Theme.laneFallbackHeight)
                     - arrangement.trackScrollY
@@ -1181,9 +1208,13 @@ Rectangle {
                             font.weight: Font.DemiBold
                         }
                         // The clip strip: name, track tempo, Follow, mode.
+                        // Hovered, an audio clip shows how far the project
+                        // tempo stretches it (ADR-0112).
+                        HoverHandler { id: clipHover; enabled: modelData.kind === "audio" }
                         ClipStrip {
                             visible: modelData.kind === "audio"
                             z: 6
+                            hovered: clipHover.hovered
                             // Stays in view while the clip's start is off screen.
                             x: Math.max(Theme.spaceSm, clipCard.shownFrom + Theme.spaceSm)
                             y: 1
@@ -1238,25 +1269,47 @@ Rectangle {
                             y: Theme.clipWaveTop
                             width: Math.max(0, parent.width - Theme.spaceMd) * Math.max(0, sourceWindowEnd - sourceWindowStart)
                             height: parent.height - Theme.clipWaveBottomGap
+                            // While a warp marker is dragged (WarpMarkerOverlay),
+                            // the audio redraws where it will play.
+                            readonly property var warpPreview: warpMarkers.item ? warpMarkers.item.preview : null
+                            onWarpPreviewChanged: requestPaint()
                             onPointsChanged: requestPaint()
                             onWidthChanged: requestPaint()
                             onHeightChanged: requestPaint()
+                            // The clip fraction whose audio plays at `at` in the preview.
+                            function previewSource(at) {
+                                const p = warpPreview
+                                if (at <= p.prev || at >= p.next)
+                                    return at
+                                return at <= p.to ? p.prev + (at - p.prev) * (p.from - p.prev) / Math.max(1e-9, p.to - p.prev)
+                                                  : p.from + (at - p.to) * (p.next - p.from) / Math.max(1e-9, p.next - p.to)
+                            }
                             onPaint: {
                                 const context = getContext("2d");
                                 context.clearRect(0, 0, width, height);
                                 if (points.length === 0 || width <= 0)
                                     return;
                                 const columns = Math.max(1, Math.min(points.length, Math.ceil(width)));
+                                const span = Math.max(1e-9, sourceWindowEnd - sourceWindowStart);
                                 const upper = [];
                                 const lower = [];
                                 for (let column = 0; column < columns; ++column) {
-                                    const begin = Math.floor(column * points.length / columns);
-                                    const end = Math.max(begin + 1, Math.floor((column + 1) * points.length / columns));
+                                    let begin = Math.floor(column * points.length / columns);
+                                    let end = Math.max(begin + 1, Math.floor((column + 1) * points.length / columns));
+                                    if (warpPreview) {
+                                        const at = sourceWindowStart + (column + 0.5) / columns * span;
+                                        begin = Math.floor((previewSource(at) - sourceWindowStart) / span * points.length);
+                                        end = begin + 1;
+                                    }
                                     let minimum = 1;
                                     let maximum = -1;
-                                    for (let index = begin; index < end; ++index) {
+                                    for (let index = Math.max(0, begin); index < Math.min(points.length, end); ++index) {
                                         minimum = Math.min(minimum, points[index].min);
                                         maximum = Math.max(maximum, points[index].max);
+                                    }
+                                    if (maximum < minimum) {
+                                        minimum = 0;
+                                        maximum = 0;
                                     }
                                     const x = (column + 0.5) * width / columns;
                                     upper.push([x, height * (1 - maximum) / 2]);
@@ -1361,7 +1414,7 @@ Rectangle {
                             property real preview: 0
                             readonly property real at: dragging ? preview : clipBeatGrid.downbeat
                             visible: clipBeatGrid.visible
-                            z: 5
+                            z: 22
                             x: Theme.spaceXs + clipBeatGrid.clipWidth * at - Theme.strokeBold / 2
                             y: Theme.clipOverlayTop
                             width: Theme.clipFlagWidth
@@ -1418,6 +1471,30 @@ Rectangle {
                                             (mouse.modifiers & Qt.AltModifier) !== 0)
                                 }
                                 onCanceled: clipFlag.dragging = false
+                            }
+                        }
+                        // The selected clip's warp markers (ADR-0112).
+                        Loader {
+                            id: warpMarkers
+                            // Level editing has the clip's surface to itself.
+                            active: modelData.kind === "audio" && arrangement.selectedClipId === modelData.id
+                                    && !arrangement.levelEditMode
+                            // Above the clip's right-click area, so its markers
+                            // take their own right-click; the flag stays on top.
+                            z: 21
+                            x: clipWaveform.x
+                            y: Theme.clipOverlayTop
+                            width: clipWaveform.width
+                            height: parent.height - Theme.clipOverlayBottomGap
+                            sourceComponent: WarpMarkerOverlay {
+                                bridge: arrangement.bridge
+                                clipId: clipCard.modelData.id
+                                viewFrom: clipWaveform.sourceWindowStart
+                                viewTo: clipWaveform.sourceWindowEnd
+                                editable: arrangement.bridge.audioEditEnabled
+                                monoFamily: arrangement.theme.monoFamily
+                                onMenuOpenChanged: arrangementRow.menuRaised = menuOpen
+                                Component.onDestruction: arrangementRow.menuRaised = false
                             }
                         }
                         Text {

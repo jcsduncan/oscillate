@@ -60,7 +60,7 @@ never reused. 0070 was never assigned.
 | 0050 | [One chain per track](0050-one-chain-per-track.md) | Accepted and implemented; export has two VST3 renderers; superseded in part by ADR-0093 for MIDI while playing |
 | 0051 | [Automation drawn on the arrangement](0051-arrangement-automation.md) | Accepted and implemented; inspector forms to retire |
 | 0052 | [Constant-tempo and key analysis](0052-constant-tempo-and-key-analysis.md) | Accepted; implemented; downbeat rule in ADR-0053 |
-| 0053 | [The clip strip](0053-clip-strip.md) | Accepted; strip, analysis, downbeat, zoom, bars before bar 1 and docked clip editor built; arrangement warp markers and tempo lane not built |
+| 0053 | [The clip strip](0053-clip-strip.md) | Accepted; implemented; warp markers on the arrangement and the tempo lane in ADR-0112 |
 | 0054 | [Live controls, granular UI updates and meters on their own clock](0054-live-controls-and-granular-updates.md) | Accepted; implemented |
 | 0055 | [Deck: a DJ mixer's three-band isolator](0055-deck-dj-isolator.md) | Accepted; implemented |
 | 0056 | [Snarl: a growl and wobble synth](0056-snarl-growl-synth.md) | Superseded by ADR-0057 |
@@ -114,4 +114,4 @@ never reused. 0070 was never assigned.
 | 0108 | [Edge: a clipper under a true-peak ceiling — linear-phase oversampling to 16×, antiderivative antialiasing, a BS.1770 guard](0108-edge-clipper.md) | Accepted; implemented |
 | 0110 | [Heavy projects across the helpers: qualification with the live helpers, a helper per hardware thread up to seven, cheaper Forge and Shape spectra](0110-heavy-projects-across-the-helpers.md) | Accepted; implemented |
 | 0111 | [Bow: sampled strings, sections and solo, bowed from the mod wheel](0111-bow-sampled-strings.md) | Accepted |
-| 0112 | [Warp markers and the tempo lane on the arrangement](0112-warp-markers-and-tempo-lane-on-the-arrangement.md) | Accepted |
+| 0112 | [Warp markers and the tempo lane on the arrangement](0112-warp-markers-and-tempo-lane-on-the-arrangement.md) | Accepted; implemented |

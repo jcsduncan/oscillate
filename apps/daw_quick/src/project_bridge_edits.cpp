@@ -3,7 +3,7 @@
 #include "clip_warp_controller.hpp"
 #include "project_bridge_projection.hpp"
 #include "route_commands.hpp"
-#include "tempo_map_commands.hpp"
+#include "tempo_lane_controller.hpp"
 #include "track_commands.hpp"
 #include "waveform_controller.hpp"
 
@@ -105,26 +105,10 @@ void ProjectBridge::select_audio_clip(const QString& clip_id) {
   clip_warp_->select_clip(source ? clip_id : QString());
 }
 
-void ProjectBridge::set_tempo_event_page(int page) { tempo_map_commands_->set_page(page); }
-
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-void ProjectBridge::add_tempo_event(int bar, int beat, double bpm, int shape_index) {
-  tempo_map_commands_->add_event(bar, beat, bpm, shape_index);
-}
-
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-void ProjectBridge::update_tempo_event(const QString& tick_text, double bpm, int shape_index) {
-  tempo_map_commands_->update_event(tick_text, bpm, shape_index);
-}
-
-void ProjectBridge::set_initial_tempo_bpm(double bpm) { tempo_map_commands_->set_initial_bpm(bpm); }
+void ProjectBridge::set_initial_tempo_bpm(double bpm) { tempo_lane_->set_initial_bpm(bpm); }
 
 void ProjectBridge::set_initial_meter(int numerator, int denominator) {
-  tempo_map_commands_->set_initial_meter(numerator, denominator);
-}
-
-void ProjectBridge::remove_tempo_event(const QString& tick_text) {
-  tempo_map_commands_->remove_event(tick_text);
+  tempo_lane_->set_initial_meter(numerator, denominator);
 }
 
 void ProjectBridge::set_status(QString value) {

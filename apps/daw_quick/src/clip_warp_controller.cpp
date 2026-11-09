@@ -663,6 +663,57 @@ void ClipWarpController::remove_marker(int index) {
                                        static_cast<std::size_t>(index)));
 }
 
+void ClipWarpController::slide_marker(int index, double fraction) {
+  const auto current = selected();
+  const auto frames = state_.value(QStringLiteral("outputFrames")).toULongLong();
+  if (!current || index < 0 || !std::isfinite(fraction) || fraction <= 0.0 || fraction >= 1.0 ||
+      frames == 0) {
+    report_(QStringLiteral("Slide the audio from inside the clip"));
+    return;
+  }
+  const auto output =
+      static_cast<std::uint64_t>(std::llround(fraction * static_cast<double>(frames)));
+  edit(QStringLiteral("Audio slid under the warp marker"),
+       application::slide_warp_marker(
+           current->snapshot, current->clip.id,
+           {.index = static_cast<std::size_t>(index), .output_frame = output}));
+}
+
+void ClipWarpController::remove_markers_after(int index) {
+  const auto current = selected();
+  if (!current || index < 0) {
+    report_(QStringLiteral("Choose a warp marker"));
+    return;
+  }
+  edit(QStringLiteral("Warp markers after this one removed"),
+       application::remove_warp_markers_after(current->snapshot, current->clip.id,
+                                              static_cast<std::size_t>(index)));
+}
+
+void ClipWarpController::straighten_from(int index) {
+  auto* project = editable_session();
+  const auto current = selected();
+  if (!project || !current || index < 0)
+    return;
+  auto proposal = application::straighten_after_warp_marker(current->snapshot, current->clip.id,
+                                                            static_cast<std::size_t>(index));
+  if (!proposal) {
+    report_(QStringLiteral("Warp: %1").arg(QString::fromStdString(proposal.error().message)));
+    return;
+  }
+  auto& value = proposal.value();
+  if (value.placement == current->clip.placement && value.processing == current->clip.processing)
+    return;
+  const auto applied = project->warp().apply_audio_clip_warp(
+      current->clip.id, value.settings_generation, value.placement, std::move(value.processing));
+  if (!applied) {
+    report_(QStringLiteral("Warp: %1").arg(QString::fromStdString(applied.error().message)));
+    return;
+  }
+  commit_();
+  report_(QStringLiteral("Straight from here: one tempo to the clip's end"));
+}
+
 void ClipWarpController::cancel_suggestions() {
   ++suggestion_serial_;
   suggestion_poll_timer_.stop();

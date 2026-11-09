@@ -45,7 +45,7 @@ int run(int argc, char** argv) {
   constexpr std::string_view usage =
       "Usage: oscillate_quick_screenshot PNG [--view arrange|mixer] [--settle MS]\n"
       "                                  [--select-track N] [--select-first-clip]\n"
-      "                                  [--visible-bars N]\n"
+      "                                  [--visible-bars N] [--tempo-lane]\n"
       "                                  [--first-bar N] [--dock-tab 0|1|2]\n"
       "                                  [--play-from BAR] [--size WIDTHxHEIGHT]\n"
       "                                  [--create FOLDER | --open FOLDER | --demo FOLDER]\n";
@@ -58,6 +58,7 @@ int run(int argc, char** argv) {
   // first clip (of the selected track, with --select-track N) and
   // --dock-tab the device dock's tab: 0 chain, 1 clip, 2 notes.
   // --size sets the window's logical size (default the design size).
+  // --tempo-lane expands the tempo lane under the ruler.
   // --play-from plays from that zero-based bar until the shot, so meters and
   // device displays are live; --demo writes the documentation project into
   // a new folder and opens it.
@@ -65,6 +66,7 @@ int run(int argc, char** argv) {
   std::optional<QString> view;
   int settle_ms = default_settle_ms;
   bool select_first_clip = false;
+  bool tempo_lane = false;
   std::optional<int> select_track;
   std::optional<int> dock_tab;
   std::optional<double> visible_bars;
@@ -85,6 +87,8 @@ int run(int argc, char** argv) {
       select_track = std::stoi(argv[++index]);
     } else if (option == "--select-first-clip") {
       select_first_clip = true;
+    } else if (option == "--tempo-lane") {
+      tempo_lane = true;
     } else if (option == "--dock-tab" && has_value) {
       dock_tab = std::stoi(argv[++index]);
     } else if (option == "--visible-bars" && has_value) {
@@ -154,6 +158,14 @@ int run(int argc, char** argv) {
   if (first_bar)
     window->setProperty("viewStartBar", *first_bar);
   window->resize(width, height);
+  if (tempo_lane) {
+    auto* workspace = window->findChild<QObject*>(QStringLiteral("arrangementWorkspace"));
+    if (workspace == nullptr) {
+      std::cerr << "--tempo-lane: the shell has no arrangement workspace\n";
+      return 1;
+    }
+    workspace->setProperty("tempoLaneExpanded", true);
+  }
   if (select_track) {
     if (*select_track >= bridge.tracks().size()) {
       std::cerr << "--select-track " << *select_track << ": the project has "

@@ -22,6 +22,19 @@
 namespace oscillate::project {
 
 enum class TrackKind : std::uint8_t { audio = 1, instrument = 2, group_bus = 3, return_bus = 4 };
+// Whether a track of this kind can hold clips (audio clips, or MIDI clips
+// and their notes); buses only process what reaches them.
+[[nodiscard]] constexpr bool track_holds_clips(TrackKind kind) noexcept {
+  switch (kind) {
+  case TrackKind::audio:
+  case TrackKind::instrument:
+    return true;
+  case TrackKind::group_bus:
+  case TrackKind::return_bus:
+    return false;
+  }
+  return false;
+}
 inline constexpr std::size_t max_sends_per_track = 32;
 inline constexpr std::size_t max_sends_per_project = 2'048;
 inline constexpr std::size_t max_routing_tracks = 4'096;

@@ -492,6 +492,18 @@ void ClipTempoController::set_bpm(const QString& clip_id, double bpm) {
   commit_();
 }
 
+void ClipTempoController::set_bpm_from_segment(const QString& clip_id, int index) {
+  const auto* session = session_ ? session_() : nullptr;
+  const auto* clip = session ? find_clip(session->snapshot(), clip_id) : nullptr;
+  if (!clip || index < 0)
+    return report_(QStringLiteral("Choose a warp marker on the clip"));
+  const auto bpm = application::warp_segment_source_bpm(session->snapshot(), clip->id,
+                                                        static_cast<std::size_t>(index));
+  if (!bpm)
+    return failure(bpm.error());
+  set_bpm(clip_id, bpm.value());
+}
+
 void ClipTempoController::reset_bpm(const QString& clip_id) {
   auto* session = editable_session();
   if (!session)
@@ -885,11 +897,17 @@ void ClipTempoController::fix_drift(const QString& clip_id, int bar) {
   double slope = period;
   double intercept = static_cast<double>(grid->downbeat);
   std::vector<Hit> used;
+  // The beat number, on the source's grid, of fit_grid's downbeat: the
+  // second pass counts from the fitted beat `from_beat`, so its beats keep
+  // the first pass's numbering and land where they belong.
+  std::int64_t numbering = 0;
   for (int pass = 0; pass < 2; ++pass) {
     used.clear();
-    for (const auto& hit : hits(fit_grid, onsets, first, last))
+    for (auto hit : hits(fit_grid, onsets, first, last)) {
+      hit.beat += numbering;
       if (hit.beat >= from_beat)
         used.push_back(hit);
+    }
     if (used.size() < 8)
       return report_(QStringLiteral("Too few kicks after bar %1 to fit").arg(bar));
     double mean_k = 0.0;
@@ -914,6 +932,7 @@ void ClipTempoController::fix_drift(const QString& clip_id, int bar) {
     fit_grid.bpm = 60.0 * grid->sample_rate / slope;
     fit_grid.downbeat = static_cast<std::uint64_t>(
         std::max(0.0, intercept + slope * static_cast<double>(from_beat)));
+    numbering = from_beat;
   }
   const auto last_beat = used.back().beat;
   // Each pinned beat plays at its place on the grid: the downbeat's tick

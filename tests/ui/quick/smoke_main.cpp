@@ -1729,50 +1729,51 @@ int run(int argc, char** argv) {
       return fields;
     };
     const auto initial_tracks = placed();
-    const auto initial_tempo_map = bridge.tempo_map();
+    const auto initial_tempo_map = bridge.tempo_lane()->property("points").toList();
     const auto before_revision = bridge.revision();
     auto* timer = new QTimer(&app);
     timer->setInterval(20);
     QElapsedTimer elapsed;
     elapsed.start();
-    QObject::connect(timer, &QTimer::timeout, &app,
-                     [&app, &bridge, timer, elapsed, before_revision, clip_id, smoke_tempo_mode,
-                      initial_tracks, initial_tempo_map, placed] {
-                       if (elapsed.elapsed() > 15'000) {
-                         std::cerr << "Tempo smoke: analysis timed out\n";
-                         timer->stop();
-                         app.exit(1);
-                         return;
-                       }
-                       const auto clips = bridge.clip_tempo()->property("clips").toMap();
-                       const auto entry = clips.value(clip_id).toMap();
-                       if (entry.isEmpty() || entry.value(QStringLiteral("analysing")).toBool())
-                         return;
-                       const auto source_key = entry.value(QStringLiteral("sourceKey")).toString();
-                       const bool hit = entry.value(QStringLiteral("cacheHit")).toBool();
-                       if (entry.value(QStringLiteral("bpm")).toDouble() != 120.0 ||
-                           entry.value(QStringLiteral("confidence")).toDouble() < 0.55 ||
-                           source_key.size() != 64 || bridge.revision() != before_revision ||
-                           bridge.tempo_map() != initial_tempo_map || placed() != initial_tracks ||
-                           (smoke_tempo_mode == "cached") != hit) {
-                         std::cerr
-                             << "Tempo smoke: clip strip analysis invalid: BPM "
-                             << entry.value(QStringLiteral("bpm")).toDouble() << " confidence "
-                             << entry.value(QStringLiteral("confidence")).toDouble()
-                             << " source-key length " << source_key.size() << " revision "
-                             << bridge.revision() << " expected " << before_revision
-                             << " tempo map unchanged " << (bridge.tempo_map() == initial_tempo_map)
-                             << " clip unchanged " << (placed() == initial_tracks) << " cache hit "
-                             << hit << '\n';
-                         timer->stop();
-                         app.exit(1);
-                         return;
-                       }
-                       std::cout << "Qt Quick tempo analysis " << smoke_tempo_mode << " "
-                                 << source_key.toStdString() << '\n';
-                       timer->stop();
-                       app.quit();
-                     });
+    QObject::connect(
+        timer, &QTimer::timeout, &app,
+        [&app, &bridge, timer, elapsed, before_revision, clip_id, smoke_tempo_mode, initial_tracks,
+         initial_tempo_map, placed] {
+          if (elapsed.elapsed() > 15'000) {
+            std::cerr << "Tempo smoke: analysis timed out\n";
+            timer->stop();
+            app.exit(1);
+            return;
+          }
+          const auto clips = bridge.clip_tempo()->property("clips").toMap();
+          const auto entry = clips.value(clip_id).toMap();
+          if (entry.isEmpty() || entry.value(QStringLiteral("analysing")).toBool())
+            return;
+          const auto source_key = entry.value(QStringLiteral("sourceKey")).toString();
+          const bool hit = entry.value(QStringLiteral("cacheHit")).toBool();
+          if (entry.value(QStringLiteral("bpm")).toDouble() != 120.0 ||
+              entry.value(QStringLiteral("confidence")).toDouble() < 0.55 ||
+              source_key.size() != 64 || bridge.revision() != before_revision ||
+              bridge.tempo_lane()->property("points").toList() != initial_tempo_map ||
+              placed() != initial_tracks || (smoke_tempo_mode == "cached") != hit) {
+            std::cerr << "Tempo smoke: clip strip analysis invalid: BPM "
+                      << entry.value(QStringLiteral("bpm")).toDouble() << " confidence "
+                      << entry.value(QStringLiteral("confidence")).toDouble()
+                      << " source-key length " << source_key.size() << " revision "
+                      << bridge.revision() << " expected " << before_revision
+                      << " tempo map unchanged "
+                      << (bridge.tempo_lane()->property("points").toList() == initial_tempo_map)
+                      << " clip unchanged " << (placed() == initial_tracks) << " cache hit " << hit
+                      << '\n';
+            timer->stop();
+            app.exit(1);
+            return;
+          }
+          std::cout << "Qt Quick tempo analysis " << smoke_tempo_mode << " "
+                    << source_key.toStdString() << '\n';
+          timer->stop();
+          app.quit();
+        });
     timer->start();
   }
   if (smoke_audio_device)
@@ -3258,6 +3259,8 @@ int run(int argc, char** argv) {
                 first_visible_item(window->contentItem(), QStringLiteral("trackCreationRow"));
             auto* add_track_button =
                 first_visible_item(window->contentItem(), QStringLiteral("addTrackButton"));
+            auto* tempo_header =
+                first_visible_item(window->contentItem(), QStringLiteral("tempoLaneHeader"));
             qsizetype first_index = 0;
             qsizetype second_index = 1;
             auto* first_row =
@@ -3273,7 +3276,11 @@ int run(int argc, char** argv) {
                 bridge.insert_chains().size() != bridge.tracks().size() + 1 ||
                 std::abs(second_row->mapToScene({0, 0}).y() -
                          (first_row->mapToScene({0, 0}).y() + first_row->height())) > 0.5 ||
+                // The tempo lane's header sits between the header row and the list.
+                !tempo_header ||
                 std::abs(track_list->mapToScene({0, 0}).y() -
+                         (tempo_header->mapToScene({0, 0}).y() + tempo_header->height())) > 0.5 ||
+                std::abs(tempo_header->mapToScene({0, 0}).y() -
                          (creation_row->mapToScene({0, 0}).y() + creation_row->height())) > 0.5 ||
                 std::abs(master_row->mapToScene({0, 0}).y() -
                          (track_list->mapToScene({0, 0}).y() + track_list->height())) > 0.5 ||

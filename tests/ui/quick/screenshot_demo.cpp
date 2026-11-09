@@ -3,6 +3,10 @@
 // project a user saved.
 #include "screenshot_demo.hpp"
 
+#include "oscillate/analysis/tempo.hpp"
+#include "oscillate/application/clip_warp_edit.hpp"
+#include "oscillate/application/project_session.hpp"
+#include "oscillate/application/tempo_cache.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
 #include "oscillate/native_inserts/instrument_binding.hpp"
@@ -12,12 +16,19 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <fcntl.h>
+#include <filesystem>
+#include <fstream>
+#include <limits>
 #include <memory>
+#include <numbers>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -90,6 +101,36 @@ constexpr std::uint32_t hall_return_colour = 0x5FC7C0;
 constexpr double hall_send_gain = 0.3;
 constexpr double hall_reverb_mix = 1.0;
 constexpr double hall_reverb_decay = 5.0;
+
+// The Top Loop (ADR-0112's screenshots): an audio loop recorded at its own
+// tempo, following the project's from the Lift with two warp markers, and a
+// tempo ramp into the Drop.
+constexpr std::uint32_t top_loop_colour = 0x9DCB7A;
+constexpr double top_loop_bpm = 122.0;
+constexpr int top_loop_bars = 8;
+constexpr int top_loop_bar = lift_bar;
+constexpr double top_loop_confidence = 0.9;
+constexpr std::uint64_t top_loop_generation = 1;
+// The two warp markers: on these beats of the loop, the second dragged a
+// sixteenth late so its segment plays a little slower.
+constexpr int first_warp_beat = 9;
+constexpr int second_warp_beat = 21;
+constexpr double warp_drag_beats = 0.25;
+// The loop's voices: a kick each beat, a clap on two and four, hats on the
+// off-beats; amplitudes, decays (seconds) and the kick's pitch (Hz).
+constexpr double kick_level_peak = 0.7;
+constexpr double kick_decay = 0.09;
+constexpr double kick_hz = 55.0;
+constexpr double clap_level_peak = 0.35;
+constexpr double clap_decay = 0.05;
+constexpr double hat_level_peak = 0.2;
+constexpr double hat_decay = 0.02;
+constexpr int beats_per_clap = 2;
+constexpr std::uint32_t noise_multiplier = 1'664'525U;
+constexpr std::uint32_t noise_increment = 1'013'904'223U;
+constexpr double pcm_full_scale = 32'767.0;
+// The ramp into the Drop.
+constexpr double drop_bpm = 126.0;
 
 template <typename T> T take(foundation::Result<T> result) {
   if (!result)
@@ -384,6 +425,134 @@ void pad(Song& song, project::TrackId track) {
   }
 }
 
+void put16(std::vector<std::uint8_t>& bytes, std::uint16_t value) {
+  bytes.push_back(static_cast<std::uint8_t>(value));
+  bytes.push_back(static_cast<std::uint8_t>(value >> 8U));
+}
+void put32(std::vector<std::uint8_t>& bytes, std::uint32_t value) {
+  put16(bytes, static_cast<std::uint16_t>(value));
+  put16(bytes, static_cast<std::uint16_t>(value >> 16U));
+}
+
+// The Top Loop as a mono 16-bit WAV at its own tempo.
+void write_top_loop(const std::filesystem::path& path) {
+  const auto period = 60.0 * sample_rate / top_loop_bpm;
+  const auto beats = top_loop_bars * beats_per_bar;
+  const auto frames = static_cast<std::uint32_t>(std::lround(beats * period));
+  constexpr std::uint16_t pcm_format = 1;
+  constexpr std::uint16_t mono = 1;
+  constexpr std::uint16_t bytes_per_sample = 2;
+  constexpr std::uint16_t bits_per_sample = 16;
+  constexpr std::uint32_t format_chunk_bytes = 16;
+  constexpr std::uint32_t header_bytes = 36;
+  std::vector<std::uint8_t> wav{'R', 'I', 'F', 'F'};
+  put32(wav, header_bytes + frames * bytes_per_sample);
+  wav.insert(wav.end(), {'W', 'A', 'V', 'E', 'f', 'm', 't', ' '});
+  put32(wav, format_chunk_bytes);
+  put16(wav, pcm_format);
+  put16(wav, mono);
+  put32(wav, sample_rate);
+  put32(wav, sample_rate * bytes_per_sample);
+  put16(wav, bytes_per_sample);
+  put16(wav, bits_per_sample);
+  wav.insert(wav.end(), {'d', 'a', 't', 'a'});
+  put32(wav, frames * bytes_per_sample);
+  std::uint32_t noise = 1;
+  for (std::uint32_t frame = 0; frame < frames; ++frame) {
+    const auto beat_position = frame / period;
+    const auto beat = static_cast<int>(beat_position);
+    const auto since_beat = (beat_position - beat) * period / sample_rate;
+    const auto half = beat_position * 2.0;
+    const auto since_half = (half - std::floor(half)) * period / 2.0 / sample_rate;
+    noise = noise * noise_multiplier + noise_increment;
+    const auto white =
+        static_cast<double>(noise) / std::numeric_limits<std::uint32_t>::max() * 2.0 - 1.0;
+    double value = kick_level_peak * std::exp(-since_beat / kick_decay) *
+                   std::sin(2.0 * std::numbers::pi * kick_hz * since_beat);
+    if (beat % beats_per_clap == 1)
+      value += clap_level_peak * std::exp(-since_beat / clap_decay) * white;
+    if (static_cast<int>(half) % 2 == 1)
+      value += hat_level_peak * std::exp(-since_half / hat_decay) * white;
+    put16(wav, static_cast<std::uint16_t>(static_cast<std::int16_t>(
+                   std::lround(std::clamp(value, -1.0, 1.0) * pcm_full_scale))));
+  }
+  std::ofstream output(path, std::ios::binary);
+  output.write(reinterpret_cast<const char*>(wav.data()), static_cast<std::streamsize>(wav.size()));
+  if (!output.good())
+    throw std::runtime_error("the Top Loop did not write");
+}
+
+void must(const foundation::Result<void>& result) {
+  if (!result)
+    throw std::runtime_error(result.error().message);
+}
+
+// Imports the Top Loop with its reviewed tempo, beats and transients, sets
+// it to follow the project from the Lift with two warp markers, and draws
+// the ramp into the Drop.
+void add_top_loop(const std::filesystem::path& root) {
+  auto session = take(application::ProjectSession::open(root));
+  const auto wav = root.parent_path() / (root.filename().string() + "-top-loop.wav");
+  write_top_loop(wav);
+  const int fd = ::open(wav.c_str(), O_RDONLY | O_CLOEXEC);
+  if (fd < 0)
+    throw std::runtime_error("the Top Loop did not open");
+  const auto imported = session->imports().import_wav_audio(fd);
+  (void)::close(fd);
+  std::filesystem::remove(wav);
+  const auto track = take(imported);
+  must(session->tracks().set_track_name(track, "Top Loop"));
+  must(session->tracks().set_track_color(track, top_loop_colour));
+  // First in the list, where the screenshots show it beside the ruler.
+  must(session->tracks().move_track(track, 0));
+  const auto& snapshot = session->snapshot();
+  const auto& source = snapshot.sources.back();
+  const auto clip =
+      std::ranges::find(snapshot.tracks, track, &project::Track::id)->clips.front().id;
+  must(session->audio_clips().set_audio_clip_name(clip, "Top Loop"));
+
+  const auto period = 60.0 * source.sample_rate / top_loop_bpm;
+  analysis::TempoEstimate estimate;
+  estimate.identity = {take(application::tempo_cache_key(source)).hex(), top_loop_generation};
+  estimate.sample_rate = source.sample_rate;
+  estimate.frames = source.frames;
+  estimate.bpm = top_loop_bpm;
+  estimate.confidence = top_loop_confidence;
+  std::vector<std::uint64_t> onsets;
+  for (int beat = 0; beat < top_loop_bars * beats_per_bar; ++beat) {
+    const auto at = static_cast<std::uint64_t>(std::lround(beat * period));
+    estimate.suggested_beat_frames.push_back(at);
+    onsets.push_back(at);
+    onsets.push_back(static_cast<std::uint64_t>(std::lround((beat + 0.5) * period)));
+  }
+  must(session->source_analysis().accept_source_tempo_analysis(
+      source.id, session->snapshot().revision, estimate));
+  must(session->source_analysis().accept_source_onset_analysis(
+      session->snapshot().sources.back(), session->snapshot().revision, onsets, false));
+  must(session->warp().set_audio_clip_follow(clip, true));
+  must(session->audio_clips().move_audio_clip(clip, {top_loop_bar * bar}));
+
+  // Two markers on beats, the second dragged a sixteenth later.
+  const auto layout = take(application::clip_warp_layout(session->snapshot(), clip));
+  const auto beat_frames =
+      static_cast<double>(layout.output_frames) / (top_loop_bars * beats_per_bar);
+  for (const int at : {first_warp_beat, second_warp_beat})
+    must(session->audio_clips().set_audio_clip_processing(
+        clip, take(application::add_warp_marker(
+                  session->snapshot(), clip,
+                  static_cast<std::uint64_t>(std::lround(at * beat_frames))))));
+  must(session->audio_clips().set_audio_clip_processing(
+      clip, take(application::move_warp_marker(
+                session->snapshot(), clip,
+                {.index = 1,
+                 .output_frame = static_cast<std::uint64_t>(
+                     std::lround((second_warp_beat + warp_drag_beats) * beat_frames))}))));
+
+  must(session->song().set_tempo_ramp({break_bar * bar}, {drop_bar * bar}, drop_bpm,
+                                      timeline::TempoShape::ease_in_out));
+  must(session->saving().save());
+}
+
 } // namespace
 
 void create_demo_project(const std::filesystem::path& root) {
@@ -454,10 +623,15 @@ void create_demo_project(const std::filesystem::path& root) {
       project::SetProjectKey{project::MusicalKey{a_minor_root, project::KeyMode::minor}});
 
   auto applied = take(model.apply(song.operations));
-  auto store = take(persistence::ProjectStore::open_writer(root, true));
-  const auto saved = take(store.save(*applied.snapshot, persistence::SaveKind::explicit_save, {}));
-  if (saved.status != persistence::SaveStatus::committed)
-    throw std::runtime_error("the demo project did not save");
+  {
+    auto store = take(persistence::ProjectStore::open_writer(root, true));
+    const auto saved =
+        take(store.save(*applied.snapshot, persistence::SaveKind::explicit_save, {}));
+    if (saved.status != persistence::SaveStatus::committed)
+      throw std::runtime_error("the demo project did not save");
+  }
+  // The writer is closed, so the session can open the project.
+  add_top_loop(root);
 }
 
 } // namespace oscillate::quick::screenshot

@@ -9,9 +9,6 @@
 
 namespace oscillate::quick::detail {
 
-// The Quick preview and command paths share these limits.
-inline constexpr int tempo_events_per_page = 4;
-
 // A zero-based, fractional bar position as a tick: whole bars by the meter,
 // then the fraction across that bar. The arrangement snaps to its grid
 // before it calls, so this keeps whatever position it chose.

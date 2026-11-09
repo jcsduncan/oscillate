@@ -34,16 +34,12 @@ Item {
     property real viewTo: 1
     property bool viewSet: false
     property var check: ({})
-    property var segments: []
     property real hoverX: -1
     property real selectFrom: -1
     property real selectTo: -1
-    property int draggedMarker: -1
-    property real draggedTo: 0
 
     function refreshCheck() {
         check = clipId.length > 0 ? controller.inspect(clipId) : ({})
-        segments = clipId.length > 0 ? controller.segments(clipId) : []
         overview.requestPaint()
         detail.requestPaint()
     }
@@ -103,12 +99,6 @@ Item {
     function minutes(seconds) {
         const whole = Math.floor(seconds)
         return Math.floor(whole / 60) + ":" + String(whole % 60).padStart(2, "0")
-    }
-    function segmentBpm(fromFraction) {
-        for (const segment of segments)
-            if (Math.abs(segment.from - fromFraction) < 1e-6)
-                return segment.bpm
-        return 0
     }
 
     onClipIdChanged: {
@@ -523,7 +513,7 @@ Item {
 
         // Hover ghost: where a click pins a marker (snapped; Alt: anywhere).
         Item {
-            visible: editor.hoverX >= 0 && editor.draggedMarker < 0 && editor.editable
+            visible: editor.hoverX >= 0 && markerOverlay.dragIndex < 0 && editor.editable
             x: editor.hoverX
             height: parent.height
             Rectangle { width: Theme.hairline; height: parent.height; color: Theme.clipEditorHoverGhost }
@@ -557,6 +547,7 @@ Item {
                 editor.hoverX = editor.xAt(editor.snapped(mouse.x, (mouse.modifiers & Qt.AltModifier) !== 0))
             }
             onPressed: mouse => {
+                markerOverlay.closeMenu()
                 if ((mouse.modifiers & Qt.ShiftModifier) !== 0) {
                     selecting = true
                     editor.selectFrom = editor.fractionAt(mouse.x)
@@ -634,84 +625,19 @@ Item {
             }
         }
 
-        // Warp markers: dashed gold, a diamond to drag, the segment's tempo.
-        Repeater {
-            model: editor.warp.markers || []
-            delegate: Item {
-                id: marker
-                objectName: "clipEditorMarker"
-                required property var modelData
-                required property int index
-                readonly property real at: editor.draggedMarker === index ? editor.draggedTo : modelData.fraction
-                visible: at >= editor.viewFrom && at <= editor.viewTo
-                x: editor.xAt(at)
-                height: detailFrame.height
-                z: 4
-                Column {
-                    height: parent.height
-                    Repeater {
-                        model: Math.ceil(marker.height / (2 * Theme.clipEditorMarkerDash))
-                        delegate: Rectangle { width: Theme.hairline; height: Theme.clipEditorMarkerDash; color: editor.gold; y: 0 }
-                    }
-                    spacing: Theme.clipEditorMarkerDash
-                }
-                Rectangle {
-                    x: -(Theme.clipEditorMarkerHeadSize - Theme.hairline) / 2
-                    y: Theme.spaceXs
-                    width: Theme.clipEditorMarkerHeadSize
-                    height: Theme.clipEditorMarkerHeadSize
-                    // A square turned to a diamond.
-                    readonly property real diamondTurn: 45
-                    rotation: diamondTurn
-                    color: editor.gold
-                }
-                Rectangle {
-                    readonly property real bpm: editor.segmentBpm(marker.modelData.fraction)
-                    visible: bpm > 0
-                    x: Theme.spaceMd
-                    y: Theme.clipEditorSegmentTagY
-                    width: segText.implicitWidth + Theme.spaceMd
-                    height: Theme.clipEditorSegmentTagHeight
-                    radius: Theme.radiusSm
-                    color: editor.gold
-                    Text {
-                        id: segText
-                        anchors.centerIn: parent
-                        text: "seg " + parent.bpm.toFixed(2)
-                        color: Theme.canvas
-                        font.pixelSize: Theme.typeSmall
-                        font.family: editor.monoFamily
-                    }
-                }
-                MouseArea {
-                    x: -width / 2
-                    width: Theme.clipEditorMarkerGrabWidth
-                    height: Theme.clipEditorMarkerGrabHeight
-                    enabled: editor.editable
-                    cursorShape: Qt.SizeHorCursor
-                    preventStealing: true
-                    Accessible.role: Accessible.Slider
-                    Accessible.name: "Warp marker: drag to stretch, double-click to remove"
-                    onPressed: {
-                        editor.draggedMarker = marker.index
-                        editor.draggedTo = marker.modelData.fraction
-                    }
-                    onPositionChanged: mouse => {
-                        if (!pressed) return
-                        const x = mapToItem(detailFrame, mouse.x, mouse.y).x
-                        editor.draggedTo = editor.snapped(x, (mouse.modifiers & Qt.AltModifier) !== 0)
-                    }
-                    onReleased: {
-                        const index = editor.draggedMarker
-                        const to = editor.draggedTo
-                        editor.draggedMarker = -1
-                        if (Math.abs(to - marker.modelData.fraction) > 1e-6)
-                            editor.bridge.clipWarp.move_marker(index, to)
-                    }
-                    onCanceled: editor.draggedMarker = -1
-                    onDoubleClicked: editor.bridge.clipWarp.remove_marker(marker.index)
-                }
-            }
+        // Warp markers, with the arrangement's gestures and commands.
+        WarpMarkerOverlay {
+            id: markerOverlay
+            objectName: "clipEditorMarkers"
+            anchors.fill: parent
+            z: 4
+            bridge: editor.bridge
+            clipId: editor.clipId
+            viewFrom: editor.viewFrom
+            viewTo: editor.viewTo
+            editable: editor.editable
+            monoFamily: editor.monoFamily
+            pinBand: false
         }
 
         // Where the kicks start to drift off the grid.
@@ -801,7 +727,7 @@ Item {
         spacing: Theme.spaceMd
         Text {
             anchors.verticalCenter: parent.verticalCenter
-            text: "Click to pin a marker · drag a marker to stretch · double-click to remove · Shift-drag to select · Ctrl+wheel zooms"
+            text: "Click to pin a marker · drag it to stretch · Shift-drag it to slide the audio · right-click for more · Shift-drag to select · Ctrl+wheel zooms"
             color: editor.dimColor
             font.pixelSize: Theme.typeBody
         }

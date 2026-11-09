@@ -34,6 +34,9 @@ Rectangle {
     // Track id → {open, keys}: the automation lanes shown under each track.
     required property var automationView
     required property bool automationDrawMode
+    // The tempo lane's header row under the creation row (ADR-0112).
+    required property int tempoLaneHeight
+    required property bool tempoLaneExpanded
     required property color panelColor
     required property color raisedColor
     required property color lineColor
@@ -360,6 +363,7 @@ Rectangle {
     signal trackSelected(int index)
     signal trackDropMoved(var drop)
     signal scrollPositionChanged(real contentY)
+    signal tempoLaneToggled()
     // Scrolls the rows (and so the arrangement beside them) by pixels.
     function scrollBy(pixels) {
         const limit = Math.max(0, trackList.contentHeight - trackList.height)
@@ -540,11 +544,64 @@ Rectangle {
         onAddAudio: trackPanel.bridge.trackCommands.add_audio_track()
     }
 
+    Rectangle {
+        id: tempoLaneHeader
+        objectName: "tempoLaneHeader"
+        y: trackCreationRow.height
+        width: trackPanel.width - Theme.hairline
+        height: trackPanel.tempoLaneHeight
+        color: Theme.tempoLaneGround
+        activeFocusOnTab: true
+        Accessible.role: Accessible.Button
+        Accessible.name: trackPanel.tempoLaneExpanded ? "Collapse the project tempo lane" : "Expand the project tempo lane to draw ramps"
+        border.color: activeFocus ? Theme.focusRing : "transparent"
+        border.width: activeFocus ? Theme.focusRingWidth : 0
+        Keys.onShortcutOverride: event => trackPanel.claimKeys(event, trackPanel.buttonKeys)
+        Keys.onReturnPressed: trackPanel.tempoLaneToggled()
+        Keys.onSpacePressed: trackPanel.tempoLaneToggled()
+        Rectangle {
+            anchors.bottom: parent.bottom
+            width: parent.width
+            height: Theme.hairline
+            color: trackPanel.lineColor
+        }
+        Row {
+            x: Theme.spaceLg
+            height: Math.min(parent.height, Theme.tempoLaneCollapsedHeight)
+            spacing: Theme.spaceSm
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: trackPanel.tempoLaneExpanded ? "▾" : "▸"
+                color: trackPanel.dimTextColor
+                font.pixelSize: Theme.typeMicro
+            }
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: Theme.tempoLaneHeaderSwatch
+                height: Theme.tempoLaneHeaderSwatch
+                radius: Theme.radiusXs
+                color: Theme.tempoLaneCurve
+            }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Project tempo"
+                color: trackPanel.dimTextColor
+                font.pixelSize: Theme.typeMicro
+            }
+        }
+        MouseArea {
+            Tip { text: "Tempo lane: draw ramps across the mix" }
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: trackPanel.tempoLaneToggled()
+        }
+    }
+
     Flickable {
         id: trackList
         objectName: "trackList"
         x: 0
-        y: trackCreationRow.height
+        y: trackCreationRow.height + trackPanel.tempoLaneHeight
         width: parent.width
         height: Math.max(0, parent.height - y - masterTrackRow.height
             - trackPanel.pianoRollHeight - trackPanel.elapsedRulerHeight)
@@ -1693,7 +1750,7 @@ Rectangle {
     Text {
         visible: trackPanel.bridge.tracks.length === 0
         x: Theme.spaceXl
-        y: trackCreationRow.height + Theme.space2xl
+        y: trackCreationRow.height + trackPanel.tempoLaneHeight + Theme.space2xl
         width: parent.width - 2 * Theme.spaceXl
         text: "No tracks yet. Double-click an instrument in the browser, or use + Track."
         wrapMode: Text.WordWrap

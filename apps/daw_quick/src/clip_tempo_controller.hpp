@@ -80,6 +80,9 @@ public:
   Q_INVOKABLE void set_bpm(const QString& clip_id, double bpm);
   // Back to the detected tempo.
   Q_INVOKABLE void reset_bpm(const QString& clip_id);
+  // The track tempo becomes the tempo of the segment from warp marker
+  // `index` (ADR-0112).
+  Q_INVOKABLE void set_bpm_from_segment(const QString& clip_id, int index);
   // x2 and /2: half- and double-time reads.
   Q_INVOKABLE void scale_bpm(const QString& clip_id, double factor);
   // One tap; from the fourth, the tempo of the taps (a gap over two seconds

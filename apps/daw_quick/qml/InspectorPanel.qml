@@ -27,7 +27,6 @@ Rectangle {
     readonly property int routingBaseHeight: 352
     readonly property int routingSendRowHeight: 29
     readonly property int routingTrackExtra: 405
-    readonly property int tempoMapHeight: 370
     readonly property int clipAnalysisHeight: 730
     readonly property int clipAnalysisGap: 20
     readonly property int baseContentHeight: 1520
@@ -51,12 +50,11 @@ Rectangle {
     readonly property int sourceCardHeight: 275
     readonly property int routingY: 277
     readonly property int masterControlsHeight: 55
-    readonly property int tempoMapY: 290
-    readonly property int keyReviewY: 475
+    readonly property int keyReviewY: 290
     readonly property int keyReviewHeight: 225
-    readonly property int clipAutomationY: 705
+    readonly property int clipAutomationY: 520
     readonly property int clipAutomationHeight: 300
-    readonly property int warpY: 1015
+    readonly property int warpY: 830
     readonly property int sendAutomationY: 290
     // Send gain automation rows.
     readonly property int sendChoiceY: 19
@@ -119,7 +117,6 @@ Rectangle {
         })
     readonly property int sendAutomationHeight: currentSend ? sendAutomationBlockHeight : 0
     readonly property int routingInspectorHeight: selectedTrack === -2 ? masterRoutingHeight : routingBaseHeight + (currentRouteTrack.sendCount || 0) * routingSendRowHeight + (currentRouteTrack.id ? routingTrackExtra : 0)
-    readonly property int tempoMapEditorHeight: tempoMapHeight
     readonly property int analysisOrAutomationHeight: inspector.selectedAudioClip() ? clipAnalysisHeight + warpEditor.implicitHeight + clipAnalysisGap : 0
     color: panel
     onSelectedTrackChanged: {
@@ -150,7 +147,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         contentWidth: width
-        contentHeight: inspector.baseContentHeight + inspector.sourcePanelOffset + inspector.routingInspectorHeight + inspector.tempoMapEditorHeight + inspector.analysisOrAutomationHeight + inspector.sendAutomationHeight
+        contentHeight: inspector.baseContentHeight + inspector.sourcePanelOffset + inspector.routingInspectorHeight + inspector.analysisOrAutomationHeight + inspector.sendAutomationHeight
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         Rectangle {
@@ -320,26 +317,11 @@ Rectangle {
             textDim: inspector.textDim
             accent: inspector.accent
         }
-        TempoMapEditor {
-            objectName: "tempoMapEditor"
-            x: inspector.inset
-            y: inspector.tempoMapY + inspector.sourcePanelOffset + inspector.routingInspectorHeight
-            width: parent.width - 2 * inspector.inset
-            height: inspector.tempoMapEditorHeight
-            bridge: inspector.bridge
-            tempoMap: inspector.bridge.tempoMap
-            panelRaised: inspector.panelRaised
-            lineColor: inspector.line
-            textMain: inspector.textMain
-            textDim: inspector.textDim
-            accent: inspector.accent
-            amber: inspector.amber
-        }
 KeyReviewPanel {
             objectName: "keyReviewPanel"
             visible: inspector.selectedAudioClip() !== null
             x: inspector.inset
-            y: inspector.keyReviewY + inspector.sourcePanelOffset + inspector.routingInspectorHeight + inspector.tempoMapEditorHeight
+            y: inspector.keyReviewY + inspector.sourcePanelOffset + inspector.routingInspectorHeight
             width: parent.width - 2 * inspector.inset
             height: inspector.keyReviewHeight
             review: inspector.bridge.keyReview
@@ -353,7 +335,7 @@ KeyReviewPanel {
             objectName: "clipChannelAutomationEditor"
             visible: inspector.selectedAudioClip() !== null
             x: inspector.inset
-            y: inspector.clipAutomationY + inspector.sourcePanelOffset + inspector.routingInspectorHeight + inspector.tempoMapEditorHeight
+            y: inspector.clipAutomationY + inspector.sourcePanelOffset + inspector.routingInspectorHeight
             width: parent.width - 2 * inspector.inset
             height: inspector.clipAutomationHeight
             bridge: inspector.bridge
@@ -370,7 +352,7 @@ KeyReviewPanel {
             objectName: "warpEditor"
             visible: inspector.selectedAudioClip() !== null
             x: inspector.inset
-            y: inspector.warpY + inspector.sourcePanelOffset + inspector.routingInspectorHeight + inspector.tempoMapEditorHeight
+            y: inspector.warpY + inspector.sourcePanelOffset + inspector.routingInspectorHeight
             width: parent.width - 2 * inspector.inset
             height: implicitHeight
             bridge: inspector.bridge
@@ -386,7 +368,7 @@ KeyReviewPanel {
             objectName: "sendAutomationEditor"
             visible: inspector.currentSend !== null
             x: inspector.inset
-            y: inspector.sendAutomationY + inspector.sourcePanelOffset + inspector.routingInspectorHeight + inspector.tempoMapEditorHeight + inspector.analysisOrAutomationHeight
+            y: inspector.sendAutomationY + inspector.sourcePanelOffset + inspector.routingInspectorHeight + inspector.analysisOrAutomationHeight
             width: parent.width - 2 * inspector.inset
             height: inspector.sendAutomationHeight
             Text {
@@ -662,7 +644,7 @@ KeyReviewPanel {
         }
         Item {
             x: 0
-            y: inspector.sourcePanelOffset + inspector.routingInspectorHeight + inspector.tempoMapEditorHeight + inspector.quickActionsGap + inspector.analysisOrAutomationHeight + inspector.sendAutomationHeight
+            y: inspector.sourcePanelOffset + inspector.routingInspectorHeight + inspector.quickActionsGap + inspector.analysisOrAutomationHeight + inspector.sendAutomationHeight
             width: parent.width
             height: inspector.quickActionsHeight
             Rectangle {

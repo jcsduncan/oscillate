@@ -18,9 +18,18 @@ device chain in the dock below.*
 
 *The mixer view.*
 
+![Warp markers on the selected clip and in the docked clip editor](../../docs/images/app/warp-markers.png)
+
+*Warp markers on the selected clip, with each segment's tempo, and the same
+markers in the dock's Clip tab ([ADR-0112](../../docs/decisions/0112-warp-markers-and-tempo-lane-on-the-arrangement.md)).*
+
+![The tempo lane expanded under the ruler](../../docs/images/app/tempo-lane.png)
+
+*The tempo lane expanded under the ruler, with an S-curve ramp into the Drop.*
+
 The shell screenshots are `oscillate_quick_screenshot` (tests/ui/quick) renders
 of its `--demo` project, playing (`--play-from`), at `QT_SCALE_FACTOR=2` and
-`--size 1760x1000`. Panel screenshots come from each panel test with its
+`--size 1760x1000`; the tempo lane shot adds `--tempo-lane`. Panel screenshots come from each panel test with its
 `<PANEL>_PANEL_SCREENSHOT_DIR` set, also at `QT_SCALE_FACTOR=2`. Both are saved
 as truecolour PNGs.
 

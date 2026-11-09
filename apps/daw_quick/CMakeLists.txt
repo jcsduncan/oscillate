@@ -46,8 +46,9 @@ set(oscillate_quick_core_sources
   src/plugin_automation_controller.hpp
   src/track_commands.cpp
   src/track_commands.hpp
-  src/tempo_map_commands.cpp
-  src/tempo_map_commands.hpp
+  src/tempo_lane_controller.cpp
+  src/tempo_lane_controller.hpp
+  src/bar_ticks.hpp
   src/workspace_layout_controller.cpp
   src/workspace_layout_controller.hpp
   src/route_commands.cpp
@@ -211,8 +212,9 @@ set(oscillate_quick_shared_sources
   src/project_lifecycle_controller.hpp
   src/route_commands.cpp
   src/route_commands.hpp
-  src/tempo_map_commands.cpp
-  src/tempo_map_commands.hpp
+  src/tempo_lane_controller.cpp
+  src/tempo_lane_controller.hpp
+  src/bar_ticks.hpp
   src/tempo_worker.cpp
   src/tempo_worker.hpp
   src/track_automation_controller.cpp

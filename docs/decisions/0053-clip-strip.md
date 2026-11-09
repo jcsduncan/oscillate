@@ -1,6 +1,6 @@
 # ADR-0053 — The clip strip: tempo, Follow and downbeat on every audio clip
 
-**Status:** Accepted; the strip, background analysis, downbeat flag, fractional zoom, bars before bar 1 and the docked clip editor are implemented. Warp markers are edited in the clip editor and the tempo map in the inspector; warp markers on the arrangement and a tempo lane are not built. **Date:** 21 October 2026.
+**Status:** Accepted and implemented. Warp markers on the arrangement and the tempo lane are in ADR-0112. **Date:** 21 October 2026.
 
 ## Context
 

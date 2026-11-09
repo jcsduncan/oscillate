@@ -232,9 +232,10 @@
     <file alias="LoopControls.qml">qml/LoopControls.qml</file>
     <file alias="WarpEditor.qml">qml/WarpEditor.qml</file>
     <file alias="WarpMarkerLane.qml">qml/WarpMarkerLane.qml</file>
+    <file alias="WarpMarkerOverlay.qml">qml/WarpMarkerOverlay.qml</file>
+    <file alias="TempoLane.qml">qml/TempoLane.qml</file>
     <file alias="WarpStepper.qml">qml/WarpStepper.qml</file>
     <file alias="KeyReviewPanel.qml">qml/KeyReviewPanel.qml</file>
-    <file alias="TempoMapEditor.qml">qml/TempoMapEditor.qml</file>
     <file alias="WelcomeScreen.qml">qml/WelcomeScreen.qml</file>
     <file alias="ManagedMediaPanel.qml">qml/ManagedMediaPanel.qml</file>
     <file alias="NamedRevisionPanel.qml">qml/NamedRevisionPanel.qml</file>

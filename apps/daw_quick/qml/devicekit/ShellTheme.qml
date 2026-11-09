@@ -671,6 +671,39 @@ KitTheme {
     readonly property color clipEditorDriftEdge: "#5a2a26"
     readonly property color clipEditorDriftText: "#ffb3a8"
     readonly property int clipEditorFooterDividerHeight: 20
+    // Warp markers on the selected clip (WarpMarkerOverlay, ADR-0112): the
+    // band along the waveform's foot where the pointer pins them.
+    readonly property int warpBandHeight: 14
+    // ...but never more than this share of the waveform's height.
+    readonly property real warpBandMaxShare: 0.34
+    readonly property int warpMarkerHeadSize: 9
+    readonly property int warpTagHeight: 15
+    readonly property int warpTagGap: 4
+    readonly property color warpTagGround: Qt.rgba(0.043, 0.055, 0.071, 0.85)
+    readonly property color warpMarkerFaded: Qt.rgba(1, 0.81, 0.36, 0.35)
+    readonly property int warpMenuWidth: 220
+    readonly property int warpMenuEntryHeight: 24
+    readonly property int warpMenuPadding: 4
+    // A stretch or slide keeps markers this far (px) from their neighbours.
+    readonly property int warpMarkerMinGap: 2
+    // The project tempo lane under the ruler (TempoLane, ADR-0112).
+    readonly property int tempoLaneCollapsedHeight: 14
+    readonly property int tempoLaneExpandedHeight: 96
+    readonly property color tempoLaneGround: "#0f1318"
+    readonly property color tempoLaneGuide: "#1a222b"
+    readonly property color tempoLaneCurve: "#f5b14c"
+    readonly property real tempoLaneCurveWidth: 1.5
+    readonly property int tempoLanePointSize: 8
+    readonly property int tempoLanePointGrab: 14
+    readonly property int tempoLanePadding: 8
+    // BPM guides at least this far apart (px), on a whole-BPM step.
+    readonly property int tempoLaneGuideMinSpacing: 18
+    readonly property real tempoLaneRampWashAlpha: 0.07
+    readonly property int tempoLaneTagHeight: 16
+    readonly property int tempoLaneMenuWidth: 180
+    readonly property int tempoLaneHeaderSwatch: 8
+    // A clip stretched further than this (percent) shows its stretch in amber.
+    readonly property real stretchWarnPercent: 6
     // The strip on an audio clip's cap: name and tempo, Follow and mode chips.
     readonly property int clipStripSpacing: 4
     readonly property int clipStripHeight: 16
