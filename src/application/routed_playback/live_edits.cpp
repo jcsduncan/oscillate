@@ -152,6 +152,7 @@ RoutedPlaybackControl::try_queue_live_native(std::shared_ptr<const project::Snap
   // A value offer never touches the detector wiring, so a built-in effect on
   // a sidechained chain still edits live.
   auto* running = active_stage(changed->id, changed_slot.in1->id);
+  // NOLINTBEGIN(bugprone-unchecked-optional-access): engaged when superseding.
   if (!running ||
       !(running->saved ==
         track_chain::SavedStage{changed_slot.in1->id, changed_slot.in1->processor}) ||
@@ -185,6 +186,7 @@ RoutedPlaybackControl::try_queue_live_native(std::shared_ptr<const project::Snap
     } else {
       pending_native_revision_.emplace(std::move(pending));
     }
+    // NOLINTEND(bugprone-unchecked-optional-access)
     return Result<bool>::success(true);
   } catch (const std::bad_alloc&) {
     return Result<bool>::failure(
@@ -267,6 +269,7 @@ Result<bool> RoutedPlaybackControl::try_queue_live_effect_group(
         return Result<bool>::success(false);
       auto* stage = dynamic_cast<native_inserts::NativeEffectStage*>(running->runtime.get());
       if (!stage || stage->slot() != change.slot ||
+          // NOLINTNEXTLINE(bugprone-unchecked-optional-access): engaged when superseding.
           (superseding && pending_native_revision_->group[i].stage != stage))
         return Result<bool>::success(false);
       group.push_back({change.track->id, change.slot, stage});
@@ -351,6 +354,7 @@ Result<bool> RoutedPlaybackControl::try_queue_live_master_native(
       if (!next)
         return Result<bool>::success(false);
       auto* stage = running->runtime.get();
+      // NOLINTBEGIN(bugprone-unchecked-optional-access): engaged when superseding.
       if (superseding &&
           pending_native_revision_->runtime !=
               decltype(pending.runtime){dynamic_cast<native_inserts::NativeEffectStage*>(stage)})
@@ -370,6 +374,7 @@ Result<bool> RoutedPlaybackControl::try_queue_live_master_native(
     } else {
       pending_native_revision_.emplace(std::move(pending));
     }
+    // NOLINTEND(bugprone-unchecked-optional-access)
     return Result<bool>::success(true);
   } catch (const std::bad_alloc&) {
     return Result<bool>::failure(
@@ -690,6 +695,7 @@ Result<bool> RoutedPlaybackControl::try_queue_live_effect_automation(
       running ? dynamic_cast<native_inserts::NativeEffectStage*>(running->runtime.get()) : nullptr;
   if (!stage || stage->slot() != *slot)
     return Result<bool>::success(false);
+  // NOLINTBEGIN(bugprone-unchecked-optional-access): engaged when superseding.
   if (superseding &&
       (pending_native_revision_->track != changed->id ||
        std::get<native_inserts::NativeEffectStage*>(pending_native_revision_->runtime) != stage))
@@ -717,6 +723,7 @@ Result<bool> RoutedPlaybackControl::try_queue_live_effect_automation(
     pending.runtime = stage;
     pending_native_revision_.emplace(std::move(pending));
   }
+  // NOLINTEND(bugprone-unchecked-optional-access)
   return Result<bool>::success(true);
 }
 
