@@ -14,6 +14,8 @@ add_library(oscillate_project
   model_history.cpp
   model_support.cpp
   model_validate.cpp
+  model_validate_automation.cpp
+  model_validate_clips.cpp
   snapshot_size.cpp
   clip_fade.cpp
   frozen_view.cpp
