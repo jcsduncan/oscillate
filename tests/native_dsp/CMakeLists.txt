@@ -373,7 +373,9 @@ oscillate_add_case_tests(native_shape_contract oscillate_shape_tests
   slopes_cut_at_their_rate
   a_live_slope_reaches_its_depth
   slope_changes_never_click
-  any_block_split_renders_identically)
+  any_block_split_renders_identically
+  display_spectra_read_input_and_output_apart
+  spectra_of_eqs_started_together_land_in_different_blocks)
 
 oscillate_add_test_executable(oscillate_effect_platform_tests SOURCES effect_platform_tests.cpp
   LIBS oscillate::native_effects)
@@ -410,6 +412,7 @@ oscillate_add_case_tests(native_forge_contract oscillate_forge_tests
   live_model_switches_are_click_free
   telemetry_draws_the_curve
   presets_match_golden_fingerprints
+  the_kernel_matches_the_reference_shaper
   SLOW
   aliases_stay_below_minus_90_dbfs
   auto_gain_matches_level)
