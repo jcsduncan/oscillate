@@ -14,7 +14,7 @@ foreach(tool IN ITEMS demo_song lock_ab minimal_demo mix_check)
     LIBS ${oscillate_render_tool_libs})
 endforeach()
 oscillate_add_tool(oscillate_nova_audition nova_audition EXCLUDE_FROM_ALL
-  SOURCES nova_audition/main.cpp nova_audition/pads.cpp LIBS ${oscillate_render_tool_libs})
+  SOURCES nova_audition/main.cpp nova_audition/pads.cpp nova_audition/breakdown.cpp nova_audition/keys.cpp nova_audition/strings.cpp LIBS ${oscillate_render_tool_libs})
 oscillate_add_tool(oscillate_anvil_loops anvil_reference EXCLUDE_FROM_ALL
   SOURCES anvil_reference/render_loops.cpp LIBS oscillate::synth_engines)
 
