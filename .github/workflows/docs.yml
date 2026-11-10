@@ -46,7 +46,7 @@ jobs:
         with:
           python-version: "3.14"
       - name: Install MkDocs
-        run: python -I -m pip install --quiet -r scripts/ci/docs-requirements.txt
+        run: python -I -m pip install --quiet --require-hashes -r scripts/ci/docs-requirements.txt
       - name: Check local Markdown links
         run: python -I scripts/check-doc-links.py
       - name: Build the site
