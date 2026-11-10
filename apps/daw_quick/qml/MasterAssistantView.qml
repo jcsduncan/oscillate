@@ -30,6 +30,8 @@ Rectangle {
     color: style.canvas
     Accessible.role: Accessible.Pane
     Accessible.name: "Master assistant"
+    // Leaving the view silences the A/B.
+    Component.onDestruction: if (view.c !== null) view.c.stopAudition()
 
     // ---- Header ----------------------------------------------------------------------
     Item {
@@ -109,7 +111,12 @@ Rectangle {
         color: accent ? view.style.accent : (buttonArea.containsMouse ? view.style.buttonFace : view.style.panelRaised)
         border.color: accent ? view.style.accent : view.style.lineStrong
         opacity: enabled ? 1 : view.style.droppedOpacity
+        activeFocusOnTab: true
+        Keys.onReturnPressed: button.clicked()
+        Keys.onEnterPressed: button.clicked()
+        Keys.onSpacePressed: button.clicked()
         Accessible.role: Accessible.Button
+        FocusRing { targetRadius: view.style.controlRadius }
         Text {
             id: buttonLabel
             anchors.centerIn: parent
@@ -631,8 +638,12 @@ Rectangle {
             radius: view.style.radiusSm
             color: row.kept ? view.style.accent : "transparent"
             border.color: row.kept ? view.style.accent : view.style.lineStrong
+            activeFocusOnTab: view.phase === "proposed"
+            Keys.onSpacePressed: row.toggled(!row.kept)
+            Keys.onReturnPressed: row.toggled(!row.kept)
             Accessible.role: Accessible.CheckBox
             Accessible.name: "Keep " + row.name
+            FocusRing { targetRadius: view.style.radiusSm }
             Accessible.checked: row.kept
             MouseArea {
                 anchors.fill: parent

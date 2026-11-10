@@ -256,6 +256,13 @@ void MasterAssistantController::set_use_loop(bool on) {
 // A goal moved: the proposal no longer answers it. Nothing was applied, so
 // it is simply dropped; Analyse plans again on what was measured.
 void MasterAssistantController::goals_changed() {
+  // A run for the old goals no longer answers them: its result is dropped.
+  if (job_.running() && !accepted_) {
+    if (progress_)
+      progress_->cancel.store(true, std::memory_order_release);
+    ++generation_;
+    status_.set(QStringLiteral("The goals changed: Analyse again"));
+  }
   if (!accepted_) {
     stopAudition();
     proposed_.reset();
@@ -415,8 +422,10 @@ void MasterAssistantController::poll() {
 void MasterAssistantController::finish() {
   timer_.stop();
   auto taken = job_.take();
-  if (!taken || taken->generation != generation_)
+  if (!taken || taken->generation != generation_) {
+    emit changed();
     return;
+  }
   auto& done = taken->result;
   for (auto& [path, analysis] : done.references)
     reference_cache_.insert_or_assign(path, std::move(analysis));
@@ -425,6 +434,7 @@ void MasterAssistantController::finish() {
                    ? QStringLiteral("Stopped")
                    : text(done.result.error().message));
     emit changed();
+    project_changed();
     return;
   }
   if (done.verified) {
@@ -437,6 +447,7 @@ void MasterAssistantController::finish() {
     status_.set(verified_on_target_ ? QStringLiteral("The master meets the target")
                                     : QStringLiteral("The master misses the target: see why"));
     emit changed();
+    project_changed();
     return;
   }
   if (done.measured)
@@ -458,6 +469,8 @@ void MasterAssistantController::finish() {
   nudge_kept_.assign(proposed_ ? proposed_->proposal.nudges.size() : 0, true);
   status_.set(QStringLiteral("Proposed: listen, then accept or reject"));
   emit changed();
+  // The mix may have changed, or another project opened, meanwhile.
+  project_changed();
 }
 
 bool MasterAssistantController::wait() {
@@ -535,9 +548,10 @@ void MasterAssistantController::accept() {
     return;
   if (hooks_.can_edit && !hooks_.can_edit())
     return;
+  const auto& proposal = proposed_->proposal;
+  const auto measured = measured_;
   stopAudition();
-  auto done =
-      assistant::accept(*session, proposed_->proposal, selection(), *measured_->pinned->snapshot);
+  auto done = assistant::accept(*session, proposal, selection(), *measured->pinned->snapshot);
   if (!done) {
     set_status(text(done.error().message));
     return;

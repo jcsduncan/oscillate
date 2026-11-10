@@ -629,11 +629,12 @@ oscillate_add_test_executable(oscillate_quick_master_assistant_panel_tests
   LIBS oscillate_quick_test_core Qt6::Gui Qt6::Quick Qt6::Test)
 set(oscillate_quick_master_assistant_cases
   analyse_fills_the_panel_and_it_fits accept_is_one_undo_step_and_verifies
-  leaving_out_and_rejecting the_ab_plays_through_the_preview screenshot_if_requested)
+  leaving_out_and_rejecting the_ab_plays_through_the_preview a_goal_changed_mid_run_drops_the_result
+  screenshot_if_requested)
 oscillate_add_case_tests(quick_master_assistant_panel oscillate_quick_master_assistant_panel_tests
   CASES ${oscillate_quick_master_assistant_cases}
   SLOW analyse_fills_the_panel_and_it_fits accept_is_one_undo_step_and_verifies
-  leaving_out_and_rejecting the_ab_plays_through_the_preview)
+  leaving_out_and_rejecting the_ab_plays_through_the_preview a_goal_changed_mid_run_drops_the_result)
 foreach(case IN LISTS oscillate_quick_master_assistant_cases ITEMS cases)
   set_tests_properties(quick_master_assistant_panel.${case} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${oscillate_quick_qml_import_dir}")
 endforeach()

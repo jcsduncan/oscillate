@@ -29,6 +29,10 @@ Flow {
             radius: height / 2
             color: lit ? chips.style.accent : (area.containsMouse ? chips.style.buttonFace : chips.style.panelRaised)
             border.color: lit ? chips.style.accent : chips.style.lineStrong
+            activeFocusOnTab: true
+            Keys.onReturnPressed: chips.chosen(chip.chipId)
+            Keys.onEnterPressed: chips.chosen(chip.chipId)
+            Keys.onSpacePressed: chips.chosen(chip.chipId)
             Accessible.role: Accessible.RadioButton
             Accessible.name: chipName
             Accessible.checked: lit
@@ -40,6 +44,7 @@ Flow {
                 color: chip.lit ? chips.style.onAccentText : chips.style.textMain
                 font.pixelSize: chips.style.typeBody
             }
+            FocusRing { targetRadius: chip.radius }
             MouseArea {
                 id: area
                 anchors.fill: parent

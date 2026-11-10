@@ -124,9 +124,9 @@ struct Song {
   quick::MasterAssistantController* controller = nullptr;
 };
 
-std::unique_ptr<application::ProjectSession> make_session(const std::filesystem::path& folder,
-                                                          const std::filesystem::path& root) {
-  auto session = take(application::ProjectSession::create(root), "project");
+// The project in `folder`/song, with the mix imported.
+std::unique_ptr<application::ProjectSession> make_session(const std::filesystem::path& folder) {
+  auto session = take(application::ProjectSession::create(folder / "song"), "project");
   const auto wav = write_mix(folder / "mix.wav");
   const int fd = ::open(wav.c_str(), O_RDONLY | O_CLOEXEC);
   require(fd >= 0, "fixture opens");
@@ -143,7 +143,7 @@ std::unique_ptr<Song> make_song() {
   const std::filesystem::path folder(song->directory.path().toStdString());
   song->root = folder / "song";
   song->bridge = std::make_unique<quick::ProjectBridge>(folder.string());
-  auto session = make_session(folder, song->root);
+  auto session = make_session(folder);
   song->session = session.get();
   song->bridge->set_project(std::move(session), song->root);
   song->controller =
@@ -304,17 +304,14 @@ void the_ab_plays_through_the_preview() {
   auto device = std::make_shared<oscillate::test::FakePlaybackDevice>();
   // The bridge's preview device is the system's; drive the A/B from a
   // controller of its own with a fake one.
-  quick::MasterAssistantController ab(
-      {.session = [&] { return song->session; },
-       .blocked = {},
-       .can_edit = {},
-       .commit = {},
-       .loop = {},
-       .preview = [&]() -> std::optional<quick::MasterAssistantController::Preview> {
-         return quick::MasterAssistantController::Preview{
-             oscillate::test::fake_output_factory(device), std::nullopt,
-             oscillate::test::FakePlaybackDevice::pump_frames};
-       }});
+  quick::MasterAssistantController::Hooks hooks;
+  hooks.session = [&] { return song->session; };
+  hooks.preview = [&]() -> std::optional<quick::MasterAssistantController::Preview> {
+    return quick::MasterAssistantController::Preview{
+        oscillate::test::fake_output_factory(device), std::nullopt,
+        oscillate::test::FakePlaybackDevice::pump_frames};
+  };
+  quick::MasterAssistantController ab(std::move(hooks));
   analyse(ab);
   ab.startAudition();
   require(ab.auditioning() && ab.player() != nullptr, "the A/B plays");
@@ -328,6 +325,25 @@ void the_ab_plays_through_the_preview() {
   require(ab.hearing_proposal() && ab.player()->proposal_chosen(), "then the proposal");
   ab.stopAudition();
   require(!ab.auditioning(), "stopped");
+  // Leaving the view silences it.
+  auto panel = load(&ab);
+  ab.startAudition();
+  require(ab.auditioning(), "playing in the view");
+  panel.reset();
+  require(!ab.auditioning(), "closing the view stops the A/B");
+}
+
+// A goal changed while Analyse runs: its proposal, for the old goals, is
+// dropped rather than offered.
+void a_goal_changed_mid_run_drops_the_result() {
+  auto song = make_song();
+  song->controller->set_loudness(QStringLiteral("streaming"));
+  song->controller->analyse();
+  require(song->controller->busy(), "running");
+  song->controller->set_loudness(QStringLiteral("loud"));
+  (void)song->controller->wait();
+  require(song->controller->phase() == QStringLiteral("idle"), "nothing proposed");
+  require(song->controller->devices().isEmpty(), "no devices offered");
 }
 
 void screenshot_if_requested() {
@@ -355,5 +371,6 @@ int main(int argc, char** argv) {
        {"accept_is_one_undo_step_and_verifies", accept_is_one_undo_step_and_verifies},
        {"leaving_out_and_rejecting", leaving_out_and_rejecting},
        {"the_ab_plays_through_the_preview", the_ab_plays_through_the_preview},
+       {"a_goal_changed_mid_run_drops_the_result", a_goal_changed_mid_run_drops_the_result},
        {"screenshot_if_requested", screenshot_if_requested}});
 }
