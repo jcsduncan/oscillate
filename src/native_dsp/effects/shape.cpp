@@ -486,4 +486,23 @@ BandStages band_stages(std::span<const double> values, std::size_t band,
 
 const EffectEngine& engine() { return shape_engine; }
 
+std::vector<std::pair<std::string_view, double>> band_values(std::span<const match_eq::Band> list) {
+  std::vector<std::pair<std::string_view, double>> out;
+  for (std::size_t b = 0; b < bands; ++b) {
+    const auto& p = shape_table::parameters;
+    const std::size_t base = b * per_band;
+    if (b >= list.size()) {
+      out.emplace_back(p[base + shape_table::on].id, 0.0);
+      continue;
+    }
+    const auto& band = list[b];
+    out.emplace_back(p[base + shape_table::on].id, 1.0);
+    out.emplace_back(p[base + shape_table::kind].id, static_cast<double>(band.kind));
+    out.emplace_back(p[base + shape_table::freq].id, band.hz);
+    out.emplace_back(p[base + shape_table::q].id, band.shape);
+    out.emplace_back(p[base + shape_table::gain].id, band.gain_db);
+  }
+  return out;
+}
+
 } // namespace oscillate::native_dsp::effects::shape

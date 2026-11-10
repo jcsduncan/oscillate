@@ -25,7 +25,8 @@
 // noise flat untilted, tilt exact; close low tones resolved; highs faster
 // than lows; peak hold holds and decays at its rate; views, the sidechain
 // overlay, resonances with frequency and level, infinite averaging and
-// freeze; telemetry independent of block size.
+// freeze; telemetry independent of block size; the tonal meter and match
+// settings (ADR-0120).
 namespace {
 using namespace effect_test;
 namespace lens = oscillate::native_dsp::effects::lens;
@@ -391,6 +392,52 @@ void telemetry_ignores_block_size() {
   REQUIRE_EQ(a, b, "the analysis is identical for any block split");
 }
 
+// ADR-0120: the tonal meter is the band meter over the input's mid and the
+// sidechain's, whatever the view, and the match settings read the table.
+void tonal_meter_reads_input_and_sidechain() {
+  namespace tonal = oscillate::native_dsp::tonal;
+  constexpr std::size_t seconds = 2;
+  constexpr std::uint32_t input_seed = 4;
+  constexpr double side_hz = 700.0;
+  constexpr double side_level = 0.3;
+  const auto frames = seconds * oscillate::test::sample_rate_48k;
+  const auto input = pink(frames, input_seed);
+  const auto side = sine(side_hz, side_level, frames);
+  auto values = untilted();
+  values[at("lens.view")] = 2.0; // Left: the meter still reads the mid.
+  const auto t = analyse(values, input, oscillate::test::sample_rate_48k_hz, &side);
+  tonal::BandMeter meter(oscillate::test::sample_rate_48k_hz);
+  for (std::size_t i = 0; i < frames; ++i) {
+    const auto left = static_cast<double>(static_cast<float>(input.left[i]));
+    const auto right = static_cast<double>(static_cast<float>(input.right[i]));
+    const auto side_mid = 0.5 * (static_cast<double>(static_cast<float>(side.left[i])) +
+                                 static_cast<double>(static_cast<float>(side.right[i])));
+    meter.push(0.5 * (left + right), side_mid);
+  }
+  REQUIRE_EQ(static_cast<std::uint64_t>(t[lens::telemetry::tonal_windows]), meter.windows(),
+             "the window count");
+  for (std::size_t i = 0; i < tonal::fine_bands; ++i) {
+    REQUIRE_EQ(t[lens::telemetry::tonal_input + i], static_cast<float>(meter.mean_a()[i]),
+               "the input's mid in fine band " + std::to_string(i));
+    REQUIRE_EQ(t[lens::telemetry::tonal_sidechain + i], static_cast<float>(meter.mean_b()[i]),
+               "the sidechain's in fine band " + std::to_string(i));
+  }
+  values[at("lens.match_amount")] = 0.5;
+  values[at("lens.match_smoothing")] = 3.0;
+  values[at("lens.match_low")] = 40.0;
+  values[at("lens.match_high")] = 12'000.0;
+  values[at("lens.match_boost")] = 3.0;
+  values[at("lens.match_cut")] = 9.0;
+  const auto settings = lens::match_settings(values);
+  require(settings.amount == 0.5 && settings.smoothing_octaves == 1.0 && settings.low_hz == 40.0 &&
+              settings.high_hz == 12'000.0 && settings.max_boost_db == 3.0 &&
+              settings.max_cut_db == 9.0,
+          "the match settings are the table's");
+  REQUIRE_FALSE(lens::matches_target(values), "matching to the sidechain by default");
+  values[at("lens.match_source")] = 1.0;
+  REQUIRE_TRUE(lens::matches_target(values), "or to a target");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -407,5 +454,7 @@ int main(int argc, char** argv) {
           {"resonances_are_found", [] { resonances_are_found(); }},
           {"infinite_average_and_freeze", [] { infinite_average_and_freeze(); }},
           {"telemetry_ignores_block_size", [] { telemetry_ignores_block_size(); }},
+          {"tonal_meter_reads_input_and_sidechain",
+           [] { tonal_meter_reads_input_and_sidechain(); }},
       });
 }

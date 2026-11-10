@@ -657,6 +657,41 @@ oscillate_add_case_tests(native_strike_contract oscillate_strike_tests
   the_callback_never_allocates
   telemetry_feeds_the_panel)
 
+# Keel (ADR-0119): adaptive tonal balance.
+oscillate_add_test_executable(oscillate_keel_tests SOURCES keel_tests.cpp
+  LIBS oscillate::native_effects)
+oscillate_add_case_tests(native_keel_contract oscillate_keel_tests
+  CASES
+  descriptor_registry_and_presets
+  amount_zero_is_bit_exact
+  tilted_pink_converges_to_the_target
+  speed_sets_the_time_to_follow
+  a_steady_programme_is_not_modulated
+  a_moving_correction_has_no_zipper
+  minimum_phase_delays_little
+  a_curve_target_is_reached
+  a_reference_target_is_reached
+  genre_targets_are_reached
+  learn_captures_the_balance
+  regions_weight_the_correction
+  limits_hold
+  absent_bands_are_not_boosted
+  silence_and_transients_do_not_drag_it
+  level_match_holds_the_loudness
+  delta_plays_the_change
+  output_trims
+  other_rates_converge_alike
+  any_block_split_renders_the_same
+  export_equals_live
+  hostile_input_stays_finite
+  low_rates_leave_the_top_bands_out
+  a_tiny_rate_still_runs
+  the_tail_is_bounded
+  presets_stay_restrained
+  a_seek_starts_clean
+  the_callback_never_allocates
+  telemetry_feeds_the_panel)
+
 # Cast (ADR-0115): the convolution reverb.
 oscillate_add_test_executable(oscillate_cast_tests SOURCES cast_tests.cpp
   LIBS oscillate::native_effects)
@@ -759,7 +794,33 @@ oscillate_add_case_tests(native_lens_contract oscillate_lens_tests
   views_and_overlay_read_true
   resonances_are_found
   infinite_average_and_freeze
-  telemetry_ignores_block_size)
+  telemetry_ignores_block_size
+  tonal_meter_reads_input_and_sidechain)
+
+# Tonal targets and match EQ (ADR-0120).
+oscillate_add_test_executable(oscillate_tonal_targets_tests SOURCES tonal_targets_tests.cpp
+  LIBS oscillate::native_dsp oscillate::dsp_primitives)
+oscillate_add_case_tests(native_tonal_targets_contract oscillate_tonal_targets_tests
+  CASES
+  grid_tiles_without_gaps
+  k_weighting_is_bs1770
+  normalised_curves_ignore_gain
+  band_meter_reads_sines_and_noise
+  band_meter_allocates_nothing
+  targets_rebuild_deterministically
+  target_files_are_validated
+  factory_targets_are_well_formed
+  placement_against_a_range)
+
+oscillate_add_test_executable(oscillate_match_eq_tests SOURCES match_eq_tests.cpp
+  LIBS oscillate::native_effects oscillate::native_dsp)
+oscillate_add_case_tests(native_match_eq_contract oscillate_match_eq_tests
+  CASES
+  own_eq_is_recovered
+  fit_uses_the_fewest_bands
+  fit_reports_what_shape_plays
+  correction_follows_its_settings
+  targets_become_fine_levels)
 
 oscillate_add_test_executable(oscillate_loudness_meter_tests SOURCES loudness_meter_tests.cpp
   LIBS oscillate::native_effects oscillate::native_dsp

@@ -16,8 +16,18 @@
 // loudness, the crest factor, the onset contrast in the three bands and the
 // true peak, with its latency and CPU.
 //
+// --balance measures a tonal balancer (Keel by default): each preset at the
+// programme's own level, reporting the programme's third-octave balance
+// against the preset's target before and after (RMS and largest distance
+// from 40 Hz to 16 kHz, once both are centred there), the loudness change,
+// how far the applied correction wanders from second to second, the onset
+// contrast change in the three bands (the filters' phase smearing
+// transients), latency and CPU. --per-programme also gives each
+// programme's tilt.
+//
 // Usage: oscillate_limiter_audit [--engine ID] [--preset NAME]... [--set ID=VALUE]...
-//        [--target LUFS] [--classic] [--shaper] [--no-loop] [--per-programme] [FILE.f32]...
+//        [--target LUFS] [--classic] [--shaper] [--balance] [--no-loop] [--per-programme]
+//        [FILE.f32]...
 // --no-loop leaves the synthetic loop out.
 // --target measures at one loudness instead of the three standard ones.
 // --classic measures the classic sample-peak limiter Ceiling replaced, with
@@ -25,6 +35,7 @@
 // --set overrides a parameter on every preset measured.
 #include "oscillate/foundation/split_mix.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
+#include "oscillate/native_dsp/effects/keel.hpp"
 #include "oscillate/native_dsp/limiter.hpp"
 #include "oscillate/native_dsp/loudness.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
@@ -45,6 +56,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -945,6 +957,292 @@ void audit_shaper(const effects::EffectEngine& engine, const std::vector<std::st
   }
 }
 
+// ---- The tonal balance audit ---------------------------------------------------------------
+
+namespace keel = oscillate::native_dsp::effects::keel;
+
+constexpr std::size_t balance_window = 16'384;
+constexpr std::size_t balance_hop = 8'192;
+constexpr double balance_low_hz = 40.0;
+constexpr double balance_high_hz = 16'000.0;
+constexpr double balance_frame_seconds = 1.0;
+constexpr double balance_settle_seconds = 8.0;
+constexpr double balance_tilt_low_hz = 63.0;
+constexpr double balance_tilt_high_hz = 12'500.0;
+
+using Bands = std::array<double, keel::bands>;
+
+// An in-place radix-2 forward transform.
+void fft_in_place(std::vector<std::complex<double>>& data) {
+  const std::size_t n = data.size();
+  for (std::size_t i = 1, j = 0; i < n; ++i) {
+    std::size_t bit = n >> 1U;
+    for (; (j & bit) != 0; bit >>= 1U) {
+      j ^= bit;
+    }
+    j ^= bit;
+    if (i < j) {
+      std::swap(data[i], data[j]);
+    }
+  }
+  for (std::size_t length = 2; length <= n; length <<= 1U) {
+    const double angle = -2.0 * pi / static_cast<double>(length);
+    for (std::size_t start = 0; start < n; start += length) {
+      for (std::size_t k = 0; k < length / 2; ++k) {
+        const auto w = std::polar(1.0, angle * static_cast<double>(k));
+        const auto even = data[start + k];
+        const auto odd = data[start + k + length / 2] * w;
+        data[start + k] = even + odd;
+        data[start + k + length / 2] = even - odd;
+      }
+    }
+  }
+}
+
+// Third-octave band powers (both channels' mean) of [from, to) by Welch's
+// method on Keel's band edges.
+Bands band_powers(const Audio& audio, std::size_t from, std::size_t to) {
+  const double half_band = 0.5 / keel::bands_per_octave;
+  Bands power{};
+  std::vector<std::complex<double>> spectrum(balance_window);
+  std::size_t segments = 0;
+  for (std::size_t start = from; start + balance_window <= to; start += balance_hop) {
+    for (const auto* channel : {&audio.left, &audio.right}) {
+      for (std::size_t i = 0; i < balance_window; ++i) {
+        const double w = 0.5 - 0.5 * std::cos(2.0 * pi * static_cast<double>(i) /
+                                              static_cast<double>(balance_window));
+        spectrum[i] = (*channel)[start + i] * w;
+      }
+      fft_in_place(spectrum);
+      for (std::size_t b = 0; b < keel::bands; ++b) {
+        const double lo = keel::band_hz(b) * std::exp2(-half_band);
+        const double hi = keel::band_hz(b) * std::exp2(half_band);
+        const auto first = static_cast<std::size_t>(std::ceil(lo * balance_window / rate));
+        const auto last = std::min(static_cast<std::size_t>(std::ceil(hi * balance_window / rate)),
+                                   balance_window / 2);
+        for (std::size_t k = std::max<std::size_t>(first, 1); k < last; ++k) {
+          power[b] += std::norm(spectrum[k]);
+        }
+      }
+    }
+    ++segments;
+  }
+  for (auto& p : power) {
+    p /= static_cast<double>(std::max<std::size_t>(segments, 1));
+  }
+  return power;
+}
+
+Bands band_db(const Bands& power) {
+  Bands out{};
+  for (std::size_t b = 0; b < keel::bands; ++b) {
+    out[b] = power_db(power[b]);
+  }
+  return out;
+}
+
+bool judged(std::size_t b) {
+  return keel::band_hz(b) >= balance_low_hz * std::exp2(-0.5 / keel::bands_per_octave) &&
+         keel::band_hz(b) <= balance_high_hz * std::exp2(0.5 / keel::bands_per_octave);
+}
+
+// RMS and largest distance of a balance from a target over the judged
+// bands, both centred there.
+std::pair<double, double> distance(const Bands& heard, const keel::Curve& wanted) {
+  double mean = 0.0;
+  double n = 0.0;
+  for (std::size_t b = 0; b < keel::bands; ++b) {
+    if (judged(b)) {
+      mean += heard[b] - wanted[b];
+      n += 1.0;
+    }
+  }
+  mean /= n;
+  double sum = 0.0;
+  double most = 0.0;
+  for (std::size_t b = 0; b < keel::bands; ++b) {
+    if (judged(b)) {
+      const double d = heard[b] - wanted[b] - mean;
+      sum += d * d;
+      most = std::max(most, std::fabs(d));
+    }
+  }
+  return {std::sqrt(sum / n), most};
+}
+
+// The least-squares slope (dB/oct) of a balance over the tilt's bands.
+double tilt_of(const Bands& heard) {
+  double sx = 0.0;
+  double sy = 0.0;
+  double sxx = 0.0;
+  double sxy = 0.0;
+  double n = 0.0;
+  for (std::size_t b = 0; b < keel::bands; ++b) {
+    const double hz = keel::band_hz(b);
+    if (hz < balance_tilt_low_hz * std::exp2(-0.5 / keel::bands_per_octave) ||
+        hz > balance_tilt_high_hz * std::exp2(0.5 / keel::bands_per_octave)) {
+      continue;
+    }
+    const double x = std::log2(hz / keel::reference_hz);
+    sx += x;
+    sy += heard[b];
+    sxx += x * x;
+    sxy += x * heard[b];
+    n += 1.0;
+  }
+  return (n * sxy - sx * sy) / (n * sxx - sx * sx);
+}
+
+// How far the applied correction moves from second to second: per judged
+// band, the RMS about its mean of the output's band level over the
+// input's, in one-second frames after the settling time; their mean.
+double wander_db(const Audio& input, const Audio& output) {
+  const auto frame = static_cast<std::size_t>(balance_frame_seconds * rate);
+  std::vector<Bands> gains;
+  for (auto at = static_cast<std::size_t>(balance_settle_seconds * rate);
+       at + frame <= input.size(); at += frame) {
+    const auto in = band_db(band_powers(input, at, at + frame));
+    const auto out = band_db(band_powers(output, at, at + frame));
+    Bands g{};
+    for (std::size_t b = 0; b < keel::bands; ++b) {
+      g[b] = out[b] - in[b];
+    }
+    gains.push_back(g);
+  }
+  if (gains.size() < 2) {
+    return 0.0;
+  }
+  double total = 0.0;
+  double n = 0.0;
+  for (std::size_t b = 0; b < keel::bands; ++b) {
+    if (!judged(b)) {
+      continue;
+    }
+    double mean = 0.0;
+    for (const auto& g : gains) {
+      mean += g[b];
+    }
+    mean /= static_cast<double>(gains.size());
+    double sum = 0.0;
+    for (const auto& g : gains) {
+      sum += (g[b] - mean) * (g[b] - mean);
+    }
+    total += std::sqrt(sum / static_cast<double>(gains.size()));
+    n += 1.0;
+  }
+  return total / n;
+}
+
+struct BalanceRow {
+  double before_rms = 0.0;
+  double before_most = 0.0;
+  double after_rms = 0.0;
+  double after_most = 0.0;
+  double lufs_change = 0.0;
+  double wander = 0.0;
+  std::array<double, 3> onset{};
+  double tilt = 0.0;
+  double cpu = 0.0;
+  double latency_ms = 0.0;
+};
+
+void print_balance_header() {
+  std::printf("| Preset | Before RMS / max dB | After RMS / max dB | LUFS change | Wander dB | "
+              "Onset contrast change L/M/H | Input tilt dB/oct | CPU | Latency |\n");
+  std::printf("|---|---|---|---|---|---|---|---|---|\n");
+}
+
+void print_balance_row(std::string_view preset, const BalanceRow& r) {
+  std::printf("| %s | %.2f / %.2f | %.2f / %.2f | %+.2f | %.2f | %+.2f/%+.2f/%+.2f | %+.2f | "
+              "%.2f%% | %.2f ms |\n",
+              std::string(preset).c_str(), r.before_rms, r.before_most, r.after_rms, r.after_most,
+              r.lufs_change, r.wander, r.onset[0], r.onset[1], r.onset[2], r.tilt, 100.0 * r.cpu,
+              r.latency_ms);
+}
+
+// Each preset over each programme at the programme's own level, judged
+// after the settling time; the mean over the programmes.
+void audit_balance(const effects::EffectEngine& engine, const std::vector<std::string>& only,
+                   const std::vector<std::pair<std::string, double>>& overrides,
+                   const std::vector<Programme>& programmes, bool per_programme) {
+  const auto& table = *engine.descriptor;
+  const auto settle = static_cast<std::size_t>(balance_settle_seconds * rate);
+  // The judged part needs an analysis window and two wander frames after
+  // the settling time.
+  constexpr std::size_t wander_frames = 2;
+  const auto needed =
+      settle + std::max(balance_window,
+                        wander_frames * static_cast<std::size_t>(balance_frame_seconds * rate));
+  for (const auto& programme : programmes) {
+    if (programme.audio.size() < needed) {
+      std::fprintf(stderr, "%s is shorter than the %.1f s the balance audit needs\n",
+                   programme.name.c_str(), static_cast<double>(needed) / rate);
+      std::exit(1);
+    }
+  }
+  print_balance_header();
+  for (const auto& preset : table.presets) {
+    if (!only.empty() && std::ranges::find(only, std::string(preset.name)) == only.end()) {
+      continue;
+    }
+    auto values = dsp::preset_values(table, preset);
+    if (!values) {
+      std::fprintf(stderr, "preset %s does not resolve\n", std::string(preset.name).c_str());
+      std::exit(1);
+    }
+    auto v = std::move(values).value();
+    for (const auto& [id, value] : overrides) {
+      const auto index = dsp::find_parameter(table, id);
+      if (!index) {
+        std::fprintf(stderr, "no parameter %s\n", id.c_str());
+        std::exit(1);
+      }
+      v[*index] = value;
+    }
+    const auto wanted = keel::target_curve(v);
+    BalanceRow mean;
+    double cpu_seconds = 0.0;
+    double audio_seconds = 0.0;
+    for (const auto& programme : programmes) {
+      const auto rendered = render(engine, v, programme.audio);
+      const auto size = programme.audio.size();
+      const auto in = band_db(band_powers(programme.audio, settle, size));
+      const auto out = band_db(band_powers(rendered.audio, settle, size));
+      BalanceRow r;
+      std::tie(r.before_rms, r.before_most) = distance(in, wanted);
+      std::tie(r.after_rms, r.after_most) = distance(out, wanted);
+      r.lufs_change = lufs(rendered.audio) - lufs(programme.audio);
+      r.wander = wander_db(programme.audio, rendered.audio);
+      const auto loss = onset_loss(programme.audio, rendered.audio);
+      for (std::size_t b = 0; b < loss.size(); ++b) {
+        r.onset[b] = -loss[b];
+      }
+      r.tilt = tilt_of(in);
+      r.latency_ms = milliseconds_per_second * rendered.latency / rate;
+      cpu_seconds += rendered.seconds;
+      audio_seconds += static_cast<double>(size) / rate;
+      if (per_programme) {
+        print_balance_row(std::string(preset.name) + " · " + programme.name, r);
+      }
+      const double n = static_cast<double>(programmes.size());
+      mean.before_rms += r.before_rms / n;
+      mean.before_most += r.before_most / n;
+      mean.after_rms += r.after_rms / n;
+      mean.after_most += r.after_most / n;
+      mean.lufs_change += r.lufs_change / n;
+      mean.wander += r.wander / n;
+      for (std::size_t b = 0; b < r.onset.size(); ++b) {
+        mean.onset[b] += r.onset[b] / n;
+      }
+      mean.tilt += r.tilt / n;
+      mean.latency_ms = r.latency_ms;
+    }
+    mean.cpu = cpu_seconds / audio_seconds;
+    print_balance_row(preset.name, mean);
+    std::fflush(stdout);
+  }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -956,6 +1254,7 @@ int main(int argc, char** argv) {
   bool per_programme = false;
   bool classic = false;
   bool shaper = false;
+  bool balance = false;
   std::optional<double> only_target;
   for (int i = 1; i < argc; ++i) {
     const std::string_view arg = argv[i];
@@ -980,6 +1279,8 @@ int main(int argc, char** argv) {
       classic = true;
     } else if (arg == "--shaper") {
       shaper = true;
+    } else if (arg == "--balance") {
+      balance = true;
     } else if (arg == "--per-programme") {
       per_programme = true;
     } else {
@@ -992,7 +1293,7 @@ int main(int argc, char** argv) {
     }
   }
   if (engine_id.empty()) {
-    engine_id = shaper ? "strike" : "ceiling";
+    engine_id = shaper ? "strike" : (balance ? "keel" : "ceiling");
   }
   if (loop) {
     programmes.insert(programmes.begin(), {"loop", drum_loop()});
@@ -1010,13 +1311,26 @@ int main(int argc, char** argv) {
     scale(programme.audio, from_db(programme_lufs - level));
     programme.crest_db = crest_db(programme.audio, fine_peaks(programme.audio));
   }
-  if (shaper) {
+  if (shaper && balance) {
+    std::fprintf(stderr, "--shaper and --balance measure different devices\n");
+    return 1;
+  }
+  if (shaper || balance) {
     const auto* engine = effects::find_engine(engine_id);
     if (engine == nullptr) {
       std::fprintf(stderr, "no engine %s\n", engine_id.c_str());
       return 1;
     }
-    audit_shaper(*engine, only, overrides, programmes, per_programme);
+    // The balance audit reads the preset's target as Keel's.
+    if (balance && engine != &keel::engine()) {
+      std::fprintf(stderr, "--balance measures Keel, not %s\n", engine_id.c_str());
+      return 1;
+    }
+    if (balance) {
+      audit_balance(*engine, only, overrides, programmes, per_programme);
+    } else {
+      audit_shaper(*engine, only, overrides, programmes, per_programme);
+    }
     return 0;
   }
   std::vector<Device> devices;

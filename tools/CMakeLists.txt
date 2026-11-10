@@ -19,6 +19,9 @@ oscillate_add_tool(oscillate_nova_audition nova_audition EXCLUDE_FROM_ALL
 # pumping, true peak, latency, CPU): docs/performance/native-effects.md.
 oscillate_add_tool(oscillate_limiter_audit limiter_audit EXCLUDE_FROM_ALL
   SOURCES limiter_audit/main.cpp LIBS oscillate::native_effects)
+# Measures references' tonal balance and builds targets (ADR-0120).
+oscillate_add_tool(oscillate_tonal_targets tonal_targets EXCLUDE_FROM_ALL
+  SOURCES tonal_targets/main.cpp LIBS oscillate::native_dsp)
 oscillate_add_tool(oscillate_anvil_loops anvil_reference EXCLUDE_FROM_ALL
   SOURCES anvil_reference/render_loops.cpp LIBS oscillate::synth_engines)
 

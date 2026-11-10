@@ -30,6 +30,7 @@ class CrateController;
 class NativeSynthDocumentModel;
 class NovaConstellation;
 class NovaArp;
+class LensMatch;
 
 // Presentation model for a built-in synth device panel, for any engine.
 // Everything it shows comes from the engine's parameter table, so new
@@ -77,6 +78,9 @@ class NativeSynthDeviceController final : public QObject {
   // Nova's arp pattern engine model (NovaArp, ADR-0078) when engine_id is
   // "nova"; null for every other engine.
   Q_PROPERTY(QObject* arp READ arp CONSTANT)
+  // Lens's match EQ and tonal balance (LensMatch, ADR-0120) when engine_id
+  // is "lens"; null for every other engine.
+  Q_PROPERTY(QObject* match READ match CONSTANT)
   // The user's own presets for this engine (ADR-0058), [{name}] sorted by
   // name, saved under $XDG_DATA_HOME/oscillate/presets/<engine>/.
   Q_PROPERTY(QVariantList user_presets READ user_presets NOTIFY user_presets_changed)
@@ -126,6 +130,7 @@ public:
   [[nodiscard]] QObject* crate() const;
   [[nodiscard]] QObject* constellation() const;
   [[nodiscard]] QObject* arp() const;
+  [[nodiscard]] QObject* match() const;
   [[nodiscard]] QVariantList user_presets() const;
   [[nodiscard]] QStringList favourites() const { return favourites_; }
   [[nodiscard]] int linked_count() const noexcept { return linked_count_; }
@@ -289,6 +294,24 @@ public:
   // Any native effect's latency in milliseconds at `sample_rate` for the
   // values now (0 for an engine that is not an effect).
   Q_INVOKABLE double effect_latency_ms(double sample_rate) const;
+  // Keel (ADR-0119), Learn: the balance the latest telemetry tracked becomes
+  // the target (the curve, with Target on Curve), as one edit. False when
+  // nothing has been tracked yet or for other engines.
+  Q_INVOKABLE bool keel_learn();
+  // Keel's target grid ({band_hz: the bands' centres, reference_band: the
+  // 1 kHz band, history_slices, history_seconds: one slice's length});
+  // empty for other engines.
+  Q_INVOKABLE QVariantMap keel_layout() const;
+  // Keel's target for the values now, before any reference (dB per band,
+  // keel::target_curve); empty for other engines.
+  Q_INVOKABLE QVariantList keel_target() const;
+  // Keel: the tonal targets (ADR-0120) a curve loads from, [{id, name,
+  // user}]: the factory's, then the user's own in
+  // LensMatch::default_targets_directory(). Empty for other engines.
+  Q_INVOKABLE QVariantList keel_genre_targets() const;
+  // Keel: the named target's median becomes the curve, with Target on
+  // Curve, as one edit. False when the id names none or for other engines.
+  Q_INVOKABLE bool keel_use_target(const QString& id);
   // Learn: the Gain (dB) that moves the output by the distance from
   // `integrated_lufs` to Target, within Gain's range; the current Gain when
   // there is no reading (NaN); NaN for other engines.
@@ -460,6 +483,7 @@ private:
   CrateController* crate_ = nullptr;             // A child, for Crate only.
   NovaConstellation* constellation_ = nullptr;   // A child, for Nova only.
   NovaArp* arp_ = nullptr;                       // A child, for Nova only.
+  LensMatch* match_ = nullptr;                   // A child, for Lens only.
   bool state_gesture_ = false;
   int preset_index_ = -1;
   // The user preset last loaded, and its values, until something else is.

@@ -1,10 +1,14 @@
 #include "native_synth_session_adapter.hpp"
+#include "oscillate/native_dsp/effects/lens.hpp"
+#include "oscillate/native_dsp/effects/shape.hpp"
+#include "oscillate/native_dsp/match_eq.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/crate.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/timeline/timing.hpp"
 
+#include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -294,6 +298,67 @@ void crate_state_media_and_clips() {
   require(!adapter.add_midi_clip(-1, {quarter}, {}), "a negative bar is refused");
 }
 
+// ADR-0120: Lens writes its match into the Shape right after it, or a new
+// Shape there, as one undo step each; a Shape elsewhere is left alone.
+void lens_writes_the_shape_after_it() {
+  namespace effects = native_dsp::effects;
+  using native_dsp::EqBandKind;
+  using native_dsp::match_eq::Band;
+  Directory directory;
+  auto session = take(application::ProjectSession::create(directory.path() / "song"));
+  const auto track = take(session->instruments().add_synth_track());
+  const auto earlier = take(session->effects().add_effect_engine(track, 0, "shape"));
+  const auto lens = take(session->effects().add_effect_engine(track, 1, "lens"));
+  std::vector<std::uint64_t> offered;
+  quick::SessionNativeSynthAdapter adapter(
+      *session, project::SignalPathId{track}, lens, effects::lens::engine(),
+      [&](std::uint64_t revision) { offered.push_back(revision); });
+  const auto chain = [&] { return session->snapshot().tracks.front().effects; };
+  const auto shape_values = [&](project::InsertSlotId slot) {
+    return take(session->effects().native_effect_values(project::SignalPathId{track}, slot));
+  };
+  const auto& table = *effects::shape::engine().descriptor;
+  const auto at = [&](std::string_view id) {
+    return native_dsp::find_parameter(table, id).value();
+  };
+  constexpr std::array first{Band{EqBandKind::low_shelf, 120.0, 0.7, 3.0},
+                             Band{EqBandKind::peaking, 2'000.0, 1.5, -2.0}};
+  constexpr std::array second{Band{EqBandKind::high_shelf, 9'000.0, 0.8, 1.5}};
+  constexpr std::size_t lens_and_two_shapes = 3;
+  const auto kind = [](EqBandKind k) { return static_cast<double>(k); };
+
+  const auto revision = session->snapshot().revision;
+  require(adapter.write_next_effect("shape", effects::shape::band_values(first)),
+          "Lens writes a new Shape: " + adapter.status().message);
+  require(chain().size() == lens_and_two_shapes && chain()[2].id != earlier,
+          "a new Shape lands right after Lens");
+  require(session->snapshot().revision == revision + 1 && offered.size() == 1,
+          "in one edit, offered to playback");
+  const auto added = chain()[2].id;
+  auto values = shape_values(added);
+  require(values[at("shape.on_1")] == 1.0 &&
+              values[at("shape.kind_1")] == kind(EqBandKind::low_shelf) &&
+              values[at("shape.freq_1")] == first[0].hz &&
+              values[at("shape.gain_2")] == first[1].gain_db && values[at("shape.on_3")] == 0.0,
+          "holding the bands");
+  require(shape_values(earlier) == native_dsp::default_values(table),
+          "the earlier Shape is untouched");
+
+  require(adapter.write_next_effect("shape", effects::shape::band_values(second)),
+          "Lens writes the Shape after it again");
+  require(chain().size() == lens_and_two_shapes && chain()[2].id == added,
+          "into the same Shape, adding none");
+  values = shape_values(added);
+  require(values[at("shape.kind_1")] == kind(EqBandKind::high_shelf) &&
+              values[at("shape.on_2")] == 0.0,
+          "its bands replaced");
+  require(session->history().undo().has_value() &&
+              shape_values(added)[at("shape.kind_1")] == kind(EqBandKind::low_shelf),
+          "one undo restores the bands before");
+  require(session->history().undo().has_value() && chain().size() == lens_and_two_shapes - 1,
+          "and one more removes the Shape it added");
+}
+
 } // namespace
 
 int main() {
@@ -303,6 +368,7 @@ int main() {
     deferred_panel_saves_keep_latest_revision_and_reopen();
     cancelling_never_edits_the_project();
     crate_state_media_and_clips();
+    lens_writes_the_shape_after_it();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';
     return 1;

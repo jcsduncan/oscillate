@@ -7,6 +7,7 @@
 #include "oscillate/native_dsp/effects/contour.hpp"
 #include "oscillate/native_dsp/effects/edge.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
+#include "oscillate/native_dsp/effects/keel.hpp"
 #include "oscillate/native_dsp/effects/press.hpp"
 #include "oscillate/native_dsp/effects/shape.hpp"
 #include "oscillate/native_dsp/effects/strata.hpp"
@@ -230,6 +231,28 @@ double effect_latency_ms(const native_dsp::EngineDescriptor& engine, std::span<c
   }
   const auto frames = effect->latency_frames(values, sample_rate);
   return static_cast<double>(frames) / sample_rate * milliseconds_per_second;
+}
+
+std::vector<std::pair<std::string_view, double>>
+keel_learned_values(const native_dsp::EngineDescriptor& engine, std::span<const double> values,
+                    std::span<const float> telemetry) {
+  namespace keel = native_dsp::effects::keel;
+  const auto target = native_dsp::find_parameter(engine, "keel.target");
+  const auto first = native_dsp::find_parameter(engine, "keel.curve_01");
+  if (&engine != keel::engine().descriptor || !target || !first ||
+      values.size() != engine.parameters.size() || telemetry.size() < keel::telemetry::size ||
+      telemetry[keel::telemetry::tracked] == 0.0F) {
+    return {};
+  }
+  const auto curve = keel::learned_curve(telemetry, values);
+  std::vector<std::pair<std::string_view, double>> out;
+  out.reserve(keel::bands + 1);
+  for (std::size_t b = 0; b < keel::bands; ++b) {
+    out.emplace_back(engine.parameters[*first + b].id, curve[b]);
+  }
+  constexpr double curve_target = 1.0;
+  out.emplace_back(engine.parameters[*target].id, curve_target);
+  return out;
 }
 
 double ceiling_latency_ms(const native_dsp::EngineDescriptor& engine,
