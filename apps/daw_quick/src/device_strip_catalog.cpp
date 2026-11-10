@@ -125,6 +125,8 @@ constexpr std::array styles{
         "trim", "Utility", "#b9c3cf", {"trim.gain", "trim.pan", "trim.width", "trim.law"}},
     DeviceStripStyle{
         "shape", "EQ", "#7ee0ff", {"shape.gain_2", "shape.gain_4", "shape.gain_5", "shape.gain_7"}},
+    DeviceStripStyle{
+        "keel", "Balance", "#8fe3b0", {"keel.amount", "keel.speed", "keel.tilt", "keel.output"}},
     DeviceStripStyle{"press",
                      "Compressor",
                      "#ffcf6b",

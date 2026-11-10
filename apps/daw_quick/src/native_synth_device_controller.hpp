@@ -289,6 +289,10 @@ public:
   // Any native effect's latency in milliseconds at `sample_rate` for the
   // values now (0 for an engine that is not an effect).
   Q_INVOKABLE double effect_latency_ms(double sample_rate) const;
+  // Keel (ADR-0119), Learn: the balance the latest telemetry tracked becomes
+  // the target (the curve, with Target on Curve), as one edit. False when
+  // nothing has been tracked yet or for other engines.
+  Q_INVOKABLE bool keel_learn();
   // Learn: the Gain (dB) that moves the output by the distance from
   // `integrated_lufs` to Target, within Gain's range; the current Gain when
   // there is no reading (NaN); NaN for other engines.

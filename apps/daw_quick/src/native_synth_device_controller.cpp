@@ -19,6 +19,7 @@
 #include "oscillate/native_dsp/effects/flyby.hpp"
 #include "oscillate/native_dsp/effects/forge.hpp"
 #include "oscillate/native_dsp/effects/hush.hpp"
+#include "oscillate/native_dsp/effects/keel.hpp"
 #include "oscillate/native_dsp/effects/orbit.hpp"
 #include "oscillate/native_dsp/effects/press.hpp"
 #include "oscillate/native_dsp/effects/pump.hpp"
@@ -1397,6 +1398,31 @@ QVariantMap NativeSynthDeviceController::telemetry() {
       gains.push_back(run(t::history_gain + b * strike::history_slices, strike::history_slices));
     }
     out[QStringLiteral("history_gain")] = gains;
+  } else if (id == "keel" && frame.size() >= native_dsp::effects::keel::telemetry::size) {
+    namespace keel = native_dsp::effects::keel;
+    namespace t = keel::telemetry;
+    const auto run = [&](std::size_t from, std::size_t count) {
+      QVariantList values;
+      for (std::size_t i = 0; i < count; ++i) {
+        values.push_back(at(from + i));
+      }
+      return values;
+    };
+    out[QStringLiteral("input_peak")] = run(t::input_peak, 2);
+    out[QStringLiteral("output_peak")] = run(t::output_peak, 2);
+    out[QStringLiteral("latency_ms")] = at(t::latency_ms);
+    out[QStringLiteral("match_db")] = at(t::match_db);
+    out[QStringLiteral("tracked")] = at(t::tracked) > 0.5;
+    out[QStringLiteral("referenced")] = at(t::referenced) > 0.5;
+    out[QStringLiteral("target_source")] = static_cast<int>(std::lround(at(t::target_source)));
+    out[QStringLiteral("target")] = run(t::target, keel::bands);
+    out[QStringLiteral("balance")] = run(t::spectrum, keel::bands);
+    out[QStringLiteral("correction")] = run(t::correction, keel::bands);
+    QVariantList history;
+    for (std::size_t s = 0; s < keel::history_slices; ++s) {
+      history.push_back(run(t::history + s * keel::bands, keel::bands));
+    }
+    out[QStringLiteral("history")] = history;
   } else if (id == "dust" && frame.size() >= native_dsp::effects::dust::telemetry::size) {
     namespace dust = native_dsp::effects::dust;
     namespace t = dust::telemetry;
@@ -2062,6 +2088,23 @@ double NativeSynthDeviceController::ceiling_latency_ms(double sample_rate) const
 
 double NativeSynthDeviceController::effect_latency_ms(double sample_rate) const {
   return quick::effect_latency_ms(engine_, values_, sample_rate);
+}
+
+bool NativeSynthDeviceController::keel_learn() {
+  std::vector<float> frame;
+  if (!adapter_.telemetry(frame)) {
+    return false;
+  }
+  const auto learned = quick::keel_learned_values(engine_, values_, frame);
+  if (learned.empty()) {
+    return false;
+  }
+  QVariantMap edit;
+  for (const auto& [id, value] : learned) {
+    edit[QString::fromUtf8(id.data(), static_cast<qsizetype>(id.size()))] = value;
+  }
+  set_values(edit);
+  return true;
 }
 
 double NativeSynthDeviceController::ceiling_learned_gain(double integrated_lufs) const {

@@ -143,6 +143,12 @@ constexpr std::array looks{
     DeviceLook{"shape", "Effects", S::eq_filter, "EQ", "Eq", "#7ee0ff",
                "Parametric, up to eight bands", "Eight-band parametric EQ: shelves, bells and cuts",
                "", "equaliser equalizer parametric bell shelf cut tone"},
+    DeviceLook{"keel", "Effects", S::eq_filter, "Tonal balance", "Tb", "#8fe3b0",
+               "Steers the mix's balance toward a target",
+               "Adaptive tonal balance: toward a tilt, a drawn or learned curve, or a reference",
+               "",
+               "tonal balance eq equaliser equalizer match master mastering target curve "
+               "reference tilt spectrum learn"},
     DeviceLook{"contour", "Effects", S::eq_filter, "Filter", "Fl", "#ff7aa8",
                "Ladder, state-variable and comb, with motion",
                "Ladder, SVF, OTA and comb filters with motion", "",

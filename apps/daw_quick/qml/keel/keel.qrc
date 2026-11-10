@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/keel">
+    <file>KeelPanel.qml</file>
+    <file>KeelTheme.qml</file>
+    <file>KeelView.qml</file>
+    <file>KeelHistory.qml</file>
+  </qresource>
+</RCC>

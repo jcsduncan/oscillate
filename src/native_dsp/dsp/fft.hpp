@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <complex>
 #include <cstddef>
 #include <numbers>
@@ -55,40 +56,78 @@ public:
     }
   }
 
-private:
-  // sign is 1 forward and -1 inverse, conjugating the twiddles.
-  void run(std::span<std::complex<double>> data, double sign) const noexcept {
-    for (std::size_t i = 1; i < size_; ++i) {
+  // The forward transform in steps, so one transform can be spread over
+  // many callbacks: reorder(), then every stage in order, each whole or in
+  // pieces of its size / 2 butterflies in any order. The result is
+  // forward()'s, bit for bit. reorder() too may run in pieces.
+  [[nodiscard]] std::size_t stages() const noexcept {
+    std::size_t count = 0;
+    for (std::size_t length = 2; length <= size_; length <<= 1U) {
+      ++count;
+    }
+    return count;
+  }
+  void reorder(std::span<std::complex<double>> data) const noexcept { reorder(data, 0, size_); }
+  // The reordering of indices [first, last) only (each swap is made from
+  // its lower index).
+  void reorder(std::span<std::complex<double>> data, std::size_t first,
+               std::size_t last) const noexcept {
+    for (std::size_t i = std::max<std::size_t>(first, 1); i < last; ++i) {
       if (i < reversed_[i]) {
         std::swap(data[i], data[reversed_[i]]);
       }
     }
+  }
+  // Butterflies [first, last) of stage `stage` (0 pairs neighbours).
+  void stage(std::span<std::complex<double>> data, std::size_t stage, std::size_t first,
+             std::size_t last) const noexcept {
+    butterflies(data, stage, first, last, 1.0);
+  }
+
+private:
+  // sign is 1 forward and -1 inverse, conjugating the twiddles.
+  void run(std::span<std::complex<double>> data, double sign) const noexcept {
+    reorder(data);
+    const std::size_t count = stages();
+    for (std::size_t s = 0; s < count; ++s) {
+      butterflies(data, s, 0, size_ / 2, sign);
+    }
+  }
+
+  void butterflies(std::span<std::complex<double>> data, std::size_t stage, std::size_t first,
+                   std::size_t last, double sign) const noexcept {
+    const std::size_t half = std::size_t{1} << stage;
+    const std::size_t length = 2 * half;
+    // The twiddles of stage s follow those of the stages before it.
+    const std::size_t at = half - 1;
     // std::complex<double> is an array of its real and imaginary parts.
     double* const x = reinterpret_cast<double*>(data.data());
-    std::size_t at = 0;
-    for (std::size_t length = 2; length <= size_; length <<= 1U) {
-      const std::size_t half = length / 2;
-      const double* const cos = cos_.data() + at;
-      const double* const sin = sin_.data() + at;
-      for (std::size_t start = 0; start < size_; start += length) {
-        double* const even = x + 2 * start;
-        double* const odd = even + 2 * half;
-        for (std::size_t k = 0; k < half; ++k) {
-          const double wr = cos[k];
-          const double wi = sign * sin[k];
-          const double odd_r = odd[2 * k];
-          const double odd_i = odd[2 * k + 1];
-          const double tr = odd_r * wr - odd_i * wi;
-          const double ti = odd_r * wi + odd_i * wr;
-          const double even_r = even[2 * k];
-          const double even_i = even[2 * k + 1];
-          even[2 * k] = even_r + tr;
-          even[2 * k + 1] = even_i + ti;
-          odd[2 * k] = even_r - tr;
-          odd[2 * k + 1] = even_i - ti;
-        }
+    const double* const cos = cos_.data() + at;
+    const double* const sin = sin_.data() + at;
+    std::size_t block = first / half;
+    std::size_t k_first = first - block * half;
+    std::size_t remaining = last > first ? last - first : 0;
+    while (remaining > 0) {
+      const std::size_t k_last = std::min(half, k_first + remaining);
+      double* const even = x + 2 * block * length;
+      double* const odd = even + 2 * half;
+      for (std::size_t k = k_first; k < k_last; ++k) {
+        const double wr = cos[k];
+        const double wi = sign * sin[k];
+        const double odd_r = odd[2 * k];
+        const double odd_i = odd[2 * k + 1];
+        const double tr = odd_r * wr - odd_i * wi;
+        const double ti = odd_r * wi + odd_i * wr;
+        const double even_r = even[2 * k];
+        const double even_i = even[2 * k + 1];
+        even[2 * k] = even_r + tr;
+        even[2 * k + 1] = even_i + ti;
+        odd[2 * k] = even_r - tr;
+        odd[2 * k + 1] = even_i - ti;
       }
-      at += half;
+      remaining -= k_last - k_first;
+      ++block;
+      k_first = 0;
     }
   }
 

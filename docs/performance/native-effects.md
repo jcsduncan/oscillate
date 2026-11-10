@@ -20,6 +20,7 @@
 | Cast | 1.2–1.9% at 64 and 128 frames (`oscillate_cast_bench`, true-stereo bundled IRs of 0.4–9.5 s); 99th-percentile block 2.3–5.2% of its period, longest 3.2–12.3%; process CPU (getrusage) equal to the mean | The 64-tap head per route, then each tier's partition products, spread over its next block. |
 | Hush | 0.45–0.55% (0.46–0.56% in 64-frame blocks) | Eight key-filter biquads, the detector and the state per channel; a `pow` only while the gain moves. |
 | Strike | Measured by `oscillate_strike_bench` on drum hits over noise, not the noise above, with one instance and with sixteen. 0.34–0.38% with one band at 64 and 128 frames; 99th-percentile block 0.5–0.7% of its period. Linear-phase bands with Clip: 4.3–4.4% (Drum Bus Punch, three bands) and 5.3% (Master Impact, four), 99th percentile 10.7–20.5%, longest 18.7–45.7%. Process CPU equal to the mean. Sixteen single-band instances in a chain: 4.7–8.9%, 99th percentile 7.7–12.5% | Per band and channel the quadrature pair (eight allpass sections), the level and two followers, and one `exp` while the gain moves. The linear-phase bank runs one forward and one inverse FFT per band every 512 frames, so its cost lands in one block of each hop; the 4× clip about 0.8%. |
+| Keel | Measured by `oscillate_keel_bench` on noise, with one instance and with sixteen. 1.2–1.3% at 64 and 128 frames; 99th-percentile block 1.8–2.6% of its period, longest 3.0–6.4%. With a reference on the sidechain: 1.8%, 99th percentile 3.7–4.4%. Process CPU equal to the mean. Sixteen in a chain: 19.6–20.5%, 99th percentile 31.4–43.0% (29.7–29.8% and 52.9–73.3% with references) | Eleven state-variable filters per channel and their gliding coefficients; one 16384-point transform per 2048 frames, spread a stage at a time over the hop, and the least-squares fit once a hop. |
 | Ceiling | 7.0–7.1% at 64 and 128 frames (`oscillate_ceiling_bench`, noise 12 dB over); 99th-percentile block 8.4–10.2% of its period, longest 11.9–17.7%; process CPU equal to the mean. Sixteen in a chain: 110–114% of one core, 99th percentile 118–150%. With no room to clip (Transients and Clip at 0): 2.5% | The 8× linear-phase clipper (about 4.5%), which sleeps with no room; the 8× fine-peak detector, the 4× guard and the output true-peak meter, about 1.9% together; K-weighted loudness. |
 
 Ceiling was measured on an Intel Core i7-10700K with GCC 15.2, Release, pinned with `taskset`.
@@ -99,6 +100,41 @@ The eight mastered tracks (mean):
 | Soften Attack | +0.59 | +0.13 | −1.36/−1.36/−0.26 | +1.51 | 0 |
 
 Strike was measured on an Intel Core i7-10700K with GCC 15.2, Release, pinned with `taskset`.
+
+## Keel toward its targets
+
+`oscillate_limiter_audit --balance` runs each Keel preset at the programme's own level and judges the last part of each programme, after 8 s of settling. It reports:
+- the third-octave balance's distance from the preset's target, before and after (RMS and largest, from 40 Hz to 16 kHz, both centred there);
+- the integrated loudness change;
+- how far the applied correction wanders from one second to the next (RMS over the bands);
+- the onset contrast change in the three bands (positive is more attack against the body);
+- the programme's own tilt against pink noise.
+
+The eight mastered tracks (mean; their tilt is −2.69 dB/oct):
+
+| Preset | Before RMS / max dB | After RMS / max dB | LUFS change | Wander dB | Onset contrast change L/M/H |
+|---|---|---|---|---|---|
+| Default | 4.20 / 9.46 | 3.05 / 8.12 | +0.06 | 0.50 | +0.52/+0.30/+0.15 |
+| Gentle Polish | 4.20 / 9.46 | 3.49 / 8.71 | +0.05 | 0.24 | +0.33/+0.20/+0.10 |
+| Tame Harsh | 4.20 / 9.46 | 3.81 / 9.12 | +0.03 | 0.16 | −0.03/+0.11/+0.10 |
+| Warm It Up | 4.30 / 10.54 | 3.25 / 9.25 | +0.05 | 0.40 | +0.35/+0.27/+0.14 |
+| Streaming Balance | 4.20 / 9.46 | 3.19 / 8.43 | +0.07 | 0.38 | +0.47/+0.28/+0.14 |
+| Low End Control | 4.20 / 9.46 | 3.78 / 8.89 | +0.02 | 0.36 | +0.56/+0.03/−0.01 |
+
+The synthetic drum loop (tilt −2.62 dB/oct):
+
+| Preset | Before RMS / max dB | After RMS / max dB | LUFS change | Wander dB | Onset contrast change L/M/H |
+|---|---|---|---|---|---|
+| Default | 6.81 / 14.49 | 4.83 / 11.35 | +0.04 | 0.05 | +0.89/−0.21/−0.16 |
+| Gentle Polish | 6.81 / 14.49 | 5.63 / 12.68 | +0.01 | 0.02 | +0.46/−0.12/−0.09 |
+| Tame Harsh | 6.81 / 14.49 | 6.40 / 13.89 | +0.00 | 0.01 | −0.01/−0.00/−0.15 |
+| Warm It Up | 6.94 / 14.65 | 5.34 / 12.16 | +0.02 | 0.03 | +0.48/−0.15/−0.13 |
+| Streaming Balance | 6.81 / 14.49 | 5.11 / 11.83 | +0.02 | 0.03 | +0.72/−0.19/−0.14 |
+| Low End Control | 6.81 / 14.49 | 6.36 / 13.76 | +0.01 | 0.03 | +0.94/−0.09/−0.02 |
+
+The onset contrast moves with the balance inside each band: a low band brought down at 50 Hz against 120 Hz has more click over its body. The filters' own phase adds little: Keel's group delay stays under 2 ms from 31.5 Hz up (`native_keel_contract`). The wander on music is the music's balance moving under a 4 s Speed; on the steady loop it is 0.05 dB.
+
+Keel was measured on an Intel Core i7-10700K with GCC 15.2, Release, pinned with `taskset`.
 
 Quality comes first, so nothing is traded for CPU here. The obvious savings, if they're ever needed:
 - **Forge:** a lower oversampling factor while the drive is low.

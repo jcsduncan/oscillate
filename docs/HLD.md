@@ -161,7 +161,7 @@ Real-time contract:
 
 ### 8.2 Native effect platform
 
-`oscillate_native_effects` (`src/native_dsp/effects/`, [ADR-0040](decisions/0040-native-effect-platform.md)) provides one generic `NativeEffectRuntime` and an `EffectEngine` registry (`src/native_dsp/effects/registry.cpp`): Contour, Forge, Orbit, Relay, Expanse, Cast, Vista, Deck, Pocket, Pump, Chop, Temper, Strata, Edge, Hush, Strike, Flyby, Dust, Lens, Loudness, Scope, Tune, Trim, Signal, Shape, Press and Ceiling. Effects with editable curves or shapes carry a document as synths do ([ADR-0058](decisions/0058-pump-volume-shaper.md)); Cast's holds its impulse responses as managed media slots, decoded by the stage off the callback ([ADR-0115](decisions/0115-cast-convolution-reverb.md)).
+`oscillate_native_effects` (`src/native_dsp/effects/`, [ADR-0040](decisions/0040-native-effect-platform.md)) provides one generic `NativeEffectRuntime` and an `EffectEngine` registry (`src/native_dsp/effects/registry.cpp`): Contour, Forge, Orbit, Relay, Expanse, Cast, Vista, Deck, Pocket, Pump, Chop, Temper, Strata, Edge, Hush, Strike, Keel, Flyby, Dust, Lens, Loudness, Scope, Tune, Trim, Signal, Shape, Press and Ceiling. Effects with editable curves or shapes carry a document as synths do ([ADR-0058](decisions/0058-pump-volume-shaper.md)); Cast's holds its impulse responses as managed media slots, decoded by the stage off the callback ([ADR-0115](decisions/0115-cast-convolution-reverb.md)).
 
 Each engine supplies:
 - a parameter table and factory presets;

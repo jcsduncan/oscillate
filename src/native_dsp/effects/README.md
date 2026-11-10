@@ -150,6 +150,17 @@ and an oversampled clip under a ceiling.
 
 ![Strike panel](../../../docs/images/effects/strike.png)
 
+### Keel
+
+Adaptive tonal balance: tracks the programme's third-octave balance over
+Speed seconds, gated against silences and bursts, and steers it toward a
+target (a tilt, a drawn or learned curve, or a reference on the sidechain)
+with minimum-phase shelves and bells and no latency. Amount, the limits,
+region weights, Level Match and Delta.
+[ADR-0119](../../../docs/decisions/0119-keel-adaptive-tonal-balance.md)
+
+![Keel panel](../../../docs/images/effects/keel.png)
+
 ### Temper
 
 Resonance suppressor with dynamic EQ bands and a drawn sensitivity curve.
