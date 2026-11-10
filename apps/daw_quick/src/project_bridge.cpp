@@ -27,6 +27,7 @@
 #include "note_tools_controller.hpp"
 #include "plugin_automation_controller.hpp"
 #include "rack_library_controller.hpp"
+#include "rebalance_controller.hpp"
 #include "recording_controller.hpp"
 #include "route_commands.hpp"
 #include "tempo_lane_controller.hpp"
@@ -230,6 +231,7 @@ QObject* ProjectBridge::note_tools() const noexcept { return note_tools_.get(); 
 QObject* ProjectBridge::note_effects() const noexcept { return note_effects_.get(); }
 QObject* ProjectBridge::freeze_commands() const noexcept { return freeze_commands_.get(); }
 QObject* ProjectBridge::mix_check() const noexcept { return mix_check_.get(); }
+QObject* ProjectBridge::rebalance() const noexcept { return rebalance_.get(); }
 QObject* ProjectBridge::arrange() const noexcept { return arrange_.get(); }
 QObject* ProjectBridge::harmony() const noexcept { return harmony_.get(); }
 QObject* ProjectBridge::groove_capture() const noexcept { return groove_capture_.get(); }

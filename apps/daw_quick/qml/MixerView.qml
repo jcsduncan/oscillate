@@ -15,6 +15,8 @@ Rectangle {
 
     // '+ Insert' on a strip: the shell opens the browser for that path.
     signal browserRequested(string pathId)
+    // The master section's Rebalance button: the shell opens the view.
+    signal rebalanceRequested()
 
     color: Theme.canvas
     Accessible.role: Accessible.Pane
@@ -235,5 +237,6 @@ Rectangle {
         anchors.margins: Theme.spaceXl
         width: implicitWidth
         bridge: mixer.bridge
+        onRebalanceRequested: mixer.rebalanceRequested()
     }
 }

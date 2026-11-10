@@ -11,6 +11,8 @@ Rectangle {
     id: section
     objectName: "masterSectionPanel"
     required property var bridge
+    // The Rebalance view (ADR-0123), from the button under the mono check.
+    signal rebalanceRequested()
     readonly property var master: bridge.masterSection
     readonly property var reading: master ? master.reading : ({ valid: false })
     // Streaming loudness targets: a tick on the short-term bar.
@@ -52,6 +54,7 @@ Rectangle {
     readonly property real correlationMarkerWidth: 4
     readonly property int scaleHeight: 10
     readonly property int monoButtonHeight: 26
+    readonly property int rebalanceButtonHeight: 26
     readonly property color warnColor: Theme.masterSectionWarnColor
     // Level bars ease over this long; spectrum bars a little quicker.
     readonly property int levelEase: 90
@@ -337,6 +340,36 @@ Rectangle {
                 onReleased: if (section.master) section.master.monoListen = false
                 onCanceled: if (section.master) section.master.monoListen = false
                 Tip { text: "Hold to hear the mix folded to mono: phase problems thin it out. Export is unaffected" }
+            }
+        }
+
+        // Each part of the mix, moved through its own tracks.
+        Rectangle {
+            objectName: "masterRebalance"
+            width: parent.width
+            height: section.rebalanceButtonHeight
+            radius: Theme.controlRadius
+            readonly property bool on: section.bridge.rebalance ? section.bridge.rebalance.enabled === true : false
+            color: rebalanceArea.containsMouse ? Theme.buttonFace : Theme.panelRaised
+            border.color: on ? Theme.accent : Theme.lineStrong
+            Accessible.role: Accessible.Button
+            Accessible.name: "Rebalance vocals, drums, bass and music"
+            Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.hover } }
+            Text {
+                anchors.centerIn: parent
+                text: parent.on ? "REBALANCE · ON" : "REBALANCE"
+                color: parent.on ? Theme.accent : Theme.textMain
+                font.pixelSize: Theme.typeCaption
+                font.bold: true
+                font.letterSpacing: Theme.trackingSm
+            }
+            MouseArea {
+                id: rebalanceArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: section.rebalanceRequested()
+                Tip { text: "Move vocals, drums, bass and music on the master, each through its own tracks" }
             }
         }
     }
