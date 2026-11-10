@@ -82,6 +82,8 @@ PACKAGING = (
     "scripts/package_*.py",
     "scripts/packaging/*",
     "scripts/ci/install-deps.sh",
+    "scripts/ci/ci-image-deps.sh",
+    "scripts/ci/Dockerfile",
     "scripts/ci/fetch-vst3-sdk.sh",
     "tests/packaging/*",
     ".github/workflows/packaging.yml",

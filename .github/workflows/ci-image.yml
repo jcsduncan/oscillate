@@ -50,8 +50,25 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - id: hash
+        run: echo "hash=$(scripts/ci/ci-image-deps.sh --hash)" >> "$GITHUB_OUTPUT"
       - name: Build base and full
-        run: scripts/ci/build-ci-image.sh "$IMAGE" "$(scripts/ci/ci-image-deps.sh --hash)"
+        env:
+          HASH: ${{ steps.hash.outputs.hash }}
+        run: scripts/ci/build-ci-image.sh "$IMAGE" "$HASH"
+      # The jobs install only on top of the pinned image, so a package this
+      # pull request removes is caught here: configure in the new images,
+      # base with the README list alone, full with every optional feature.
+      - name: Configure in the new images
+        env:
+          HASH: ${{ steps.hash.outputs.hash }}
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src "$IMAGE:base-$HASH" \
+            cmake --preset quick -B /tmp/base
+          docker run --rm -v "$PWD:/src" -w /src "$IMAGE:full-$HASH" \
+            cmake --preset quick -B /tmp/full -DOSCILLATE_REQUIRE_JACK=ON \
+            -DOSCILLATE_BUILD_CODEC_ADAPTER=ON -DOSCILLATE_BUILD_EXPORT_RESAMPLER=ON \
+            -DOSCILLATE_BUILD_SOURCE_RESAMPLER=ON
 
   image:
     name: Build and push the CI image

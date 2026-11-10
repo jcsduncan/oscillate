@@ -259,7 +259,8 @@ plug-in runtimes on top. The install smoke tests keep a clean
 digest current.
 
 `ci-image.yml` builds both when a pull request changes an input of the
-image, and on `main` when an input changes, every Monday (for security
+image and configures the project in each, which catches a package the
+pull request removed, and on `main` when an input changes, every Monday (for security
 updates) and on demand it pushes them, tagged `<variant>-<hash of the
 inputs>` and `<variant>-latest`, with build provenance attestations. It then
 opens the pull request `ci/pin-ci-image`, which moves every
