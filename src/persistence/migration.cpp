@@ -1,5 +1,7 @@
 #include "migration.hpp"
 
+#include "oscillate/project/snapshot.hpp"
+
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
@@ -16,10 +18,12 @@ using Result = foundation::Result<Json>;
 
 constexpr SchemaVersion schema_1_47{1, 47};
 constexpr SchemaVersion schema_1_48{1, 48};
+constexpr SchemaVersion schema_1_49{1, 49};
 
 // One entry per schema change after the first released schema (ADR-0095).
-constexpr std::array<MigrationStep, 1> built_in_steps{
-    MigrationStep{schema_1_47, schema_1_48, migrate_1_47_to_1_48}};
+constexpr std::array<MigrationStep, 2> built_in_steps{
+    MigrationStep{schema_1_47, schema_1_48, migrate_1_47_to_1_48},
+    MigrationStep{schema_1_48, schema_1_49, migrate_1_48_to_1_49}};
 
 // 1.47's convolution insert and the Cast effect that replaces it in 1.48
 // (ADR-0115). The ids are Cast's saved document format, so they are spelled
@@ -90,6 +94,33 @@ void convert_convolutions(Json& inserts) {
 std::atomic<const ScopedMigrationChain::Chain*> installed_chain{nullptr};
 
 } // namespace
+
+Json migrate_1_48_to_1_49(Json manifest) {
+  // The project's settings as a new project starts them, off.
+  const project::MasterRebalance off;
+  Json roles = Json::array();
+  for (const auto& role : off.roles)
+    roles.push_back({{"gain_db", role.gain_db},
+                     {"low_db", role.low_db},
+                     {"low_hz", role.low_hz},
+                     {"mid_db", role.mid_db},
+                     {"mid_hz", role.mid_hz},
+                     {"mid_q", role.mid_q},
+                     {"high_db", role.high_db},
+                     {"high_hz", role.high_hz}});
+  auto& saved = manifest["project"];
+  saved["rebalance"] = {{"enabled", off.enabled}, {"roles", std::move(roles)}};
+  // No track has a chosen or heard role: each is inferred.
+  if (auto tracks = saved.find("tracks"); tracks != saved.end() && tracks->is_array()) {
+    for (auto& track : *tracks) {
+      if (!track.is_object())
+        continue;
+      track["mix_role"] = nullptr;
+      track["heard_role"] = nullptr;
+    }
+  }
+  return manifest;
+}
 
 std::span<const MigrationStep> migration_steps() noexcept { return built_in_steps; }
 

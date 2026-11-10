@@ -6,6 +6,7 @@
 #include "oscillate/native_inserts/effect_stage.hpp"
 #include "oscillate/plugins/vst3_graph_node.hpp"
 #include "oscillate/project/model.hpp"
+#include "oscillate/render_graph/rebalance.hpp"
 #include "oscillate/routing/project_route_plan.hpp"
 #include "oscillate/track_chain/track_chain.hpp"
 
@@ -514,6 +515,10 @@ private:
   project::ProjectModel& model_;
   engine::RoutedMixerLimits limits_;
   routing::ProjectRouteIdRegistry registry_;
+  // Every track's master rebalance stage (ADR-0123), kept for the session:
+  // each saved edit is offered to the running stages, whatever else it
+  // changes, and a graph takes the stage of each track it builds.
+  render_graph::RebalanceStages rebalance_;
   TrackInsertProvider* inserts_;
   std::filesystem::path project_root_;
   // Every running track chain and the master's. A chain edit switches only

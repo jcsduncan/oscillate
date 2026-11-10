@@ -125,3 +125,4 @@ never reused. 0070 was never assigned.
 | 0120 | [Match EQ and tonal balance targets in Lens](0120-match-eq-and-tonal-targets.md) | Accepted; implemented |
 | 0121 | [Stick: Naked Drums, the default kit](0121-stick-naked-drums.md) | Accepted; implemented |
 | 0122 | [Gild: a multiband exciter on Forge's curves, oversampled and level-matched](0122-gild-multiband-exciter.md) | Accepted; implemented |
+| 0123 | [Master rebalance by role from the project's tracks](0123-master-rebalance.md) | Accepted; implemented |

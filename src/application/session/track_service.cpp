@@ -106,6 +106,37 @@ foundation::Result<void> TrackService::set_master_level(double level,
   return foundation::Result<void>::success();
 }
 
+foundation::Result<void> TrackService::set_master_rebalance(project::MasterRebalance rebalance,
+                                                            std::optional<std::uint64_t> gesture) {
+  auto applied = model().apply({project::SetMasterRebalance{rebalance}}, gesture);
+  if (!applied)
+    return foundation::Result<void>::failure(applied.error());
+  return foundation::Result<void>::success();
+}
+
+foundation::Result<void> TrackService::set_track_mix_role(project::TrackId track,
+                                                          std::optional<project::MixRole> role) {
+  auto applied = model().apply({project::SetTrackMixRole{track, role}});
+  if (!applied)
+    return foundation::Result<void>::failure(applied.error());
+  return foundation::Result<void>::success();
+}
+
+foundation::Result<void>
+TrackService::apply_heard_roles(const std::vector<project::Operation>& heard) {
+  if (heard.empty())
+    return foundation::Result<void>::success();
+  if (!std::ranges::all_of(heard, [](const project::Operation& operation) {
+        return std::holds_alternative<project::SetTrackHeardRole>(operation);
+      }))
+    return foundation::Result<void>::failure(
+        {foundation::ErrorCode::invalid_argument, "Only heard roles apply here"});
+  auto applied = model().apply(heard);
+  if (!applied)
+    return foundation::Result<void>::failure(applied.error());
+  return foundation::Result<void>::success();
+}
+
 foundation::Result<project::TrackId>
 TrackService::add_bus_track(project::TrackKind kind, std::optional<std::size_t> insert_index) {
   if (kind != project::TrackKind::group_bus && kind != project::TrackKind::return_bus) {

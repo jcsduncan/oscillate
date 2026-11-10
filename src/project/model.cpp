@@ -27,7 +27,8 @@ namespace oscillate::project {
 using namespace detail;
 
 bool requires_routed_rendering(const Snapshot& snapshot) noexcept {
-  if (snapshot.master_level != 1.0)
+  // Rebalance stages run on the routed mixer's nodes (ADR-0123).
+  if (snapshot.master_level != 1.0 || snapshot.rebalance.enabled)
     return true;
   return std::ranges::any_of(snapshot.tracks, [](const Track& track) {
     const auto channel_lane = [](const AutomationLane& lane) {

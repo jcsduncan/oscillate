@@ -33,6 +33,9 @@ struct RenderedInterval {
 
 [[nodiscard]] Result<void> validate_frozen(const Track& track, const Snapshot& snapshot);
 
+// Every role's gain and EQ within its range (ADR-0123).
+[[nodiscard]] Result<void> validate_rebalance(const MasterRebalance& rebalance);
+
 [[nodiscard]] Result<RenderedInterval> render_placement(const Snapshot& state,
                                                         const Placement& placement, ClipId id);
 

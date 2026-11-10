@@ -64,6 +64,12 @@ oscillate_add_test_executable(oscillate_eq_tests SOURCES eq_tests.cpp
   LIBS oscillate::native_dsp
   TEST native_eq_contract)
 
+oscillate_add_test_executable(oscillate_rebalance_stage_tests SOURCES rebalance_stage_tests.cpp
+  LIBS oscillate::native_dsp)
+oscillate_add_case_tests(native_rebalance_stage_contract oscillate_rebalance_stage_tests
+  CASES neutral_is_exact matches_shape_eq_and_gain gain_only_is_exact
+        edits_glide_without_allocating bands_stay_in_range)
+
 oscillate_add_test_executable(oscillate_compressor_tests SOURCES compressor_tests.cpp
   LIBS oscillate::native_dsp
   TEST native_compressor_contract)

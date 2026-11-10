@@ -254,6 +254,8 @@ foundation::Result<GraphNodes> graph_nodes(const project::Snapshot& snapshot,
       output_gain = {level, level};
     }
     graph.nodes.emplace_back(node, std::move(processor), std::nullopt, muted, output_gain);
+    if (track && sources.track_output_stage)
+      graph.nodes.back().output_stage = sources.track_output_stage(*track);
     graph.owners.push_back(track);
   }
   return foundation::Result<GraphNodes>::success(std::move(graph));

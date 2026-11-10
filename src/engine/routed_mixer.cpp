@@ -148,6 +148,8 @@ Result RoutedMixer::prepare_impl(std::span<const RoutedNode> nodes,
     std::unordered_map<RoutingNodeId, std::uint32_t> latencies;
     std::unordered_map<RoutingNodeId, bool> muted_by_node;
     std::unordered_map<RoutingNodeId, StereoFrame> gain_by_node;
+    std::unordered_map<RoutingNodeId, std::shared_ptr<ProcessorRuntime>> output_stages;
+    output_stages.reserve(nodes.size());
     owners.reserve(nodes.size());
     replacements.reserve(nodes.size());
     state_handoffs.reserve(nodes.size());
@@ -160,7 +162,11 @@ Result RoutedMixer::prepare_impl(std::span<const RoutedNode> nodes,
       if (node.processor && !active_owners.insert(node.processor.get()).second)
         return fail(foundation::ErrorCode::conflict,
                     "route processors require exclusive runtime ownership");
+      if (node.output_stage && !active_owners.insert(node.output_stage.get()).second)
+        return fail(foundation::ErrorCode::conflict,
+                    "route output stages require exclusive runtime ownership");
       owners.emplace(node.routing.id, node.processor);
+      output_stages.emplace(node.routing.id, node.output_stage);
       replacements.emplace(node.routing.id, node.replacement);
       state_handoffs.emplace(node.routing.id, node.state_handoff_prior);
       latencies.emplace(node.routing.id, node.routing.processor_latency_frames);
@@ -472,6 +478,9 @@ Result RoutedMixer::prepare_impl(std::span<const RoutedNode> nodes,
         std::move(sidechain_processors), std::move(source_histories),
         std::move(processor_input_histories), std::move(scratch), std::move(runtime_edges),
         std::move(incoming)));
+    mixer->output_stages_.reserve(mixer->plan_.topological_order.size());
+    for (const auto id : mixer->plan_.topological_order)
+      mixer->output_stages_.push_back(output_stages.at(id));
     mixer->build_levels();
     if (live) {
       mixer->live_from_ = prior;
@@ -881,6 +890,8 @@ void RoutedMixer::mix_node(std::size_t index, const NodeBlock& block,
         frame = finite({frame.left * gain.left, frame.right * gain.right});
     }
   }
+  if (output_stages_[index])
+    output_stages_[index]->process(frames, block.context);
   if (node_meters_)
     node_meters_->observe(index, frames, block.context);
   auto& history = source_histories_[index];

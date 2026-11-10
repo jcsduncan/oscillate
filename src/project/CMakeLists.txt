@@ -1,4 +1,5 @@
 add_library(oscillate_project
+  mix_roles.cpp
   model.cpp
   model_apply.cpp
   model_apply_automation.cpp

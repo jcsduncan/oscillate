@@ -111,3 +111,16 @@ Close other audio and heavy applications before a run, since whole-process
 CPU and callback time both include contention from the rest of the machine.
 The physical-output gates of the 32-track mixed rehearsal are described in the
 [G7 runbook](g7-physical-device-runbook.md).
+
+## Master rebalance
+
+`--rebalance on` sets every role of the master rebalance ([ADR-0123](../decisions/0123-master-rebalance.md)), a gain and all three bands, so each of the heavy project's 32 source tracks runs its stage's EQ. Through the fake callback on the i7-10700K (GCC 15.2, release, seven helpers, 20 s measured, three runs each, alternating off and on, while desktop applications ran):
+
+| Frames | Rebalance | Whole-process CPU, mean (range) | 100 ms windows p99, range | Callback p99, range |
+| --- | --- | --- | --- | --- |
+| 128 | off | 210.5% (205.7–213.7) | 239.4–245.6% | 1,404–1,444 µs |
+| 128 | on | 213.9% (211.5–217.3) | 242.7–247.3% | 1,407–1,448 µs |
+| 64 | off | 221.7% (216.2–226.1) | 245.4–256.4% | 718–750 µs |
+| 64 | on | 222.2% (220.6–223.8) | 246.2–258.2% | 729–761 µs |
+
+The means differ by 3.4 points of one core at 128 frames and 0.5 at 64, inside the runs' ranges: three 20 s runs do not resolve the stages' cost, so it is at most a few points of one core for 32 stages.

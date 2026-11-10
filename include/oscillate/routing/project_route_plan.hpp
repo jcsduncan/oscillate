@@ -130,6 +130,9 @@ struct TrackStereoGain {
 struct GraphNodeSources {
   // The processor on a track's node (its prepared chain), or none.
   std::function<std::shared_ptr<engine::ProcessorRuntime>(project::TrackId)> track_processor{};
+  // The stage on a track's output after its fader (the master rebalance
+  // stage, ADR-0123), or none.
+  std::function<std::shared_ptr<engine::ProcessorRuntime>(project::TrackId)> track_output_stage{};
   // Live playback runs the master chain on the master node, with its
   // latency and the master level as the node's gain. Otherwise the master
   // node only sums, and the caller runs the master chain and level after it.

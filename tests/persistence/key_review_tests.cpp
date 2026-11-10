@@ -149,7 +149,7 @@ void codec_and_store_contract() {
   const auto text =
       detail::encode_manifest(before, std::string(32, 'a'), std::nullopt, SaveKind::explicit_save);
   auto value = Json::parse(text);
-  REQUIRE_EQ(value["schema"]["minor"], 48, "wrong key-review schema version");
+  REQUIRE_EQ(value["schema"]["minor"], 49, "wrong key-review schema version");
   REQUIRE_EQ(take(detail::decode_manifest(text)).snapshot.source_key_reviews,
              before.source_key_reviews, "key review codec round-trip failed");
   for (const auto& altered : {"detected", "confidence", "compatible", "correction"}) {

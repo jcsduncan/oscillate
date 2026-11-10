@@ -83,6 +83,19 @@ struct SetTrackLevelPan {
 struct SetMasterLevel {
   double level;
 };
+// Master rebalance (ADR-0123): the whole setting, the role a track's
+// musician chose (none: inferred) and the role heard in its audio.
+struct SetMasterRebalance {
+  MasterRebalance rebalance;
+};
+struct SetTrackMixRole {
+  TrackId id;
+  std::optional<MixRole> role;
+};
+struct SetTrackHeardRole {
+  TrackId id;
+  std::optional<MixRole> role;
+};
 // Sets or clears the project key.
 struct SetProjectKey {
   std::optional<MusicalKey> key;
@@ -379,7 +392,7 @@ using Operation = std::variant<
     ReplaceAutomationLane, RemoveAutomationLane, SetTrackName, SetTrackColor, SetClipName,
     SetClipColor, AddMarker, MoveMarker, RenameMarker, RemoveMarker, SetProjectKey, SetLeadBars,
     AddNoteEffect, SetNoteEffectSettings, MoveNoteEffect, SetNoteEffectEnabled, RemoveNoteEffect,
-    SetTrackMacros, SetTrackFrozen>;
+    SetTrackMacros, SetTrackFrozen, SetMasterRebalance, SetTrackMixRole, SetTrackHeardRole>;
 
 struct ChangeSet {
   std::vector<TrackId> tracks;

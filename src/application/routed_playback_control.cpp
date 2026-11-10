@@ -89,9 +89,28 @@ using routed_playback::same_timing;
   return "This edit cannot switch while playing";
 }
 
+// The tracks equal but for their rebalance roles, which the running
+// stages take live (ADR-0123). Only a track whose roles differ is copied.
+[[nodiscard]] bool same_but_roles(const std::vector<project::Track>& before,
+                                  const std::vector<project::Track>& after) {
+  if (before.size() != after.size())
+    return false;
+  for (std::size_t index = 0; index < before.size(); ++index) {
+    if (before[index] == after[index])
+      continue;
+    auto masked = after[index];
+    masked.mix_role = before[index].mix_role;
+    masked.heard_role = before[index].heard_role;
+    if (masked != before[index])
+      return false;
+  }
+  return true;
+}
+
 // Nothing that plays changed but, perhaps, the project key (and with it
-// nothing but presentation): the running synths hear the key; no graph,
-// chain or source changes. An edit undone by the next one lands here too.
+// nothing but presentation) or the master rebalance: the running synths hear
+// the key and the running stages the rebalance (ADR-0123); no graph, chain or
+// source changes. An edit undone by the next one lands here too.
 [[nodiscard]] bool same_audible_state(const project::Snapshot& before,
                                       const project::Snapshot& after) {
   return after.revision > before.revision && before.id == after.id &&
@@ -101,7 +120,7 @@ using routed_playback::same_timing;
          before.source_tempo_reviews == after.source_tempo_reviews &&
          before.source_key_reviews == after.source_key_reviews &&
          before.next_insert_slot_serial == after.next_insert_slot_serial &&
-         before.tracks == after.tracks;
+         same_but_roles(before.tracks, after.tracks);
 }
 
 [[nodiscard]] bool channel_controls_only(const project::Snapshot& before,
@@ -380,6 +399,10 @@ Result<void> RoutedPlaybackControl::apply_current() {
   OSCILLATE_TRACE_SPAN("edit.apply");
   const auto current = model_.snapshot();
   deferred_revision_.reset();
+  // The running rebalance stages follow every edit at once; a graph this
+  // edit builds takes them as they are.
+  if (auto rebalanced = rebalance_.update(*current); !rebalanced)
+    return fail(current->revision, rebalanced.error());
   // An edit made while an earlier one is still switching in waits for it;
   // observe() then applies the newest saved revision, so rapid edits
   // coalesce instead of being refused.

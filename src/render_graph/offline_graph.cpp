@@ -5,6 +5,7 @@
 #include "oscillate/native_inserts/synth_player.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/render_graph/insert_preflight.hpp"
+#include "oscillate/render_graph/rebalance.hpp"
 #include "oscillate/routing/project_route_plan.hpp"
 #include "oscillate/source_prep/synth_media.hpp"
 #include "oscillate/track_chain/track_chain.hpp"
@@ -101,6 +102,12 @@ prepare_offline_routing(const project::Snapshot& snapshot, const OfflineGraphReq
       return foundation::Result<OfflineRoute>::failure(
           {foundation::ErrorCode::corrupt_data, "Native route owner is absent or duplicated"});
   }
+  // Each track's rebalance stage, and the ring-out its EQ adds to its node.
+  RebalanceStages rebalance;
+  if (auto updated = rebalance.update(snapshot); !updated)
+    return foundation::Result<OfflineRoute>::failure(updated.error());
+  for (const auto& owner : plan.value().track_nodes)
+    own_tails[owner.node] += rebalance.tail_frames(owner.track);
   std::map<engine::RoutingNodeId, std::vector<engine::RoutingNodeId>> outgoing;
   for (const auto& edge : plan.value().edges)
     outgoing[edge.source].push_back(edge.destination);
@@ -130,6 +137,8 @@ prepare_offline_routing(const project::Snapshot& snapshot, const OfflineGraphReq
          const auto native = std::ranges::find(native_runtimes, track, &NativeRouteRuntime::track);
          return native == native_runtimes.end() ? nullptr : native->chain.runtime;
        },
+       .track_output_stage = [&](project::TrackId track)
+           -> std::shared_ptr<engine::ProcessorRuntime> { return rebalance.stage(track); },
        .mute_silent_tracks = true});
   if (!graph_nodes)
     return foundation::Result<OfflineRoute>::failure(graph_nodes.error());

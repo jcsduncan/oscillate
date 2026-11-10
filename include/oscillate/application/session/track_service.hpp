@@ -37,6 +37,17 @@ public:
   [[nodiscard]] foundation::Result<project::TrackId>
   add_audio_track(std::optional<std::size_t> insert_index = std::nullopt);
 
+  // Master rebalance (ADR-0123), each one undo step: the whole setting (a
+  // gesture coalesces a drag), the role a track's musician chose (none:
+  // inferred), and the roles heard in the audio tracks (listen_for_roles).
+  [[nodiscard]] foundation::Result<void>
+  set_master_rebalance(project::MasterRebalance rebalance,
+                       std::optional<std::uint64_t> gesture = {});
+  [[nodiscard]] foundation::Result<void> set_track_mix_role(project::TrackId track,
+                                                            std::optional<project::MixRole> role);
+  [[nodiscard]] foundation::Result<void>
+  apply_heard_roles(const std::vector<project::Operation>& heard);
+
   // Presentation: never audible, each one undo step.
   [[nodiscard]] foundation::Result<void> set_track_name(project::TrackId track, std::string name);
   // An empty colour returns the track (or clip) to the app's palette.

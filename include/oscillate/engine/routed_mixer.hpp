@@ -48,6 +48,11 @@ struct RoutedNode {
   // An explicitly prepared successor chain may retain stages owned by this
   // quiescent predecessor. No predecessor drain may be active in this case.
   std::shared_ptr<ProcessorRuntime> state_handoff_prior = {};
+  // A zero-latency stage on the node's output, after its fader, pan, gain
+  // automation and mute, before its meter and its routes (the master
+  // rebalance stage, ADR-0123). Like the processor, one mixer at a time
+  // processes it; the same owner may continue across graph switches.
+  std::shared_ptr<ProcessorRuntime> output_stage = {};
 
   RoutedNode(RoutingNode route, std::shared_ptr<ProcessorRuntime> owner,
              std::optional<RoutedTailReplacement> tail = {}, bool is_muted = false,
@@ -306,6 +311,8 @@ private:
   RoutingLatencyPlan plan_;
   RoutedMixerLimits limits_;
   std::vector<std::shared_ptr<ProcessorRuntime>> processors_;
+  // Per node, its output stage (RoutedNode::output_stage), or none.
+  std::vector<std::shared_ptr<ProcessorRuntime>> output_stages_;
   std::vector<std::uint32_t> processor_latencies_;
   std::vector<TailDrains> tails_;
   std::vector<bool> muted_;

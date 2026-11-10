@@ -21,3 +21,9 @@ oscillate_add_test_executable(oscillate_key_tests SOURCES key_tests.cpp
 oscillate_add_test_executable(oscillate_mix_check_analysis_tests SOURCES mix_check_tests.cpp
   LIBS oscillate::analysis
   TEST analysis_mix_check TIER slow)
+
+oscillate_add_test_executable(oscillate_mix_role_hearing_tests SOURCES mix_role_tests.cpp
+  LIBS oscillate::analysis)
+oscillate_add_case_tests(analysis_mix_role oscillate_mix_role_hearing_tests
+  CASES drums_are_heard bass_is_heard a_voice_is_heard other_music_is_music too_little_is_music
+        the_same_audio_is_heard_the_same)

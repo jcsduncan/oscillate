@@ -10,6 +10,7 @@
 #include "oscillate/project/source_types.hpp"
 #include "oscillate/timeline/timing.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -104,6 +105,15 @@ struct FrozenTrack {
   bool operator==(const FrozenTrack&) const = default;
 };
 
+// Master rebalance (ADR-0123): what part of the mix a track plays. Its
+// role's gain and EQ on the master act on its output (role_stage_roots).
+enum class MixRole : std::uint8_t { vocals = 0, drums = 1, bass = 2, music = 3, none = 4 };
+// The roles a rebalance stage carries settings for (every role but none).
+inline constexpr std::size_t mix_role_count = 4;
+[[nodiscard]] constexpr bool valid_mix_role(MixRole role) noexcept {
+  return static_cast<std::uint8_t>(role) <= static_cast<std::uint8_t>(MixRole::none);
+}
+
 struct Track {
   TrackId id;
   std::vector<Clip> clips;
@@ -128,6 +138,10 @@ struct Track {
   std::vector<NoteEffectInsert> note_effects = {};
   std::vector<Macro> macros = {};
   std::optional<FrozenTrack> frozen = std::nullopt;
+  // Master rebalance (ADR-0123): the role the musician chose, overriding
+  // the inferred one, and the role last heard in its audio (an audio track).
+  std::optional<MixRole> mix_role = std::nullopt;
+  std::optional<MixRole> heard_role = std::nullopt;
   Track(TrackId track_id, std::vector<Clip> audio_clips = {},
         TrackKind track_kind = TrackKind::audio, InstrumentSource source = {},
         std::vector<MidiClip> notes = {}, std::vector<EffectInsert> inserts = {},
@@ -155,6 +169,43 @@ inline constexpr std::size_t max_markers_per_project = 1'024;
 inline constexpr std::uint32_t max_lead_bars = 1'024;
 inline constexpr std::size_t max_marker_name_bytes = 128;
 
+// One role's rebalance (ADR-0123): a gain and a three-band EQ (low shelf,
+// bell, high shelf) on the role's tracks' outputs. Gains in dB.
+inline constexpr double rebalance_gain_limit_db = 12.0;
+inline constexpr double rebalance_low_min_hz = 20.0;
+inline constexpr double rebalance_low_max_hz = 1'000.0;
+inline constexpr double rebalance_low_default_hz = 100.0;
+inline constexpr double rebalance_mid_min_hz = 100.0;
+inline constexpr double rebalance_mid_max_hz = 10'000.0;
+inline constexpr double rebalance_mid_default_hz = 1'000.0;
+inline constexpr double rebalance_mid_min_q = 0.3;
+inline constexpr double rebalance_mid_max_q = 4.0;
+inline constexpr double rebalance_mid_default_q = 0.7;
+inline constexpr double rebalance_high_min_hz = 1'000.0;
+inline constexpr double rebalance_high_max_hz = 16'000.0;
+inline constexpr double rebalance_high_default_hz = 8'000.0;
+struct RoleBalance {
+  double gain_db = 0.0;
+  double low_db = 0.0;
+  double low_hz = rebalance_low_default_hz;
+  double mid_db = 0.0;
+  double mid_hz = rebalance_mid_default_hz;
+  double mid_q = rebalance_mid_default_q;
+  double high_db = 0.0;
+  double high_hz = rebalance_high_default_hz;
+  bool operator==(const RoleBalance&) const = default;
+};
+// Whether a role's settings leave its tracks untouched.
+[[nodiscard]] constexpr bool neutral(const RoleBalance& role) noexcept {
+  return role.gain_db == 0.0 && role.low_db == 0.0 && role.mid_db == 0.0 && role.high_db == 0.0;
+}
+// Off, every role is neutral whatever its saved settings.
+struct MasterRebalance {
+  bool enabled = false;
+  std::array<RoleBalance, mix_role_count> roles{};
+  bool operator==(const MasterRebalance&) const = default;
+};
+
 // This is durable project intent only. Audible graph status belongs to application.
 struct Snapshot {
   ProjectId id;
@@ -180,6 +231,8 @@ struct Snapshot {
   // first downbeat). The timeline still starts at zero; the ruler counts
   // these bars as 1 - lead_bars .. 0. Presentation only.
   std::uint32_t lead_bars = 0;
+  // Master rebalance (ADR-0123), applied before the master chain.
+  MasterRebalance rebalance = {};
   // The revision of the last change that could be heard. Names, colours
   // and markers carry it forward, so playback built at or after it
   // is current. Derived, not saved: a loaded project starts at its revision.

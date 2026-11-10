@@ -312,6 +312,7 @@ oscillate_add_case_tests(application_routed_live_edit oscillate_application_rout
   track_mute_fades_without_a_gap
   rapid_edits_coalesce_onto_the_newest_revision
   an_edit_waiting_behind_a_note_edit_applies_next
+  rebalance_edits_glide_without_a_gap
   track_add_switches_with_its_source
   track_remove_fades_out_then_switches
   track_remove_fades_out_over_its_level_lane
@@ -385,6 +386,12 @@ oscillate_add_test_executable(oscillate_application_sampler_conversion_tests SOU
 oscillate_add_test_executable(oscillate_application_effect_export_parity_tests SOURCES effect_export_parity_tests.cpp
   LIBS oscillate::application oscillate::native_effects
   TEST application_effect_export_parity TIER slow LABELS parity)
+
+oscillate_add_test_executable(oscillate_application_rebalance_tests SOURCES rebalance_tests.cpp
+  LIBS oscillate::application oscillate::native_effects)
+oscillate_add_case_tests(application_rebalance oscillate_application_rebalance_tests
+  CASES master_change_nulls_against_the_tracks off_or_neutral_is_exact export_matches_live
+        listening_saves_the_heard_part)
 
 oscillate_add_test_executable(oscillate_application_history_labels_tests SOURCES history_labels_tests.cpp
   LIBS oscillate::application
