@@ -43,7 +43,11 @@ KEYMAP = f"""// keymap
 #define $KEY_TOM3 {TOM_KEY}
 #define $SW_NON 12
 """
-MACRO = f"""#define $dir ../Samples
+VELTRACK = 99
+# Velocity squared, in dB: full tracking.
+SQUARED_DB = 40.0
+MACRO = f"""#define $VELTRACK {VELTRACK}
+#define $dir ../Samples
 #define $ext wav
 #define $TRIM_OH_KICK {TRIM_DB}
 #define $TUN_TOM3 {TOM_CENTS}
@@ -167,6 +171,15 @@ class SfzTests(unittest.TestCase):
         )
         self.assertEqual(regions[1], {"master_volume": "3", "key": "38", "sample": "b.wav"})
         self.assertEqual(regions[2], {"sample": "c.wav"})
+
+    def test_velocity_tracking_follows_the_sfz(self):
+        soft_velocity = 27
+        full_tracking = 100
+        self.assertEqual(kits.velocity_db(kits.MAX_VELOCITY, VELTRACK), 0.0)
+        self.assertAlmostEqual(
+            kits.velocity_db(soft_velocity, full_tracking),
+            SQUARED_DB * math.log10(soft_velocity / kits.MAX_VELOCITY),
+        )
 
     def test_opcode_values_may_hold_spaces(self):
         self.assertEqual(

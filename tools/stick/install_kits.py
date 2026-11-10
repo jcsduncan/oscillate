@@ -311,6 +311,11 @@ NAKED_EXPECTED_HITS = {
 # The SFZ's hi-hat keyswitch: Stick plays the non-variable mapping (the
 # variable one maps the same samples to the hat pedal controller).
 NAKED_KEYSWITCH = "$SW_NON"
+# Naked's samples are normalised per velocity layer: its SFZ gives them
+# their dynamics by velocity tracking (amp_veltrack, this define, in %).
+NAKED_VELTRACK = "$VELTRACK"
+MAX_VELOCITY = 127
+PERCENT = 100.0
 
 
 # ---- DRSKit (DrumGizmo, zip) --------------------------------------------------------------------
@@ -724,6 +729,12 @@ def sfz_number(value: str, what: str) -> float:
         raise SystemExit(f"the SFZ's {what} is not a number: {value}") from error
 
 
+def velocity_db(velocity: float, veltrack_percent: float) -> float:
+    """The SFZ's velocity tracking: the gain a note of `velocity` plays at,
+    (velocity / 127)^2 in amplitude at 100 %."""
+    return veltrack_percent / PERCENT * 2.0 * DECIBELS * math.log10(velocity / MAX_VELOCITY)
+
+
 def naked_stroke(part: str, label: str, key: str, keys: dict[str, str]) -> tuple[str, str] | None:
     """The piece and articulation a region of the SFZ records."""
     for define in NAKED_SNARE_KEYS:
@@ -744,6 +755,7 @@ def naked_hits(source: Path, expected: dict[tuple[str, str], int] | None = None)
     for chunk in re.split(r"<\w+>", "\n".join(main)):
         default_path = sfz_opcodes(chunk).get("default_path", default_path)
     keyswitch = reader.defines[NAKED_KEYSWITCH]
+    veltrack = sfz_number(reader.defines[NAKED_VELTRACK], "velocity tracking")
     keys = {define: reader.defines[define] for define in NAKED_SNARE_KEYS}
     mic_files = re.findall(
         r'#include\s+"(\.\./Data/stereo/(\w+)\.txt)"', instrument.read_text(errors="replace")
@@ -775,7 +787,7 @@ def naked_hits(source: Path, expected: dict[tuple[str, str], int] | None = None)
             gain_db = sum(
                 sfz_number(region.get(name, "0"), name)
                 for name in ("master_volume", "group_volume", "volume")
-            )
+            ) + velocity_db(sfz_number(region.get("hivel", str(MAX_VELOCITY)), "hivel"), veltrack)
             cents = sfz_number(region.get("tune", "0"), "tune")
             lovel = region.get("lovel", "")
             identity = (*stroke, label, key, lovel, region.get("seq_position", ""))
