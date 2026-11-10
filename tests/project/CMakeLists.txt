@@ -26,5 +26,5 @@ oscillate_add_test_executable(oscillate_mix_roles_tests SOURCES mix_roles_tests.
   LIBS oscillate::project)
 oscillate_add_case_tests(project_mix_roles oscillate_mix_roles_tests
   CASES devices_name_their_part names_say_the_part heard_and_notes_follow_names
-        groups_carry_one_stage a_chosen_group_role_passes_down frozen_tracks_keep_their_role
+        stages_sit_on_the_tracks a_chosen_group_role_passes_down frozen_tracks_keep_their_role
         commands_save_roles_and_settings)

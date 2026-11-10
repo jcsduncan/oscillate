@@ -211,9 +211,7 @@ std::vector<TrackRole> mix_roles(const Snapshot& snapshot) {
       for (const auto child : children[i]) {
         resolve(child);
         const auto role = roles[child].role;
-        if (role == MixRole::none)
-          continue;
-        if (shared && *shared != role)
+        if (role == MixRole::none || (shared && *shared != role))
           mixed = true;
         shared = role;
       }
@@ -238,9 +236,7 @@ std::vector<TrackRole> mix_roles(const Snapshot& snapshot) {
   for (std::size_t i = 0; i < tracks.size(); ++i)
     resolve(i);
   for (std::size_t i = 0; i < tracks.size(); ++i) {
-    const auto up = parent(i);
-    const auto above = up ? roles[*up].role : MixRole::none;
-    if (roles[i].role != above)
+    if (track_holds_clips(tracks[i].kind))
       roles[i].stage = roles[i].role;
   }
   return roles;

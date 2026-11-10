@@ -443,52 +443,51 @@ struct Vst3Parts {
 #endif
 };
 
-// The master rebalance roles (ADR-0123) the references must have: a
-// recording is music, a drum or bass instrument plays its part, any other
-// synth music; a group bus takes the role all it sums share, else none; a
-// return none. Each track whose role differs from its group's carries a stage.
+// The master rebalance roles (ADR-0123) the references must have, by the
+// engines these projects use: Stick, Pulse, Anvil and Knock play drums,
+// Torque bass, a recording and every other synth music. A group bus takes
+// the role all it sums share, else none; a return none. Each source track
+// carries its role's stage; buses none.
+constexpr std::array<std::string_view, 4> reference_drum_engines{"stick", "pulse", "anvil",
+                                                                 "knock"};
+constexpr std::string_view reference_bass_engine = "torque";
+
 void check_roles(const project::Snapshot& snapshot, std::span<const project::TrackId> groups) {
   const auto roles = project::mix_roles(snapshot);
-  const auto own = [](const project::Track& track) {
+  const auto expected = [](const project::Track& track) {
     const auto* patch = std::get_if<project::NativeInstrumentPatch>(&track.instrument_source);
     if (patch == nullptr)
       return project::MixRole::music;
-    if (std::ranges::find(project::drum_engines, patch->engine) != project::drum_engines.end())
+    if (std::ranges::find(reference_drum_engines, patch->engine) != reference_drum_engines.end())
       return project::MixRole::drums;
-    if (std::ranges::find(project::bass_engines, patch->engine) != project::bass_engines.end())
-      return project::MixRole::bass;
-    return project::MixRole::music;
+    return patch->engine == reference_bass_engine ? project::MixRole::bass
+                                                  : project::MixRole::music;
   };
   std::size_t staged = 0;
-  for (const auto group : groups) {
-    std::optional<project::MixRole> shared;
-    bool mixed = false;
-    for (const auto& track : snapshot.tracks) {
-      if (track.main_output != group)
-        continue;
-      mixed = mixed || (shared && *shared != own(track));
-      shared = own(track);
+  for (std::size_t index = 0; index < snapshot.tracks.size(); ++index) {
+    const auto& track = snapshot.tracks[index];
+    auto want = project::MixRole::none;
+    if (track.kind == project::TrackKind::audio || track.kind == project::TrackKind::instrument) {
+      want = expected(track);
+    } else if (std::ranges::find(groups, track.id) != groups.end()) {
+      std::optional<project::MixRole> shared;
+      bool mixed = false;
+      for (const auto& member : snapshot.tracks) {
+        if (member.main_output != track.id)
+          continue;
+        mixed = mixed || (shared && *shared != expected(member));
+        shared = expected(member);
+      }
+      want = shared && !mixed ? *shared : project::MixRole::none;
     }
-    const auto expected = shared && !mixed ? *shared : project::MixRole::none;
-    for (std::size_t index = 0; index < snapshot.tracks.size(); ++index) {
-      const auto& track = snapshot.tracks[index];
-      const auto want = track.id == group            ? expected
-                        : track.main_output == group ? own(track)
-                                                     : roles[index].role;
-      if (track.id != group && track.main_output != group)
-        continue;
-      if (roles[index].role != want)
-        throw std::runtime_error("a reference track has the wrong rebalance role");
-      const auto stage = track.id == group || want != expected ? want : project::MixRole::none;
-      if (roles[index].stage != stage)
-        throw std::runtime_error("a reference track has the wrong rebalance stage");
-      staged += stage == project::MixRole::none ? 0U : 1U;
-    }
+    if (roles[index].role != want)
+      throw std::runtime_error("a reference track has the wrong rebalance role");
+    const bool source =
+        track.kind == project::TrackKind::audio || track.kind == project::TrackKind::instrument;
+    if (roles[index].stage != (source ? want : project::MixRole::none))
+      throw std::runtime_error("a reference track has the wrong rebalance stage");
+    staged += source ? 1U : 0U;
   }
-  for (std::size_t index = 0; index < snapshot.tracks.size(); ++index)
-    if (snapshot.tracks[index].kind == project::TrackKind::return_bus &&
-        roles[index].role != project::MixRole::none)
-      throw std::runtime_error("a reference return has a rebalance role");
   std::cout << "roles checked: " << staged << " rebalance stages\n";
 }
 

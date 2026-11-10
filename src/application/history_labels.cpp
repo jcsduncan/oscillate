@@ -190,9 +190,9 @@ void describe_track(const project::Track& before, const project::Track& after,
   if (before.pan != after.pan)
     out.push_back({"Change pan", where});
   if (before.mix_role != after.mix_role)
-    out.push_back({"Set role", where, " "});
+    out.push_back({"Set role", where});
   if (before.heard_role != after.heard_role)
-    out.push_back({"Listen for role", where, " "});
+    out.push_back({"Listen for role", where});
   if (before.instrument_source != after.instrument_source) {
     const auto* old_native = std::get_if<project::NativeInstrumentPatch>(&before.instrument_source);
     const auto* new_native = std::get_if<project::NativeInstrumentPatch>(&after.instrument_source);

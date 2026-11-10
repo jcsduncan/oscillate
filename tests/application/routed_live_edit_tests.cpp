@@ -2,6 +2,7 @@
 #include "oscillate/application/routed_audio_source.hpp"
 #include "oscillate/application/routed_source_selection.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
+#include "oscillate/native_dsp/rebalance.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
 #include "oscillate/native_inserts/instrument_binding.hpp"
 #include "oscillate/test/allocation_counter.hpp"
@@ -575,7 +576,9 @@ void rebalance_edits_glide_without_a_gap() {
   constexpr double high_db = 3.0;
   constexpr std::uint64_t eq_block = edit_block + 20;
   constexpr std::uint64_t role_block = held_end_block;
-  constexpr std::uint64_t glide_blocks = 16;
+  // The gain glide and the EQ transition, in blocks, with one to spare.
+  constexpr std::uint64_t glide_blocks =
+      oscillate::native_dsp::rebalance_gain_glide_frames / block_frames + 1;
   Song song;
   const auto unchanged = reference(song, {});
   Run run(song.root, song.saved);
@@ -614,7 +617,11 @@ void rebalance_edits_glide_without_a_gap() {
   run.play_to(song_blocks);
   REQUIRE_EQ(run.control.status().active_graph_revision, revision,
              "the role edit did not become active without a restart");
-  const auto settled = (role_block + glide_blocks) * block_frames;
+  // The gain's glide, then the flat EQ ringing out what the bands left.
+  const auto settle =
+      take(oscillate::native_dsp::neutral_target(song.saved.sample_rate)).settle_frames;
+  const auto settled = (role_block + glide_blocks) * block_frames + settle;
+  REQUIRE_LT(settled, run.left.size(), "the song runs past the stage's settling");
   require_matches(std::span(run.left).subspan(settled), std::span(unchanged).subspan(settled),
                   "a neutral stage plays the song unchanged");
 }

@@ -25,14 +25,15 @@ foundation::Result<void> RebalanceStages::update(const project::Snapshot& snapsh
   targets.reserve(project::mix_role_count + 1);
   std::array<bool, project::mix_role_count> changed{};
   for (std::size_t role = 0; role < project::mix_role_count; ++role) {
-    tones[role] =
+    const auto tone =
         role_tone(snapshot.rebalance.enabled ? snapshot.rebalance.roles[role] : neutral_balance);
+    tones[role] = tone;
     changed[role] = rate_changed || tones[role] != tones_[role];
     if (!changed[role]) {
       targets.push_back(targets_[role]);
       continue;
     }
-    auto made = native_dsp::role_target(*tones[role], snapshot.sample_rate);
+    auto made = native_dsp::role_target(tone, snapshot.sample_rate);
     if (!made)
       return R::failure(made.error());
     targets.push_back(std::move(made).value());
@@ -82,13 +83,7 @@ std::shared_ptr<native_dsp::RoleStage> RebalanceStages::stage(project::TrackId t
 
 std::uint64_t RebalanceStages::tail_frames(project::TrackId track) const {
   const auto role = std::ranges::find(roles_, track, &project::TrackRole::track);
-  if (role == roles_.end())
-    return 0;
-  const auto& made = target(role->stage);
-  if (made.flat_eq)
-    return 0;
-  const auto tail = native_dsp::estimate_eq_tail_frames(made.eq);
-  return tail ? tail.value() : 0;
+  return role == roles_.end() ? 0 : target(role->stage).tail_frames;
 }
 
 } // namespace oscillate::render_graph

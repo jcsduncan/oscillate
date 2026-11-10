@@ -47,6 +47,11 @@ struct RoleTarget {
   float gain = 1.0F;
   bool flat_eq = true;
   bool neutral = true;
+  // Frames a flat EQ keeps running after a glide to it, so the filter state
+  // the earlier bands left rings out before the stage stops running it.
+  std::uint64_t settle_frames = 0;
+  // Frames the EQ sounds after its input stops; zero while flat.
+  std::uint64_t tail_frames = 0;
 };
 [[nodiscard]] foundation::Result<RoleTarget> role_target(const RoleTone& tone,
                                                          std::uint32_t sample_rate);
@@ -93,6 +98,7 @@ private:
   std::optional<EqRuntime> eq_;
   std::uint64_t offered_ = 0;
   bool pending_ = false;
+  std::uint64_t settled_ = 0;
   float gain_ = 1.0F;
   float gain_from_ = 1.0F;
   std::uint32_t glide_done_ = rebalance_gain_glide_frames;

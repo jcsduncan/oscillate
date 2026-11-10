@@ -10,6 +10,7 @@
 #include "oscillate/test/tolerances.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -37,7 +38,8 @@ constexpr double low_hz = 120.0;
 constexpr double mid_hz = 900.0;
 constexpr double mid_q = 0.9;
 constexpr double high_hz = 7'000.0;
-constexpr double decibels_per_decade = 20.0;
+// 6 dB as a linear gain, 10^(6/20).
+constexpr float boost_gain = 1.99526231F;
 // One frame's change while gliding stays under this: the tone itself moves
 // at most 2 pi f / rate * level (0.0072) per frame, and the settings raise
 // it at most fourfold; a 6 dB step in the gain would jump by up to `level`.
@@ -80,9 +82,16 @@ void neutral_is_exact() {
 // The stage equals Shape's EQ cascade with the same bands, then the gain.
 void matches_shape_eq_and_gain() {
   auto stage = dsp::RoleStage(take(dsp::role_target(tone, rate)));
-  const auto bands = dsp::rebalance_bands_for(tone, rate);
+  // The low shelf, bell and high shelf, the shelves at Shape's steepest
+  // slope without overshoot, written out here.
+  constexpr double shelf_slope = 1.0;
+  const std::array<dsp::EqBandSettings, 3> bands{{
+      {dsp::EqBandKind::low_shelf, low_hz, shelf_slope, low_db},
+      {dsp::EqBandKind::peaking, mid_hz, mid_q, mid_db},
+      {dsp::EqBandKind::high_shelf, high_hz, shelf_slope, high_db},
+  }};
   dsp::EqRuntime reference(take(dsp::prepare_eq(bands, rate)));
-  const auto gain = static_cast<float>(std::pow(10.0, boost_db / decibels_per_decade));
+  const auto gain = boost_gain;
   const auto input = signal(block * blocks);
   auto output = input;
   auto expected = input;
@@ -99,7 +108,7 @@ void matches_shape_eq_and_gain() {
 void gain_only_is_exact() {
   const dsp::RoleTone gain_only{boost_db, 0.0, low_hz, 0.0, mid_hz, mid_q, 0.0, high_hz};
   auto stage = dsp::RoleStage(take(dsp::role_target(gain_only, rate)));
-  const auto gain = static_cast<float>(std::pow(10.0, boost_db / decibels_per_decade));
+  const auto gain = boost_gain;
   const auto input = signal(block * blocks);
   auto output = input;
   run(stage, output);

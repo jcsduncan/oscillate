@@ -76,6 +76,11 @@ void rebalance_round_trips() {
   REQUIRE_EQ(json["project"]["tracks"][1]["heard_role"], "drums");
   REQUIRE_EQ(json["project"]["tracks"][2]["mix_role"], "none");
   REQUIRE_EQ(json["project"]["rebalance"]["roles"].size(), mix_role_count, "one setting per role");
+  auto off = original;
+  off.rebalance.enabled = false;
+  const auto decoded_off = take(detail::decode_manifest(encode(off)));
+  REQUIRE_EQ(decoded_off.snapshot.rebalance, off.rebalance,
+             "a switched-off rebalance keeps its settings");
   const auto decoded = take(detail::decode_manifest(json.dump()));
   REQUIRE_EQ(decoded.snapshot.rebalance, original.rebalance, "the settings round-trip exactly");
   for (std::size_t i = 0; i < original.tracks.size(); ++i) {
@@ -94,6 +99,8 @@ void malformed_rebalance_is_refused() {
   refused([](Json& p) { p.erase("rebalance"); }, "a missing rebalance");
   refused([](Json& p) { p["tracks"][0].erase("mix_role"); }, "a missing role");
   refused([](Json& p) { p["tracks"][0]["mix_role"] = "lead"; }, "an unknown role");
+  refused([](Json& p) { p["tracks"][1].erase("heard_role"); }, "a missing heard role");
+  refused([](Json& p) { p["tracks"][1]["heard_role"] = "lead"; }, "an unknown heard role");
   refused([](Json& p) { p["rebalance"]["roles"].erase(0); }, "a missing role setting");
   refused([](Json& p) { p["rebalance"]["roles"][0]["gain_db"] = past_limit_db; },
           "a gain past its limit");

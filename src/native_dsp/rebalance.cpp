@@ -1,5 +1,7 @@
 #include "oscillate/native_dsp/rebalance.hpp"
 
+#include "oscillate/native_dsp/dsp/math.hpp"
+
 #include <algorithm>
 #include <cmath>
 
@@ -9,13 +11,11 @@ namespace {
 // prepare_eq's frequency range.
 constexpr double lowest_hz = 10.0;
 constexpr double highest_hz = 20'000.0;
-// Shape's guard below Nyquist (dsp::nyquist_guard).
-constexpr double nyquist_share = 0.45;
 constexpr double decibels_per_gain_decade = 20.0;
 constexpr double decade = 10.0;
 
 [[nodiscard]] double in_band(double hz, double sample_rate) noexcept {
-  return std::clamp(hz, lowest_hz, std::min(highest_hz, nyquist_share * sample_rate));
+  return std::clamp(hz, lowest_hz, std::min(highest_hz, dsp::nyquist_guard * sample_rate));
 }
 
 } // namespace
@@ -45,7 +45,20 @@ foundation::Result<RoleTarget> role_target(const RoleTone& tone, std::uint32_t s
     return R::failure(flat.error());
   const bool flat_eq = tone.low_db == 0.0 && tone.mid_db == 0.0 && tone.high_db == 0.0;
   const auto gain = static_cast<float>(std::pow(decade, tone.gain_db / decibels_per_gain_decade));
-  return R::success(RoleTarget{eq.value(), flat.value(), gain, flat_eq, flat_eq && gain == 1.0F});
+  // How long the flat cascade takes to ring out what the EQ left in it.
+  auto settle = estimate_eq_tail_frames(flat.value());
+  if (!settle)
+    return R::failure(settle.error());
+  // How long the EQ keeps sounding after its input stops (export tails).
+  std::uint64_t tail = 0;
+  if (!flat_eq) {
+    auto ring = estimate_eq_tail_frames(eq.value());
+    if (!ring)
+      return R::failure(ring.error());
+    tail = ring.value();
+  }
+  return R::success(RoleTarget{eq.value(), flat.value(), gain, flat_eq, flat_eq && gain == 1.0F,
+                               settle.value(), tail});
 }
 
 foundation::Result<RoleTarget> neutral_target(std::uint32_t sample_rate) {
@@ -120,9 +133,15 @@ void RoleStage::process(std::span<engine::StereoFrame> stereo,
     for (auto& frame : stereo)
       frame = {frame.left * gain_, frame.right * gain_};
   }
-  // Settled at a flat EQ: stop running it, so a stage at 0 dB is exact.
-  if (eq_ && !pending_ && target.flat_eq && eq_->applied_prepared_revision() == offered_)
-    eq_.reset();
+  // At a flat EQ, once what the earlier bands left in the cascade has rung
+  // out: stop running it, so a stage at 0 dB is exact.
+  if (eq_ && !pending_ && target.flat_eq && eq_->applied_prepared_revision() == offered_) {
+    settled_ += stereo.size();
+    if (settled_ >= target.settle_frames)
+      eq_.reset();
+  } else {
+    settled_ = 0;
+  }
 }
 
 } // namespace oscillate::native_dsp

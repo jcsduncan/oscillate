@@ -121,8 +121,8 @@ project::TrackId synth(app::ProjectSession& session, std::string name,
   return track;
 }
 
-// Kick and snare summed on a group bus, a bass, a voice with a send to a
-// delay on a return, and a pad.
+// Kick and snare summed on a group bus, a bass, a voice and the kick with
+// sends to a delay on a return, and a pad.
 SongContent write_song(const fs::path& root) {
   auto session = take(app::ProjectSession::create(root));
   constexpr std::uint8_t kick_key = 36;
@@ -149,6 +149,8 @@ SongContent write_song(const fs::path& root) {
   const auto echo = take(session->tracks().add_bus_track(project::TrackKind::return_bus));
   (void)take(session->effects().add_effect_engine(echo, 0, "relay"));
   (void)take(session->routing().add_send(vox, echo, send_gain));
+  // A grouped track's send reaches the return past its group.
+  (void)take(session->routing().add_send(kick, echo, send_gain));
   REQUIRE_OK(session->saving().save());
   return {session->snapshot(), kick, snare, bass, vox, pad};
 }
@@ -215,10 +217,13 @@ Variant changed_on_tracks(const Song& song, const project::MasterRebalance& reba
     const auto tone = oscillate::render_graph::role_tone(balance);
     const auto settings = oscillate::native_dsp::rebalance_bands_for(tone, rate);
     std::vector<match_eq::Band> bands;
+    bands.reserve(settings.size());
     for (const auto& band : settings)
       bands.push_back({band.kind, band.frequency_hz, band.shape, band.gain_db});
     project::NativeEffectPatch patch{"shape", 1, {}};
-    for (const auto& [id, value] : shape::band_values(bands))
+    const auto values = shape::band_values(bands);
+    patch.parameters.reserve(values.size());
+    for (const auto& [id, value] : values)
       patch.parameters.push_back({std::string(id), value});
     const auto saved = *std::ranges::find(session->snapshot().tracks, track, &project::Track::id);
     (void)take(session->effects().add_native_effect(track, saved.effects.size(), patch));
@@ -270,7 +275,7 @@ void the_song_has_its_roles(const Song& song) {
   const auto stage = [&](project::TrackId track) {
     return std::ranges::find(roles, track, &project::TrackRole::track)->stage;
   };
-  REQUIRE_EQ(stage(song.kick), project::MixRole::none, "the drum bus carries the drums' stage");
+  REQUIRE_EQ(stage(song.kick), project::MixRole::drums, "a grouped track carries its stage");
   REQUIRE_EQ(stage(song.bass), project::MixRole::bass);
   REQUIRE_EQ(stage(song.vox), project::MixRole::vocals);
   REQUIRE_EQ(stage(song.pad), project::MixRole::music);

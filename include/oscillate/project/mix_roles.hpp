@@ -30,9 +30,10 @@ struct TrackRole {
   TrackId track;
   MixRole role = MixRole::music;
   RoleReason reason = RoleReason::fallback;
-  // The role whose stage acts on this track's output: its role where it
-  // differs from the role of the bus its output plays into (the master has
-  // none), otherwise none, so no sound passes the same role's stage twice.
+  // The role whose stage acts on this track's output: an audio or
+  // instrument track's role. Buses carry none: a bus's role only passes to
+  // the tracks under it, so every sound passes its role's stage once, on its
+  // own track, whatever buses and sends it reaches the master through.
   MixRole stage = MixRole::none;
 };
 
@@ -41,8 +42,8 @@ struct TrackRole {
 // Otherwise an audio or instrument track takes, in this order: its device's
 // part, a part its name or its clips' names say, the part heard in its audio,
 // bass when its notes sit low, else music. A group bus takes the role every
-// track it sums shares, else its name's, else none; a return bus none. A
-// sound reaching a return through a send has already passed its own stage.
+// track it sums shares (a track of none among them makes it mixed), else
+// its name's, else none; a return bus none.
 [[nodiscard]] std::vector<TrackRole> mix_roles(const Snapshot& snapshot);
 
 // The built-in instruments that play one part only.

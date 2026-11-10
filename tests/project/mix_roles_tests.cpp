@@ -109,7 +109,7 @@ void devices_name_their_part() {
       mix_roles(snapshot({instrument(1, "stick"), instrument(2, "knock"), instrument(3, "anvil"),
                           instrument(4, "pulse"), instrument(5, "fret"), instrument(6, "torque"),
                           instrument(7, "nova"), instrument(8, "stick", "Vox")}));
-  for (const std::uint64_t drums : {1, 2, 3, 4, 8}) {
+  for (const std::uint64_t drums : {1U, 2U, 3U, 4U, 8U}) {
     REQUIRE_EQ(role_of(roles, drums).role, MixRole::drums, "a drum instrument plays drums");
     REQUIRE_EQ(role_of(roles, drums).reason, RoleReason::device);
   }
@@ -164,24 +164,30 @@ void heard_and_notes_follow_names() {
   REQUIRE_EQ(role_of(roles, 5).role, MixRole::music, "chords are not a bass line");
 }
 
-void groups_carry_one_stage() {
-  // Group 10 sums two drum tracks; group 20 sums drums and bass; return 30.
+void stages_sit_on_the_tracks() {
+  // Group 10 sums two drum tracks; group 20 sums drums and bass; group 40 a
+  // drum track and one left out; return 30.
   auto chosen = audio(5);
   chosen.mix_role = MixRole::vocals;
+  auto left_out = audio(7);
+  left_out.mix_role = MixRole::none;
   const auto roles = mix_roles(
       snapshot({bus(10, TrackKind::group_bus), bus(20, TrackKind::group_bus),
-                bus(30, TrackKind::return_bus, "Vocal Plate"), into(instrument(1, "stick"), 10),
-                into(audio(2, "Snare"), 10), into(instrument(3, "knock"), 20),
-                into(instrument(4, "fret"), 20), into(chosen, 20)}));
+                bus(30, TrackKind::return_bus, "Vocal Plate"), bus(40, TrackKind::group_bus),
+                into(instrument(1, "stick"), 10), into(audio(2, "Snare"), 10),
+                into(instrument(3, "knock"), 20), into(instrument(4, "fret"), 20), into(chosen, 20),
+                into(instrument(6, "anvil"), 40), into(left_out, 40)}));
   REQUIRE_EQ(role_of(roles, 10).role, MixRole::drums, "a drum bus is drums");
   REQUIRE_EQ(role_of(roles, 10).reason, RoleReason::summed);
-  REQUIRE_EQ(role_of(roles, 10).stage, MixRole::drums, "the group carries the stage");
-  REQUIRE_EQ(role_of(roles, 1).stage, MixRole::none, "its tracks pass the group's stage");
-  REQUIRE_EQ(role_of(roles, 2).stage, MixRole::none);
+  REQUIRE_EQ(role_of(roles, 10).stage, MixRole::none, "a bus carries no stage");
+  REQUIRE_EQ(role_of(roles, 1).stage, MixRole::drums, "each track carries its role's stage");
+  REQUIRE_EQ(role_of(roles, 2).stage, MixRole::drums);
   REQUIRE_EQ(role_of(roles, 20).role, MixRole::none, "a mixed bus has no role");
-  REQUIRE_EQ(role_of(roles, 3).stage, MixRole::drums, "under a mixed bus each track has one");
+  REQUIRE_EQ(role_of(roles, 3).stage, MixRole::drums);
   REQUIRE_EQ(role_of(roles, 4).stage, MixRole::bass);
   REQUIRE_EQ(role_of(roles, 5).stage, MixRole::vocals);
+  REQUIRE_EQ(role_of(roles, 40).role, MixRole::none, "a track left out makes its bus mixed");
+  REQUIRE_EQ(role_of(roles, 7).stage, MixRole::none, "a track left out has no stage");
   REQUIRE_EQ(role_of(roles, 30).role, MixRole::none, "a return has none, whatever its name");
   REQUIRE_EQ(role_of(roles, 30).stage, MixRole::none);
 }
@@ -196,9 +202,9 @@ void a_chosen_group_role_passes_down() {
       mix_roles(snapshot({group, into(nested, 10), into(instrument(1, "stick"), 11), own}));
   REQUIRE_EQ(role_of(roles, 1).role, MixRole::music, "a chosen bus role holds below it");
   REQUIRE_EQ(role_of(roles, 1).reason, RoleReason::group);
-  REQUIRE_EQ(role_of(roles, 1).stage, MixRole::none, "no sound passes one role twice");
+  REQUIRE_EQ(role_of(roles, 1).stage, MixRole::music, "the track carries the bus's role");
   REQUIRE_EQ(role_of(roles, 11).stage, MixRole::none);
-  REQUIRE_EQ(role_of(roles, 10).stage, MixRole::music);
+  REQUIRE_EQ(role_of(roles, 10).stage, MixRole::none);
   REQUIRE_EQ(role_of(roles, 2).role, MixRole::bass, "a track's own choice wins");
   REQUIRE_EQ(role_of(roles, 2).stage, MixRole::bass);
 }
@@ -236,7 +242,10 @@ void commands_save_roles_and_settings() {
   REQUIRE_EQ(model.snapshot()->tracks[0].mix_role, MixRole::vocals);
   REQUIRE_TRUE(!model.apply({SetTrackMixRole{track, MixRole::vocals}}), "an unchanged role");
   REQUIRE_TRUE(!model.apply({SetTrackMixRole{id<TrackId>(2), MixRole::bass}}), "a missing track");
-  REQUIRE_TRUE(!model.apply({SetTrackHeardRole{track, static_cast<MixRole>(beats + 1)}}),
+  // An out-of-range role is exactly what this checks.
+  constexpr auto unknown_role = static_cast<std::uint8_t>(MixRole::none) + 1;
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
+  REQUIRE_TRUE(!model.apply({SetTrackHeardRole{track, static_cast<MixRole>(unknown_role)}}),
                "an unknown role");
   REQUIRE_OK(model.apply({SetTrackHeardRole{track, MixRole::drums}}));
   REQUIRE_EQ(model.snapshot()->tracks[0].heard_role, MixRole::drums);
@@ -274,7 +283,7 @@ int main(int argc, char** argv) {
       {{"devices_name_their_part", devices_name_their_part},
        {"names_say_the_part", names_say_the_part},
        {"heard_and_notes_follow_names", heard_and_notes_follow_names},
-       {"groups_carry_one_stage", groups_carry_one_stage},
+       {"stages_sit_on_the_tracks", stages_sit_on_the_tracks},
        {"a_chosen_group_role_passes_down", a_chosen_group_role_passes_down},
        {"frozen_tracks_keep_their_role", frozen_tracks_keep_their_role},
        {"commands_save_roles_and_settings", commands_save_roles_and_settings}});

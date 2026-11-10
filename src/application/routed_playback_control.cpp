@@ -89,22 +89,28 @@ using routed_playback::same_timing;
   return "This edit cannot switch while playing";
 }
 
-// Nothing that plays changed but, perhaps, the project key (and with it
-// nothing but presentation): the running synths hear the key; no graph,
-// chain or source changes. An edit undone by the next one lands here too.
-// The tracks without their rebalance roles, which the running stages take
-// live (ADR-0123).
-[[nodiscard]] std::vector<project::Track> without_roles(std::vector<project::Track> tracks) {
-  for (auto& track : tracks) {
-    track.mix_role.reset();
-    track.heard_role.reset();
+// The tracks equal but for their rebalance roles, which the running
+// stages take live (ADR-0123). Only a track whose roles differ is copied.
+[[nodiscard]] bool same_but_roles(const std::vector<project::Track>& before,
+                                  const std::vector<project::Track>& after) {
+  if (before.size() != after.size())
+    return false;
+  for (std::size_t index = 0; index < before.size(); ++index) {
+    if (before[index] == after[index])
+      continue;
+    auto masked = after[index];
+    masked.mix_role = before[index].mix_role;
+    masked.heard_role = before[index].heard_role;
+    if (masked != before[index])
+      return false;
   }
-  return tracks;
+  return true;
 }
 
-// Nothing a graph is built from changed: the snapshots differ at most in
-// what is not heard and in the master rebalance, which the running stages
-// take live (ADR-0123).
+// Nothing that plays changed but, perhaps, the project key (and with it
+// nothing but presentation) or the master rebalance: the running synths hear
+// the key and the running stages the rebalance (ADR-0123); no graph, chain or
+// source changes. An edit undone by the next one lands here too.
 [[nodiscard]] bool same_audible_state(const project::Snapshot& before,
                                       const project::Snapshot& after) {
   return after.revision > before.revision && before.id == after.id &&
@@ -114,7 +120,7 @@ using routed_playback::same_timing;
          before.source_tempo_reviews == after.source_tempo_reviews &&
          before.source_key_reviews == after.source_key_reviews &&
          before.next_insert_slot_serial == after.next_insert_slot_serial &&
-         without_roles(before.tracks) == without_roles(after.tracks);
+         same_but_roles(before.tracks, after.tracks);
 }
 
 [[nodiscard]] bool channel_controls_only(const project::Snapshot& before,
