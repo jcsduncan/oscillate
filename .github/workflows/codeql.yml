@@ -1,22 +1,23 @@
 name: CodeQL
 
-# Pull requests and pushes to main analyse C/C++ without a build
-# (build-mode none), plus Python and the workflows. The nightly run analyses
-# C/C++ from a real build of the Quick preset, for full type information.
+# Pull requests analyse Python and the workflows. C/C++ is analysed without a
+# build (build-mode none) on each push to main, so pull requests don't wait on
+# it, and weekly from a real build of the Quick preset, for full type
+# information.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
   schedule:
-    - cron: "30 2 * * *"
+    - cron: "30 2 * * 0"
   workflow_dispatch:
 
-# The event is part of the group so a push to main never cancels the nightly
-# build analysis on the same ref. Runs on main are not cancelled: each one
-# caches the overlay-base database that pull requests analyse against.
+# The event is part of the group so a push to main never cancels the weekly
+# build analysis on the same ref. Each push has a group of its own, so no
+# merge waiting behind another is cancelled unanalysed.
 concurrency:
-  group: codeql-${{ github.ref }}-${{ github.event_name }}
+  group: codeql-${{ github.ref }}-${{ github.event_name }}${{ github.event_name == 'push' && format('-{0}', github.sha) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -42,10 +43,8 @@ jobs:
         run: python3 -I scripts/ci/changes.py "$BASE_SHA" "${HEAD_SHA:-HEAD}"
 
   # Every language reports a result on every pull request. The c-cpp job
-  # skips its steps, and passes, when no C/C++ source changed. A pull request
-  # extracts only its changed files into the overlay-base database cached by
-  # the last run on main; without that cache (a new CodeQL version) the whole
-  # tree is extracted, which takes about half an hour.
+  # skips its steps, and passes, on pull requests and on pushes that change
+  # no C/C++ source; pushes to main that do change it analyse the tree.
   analyze:
     needs: changes
     name: Analyze (${{ matrix.language }})
@@ -60,11 +59,11 @@ jobs:
       matrix:
         language: [actions, c-cpp, python]
     env:
-      SCAN: ${{ matrix.language != 'c-cpp' || needs.changes.outputs.cpp == 'true' }}
+      SCAN: ${{ matrix.language != 'c-cpp' || (github.event_name == 'push' && needs.changes.outputs.cpp == 'true') }}
     steps:
-      - name: No C/C++ change
+      - name: C/C++ not analysed here
         if: env.SCAN != 'true'
-        run: echo "No C/C++ source changed; c-cpp analysis skipped." | tee -a "$GITHUB_STEP_SUMMARY"
+        run: echo "C/C++ is analysed on pushes to main that change it; skipped here." | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.SCAN == 'true'
         with:
