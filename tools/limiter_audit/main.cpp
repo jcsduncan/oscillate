@@ -30,8 +30,19 @@
 // transients), latency and CPU. --per-programme also gives each
 // programme's tilt.
 //
+// --assistant plans a master for each programme, and for each programme
+// coloured as a muddy, dull mix, toward the All References target
+// (ADR-0124): at each loudness target with Clean, and at Club with every
+// character. It reports the loudness reached against the target, the true
+// peak against the ceiling, the tonal distance before and after, and the
+// crest and onset loss against a naive chain (Ceiling alone, with no room,
+// at the same loudness and ceiling), with the passes the gain took, and
+// checks that the same input gives the same proposal. --goal measures one
+// of them ("Club Punchy").
+//
 // Usage: oscillate_limiter_audit [--engine ID] [--preset NAME]... [--set ID=VALUE]...
-//        [--target LUFS] [--classic] [--shaper] [--exciter] [--balance] [--no-loop]
+//        [--target LUFS] [--classic] [--shaper] [--exciter] [--balance] [--assistant]
+//        [--goal NAME] [--no-loop]
 //        [--per-programme]
 //        [FILE.f32]...
 // --no-loop leaves the synthetic loop out.
@@ -40,11 +51,16 @@
 // Ceiling's former presets: the baseline.
 // --set overrides a parameter on every preset measured.
 #include "oscillate/foundation/split_mix.hpp"
+#include "oscillate/native_dsp/effects/ceiling.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/keel.hpp"
+#include "oscillate/native_dsp/effects/shape.hpp"
 #include "oscillate/native_dsp/limiter.hpp"
 #include "oscillate/native_dsp/loudness.hpp"
+#include "oscillate/native_dsp/master_assistant.hpp"
+#include "oscillate/native_dsp/match_eq.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
+#include "oscillate/native_dsp/tonal_targets.hpp"
 #include "oscillate/native_dsp/true_peak.hpp"
 
 #include <algorithm>
@@ -57,6 +73,7 @@
 #include <cstdio>
 #include <fstream>
 #include <functional>
+#include <memory>
 #include <numbers>
 #include <optional>
 #include <span>
@@ -1378,6 +1395,230 @@ void audit_balance(const effects::EffectEngine& engine, const std::vector<std::s
   }
 }
 
+// ---- The master assistant ------------------------------------------------------------------
+
+namespace assistant = oscillate::native_dsp::assistant;
+
+// The reference every programme is mastered toward, and the synthetic
+// mixes' colouring: a muddy, dull mix (a low shelf up, a high shelf down).
+constexpr std::string_view assistant_target_id = "all";
+constexpr double dull_low_hz = 120.0;
+constexpr double dull_low_db = 4.0;
+constexpr double dull_high_hz = 5'000.0;
+constexpr double dull_high_db = -5.0;
+constexpr double shelf_slope = 1.0;
+// The naive chain is Ceiling alone with no room: a plain true-peak limiter.
+constexpr double naive_transients = 0.0;
+constexpr double naive_clip_db = 0.0;
+
+assistant::MemoryStore store_of(const Audio& audio) {
+  std::vector<float> left(audio.left.begin(), audio.left.end());
+  std::vector<float> right(audio.right.begin(), audio.right.end());
+  return {rate_hz, std::move(left), std::move(right)};
+}
+Audio audio_of(const assistant::Capture& capture) {
+  return {std::vector<double>(capture.left.begin(), capture.left.end()),
+          std::vector<double>(capture.right.begin(), capture.right.end())};
+}
+oscillate::foundation::Result<std::unique_ptr<assistant::Store>> memory_store(std::uint32_t r) {
+  return oscillate::foundation::Result<std::unique_ptr<assistant::Store>>::success(
+      std::make_unique<assistant::MemoryStore>(r));
+}
+
+// The programme through a low shelf up and a high shelf down.
+Audio dulled(const Audio& audio) {
+  const std::array shelves{
+      dsp::match_eq::Band{dsp::EqBandKind::low_shelf, dull_low_hz, shelf_slope, dull_low_db},
+      dsp::match_eq::Band{dsp::EqBandKind::high_shelf, dull_high_hz, shelf_slope, dull_high_db}};
+  assistant::Device shape{"shape", "Shape", {}, {}};
+  for (const auto& [id, value] : effects::shape::band_values(shelves)) {
+    shape.values.emplace_back(std::string(id), value);
+  }
+  auto chain = assistant::chain_from(std::span(&shape, 1));
+  auto source = store_of(audio);
+  assistant::Capture all;
+  assistant::RunOptions options;
+  options.window = assistant::Window{0, audio.size()};
+  options.capture = &all;
+  if (!chain || !assistant::run_chain(source, chain.value(), options)) {
+    std::fprintf(stderr, "cannot colour a programme\n");
+    std::exit(1);
+  }
+  return audio_of(all);
+}
+
+struct AssistantRow {
+  double in_lufs = 0.0;
+  double out_lufs = 0.0;
+  double true_peak = 0.0;
+  double tonal_before = 0.0;
+  double tonal_after = 0.0;
+  double crest_loss = 0.0;
+  double naive_crest_loss = 0.0;
+  std::array<double, 3> onset{};
+  std::array<double, 3> naive_onset{};
+  std::size_t passes = 0;
+  std::string chain;
+};
+
+void print_assistant_header() {
+  std::printf("| Programme | Goal | In LUFS | Out LUFS | Error LU | TP dBTP | Tonal before | "
+              "Tonal after | Crest loss | Naive crest loss | Onset loss low/mid/high | "
+              "Naive onset loss | Passes | Chain |\n");
+  std::printf("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
+}
+
+void print_assistant_row(std::string_view programme, std::string_view goal, double target,
+                         const AssistantRow& r) {
+  std::printf("| %s | %s | %.2f | %.2f | %+.2f | %.2f | %.2f | %.2f | %.2f | %.2f | "
+              "%.2f/%.2f/%.2f | %.2f/%.2f/%.2f | %zu | %s |\n",
+              std::string(programme).c_str(), std::string(goal).c_str(), r.in_lufs, r.out_lufs,
+              r.out_lufs - target, r.true_peak, r.tonal_before, r.tonal_after, r.crest_loss,
+              r.naive_crest_loss, r.onset[0], r.onset[1], r.onset[2], r.naive_onset[0],
+              r.naive_onset[1], r.naive_onset[2], r.passes, r.chain.c_str());
+}
+
+struct AssistantGoal {
+  std::string name;
+  assistant::Goals goals;
+};
+
+std::vector<AssistantGoal> assistant_goals() {
+  std::vector<AssistantGoal> out;
+  for (const auto& preset : assistant::loudness_presets) {
+    for (std::size_t c = 0; c < assistant::character_count; ++c) {
+      const auto character = static_cast<assistant::Character>(c);
+      // Every character at the club target; the others at Clean.
+      if (preset.id != "club" && character != assistant::Character::clean) {
+        continue;
+      }
+      out.push_back({std::string(preset.name) + " " + std::string(assistant::character_names[c]),
+                     {preset.lufs, preset.ceiling_dbtp, character, 0.0}});
+    }
+  }
+  return out;
+}
+
+// Plans each programme toward the factory target at each goal, and the
+// naive limiter-only chain at the same loudness and ceiling for comparison.
+void audit_assistant(const std::vector<Programme>& programmes, bool per_programme,
+                     const std::optional<std::string>& only_goal) {
+  const auto* target = dsp::tonal::find_factory_target(assistant_target_id);
+  if (target == nullptr) {
+    std::fprintf(stderr, "no factory target %s\n", std::string(assistant_target_id).c_str());
+    std::exit(1);
+  }
+  const auto reference = assistant::reference_from(*target);
+  std::vector<Programme> mixes = programmes;
+  for (const auto& programme : programmes) {
+    mixes.push_back({programme.name + " · dull", dulled(programme.audio), 0.0});
+  }
+  print_assistant_header();
+  bool deterministic = true;
+  std::size_t within = 0;
+  std::size_t total = 0;
+  auto goals = assistant_goals();
+  if (only_goal) {
+    std::erase_if(goals, [&](const AssistantGoal& g) { return g.name != *only_goal; });
+  }
+  for (const auto& goal : goals) {
+    AssistantRow mean;
+    mean.true_peak = -HUGE_VAL;
+    double worst_error = 0.0;
+    double worst_peak = -HUGE_VAL;
+    for (const auto& mix : mixes) {
+      auto source = store_of(mix.audio);
+      const auto analysis = assistant::analyse(source.left(), source.right(), rate_hz);
+      const assistant::Window all{0, mix.audio.size()};
+      auto planned =
+          assistant::plan(source, analysis, reference, goal.goals, memory_store, {}, all);
+      if (!planned) {
+        std::fprintf(stderr, "%s: %s\n", mix.name.c_str(), planned.error().message.c_str());
+        std::exit(1);
+      }
+      // The same input gives the same proposal (checked at the first goal).
+      if (&goal == &goals.front()) {
+        auto again = assistant::plan(source, analysis, reference, goal.goals, memory_store);
+        if (!again) {
+          std::exit(1);
+        }
+        deterministic = deterministic && again.value().proposal.devices.size() ==
+                                             planned.value().proposal.devices.size();
+        for (std::size_t d = 0; deterministic && d < planned.value().proposal.devices.size(); ++d) {
+          deterministic = planned.value().proposal.devices[d].values ==
+                          again.value().proposal.devices[d].values;
+        }
+      }
+      const auto& out = planned.value().learned;
+      const auto output = audio_of(out.window);
+      AssistantRow r;
+      r.in_lufs = analysis.lufs();
+      r.out_lufs = out.output.lufs();
+      r.true_peak = out.output.true_peak_dbtp;
+      r.tonal_before = assistant::tonal_distance(analysis.tonal, reference.target.median).rms_db;
+      r.tonal_after = assistant::tonal_distance(out.output.tonal, reference.target.median).rms_db;
+      const double in_crest = crest_db(mix.audio, fine_peaks(mix.audio));
+      r.crest_loss = in_crest - crest_db(output, fine_peaks(output));
+      r.onset = onset_loss(mix.audio, output);
+      r.passes = out.passes;
+      for (const auto& device : planned.value().proposal.devices) {
+        r.chain += (r.chain.empty() ? "" : " ") + device.name;
+      }
+
+      // The naive chain: Ceiling with no room, learned to the same target.
+      assistant::Device naive{"ceiling",
+                              "Ceiling",
+                              {{"ceiling.ceiling", goal.goals.ceiling_dbtp},
+                               {"ceiling.transients", naive_transients},
+                               {"ceiling.clip", naive_clip_db}},
+                              {}};
+      auto chain = assistant::chain_from(std::span(&naive, 1));
+      assistant::GainSearch search;
+      search.limiter = {
+          0, *dsp::find_parameter(*effects::ceiling::engine().descriptor, "ceiling.gain")};
+      search.target_lufs = goal.goals.lufs;
+      auto plain =
+          assistant::learn_gain(source, std::move(chain).value(), search, memory_store, all);
+      if (!plain) {
+        std::exit(1);
+      }
+      const auto naive_output = audio_of(plain.value().window);
+      r.naive_crest_loss = in_crest - crest_db(naive_output, fine_peaks(naive_output));
+      r.naive_onset = onset_loss(mix.audio, naive_output);
+
+      ++total;
+      if (assistant::meets(assistant::outcome(out.output, reference), goal.goals)) {
+        ++within;
+      }
+      worst_error = std::max(worst_error, std::fabs(r.out_lufs - goal.goals.lufs));
+      worst_peak = std::max(worst_peak, r.true_peak - goal.goals.ceiling_dbtp);
+      if (per_programme) {
+        print_assistant_row(mix.name, goal.name, goal.goals.lufs, r);
+      }
+      const double n = static_cast<double>(mixes.size());
+      mean.in_lufs += r.in_lufs / n;
+      mean.out_lufs += r.out_lufs / n;
+      mean.true_peak = std::max(mean.true_peak, r.true_peak);
+      mean.tonal_before += r.tonal_before / n;
+      mean.tonal_after += r.tonal_after / n;
+      mean.crest_loss += r.crest_loss / n;
+      mean.naive_crest_loss += r.naive_crest_loss / n;
+      for (std::size_t b = 0; b < 3; ++b) {
+        mean.onset[b] += r.onset[b] / n;
+        mean.naive_onset[b] += r.naive_onset[b] / n;
+      }
+      mean.passes = std::max(mean.passes, r.passes);
+    }
+    mean.chain = "worst error " + std::to_string(worst_error) + " LU, worst peak over " +
+                 std::to_string(worst_peak) + " dB";
+    print_assistant_row("mean", goal.name, goal.goals.lufs, mean);
+    std::fflush(stdout);
+  }
+  std::printf("\n%zu of %zu masters within ±%.1f LU and under the ceiling; "
+              "the same proposal twice: %s\n",
+              within, total, assistant::loudness_tolerance_lu, deterministic ? "yes" : "no");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -1391,6 +1632,8 @@ int main(int argc, char** argv) {
   bool shaper = false;
   bool exciter = false;
   bool balance = false;
+  bool assistant_mode = false;
+  std::optional<std::string> only_goal;
   std::optional<double> only_target;
   for (int i = 1; i < argc; ++i) {
     const std::string_view arg = argv[i];
@@ -1419,6 +1662,10 @@ int main(int argc, char** argv) {
       exciter = true;
     } else if (arg == "--balance") {
       balance = true;
+    } else if (arg == "--assistant") {
+      assistant_mode = true;
+    } else if (arg == "--goal" && i + 1 < argc) {
+      only_goal = argv[++i];
     } else if (arg == "--per-programme") {
       per_programme = true;
     } else {
@@ -1449,9 +1696,16 @@ int main(int argc, char** argv) {
     scale(programme.audio, from_db(programme_lufs - level));
     programme.crest_db = crest_db(programme.audio, fine_peaks(programme.audio));
   }
-  if (static_cast<int>(shaper) + static_cast<int>(exciter) + static_cast<int>(balance) > 1) {
-    std::fprintf(stderr, "--shaper, --exciter and --balance measure different devices\n");
+  if (static_cast<int>(shaper) + static_cast<int>(exciter) + static_cast<int>(balance) +
+          static_cast<int>(assistant_mode) >
+      1) {
+    std::fprintf(stderr,
+                 "--shaper, --exciter, --balance and --assistant measure different things\n");
     return 1;
+  }
+  if (assistant_mode) {
+    audit_assistant(programmes, per_programme, only_goal);
+    return 0;
   }
   if (shaper || exciter || balance) {
     const auto* engine = effects::find_engine(engine_id);

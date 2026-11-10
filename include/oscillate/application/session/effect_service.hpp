@@ -136,6 +136,11 @@ public:
   // anything changes. Returns the slots edited or added, in order.
   [[nodiscard]] foundation::Result<std::vector<project::InsertSlotId>>
   apply_effect_edits(std::span<const EffectEdit> edits);
+  // The master assistant's proposal (ADR-0124) as one undo step: built-in
+  // effects added, set or switched on on the master, and the rebalance.
+  // Any other operation is refused before anything changes.
+  [[nodiscard]] foundation::Result<void>
+  apply_master_operations(std::vector<project::Operation> operations);
 
 private:
   SaveService& saving_;

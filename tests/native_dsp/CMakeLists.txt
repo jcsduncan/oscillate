@@ -840,6 +840,32 @@ oscillate_add_case_tests(native_lens_contract oscillate_lens_tests
   telemetry_ignores_block_size
   tonal_meter_reads_input_and_sidechain)
 
+# The master assistant (ADR-0124).
+oscillate_add_test_executable(oscillate_master_assistant_tests SOURCES master_assistant_tests.cpp
+  LIBS oscillate::master_assistant oscillate::native_effects oscillate::native_dsp)
+oscillate_add_case_tests(native_master_assistant_contract oscillate_master_assistant_tests
+  CASES
+  loudness_peak_and_crest_read_as_built
+  width_mono_bass_and_onsets_read_as_built
+  tonal_distance_ignores_gain
+  reference_tracks_average_their_traits
+  loudest_window_finds_the_drop
+  rules_follow_the_measurements
+  nudges_need_a_clear_owner
+  the_offline_chain_lines_up
+  plan_reaches_streaming
+  plan_reaches_club
+  plan_reaches_loud
+  the_same_input_plans_the_same
+  the_master_fader_is_allowed_for
+  level_matching_turns_the_louder_down
+  SLOW
+  plan_reaches_streaming
+  plan_reaches_club
+  plan_reaches_loud
+  the_same_input_plans_the_same
+  the_master_fader_is_allowed_for)
+
 # Tonal targets and match EQ (ADR-0120).
 oscillate_add_test_executable(oscillate_tonal_targets_tests SOURCES tonal_targets_tests.cpp
   LIBS oscillate::native_dsp oscillate::dsp_primitives)

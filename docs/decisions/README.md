@@ -126,3 +126,4 @@ never reused. 0070 was never assigned.
 | 0121 | [Stick: Naked Drums and a production chain per mic group](0121-stick-naked-drums.md) | Accepted; implemented |
 | 0122 | [Gild: a multiband exciter on Forge's curves, oversampled and level-matched](0122-gild-multiband-exciter.md) | Accepted; implemented |
 | 0123 | [Master rebalance by role from the project's tracks](0123-master-rebalance.md) | Accepted; implemented |
+| 0124 | [The master assistant: a proposed master chain from a reference and a loudness target](0124-master-assistant.md) | Accepted; implemented |

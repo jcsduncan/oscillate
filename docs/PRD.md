@@ -373,6 +373,8 @@ The baseline processors are the Shape (EQ), Press (compressor), Expanse (algorit
 
 The master rebalance sets a gain and a three-band EQ for each of four roles, vocals, drums, bass and music, before the master chain. It acts on the project's own tracks rather than separating the stereo mix, so it is exact and free of artefacts. Roles are inferred from each track's instrument, names, notes or listened audio, and the musician can choose them; edits while playing glide without a gap ([ADR-0123](decisions/0123-master-rebalance.md)).
 
+The master assistant proposes a master chain of these devices toward a reference (a genre target or reference tracks) and a loudness target, with a character (clean, punchy or warm). It measures the mix offline, says why it proposes each device in one line with the measurement behind it, learns the limiter's gain on the mix itself, offers a level-matched A/B against the current master, and changes nothing until it is accepted, as one undo step; the master is then measured again against the targets ([ADR-0124](decisions/0124-master-assistant.md)).
+
 Every native effect is insertable on any track, bus or master chain, saved with the project, automatable and rendered identically by live playback and export ([ADR-0043](decisions/0043-one-native-insert-path.md), [ADR-0050](decisions/0050-one-chain-per-track.md)).
 
 ### Metering and delay compensation

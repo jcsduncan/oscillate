@@ -313,6 +313,7 @@ oscillate_add_case_tests(application_routed_live_edit oscillate_application_rout
   rapid_edits_coalesce_onto_the_newest_revision
   an_edit_waiting_behind_a_note_edit_applies_next
   rebalance_edits_glide_without_a_gap
+  assistant_proposal_is_accepted_without_a_gap
   track_add_switches_with_its_source
   track_remove_fades_out_then_switches
   track_remove_fades_out_over_its_level_lane
@@ -438,6 +439,25 @@ foreach(mix_check_case sub click mono ringing nova_sub true_peak history)
   oscillate_add_test(NAME application_mix_check_${mix_check_case}
     COMMAND oscillate_application_mix_check_tests ${mix_check_case} TIER slow)
 endforeach()
+
+# The master assistant (ADR-0124): measure, propose, accept, verify, A/B.
+oscillate_add_test_executable(oscillate_application_master_assistant_tests
+  SOURCES master_assistant_tests.cpp
+  LIBS oscillate::application oscillate::persistence)
+oscillate_add_case_tests(application_master_assistant oscillate_application_master_assistant_tests
+  CASES
+  measure_hears_the_mix_before_the_chain
+  accept_is_one_step_and_proposing_changes_nothing
+  accept_part_of_it
+  the_master_meets_what_was_predicted
+  nudges_land_in_the_rebalance
+  audition_is_level_matched_and_gapless
+  SLOW
+  measure_hears_the_mix_before_the_chain
+  accept_is_one_step_and_proposing_changes_nothing
+  accept_part_of_it
+  the_master_meets_what_was_predicted
+  nudges_land_in_the_rebalance)
 
 # Arrange from a loop (ADR-0080): roles, determinism, the rules, Keep and undo.
 oscillate_add_test_executable(oscillate_application_arrange_from_loop_tests SOURCES arrange_from_loop_tests.cpp

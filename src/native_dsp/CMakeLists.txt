@@ -168,6 +168,18 @@ target_link_libraries(oscillate_native_effects PUBLIC oscillate::native_control 
 oscillate_target_defaults(oscillate_native_effects)
 oscillate_optimize_in_debug(oscillate_native_effects)
 
+# The master assistant (ADR-0124): measures a mix and proposes a master
+# chain of the built-in effects, learning the limiter's gain offline.
+add_library(oscillate_master_assistant master_assistant.cpp master_assistant_analysis.cpp)
+add_library(oscillate::master_assistant ALIAS oscillate_master_assistant)
+target_include_directories(oscillate_master_assistant PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../../include>
+)
+target_link_libraries(oscillate_master_assistant PUBLIC oscillate::native_effects oscillate::native_dsp
+  PRIVATE oscillate::dsp_primitives)
+oscillate_target_defaults(oscillate_master_assistant)
+oscillate_optimize_in_debug(oscillate_master_assistant)
+
 # GCC 15 at -O3 inlines std::sort over a counted prefix of a fixed std::array
 # (the chord's tones, Comp's keys) and reports libstdc++'s heap code reading
 # past the array, on paths the count rules out (a known -Warray-bounds false

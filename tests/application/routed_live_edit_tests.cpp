@@ -1,3 +1,4 @@
+#include "oscillate/application/master_assistant.hpp"
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/application/routed_audio_source.hpp"
 #include "oscillate/application/routed_source_selection.hpp"
@@ -148,6 +149,19 @@ engine::RoutedMixerLimits limits() {
   return result;
 }
 
+// The app's lookahead room and node input history (routed_playback.cpp), so
+// a chain switching in fresh on a node with none primes from its recent
+// input (ADR-0049).
+constexpr std::uint32_t app_latency_frames = 8'192;
+constexpr std::uint64_t app_history_bytes = 64ULL * 1024 * 1024;
+engine::RoutedMixerLimits app_limits() {
+  auto result = limits();
+  result.latency = {1, app_latency_frames};
+  result.max_history_bytes = app_history_bytes;
+  result.max_processor_input_history_frames = app_latency_frames;
+  return result;
+}
+
 template <typename Id> Id fresh(std::uint64_t serial) {
   return take(Id::from_bits({edit_id_high, serial}));
 }
@@ -235,9 +249,10 @@ struct Run {
   audio::TransportCursor transport;
   std::vector<float> left;
 
-  Run(fs::path song_root, const project::Snapshot& song)
+  Run(fs::path song_root, const project::Snapshot& song,
+      const engine::RoutedMixerLimits& mixer_limits = limits())
       : root(std::move(song_root)), model(take(project::ProjectModel::open(song, gate))),
-        control(model, limits()) {
+        control(model, mixer_limits) {
     REQUIRE_OK(control.submit_current(), "the graph did not prepare");
     source = take(app::RoutedAudioSource::prepare(root, *model.snapshot(), control, stream_frames));
     control.bind_live_source(*source);
@@ -626,6 +641,35 @@ void rebalance_edits_glide_without_a_gap() {
                   "a neutral stage plays the song unchanged");
 }
 
+// The master assistant's proposal (ADR-0124) accepted while playing: its
+// devices, the limiter's lookahead among them, join the empty master chain
+// and the rebalance moves in one revision, which becomes active without a
+// restart or a gap (with the app's node input history, which primes the
+// fresh chain).
+void assistant_proposal_is_accepted_without_a_gap() {
+  namespace core = oscillate::native_dsp::assistant;
+  constexpr double band_gain_db = 3.0;
+  constexpr double limiter_gain_db = 3.0;
+  constexpr double nudge_db = -1.0;
+  Song song;
+  Run run(song.root, song.saved, app_limits());
+  run.play_to(edit_block);
+  core::Proposal proposal;
+  proposal.devices = {{"shape", "Shape", {{"shape.on_3", 1.0}, {"shape.gain_3", band_gain_db}}, {}},
+                      {"ceiling", "Ceiling", {{"ceiling.gain", limiter_gain_db}}, {}}};
+  proposal.nudges = {{static_cast<std::size_t>(project::MixRole::music), nudge_db, {}}};
+  const auto operations =
+      take(app::master_assistant::operations(*run.model.snapshot(), proposal, {}));
+  const auto revision = run.edit(operations, "master assistant");
+  run.play_to(song_blocks);
+  REQUIRE_EQ(run.control.status().active_graph_revision, revision,
+             "the proposal did not become active without a restart");
+  require_continuous(run.left, "master assistant");
+  REQUIRE_EQ(run.model.snapshot()->master_effects.size(), proposal.devices.size(),
+             "both devices are on the master");
+  REQUIRE_TRUE(run.model.snapshot()->rebalance.enabled, "the nudge switched the rebalance on");
+}
+
 // --- Edits a whole replacement carries (ADR-0098) ------------------------------
 
 // The playing run over the whole song, with `edit` made at the edit block.
@@ -889,6 +933,8 @@ int main(int argc, char** argv) {
        {"an_edit_waiting_behind_a_note_edit_applies_next",
         an_edit_waiting_behind_a_note_edit_applies_next},
        {"rebalance_edits_glide_without_a_gap", rebalance_edits_glide_without_a_gap},
+       {"assistant_proposal_is_accepted_without_a_gap",
+        assistant_proposal_is_accepted_without_a_gap},
        {"track_add_switches_with_its_source", track_add_switches_with_its_source},
        {"track_remove_fades_out_then_switches", track_remove_fades_out_then_switches},
        {"track_remove_fades_out_over_its_level_lane", track_remove_fades_out_over_its_level_lane},
