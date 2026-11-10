@@ -153,6 +153,15 @@ ProjectSession::inspect_recovery(const std::filesystem::path& root) {
         append(candidate, false);
     }
   }
+  // Nothing to offer because this build cannot read the project (a newer
+  // schema, or one older than the oldest release): say so rather than
+  // reporting no valid generation.
+  if (inspection.choices.empty()) {
+    for (const auto* failed : {&current, &autosave}) {
+      if (!*failed && failed->error().code == foundation::ErrorCode::unsupported)
+        return foundation::Result<RecoveryInspection>::failure(failed->error());
+    }
+  }
   return foundation::Result<RecoveryInspection>::success(std::move(inspection));
 }
 

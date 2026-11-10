@@ -1,3 +1,4 @@
+#include "migration.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/test/check.hpp"
 #include "private.hpp"
@@ -59,7 +60,9 @@ void fades_round_trip() {
   malformed = json;
   malformed["project"]["tracks"][0]["clips"][0]["fades"]["in_fraction"] = 0.9;
   require(!detail::decode_manifest(malformed.dump()), "overlapping fade lengths were accepted");
-  for (const int other : {47, 49}) {
+  // Older than the oldest release, and newer than this build.
+  for (const auto other :
+       {detail::released_schemas.front().minor - 1, detail::current_schema.minor + 1}) {
     malformed = json;
     malformed["schema"]["minor"] = other;
     require(!detail::decode_manifest(malformed.dump()), "another schema minor was accepted");

@@ -12,6 +12,7 @@
 #include "oscillate/test/cases.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/fake_output.hpp"
+#include "oscillate/test/saved_manifest.hpp"
 #include "oscillate/test/temp_dir.hpp"
 #include "oscillate/test/tolerances.hpp"
 #include "oscillate/test/wait.hpp"
@@ -20,6 +21,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <fcntl.h>
 #include <filesystem>
 #include <fstream>
@@ -6215,6 +6217,107 @@ void external_relink_proof_rechecks_candidate_and_retains_failed_edit() {
              "retried relink did not reopen");
 }
 
+// Schema 1.47, the schema v0.3.0 wrote: the oldest release (ADR-0095).
+constexpr std::uint32_t release_major = 1;
+constexpr std::uint32_t oldest_release_minor = 47;
+constexpr std::uint32_t before_oldest_release_minor = oldest_release_minor - 1;
+// A schema no release has written yet.
+constexpr std::uint32_t future_minor = 99;
+constexpr double convolution_wet = 0.4;
+constexpr std::string_view cast_mix = "cast.mix";
+constexpr std::string_view cast_normalise = "cast.normalise";
+constexpr double cast_normalise_off = 0.0;
+
+// A project v0.3.0 saved, with a 1.47 convolution insert on a track, opens
+// through ProjectSession as a Cast effect playing the same IR, saves in the
+// current schema and reopens.
+void project_from_the_oldest_release_opens_and_saves() {
+  constexpr std::string_view cast = "cast";
+  constexpr std::string_view ir_slot = "ir";
+  Directory directory;
+  const auto root = directory.path() / "song";
+  const auto wav = make_wav(directory.path());
+  std::optional<project::SourceId> ir_source;
+  {
+    auto session = take(application::ProjectSession::create(root));
+    const auto track = take(session->tracks().add_audio_track());
+    const project::SignalPathId path{track};
+    const auto slot = take(session->effects().add_effect_engine(path, 0, cast));
+    FileDescriptor descriptor(wav);
+    REQUIRE_OK(session->imports().import_native_effect_media(path, slot, ir_slot, descriptor.get()),
+               "the impulse response did not import");
+    REQUIRE_OK(session->saving().save(), "the fixture project did not save");
+    ir_source = session->snapshot().sources.front().id;
+  }
+  // Write the insert back as v0.3.0's convolution kind, in schema 1.47.
+  oscillate::test::rewrite_current_manifest(root, [&](nlohmann::json& manifest) {
+    oscillate::test::set_manifest_schema(manifest, release_major, oldest_release_minor);
+    auto& insert = manifest["project"]["tracks"][0]["effects"][0];
+    const auto& payload = insert["payload"];
+    insert["payload"] = {{"generation", payload["generation"]},
+                         {"wet", convolution_wet},
+                         {"ir", payload["document"]["media"][0]["managed"]}};
+    insert["kind"] = "native_convolution";
+  });
+
+  const auto check_cast = [&](const project::Snapshot& state, std::string_view when) {
+    const auto& effects = state.tracks.front().effects;
+    REQUIRE_EQ(effects.size(), std::size_t{1}, std::string(when) + ": the insert was lost");
+    const auto* patch = std::get_if<project::NativeEffectPatch>(&effects.front().processor);
+    REQUIRE_NE(patch, nullptr, std::string(when) + ": the convolution is not a built-in effect");
+    REQUIRE_EQ(patch->engine, std::string(cast), std::string(when) + ": not a Cast effect");
+    const auto& media = patch->document.media;
+    REQUIRE_EQ(media.size(), std::size_t{1}, std::string(when) + ": Cast has no IR slot");
+    REQUIRE_EQ(media.front().id, std::string(ir_slot), std::string(when) + ": wrong IR slot");
+    const auto* managed = std::get_if<project::ManagedAudioReference>(&media.front().media);
+    REQUIRE_NE(managed, nullptr, std::string(when) + ": the IR is not the user's file");
+    REQUIRE_TRUE(managed->source == ir_source, std::string(when) + ": the IR changed");
+    const auto value_of = [&](std::string_view id) {
+      const auto found =
+          std::ranges::find(patch->parameters, id, &project::NativeInstrumentParameter::id);
+      REQUIRE_TRUE(found != patch->parameters.end(), std::string(when) + ": no " + std::string(id));
+      return found->value;
+    };
+    REQUIRE_EQ(value_of(cast_mix), convolution_wet, std::string(when) + ": wet is not the mix");
+    REQUIRE_EQ(value_of(cast_normalise), cast_normalise_off,
+               std::string(when) + ": the IR's own level was normalised");
+  };
+  {
+    auto session = take(application::ProjectSession::open(root));
+    check_cast(session->snapshot(), "opened");
+    REQUIRE_OK(session->saving().save(), "the migrated project did not save");
+  }
+  auto reopened = take(application::ProjectSession::open(root));
+  check_cast(reopened->snapshot(), "reopened");
+}
+
+// A project this build cannot read says why, instead of offering no
+// recovery: a newer schema names itself and this build's newest, an older one
+// says it predates the oldest release.
+void unreadable_schema_says_why() {
+  Directory directory;
+  const auto root = directory.path() / "song";
+  take(application::ProjectSession::create(root)).reset();
+  const auto refusal = [&](std::uint32_t minor) {
+    oscillate::test::rewrite_current_manifest(root, [&](nlohmann::json& manifest) {
+      oscillate::test::set_manifest_schema(manifest, release_major, minor);
+    });
+    const auto inspection = application::ProjectSession::inspect_recovery(root);
+    require(!inspection, "an unreadable project offered recovery");
+    REQUIRE_EQ(inspection.error().code, foundation::ErrorCode::unsupported,
+               "an unreadable schema is not reported as unsupported");
+    return inspection.error().message;
+  };
+  const auto newer = refusal(future_minor);
+  require(newer.find("newer Oscillate") != std::string::npos &&
+              newer.find(std::to_string(release_major) + "." + std::to_string(future_minor)) !=
+                  std::string::npos,
+          "a newer schema does not say so: " + newer);
+  const auto older = refusal(before_oldest_release_minor);
+  require(older.find("predates the oldest supported release") != std::string::npos,
+          "an older schema does not say so: " + older);
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -6265,6 +6368,9 @@ int main(int argc, char** argv) {
            native_synth_media_import_is_atomic_and_undoable},
           {"native_synth_media_import_runs_on_a_worker",
            native_synth_media_import_runs_on_a_worker},
+          {"project_from_the_oldest_release_opens_and_saves",
+           project_from_the_oldest_release_opens_and_saves},
+          {"unreadable_schema_says_why", unreadable_schema_says_why},
           {"native_effect_media_import_is_atomic_and_undoable",
            native_effect_media_import_is_atomic_and_undoable},
           {"crate_sample_import_sets_state_in_one_step",

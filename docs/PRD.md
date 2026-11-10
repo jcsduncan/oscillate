@@ -182,10 +182,9 @@ Plugin state, automation, clip settings, tempo and time-signature maps, project 
 
 ### Integrity and recovery
 
-During greenfield development before the first public beta, only the current
-project schema must open. Earlier development projects have no migration
-guarantee. Compatibility and migration obligations begin with the first
-publicly released project schema.
+Projects saved by every tagged release from v0.3.0 on open in every later
+release. Projects from development schemas before v0.3.0 have no migration
+guarantee.
 
 - Atomic and crash-safe project writes.
 - Configurable autosave and crash-recovery snapshots.

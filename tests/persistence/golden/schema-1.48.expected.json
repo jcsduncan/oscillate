@@ -1,0 +1,53 @@
+{
+  "tracks": [
+    {
+      "name": "01  Pulse · 909 rhythm",
+      "audio_clips": 0,
+      "midi_clips": 6,
+      "notes": 931,
+      "effects": 0,
+      "automation_lanes": 0
+    },
+    {
+      "name": "02  Torque · rolling bass",
+      "audio_clips": 0,
+      "midi_clips": 4,
+      "notes": 256,
+      "effects": 0,
+      "automation_lanes": 1
+    },
+    {
+      "name": "03  Ember · analog strings",
+      "audio_clips": 0,
+      "midi_clips": 6,
+      "notes": 96,
+      "effects": 2,
+      "automation_lanes": 1
+    },
+    {
+      "name": "04  Nova · glass arpeggio",
+      "audio_clips": 0,
+      "midi_clips": 4,
+      "notes": 512,
+      "effects": 1,
+      "automation_lanes": 1
+    },
+    {
+      "name": "05  Halo · bell motif",
+      "audio_clips": 0,
+      "midi_clips": 2,
+      "notes": 53,
+      "effects": 1,
+      "automation_lanes": 0
+    },
+    {
+      "name": "06  Drift · atmosphere",
+      "audio_clips": 0,
+      "midi_clips": 4,
+      "notes": 32,
+      "effects": 0,
+      "automation_lanes": 0
+    }
+  ],
+  "markers": 7
+}

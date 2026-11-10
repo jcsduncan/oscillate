@@ -1,5 +1,6 @@
 #include "project_lifecycle_controller.hpp"
 
+#include "oscillate/foundation/error.hpp"
 #include "oscillate/persistence/project_creation.hpp"
 
 #include <QDir>
@@ -236,8 +237,11 @@ void ProjectLifecycleController::open_path(const std::filesystem::path& root) {
   }
   auto inspection = application::ProjectSession::inspect_recovery(root);
   if (!inspection) {
-    host_.status(QStringLiteral("Could not inspect project recovery: %1")
-                     .arg(QString::fromStdString(inspection.error().message)));
+    // Unsupported: this build cannot read the project, and the message says why.
+    const auto prefix = inspection.error().code == foundation::ErrorCode::unsupported
+                            ? QStringLiteral("Could not open project: %1")
+                            : QStringLiteral("Could not inspect project recovery: %1");
+    host_.status(prefix.arg(QString::fromStdString(inspection.error().message)));
     return;
   }
   const auto saved = std::ranges::find_if(inspection.value().choices, [](const auto& choice) {
@@ -251,7 +255,10 @@ void ProjectLifecycleController::open_path(const std::filesystem::path& root) {
       });
   if (!inspection.value().has_current || newer_autosave || inspection.value().autosave_issue) {
     if (inspection.value().choices.empty()) {
-      host_.status(QStringLiteral("Could not open project: no validated recovery generation"));
+      const auto& issue = inspection.value().current_issue;
+      host_.status(QStringLiteral("Could not open project: %1")
+                       .arg(issue ? QString::fromStdString(*issue)
+                                  : QStringLiteral("no validated recovery generation")));
       return;
     }
     present_recovery(root, inspection.value());

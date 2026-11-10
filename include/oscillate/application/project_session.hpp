@@ -78,6 +78,9 @@ public:
   create(const std::filesystem::path& root, CreateOptions options);
   [[nodiscard]] static foundation::Result<std::unique_ptr<ProjectSession>>
   open(const std::filesystem::path& root, persistence::FaultHook save_fault = {});
+  // Lists the generations a recovery can open. Fails as unsupported, with the
+  // store's reason, when none can be offered because this build cannot read
+  // the project's schema.
   [[nodiscard]] static foundation::Result<RecoveryInspection>
   inspect_recovery(const std::filesystem::path& root);
   // Revalidates the selected generation before opening it. An autosave remains
