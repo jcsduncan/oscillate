@@ -65,8 +65,9 @@ Rectangle {
 
     function libraryChipText() {
         const kit = controller.revision >= 0 ? controller.parameter("stick.kit").choices[controller.choice("stick.kit")] : ""
+        // Ready: the lamp is lit; the text names the kit, its mics and size.
         if (ready)
-            return "Library ready · " + kit + " · " + library.mics + " mics · "
+            return kit + " · " + library.mics + " mics · "
                 + Format.quantity(library.resident_mb, "MB", 0)
         if (library.state === "loading")
             return "Loading " + kit

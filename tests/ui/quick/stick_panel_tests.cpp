@@ -296,8 +296,9 @@ void the_notice_guides_the_install() {
       "Look again finds the installed kit and its mics");
   require(find_item(panel->root, QStringLiteral("stickStrip:kick_out")) == nullptr,
           "a group the kit has no mic in has no strip");
-  require(text_of(*panel, QStringLiteral("stickLibraryChipText")).startsWith("Library ready"),
-          "the chip says it is ready, with its size");
+  require(
+      text_of(*panel, QStringLiteral("stickLibraryChipText")).contains(QStringLiteral(" mics · ")),
+      "the chip says it is ready, with its size");
   click(*panel, centre(item(*panel, QStringLiteral("stickLibraryChip"))));
   require(
       QTest::qWaitFor(
