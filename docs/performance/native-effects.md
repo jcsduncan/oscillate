@@ -104,11 +104,11 @@ Strike was measured on an Intel Core i7-10700K with GCC 15.2, Release, pinned wi
 
 ## Gild on mixes
 
-`oscillate_limiter_audit --exciter` runs each Gild preset at the programme's own level and reports the integrated loudness change, what the preset adds (its Delta) against the programme, overall and in three bands (under 150 Hz, 150 Hz to 2.5 kHz, over 2.5 kHz), and the 16× true peak change. The eight mastered tracks (mean):
+`oscillate_limiter_audit --exciter` runs each Gild preset at the programme's own level and reports the integrated loudness change, what the preset adds (its Delta) against the programme, overall and in three bands (under 150 Hz, 150 Hz to 2.5 kHz, over 2.5 kHz), and the 16× true peak change. "None" is under −120 dB. The eight mastered tracks (mean):
 
 | Preset | LUFS change | Added dB | Added L/M/H dB | True peak change | Latency |
 |---|---|---|---|---|---|
-| Default | 0.00 | −278.7 | −276.9/−270.2/−259.3 | +2.57 | 1.85 ms |
+| Default | 0.00 | none | none/none/none | +2.57 | 1.85 ms |
 | Air Lift | 0.00 | −45.8 | −56.1/−52.5/−27.0 | −0.02 | 1.92 ms |
 | Warm Mids | −0.01 | −34.5 | −39.8/−28.0/−32.0 | +2.42 | 1.85 ms |
 | Bass Weight | −0.01 | −25.1 | −25.2/−26.0/−94.6 | +2.62 | 1.85 ms |
@@ -119,7 +119,7 @@ The synthetic drum loop:
 
 | Preset | LUFS change | Added dB | Added L/M/H dB | True peak change | Latency |
 |---|---|---|---|---|---|
-| Default | 0.00 | −279.6 | −278.5/−267.6/−262.1 | +0.40 | 1.85 ms |
+| Default | 0.00 | none | none/none/none | +0.40 | 1.85 ms |
 | Air Lift | 0.00 | −36.4 | −50.6/−41.5/−19.2 | −0.72 | 1.92 ms |
 | Warm Mids | 0.00 | −46.6 | −50.9/−37.5/−42.3 | −0.51 | 1.85 ms |
 | Bass Weight | −0.02 | −25.1 | −26.2/−21.8/−94.2 | −0.58 | 1.85 ms |

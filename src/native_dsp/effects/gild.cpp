@@ -226,6 +226,7 @@ struct Drive {
 // antiderivative at v), by its antiderivatives; the curve at the midpoint
 // when the step is too small for them.
 template <int M>
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): named at both calls.
 [[nodiscard]] double mean_over(Side& side, double v, double previous_v, double ad) noexcept {
   const double dv = v - previous_v;
   double y = 0.0;
@@ -364,6 +365,8 @@ struct Band {
   // tail it sleeps.
   std::uint64_t idle_frames = 0;
   bool asleep = true;
+  // Whether the band count includes it: one that joins again starts clean.
+  bool playing = false;
   double dry_power = 0.0;
   double wet_power = 0.0;
   double added_power = 0.0;
@@ -436,7 +439,7 @@ public:
       };
       const double low = edge(static_cast<double>(b)) / bin_hz;
       const double high = edge(static_cast<double>(b + 1)) / bin_hz;
-      const double nyquist_bin = static_cast<double>(spectrum_window / 2 - 1);
+      const double nyquist_bin = static_cast<double>(spectrum_window) / 2.0 - 1.0;
       auto first = static_cast<std::size_t>(std::clamp(std::ceil(low), 1.0, nyquist_bin));
       auto last = static_cast<std::size_t>(std::clamp(std::ceil(high), 1.0, nyquist_bin + 1.0));
       if (last <= first) {
@@ -473,12 +476,20 @@ public:
       const std::size_t first = p::first_band + b * t::band::size;
       auto& band = bands_[b];
       const bool playing = b < layout_.bands;
+      // A band that joins again starts clean and at its settings; it fades
+      // in through its solo toggle.
+      const bool rejoined = playing && !band.playing;
+      if (rejoined) {
+        band.clear();
+      }
+      band.playing = playing;
+      const bool at_once = jump || rejoined;
       band.drive.settle(playing ? std::clamp(v[first + t::band::drive], 0.0, 1.0) : 0.0, steps,
-                        jump);
-      band.bias.settle(std::clamp(v[first + t::band::even], 0.0, 1.0) * max_bias, steps, jump);
-      band.mix.settle(std::clamp(v[first + t::band::mix], 0.0, 1.0), steps, jump);
+                        at_once);
+      band.bias.settle(std::clamp(v[first + t::band::even], 0.0, 1.0) * max_bias, steps, at_once);
+      band.mix.settle(std::clamp(v[first + t::band::mix], 0.0, 1.0), steps, at_once);
       const int curve = static_cast<int>(choice(v[first + t::band::curve], t::curves.size()));
-      if (jump) {
+      if (at_once) {
         band.curve = curve;
       } else if (curve != band.curve && band.fade == 0.0) {
         band.fading_curve = band.curve;

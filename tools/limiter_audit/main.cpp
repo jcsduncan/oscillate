@@ -980,10 +980,23 @@ void print_exciter_header() {
   std::printf("|---|---|---|---|---|---|---|\n");
 }
 
+// What is added reads "none" at or under this (dB against the programme).
+constexpr double added_floor_db = -120.0;
+
+std::string added_text(double db) {
+  if (db <= added_floor_db) {
+    return "none";
+  }
+  std::array<char, 16> text{};
+  std::snprintf(text.data(), text.size(), "%.1f", db);
+  return text.data();
+}
+
 void print_exciter_row(std::string_view preset, const ExciterRow& r) {
-  std::printf("| %s | %+.2f | %.1f | %.1f/%.1f/%.1f | %+.2f | %.2f%% | %.2f ms |\n",
-              std::string(preset).c_str(), r.lufs_change, r.added_db, r.band_added_db[0],
-              r.band_added_db[1], r.band_added_db[2], r.peak_change, 100.0 * r.cpu, r.latency_ms);
+  std::printf("| %s | %+.2f | %s | %s/%s/%s | %+.2f | %.2f%% | %.2f ms |\n",
+              std::string(preset).c_str(), r.lufs_change, added_text(r.added_db).c_str(),
+              added_text(r.band_added_db[0]).c_str(), added_text(r.band_added_db[1]).c_str(),
+              added_text(r.band_added_db[2]).c_str(), r.peak_change, 100.0 * r.cpu, r.latency_ms);
 }
 
 double mean_power(const std::vector<double>& x) {
@@ -1048,13 +1061,13 @@ void audit_exciter(const effects::EffectEngine& engine, const std::vector<std::s
       const auto added = render(engine, delta_values, programme.audio);
       ExciterRow r;
       r.lufs_change = lufs(rendered.audio) - lufs(programme.audio);
-      r.added_db =
-          power_db(mean_power(mono(added.audio))) - power_db(mean_power(mono(programme.audio)));
+      r.added_db = std::max(added_floor_db, power_db(mean_power(mono(added.audio))) -
+                                                power_db(mean_power(mono(programme.audio))));
       const auto in_bands = bands(programme.audio);
       const auto added_bands = bands(added.audio);
       for (std::size_t b = 0; b < in_bands.size(); ++b) {
-        r.band_added_db[b] =
-            power_db(mean_power(added_bands[b])) - power_db(mean_power(in_bands[b]));
+        r.band_added_db[b] = std::max(added_floor_db, power_db(mean_power(added_bands[b])) -
+                                                          power_db(mean_power(in_bands[b])));
       }
       r.peak_change =
           true_peak_16x(fine_peaks(rendered.audio)) - true_peak_16x(fine_peaks(programme.audio));

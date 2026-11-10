@@ -719,6 +719,7 @@ oscillate_add_case_tests(native_gild_contract oscillate_gild_tests
   the_tail_is_bounded
   presets_stay_restrained
   a_seek_starts_clean
+  a_band_that_rejoins_starts_clean
   the_callback_never_allocates
   telemetry_feeds_the_panel)
 

@@ -144,6 +144,7 @@ double amplitude_db(const std::vector<double>& x, std::size_t from, std::size_t 
   return gain_to_db(std::abs(phasor(x, from, length, hz)));
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): named at every call.
 double rms_of(const std::vector<double>& x, std::size_t from, std::size_t length) {
   double sum = 0.0;
   for (std::size_t i = 0; i < length; ++i) {
@@ -787,6 +788,56 @@ void a_seek_starts_clean() {
           "after a seek Gild plays as a fresh one");
 }
 
+// A band the band count drops and brings back starts clean. A loud driven
+// passage leaves band 4's Level Match far from unity; after a second of
+// silence (the crossovers settle, the match's powers fall together and
+// keep their ratio), half a second on one band, then four bands again on a
+// tone: once the band has faded back in the output is a fresh Gild's.
+void a_band_that_rejoins_starts_clean() {
+  constexpr double loud_seconds = 0.5;
+  constexpr double settle_silence_seconds = 1.0;
+  constexpr double one_band_seconds = 0.5;
+  constexpr double tone_seconds = 0.5;
+  constexpr double hz = 10'000.0;
+  constexpr double quiet = 0.1;
+  constexpr std::size_t driven_band = 3;
+  // The rejoining bands fade in over dsp::switch_fade_seconds.
+  constexpr double fade_seconds = 0.02;
+  constexpr double clean_tolerance = 1e-5;
+  const auto values = driven(defaults(), driven_band, 1.0, tape, 0.5);
+  const auto one = with(values, "gild.bands", static_cast<double>(one_band));
+  const auto loud = frames(loud_seconds);
+  const auto drop = loud + frames(settle_silence_seconds);
+  const auto rejoin = drop + frames(one_band_seconds);
+  const auto count = rejoin + frames(tone_seconds);
+  Stereo input = silence(count);
+  Stereo fresh_input = silence(count);
+  const auto burst = noise(1.0, loud);
+  const auto ending = tone(hz, quiet, count);
+  for (std::size_t i = 0; i < count; ++i) {
+    if (i < loud) {
+      input.left[i] = burst.left[i];
+      input.right[i] = burst.right[i];
+    } else if (i >= rejoin) {
+      input.left[i] = fresh_input.left[i] = ending.left[i];
+      input.right[i] = fresh_input.right[i] = ending.right[i];
+    }
+  }
+  auto runtime = make_effect(engine(), values, rate);
+  std::uint64_t generation = 1;
+  const auto out = process(
+      *runtime, input, {.at = {drop, rejoin}, .before = [&](std::uint64_t frame) {
+                          require(runtime->offer_values(frame == drop ? one : values, ++generation),
+                                  "the band count is offered");
+                        }});
+  const auto fresh = render(values, fresh_input);
+  double worst = 0.0;
+  for (std::size_t i = rejoin + frames(fade_seconds); i < count; ++i) {
+    worst = std::max(worst, std::fabs(out.left[i] - fresh.left[i]));
+  }
+  REQUIRE_LT(worst, clean_tolerance, "the band that joins again starts clean");
+}
+
 void the_callback_never_allocates() {
   constexpr std::uint64_t blocks = 2'000;
   constexpr std::uint64_t start = 4'096;
@@ -908,6 +959,7 @@ int main(int argc, char** argv) {
           {"the_tail_is_bounded", [] { the_tail_is_bounded(); }},
           {"presets_stay_restrained", [] { presets_stay_restrained(); }},
           {"a_seek_starts_clean", [] { a_seek_starts_clean(); }},
+          {"a_band_that_rejoins_starts_clean", [] { a_band_that_rejoins_starts_clean(); }},
           {"the_callback_never_allocates", [] { the_callback_never_allocates(); }},
           {"telemetry_feeds_the_panel", [] { telemetry_feeds_the_panel(); }},
       });
