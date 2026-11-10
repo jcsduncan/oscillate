@@ -103,11 +103,10 @@ Strike was measured on an Intel Core i7-10700K with GCC 15.2, Release, pinned wi
 
 ## Keel toward its targets
 
-`oscillate_limiter_audit --balance` runs each Keel preset at the programme's own level and judges the last part of each programme, after 8 s of settling. It reports:
-- the third-octave balance's distance from the preset's target, before and after (RMS and largest, from 40 Hz to 16 kHz, both centred there);
-- the integrated loudness change;
-- how far the applied correction wanders from one second to the next (RMS over the bands);
-- the onset contrast change in the three bands (positive is more attack against the body);
+`oscillate_limiter_audit --balance` runs each Keel preset at the programme's own level. It reports:
+- after 8 s of settling, the third-octave balance's distance from the preset's target, before and after (RMS and largest, from 40 Hz to 16 kHz, both centred there);
+- after 8 s of settling, the wander: per band, the standard deviation of the applied gain (output over input) across one-second frames, averaged over the bands;
+- over the whole programme, the integrated loudness change and the onset contrast change in the three bands (positive is more attack against the body);
 - the programme's own tilt against pink noise.
 
 The eight mastered tracks (mean; their tilt is −2.69 dB/oct):
@@ -132,7 +131,7 @@ The synthetic drum loop (tilt −2.62 dB/oct):
 | Streaming Balance | 6.81 / 14.49 | 5.11 / 11.83 | +0.02 | 0.03 | +0.72/−0.19/−0.14 |
 | Low End Control | 6.81 / 14.49 | 6.36 / 13.76 | +0.01 | 0.03 | +0.94/−0.09/−0.02 |
 
-The onset contrast moves with the balance inside each band: a low band brought down at 50 Hz against 120 Hz has more click over its body. The filters' own phase adds little: Keel's group delay stays under 2 ms from 31.5 Hz up (`native_keel_contract`). The wander on music is the music's balance moving under a 4 s Speed; on the steady loop it is 0.05 dB.
+The onset contrast moves with the balance inside each band: a low band brought down at 50 Hz against 120 Hz has more click over its body. The filters' own phase adds little: converged on a 4 dB lift at 80 Hz, Keel's group delay stays under 2 ms in every band from 31.5 Hz to 16 kHz (`native_keel_contract`). The wander on music is the music's balance moving under a 4 s Speed; on the steady loop it is 0.05 dB.
 
 Keel was measured on an Intel Core i7-10700K with GCC 15.2, Release, pinned with `taskset`.
 

@@ -1052,6 +1052,22 @@ void hostile_input_stays_finite() {
   }
 }
 
+// At low rates the top bands lie over Nyquist: they are never read, and
+// Keel analyses, steers and stays finite.
+void low_rates_leave_the_top_bands_out() {
+  constexpr std::array low_rates{8'000.0, 11'025.0, 16'000.0};
+  constexpr double seconds = 3.0;
+  for (const double low : low_rates) {
+    const auto input = pink(tilt_db, frames(seconds, low), 1, low);
+    const auto traced = trace(wide(defaults()), input, nullptr, low);
+    REQUIRE_EQ(traced.last[keel::telemetry::tracked], 1.0F, "tracked at " + std::to_string(low));
+    for (std::size_t i = 0; i < traced.out.size(); ++i) {
+      require(std::isfinite(traced.out.left[i]) && std::isfinite(traced.out.right[i]),
+              "finite output");
+    }
+  }
+}
+
 // The kernel factory takes any positive rate: under 1 Hz the history's
 // slice is still at least a frame, so a hop ends.
 void a_tiny_rate_still_runs() {
@@ -1235,6 +1251,7 @@ int main(int argc, char** argv) {
           {"any_block_split_renders_the_same", [] { any_block_split_renders_the_same(); }},
           {"export_equals_live", [] { export_equals_live(); }},
           {"hostile_input_stays_finite", [] { hostile_input_stays_finite(); }},
+          {"low_rates_leave_the_top_bands_out", [] { low_rates_leave_the_top_bands_out(); }},
           {"a_tiny_rate_still_runs", [] { a_tiny_rate_still_runs(); }},
           {"the_tail_is_bounded", [] { the_tail_is_bounded(); }},
           {"presets_stay_restrained", [] { presets_stay_restrained(); }},

@@ -36,7 +36,7 @@ A master needs its long-term tonal balance (how much low, mid and top it has aga
    - **Ripple.** Fitted to a 3 dB/oct tilt held within 18 dB, the bank ripples 0.25 dB from 40 Hz to 16 kHz. Narrower bells, or an octave-spaced bank without the 31.25 Hz bell, ripple more (0.8–1.4 dB).
    - **Gliding.** The gains ramp across each hop and are smoothed over one more. The filters are designed every 16 frames and their coefficients glide frame by frame between designs. Designing every 16 frames without gliding left a zipper floor 88 dB under a multitone. The ramps alone left the hop rate (23 Hz) audible as sidebands 77 dB under it.
    - **At 0 dB a section's output is its input exactly,** so Amount 0 is bit for bit.
-   - **Why not linear phase.** Converged on a 4 dB lift at 80 Hz, Keel's measured impulse response delays the 63 Hz band by 1.5 ms, no band from 31.5 Hz up by more than 2 ms, and none from 200 Hz up by more than 0.15 ms. A linear-phase filter that resolves the 20 Hz band would need about 170 ms of taps: about 85 ms of latency, and pre-echo before every kick. Minimum phase is kept.
+   - **Why not linear phase.** Converged on a 4 dB lift at 80 Hz, Keel's measured impulse response delays the 63 Hz band by 1.5 ms, no band from 31.5 Hz to 16 kHz by more than 2 ms, and none from 200 Hz to 16 kHz by more than 0.15 ms. A linear-phase filter that resolves the 20 Hz band would need about 170 ms of taps: about 85 ms of latency, and pre-echo before every kick. Minimum phase is kept.
 6. **Level Match** estimates the loudness the correction adds from the tracked band powers, K-weighted, and takes it out. The gain ramps across the hop.
    - **Output** trims after everything, gliding over 10 ms.
    - **Delta** plays the output less the input.
@@ -64,17 +64,17 @@ A master needs its long-term tonal balance (how much low, mid and top it has aga
 
 ## Consequences
 
-- **Tests:** `native_keel_contract` (28 cases):
+- **Tests:** `native_keel_contract` (29 cases):
   - **Convergence.** Pink noise tilted ±3 dB/oct converges to a flat target within 1 dB from 40 Hz to 16 kHz in under 2 s at Speeds of 1, 4 and 15 s. It ends within 0.5 dB, and a Welch analysis of the output agrees within 1.25 dB.
   - **Following.** A reversal from −3 to +3 dB/oct is followed within 1 dB after 6.2–6.6 Speeds (the bands average power).
   - **Passthrough and stillness.** Amount 0 is bit for bit. On steady pink noise the correction wanders 0.25 dB RMS or less (less when slower), and what moves faster than a second stays under 0.05 dB RMS. A periodic multitone holds its correction within 0.05 dB.
   - **No zipper.** While a reference turns the correction over, a multitone gains no sidebands more than 40 Hz from its tones above −100 dB.
-  - **Phase.** The measured group delay stays under 2 ms from 31.5 Hz up and under 0.25 ms from 200 Hz up.
+  - **Phase.** Converged on a 4 dB lift at 80 Hz, the measured group delay stays under 2 ms from 31.5 Hz to 16 kHz and under 0.25 ms from 200 Hz to 16 kHz.
   - **Targets.** The curve, reference and learned targets are reached. Steered toward each factory genre target, pink noise falling as masters do goes from 1.6–2.0 dB RMS from the target to 0.73–1.11 dB from 50 Hz to 16 kHz; what stays is the targets' third-octave detail. A programme that already has a target's balance is moved by under 1 dB in any band.
   - **Controls.** Regions, limits, absent bands, the gates (silences move the correction under 0.25 dB; rare bursts move it less than half as far as they move a plain average), Level Match (within 0.5 LU), Delta and Output.
   - **Other rates.** 44.1 and 96 kHz converge alike.
-  - **Platform.** Block splits, export against live, hostile input, a rate under 1 Hz, a bounded tail, restrained presets, a seek, no allocation and the telemetry.
+  - **Platform.** Block splits, export against live, hostile input, rates of 8 to 16 kHz and under 1 Hz, a bounded tail, restrained presets, a seek, no allocation and the telemetry.
 
   `quick_keel_panel_contract` covers the panel, Learn and screenshots (`KEEL_PANEL_SCREENSHOT_DIR`). The platform contracts and `effect_export_parity` cover Keel with every engine.
-- **Audit:** `oscillate_limiter_audit --balance` measures each preset's distance from its target before and after, the loudness change, the second-to-second wander of the applied correction and the onset contrast change. On the eight-track corpus the Default preset takes the mean RMS distance from its target from 4.20 to 3.05 dB (largest 9.46 to 8.12 dB), with the loudness within 0.1 LU; Gentle Polish to 3.49 dB, Streaming Balance to 3.19 dB (`docs/performance/native-effects.md`).
+- **Audit:** `oscillate_limiter_audit --balance` measures each preset's distance from its target before and after, the loudness change, the wander of the applied correction (per band, its standard deviation across one-second frames) and the onset contrast change. On the eight-track corpus the Default preset takes the mean RMS distance from its target from 4.20 to 3.05 dB (largest 9.46 to 8.12 dB), with the loudness within 0.1 LU; Gentle Polish to 3.49 dB, Streaming Balance to 3.19 dB (`docs/performance/native-effects.md`).
 - **CPU:** one instance costs 1.2–1.3% of a core (pinned, whole process), with a 99th-percentile 64-frame block of 2.6% of its period; 1.8% with a reference. Sixteen in a chain cost about 20%, 99th percentile 42% at 64 frames; about 30% with a reference on each.

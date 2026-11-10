@@ -467,8 +467,11 @@ private:
       const double hi = std::min(centre * std::exp2(half_band_octaves) / bin_hz,
                                  static_cast<double>(window_size_) / 2.0 - 1.0);
       auto& range = bins_[b];
-      range.first = static_cast<std::size_t>(std::max(1.0, std::floor(lo + 0.5)));
-      range.last = static_cast<std::size_t>(std::max(1.0, std::floor(hi + 0.5)));
+      // Every bin read lies inside the transform's lower half, even for a
+      // band over Nyquist (which is never live).
+      const double top_bin = static_cast<double>(window_size_) / 2.0 - 1.0;
+      range.first = static_cast<std::size_t>(std::clamp(std::floor(lo + 0.5), 1.0, top_bin));
+      range.last = static_cast<std::size_t>(std::clamp(std::floor(hi + 0.5), 1.0, top_bin));
       range.first_weight = std::min(1.0, static_cast<double>(range.first) + 0.5 - lo);
       range.last_weight = std::min(1.0, hi - (static_cast<double>(range.last) - 0.5));
       if (range.first == range.last) {
@@ -703,6 +706,10 @@ private:
       return 0.5 * (std::norm(a) + std::norm(b)) * power_scale_;
     };
     for (std::size_t b = 0; b < bands; ++b) {
+      if (!live_[b]) {
+        job.frame[b] = 0.0;
+        continue;
+      }
       const auto& range = bins_[b];
       double sum = range.first_weight * bin_power(range.first);
       if (range.last > range.first) {
