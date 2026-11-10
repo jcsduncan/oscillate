@@ -84,6 +84,14 @@ jobs:
           NO_MKDOCS_2_WARNING: "1"
           OSCILLATE_KNOWN_ISSUES: ${{ runner.temp }}/known-issues.md
         run: python -I -m mkdocs build --strict --site-dir site
+      # Pages paths are case-sensitive; the app ID io.github.jcsduncan.Oscillate
+      # implies /Oscillate/, which Flathub's linter checks is reachable.
+      - name: Redirect the app ID's path to the site
+        run: |
+          mkdir -p site/Oscillate
+          printf '%s\n' '<!doctype html><meta charset="utf-8"><title>Oscillate</title>' \
+            '<meta http-equiv="refresh" content="0; url=../">' \
+            '<link rel="canonical" href="../"><a href="../">Oscillate</a>' > site/Oscillate/index.html
       # Skipped, with a notice, until the signing key secrets exist.
       - name: Build the signed apt repository
         id: apt
