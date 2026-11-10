@@ -189,6 +189,7 @@ constexpr double tail_seconds = 0.25;
 }
 
 // A filter's response in dB at warped frequency x at gain_db.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): named at every call.
 [[nodiscard]] double response_db(Kind kind, double q, double x, double gain_db) noexcept {
   if (gain_db == 0.0) {
     return 0.0;
@@ -207,6 +208,7 @@ struct Svf {
   double m1 = 0.0;
   double m2 = 0.0;
 
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): named at every call.
   void set(Kind kind, double warped, double q, double gain_db) noexcept {
     const double a = std::pow(10.0, gain_db / (2.0 * decibels_per_gain));
     double g = warped;
@@ -459,7 +461,7 @@ private:
                    : 0.0;
       const double lo = centre * std::exp2(-half_band_octaves) / bin_hz;
       const double hi = std::min(centre * std::exp2(half_band_octaves) / bin_hz,
-                                 static_cast<double>(window_size_ / 2) - 1.0);
+                                 static_cast<double>(window_size_) / 2.0 - 1.0);
       auto& range = bins_[b];
       range.first = static_cast<std::size_t>(std::max(1.0, std::floor(lo + 0.5)));
       range.last = static_cast<std::size_t>(std::max(1.0, std::floor(hi + 0.5)));
@@ -747,6 +749,7 @@ private:
   // Each band's region weight: Low, Mid and High crossing over an octave
   // about each split.
   [[nodiscard]] double region(double hz) const noexcept {
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): named at every call.
     const auto blend = [](double octaves_past, double below, double above) {
       const double u = std::clamp(octaves_past / region_octaves + 0.5, 0.0, 1.0);
       const double k = 0.5 - 0.5 * std::cos(std::numbers::pi * u);

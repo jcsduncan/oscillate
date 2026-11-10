@@ -370,9 +370,9 @@ void the_real_keel_reaches_the_panel_and_learns() {
           "Learn turns the target to the curve");
   const auto learned = keel::learned_curve(last, values);
   for (std::size_t b = 0; b < keel::bands; ++b) {
-    const auto& parameter =
-        table()
-            .parameters[*oscillate::native_dsp::find_parameter(table(), curve_id(b).toStdString())];
+    const auto index = oscillate::native_dsp::find_parameter(table(), curve_id(b).toStdString());
+    require(index.has_value(), "the curve's parameter " + curve_id(b).toStdString());
+    const auto& parameter = table().parameters[*index];
     require(std::fabs(controller.value(curve_id(b)) -
                       oscillate::native_dsp::sanitise(parameter, learned[b])) < tolerance_db,
             "the curve is the learned balance at band " + std::to_string(b));

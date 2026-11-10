@@ -246,6 +246,7 @@ keel_learned_values(const native_dsp::EngineDescriptor& engine, std::span<const 
   }
   const auto curve = keel::learned_curve(telemetry, values);
   std::vector<std::pair<std::string_view, double>> out;
+  out.reserve(keel::bands + 1);
   for (std::size_t b = 0; b < keel::bands; ++b) {
     out.emplace_back(engine.parameters[*first + b].id, curve[b]);
   }

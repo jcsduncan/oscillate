@@ -94,8 +94,9 @@ std::size_t band_of(double hz) {
       std::lround(std::log2(hz / keel::reference_hz) * keel::bands_per_octave) +
       static_cast<long>(keel::reference_band));
 }
-const std::size_t judged_first = band_of(judged_low_hz);
-const std::size_t judged_last = band_of(judged_high_hz);
+// The judged bands, first and last.
+std::size_t judged_first() { return band_of(judged_low_hz); }
+std::size_t judged_last() { return band_of(judged_high_hz); }
 
 // Pink noise tilted `tilt` dB/oct about 1 kHz (plus any `curve`, dB per
 // third-octave band, read between band centres), at programme_rms,
@@ -157,6 +158,7 @@ Stereo render(const std::vector<double>& values, const Stereo& input,
 
 // The third-octave balance (dB per band, both channels' mean power) of
 // [from, to) by Welch's method on Keel's band edges.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): named at every call.
 std::array<double, keel::bands> balance_db(const Stereo& x, std::size_t from, std::size_t to,
                                            double at_rate = rate) {
   constexpr double half_band = 0.5 / keel::bands_per_octave;
@@ -195,12 +197,12 @@ std::array<double, keel::bands> balance_db(const Stereo& x, std::size_t from, st
 // once both are centred there.
 double deviation_db(const std::array<double, keel::bands>& heard, const keel::Curve& wanted) {
   double mean = 0.0;
-  for (std::size_t b = judged_first; b <= judged_last; ++b) {
+  for (std::size_t b = judged_first(); b <= judged_last(); ++b) {
     mean += heard[b] - wanted[b];
   }
-  mean /= static_cast<double>(judged_last - judged_first + 1);
+  mean /= static_cast<double>(judged_last() - judged_first() + 1);
   double most = 0.0;
-  for (std::size_t b = judged_first; b <= judged_last; ++b) {
+  for (std::size_t b = judged_first(); b <= judged_last(); ++b) {
     most = std::max(most, std::fabs(heard[b] - wanted[b] - mean));
   }
   return most;
@@ -210,13 +212,13 @@ double deviation_db(const std::array<double, keel::bands>& heard, const keel::Cu
 // both are centred there.
 double rms_deviation_db(const std::array<double, keel::bands>& heard, const keel::Curve& wanted) {
   double mean = 0.0;
-  for (std::size_t b = judged_first; b <= judged_last; ++b) {
+  for (std::size_t b = judged_first(); b <= judged_last(); ++b) {
     mean += heard[b] - wanted[b];
   }
-  const auto n = static_cast<double>(judged_last - judged_first + 1);
+  const auto n = static_cast<double>(judged_last() - judged_first() + 1);
   mean /= n;
   double sum = 0.0;
-  for (std::size_t b = judged_first; b <= judged_last; ++b) {
+  for (std::size_t b = judged_first(); b <= judged_last(); ++b) {
     const double d = heard[b] - wanted[b] - mean;
     sum += d * d;
   }
@@ -501,7 +503,7 @@ Wander wander(const Traced& traced, std::size_t from) {
   constexpr double trend_seconds = 1.0;
   const auto half = static_cast<std::size_t>(trend_seconds * rate / static_cast<double>(hop) / 2.0);
   Wander out;
-  for (std::size_t b = judged_first; b <= judged_last; ++b) {
+  for (std::size_t b = judged_first(); b <= judged_last(); ++b) {
     double mean = 0.0;
     for (std::size_t h = from; h < traced.corrections.size(); ++h) {
       mean += traced.corrections[h][b];
@@ -526,7 +528,7 @@ Wander wander(const Traced& traced, std::size_t from) {
     out.rms_db += std::sqrt(spread / static_cast<double>(traced.corrections.size() - from));
     out.fast_db += std::sqrt(fast / static_cast<double>(std::max<std::size_t>(counted, 1)));
   }
-  const auto n = static_cast<double>(judged_last - judged_first + 1);
+  const auto n = static_cast<double>(judged_last() - judged_first() + 1);
   out.rms_db /= n;
   out.fast_db /= n;
   return out;
@@ -661,8 +663,9 @@ void minimum_phase_delays_little() {
   }
   const auto bin_hz = rate / static_cast<double>(length);
   const auto bin_of = [&](double hz) { return static_cast<std::size_t>(std::lround(hz / bin_hz)); };
-  REQUIRE_GT(gain_to_db(std::abs(mean[bin_of(lift_hz)]) / std::abs(mean[bin_of(keel::reference_hz)])),
-             least_lift_db, "the lift is in place");
+  REQUIRE_GT(
+      gain_to_db(std::abs(mean[bin_of(lift_hz)]) / std::abs(mean[bin_of(keel::reference_hz)])),
+      least_lift_db, "the lift is in place");
   // Per band: the phase's turn across the band's bins over their span.
   const double half_band = 0.5 / keel::bands_per_octave;
   for (std::size_t b = band_of(lowest_hz); b <= band_of(highest_hz); ++b) {
@@ -735,7 +738,7 @@ void learn_captures_the_balance() {
     keel::set_curve(values, keel::learned_curve(heard.last, values));
     values[at("keel.target")] = target_curve;
     const auto traced = trace(values, input);
-    for (std::size_t b = judged_first; b <= judged_last; ++b) {
+    for (std::size_t b = judged_first(); b <= judged_last(); ++b) {
       REQUIRE_LT(std::fabs(traced.corrections.back()[b]), learned_rest_db,
                  "the learned balance needs no correction at " + std::to_string(keel::band_hz(b)) +
                      " Hz: " + std::to_string(traced.corrections.back()[b]));
@@ -829,7 +832,7 @@ void silence_and_transients_do_not_drag_it() {
     }
   }
   const auto after_gaps = trace(values, gapped).corrections.back();
-  for (std::size_t b = judged_first; b <= judged_last; ++b) {
+  for (std::size_t b = judged_first(); b <= judged_last(); ++b) {
     REQUIRE_LT(std::fabs(after_gaps[b] - plain[b]), held_db,
                "silences do not drag it at " + std::to_string(keel::band_hz(b)) + " Hz");
   }
@@ -846,7 +849,7 @@ void silence_and_transients_do_not_drag_it() {
   const auto heard_burst = balance_db(burst, 0, burst.size());
   double moved = 0.0;
   double plain_moved = 0.0;
-  for (std::size_t b = judged_first; b <= judged_last; ++b) {
+  for (std::size_t b = judged_first(); b <= judged_last(); ++b) {
     moved = std::max(moved, std::fabs(after_bursts[b] - plain[b]));
     plain_moved = std::max(plain_moved, std::fabs(heard_burst[b] - heard_plain[b]));
   }
@@ -1118,7 +1121,7 @@ void telemetry_feeds_the_panel() {
   const auto tilt = tilted(-tilt_db);
   const float offset =
       frame[tm::spectrum + keel::reference_band] - static_cast<float>(tilt[keel::reference_band]);
-  for (std::size_t b = judged_first; b <= judged_last; ++b) {
+  for (std::size_t b = judged_first(); b <= judged_last(); ++b) {
     REQUIRE_LT(std::fabs(frame[tm::spectrum + b] - static_cast<float>(tilt[b]) - offset),
                reading_db, "the spectrum reads the input's balance");
     REQUIRE_LT(std::fabs(frame[tm::target + b] - frame[tm::target + keel::reference_band]),
@@ -1130,7 +1133,7 @@ void telemetry_feeds_the_panel() {
   // The newest history slice is the correction a slice ago; the oldest
   // slices, before the render began, read 0 dB.
   const std::size_t newest = tm::history + (keel::history_slices - 1) * keel::bands;
-  REQUIRE_LT(std::fabs(frame[newest + judged_first] - frame[tm::correction + judged_first]),
+  REQUIRE_LT(std::fabs(frame[newest + judged_first()] - frame[tm::correction + judged_first()]),
              reading_db, "the newest slice is the correction now");
   REQUIRE_EQ(frame[tm::history], 0.0F, "the oldest slice predates the render");
   REQUIRE_GT(frame[tm::input_peak], -tilt_db * keel::bands_per_octave * 2.0F, "the input meter");
