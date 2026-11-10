@@ -184,6 +184,7 @@ struct Sums {
 
 // The even-length top decimator over a stream held in pairs: tap 2j reads
 // firsts[k - j] and tap 2j + 1 seconds[k - j - 1], summed in tap order.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the firsts, then the seconds.
 void convolve_pairs(std::span<const double> taps, const double* firsts, const double* seconds,
                     std::size_t n, double* y) noexcept {
   const std::size_t pairs = taps.size() / 2;
@@ -293,7 +294,7 @@ void Resampler::reset() noexcept {
 // Zero-stuffing by two through the half-band (gain 2): the even output is the
 // filter's even taps over the input, the odd one the input K frames back.
 void Resampler::up(std::span<const double> frames, double* top) noexcept {
-  std::copy(frames.begin(), frames.end(), top);
+  std::ranges::copy(frames, top);
   std::size_t count = frames.size();
   for (std::size_t s = 0; s < design_->stages; ++s, count *= 2) {
     const auto& halfband = design_->halfbands[s];

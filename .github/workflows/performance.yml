@@ -139,24 +139,36 @@ jobs:
         run: scripts/build.sh "$BUILD_DIR" --target oscillate_reference_project
       # The light reference's tracks leave most of each block to the master,
       # so its serial cost shows plainly; on these four-core runners the
-      # heavy reference alone already fills the period, so it is reported,
-      # not gated.
+      # heavy reference alone already fills the period, so its p99 is
+      # reported, not gated.
       - name: Gate the master
         run: |
+          status=0
           python3 -I tests/qualification/qualify_reference_projects.py \
             --executable "$BUILD_DIR/tests/qualification/oscillate_reference_project" \
             --output master-gate --references light --master heavy --frames 1024 \
             --seconds "$SECONDS_PER_RUN" --trace \
-            --gate-master-percent "$MASTER_LIMIT_PERCENT" --gate-p99-percent "$P99_LIMIT_PERCENT"
-          cat master-gate/results.md >> "$GITHUB_STEP_SUMMARY"
-      - name: Measure the heavy master at each buffer
+            --gate-master-percent "$MASTER_LIMIT_PERCENT" --gate-p99-percent "$P99_LIMIT_PERCENT" \
+            || status=$?
+          if [ -f master-gate/results.md ]; then
+            cat master-gate/results.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$status"
+      # Every buffer, light and heavy: the master's share is gated, the
+      # callback's p99 only reported.
+      - name: Gate the master's share at each buffer
         if: always()
         run: |
+          status=0
           python3 -I tests/qualification/qualify_reference_projects.py \
             --executable "$BUILD_DIR/tests/qualification/oscillate_reference_project" \
             --output master-heavy --references light heavy --master heavy \
-            --frames 256 512 1024 --seconds "$SECONDS_PER_RUN" --trace
-          cat master-heavy/results.md >> "$GITHUB_STEP_SUMMARY"
+            --frames 256 512 1024 --seconds "$SECONDS_PER_RUN" --trace \
+            --gate-master-percent "$MASTER_LIMIT_PERCENT" || status=$?
+          if [ -f master-heavy/results.md ]; then
+            cat master-heavy/results.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$status"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

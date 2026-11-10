@@ -981,7 +981,9 @@ private:
                   : Complex(0.0);
       }
       block_.forward(filter_spectrum_);
-      auto& landing = landing_[(landed_ + part) % parts];
+      // The hop this part's product lands in, from the hop now.
+      const std::size_t lands = landed_ + part < parts ? landed_ + part : landed_ + part - parts;
+      auto& landing = landing_[lands];
       for (std::size_t bin = 0; bin <= h; ++bin) {
         Complex ha;
         Complex hb;
@@ -1002,7 +1004,9 @@ private:
     block_.inverse(product_);
     std::ranges::fill(now.a, Complex(0.0));
     std::ranges::fill(now.b, Complex(0.0));
-    landed_ = (landed_ + 1) % parts;
+    if (++landed_ == parts) {
+      landed_ = 0;
+    }
     // The next hop's output. Its frame n leaves n frames after the newest
     // input; the dry it is heard against is the input a latency earlier.
     const std::size_t latency = frames_.latency;

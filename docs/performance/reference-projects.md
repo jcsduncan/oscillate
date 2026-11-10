@@ -78,10 +78,11 @@ numbers show trends between runs, not release headroom.
 
 Its master gate plays the light reference with the heavy master at 1024
 frames and fails when the master takes more than 20% of the period or the
-callback's p99 passes 35%. It also reports the light and heavy references
-with the heavy master at 256, 512 and 1024 frames (the `master-gate`
+callback's p99 passes 35%. It also plays the light and heavy references
+with the heavy master at 256, 512 and 1024 frames, failing when the master
+takes more than 20% of the period at any of them (the `master-gate`
 artifact). On these runners the heavy reference alone fills its period, so
-it is reported, not gated.
+its p99 is reported, not gated.
 
 ## On the reference machine
 

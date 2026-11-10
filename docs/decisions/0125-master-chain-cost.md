@@ -20,7 +20,7 @@ On 0.5.0 a mastered project clicked and stuttered at 1024 frames. The master run
    - a single processed channel designs one filter, not two;
    - the per-band ballistic coefficients, the sensitivity curve and the display's band mapping are kept until their settings change.
    The filters differ from the previous ones by rounding only.
-5. **A gate in CI.** The reference player gains `--master heavy`, a finished master's chain (Temper, Ceiling at Loud Club, Gild at Warm Mids, 4x, Lens, Keel at Gentle Polish, Shape at Presence, Loudness), and blocks of 256, 512 and 1024 frames. The performance workflow's master job plays the light reference with it at 1024 frames and fails when the master node's mean time passes 20% of the period or the callback's p99 passes 35%. The light reference leaves most of each block to the master, so its cost shows plainly; on the four-core hosted runners the heavy reference alone fills the period, so it is measured at each size and reported, not gated. The workflow runs on pull requests that change the effects' DSP, the shared DSP or the engine.
+5. **A gate in CI.** The reference player gains `--master heavy`, a finished master's chain (Temper, Ceiling at Loud Club, Gild at Warm Mids, 4x, Lens, Keel at Gentle Polish, Shape at Presence, Loudness), and blocks of 256, 512 and 1024 frames. The performance workflow's master job plays the light reference with it at 1024 frames and fails when the master node's mean time passes 20% of the period or the callback's p99 passes 35%. The light reference leaves most of each block to the master, so its cost shows plainly. The light and heavy references are also played at 256, 512 and 1024 frames with the master's share gated at 20%; on the four-core hosted runners the heavy reference alone fills the period, so its p99 is reported, not gated. The workflow runs on pull requests that change the effects' DSP, the shared DSP or the engine.
 6. **The master is not pipelined.** Rendering block n's master while the helpers render block n + 1's tracks would take it off the critical path for one block of output latency. It is investigated below and not shipped.
 
 ## Measured
@@ -47,7 +47,18 @@ Before, the chain costs what the user's trace showed (5.4 ms at 1024 frames). Th
 | 512 | 2.84 ms (26.6%) | 1.35 ms (12.6%) | 34.0% | 17.3% |
 | 1024 | 5.60 ms (26.3%) | 2.70 ms (12.7%) | 30.9% | 17.0% |
 
-On a hosted four-core runner (three helpers) with 0.5.0's devices the master took 30.3–32.1% of the period at every size, light or heavy; the light reference's p99 at 1024 frames was 43.2% of the period and the heavy reference's 109.7%, 291 blocks late in 20 s.
+On a hosted four-core runner (three helpers) with 0.5.0's devices the master took 30.3–32.1% of the period at every size, light or heavy; the light reference's p99 at 1024 frames was 43.2% of the period and the heavy reference's 109.7%, 291 blocks late in 20 s. With this ADR's devices, on the same kind of runner:
+
+| Reference, frames | Master before | Master after | p99 before | p99 after | Late blocks before | after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| light, 256 | 1.71 ms (32.1%) | 0.51 ms (9.5%) | 43.6% | 12.7% | 0 | 0 |
+| light, 512 | 3.31 ms (31.0%) | 1.02 ms (9.6%) | 35.9% | 17.6% | 0 | 0 |
+| light, 1024 | 6.56 ms (30.7%) | 2.02 ms (9.5%) | 34.9% | 11.5% | 0 | 0 |
+| heavy, 256 | 1.64 ms (30.8%) | 0.52 ms (9.7%) | 123.3% | 69.4% | 2238 | 0 |
+| heavy, 512 | 3.24 ms (30.4%) | 0.98 ms (9.2%) | 127.6% | 57.0% | 879 | 0 |
+| heavy, 1024 | 6.47 ms (30.3%) | 2.02 ms (9.5%) | 109.7% | 64.7% | 291 | 0 |
+
+The heavy reference's whole-process CPU fell from 278–282% to 157–164% of a core: its default master (Ceiling and the shared FFT) and its tracks gain from the same changes. Hosted runners vary from run to run, so these two runs bound the change rather than measure it exactly.
 
 **Pipelining, investigated.** Rendering the master of block n − 1 on the callback thread while the helpers render block n's tracks costs one block of output latency (5.3 ms at 256 frames, 21.3 ms at 1024) and takes one lane from the tracks. From the measured spans, the pipelined block is about the larger of the tracks' time on one lane fewer and the master's time. On the user's trace (eight lanes, callback median 14.7 ms, master 5.4 ms) that would have saved about 28%; with this ADR's devices (master 2.6 ms) about 11%. On the four-core runner, where the tracks fill the block, it saves under 8% before and less after. Live edits, seeks, meters and the reported latency would all have to account for the extra block. Not shipped: the device work removes most of the master's time without the latency, and a pipelined master is worth revisiting only as an option for large buffers if masters grow again.
 

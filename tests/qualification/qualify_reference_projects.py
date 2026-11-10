@@ -111,9 +111,7 @@ def trace_tables(trace: dict) -> dict:
     # The master runs on the callback after every other node, so its time is
     # serial in every block (ADR-0125).
     masters = [
-        span["dur"]
-        for span in by_kind.get(MASTER_NODE_KIND, [])
-        if span["name"] == MASTER_NODE
+        span["dur"] for span in by_kind.get(MASTER_NODE_KIND, []) if span["name"] == MASTER_NODE
     ]
     master = (
         {
@@ -311,7 +309,9 @@ def gate(args, runs: list[dict]) -> list[str]:
                 )
         if args.gate_p99_percent is not None:
             load = result.get("p99_period_percent")
-            if load is not None and load > args.gate_p99_percent:
+            if load is None:
+                failures.append(f"{name}: the run reported no callback p99")
+            elif load > args.gate_p99_percent:
                 failures.append(
                     f"{name}: the callback's p99 is {load}% of the period, "
                     f"over the {args.gate_p99_percent}% limit"

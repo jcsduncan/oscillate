@@ -158,6 +158,11 @@ class Master(unittest.TestCase):
         self.assertIn("master takes 15.0% of the period", failures[0])
         self.assertIn("p99 is 30.0% of the period", failures[1])
 
+    def test_a_p99_limit_needs_a_p99(self):
+        run = run_with(MASTER_TRACE)
+        del run["result"]["p99_period_percent"]
+        self.assertIn("no callback p99", gate(limits(p99=30.0), [run])[0])
+
     def test_a_master_limit_needs_a_trace(self):
         self.assertIn("no master spans", gate(limits(master=10.0), [run_with(None)])[0])
 

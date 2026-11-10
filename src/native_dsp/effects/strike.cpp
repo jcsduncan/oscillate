@@ -292,14 +292,12 @@ public:
 
   void process(std::span<engine::StereoFrame> audio,
                std::span<const engine::StereoFrame>) noexcept override {
-    const std::size_t n = layout_.bands;
-    const std::size_t size = delayed_.size();
     block_gain_.fill(0.0);
     double block_clip = 1.0;
     for (std::size_t start = 0; start < audio.size(); start += edge_dsp::block_frames) {
       const auto chunk =
           audio.subspan(start, std::min(edge_dsp::block_frames, audio.size() - start));
-      block_clip = std::max(block_clip, process_block(chunk, n, size));
+      block_clip = std::max(block_clip, process_block(chunk));
     }
     const double fall_db = clipped_fall_db_per_second * static_cast<double>(audio.size()) / rate_;
     clipped_ = std::max(std::max(clipped_ - fall_db, 0.0), gain_to_db(block_clip));
@@ -307,8 +305,9 @@ public:
 
   // One block of the clipper's size; returns how far the clipper took the
   // loudest top-rate sample down.
-  double process_block(std::span<engine::StereoFrame> audio, std::size_t n,
-                       std::size_t size) noexcept {
+  double process_block(std::span<engine::StereoFrame> audio) noexcept {
+    const std::size_t n = layout_.bands;
+    const std::size_t size = delayed_.size();
     std::array<std::array<double, edge_dsp::block_frames>, 2> outs{};
     for (std::size_t i = 0; i < audio.size(); ++i) {
       const auto& frame = audio[i];

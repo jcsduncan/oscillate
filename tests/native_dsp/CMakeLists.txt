@@ -825,6 +825,14 @@ oscillate_add_case_tests(native_pocket_contract oscillate_pocket_tests
   SLOW
   real_kicks_come_out_of_the_bass)
 
+# Lens's capture from the callback to its reader (ADR-0125), with two threads.
+oscillate_add_test_executable(oscillate_capture_queue_tests SOURCES capture_queue_tests.cpp
+  LIBS oscillate::dsp_primitives Threads::Threads)
+oscillate_add_case_tests(native_capture_queue_contract oscillate_capture_queue_tests
+  CASES
+  two_threads_keep_order_and_runs
+  a_drop_then_a_fit_starts_one_run)
+
 oscillate_add_test_executable(oscillate_lens_tests SOURCES lens_tests.cpp
   LIBS oscillate::native_effects)
 oscillate_add_case_tests(native_lens_contract oscillate_lens_tests

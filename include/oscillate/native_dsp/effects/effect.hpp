@@ -36,7 +36,12 @@ struct KeyNote {
 };
 
 // Engine-specific DSP. Created and destroyed on control; every other member
-// runs only on the one callback that owns the runtime.
+// runs only on the one callback that owns the runtime, except
+// adopt_document's offers (see NativeEffectRuntime) and, for a kernel that
+// analyses off the callback, analyse_telemetry. Such a kernel splits its
+// state: what the callback writes and the reader reads is shared through
+// lock-free structures only (Lens: its values, as atomics, and its
+// CaptureQueue); everything else belongs to one side.
 class EffectKernel {
 public:
   virtual ~EffectKernel() = default;
@@ -56,13 +61,15 @@ public:
     (void)out;
     return 0;
   }
-  // A kernel whose telemetry is an analysis too costly for the callback
-  // (ADR-0125) only captures its input there and analyses it here instead:
-  // on the one control thread that reads the runtime's telemetry, while the
-  // callback runs, so it costs nothing while nobody reads it. Brings the
-  // analysis up to what was captured and writes the telemetry layout;
-  // returns how many values (0 before the first capture).
+  // True for a kernel whose telemetry is an analysis too costly for the
+  // callback (ADR-0125): it only captures its input there, publishes no
+  // telemetry from it, and analyses in analyse_telemetry instead.
   [[nodiscard]] virtual bool analyses_off_callback() const noexcept { return false; }
+  // Such a kernel's analysis, on the one control thread that reads the
+  // runtime's telemetry, while the callback runs, so it costs nothing while
+  // nobody reads it. Brings the analysis up to what was captured and writes
+  // the telemetry layout; returns how many values (0 before the first
+  // capture).
   [[nodiscard]] virtual std::size_t analyse_telemetry(std::span<float> out) noexcept {
     (void)out;
     return 0;
