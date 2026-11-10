@@ -36,7 +36,12 @@ struct KeyNote {
 };
 
 // Engine-specific DSP. Created and destroyed on control; every other member
-// runs only on the one callback that owns the runtime.
+// runs only on the one callback that owns the runtime, except
+// adopt_document's offers (see NativeEffectRuntime) and, for a kernel that
+// analyses off the callback, analyse_telemetry. Such a kernel splits its
+// state: what the callback writes and the reader reads is shared through
+// lock-free structures only (Lens: its values, as atomics, and its
+// CaptureQueue); everything else belongs to one side.
 class EffectKernel {
 public:
   virtual ~EffectKernel() = default;
@@ -53,6 +58,19 @@ public:
   virtual void reset() noexcept = 0;
   // Callback only, after each block: the engine's telemetry layout.
   [[nodiscard]] virtual std::size_t telemetry(std::span<float> out) const noexcept {
+    (void)out;
+    return 0;
+  }
+  // True for a kernel whose telemetry is an analysis too costly for the
+  // callback (ADR-0125): it only captures its input there, publishes no
+  // telemetry from it, and analyses in analyse_telemetry instead.
+  [[nodiscard]] virtual bool analyses_off_callback() const noexcept { return false; }
+  // Such a kernel's analysis, on the one control thread that reads the
+  // runtime's telemetry, while the callback runs, so it costs nothing while
+  // nobody reads it. Brings the analysis up to what was captured and writes
+  // the telemetry layout; returns how many values (0 before the first
+  // capture).
+  [[nodiscard]] virtual std::size_t analyse_telemetry(std::span<float> out) noexcept {
     (void)out;
     return 0;
   }
@@ -201,7 +219,10 @@ public:
   bool offer_key_notes(std::vector<KeyNote> notes);
   // Control only: the document last offered (or created with).
   [[nodiscard]] const project::NativeSynthDocument& document() const noexcept { return document_; }
-  [[nodiscard]] bool read_telemetry(std::vector<float>& out) { return telemetry_->read(out); }
+  // Control only, from one thread: the newest telemetry, false until the
+  // first. For a kernel that analyses off the callback, this runs its
+  // analysis.
+  [[nodiscard]] bool read_telemetry(std::vector<float>& out);
   [[nodiscard]] const EffectEngine& engine() const noexcept { return engine_; }
   // Fixed at creation (see EffectEngine::latency_frames).
   [[nodiscard]] std::uint32_t latency_frames() const noexcept { return latency_; }

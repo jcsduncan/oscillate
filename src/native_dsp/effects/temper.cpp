@@ -120,6 +120,11 @@ constexpr double display_seconds = 0.05;
 constexpr double hold_seconds = 1.0;
 // Trim glides over this to stay click-free.
 constexpr double trim_seconds = 0.01;
+// The minimum-phase design floors the gain here before its log, and takes a
+// fully wet gain's log straight from its dB.
+constexpr double gain_floor = 1e-12;
+const double log_floor = std::log(gain_floor);
+constexpr double db_to_log = std::numbers::ln10 / 20.0;
 
 [[nodiscard]] std::size_t scale_for(double rate) noexcept {
   std::size_t scale = 1;
@@ -173,14 +178,30 @@ constexpr double trim_seconds = 0.01;
   return 10.0 * std::log10(num / den);
 }
 
+// Complex products in real arithmetic: a std::complex product compiles to
+// a NaN-checking library call. For finite values they are the same.
+[[nodiscard]] inline Complex times(Complex x, Complex y) noexcept {
+  return {x.real() * y.real() - x.imag() * y.imag(), x.real() * y.imag() + x.imag() * y.real()};
+}
+[[nodiscard]] inline Complex times_i(Complex x) noexcept { return {-x.imag(), x.real()}; }
+// e^z as the C library's complex exponential takes it for finite z (the
+// real part's exponential times the imaginary part's cosine and sine),
+// without its checks for infinities.
+[[nodiscard]] inline Complex exp_of(Complex z) noexcept {
+  const double magnitude = std::exp(z.real());
+  return {magnitude * std::cos(z.imag()), magnitude * std::sin(z.imag())};
+}
+
 // Packs two real sequences' spectra into one transform: Z = FFT(a + i b);
 // returns A[k] and B[k].
 inline void unpack(std::span<const Complex> z, std::size_t k, Complex& a, Complex& b) noexcept {
   const std::size_t n = z.size();
   const Complex zk = z[k];
-  const Complex zm = std::conj(z[(n - k) % n]);
+  const Complex zm = std::conj(z[k == 0 ? 0 : n - k]);
   a = 0.5 * (zk + zm);
-  b = Complex(0.0, -0.5) * (zk - zm);
+  // -i / 2 times their difference.
+  const Complex difference = zk - zm;
+  b = {0.5 * difference.imag(), -0.5 * difference.real()};
 }
 
 class TemperKernel final : public EffectKernel {
@@ -189,8 +210,7 @@ public:
       : rate_(rate), frames_(frames_for(values, rate)), phase_(phase_of(values)),
         hold_(std::exp(std::log(1e-3) / (hold_seconds * rate))),
         trim_step_(1.0 - std::exp(-1.0 / (trim_seconds * rate))), analysis_(frames_.window),
-        design_(frames_.filter * 2),
-        block_(phase_ == t::Phase::low_latency ? 1 : frames_.filter * 2) {
+        design_(frames_.filter * 2), block_(phase_ == t::Phase::low_latency ? 1 : frames_.hop * 2) {
     std::ranges::copy(values, values_.begin());
     const std::size_t w = frames_.window;
     const std::size_t d = design_.size();
@@ -239,8 +259,15 @@ public:
     }
     spectrum_.resize(d);
     filter_spectrum_.resize(block_.size());
-    accumulator_.assign(block_.size(), 0.0);
-    accumulator_b_.assign(block_.size(), 0.0);
+    block_a_.resize(frames_.hop + 1);
+    block_b_.resize(frames_.hop + 1);
+    landing_.resize(frames_.filter / frames_.hop);
+    for (auto& landing : landing_) {
+      landing.a.assign(frames_.hop + 1, Complex(0.0));
+      landing.b.assign(frames_.hop + 1, Complex(0.0));
+    }
+    overlap_a_.assign(frames_.hop, 0.0);
+    overlap_b_.assign(frames_.hop, 0.0);
     out_.assign(frames_.hop, {});
     for (auto& h : fir_) {
       h.assign(frames_.filter, 0.0);
@@ -250,6 +277,7 @@ public:
     }
     taper_.resize(frames_.filter);
     prepare_taper();
+    prepare_display();
     reset_state();
   }
 
@@ -386,6 +414,23 @@ private:
     }
   }
 
+  // Each display band's centre and the grid bands whose centres it holds.
+  void prepare_display() noexcept {
+    const auto grid_at = [](double hz) {
+      return std::log2(hz / grid_low_hz) * grid_per_octave - 0.5;
+    };
+    const auto display_hz = [](double edge) {
+      return display_low_hz * std::pow(display_span, edge / static_cast<double>(display_bands));
+    };
+    for (std::size_t i = 0; i < display_bands; ++i) {
+      const double hz = display_hz(static_cast<double>(i) + 0.5);
+      display_[i] = {hz, grid_at(hz),
+                     std::max(0.0, std::ceil(grid_at(display_hz(static_cast<double>(i))))),
+                     std::min(static_cast<double>(grid - 1),
+                              std::floor(grid_at(display_hz(static_cast<double>(i + 1)))))};
+    }
+  }
+
   void prepare_taper() {
     const std::size_t m = frames_.filter;
     if (phase_ == t::Phase::linear) {
@@ -410,8 +455,13 @@ private:
       std::ranges::fill(ring, 0.0);
     }
     std::ranges::fill(key_ring_, 0.0);
-    std::ranges::fill(accumulator_, 0.0);
-    std::ranges::fill(accumulator_b_, 0.0);
+    for (auto& landing : landing_) {
+      std::ranges::fill(landing.a, Complex(0.0));
+      std::ranges::fill(landing.b, Complex(0.0));
+    }
+    landed_ = 0;
+    std::ranges::fill(overlap_a_, 0.0);
+    std::ranges::fill(overlap_b_, 0.0);
     std::ranges::fill(out_, std::pair<double, double>{});
     for (std::size_t c = 0; c < 2; ++c) {
       std::fill(cut_[c].begin(), cut_[c].end(), 0.0);
@@ -546,11 +596,16 @@ private:
         lerp(transient_wide_db, transient_narrow_db, values_[p::separate]);
     const double attacks = values_[p::attacks];
     const double sustains = values_[p::sustains];
+    // The sensitivity curve, again only when its nodes move.
     const Nodes sorted = nodes();
-    std::array<double, grid> sensitivity{};
-    for (std::size_t b = 0; b < grid; ++b) {
-      sensitivity[b] = std::exp2(sensitivity_db(sorted, centre_hz(b)) / sensitivity_doubling_db);
+    if (!sensitivity_known_ || sorted != sensitivity_nodes_) {
+      for (std::size_t b = 0; b < grid; ++b) {
+        sensitivity_[b] = std::exp2(sensitivity_db(sorted, centre_hz(b)) / sensitivity_doubling_db);
+      }
+      sensitivity_nodes_ = sorted;
+      sensitivity_known_ = true;
     }
+    const auto& sensitivity = sensitivity_;
     double transient_sum = 0.0;
     std::size_t transient_count = 0;
     for (std::size_t c = 0; c < channels; ++c) {
@@ -650,17 +705,27 @@ private:
         }
       }
     }
-    // Ballistics, leaned by Tilt.
-    const double attack_s = values_[p::attack] / 1'000.0;
-    const double release_s = values_[p::release] / 1'000.0;
-    const double hop = static_cast<double>(frames_.hop);
+    // Ballistics, leaned by Tilt: each band's coefficients, again only when
+    // the times or the tilt move.
+    const Ballistics now{values_[p::attack], values_[p::release], tilt};
+    if (!(now == ballistics_)) {
+      const double attack_s = now.attack_ms / 1'000.0;
+      const double release_s = now.release_ms / 1'000.0;
+      const double hop = static_cast<double>(frames_.hop);
+      for (std::size_t b = 0; b < grid; ++b) {
+        const double skew = std::pow(tilt_time_factor, -tilt * position_of(b) * 2.0);
+        attack_coefficient_[b] = 1.0 - std::exp(-hop / ((attack_s * skew) * rate_));
+        release_coefficient_[b] = 1.0 - std::exp(-hop / ((release_s * skew) * rate_));
+      }
+      ballistics_ = now;
+    }
     double deepest = 0.0;
     for (std::size_t c = 0; c < channels; ++c) {
       for (std::size_t b = 0; b < grid; ++b) {
-        const double skew = std::pow(tilt_time_factor, -tilt * position_of(b) * 2.0);
         const double want = smoothed_[c][b];
-        const double seconds = (want > cut_[c][b] ? attack_s : release_s) * skew;
-        cut_[c][b] += (want - cut_[c][b]) * (1.0 - std::exp(-hop / (seconds * rate_)));
+        const double coefficient =
+            want > cut_[c][b] ? attack_coefficient_[b] : release_coefficient_[b];
+        cut_[c][b] += (want - cut_[c][b]) * coefficient;
         deepest = std::max(deepest, cut_[c][b]);
       }
     }
@@ -742,9 +807,8 @@ private:
 
   // ---- filters ------------------------------------------------------------
 
-  // The applied gain (linear, mixed) per design bin for channel c.
-  void gains(std::size_t c) noexcept {
-    const double mix = values_[p::mix];
+  // The gain (dB, unmixed) per design bin for channel c.
+  void gains_db(std::size_t c) noexcept {
     auto& out = design_gain_[c];
     for (std::size_t k = 0; k < out.size(); ++k) {
       const double u = design_band_[k];
@@ -762,8 +826,22 @@ private:
           gain_db += band_shape_[j][k] * (band_now_[c][j] / band.range);
         }
       }
-      out[k] = (1.0 - mix) + mix * oscillate::native_dsp::dsp::db_to_gain(gain_db);
+      out[k] = gain_db;
     }
+  }
+
+  // The applied gain per design bin, linear and mixed.
+  [[nodiscard]] double mixed(double gain_db) const noexcept {
+    const double mix = values_[p::mix];
+    return (1.0 - mix) + mix * oscillate::native_dsp::dsp::db_to_gain(gain_db);
+  }
+
+  // Its natural log, floored: fully wet, straight from the dB.
+  [[nodiscard]] double log_mixed(double gain_db) const noexcept {
+    if (values_[p::mix] == 1.0) {
+      return std::max(gain_db * db_to_log, log_floor);
+    }
+    return std::log(std::max(mixed(gain_db), gain_floor));
   }
 
   // Designs both channels' filters into fir_ (two real designs packed in
@@ -771,18 +849,24 @@ private:
   void design() noexcept {
     const std::size_t channels = processed();
     for (std::size_t c = 0; c < channels; ++c) {
-      gains(c);
+      gains_db(c);
     }
     const std::size_t d = design_.size();
     const std::size_t m = frames_.filter;
     auto& z = spectrum_;
-    const auto mirror = [d](std::size_t k) { return k <= d / 2 ? k : d - k; };
     const auto& ga = design_gain_[0];
     const auto& gb = design_gain_[channels == 2 ? 1 : 0];
-    if (phase_ == t::Phase::linear) {
-      for (std::size_t k = 0; k < d; ++k) {
-        z[k] = Complex(ga[mirror(k)], gb[mirror(k)]);
+    // Each bin from 0 to d / 2, then mirrored above it.
+    const auto fill = [&](const auto& of) {
+      for (std::size_t k = 0; k <= d / 2; ++k) {
+        z[k] = Complex(of(ga[k]), of(gb[k]));
       }
+      for (std::size_t k = d / 2 + 1; k < d; ++k) {
+        z[k] = z[d - k];
+      }
+    };
+    if (phase_ == t::Phase::linear) {
+      fill([this](double db) { return mixed(db); });
       design_.inverse(z);
       for (std::size_t n = 0; n < m; ++n) {
         const Complex h = z[(n + d - m / 2) % d] * taper_[n];
@@ -792,10 +876,7 @@ private:
       return;
     }
     // Minimum phase by the folded cepstrum.
-    for (std::size_t k = 0; k < d; ++k) {
-      z[k] = Complex(std::log(std::max(ga[mirror(k)], 1e-12)),
-                     std::log(std::max(gb[mirror(k)], 1e-12)));
-    }
+    fill([this](double db) { return log_mixed(db); });
     design_.inverse(z);
     for (std::size_t n = 1; n < d / 2; ++n) {
       z[n] *= 2.0;
@@ -809,11 +890,12 @@ private:
       Complex a;
       Complex b;
       unpack(z, k, a, b);
-      const Complex ea = std::exp(a);
-      const Complex eb = std::exp(b);
-      scratch_[k] = ea + Complex(0.0, 1.0) * eb;
+      const Complex ea = exp_of(a);
+      // One processed channel designs one filter.
+      const Complex eb = channels == 2 ? exp_of(b) : Complex(0.0);
+      scratch_[k] = ea + times_i(eb);
       if (k != 0 && k != d / 2) {
-        scratch_[d - k] = std::conj(ea) + Complex(0.0, 1.0) * std::conj(eb);
+        scratch_[d - k] = std::conj(ea) + times_i(std::conj(eb));
       }
     }
     std::copy(scratch_.begin(), scratch_.begin() + static_cast<std::ptrdiff_t>(d), z.begin());
@@ -865,11 +947,17 @@ private:
   }
 
   // Natural and Linear: filter the hop's block (lookahead behind the newest
-  // input) by overlap-add and queue it as the next hop's output.
+  // input) by overlap-add and queue it as the next hop's output. The filter
+  // runs in partitions a hop long, each through a transform of two hops:
+  // the block's spectrum times each partition's goes into the spectrum of
+  // the hop its product lands in, and each hop's sum comes back to time
+  // once. That is the block's whole convolution with this hop's filter, as
+  // one transform of the filter's length would give it, for a third of the
+  // transforms' work.
   void overlap_add() noexcept {
     const std::size_t k = block_.size();
     const std::size_t h = frames_.hop;
-    const std::size_t m = frames_.filter;
+    const std::size_t parts = frames_.filter / h;
     const std::size_t channels = processed();
     // The block's newest sample is `lookahead` behind the newest input.
     const std::size_t first_back = frames_.lookahead + h - 1;
@@ -881,29 +969,43 @@ private:
       } else {
         block_in_[n] = 0.0;
       }
-      filter_spectrum_[n] =
-          n < m ? Complex(fir_[0][n], channels == 2 ? fir_[1][n] : 0.0) : Complex(0.0);
     }
-    block_.forward(filter_spectrum_);
     block_.forward(block_in_);
-    for (std::size_t bin = 0; bin <= k / 2; ++bin) {
-      Complex xa;
-      Complex xb;
-      Complex ha;
-      Complex hb;
-      unpack(block_in_, bin, xa, xb);
-      unpack(filter_spectrum_, bin, ha, hb);
-      const Complex ya = xa * ha;
-      const Complex yb = xb * hb;
-      product_[bin] = ya + Complex(0.0, 1.0) * yb;
-      if (bin != 0 && bin != k / 2) {
-        product_[k - bin] = std::conj(ya) + Complex(0.0, 1.0) * std::conj(yb);
+    for (std::size_t bin = 0; bin <= h; ++bin) {
+      unpack(block_in_, bin, block_a_[bin], block_b_[bin]);
+    }
+    for (std::size_t part = 0; part < parts; ++part) {
+      for (std::size_t n = 0; n < k; ++n) {
+        filter_spectrum_[n] =
+            n < h ? Complex(fir_[0][part * h + n], channels == 2 ? fir_[1][part * h + n] : 0.0)
+                  : Complex(0.0);
+      }
+      block_.forward(filter_spectrum_);
+      // The hop this part's product lands in, from the hop now.
+      const std::size_t lands = landed_ + part < parts ? landed_ + part : landed_ + part - parts;
+      auto& landing = landing_[lands];
+      for (std::size_t bin = 0; bin <= h; ++bin) {
+        Complex ha;
+        Complex hb;
+        unpack(filter_spectrum_, bin, ha, hb);
+        landing.a[bin] += times(block_a_[bin], ha);
+        landing.b[bin] += times(block_b_[bin], hb);
+      }
+    }
+    // This hop's sum back to time: its first hop is out now, its second
+    // overlaps the next.
+    auto& now = landing_[landed_];
+    for (std::size_t bin = 0; bin <= h; ++bin) {
+      product_[bin] = now.a[bin] + times_i(now.b[bin]);
+      if (bin != 0 && bin != h) {
+        product_[k - bin] = std::conj(now.a[bin]) + times_i(std::conj(now.b[bin]));
       }
     }
     block_.inverse(product_);
-    for (std::size_t n = 0; n < k; ++n) {
-      accumulator_[n] += product_[n].real();
-      accumulator_b_[n] += product_[n].imag();
+    std::ranges::fill(now.a, Complex(0.0));
+    std::ranges::fill(now.b, Complex(0.0));
+    if (++landed_ == parts) {
+      landed_ = 0;
     }
     // The next hop's output. Its frame n leaves n frames after the newest
     // input; the dry it is heard against is the input a latency earlier.
@@ -911,15 +1013,12 @@ private:
     for (std::size_t n = 0; n < h; ++n) {
       const std::size_t back = latency - 1 - n;
       const auto dry = split(mode_, past(ring_[0], back), past(ring_[1], back));
-      const double b = channels == 2 ? accumulator_b_[n] : dry.b;
-      out_[n] = finish(dry, accumulator_[n], b);
+      const double a = product_[n].real() + overlap_a_[n];
+      const double b = channels == 2 ? product_[n].imag() + overlap_b_[n] : dry.b;
+      out_[n] = finish(dry, a, b);
+      overlap_a_[n] = product_[h + n].real();
+      overlap_b_[n] = product_[h + n].imag();
     }
-    std::copy(accumulator_.begin() + static_cast<std::ptrdiff_t>(h), accumulator_.end(),
-              accumulator_.begin());
-    std::fill(accumulator_.end() - static_cast<std::ptrdiff_t>(h), accumulator_.end(), 0.0);
-    std::copy(accumulator_b_.begin() + static_cast<std::ptrdiff_t>(h), accumulator_b_.end(),
-              accumulator_b_.begin());
-    std::fill(accumulator_b_.end() - static_cast<std::ptrdiff_t>(h), accumulator_b_.end(), 0.0);
   }
 
   // ---- the hop --------------------------------------------------------------
@@ -951,12 +1050,6 @@ private:
         1.0 - std::exp(-static_cast<double>(frames_.hop) / (display_seconds * rate_));
     const std::size_t channels = processed();
     const double mix = values_[p::mix];
-    const auto grid_at = [](double hz) {
-      return std::log2(hz / grid_low_hz) * grid_per_octave - 0.5;
-    };
-    const auto display_hz = [](double edge) {
-      return display_low_hz * std::pow(display_span, edge / static_cast<double>(display_bands));
-    };
     const auto sample = [](const std::array<double, grid>& on, double u) {
       if (u <= 0.0) {
         return on[0];
@@ -968,11 +1061,7 @@ private:
       return lerp(on[b], on[b + 1], u - static_cast<double>(b));
     };
     for (std::size_t i = 0; i < display_bands; ++i) {
-      const double hz = display_hz(static_cast<double>(i) + 0.5);
-      const double centre = grid_at(hz);
-      const double first = std::max(0.0, std::ceil(grid_at(display_hz(static_cast<double>(i)))));
-      const double last = std::min(static_cast<double>(grid - 1),
-                                   std::floor(grid_at(display_hz(static_cast<double>(i + 1)))));
+      const auto& [hz, centre, first, last] = display_[i];
       double in = silence_db;
       double key = silence_db;
       double cut = 0.0;
@@ -1055,6 +1144,20 @@ private:
   std::array<std::array<double, grid>, 2> envelope_{};
   std::array<std::array<double, grid>, 2> cut_{};
 
+  // What suppress() keeps between hops while its settings stay.
+  struct Ballistics {
+    double attack_ms = -1.0;
+    double release_ms = -1.0;
+    double tilt = 0.0;
+    bool operator==(const Ballistics&) const = default;
+  };
+  Ballistics ballistics_{};
+  std::array<double, grid> attack_coefficient_{};
+  std::array<double, grid> release_coefficient_{};
+  Nodes sensitivity_nodes_{};
+  std::array<double, grid> sensitivity_{};
+  bool sensitivity_known_ = false;
+
   std::array<BandSettings, bands> band_settings_{};
   std::array<std::vector<double>, bands> band_shape_;
   std::array<std::vector<double>, bands> band_weight_;
@@ -1072,10 +1175,28 @@ private:
   std::vector<Complex> block_in_ = std::vector<Complex>(block_.size());
   std::vector<Complex> filter_spectrum_;
   std::vector<Complex> product_ = std::vector<Complex>(block_.size());
-  std::vector<double> accumulator_;
-  std::vector<double> accumulator_b_;
+  // The block's two spectra, and each coming hop's sum of products (a ring
+  // from the hop now), per processed channel.
+  std::vector<Complex> block_a_;
+  std::vector<Complex> block_b_;
+  struct Landing {
+    std::vector<Complex> a;
+    std::vector<Complex> b;
+  };
+  std::vector<Landing> landing_;
+  std::size_t landed_ = 0;
+  // The second half of the last hop's sum, which overlaps this one.
+  std::vector<double> overlap_a_;
+  std::vector<double> overlap_b_;
   std::vector<std::pair<double, double>> out_;
 
+  struct DisplayBand {
+    double hz = 0.0;
+    double centre = 0.0; // On the grid, fractional.
+    double first = 0.0;
+    double last = 0.0;
+  };
+  std::array<DisplayBand, display_bands> display_{};
   std::array<double, display_bands> display_in_{};
   std::array<double, display_bands> display_out_{};
   std::array<double, display_bands> display_key_{};

@@ -152,33 +152,49 @@ public:
     double block_gain = 0.0;
     double block_clip = 1.0;
     double block_guard = 1.0;
-    for (auto& frame : audio) {
-      const double drive = gain_.next();
-      const double ceiling = ceiling_.next();
-      const std::array<double, 2> raw{finite_or_zero(frame.left), finite_or_zero(frame.right)};
-      meter_input(raw);
-      const std::array<double, 2> driven{raw[0] * drive, raw[1] * drive};
-      detector_[detector_count_++] = {static_cast<float>(driven[0]), static_cast<float>(driven[1])};
-      if (detector_count_ == detector_.size()) {
-        bands_.analyse(detector_);
-        detector_count_ = 0;
+    // In the clipper's blocks: the gain stage, then the clipper over the
+    // block, then the guard and the meters.
+    for (std::size_t start = 0; start < audio.size(); start += edge_dsp::block_frames) {
+      const auto chunk =
+          audio.subspan(start, std::min(edge_dsp::block_frames, audio.size() - start));
+      const std::size_t frames = chunk.size();
+      std::array<double, edge_dsp::block_frames> left{};
+      std::array<double, edge_dsp::block_frames> right{};
+      std::array<double, edge_dsp::block_frames> ceilings{};
+      for (std::size_t i = 0; i < frames; ++i) {
+        const auto& frame = chunk[i];
+        const double drive = gain_.next();
+        const double ceiling = ceiling_.next();
+        const std::array<double, 2> raw{finite_or_zero(frame.left), finite_or_zero(frame.right)};
+        meter_input(raw);
+        const std::array<double, 2> driven{raw[0] * drive, raw[1] * drive};
+        detector_[detector_count_++] = {static_cast<float>(driven[0]),
+                                        static_cast<float>(driven[1])};
+        if (detector_count_ == detector_.size()) {
+          bands_.analyse(detector_);
+          detector_count_ = 0;
+        }
+        // Under a ceiling of 1 from here to the guard.
+        const std::array<double, 2> unit{driven[0] / ceiling, driven[1] / ceiling};
+        const auto gains = stage_.process(unit[0], unit[1]);
+        const auto delayed = audio_delay_.push(unit);
+        block_gain = std::min({block_gain, gains[0], gains[1]});
+        left[i] = delayed[0] * std::exp(gains[0]);
+        right[i] = delayed[1] * std::exp(gains[1]);
+        ceilings[i] = ceiling;
       }
-      // Under a ceiling of 1 from here to the guard.
-      const std::array<double, 2> unit{driven[0] / ceiling, driven[1] / ceiling};
-      const auto gains = stage_.process(unit[0], unit[1]);
-      const auto delayed = audio_delay_.push(unit);
-      block_gain = std::min({block_gain, gains[0], gains[1]});
-      double left = delayed[0] * std::exp(gains[0]);
-      double right = delayed[1] * std::exp(gains[1]);
-      block_clip = std::max(block_clip, clipper_.process(left, right));
-      block_guard = std::min(block_guard, guard_.process(left, right));
-      // Back to the ceiling this frame went in under.
-      const double out_ceiling = ceiling_delay_.push({ceiling, 0.0})[0];
-      left *= out_ceiling;
-      right *= out_ceiling;
-      meter_output(left, right);
-      frame.left = static_cast<float>(left);
-      frame.right = static_cast<float>(right);
+      block_clip = std::max(block_clip, clipper_.process(std::span(left).first(frames),
+                                                         std::span(right).first(frames)));
+      for (std::size_t i = 0; i < frames; ++i) {
+        block_guard = std::min(block_guard, guard_.process(left[i], right[i]));
+        // Back to the ceiling this frame went in under.
+        const double out_ceiling = ceiling_delay_.push({ceilings[i], 0.0})[0];
+        left[i] *= out_ceiling;
+        right[i] *= out_ceiling;
+        meter_output(left[i], right[i]);
+        chunk[i].left = static_cast<float>(left[i]);
+        chunk[i].right = static_cast<float>(right[i]);
+      }
     }
     if (detector_count_ > 0) {
       bands_.analyse(std::span(detector_).first(detector_count_));

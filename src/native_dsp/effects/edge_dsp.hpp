@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <vector>
 
 // Edge's DSP (ADR-0108): the clip curve and its antiderivative, the
@@ -138,28 +139,61 @@ private:
   std::size_t position_ = 0;
 };
 
-// One channel's resampler for a design: up() writes `factor` samples at the
-// top rate, down() takes them back to one frame.
+// Base-rate frames a resampler takes in one call.
+inline constexpr std::size_t block_frames = 32;
+// The most samples one stage's stream holds in a call.
+inline constexpr std::size_t max_stage_samples = block_frames * max_factor / 2;
+
+// y[k] = sum over i of taps[i] * x[k - i] for k below n, summed in tap order
+// (so each output is the plain dot product's, bit for bit); x must hold
+// taps.size() - 1 samples of history before x[0].
+void convolve(std::span<const double> taps, const double* x, std::size_t n, double* y) noexcept;
+
+// One stream's filter input: its history, then the samples of this call.
+class Line {
+public:
+  void resize(std::size_t history) noexcept {
+    history_ = history < max_history ? history : max_history;
+    reset();
+  }
+  void reset() noexcept { data_.fill(0.0); }
+  // Where this call's samples go; history precedes it.
+  [[nodiscard]] double* fresh() noexcept { return data_.data() + history_; }
+  // After a call of n samples: the newest history moves to the front.
+  void advance(std::size_t n) noexcept;
+
+private:
+  std::array<double, max_history + max_stage_samples> data_{};
+  std::size_t history_ = 0;
+};
+
+// One channel's resampler for a design, a block at a time: up() writes
+// `factor` top-rate samples per frame, down() takes them back to frames.
+// Every output is the same arithmetic in the same order whatever the
+// block sizes, so any split renders alike.
 class Resampler {
 public:
   void prepare(const Design& design) noexcept;
   void reset() noexcept;
-  void up(double x, double* out) noexcept;
-  [[nodiscard]] double down(double* in) noexcept;
+  // Up to block_frames frames in; frames * factor samples into `top`.
+  void up(std::span<const double> frames, double* top) noexcept;
+  // out.size() * factor samples of `top` (used as scratch) back to frames.
+  void down(double* top, std::span<double> out) noexcept;
 
 private:
-  struct Up {
-    Ring history;
-  };
   struct Down {
-    Ring firsts;
-    Ring seconds;
+    Line firsts;
+    Line seconds;
   };
   const Design* design_ = nullptr;
-  std::array<Up, max_stages> ups_{};
+  std::array<Line, max_stages> ups_{};
   std::array<Down, max_stages> downs_{};
-  Ring top_;
-  Ring pad_;
+  // With antialiasing, the top decimator's stream in pairs.
+  Line top_firsts_;
+  Line top_seconds_;
+  // The last `pad` top-rate samples, oldest first.
+  std::array<double, max_factor> pad_{};
+  std::array<double, max_stage_samples> sums_{};
 };
 
 // ---- The true-peak guard -----------------------------------------------------------------

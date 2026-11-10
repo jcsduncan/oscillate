@@ -1,5 +1,6 @@
 #include "oscillate/native_dsp/effects/lens.hpp"
 
+#include "capture_queue.hpp"
 #include "dsp/fft.hpp"
 #include "lens_presets.hpp"
 #include "lens_table.hpp"
@@ -7,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <complex>
 #include <cstddef>
@@ -57,6 +59,9 @@ constexpr double hop_seconds = 512.0 / 48'000.0;
 // readings crossfade as the band grows from half a lobe to a whole one.
 constexpr double lobe_bins = 5.0;
 constexpr double silent_db = -200.0;
+// The callback keeps this much input for the reader (ADR-0125): a reader
+// that falls further behind starts its analysis afresh.
+constexpr double capture_seconds = 2.0;
 // Resonances: local maxima standing 6 dB over their third-octave
 // surroundings.
 constexpr double peak_prominence_db = 6.0;
@@ -87,12 +92,25 @@ struct Resolution {
   std::uint64_t stride = 1;
 };
 
+// One frame as the callback captures it: the input, and the sidechain
+// (silent without one).
+struct Captured {
+  float left = 0.0F;
+  float right = 0.0F;
+  float side_left = 0.0F;
+  float side_right = 0.0F;
+};
+
+// The callback only captures its input and the values; the analysis runs
+// when the telemetry is read (EffectKernel::analyse_telemetry), on the control
+// thread, and only then.
 class LensKernel final : public EffectKernel {
 public:
   explicit LensKernel(double sample_rate)
       : rate_(sample_rate), meter_(sample_rate),
         hop_(std::max<std::size_t>(
-            64, static_cast<std::size_t>(std::lround(hop_seconds * sample_rate)))) {
+            64, static_cast<std::size_t>(std::lround(hop_seconds * sample_rate)))),
+        queue_(static_cast<std::size_t>(std::ceil(capture_seconds * sample_rate))) {
     // Every size any resolution may use at this rate.
     std::vector<std::size_t> all;
     for (const auto& set : sizes_48k) {
@@ -138,10 +156,52 @@ public:
     for (std::size_t j = 0; j < points; ++j) {
       hz_[j] = point_hz(j);
     }
-    reset();
+    restart();
   }
 
+  // Callback only: the values, for the reader.
   void control(std::span<const double> v, std::uint32_t, const Transport&) noexcept override {
+    for (std::size_t i = 0; i < values_.size(); ++i) {
+      values_[i].store(v[i], std::memory_order_relaxed);
+    }
+  }
+
+  // Callback only: audio passes untouched; the reader analyses a copy.
+  void process(std::span<engine::StereoFrame> audio,
+               std::span<const engine::StereoFrame> sidechain) noexcept override {
+    (void)queue_.write(audio.size(), [&](std::size_t i) {
+      const auto side = sidechain.empty() ? engine::StereoFrame{} : sidechain[i];
+      return Captured{audio[i].left, audio[i].right, side.left, side.right};
+    });
+  }
+
+  // Callback only: the reader starts afresh from here.
+  void reset() noexcept override { queue_.restart(); }
+
+  [[nodiscard]] bool analyses_off_callback() const noexcept override { return true; }
+
+  // Control only: the values the callback last saw, then every captured
+  // frame through the analysis, then the telemetry.
+  [[nodiscard]] std::size_t analyse_telemetry(std::span<float> out) noexcept override {
+    if (out.size() < telemetry::size) {
+      return 0;
+    }
+    adopt_values();
+    queue_.read([this] { restart(); }, [this](const Captured& frame) { take(frame); });
+    if (!captured_) {
+      return 0;
+    }
+    write_telemetry(out);
+    return telemetry::size;
+  }
+
+private:
+  // The values as the callback last saw them, with what they imply.
+  void adopt_values() noexcept {
+    std::array<double, lens_table::parameters.size()> v{};
+    for (std::size_t i = 0; i < v.size(); ++i) {
+      v[i] = values_[i].load(std::memory_order_relaxed);
+    }
     const int view = as_int(v[p::view]);
     const int resolution = as_int(v[p::resolution]);
     const int smoothing = as_int(v[p::smoothing]);
@@ -166,30 +226,27 @@ public:
     primed_ = true;
   }
 
-  void process(std::span<engine::StereoFrame> audio,
-               std::span<const engine::StereoFrame> sidechain) noexcept override {
-    // Audio passes untouched; the analysis reads it.
-    for (std::size_t i = 0; i < audio.size(); ++i) {
-      const std::size_t at = write_ & ring_mask_;
-      rings_[0][at] = audio[i].left;
-      rings_[1][at] = audio[i].right;
-      rings_[2][at] = sidechain.empty()
-                          ? 0.0
-                          : 0.5 * (static_cast<double>(sidechain[i].left) + sidechain[i].right);
-      // The tonal meter reads the mid of the input and the sidechain, whatever
-      // the view, and runs while frozen.
-      meter_.push(0.5 * (static_cast<double>(audio[i].left) + audio[i].right), rings_[2][at]);
-      ++write_;
-      if (++since_hop_ == hop_) {
-        since_hop_ = 0;
-        if (!freeze_) {
-          analyse();
-        }
+  // One captured frame into the analysis rings and the tonal meter.
+  void take(const Captured& frame) noexcept {
+    captured_ = true;
+    const std::size_t at = write_ & ring_mask_;
+    rings_[0][at] = frame.left;
+    rings_[1][at] = frame.right;
+    rings_[2][at] = 0.5 * (static_cast<double>(frame.side_left) + frame.side_right);
+    // The tonal meter reads the mid of the input and the sidechain, whatever
+    // the view, and runs while frozen.
+    meter_.push(0.5 * (static_cast<double>(frame.left) + frame.right), rings_[2][at]);
+    ++write_;
+    if (++since_hop_ == hop_) {
+      since_hop_ = 0;
+      if (!freeze_) {
+        analyse_hop();
       }
     }
   }
 
-  void reset() noexcept override {
+  // A new run (a seek, or a reader that fell behind): from silence.
+  void restart() noexcept {
     for (auto& ring : rings_) {
       std::ranges::fill(ring, 0.0);
     }
@@ -201,10 +258,7 @@ public:
     meter_.reset();
   }
 
-  [[nodiscard]] std::size_t telemetry(std::span<float> out) const noexcept override {
-    if (out.size() < telemetry::size) {
-      return 0;
-    }
+  void write_telemetry(std::span<float> out) const noexcept {
     for (std::size_t j = 0; j < points; ++j) {
       const double tilt = tilt_ * std::log2(hz_[j] / 1'000.0);
       out[telemetry::curve_a + j] = static_cast<float>(display(average_[0][j], tilt));
@@ -225,10 +279,8 @@ public:
       out[telemetry::tonal_sidechain + i] = static_cast<float>(meter_.mean_b()[i]);
     }
     out[telemetry::tonal_windows] = static_cast<float>(meter_.windows());
-    return telemetry::size;
   }
 
-private:
   // How each point is measured: up to two window sizes, their weights and
   // band edges in bins.
   struct Plan {
@@ -399,7 +451,7 @@ private:
     }
   }
 
-  void analyse() noexcept {
+  void analyse_hop() noexcept {
     // Only once the longest window holds signal from this run.
     std::array<bool, 16> fresh{};
     for (std::size_t j = 0; j < points; ++j) {
@@ -503,9 +555,14 @@ private:
     }
   }
 
+  // Shared: the callback's values for the reader, and the captured input.
+  std::array<std::atomic<double>, lens_table::parameters.size()> values_{};
+  // The rest is the reader's.
   double rate_;
   tonal::BandMeter meter_;
   std::size_t hop_;
+  CaptureQueue<Captured> queue_;
+  bool captured_ = false;
   std::vector<Resolution> resolutions_;
   std::size_t largest_ = 0;
   std::array<std::vector<double>, 3> rings_; // left, right, sidechain mid

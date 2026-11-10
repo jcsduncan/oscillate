@@ -308,4 +308,14 @@ EffectProcessStatus NativeEffectRuntime::process(std::span<engine::StereoFrame> 
   return EffectProcessStatus::rendered;
 }
 
+bool NativeEffectRuntime::read_telemetry(std::vector<float>& out) {
+  if (!kernel_->analyses_off_callback()) {
+    return telemetry_->read(out);
+  }
+  const engine::DenormalsFlushed flushed;
+  out.resize(max_telemetry_values);
+  out.resize(kernel_->analyse_telemetry(out));
+  return !out.empty();
+}
+
 } // namespace oscillate::native_dsp::effects

@@ -2,6 +2,7 @@
 
 #include "dsp/bs1770.hpp"
 #include "dsp/fft.hpp"
+#include "dsp/sse2_pair.hpp"
 #include "keel_presets.hpp"
 #include "keel_table.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
@@ -255,13 +256,15 @@ struct Svf {
   }
 };
 
+// Both channels' states of one filter, left and right in one SSE2 pair:
+// each lane runs exactly the scalar arithmetic.
 struct SvfState {
-  double ic1 = 0.0;
-  double ic2 = 0.0;
-  [[nodiscard]] double process(const Svf& f, double v0) noexcept {
-    const double v3 = v0 - ic2;
-    const double v1 = f.a1 * ic1 + f.a2 * v3;
-    const double v2 = ic2 + f.a2 * ic1 + f.a3 * v3;
+  base::Pair ic1{0.0, 0.0};
+  base::Pair ic2{0.0, 0.0};
+  [[nodiscard]] base::Pair process(const Svf& f, base::Pair v0) noexcept {
+    const base::Pair v3 = v0 - ic2;
+    const base::Pair v1 = f.a1 * ic1 + f.a2 * v3;
+    const base::Pair v2 = ic2 + f.a2 * ic1 + f.a3 * v3;
     ic1 = 2.0 * v1 - ic1;
     ic2 = 2.0 * v2 - ic2;
     return f.m0 * v0 + f.m1 * v1 + f.m2 * v2;
@@ -385,11 +388,13 @@ public:
       const double match = match_from_ + (match_to_ - match_from_) * u;
       output_ += (output_target - output_) * output_step_;
       const double gain = output_ * match;
+      base::Pair pair{in[0], in[1]};
+      for (std::size_t j = 0; j < filters; ++j) {
+        pair = state_[j].process(svf_[j], pair);
+      }
+      const std::array<double, 2> filtered{pair.first(), pair.second()};
       for (std::size_t c = 0; c < 2; ++c) {
-        double y = in[c];
-        for (std::size_t j = 0; j < filters; ++j) {
-          y = state_[c][j].process(svf_[j], y);
-        }
+        double y = filtered[c];
         if (delta) {
           y -= in[c];
         }
@@ -548,9 +553,7 @@ private:
     for (auto& ring : key_ring_) {
       std::ranges::fill(ring, 0.0);
     }
-    for (auto& channel : state_) {
-      channel.fill({});
-    }
+    state_.fill({});
     input_.reset();
     reference_.reset();
     gain_from_.fill(0.0);
@@ -978,7 +981,7 @@ private:
   std::array<Svf, filters> svf_{};
   std::array<Svf, filters> svf_step_{};
   std::array<Svf, filters> targets_{};
-  std::array<std::array<SvfState, filters>, 2> state_{};
+  std::array<SvfState, filters> state_{};
 
   Tracker input_;
   Tracker reference_;

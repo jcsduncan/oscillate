@@ -40,11 +40,27 @@ std::vector<double> untilted() {
   return values;
 }
 
+// How often the panel reads Lens while it plays, in frames (about 30 Hz at
+// 48 kHz): Lens analyses what it captured when its telemetry is read.
+constexpr std::uint64_t read_interval = 1'600;
+
+// Plays `input` with the panel open: the telemetry is read as it plays.
+Stereo play(effects::NativeEffectRuntime& runtime, const Stereo& input, RenderOptions options = {},
+            std::uint64_t start = 0) {
+  for (std::uint64_t frame = start + read_interval; frame < start + input.size();
+       frame += read_interval) {
+    options.at.push_back(frame);
+  }
+  std::vector<float> ignored;
+  options.before = [&](std::uint64_t) { (void)runtime.read_telemetry(ignored); };
+  return process(runtime, input, options, start);
+}
+
 std::vector<float> analyse(const std::vector<double>& values, const Stereo& input,
                            double rate = oscillate::test::sample_rate_48k_hz,
                            const Stereo* side = nullptr, std::size_t block = 128) {
   auto runtime = make_effect(lens::engine(), values, rate);
-  (void)process(*runtime, input, {.block = block, .sidechain = side, .rate = rate});
+  (void)play(*runtime, input, {.block = block, .sidechain = side, .rate = rate});
   std::vector<float> t;
   REQUIRE_TRUE(runtime->read_telemetry(t), "telemetry");
   REQUIRE_EQ(t.size(), lens::telemetry::size, "telemetry");
@@ -283,12 +299,12 @@ void peak_hold_holds_and_decays() {
   auto input = sine(on_point(1'000.0), 0.5, std::size_t{2} * 48'000);
   std::fill(input.left.begin() + 48'000, input.left.end(), 0.0);
   std::fill(input.right.begin() + 48'000, input.right.end(), 0.0);
-  (void)process(*runtime, slice(input, 0, 48'000));
+  (void)play(*runtime, slice(input, 0, 48'000));
   std::vector<float> t;
   require(runtime->read_telemetry(t), "telemetry");
   const double held = level_at(t, lens::telemetry::hold, 1'000.0);
   REQUIRE_LT(std::fabs(held - db(0.5)), 0.15, "the hold catches the peak");
-  (void)process(*runtime, slice(input, 48'000, std::size_t{2} * 48'000), {}, 48'000);
+  (void)play(*runtime, slice(input, 48'000, std::size_t{2} * 48'000), {}, 48'000);
   require(runtime->read_telemetry(t), "telemetry");
   const double later = level_at(t, lens::telemetry::hold, 1'000.0);
   std::cout << "  peak hold fell " << held - later << " dB in 1 s at 12 dB/s\n";
@@ -369,13 +385,13 @@ void infinite_average_and_freeze() {
   REQUIRE_LT(std::fabs(change + 3.01), 0.5,
              "infinite averaging halves the power over twice the time: " + std::to_string(change));
   auto runtime = make_effect(lens::engine(), values);
-  (void)process(*runtime, burst);
+  (void)play(*runtime, burst);
   std::vector<float> before;
   (void)runtime->read_telemetry(before);
   auto frozen = values;
   frozen[at("lens.freeze")] = 1.0;
   require(runtime->offer_values(frozen, 1), "freeze offered");
-  (void)process(*runtime, sine(5'000.0, 0.9, 48'000), {}, std::uint64_t{2} * 48'000);
+  (void)play(*runtime, sine(5'000.0, 0.9, 48'000), {}, std::uint64_t{2} * 48'000);
   std::vector<float> after;
   (void)runtime->read_telemetry(after);
   require(std::equal(before.begin(),
@@ -438,6 +454,47 @@ void tonal_meter_reads_input_and_sidechain() {
   REQUIRE_TRUE(lens::matches_target(values), "or to a target");
 }
 
+// ADR-0125: Lens only captures on the callback and analyses when its
+// telemetry is read. Unread, it buffers what it can hold and drops the
+// rest; a reader that fell behind, or a seek, starts the analysis afresh
+// rather than reading a gap as continuous.
+void analysis_runs_when_read() {
+  constexpr std::size_t unread_seconds = 6;
+  constexpr std::size_t later_seconds = 1;
+  constexpr double hop_frames = 512.0;
+  constexpr double tone_hz = 1'000.0;
+  constexpr double tone_level = 0.5;
+  const auto rate = oscillate::test::sample_rate_48k;
+  const auto hops_in = [&](std::size_t frames) {
+    return static_cast<float>(std::floor(static_cast<double>(frames) / hop_frames));
+  };
+  const auto tone = sine(tone_hz, tone_level, unread_seconds * rate);
+  std::vector<float> t;
+
+  auto unread = make_effect(lens::engine(), untilted());
+  (void)process(*unread, tone);
+  require(unread->read_telemetry(t), "telemetry");
+  const float buffered = t[lens::telemetry::hops];
+  REQUIRE_GT(buffered, 0.0F, "what was buffered is analysed on the first read");
+  REQUIRE_LT(buffered, hops_in(tone.size()), "and no more than the capture holds");
+  (void)process(*unread, slice(tone, 0, later_seconds * rate), {}, tone.size());
+  require(unread->read_telemetry(t), "telemetry");
+  REQUIRE_EQ(t[lens::telemetry::hops], hops_in(later_seconds * rate),
+             "after the gap the analysis starts afresh");
+
+  auto read = make_effect(lens::engine(), untilted());
+  (void)play(*read, tone);
+  require(read->read_telemetry(t), "telemetry");
+  REQUIRE_EQ(t[lens::telemetry::hops], hops_in(tone.size()),
+             "a reader that keeps up analyses every hop");
+  RenderOptions seek;
+  seek.generation = 2;
+  (void)play(*read, slice(tone, 0, later_seconds * rate), seek, tone.size());
+  require(read->read_telemetry(t), "telemetry");
+  REQUIRE_EQ(t[lens::telemetry::hops], hops_in(later_seconds * rate),
+             "and a seek starts it afresh");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -456,5 +513,6 @@ int main(int argc, char** argv) {
           {"telemetry_ignores_block_size", [] { telemetry_ignores_block_size(); }},
           {"tonal_meter_reads_input_and_sidechain",
            [] { tonal_meter_reads_input_and_sidechain(); }},
+          {"analysis_runs_when_read", [] { analysis_runs_when_read(); }},
       });
 }

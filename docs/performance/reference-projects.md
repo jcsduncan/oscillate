@@ -13,6 +13,7 @@ and played at 48 kHz. Nothing is read from a user's projects.
 | MIDI | none | Bar-long four-note chords or an eighth-note line, at 120 BPM | One bar-long note per part, the four making a chord, at 120 BPM | A sixteenth-note funk groove (hats, ghost notes, an open hat), a crash every four bars and a tom fill before it, at 120 BPM |
 | Routing | 2 groups, 2 returns, one send per track | the same | the same | the same |
 | Master | EQ, compressor, reverb, limiter | the same | the same | the same |
+| Heavy master (`--master heavy`) | Temper, Ceiling (Loud Club), Gild (Warm Mids, 4x), Lens, Keel (Gentle Polish), Shape (Presence), Loudness | the same | the same | the same |
 
 The audio tracks play generated WAVs (two partials and a click per beat). The
 VST3 parts default to the repository's synthetic fixtures; on the reference
@@ -28,8 +29,8 @@ and Stick mixes every mic, so measure an installed kit with `--stick-kit DIR`
 ## What a run reports
 
 [`qualify_reference_projects.py`](../../tests/qualification/qualify_reference_projects.py)
-plays each project at 64 and 128 frames and writes `results.json` and
-`results.md`. Through the fake callback, timing and CPU cover the blocks after
+plays each project at 64 and 128 frames (`--frames` takes 256, 512 and 1024
+too) and writes `results.json` and `results.md`. Through the fake callback, timing and CPU cover the blocks after
 100 warm-up blocks; on a sink they cover the whole playback, warm-up included.
 Both render with the audio helpers live playback uses: by default one fewer
 than the hardware threads the process may run on, at most seven (ADR-0048,
@@ -50,6 +51,13 @@ sink. `--workers N` sets another count, 0 for the callback alone.
 - **Devices** (with `--trace`): from the [performance trace](../decisions/0061-performance-tracing.md),
   each synth and effect kind's share of one core, instance count and
   per-block mean, p99 and maximum, on the callback and worker threads.
+- **Master** (with `--trace`): the master node's mean, p99 and maximum time
+  a block, and its mean as a share of the period. The master runs after
+  every other node, so this time is serial in every block
+  ([ADR-0125](../decisions/0125-master-chain-cost.md)).
+- **Gate:** `--gate-master-percent` and `--gate-p99-percent` fail the run
+  when the master's mean or the callback's p99 passes that share of the
+  period.
 - **Correctness:** a run fails on any render failure, missing source frame or
   worker failure. Through the fake callback it also fails on a non-finite
   sample or silent output; on a sink, listen or use the live tier's monitored
@@ -63,9 +71,18 @@ exposes it, and the trace's xrun instants.
 The [reference performance workflow](../../.github/workflows/performance.yml)
 runs the four projects through the fake callback weekly on `main`, on demand
 (`gh workflow run performance.yml -f seconds=60`) and on pull requests that
-change the harness. Its summary is `results.md`; the `reference-performance`
-artifact holds both files and the logs. Hosted runners are shared four-core
-machines, so their numbers show trends between runs, not release headroom.
+change the harness, the built-in effects' DSP, the shared DSP or the engine.
+Its summary is `results.md`; the `reference-performance` artifact holds both
+files and the logs. Hosted runners are shared four-core machines, so their
+numbers show trends between runs, not release headroom.
+
+Its master gate plays the light reference with the heavy master at 1024
+frames and fails when the master takes more than 20% of the period or the
+callback's p99 passes 35%. It also plays the light and heavy references
+with the heavy master at 256, 512 and 1024 frames, failing when the master
+takes more than 20% of the period at any of them (the `master-gate`
+artifact). On these runners the heavy reference alone fills its period, so
+its p99 is reported, not gated.
 
 ## On the reference machine
 

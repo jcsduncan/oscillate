@@ -126,46 +126,58 @@ public:
                std::span<const engine::StereoFrame>) noexcept override {
     double block_ratio = 1.0;
     double block_guard = 1.0;
-    for (auto& frame : audio) {
-      const std::array<double, 2> raw{finite_or_zero(frame.left), finite_or_zero(frame.right)};
-      const double input_gain = input_.next();
-      const double output_gain = output_.next();
-      const Curve curve = Curve::with_knee(knee_.next());
-      const double ceiling = ceiling_.next();
-      const std::array<double, 2> driven{raw[0] * input_gain, raw[1] * input_gain};
-      meter_input(driven);
-
+    for (std::size_t start = 0; start < audio.size(); start += edge_dsp::block_frames) {
+      const auto chunk =
+          audio.subspan(start, std::min(edge_dsp::block_frames, audio.size() - start));
+      const std::size_t frames = chunk.size();
       // The clipper and the guard work under a ceiling of 1: the driven
       // input is scaled by the ceiling on the way in and back on the way out.
-      std::array<double, 2> y{};
-      block_ratio =
-          std::max(block_ratio, clip({driven[0] / ceiling, driven[1] / ceiling}, curve, y));
-      block_guard = std::min(block_guard, guard_.process(y[0], y[1]));
-
-      // The input, aligned with the output: raw for Compare, driven for
-      // Delta, and the ceiling it went in under.
-      aligned_[aligned_position_] = {raw, driven, ceiling};
-      aligned_position_ = (aligned_position_ + 1) % aligned_.size();
-      const Aligned& dry = aligned_[aligned_position_];
-      y[0] *= dry.ceiling;
-      y[1] *= dry.ceiling;
-
-      const std::array<double, 2> out{y[0] * output_gain, y[1] * output_gain};
-      meter_output(out);
-      match(dry, out);
-
-      const double delta = delta_.next();
-      const double compare = compare_.next();
-      const double bypass = 1.0 + (match_gain_ - 1.0) * match_.next();
-      const double wet = (1.0 - compare) * (1.0 - delta);
-      const double removed = (1.0 - compare) * delta;
-      std::array<double, 2> mixed{};
-      for (std::size_t c = 0; c < 2; ++c) {
-        mixed[c] = wet * out[c] + removed * output_gain * (dry.driven[c] - y[c]) +
-                   compare * bypass * dry.raw[c];
+      std::array<FrameIn, edge_dsp::block_frames> in{};
+      std::array<std::array<double, edge_dsp::block_frames>, 2> y{};
+      for (std::size_t i = 0; i < frames; ++i) {
+        auto& f = in[i];
+        f.raw = {finite_or_zero(chunk[i].left), finite_or_zero(chunk[i].right)};
+        const double input_gain = input_.next();
+        f.output_gain = output_.next();
+        f.curve = Curve::with_knee(knee_.next());
+        f.ceiling = ceiling_.next();
+        f.driven = {f.raw[0] * input_gain, f.raw[1] * input_gain};
+        meter_input(f.driven);
+        y[0][i] = f.driven[0] / f.ceiling;
+        y[1][i] = f.driven[1] / f.ceiling;
       }
-      frame.left = static_cast<float>(mixed[0]);
-      frame.right = static_cast<float>(mixed[1]);
+      block_ratio = std::max(block_ratio, clip(in, frames, y));
+      for (std::size_t i = 0; i < frames; ++i) {
+        const auto& f = in[i];
+        std::array<double, 2> wet{y[0][i], y[1][i]};
+        block_guard = std::min(block_guard, guard_.process(wet[0], wet[1]));
+
+        // The input, aligned with the output: raw for Compare, driven for
+        // Delta, and the ceiling it went in under.
+        aligned_[aligned_position_] = {f.raw, f.driven, f.ceiling};
+        aligned_position_ = (aligned_position_ + 1) % aligned_.size();
+        const Aligned& dry = aligned_[aligned_position_];
+        wet[0] *= dry.ceiling;
+        wet[1] *= dry.ceiling;
+
+        const double output_gain = f.output_gain;
+        const std::array<double, 2> out{wet[0] * output_gain, wet[1] * output_gain};
+        meter_output(out);
+        match(dry, out);
+
+        const double delta = delta_.next();
+        const double compare = compare_.next();
+        const double bypass = 1.0 + (match_gain_ - 1.0) * match_.next();
+        const double wet_share = (1.0 - compare) * (1.0 - delta);
+        const double removed = (1.0 - compare) * delta;
+        std::array<double, 2> mixed{};
+        for (std::size_t c = 0; c < 2; ++c) {
+          mixed[c] = wet_share * out[c] + removed * output_gain * (dry.driven[c] - wet[c]) +
+                     compare * bypass * dry.raw[c];
+        }
+        chunk[i].left = static_cast<float>(mixed[0]);
+        chunk[i].right = static_cast<float>(mixed[1]);
+      }
     }
     const double frames = static_cast<double>(audio.size());
     const double clipped_db = gain_to_db(block_ratio) - gain_to_db(block_guard);
@@ -234,51 +246,66 @@ private:
   // ceiling that scaled them.
   void fill_aligned() noexcept { std::ranges::fill(aligned_, Aligned{{}, {}, ceiling_.value}); }
 
-  // Clips one frame through the oversampler into `y`; returns how far the
-  // loudest top-rate sample was clipped (a ratio, 1 for none).
-  double clip(const std::array<double, 2>& x, const Curve& curve,
-              std::array<double, 2>& y) noexcept {
+  // One frame's controls and input, kept for the second half of its block.
+  struct FrameIn {
+    std::array<double, 2> raw{};
+    std::array<double, 2> driven{};
+    double output_gain = 1.0;
+    double ceiling = 1.0;
+    Curve curve{};
+  };
+
+  // Clips a block through the oversampler in place (`y`, per channel, under
+  // the ceiling); returns how far the loudest top-rate sample was clipped
+  // (a ratio, 1 for none).
+  double clip(const std::array<FrameIn, edge_dsp::block_frames>& in, std::size_t frames,
+              std::array<std::array<double, edge_dsp::block_frames>, 2>& y) noexcept {
     const std::size_t factor = design_.factor;
-    std::array<std::array<double, edge_dsp::max_factor>, 2> top{};
+    std::array<std::array<double, edge_dsp::block_frames * edge_dsp::max_factor>, 2> top{};
     if (design_.stages == 0) {
-      top[0][0] = x[0];
-      top[1][0] = x[1];
+      std::copy_n(y[0].begin(), frames, top[0].begin());
+      std::copy_n(y[1].begin(), frames, top[1].begin());
     } else {
-      channels_[0].resampler.up(x[0], top[0].data());
-      channels_[1].resampler.up(x[1], top[1].data());
+      channels_[0].resampler.up(std::span(y[0]).first(frames), top[0].data());
+      channels_[1].resampler.up(std::span(y[1]).first(frames), top[1].data());
     }
     double ratio = 1.0;
-    const double linked = link_.next();
-    for (std::size_t i = 0; i < factor; ++i) {
-      const double l = top[0][i];
-      const double r = top[1][i];
-      const double loudest = std::max(std::fabs(l), std::fabs(r));
-      if (loudest > curve.threshold) {
-        ratio = std::max(ratio, loudest / curve.magnitude(loudest));
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+      const Curve& curve = in[frame].curve;
+      const double linked = link_.next();
+      for (std::size_t i = frame * factor; i < (frame + 1) * factor; ++i) {
+        const double l = top[0][i];
+        const double r = top[1][i];
+        const double loudest = std::max(std::fabs(l), std::fabs(r));
+        if (loudest > curve.threshold) {
+          ratio = std::max(ratio, loudest / curve.magnitude(loudest));
+        }
+        // Each path not heard keeps its antialiasing history, so a fade into
+        // it starts clean.
+        std::array<double, 2> separate{l, r};
+        std::array<double, 2> together{l, r};
+        if (linked < 1.0) {
+          separate = clip_separate({l, r}, curve);
+        } else if (design_.antialiased) {
+          channels_[0].antialiased.skip(l);
+          channels_[1].antialiased.skip(r);
+        }
+        if (linked > 0.0) {
+          together = clip_linked({l, r}, loudest, curve);
+        } else if (design_.antialiased) {
+          magnitude_.skip(loudest);
+        }
+        previous_top_ = {l, r};
+        top[0][i] = separate[0] + (together[0] - separate[0]) * linked;
+        top[1][i] = separate[1] + (together[1] - separate[1]) * linked;
       }
-      // Each path not heard keeps its antialiasing history, so a fade into
-      // it starts clean.
-      std::array<double, 2> separate{l, r};
-      std::array<double, 2> together{l, r};
-      if (linked < 1.0) {
-        separate = clip_separate({l, r}, curve);
-      } else if (design_.antialiased) {
-        channels_[0].antialiased.skip(l);
-        channels_[1].antialiased.skip(r);
-      }
-      if (linked > 0.0) {
-        together = clip_linked({l, r}, loudest, curve);
-      } else if (design_.antialiased) {
-        magnitude_.skip(loudest);
-      }
-      previous_top_ = {l, r};
-      top[0][i] = separate[0] + (together[0] - separate[0]) * linked;
-      top[1][i] = separate[1] + (together[1] - separate[1]) * linked;
     }
     if (design_.stages == 0) {
-      y = {top[0][0], top[1][0]};
+      std::copy_n(top[0].begin(), frames, y[0].begin());
+      std::copy_n(top[1].begin(), frames, y[1].begin());
     } else {
-      y = {channels_[0].resampler.down(top[0].data()), channels_[1].resampler.down(top[1].data())};
+      channels_[0].resampler.down(top[0].data(), std::span(y[0]).first(frames));
+      channels_[1].resampler.down(top[1].data(), std::span(y[1]).first(frames));
     }
     return ratio;
   }

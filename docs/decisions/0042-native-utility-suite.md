@@ -1,6 +1,6 @@
 # ADR-0042: A native utility suite
 
-- **Status:** Accepted; all six built.
+- **Status:** Accepted; all six built. Superseded in part by [ADR-0125](0125-master-chain-cost.md): Lens analyses on the thread that reads its telemetry, not in the callback.
 - **Date:** 2026-10-19.
 - **Builds on:** ADR-0040 (native effect platform) and ADR-0041 (Pocket).
 

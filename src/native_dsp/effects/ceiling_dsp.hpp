@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <span>
 #include <vector>
 
 // Ceiling's DSP (ADR-0117): a true-peak-aware lookahead gain stage with a
@@ -86,7 +87,9 @@ public:
   [[nodiscard]] double push(double x) noexcept;
 
 private:
-  std::array<std::array<double, taps>, factor - 1> kernels_{};
+  // Tap-major, so the phases sum side by side (each in tap order); the
+  // last lane is zero.
+  std::array<std::array<double, factor>, taps> kernels_{};
   std::array<double, 2 * taps> history_{};
   std::size_t write_ = 0;
 };
@@ -175,9 +178,10 @@ public:
   // whether there is room to clip at all. On `jump` (before the first
   // block) the path is taken at once.
   void set(double knee, bool active, bool jump) noexcept;
-  // In place, one frame: returns the most the curve took off (linear, >= 1
-  // as a ratio of input to output magnitude at the top rate).
-  double process(double& left, double& right) noexcept;
+  // In place, up to edge_dsp::block_frames frames: returns the most the
+  // curve took off (linear, >= 1 as a ratio of input to output magnitude at
+  // the top rate).
+  double process(std::span<double> left, std::span<double> right) noexcept;
   [[nodiscard]] std::uint32_t latency() const noexcept;
 
 private:

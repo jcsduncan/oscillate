@@ -292,11 +292,25 @@ public:
 
   void process(std::span<engine::StereoFrame> audio,
                std::span<const engine::StereoFrame>) noexcept override {
-    const std::size_t n = layout_.bands;
-    const std::size_t size = delayed_.size();
     block_gain_.fill(0.0);
     double block_clip = 1.0;
-    for (auto& frame : audio) {
+    for (std::size_t start = 0; start < audio.size(); start += edge_dsp::block_frames) {
+      const auto chunk =
+          audio.subspan(start, std::min(edge_dsp::block_frames, audio.size() - start));
+      block_clip = std::max(block_clip, process_block(chunk));
+    }
+    const double fall_db = clipped_fall_db_per_second * static_cast<double>(audio.size()) / rate_;
+    clipped_ = std::max(std::max(clipped_ - fall_db, 0.0), gain_to_db(block_clip));
+  }
+
+  // One block of the clipper's size; returns how far the clipper took the
+  // loudest top-rate sample down.
+  double process_block(std::span<engine::StereoFrame> audio) noexcept {
+    const std::size_t n = layout_.bands;
+    const std::size_t size = delayed_.size();
+    std::array<std::array<double, edge_dsp::block_frames>, 2> outs{};
+    for (std::size_t i = 0; i < audio.size(); ++i) {
+      const auto& frame = audio[i];
       const std::array<double, 2> in{finite_or_zero(frame.left), finite_or_zero(frame.right)};
       for (std::size_t c = 0; c < 2; ++c) {
         input_peak_[c] = std::max(input_peak_[c] * hold_, std::fabs(in[c]));
@@ -334,19 +348,19 @@ public:
       wet[0] *= output;
       wet[1] *= output;
       file(dry, wet);
-
-      std::array<double, 2> out = wet;
-      if (clip_) {
-        block_clip = std::max(block_clip, clip(out));
-      }
-      for (std::size_t c = 0; c < 2; ++c) {
-        output_peak_[c] = std::max(output_peak_[c] * hold_, std::fabs(out[c]));
-      }
-      frame.left = static_cast<float>(out[0]);
-      frame.right = static_cast<float>(out[1]);
+      outs[0][i] = wet[0];
+      outs[1][i] = wet[1];
     }
-    const double fall_db = clipped_fall_db_per_second * static_cast<double>(audio.size()) / rate_;
-    clipped_ = std::max(std::max(clipped_ - fall_db, 0.0), gain_to_db(block_clip));
+    const std::size_t frames = audio.size();
+    const double ratio = clip_ ? clip(outs, frames) : 1.0;
+    for (std::size_t i = 0; i < frames; ++i) {
+      for (std::size_t c = 0; c < 2; ++c) {
+        output_peak_[c] = std::max(output_peak_[c] * hold_, std::fabs(outs[c][i]));
+      }
+      audio[i].left = static_cast<float>(outs[0][i]);
+      audio[i].right = static_cast<float>(outs[1][i]);
+    }
+    return ratio;
   }
 
   void reset() noexcept override {
@@ -456,17 +470,24 @@ private:
     return gain;
   }
 
-  // The sum through Edge's curve under the ceiling, both channels taking
-  // the gain the louder needs; returns how far the loudest top-rate sample
-  // came down (a ratio, 1 for none).
-  double clip(std::array<double, 2>& y) noexcept {
-    const double ceiling = ceiling_.next();
+  // A block of the sum through Edge's curve under the ceiling, both channels
+  // taking the gain the louder needs; returns how far the loudest top-rate
+  // sample came down (a ratio, 1 for none).
+  double clip(std::array<std::array<double, edge_dsp::block_frames>, 2>& y,
+              std::size_t frames) noexcept {
+    std::array<double, edge_dsp::block_frames> ceilings{};
+    std::array<std::array<double, edge_dsp::block_frames>, 2> under{};
+    for (std::size_t i = 0; i < frames; ++i) {
+      ceilings[i] = ceiling_.next();
+      under[0][i] = y[0][i] / ceilings[i];
+      under[1][i] = y[1][i] / ceilings[i];
+    }
     const auto curve = edge_dsp::Curve::with_knee(edge_dsp::max_knee * clip_shape);
-    std::array<std::array<double, edge_dsp::max_factor>, 2> top{};
-    resamplers_[0].up(y[0] / ceiling, top[0].data());
-    resamplers_[1].up(y[1] / ceiling, top[1].data());
+    std::array<std::array<double, edge_dsp::block_frames * edge_dsp::max_factor>, 2> top{};
+    resamplers_[0].up(std::span(under[0]).first(frames), top[0].data());
+    resamplers_[1].up(std::span(under[1]).first(frames), top[1].data());
     double ratio = 1.0;
-    for (std::size_t i = 0; i < design_.factor; ++i) {
+    for (std::size_t i = 0; i < frames * design_.factor; ++i) {
       const double loudest = std::max(std::fabs(top[0][i]), std::fabs(top[1][i]));
       if (loudest > curve.threshold) {
         const double gain = curve.magnitude(loudest) / loudest;
@@ -475,8 +496,12 @@ private:
         top[1][i] *= gain;
       }
     }
-    y = {resamplers_[0].down(top[0].data()) * ceiling,
-         resamplers_[1].down(top[1].data()) * ceiling};
+    resamplers_[0].down(top[0].data(), std::span(under[0]).first(frames));
+    resamplers_[1].down(top[1].data(), std::span(under[1]).first(frames));
+    for (std::size_t i = 0; i < frames; ++i) {
+      y[0][i] = under[0][i] * ceilings[i];
+      y[1][i] = under[1][i] * ceilings[i];
+    }
     return ratio;
   }
 

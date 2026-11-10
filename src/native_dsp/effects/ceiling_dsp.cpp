@@ -3,10 +3,12 @@
 #include "oscillate/native_dsp/dsp/math.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <numbers>
+#include <span>
 
 namespace oscillate::native_dsp::effects::ceiling_dsp {
 namespace {
@@ -34,7 +36,7 @@ FinePeak::FinePeak() noexcept {
   const auto half_width = static_cast<double>(radius + 1);
   for (std::size_t phase = 1; phase < factor; ++phase) {
     const double fraction = static_cast<double>(phase) / static_cast<double>(factor);
-    auto& kernel = kernels_[phase - 1];
+    std::array<double, taps> kernel{};
     double sum = 0.0;
     for (std::size_t tap = 0; tap < taps; ++tap) {
       const double x = static_cast<double>(tap) - static_cast<double>(radius) - fraction;
@@ -42,8 +44,8 @@ FinePeak::FinePeak() noexcept {
       kernel[tap] = sinc * native_dsp::dsp::kaiser(x, half_width, fine_peak_beta);
       sum += kernel[tap];
     }
-    for (double& coefficient : kernel) {
-      coefficient /= sum;
+    for (std::size_t tap = 0; tap < taps; ++tap) {
+      kernels_[tap][phase - 1] = kernel[tap] / sum;
     }
   }
 }
@@ -62,13 +64,16 @@ double FinePeak::push(double x) noexcept {
     write_ = 0;
   }
   const double* window = history_.data() + write_;
-  double top = 0.0;
-  for (const auto& kernel : kernels_) {
-    double y = 0.0;
-    for (std::size_t tap = 0; tap < taps; ++tap) {
-      y += kernel[tap] * window[tap];
+  std::array<double, factor> y{};
+  for (std::size_t tap = 0; tap < taps; ++tap) {
+    const double x = window[tap];
+    for (std::size_t phase = 0; phase < factor; ++phase) {
+      y[phase] += kernels_[tap][phase] * x;
     }
-    top = std::max(top, std::fabs(y));
+  }
+  double top = 0.0;
+  for (std::size_t phase = 0; phase + 1 < factor; ++phase) {
+    top = std::max(top, std::fabs(y[phase]));
   }
   return top;
 }
@@ -278,19 +283,26 @@ void Clipper::set(double knee, bool active, bool jump) noexcept {
 
 std::uint32_t Clipper::latency() const noexcept { return design_->latency; }
 
-double Clipper::process(double& left, double& right) noexcept {
-  const auto delayed = delay_.push({left, right});
+double Clipper::process(std::span<double> left, std::span<double> right) noexcept {
+  const std::size_t frames = left.size();
+  std::array<std::array<double, 2>, edge_dsp::block_frames> delayed{};
+  for (std::size_t i = 0; i < frames; ++i) {
+    delayed[i] = delay_.push({left[i], right[i]});
+  }
   if (!running_) {
-    left = delayed[0];
-    right = delayed[1];
+    for (std::size_t i = 0; i < frames; ++i) {
+      left[i] = delayed[i][0];
+      right[i] = delayed[i][1];
+    }
     return 1.0;
   }
-  std::array<std::array<double, edge_dsp::max_factor>, 2> top{};
-  resamplers_[0].up(left, top[0].data());
-  resamplers_[1].up(right, top[1].data());
+  const std::array<std::span<double>, 2> channels{left, right};
+  std::array<std::array<double, edge_dsp::block_frames * edge_dsp::max_factor>, 2> top{};
+  const std::size_t samples = frames * design_->factor;
   double ratio = 1.0;
   for (std::size_t c = 0; c < 2; ++c) {
-    for (std::size_t i = 0; i < design_->factor; ++i) {
+    resamplers_[c].up(channels[c], top[c].data());
+    for (std::size_t i = 0; i < samples; ++i) {
       const double u = top[c][i];
       const double magnitude = std::fabs(u);
       if (magnitude > curve_.threshold) {
@@ -299,17 +311,27 @@ double Clipper::process(double& left, double& right) noexcept {
       top[c][i] = design_->antialiased ? antialiased_[c].process(u, curve_) : curve_(u);
     }
   }
-  const std::array<double, 2> clipped{resamplers_[0].down(top[0].data()),
-                                      resamplers_[1].down(top[1].data())};
-  if (warming_ > 0) {
-    --warming_;
-  } else {
-    mix_ = active_ ? std::min(1.0, mix_ + fade_step_) : std::max(0.0, mix_ - fade_step_);
+  std::array<std::array<double, edge_dsp::block_frames>, 2> clipped{};
+  for (std::size_t c = 0; c < 2; ++c) {
+    resamplers_[c].down(top[c].data(), std::span(clipped[c]).first(frames));
   }
-  left = delayed[0] + mix_ * (clipped[0] - delayed[0]);
-  right = delayed[1] + mix_ * (clipped[1] - delayed[1]);
-  if (!active_ && mix_ == 0.0) {
-    running_ = false;
+  for (std::size_t i = 0; i < frames; ++i) {
+    if (!running_) {
+      // Stopped earlier in this block: the rest is the delay alone.
+      left[i] = delayed[i][0];
+      right[i] = delayed[i][1];
+      continue;
+    }
+    if (warming_ > 0) {
+      --warming_;
+    } else {
+      mix_ = active_ ? std::min(1.0, mix_ + fade_step_) : std::max(0.0, mix_ - fade_step_);
+    }
+    left[i] = delayed[i][0] + mix_ * (clipped[0][i] - delayed[i][0]);
+    right[i] = delayed[i][1] + mix_ * (clipped[1][i] - delayed[i][1]);
+    if (!active_ && mix_ == 0.0) {
+      running_ = false;
+    }
   }
   return ratio;
 }

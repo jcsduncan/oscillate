@@ -216,11 +216,11 @@ public:
         const double x = distance - fraction;
         const double sinc =
             std::abs(x) < 1e-12 ? 1.0 : std::sin(std::numbers::pi * x) / (std::numbers::pi * x);
-        kernels_[phase - 1][tap] = sinc * window;
-        sum += kernels_[phase - 1][tap];
+        kernels_[tap][phase - 1] = sinc * window;
+        sum += kernels_[tap][phase - 1];
       }
-      for (double& coefficient : kernels_[phase - 1]) {
-        coefficient /= sum;
+      for (std::size_t tap = 0; tap < taps; ++tap) {
+        kernels_[tap][phase - 1] /= sum;
       }
     }
   }
@@ -242,19 +242,26 @@ public:
     }
     // write_ is now the oldest sample; walk oldest to newest.
     const double* window = history_.data() + write_;
-    double top = 0.0;
-    for (const auto& kernel : kernels_) {
-      double y = 0.0;
-      for (std::size_t tap = 0; tap < taps; ++tap) {
-        y += kernel[tap] * window[tap];
+    std::array<double, lanes> y{};
+    for (std::size_t tap = 0; tap < taps; ++tap) {
+      const double x = window[tap];
+      for (std::size_t phase = 0; phase < lanes; ++phase) {
+        y[phase] += kernels_[tap][phase] * x;
       }
-      top = std::max(top, std::abs(y));
+    }
+    double top = 0.0;
+    for (std::size_t phase = 0; phase < phases; ++phase) {
+      top = std::max(top, std::abs(y[phase]));
     }
     return top;
   }
 
 private:
-  std::array<std::array<double, taps>, 3> kernels_{};
+  // The three fractional phases, tap-major so they sum side by side (each
+  // in tap order); the fourth lane is zero.
+  static constexpr std::size_t phases = 3;
+  static constexpr std::size_t lanes = phases + 1;
+  std::array<std::array<double, lanes>, taps> kernels_{};
   std::array<double, 2 * taps> history_{};
   std::size_t write_ = 0;
 };

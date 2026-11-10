@@ -1,6 +1,6 @@
 # ADR-0120 — Match EQ and tonal balance targets in Lens
 
-**Status:** Accepted and implemented. **Date:** 10 November 2026.
+**Status:** Accepted and implemented; superseded in part by [ADR-0125](0125-master-chain-cost.md): Lens runs its band meter when its telemetry is read, not on the callback. **Date:** 10 November 2026.
 **Builds on:** ADR-0042 (Lens), ADR-0047 (Shape), ADR-0054 (live controls), ADR-0103 (shared device panel parts).
 **Contract:** `include/oscillate/native_dsp/tonal_targets.hpp` (the grid, target curves and the factory targets, shared with the adaptive tonal balance device), `include/oscillate/native_dsp/tonal_analysis.hpp` (the band meter, building targets, the target file), `include/oscillate/native_dsp/match_eq.hpp` (the correction and the band fit), Lens's telemetry and match parameters (`effects/lens.hpp`), `shape::band_values`, `NativeSynthPanelAdapter::write_next_effect`. No schema change.
 
