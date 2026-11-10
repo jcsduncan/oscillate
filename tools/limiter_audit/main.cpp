@@ -16,6 +16,11 @@
 // loudness, the crest factor, the onset contrast in the three bands and the
 // true peak, with its latency and CPU.
 //
+// --exciter measures an exciter (Gild by default): each preset at the
+// programme's own level, reporting the loudness change, what it adds (its
+// Delta) against the programme, overall and in the three bands, and the
+// true peak change, with its latency and CPU.
+//
 // --balance measures a tonal balancer (Keel by default): each preset at the
 // programme's own level, reporting the programme's third-octave balance
 // against the preset's target before and after (RMS and largest distance
@@ -26,7 +31,8 @@
 // programme's tilt.
 //
 // Usage: oscillate_limiter_audit [--engine ID] [--preset NAME]... [--set ID=VALUE]...
-//        [--target LUFS] [--classic] [--shaper] [--balance] [--no-loop] [--per-programme]
+//        [--target LUFS] [--classic] [--shaper] [--exciter] [--balance] [--no-loop]
+//        [--per-programme]
 //        [FILE.f32]...
 // --no-loop leaves the synthetic loop out.
 // --target measures at one loudness instead of the three standard ones.
@@ -957,6 +963,135 @@ void audit_shaper(const effects::EffectEngine& engine, const std::vector<std::st
   }
 }
 
+// ---- The exciter audit ----------------------------------------------------------------------
+
+struct ExciterRow {
+  double lufs_change = 0.0;
+  double added_db = 0.0;
+  std::array<double, 3> band_added_db{};
+  double peak_change = 0.0;
+  double cpu = 0.0;
+  double latency_ms = 0.0;
+};
+
+void print_exciter_header() {
+  std::printf("| Preset | LUFS change | Added dB | Added L/M/H dB | True peak change | CPU | "
+              "Latency |\n");
+  std::printf("|---|---|---|---|---|---|---|\n");
+}
+
+// What is added reads "none" at or under this (dB against the programme).
+constexpr double added_floor_db = -120.0;
+
+std::string added_text(double db) {
+  if (db <= added_floor_db) {
+    return "none";
+  }
+  std::array<char, 16> text{};
+  std::snprintf(text.data(), text.size(), "%.1f", db);
+  return text.data();
+}
+
+void print_exciter_row(std::string_view preset, const ExciterRow& r) {
+  std::printf("| %s | %+.2f | %s | %s/%s/%s | %+.2f | %.2f%% | %.2f ms |\n",
+              std::string(preset).c_str(), r.lufs_change, added_text(r.added_db).c_str(),
+              added_text(r.band_added_db[0]).c_str(), added_text(r.band_added_db[1]).c_str(),
+              added_text(r.band_added_db[2]).c_str(), r.peak_change, 100.0 * r.cpu, r.latency_ms);
+}
+
+double mean_power(const std::vector<double>& x) {
+  double sum = 0.0;
+  for (const double v : x) {
+    sum += v * v;
+  }
+  return x.empty() ? 0.0 : sum / static_cast<double>(x.size());
+}
+
+std::vector<double> mono(const Audio& audio) {
+  std::vector<double> out(audio.size());
+  for (std::size_t i = 0; i < audio.size(); ++i) {
+    out[i] = 0.5 * (audio.left[i] + audio.right[i]);
+  }
+  return out;
+}
+
+// Each preset over each programme at the programme's own level, and again
+// with Delta on for what it adds; the mean over the programmes.
+void audit_exciter(const effects::EffectEngine& engine, const std::vector<std::string>& only,
+                   const std::vector<std::pair<std::string, double>>& overrides,
+                   const std::vector<Programme>& programmes, bool per_programme) {
+  const auto& table = *engine.descriptor;
+  const auto delta = dsp::find_parameter(table, std::string(table.id) + ".delta");
+  if (!delta) {
+    std::fprintf(stderr, "%s has no delta\n", std::string(table.id).c_str());
+    std::exit(1);
+  }
+  for (const auto& name : only) {
+    if (std::ranges::none_of(table.presets, [&](const auto& p) { return p.name == name; })) {
+      std::fprintf(stderr, "no preset %s\n", name.c_str());
+      std::exit(1);
+    }
+  }
+  print_exciter_header();
+  for (const auto& preset : table.presets) {
+    if (!only.empty() && std::ranges::find(only, std::string(preset.name)) == only.end()) {
+      continue;
+    }
+    auto values = dsp::preset_values(table, preset);
+    if (!values) {
+      std::fprintf(stderr, "preset %s does not resolve\n", std::string(preset.name).c_str());
+      std::exit(1);
+    }
+    auto v = std::move(values).value();
+    for (const auto& [id, value] : overrides) {
+      const auto index = dsp::find_parameter(table, id);
+      if (!index) {
+        std::fprintf(stderr, "no parameter %s\n", id.c_str());
+        std::exit(1);
+      }
+      v[*index] = value;
+    }
+    auto delta_values = v;
+    delta_values[*delta] = 1.0;
+    ExciterRow mean;
+    double cpu_seconds = 0.0;
+    double audio_seconds = 0.0;
+    for (const auto& programme : programmes) {
+      const auto rendered = render(engine, v, programme.audio);
+      const auto added = render(engine, delta_values, programme.audio);
+      ExciterRow r;
+      r.lufs_change = lufs(rendered.audio) - lufs(programme.audio);
+      r.added_db = std::max(added_floor_db, power_db(mean_power(mono(added.audio))) -
+                                                power_db(mean_power(mono(programme.audio))));
+      const auto in_bands = bands(programme.audio);
+      const auto added_bands = bands(added.audio);
+      for (std::size_t b = 0; b < in_bands.size(); ++b) {
+        r.band_added_db[b] = std::max(added_floor_db, power_db(mean_power(added_bands[b])) -
+                                                          power_db(mean_power(in_bands[b])));
+      }
+      r.peak_change =
+          true_peak_16x(fine_peaks(rendered.audio)) - true_peak_16x(fine_peaks(programme.audio));
+      r.latency_ms = milliseconds_per_second * rendered.latency / rate;
+      cpu_seconds += rendered.seconds;
+      audio_seconds += static_cast<double>(programme.audio.size()) / rate;
+      if (per_programme) {
+        print_exciter_row(std::string(preset.name) + " · " + programme.name, r);
+      }
+      const double n = static_cast<double>(programmes.size());
+      mean.lufs_change += r.lufs_change / n;
+      mean.added_db += r.added_db / n;
+      for (std::size_t b = 0; b < r.band_added_db.size(); ++b) {
+        mean.band_added_db[b] += r.band_added_db[b] / n;
+      }
+      mean.peak_change += r.peak_change / n;
+      mean.latency_ms = r.latency_ms;
+    }
+    mean.cpu = cpu_seconds / audio_seconds;
+    print_exciter_row(preset.name, mean);
+    std::fflush(stdout);
+  }
+}
+
 // ---- The tonal balance audit ---------------------------------------------------------------
 
 namespace keel = oscillate::native_dsp::effects::keel;
@@ -1254,6 +1389,7 @@ int main(int argc, char** argv) {
   bool per_programme = false;
   bool classic = false;
   bool shaper = false;
+  bool exciter = false;
   bool balance = false;
   std::optional<double> only_target;
   for (int i = 1; i < argc; ++i) {
@@ -1279,6 +1415,8 @@ int main(int argc, char** argv) {
       classic = true;
     } else if (arg == "--shaper") {
       shaper = true;
+    } else if (arg == "--exciter") {
+      exciter = true;
     } else if (arg == "--balance") {
       balance = true;
     } else if (arg == "--per-programme") {
@@ -1293,7 +1431,7 @@ int main(int argc, char** argv) {
     }
   }
   if (engine_id.empty()) {
-    engine_id = shaper ? "strike" : (balance ? "keel" : "ceiling");
+    engine_id = shaper ? "strike" : (exciter ? "gild" : (balance ? "keel" : "ceiling"));
   }
   if (loop) {
     programmes.insert(programmes.begin(), {"loop", drum_loop()});
@@ -1311,11 +1449,11 @@ int main(int argc, char** argv) {
     scale(programme.audio, from_db(programme_lufs - level));
     programme.crest_db = crest_db(programme.audio, fine_peaks(programme.audio));
   }
-  if (shaper && balance) {
-    std::fprintf(stderr, "--shaper and --balance measure different devices\n");
+  if (static_cast<int>(shaper) + static_cast<int>(exciter) + static_cast<int>(balance) > 1) {
+    std::fprintf(stderr, "--shaper, --exciter and --balance measure different devices\n");
     return 1;
   }
-  if (shaper || balance) {
+  if (shaper || exciter || balance) {
     const auto* engine = effects::find_engine(engine_id);
     if (engine == nullptr) {
       std::fprintf(stderr, "no engine %s\n", engine_id.c_str());
@@ -1328,6 +1466,8 @@ int main(int argc, char** argv) {
     }
     if (balance) {
       audit_balance(*engine, only, overrides, programmes, per_programme);
+    } else if (exciter) {
+      audit_exciter(*engine, only, overrides, programmes, per_programme);
     } else {
       audit_shaper(*engine, only, overrides, programmes, per_programme);
     }

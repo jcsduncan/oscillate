@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/gild">
+    <file>GildPanel.qml</file>
+    <file>GildTheme.qml</file>
+    <file>GildView.qml</file>
+  </qresource>
+</RCC>
