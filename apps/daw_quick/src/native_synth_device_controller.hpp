@@ -30,6 +30,7 @@ class CrateController;
 class NativeSynthDocumentModel;
 class NovaConstellation;
 class NovaArp;
+class LensMatch;
 
 // Presentation model for a built-in synth device panel, for any engine.
 // Everything it shows comes from the engine's parameter table, so new
@@ -77,6 +78,9 @@ class NativeSynthDeviceController final : public QObject {
   // Nova's arp pattern engine model (NovaArp, ADR-0078) when engine_id is
   // "nova"; null for every other engine.
   Q_PROPERTY(QObject* arp READ arp CONSTANT)
+  // Lens's match EQ and tonal balance (LensMatch, ADR-0120) when engine_id
+  // is "lens"; null for every other engine.
+  Q_PROPERTY(QObject* match READ match CONSTANT)
   // The user's own presets for this engine (ADR-0058), [{name}] sorted by
   // name, saved under $XDG_DATA_HOME/oscillate/presets/<engine>/.
   Q_PROPERTY(QVariantList user_presets READ user_presets NOTIFY user_presets_changed)
@@ -126,6 +130,7 @@ public:
   [[nodiscard]] QObject* crate() const;
   [[nodiscard]] QObject* constellation() const;
   [[nodiscard]] QObject* arp() const;
+  [[nodiscard]] QObject* match() const;
   [[nodiscard]] QVariantList user_presets() const;
   [[nodiscard]] QStringList favourites() const { return favourites_; }
   [[nodiscard]] int linked_count() const noexcept { return linked_count_; }
@@ -460,6 +465,7 @@ private:
   CrateController* crate_ = nullptr;             // A child, for Crate only.
   NovaConstellation* constellation_ = nullptr;   // A child, for Nova only.
   NovaArp* arp_ = nullptr;                       // A child, for Nova only.
+  LensMatch* match_ = nullptr;                   // A child, for Lens only.
   bool state_gesture_ = false;
   int preset_index_ = -1;
   // The user preset last loaded, and its values, until something else is.

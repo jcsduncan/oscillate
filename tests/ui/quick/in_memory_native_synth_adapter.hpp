@@ -131,6 +131,17 @@ public:
     std::ranges::stable_sort(window.notes, {}, &NativeSynthClipNote::beat);
     return window;
   }
+  // Records each write to the next effect and accepts it.
+  bool write_next_effect(std::string_view engine,
+                         std::span<const std::pair<std::string_view, double>> values) override {
+    NextEffectWrite write{std::string(engine), {}};
+    for (const auto& [id, value] : values)
+      write.values.emplace_back(std::string(id), value);
+    next_effect_writes_.push_back(std::move(write));
+    ++status_.saved_revision;
+    status_.audible_revision = status_.saved_revision;
+    return true;
+  }
   // Replaces a clip add_midi_clip made; refused for any other id.
   bool replace_midi_clip(std::string_view clip, timeline::TickPosition length,
                          std::vector<project::MidiNote> notes) override {
@@ -228,6 +239,13 @@ public:
     std::string path;
   };
   [[nodiscard]] const std::vector<Import>& imports() const { return imports_; }
+  struct NextEffectWrite {
+    std::string engine;
+    std::vector<std::pair<std::string, double>> values;
+  };
+  [[nodiscard]] const std::vector<NextEffectWrite>& next_effect_writes() const {
+    return next_effect_writes_;
+  }
 
 private:
   struct PendingImport {
@@ -253,6 +271,7 @@ private:
   double bpm_ = memory_default_bpm;
   std::optional<project::MusicalKey> key_;
   std::vector<Import> imports_;
+  std::vector<NextEffectWrite> next_effect_writes_;
 };
 
 } // namespace oscillate::quick

@@ -120,7 +120,7 @@ KitTheme {
 
     // The panel's layout.
     property int panelWidth: 1380
-    property int panelHeight: 812
+    property int panelHeight: 946
     property real panelRadius: 10
     property real cardGap: 10
     property real cardInset: 14
@@ -181,7 +181,7 @@ KitTheme {
 
     // Row A: the spectrum and the resonance table.
     property real rowAY: 76
-    property real rowAHeight: 392
+    property real rowAHeight: 340
     property real sideWidth: 310
     property real spectrumY: 30
     property real tableHeaderY: 32
@@ -189,13 +189,13 @@ KitTheme {
     property real frequencyColumnWidth: 96
     property real tableX: 10
     property real tableY: 48
-    property real tableSpacing: 3
-    property real tableRowHeight: 33
+    property real tableSpacing: 1
+    property real tableRowHeight: 30
     property real strongestWashAlpha: 0.08
     property real rankWidth: 16
     property real noteX: 22
     property real noteNameY: 3
-    property real noteCentsY: 20
+    property real noteCentsY: 17
     property real frequencyX: 92
     property real levelX: 186
     property real levelBarX: 248
@@ -231,6 +231,26 @@ KitTheme {
     property real differenceTextX: 30
     property real freezeToggleHeight: 52
     property real freezeNoteY: 94
+    property real rowCHeight: 162
+
+    // Row D: match EQ and tonal balance (ADR-0120).
+    property real matchPlateWidth: 800
+    property real matchPlotWidth: 420
+    property real matchControlsX: 446
+    property real matchKnobY: 74
+    property int matchKnobDiameter: 30
+    property real matchButtonsY: 150
+    property real matchRangeDb: 12
+    property color matchOutsideFill: Qt.rgba(0.02, 0.03, 0.06, 0.6)
+    property real matchBandDotRadius: 6
+    property real matchBandDotTextDrop: 3
+    property real tonalPickerY: 30
+    property real tonalPickerNameWidth: 220
+    property real tonalPlotY: 62
+    property real tonalFooterBottom: 26
+    property real tonalRangeDb: 9
+    property real tonalRangeAlpha: 0.18
+    property real tonalDotRadius: 3
 
     // The control last touched, read back in the display.
     lastTouched: ""

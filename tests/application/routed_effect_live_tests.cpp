@@ -4,6 +4,8 @@
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/pump.hpp"
+#include "oscillate/native_dsp/effects/shape.hpp"
+#include "oscillate/native_dsp/match_eq.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/test/allocation_counter.hpp"
@@ -599,6 +601,78 @@ void pump_ducks_only_to_a_kick_you_can_hear(double trigger, std::string_view mod
   REQUIRE_GT(listen(), unducked_db, name + ": a key at no gain does not duck");
 }
 
+// ADR-0120: Lens's match EQ writes a whole set of Shape bands in one edit.
+// It goes live on the running Shape (no rebuild, no callback allocation) and
+// the sound runs through it without a gap or a jump: every block sounds, and
+// no step between samples outgrows the largest before the edit by more than
+// the bands' boost allows.
+void matched_shape_bands_edit_live() {
+  using oscillate::native_dsp::EqBandKind;
+  using oscillate::native_dsp::match_eq::Band;
+  constexpr int settle_blocks = 40;
+  constexpr int measured_blocks = 32;
+  // The bands boost by 3 dB at most: steps may grow by that, and a margin.
+  constexpr double step_growth_limit = 2.0;
+  constexpr std::array bands{Band{EqBandKind::low_shelf, 110.0, 0.7, -2.5},
+                             Band{EqBandKind::peaking, 320.0, 1.1, 2.0},
+                             Band{EqBandKind::peaking, 900.0, 2.5, -3.0},
+                             Band{EqBandKind::peaking, 2'400.0, 1.4, 3.0},
+                             Band{EqBandKind::peaking, 6'000.0, 3.0, -2.0},
+                             Band{EqBandKind::high_shelf, 10'000.0, 0.8, 2.5}};
+  Directory directory;
+  const auto root = directory.path() / "song";
+  Live live(root, effect_project(root, "shape", false));
+  REQUIRE_GT(live.render(settle_blocks), 1e-3, "the note is audible through Shape");
+  live.control.observe();
+  const auto device = live.source->render_source();
+  float previous = 0.0F;
+  bool started = false;
+  const auto largest_step = [&](int blocks) {
+    double largest = 0.0;
+    counting_allocations = true;
+    for (int block = 0; block < blocks; ++block) {
+      REQUIRE_EQ(
+          audio::render_transport_block(device, live.transport, true, live.stereo, live.samples),
+          audio::BlockResult::rendered, "block failed to render");
+      double power = 0.0;
+      for (std::size_t i = 0; i < live.stereo.size(); ++i) {
+        const float left = live.stereo[i].left;
+        if (started)
+          largest = std::max(largest, static_cast<double>(std::abs(left - previous)));
+        previous = left;
+        started = true;
+        power += static_cast<double>(left) * left;
+      }
+      REQUIRE_GT(power, 0.0, "every block sounds");
+    }
+    counting_allocations = false;
+    REQUIRE_EQ(counted_allocations, 0, "callbacks never allocate");
+    return largest;
+  };
+  const double before = largest_step(measured_blocks);
+  const auto& track = live.model.snapshot()->tracks.front();
+  const auto& slot = track.effects.front();
+  const auto& patch = std::get<project::NativeEffectPatch>(slot.processor);
+  auto resolved = take(inserts::resolve_native_effect(patch));
+  for (const auto& [id, value] : effects::shape::band_values(bands)) {
+    resolved.values[take(oscillate::native_dsp::find_parameter(*resolved.engine->descriptor, id))] =
+        value;
+  }
+  auto applied = take(live.model.apply(
+      {project::SetNativeEffectSettings{track.id, slot.id,
+                                        take(inserts::make_native_effect_patch(
+                                            *resolved.engine, resolved.values, patch.document))}}));
+  REQUIRE_OK(live.control.begin_edit(applied, "matched Shape bands"),
+             "the matched bands are accepted live");
+  const double through = largest_step(measured_blocks);
+  live.control.observe();
+  REQUIRE_EQ(live.control.status().active_graph_revision, applied.snapshot->revision,
+             "the bands are audible once Shape acknowledges them");
+  REQUIRE_LT(through, step_growth_limit * before,
+             "no jump through the change: " + std::to_string(through) + " against " +
+                 std::to_string(before));
+}
+
 int main() {
   try {
     keyed_effect_switches_off_and_deletes();
@@ -615,6 +689,7 @@ int main() {
     effect_automation_edits_live();
     sidechained_effect_edits_live();
     master_effect_values_edit_live();
+    matched_shape_bands_edit_live();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';
     return 1;

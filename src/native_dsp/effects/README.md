@@ -204,8 +204,11 @@ rotator.
 ### Lens
 
 Spectrum analyser with a spectrogram and reference matching; audio passes
-untouched.
-[ADR-0042](../../../docs/decisions/0042-native-utility-suite.md)
+untouched. Match EQ fits Shape bands that move the mix to the sidechain or
+a tonal balance target, and the tonal balance view shows the mix against a
+target measured from references.
+[ADR-0042](../../../docs/decisions/0042-native-utility-suite.md),
+[ADR-0120](../../../docs/decisions/0120-match-eq-and-tonal-targets.md)
 
 ![Lens panel](../../../docs/images/effects/lens.png)
 

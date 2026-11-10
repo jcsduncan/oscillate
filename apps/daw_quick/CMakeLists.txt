@@ -368,6 +368,8 @@ add_library(oscillate_quick_native_synth
   src/nova_constellation.cpp src/nova_constellation.hpp
   # Nova's arp pattern library, mutate and groove (ADR-0078).
   src/nova_arp.cpp src/nova_arp.hpp
+  # Lens's match EQ and tonal balance (ADR-0120).
+  src/lens_match.cpp src/lens_match.hpp
   src/native_synth_document_model.cpp src/native_synth_document_model.hpp
   src/native_synth_panel_adapter.hpp
   src/macro_map_state.hpp

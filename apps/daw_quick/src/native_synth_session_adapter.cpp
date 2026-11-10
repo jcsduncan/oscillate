@@ -15,8 +15,10 @@
 #include <chrono>
 #include <cmath>
 #include <exception>
+#include <iterator>
 #include <limits>
 #include <optional>
+#include <span>
 #include <string>
 #include <utility>
 #include <variant>
@@ -119,16 +121,20 @@ bool SessionNativeSynthAdapter::telemetry(std::vector<float>& frame) {
   return telemetry_ && unavailable_reason().empty() && telemetry_(frame);
 }
 
+const std::vector<project::EffectInsert>* SessionNativeSynthAdapter::effect_chain() const {
+  const auto& snapshot = session_.snapshot();
+  if (const auto* track = std::get_if<project::TrackId>(&path_)) {
+    const auto found = std::ranges::find(snapshot.tracks, *track, &project::Track::id);
+    return found == snapshot.tracks.end() ? nullptr : &found->effects;
+  }
+  return &snapshot.master_effects;
+}
+
 std::string SessionNativeSynthAdapter::unavailable_reason() const {
   if (slot_) {
-    const auto& snapshot = session_.snapshot();
-    const std::vector<project::EffectInsert>* effects = &snapshot.master_effects;
-    if (const auto* track = std::get_if<project::TrackId>(&path_)) {
-      const auto found = std::ranges::find(snapshot.tracks, *track, &project::Track::id);
-      if (found == snapshot.tracks.end())
-        return "Track not found";
-      effects = &found->effects;
-    }
+    const auto* effects = effect_chain();
+    if (effects == nullptr)
+      return "Track not found";
     const auto slot = std::ranges::find(*effects, *slot_, &project::EffectInsert::id);
     if (slot == effects->end())
       return "Effect slot was removed";
@@ -176,6 +182,41 @@ void SessionNativeSynthAdapter::apply(std::span<const double> values,
   const auto after = session_.snapshot().revision;
   if (after != before && after_edit_)
     after_edit_(after);
+}
+
+bool SessionNativeSynthAdapter::write_next_effect(
+    std::string_view engine, std::span<const std::pair<std::string_view, double>> values) {
+  if (!slot_) {
+    message_ = "Only an effect writes the effect after it";
+    return false;
+  }
+  if (const auto reason = unavailable_reason(); !reason.empty()) {
+    message_ = reason;
+    return false;
+  }
+  const auto& chain = *effect_chain();
+  const auto here = std::ranges::find(chain, *slot_, &project::EffectInsert::id);
+  const auto next = static_cast<std::size_t>(std::distance(chain.begin(), here)) + 1;
+  application::EffectEdit edit{path_, std::nullopt, next, std::string(engine), {}};
+  if (next < chain.size()) {
+    const auto* patch = std::get_if<project::NativeEffectPatch>(&chain[next].processor);
+    if (patch != nullptr && patch->engine == engine)
+      edit.slot = chain[next].id;
+  }
+  for (const auto& [id, value] : values)
+    edit.values.emplace_back(std::string(id), value);
+  const auto before = session_.snapshot().revision;
+  auto applied = session_.effects().apply_effect_edits(std::span(&edit, 1));
+  if (!applied) {
+    message_ = applied.error().message;
+    return false;
+  }
+  message_.clear();
+  const auto after = session_.snapshot().revision;
+  if (after != before && after_edit_)
+    after_edit_(after);
+  save();
+  return true;
 }
 
 void SessionNativeSynthAdapter::save() {
