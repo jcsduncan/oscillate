@@ -14,10 +14,10 @@ on:
   workflow_dispatch:
 
 # The event is part of the group so a push to main never cancels the weekly
-# build analysis on the same ref. Runs on main are not cancelled, so every
-# merge that changes C/C++ is analysed.
+# build analysis on the same ref. Each push has a group of its own, so no
+# merge waiting behind another is cancelled unanalysed.
 concurrency:
-  group: codeql-${{ github.ref }}-${{ github.event_name }}
+  group: codeql-${{ github.ref }}-${{ github.event_name }}${{ github.event_name == 'push' && format('-{0}', github.sha) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
