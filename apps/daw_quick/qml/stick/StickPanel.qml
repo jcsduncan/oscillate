@@ -48,10 +48,23 @@ Rectangle {
     property string chainGroup: ""
     property string chainGroupName: ""
     readonly property var chainStages: ["gate", "eq", "comp", "shaper", "sat"]
-    function openChain(id, name) {
+    // The control that opened the chain takes the keyboard back on close.
+    property Item chainOpener: null
+    function openChain(id, name, opener) {
         chainGroup = id
         chainGroupName = name
+        chainOpener = opener
         chainOpen = true
+    }
+    function closeChain() {
+        chainOpen = false
+        if (chainOpener !== null)
+            chainOpener.forceActiveFocus()
+    }
+    // A kit without the open group's mics closes its chain.
+    onGroupsChanged: {
+        if (chainOpen && chainGroup !== "" && !groups.some(g => g.id === chainGroup))
+            closeChain()
     }
 
     readonly property real margin: theme.panelMargin
@@ -402,8 +415,16 @@ Rectangle {
                         activeFocusOnTab: true
                         Accessible.role: Accessible.Button
                         Accessible.name: strip.modelData.name + " chain"
-                        Keys.onReturnPressed: panel.openChain(strip.modelData.id, strip.modelData.name)
-                        Keys.onSpacePressed: panel.openChain(strip.modelData.id, strip.modelData.name)
+                        Accessible.description: {
+                            const on = panel.chainStages.filter(stage => panel.controller.revision >= 0
+                                && panel.controller.choice(strip.base + "." + stage) === 1)
+                            if (chainChip.sending)
+                                on.push("parallel")
+                            return on.length > 0 ? "On: " + on.join(", ") : "Every stage off"
+                        }
+                        Accessible.onPressAction: panel.openChain(strip.modelData.id, strip.modelData.name, chainChip)
+                        Keys.onReturnPressed: panel.openChain(strip.modelData.id, strip.modelData.name, chainChip)
+                        Keys.onSpacePressed: panel.openChain(strip.modelData.id, strip.modelData.name, chainChip)
                         Row {
                             id: lamps
                             anchors.centerIn: parent
@@ -431,7 +452,7 @@ Rectangle {
                             height: Math.max(parent.height, panel.theme.minHitSize)
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: panel.openChain(strip.modelData.id, strip.modelData.name)
+                            onClicked: panel.openChain(strip.modelData.id, strip.modelData.name, chainChip)
                         }
                     }
                     Row {
@@ -605,13 +626,14 @@ Rectangle {
                 parameterId: "stick.level"
             }
             Kit.Button {
+                id: busButton
                 objectName: "stickBusButton"
                 anchors.verticalCenter: parent.verticalCenter
                 theme: panel.theme
                 label: "Kit buses"
                 tip: "The parallel compressor and the kit bus: glue, EQ, clip"
                 on: panel.chainOpen && panel.chainGroup === ""
-                onClicked: panel.openChain("", "")
+                onClicked: panel.openChain("", "", busButton)
             }
         }
         Note {
@@ -641,7 +663,7 @@ Rectangle {
         theme: panel.theme
         group: panel.chainGroup
         groupName: panel.chainGroupName
-        onClosed: panel.chainOpen = false
+        onClosed: panel.closeChain()
     }
 
     // ---- The library, from the header's chip ------------------------------------------------------------

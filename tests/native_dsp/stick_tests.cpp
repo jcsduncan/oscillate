@@ -915,12 +915,30 @@ void the_callback_does_not_allocate() {
   events[0].kind = engine::MidiEventKind::note_on;
   events[0].offset = block / 2;
   const auto keys = groove();
+  // Stages switch out and back in while it plays: the crossfades and the
+  // kernels' clean starts run on the callback too.
+  auto switched = rich();
+  for (const auto stage : {"stick.mic.toms.gate", "stick.mic.snare_top.comp",
+                           "stick.mic.kick_in.sat", "stick.bus.clip"}) {
+    switched[at(stage)] = 0.0;
+  }
+  switched[at("stick.mic.snare_bottom.shaper")] = on;
+  constexpr std::uint64_t switch_out = blocks / 3;
+  constexpr std::uint64_t switch_in = 2 * blocks / 3;
+  std::uint64_t revision = 1;
   // Prime: the first block adopts the values.
   runtime->await_content();
   (void)runtime->process(buffer, {}, 0, 1, {}, {});
   counted_allocations = 0;
   counting_allocations = true;
   for (std::uint64_t b = 1; b < blocks; ++b) {
+    if (b == switch_out || b == switch_in) {
+      // Offering is the control thread's; only the callback is counted.
+      counting_allocations = false;
+      REQUIRE_TRUE(runtime->offer_values(b == switch_out ? switched : rich(), ++revision),
+                   "stages switch");
+      counting_allocations = true;
+    }
     const auto hit_index = b / every;
     events[0].note_id_bits = {0, hit_index};
     events[0].key = keys[(hit_index * 2) % keys.size()].key;
@@ -944,11 +962,17 @@ void the_tail_bound_covers_a_hit() {
   chain_on(chained);
   REQUIRE_GT(stick::engine().tail_frames(chained, rate), stick::engine().tail_frames(dry(), rate),
              "the chain's stages lengthen the tail");
-  auto runtime = make_runtime(stick::engine(), v);
   const auto off = frames_of(after_seconds);
-  const auto x = mono(render(*runtime, note(0, off, crash, 1, full), off + tail + off));
-  REQUIRE_GT(rms(x, off, off), audible, "the cymbal rings on");
-  REQUIRE_LT(rms(x, off + tail, off), tail_silence, "silent after the tail bound");
+  // With and without the chain, silent after its bound.
+  auto with_chain = v;
+  chain_on(with_chain);
+  for (const auto& values : {v, with_chain}) {
+    const auto bound = stick::engine().tail_frames(values, rate);
+    auto runtime = make_runtime(stick::engine(), values);
+    const auto x = mono(render(*runtime, note(0, off, crash, 1, full), off + bound + off));
+    REQUIRE_GT(rms(x, off, off), audible, "the cymbal rings on");
+    REQUIRE_LT(rms(x, off + bound, off), tail_silence, "silent after the tail bound");
+  }
 }
 
 } // namespace

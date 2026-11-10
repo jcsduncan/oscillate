@@ -287,11 +287,13 @@ void render_set(const fs::path& output) {
   }
   // Each preset's kick and snare struck once, alone, for measuring.
   const auto hits = output / "hits";
+  const auto hit_work = work / "hits";
   fs::create_directories(hits);
+  fs::create_directories(hit_work);
   for (const auto& groove : grooves()) {
     for (const auto& [name, key] : {std::pair{"kick", kick}, std::pair{"snare", snare}}) {
       const std::string label = std::string(groove.preset) + " - " + name;
-      const auto root = work / label;
+      const auto root = hit_work / label;
       if (fs::exists(root))
         continue; // A preset two grooves share.
       auto session = take(Session::create(root));

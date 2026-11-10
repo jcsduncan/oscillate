@@ -961,7 +961,7 @@ private:
     const auto at = static_cast<std::size_t>(since);
     const auto bus = std::span(bus_frames_).first(frames);
     const auto send = std::span(parallel_frames_).first(frames);
-    std::fill(send.begin(), send.end(), engine::StereoFrame{0.0F, 0.0F});
+    std::ranges::fill(send, engine::StereoFrame{0.0F, 0.0F});
     for (std::size_t slot = 1; slot < slots_; ++slot) {
       const auto group = bus_group_[slot];
       for (std::size_t i = 0; i < frames; ++i) {

@@ -74,6 +74,14 @@ Rectangle {
     Accessible.role: Accessible.Pane
     Accessible.name: group !== "" ? groupName + " chain" : "Kit buses"
     Keys.onEscapePressed: chain.closed()
+    // Open, it takes the keyboard (Escape closes it) and every press: the
+    // mixer under it does not react through its gaps.
+    onVisibleChanged: if (visible) forceActiveFocus()
+
+    MouseArea {
+        anchors.fill: parent
+        onPressed: chain.forceActiveFocus()
+    }
 
     Item {
         id: title
@@ -119,7 +127,7 @@ Rectangle {
                     || (chain.controller.revision >= 0 && chain.controller.choice(modelData.toggle) === 1)
                 readonly property int columns: Math.min(modelData.knobs.length, chain.theme.chainColumns)
                 objectName: "stickChainSection:" + modelData.title
-                width: Math.max(columns * chain.theme.chainCell, model.width) + 2 * chain.theme.tilePad
+                width: Math.max(columns * chain.theme.chainCell, modelLoader.width) + 2 * chain.theme.tilePad
                 height: sectionTitle.height + knobs.height + 2 * chain.theme.tilePad
                         + (modelData.model !== undefined ? chain.theme.segmentHeight + chain.theme.hintGap : 0)
                 radius: chain.theme.tileRadius
@@ -156,7 +164,7 @@ Rectangle {
                     }
                 }
                 Loader {
-                    id: model
+                    id: modelLoader
                     x: chain.theme.tilePad
                     y: sectionTitle.y + sectionTitle.height + chain.theme.hintGap
                     active: section.modelData.model !== undefined
@@ -166,13 +174,13 @@ Rectangle {
                         theme: chain.theme
                         parameterId: section.modelData.model
                         inactive: !section.on
-                        inactiveReason: "Saturation is off"
+                        inactiveReason: section.modelData.title.toLowerCase() + " is off"
                     }
                 }
                 Grid {
                     id: knobs
                     x: chain.theme.tilePad
-                    y: (section.modelData.model !== undefined ? model.y + model.height
+                    y: (section.modelData.model !== undefined ? modelLoader.y + modelLoader.height
                                                               : sectionTitle.y + sectionTitle.height)
                        + chain.theme.hintGap
                     columns: section.columns

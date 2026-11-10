@@ -17,6 +17,7 @@
 #include <QQuickWindow>
 #include <QTest>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -350,8 +351,8 @@ void pieces_mics_and_meters() {
 }
 
 // Runs after the kits are installed. A strip's chain chip opens its
-// group's chain; a stage's switch writes its parameter and lights the
-// strip's lamp; Done closes it; the kit row opens the buses.
+// group's chain; a stage's switch writes its parameter; Done closes it and
+// Escape does too; the kit row opens the buses.
 void the_chain_opens_from_a_strip() {
   InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
   NativeSynthDeviceController controller(table(), adapter);
@@ -372,6 +373,10 @@ void the_chain_opens_from_a_strip() {
           "a stage's switch turns it on");
   click(*panel, centre(item(*panel, QStringLiteral("stickChainClose"))));
   require(QTest::qWaitFor([&] { return !editor->isVisible(); }, wait_ms), "Done closes it");
+  click(*panel, centre(item(*panel, QStringLiteral("stickChainChip:snare_top"))));
+  require(QTest::qWaitFor([&] { return editor->isVisible(); }, wait_ms), "it opens again");
+  QTest::keyClick(panel->window.get(), Qt::Key_Escape);
+  require(QTest::qWaitFor([&] { return !editor->isVisible(); }, wait_ms), "Escape closes it");
   click(*panel, centre(item(*panel, QStringLiteral("stickBusButton"))));
   require(QTest::qWaitFor([&] { return editor->isVisible(); }, wait_ms),
           "the kit row opens the buses");
@@ -423,8 +428,11 @@ void screenshots_if_requested() {
   QTest::qWait(settle_ms);
   shoot_if_requested(*panel, QStringLiteral("stick.png"));
   // A shaped kit's kick chain, open.
-  constexpr int house_tight = 1;
-  controller.apply_preset(house_tight);
+  const auto& presets = table().presets;
+  const auto house_tight = std::ranges::find(presets, std::string_view("House Tight"),
+                                             &oscillate::native_dsp::Preset::name);
+  require(house_tight != presets.end(), "House Tight is a preset");
+  controller.apply_preset(static_cast<int>(house_tight - presets.begin()));
   click(*panel, centre(item(*panel, QStringLiteral("stickChainChip:kick_in"))));
   QTest::qWait(settle_ms);
   shoot_if_requested(*panel, QStringLiteral("stick_chain.png"));

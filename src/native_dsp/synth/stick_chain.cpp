@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <initializer_list>
 #include <limits>
 #include <optional>
@@ -54,6 +55,7 @@ constexpr std::size_t missing = std::numeric_limits<std::size_t>::max();
 }
 
 // A choice parameter's value for the choice named `name`.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a parameter id, then a choice name.
 [[nodiscard]] double choice_of(const effects::EffectEngine& engine, std::string_view id,
                                std::string_view name) {
   const auto index = at(engine, id);
@@ -94,7 +96,7 @@ struct Ids {
 constexpr std::array<int, 5> shape_bands{1, 2, 3, 7, 8};
 constexpr std::array<std::string_view, 5> shape_kinds{"High Pass", "Low Shelf", "Peak",
                                                       "High Shelf", "Low Pass"};
-enum ShapeBand : std::size_t { band_cut_low, band_low, band_mid, band_high, band_cut_high };
+enum ShapeBand : std::uint8_t { band_cut_low, band_low, band_mid, band_high, band_cut_high };
 
 const Ids& ids() {
   static const Ids found = [] {
@@ -166,6 +168,7 @@ void map_gate(std::span<const double> v, std::size_t base, std::span<double> out
 // An EQ's controls from `base` (its switch) on.
 void map_eq(std::span<const double> v, std::size_t base, std::span<double> out) noexcept {
   const auto& bands = ids().shape;
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a band's frequency, Q and gain.
   const auto band = [&](ShapeBand b, bool enabled, double hz, double q, double db) {
     out[bands[b].on] = enabled ? on : off;
     out[bands[b].kind] = bands[b].kind_value;
