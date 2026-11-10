@@ -13,6 +13,7 @@ on:
     paths:
       - .github/workflows/ci-image.yml
       - scripts/ci/Dockerfile
+      - scripts/ci/build-ci-image.sh
       - scripts/ci/ci-image-deps.sh
       - scripts/ci/install-deps.sh
   pull_request:
@@ -20,6 +21,7 @@ on:
     paths:
       - .github/workflows/ci-image.yml
       - scripts/ci/Dockerfile
+      - scripts/ci/build-ci-image.sh
       - scripts/ci/ci-image-deps.sh
       - scripts/ci/install-deps.sh
   schedule:
@@ -34,18 +36,33 @@ permissions: {}
 
 env:
   IMAGE: ghcr.io/jcsduncan/oscillate-ci
-  PUBLISH: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
 
 jobs:
-  image:
+  # Pull requests only build, with a read-only token.
+  check:
     name: Build the CI image
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
       contents: read
-      packages: write
-      id-token: write
-      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build base and full
+        run: scripts/ci/build-ci-image.sh "$IMAGE" "$(scripts/ci/ci-image-deps.sh --hash)"
+
+  image:
+    name: Build and push the CI image
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write # push the image to GHCR
+      id-token: write # sign the provenance attestations
+      attestations: write # store the provenance attestations
     outputs:
       base: ${{ steps.push.outputs.base }}
       full: ${{ steps.push.outputs.full }}
@@ -59,22 +76,9 @@ jobs:
       - name: Build base and full
         env:
           HASH: ${{ steps.hash.outputs.hash }}
-        run: |
-          for variant in base full; do
-            docker build --target "$variant" -f scripts/ci/Dockerfile \
-              -t "$IMAGE:$variant-$HASH" -t "$IMAGE:$variant-latest" .
-          done
-          {
-            echo "| Variant | Size |"
-            echo "| --- | --- |"
-            for variant in base full; do
-              size=$(docker image inspect --format '{{.Size}}' "$IMAGE:$variant-$HASH")
-              echo "| $variant | $((size / 1024 / 1024)) MiB |"
-            done
-          } | tee -a "$GITHUB_STEP_SUMMARY"
+        run: scripts/ci/build-ci-image.sh "$IMAGE" "$HASH"
       - name: Push
         id: push
-        if: env.PUBLISH == 'true'
         env:
           HASH: ${{ steps.hash.outputs.hash }}
           GH_TOKEN: ${{ github.token }}
@@ -89,19 +93,20 @@ jobs:
             echo "$variant=$digest" >> "$GITHUB_OUTPUT"
             echo "$IMAGE@$digest ($variant-$HASH)" | tee -a "$GITHUB_STEP_SUMMARY"
           done
-          docker logout ghcr.io
+      # Both read the ghcr.io login that the push step stored.
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        if: env.PUBLISH == 'true'
         with:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.push.outputs.base }}
           push-to-registry: true
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        if: env.PUBLISH == 'true'
         with:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.push.outputs.full }}
           push-to-registry: true
+      - name: Log out of GHCR
+        if: always()
+        run: docker logout ghcr.io
 
   # GITHUB_TOKEN cannot change workflow files, and a pull request it opens
   # runs no checks, so this acts with RELEASE_PLEASE_TOKEN (CONTRIBUTING.md,
@@ -109,7 +114,6 @@ jobs:
   pin:
     name: Pin the new digests
     needs: image
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
