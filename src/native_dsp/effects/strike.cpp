@@ -101,6 +101,8 @@ constexpr double tail_seconds = 0.05;
 constexpr double hold_seconds = 1.0;
 constexpr double hold_fall = 1e-3;
 constexpr double reading_floor_db = -120.0;
+// The clip reading falls this fast, in dB.
+constexpr double clipped_fall_db_per_second = 60.0;
 
 [[nodiscard]] double finite_or_zero(float x) noexcept {
   return std::isfinite(x) ? static_cast<double>(x) : 0.0;
@@ -276,6 +278,10 @@ public:
       sustain_db_[b] = v[first + t::band::sustain];
       const bool solo = v[first + t::band::solo] != 0.0;
       heard_[b].to(b < layout_.bands && (!any_solo || solo), jump);
+      // An unused band's detectors start clean when it plays again.
+      if (b >= layout_.bands) {
+        followers_[b] = {};
+      }
     }
     link_ = std::clamp(v[p::link], 0.0, 1.0);
     mix_.settle(std::clamp(v[p::mix], 0.0, 1.0), steps, jump);
@@ -339,8 +345,8 @@ public:
       frame.left = static_cast<float>(out[0]);
       frame.right = static_cast<float>(out[1]);
     }
-    const double frames = static_cast<double>(audio.size());
-    clipped_ = std::max(clipped_ * std::pow(hold_, frames), gain_to_db(block_clip));
+    const double fall_db = clipped_fall_db_per_second * static_cast<double>(audio.size()) / rate_;
+    clipped_ = std::max(std::max(clipped_ - fall_db, 0.0), gain_to_db(block_clip));
   }
 
   void reset() noexcept override {

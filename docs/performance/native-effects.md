@@ -19,7 +19,7 @@
 | Expanse | 5.1–6.5% | 16 lines with two allpasses and two biquads each; Hadamard mixing; shimmer when on. |
 | Cast | 1.2–1.9% at 64 and 128 frames (`oscillate_cast_bench`, true-stereo bundled IRs of 0.4–9.5 s); 99th-percentile block 2.3–5.2% of its period, longest 3.2–12.3%; process CPU (getrusage) equal to the mean | The 64-tap head per route, then each tier's partition products, spread over its next block. |
 | Hush | 0.45–0.55% (0.46–0.56% in 64-frame blocks) | Eight key-filter biquads, the detector and the state per channel; a `pow` only while the gain moves. |
-| Strike | 0.34–0.38% with one band at 64 and 128 frames (`oscillate_strike_bench`, drum hits over noise); 99th-percentile block 0.5–0.7% of its period. Linear-phase bands with Clip: 4.3–4.4% (Drum Bus Punch, three bands) and 5.3% (Master Impact, four), 99th percentile 10.7–20.5%, longest 18.7–45.7%. Process CPU equal to the mean. Sixteen single-band instances in a chain: 4.7–8.9%, 99th percentile 7.7–12.5% | Per band and channel the quadrature pair (eight allpass sections), the level and two followers, and one `exp` while the gain moves. The linear-phase bank runs one forward and one inverse FFT per band every 512 frames, so its cost lands in one block of each hop; the 4× clip about 0.8%. |
+| Strike | Measured by `oscillate_strike_bench` on drum hits over noise, not the noise above, with one instance and with sixteen. 0.34–0.38% with one band at 64 and 128 frames; 99th-percentile block 0.5–0.7% of its period. Linear-phase bands with Clip: 4.3–4.4% (Drum Bus Punch, three bands) and 5.3% (Master Impact, four), 99th percentile 10.7–20.5%, longest 18.7–45.7%. Process CPU equal to the mean. Sixteen single-band instances in a chain: 4.7–8.9%, 99th percentile 7.7–12.5% | Per band and channel the quadrature pair (eight allpass sections), the level and two followers, and one `exp` while the gain moves. The linear-phase bank runs one forward and one inverse FFT per band every 512 frames, so its cost lands in one block of each hop; the 4× clip about 0.8%. |
 | Ceiling | 7.0–7.1% at 64 and 128 frames (`oscillate_ceiling_bench`, noise 12 dB over); 99th-percentile block 8.4–10.2% of its period, longest 11.9–17.7%; process CPU equal to the mean. Sixteen in a chain: 110–114% of one core, 99th percentile 118–150%. With no room to clip (Transients and Clip at 0): 2.5% | The 8× linear-phase clipper (about 4.5%), which sleeps with no room; the 8× fine-peak detector, the 4× guard and the output true-peak meter, about 1.9% together; K-weighted loudness. |
 
 Ceiling was measured on an Intel Core i7-10700K with GCC 15.2, Release, pinned with `taskset`.
@@ -76,7 +76,7 @@ Tones 6 dB over the ceiling, dB:
 
 `oscillate_limiter_audit --shaper` runs each Strike preset at the programme's own level and reports what it changes: integrated loudness, short-term crest factor (16× true peak over RMS), onset contrast in the three bands (positive is more attack against the body) and the 16× true peak. The synthetic drum loop:
 
-| Preset | LUFS | Crest | Onset contrast L/M/H | True peak | Latency |
+| Preset | LUFS change | Crest change | Onset contrast change L/M/H | True peak change | Latency |
 |---|---|---|---|---|---|
 | Kick Snap | +0.07 | +1.51 | +1.14/+2.05/+0.57 | +4.46 | 1.0 ms |
 | Snare Crack | +1.15 | +1.40 | +1.32/+2.00/+0.68 | +5.85 | 1.0 ms |
@@ -89,7 +89,7 @@ The same three bands split at minimum phase with every gain at 0 dB change the o
 
 The eight mastered tracks (mean):
 
-| Preset | LUFS | Crest | Onset contrast L/M/H | True peak | Latency |
+| Preset | LUFS change | Crest change | Onset contrast change L/M/H | True peak change | Latency |
 |---|---|---|---|---|---|
 | Kick Snap | −0.41 | +1.33 | +0.79/+1.44/+0.32 | +4.07 | 1.0 ms |
 | Snare Crack | +0.52 | +1.23 | +0.91/+1.39/+0.40 | +5.26 | 1.0 ms |
