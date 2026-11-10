@@ -208,16 +208,18 @@ public:
     for (std::size_t k = 0; k < core::role_count; ++k) {
       if (!heard[k])
         continue;
-      if (!meters_[k])
-        meters_[k].emplace(rate_);
-      meters_[k].value().push(sums_[k]);
+      auto& meter = meters_[k];
+      if (!meter)
+        meter.emplace(rate_);
+      if (meter)
+        meter->push(sums_[k]);
     }
   }
   [[nodiscard]] core::RolePowers powers() const {
     core::RolePowers out;
     for (std::size_t k = 0; k < core::role_count; ++k)
-      if (meters_[k])
-        out[k] = meters_[k].value().powers();
+      if (const auto& meter = meters_[k])
+        out[k] = meter->powers();
     return out;
   }
 
@@ -357,10 +359,12 @@ Result<std::vector<core::ChainDevice>> chain_of(const project::Snapshot& snapsho
     if (!resolved)
       return Result<std::vector<core::ChainDevice>>::failure(resolved.error());
     const auto& table = *resolved.value().engine->descriptor;
-    if (!limiter && patch->engine == "ceiling")
-      limiter = core::Knob{chain.size(), native_dsp::find_parameter(table, "ceiling.gain").value()};
-    if (!trim && patch->engine == "trim")
-      trim = core::Knob{chain.size(), native_dsp::find_parameter(table, "trim.gain").value()};
+    if (const auto gain = native_dsp::find_parameter(table, "ceiling.gain");
+        !limiter && patch->engine == "ceiling" && gain)
+      limiter = core::Knob{chain.size(), *gain};
+    if (const auto gain = native_dsp::find_parameter(table, "trim.gain");
+        !trim && patch->engine == "trim" && gain)
+      trim = core::Knob{chain.size(), *gain};
     chain.push_back({resolved.value().engine, std::move(resolved.value().values),
                      patch->document.empty() ? std::nullopt : std::optional(patch->document)});
   }

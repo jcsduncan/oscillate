@@ -38,10 +38,12 @@ The project has every device a master needs (Shape, Keel, Press, Strata, Gild, S
 |---|---|---|---|---|---|
 | Streaming, Clean | 18 of 18 | 0.09 LU | 4.54 → 3.13 dB | −0.52 (0.00) dB | 0.40/−0.13/−0.09 (−0.01/−0.02/−0.01) dB |
 | Club, Punchy | 18 of 18 | 0.09 LU | 4.54 → 3.11 dB | 0.14 (0.32) dB | −0.08/−0.22/−0.10 (−0.63/−0.13/−0.17) dB |
+| Loud, Clean | 18 of 18 | 0.10 LU | 4.54 → 3.99 dB | 1.73 (0.75) dB | −0.15/−0.82/−0.89 (−0.40/0.13/−0.39) dB |
 
-- **Loudness and peaks:** every master lands within 0.1 LU of its target, and no true peak passes the ceiling (the worst sits 0.01 dB under it). Learning took one to four passes.
-- **Tonal balance:** the distance from the target falls on every programme, by 1.4 dB RMS on average.
-- **Transients:** at Club the proposed chains lose less crest than the naive limiter (0.14 against 0.32 dB). The exception is one track whose lows carry side 12 dB or less under the mid: Vista's mono bass turns the mid's phase at its crossovers, and the kick's onset contrast below 150 Hz falls by 6.1–7.3 dB on it at both targets. That track alone makes the mean low-band onset loss larger than the naive chain's; the line under Vista says what it does, and it can be left out.
+- **Loudness and peaks:** every master lands within 0.1 LU of its target, and no true peak passes the ceiling (the worst sits 0.01 dB under it). Learning took one to six passes.
+- **Tonal balance:** the distance from the target falls on every programme: by 1.4 dB RMS on average at Streaming and Club, 0.55 dB at Loud, where the compressors chosen to reach −7 LUFS pull some of the balance back.
+- **Transients:** at Club the proposed chains lose less crest than the naive limiter (0.14 against 0.32 dB). At Loud they lose more crest (1.73 against 0.75 dB) but less onset contrast in the mids and highs: Clean's limiter alone falls short of −7 LUFS, so a compressor is kept for the loudness, and the crest it takes is the cost of the target.
+- **Mono bass:** one track's lows carry side less than 12 dB under the mid. Vista's mono bass turns the mid's phase at its crossovers, and the kick's onset contrast below 150 Hz falls by 4.2–7.3 dB on that track at every target. That track alone makes the mean low-band onset loss larger than the naive chain's; the line under Vista says what it does, and it can be left out.
 - **Determinism:** the same programme and goal give the same proposal, value for value.
 
 ## Consequences
@@ -50,5 +52,5 @@ The project has every device a master needs (Shape, Keel, Press, Strata, Gild, S
   - `native_master_assistant_contract`: loudness against the project's analyser, a sine's true peak and crest, width, mono bass and onset rate on built signals, the tonal distance and the loudest window; each rule from its measurement; nudges only with a clear owner; the offline chain lined up sample for sample; each loudness preset reached under its ceiling with the balance moved toward the reference; the master fader allowed for; the same input planning the same proposal word for word; level matching.
   - `application_master_assistant`: the measurement leaves the master chain out; proposing changes nothing; Accept is one undo step that keeps an existing Trim in place and adds the rest in order, and one undo takes it back; accepting part of it edits an existing Ceiling rather than doubling it; a changed mix is refused; the rendered master meets the goals within 0.25 LU of the prediction (the song also carries the chain's tail); nudges render again and land in the rebalance; the A/B is level-matched, crossfades and allocates nothing.
   - `application_routed_live_edit` (`assistant_proposal_is_accepted_without_a_gap`): a proposal with a lookahead limiter accepted onto an empty master while playing becomes active without a restart or a silent block, with the app's node input history (which primes a fresh chain, ADR-0049).
-- **Cost:** planning runs the chain over the programme several times on a worker: one to four passes of the limiter, more when compressors are weighed. A 30 s programme plans in seconds; a whole song takes about as long per pass as Ceiling takes to process it.
+- **Cost:** planning runs the chain over the programme several times on a worker: one to six passes of the limiter, more when compressors are weighed. A 30 s programme plans in seconds; a whole song takes about as long per pass as Ceiling takes to process it.
 - **Vista's mono bass** keeps its phase cost; a mono bass with no crossover phase on the mid would need Vista's DSP to change.

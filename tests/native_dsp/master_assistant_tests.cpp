@@ -167,10 +167,11 @@ void loudness_peak_and_crest_read_as_built() {
   }
   REQUIRE_EQ(reference_meter.append(interleaved), dsp::LoudnessStatus::ok, "the meter takes it");
   const auto measured = assistant::analyse(noise.left, noise.right, rate);
-  REQUIRE_TRUE(measured.integrated_lufs, "integrated loudness");
-  REQUIRE_NEAR(measured.integrated_lufs.value(), reference_meter.finish().integrated_lkfs.value(),
-               loudness_agreement_lu, "the same BS.1770 loudness");
-  REQUIRE_GE(measured.max_short_term_lufs, *measured.integrated_lufs, "short-term peaks over it");
+  const auto expected = reference_meter.finish().integrated_lkfs;
+  REQUIRE_TRUE(measured.integrated_lufs && expected, "integrated loudness");
+  REQUIRE_NEAR(measured.lufs(), expected.value_or(assistant::floor_db), loudness_agreement_lu,
+               "the same BS.1770 loudness");
+  REQUIRE_GE(measured.max_short_term_lufs, measured.lufs(), "short-term peaks over it");
   REQUIRE_GE(measured.max_momentary_lufs, measured.max_short_term_lufs, "momentary over that");
 
   constexpr double amplitude_db = -6.0;
@@ -261,10 +262,11 @@ void reference_tracks_average_their_traits() {
   const std::array tracks{first, second, silent};
   const auto r = take(assistant::reference_from("references", tracks));
   REQUIRE_TRUE(r.traits.has_value(), "measured traits");
-  REQUIRE_NEAR(r.traits.value().low_side_db, 0.5 * (first_side_db + second_side_db),
-               alignment_tolerance, "the mean low side");
-  REQUIRE_NEAR(r.traits.value().crest_db, 0.5 * (first_crest_db + second_crest_db),
-               alignment_tolerance, "the mean crest");
+  const auto traits = r.traits.value_or(assistant::Traits{});
+  REQUIRE_NEAR(traits.low_side_db, 0.5 * (first_side_db + second_side_db), alignment_tolerance,
+               "the mean low side");
+  REQUIRE_NEAR(traits.crest_db, 0.5 * (first_crest_db + second_crest_db), alignment_tolerance,
+               "the mean crest");
   REQUIRE_EQ(r.target.references, 2, "the silent track is left out");
 }
 

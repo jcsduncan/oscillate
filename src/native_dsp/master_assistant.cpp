@@ -197,9 +197,10 @@ std::vector<Nudge> nudges_for(const tonal::Curve& diff, const RolePowers& roles)
     if (total <= 0.0)
       continue;
     for (std::size_t k = 0; k < role_count; ++k) {
-      if (!roles[k])
+      const auto& role = roles[k];
+      if (!role)
         continue;
-      const double share = roles[k].value()[r] / total;
+      const double share = (*role)[r] / total;
       if (share < nudge_share || std::fabs(deviation[r]) <= weight[k])
         continue;
       weight[k] = std::fabs(deviation[r]);
@@ -769,10 +770,12 @@ GainSearch search_for(const Proposal& proposal) {
   search.output_gain = dsp::db_to_gain(proposal.goals.after_chain_db);
   for (std::size_t i = 0; i < proposal.devices.size(); ++i) {
     const auto& device = proposal.devices[i];
-    if (device.engine == "ceiling")
-      search.limiter = {i, find_parameter(table("ceiling"), "ceiling.gain").value()};
-    if (device.engine == "trim")
-      search.trim = Knob{i, find_parameter(table("trim"), "trim.gain").value()};
+    if (const auto gain = find_parameter(table("ceiling"), "ceiling.gain");
+        device.engine == "ceiling" && gain)
+      search.limiter = {i, *gain};
+    if (const auto gain = find_parameter(table("trim"), "trim.gain");
+        device.engine == "trim" && gain)
+      search.trim = Knob{i, *gain};
   }
   return search;
 }
