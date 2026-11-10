@@ -9,9 +9,12 @@ effects renders through the native offline master itself
 tail-inclusive project-rate stream to the master output stage
 (`include/oscillate/export/master_output.hpp`, `src/export/master_output.cpp`). That stage:
 
-- writes WAV float32, PCM24 or PCM16, with seeded TPDF dither for integer WAV;
+- writes WAV float32, PCM24 or PCM16;
 - in a codec build, writes FLAC16, FLAC24 or MP3 through the existing in-process
   libsndfile `EncodedWriter`; no external encoder or `ffmpeg` process is used;
+- dithers integer WAV and FLAC with seeded TPDF, flat or noise-shaped
+  ([ADR-0117](../decisions/0117-ceiling-mastering-limiter.md)); float WAV and MP3
+  are written undithered;
 - in a libsamplerate export build, converts to 44.1, 48, 88.2 or 96 kHz with the
   existing `SRC_SINC_BEST_QUALITY` worker converter, using the native master's
   rounded duration, one-frame terminal pad and wrong-duration rejection;
@@ -23,8 +26,8 @@ observer on the emitted output samples.
 
 `render_vst3_master` takes `MasterOutputOptions`, a variant of
 `MasterRenderOptions` and `EncodedMasterOptions`. `render_vst3_stem` and
-`render_vst3_stems` accept every WAV format and output rate. The Qt Quick Export Master action passes the selected format and output
-rate to these paths; its existing rate validation still rejects MP3 above
+`render_vst3_stems` accept every WAV format and output rate. The Qt Quick Export Master action passes the selected format, dither and
+output rate to these paths; its existing rate validation still rejects MP3 above
 48 kHz and conversion in a build without libsamplerate before dispatch.
 
 ## Constraints

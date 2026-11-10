@@ -137,6 +137,7 @@ add_library(oscillate_native_effects effects/runtime.cpp effects/registry.cpp
                                             effects/tune.cpp effects/trim.cpp
                                             effects/signal.cpp effects/shape.cpp
                                             effects/press.cpp effects/ceiling.cpp
+                                            effects/ceiling_dsp.cpp
                                             effects/strata.cpp
                                             # Edge's oversampler and guard (ADR-0108).
                                             effects/edge.cpp effects/edge_dsp.cpp

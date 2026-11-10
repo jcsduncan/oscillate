@@ -1,6 +1,6 @@
 # ADR-0047 — The classic processors become engines
 
-**Status:** Accepted and implemented for EQ, compressor, limiter and reverb (schema 1.37); convolution superseded by [ADR-0115](0115-cast-convolution-reverb.md). **Date:** 20 October 2026.
+**Status:** Accepted and implemented for EQ, compressor, limiter and reverb (schema 1.37); convolution superseded by [ADR-0115](0115-cast-convolution-reverb.md); Ceiling's classic limiter superseded by [ADR-0117](0117-ceiling-mastering-limiter.md). **Date:** 20 October 2026.
 **Completes:** ADR-0043 (one native insert path).
 
 ## Context

@@ -1,12 +1,14 @@
 #pragma once
 
 #include "oscillate/native_dsp/compressor.hpp"
+#include "oscillate/native_dsp/effects/ceiling.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/eq.hpp"
 #include "oscillate/native_dsp/limiter.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/project/model.hpp"
+#include "oscillate/test/audio_constants.hpp"
 
 #include <algorithm>
 #include <array>
@@ -59,9 +61,10 @@ template <typename T> void set_master(project::Snapshot& snapshot, T value) {
   });
 }
 
-// Built-in effect fixtures (ADR-0047). Shape, Press and Ceiling run the
-// native_dsp EQ, compressor and limiter bit for bit, so those runtimes are
-// the oracles; Expanse is the reverb.
+// Built-in effect fixtures (ADR-0047). Shape and Press run the native_dsp
+// EQ and compressor bit for bit, so those runtimes are the oracles; Expanse
+// is the reverb. Ceiling (ADR-0117) is set with no room to clip, so whatever
+// it does not limit passes as an exact delay of ceiling::latency_frames.
 namespace native_dsp = oscillate::native_dsp;
 
 inline project::NativeEffectPatch
@@ -116,11 +119,20 @@ inline project::NativeEffectPatch press(const native_dsp::CompressorSettings& se
 }
 
 inline project::NativeEffectPatch ceiling(const native_dsp::LimiterSettings& settings) {
-  const std::array<std::pair<std::string, double>, 3> values{
+  const std::array<std::pair<std::string, double>, 5> values{
       {{"ceiling.ceiling", settings.ceiling_db},
        {"ceiling.lookahead", settings.lookahead_ms},
-       {"ceiling.release", settings.release_ms}}};
+       {"ceiling.release", settings.release_ms},
+       {"ceiling.transients", 0.0},
+       {"ceiling.clip", 0.0}}};
   return effect_patch("ceiling", values);
+}
+
+// Ceiling's latency for a lookahead at 48 kHz, as the fixture above sets
+// it.
+inline std::uint32_t ceiling_latency(double lookahead_ms) {
+  return native_dsp::effects::ceiling::latency_frames(lookahead_ms,
+                                                      oscillate::test::sample_rate_48k_hz);
 }
 
 // Expanse at a decay (seconds) and mix (0..1).

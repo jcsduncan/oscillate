@@ -283,6 +283,13 @@ public:
   // the latency in milliseconds at `sample_rate`.
   Q_INVOKABLE QVariantList edge_transfer(double from_db, double to_db, int points) const;
   Q_INVOKABLE double edge_latency_ms(double sample_rate) const;
+  // Ceiling (ADR-0117): its latency in milliseconds at `sample_rate` (0 for
+  // other engines).
+  Q_INVOKABLE double ceiling_latency_ms(double sample_rate) const;
+  // Learn: the Gain (dB) that moves the output by the distance from
+  // `integrated_lufs` to Target, within Gain's range; the current Gain when
+  // there is no reading (NaN); NaN for other engines.
+  Q_INVOKABLE double ceiling_learned_gain(double integrated_lufs) const;
   // Cast (ADR-0115): its bundled IRs ({id, name, category}, in browser
   // order).
   Q_INVOKABLE QVariantList cast_irs() const;

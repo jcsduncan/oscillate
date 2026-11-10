@@ -61,6 +61,7 @@
 #include <cmath>
 #include <cstddef>
 #include <filesystem>
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -1307,6 +1308,19 @@ QVariantMap NativeSynthDeviceController::telemetry() {
     out[QStringLiteral("input_peak")] = QVariantList{at(t::input_peak), at(t::input_peak + 1)};
     out[QStringLiteral("output_peak")] = QVariantList{at(t::output_peak), at(t::output_peak + 1)};
     out[QStringLiteral("reduction")] = at(t::reduction);
+    out[QStringLiteral("clipped")] = at(t::clipped);
+    out[QStringLiteral("guarded")] = at(t::guarded);
+    // No reading yet (silence, too short, or just after a Gain change): NaN.
+    const auto loudness = [&](std::size_t index) {
+      const double value = at(index);
+      return value > static_cast<double>(native_dsp::effects::ceiling::no_loudness)
+                 ? value
+                 : std::numeric_limits<double>::quiet_NaN();
+    };
+    out[QStringLiteral("momentary")] = loudness(t::momentary);
+    out[QStringLiteral("short_term")] = loudness(t::short_term);
+    out[QStringLiteral("integrated")] = loudness(t::integrated);
+    out[QStringLiteral("latency_ms")] = at(t::latency_ms);
   } else if (id == "edge" && frame.size() >= native_dsp::effects::edge::telemetry::size) {
     namespace edge = native_dsp::effects::edge;
     namespace t = edge::telemetry;
@@ -2015,6 +2029,14 @@ bool NativeSynthDeviceController::choose_media(const QString& slot, const QStrin
 
 double NativeSynthDeviceController::edge_latency_ms(double sample_rate) const {
   return quick::edge_latency_ms(engine_, values_, sample_rate);
+}
+
+double NativeSynthDeviceController::ceiling_latency_ms(double sample_rate) const {
+  return quick::ceiling_latency_ms(engine_, values_, sample_rate);
+}
+
+double NativeSynthDeviceController::ceiling_learned_gain(double integrated_lufs) const {
+  return quick::ceiling_learned_gain(engine_, values_, integrated_lufs);
 }
 
 double NativeSynthDeviceController::forge_makeup_db() const {

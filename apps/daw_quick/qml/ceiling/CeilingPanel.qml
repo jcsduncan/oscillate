@@ -3,14 +3,16 @@ import QtQuick
 import Oscillate.Format
 import "../devicekit" as Kit
 
-// The Ceiling device panel: a mastering brickwall in charcoal and coral.
-// The gain reduction leads, as a history over the last ten seconds hanging
-// from 0 dB, with the reduction now and its largest beside it; then the
-// input and output peak meters with the ceiling drawn across the output.
-// Below: the ceiling as the hero dial, the lookahead (the limiter's
-// latency) and the release. Every control reads and writes through
-// `controller` (NativeSynthDeviceController for Ceiling); the readings
-// come only from the telemetry (layout in ceiling.hpp).
+// The Ceiling device panel: a true-peak mastering limiter in charcoal and
+// coral. Row A: the gain reduction as a history over the last ten seconds
+// hanging from 0 dB, with the reduction now and its largest; the input and
+// output meters with the ceiling drawn across the output; the output's
+// loudness against the target, with Learn to move Gain by the difference.
+// Row B: Drive (gain and the ceiling, large), Limit (lookahead, release,
+// character), Clip (transients, clip, shape, with what the clipper and the
+// guard took) and Stereo (the two links). Every control reads and writes
+// through `controller` (NativeSynthDeviceController for Ceiling); the
+// readings come only from the telemetry (layout in ceiling.hpp).
 Rectangle {
     id: panel
     required property var controller
@@ -29,13 +31,25 @@ Rectangle {
     readonly property real ceilDb: 6
     // A peak above this reads in the over colour.
     readonly property real overDb: -3
+    // When the panel cannot read the running latency, it shows it at 48 kHz.
+    readonly property real nominalRate: 48000
 
     readonly property bool playing: live.live === true
     readonly property var inPeak: playing ? live.input_peak : [-200, -200]
     readonly property var outPeak: playing ? live.output_peak : [-200, -200]
     readonly property real reductionDb: playing ? live.reduction : 0
+    readonly property real clippedDb: playing ? live.clipped : 0
+    readonly property real guardedDb: playing ? live.guarded : 0
+    // Loudness readings are NaN until there is one to show.
+    readonly property real integrated: playing ? live.integrated : NaN
+    readonly property real shortTerm: playing ? live.short_term : NaN
+    readonly property real momentary: playing ? live.momentary : NaN
+    readonly property real latencyMs: playing ? live.latency_ms
+        : (revision >= 0 ? controller.ceiling_latency_ms(nominalRate) : 0)
     readonly property real ceiling: revision >= 0 ? controller.value("ceiling.ceiling") : -1
     readonly property real gain: revision >= 0 ? controller.value("ceiling.gain") : 0
+    readonly property real target: revision >= 0 ? controller.value("ceiling.target") : -14
+    readonly property bool measured: isFinite(integrated)
     readonly property real largestDb: {
         let most = 0
         for (let i = 0; i < samples.length; ++i)
@@ -72,6 +86,16 @@ Rectangle {
     function clearHistory() {
         samples = []
     }
+    // Learn: move Gain by the distance from the integrated loudness to the
+    // target (the controller works it out). Limiting makes loudness grow
+    // more slowly than gain; the reading restarts at the change, so a second
+    // Learn on the same passage closes what remains.
+    function learn() {
+        if (!measured)
+            return
+        theme.lastTouched = "ceiling.gain"
+        controller.set_value("ceiling.gain", controller.ceiling_learned_gain(integrated))
+    }
 
     // ---- Formatting ------------------------------------------------------------------
 
@@ -83,9 +107,12 @@ Rectangle {
     function dbText(db) {
         return db <= floorDb ? Format.number(-Infinity) : signed(db)
     }
-    // The reduction is a cut: shown below zero.
+    // A cut is shown below zero.
     function reductionText(db) {
         return Format.number(-db, levelDecimals)
+    }
+    function loudnessText(lufs) {
+        return playing && isFinite(lufs) ? signed(lufs) : "—"
     }
     // Where a level sits on the meters, 0 (floor) to 1 (top).
     function meterAt(db) {
@@ -102,6 +129,28 @@ Rectangle {
         color: panel.theme.inkFaint
         font.pixelSize: panel.theme.typeCaption
         wrapMode: Text.WordWrap
+    }
+    // A knob with its value under it and a hint under that.
+    component HintedKnob: Column {
+        id: hinted
+        required property string parameterId
+        required property string hint
+        property int diameter: panel.theme.knobDiameterLarge
+        spacing: panel.theme.knobHintGap
+        Kit.Knob {
+            anchors.horizontalCenter: parent.horizontalCenter
+            controller: panel.controller
+            theme: panel.theme
+            parameterId: hinted.parameterId
+            diameter: hinted.diameter
+            readout: true
+        }
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: hinted.hint
+            color: panel.theme.inkFaint
+            font.pixelSize: panel.theme.typeCaption
+        }
     }
 
     // ---- Header ----------------------------------------------------------------------
@@ -142,8 +191,7 @@ Rectangle {
                     objectName: "ceilingLatency"
                     x: panel.theme.spaceXxs
                     y: wordmark.height + panel.theme.subtitleGap
-                    text: "LOOKAHEAD LIMITER · " + (panel.revision >= 0 ? panel.controller.display("ceiling.lookahead") : "")
-                        + " LATENCY"
+                    text: "TRUE-PEAK LIMITER · " + Format.number(panel.latencyMs, 1) + " ms LATENCY"
                     color: panel.theme.subtitleInk
                     font.pixelSize: panel.theme.subtitleSize
                     font.bold: true
@@ -158,7 +206,7 @@ Rectangle {
         }
     }
 
-    // ---- Row A: the reduction and the meters -------------------------------------------
+    // ---- Row A: the reduction, the meters and the loudness ------------------------------
 
     readonly property real rowAY: theme.rowAY
     readonly property real rowAHeight: theme.rowAHeight
@@ -171,7 +219,8 @@ Rectangle {
         noteColor: panel.playing ? panel.theme.live : panel.theme.inkFaint
         x: panel.margin
         y: panel.rowAY
-        width: panel.width - 2 * panel.margin - panel.gap - panel.theme.meterPlateWidth
+        width: panel.width - 2 * panel.margin - 2 * panel.gap - panel.theme.meterPlateWidth
+            - panel.theme.loudnessPlateWidth
         height: panel.rowAHeight
         CeilingHistory {
             x: panel.theme.spaceMd
@@ -199,7 +248,7 @@ Rectangle {
                 horizontalAlignment: Text.AlignHCenter
                 text: panel.playing ? panel.reductionText(panel.reductionDb) : "—"
                 color: !panel.playing ? panel.theme.inkFaint
-                    : panel.reductionDb < 0.05 ? panel.theme.inkDim : panel.theme.reduction
+                    : panel.reductionDb < panel.theme.reductionIdleDb ? panel.theme.inkDim : panel.theme.reduction
                 font.family: panel.theme.sans
                 font.pixelSize: panel.theme.reductionNowSize
                 font.weight: Font.Light
@@ -232,34 +281,15 @@ Rectangle {
                 width: 1
                 height: panel.theme.clearSpacer
             }
-            Rectangle {
+            Kit.Button {
                 objectName: "ceilingClearHistory"
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: panel.theme.clearWidth
-                height: panel.theme.clearHeight
-                radius: height / 2
-                color: clearArea.pressed ? panel.theme.button : panel.theme.buttonHi
-                border.color: activeFocus ? panel.theme.accent : panel.theme.wellEdge
-                activeFocusOnTab: true
-                opacity: panel.samples.length > 0 ? 1 : panel.theme.idleOpacity
-                Accessible.role: Accessible.Button
-                Kit.HoverTip { theme: panel.theme }
-                Accessible.name: "Clear the reduction history"
-                Keys.onReturnPressed: panel.clearHistory()
-                Keys.onSpacePressed: panel.clearHistory()
-                Text {
-                    anchors.centerIn: parent
-                    text: "CLEAR"
-                    color: panel.theme.inkDim
-                    font.pixelSize: panel.theme.typeCaption
-                    font.bold: true
-                    font.letterSpacing: panel.theme.clearSpacing
-                }
-                MouseArea {
-                    id: clearArea
-                    anchors.fill: parent
-                    onClicked: panel.clearHistory()
-                }
+                theme: panel.theme
+                label: "Clear"
+                tip: "Clear the reduction history"
+                active: panel.samples.length > 0
+                onClicked: panel.clearHistory()
             }
         }
     }
@@ -268,11 +298,11 @@ Rectangle {
         id: meterPlate
         theme: panel.theme
         title: "LEVELS"
-        note: panel.playing ? "PEAK" : "NO SIGNAL"
+        note: panel.playing ? "PEAK · TRUE PEAK" : "NO SIGNAL"
         noteColor: panel.playing ? panel.theme.live : panel.theme.inkFaint
         x: reductionPlate.x + reductionPlate.width + panel.gap
         y: panel.rowAY
-        width: panel.width - panel.margin - x
+        width: panel.theme.meterPlateWidth
         height: panel.rowAHeight
 
         readonly property real meterHeight: panel.theme.meterHeight
@@ -362,23 +392,116 @@ Rectangle {
             y: meterPlate.height - panel.theme.noteBottom
             width: meterPlate.width - 2 * panel.theme.cardInset
             horizontalAlignment: Text.AlignHCenter
-            text: "The line on OUT is the ceiling."
+            text: "OUT reads true peak; the line is the ceiling."
         }
     }
 
-    // ---- Row B: gain, ceiling, lookahead, release ----------------------------------------
+    Kit.Card {
+        id: loudnessPlate
+        theme: panel.theme
+        title: "LOUDNESS"
+        note: "OUTPUT · LUFS"
+        x: meterPlate.x + meterPlate.width + panel.gap
+        y: panel.rowAY
+        width: panel.width - panel.margin - x
+        height: panel.rowAHeight
+        Caption {
+            x: panel.theme.cardInset
+            y: panel.theme.cardContentY
+            text: "INTEGRATED"
+        }
+        Text {
+            id: integratedValue
+            objectName: "ceilingIntegrated"
+            x: panel.theme.cardInset
+            y: panel.theme.integratedY
+            text: panel.loudnessText(panel.integrated)
+            color: panel.playing && panel.measured ? panel.theme.accent : panel.theme.inkFaint
+            font.family: panel.theme.sans
+            font.pixelSize: panel.theme.integratedSize
+            font.weight: Font.Light
+        }
+        Text {
+            objectName: "ceilingToTarget"
+            anchors.left: integratedValue.right
+            anchors.leftMargin: panel.theme.spaceMd
+            anchors.baseline: integratedValue.baseline
+            text: panel.playing && panel.measured
+                ? Format.signed_number(panel.integrated - panel.target, panel.levelDecimals) + " LU to target"
+                : ""
+            color: panel.theme.inkDim
+            font.pixelSize: panel.theme.typeLabel
+        }
+        Column {
+            x: panel.theme.cardInset
+            y: panel.theme.loudnessRowsY
+            spacing: panel.theme.spaceSm
+            Repeater {
+                model: [
+                    { name: "SHORT-TERM", key: "ceilingShortTerm" },
+                    { name: "MOMENTARY", key: "ceilingMomentary" }
+                ]
+                delegate: Row {
+                    id: reading
+                    required property var modelData
+                    spacing: panel.theme.spaceMd
+                    Caption {
+                        width: panel.theme.loudnessCaptionWidth
+                        text: reading.modelData.name
+                        anchors.baseline: value.baseline
+                    }
+                    Text {
+                        id: value
+                        objectName: reading.modelData.key
+                        text: panel.loudnessText(reading.modelData.key === "ceilingShortTerm"
+                                                 ? panel.shortTerm : panel.momentary)
+                        color: panel.playing ? panel.theme.ink : panel.theme.inkFaint
+                        font.family: panel.theme.mono
+                        font.pixelSize: panel.theme.typeHeading
+                    }
+                }
+            }
+        }
+        HintedKnob {
+            x: panel.theme.cardInset
+            y: panel.theme.targetKnobY
+            parameterId: "ceiling.target"
+            hint: "what Learn aims at"
+            diameter: panel.theme.knobDiameterSmall
+        }
+        Kit.Button {
+            objectName: "ceilingLearn"
+            x: loudnessPlate.width - panel.theme.cardInset - width
+            y: panel.theme.learnY
+            width: panel.theme.learnWidth
+            theme: panel.theme
+            label: "Learn gain"
+            tip: "Move Gain by the distance from the integrated loudness to the target"
+            prime: panel.playing && panel.measured
+            active: panel.controller.editable && panel.playing && panel.measured
+            onClicked: panel.learn()
+        }
+        Note {
+            x: loudnessPlate.width - panel.theme.cardInset - panel.theme.learnWidth
+            y: panel.theme.learnNoteY
+            width: panel.theme.learnWidth
+            text: "Play the loudest part, then Learn; once more to close the rest."
+        }
+    }
+
+    // ---- Row B: drive, limit, clip, stereo ------------------------------------------------
 
     readonly property real rowBY: rowAY + rowAHeight + gap
     readonly property real rowBHeight: panel.height - rowBY - margin
 
     Kit.Card {
-        id: gainPlate
+        id: drivePlate
         theme: panel.theme
-        title: "GAIN"
-        note: "DRIVE INTO THE LIMITER"
+        title: "DRIVE"
+        note: "INTO THE CEILING"
         x: panel.margin
         y: panel.rowBY
-        width: panel.theme.gainPlateWidth
+        width: panel.theme.drivePlateWidth
         height: panel.rowBHeight
         Kit.Knob {
             x: panel.theme.heroKnobX
@@ -392,129 +515,146 @@ Rectangle {
         }
         Text {
             objectName: "gainValue"
-            x: panel.theme.gainValueX
-            y: panel.theme.gainValueY
+            x: panel.theme.heroKnobX
+            y: panel.theme.heroValueY
+            width: panel.theme.heroKnobDiameter
+            horizontalAlignment: Text.AlignHCenter
             text: panel.signed(panel.gain)
             color: panel.theme.accent
             font.family: panel.theme.sans
-            font.pixelSize: panel.theme.gainValueSize
+            font.pixelSize: panel.theme.heroValueSize
             font.weight: Font.Light
-            Text {
-                anchors.left: parent.right
-                anchors.leftMargin: panel.theme.gainUnitGap
-                anchors.baseline: parent.baseline
-                text: "dB"
-                color: panel.theme.inkDim
-                font.pixelSize: panel.theme.typeSubtitle
-            }
         }
-        Note {
+        Caption {
             x: panel.theme.heroKnobX
-            y: panel.theme.gainNoteY
-            width: gainPlate.width - 2 * panel.theme.heroKnobX
-            text: "Turn up to make the mix louder: the ceiling catches the peaks."
+            y: panel.theme.heroCaptionY
+            width: panel.theme.heroKnobDiameter
+            horizontalAlignment: Text.AlignHCenter
+            text: "GAIN · dB"
         }
-    }
-
-    Kit.Card {
-        id: ceilingPlate
-        theme: panel.theme
-        title: "CEILING"
-        note: "THE OUTPUT NEVER PASSES IT"
-        x: gainPlate.x + gainPlate.width + panel.gap
-        y: panel.rowBY
-        width: panel.theme.ceilingPlateWidth
-        height: panel.rowBHeight
         Kit.Knob {
-            x: panel.theme.heroKnobX
+            x: drivePlate.width - panel.theme.heroKnobX - panel.theme.heroKnobDiameter
             y: panel.theme.cardContentY
             controller: panel.controller
             theme: panel.theme
             parameterId: "ceiling.ceiling"
             diameter: panel.theme.heroKnobDiameter
             label: ""
-            valueText: panel.signed(panel.ceiling) + " dB"
+            valueText: panel.signed(panel.ceiling) + " dBTP"
         }
         Text {
             objectName: "ceilingValue"
-            x: panel.theme.ceilingValueX
-            y: panel.theme.ceilingValueY
+            x: drivePlate.width - panel.theme.heroKnobX - panel.theme.heroKnobDiameter
+            y: panel.theme.heroValueY
+            width: panel.theme.heroKnobDiameter
+            horizontalAlignment: Text.AlignHCenter
             text: panel.signed(panel.ceiling)
             color: panel.theme.accent
             font.family: panel.theme.sans
-            font.pixelSize: panel.theme.ceilingValueSize
+            font.pixelSize: panel.theme.heroValueSize
             font.weight: Font.Light
-            Text {
-                anchors.left: parent.right
-                anchors.leftMargin: panel.theme.spaceSm
-                anchors.baseline: parent.baseline
-                text: "dBFS"
-                color: panel.theme.inkDim
-                font.pixelSize: panel.theme.typeHeading
+        }
+        Caption {
+            x: drivePlate.width - panel.theme.heroKnobX - panel.theme.heroKnobDiameter
+            y: panel.theme.heroCaptionY
+            width: panel.theme.heroKnobDiameter
+            horizontalAlignment: Text.AlignHCenter
+            text: "CEILING · dBTP"
+        }
+    }
+
+    // A card of hinted knobs in a row.
+    component KnobCard: Kit.Card {
+        id: knobCard
+        required property var knobs
+        theme: panel.theme
+        y: panel.rowBY
+        height: panel.rowBHeight
+        Row {
+            x: panel.theme.cardInset
+            y: panel.theme.cardContentY
+            Repeater {
+                model: knobCard.knobs
+                delegate: HintedKnob {
+                    required property var modelData
+                    width: (knobCard.width - 2 * panel.theme.cardInset) / knobCard.knobs.length
+                    parameterId: modelData.id
+                    hint: modelData.hint
+                }
             }
         }
-        Note {
-            x: panel.theme.ceilingValueX
-            y: panel.theme.ceilingNoteY
-            width: ceilingPlate.width - panel.theme.ceilingValueX - panel.theme.cardInset
-            text: "Peaks over the ceiling are turned down to it, ahead of time; everything under it passes untouched."
-        }
     }
 
-    Kit.Card {
-        id: lookaheadPlate
-        theme: panel.theme
-        title: "LOOKAHEAD"
-        note: "NOT AUTOMATABLE"
-        x: ceilingPlate.x + ceilingPlate.width + panel.gap
-        y: panel.rowBY
-        width: panel.theme.lookaheadPlateWidth
-        height: panel.rowBHeight
-        Kit.Knob {
+    KnobCard {
+        id: limitPlate
+        title: "LIMIT"
+        note: "LOOKAHEAD IS THE LATENCY"
+        x: drivePlate.x + drivePlate.width + panel.gap
+        width: panel.theme.limitPlateWidth
+        knobs: [
+            { id: "ceiling.lookahead", hint: "smooth ← → fast" },
+            { id: "ceiling.release", hint: "to the loudness stage" },
+            { id: "ceiling.character", hint: "fast ← → steady" }
+        ]
+    }
+
+    KnobCard {
+        id: clipPlate
+        title: "CLIP"
+        note: "OVERSAMPLED 8×"
+        x: limitPlate.x + limitPlate.width + panel.gap
+        width: panel.theme.clipPlateWidth
+        knobs: [
+            { id: "ceiling.transients", hint: "onsets through" },
+            { id: "ceiling.clip", hint: "every peak" },
+            { id: "ceiling.shape", hint: "hard ← → soft" }
+        ]
+        Row {
             x: panel.theme.cardInset
-            y: panel.theme.cardContentY
-            controller: panel.controller
-            theme: panel.theme
-            parameterId: "ceiling.lookahead"
-            diameter: panel.theme.smallKnobDiameter
-            readout: true
-        }
-        Note {
-            x: panel.theme.sideNoteX
-            y: panel.theme.sideNoteY
-            width: lookaheadPlate.width - panel.theme.sideNoteX - panel.theme.cardInset
-            text: "How far ahead the limiter sees each peak, so it can turn down smoothly. The track is delayed by as much; changing it rebuilds the chain."
+            y: clipPlate.height - panel.theme.noteBottom
+            spacing: panel.theme.spaceXl
+            Repeater {
+                model: [
+                    { name: "CLIPPED", key: "ceilingClipped" },
+                    { name: "GUARD", key: "ceilingGuarded" }
+                ]
+                delegate: Row {
+                    id: taken
+                    required property var modelData
+                    spacing: panel.theme.spaceSm
+                    Caption {
+                        text: taken.modelData.name
+                        anchors.baseline: amount.baseline
+                    }
+                    Text {
+                        id: amount
+                        objectName: taken.modelData.key
+                        text: panel.playing ? panel.reductionText(taken.modelData.key === "ceilingClipped"
+                                                                  ? panel.clippedDb : panel.guardedDb) + " dB" : "—"
+                        color: panel.playing ? panel.theme.reduction : panel.theme.inkFaint
+                        font.family: panel.theme.mono
+                        font.pixelSize: panel.theme.typeSmall
+                    }
+                }
+            }
         }
     }
 
-    Kit.Card {
-        id: releasePlate
-        theme: panel.theme
-        title: "RELEASE"
-        x: lookaheadPlate.x + lookaheadPlate.width + panel.gap
-        y: panel.rowBY
+    KnobCard {
+        id: stereoPlate
+        title: "STEREO"
+        note: "LINK"
+        x: clipPlate.x + clipPlate.width + panel.gap
         width: panel.width - panel.margin - x
-        height: panel.rowBHeight
-        Kit.Knob {
-            x: panel.theme.cardInset
-            y: panel.theme.cardContentY
-            controller: panel.controller
-            theme: panel.theme
-            parameterId: "ceiling.release"
-            diameter: panel.theme.smallKnobDiameter
-            readout: true
-        }
-        Note {
-            x: panel.theme.sideNoteX
-            y: panel.theme.sideNoteY
-            width: releasePlate.width - panel.theme.sideNoteX - panel.theme.cardInset
-            text: "How fast the gain recovers after a peak. Short is loud and can pump; long is smooth."
-        }
+        knobs: [
+            { id: "ceiling.link", hint: "sustain" },
+            { id: "ceiling.transient_link", hint: "onsets" }
+        ]
     }
 
     Timer {
         objectName: "ceilingTelemetryPoll"
-        interval: panel.playing ? 33 : 250
+        interval: panel.playing ? panel.theme.pollPlayingMs : panel.theme.pollIdleMs
         repeat: true
         running: panel.visible
         onTriggered: panel.poll()

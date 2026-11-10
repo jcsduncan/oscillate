@@ -104,8 +104,11 @@ sidechain-keyable detector.
 
 ### Ceiling
 
-Lookahead limiter.
-[ADR-0047](../../../docs/decisions/0047-classic-processors-as-engines.md)
+True-peak mastering limiter: a lookahead gain stage whose fast envelope
+releases to a slow loudness stage, onsets let through to an 8× oversampled
+soft clipper, a BS.1770 true-peak guard, separate sustain and transient stereo
+links, and the output's loudness against a target that Gain can learn.
+[ADR-0117](../../../docs/decisions/0117-ceiling-mastering-limiter.md)
 
 ![Ceiling panel](../../../docs/images/effects/ceiling.png)
 

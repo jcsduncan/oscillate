@@ -1,6 +1,7 @@
 #include "oscillate/application/routed_playback_control.hpp"
 #include "oscillate/engine/routed_mixer.hpp"
 #include "oscillate/native_dsp/compressor.hpp"
+#include "oscillate/native_dsp/effects/ceiling.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/press.hpp"
 #include "oscillate/native_dsp/eq.hpp"
@@ -94,9 +95,10 @@ void near(engine::StereoFrame sample, float expected) {
                              std::to_string(sample.left));
 }
 
-// Built-in effect fixtures (ADR-0047). Shape, Press and Ceiling run the
-// native_dsp EQ, compressor and limiter bit for bit, so those runtimes stay
-// the oracles here.
+// Built-in effect fixtures (ADR-0047). Shape and Press run the native_dsp
+// EQ and compressor bit for bit, so those runtimes stay the oracles here.
+// Ceiling (ADR-0117) is set with no room to clip, so what it does not limit
+// passes as an exact delay of ceiling::latency_frames.
 project::NativeEffectPatch effect_patch(std::string_view engine_id,
                                         std::span<const std::pair<std::string, double>> values) {
   const auto* engine = native_dsp::effects::find_engine(engine_id);
@@ -142,11 +144,18 @@ project::NativeEffectPatch press_patch(const native_dsp::CompressorSettings& set
 }
 
 project::NativeEffectPatch ceiling_patch(const native_dsp::LimiterSettings& settings) {
-  const std::array<std::pair<std::string, double>, 3> values{
+  const std::array<std::pair<std::string, double>, 5> values{
       {{"ceiling.ceiling", settings.ceiling_db},
        {"ceiling.lookahead", settings.lookahead_ms},
-       {"ceiling.release", settings.release_ms}}};
+       {"ceiling.release", settings.release_ms},
+       {"ceiling.transients", 0.0},
+       {"ceiling.clip", 0.0}}};
   return effect_patch("ceiling", values);
+}
+
+std::uint32_t ceiling_latency(double lookahead_ms) {
+  return native_dsp::effects::ceiling::latency_frames(lookahead_ms,
+                                                      oscillate::test::sample_rate_48k_hz);
 }
 
 constexpr native_dsp::EqBandSettings high_pass_100{native_dsp::EqBandKind::high_pass, 100.0, 0.707,
@@ -2049,6 +2058,8 @@ void constrained_publication_preserves_failed_revision() {
 }
 
 void terminal_limiter_alignment_and_tail(std::size_t frames) {
+  constexpr double lookahead_ms = 1.0;
+  const auto latency = ceiling_latency(lookahead_ms);
   Gate gate;
   auto state = model(gate);
   const auto direct = id<project::TrackId>(91);
@@ -2062,17 +2073,17 @@ void terminal_limiter_alignment_and_tail(std::size_t frames) {
                           project::SetTrackMainOutput{through_bus, bus},
                           project::AddSendRoute{direct, {send, returns, 0.25}},
                           project::AddNativeEffect{project::MasterSignalPath{}, 0,
-                                                   ceiling_patch({0.0, 1.0, 100.0})}}));
+                                                   ceiling_patch({0.0, lookahead_ms, 100.0})}}));
   auto bounded = limits();
   bounded.max_frames = frames;
   bounded.max_buffer_bytes = 6ULL * frames * sizeof(engine::StereoFrame);
   app::RoutedPlaybackControl control(state, bounded);
   REQUIRE_OK(control.submit_current(),
-             "routed terminal master did not report its exact 48-frame output latency");
-  REQUIRE_EQ(control.master_output_latency_frames(), 48,
-             "routed terminal master did not report its exact 48-frame output latency");
-  REQUIRE_EQ(control.prepared_limiter_drain_frames(), 48,
-             "routed terminal master did not report its exact 48-frame output latency");
+             "routed terminal master did not report its exact output latency");
+  REQUIRE_EQ(control.master_output_latency_frames(), latency,
+             "routed terminal master did not report its exact output latency");
+  REQUIRE_EQ(control.prepared_limiter_drain_frames(), latency,
+             "routed terminal master did not report its exact output latency");
   std::vector<engine::StereoFrame> impulse(frames), silence(frames), output(frames);
   const auto hit = frames - 1;
   impulse[hit] = {0.2F, -0.2F};
@@ -2089,64 +2100,77 @@ void terminal_limiter_alignment_and_tail(std::size_t frames) {
     near(frame, 0.0F);
   control.observe();
 
+  // Silent blocks after the impulse's block until it comes out, `latency`
+  // frames after it went in; every other frame is silent.
+  const std::size_t arrives = hit + latency - frames;
+  const std::size_t silent_blocks = arrives / frames + 1;
+  const auto drain = [&](std::uint64_t first_block, float expected, const char* failure) {
+    for (std::size_t block = 0; block < silent_blocks; ++block) {
+      if (block == 0)
+        counting_allocations = true;
+      const auto status = control.render_block(inputs, output, {(first_block + block) * frames, 1});
+      counting_allocations = false;
+      REQUIRE_EQ(status, engine::RoutedRenderStatus::rendered, failure);
+      for (std::size_t frame = 0; frame < frames; ++frame)
+        near(output[frame], block * frames + frame == arrives ? expected : 0.0F);
+    }
+  };
+
   auto changed = take(state.apply({project::SetSendGain{send, 0.5}}));
   REQUIRE_OK(control.begin_edit(changed, "send gain"),
              "unrelated route edit did not begin with a live limiter");
   set_source(inputs, control.source_layout(), direct, silence);
   set_source(inputs, control.source_layout(), through_bus, silence);
-  counting_allocations = true;
-  const auto switched = control.render_block(inputs, output, {frames, 1});
-  counting_allocations = false;
-  REQUIRE_EQ(switched, engine::RoutedRenderStatus::rendered,
-             "limited live send switch failed or allocated");
-  REQUIRE_EQ(counted_allocations, 0, "limited live send switch failed or allocated");
-  for (std::size_t frame = 0; frame < frames; ++frame)
-    near(output[frame], frame == 47 ? 0.45F : 0.0F);
+  counted_allocations = 0;
+  drain(1, 0.45F, "limited live send switch failed");
+  REQUIRE_EQ(counted_allocations, 0, "limited live send switch allocated");
   control.observe();
   REQUIRE_EQ(control.status().active_graph_revision, changed.snapshot->revision,
              "route edit did not activate with the existing limiter");
 
   // A final project frame must be followed by silence-fed processing of the
   // exact lookahead tail; the device Stop path is not this drain operation.
+  const std::uint64_t last = 1 + silent_blocks;
   std::ranges::fill(impulse, engine::StereoFrame{});
   impulse[hit] = {0.2F, -0.2F};
   set_source(inputs, control.source_layout(), direct, impulse);
-  REQUIRE_EQ(control.render_block(inputs, output, {2 * frames, 1}),
+  REQUIRE_EQ(control.render_block(inputs, output, {last * frames, 1}),
              engine::RoutedRenderStatus::rendered, "last source block did not render");
   set_source(inputs, control.source_layout(), direct, silence);
-  REQUIRE_EQ(control.render_block(inputs, output, {3 * frames, 1}),
-             engine::RoutedRenderStatus::rendered, "explicit silence-fed limiter drain failed");
-  for (std::size_t frame = 0; frame < frames; ++frame)
-    near(output[frame], frame == 47 ? 0.3F : 0.0F);
+  drain(last + 1, 0.3F, "explicit silence-fed limiter drain failed");
 }
 
 void terminal_output_latency_is_separate_from_edge_compensation() {
+  constexpr double lookahead_ms = 5.0;
+  constexpr std::size_t block = 64;
+  const auto latency = ceiling_latency(lookahead_ms);
   Gate gate;
   auto state = model(gate);
   const auto audio = id<project::TrackId>(96);
-  (void)take(state.apply(
-      {project::AddTrack{audio}, project::AddNativeEffect{project::MasterSignalPath{}, 0,
-                                                          ceiling_patch({0.0, 5.0, 100.0})}}));
+  (void)take(state.apply({project::AddTrack{audio},
+                          project::AddNativeEffect{project::MasterSignalPath{}, 0,
+                                                   ceiling_patch({0.0, lookahead_ms, 100.0})}}));
   auto bounded = limits();
   bounded.latency.max_compensation_frames = 0;
   app::RoutedPlaybackControl control(state, bounded);
   REQUIRE_OK(control.submit_current(),
-             "terminal 240-frame lookahead was incorrectly charged to zero edge PDC budget");
-  REQUIRE_EQ(control.master_output_latency_frames(), 240,
-             "terminal 240-frame lookahead was incorrectly charged to zero edge PDC budget");
-  std::array<engine::StereoFrame, 64> impulse{}, silence{}, output{};
+             "terminal lookahead was incorrectly charged to zero edge PDC budget");
+  REQUIRE_EQ(control.master_output_latency_frames(), latency,
+             "terminal lookahead was incorrectly charged to zero edge PDC budget");
+  std::array<engine::StereoFrame, block> impulse{}, silence{}, output{};
   impulse[0] = {0.25F, -0.25F};
   std::array<std::span<const engine::StereoFrame>, 2> inputs{};
   set_source(inputs, control.source_layout(), audio, impulse);
   REQUIRE_EQ(control.render_block(inputs, output, {0, 1}), engine::RoutedRenderStatus::rendered,
              "terminal long-lookahead graph did not activate");
   set_source(inputs, control.source_layout(), audio, silence);
-  for (std::uint64_t block = 1; block < 4; ++block) {
-    REQUIRE_EQ(control.render_block(inputs, output, {block * 64, 1}),
+  const std::size_t arrives_block = latency / block;
+  for (std::uint64_t b = 1; b <= arrives_block; ++b) {
+    REQUIRE_EQ(control.render_block(inputs, output, {b * block, 1}),
                engine::RoutedRenderStatus::rendered, "terminal long-lookahead continuation failed");
+    for (std::size_t frame = 0; frame < output.size(); ++frame)
+      near(output[frame], b * block + frame == latency ? 0.25F : 0.0F);
   }
-  for (std::size_t frame = 0; frame < output.size(); ++frame)
-    near(output[frame], frame == 48 ? 0.25F : 0.0F);
 }
 
 // Independent direct-form high-pass reference. This uses the published RBJ

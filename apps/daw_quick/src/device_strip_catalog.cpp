@@ -152,8 +152,10 @@ constexpr std::array styles{
                      "#b49cff",
                      {"hush.threshold", "hush.range", "hush.release", "hush.hysteresis"}},
     // Lookahead is the latency: not a strip control.
-    DeviceStripStyle{
-        "ceiling", "Limiter", "#ff8a8a", {"ceiling.ceiling", "ceiling.release", "", ""}},
+    DeviceStripStyle{"ceiling",
+                     "Limiter",
+                     "#ff8a8a",
+                     {"ceiling.gain", "ceiling.ceiling", "ceiling.transients", "ceiling.release"}},
     DeviceStripStyle{
         "signal",
         "Generator",

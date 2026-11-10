@@ -101,8 +101,10 @@ constexpr std::array looks{
                "Soft-knee compressor, keyable from a sidechain", "",
                "comp compression dynamics glue squash punch sidechain bus"},
     DeviceLook{"ceiling", "Effects", S::dynamics, "Limiter", "Lm", "#ff8a8a",
-               "Lookahead peak limiter for the master", "Lookahead peak limiter for the master", "",
-               "limit limiting brickwall maximiser maximizer loud master ceiling"},
+               "True-peak limiter for the master",
+               "True-peak mastering limiter: onsets kept, oversampled clip, loudness target", "",
+               "limit limiting brickwall maximiser maximizer loud master ceiling true peak lufs "
+               "loudness transient clip"},
     DeviceLook{"edge", "Effects", S::dynamics, "Clipper", "Cl", "#f08a5d",
                "Clips peaks under a 0 dBFS ceiling, oversampled",
                "Clipper for drums and the master: hard to soft, up to 16x, never over 0 dBTP", "",

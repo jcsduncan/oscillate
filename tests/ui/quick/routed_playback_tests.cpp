@@ -3,6 +3,7 @@
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/native_dsp/compressor.hpp"
+#include "oscillate/native_dsp/effects/ceiling.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/eq.hpp"
 #include "oscillate/native_dsp/limiter.hpp"
@@ -10,6 +11,7 @@
 #include "oscillate/native_dsp/synth/engines.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/test/allocation_counter.hpp"
+#include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/wait.hpp"
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
@@ -165,12 +167,24 @@ project::NativeEffectPatch press(const Compression& settings) {
                                 {"press.makeup", settings.makeup_db}});
 }
 
-// Ceiling: ceiling dB, lookahead ms, release ms.
+// Ceiling: ceiling dB, lookahead ms, release ms; no room to clip, so what
+// it does not limit passes as an exact delay of its latency (ADR-0117).
 project::NativeEffectPatch ceiling(double ceiling_db, double lookahead_ms, double release_ms) {
   return engine_patch("ceiling", {{"ceiling.ceiling", ceiling_db},
                                   {"ceiling.lookahead", lookahead_ms},
-                                  {"ceiling.release", release_ms}});
+                                  {"ceiling.release", release_ms},
+                                  {"ceiling.transients", 0.0},
+                                  {"ceiling.clip", 0.0}});
 }
+
+std::uint32_t ceiling_latency(double lookahead_ms) {
+  return oscillate::native_dsp::effects::ceiling::latency_frames(
+      lookahead_ms, oscillate::test::sample_rate_48k_hz);
+}
+
+// Playback blocks in the limiter Stop tests, and the frames each holds.
+constexpr std::size_t stop_block = 64;
+constexpr std::size_t stop_block_samples = 2 * stop_block;
 
 void put16(std::vector<std::uint8_t>& bytes, std::uint16_t value) {
   bytes.push_back(static_cast<std::uint8_t>(value));
@@ -1656,7 +1670,7 @@ void limiter_stop_renders_exact_lookahead_before_transport_release() {
   (void)::close(fd);
   require(imported.has_value(), "limiter source import failed");
   require(session->effects()
-                  .add_native_effect(project::MasterSignalPath{}, 0, ceiling(-12.0, 5.0, 100.0))
+                  .add_native_effect(project::MasterSignalPath{}, 0, ceiling(-6.0, 5.0, 100.0))
                   .has_value() &&
               session->saving().save().has_value(),
           "limiter fixture save failed");
@@ -1675,15 +1689,18 @@ void limiter_stop_renders_exact_lookahead_before_transport_release() {
               !session->exports().prepare_wav_master_export({root / "blocked.wav"}),
           "limiter playback did not hold the transport before Stop");
 
+  // The drain renders the lookahead in whole blocks.
+  const auto latency = ceiling_latency(5.0);
+  const std::size_t drain_blocks = (latency + stop_block - 1) / stop_block;
   run->begin_graceful_stop();
   auto stopper = std::async(std::launch::async, [&run] { return run->stop_and_retire(); });
-  evidence->permit(3);
-  evidence->await_blocks(4);
+  evidence->permit(drain_blocks - 1);
+  evidence->await_blocks(drain_blocks);
   require(stopper.wait_for(std::chrono::milliseconds(0)) == std::future_status::timeout &&
               !session->exports().prepare_wav_master_export({root / "still-blocked.wav"}),
           "limiter Stop released transport before its prepared lookahead completed");
   evidence->permit(1);
-  evidence->await_blocks(5);
+  evidence->await_blocks(drain_blocks + 1);
   require(stopper.get() == quick::RoutedPlayback::StopDrainOutcome::completed,
           "limiter Stop did not report a complete drain");
   require(evidence->stopped && evidence->stop_off_caller &&
@@ -1691,10 +1708,10 @@ void limiter_stop_renders_exact_lookahead_before_transport_release() {
           "limiter output was not joined before transport release");
   {
     std::lock_guard lock(evidence->mutex);
-    require(evidence->samples.size() == std::size_t{5} * 128,
-            "limiter drain did not render the expected five blocks");
-    for (std::size_t frame = 0; frame < 320; ++frame) {
-      const float expected = frame >= 240 && frame < 304 ? 0.25F : 0.0F;
+    require(evidence->samples.size() == (drain_blocks + 1) * stop_block_samples,
+            "limiter drain did not render the played block and its lookahead");
+    for (std::size_t frame = 0; frame < (drain_blocks + 1) * stop_block; ++frame) {
+      const float expected = frame >= latency && frame < latency + stop_block ? 0.25F : 0.0F;
       require(std::fabs(evidence->samples[frame * 2] - expected) < 0.00001F &&
                   std::fabs(evidence->samples[frame * 2 + 1] - expected) < 0.00001F,
               "limiter Stop tail was truncated or continued reading project source");
@@ -1745,20 +1762,22 @@ void routed_track_limiter_stop_drains_before_releasing_transport() {
       root, snapshot, take(session->reserve_playback_start()), factory, std::nullopt, 64));
   evidence->permit(1);
   evidence->await_blocks(1);
+  const auto latency = ceiling_latency(1.0);
+  const std::size_t drain_blocks = (latency + stop_block - 1) / stop_block;
   run->begin_graceful_stop();
   auto stopper = std::async(std::launch::async, [&run] { return run->stop_and_retire(); });
-  evidence->permit(1);
-  evidence->await_blocks(2);
+  evidence->permit(drain_blocks);
+  evidence->await_blocks(drain_blocks + 1);
   require(stopper.get() == quick::RoutedPlayback::StopDrainOutcome::completed &&
               session->exports()
                   .prepare_wav_master_export({root / "after-track-limiter.wav"})
                   .has_value(),
           "route limiter Stop did not drain and release the transport");
   std::lock_guard lock(evidence->mutex);
-  require(evidence->samples.size() == std::size_t{2} * 128,
-          "route limiter did not render exactly one 48-frame drain block");
-  for (std::size_t frame = 0; frame < 128; ++frame) {
-    const float expected = frame >= 48 && frame < 112 ? 0.25F : 0.0F;
+  require(evidence->samples.size() == (drain_blocks + 1) * stop_block_samples,
+          "route limiter did not render exactly its lookahead's drain blocks");
+  for (std::size_t frame = 0; frame < (drain_blocks + 1) * stop_block; ++frame) {
+    const float expected = frame >= latency && frame < latency + stop_block ? 0.25F : 0.0F;
     require(std::fabs(evidence->samples[frame * 2] - expected) < 0.00001F,
             "route limiter Stop truncated the saved lookahead or read new source frames");
   }
@@ -2103,13 +2122,24 @@ void saved_native_eq_is_audible_from_quick() {
                                          limiter_settings.release_ms);
     for (const auto frames : {64U, 128U}) {
       oscillate::native_dsp::EqRuntime eq(prepared);
-      oscillate::native_dsp::LimiterRuntime limiter(take(oscillate::native_dsp::prepare_limiter(
-          {limiter_settings.ceiling_db, limiter_settings.lookahead_ms, limiter_settings.release_ms},
-          chained->sample_rate)));
+      // Ceiling itself, with the patch's values, is the oracle.
+      const auto& ceiling_engine = oscillate::native_dsp::effects::ceiling::engine();
+      auto ceiling_values = oscillate::native_dsp::default_values(*ceiling_engine.descriptor);
+      for (const auto& value :
+           std::get<project::NativeEffectPatch>(owner.effects[1].processor).parameters) {
+        const auto index =
+            oscillate::native_dsp::find_parameter(*ceiling_engine.descriptor, value.id);
+        if (!index)
+          throw std::runtime_error("the oracle does not know " + value.id);
+        ceiling_values[*index] = value.value;
+      }
+      auto limiter = take(oscillate::native_dsp::effects::NativeEffectRuntime::create(
+          ceiling_engine, ceiling_values, static_cast<double>(chained->sample_rate)));
       std::array<engine::StereoFrame, 128> expected{};
       expected.fill({0.25F, 0.25F});
       eq.process(std::span(expected).first(frames), {0, 1});
-      limiter.process(std::span(expected).first(frames), {0, 1});
+      const oscillate::native_dsp::Transport stopped{0.0, 0.0, 0.0, 4.0};
+      (void)limiter->process(std::span(expected).first(frames), {}, 0, 1, stopped, {});
       OutputEvidence evidence{.caller = std::this_thread::get_id()};
       app::PlaybackOutputFactory factory = [&evidence](audio::StereoRenderSource source,
                                                        audio::TransportCursor& cursor) {

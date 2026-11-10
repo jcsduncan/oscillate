@@ -3,6 +3,7 @@
 #include "routed_playback.hpp"
 
 #include "oscillate/application/project_session.hpp"
+#include "oscillate/export/dither.hpp"
 #if defined(OSCILLATE_HAVE_JACK_EXPORT) && OSCILLATE_HAVE_JACK_EXPORT
 #include "realtime_export_run.hpp"
 #endif
@@ -42,6 +43,12 @@ class ExportController final : public QObject {
   Q_PROPERTY(
       int exportFormatIndex READ export_format_index WRITE set_export_format_index NOTIFY changed)
   Q_PROPERTY(int exportRateIndex READ export_rate_index WRITE set_export_rate_index NOTIFY changed)
+  // Dither for integer formats (ADR-0117), by index into exportDitherLabels;
+  // exportDithers is false for a format written as rendered (float, MP3).
+  Q_PROPERTY(
+      int exportDitherIndex READ export_dither_index WRITE set_export_dither_index NOTIFY changed)
+  Q_PROPERTY(QStringList exportDitherLabels READ export_dither_labels CONSTANT)
+  Q_PROPERTY(bool exportDithers READ export_dithers NOTIFY changed)
   Q_PROPERTY(QVariantList exportRateAvailability READ export_rate_availability NOTIFY changed)
   Q_PROPERTY(bool masterExportRateValid READ master_export_rate_valid NOTIFY changed)
   Q_PROPERTY(QString exportRateStatus READ export_rate_status NOTIFY changed)
@@ -94,6 +101,10 @@ public:
   [[nodiscard]] bool export_trim_tail() const noexcept { return export_trim_tail_; }
   void set_export_trim_tail(bool trim);
   [[nodiscard]] int export_format_index() const { return export_format_index_; }
+  [[nodiscard]] int export_dither_index() const { return export_dither_index_; }
+  void set_export_dither_index(int index);
+  [[nodiscard]] static QStringList export_dither_labels();
+  [[nodiscard]] bool export_dithers() const;
   void set_export_format_index(int index);
   [[nodiscard]] int export_rate_index() const { return export_rate_index_; }
   void set_export_rate_index(int index);
@@ -201,6 +212,7 @@ private:
   bool export_target_is_default_ = true;
   bool export_trim_tail_ = true;
   int export_format_index_ = 0;
+  int export_dither_index_ = static_cast<int>(exporting::DitherShape::psychoacoustic);
   int export_rate_index_ = 0;
   int realtime_export_end_bar_ = 16;
   bool realtime_export_end_bar_custom_ = false;

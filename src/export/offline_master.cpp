@@ -1390,7 +1390,8 @@ render_stems_impl(const project::Snapshot& snapshot, const persistence::ProjectS
     auto rendered = render_stem(
         snapshot, store, plan.value(), track.id,
         MasterRenderOptions{target, options.format, options.dither_seed, options.sample_rate,
-                            options.loudness_reports != nullptr ? &measurement : nullptr},
+                            options.loudness_reports != nullptr ? &measurement : nullptr, false,
+                            options.dither},
         vst3);
     if (!rendered) {
       return rendered;

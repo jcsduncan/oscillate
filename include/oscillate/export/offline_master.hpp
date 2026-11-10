@@ -76,6 +76,8 @@ struct MasterRenderOptions {
   // tail_quiet_below_music_db under the music's loudest moment, instead of
   // at every effect's worst-case tail.
   bool trim_silent_tail = false;
+  // Integer formats only (ADR-0117).
+  DitherShape dither = default_dither_shape;
 };
 
 // One aligned WAV per audio/instrument source track, named track-<stable UUID>.wav.
@@ -93,6 +95,8 @@ struct StemRenderOptions {
   std::uint32_t sample_rate = 0;
   // Reports follow source-track order and appear only after bundle publication.
   std::vector<StemLoudnessReport>* loudness_reports = nullptr;
+  // Integer formats only (ADR-0117).
+  DitherShape dither = default_dither_shape;
 };
 
 enum class EncodedMasterFormat : std::uint8_t { flac16, flac24, mp3 };
@@ -107,6 +111,8 @@ struct EncodedMasterOptions {
   std::uint32_t sample_rate = 0;
   // As MasterRenderOptions::trim_silent_tail.
   bool trim_silent_tail = false;
+  // Integer FLAC only (ADR-0117).
+  DitherShape dither = default_dither_shape;
 };
 
 // One master target: WAV (float32/PCM) or, in a codec build, FLAC/MP3.

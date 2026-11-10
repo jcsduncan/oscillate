@@ -4,6 +4,8 @@
 #include "oscillate/application/vst3/project_binding.hpp"
 #include "oscillate/export/offline_master.hpp"
 #include "oscillate/native_dsp/compressor.hpp"
+#include "oscillate/native_dsp/effects/ceiling.hpp"
+#include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/eq.hpp"
 #include "oscillate/native_dsp/limiter.hpp"
 #include "oscillate/persistence/store.hpp"
@@ -812,6 +814,28 @@ void mixed_compressor_vst3_export_checks() {
   REQUIRE_EQ(read_file(after_path), after, "invalid compressor settings replaced durable master");
 }
 
+// Ceiling (ADR-0117) as the export fixture sets it, run over `input` and
+// `latency` frames of silence after it: the oracle for a chain holding it.
+std::vector<engine::StereoFrame> ceiling_oracle(const native_dsp::LimiterSettings& settings,
+                                                std::span<const engine::StereoFrame> input) {
+  constexpr double rate = oscillate::test::sample_rate_48k_hz;
+  constexpr std::size_t block = 128;
+  const auto patch = test_insert::ceiling(settings);
+  const auto& limiter = native_dsp::effects::ceiling::engine();
+  auto values = native_dsp::default_values(*limiter.descriptor);
+  for (const auto& parameter : patch.parameters)
+    values[*native_dsp::find_parameter(*limiter.descriptor, parameter.id)] = parameter.value;
+  auto runtime = take(native_dsp::effects::NativeEffectRuntime::create(limiter, values, rate));
+  std::vector<engine::StereoFrame> out(input.begin(), input.end());
+  out.resize(input.size() + runtime->latency_frames());
+  const native_dsp::Transport stopped{0.0, 0.0, 0.0, 4.0};
+  for (std::size_t at = 0; at < out.size(); at += block) {
+    const auto span = std::span(out).subspan(at, std::min(block, out.size() - at));
+    (void)runtime->process(span, {}, at, 1, stopped, {});
+  }
+  return out;
+}
+
 void mixed_limiter_vst3_export_checks() {
   Directory directory;
   Gate gate;
@@ -820,7 +844,7 @@ void mixed_limiter_vst3_export_checks() {
   require(scan.ok(), "mixed limiter fixture scan failed");
   auto saved = make_project(directory, gate, scan);
   auto mixed = saved.snapshot;
-  const native_dsp::LimiterSettings settings{-18.0, 0.25, 100.0};
+  const native_dsp::LimiterSettings settings{-18.0, 0.5, 100.0};
   mixed.tracks.front().effects.insert(
       mixed.tracks.front().effects.begin(),
       {id<project::InsertSlotId>(3400), true, test_insert::ceiling(settings)});
@@ -851,30 +875,30 @@ void mixed_limiter_vst3_export_checks() {
   REQUIRE_EQ(before.size(), after.size(),
              "limiter/VST3 order or latency-stripped duration changed");
   REQUIRE_NE(before, after, "limiter/VST3 order or latency-stripped duration changed");
-  const auto prepared = take(native_dsp::prepare_limiter(settings, 48'000));
-  REQUIRE_EQ(prepared.latency_frames(), 12, "limiter fixture lookahead changed");
+  // The VST3 gain fixture's latency, and Ceiling's.
+  constexpr std::size_t plugin_latency = 7;
+  const std::size_t limiter_latency = test_insert::ceiling_latency(settings.lookahead_ms);
+  const std::size_t shift = limiter_latency + plugin_latency;
   std::array<engine::StereoFrame, 154> source{};
   source[63] = {0.25F, 0.125F};
   source[64] = {0.125F, 0.0625F};
   source[127] = {0.25F, 0.125F};
   source[128] = {0.125F, 0.0625F};
   const auto nonlinear = [](float value) { return value * std::fabs(value); };
-  auto limited_first = source;
-  native_dsp::LimiterRuntime before_oracle(prepared);
-  before_oracle.process(limited_first, {0, 1});
-  std::array<engine::StereoFrame, 154> expected_before{};
-  for (std::size_t frame = 7; frame < expected_before.size(); ++frame)
-    expected_before[frame] = {nonlinear(limited_first[frame - 7].left),
-                              nonlinear(limited_first[frame - 7].right)};
-  std::array<engine::StereoFrame, 154> expected_after{};
-  for (std::size_t frame = 7; frame < expected_after.size(); ++frame)
-    expected_after[frame] = {nonlinear(source[frame - 7].left), nonlinear(source[frame - 7].right)};
-  native_dsp::LimiterRuntime after_oracle(prepared);
-  after_oracle.process(expected_after, {0, 1});
+  const auto limited_first = ceiling_oracle(settings, source);
+  std::vector<engine::StereoFrame> expected_before(limited_first.size() + plugin_latency);
+  for (std::size_t frame = plugin_latency; frame < expected_before.size(); ++frame)
+    expected_before[frame] = {nonlinear(limited_first[frame - plugin_latency].left),
+                              nonlinear(limited_first[frame - plugin_latency].right)};
+  std::vector<engine::StereoFrame> plugin_first(source.size() + plugin_latency);
+  for (std::size_t frame = plugin_latency; frame < plugin_first.size(); ++frame)
+    plugin_first[frame] = {nonlinear(source[frame - plugin_latency].left),
+                           nonlinear(source[frame - plugin_latency].right)};
+  const auto expected_after = ceiling_oracle(settings, plugin_first);
   for (const auto frame : {62U, 63U, 64U, 65U, 127U, 128U, 129U, 134U}) {
     const float dry = frame == 63 ? 0.25F : frame == 64 ? 0.125F : 0.0F;
-    near(sample(before, frame), dry + expected_before[frame + 19].left * 1.5F);
-    near(sample(after, frame), dry + expected_after[frame + 19].left * 1.5F);
+    near(sample(before, frame), dry + expected_before[frame + shift].left * 1.5F);
+    near(sample(after, frame), dry + expected_after[frame + shift].left * 1.5F);
   }
   for (std::size_t frame = 0; frame < 135; ++frame)
     require(std::isfinite(sample(before, frame)) && std::isfinite(sample(after, frame)),
@@ -1007,7 +1031,7 @@ void mixed_bus_vst3_export_checks() {
   const auto tail_scan = scanner.scan(VST3_TAIL_BUNDLE);
   require(tail_scan.ok(), "mixed bus tail fixture scan failed");
   auto saved = make_project(directory, gate, scan);
-  const native_dsp::LimiterSettings settings{-18.0, 0.25, 100.0};
+  const native_dsp::LimiterSettings settings{-18.0, 0.5, 100.0};
   auto render = [&](const project::Snapshot& snapshot, const fs::path& target,
                     std::optional<project::TrackId> stem = std::nullopt) {
     auto authority = take(exporting::StoppedExportAuthority::acquire(snapshot, gate));
@@ -1017,8 +1041,8 @@ void mixed_bus_vst3_export_checks() {
     return exporting::render_vst3_master(snapshot, saved.store, std::move(authority), scanner,
                                          exporting::MasterRenderOptions{target});
   };
-  const auto prepared = take(native_dsp::prepare_limiter(settings, 48'000));
-  REQUIRE_EQ(prepared.latency_frames(), 12, "mixed bus lookahead fixture changed");
+  constexpr std::size_t plugin_latency = 7;
+  const std::size_t shift = test_insert::ceiling_latency(settings.lookahead_ms) + plugin_latency;
   std::array<engine::StereoFrame, 154> source{};
   source[63] = {0.25F, 0.125F};
   source[64] = {0.125F, 0.0625F};
@@ -1057,23 +1081,24 @@ void mixed_bus_vst3_export_checks() {
         frame.left *= bus_gain;
         frame.right *= bus_gain;
       }
-      std::array<engine::StereoFrame, 154> expected{};
-      native_dsp::LimiterRuntime oracle(prepared);
+      std::vector<engine::StereoFrame> expected;
       if (native_first) {
-        oracle.process(expected_input, {0, 1});
-        for (std::size_t frame = 7; frame < expected.size(); ++frame)
-          expected[frame] = {nonlinear(expected_input[frame - 7].left),
-                             nonlinear(expected_input[frame - 7].right)};
+        const auto limited = ceiling_oracle(settings, expected_input);
+        expected.resize(limited.size() + plugin_latency);
+        for (std::size_t frame = plugin_latency; frame < expected.size(); ++frame)
+          expected[frame] = {nonlinear(limited[frame - plugin_latency].left),
+                             nonlinear(limited[frame - plugin_latency].right)};
       } else {
-        for (std::size_t frame = 7; frame < expected.size(); ++frame)
-          expected[frame] = {nonlinear(expected_input[frame - 7].left),
-                             nonlinear(expected_input[frame - 7].right)};
-        oracle.process(expected, {0, 1});
+        std::vector<engine::StereoFrame> shaped(expected_input.size() + plugin_latency);
+        for (std::size_t frame = plugin_latency; frame < shaped.size(); ++frame)
+          shaped[frame] = {nonlinear(expected_input[frame - plugin_latency].left),
+                           nonlinear(expected_input[frame - plugin_latency].right)};
+        expected = ceiling_oracle(settings, shaped);
       }
       for (std::size_t frame = 0; frame < 135; ++frame) {
         const float dry = frame == 63 ? 0.25F : frame == 64 ? 0.125F : 0.0F;
         const float direct = bus_kind == project::TrackKind::return_bus ? source[frame].left : 0.0F;
-        near(sample(bytes, frame), direct + dry + expected[frame + 19].left);
+        near(sample(bytes, frame), direct + dry + expected[frame + shift].left);
         require(std::isfinite(sample(bytes, frame)), "mixed bus emitted non-finite audio");
       }
       const auto wet_path = directory.path / "mixed-bus-source-stem.wav";

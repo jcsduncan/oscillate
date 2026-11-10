@@ -233,20 +233,20 @@ public:
   // Pushes a sample; returns the largest magnitude of the three
   // interpolated points between the samples `radius` and `radius + 1` back.
   [[nodiscard]] double push(double x) noexcept {
+    // Each sample is kept twice, `taps` apart, so the window from the
+    // oldest sample to the newest is always contiguous.
     history_[write_] = x;
+    history_[write_ + taps] = x;
     if (++write_ == taps) {
       write_ = 0;
     }
     // write_ is now the oldest sample; walk oldest to newest.
+    const double* window = history_.data() + write_;
     double top = 0.0;
     for (const auto& kernel : kernels_) {
       double y = 0.0;
-      std::size_t index = write_;
-      for (const double coefficient : kernel) {
-        y += coefficient * history_[index];
-        if (++index == taps) {
-          index = 0;
-        }
+      for (std::size_t tap = 0; tap < taps; ++tap) {
+        y += kernel[tap] * window[tap];
       }
       top = std::max(top, std::abs(y));
     }
@@ -255,7 +255,7 @@ public:
 
 private:
   std::array<std::array<double, taps>, 3> kernels_{};
-  std::array<double, taps> history_{};
+  std::array<double, 2 * taps> history_{};
   std::size_t write_ = 0;
 };
 

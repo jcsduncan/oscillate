@@ -36,6 +36,8 @@ constexpr std::array<std::string_view, 6> export_format_names{
 constexpr std::size_t wav_format_count = 3;
 constexpr int wav_formats_end = static_cast<int>(wav_format_count);
 constexpr int mp3_format_index = 5;
+// The formats written as rendered, without dither: 32-bit float and MP3.
+constexpr int float_format_index = 0;
 // MP3 masters stop at this output rate.
 constexpr std::uint32_t max_mp3_rate = 48'000;
 // Stem folders numbered past an existing one stop here.
@@ -261,6 +263,28 @@ void ExportController::set_export_folder(const QString& folder) {
   set_export_target(QString::fromStdString(path.string()));
 }
 
+void ExportController::set_export_dither_index(int index) {
+  if (export_busy() || index < 0 ||
+      index >= static_cast<int>(exporting::dither_shape_names.size()) ||
+      index == export_dither_index_) {
+    return;
+  }
+  export_dither_index_ = index;
+  emit changed();
+}
+
+QStringList ExportController::export_dither_labels() {
+  QStringList labels;
+  for (const auto name : exporting::dither_shape_names) {
+    labels.push_back(QString::fromLatin1(name.data(), static_cast<qsizetype>(name.size())));
+  }
+  return labels;
+}
+
+bool ExportController::export_dithers() const {
+  return export_format_index_ != float_format_index && export_format_index_ != mp3_format_index;
+}
+
 void ExportController::set_export_trim_tail(bool trim) {
   if (trim == export_trim_tail_)
     return;
@@ -417,6 +441,7 @@ void ExportController::export_master() {
                                        exporting::EncodedMasterFormat::mp3};
   const auto path = std::filesystem::path(target.toStdString());
   const auto output_rate = export_rates[static_cast<std::size_t>(export_rate_index_)];
+  const auto dither = static_cast<exporting::DitherShape>(export_dither_index_);
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
   // VST3 masters render their plugins at the project rate and share the
   // native master's format and output-rate stage.
@@ -424,11 +449,11 @@ void ExportController::export_master() {
       export_format_index_ < wav_formats_end
           ? exporting::MasterOutputOptions{exporting::MasterRenderOptions{
                 path, wav_formats[static_cast<std::size_t>(export_format_index_)], 0, output_rate,
-                nullptr, export_trim_tail_}}
+                nullptr, export_trim_tail_, dither}}
           : exporting::MasterOutputOptions{exporting::EncodedMasterOptions{
                 path,
                 encoded_formats[static_cast<std::size_t>(export_format_index_ - wav_formats_end)],
-                0, 0.5, output_rate, export_trim_tail_}};
+                0, 0.5, output_rate, export_trim_tail_, dither}};
 #endif
   if (has_vst3_stage(session()->snapshot())) {
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
@@ -450,11 +475,11 @@ void ExportController::export_master() {
       export_format_index_ < wav_formats_end
           ? session()->exports().prepare_wav_master_export(
                 {path, wav_formats[static_cast<std::size_t>(export_format_index_)], 0, output_rate,
-                 nullptr, export_trim_tail_})
+                 nullptr, export_trim_tail_, dither})
           : session()->exports().prepare_encoded_master_export(
                 {path,
                  encoded_formats[static_cast<std::size_t>(export_format_index_ - wav_formats_end)],
-                 0, 0.5, output_rate, export_trim_tail_});
+                 0, 0.5, output_rate, export_trim_tail_, dither});
   if (!prepared) {
     export_status_ = QStringLiteral("%1 export failed: %2")
                          .arg(format_name)
