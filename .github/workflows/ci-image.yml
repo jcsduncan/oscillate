@@ -1,0 +1,156 @@
+name: CI image
+
+# Builds the CI container image ghcr.io/jcsduncan/oscillate-ci
+# (scripts/ci/Dockerfile, CONTRIBUTING.md "CI container image") in its base
+# and full variants. On main, weekly and on demand it pushes them, tagged
+# <variant>-<inputs hash> and <variant>-latest, attests their provenance and
+# opens a pull request that pins the new digests in the workflows. Pull
+# requests that change the image only build it.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/ci-image.yml
+      - scripts/ci/Dockerfile
+      - scripts/ci/ci-image-deps.sh
+      - scripts/ci/install-deps.sh
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/ci-image.yml
+      - scripts/ci/Dockerfile
+      - scripts/ci/ci-image-deps.sh
+      - scripts/ci/install-deps.sh
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-image-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
+env:
+  IMAGE: ghcr.io/jcsduncan/oscillate-ci
+  PUBLISH: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+
+jobs:
+  image:
+    name: Build the CI image
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      base: ${{ steps.push.outputs.base }}
+      full: ${{ steps.push.outputs.full }}
+      hash: ${{ steps.hash.outputs.hash }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: hash
+        run: echo "hash=$(scripts/ci/ci-image-deps.sh --hash)" >> "$GITHUB_OUTPUT"
+      - name: Build base and full
+        env:
+          HASH: ${{ steps.hash.outputs.hash }}
+        run: |
+          for variant in base full; do
+            docker build --target "$variant" -f scripts/ci/Dockerfile \
+              -t "$IMAGE:$variant-$HASH" -t "$IMAGE:$variant-latest" .
+          done
+          {
+            echo "| Variant | Size |"
+            echo "| --- | --- |"
+            for variant in base full; do
+              size=$(docker image inspect --format '{{.Size}}' "$IMAGE:$variant-$HASH")
+              echo "| $variant | $((size / 1024 / 1024)) MiB |"
+            done
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Push
+        id: push
+        if: env.PUBLISH == 'true'
+        env:
+          HASH: ${{ steps.hash.outputs.hash }}
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          for variant in base full; do
+            docker push --quiet "$IMAGE:$variant-$HASH"
+            docker push --quiet "$IMAGE:$variant-latest"
+            digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE:$variant-$HASH")
+            digest=${digest#*@}
+            echo "$variant=$digest" >> "$GITHUB_OUTPUT"
+            echo "$IMAGE@$digest ($variant-$HASH)" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+          docker logout ghcr.io
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: env.PUBLISH == 'true'
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.base }}
+          push-to-registry: true
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: env.PUBLISH == 'true'
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.full }}
+          push-to-registry: true
+
+  # GITHUB_TOKEN cannot change workflow files, and a pull request it opens
+  # runs no checks, so this acts with RELEASE_PLEASE_TOKEN (CONTRIBUTING.md,
+  # "Releases"), which needs the Workflows permission for this.
+  pin:
+    name: Pin the new digests
+    needs: image
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      BRANCH: ci/pin-ci-image
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Point the workflows at the new digests
+        env:
+          BASE: ${{ needs.image.outputs.base }}
+          FULL: ${{ needs.image.outputs.full }}
+        run: |
+          sed -E -i \
+            -e "s|($IMAGE@)sha256:[0-9a-f]{64}( # base)|\1$BASE\2|" \
+            -e "s|($IMAGE@)sha256:[0-9a-f]{64}( # full)|\1$FULL\2|" \
+            .github/workflows/*.yml
+          git diff --stat
+      - name: Open or update the pull request
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          HASH: ${{ needs.image.outputs.hash }}
+        run: |
+          if git diff --quiet; then
+            echo "No workflow pins this image yet, or the digests are current."
+            exit 0
+          fi
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::The RELEASE_PLEASE_TOKEN repository secret is not set (CONTRIBUTING.md, \"Releases\")"
+            exit 1
+          fi
+          title="ci: pin the CI image built from inputs $HASH"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -am "$title"
+          git push -q --force "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" "HEAD:refs/heads/$BRANCH"
+          body="Pins the workflows to the CI image digests pushed by run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID."
+          if [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            gh pr edit "$BRANCH" --title "$title" --body "$body"
+          else
+            gh pr create --base main --head "$BRANCH" --title "$title" --body "$body"
+          fi

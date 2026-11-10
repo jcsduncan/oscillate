@@ -235,6 +235,29 @@ ASan/UBSan, TSan where concurrency changed, and coverage
 release gate (PRD §23); coverage does not waive a blocker. CodeRabbit reviews each pull request with
 the rules in `.coderabbit.yaml`, which follow [AGENTS.md](AGENTS.md).
 
+## CI container image
+
+`ghcr.io/jcsduncan/oscillate-ci` is the pinned Ubuntu 26.04 image with the
+build dependencies installed (`scripts/ci/Dockerfile`). It comes in two
+variants, whose package lists are in `scripts/ci/ci-image-deps.sh`:
+
+- **base**: the README list (`scripts/ci/install-deps.sh`) and the CI tools
+  (git, ccache, zstd, curl, gnupg), and no other build dependency, so a
+  build in it shows the README list is complete.
+- **full**: base plus the optional features (JACK, libsamplerate,
+  libsndfile, libmpg123, X11), the .deb and AppImage tools and ffmpeg.
+
+`ci-image.yml` builds both when a pull request changes an input of the
+image, and on `main` when an input changes, every Monday (for security
+updates) and on demand it pushes them, tagged `<variant>-<hash of the
+inputs>` and `<variant>-latest`, with build provenance attestations. It then
+opens the pull request `ci/pin-ci-image`, which moves every
+`ghcr.io/jcsduncan/oscillate-ci@sha256:… # <variant>` pin in the workflows
+to the new digests; that pull request runs the checks on the new image
+before it is merged. It acts with `RELEASE_PLEASE_TOKEN`, which needs the
+Workflows permission (read and write) on top of those listed under
+Releases.
+
 ## Releases
 
 Release Please (`.github/workflows/release-please.yml`) keeps a release pull
