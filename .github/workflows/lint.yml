@@ -34,7 +34,7 @@ jobs:
       - name: Check module dependencies
         run: python -I scripts/ci/check_module_deps.py
       - name: Install pre-commit
-        run: python -I -m pip install --quiet -r scripts/ci/lint-requirements.txt
+        run: python -I -m pip install --quiet --require-hashes -r scripts/ci/lint-requirements.txt
       # Hooks run on the files this change touches.
       - name: Run hooks on the changed files
         env:
