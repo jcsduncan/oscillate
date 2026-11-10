@@ -18,7 +18,7 @@ oscillate_add_tool(oscillate_nova_audition nova_audition EXCLUDE_FROM_ALL
 # Measures a limiter's presets at equal loudness (distortion, transients,
 # pumping, true peak, latency, CPU): docs/performance/native-effects.md.
 oscillate_add_tool(oscillate_limiter_audit limiter_audit EXCLUDE_FROM_ALL
-  SOURCES limiter_audit/main.cpp LIBS oscillate::native_effects)
+  SOURCES limiter_audit/main.cpp LIBS oscillate::native_effects oscillate::master_assistant)
 # Measures references' tonal balance and builds targets (ADR-0120).
 oscillate_add_tool(oscillate_tonal_targets tonal_targets EXCLUDE_FROM_ALL
   SOURCES tonal_targets/main.cpp LIBS oscillate::native_dsp)

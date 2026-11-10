@@ -638,4 +638,27 @@ EffectService::apply_effect_edits(std::span<const EffectEdit> edits) {
   return R::success(std::move(slots));
 }
 
+foundation::Result<void>
+EffectService::apply_master_operations(std::vector<project::Operation> operations) {
+  const auto on_master = [](const project::SignalPathId& path) {
+    return std::holds_alternative<project::MasterSignalPath>(path);
+  };
+  const bool master_only = std::ranges::all_of(operations, [&](const project::Operation& op) {
+    if (const auto* add = std::get_if<project::AddNativeEffect>(&op))
+      return on_master(add->path);
+    if (const auto* set = std::get_if<project::SetNativeEffectSettings>(&op))
+      return on_master(set->path);
+    if (const auto* enable = std::get_if<project::SetEffectInsertEnabled>(&op))
+      return on_master(enable->path);
+    return std::holds_alternative<project::SetMasterRebalance>(op);
+  });
+  if (operations.empty() || !master_only)
+    return Result<void>::failure(
+        {ErrorCode::invalid_argument, "Only the master's chain and rebalance can change here"});
+  auto applied = model().apply(operations);
+  if (!applied)
+    return Result<void>::failure(applied.error());
+  return Result<void>::success();
+}
+
 } // namespace oscillate::application

@@ -52,6 +52,8 @@ add_library(oscillate_application
   arrange_from_loop.cpp
   mix_check.cpp
   mix_check_history.cpp
+  # The master assistant (ADR-0124).
+  master_assistant.cpp
   # The Constellation (ADR-0077): presets placed by sound, morphed and mutated.
   sound_map.cpp
   nova_morph.cpp
@@ -91,6 +93,7 @@ target_link_libraries(oscillate_application PUBLIC
   oscillate::project oscillate::timeline oscillate::persistence oscillate::export oscillate::routing
   oscillate::analysis oscillate::processing oscillate::warp_render_cache oscillate::synth_engines
   oscillate::native_inserts oscillate::track_chain oscillate::midi_file oscillate::render_graph
+  oscillate::master_assistant
   PRIVATE oscillate::source_prep nlohmann_json::nlohmann_json
 )
 target_compile_definitions(oscillate_application PRIVATE
