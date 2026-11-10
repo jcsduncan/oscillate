@@ -174,9 +174,9 @@ struct Slice {
   std::size_t offset = 0;
   std::size_t frames = 0;
 };
-Slice slice(std::uint64_t first, std::size_t frames, std::uint64_t from, std::uint64_t to) {
-  const auto begin = std::max(first, from);
-  const auto end = std::min(first + frames, to);
+Slice slice(std::uint64_t first, std::size_t frames, Range within) {
+  const auto begin = std::max(first, within.first);
+  const auto end = std::min(first + frames, within.last);
   if (begin >= end)
     return {};
   return {static_cast<std::size_t>(begin - first), static_cast<std::size_t>(end - begin)};
@@ -210,14 +210,14 @@ public:
         continue;
       if (!meters_[k])
         meters_[k].emplace(rate_);
-      meters_[k]->push(sums_[k]);
+      meters_[k].value().push(sums_[k]);
     }
   }
   [[nodiscard]] core::RolePowers powers() const {
     core::RolePowers out;
     for (std::size_t k = 0; k < core::role_count; ++k)
       if (meters_[k])
-        out[k] = meters_[k]->powers();
+        out[k] = meters_[k].value().powers();
     return out;
   }
 
@@ -265,10 +265,10 @@ Result<Rendered> render_programme(const project::Snapshot& snapshot,
   if (with_roles)
     taps.tracks = [&](std::span<const exporting::TrackTap> tracks, std::uint64_t at) {
       if (!tracks.empty())
-        roles->push(tracks, slice(at, tracks.front().left.size(), first, last));
+        roles->push(tracks, slice(at, tracks.front().left.size(), Range{first, last}));
     };
   taps.master = [&](std::span<const float> left, std::span<const float> right, std::uint64_t at) {
-    const auto part = slice(at, left.size(), first, last);
+    const auto part = slice(at, left.size(), Range{first, last});
     if (part.frames == 0 || failure)
       return;
     const auto l = left.subspan(part.offset, part.frames);
@@ -358,9 +358,9 @@ Result<std::vector<core::ChainDevice>> chain_of(const project::Snapshot& snapsho
       return Result<std::vector<core::ChainDevice>>::failure(resolved.error());
     const auto& table = *resolved.value().engine->descriptor;
     if (!limiter && patch->engine == "ceiling")
-      limiter = core::Knob{chain.size(), *native_dsp::find_parameter(table, "ceiling.gain")};
+      limiter = core::Knob{chain.size(), native_dsp::find_parameter(table, "ceiling.gain").value()};
     if (!trim && patch->engine == "trim")
-      trim = core::Knob{chain.size(), *native_dsp::find_parameter(table, "trim.gain")};
+      trim = core::Knob{chain.size(), native_dsp::find_parameter(table, "trim.gain").value()};
     chain.push_back({resolved.value().engine, std::move(resolved.value().values),
                      patch->document.empty() ? std::nullopt : std::optional(patch->document)});
   }
@@ -403,7 +403,7 @@ Result<core::Capture> current_window(const Measured& measured, core::Window wind
   exporting::RenderTaps taps;
   taps.trim_silent_tail = true;
   taps.master = [&](std::span<const float> left, std::span<const float> right, std::uint64_t at) {
-    const auto part = slice(at, left.size(), from, to);
+    const auto part = slice(at, left.size(), Range{from, to});
     out.left.insert(out.left.end(), left.begin() + static_cast<std::ptrdiff_t>(part.offset),
                     left.begin() + static_cast<std::ptrdiff_t>(part.offset + part.frames));
     out.right.insert(out.right.end(), right.begin() + static_cast<std::ptrdiff_t>(part.offset),
@@ -522,7 +522,9 @@ Result<core::Analysis> measure_reference(const std::filesystem::path& path,
     return R::failure(wav.error());
 #endif
   }
-  auto analysis = std::move(*analyser).finish();
+  if (!analyser)
+    return R::failure({ErrorCode::invalid_argument, "The reference is unreadable"});
+  auto analysis = std::move(analyser.value()).finish();
   if (!analysis.integrated_lufs)
     return R::failure({ErrorCode::invalid_argument, "The reference is silent or too short"});
   return R::success(std::move(analysis));

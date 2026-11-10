@@ -122,6 +122,7 @@ void set(std::vector<double>& values, std::string_view engine, std::string_view 
   if (index)
     values[*index] = value;
 }
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the engine, its parameter, the label.
 double choice_of(std::string_view engine, std::string_view id, std::string_view label) {
   const auto& t = table(engine);
   const auto index = find_parameter(t, id);
@@ -131,6 +132,7 @@ double choice_of(std::string_view engine, std::string_view id, std::string_view 
   const auto found = std::ranges::find(choices, label);
   return found == choices.end() ? 0.0 : static_cast<double>(found - choices.begin());
 }
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the engine, then its preset.
 std::vector<double> preset(std::string_view engine, std::string_view name) {
   const auto& t = table(engine);
   for (const auto& p : t.presets) {
@@ -197,7 +199,7 @@ std::vector<Nudge> nudges_for(const tonal::Curve& diff, const RolePowers& roles)
     for (std::size_t k = 0; k < role_count; ++k) {
       if (!roles[k])
         continue;
-      const double share = (*roles[k])[r] / total;
+      const double share = roles[k].value()[r] / total;
       if (share < nudge_share || std::fabs(deviation[r]) <= weight[k])
         continue;
       weight[k] = std::fabs(deviation[r]);
@@ -768,9 +770,9 @@ GainSearch search_for(const Proposal& proposal) {
   for (std::size_t i = 0; i < proposal.devices.size(); ++i) {
     const auto& device = proposal.devices[i];
     if (device.engine == "ceiling")
-      search.limiter = {i, *find_parameter(table("ceiling"), "ceiling.gain")};
+      search.limiter = {i, find_parameter(table("ceiling"), "ceiling.gain").value()};
     if (device.engine == "trim")
-      search.trim = Knob{i, *find_parameter(table("trim"), "trim.gain")};
+      search.trim = Knob{i, find_parameter(table("trim"), "trim.gain").value()};
   }
   return search;
 }
@@ -784,6 +786,7 @@ Result<Learned> learn_for(Source& source, const Proposal& proposal, const StoreF
                     cancelled);
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the engine, then its parameter.
 double* value_of(Proposal& proposal, std::string_view engine, std::string_view id) {
   for (auto& device : proposal.devices)
     if (device.engine == engine)

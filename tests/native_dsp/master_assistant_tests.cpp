@@ -17,6 +17,7 @@
 #include "oscillate/test/check.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -61,6 +62,7 @@ std::size_t frames_of(double length) { return static_cast<std::size_t>(length * 
 
 // Pink-ish noise (white through a -3 dB/oct one-pole cascade), stereo with
 // `side` of uncorrelated noise in each channel.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the length, then the side's level.
 Stereo pinkish(double length, double side, std::uint64_t salt = 0) {
   constexpr std::array poles{0.99886, 0.99332, 0.96900, 0.86650, 0.55000, -0.7616};
   constexpr std::array gains{0.0555179, 0.0750759, 0.1538520, 0.3104856, 0.5329522, -0.0168980};
@@ -88,6 +90,7 @@ Stereo pinkish(double length, double side, std::uint64_t salt = 0) {
 }
 
 // A kick (a decaying 55 Hz sine) every `period` seconds over the noise.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the period, then the level.
 void add_kicks(Stereo& s, double period, double level) {
   constexpr double kick_hz = 55.0;
   constexpr double decay_seconds = 0.12;
@@ -146,7 +149,7 @@ const assistant::Device* device(const assistant::Proposal& p, std::string_view e
 
 double value(const assistant::Device& d, std::string_view id) {
   const auto found = std::ranges::find(d.values, id, &std::pair<std::string, double>::first);
-  REQUIRE_TRUE(found != d.values.end(), std::string(id));
+  REQUIRE_TRUE(found != d.values.end(), id);
   return found->second;
 }
 
@@ -165,7 +168,7 @@ void loudness_peak_and_crest_read_as_built() {
   REQUIRE_EQ(reference_meter.append(interleaved), dsp::LoudnessStatus::ok, "the meter takes it");
   const auto measured = assistant::analyse(noise.left, noise.right, rate);
   REQUIRE_TRUE(measured.integrated_lufs, "integrated loudness");
-  REQUIRE_NEAR(*measured.integrated_lufs, *reference_meter.finish().integrated_lkfs,
+  REQUIRE_NEAR(measured.integrated_lufs.value(), reference_meter.finish().integrated_lkfs.value(),
                loudness_agreement_lu, "the same BS.1770 loudness");
   REQUIRE_GE(measured.max_short_term_lufs, *measured.integrated_lufs, "short-term peaks over it");
   REQUIRE_GE(measured.max_momentary_lufs, measured.max_short_term_lufs, "momentary over that");
@@ -236,6 +239,33 @@ void tonal_distance_ignores_gain() {
   REQUIRE_EQ(d.worst_band, bump_band, "the bump is the worst band");
   REQUIRE_GT(d.worst_db, 0.0, "and it is over");
   REQUIRE_LT(d.rms_db, bump_db, "spread over the judged bands");
+}
+
+// Reference tracks' traits are their mean, and a target is built from
+// their curves; a track with no loudness is left out.
+void reference_tracks_average_their_traits() {
+  constexpr double first_side_db = -20.0;
+  constexpr double second_side_db = -30.0;
+  constexpr double first_crest_db = 8.0;
+  constexpr double second_crest_db = 12.0;
+  assistant::Analysis first;
+  first.integrated_lufs = mix_lufs;
+  first.low_side_db = first_side_db;
+  first.crest_db = first_crest_db;
+  first.tonal = reference().target.median;
+  auto second = first;
+  second.low_side_db = second_side_db;
+  second.crest_db = second_crest_db;
+  auto silent = first;
+  silent.integrated_lufs.reset();
+  const std::array tracks{first, second, silent};
+  const auto r = take(assistant::reference_from("references", tracks));
+  REQUIRE_TRUE(r.traits.has_value(), "measured traits");
+  REQUIRE_NEAR(r.traits.value().low_side_db, 0.5 * (first_side_db + second_side_db),
+               alignment_tolerance, "the mean low side");
+  REQUIRE_NEAR(r.traits.value().crest_db, 0.5 * (first_crest_db + second_crest_db),
+               alignment_tolerance, "the mean crest");
+  REQUIRE_EQ(r.target.references, 2, "the silent track is left out");
 }
 
 // The loudest window is where the programme is loudest.
@@ -471,6 +501,7 @@ int main(int argc, char** argv) {
       {{"loudness_peak_and_crest_read_as_built", loudness_peak_and_crest_read_as_built},
        {"width_mono_bass_and_onsets_read_as_built", width_mono_bass_and_onsets_read_as_built},
        {"tonal_distance_ignores_gain", tonal_distance_ignores_gain},
+       {"reference_tracks_average_their_traits", reference_tracks_average_their_traits},
        {"loudest_window_finds_the_drop", loudest_window_finds_the_drop},
        {"rules_follow_the_measurements", rules_follow_the_measurements},
        {"nudges_need_a_clear_owner", nudges_need_a_clear_owner},

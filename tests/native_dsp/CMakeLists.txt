@@ -848,6 +848,7 @@ oscillate_add_case_tests(native_master_assistant_contract oscillate_master_assis
   loudness_peak_and_crest_read_as_built
   width_mono_bass_and_onsets_read_as_built
   tonal_distance_ignores_gain
+  reference_tracks_average_their_traits
   loudest_window_finds_the_drop
   rules_follow_the_measurements
   nudges_need_a_clear_owner

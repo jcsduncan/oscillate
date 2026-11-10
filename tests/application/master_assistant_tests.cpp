@@ -221,6 +221,7 @@ void accept_is_one_step_and_proposing_changes_nothing() {
   REQUIRE_EQ(song.session->history().undo_steps().size(), steps + 1, "one undo step");
   const auto engines = master_engines(song.session->snapshot());
   std::vector<std::string> proposed_engines;
+  proposed_engines.reserve(proposed.proposal.devices.size() + 1);
   for (const auto& d : proposed.proposal.devices)
     proposed_engines.push_back(d.engine);
   if (std::ranges::find(proposed_engines, "trim") == proposed_engines.end())

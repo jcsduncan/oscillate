@@ -479,6 +479,7 @@ foundation::Result<Reference> reference_from(std::string name, std::span<const A
   using R = foundation::Result<Reference>;
   std::vector<tonal::Curve> curves;
   Traits traits{};
+  traits.low_side_db = 0.0;
   std::size_t used = 0;
   for (const auto& track : tracks) {
     if (!track.integrated_lufs)
