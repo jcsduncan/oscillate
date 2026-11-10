@@ -266,8 +266,10 @@ void malformed_kits_are_rejected() {
   const auto& invalid = library::State::invalid;
   REQUIRE_EQ(broken("not a stick kit\n" + text), invalid, "format line");
   REQUIRE_EQ(broken(with_line(text, "channels ", "channels 17")), invalid, "seventeen mics");
-  REQUIRE_EQ(broken(with_line(text, "mic 0 ", "mic 9 kick_in kick mono")), invalid,
-             "a mic past the channels");
+  REQUIRE_EQ(
+      broken(with_line(text, "mic 0 ",
+                       "mic " + std::to_string(stick_test::mics.size()) + " kick_in kick mono")),
+      invalid, "a mic past the channels");
   REQUIRE_EQ(broken(with_line(text, "mic 0 ", "mic 0 overheads kick mono")), invalid,
              "an overhead that hears one piece");
   REQUIRE_EQ(broken(with_line(text, "mic 0 ", "mic 0 kick_in kick left")), invalid,

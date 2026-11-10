@@ -21,7 +21,7 @@ without the VST3 host plays a second Ember in place of the VST3 instrument.
 The pad's Bow plays its synthetic test library, which costs what the
 installed one does to read, so the run needs no download. The drums' Stick
 plays its synthetic kit, whose hits stream past their resident starts as an
-installed kit's do; it has nine mics where Naked Drums has 16 and DRS Studio 13,
+installed kit's do; it has ten mics where Naked Drums has 16 and DRS Studio 13,
 and Stick mixes every mic, so measure an installed kit with `--stick-kit DIR`
 (a kit's folder), which the results name.
 

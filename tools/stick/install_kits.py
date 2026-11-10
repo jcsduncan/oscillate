@@ -169,22 +169,27 @@ class Mic:
 
 
 def close(group: str, *pieces: str) -> Mic:
+    """A close mic hearing these pieces."""
     return Mic(group, pieces, "mono")
 
 
 def left(group: str) -> Mic:
+    """A pair's left mic."""
     return Mic(group, (), "left")
 
 
 def right(group: str) -> Mic:
+    """A pair's right mic."""
     return Mic(group, (), "right")
 
 
 def centre(group: str) -> Mic:
+    """A single distant mic in the centre."""
     return Mic(group, (), "centre")
 
 
 def mic_line(index: int, mic: Mic) -> str:
+    """A mic's manifest line."""
     return f"mic {index} {mic.group} {'+'.join(mic.pieces) or '-'} {mic.side}"
 
 
@@ -439,6 +444,7 @@ KITS: dict[str, Kit] = {
 
 
 def data_directory() -> Path:
+    """Where Stick reads its kits, as stick_library.cpp looks."""
     override = os.environ.get("OSCILLATE_STICK_LIBRARY")
     if override:
         return Path(override)
@@ -447,22 +453,40 @@ def data_directory() -> Path:
 
 
 def run(command: list[str], cwd: Path | None = None) -> str:
+    """A command's output; its error ends the install."""
     result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         raise SystemExit(f"{' '.join(command)} failed:\n{result.stderr.strip()}")
     return result.stdout.strip()
 
 
+def head_of(source: Path) -> str:
+    """The checkout's commit; empty before one is checked out."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", "-q", "HEAD"],
+        cwd=source,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
 def fetch_naked(source: Path) -> None:
-    """The SFZ repository at its pinned commit, checked."""
+    """The SFZ repository at its pinned commit, checked. A fetch cut short
+    is resumed: whatever the checkout holds, the pinned commit is fetched
+    and checked out again until it is there."""
     if not (source / ".git").is_dir():
         source.mkdir(parents=True, exist_ok=True)
-        print(f"fetching {NAKED_REPOSITORY} at {NAKED_COMMIT[:12]} (about 1.3 GB)")
         run(["git", "init", "-q"], source)
         run(["git", "remote", "add", "origin", NAKED_REPOSITORY], source)
+    if head_of(source) != NAKED_COMMIT:
+        print(f"fetching {NAKED_REPOSITORY} at {NAKED_COMMIT[:12]} (about 1.3 GB)")
         run(["git", "fetch", "-q", "--depth", "1", "origin", NAKED_COMMIT], source)
-        run(["git", "-c", "advice.detachedHead=false", "checkout", "-q", "FETCH_HEAD"], source)
-    if run(["git", "rev-parse", "HEAD"], source) != NAKED_COMMIT:
+        run(
+            ["git", "-c", "advice.detachedHead=false", "checkout", "-q", "-f", "FETCH_HEAD"], source
+        )
+    if head_of(source) != NAKED_COMMIT:
         raise SystemExit("the Naked Drums checkout is not the pinned commit")
     if run(["git", "rev-parse", "HEAD^{tree}"], source) != NAKED_TREE:
         raise SystemExit("the Naked Drums checkout's tree is not the pinned tree")
@@ -477,6 +501,7 @@ def fetch_naked(source: Path) -> None:
 
 
 def md5_of(path: Path) -> str:
+    """A file's MD5, read in chunks."""
     digest = hashlib.md5(usedforsecurity=False)
     with path.open("rb") as file:
         for chunk in iter(lambda: file.read(DOWNLOAD_CHUNK), b""):
@@ -639,12 +664,14 @@ class SfzText:
     instrument's folder, as SFZ players resolve them)."""
 
     def __init__(self, root: Path, instrument_folder: Path) -> None:
+        """Text under `root`, includes resolved from `instrument_folder`."""
         self.root = root.resolve()
         self.folder = instrument_folder
         self.defines: dict[str, str] = {}
         self._pattern: re.Pattern[str] | None = None
 
     def resolve(self, relative: str) -> Path:
+        """An included file, which must lie inside the source."""
         path = (self.folder / relative).resolve()
         if not path.is_relative_to(self.root) or not path.is_file():
             raise SystemExit(f"the SFZ names a file outside it or missing: {relative}")
@@ -666,6 +693,7 @@ class SfzText:
         return text
 
     def lines(self, path: Path, depth: int = 0) -> list[str]:
+        """A file's lines, defines applied and includes followed."""
         if depth > MAX_INCLUDE_DEPTH:
             raise SystemExit("the SFZ includes too deeply")
         if path.stat().st_size > MAX_SFZ_BYTES:
@@ -723,6 +751,7 @@ def sfz_regions(lines: list[str]) -> list[dict[str, str]]:
 
 
 def sfz_number(value: str, what: str) -> float:
+    """An opcode's number; anything else ends the install."""
     try:
         return float(value)
     except ValueError as error:
@@ -906,6 +935,7 @@ def mix_channels(
 
 
 def block_peaks(channels: list[array.array], block: int) -> list[float]:
+    """Each block's peak over the channels."""
     frames = len(channels[0])
     peaks = []
     for start in range(0, frames, block):
@@ -976,6 +1006,7 @@ def dithered(part: array.array, gain: float, uniform: Callable[[], float]) -> ar
 
 
 def measure(job: tuple[Hit, list[Mic], str, str]) -> Hit:
+    """One hit decoded, checked, measured, trimmed and written as int16."""
     hit, mics, filters, work = job
     channels = mix_channels(hit, read_parts(hit, filters))
     frames = len(channels[0])
@@ -1052,6 +1083,7 @@ def source_line(hit: Hit) -> str:
 
 
 def write_kit(kit: Kit, mics: list[Mic], hits: list[Hit], target: Path) -> int:
+    """The pack, manifest, sources and credit; returns the pack's size."""
     channels = len(mics)
     frame_bytes = BYTES_PER_SAMPLE * channels
     # Each hit starts on a whole frame and a 4 KiB boundary.
@@ -1096,6 +1128,7 @@ def write_kit(kit: Kit, mics: list[Mic], hits: list[Hit], target: Path) -> int:
 
 
 def install(kit: Kit, mics: list[Mic], hits: list[Hit], base: Path, jobs: int) -> Path:
+    """The kit converted beside the old one, then swapped in whole."""
     target = base / kit.folder
     partial = target.with_name(target.name + ".partial")
     if partial.exists():
@@ -1131,6 +1164,7 @@ def install(kit: Kit, mics: list[Mic], hits: list[Hit], base: Path, jobs: int) -
 
 
 def main() -> int:
+    """Fetches and installs the kits asked for."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument(
         "--kit",

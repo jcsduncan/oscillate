@@ -97,7 +97,7 @@ Machine-specific paths go in `CMakeUserPresets.json` (ignored by Git).
 Concert, Fret, Wren, Bow and Stick need sample libraries that are not in this
 repository. The installers download a pinned release, verify it and convert
 it. They need Python 3 and ffmpeg (with libsoxr for Fret and Wren); Concert,
-Fret and Bow also need git.
+Fret, Bow and Stick also need git.
 
 | Instrument | Library | Licence | Installer | Location override |
 | --- | --- | --- | --- | --- |

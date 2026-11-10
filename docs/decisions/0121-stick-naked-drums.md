@@ -2,7 +2,7 @@
 
 **Status:** Accepted; implemented.
 **Date:** 10 November 2026.
-**Amends:** ADR-0114 (its kits, pieces, articulations, mic groups, key map, defaults and presets).
+**Supersedes in part:** ADR-0114: its kits and default kit, pieces, articulations, mic groups, key map, defaults and presets. ADR-0114's other decisions stand: the streamed packs, background loading, the hit choice by power, round robins, the hi-hat pedal, the mic mixer, the per-piece controls and the panel.
 
 ## Why
 

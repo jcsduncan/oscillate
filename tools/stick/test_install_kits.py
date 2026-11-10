@@ -134,11 +134,15 @@ def write_kit(base: Path) -> Path:
 
 
 class SfzTests(unittest.TestCase):
+    """The SFZ reader: defines, includes, headers."""
+
     def setUp(self):
+        """A fresh folder per test."""
         self.base = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.base)
 
     def test_defines_apply_in_order_longest_first(self):
+        """Defines apply in order longest first."""
         sfz = self.base / "a.sfz"
         sfz.write_text(
             "#define $A one\n#define $AB two\nx=$AB_$A\n#define $A three\ny=$A\n"
@@ -148,6 +152,7 @@ class SfzTests(unittest.TestCase):
         self.assertEqual(lines, ["x=two_one", "y=three", " z=1"])
 
     def test_includes_outside_the_source_are_refused(self):
+        """Includes outside the source are refused."""
         sfz = self.base / "kit" / "a.sfz"
         sfz.parent.mkdir()
         (self.base / "outside.txt").write_text("x=1\n")
@@ -156,6 +161,7 @@ class SfzTests(unittest.TestCase):
             kits.SfzText(sfz.parent, sfz.parent).lines(sfz)
 
     def test_regions_inherit_master_and_group_opcodes(self):
+        """Regions inherit master and group opcodes."""
         lines = [
             "<master> master_volume=3",
             "<group> key=36",
@@ -173,6 +179,7 @@ class SfzTests(unittest.TestCase):
         self.assertEqual(regions[2], {"sample": "c.wav"})
 
     def test_velocity_tracking_follows_the_sfz(self):
+        """Velocity tracking follows the SFZ."""
         soft_velocity = 27
         full_tracking = 100
         self.assertEqual(kits.velocity_db(kits.MAX_VELOCITY, VELTRACK), 0.0)
@@ -182,6 +189,7 @@ class SfzTests(unittest.TestCase):
         )
 
     def test_opcode_values_may_hold_spaces(self):
+        """Opcode values may hold spaces."""
         self.assertEqual(
             kits.sfz_opcodes("region_label=10 one sample=a b.wav"),
             {"region_label": "10 one", "sample": "a b.wav"},
@@ -189,20 +197,26 @@ class SfzTests(unittest.TestCase):
 
 
 class NakedTests(unittest.TestCase):
+    """Naked's mapping and install, on the synthetic kit."""
+
     @classmethod
     def setUpClass(cls):
+        """Writes the synthetic kit and reads its hits once."""
         cls.base = Path(tempfile.mkdtemp())
         cls.source = write_kit(cls.base / "source")
         cls.hits = kits.naked_hits(cls.source, EXPECTED)
 
     @classmethod
     def tearDownClass(cls):
+        """Removes the synthetic kit."""
         shutil.rmtree(cls.base)
 
     def hit(self, piece, articulation):
+        """The first hit of a stroke."""
         return next(h for h in self.hits if (h.piece, h.articulation) == (piece, articulation))
 
     def test_every_mic_of_a_hit_joins_it(self):
+        """Every mic of a hit joins it."""
         kick = self.hit("kick", "hit")
         played = [len(parts) for parts in kick.channels]
         oh_left, oh_right = kits.NAKED_FAR["OH"]
@@ -218,6 +232,7 @@ class NakedTests(unittest.TestCase):
         self.assertEqual(kick.channels[oh_left][0].gain_db, TRIM_DB)
 
     def test_the_second_snare_is_its_alt_and_the_tops_sum(self):
+        """The second snare is its alt and the tops sum."""
         snare = self.hit("snare", "hit")
         second = self.hit("snare", "alt")
         top = kits.NAKED_CLOSE["Snare_Tops"][0]
@@ -226,20 +241,24 @@ class NakedTests(unittest.TestCase):
         self.assertTrue(all("_B_" in p.path for p in second.channels[top]))
 
     def test_toms_share_a_channel_and_keep_their_tuning(self):
+        """Toms share a channel and keep their tuning."""
         tom = self.hit("tom3", "hit")
         (channel,) = kits.NAKED_CLOSE["Tom3"]
         self.assertEqual(kits.NAKED_MICS[channel].pieces, ("tom1", "tom2", "tom3", "tom4", "tom5"))
         self.assertEqual(tom.channels[channel][0].cents, TOM_CENTS)
 
     def test_unexpected_counts_are_refused(self):
+        """Unexpected counts are refused."""
         with self.assertRaises(SystemExit):
             kits.naked_hits(self.source, {("kick", "hit"): ROUND_ROBINS})
 
     def test_an_unknown_stroke_is_refused(self):
+        """An unknown stroke is refused."""
         with self.assertRaises(SystemExit):
             kits.naked_stroke("Cowbell", "Center", "56", {"$KEY_SNR1": "38", "$KEY_SNR2": "40"})
 
     def test_install_writes_the_kit_its_sources_and_its_credit(self):
+        """Install writes the kit, its sources and its credit."""
         destination = self.base / "installed"
         target = kits.install(kits.KITS["naked"], kits.NAKED_MICS, self.hits, destination, 1)
         manifest = (target / kits.MANIFEST).read_text().splitlines()
@@ -268,6 +287,7 @@ class NakedTests(unittest.TestCase):
             self.assertIn(fact, credit)
 
     def test_a_silent_mic_stays_undithered(self):
+        """A silent mic stays undithered."""
         work = self.base / "work"
         work.mkdir(exist_ok=True)
         kick = self.hit("kick", "hit")
@@ -281,6 +301,7 @@ class NakedTests(unittest.TestCase):
         self.assertTrue(any(pcm[0::channels]))
 
     def test_a_file_with_more_channels_than_the_kit_plays_is_refused(self):
+        """A file with more channels than the kit plays is refused."""
         kick = self.hit("kick", "hit")
         (room,) = kits.NAKED_FAR["CR"]
         stereo_room = kick.channels[room][0].path
