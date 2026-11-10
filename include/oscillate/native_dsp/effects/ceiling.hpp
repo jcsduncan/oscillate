@@ -37,7 +37,7 @@ inline constexpr float no_loudness = -70.0F;
 // (reduction_bands.hpp). Then the most the clipper and the guard took off
 // (dB, positive, held 1 s); the output's momentary, short-term and
 // integrated loudness (LUFS; no_loudness until there is a reading; the
-// integrated one since the last reset); the latency in milliseconds.
+// integrated one since the last reset or Gain change); the latency in milliseconds.
 namespace telemetry {
 inline constexpr std::size_t input_peak = 0;  // left, right
 inline constexpr std::size_t output_peak = 2; // left, right

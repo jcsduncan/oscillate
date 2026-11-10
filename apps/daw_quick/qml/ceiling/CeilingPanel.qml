@@ -31,11 +31,6 @@ Rectangle {
     readonly property real ceilDb: 6
     // A peak above this reads in the over colour.
     readonly property real overDb: -3
-    // A loudness reading with nothing to read (ceiling::no_loudness).
-    readonly property real noLoudness: -70
-    // The gain's range, for Learn (ceiling.gain).
-    readonly property real gainMin: 0
-    readonly property real gainMax: 24
     // When the panel cannot read the running latency, it shows it at 48 kHz.
     readonly property real nominalRate: 48000
 
@@ -45,15 +40,16 @@ Rectangle {
     readonly property real reductionDb: playing ? live.reduction : 0
     readonly property real clippedDb: playing ? live.clipped : 0
     readonly property real guardedDb: playing ? live.guarded : 0
-    readonly property real integrated: playing ? live.integrated : noLoudness
-    readonly property real shortTerm: playing ? live.short_term : noLoudness
-    readonly property real momentary: playing ? live.momentary : noLoudness
+    // Loudness readings are NaN until there is one to show.
+    readonly property real integrated: playing ? live.integrated : NaN
+    readonly property real shortTerm: playing ? live.short_term : NaN
+    readonly property real momentary: playing ? live.momentary : NaN
     readonly property real latencyMs: playing ? live.latency_ms
         : (revision >= 0 ? controller.ceiling_latency_ms(nominalRate) : 0)
     readonly property real ceiling: revision >= 0 ? controller.value("ceiling.ceiling") : -1
     readonly property real gain: revision >= 0 ? controller.value("ceiling.gain") : 0
     readonly property real target: revision >= 0 ? controller.value("ceiling.target") : -14
-    readonly property bool measured: integrated > noLoudness
+    readonly property bool measured: isFinite(integrated)
     readonly property real largestDb: {
         let most = 0
         for (let i = 0; i < samples.length; ++i)
@@ -91,14 +87,14 @@ Rectangle {
         samples = []
     }
     // Learn: move Gain by the distance from the integrated loudness to the
-    // target. Limiting makes loudness grow more slowly than gain, so a
-    // second Learn on the same passage closes what remains.
+    // target (the controller works it out). Limiting makes loudness grow
+    // more slowly than gain; the reading restarts at the change, so a second
+    // Learn on the same passage closes what remains.
     function learn() {
         if (!measured)
             return
-        const wanted = Math.max(gainMin, Math.min(gainMax, gain + target - integrated))
         theme.lastTouched = "ceiling.gain"
-        controller.set_value("ceiling.gain", wanted)
+        controller.set_value("ceiling.gain", controller.ceiling_learned_gain(integrated))
     }
 
     // ---- Formatting ------------------------------------------------------------------
@@ -116,7 +112,7 @@ Rectangle {
         return Format.number(-db, levelDecimals)
     }
     function loudnessText(lufs) {
-        return playing && lufs > noLoudness ? signed(lufs) : "—"
+        return playing && isFinite(lufs) ? signed(lufs) : "—"
     }
     // Where a level sits on the meters, 0 (floor) to 1 (top).
     function meterAt(db) {

@@ -127,6 +127,8 @@ struct Audio {
 struct Programme {
   std::string name;
   Audio audio;
+  // The input's short-term crest factor, measured once.
+  double crest_db = 0.0;
 };
 
 // ---- Programmes ----------------------------------------------------------------------------
@@ -899,7 +901,13 @@ int main(int argc, char** argv) {
     return 1;
   }
   for (auto& programme : programmes) {
-    scale(programme.audio, from_db(programme_lufs - lufs(programme.audio)));
+    const double level = lufs(programme.audio);
+    if (!std::isfinite(level)) {
+      std::fprintf(stderr, "%s has no measurable loudness\n", programme.name.c_str());
+      return 1;
+    }
+    scale(programme.audio, from_db(programme_lufs - level));
+    programme.crest_db = crest_db(programme.audio, fine_peaks(programme.audio));
   }
   std::vector<Device> devices;
   if (classic) {
@@ -976,8 +984,7 @@ int main(int argc, char** argv) {
         r.tp4_over = driven.overshoot_db;
         const auto out_peaks = fine_peaks(driven.render.audio);
         r.tp16_over = true_peak_16x(out_peaks) - ceiling_db + driven.trim_db;
-        r.crest_loss = crest_db(programme.audio, fine_peaks(programme.audio)) -
-                       crest_db(driven.render.audio, out_peaks);
+        r.crest_loss = programme.crest_db - crest_db(driven.render.audio, out_peaks);
         r.onset = onset_loss(programme.audio, driven.render.audio);
         r.pump = pumping_db(programme.audio, driven.render.audio);
         r.latency_ms = milliseconds_per_second * driven.render.latency / rate;

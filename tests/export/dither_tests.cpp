@@ -138,7 +138,10 @@ void shaped_noise_follows_its_curve() {
   }
   // The psychoacoustic shape puts its noise where the ear hears least.
   const auto taps = dither_taps(DitherShape::psychoacoustic, rate_44k);
-  for (double hz = dip_low_hz; hz <= dip_high_hz; hz += dip_low_hz / 2.0) {
+  constexpr std::size_t dip_steps = 6; // every 500 Hz from 2 to 5 kHz
+  for (std::size_t step = 0; step <= dip_steps; ++step) {
+    const double hz =
+        dip_low_hz + (dip_high_hz - dip_low_hz) * static_cast<double>(step) / dip_steps;
     REQUIRE_LE(db(transfer_power(taps, hz, rate_44k)), -psychoacoustic_dip_db,
                "the F-weighted noise dips from 2 to 5 kHz");
   }
@@ -149,7 +152,9 @@ void high_rates_push_the_noise_above_the_band() {
     for (const auto shape : {DitherShape::shaped, DitherShape::psychoacoustic}) {
       follows_the_curve(shape, rate);
       const auto taps = dither_taps(shape, rate);
-      for (double hz = audible_step_hz; hz <= audible_hz; hz += audible_step_hz) {
+      const auto steps = static_cast<std::size_t>(audible_hz / audible_step_hz);
+      for (std::size_t step = 1; step <= steps; ++step) {
+        const double hz = audible_step_hz * static_cast<double>(step);
         REQUIRE_LE(db(transfer_power(taps, hz, rate)), -high_rate_audible_cut_db,
                    "at the high rates the noise leaves the audible band");
       }

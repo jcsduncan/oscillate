@@ -51,6 +51,12 @@ namespace oscillate::quick {
 [[nodiscard]] double ceiling_latency_ms(const native_dsp::EngineDescriptor& engine,
                                         std::span<const double> values, double sample_rate);
 
+// Ceiling's Learn: the Gain (dB) that moves the output by the distance from
+// `integrated_lufs` to Target, clamped to Gain's range; the current Gain
+// when the reading is not finite, NaN for other engines.
+[[nodiscard]] double ceiling_learned_gain(const native_dsp::EngineDescriptor& engine,
+                                          std::span<const double> values, double integrated_lufs);
+
 // Strata (native effect) sketches, empty for other engines:
 //  - strata_transfer: band `band`'s static curve, output dB (makeup
 //    included) at `points` steady levels evenly spaced from `floor_db` to 0;

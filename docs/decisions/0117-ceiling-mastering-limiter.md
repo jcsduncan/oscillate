@@ -44,11 +44,11 @@ Export rounded integer formats with flat TPDF dither and no choice of shape.
    - **Latency** is the fine peak's reach (16 frames), the lookahead less one, the clipper's round trip (92 frames) and the guard (55 frames at 48 kHz). That is 354 frames (7.4 ms) at the default 4 ms.
    - **Tail:** with room to clip, the clipper's filters ring 93 frames past their round trip. With none, Ceiling stops with its input.
 10. **Telemetry and panel** (`qml/ceiling`):
-    - **Telemetry:** the input peak (before Gain) and the output's true peak; the reduction and its bands (the strip view's); what the clipper and the guard took; the output's momentary, short-term and integrated loudness (since the last reset); the latency.
+    - **Telemetry:** the input peak (before Gain) and the output's true peak; the reduction and its bands (the strip view's); what the clipper and the guard took; the output's momentary, short-term and integrated loudness (since the last reset or Gain change); the latency.
     - **The panel**, in the device kit:
       - the reduction history over ten seconds with its value now and its largest;
       - the IN and OUT meters, with the ceiling drawn across OUT;
-      - the loudness against Target. Learn moves Gain by the difference; limiting makes loudness grow more slowly than gain, so a second Learn closes the rest;
+      - the loudness against Target. Learn moves Gain by the difference. Limiting makes loudness grow more slowly than gain, and the reading restarts at a Gain change, so a second Learn on the same passage closes the rest;
       - the Drive, Limit, Clip and Stereo cards.
 11. **Presets:**
     - **Default:** half the onset room, a nearly hard knee, a 100 ms release to a 60% loudness stage;

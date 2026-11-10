@@ -11,6 +11,7 @@
 #include "oscillate/native_dsp/synth/engines.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/test/allocation_counter.hpp"
+#include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/wait.hpp"
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
@@ -177,7 +178,8 @@ project::NativeEffectPatch ceiling(double ceiling_db, double lookahead_ms, doubl
 }
 
 std::uint32_t ceiling_latency(double lookahead_ms) {
-  return oscillate::native_dsp::effects::ceiling::latency_frames(lookahead_ms, 48'000.0);
+  return oscillate::native_dsp::effects::ceiling::latency_frames(
+      lookahead_ms, oscillate::test::sample_rate_48k_hz);
 }
 
 // Playback blocks in the limiter Stop tests, and the frames each holds.
@@ -2124,9 +2126,12 @@ void saved_native_eq_is_audible_from_quick() {
       const auto& ceiling_engine = oscillate::native_dsp::effects::ceiling::engine();
       auto ceiling_values = oscillate::native_dsp::default_values(*ceiling_engine.descriptor);
       for (const auto& value :
-           std::get<project::NativeEffectPatch>(owner.effects[1].processor).parameters)
-        ceiling_values[*oscillate::native_dsp::find_parameter(*ceiling_engine.descriptor,
-                                                              value.id)] = value.value;
+           std::get<project::NativeEffectPatch>(owner.effects[1].processor).parameters) {
+        const auto index =
+            oscillate::native_dsp::find_parameter(*ceiling_engine.descriptor, value.id);
+        require(index.has_value(), "the oracle knows every Ceiling parameter");
+        ceiling_values[*index] = value.value;
+      }
       auto limiter = take(oscillate::native_dsp::effects::NativeEffectRuntime::create(
           ceiling_engine, ceiling_values, static_cast<double>(chained->sample_rate)));
       std::array<engine::StereoFrame, 128> expected{};

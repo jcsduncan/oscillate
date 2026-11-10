@@ -19,6 +19,11 @@ constexpr std::array<double, 6> high_rate_88k{3.756175,  -7.274174, 8.912526,
                                               -7.274174, 3.756175,  -1.0};
 constexpr std::array<double, 6> high_rate_96k{4.073441,  -8.210213, 10.196781,
                                               -8.210213, 4.073441,  -1.0};
+static_assert(e_weighted.size() <= DitherQuantizer::max_taps &&
+                  f_weighted.size() <= DitherQuantizer::max_taps &&
+                  high_rate_88k.size() <= DitherQuantizer::max_taps &&
+                  high_rate_96k.size() <= DitherQuantizer::max_taps,
+              "every error filter fits the quantizer's history");
 // Rates up to this one take the 44.1 kHz designs; above it, 88.2 kHz takes
 // its own and 96 kHz its own.
 constexpr std::uint32_t base_rate_limit = 48'000;

@@ -107,6 +107,13 @@ public:
     const bool jump = !primed_;
     const double steps = std::max<double>(1.0, frames);
     gain_.settle(dsp::db_to_gain(v[p::gain]), steps, jump);
+    // The integrated loudness reads the output since the last Gain change,
+    // so a second Learn sees only what the new gain gives.
+    if (!jump && v[p::gain] != gain_db_) {
+      gate_.clear();
+      integrated_ = no_loudness;
+    }
+    gain_db_ = v[p::gain];
     ceiling_.settle(dsp::db_to_gain(v[p::ceiling]), steps, jump);
     const double release = v[p::release] / milliseconds_per_second;
     const double clip_room = log_gain(v[p::clip]);
@@ -288,6 +295,7 @@ private:
   bs1770::StepWindows windows_;
   bs1770::Gate gate_;
   float integrated_ = no_loudness;
+  double gain_db_ = 0.0;
   std::array<double, 2> input_peak_{};
   std::array<double, 2> output_peak_{};
   double reduction_ = 0.0;

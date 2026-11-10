@@ -420,7 +420,9 @@ void the_clipper_does_not_alias() {
   const double reference = amplitude(x, alias_hz);
   double worst = -std::numeric_limits<double>::infinity();
   constexpr double resolution_hz = 50.0;
-  for (double hz = resolution_hz; hz < audible_hz; hz += resolution_hz) {
+  const auto bins = static_cast<std::size_t>(audible_hz / resolution_hz);
+  for (std::size_t bin = 1; bin < bins; ++bin) {
+    const double hz = resolution_hz * static_cast<double>(bin);
     const double harmonic = std::fmod(hz, alias_hz);
     if (harmonic < harmonic_guard_hz || alias_hz - harmonic < harmonic_guard_hz) {
       continue; // the tone and its harmonics

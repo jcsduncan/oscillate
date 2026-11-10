@@ -17,6 +17,7 @@
 #include <complex>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <numbers>
 #include <string_view>
 #include <vector>
@@ -228,6 +229,21 @@ double ceiling_latency_ms(const native_dsp::EngineDescriptor& engine,
   }
   const auto frames = native_dsp::effects::ceiling::engine().latency_frames(values, sample_rate);
   return static_cast<double>(frames) / sample_rate * milliseconds_per_second;
+}
+
+double ceiling_learned_gain(const native_dsp::EngineDescriptor& engine,
+                            std::span<const double> values, double integrated_lufs) {
+  const auto gain = native_dsp::find_parameter(engine, "ceiling.gain");
+  const auto target = native_dsp::find_parameter(engine, "ceiling.target");
+  if (engine.id != native_dsp::effects::ceiling::engine().descriptor->id || !gain || !target ||
+      values.size() != engine.parameters.size()) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  if (!std::isfinite(integrated_lufs)) {
+    return values[*gain];
+  }
+  return native_dsp::sanitise(engine.parameters[*gain],
+                              values[*gain] + values[*target] - integrated_lufs);
 }
 
 namespace {
