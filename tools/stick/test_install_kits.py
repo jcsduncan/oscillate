@@ -55,13 +55,18 @@ MACRO = f"""#define $VELTRACK {VELTRACK}
 <control>
 default_path=$dir/
 """
-REGIONS = """#define $POS 1
+# Two velocity layers of one round robin, recorded alike: the SFZ's
+# velocity tracking alone sets them apart.
+SOFT_TOP = 63
+LOUD_BOTTOM = SOFT_TOP + 1
+REGIONS = f"""#define $POS 1
 #define $RR one
-<region> lovel=1 hivel=127 seq_position=$POS sample=$MIC_$ART_$RR.$ext
-#define $POS 2
+<region> lovel=1 hivel={SOFT_TOP} seq_position=$POS sample=$MIC_$ART_$RR.$ext
 #define $RR two
-<region> lovel=1 hivel=127 seq_position=$POS sample=$MIC_$ART_$RR.$ext
+<region> lovel={LOUD_BOTTOM} hivel=127 seq_position=$POS sample=$MIC_$ART_$RR.$ext
 """
+# Powers agree within dither.
+POWER_TOLERANCE_DB = 0.05
 # Each group file: its master opcodes, then a group per key (name, key define).
 GROUPS = {
     "kick_in": ("", [("KickIn", "Kick", "$KEY_KICK")]),
@@ -184,6 +189,10 @@ class SfzTests(unittest.TestCase):
         full_tracking = 100
         self.assertEqual(kits.velocity_db(kits.MAX_VELOCITY, VELTRACK), 0.0)
         self.assertAlmostEqual(
+            kits.velocity_db(soft_velocity, VELTRACK),
+            VELTRACK / kits.PERCENT * SQUARED_DB * math.log10(soft_velocity / kits.MAX_VELOCITY),
+        )
+        self.assertAlmostEqual(
             kits.velocity_db(soft_velocity, full_tracking),
             SQUARED_DB * math.log10(soft_velocity / kits.MAX_VELOCITY),
         )
@@ -211,9 +220,14 @@ class NakedTests(unittest.TestCase):
         """Removes the synthetic kit."""
         shutil.rmtree(cls.base)
 
-    def hit(self, piece, articulation):
-        """The first hit of a stroke."""
-        return next(h for h in self.hits if (h.piece, h.articulation) == (piece, articulation))
+    def hit(self, piece, articulation, layer=LOUD_BOTTOM):
+        """A stroke's hit on the velocity layer from `layer` up."""
+        return next(
+            h
+            for h in self.hits
+            if (h.piece, h.articulation) == (piece, articulation)
+            and h.name.split("/")[4] == str(layer)
+        )
 
     def test_every_mic_of_a_hit_joins_it(self):
         """Every mic of a hit joins it."""
@@ -285,6 +299,19 @@ class NakedTests(unittest.TestCase):
         self.assertTrue(credit.startswith(kits.NAKED_NOTICE))
         for fact in ("kinwie", kits.NAKED_COMMIT, kits.NAKED_LICENCE_COMMIT, kits.LICENCE_URL):
             self.assertIn(fact, credit)
+
+    def test_a_soft_layer_measures_as_the_sfz_plays_it(self):
+        """A soft layer measures as the SFZ plays it."""
+        work = self.base / "layers"
+        work.mkdir(exist_ok=True)
+        filters = kits.resampler()
+        soft = kits.measure((self.hit("kick", "hit", 1), kits.NAKED_MICS, filters, str(work)))
+        loud = kits.measure((self.hit("kick", "hit"), kits.NAKED_MICS, filters, str(work)))
+        self.assertAlmostEqual(
+            soft.power_db - loud.power_db,
+            kits.velocity_db(SOFT_TOP, VELTRACK),
+            delta=POWER_TOLERANCE_DB,
+        )
 
     def test_a_silent_mic_stays_undithered(self):
         """A silent mic stays undithered."""

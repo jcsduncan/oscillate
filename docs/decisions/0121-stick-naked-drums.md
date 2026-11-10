@@ -48,7 +48,7 @@ A listening shootout of eight sampled kits against Stick's three DrumGizmo kits 
 | Crash 1, crash 2 (edges), splash 1, china 1 | crash1, crash2, splash, china |
 
 - **Applied as the SFZ plays them:** each mic's trim (`master_volume`), the hats' articulation trims (`group_volume`) and the per-layer volumes; toms 3 and 4 tuned down 200 and 70 cents (played slower before resampling).
-- **Velocity.** Naked's samples are normalised per velocity layer (a soft kick's files peak as high as a hard one's); its SFZ gives them their dynamics by velocity tracking (`amp_veltrack` 99 %: (v/127)² in amplitude). The installer applies that gain at each layer's top velocity, so each hit's measured power, and Stick's choice of hit by power, follows the layers: soft notes play the soft recordings, quieter, as the SFZ plays them.
+- **Velocity.** Naked's samples are normalised per velocity layer (a soft kick's files peak as high as a hard one's); its SFZ gives them their dynamics by velocity tracking (`amp_veltrack` 99 %: (v/127)^1.98 in amplitude). The installer applies that gain at each layer's top velocity, so the hits' measured powers order by layer. Stick then plays by power as for every kit (a velocity asks for a power over the stroke's range), which approximates the SFZ: soft notes play the soft layers, quieter, though not at the SFZ's exact velocity boundaries or curve.
 - **Channels.** Naked's 16 mic channels become 16 pack channels:
 
 | Channel | Group | Hears |
