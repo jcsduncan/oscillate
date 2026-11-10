@@ -339,6 +339,10 @@ oscillate_add_case_tests(native_stick_contract oscillate_stick_tests
   bleed_mutes_solos_and_mixes_route_the_mics
   pans_place_close_mics_and_balance_cymbals
   shared_close_mics_and_a_centred_room
+  the_chain_off_changes_nothing
+  inserts_shape_their_own_group
+  the_parallel_and_kit_buses
+  a_stage_switches_in_without_a_step
   tune_decay_and_brushes
   the_stream_joins_the_resident_start
   voices_are_bounded

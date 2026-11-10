@@ -17,6 +17,7 @@
 #include <QQuickWindow>
 #include <QTest>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -349,6 +350,41 @@ void pieces_mics_and_meters() {
           "the kit row counts the voices");
 }
 
+// Runs after the kits are installed. A strip's chain chip opens its
+// group's chain; a stage's switch writes its parameter; Done closes it and
+// Escape does too; the kit row opens the buses.
+void the_chain_opens_from_a_strip() {
+  InMemoryNativeSynthAdapter adapter(oscillate::native_dsp::default_values(table()));
+  NativeSynthDeviceController controller(table(), adapter);
+  auto panel = load_panel(controller);
+  auto* editor = item(*panel, QStringLiteral("stickChain"));
+  require(!editor->isVisible(), "the chain is closed at first");
+  click(*panel, centre(item(*panel, QStringLiteral("stickChainChip:snare_top"))));
+  require(QTest::qWaitFor([&] { return editor->isVisible(); }, wait_ms),
+          "the strip's chip opens its chain");
+  require(
+      text_of(*panel, QStringLiteral("stickChainTitle")).startsWith(QStringLiteral("SNARE TOP")),
+      "titled with its group");
+  require(find_item(panel->root, QStringLiteral("stickKnob:stick.mic.snare_top.comp_threshold")) !=
+              nullptr,
+          "with its compressor's knobs");
+  click(*panel, centre(item(*panel, QStringLiteral("stickChainSwitch:stick.mic.snare_top.comp"))));
+  require(controller.choice(QStringLiteral("stick.mic.snare_top.comp")) == 1,
+          "a stage's switch turns it on");
+  click(*panel, centre(item(*panel, QStringLiteral("stickChainClose"))));
+  require(QTest::qWaitFor([&] { return !editor->isVisible(); }, wait_ms), "Done closes it");
+  click(*panel, centre(item(*panel, QStringLiteral("stickChainChip:snare_top"))));
+  require(QTest::qWaitFor([&] { return editor->isVisible(); }, wait_ms), "it opens again");
+  QTest::keyClick(panel->window.get(), Qt::Key_Escape);
+  require(QTest::qWaitFor([&] { return !editor->isVisible(); }, wait_ms), "Escape closes it");
+  click(*panel, centre(item(*panel, QStringLiteral("stickBusButton"))));
+  require(QTest::qWaitFor([&] { return editor->isVisible(); }, wait_ms),
+          "the kit row opens the buses");
+  require(find_item(panel->root, QStringLiteral("stickKnob:stick.parallel.level")) != nullptr &&
+              find_item(panel->root, QStringLiteral("stickChainSwitch:stick.bus.clip")) != nullptr,
+          "the parallel return and the kit bus's clip");
+}
+
 // A groove's frame for the screenshot: kick, snare and hat sounding, every
 // mic metering.
 std::vector<float> groove_frame() {
@@ -391,6 +427,15 @@ void screenshots_if_requested() {
   constexpr int settle_ms = 300;
   QTest::qWait(settle_ms);
   shoot_if_requested(*panel, QStringLiteral("stick.png"));
+  // A shaped kit's kick chain, open.
+  const auto& presets = table().presets;
+  const auto house_tight = std::ranges::find(presets, std::string_view("House Tight"),
+                                             &oscillate::native_dsp::Preset::name);
+  require(house_tight != presets.end(), "House Tight is a preset");
+  controller.apply_preset(static_cast<int>(house_tight - presets.begin()));
+  click(*panel, centre(item(*panel, QStringLiteral("stickChainChip:kick_in"))));
+  QTest::qWait(settle_ms);
+  shoot_if_requested(*panel, QStringLiteral("stick_chain.png"));
 }
 
 } // namespace
@@ -403,6 +448,7 @@ int main(int argc, char** argv) {
     controller_decodes_stick_telemetry();
     the_notice_guides_the_install();
     pieces_mics_and_meters();
+    the_chain_opens_from_a_strip();
     screenshots_if_requested();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';

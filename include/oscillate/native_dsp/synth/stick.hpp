@@ -129,6 +129,16 @@ inline constexpr std::uint32_t max_mics = 16;
 enum class Mix : std::uint8_t { dry, studio, room };
 inline constexpr std::size_t mix_count = 3;
 
+// ---- The production chain (ADR-0121) -----------------------------------------------------------
+
+// Each mic group's inserts, in signal order; then its Parallel send. Every
+// stage is off by default and costs nothing while off.
+enum class Stage : std::uint8_t { gate, eq, comp, shaper, sat };
+inline constexpr std::size_t stage_count = 5;
+// The saturation's curves (Forge's Tape, Tube, Transistor and Clip).
+enum class SatModel : std::uint8_t { tape, tube, transistor, clip };
+inline constexpr std::size_t sat_model_count = 4;
+
 // ---- Ranges ----------------------------------------------------------------------------------
 
 inline constexpr double max_tune_semitones = 12.0;

@@ -14,6 +14,7 @@
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace oscillate::tools::drums {
@@ -67,6 +68,9 @@ constexpr std::size_t seed_stride = 131;
 constexpr int bars = 8;
 constexpr int phrase_bars = 4;
 constexpr double crash_length_beats = beats_per_bar;
+// A hit alone: two seconds at this tempo.
+constexpr double hit_bpm = 120.0;
+constexpr double hit_beats = 4.0;
 
 struct Row {
   std::uint8_t key;
@@ -146,7 +150,7 @@ std::vector<Note> arrange(const Groove& groove) {
 const std::vector<Groove>& grooves() {
   static const std::vector<Groove> list{
       {"01 funk sixteenths, ghost notes",
-       "Natural",
+       "Funk Pocket",
        98.0,
        0.0,
        false,
@@ -162,7 +166,7 @@ const std::vector<Groove>& grooves() {
         {mid_tom, ".............x.."},
         {floor_tom, "..............Xx"}}},
       {"02 dry break",
-       "Close Mics",
+       "Break Crunch",
        92.0,
        0.0,
        false,
@@ -173,7 +177,7 @@ const std::vector<Groove>& grooves() {
         {open_hat, "..............o."}},
        {{kick, "X.X.......X....."}, {snare, "....X..g.g..XxXx"}, {hat, "x.x.x.x.x.x....."}}},
       {"03 half time in the room",
-       "Rooms",
+       "Big Room",
        84.0,
        0.0,
        false,
@@ -192,7 +196,7 @@ const std::vector<Groove>& grooves() {
         {floor_tom, "...............X"},
         {ride, "x.x.x.x.x......."}}},
       {"04 lo-fi, laid back",
-       "DRS Studio",
+       "Lo-Fi Dust",
        86.0,
        0.38,
        false,
@@ -239,6 +243,24 @@ const std::vector<Groove>& grooves() {
         {low_tom, "............xx.."},
         {floor_tom, "..............XX"},
         {hat, "x.x.x.x........."}}},
+      {"07 house, four to the floor",
+       "House Tight",
+       124.0,
+       0.0,
+       false,
+       {{kick, "X...X...X...X..."},
+        {snare, "....x.......x..."},
+        {hat, "o.o.o.o.o.o.o.o."},
+        {open_hat, "..x...x...x...x."}},
+       {{kick, "X...X...X...X..."},
+        {snare, "....x.......x..."},
+        {side_stick, "..........g....."},
+        {hat, "o.o.o.o.o.o.o.oo"},
+        {open_hat, "..x...x...x...x."}},
+       {{kick, "X...X...X...X..."},
+        {snare, "....x.......x.gx"},
+        {hat, "o.o.o.o.o.o.o..."},
+        {open_hat, "..x...x...x....."}}},
   };
   return list;
 }
@@ -262,6 +284,25 @@ void render_set(const fs::path& output) {
                     static_cast<double>(bars * beats_per_bar) + crash_length_beats);
     audition::render(*session, root, output / (label + ".wav"), render_rate,
                      exporting::WavFormat::float32);
+  }
+  // Each preset's kick and snare struck once, alone, for measuring.
+  const auto hits = output / "hits";
+  const auto hit_work = work / "hits";
+  fs::create_directories(hits);
+  fs::create_directories(hit_work);
+  for (const auto& groove : grooves()) {
+    for (const auto& [name, key] : {std::pair{"kick", kick}, std::pair{"snare", snare}}) {
+      const std::string label = std::string(groove.preset) + " - " + name;
+      const auto root = hit_work / label;
+      if (fs::exists(root))
+        continue; // A preset two grooves share.
+      auto session = take(Session::create(root));
+      done(session->song().set_tempo_event({0}, hit_bpm, timeline::TempoShape::step));
+      const auto track = parts::add_track(*session, engine, groove.preset, track_level);
+      parts::add_clip(*session, track, 0.0, {{0.0, stroke_beats, key, accent}}, 0, hit_beats);
+      audition::render(*session, root, hits / (label + ".wav"), render_rate,
+                       exporting::WavFormat::float32);
+    }
   }
   fs::remove_all(work);
 }

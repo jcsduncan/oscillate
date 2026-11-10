@@ -142,7 +142,7 @@ constexpr std::size_t pad_parts = 4;
 
 // The drums: Stick's kit in two parts, a busy funk groove (sixteenth hats
 // with an open one, ghost notes, a crash every four bars and a tom fill
-// before it) as Natural and Close Mics play it.
+// before it) as Natural and House Tight (its production chain on) play it.
 constexpr std::string_view drums_engine = "stick";
 constexpr std::array<std::size_t, 2> drums_presets{0, 1};
 

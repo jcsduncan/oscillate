@@ -3,5 +3,6 @@
     <file>StickPanel.qml</file>
     <file>StickTheme.qml</file>
     <file>StickKit.qml</file>
+    <file>StickChain.qml</file>
   </qresource>
 </RCC>

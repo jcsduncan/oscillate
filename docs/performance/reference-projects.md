@@ -8,7 +8,7 @@ and played at 48 kHz. Nothing is read from a user's projects.
 | | Light | Heavy | Pad | Drums |
 | --- | --- | --- | --- | --- |
 | Source tracks | 32 audio | 16 audio, 15 built-in synths, 1 VST3 instrument | 4 Bow | 2 Stick |
-| Synths | none | Nova ×6, Prism ×2, Ember, Drift, Halo, Pulse, Torque, Anvil, Knock | Bow ×4, Warm Section (Ensemble, twelve players) | Stick ×2, Natural and Close Mics |
+| Synths | none | Nova ×6, Prism ×2, Ember, Drift, Halo, Pulse, Torque, Anvil, Knock | Bow ×4, Warm Section (Ensemble, twelve players) | Stick ×2, Natural and House Tight |
 | Track effects | none | EQ and compressor per audio track; saturator and delay per synth; one VST3 effect | none | none |
 | MIDI | none | Bar-long four-note chords or an eighth-note line, at 120 BPM | One bar-long note per part, the four making a chord, at 120 BPM | A sixteenth-note funk groove (hats, ghost notes, an open hat), a crash every four bars and a tom fill before it, at 120 BPM |
 | Routing | 2 groups, 2 returns, one send per track | the same | the same | the same |
