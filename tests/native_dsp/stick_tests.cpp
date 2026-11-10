@@ -110,10 +110,32 @@ std::vector<double> dry(bool robins = false) {
   return v;
 }
 
-// Everything moving: humanised, round robins, the kit's own shortening.
+constexpr double on = 1.0;
+
+// Every stage of the production chain on somewhere (ADR-0121): a gate,
+// EQ, compressor, transient shaper and saturation on the mics, a parallel
+// send, and the kit bus's glue, EQ and clip.
+void chain_on(std::vector<double>& v) {
+  v[at("stick.mic.toms.gate")] = on;
+  v[at("stick.mic.overheads.eq")] = on;
+  v[at("stick.mic.overheads.high")] = -6.0;
+  v[at("stick.mic.snare_top.comp")] = on;
+  v[at("stick.mic.hihat.shaper")] = on;
+  v[at("stick.mic.hihat.attack")] = 6.0;
+  v[at("stick.mic.kick_in.sat")] = on;
+  v[at("stick.mic.kick_in.parallel")] = 0.0;
+  v[at("stick.bus.comp")] = on;
+  v[at("stick.bus.eq")] = on;
+  v[at("stick.bus.low_cut")] = 40.0;
+  v[at("stick.bus.clip")] = on;
+}
+
+// Everything moving: humanised, round robins, the kit's own shortening, and
+// the whole production chain.
 std::vector<double> rich() {
   auto v = default_values(*stick::engine().descriptor);
   v[at("stick.humanise")] = 1.0;
+  chain_on(v);
   return v;
 }
 
@@ -324,8 +346,9 @@ void a_missing_second_drum_plays_the_plain_stroke() {
 }
 
 void descriptor_registry_and_presets() {
-  constexpr std::array<std::string_view, 5> presets{"Natural", "Close Mics", "Rooms", "DRS Studio",
-                                                    "Brushes"};
+  constexpr std::array<std::string_view, 8> presets{"Natural",      "House Tight", "Funk Pocket",
+                                                    "Break Crunch", "Lo-Fi Dust",  "Big Room",
+                                                    "DRS Studio",   "Brushes"};
   const auto& descriptor = *stick::engine().descriptor;
   REQUIRE_EQ(find_engine("stick"), &stick::engine(), "Stick is registered");
   REQUIRE_OK(validate_engine(descriptor), "the table validates");
@@ -566,6 +589,168 @@ void shared_close_mics_and_a_centred_room() {
   REQUIRE_LT(levels[stick_test::tom], absent_db, "and the kick does not bleed into it");
 }
 
+// ---- The production chain (ADR-0121) ----------------------------------------------------------
+
+// Chain settings the tests use.
+constexpr double gate_shut_db = 0.0; // A threshold over every hit: the gate stays shut.
+constexpr double cut_hz = 1'000.0;   // A low cut over the snare top's tone.
+// A low cut over every snare tone, and a bell taking the snare top's own.
+constexpr double snare_cut_hz = 1'000.0;
+constexpr double bell_cut_db = -15.0;
+constexpr double hard_drive_db = 30.0;
+constexpr double low_threshold_db = -40.0;
+constexpr double lift_db = 18.0;
+constexpr double attack_boost_db = 12.0;
+constexpr double unity_db = 0.0;
+constexpr double off_db = -60.0; // A send or return at the bottom of its range.
+constexpr double clip_drive_db = 18.0;
+// A tone within this of where it was is unchanged.
+constexpr double kept_db = 0.5;
+constexpr double same_db = 0.01;
+// The start of a hit: its first quarter window.
+constexpr std::size_t onset = window / 4;
+
+// With every stage off the chain is not there: its settings change nothing.
+void the_chain_off_changes_nothing() {
+  install();
+  auto v = dry();
+  const auto plain = hit(v, snare);
+  v[at("stick.mic.snare_top.comp_threshold")] = low_threshold_db;
+  v[at("stick.mic.snare_top.gate_threshold")] = gate_shut_db;
+  v[at("stick.mic.overheads.high_cut")] = cut_hz;
+  v[at("stick.mic.snare_top.sat_drive")] = hard_drive_db;
+  v[at("stick.bus.clip_drive")] = clip_drive_db;
+  require(hit(v, snare) == plain, "settings of switched-off stages change nothing");
+}
+
+// Each insert acts on its own group's mics, not the others'.
+void inserts_shape_their_own_group() {
+  install();
+  using stick_test::kick_in;
+  using stick_test::overhead_right;
+  using stick_test::room_left;
+  using stick_test::snare_top;
+  // A gate shut against the loudest hit silences its group only, once its
+  // hold and release have run.
+  constexpr double closed_seconds = 0.2;
+  const double top_hz = stick_test::mics[snare_top].hz;
+  const double room_hz = stick_test::mics[room_left].hz;
+  const auto ringing = hit(dry(), snare);
+  auto v = dry();
+  v[at("stick.mic.snare_top.gate")] = on;
+  v[at("stick.mic.snare_top.gate_threshold")] = gate_shut_db;
+  const auto gated = hit(v, snare);
+  const auto later = [&](const std::vector<double>& x, double hz) {
+    return magnitude(x, frames_of(closed_seconds), window, hz);
+  };
+  REQUIRE_LT(db(later(gated, top_hz) / later(ringing, top_hz)), absent_db,
+             "the gate shuts the snare top");
+  REQUIRE_LT(std::fabs(db(later(gated, room_hz) / later(ringing, room_hz))), kept_db,
+             "and leaves the room");
+  // A low cut thins its group: the snare top loses its tone, the
+  // overheads keep theirs.
+  v = dry();
+  v[at("stick.mic.snare_top.eq")] = on;
+  v[at("stick.mic.snare_top.low_cut")] = cut_hz;
+  const auto thinned = hit(v, snare);
+  const double overhead_hz = stick_test::mics[overhead_right].hz;
+  const auto change = [&](double hz) {
+    return db(magnitude(thinned, 0, window, hz) / magnitude(ringing, 0, window, hz));
+  };
+  constexpr double cut_db = -12.0;
+  REQUIRE_LT(change(top_hz), cut_db, "the low cut takes the snare top's tone");
+  REQUIRE_LT(std::fabs(change(overhead_hz)), kept_db, "the overheads keep theirs");
+  // Saturation adds harmonics: a clipped kick mic's third harmonic, absent
+  // without it (no bleed, so no snare mic plays at that frequency).
+  const double kick_hz = stick_test::mics[kick_in].hz;
+  constexpr double third = 3.0;
+  v = dry();
+  v[at("stick.bleed")] = 0.0;
+  const auto clean = hit(v, kick, full);
+  v[at("stick.mic.kick_in.sat")] = on;
+  v[at("stick.mic.kick_in.sat_model")] = static_cast<double>(stick::SatModel::clip);
+  v[at("stick.mic.kick_in.sat_drive")] = hard_drive_db;
+  const auto driven = hit(v, kick, full);
+  constexpr double harmonics_db = 20.0;
+  REQUIRE_GT(db(magnitude(driven, 0, window, kick_hz * third) /
+                magnitude(clean, 0, window, kick_hz * third)),
+             harmonics_db, "saturation adds the kick's third harmonic");
+  // A compressor with makeup brings a soft hit up.
+  constexpr std::uint8_t soft = 30;
+  v = dry();
+  const double before = rms(hit(v, snare, soft), 0, window);
+  v[at("stick.mic.snare_top.comp")] = on;
+  v[at("stick.mic.snare_top.comp_threshold")] = low_threshold_db;
+  v[at("stick.mic.snare_top.comp_makeup")] = lift_db;
+  REQUIRE_GT(rms(hit(v, snare, soft), 0, window), before, "the compressor lifts a soft hit");
+  // The transient shaper's attack boost lifts the hit's start.
+  v = dry();
+  const double start = peak_of(hit(v, snare), 0, onset);
+  v[at("stick.mic.snare_top.shaper")] = on;
+  v[at("stick.mic.snare_top.attack")] = attack_boost_db;
+  REQUIRE_GT(peak_of(hit(v, snare), 0, onset), start, "attack lifts the snare's start");
+}
+
+// The parallel bus adds its compressed copy; the kit bus's clip holds
+// peaks down.
+void the_parallel_and_kit_buses() {
+  install();
+  auto v = dry();
+  const double plain = rms(hit(v, snare), 0, window);
+  v[at("stick.mic.snare_top.parallel")] = unity_db;
+  v[at("stick.parallel.level")] = unity_db;
+  REQUIRE_GT(rms(hit(v, snare), 0, window), plain, "the parallel bus adds to the kit");
+  v[at("stick.parallel.level")] = off_db;
+  REQUIRE_LT(std::fabs(db(rms(hit(v, snare), 0, window) / plain)), same_db,
+             "a closed return adds nothing");
+  // The clip trades peak for density: a lower crest factor.
+  const auto crest = [](const std::vector<double>& x) {
+    return peak_of(x, 0, window) / rms(x, 0, window);
+  };
+  v = dry();
+  const double natural = crest(hit(v, snare, full));
+  v[at("stick.bus.clip")] = on;
+  v[at("stick.bus.clip_drive")] = clip_drive_db;
+  REQUIRE_LT(crest(hit(v, snare, full)), natural, "the clip holds the peaks down");
+}
+
+// A stage switched in fades in over 10 ms: no step, then all of it.
+void a_stage_switches_in_without_a_step() {
+  install();
+  constexpr double before_seconds = 0.1;
+  constexpr double after_seconds = 0.05;
+  constexpr double faded_seconds = 0.03;
+  constexpr double first_ms_seconds = 0.001;
+  constexpr double step_db = 1.0;
+  constexpr double cut_db = -20.0;
+  const double top_hz = stick_test::mics[stick_test::snare_top].hz;
+  // The snare's mics cut under their tones, switched in while it rings.
+  const auto played = [&](bool switching) {
+    auto v = dry();
+    auto runtime = make_runtime(stick::engine(), v);
+    (void)render(*runtime, note(0, frames_of(after_seconds * 2.0), snare, 1, loud),
+                 frames_of(before_seconds));
+    if (switching) {
+      for (const auto group : {"snare_top", "snare_bottom"}) {
+        v[at("stick.mic." + std::string(group) + ".eq")] = on;
+        v[at("stick.mic." + std::string(group) + ".low_cut")] = snare_cut_hz;
+        v[at("stick.mic." + std::string(group) + ".mid_freq")] = top_hz;
+        v[at("stick.mic." + std::string(group) + ".mid")] = bell_cut_db;
+      }
+      REQUIRE_TRUE(runtime->offer_values(v, 2), "the EQ switches in");
+    }
+    return mono(render(*runtime, {}, frames_of(after_seconds)));
+  };
+  const auto plain = played(false);
+  const auto cut = played(true);
+  REQUIRE_LT(std::fabs(db(rms(cut, 0, frames_of(first_ms_seconds)) /
+                          rms(plain, 0, frames_of(first_ms_seconds)))),
+             step_db, "the switch fades rather than steps");
+  REQUIRE_LT(db(magnitude(cut, frames_of(faded_seconds), onset, top_hz) /
+                magnitude(plain, frames_of(faded_seconds), onset, top_hz)),
+             cut_db, "once faded in, the EQ cuts the snare's tones");
+}
+
 void tune_decay_and_brushes() {
   install();
   const double top_hz = stick_test::mics[stick_test::snare_top].hz;
@@ -755,6 +940,10 @@ void the_tail_bound_covers_a_hit() {
   v[at("stick.crash1.tune")] = -stick::max_tune_semitones;
   const auto tail = stick::engine().tail_frames(v, rate);
   REQUIRE_GT(tail, stick::engine().tail_frames(dry(), rate), "a lower Tune lengthens the tail");
+  auto chained = dry();
+  chain_on(chained);
+  REQUIRE_GT(stick::engine().tail_frames(chained, rate), stick::engine().tail_frames(dry(), rate),
+             "the chain's stages lengthen the tail");
   auto runtime = make_runtime(stick::engine(), v);
   const auto off = frames_of(after_seconds);
   const auto x = mono(render(*runtime, note(0, off, crash, 1, full), off + tail + off));
@@ -785,6 +974,10 @@ int main(int argc, char** argv) {
           {"pans_place_close_mics_and_balance_cymbals",
            [] { pans_place_close_mics_and_balance_cymbals(); }},
           {"shared_close_mics_and_a_centred_room", [] { shared_close_mics_and_a_centred_room(); }},
+          {"the_chain_off_changes_nothing", [] { the_chain_off_changes_nothing(); }},
+          {"inserts_shape_their_own_group", [] { inserts_shape_their_own_group(); }},
+          {"the_parallel_and_kit_buses", [] { the_parallel_and_kit_buses(); }},
+          {"a_stage_switches_in_without_a_step", [] { a_stage_switches_in_without_a_step(); }},
           {"tune_decay_and_brushes", [] { tune_decay_and_brushes(); }},
           {"the_stream_joins_the_resident_start", [] { the_stream_joins_the_resident_start(); }},
           {"voices_are_bounded", [] { voices_are_bounded(); }},

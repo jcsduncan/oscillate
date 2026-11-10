@@ -174,6 +174,17 @@ KitTheme {
     property real meterCeilDb: 0
     property real meterHot: 0.75
     property int stripLabelLines: 2
+    // The strip's chain chip: a lamp per stage and the parallel send.
+    property real chainChipHeight: 18
+    property real chainLampSize: 5
+    property real chainLampGap: 3
+
+    // The chain editor (ADR-0121): knobs per row in a stage, a knob's cell
+    // and its dial.
+    property int chainColumns: 3
+    property real chainCell: 64
+    property real chainCellHeight: 78
+    property int chainKnobDiameter: 34
 
     // Cards and their titles.
     property int cardPad: 16

@@ -3,12 +3,13 @@ import QtQuick
 import "../devicekit" as Kit
 import Oscillate.Format
 
-// The Stick drum kit panel (ADR-0114), as the approved mockup lays it out:
-// the shared header with the library chip and presets; the kit picker and
-// the Dry, Studio and Room mixes; the kit from above (click a piece) with
-// the hi-hat pedal; the mic mixer (a strip per mic group: meter, fader, mute
-// and solo) with Bleed; the chosen piece's seven controls; and the kit row
-// (strikers, round robins, Humanise, Level, the voices sounding).
+// The Stick drum kit panel (ADR-0114, ADR-0121): the shared header with the
+// library chip and presets; the kit picker and the Dry, Studio and Room
+// mixes; the kit from above (click a piece) with the hi-hat pedal; the mic
+// mixer (a strip per mic group: meter, fader, mute, solo and its chain's
+// lamps, which open the group's chain) with Bleed; the chosen piece's seven
+// controls; and the kit row (strikers, round robins, Humanise, Level, the
+// kit buses, the voices sounding).
 //
 // Values go through `controller` (NativeSynthDeviceController); the kit's
 // library and layout come from stick_library and stick_layout, live state
@@ -42,6 +43,16 @@ Rectangle {
     }
     readonly property var piece: selected < pieces.length ? pieces[selected] : ({ id: "snare", name: "Snare" })
     readonly property bool kitHasBrushes: pieces.some(p => p.brushes === true)
+    // The chain editor: a mic group's (its id and name), or the buses' ("").
+    property bool chainOpen: false
+    property string chainGroup: ""
+    property string chainGroupName: ""
+    readonly property var chainStages: ["gate", "eq", "comp", "shaper", "sat"]
+    function openChain(id, name) {
+        chainGroup = id
+        chainGroupName = name
+        chainOpen = true
+    }
 
     readonly property real margin: theme.panelMargin
     readonly property real gap: theme.panelGap
@@ -365,13 +376,63 @@ Rectangle {
                     Text {
                         id: stripValue
                         objectName: "stickStripLevel:" + strip.modelData.id
-                        y: switches.y - panel.theme.hintGap - height
+                        y: chainChip.y - panel.theme.hintGap - height
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
                         text: panel.controller.revision >= 0 ? panel.controller.display(strip.base + ".level") : ""
                         color: panel.theme.ink
                         font.family: panel.theme.mono
                         font.pixelSize: panel.theme.smallSize
+                    }
+                    // The chain's lamps: a stage on is lit; the last is the
+                    // parallel send. Click to open the group's chain.
+                    Rectangle {
+                        id: chainChip
+                        objectName: "stickChainChip:" + strip.modelData.id
+                        readonly property bool sending: panel.controller.revision >= 0
+                            && panel.controller.value(strip.base + ".parallel")
+                               > panel.controller.parameter(strip.base + ".parallel").minimum
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        y: switches.y - panel.theme.hintGap - height
+                        width: lamps.implicitWidth + 2 * panel.theme.hintGap
+                        height: panel.theme.chainChipHeight
+                        radius: height / 2
+                        color: chipMouse.containsMouse ? panel.theme.buttonHi : "transparent"
+                        border.color: chainChip.activeFocus ? panel.theme.focusRing : panel.theme.tileEdge
+                        activeFocusOnTab: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: strip.modelData.name + " chain"
+                        Keys.onReturnPressed: panel.openChain(strip.modelData.id, strip.modelData.name)
+                        Keys.onSpacePressed: panel.openChain(strip.modelData.id, strip.modelData.name)
+                        Row {
+                            id: lamps
+                            anchors.centerIn: parent
+                            spacing: panel.theme.chainLampGap
+                            Repeater {
+                                model: panel.chainStages.length + 1
+                                Rectangle {
+                                    required property int index
+                                    readonly property bool lit: index < panel.chainStages.length
+                                        ? panel.controller.revision >= 0
+                                          && panel.controller.choice(strip.base + "." + panel.chainStages[index]) === 1
+                                        : chainChip.sending
+                                    width: panel.theme.chainLampSize
+                                    height: width
+                                    radius: width / 2
+                                    color: lit ? panel.theme.amber : panel.theme.track
+                                }
+                            }
+                        }
+                        // A full touch target around the slim chip.
+                        MouseArea {
+                            id: chipMouse
+                            anchors.centerIn: parent
+                            width: Math.max(parent.width, panel.theme.minHitSize)
+                            height: Math.max(parent.height, panel.theme.minHitSize)
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: panel.openChain(strip.modelData.id, strip.modelData.name)
+                        }
                     }
                     Row {
                         id: switches
@@ -543,6 +604,15 @@ Rectangle {
                 theme: panel.theme
                 parameterId: "stick.level"
             }
+            Kit.Button {
+                objectName: "stickBusButton"
+                anchors.verticalCenter: parent.verticalCenter
+                theme: panel.theme
+                label: "Kit buses"
+                tip: "The parallel compressor and the kit bus: glue, EQ, clip"
+                on: panel.chainOpen && panel.chainGroup === ""
+                onClicked: panel.openChain("", "")
+            }
         }
         Note {
             objectName: "stickVoices"
@@ -556,6 +626,22 @@ Rectangle {
                     + (late > 0 ? " · " + late + " frames late from disk" : "")
             }
         }
+    }
+
+    // ---- The chain, over the mixer and the piece ------------------------------------------------
+
+    StickChain {
+        x: mixer.x
+        y: mixer.y
+        width: mixer.width
+        height: panel.bodyHeight
+        z: 1
+        visible: panel.chainOpen
+        controller: panel.controller
+        theme: panel.theme
+        group: panel.chainGroup
+        groupName: panel.chainGroupName
+        onClosed: panel.chainOpen = false
     }
 
     // ---- The library, from the header's chip ------------------------------------------------------------

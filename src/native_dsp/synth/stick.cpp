@@ -4,6 +4,7 @@
 #include "oscillate/native_dsp/parameter_control.hpp"
 #include "oscillate/native_dsp/synth/sample_stream.hpp"
 #include "oscillate/native_dsp/transport.hpp"
+#include "stick_chain.hpp"
 #include "stick_library.hpp"
 #include "stick_presets.hpp"
 #include "stick_table.hpp"
@@ -40,6 +41,10 @@ constexpr std::size_t level = st::index_of("stick.level");
 } // namespace p
 
 constexpr std::size_t max_frames = control_interval_frames;
+// The mix's buses: the groups with no chain sounding, then one per group
+// whose chain sounds (ADR-0121).
+constexpr std::size_t max_slots = 1 + mic_group_count;
+constexpr std::uint8_t direct = 0;
 // Every hit sounding: each piece's own limit below sums to this.
 constexpr std::size_t max_voices = 32;
 // Source frames gathered per resampling pass.
@@ -223,6 +228,7 @@ public:
     const double tick_seconds = static_cast<double>(control_interval_frames) / sample_rate;
     switch_glide_ = 1.0 - std::exp(-tick_seconds / switch_seconds);
     meter_fall_ = db_to_gain(-meter_release_db_per_second * tick_seconds);
+    chain_ok_ = chain_.init(sample_rate, max_frames);
   }
 
   void control(std::span<const double> values, std::uint32_t frames_to_next_tick,
@@ -242,6 +248,10 @@ public:
     if (library_ != nullptr) {
       weigh_pieces();
     }
+    if (chain_ok_) {
+      chain_.control(values, frames_to_next_tick, transport);
+    }
+    route();
     for (std::size_t piece = 0; piece < piece_count; ++piece) {
       const double level =
           gain_of(values[st::piece_index(static_cast<Piece>(piece), st::piece::level)]);
@@ -310,8 +320,10 @@ public:
   void render(std::span<engine::StereoFrame> output) noexcept override {
     for (std::size_t offset = 0; offset < output.size(); offset += max_frames) {
       const std::size_t frames = std::min(max_frames, output.size() - offset);
-      std::fill_n(mix_left_.begin(), frames, 0.0);
-      std::fill_n(mix_right_.begin(), frames, 0.0);
+      for (std::size_t slot = 0; slot < slots_; ++slot) {
+        std::fill_n(mix_left_[slot].begin(), frames, 0.0);
+        std::fill_n(mix_right_[slot].begin(), frames, 0.0);
+      }
       const double since = static_cast<double>(frames_since_tick_ + offset);
       for (std::size_t slot = 0; slot < voices_.size(); ++slot) {
         if (voices_[slot].active) {
@@ -325,6 +337,7 @@ public:
   }
 
   void reset() noexcept override {
+    chain_.reset();
     declick_ = last_output_;
     declick_left_ = declick_frames_;
     for (std::size_t slot = 0; slot < voices_.size(); ++slot) {
@@ -747,8 +760,8 @@ private:
   // ---- Rendering -------------------------------------------------------------------------------
 
   // Source frames [first, first + count) of a voice, every channel mixed by
-  // its weights into the scratch pair. Returns how many streamed frames had
-  // not arrived (heard as silence).
+  // its weights into its bus's scratch pair. Returns how many streamed
+  // frames had not arrived (heard as silence).
   std::uint32_t gather(Voice& v, std::size_t slot, std::int64_t first, std::size_t count) noexcept {
     const auto channels = v.library->channels();
     const auto frames = static_cast<std::int64_t>(v.sample->frames);
@@ -775,10 +788,18 @@ private:
           ++starved;
         }
       }
-      float left = 0.0F;
-      float right = 0.0F;
-      if (frame != nullptr) {
-        const auto& w = v.weights[entry];
+      for (std::size_t bus = 0; bus < slots_; ++bus) {
+        scratch_left_[bus][j] = 0.0F;
+        scratch_right_[bus][j] = 0.0F;
+      }
+      if (frame == nullptr) {
+        continue;
+      }
+      const auto& w = v.weights[entry];
+      if (slots_ == 1) {
+        // Every group on the direct bus: no chain sounds.
+        float left = 0.0F;
+        float right = 0.0F;
         for (std::uint32_t c = 0; c < channels; ++c) {
           const float x = static_cast<float>(frame[c]) * scale;
           const float l = x * w.left[c];
@@ -787,9 +808,19 @@ private:
           right += r;
           mic_peak_[c] = std::max<double>(mic_peak_[c], std::max(std::fabs(l), std::fabs(r)));
         }
+        scratch_left_[direct][j] = left;
+        scratch_right_[direct][j] = right;
+        continue;
       }
-      scratch_left_[j] = left;
-      scratch_right_[j] = right;
+      for (std::uint32_t c = 0; c < channels; ++c) {
+        const float x = static_cast<float>(frame[c]) * scale;
+        const float l = x * w.left[c];
+        const float r = x * w.right[c];
+        const auto bus = bus_of_channel_[c];
+        scratch_left_[bus][j] += l;
+        scratch_right_[bus][j] += r;
+        mic_peak_[c] = std::max<double>(mic_peak_[c], std::max(std::fabs(l), std::fabs(r)));
+      }
     }
     return starved;
   }
@@ -839,23 +870,29 @@ private:
       for (std::size_t i = 0; i < count; ++i) {
         const double base = std::floor(v.position);
         const auto at = static_cast<std::size_t>(static_cast<std::int64_t>(base) - from);
-        float left = 0.0F;
-        float right = 0.0F;
-        if (v.exact) {
-          left = scratch_left_[at];
-          right = scratch_right_[at];
-        } else {
-          const std::size_t tap = at - static_cast<std::size_t>(SincTable::left);
-          v.table->read(scratch_left_.data() + tap, scratch_right_.data() + tap, v.position - base,
-                        left, right);
-        }
         const double u = std::clamp((since + static_cast<double>(done + i)) / tick_span_, 0.0, 1.0);
         const double amplitude = v.gain * v.env * v.hat * v.fade * (level_from + u * level_change);
-        const double l = amplitude * left;
-        const double r = amplitude * right;
-        mix_left_[done + i] += l;
-        mix_right_[done + i] += r;
-        peak = std::max({peak, std::fabs(l), std::fabs(r)});
+        double total_left = 0.0;
+        double total_right = 0.0;
+        for (std::size_t bus = 0; bus < slots_; ++bus) {
+          float left = 0.0F;
+          float right = 0.0F;
+          if (v.exact) {
+            left = scratch_left_[bus][at];
+            right = scratch_right_[bus][at];
+          } else {
+            const std::size_t tap = at - static_cast<std::size_t>(SincTable::left);
+            v.table->read(scratch_left_[bus].data() + tap, scratch_right_[bus].data() + tap,
+                          v.position - base, left, right);
+          }
+          const double l = amplitude * left;
+          const double r = amplitude * right;
+          mix_left_[bus][done + i] += l;
+          mix_right_[bus][done + i] += r;
+          total_left += l;
+          total_right += r;
+        }
+        peak = std::max({peak, std::fabs(total_left), std::fabs(total_right)});
         v.env *= v.env_step;
         v.hat *= v.hat_step;
         if (v.fade_step > 0.0) {
@@ -887,13 +924,92 @@ private:
     }
   }
 
-  // Level, the safety knee and the reset's declick, into the output.
+  // The buses this tick: a group whose chain sounds (or whose Parallel send
+  // is open) gets its own; every other group mixes on the direct bus. A
+  // chain switched in starts at its dry signal, so a group moves between
+  // buses without a step.
+  void route() noexcept {
+    std::array<std::uint8_t, mic_group_count> bus_of_group{};
+    slots_ = 1;
+    for (std::size_t g = 0; g < mic_group_count; ++g) {
+      const auto group = static_cast<MicGroup>(g);
+      if (chain_ok_ && chain_.routed(group)) {
+        bus_group_[slots_] = group;
+        bus_of_group[g] = static_cast<std::uint8_t>(slots_++);
+      } else {
+        bus_of_group[g] = direct;
+      }
+    }
+    bus_of_channel_.fill(direct);
+    if (library_ != nullptr) {
+      const auto mics = library_->mics();
+      for (std::size_t c = 0; c < mics.size(); ++c) {
+        bus_of_channel_[c] = bus_of_group[static_cast<std::size_t>(mics[c].group)];
+      }
+    }
+  }
+
+  // The chain over the buses (ADR-0121): each group's inserts, the parallel
+  // bus and the kit bus, into the direct bus. Without a stage sounding the
+  // direct bus passes untouched.
+  void run_chain(std::size_t frames, double since) noexcept {
+    const bool parallel = chain_.parallel_sounding();
+    const bool kit = chain_.kit_sounding();
+    if (slots_ == 1 && !parallel && !kit) {
+      return;
+    }
+    const auto at = static_cast<std::size_t>(since);
+    const auto bus = std::span(bus_frames_).first(frames);
+    const auto send = std::span(parallel_frames_).first(frames);
+    std::fill(send.begin(), send.end(), engine::StereoFrame{0.0F, 0.0F});
+    for (std::size_t slot = 1; slot < slots_; ++slot) {
+      const auto group = bus_group_[slot];
+      for (std::size_t i = 0; i < frames; ++i) {
+        bus[i] = {static_cast<float>(mix_left_[slot][i]), static_cast<float>(mix_right_[slot][i])};
+      }
+      chain_.process_group(group, bus, at);
+      for (std::size_t i = 0; i < frames; ++i) {
+        mix_left_[direct][i] += bus[i].left;
+        mix_right_[direct][i] += bus[i].right;
+        const auto gain = static_cast<float>(chain_.send(group, unit_in_tick(since, i)));
+        send[i].left += gain * bus[i].left;
+        send[i].right += gain * bus[i].right;
+      }
+    }
+    if (parallel) {
+      chain_.process_parallel(send, at);
+      for (std::size_t i = 0; i < frames; ++i) {
+        const double back = chain_.parallel_return(unit_in_tick(since, i));
+        mix_left_[direct][i] += back * send[i].left;
+        mix_right_[direct][i] += back * send[i].right;
+      }
+    }
+    if (kit) {
+      for (std::size_t i = 0; i < frames; ++i) {
+        bus[i] = {static_cast<float>(mix_left_[direct][i]),
+                  static_cast<float>(mix_right_[direct][i])};
+      }
+      chain_.process_kit(bus, at);
+      for (std::size_t i = 0; i < frames; ++i) {
+        mix_left_[direct][i] = bus[i].left;
+        mix_right_[direct][i] = bus[i].right;
+      }
+    }
+  }
+
+  // How far through the tick output frame `i` after `since` lies, 0..1.
+  [[nodiscard]] double unit_in_tick(double since, std::size_t i) const noexcept {
+    return std::clamp((since + static_cast<double>(i)) / tick_span_, 0.0, 1.0);
+  }
+
+  // The chain, the level, the safety knee and the reset's declick, into the output.
   void finish(std::span<engine::StereoFrame> output, double since) noexcept {
+    run_chain(output.size(), since);
     for (std::size_t i = 0; i < output.size(); ++i) {
-      const double u = std::clamp((since + static_cast<double>(i)) / tick_span_, 0.0, 1.0);
+      const double u = unit_in_tick(since, i);
       const double master = master_from_ + u * (master_to_ - master_from_);
-      double left = safety(mix_left_[i] * master);
-      double right = safety(mix_right_[i] * master);
+      double left = safety(mix_left_[direct][i] * master);
+      double right = safety(mix_right_[direct][i] * master);
       if (declick_left_ > 0.0) {
         const double fade = declick_ * (declick_left_ / declick_frames_);
         left += fade;
@@ -938,10 +1054,18 @@ private:
   double master_to_ = 0.0;
   double pedal_ = 0.0;
   bool primed_ = false;
-  std::array<float, scratch_frames> scratch_left_{};
-  std::array<float, scratch_frames> scratch_right_{};
-  std::array<double, max_frames> mix_left_{};
-  std::array<double, max_frames> mix_right_{};
+  std::array<std::array<float, scratch_frames>, max_slots> scratch_left_{};
+  std::array<std::array<float, scratch_frames>, max_slots> scratch_right_{};
+  std::array<std::array<double, max_frames>, max_slots> mix_left_{};
+  std::array<std::array<double, max_frames>, max_slots> mix_right_{};
+  // The production chain and its buses.
+  detail::Chain chain_;
+  bool chain_ok_ = false;
+  std::size_t slots_ = 1;
+  std::array<std::uint8_t, max_mics> bus_of_channel_{};
+  std::array<MicGroup, max_slots> bus_group_{};
+  std::array<engine::StereoFrame, max_frames> bus_frames_{};
+  std::array<engine::StereoFrame, max_frames> parallel_frames_{};
   double declick_frames_ = 1.0;
   double declick_left_ = 0.0;
   double declick_ = 0.0;
@@ -975,7 +1099,7 @@ void fetch_content(std::span<const double> values) noexcept {
 }
 
 // The longest a hit can sound: the kit's longest recording, slowed by the
-// lowest Tune, after the latest Humanise.
+// lowest Tune, after the latest Humanise, and the chain's tails after it.
 std::uint64_t tail_frames(std::span<const double> values, double sample_rate) {
   double frames = static_cast<double>(detail::max_hit_frames);
   double slowest = std::exp2(max_tune_semitones / semitones_per_octave);
@@ -995,7 +1119,9 @@ std::uint64_t tail_frames(std::span<const double> values, double sample_rate) {
   }
   const double seconds = frames / static_cast<double>(library::pack_rate) * slowest +
                          humanise_delay_seconds + declick_seconds + tail_margin_seconds;
-  return static_cast<std::uint64_t>(std::ceil(seconds * sample_rate));
+  // The chain's stages ring on after the last hit.
+  return static_cast<std::uint64_t>(std::ceil(seconds * sample_rate)) +
+         detail::Chain::tail_frames(values, sample_rate);
 }
 
 const EngineDescriptor descriptor{"stick", "Stick", 1, st::parameters, stick_presets::presets};

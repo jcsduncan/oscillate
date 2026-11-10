@@ -146,6 +146,7 @@
     <file alias="stick/StickPanel.qml">qml/stick/StickPanel.qml</file>
     <file alias="stick/StickTheme.qml">qml/stick/StickTheme.qml</file>
     <file alias="stick/StickKit.qml">qml/stick/StickKit.qml</file>
+    <file alias="stick/StickChain.qml">qml/stick/StickChain.qml</file>
     <file alias="wren/WrenPanel.qml">qml/wren/WrenPanel.qml</file>
     <file alias="wren/WrenTheme.qml">qml/wren/WrenTheme.qml</file>
     <file alias="wren/WrenPhrase.qml">qml/wren/WrenPhrase.qml</file>

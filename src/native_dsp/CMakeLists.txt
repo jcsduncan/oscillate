@@ -82,6 +82,7 @@ add_library(oscillate_synth_engines synth/runtime.cpp synth/prism.cpp synth/engi
                                            synth/bow.cpp
                                            synth/bow_library.cpp
                                            synth/stick.cpp
+                                           synth/stick_chain.cpp
                                            synth/stick_library.cpp
                                            synth/crate/table.cpp synth/crate/document.cpp
                                            synth/crate/kernel.cpp
