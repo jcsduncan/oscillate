@@ -1849,7 +1849,7 @@ Report report(const Measurements& measured, std::string_view target_id) {
 
 bool same_mix(const project::Snapshot& a, const project::Snapshot& b) {
   if (a.tracks.size() != b.tracks.size() || !(a.master_effects == b.master_effects) ||
-      a.master_level != b.master_level || !same_timing(a, b))
+      a.master_level != b.master_level || a.rebalance != b.rebalance || !same_timing(a, b))
     return false;
   for (std::size_t i = 0; i < a.tracks.size(); ++i) {
     if (a.tracks[i].soloed == b.tracks[i].soloed) {

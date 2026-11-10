@@ -1,5 +1,7 @@
 #include "oscillate/project/frozen_view.hpp"
 
+#include "oscillate/project/mix_roles.hpp"
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -181,10 +183,14 @@ std::optional<Snapshot> frozen_playback_view(const Snapshot& snapshot) {
   if (!has_frozen_track(snapshot))
     return std::nullopt;
   auto view = snapshot;
+  // A frozen track keeps the rebalance role its devices gave it (ADR-0123).
+  const auto roles = mix_roles(snapshot);
   std::vector<InsertSlotId> frozen_slots;
-  for (auto& track : view.tracks) {
+  for (std::size_t index = 0; index < view.tracks.size(); ++index) {
+    auto& track = view.tracks[index];
     if (!track.frozen)
       continue;
+    track.mix_role = roles[index].role;
     const auto frozen = *track.frozen;
     // The render was taken before the channel: its clips' channel lanes
     // still play over it (ADR-0102). A freeze is refused unless its render

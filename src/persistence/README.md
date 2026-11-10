@@ -2,7 +2,7 @@
 
 This module links OpenSSL 3 `libcrypto` through CMake's `OpenSSL::Crypto` target for SHA-256 manifest checksums. OpenSSL 3 is licensed under Apache-2.0. The dependency and its transitive package closure belong in the release software bill of materials and Ubuntu/AppImage redistribution review. The checksum detects accidental or malicious changes to a generation; it is not an authenticity signature because the pointer and manifest live together.
 
-The bounded nlohmann/json codec writes the current schema, 1.48, with strict duplicate-field and size checks; a missing or unknown field is rejected. `migration.cpp` brings a manifest from an older released schema to the current one before decoding, through one pure step per schema change, and refuses newer and pre-release schemas ([ADR-0095](../../docs/decisions/0095-schema-migration-policy.md)). Released schemas are those written by a tagged release from v0.3.0 on: 1.47 and 1.48. 1.47 opens through the 1.47 → 1.48 step, which turns each `native_convolution` insert into a Cast effect playing the same IR; schemas before 1.47 do not open. The first explicit save after a migration names the pre-upgrade generation as a revision, so pruning keeps it. Each released schema has a golden manifest in `tests/persistence/golden`. The [project-media specification](../../docs/specs/03-project-media.md) and the specs it cites hold the detailed field contracts.
+The bounded nlohmann/json codec writes the current schema, 1.49, with strict duplicate-field and size checks; a missing or unknown field is rejected. `migration.cpp` brings a manifest from an older released schema to the current one before decoding, through one pure step per schema change, and refuses newer and pre-release schemas ([ADR-0095](../../docs/decisions/0095-schema-migration-policy.md)). Released schemas are those written by a tagged release from v0.3.0 on: 1.47 and 1.48. 1.47 opens through the 1.47 → 1.48 step, which turns each `native_convolution` insert into a Cast effect playing the same IR, and 1.48 through the 1.48 → 1.49 step, which adds the master rebalance, off, and gives no track a chosen or heard role; schemas before 1.47 do not open. The first explicit save after a migration names the pre-upgrade generation as a revision, so pruning keeps it. Each released schema has a golden manifest in `tests/persistence/golden`. The [project-media specification](../../docs/specs/03-project-media.md) and the specs it cites hold the detailed field contracts.
 
 | Minor | Adds |
 | --- | --- |
@@ -52,6 +52,7 @@ The bounded nlohmann/json codec writes the current schema, 1.48, with strict dup
 | 1.46 | Project `chords` (the Chord track, [ADR-0083](../../docs/decisions/0083-harmony-chord-track-and-comp.md)). |
 | 1.47 | `chords` removed: chords are notes in MIDI clips ([ADR-0084](../../docs/decisions/0084-chord-clips.md)). |
 | 1.48 | `native_convolution` inserts removed; a built-in effect `document` may hold managed `media` slots (Cast's impulse responses, [ADR-0115](../../docs/decisions/0115-cast-convolution-reverb.md)). |
+| 1.49 | The project's master `rebalance` and each track's `mix_role` and `heard_role` ([ADR-0123](../../docs/decisions/0123-master-rebalance.md)). |
 
 Schemas before 1.47 are development formats that do not open; 1.47 onwards
 are released. Check every active branch before claiming the next minor.

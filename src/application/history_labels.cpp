@@ -189,6 +189,10 @@ void describe_track(const project::Track& before, const project::Track& after,
     out.push_back({"Change level", where});
   if (before.pan != after.pan)
     out.push_back({"Change pan", where});
+  if (before.mix_role != after.mix_role)
+    out.push_back({"Set role", where, " "});
+  if (before.heard_role != after.heard_role)
+    out.push_back({"Listen for role", where, " "});
   if (before.instrument_source != after.instrument_source) {
     const auto* old_native = std::get_if<project::NativeInstrumentPatch>(&before.instrument_source);
     const auto* new_native = std::get_if<project::NativeInstrumentPatch>(&after.instrument_source);
@@ -311,6 +315,8 @@ std::string describe_change(const project::Snapshot& before, const project::Snap
     phrases.push_back({"Change bars before bar 1", {}});
   if (before.master_level != after.master_level)
     phrases.push_back({"Change master level", {}});
+  if (before.rebalance != after.rebalance)
+    phrases.push_back({"Rebalance the mix", {}});
   describe_effects(before.master_effects, after.master_effects, "the master", phrases);
   describe_markers(before, after, phrases);
   if (phrases.empty()) {

@@ -67,7 +67,7 @@ void effects_round_trip_exactly() {
   const auto original = snapshot();
   const auto encoded = encode(original);
   const auto json = Json::parse(encoded);
-  REQUIRE_EQ(json["schema"]["minor"], 48, "built-in effects save in the current schema");
+  REQUIRE_EQ(json["schema"]["minor"], 49, "built-in effects save in the current schema");
   const auto& slot = json["project"]["tracks"][0]["effects"][0];
   REQUIRE_EQ(slot["kind"], "native_effect", "the effect payload is saved");
   REQUIRE_EQ(slot["payload"]["engine"], "contour", "the effect payload is saved");

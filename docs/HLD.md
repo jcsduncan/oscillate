@@ -44,7 +44,7 @@ The process contains the UI, model, engine, and default plugin host. Plugin scan
 | `foundation` | IDs, errors, bounded value types, display value text (the one number formatter every panel uses), diagnostics interfaces, the performance tracer | C++ standard library |
 | `timeline` | Beat/sample time, tempo and meter maps, conversions | `foundation` |
 | `automation` | Automation curve evaluation | `timeline` |
-| `project` | Tracks, clips, routing intent, commands, undo, versioned state | `foundation`, `timeline` |
+| `project` | Tracks, clips, routing intent, commands, undo, versioned state; master rebalance roles ([ADR-0123](decisions/0123-master-rebalance.md)) | `foundation`, `timeline` |
 | `automation_project` | Preparing project automation lanes into evaluated curves for playback and export | `automation`, `project`, `timeline` |
 | `harmony` | Chord table, naming, voicing, the Progression Lab and chord-clip helpers ([ADR-0084](decisions/0084-chord-clips.md)) | `project`, `timeline` |
 | `midi_file` | Bounded Standard MIDI File reader | `foundation` |
@@ -53,7 +53,7 @@ The process contains the UI, model, engine, and default plugin host. Plugin scan
 | `audio_io` | PipeWire and JACK adapters, transport cursor, metronome | `engine` interface |
 | `codec` | Worker-only encoded-audio reader (libsndfile; libmpg123 for MP3) | `foundation` |
 | `media` | Import staging, source identity, decode/resample prefetch, per-clip rings, caches | `foundation`, `project`, `codec` |
-| `analysis` | Waveform, tempo, key and Mix Check analysis | `media`, DSP primitives |
+| `analysis` | Waveform, tempo, key, Mix Check and rebalance role analysis | `media`, DSP primitives |
 | `warp_dsp` | In-house stretch and pitch engine ([ADR-0026](decisions/0026-continuous-warp-stream.md)) | `foundation`, vendored PFFFT |
 | `clay_dsp` | Note analysis and resynthesis of audio for Clay ([ADR-0081](decisions/0081-clay-note-editing.md)) | `foundation`, `warp_dsp` |
 | `processing` | Warp maps, clip frame plans, verified source views, warp render cache, Clay sources | `foundation`, `media`, `project`, `warp_dsp`, `clay_dsp`, `persistence` |
@@ -63,7 +63,7 @@ The process contains the UI, model, engine, and default plugin host. Plugin scan
 | `track_chain` | One chain per track: instrument then inserts, prepared for live playback and export ([ADR-0050](decisions/0050-one-chain-per-track.md)) | `project`, `engine`, `routing`, `native_inserts` |
 | `persistence` | Manifest codec and schema migrations, committed asset references, generations, recovery | `project`, `media`, `codec` |
 | `source_prep` | Bounded control/worker decode of integrity-checked managed audio, for synth media slots and export | `engine`, `persistence`, `media`, `project` |
-| `render_graph` | The offline graph builder ([ADR-0090](decisions/0090-render-graph-builder.md)): which saved inserts an offline render admits, and a snapshot's track chains (through `track_chain`), routed mixer (through `routing::graph_nodes`, as live playback builds it), master chain and built-in instruments, prepared for export; VST3 stages come from a preparer the plugin host supplies | `project`, `engine`, `routing`, `automation_project`, `timeline`, `native_dsp`, `native_inserts`, `track_chain`, `source_prep`, `persistence` |
+| `render_graph` | The offline graph builder ([ADR-0090](decisions/0090-render-graph-builder.md)): which saved inserts an offline render admits, and a snapshot's track chains (through `track_chain`), routed mixer (through `routing::graph_nodes`, as live playback builds it), master chain, built-in instruments and master rebalance stages ([ADR-0123](decisions/0123-master-rebalance.md)), prepared for export; VST3 stages come from a preparer the plugin host supplies | `project`, `engine`, `routing`, `automation_project`, `timeline`, `native_dsp`, `native_inserts`, `track_chain`, `source_prep`, `persistence` |
 | `export` | Offline render of the graph `render_graph` prepares, JACK real-time capture and format writers | `engine`, `routing`, `project`, `media`, `source_prep`, `persistence`, `processing`, `audio_io`, `render_graph`, the `native_dsp` loudness and true-peak meters |
 | `application` | Command dispatch, revisioned read models, recording, plugin browser/scan status, lifecycle services; the VST3 adapters that bind saved plugin instances to loaded hosts and graph nodes, and those to routed playback, the session and offline export (`src/application/vst3`) | all modules above |
 | `plugin_ui` (`src/app/plugin_ui`) | UI-thread VST3 run loop (`qt_vst3_run_loop`), editor attachment and X11 embedding | `plugins`, Qt |

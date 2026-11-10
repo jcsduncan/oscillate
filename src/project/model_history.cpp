@@ -116,7 +116,7 @@ void add_all_ids(const Snapshot& state, ChangeSet& changes) {
   return from.sample_rate == to.sample_rate && from.key == to.key &&
          same_tempo(from.tempo, to.tempo) && same_meter(from.meter, to.meter) &&
          from.sources == to.sources && from.master_effects == to.master_effects &&
-         from.master_level == to.master_level &&
+         from.master_level == to.master_level && from.rebalance == to.rebalance &&
          from.source_tempo_reviews == to.source_tempo_reviews &&
          from.source_key_reviews == to.source_key_reviews &&
          unpresented(from.tracks) == unpresented(to.tracks);
@@ -199,12 +199,13 @@ void add_all_ids(const Snapshot& state, ChangeSet& changes) {
   changes.timing = !same_tempo(from.tempo, to.tempo) || !same_meter(from.meter, to.meter);
   changes.sample_rate = from.sample_rate != to.sample_rate;
   changes.master_effects = from.master_effects != to.master_effects;
-  changes.routing = from.master_level != to.master_level ||
+  changes.routing = from.master_level != to.master_level || from.rebalance != to.rebalance ||
                     !std::ranges::equal(from.tracks, to.tracks, [](const Track& a, const Track& b) {
                       // As for the forward edits: mixer controls and freezing are routing.
                       return a.id == b.id && a.kind == b.kind && a.main_output == b.main_output &&
                              a.sends == b.sends && a.muted == b.muted && a.soloed == b.soloed &&
-                             a.level == b.level && a.pan == b.pan && a.frozen == b.frozen;
+                             a.level == b.level && a.pan == b.pan && a.frozen == b.frozen &&
+                             a.mix_role == b.mix_role && a.heard_role == b.heard_role;
                     });
   // Undo, redo and restore may change any name, colour or marker.
   changes.presentation = true;

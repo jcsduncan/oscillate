@@ -320,12 +320,16 @@ RoutedPlaybackControl::build_and_publish(std::shared_ptr<const project::Snapshot
   const auto master_latency = master_chain ? master_chain->chain.latency_frames() : 0;
   // The graph's nodes as export builds them, with the master chain on the
   // master node and each switched chain's predecessor retiring beside it.
+  if (auto rebalanced = rebalance_.update(snapshot); !rebalanced)
+    return fail(snapshot.revision, rebalanced.error());
   auto graph = routing::graph_nodes(
       snapshot, route.value(),
       {.track_processor = [&](project::TrackId track) -> std::shared_ptr<engine::ProcessorRuntime> {
          const auto* chain = chain_of(track);
          return chain ? chain->chain.runtime : nullptr;
        },
+       .track_output_stage = [&](project::TrackId track)
+           -> std::shared_ptr<engine::ProcessorRuntime> { return rebalance_.stage(track); },
        .master_at_node = true,
        .master_processor = master_chain ? master_chain->chain.runtime : nullptr,
        .master_latency_frames = master_latency});

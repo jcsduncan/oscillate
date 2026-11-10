@@ -1,0 +1,30 @@
+# ADR-0123 — Master rebalance by role from the project's tracks
+
+**Status:** Accepted and implemented. **Date:** 10 November 2026.
+**Builds on:** ADR-0047 (Shape), ADR-0049 (live graph switching), ADR-0054 (live controls), ADR-0059 (freeze), ADR-0090 (render graph builder).
+**Contract:** `include/oscillate/project/mix_roles.hpp` (roles and stages), `MixRole`, `RoleBalance`, `MasterRebalance` and `Track::mix_role`/`heard_role` in `project/snapshot.hpp`, the `SetMasterRebalance`, `SetTrackMixRole` and `SetTrackHeardRole` commands, `include/oscillate/native_dsp/rebalance.hpp` (the stage), `include/oscillate/render_graph/rebalance.hpp` (a graph's stages), `RoutedNode::output_stage`, `GraphNodeSources::track_output_stage`, `include/oscillate/analysis/mix_role.hpp` and `application/role_listening.hpp`; schema 1.49.
+
+## Context
+
+Mastering often needs the vocal up a little, the drums brighter or the bass tamed after the mix is done. Tools that work on a stereo master separate the parts first, which costs quality and leaves artefacts. The project already holds every part on its own track, so a rebalance on the master can act on those tracks' outputs exactly.
+
+## Decision
+
+1. **Roles.** A track plays one of four roles, vocals, drums, bass or music, or none. `project::mix_roles` infers them from the saved snapshot only, so live playback and export agree:
+   - A role the musician chose (`Track::mix_role`) holds for the track and for everything that plays into it, unless they choose their own.
+   - An audio or instrument track otherwise takes, in order: its built-in instrument's part (Stick, Knock, Anvil and Pulse play drums; Fret and Torque play bass); a part its name says, then its clips' names (whole words, drums before vocals before bass, so "Bass Drum" is drums); for an audio track, the part heard in its audio (`Track::heard_role`); for an instrument track, bass when half its notes sit under C3 and nine in ten under G3; else music.
+   - A group bus takes the role every track it sums shares, else its name's, else none. A return bus has none.
+   - A kick and a synth role were not added: no measurement showed a rebalance needing them, and two more rows of controls cost more than they give.
+2. **One stage per role, where the role starts.** Each track's output carries a stage. Its role is the track's role where that differs from the role of the bus its output plays into (the master has none); otherwise it is neutral. So no sound passes the same role's stage twice: a drum bus carries the drums' stage and its tracks none, while under a mixed bus each track carries its own. A group's stage acts on all it sums, including a track under it with another chosen role.
+3. **The stage is after the fader.** `RoutedNode::output_stage` runs on a node's block after its fader, pan, gain automation and mute, before its meter and its routes. It holds the role's gain (±12 dB) and a three-band EQ: a low shelf, a bell and a high shelf, the classic cascade Shape runs (`prepare_eq`, `EqRuntime`, a shelf slope of 1). Gain and EQ are linear and per channel, so the stage equals raising the track's fader by the gain with Shape, set to the same bands, last in its chain. The `application_rebalance` contract holds that null over a grouped pair, a bass, a voice and a pad, within 1e-5.
+4. **Sends follow the role.** Audible sends tap a node after its fader, so they carry the stage: lowering the vocals lowers what they send to the reverb too, as a fader would. The return bus has no role of its own, so a sound reaching it through a send is not rebalanced twice. A sidechain key taps before the fader and ignores the stage, so rebalancing never changes how hard something ducks.
+5. **Live edits glide on the running stages.** `render_graph::RebalanceStages` keeps one stage per track for the playback session. Every saved edit is offered to the stages it changes before anything else is decided, through a lock-free triple buffer: the gain glides over 512 frames and the EQ over `EqRuntime`'s 64-frame transition. An edit that changes only the rebalance or the roles publishes no graph. A graph built later takes the same stages, so they continue across switches. While its settings are neutral and settled a stage leaves its block untouched, so a rebalance switched off, or at 0 dB, renders bit for bit what the project renders without one.
+6. **Export builds the same stages.** The offline graph builds a set for its snapshot and adds each EQ's settling time to its node's tail. A track render (freeze, bounce) is taken before the channel, so it plays without the rebalance. The frozen playback view pins each frozen track's role, which its devices gave it, since the view replaces them with audio.
+7. **Listening.** `analysis::hear_role` measures a recording's sounding frames: spectral centroid, energy under 150 Hz, onsets per second, how far each frame falls under its neighbourhood's loudest, the share of frames with one pitch, their median pitch and how far they sit from equal-tempered semitones. Many onsets that fall 10 dB or more between them are drums. A pitch under 160 Hz with most energy under 150 Hz is bass. A pitch from 90 Hz to 1 kHz that sits 12 cents or more off the semitones is vocals: a voice slides and bends. Anything else is music. `listen_for_roles` hears each audio track from the source its clips play most of and returns the commands that save what it heard, applied as one undo step. Listening is an explicit action, so a project never changes by itself.
+8. **Saved.** Schema 1.49 adds the project's `rebalance` (`enabled` and one setting per role) and each track's `mix_role` and `heard_role` (a role name or null).
+
+## Consequences
+
+- The rebalance needs routed rendering (`requires_routed_rendering`).
+- Each track node runs one more processor call per block; a neutral stage returns at once. On the heavy reference project, whole-process CPU with every role set is in `docs/performance/reference-projects.md`.
+- A stem export includes the rebalance of its track's stage.

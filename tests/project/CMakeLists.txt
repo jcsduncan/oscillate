@@ -21,3 +21,10 @@ oscillate_add_test_executable(oscillate_project_history_tests SOURCES model_hist
 oscillate_add_test_executable(oscillate_render_slices_tests SOURCES render_slices_tests.cpp
   LIBS oscillate::project
   TEST project_render_slices)
+
+oscillate_add_test_executable(oscillate_mix_roles_tests SOURCES mix_roles_tests.cpp
+  LIBS oscillate::project)
+oscillate_add_case_tests(project_mix_roles oscillate_mix_roles_tests
+  CASES devices_name_their_part names_say_the_part heard_and_notes_follow_names
+        groups_carry_one_stage a_chosen_group_role_passes_down frozen_tracks_keep_their_role
+        commands_save_roles_and_settings)

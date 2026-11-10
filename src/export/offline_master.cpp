@@ -1628,6 +1628,8 @@ foundation::Result<TrackRender> render_track(const project::Snapshot& snapshot,
     std::erase_if(clip.automation, project::plays_after_render);
   view.master_effects.clear();
   view.master_level = 1.0;
+  // The rebalance stage plays after the channel (ADR-0123).
+  view.rebalance.enabled = false;
   auto detector_buses = stem_detector_buses(view);
   if (!detector_buses)
     return R::failure(detector_buses.error());

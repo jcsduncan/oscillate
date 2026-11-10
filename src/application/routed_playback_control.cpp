@@ -92,6 +92,19 @@ using routed_playback::same_timing;
 // Nothing that plays changed but, perhaps, the project key (and with it
 // nothing but presentation): the running synths hear the key; no graph,
 // chain or source changes. An edit undone by the next one lands here too.
+// The tracks without their rebalance roles, which the running stages take
+// live (ADR-0123).
+[[nodiscard]] std::vector<project::Track> without_roles(std::vector<project::Track> tracks) {
+  for (auto& track : tracks) {
+    track.mix_role.reset();
+    track.heard_role.reset();
+  }
+  return tracks;
+}
+
+// Nothing a graph is built from changed: the snapshots differ at most in
+// what is not heard and in the master rebalance, which the running stages
+// take live (ADR-0123).
 [[nodiscard]] bool same_audible_state(const project::Snapshot& before,
                                       const project::Snapshot& after) {
   return after.revision > before.revision && before.id == after.id &&
@@ -101,7 +114,7 @@ using routed_playback::same_timing;
          before.source_tempo_reviews == after.source_tempo_reviews &&
          before.source_key_reviews == after.source_key_reviews &&
          before.next_insert_slot_serial == after.next_insert_slot_serial &&
-         before.tracks == after.tracks;
+         without_roles(before.tracks) == without_roles(after.tracks);
 }
 
 [[nodiscard]] bool channel_controls_only(const project::Snapshot& before,
@@ -380,6 +393,10 @@ Result<void> RoutedPlaybackControl::apply_current() {
   OSCILLATE_TRACE_SPAN("edit.apply");
   const auto current = model_.snapshot();
   deferred_revision_.reset();
+  // The running rebalance stages follow every edit at once; a graph this
+  // edit builds takes them as they are.
+  if (auto rebalanced = rebalance_.update(*current); !rebalanced)
+    return fail(current->revision, rebalanced.error());
   // An edit made while an earlier one is still switching in waits for it;
   // observe() then applies the newest saved revision, so rapid edits
   // coalesce instead of being refused.

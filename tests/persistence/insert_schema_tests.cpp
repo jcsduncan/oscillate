@@ -76,7 +76,7 @@ void writer_round_trip_and_validation() {
   auto saved = state();
   const auto encoded = manifest(saved);
   const auto json = Json::parse(encoded);
-  REQUIRE_EQ(json["schema"]["minor"], 48, "writer wrote retired fields or omitted allocator state");
+  REQUIRE_EQ(json["schema"]["minor"], 49, "writer wrote retired fields or omitted allocator state");
   REQUIRE_TRUE(!json["project"].contains("master_eq"),
                "writer wrote retired fields or omitted allocator state");
   REQUIRE_TRUE(!json["project"]["tracks"][0].contains("vst3_plugins"),
@@ -122,7 +122,7 @@ void controller_state_round_trip() {
   missing.controller_state = std::vector<std::uint8_t>{6, 5};
   const auto encoded = manifest(saved);
   const auto json = Json::parse(encoded);
-  REQUIRE_EQ(json["schema"]["minor"], 48, "controller chunks lost present, empty or absent state");
+  REQUIRE_EQ(json["schema"]["minor"], 49, "controller chunks lost present, empty or absent state");
   REQUIRE_EQ(json["project"]["tracks"][0]["effects"][0]["payload"]["controller_state_base64"],
              "CQgH", "controller chunks lost present, empty or absent state");
   REQUIRE_EQ(json["project"]["tracks"][0]["effects"][1]["payload"]["controller_state_base64"], "",
@@ -206,7 +206,7 @@ void effect_media_round_trips_and_missing_asset_reopens() {
   saved.master_effects.push_back({id<InsertSlotId>(2005), true, cast});
   const auto encoded = manifest(saved);
   const auto json = Json::parse(encoded);
-  REQUIRE_EQ(json["schema"]["minor"], 48, "effect media was not written in the current schema");
+  REQUIRE_EQ(json["schema"]["minor"], 49, "effect media was not written in the current schema");
   REQUIRE_EQ(json["project"]["master_effects"].back()["kind"], "native_effect",
              "effect media was not written as a built-in effect");
   const auto media_entry = [](Json& manifest_json) -> Json& {

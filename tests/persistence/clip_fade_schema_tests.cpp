@@ -42,7 +42,7 @@ void fades_round_trip() {
   const auto encoded = detail::encode_manifest(original, std::string(32, 'a'), std::nullopt,
                                                SaveKind::explicit_save);
   auto json = Json::parse(encoded);
-  REQUIRE_EQ(json["schema"]["minor"], 48, "clip fade schema was not saved");
+  REQUIRE_EQ(json["schema"]["minor"], 49, "clip fade schema was not saved");
   REQUIRE_EQ(json["project"]["tracks"][0]["clips"][0]["fades"]["out_curve"], "smoothstep",
              "clip fade schema was not saved");
   const auto decoded = take(detail::decode_manifest(encoded));

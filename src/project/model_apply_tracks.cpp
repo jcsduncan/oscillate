@@ -1,4 +1,5 @@
 #include "model_internal.hpp"
+#include "model_validate.hpp"
 
 #include "oscillate/foundation/midi.hpp"
 #include "oscillate/foundation/trace.hpp"
@@ -183,6 +184,46 @@ Result<void> apply_command(ApplyContext& context, const SetMasterLevel& command)
   candidate.master_level = command.level;
   changes.routing = true;
   return Result<void>::success();
+}
+
+Result<void> apply_command(ApplyContext& context, const SetMasterRebalance& command) {
+  auto& candidate = context.candidate;
+  if (auto valid = validate_rebalance(command.rebalance); !valid)
+    return valid;
+  if (candidate.rebalance == command.rebalance)
+    return Result<void>::failure(invalid("master rebalance is unchanged"));
+  candidate.rebalance = command.rebalance;
+  context.changes.routing = true;
+  return Result<void>::success();
+}
+
+namespace {
+
+// A track's chosen or heard role, as SetTrackMixRole and SetTrackHeardRole
+// set it.
+Result<void> set_role(ApplyContext& context, TrackId id, std::optional<MixRole> role,
+                      std::optional<MixRole> Track::* field) {
+  auto* track = find_track(context.candidate, id);
+  if (track == nullptr)
+    return Result<void>::failure({ErrorCode::not_found, "track not found: " + id.to_string()});
+  if (role && !valid_mix_role(*role))
+    return Result<void>::failure(invalid("mix role is unknown"));
+  if ((*track).*field == role)
+    return Result<void>::failure(invalid("track mix role is unchanged"));
+  (*track).*field = role;
+  add_unique(context.changes.tracks, id);
+  context.changes.routing = true;
+  return Result<void>::success();
+}
+
+} // namespace
+
+Result<void> apply_command(ApplyContext& context, const SetTrackMixRole& command) {
+  return set_role(context, command.id, command.role, &Track::mix_role);
+}
+
+Result<void> apply_command(ApplyContext& context, const SetTrackHeardRole& command) {
+  return set_role(context, command.id, command.role, &Track::heard_role);
 }
 
 Result<void> apply_command(ApplyContext& context, const SetTrackFrozen& command) {

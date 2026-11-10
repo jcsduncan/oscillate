@@ -62,6 +62,7 @@ add_library(oscillate_application
   midi_recording.cpp
   history_labels.cpp
   revision_status.cpp
+  role_listening.cpp
   routed_audio_source.cpp
   routed_playback_control.cpp
   # The stages RoutedPlaybackControl composes.
@@ -89,7 +90,7 @@ target_link_libraries(oscillate_application PUBLIC
   oscillate::audio_io oscillate::automation_project oscillate::engine oscillate::media oscillate::native_dsp
   oscillate::project oscillate::timeline oscillate::persistence oscillate::export oscillate::routing
   oscillate::analysis oscillate::processing oscillate::warp_render_cache oscillate::synth_engines
-  oscillate::native_inserts oscillate::track_chain oscillate::midi_file
+  oscillate::native_inserts oscillate::track_chain oscillate::midi_file oscillate::render_graph
   PRIVATE oscillate::source_prep nlohmann_json::nlohmann_json
 )
 target_compile_definitions(oscillate_application PRIVATE

@@ -911,6 +911,59 @@ public:
   return value.get<bool>();
 }
 
+// Master rebalance (ADR-0123): roles by name; the settings in role order.
+constexpr std::array<std::string_view, project::mix_role_count + 1> mix_role_names{
+    "vocals", "drums", "bass", "music", "none"};
+
+[[nodiscard]] Json encode_mix_role(std::optional<project::MixRole> role) {
+  if (!role)
+    return nullptr;
+  return std::string(mix_role_names[static_cast<std::size_t>(*role)]);
+}
+
+[[nodiscard]] std::optional<project::MixRole> decode_mix_role(const Json& value) {
+  if (value.is_null())
+    return std::nullopt;
+  const auto name = string(value);
+  const auto found = std::ranges::find(mix_role_names, name);
+  if (found == mix_role_names.end())
+    throw ParseError("unknown mix role");
+  return static_cast<project::MixRole>(found - mix_role_names.begin());
+}
+
+[[nodiscard]] Json encode_rebalance(const project::MasterRebalance& rebalance) {
+  Json roles = Json::array();
+  for (const auto& role : rebalance.roles)
+    roles.push_back({{"gain_db", role.gain_db},
+                     {"low_db", role.low_db},
+                     {"low_hz", role.low_hz},
+                     {"mid_db", role.mid_db},
+                     {"mid_hz", role.mid_hz},
+                     {"mid_q", role.mid_q},
+                     {"high_db", role.high_db},
+                     {"high_hz", role.high_hz}});
+  return {{"enabled", rebalance.enabled}, {"roles", std::move(roles)}};
+}
+
+[[nodiscard]] project::MasterRebalance decode_rebalance(const Json& value) {
+  fields(value, {"enabled", "roles"});
+  project::MasterRebalance rebalance;
+  rebalance.enabled = boolean(field(value, "enabled"));
+  const auto& roles = field(value, "roles");
+  if (!roles.is_array() || roles.size() != project::mix_role_count)
+    throw ParseError("master rebalance needs one setting per role");
+  for (std::size_t index = 0; index < project::mix_role_count; ++index) {
+    const auto& role = roles[index];
+    fields(role,
+           {"gain_db", "low_db", "low_hz", "mid_db", "mid_hz", "mid_q", "high_db", "high_hz"});
+    rebalance.roles[index] = {real(field(role, "gain_db")), real(field(role, "low_db")),
+                              real(field(role, "low_hz")),  real(field(role, "mid_db")),
+                              real(field(role, "mid_hz")),  real(field(role, "mid_q")),
+                              real(field(role, "high_db")), real(field(role, "high_hz"))};
+  }
+  return rebalance;
+}
+
 [[nodiscard]] Json
 encode_sparse_parameters(const std::vector<project::NativeInstrumentParameter>& values) {
   Json result = Json::array();
@@ -1617,7 +1670,9 @@ std::string encode_manifest(const project::Snapshot& snapshot, std::string_view 
                       {"color", encode_color(track.color)},
                       {"note_effects", encode_note_effects(track.note_effects)},
                       {"macros", encode_macros(track.macros)},
-                      {"frozen", encode_frozen(track.frozen)}});
+                      {"frozen", encode_frozen(track.frozen)},
+                      {"mix_role", encode_mix_role(track.mix_role)},
+                      {"heard_role", encode_mix_role(track.heard_role)}});
   }
   Json sources = Json::array();
   for (const auto& source : snapshot.sources) {
@@ -1701,7 +1756,8 @@ std::string encode_manifest(const project::Snapshot& snapshot, std::string_view 
         {"next_insert_slot_serial", snapshot.next_insert_slot_serial},
         {"markers", std::move(markers)},
         {"key", snapshot.key ? encode_key(*snapshot.key) : Json(nullptr)},
-        {"lead_bars", snapshot.lead_bars}}}};
+        {"lead_bars", snapshot.lead_bars},
+        {"rebalance", encode_rebalance(snapshot.rebalance)}}}};
   return manifest.dump() + '\n';
 }
 
@@ -1747,7 +1803,7 @@ Result<LoadedGeneration> decode_manifest(std::string_view text) {
     fields(project_value,
            {"id", "revision", "sample_rate", "timing_version", "tempo", "meter", "tracks",
             "sources", "source_tempo_reviews", "source_key_reviews", "master_effects",
-            "master_level", "next_insert_slot_serial", "markers", "key", "lead_bars"});
+            "master_level", "next_insert_slot_serial", "markers", "key", "lead_bars", "rebalance"});
     const auto timing_version =
         unsigned_integer<std::uint32_t>(field(project_value, "timing_version"));
     if (timing_version != timeline::timing_map_version) {
@@ -1794,9 +1850,11 @@ Result<LoadedGeneration> decode_manifest(std::string_view text) {
     const auto& track_values = field(project_value, "tracks");
     check_array(track_values, max_tracks);
     for (const auto& track : track_values) {
-      fields(track, {"id", "clips", "kind", "instrument_source", "midi_clips", "effects",
-                     "main_output", "sends", "automation", "muted", "soloed", "level", "pan",
-                     "name", "color", "note_effects", "macros", "frozen"});
+      fields(track, {"id",         "clips",   "kind",        "instrument_source",
+                     "midi_clips", "effects", "main_output", "sends",
+                     "automation", "muted",   "soloed",      "level",
+                     "pan",        "name",    "color",       "note_effects",
+                     "macros",     "frozen",  "mix_role",    "heard_role"});
       std::vector<project::Clip> clips;
       const auto& clip_values = field(track, "clips");
       check_array(clip_values, max_clips);
@@ -1857,6 +1915,8 @@ Result<LoadedGeneration> decode_manifest(std::string_view text) {
       decoded.note_effects = decode_note_effects(field(track, "note_effects"));
       decoded.macros = decode_macros(field(track, "macros"));
       decoded.frozen = decode_frozen(field(track, "frozen"));
+      decoded.mix_role = decode_mix_role(field(track, "mix_role"));
+      decoded.heard_role = decode_mix_role(field(track, "heard_role"));
       const auto& muted = field(track, "muted");
       const auto& soloed = field(track, "soloed");
       if (!muted.is_boolean() || !soloed.is_boolean()) {
@@ -1987,6 +2047,7 @@ Result<LoadedGeneration> decode_manifest(std::string_view text) {
     snapshot.lead_bars = unsigned_integer<std::uint32_t>(field(project_value, "lead_bars"));
     if (snapshot.lead_bars > project::max_lead_bars)
       throw ParseError("too many bars before bar 1");
+    snapshot.rebalance = decode_rebalance(field(project_value, "rebalance"));
     ValidationGate gate;
     auto validated = project::ProjectModel::open(snapshot, gate);
     if (!validated) {

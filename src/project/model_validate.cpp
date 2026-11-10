@@ -102,12 +102,36 @@ namespace {
 
 } // namespace
 
+Result<void> validate_rebalance(const MasterRebalance& rebalance) {
+  const auto within = [](double value, double low, double high) {
+    return std::isfinite(value) && value >= low && value <= high;
+  };
+  constexpr double limit = rebalance_gain_limit_db;
+  for (const auto& role : rebalance.roles) {
+    if (!within(role.gain_db, -limit, limit) || !within(role.low_db, -limit, limit) ||
+        !within(role.mid_db, -limit, limit) || !within(role.high_db, -limit, limit) ||
+        !within(role.low_hz, rebalance_low_min_hz, rebalance_low_max_hz) ||
+        !within(role.mid_hz, rebalance_mid_min_hz, rebalance_mid_max_hz) ||
+        !within(role.mid_q, rebalance_mid_min_q, rebalance_mid_max_q) ||
+        !within(role.high_hz, rebalance_high_min_hz, rebalance_high_max_hz))
+      return Result<void>::failure(invalid("master rebalance setting is outside its range"));
+  }
+  return Result<void>::success();
+}
+
 [[nodiscard]] Result<void> validate(const Snapshot& state) {
   if (!timeline::supported_sample_rate(state.sample_rate)) {
     return Result<void>::failure(invalid("unsupported project sample rate"));
   }
   if (!std::isfinite(state.master_level) || state.master_level < 0.0 || state.master_level > 4.0)
     return Result<void>::failure(invalid("invalid master level"));
+  if (auto rebalance = validate_rebalance(state.rebalance); !rebalance)
+    return rebalance;
+  for (const auto& track : state.tracks) {
+    if ((track.mix_role && !valid_mix_role(*track.mix_role)) ||
+        (track.heard_role && !valid_mix_role(*track.heard_role)))
+      return Result<void>::failure(invalid("invalid track mix role"));
+  }
   if (state.next_insert_slot_serial == 0) {
     return Result<void>::failure(invalid("zero effect slot allocator serial"));
   }

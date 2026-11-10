@@ -15,6 +15,7 @@
 #include "oscillate/engine/audio_worker_pool.hpp"
 #include "oscillate/foundation/trace.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
+#include "oscillate/project/mix_roles.hpp"
 
 #if defined(OSCILLATE_QUALIFICATION_VST3)
 #include "oscillate/application/vst3/stage_provider.hpp"
@@ -163,6 +164,8 @@ struct Options {
   // The drums reference: an installed kit to play as the studio kit, in
   // place of the synthetic one.
   std::optional<fs::path> stick_kit;
+  // Every role of the master rebalance set (ADR-0123).
+  bool rebalance = false;
 };
 
 template <typename T> T take(foundation::Result<T> result, std::string_view what) {
@@ -189,7 +192,7 @@ Options parse(int argc, char** argv) {
       "usage: oscillate_reference_project --reference light|heavy|pad|drums --frames 64|128 "
       "--scratch DIR [--seconds N] [--warmup BLOCKS] [--pipewire-target SERIAL] "
       "[--trace FILE] [--vst3-effect BUNDLE] [--vst3-instrument BUNDLE] [--workers N] "
-      "[--stick-kit DIR]";
+      "[--stick-kit DIR] [--rebalance on|off]";
   if (argc % 2 == 0)
     throw std::runtime_error(std::string(usage));
   Options options;
@@ -219,6 +222,10 @@ Options parse(int argc, char** argv) {
       options.vst3_instrument = fs::path(value);
     } else if (key == "--stick-kit") {
       options.stick_kit = fs::path(value);
+    } else if (key == "--rebalance") {
+      if (value != "on" && value != "off")
+        throw std::runtime_error("--rebalance is on or off");
+      options.rebalance = value == "on";
     } else if (key == "--workers") {
       std::size_t workers = 0;
       const auto parsed = std::from_chars(value.data(), value.data() + value.size(), workers);
@@ -436,6 +443,72 @@ struct Vst3Parts {
 #endif
 };
 
+// The master rebalance roles (ADR-0123) the references must have: a
+// recording is music, a drum or bass instrument plays its part, any other
+// synth music; a group bus takes the role all it sums share, else none; a
+// return none. Each track whose role differs from its group's carries a stage.
+void check_roles(const project::Snapshot& snapshot, std::span<const project::TrackId> groups) {
+  const auto roles = project::mix_roles(snapshot);
+  const auto own = [](const project::Track& track) {
+    const auto* patch = std::get_if<project::NativeInstrumentPatch>(&track.instrument_source);
+    if (patch == nullptr)
+      return project::MixRole::music;
+    if (std::ranges::find(project::drum_engines, patch->engine) != project::drum_engines.end())
+      return project::MixRole::drums;
+    if (std::ranges::find(project::bass_engines, patch->engine) != project::bass_engines.end())
+      return project::MixRole::bass;
+    return project::MixRole::music;
+  };
+  std::size_t staged = 0;
+  for (const auto group : groups) {
+    std::optional<project::MixRole> shared;
+    bool mixed = false;
+    for (const auto& track : snapshot.tracks) {
+      if (track.main_output != group)
+        continue;
+      mixed = mixed || (shared && *shared != own(track));
+      shared = own(track);
+    }
+    const auto expected = shared && !mixed ? *shared : project::MixRole::none;
+    for (std::size_t index = 0; index < snapshot.tracks.size(); ++index) {
+      const auto& track = snapshot.tracks[index];
+      const auto want = track.id == group            ? expected
+                        : track.main_output == group ? own(track)
+                                                     : roles[index].role;
+      if (track.id != group && track.main_output != group)
+        continue;
+      if (roles[index].role != want)
+        throw std::runtime_error("a reference track has the wrong rebalance role");
+      const auto stage = track.id == group || want != expected ? want : project::MixRole::none;
+      if (roles[index].stage != stage)
+        throw std::runtime_error("a reference track has the wrong rebalance stage");
+      staged += stage == project::MixRole::none ? 0U : 1U;
+    }
+  }
+  for (std::size_t index = 0; index < snapshot.tracks.size(); ++index)
+    if (snapshot.tracks[index].kind == project::TrackKind::return_bus &&
+        roles[index].role != project::MixRole::none)
+      throw std::runtime_error("a reference return has a rebalance role");
+  std::cout << "roles checked: " << staged << " rebalance stages\n";
+}
+
+// Every role moved: a gain and all three bands, so every stage runs its EQ.
+project::MasterRebalance rebalance_all_roles() {
+  constexpr double gain_db = 1.5;
+  constexpr double low_db = 2.0;
+  constexpr double mid_db = -1.5;
+  constexpr double high_db = 1.0;
+  project::MasterRebalance rebalance;
+  rebalance.enabled = true;
+  for (auto& role : rebalance.roles) {
+    role.gain_db = gain_db;
+    role.low_db = low_db;
+    role.mid_db = mid_db;
+    role.high_db = high_db;
+  }
+  return rebalance;
+}
+
 struct Workload {
   std::size_t audio_tracks = 0;
   std::size_t native_synths = 0;
@@ -591,6 +664,9 @@ Workload build_project(const fs::path& root, const fs::path& media, const Option
     (void)take(
         session->effects().add_effect_engine(project::MasterSignalPath{}, slot, master_chain[slot]),
         "master effect");
+  check_roles(session->snapshot(), std::array{group_a, group_b});
+  if (options.rebalance)
+    take(session->tracks().set_master_rebalance(rebalance_all_roles()), "rebalance");
   take(session->saving().save(), "save");
   return workload;
 }
@@ -879,7 +955,8 @@ void run(const Options& options) {
               << " vst3_effects=" << workload.vst3_effects
               << " vst3_instruments=" << workload.vst3_instruments << " notes=" << workload.notes
               << " master=" << master_chain.size() << " groups=" << bus_count
-              << " returns=" << bus_count << '\n'
+              << " returns=" << bus_count << " rebalance=" << (options.rebalance ? "on" : "off")
+              << '\n'
               << std::flush;
     measure(options, root, vst3);
   } catch (...) {

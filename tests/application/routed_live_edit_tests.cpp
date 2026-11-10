@@ -562,6 +562,63 @@ void an_edit_waiting_behind_a_note_edit_applies_next() {
   REQUIRE_LT(block_power(run.left, muted_block), silent_power, "the muted track still sounds");
 }
 
+// Master rebalance edits (ADR-0123) while playing: the gain, then the EQ,
+// then the track's role all reach the running stage without a graph switch
+// or a gap, each gliding from where it was; once its stage is neutral again
+// the song plays exactly as it did without a rebalance.
+void rebalance_edits_glide_without_a_gap() {
+  constexpr double boost_db = 6.0;
+  constexpr double boost = 2.0; // 6 dB, near enough for a level check
+  constexpr double level_tolerance = 0.05;
+  constexpr double low_db = 6.0;
+  constexpr double mid_db = -4.0;
+  constexpr double high_db = 3.0;
+  constexpr std::uint64_t eq_block = edit_block + 20;
+  constexpr std::uint64_t role_block = held_end_block;
+  constexpr std::uint64_t glide_blocks = 16;
+  Song song;
+  const auto unchanged = reference(song, {});
+  Run run(song.root, song.saved);
+  run.play_to(edit_block);
+  project::MasterRebalance rebalance;
+  rebalance.enabled = true;
+  auto& music = rebalance.roles[static_cast<std::size_t>(project::MixRole::music)];
+  music.gain_db = boost_db;
+  auto revision = run.edit({project::SetMasterRebalance{rebalance}}, "rebalance gain");
+  run.play_to(eq_block);
+  REQUIRE_EQ(run.control.status().active_graph_revision, revision,
+             "the gain edit did not become active without a restart");
+  require_continuous(run.left, "rebalance gain");
+  const auto window = [](const std::vector<float>& samples, std::uint64_t from) {
+    double power = 0.0;
+    for (auto block = from; block < from + around_blocks; ++block)
+      power += block_power(samples, block);
+    return power;
+  };
+  const auto ratio = std::sqrt(window(run.left, eq_block - around_blocks) /
+                               window(unchanged, eq_block - around_blocks));
+  REQUIRE_NEAR(ratio, boost, level_tolerance * boost, "the role's gain is heard");
+
+  music.low_db = low_db;
+  music.mid_db = mid_db;
+  music.high_db = high_db;
+  revision = run.edit({project::SetMasterRebalance{rebalance}}, "rebalance EQ");
+  run.play_to(role_block);
+  REQUIRE_EQ(run.control.status().active_graph_revision, revision,
+             "the EQ edit did not become active without a restart");
+  for (auto block = eq_block; block < eq_block + around_blocks; ++block)
+    REQUIRE_GT(block_power(run.left, block), silent_power, "rebalance EQ: a silent block");
+
+  // The track leaves the rebalance: its stage glides back to neutral.
+  revision = run.edit({project::SetTrackMixRole{song.track, project::MixRole::none}}, "role");
+  run.play_to(song_blocks);
+  REQUIRE_EQ(run.control.status().active_graph_revision, revision,
+             "the role edit did not become active without a restart");
+  const auto settled = (role_block + glide_blocks) * block_frames;
+  require_matches(std::span(run.left).subspan(settled), std::span(unchanged).subspan(settled),
+                  "a neutral stage plays the song unchanged");
+}
+
 // --- Edits a whole replacement carries (ADR-0098) ------------------------------
 
 // The playing run over the whole song, with `edit` made at the edit block.
@@ -824,6 +881,7 @@ int main(int argc, char** argv) {
         rapid_edits_coalesce_onto_the_newest_revision},
        {"an_edit_waiting_behind_a_note_edit_applies_next",
         an_edit_waiting_behind_a_note_edit_applies_next},
+       {"rebalance_edits_glide_without_a_gap", rebalance_edits_glide_without_a_gap},
        {"track_add_switches_with_its_source", track_add_switches_with_its_source},
        {"track_remove_fades_out_then_switches", track_remove_fades_out_then_switches},
        {"track_remove_fades_out_over_its_level_lane", track_remove_fades_out_over_its_level_lane},

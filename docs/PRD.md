@@ -371,6 +371,8 @@ The baseline processors are the Shape (EQ), Press (compressor), Expanse (algorit
 - a spatial pass-by effect (Flyby, [ADR-0067](decisions/0067-flyby.md)) and background texture and ageing (Dust, [ADR-0069](decisions/0069-dust-texture.md));
 - the utility suite ([ADR-0042](decisions/0042-native-utility-suite.md)): Lens (spectrum analyser, with match EQ into Shape and tonal balance targets measured from references, [ADR-0120](decisions/0120-match-eq-and-tonal-targets.md)), Loudness (EBU R128), Scope (oscilloscope and alignment), Tune (tuner), Trim (gain and stereo utility) and Signal (test generator).
 
+The master rebalance sets a gain and a three-band EQ for each of four roles, vocals, drums, bass and music, before the master chain. It acts on the project's own tracks rather than separating the stereo mix, so it is exact and free of artefacts. Roles are inferred from each track's instrument, names, notes or listened audio, and the musician can choose them; edits while playing glide without a gap ([ADR-0123](decisions/0123-master-rebalance.md)).
+
 Every native effect is insertable on any track, bus or master chain, saved with the project, automatable and rendered identically by live playback and export ([ADR-0043](decisions/0043-one-native-insert-path.md), [ADR-0050](decisions/0050-one-chain-per-track.md)).
 
 ### Metering and delay compensation
