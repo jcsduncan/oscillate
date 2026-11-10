@@ -305,6 +305,8 @@
     <file alias="lens/LensTheme.qml">qml/lens/LensTheme.qml</file>
     <file alias="lens/LensSpectrum.qml">qml/lens/LensSpectrum.qml</file>
     <file alias="lens/LensSpectrogram.qml">qml/lens/LensSpectrogram.qml</file>
+    <file alias="lens/LensMatchPlot.qml">qml/lens/LensMatchPlot.qml</file>
+    <file alias="lens/LensTonalPlot.qml">qml/lens/LensTonalPlot.qml</file>
     <file alias="loudness/LoudnessPanel.qml">qml/loudness/LoudnessPanel.qml</file>
     <file alias="loudness/LoudnessTheme.qml">qml/loudness/LoudnessTheme.qml</file>
     <file alias="loudness/LoudnessMeter.qml">qml/loudness/LoudnessMeter.qml</file>

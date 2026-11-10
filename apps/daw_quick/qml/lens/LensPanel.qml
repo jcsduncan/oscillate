@@ -926,10 +926,13 @@ Rectangle {
             y: panel.theme.cardContentY
             text: "MATCH TO"
         }
+        // Match To and Smoothing side by side.
+        readonly property real segmentWidth: (width - panel.theme.matchControlsX - panel.theme.cardInset
+                                              - panel.gap) / 2
         Kit.Segment {
             x: panel.theme.matchControlsX
             y: panel.theme.segmentY
-            width: matchPlate.width - panel.theme.matchControlsX - panel.theme.cardInset
+            width: matchPlate.segmentWidth
             height: panel.theme.segmentRowHeight
             controller: panel.controller
             theme: panel.theme
@@ -937,14 +940,14 @@ Rectangle {
             labels: ["SIDECHAIN", "TARGET"]
         }
         Caption {
-            x: panel.theme.matchControlsX
-            y: panel.theme.secondCaptionY
-            text: "SMOOTHING · OCTAVES"
+            x: panel.theme.matchControlsX + matchPlate.segmentWidth + panel.gap
+            y: panel.theme.cardContentY
+            text: "SMOOTHING · OCT"
         }
         Kit.Segment {
-            x: panel.theme.matchControlsX
-            y: panel.theme.secondSegmentY
-            width: matchPlate.width - panel.theme.matchControlsX - panel.theme.cardInset
+            x: panel.theme.matchControlsX + matchPlate.segmentWidth + panel.gap
+            y: panel.theme.segmentY
+            width: matchPlate.segmentWidth
             height: panel.theme.segmentRowHeight
             controller: panel.controller
             theme: panel.theme

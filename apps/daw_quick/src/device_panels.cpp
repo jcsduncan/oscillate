@@ -40,7 +40,7 @@ constexpr std::array panels{
     DevicePanel{"pocket", "qrc:/pocket/PocketPanel.qml", 1340, 740, ""},
     DevicePanel{"pump", "qrc:/pump/PumpPanel.qml", 1280, 720, keyed_inputs},
     DevicePanel{"chop", "qrc:/chop/ChopPanel.qml", 1240, 760, ""},
-    DevicePanel{"lens", "qrc:/lens/LensPanel.qml", 1380, 1058, ""},
+    DevicePanel{"lens", "qrc:/lens/LensPanel.qml", 1380, 946, ""},
     DevicePanel{"loudness", "qrc:/loudness/LoudnessPanel.qml", 1240, 760, ""},
     DevicePanel{"scope", "qrc:/scope/ScopePanel.qml", 1240, 760, "trackName keyName sampleRate"},
     DevicePanel{"tune", "qrc:/tune/TunePanel.qml", 1240, 760, ""},
