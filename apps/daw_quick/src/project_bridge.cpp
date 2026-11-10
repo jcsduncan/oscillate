@@ -17,6 +17,7 @@
 #include "key_match_controller.hpp"
 #include "loop_transport.hpp"
 #include "macro_controller.hpp"
+#include "master_assistant_controller.hpp"
 #include "master_section.hpp"
 #include "meter_model.hpp"
 #include "mix_check_controller.hpp"
@@ -232,6 +233,7 @@ QObject* ProjectBridge::note_effects() const noexcept { return note_effects_.get
 QObject* ProjectBridge::freeze_commands() const noexcept { return freeze_commands_.get(); }
 QObject* ProjectBridge::mix_check() const noexcept { return mix_check_.get(); }
 QObject* ProjectBridge::rebalance() const noexcept { return rebalance_.get(); }
+QObject* ProjectBridge::master_assistant() const noexcept { return master_assistant_.get(); }
 QObject* ProjectBridge::arrange() const noexcept { return arrange_.get(); }
 QObject* ProjectBridge::harmony() const noexcept { return harmony_.get(); }
 QObject* ProjectBridge::groove_capture() const noexcept { return groove_capture_.get(); }

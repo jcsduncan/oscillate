@@ -17,6 +17,8 @@ Rectangle {
     signal browserRequested(string pathId)
     // The master section's Rebalance button: the shell opens the view.
     signal rebalanceRequested()
+    // The master section's assistant button: the shell opens the view.
+    signal assistantRequested()
 
     color: Theme.canvas
     Accessible.role: Accessible.Pane
@@ -238,5 +240,6 @@ Rectangle {
         width: implicitWidth
         bridge: mixer.bridge
         onRebalanceRequested: mixer.rebalanceRequested()
+        onAssistantRequested: mixer.assistantRequested()
     }
 }
