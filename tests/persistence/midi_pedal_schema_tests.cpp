@@ -1,3 +1,4 @@
+#include "migration.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/test/check.hpp"
 #include "private.hpp"
@@ -92,7 +93,9 @@ void pedals_and_controller_state_round_trip_together() {
 }
 
 void other_schemas_are_rejected() {
-  for (const int minor : {47, 49}) {
+  // Older than the oldest release, and newer than this build.
+  for (const auto minor :
+       {detail::released_schemas.front().minor - 1, detail::current_schema.minor + 1}) {
     auto other = encoded(snapshot(pedals()));
     other["schema"]["minor"] = minor;
     require(!detail::decode_manifest(other.dump()), "another schema minor is rejected");
