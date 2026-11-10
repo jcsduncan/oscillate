@@ -352,6 +352,10 @@
     <file alias="strike/StrikePanel.qml">qml/strike/StrikePanel.qml</file>
     <file alias="strike/StrikeTheme.qml">qml/strike/StrikeTheme.qml</file>
     <file alias="strike/StrikeView.qml">qml/strike/StrikeView.qml</file>
+    <file alias="keel/KeelPanel.qml">qml/keel/KeelPanel.qml</file>
+    <file alias="keel/KeelTheme.qml">qml/keel/KeelTheme.qml</file>
+    <file alias="keel/KeelView.qml">qml/keel/KeelView.qml</file>
+    <file alias="keel/KeelHistory.qml">qml/keel/KeelHistory.qml</file>
     <file alias="strata/StrataPanel.qml">qml/strata/StrataPanel.qml</file>
     <file alias="strata/StrataTheme.qml">qml/strata/StrataTheme.qml</file>
     <file alias="strata/StrataSpectrum.qml">qml/strata/StrataSpectrum.qml</file>

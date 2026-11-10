@@ -172,6 +172,20 @@ void fft_matches_a_naive_dft() {
       round_trip = std::max(round_trip, std::abs(back[k] - x[k]));
     }
     REQUIRE_LT(round_trip, 1e-14 * static_cast<double>(n) + 1e-15, "inverse undoes forward");
+    // In steps, the reordering in pieces and each stage in uneven pieces
+    // taken last first: forward's
+    // result bit for bit.
+    constexpr std::size_t piece = 37;
+    auto staged = x;
+    for (std::size_t from = 0; from < n; from += piece) {
+      fft.reorder(staged, from, std::min(n, from + piece));
+    }
+    for (std::size_t stage = 0; stage < fft.stages(); ++stage) {
+      for (std::size_t end = n / 2; end > 0; end -= std::min(end, piece)) {
+        fft.stage(staged, stage, end - std::min(end, piece), end);
+      }
+    }
+    require(staged == forward, "the staged transform is forward's: " + std::to_string(n));
     auto inverse_only = x;
     fft.inverse(inverse_only);
     const auto expected_inverse = naive_dft(x, 1.0);

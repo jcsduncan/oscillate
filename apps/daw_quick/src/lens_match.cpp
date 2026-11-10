@@ -407,11 +407,16 @@ bool LensMatch::save_target() {
 }
 
 void LensMatch::load_targets() {
-  user_targets_.clear();
-  const QDir directory(directory_);
+  user_targets_ = read_user_targets(directory_);
+  emit targets_changed();
+}
+
+std::vector<tonal::Target> LensMatch::read_user_targets(const QString& directory_path) {
+  std::vector<tonal::Target> out;
+  const QDir directory(directory_path);
   const auto files = directory.entryInfoList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
   for (const auto& info : files) {
-    if (user_targets_.size() >= max_user_targets) {
+    if (out.size() >= max_user_targets) {
       break;
     }
     if (info.size() > static_cast<qint64>(tonal::max_file_bytes)) {
@@ -426,10 +431,10 @@ void LensMatch::load_targets() {
         std::string_view(bytes.constData(), static_cast<std::size_t>(bytes.size())),
         user_prefix + info.completeBaseName().toStdString());
     if (parsed) {
-      user_targets_.push_back(std::move(parsed).value());
+      out.push_back(std::move(parsed).value());
     }
   }
-  emit targets_changed();
+  return out;
 }
 
 void LensMatch::bump() {

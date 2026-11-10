@@ -86,6 +86,10 @@ public:
 
   // $XDG_DATA_HOME/oscillate/tonal-targets.
   [[nodiscard]] static QString default_targets_directory();
+  // The user's targets in `directory` (*.json, by name), at most
+  // max_user_targets; files that are too large or do not parse are skipped.
+  [[nodiscard]] static std::vector<native_dsp::tonal::Target>
+  read_user_targets(const QString& directory);
 
   [[nodiscard]] int revision() const noexcept { return revision_; }
   [[nodiscard]] double seconds() const noexcept;

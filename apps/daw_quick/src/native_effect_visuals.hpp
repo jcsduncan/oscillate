@@ -4,6 +4,8 @@
 
 #include <cstddef>
 #include <span>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace oscillate::quick {
@@ -51,6 +53,13 @@ namespace oscillate::quick {
 // (0 for an engine that is not an effect, or values that do not fit it).
 [[nodiscard]] double effect_latency_ms(const native_dsp::EngineDescriptor& engine,
                                        std::span<const double> values, double sample_rate);
+
+// Keel's Learn (ADR-0119): the curve values that make the balance a
+// telemetry frame tracked the target, with Target on Curve, by parameter id;
+// empty when nothing was tracked or for other engines.
+[[nodiscard]] std::vector<std::pair<std::string_view, double>>
+keel_learned_values(const native_dsp::EngineDescriptor& engine, std::span<const double> values,
+                    std::span<const float> telemetry);
 
 // Ceiling's latency in milliseconds at `sample_rate` (0 for other engines).
 [[nodiscard]] double ceiling_latency_ms(const native_dsp::EngineDescriptor& engine,
