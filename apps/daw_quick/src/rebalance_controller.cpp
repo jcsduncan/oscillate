@@ -516,8 +516,8 @@ void RebalanceController::project_changed() {
                           response(snapshot.rebalance.roles[index], snapshot.sample_rate));
   std::ranges::stable_sort(rows, {}, &std::pair<int, QVariantMap>::first);
   QVariantList list;
-  for (auto& entry : rows)
-    list.push_back(std::move(entry.second));
+  for (const auto& entry : rows)
+    list.push_back(entry.second);
   set_tracks(std::move(list));
   emit changed();
 }

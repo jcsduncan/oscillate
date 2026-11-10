@@ -324,7 +324,8 @@ void role_meters_combine_the_tracks_each_stage_acts_on() {
         const auto found = readings.find(track);
         return found == readings.end() ? std::nullopt : std::optional(found->second);
       });
-  require(combined.has_value(), "the vocals combine");
+  if (!combined)
+    throw std::runtime_error("the vocals do not combine");
   const double power = static_cast<double>(lead.left_rms) * lead.left_rms +
                        static_cast<double>(backing.left_rms) * backing.left_rms;
   require(std::abs(combined->left_rms - std::sqrt(power)) < level_tolerance,
