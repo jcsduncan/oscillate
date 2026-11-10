@@ -21,9 +21,10 @@
 | Hush | 0.45–0.55% (0.46–0.56% in 64-frame blocks) | Eight key-filter biquads, the detector and the state per channel; a `pow` only while the gain moves. |
 | Strike | Measured by `oscillate_strike_bench` on drum hits over noise, not the noise above, with one instance and with sixteen. 0.34–0.38% with one band at 64 and 128 frames; 99th-percentile block 0.5–0.7% of its period. Linear-phase bands with Clip: 4.3–4.4% (Drum Bus Punch, three bands) and 5.3% (Master Impact, four), 99th percentile 10.7–20.5%, longest 18.7–45.7%. Process CPU equal to the mean. Sixteen single-band instances in a chain: 4.7–8.9%, 99th percentile 7.7–12.5% | Per band and channel the quadrature pair (eight allpass sections), the level and two followers, and one `exp` while the gain moves. The linear-phase bank runs one forward and one inverse FFT per band every 512 frames, so its cost lands in one block of each hop; the 4× clip about 0.8%. |
 | Keel | Measured by `oscillate_keel_bench` on noise, with one instance and with sixteen. 1.2–1.3% at 64 and 128 frames; 99th-percentile block 1.8–2.6% of its period, longest 3.0–6.4%. With a reference on the sidechain: 1.8%, 99th percentile 3.7–4.4%. Process CPU equal to the mean. Sixteen in a chain: 19.6–20.5%, 99th percentile 31.4–43.0% (29.7–29.8% and 52.9–73.3% with references) | Eleven state-variable filters per channel and their gliding coefficients; one 16384-point transform per 2048 frames, spread a stage at a time over the hop, and the least-squares fit once a hop. |
+| Gild | Measured by `oscillate_gild_bench` on a mix (bass, chord partials, kicks, hiss), with one instance and with eight. 0.9–1.0% at rest (four bands, no drive); one driven band 5.0–5.2% at 4× (Warm Mids, Bass Weight) and 6.2–7.8% at 8× (Vocal Presence, Air Lift), 99th-percentile block 7.5–12.3% of its period; Tape Glue (four linear-phase bands at 4×) 17.2–18.2%, 99th percentile 26.6–47.3%. Process CPU equal to the mean. Eight in a chain: 39–61% for one driven band each, 147–149% for Tape Glue | Per driven band and channel Edge's linear-phase up and down resampling (about 2.7% a band at 4×), the curve at the top rate (twice with Even or the tube, for the even part), Level Match and the spectrum's 4096-point transform every 2048 frames. A band at zero drive sleeps. |
 | Ceiling | 7.0–7.1% at 64 and 128 frames (`oscillate_ceiling_bench`, noise 12 dB over); 99th-percentile block 8.4–10.2% of its period, longest 11.9–17.7%; process CPU equal to the mean. Sixteen in a chain: 110–114% of one core, 99th percentile 118–150%. With no room to clip (Transients and Clip at 0): 2.5% | The 8× linear-phase clipper (about 4.5%), which sleeps with no room; the 8× fine-peak detector, the 4× guard and the output true-peak meter, about 1.9% together; K-weighted loudness. |
 
-Ceiling was measured on an Intel Core i7-10700K with GCC 15.2, Release, pinned with `taskset`.
+Ceiling and Gild were measured on an Intel Core i7-10700K with GCC 15.2, Release, pinned with `taskset`.
 
 ## Ceiling at equal loudness
 
@@ -100,6 +101,34 @@ The eight mastered tracks (mean):
 | Soften Attack | +0.59 | +0.13 | −1.36/−1.36/−0.26 | +1.51 | 0 |
 
 Strike was measured on an Intel Core i7-10700K with GCC 15.2, Release, pinned with `taskset`.
+
+## Gild on mixes
+
+`oscillate_limiter_audit --exciter` runs each Gild preset at the programme's own level and reports the integrated loudness change, what the preset adds (its Delta) against the programme, overall and in three bands (under 150 Hz, 150 Hz to 2.5 kHz, over 2.5 kHz), and the 16× true peak change. The eight mastered tracks (mean):
+
+| Preset | LUFS change | Added dB | Added L/M/H dB | True peak change | Latency |
+|---|---|---|---|---|---|
+| Default | 0.00 | −278.7 | −276.9/−270.2/−259.3 | +2.57 | 1.85 ms |
+| Air Lift | 0.00 | −45.8 | −56.1/−52.5/−27.0 | −0.02 | 1.92 ms |
+| Warm Mids | −0.01 | −34.5 | −39.8/−28.0/−32.0 | +2.42 | 1.85 ms |
+| Bass Weight | −0.01 | −25.1 | −25.2/−26.0/−94.6 | +2.62 | 1.85 ms |
+| Tape Glue | 0.00 | −35.2 | −36.1/−33.9/−43.2 | +0.07 | 33.83 ms |
+| Vocal Presence | 0.00 | −46.6 | −58.4/−44.3/−30.5 | +1.47 | 1.92 ms |
+
+The synthetic drum loop:
+
+| Preset | LUFS change | Added dB | Added L/M/H dB | True peak change | Latency |
+|---|---|---|---|---|---|
+| Default | 0.00 | −279.6 | −278.5/−267.6/−262.1 | +0.40 | 1.85 ms |
+| Air Lift | 0.00 | −36.4 | −50.6/−41.5/−19.2 | −0.72 | 1.92 ms |
+| Warm Mids | 0.00 | −46.6 | −50.9/−37.5/−42.3 | −0.51 | 1.85 ms |
+| Bass Weight | −0.02 | −25.1 | −26.2/−21.8/−94.2 | −0.58 | 1.85 ms |
+| Tape Glue | 0.00 | −35.6 | −37.0/−30.5/−47.3 | −0.16 | 33.83 ms |
+| Vocal Presence | 0.00 | −49.2 | −59.4/−44.7/−34.1 | −0.10 | 1.92 ms |
+
+- **Level.** Level Match keeps every preset within 0.02 LU.
+- **Harmonics land above the band driven.** Air Lift adds most over 2.5 kHz, Bass Weight in the lows and mids, and nothing over 2.5 kHz.
+- **True peak.** At minimum phase the split's allpass changes the waveform even at zero drive (Default: +2.6 dB on the tracks). Tape Glue's linear phase moves it by under 0.2 dB.
 
 ## Keel toward its targets
 

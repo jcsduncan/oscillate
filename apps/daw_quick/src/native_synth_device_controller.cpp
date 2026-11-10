@@ -19,6 +19,7 @@
 #include "oscillate/native_dsp/effects/edge.hpp"
 #include "oscillate/native_dsp/effects/flyby.hpp"
 #include "oscillate/native_dsp/effects/forge.hpp"
+#include "oscillate/native_dsp/effects/gild.hpp"
 #include "oscillate/native_dsp/effects/hush.hpp"
 #include "oscillate/native_dsp/effects/keel.hpp"
 #include "oscillate/native_dsp/effects/lens.hpp"
@@ -1429,6 +1430,26 @@ QVariantMap NativeSynthDeviceController::telemetry() {
       history.push_back(run(t::history + s * keel::bands, keel::bands));
     }
     out[QStringLiteral("history")] = history;
+  } else if (id == "gild" && frame.size() >= native_dsp::effects::gild::telemetry::size) {
+    namespace gild = native_dsp::effects::gild;
+    namespace t = gild::telemetry;
+    const auto run = [&](std::size_t from, std::size_t count) {
+      QVariantList values;
+      for (std::size_t i = 0; i < count; ++i) {
+        values.push_back(at(from + i));
+      }
+      return values;
+    };
+    out[QStringLiteral("input_peak")] = run(t::input_peak, 2);
+    out[QStringLiteral("output_peak")] = run(t::output_peak, 2);
+    out[QStringLiteral("latency_ms")] = at(t::latency_ms);
+    out[QStringLiteral("band_count")] = static_cast<int>(at(t::band_count));
+    out[QStringLiteral("crossovers")] = run(t::crossovers, gild::max_crossovers);
+    out[QStringLiteral("band_level")] = run(t::band_level, gild::max_bands);
+    out[QStringLiteral("band_added")] = run(t::band_added, gild::max_bands);
+    out[QStringLiteral("band_drive")] = run(t::band_drive, gild::max_bands);
+    out[QStringLiteral("input_spectrum")] = run(t::input_spectrum, gild::spectrum_bins);
+    out[QStringLiteral("added_spectrum")] = run(t::added_spectrum, gild::spectrum_bins);
   } else if (id == "dust" && frame.size() >= native_dsp::effects::dust::telemetry::size) {
     namespace dust = native_dsp::effects::dust;
     namespace t = dust::telemetry;

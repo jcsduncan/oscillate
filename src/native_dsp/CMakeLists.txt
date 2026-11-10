@@ -151,6 +151,8 @@ add_library(oscillate_native_effects effects/runtime.cpp effects/registry.cpp
                                             effects/hush.cpp
                                             # Strike, the transient shaper (ADR-0118).
                                             effects/strike.cpp
+                                            # Gild, the multiband exciter (ADR-0122).
+                                            effects/gild.cpp
                                             # Keel, adaptive tonal balance (ADR-0119).
                                             effects/keel.cpp
                                             # Cast, the convolution reverb (ADR-0115).

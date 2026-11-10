@@ -349,6 +349,9 @@
     <file alias="hush/HushTheme.qml">qml/hush/HushTheme.qml</file>
     <file alias="hush/HushScope.qml">qml/hush/HushScope.qml</file>
     <file alias="hush/HushSwitch.qml">qml/hush/HushSwitch.qml</file>
+    <file alias="gild/GildPanel.qml">qml/gild/GildPanel.qml</file>
+    <file alias="gild/GildTheme.qml">qml/gild/GildTheme.qml</file>
+    <file alias="gild/GildView.qml">qml/gild/GildView.qml</file>
     <file alias="strike/StrikePanel.qml">qml/strike/StrikePanel.qml</file>
     <file alias="strike/StrikeTheme.qml">qml/strike/StrikeTheme.qml</file>
     <file alias="strike/StrikeView.qml">qml/strike/StrikeView.qml</file>

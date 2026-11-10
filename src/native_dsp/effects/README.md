@@ -150,6 +150,18 @@ and an oversampled clip under a ceiling.
 
 ![Strike panel](../../../docs/images/effects/strike.png)
 
+### Gild
+
+Multiband exciter: Forge's tape, tube, transistor and diode curves in up to
+four bands (Linkwitz-Riley or linear phase), each with Drive, Even
+(even-harmonic bias), Mix and solo; only the curve's bend is added, so zero
+drive adds nothing. Edge's oversampling (antialiased from 8x), Level Match
+per band, Dynamic (more drive on quiet passages), Delta and a spectrum of
+what is added.
+[ADR-0122](../../../docs/decisions/0122-gild-multiband-exciter.md)
+
+![Gild panel](../../../docs/images/effects/gild.png)
+
 ### Keel
 
 Adaptive tonal balance: tracks the programme's third-octave balance over

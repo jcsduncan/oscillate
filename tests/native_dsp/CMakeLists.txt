@@ -691,6 +691,37 @@ oscillate_add_case_tests(native_keel_contract oscillate_keel_tests
   the_callback_never_allocates
   telemetry_feeds_the_panel)
 
+# Gild (ADR-0122): the multiband exciter.
+oscillate_add_test_executable(oscillate_gild_tests SOURCES gild_tests.cpp
+  LIBS oscillate::native_effects)
+oscillate_add_case_tests(native_gild_contract oscillate_gild_tests
+  CASES
+  descriptor_registry_and_presets
+  zero_drive_passes_untouched
+  bands_sum_flat
+  linear_phase_sums_to_the_input_delayed
+  harmonics_match_tape
+  harmonics_match_tube
+  harmonics_match_transistor
+  harmonics_match_diode
+  even_raises_the_even_harmonics
+  aliasing_under_100_dbfs_at_16x
+  level_match_holds_the_level
+  dynamic_drives_quiet_passages_harder
+  band_drive_stays_in_its_band
+  solo_plays_only_its_band
+  mix_blends_with_the_dry_band
+  delta_plays_what_was_added
+  latency_is_reported_and_exact
+  any_block_split_renders_the_same
+  export_equals_live
+  hostile_input_stays_finite
+  the_tail_is_bounded
+  presets_stay_restrained
+  a_seek_starts_clean
+  the_callback_never_allocates
+  telemetry_feeds_the_panel)
+
 # Cast (ADR-0115): the convolution reverb.
 oscillate_add_test_executable(oscillate_cast_tests SOURCES cast_tests.cpp
   LIBS oscillate::native_effects)
