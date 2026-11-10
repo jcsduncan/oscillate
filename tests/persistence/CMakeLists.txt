@@ -56,7 +56,7 @@ oscillate_add_test_executable(oscillate_rebalance_schema_tests SOURCES rebalance
   LIBS oscillate::persistence nlohmann_json::nlohmann_json OpenSSL::Crypto
   INCLUDES ${CMAKE_CURRENT_LIST_DIR}/../../src/persistence)
 oscillate_add_case_tests(persistence_rebalance_schema oscillate_rebalance_schema_tests
-  CASES rebalance_round_trips malformed_rebalance_is_refused)
+  CASES rebalance_round_trips malformed_rebalance_is_refused schema_1_48_migrates)
 
 oscillate_add_test_executable(oscillate_schema_migration_tests SOURCES schema_migration_tests.cpp
   LIBS oscillate::persistence oscillate::foundation_digest nlohmann_json::nlohmann_json

@@ -2,6 +2,7 @@
 // tracks' chosen and heard roles round-trip exactly; malformed or
 // out-of-range values are refused.
 
+#include "migration.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/test/cases.hpp"
 #include "oscillate/test/check.hpp"
@@ -9,6 +10,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -110,11 +112,35 @@ void malformed_rebalance_is_refused() {
   refused([](Json& p) { p["rebalance"]["enabled"] = 1; }, "a non-boolean switch");
 }
 
+// A 1.48 manifest (no rebalance, no roles) opens in 1.49 with the
+// rebalance off at its defaults and every role inferred.
+void schema_1_48_migrates() {
+  constexpr int previous_minor = schema_minor - 1;
+  auto saved = Json::parse(encode(snapshot()));
+  saved["schema"]["minor"] = previous_minor;
+  saved["project"].erase("rebalance");
+  for (auto& track : saved["project"]["tracks"]) {
+    track.erase("mix_role");
+    track.erase("heard_role");
+  }
+  const std::array released{detail::SchemaVersion{1, static_cast<std::uint32_t>(previous_minor)}};
+  const detail::ScopedMigrationChain chain(released, detail::migration_steps());
+  const auto decoded = take(detail::decode_manifest(saved.dump()));
+  REQUIRE_EQ(decoded.snapshot.rebalance, MasterRebalance{}, "the rebalance starts off");
+  for (const auto& track : decoded.snapshot.tracks) {
+    REQUIRE_TRUE(!track.mix_role, "no track has a chosen role");
+    REQUIRE_TRUE(!track.heard_role, "no track has a heard role");
+  }
+  REQUIRE_EQ(detail::migrate_1_48_to_1_49(saved)["project"]["tracks"].size(),
+             saved["project"]["tracks"].size(), "the step keeps every track");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
   return oscillate::test::run_cases(
       argc, argv, "rebalance schema passed",
       {{"rebalance_round_trips", rebalance_round_trips},
-       {"malformed_rebalance_is_refused", malformed_rebalance_is_refused}});
+       {"malformed_rebalance_is_refused", malformed_rebalance_is_refused},
+       {"schema_1_48_migrates", schema_1_48_migrates}});
 }

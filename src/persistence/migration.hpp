@@ -43,6 +43,9 @@ struct MigrationStep {
 // 1.47 -> 1.48: each `native_convolution` insert becomes a Cast effect
 // (ADR-0115) playing the same impulse response; see migration.cpp.
 [[nodiscard]] nlohmann::json migrate_1_47_to_1_48(nlohmann::json manifest);
+// 1.48 -> 1.49 (ADR-0123): the master rebalance, off at its defaults, and no
+// chosen or heard role on any track.
+[[nodiscard]] nlohmann::json migrate_1_48_to_1_49(nlohmann::json manifest);
 
 [[nodiscard]] std::string schema_text(SchemaVersion version);
 

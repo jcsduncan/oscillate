@@ -52,7 +52,7 @@ The bounded nlohmann/json codec writes the current schema, 1.49, with strict dup
 | 1.46 | Project `chords` (the Chord track, [ADR-0083](../../docs/decisions/0083-harmony-chord-track-and-comp.md)). |
 | 1.47 | `chords` removed: chords are notes in MIDI clips ([ADR-0084](../../docs/decisions/0084-chord-clips.md)). |
 | 1.48 | `native_convolution` inserts removed; a built-in effect `document` may hold managed `media` slots (Cast's impulse responses, [ADR-0115](../../docs/decisions/0115-cast-convolution-reverb.md)). |
-| 1.49 | The project's master `rebalance` and each track's `mix_role` and `heard_role` ([ADR-0123](../../docs/decisions/0123-master-rebalance.md)). |
+| 1.49 | The project's master `rebalance` and each track's `mix_role` and `heard_role` ([ADR-0123](../../docs/decisions/0123-master-rebalance.md)); from 1.48, the rebalance starts off and every role is inferred. |
 
 Schemas before 1.47 are development formats that do not open; 1.47 onwards
 are released. Check every active branch before claiming the next minor.
