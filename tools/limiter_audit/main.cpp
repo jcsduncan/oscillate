@@ -884,6 +884,12 @@ void audit_shaper(const effects::EffectEngine& engine, const std::vector<std::st
                   const std::vector<std::pair<std::string, double>>& overrides,
                   const std::vector<Programme>& programmes, bool per_programme) {
   const auto& table = *engine.descriptor;
+  for (const auto& name : only) {
+    if (std::ranges::none_of(table.presets, [&](const auto& p) { return p.name == name; })) {
+      std::fprintf(stderr, "no preset %s\n", name.c_str());
+      std::exit(1);
+    }
+  }
   print_shaper_header();
   for (const auto& preset : table.presets) {
     if (!only.empty() && std::ranges::find(only, std::string(preset.name)) == only.end()) {
@@ -891,7 +897,8 @@ void audit_shaper(const effects::EffectEngine& engine, const std::vector<std::st
     }
     auto values = dsp::preset_values(table, preset);
     if (!values) {
-      continue;
+      std::fprintf(stderr, "preset %s does not resolve\n", std::string(preset.name).c_str());
+      std::exit(1);
     }
     auto v = std::move(values).value();
     for (const auto& [id, value] : overrides) {

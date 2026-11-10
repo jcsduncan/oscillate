@@ -49,7 +49,6 @@ using oscillate::test::require;
 
 constexpr double rate = 48'000.0;
 constexpr int wait_ms = 1'000;
-constexpr double milliseconds_per_second = 1'000.0;
 constexpr int three_bands = 2;
 constexpr int linear_phase = 1;
 constexpr int lookahead_2ms = 3;
@@ -277,12 +276,10 @@ void controls_edit_their_parameters() {
   require(item(*panel, QStringLiteral("strikeKnob:strike.band_3.attack"))->isVisible() &&
               !item(*panel, QStringLiteral("strikeKnob:strike.band_4.attack"))->isVisible(),
           "three band columns");
-  const double expected_ms =
-      static_cast<double>(strike::latency_frames(lookahead_2ms, true, false, rate)) / rate *
-      milliseconds_per_second;
+  // 2 ms of lookahead (96 frames) and the bank's 1023 + 512 frames at
+  // 48 kHz: 1631 frames, 33.98 ms.
   require(wait_for_text(*panel, QStringLiteral("strikeLatency"),
-                        QStringLiteral("Latency ") + QString::number(expected_ms, 'f', 1) +
-                            QStringLiteral(" ms · reported for delay compensation")),
+                        QStringLiteral("Latency 34.0 ms · reported for delay compensation")),
           "the bank's latency joins the lookahead's: " +
               text_of(*panel, QStringLiteral("strikeLatency")).toStdString());
 

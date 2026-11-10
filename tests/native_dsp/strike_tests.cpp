@@ -467,6 +467,7 @@ void band_settings_stay_in_their_band() {
 }
 
 // The amplitude of `hz` in x over [from, from + length) (one DFT bin).
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): named at every call.
 double amplitude_of(const std::vector<double>& x, std::size_t from, std::size_t length, double hz) {
   std::complex<double> sum{};
   for (std::size_t i = 0; i < length; ++i) {

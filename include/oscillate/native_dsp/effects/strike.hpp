@@ -47,12 +47,13 @@ inline constexpr double full_db = 7.0;
 inline constexpr std::size_t history_slices = 256;
 inline constexpr double history_seconds = 2.0;
 
-// Telemetry: input and output peak (dBFS, held 1 s) per channel; how far
-// Clip took the loudest peak down (dB, positive, held 1 s); the latency in
-// milliseconds; the band count; the crossovers as they play (Hz, 0 when
-// unused); per band its gain now (dB, signed, the channel furthest from
-// 0 dB); then history_slices input peaks, output peaks, and per band
-// history_slices gains, oldest first.
+// Telemetry: input and output peak (dBFS, falling 60 dB a second) per
+// channel; how far Clip took the loudest peak down (dB, positive, falling
+// 60 dB a second); the latency in milliseconds; the band count; the
+// crossovers as they play (Hz, 0 when unused); per band its gain now (dB,
+// signed, the channel furthest from 0 dB, over the last block); then
+// history_slices input peaks, output peaks, and per band history_slices
+// gains, oldest first.
 namespace telemetry {
 inline constexpr std::size_t input_peak = 0;  // left, right
 inline constexpr std::size_t output_peak = 2; // left, right

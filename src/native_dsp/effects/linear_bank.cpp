@@ -62,6 +62,7 @@ void LinearBank::reset() noexcept {
   position_ = 0;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): left then right, as everywhere.
 void LinearBank::process(double left, double right, std::span<double> out_left,
                          std::span<double> out_right) noexcept {
   for (std::size_t k = 0; k < bands_; ++k) {

@@ -27,7 +27,7 @@ Drums need their attack brought forward or rounded off and their ring shortened 
    Each band's gain applies to that band; Mix blends each band with itself unshaped, so a partial mix does not comb. Solo plays only the soloed bands, fading over 20 ms.
 4. **Lookahead** delays the bands against their detectors, so the gain is in place when the hit arrives. Two milliseconds lift the first cycle of a 1 kHz hit by the whole setting.
 5. **Clip** passes the sum, after Output, through Edge's curve at half its widest knee, under the ceiling, four times oversampled through Edge's light filters (0.77 ms). Added punch then cannot overshoot: a hit lifted 12 dB into a −6 dBFS ceiling peaks 0.15 dB over it, where unclipped it would pass 6 dB over.
-6. **Telemetry:** input and output peaks per channel (held 1 s), how far Clip took the loudest peak down, the latency, the band count and the crossovers, each band's gain now, and a scrolling view of the last 2 s in 256 slices: the input's and the output's peak and each band's gain furthest from 0 dB.
+6. **Telemetry:** input and output peaks per channel and how far Clip took the loudest peak down, each falling 60 dB a second; the latency, the band count and the crossovers, each band's gain now, and a scrolling view of the last 2 s in 256 slices: the input's and the output's peak and each band's gain furthest from 0 dB.
 7. **Presets,** each measured on the hits it is for (the onset contrast: the first 15 ms against 30–150 ms on):
    - Kick Snap: attack +6 dB, sustain −2 dB, 6 ms, 1 ms lookahead.
    - Snare Crack: attack +7 dB, 8 ms, 1 ms lookahead.

@@ -85,7 +85,11 @@ int main() {
           const Transport transport{0.0, 0.0, 0.0, beats_per_bar};
           const auto start = std::chrono::steady_clock::now();
           for (auto& runtime : chain) {
-            (void)runtime->process(buffer, {}, position, 1, transport, {});
+            if (runtime->process(buffer, {}, position, 1, transport, {}) !=
+                effects::EffectProcessStatus::rendered) {
+              std::fprintf(stderr, "a block was rejected\n");
+              return 1;
+            }
           }
           const std::chrono::duration<double> elapsed = std::chrono::steady_clock::now() - start;
           times.push_back(elapsed.count());

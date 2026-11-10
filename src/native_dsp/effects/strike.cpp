@@ -475,6 +475,7 @@ private:
   }
 
   // The view: the dry and shaped sums' peaks and each band's gain.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): named at the one call.
   void file(const std::array<double, 2>& dry, const std::array<double, 2>& wet) noexcept {
     slice_input_ = std::max(slice_input_, std::max(std::fabs(dry[0]), std::fabs(dry[1])));
     slice_output_ = std::max(slice_output_, std::max(std::fabs(wet[0]), std::fabs(wet[1])));
