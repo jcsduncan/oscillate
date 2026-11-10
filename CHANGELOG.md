@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.0](https://github.com/jcsduncan/oscillate/compare/v0.3.0...v0.4.0) (2026-11-10)
+
+
+### Features
+
+* **app:** retire the automation forms; the arrangement lanes edit everything ([#336](https://github.com/jcsduncan/oscillate/issues/336)) ([8336289](https://github.com/jcsduncan/oscillate/commit/83362891049598f690a732fabec1965d1132a338))
+* **app:** warp markers on the arrangement and the project tempo lane ([#330](https://github.com/jcsduncan/oscillate/issues/330)) ([a41fd83](https://github.com/jcsduncan/oscillate/commit/a41fd83b1990e8ace429f4f26d182498fe30f17f))
+* **native_dsp,app,tools:** Keel adaptive tonal balance toward a target curve ([#356](https://github.com/jcsduncan/oscillate/issues/356)) ([de923e8](https://github.com/jcsduncan/oscillate/commit/de923e8b835b631c44af694aff63cefa57c80056))
+* **native_dsp,app,tools:** match EQ and tonal balance targets in Lens ([#355](https://github.com/jcsduncan/oscillate/issues/355)) ([758069f](https://github.com/jcsduncan/oscillate/commit/758069ffcccf5083bf1cec3aaeaa60b9476ddfc7))
+* **native_dsp,app,tools:** Stick sampled acoustic drums ([#342](https://github.com/jcsduncan/oscillate/issues/342)) ([fc551ef](https://github.com/jcsduncan/oscillate/commit/fc551ef31bb38b21e8d48a2a5e4afc710abeb09e))
+* **native_dsp,app,tools:** Strike transient shaper, single-band and multiband ([#353](https://github.com/jcsduncan/oscillate/issues/353)) ([f611981](https://github.com/jcsduncan/oscillate/commit/f611981eeb79fdb40cbc6b7c0b41330642539ed7))
+* **native_dsp,application,app:** Edge ceiling; linked effect edits all or nothing ([#340](https://github.com/jcsduncan/oscillate/issues/340)) ([7803e43](https://github.com/jcsduncan/oscillate/commit/7803e43fbb873c54c2d48202f8b42ab437cf6c19))
+* **native_dsp,export,app,tools:** Ceiling mastering limiter and noise-shaped dither ([#352](https://github.com/jcsduncan/oscillate/issues/352)) ([7913d1c](https://github.com/jcsduncan/oscillate/commit/7913d1c9bc09c297de4f8271afa252aa3625e64e))
+* **native_dsp,persistence,app:** Cast convolution reverb and Hush gate ([#351](https://github.com/jcsduncan/oscillate/issues/351)) ([812b2da](https://github.com/jcsduncan/oscillate/commit/812b2da1c2cfc30898242fc8dae0baa0cdb3f119))
+* **tools,native_dsp:** breakdown, keys and strings audition modes, and the Rolling Sixteenth Bass preset ([#339](https://github.com/jcsduncan/oscillate/issues/339)) ([c2aa11e](https://github.com/jcsduncan/oscillate/commit/c2aa11e422316660928b77ef4c9a0e1845e9e537))
+* **tools:** drums audition mode renders Stick grooves per preset ([#354](https://github.com/jcsduncan/oscillate/issues/354)) ([d0dd59f](https://github.com/jcsduncan/oscillate/commit/d0dd59faf9738b8cb0e6275404cba764950c20ec))
+
+
+### Bug Fixes
+
+* **app:** install live audio edits on the UI thread ([#334](https://github.com/jcsduncan/oscillate/issues/334)) ([5f9de12](https://github.com/jcsduncan/oscillate/commit/5f9de1253680f92f57c10e4934bd3fd64aaad656))
+
 ## [0.3.0](https://github.com/jcsduncan/oscillate/compare/v0.2.0...v0.3.0) (2026-11-09)
 
 
