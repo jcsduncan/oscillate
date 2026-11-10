@@ -122,3 +122,4 @@ never reused. 0070 was never assigned.
 | 0117 | [Ceiling: a true-peak mastering limiter with transient room, an oversampled soft clipper, stereo links, and noise-shaped dither on export](0117-ceiling-mastering-limiter.md) | Accepted; implemented |
 | 0118 | [Strike: a single-band and multiband transient shaper with level-independent detection](0118-strike-transient-shaper.md) | Accepted; implemented |
 | 0119 | [Keel: adaptive tonal balance toward a target curve](0119-keel-adaptive-tonal-balance.md) | Accepted; implemented |
+| 0120 | [Match EQ and tonal balance targets in Lens](0120-match-eq-and-tonal-targets.md) | Accepted; implemented |

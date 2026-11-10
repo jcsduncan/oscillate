@@ -2,10 +2,14 @@
 
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/eq.hpp"
+#include "oscillate/native_dsp/match_eq.hpp"
 
 #include <array>
 #include <cstddef>
 #include <span>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 namespace oscillate::native_dsp::effects::shape {
 
@@ -33,6 +37,13 @@ struct BandStages {
 // A pass filter is its slope's stages (eq_pass_stages); the others are one.
 [[nodiscard]] BandStages band_stages(std::span<const double> values, std::size_t band,
                                      double sample_rate) noexcept;
+
+// Match EQ (ADR-0120): the values that make Shape play `bands` (at most
+// `bands` of them, in order) and nothing else, as (id, value) pairs: each
+// band's On, Kind, Frequency, Q (a shelf's slope) and Gain, and every band
+// past the list off.
+[[nodiscard]] std::vector<std::pair<std::string_view, double>>
+band_values(std::span<const match_eq::Band> bands);
 
 // Telemetry: input and output peak (dBFS, held 1 s) per channel.
 // The display spectra: the mono sum's power in spectrum_bands log-spaced

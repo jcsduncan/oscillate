@@ -58,6 +58,11 @@ Rectangle {
     readonly property bool delta: revision >= 0 && controller.choice("keel.delta") === 1
     readonly property bool referenced: playing && live.referenced === true
 
+    // The genre targets a curve loads from, and the one shown.
+    readonly property var genreTargets: controller.keel_genre_targets()
+    property int genreIndex: 0
+    readonly property var genre: genreTargets.length > 0
+        ? genreTargets[Math.min(genreIndex, genreTargets.length - 1)] : null
     // The drawn curve's parameters, low band to high.
     readonly property var curveIds: controller.parameter_ids("Curve")
     // The target the values describe, before any reference (dB per band).
@@ -424,6 +429,7 @@ Rectangle {
             labels: ["Tilt", "Curve", "Reference"]
         }
         Row {
+            id: curveActions
             x: panel.theme.cardInset
             y: targetChoice.y + targetChoice.height + panel.theme.spaceLg
             spacing: panel.theme.spaceLg
@@ -441,6 +447,55 @@ Rectangle {
                 label: "Flatten"
                 tip: "Set the drawn curve to 0 dB in every band"
                 onClicked: panel.flatten()
+            }
+        }
+        // A measured genre target (Lens's, ADR-0120) or the user's own,
+        // loaded as the curve.
+        Caption {
+            id: genreCaption
+            x: panel.theme.cardInset
+            y: curveActions.y + curveActions.height + panel.theme.spaceLg
+            text: "GENRE TARGET"
+        }
+        Row {
+            x: panel.theme.cardInset
+            y: genreCaption.y + genreCaption.height + panel.theme.spaceXs
+            spacing: panel.theme.spaceSm
+            Kit.Button {
+                objectName: "keelGenrePrevious"
+                theme: panel.theme
+                label: "‹"
+                tip: "The previous target"
+                active: panel.genreTargets.length > 1
+                onClicked: panel.genreIndex = (panel.genreIndex + panel.genreTargets.length - 1)
+                                              % panel.genreTargets.length
+            }
+            Text {
+                objectName: "keelGenreName"
+                width: panel.theme.genreNameWidth
+                height: parent.height
+                verticalAlignment: Text.AlignVCenter
+                horizontalAlignment: Text.AlignHCenter
+                text: panel.genre !== null ? panel.genre.name : "None"
+                color: panel.genre !== null ? panel.theme.ink : panel.theme.inkFaint
+                font.pixelSize: panel.theme.typeLabel
+                elide: Text.ElideRight
+            }
+            Kit.Button {
+                objectName: "keelGenreNext"
+                theme: panel.theme
+                label: "›"
+                tip: "The next target"
+                active: panel.genreTargets.length > 1
+                onClicked: panel.genreIndex = (panel.genreIndex + 1) % panel.genreTargets.length
+            }
+            Kit.Button {
+                objectName: "keelUseGenre"
+                theme: panel.theme
+                label: "Use"
+                tip: "Load this target's median as the curve"
+                active: panel.genre !== null
+                onClicked: panel.controller.keel_use_target(panel.genre.id)
             }
         }
         Kit.Knob {

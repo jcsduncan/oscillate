@@ -45,6 +45,9 @@ constexpr std::size_t first_curve = t::first_curve;
 } // namespace p
 
 static_assert(t::curve_count == bands);
+// The tonal grid (ADR-0120) is Keel's less one band at each end.
+static_assert(tonal::bands + 2 == bands);
+static_assert(tonal::first_band_step + static_cast<int>(reference_band) == 1);
 static_assert(telemetry::size <= max_telemetry_values);
 
 constexpr std::size_t parameter_count = t::parameters.size();
@@ -714,7 +717,12 @@ private:
 
   // A tracker's balance: smoothed across bands, in dB.
   [[nodiscard]] std::array<double, bands> balance(const Tracker& tracker) const noexcept {
-    const auto& power = tracker.power();
+    return smoothed(tracker.power());
+  }
+
+  // Band powers smoothed a third of an octave each way, in dB.
+  [[nodiscard]] std::array<double, bands>
+  smoothed(const std::array<double, bands>& power) const noexcept {
     std::array<double, bands> out{};
     for (std::size_t b = 0; b < bands; ++b) {
       double sum = smooth_centre * power[b];
@@ -789,8 +797,14 @@ private:
     }
     centre(spectrum, presence);
     shown_spectrum_ = spectrum;
-    // The target, centred over the same bands.
-    auto target = target_curve(values_);
+    // The target, smoothed as the balance is (so a steep curve is compared
+    // like with like) and centred over the same bands.
+    std::array<double, bands> drawn_power{};
+    const auto drawn = target_curve(values_);
+    for (std::size_t b = 0; b < bands; ++b) {
+      drawn_power[b] = std::pow(10.0, drawn[b] / decibels_per_bel);
+    }
+    auto target = smoothed(drawn_power);
     if (source_ == t::Target::reference) {
       if (!reference_.tracked()) {
         shown_target_.fill(empty_db);
@@ -1018,6 +1032,25 @@ Curve target_curve(std::span<const double> values) noexcept {
   for (std::size_t b = 0; b < bands; ++b) {
     out[b] = values[p::tilt] * std::log2(band_hz(b) / reference_hz) +
              (drawn ? values[p::first_curve + b] : 0.0);
+  }
+  return out;
+}
+
+Curve curve_from(const tonal::Curve& levels) noexcept {
+  Curve out{};
+  for (std::size_t b = 0; b < tonal::bands; ++b) {
+    out[b + 1] = levels[b];
+  }
+  out.front() = levels.front();
+  out.back() = levels.back();
+  // Only the shape counts: centred, so the curve's range holds it.
+  double mean = 0.0;
+  for (const double db : out) {
+    mean += db;
+  }
+  mean /= static_cast<double>(bands);
+  for (double& db : out) {
+    db -= mean;
   }
   return out;
 }

@@ -154,7 +154,7 @@ and an oversampled clip under a ceiling.
 
 Adaptive tonal balance: tracks the programme's third-octave balance over
 Speed seconds, gated against silences and bursts, and steers it toward a
-target (a tilt, a drawn or learned curve, or a reference on the sidechain)
+target (a tilt, a drawn, learned or genre curve, or a reference on the sidechain)
 with minimum-phase shelves and bells and no latency. Amount, the limits,
 region weights, Level Match and Delta.
 [ADR-0119](../../../docs/decisions/0119-keel-adaptive-tonal-balance.md)
@@ -215,8 +215,11 @@ rotator.
 ### Lens
 
 Spectrum analyser with a spectrogram and reference matching; audio passes
-untouched.
-[ADR-0042](../../../docs/decisions/0042-native-utility-suite.md)
+untouched. Match EQ fits Shape bands that move the mix to the sidechain or
+a tonal balance target, and the tonal balance view shows the mix against a
+target measured from references.
+[ADR-0042](../../../docs/decisions/0042-native-utility-suite.md),
+[ADR-0120](../../../docs/decisions/0120-match-eq-and-tonal-targets.md)
 
 ![Lens panel](../../../docs/images/effects/lens.png)
 

@@ -13,9 +13,12 @@
 //   oscillate_nova_audition --keys|--keys2 <output directory> [--stems]
 // renders the keys audition sets (keys.hpp).
 //   oscillate_nova_audition --strings <output directory> [--stems]
-// renders the strings audition set (strings.hpp).
+// renders the strings audition set (strings.hpp), and
+//   oscillate_nova_audition --drums <output directory>
+// the Stick grooves (drums.hpp).
 #include "audition.hpp"
 #include "breakdown.hpp"
+#include "drums.hpp"
 #include "keys.hpp"
 #include "pads.hpp"
 #include "strings.hpp"
@@ -146,7 +149,8 @@ int main(int argc, char** argv) {
   if (argc < 2)
     fail("usage: oscillate_nova_audition <output directory> [preset...] | --pads <output "
          "directory> <lead.mid> | --breakdown <output directory> [--stems] | --keys|--keys2 "
-         "<output directory> [--stems] | --strings <output directory> [--stems]");
+         "<output directory> [--stems] | --strings <output directory> [--stems] | --drums <output "
+         "directory>");
   if (std::string_view(argv[1]) == tools::pads::flag) {
     if (argc != 4)
       fail("usage: oscillate_nova_audition --pads <output directory> <lead.mid>");
@@ -176,6 +180,12 @@ int main(int argc, char** argv) {
     if (argc != 3 && !stems)
       fail("usage: oscillate_nova_audition --strings <output directory> [--stems]");
     tools::strings::render_set(argv[2], stems);
+    return 0;
+  }
+  if (std::string_view(argv[1]) == tools::drums::flag) {
+    if (argc != 3)
+      fail("usage: oscillate_nova_audition --drums <output directory>");
+    tools::drums::render_set(argv[2]);
     return 0;
   }
   const fs::path out = argv[1];

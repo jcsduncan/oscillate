@@ -6,6 +6,7 @@
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/keel.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
+#include "oscillate/native_dsp/tonal_targets.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QColor>
@@ -34,7 +35,8 @@
 
 // The Keel panel (ADR-0119): every parameter on a control (the curve's on
 // the balance view); the text fits; the subtitle follows the target; the
-// view edits the drawn curve by pointer and keys; Flatten and Learn; the
+// view edits the drawn curve by pointer and keys; Flatten, Learn and the
+// genre targets; the
 // telemetry decodes into the view, the history and the meters; the real
 // Keel's readings reach the panel; presets and status; and screenshots on
 // request.
@@ -381,6 +383,35 @@ void the_real_keel_reaches_the_panel_and_learns() {
   }
 }
 
+// A genre target (ADR-0120) loads as the curve: the arrows step through
+// the targets and Use writes the shown one's median, centred on Keel's
+// grid, with Target on Curve, as one edit.
+void a_genre_target_loads_as_the_curve() {
+  namespace tonal = oscillate::native_dsp::tonal;
+  InMemoryNativeSynthAdapter adapter(preset("Default"));
+  NativeSynthDeviceController controller(table(), adapter);
+  auto panel = load_panel(controller);
+  const auto targets = tonal::factory_targets();
+  require(targets.size() > 1, "factory targets to step through");
+  require(text_of(*panel, QStringLiteral("keelGenreName")) == qs(targets[0].name),
+          "the first target shows");
+  click(*panel, item(*panel, QStringLiteral("keelGenreNext")));
+  require(wait_for_text(*panel, QStringLiteral("keelGenreName"), qs(targets[1].name)),
+          "the next target shows");
+  const auto revision = controller.revision();
+  click(*panel, item(*panel, QStringLiteral("keelUseGenre")));
+  require(controller.revision() == revision + 1, "one edit");
+  require(controller.choice(QStringLiteral("keel.target")) == target_curve, "the curve target");
+  const auto curve = keel::curve_from(targets[1].median);
+  for (std::size_t b = 0; b < keel::bands; ++b) {
+    require(std::fabs(controller.value(curve_id(b)) - curve[b]) < tolerance_db,
+            "the curve is the target's median at band " + std::to_string(b));
+  }
+  require(!controller.keel_use_target(QStringLiteral("no-such-target")),
+          "an unknown id loads nothing");
+  oscillate::test::panel_fit::require_text_fits(panel->root, "keel genre");
+}
+
 void presets_and_status() {
   InMemoryNativeSynthAdapter adapter(preset("Default"));
   NativeSynthDeviceController controller(table(), adapter);
@@ -446,6 +477,7 @@ int main(int argc, char** argv) {
     the_view_edits_the_curve();
     telemetry_decodes_into_the_view();
     the_real_keel_reaches_the_panel_and_learns();
+    a_genre_target_loads_as_the_curve();
     presets_and_status();
     screenshots_if_requested();
   } catch (const std::exception& error) {

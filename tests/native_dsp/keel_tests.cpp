@@ -3,6 +3,7 @@
 #include "oscillate/native_dsp/dsp/math.hpp"
 #include "oscillate/native_dsp/effects/keel.hpp"
 #include "oscillate/native_dsp/loudness.hpp"
+#include "oscillate/native_dsp/tonal_targets.hpp"
 #include "oscillate/test/allocation_counter.hpp"
 #include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/cases.hpp"
@@ -193,16 +194,18 @@ std::array<double, keel::bands> balance_db(const Stereo& x, std::size_t from, st
   return out;
 }
 
-// The largest distance of `heard` from `wanted` over the judged bands,
-// once both are centred there.
-double deviation_db(const std::array<double, keel::bands>& heard, const keel::Curve& wanted) {
+// The largest distance of `heard` from `wanted` over the bands from
+// `first` to `last` (the judged bands unless given), once both are centred
+// there.
+double deviation_db(const std::array<double, keel::bands>& heard, const keel::Curve& wanted,
+                    std::size_t first = judged_first(), std::size_t last = judged_last()) {
   double mean = 0.0;
-  for (std::size_t b = judged_first(); b <= judged_last(); ++b) {
+  for (std::size_t b = first; b <= last; ++b) {
     mean += heard[b] - wanted[b];
   }
-  mean /= static_cast<double>(judged_last() - judged_first() + 1);
+  mean /= static_cast<double>(last - first + 1);
   double most = 0.0;
-  for (std::size_t b = judged_first(); b <= judged_last(); ++b) {
+  for (std::size_t b = first; b <= last; ++b) {
     most = std::max(most, std::fabs(heard[b] - wanted[b] - mean));
   }
   return most;
@@ -210,15 +213,16 @@ double deviation_db(const std::array<double, keel::bands>& heard, const keel::Cu
 
 // The RMS distance of `heard` from `wanted` over the judged bands, once
 // both are centred there.
-double rms_deviation_db(const std::array<double, keel::bands>& heard, const keel::Curve& wanted) {
+double rms_deviation_db(const std::array<double, keel::bands>& heard, const keel::Curve& wanted,
+                        std::size_t first = judged_first(), std::size_t last = judged_last()) {
   double mean = 0.0;
-  for (std::size_t b = judged_first(); b <= judged_last(); ++b) {
+  for (std::size_t b = first; b <= last; ++b) {
     mean += heard[b] - wanted[b];
   }
-  const auto n = static_cast<double>(judged_last() - judged_first() + 1);
+  const auto n = static_cast<double>(last - first + 1);
   mean /= n;
   double sum = 0.0;
-  for (std::size_t b = judged_first(); b <= judged_last(); ++b) {
+  for (std::size_t b = first; b <= last; ++b) {
     const double d = heard[b] - wanted[b] - mean;
     sum += d * d;
   }
@@ -724,6 +728,51 @@ void a_reference_target_is_reached() {
   REQUIRE_EQ(traced.last[keel::telemetry::referenced], 1.0F, "the reference is reported");
 }
 
+// The genre targets (ADR-0120) sit on Keel's grid one band in from each
+// end. Steered toward each factory target, pink noise falling as masters
+// do (1.6-2.0 dB RMS from the targets from 50 Hz to 16 kHz) comes within
+// 1.25 dB RMS, less than 60% of where it started: what stays is the
+// targets' third-octave detail, finer than bells an octave apart. A
+// programme that already has a target's balance is moved by less than
+// 1 dB in any band. Under 50 Hz the targets fall some 30 dB in an octave.
+void genre_targets_are_reached() {
+  constexpr double seconds = 12.0;
+  constexpr double reached_db = 1.25;
+  constexpr double reached_share = 0.6;
+  constexpr double rest_db = 1.0;
+  constexpr double genre_low_hz = 50.0;
+  // Masters fall about this much against pink noise (keel_table).
+  constexpr double master_tilt = -2.5;
+  namespace tonal = oscillate::native_dsp::tonal;
+  for (std::size_t b = 0; b < tonal::bands; ++b) {
+    REQUIRE_LT(std::fabs(keel::band_hz(b + 1) - tonal::band_hz(b)), tolerance::double_rounding,
+               "the grids share their centres");
+  }
+  const auto first = band_of(genre_low_hz);
+  const auto targets = tonal::factory_targets();
+  REQUIRE_TRUE(!targets.empty(), "factory targets");
+  for (const auto& target : targets) {
+    auto values = wide(defaults());
+    values[at("keel.target")] = target_curve;
+    const auto wanted = keel::curve_from(target.median);
+    keel::set_curve(values, wanted);
+    const auto steered = trace(values, pink(master_tilt, frames(seconds)));
+    const double before = rms_deviation_db(tilted(master_tilt), wanted, first, judged_last());
+    const double off = rms_deviation_db(plus(tilted(master_tilt), steered.corrections.back()),
+                                        wanted, first, judged_last());
+    REQUIRE_LT(off, reached_db, target.id + " is reached: " + std::to_string(off));
+    REQUIRE_LT(off, reached_share * before,
+               target.id + " moves toward it: " + std::to_string(before) + " to " +
+                   std::to_string(off));
+    const auto matched = trace(values, pink(0.0, frames(seconds), 1, rate, &wanted));
+    double most = 0.0;
+    for (std::size_t b = first; b <= judged_last(); ++b) {
+      most = std::max(most, std::fabs(matched.corrections.back()[b]));
+    }
+    REQUIRE_LT(most, rest_db, target.id + " already met: " + std::to_string(most));
+  }
+}
+
 // Learn captures the programme's balance as the target: on the same
 // programme the correction then rests near 0 dB, with or without a tilt.
 void learn_captures_the_balance() {
@@ -1172,6 +1221,7 @@ int main(int argc, char** argv) {
           {"minimum_phase_delays_little", [] { minimum_phase_delays_little(); }},
           {"a_curve_target_is_reached", [] { a_curve_target_is_reached(); }},
           {"a_reference_target_is_reached", [] { a_reference_target_is_reached(); }},
+          {"genre_targets_are_reached", [] { genre_targets_are_reached(); }},
           {"learn_captures_the_balance", [] { learn_captures_the_balance(); }},
           {"regions_weight_the_correction", [] { regions_weight_the_correction(); }},
           {"limits_hold", [] { limits_hold(); }},

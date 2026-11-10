@@ -10,7 +10,7 @@
 | Relay | 1.1–1.5% | Two lines, the diffusion chain (always fed) and three loop characters. |
 | Vista | 0.9–1.0% | Two phase-compensated Linkwitz-Riley trees (mid and side), the decorrelator and meters. |
 | Pocket | 6.4–6.7% | 24 bands of fourth-order analysis for kick and bass, 24 bells, and the active-set bell solve every 32 frames. |
-| Lens | 4.1–8.4% (13.1% with the sidechain overlay) | Three window sizes per hop; long windows update at 87.5% overlap (every 4–8 hops), short ones every 10.7 ms; 400 display points from running bin sums. |
+| Lens | 4.1–8.4% (13.1% with the sidechain overlay), and about 0.25% for the tonal meter | Three window sizes per hop; long windows update at 87.5% overlap (every 4–8 hops), short ones every 10.7 ms; 400 display points from running bin sums. The tonal meter (ADR-0120): buffering every frame, then one 16384-point transform (0.34 ms on an i7-10700K) and the band sums every 8192 frames; 0.25% is all of it. |
 | Loudness | 0.2% | K-weighting biquads, the 4× windowed-sinc true-peak interpolator and exact gating once per 100 ms. |
 | Scope | 0.1% (about 0.8% with a sidechain) | The sweep's min/max columns; with a sidechain, a 16384-point cross-correlation every 85 ms. |
 | Tune | 2.8% (6.1% Bass, under 0.1% Kick) | An NSDF by FFT and two single-bin DFTs about 23 times a second (Instrument and Bass), or a low-pass and zero crossings per sample (Kick). |
@@ -125,7 +125,7 @@ The synthetic drum loop (tilt −2.62 dB/oct):
 
 | Preset | Before RMS / max dB | After RMS / max dB | LUFS change | Wander dB | Onset contrast change L/M/H |
 |---|---|---|---|---|---|
-| Default | 6.81 / 14.49 | 4.83 / 11.35 | +0.04 | 0.05 | +0.89/−0.21/−0.16 |
+| Default | 6.81 / 14.49 | 4.83 / 11.34 | +0.04 | 0.05 | +0.89/−0.21/−0.16 |
 | Gentle Polish | 6.81 / 14.49 | 5.63 / 12.68 | +0.01 | 0.02 | +0.46/−0.12/−0.09 |
 | Tame Harsh | 6.81 / 14.49 | 6.40 / 13.89 | +0.00 | 0.01 | −0.01/−0.00/−0.15 |
 | Warm It Up | 6.94 / 14.65 | 5.34 / 12.16 | +0.02 | 0.03 | +0.48/−0.15/−0.13 |

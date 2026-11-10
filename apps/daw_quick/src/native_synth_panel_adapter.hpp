@@ -216,6 +216,16 @@ public:
     (void)frame;
     return false;
   }
+  // Values ((id, value) pairs) written to the built-in effect `engine` right
+  // after this effect on its chain, or to a new one inserted right after it
+  // when the next is not one, as one undo step: Lens writing its match EQ
+  // into Shape (ADR-0120). False when it is refused; status() says why.
+  virtual bool write_next_effect(std::string_view engine,
+                                 std::span<const std::pair<std::string_view, double>> values) {
+    (void)engine;
+    (void)values;
+    return false;
+  }
   // Macros (ADR-0059): the index of the track macro driving `parameter_id`,
   // mapping it to macro `index` over a plain range (moving it off another
   // macro first), and unmapping it. Adapters without a track's macros (tests,

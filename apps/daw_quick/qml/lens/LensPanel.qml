@@ -8,7 +8,9 @@ import "../devicekit" as Kit
 // second curve, peak hold, sidechain overlay and difference over it, and the
 // strongest resonances marked with their notes; beside it the resonance
 // table; under it a scrolling spectrogram on the same axis and the reading;
-// below, every control, Freeze given its own plate. Every control reads and
+// below, every control, Freeze given its own plate; at the bottom the match
+// EQ (its correction and the Shape bands that draw it, ADR-0120) and the
+// mix against a tonal balance target. Every control reads and
 // writes through `controller` (NativeSynthDeviceController for Lens); the
 // panel itself only keeps how it draws (dB range, ceiling, the difference
 // curve). With nothing playing it shows a typical mix through the settings.
@@ -98,6 +100,8 @@ Rectangle {
     }
     function poll() {
         live = decode(controller.telemetry())
+        if (match)
+            match.poll()
         // A new analysis adds a spectrogram row; a frozen or silent Lens adds
         // none.
         if (live.playing && live.hops !== lastHops) {
@@ -637,7 +641,7 @@ Rectangle {
     // ---- Controls --------------------------------------------------------------------
 
     readonly property real rowCY: rowBY + rowBHeight + gap
-    readonly property real rowCHeight: panel.height - rowCY - margin
+    readonly property real rowCHeight: theme.rowCHeight
 
     Kit.Card {
         theme: panel.theme
@@ -875,6 +879,239 @@ Rectangle {
             color: panel.theme.inkFaint
             font.pixelSize: panel.theme.typeCaption
             wrapMode: Text.WordWrap
+        }
+    }
+
+    // ---- Match EQ and tonal balance (ADR-0120) ------------------------------------
+
+    readonly property var match: controller.match
+    readonly property int matchRevision: match ? match.revision : 0
+    readonly property real rowDY: rowCY + rowCHeight + gap
+    readonly property real rowDHeight: panel.height - rowDY - margin
+    readonly property bool matchToTarget: revision >= 0 && controller.choice("lens.match_source") === 1
+
+    Kit.Card {
+        theme: panel.theme
+        id: matchPlate
+        objectName: "lensMatchPlate"
+        title: "MATCH EQ"
+        note: panel.matchRevision >= 0 && panel.match && panel.match.applyMessage !== ""
+            ? panel.match.applyMessage.toUpperCase()
+            : panel.matchRevision >= 0 && panel.match && panel.match.ready
+            ? panel.match.bands.length + " SHAPE BANDS · FIT ERROR " + Format.number(panel.match.fitRms, 2)
+              + " dB RMS, " + Format.number(panel.match.fitMax, 1) + " dB PEAK"
+            : panel.matchToTarget ? "PLAY THE MIX TO MATCH IT TO " + (panel.match ? panel.match.targetName.toUpperCase() : "")
+            : "PLAY A REFERENCE INTO THE SIDECHAIN"
+        noteColor: panel.match && panel.match.ready ? panel.theme.live : panel.theme.inkFaint
+        x: panel.margin
+        y: panel.rowDY
+        width: panel.theme.matchPlateWidth
+        height: panel.rowDHeight
+        LensMatchPlot {
+            x: panel.theme.cardInset
+            y: panel.theme.cardContentY
+            width: panel.theme.matchPlotWidth
+            height: matchPlate.height - panel.theme.cardContentY - panel.theme.cardInset
+            theme: panel.theme
+            live: panel.matchRevision >= 0 && panel.match !== null && panel.match.ready
+            hz: panel.match ? panel.match.fineHz : []
+            correction: panel.matchRevision >= 0 && panel.match ? panel.match.correction : []
+            response: panel.matchRevision >= 0 && panel.match ? panel.match.response : []
+            bands: panel.matchRevision >= 0 && panel.match ? panel.match.bands : []
+            lowLimitHz: panel.revision >= 0 ? panel.controller.value("lens.match_low") : 0
+            highLimitHz: panel.revision >= 0 ? panel.controller.value("lens.match_high") : 0
+        }
+        Caption {
+            x: panel.theme.matchControlsX
+            y: panel.theme.cardContentY
+            text: "MATCH TO"
+        }
+        // Match To and Smoothing side by side.
+        readonly property real segmentWidth: (width - panel.theme.matchControlsX - panel.theme.cardInset
+                                              - panel.gap) / 2
+        Kit.Segment {
+            x: panel.theme.matchControlsX
+            y: panel.theme.segmentY
+            width: matchPlate.segmentWidth
+            height: panel.theme.segmentRowHeight
+            controller: panel.controller
+            theme: panel.theme
+            parameterId: "lens.match_source"
+            labels: ["SIDECHAIN", "TARGET"]
+        }
+        Caption {
+            x: panel.theme.matchControlsX + matchPlate.segmentWidth + panel.gap
+            y: panel.theme.cardContentY
+            text: "SMOOTHING · OCT"
+        }
+        Kit.Segment {
+            x: panel.theme.matchControlsX + matchPlate.segmentWidth + panel.gap
+            y: panel.theme.segmentY
+            width: matchPlate.segmentWidth
+            height: panel.theme.segmentRowHeight
+            controller: panel.controller
+            theme: panel.theme
+            parameterId: "lens.match_smoothing"
+            labels: ["1/6", "1/3", "1/2", "1"]
+        }
+        Row {
+            x: panel.theme.matchControlsX
+            y: panel.theme.matchKnobY
+            width: matchPlate.width - panel.theme.matchControlsX - panel.theme.cardInset
+            Repeater {
+                id: matchKnobs
+                model: [["lens.match_amount", "Amount"], ["lens.match_low", "Low"], ["lens.match_high", "High"],
+                        ["lens.match_boost", "Boost"], ["lens.match_cut", "Cut"]]
+                delegate: Item {
+                    id: knobCell
+                    required property var modelData
+                    width: (matchPlate.width - panel.theme.matchControlsX - panel.theme.cardInset) / matchKnobs.count
+                    height: matchKnob.implicitHeight
+                    Kit.Knob {
+                        id: matchKnob
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        controller: panel.controller
+                        theme: panel.theme
+                        parameterId: knobCell.modelData[0]
+                        label: knobCell.modelData[1]
+                        diameter: panel.theme.matchKnobDiameter
+                    }
+                }
+            }
+        }
+        Row {
+            anchors.right: parent.right
+            anchors.rightMargin: panel.theme.cardInset
+            y: panel.theme.matchButtonsY
+            spacing: panel.theme.spaceMd
+            Text {
+                objectName: "lensMatchSeconds"
+                anchors.verticalCenter: parent.verticalCenter
+                text: panel.matchRevision >= 0 && panel.match
+                    ? "AVERAGE " + Format.number(panel.match.seconds, 0) + " s" : ""
+                color: panel.theme.inkFaint
+                font.pixelSize: panel.theme.typeMicro
+                font.bold: true
+                font.letterSpacing: panel.theme.captionTightSpacing
+            }
+            Kit.Button {
+                objectName: "lensMatchReset"
+                theme: panel.theme
+                small: true
+                label: "Restart"
+                tip: "Start the long-term average again"
+                onClicked: panel.match.reset()
+            }
+            Kit.Button {
+                objectName: "lensMatchApply"
+                theme: panel.theme
+                small: true
+                prime: true
+                active: panel.matchRevision >= 0 && panel.match !== null && panel.match.ready
+                label: "Apply to Shape"
+                tip: "Write these bands into the Shape after Lens (one undo step)"
+                onClicked: panel.match.apply()
+            }
+        }
+    }
+
+    Kit.Card {
+        theme: panel.theme
+        id: tonalPlate
+        objectName: "lensTonalPlate"
+        title: "TONAL BALANCE"
+        note: panel.matchRevision >= 0 && panel.match && panel.match.placements.length > 0
+            ? panel.match.inRange + " OF " + panel.match.placements.length + " BANDS IN RANGE"
+            : "PLAY THE MIX TO MEASURE IT"
+        noteColor: panel.match && panel.match.placements.length > 0
+            && panel.match.inRange === panel.match.placements.length ? panel.theme.live : panel.theme.inkFaint
+        x: matchPlate.x + matchPlate.width + panel.gap
+        y: panel.rowDY
+        width: panel.width - panel.margin - x
+        height: panel.rowDHeight
+        Row {
+            x: panel.theme.cardInset
+            y: panel.theme.tonalPickerY
+            spacing: panel.theme.spaceSm
+            Kit.Button {
+                objectName: "lensTargetPrevious"
+                theme: panel.theme
+                small: true
+                label: "◀"
+                tip: "Previous target"
+                onClicked: panel.match.step_target(-1)
+            }
+            Column {
+                width: panel.theme.tonalPickerNameWidth
+                anchors.verticalCenter: parent.verticalCenter
+                Text {
+                    objectName: "lensTargetName"
+                    width: parent.width
+                    elide: Text.ElideRight
+                    text: panel.matchRevision >= 0 && panel.match ? panel.match.targetName : ""
+                    color: panel.theme.ink
+                    font.pixelSize: panel.theme.typeBody
+                    font.bold: true
+                }
+                Text {
+                    text: {
+                        if (panel.matchRevision < 0 || !panel.match)
+                            return ""
+                        for (const t of panel.match.targets) {
+                            if (t.id === panel.match.targetId)
+                                return (t.user ? "YOUR TARGET · " : "") + t.references
+                                    + (t.references === 1 ? " REFERENCE" : " REFERENCES")
+                        }
+                        return ""
+                    }
+                    color: panel.theme.inkFaint
+                    font.pixelSize: panel.theme.typeMicro
+                    font.letterSpacing: panel.theme.subcaptionSpacing
+                }
+            }
+            Kit.Button {
+                objectName: "lensTargetNext"
+                theme: panel.theme
+                small: true
+                label: "▶"
+                tip: "Next target"
+                onClicked: panel.match.step_target(1)
+            }
+        }
+        Kit.Button {
+            objectName: "lensTargetSave"
+            x: tonalPlate.width - panel.theme.cardInset - width
+            y: panel.theme.tonalPickerY
+            theme: panel.theme
+            small: true
+            label: "Save as target"
+            tip: "Save what the sidechain played (else the input) as your own target"
+            onClicked: panel.match.save_target()
+        }
+        LensTonalPlot {
+            x: panel.theme.cardInset
+            y: panel.theme.tonalPlotY
+            width: tonalPlate.width - 2 * panel.theme.cardInset
+            height: tonalPlate.height - panel.theme.tonalPlotY - panel.theme.tonalFooterBottom
+            theme: panel.theme
+            live: panel.matchRevision >= 0 && panel.match !== null && panel.match.tonal.length > 0
+            hz: panel.match ? panel.match.bandHz : []
+            levels: panel.matchRevision >= 0 && panel.match ? panel.match.tonal : []
+            low: panel.matchRevision >= 0 && panel.match ? panel.match.targetLow : []
+            median: panel.matchRevision >= 0 && panel.match ? panel.match.targetMedian : []
+            high: panel.matchRevision >= 0 && panel.match ? panel.match.targetHigh : []
+            placements: panel.matchRevision >= 0 && panel.match ? panel.match.placements : []
+        }
+        Text {
+            objectName: "lensMatchMessage"
+            x: panel.theme.cardInset
+            y: tonalPlate.height - panel.theme.tonalFooterBottom + panel.theme.spaceSm
+            width: tonalPlate.width - 2 * panel.theme.cardInset
+            elide: Text.ElideRight
+            text: panel.matchRevision >= 0 && panel.match && panel.match.message !== "" ? panel.match.message
+                : "Range: the middle half of the target's references, loudness-normalised."
+            color: panel.theme.inkFaint
+            font.pixelSize: panel.theme.typeCaption
         }
     }
 

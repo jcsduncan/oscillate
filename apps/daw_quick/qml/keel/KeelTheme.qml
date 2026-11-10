@@ -121,12 +121,13 @@ KitTheme {
     property int meterValueSize: 15
 
     property real balanceCardHeight: 132
-    property real targetCardHeight: 168
+    property real targetCardHeight: 214
     property real regionsCardHeight: 132
     property int knobDiameterLarge: 54
     property int knobDiameterMedium: 46
     property int knobDiameterSmall: 40
     property real targetChoiceWidth: 250
+    property real genreNameWidth: 180
     property real noteGap: 8
 
     segmentedEqualCells: true

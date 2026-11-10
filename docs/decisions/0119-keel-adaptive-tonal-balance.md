@@ -1,7 +1,7 @@
 # ADR-0119 — Keel: adaptive tonal balance toward a target curve
 
 **Status:** Accepted and implemented. **Date:** 10 November 2026.
-**Builds on:** ADR-0040 (native effect platform), ADR-0042 (Lens's band powers, where pink noise reads flat), ADR-0064 (Temper's dynamic EQ), ADR-0103 (shared device panel parts), ADR-0117 (the limiter audit).
+**Builds on:** ADR-0040 (native effect platform), ADR-0042 (Lens's band powers, where pink noise reads flat), ADR-0064 (Temper's dynamic EQ), ADR-0120 (tonal balance targets), ADR-0103 (shared device panel parts), ADR-0117 (the limiter audit).
 **Contract:** `include/oscillate/native_dsp/effects/keel.hpp`, the table `src/native_dsp/effects/keel_table.hpp`. No schema change.
 
 ## Context
@@ -18,7 +18,9 @@ A master needs its long-term tonal balance (how much low, mid and top it has aga
    - the curve: 31 values, one per third-octave band (±24 dB).
 
    Target, Level Match, Delta and the curve are not automatable.
-2. **The target grid** is the interface other target sources write to: 31 third-octave bands at 1 kHz × 2^((b − 17)/3), from 19.7 Hz to 20.2 kHz (`keel::band_hz`). A target is one dB value per band (`keel::Curve`), and only its shape counts. `keel::set_curve` writes a curve into the parameters; `keel::target_curve` reads the target back. Genre targets measured from references (#346) are curves on this grid.
+2. **The target grid** is 31 third-octave bands at 1 kHz × 2^((b − 17)/3), from 19.7 Hz to 20.2 kHz (`keel::band_hz`). A target is one dB value per band (`keel::Curve`), and only its shape counts. `keel::set_curve` writes a curve into the parameters; `keel::target_curve` reads the target back.
+   - **Genre targets** are ADR-0120's: the factory targets measured from references and the user's own files in `$XDG_DATA_HOME/oscillate/tonal-targets/`. Their grid (24.8 Hz to 16 kHz) is Keel's less one band at each end. `keel::curve_from` places a target's median on Keel's grid, the two outer bands taking their neighbour's level, centred. The panel loads one into the curve as one edit, so a project keeps the curve it chose even if the target files change.
+   - **The meter is Keel's own.** ADR-0120's `tonal::BandMeter` averages a whole programme evenly and runs each window's transform in one callback. Keel needs a gated average over Speed and spreads each transform across the hop (below). Both meters sum the same third-octave bands, so pink noise reads flat in each.
 3. **Tracking.** A Hann-windowed STFT of both channels: 16384 points every 2048 frames at 48 kHz, scaled with the rate. Each band's power is the sum of the bins inside its edges (the band centre × 2^(±1/6)), with partial bins weighted, so pink noise reads flat and the 20 Hz band holds one and a half bins.
    - **Gates.** Each hop's K-weighted band powers give it a loudness. A hop under −70 dB is ignored. A recent loudness follows every other hop over Speed. A hop more than 20 dB under that loudness is left out of the balance, so fades and gaps do not drag it. A hop more than 6 dB over it is scaled down to that level, so a burst counts as no more than a loud bar.
    - **Averaging.** Band powers average over Speed seconds: a running mean until a Speed has passed, then an exponential average. The balance is smoothed a third of an octave each way.
@@ -26,7 +28,7 @@ A master needs its long-term tonal balance (how much low, mid and top it has aga
    - **The analysis is spread across the hop.** Each window's transform is windowed, reordered and computed stage by stage, a share every 16 frames, and is ready by the next hop. `dsp::Fft` gained a staged forward transform for this, bit for bit the same as `forward()`. One instance's 99th-percentile 64-frame block fell from 26% to 2.6% of its period.
 4. **Comparison.**
    - **Presence.** Bands more than 45 dB under the K-weighted power mean hold no content. They are left out of the means and never boosted. A low-passed programme is not given back a top it never had.
-   - **Alignment.** The balance and the target are each centred on their K-weighted mean over the bands with content. The correction is −Amount × the region weight × (balance − target), within −Max Cut and +Max Boost.
+   - **Alignment.** The target is smoothed across bands as the balance is, so a steep curve (the genre targets fall some 30 dB under 50 Hz) is compared like with like. The balance and the target are each centred on their K-weighted mean over the bands with content. The correction is −Amount × the region weight × (balance − target), within −Max Cut and +Max Boost.
    - **Regions.** The region weights cross over an octave centred on each split.
    - **Reference.** The target is the sidechain's balance (tracked the same way) plus the tilt. Until a reference has been heard the correction holds at 0 dB.
 5. **Filtering: minimum phase, no latency.** The correction feeds a bank of eleven trapezoidal state-variable filters (A. Simper's form): a low shelf at 20 Hz, bells at Q 0.6 an octave apart from 31.25 Hz to 8 kHz, and a high shelf at 12 kHz.
@@ -58,17 +60,17 @@ A master needs its long-term tonal balance (how much low, mid and top it has aga
     - **The balance view.** Centred bands on a log axis: the tracked balance as a ghost, the target, the correction as amber and sky bars, and the balance Keel lets out. On Curve the same view edits the curve: drag a band, or choose one with the arrows and move it.
     - **The history.** The correction over the last 24 s as a band-by-time map.
     - **Meters.** The peaks and Level Match.
-    - **Controls.** Steer (Amount, Speed, limits); Target with Learn and Flatten; Regions; Output.
+    - **Controls.** Steer (Amount, Speed, limits); Target with Learn, Flatten and a genre target to load; Regions; Output.
 
 ## Consequences
 
-- **Tests:** `native_keel_contract` (27 cases):
+- **Tests:** `native_keel_contract` (28 cases):
   - **Convergence.** Pink noise tilted ±3 dB/oct converges to a flat target within 1 dB from 40 Hz to 16 kHz in under 2 s at Speeds of 1, 4 and 15 s. It ends within 0.5 dB, and a Welch analysis of the output agrees within 1.25 dB.
   - **Following.** A reversal from −3 to +3 dB/oct is followed within 1 dB after 6.2–6.6 Speeds (the bands average power).
   - **Passthrough and stillness.** Amount 0 is bit for bit. On steady pink noise the correction wanders 0.25 dB RMS or less (less when slower), and what moves faster than a second stays under 0.05 dB RMS. A periodic multitone holds its correction within 0.05 dB.
   - **No zipper.** While a reference turns the correction over, a multitone gains no sidebands more than 40 Hz from its tones above −100 dB.
   - **Phase.** The measured group delay stays under 2 ms from 31.5 Hz up and under 0.25 ms from 200 Hz up.
-  - **Targets.** The curve, reference and learned targets are reached.
+  - **Targets.** The curve, reference and learned targets are reached. Steered toward each factory genre target, pink noise falling as masters do goes from 1.6–2.0 dB RMS from the target to 0.73–1.11 dB from 50 Hz to 16 kHz; what stays is the targets' third-octave detail. A programme that already has a target's balance is moved by under 1 dB in any band.
   - **Controls.** Regions, limits, absent bands, the gates (silences move the correction under 0.25 dB; rare bursts move it less than half as far as they move a plain average), Level Match (within 0.5 LU), Delta and Output.
   - **Other rates.** 44.1 and 96 kHz converge alike.
   - **Platform.** Block splits, export against live, hostile input, a rate under 1 Hz, a bounded tail, restrained presets, a seek, no allocation and the telemetry.

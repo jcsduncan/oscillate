@@ -369,7 +369,7 @@ The baseline processors are the Shape (EQ), Press (compressor), Expanse (algorit
 - a transient shaper whose attack and sustain gains do not depend on the level, single-band for drums or in up to four bands for a bus or the master (Strike, [ADR-0118](decisions/0118-strike-transient-shaper.md));
 - adaptive tonal balance that steers the programme's long-term spectrum toward a tilt, a drawn or learned curve or a reference track, with no latency (Keel, [ADR-0119](decisions/0119-keel-adaptive-tonal-balance.md));
 - a spatial pass-by effect (Flyby, [ADR-0067](decisions/0067-flyby.md)) and background texture and ageing (Dust, [ADR-0069](decisions/0069-dust-texture.md));
-- the utility suite ([ADR-0042](decisions/0042-native-utility-suite.md)): Lens (spectrum analyser), Loudness (EBU R128), Scope (oscilloscope and alignment), Tune (tuner), Trim (gain and stereo utility) and Signal (test generator).
+- the utility suite ([ADR-0042](decisions/0042-native-utility-suite.md)): Lens (spectrum analyser, with match EQ into Shape and tonal balance targets measured from references, [ADR-0120](decisions/0120-match-eq-and-tonal-targets.md)), Loudness (EBU R128), Scope (oscilloscope and alignment), Tune (tuner), Trim (gain and stereo utility) and Signal (test generator).
 
 Every native effect is insertable on any track, bus or master chain, saved with the project, automatable and rendered identically by live playback and export ([ADR-0043](decisions/0043-one-native-insert-path.md), [ADR-0050](decisions/0050-one-chain-per-track.md)).
 

@@ -1,6 +1,7 @@
 #include "native_synth_device_controller.hpp"
 #include "crate_controller.hpp"
 #include "device_panels.hpp"
+#include "lens_match.hpp"
 #include "native_effect_visuals.hpp"
 #include "native_synth_document_model.hpp"
 #include "nova_arp.hpp"
@@ -20,6 +21,7 @@
 #include "oscillate/native_dsp/effects/forge.hpp"
 #include "oscillate/native_dsp/effects/hush.hpp"
 #include "oscillate/native_dsp/effects/keel.hpp"
+#include "oscillate/native_dsp/effects/lens.hpp"
 #include "oscillate/native_dsp/effects/orbit.hpp"
 #include "oscillate/native_dsp/effects/press.hpp"
 #include "oscillate/native_dsp/effects/pump.hpp"
@@ -279,6 +281,8 @@ NativeSynthDeviceController::NativeSynthDeviceController(const native_dsp::Engin
     constellation_ = new NovaConstellation(*this, NovaConstellation::default_cache_file(), this);
     arp_ = new NovaArp(*this, this);
   }
+  if (engine_.id == native_dsp::effects::lens::engine().descriptor->id)
+    match_ = new LensMatch(*this, adapter_, LensMatch::default_targets_directory(), this);
   for (const auto& preset : engine_.presets) {
     auto values = native_dsp::preset_values(engine_, preset);
     preset_values_.push_back(values ? values.value() : native_dsp::default_values(engine_));
@@ -336,6 +340,8 @@ QObject* NativeSynthDeviceController::crate() const { return crate_; }
 QObject* NativeSynthDeviceController::constellation() const { return constellation_; }
 
 QObject* NativeSynthDeviceController::arp() const { return arp_; }
+
+QObject* NativeSynthDeviceController::match() const { return match_; }
 
 std::optional<std::size_t> NativeSynthDeviceController::index_of(const QString& id) const {
   const QByteArray utf8 = id.toUtf8();
@@ -2115,6 +2121,62 @@ QVariantList NativeSynthDeviceController::keel_target() const {
     out.push_back(db);
   }
   return out;
+}
+
+QVariantList NativeSynthDeviceController::keel_genre_targets() const {
+  namespace keel = native_dsp::effects::keel;
+  if (&engine_ != keel::engine().descriptor) {
+    return {};
+  }
+  QVariantList out;
+  const auto add = [&](const native_dsp::tonal::Target& target, bool user) {
+    out.push_back(QVariantMap{{QStringLiteral("id"), QString::fromStdString(target.id)},
+                              {QStringLiteral("name"), QString::fromStdString(target.name)},
+                              {QStringLiteral("user"), user}});
+  };
+  for (const auto& target : native_dsp::tonal::factory_targets()) {
+    add(target, false);
+  }
+  for (const auto& target : LensMatch::read_user_targets(LensMatch::default_targets_directory())) {
+    add(target, true);
+  }
+  return out;
+}
+
+bool NativeSynthDeviceController::keel_use_target(const QString& id) {
+  namespace keel = native_dsp::effects::keel;
+  if (&engine_ != keel::engine().descriptor) {
+    return false;
+  }
+  const auto wanted = id.toStdString();
+  std::optional<native_dsp::tonal::Target> found;
+  if (const auto* factory = native_dsp::tonal::find_factory_target(wanted)) {
+    found = *factory;
+  } else {
+    for (auto& target : LensMatch::read_user_targets(LensMatch::default_targets_directory())) {
+      if (target.id == wanted) {
+        found = std::move(target);
+        break;
+      }
+    }
+  }
+  if (!found) {
+    return false;
+  }
+  std::vector<double> values(values_.begin(), values_.end());
+  keel::set_curve(values, keel::curve_from(found->median));
+  const auto first = native_dsp::find_parameter(engine_, "keel.curve_01");
+  const auto target = native_dsp::find_parameter(engine_, "keel.target");
+  if (!first || !target) {
+    return false;
+  }
+  constexpr double curve_target = 1.0;
+  QVariantMap edit{{text(engine_.parameters[*target].id), curve_target}};
+  for (std::size_t b = 0; b < keel::bands; ++b) {
+    edit[text(engine_.parameters[*first + b].id)] = values[*first + b];
+  }
+  set_values(edit);
+  return true;
 }
 
 bool NativeSynthDeviceController::keel_learn() {

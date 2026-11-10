@@ -1,6 +1,7 @@
 #pragma once
 
 #include "oscillate/native_dsp/effects/effect.hpp"
+#include "oscillate/native_dsp/tonal_targets.hpp"
 
 #include <array>
 #include <cstddef>
@@ -47,6 +48,12 @@ using Curve = std::array<double, bands>;
 // The target the values describe before any reference: the tilt alone, or
 // the drawn curve plus the tilt (Tilt and Reference read only the tilt).
 [[nodiscard]] Curve target_curve(std::span<const double> values) noexcept;
+// A tonal target's curve (ADR-0120: its median, or either end of its
+// range) on Keel's grid. The tonal grid is Keel's less its outermost band
+// at each end (its band 0 is Keel's band 1); those two take their
+// neighbour's level. The result is centred on its mean: only its shape
+// counts.
+[[nodiscard]] Curve curve_from(const tonal::Curve& levels) noexcept;
 // Writes a curve (a drawn, learned or genre target) into the values' curve
 // parameters, within their range.
 void set_curve(std::span<double> values, const Curve& curve) noexcept;
