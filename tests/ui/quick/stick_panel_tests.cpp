@@ -66,15 +66,15 @@ constexpr std::size_t snare = static_cast<std::size_t>(stick::Piece::snare);
 constexpr std::size_t kick = static_cast<std::size_t>(stick::Piece::kick);
 constexpr std::size_t snare_top = static_cast<std::size_t>(stick::MicGroup::snare_top);
 constexpr std::size_t overheads = static_cast<std::size_t>(stick::MicGroup::overheads);
-// The synthetic kit's snare: sticks, a side-stick and brushes.
-constexpr int snare_hits = 30;
+// The synthetic kit's snare: sticks, a second snare, a side-stick and brushes.
+constexpr int snare_hits = 40;
 
 // A frame with the snare struck: its piece lit, its mics loud.
 std::vector<float> snare_frame() {
   namespace t = stick::telemetry;
   std::vector<float> frame(t::size, 0.0F);
   frame[t::library] = static_cast<float>(static_cast<int>(stick::library::State::ready));
-  frame[t::kit] = static_cast<float>(stick::Kit::drs);
+  frame[t::kit] = static_cast<float>(stick::Kit::naked);
   frame[t::hits] = frame_hits;
   frame[t::voices] = frame_voices;
   frame[t::output_peak_db] = frame_peak_db;
@@ -114,18 +114,18 @@ void controller_reports_loading_then_missing() {
               !library.value(QStringLiteral("message")).toString().isEmpty(),
           "a missing kit is reported with a reason");
   require(library.value(QStringLiteral("install_command")).toString() ==
-              qs(stick::library::install_command) + QStringLiteral(" --kit drs"),
+              qs(stick::library::install_command) + QStringLiteral(" --kit naked"),
           "the panel learns how to install the chosen kit");
   require(library.value(QStringLiteral("required"))
               .toString()
-              .contains(qs(stick::library::facts(stick::Kit::drs).attribution)),
+              .contains(qs(stick::library::facts(stick::Kit::naked).attribution)),
           "and which kit, with its credit");
   const auto kits = library.value(QStringLiteral("kits")).toList();
   require(kits.size() == static_cast<qsizetype>(stick::kit_count) &&
               !kits.front().toMap().value(QStringLiteral("installed")).toBool(),
           "each kit says whether it is installed");
   require(controller.library_folder(QString::fromStdString(
-              (nowhere / stick::library::facts(stick::Kit::drs).folder).string())) ==
+              (nowhere / stick::library::facts(stick::Kit::naked).folder).string())) ==
               QString::fromStdString(nowhere.parent_path().string()),
           "a kit not yet installed shows its nearest folder");
   const auto& prism = *synth::prism::engine().descriptor;
@@ -141,21 +141,23 @@ void controller_lays_out_the_kit() {
   auto layout = controller.stick_layout();
   auto pieces = layout.value(QStringLiteral("pieces")).toList();
   require(!layout.value(QStringLiteral("loaded")).toBool() &&
-              layout.value(QStringLiteral("toms")).toInt() == 3,
-          "before it loads, the kit's facts: DRS Studio has three toms");
+              layout.value(QStringLiteral("toms")).toInt() == static_cast<int>(stick::max_toms),
+          "before it loads, the kit's facts: Naked Drums has five toms");
+  const auto present = [&](stick::Piece piece) {
+    return pieces[static_cast<qsizetype>(piece)].toMap().value(QStringLiteral("present")).toBool();
+  };
   require(pieces.size() == static_cast<qsizetype>(stick::piece_count) &&
-              !pieces[static_cast<qsizetype>(stick::Piece::china)]
-                   .toMap()
-                   .value(QStringLiteral("present"))
-                   .toBool(),
-          "and no china");
+              present(stick::Piece::splash) && present(stick::Piece::china),
+          "a splash and a china");
   require(pieces[static_cast<qsizetype>(kick)].toMap().value(QStringLiteral("keys")).toString() ==
               QStringLiteral("B1, C2"),
           "the kick plays B1 and C2 (35 and 36)");
-  controller.set_choice(QStringLiteral("stick.kit"), static_cast<int>(stick::Kit::muldjord));
+  controller.set_choice(QStringLiteral("stick.kit"), static_cast<int>(stick::Kit::drs));
   layout = controller.stick_layout();
-  require(layout.value(QStringLiteral("toms")).toInt() == static_cast<int>(stick::max_toms),
-          "the layout follows the kit");
+  pieces = layout.value(QStringLiteral("pieces")).toList();
+  constexpr int drs_toms = 3;
+  require(layout.value(QStringLiteral("toms")).toInt() == drs_toms && !present(stick::Piece::china),
+          "the layout follows the kit: DRS Studio has three toms and no china");
 }
 
 void controller_decodes_stick_telemetry() {
@@ -273,16 +275,16 @@ void the_notice_guides_the_install() {
   require(text_of(*panel, QStringLiteral("stickLibraryState")) == QStringLiteral("NOT INSTALLED"),
           "the notice says it is not installed");
   require(text_of(*panel, QStringLiteral("stickInstallCommand")) ==
-              qs(stick::library::install_command) + QStringLiteral(" --kit drs"),
+              qs(stick::library::install_command) + QStringLiteral(" --kit naked"),
           "the install command is shown exactly");
   require(text_of(*panel, QStringLiteral("stickLibraryChipText")) ==
-              QStringLiteral("DRS Studio not installed"),
+              QStringLiteral("Naked Drums not installed"),
           "the chip says the kit is not installed");
   require(find_item(panel->root, QStringLiteral("stickStrip:overheads")) == nullptr,
           "no mixer without its kit");
   click(*panel, centre(item(*panel, QStringLiteral("stickCopyInstall"))));
   require(controller.clipboard_text() ==
-              qs(stick::library::install_command) + QStringLiteral(" --kit drs"),
+              qs(stick::library::install_command) + QStringLiteral(" --kit naked"),
           "Copy puts the command on the clipboard");
   shoot_if_requested(*panel, QStringLiteral("stick_panel_missing_kit.png"));
 
@@ -350,8 +352,9 @@ void pieces_mics_and_meters() {
 // mic metering.
 std::vector<float> groove_frame() {
   namespace t = stick::telemetry;
-  constexpr std::array<float, stick::mic_group_count> mic_db{-10.0F, -14.0F, -6.0F, -12.0F, -30.0F,
-                                                             -12.0F, -36.0F, -9.0F, -15.0F};
+  constexpr std::array<float, stick::mic_group_count> mic_db{-10.0F, -14.0F, -12.0F, -6.0F, -12.0F,
+                                                             -30.0F, -24.0F, -36.0F, -9.0F, -15.0F,
+                                                             -18.0F, -16.0F, -30.0F};
   constexpr float kick_level = 0.6F;
   constexpr float hat_level = 0.45F;
   auto frame = snare_frame();
@@ -373,7 +376,7 @@ void screenshots_if_requested() {
   }
   if (const char* real = std::getenv("STICK_PANEL_SCREENSHOT_LIBRARY");
       real != nullptr && *real != '\0') {
-    const auto status = stick::library::load(stick::Kit::drs, real);
+    const auto status = stick::library::load(stick::Kit::naked, real);
     require(status.state == stick::library::State::ready,
             "the screenshot kit loads: " + status.message);
   }

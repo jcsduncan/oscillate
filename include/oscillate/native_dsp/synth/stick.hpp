@@ -12,25 +12,26 @@
 
 namespace oscillate::native_dsp::synth::stick {
 
-// Stick (ADR-0114): a sampled acoustic drum kit, every hit recorded on every
-// mic. Three DrumGizmo kits (CC BY 4.0) installed by
-// tools/stick/install_kits.py: DRS Studio (DRSKit 2.1), Muldjord
-// (MuldjordKit 3) and Garage (ShittyKit 1.2). Each hit's start stays in
-// memory and the rest streams from disk.
+// Stick (ADR-0114, ADR-0121): a sampled acoustic drum kit, every hit
+// recorded on every mic. Two kits (CC BY 4.0) installed by
+// tools/stick/install_kits.py: Naked Drums (Wilkinson Audio, in kinwie's
+// SFZ conversion; the default) and DRS Studio (DrumGizmo's DRSKit 2.1, the
+// one with brushes). Each hit's start stays in memory and the rest streams
+// from disk.
 //
 // Notes follow the General MIDI drum map. Velocity picks a hit by its
 // recorded power, with seeded round robins among its neighbours; the
 // hi-hat pedal (stick.perf.pedal) opens the hat between its closed and open
 // recordings; the mic mixer sets each mic's level, mute and solo, and Bleed
 // off keeps each hit to its own close mics, the overheads and the room.
-// Without its kit Stick is silent and says so. Defaults are the "Tight
-// Funk" preset.
+// Without its kit Stick is silent and says so. Defaults are the "Natural"
+// preset.
 [[nodiscard]] const SynthEngine& engine();
 
 // ---- Kits ---------------------------------------------------------------------------------
 
-enum class Kit : std::uint8_t { drs, muldjord, garage };
-inline constexpr std::size_t kit_count = 3;
+enum class Kit : std::uint8_t { naked, drs };
+inline constexpr std::size_t kit_count = 2;
 
 // ---- Pieces and their articulations ----------------------------------------------------------
 
@@ -43,14 +44,15 @@ enum class Piece : std::uint8_t {
   tom2,
   tom3,
   tom4,
+  tom5,
   crash1,
   crash2,
   ride,
-  ride2,
+  splash,
   china
 };
-inline constexpr std::size_t piece_count = 12;
-inline constexpr std::size_t max_toms = 4;
+inline constexpr std::size_t piece_count = 13;
+inline constexpr std::size_t max_toms = 5;
 // A bit per Piece.
 [[nodiscard]] constexpr std::uint32_t piece_bit(Piece piece) noexcept {
   return 1U << static_cast<unsigned>(piece);
@@ -60,8 +62,8 @@ inline constexpr std::size_t max_toms = 4;
 // open or open, and its pedal on its own.
 enum class Articulation : std::uint8_t {
   hit,       // The plain stroke: centre, bow or edge.
-  alt,       // A second drum played as this piece (Muldjord's second kick).
-  rimshot,   // Snare: head and rim together.
+  alt,       // A second drum or stroke played as this piece (Naked's second
+             // snare, DRS Studio's kick with its beater bouncing).
   sidestick, // Snare: the stick laid across the rim.
   bell,      // Ride: the bell.
   closed,    // Hi-hat strokes, closed to open.
@@ -69,7 +71,7 @@ enum class Articulation : std::uint8_t {
   open,
   pedal // Hi-hat: the foot closing it.
 };
-inline constexpr std::size_t articulation_count = 9;
+inline constexpr std::size_t articulation_count = 8;
 
 // What struck it: sticks, or brushes where the kit recorded them (the
 // kick's beater and the hi-hat's pedal are the same either way).
@@ -84,7 +86,7 @@ inline constexpr std::size_t striker_count = 2;
 // ---- The General MIDI map ---------------------------------------------------------------------
 
 inline constexpr int first_key = 35; // B1 (C4 is 60), the second kick.
-inline constexpr int last_key = 59;  // B3, the second ride.
+inline constexpr int last_key = 59;  // B3, the second ride (the ride).
 // What a key plays: the hi-hat's F#2 strokes at the pedal's openness.
 struct Mapped {
   Piece piece = Piece::kick;
@@ -102,22 +104,25 @@ struct Mapped {
 enum class MicGroup : std::uint8_t {
   kick_in,
   kick_out,
+  kick_sub,
   snare_top,
   snare_bottom,
   toms,
   hihat,
   ride,
   overheads,
-  room
+  room,
+  far_room,
+  mid_side,
+  china_oh
 };
-inline constexpr std::size_t mic_group_count = 9;
-// Close mics hear one piece; overheads and room hear the kit as a pair.
+inline constexpr std::size_t mic_group_count = 13;
+// Close mics hear their pieces; the overheads and rooms hear the kit.
 [[nodiscard]] constexpr bool close_group(MicGroup group) noexcept {
-  return group != MicGroup::overheads && group != MicGroup::room;
+  return group < MicGroup::overheads;
 }
 
-// A kit's channels: the mics the installer keeps (Muldjord's trigger
-// channel is dropped).
+// A kit's channels (Naked Drums has 16, DRS Studio 13).
 inline constexpr std::uint32_t max_mics = 16;
 
 // The mic mixes on the kit selector, applied over the mixer's faders.
@@ -181,16 +186,14 @@ inline constexpr std::uint32_t common_pieces = piece_bit(Piece::kick) | piece_bi
                                                piece_bit(Piece::tom2) | piece_bit(Piece::crash1) |
                                                piece_bit(Piece::crash2) | piece_bit(Piece::ride);
 inline constexpr std::array<KitFacts, kit_count> kits{{
-    {"DRS Studio", "Maple kit · 13 mics", "drs-studio", "drs",
+    {"Naked Drums", "Yamaha studio kit · 16 mics", "naked-drums", "naked",
+     "Naked Drums by Wilkinson Audio, SFZ by kinwie, CC BY 4.0",
+     common_pieces | piece_bit(Piece::tom3) | piece_bit(Piece::tom4) | piece_bit(Piece::tom5) |
+         piece_bit(Piece::splash) | piece_bit(Piece::china),
+     max_toms},
+    {"DRS Studio", "Maple kit · 13 mics · brushes", "drs-studio", "drs",
      "DRSKit 2.1 by Jes Eiler (DRSDrums) and the DrumGizmo team, CC BY 4.0",
      common_pieces | piece_bit(Piece::tom3), 3},
-    {"Muldjord", "Tama rock kit · 15 mics", "muldjord", "muldjord",
-     "MuldjordKit 3 by Lars Muldjord; drum samples provided by DrumGizmo.org, CC BY 4.0",
-     common_pieces | piece_bit(Piece::tom3) | piece_bit(Piece::tom4) | piece_bit(Piece::ride2) |
-         piece_bit(Piece::china),
-     max_toms},
-    {"Garage", "Small kit · 8 mics · raw", "garage", "garage",
-     "ShittyKit 1.2 by Sardonicus for DrumGizmo, CC BY 4.0", common_pieces, 2},
 }};
 [[nodiscard]] constexpr const KitFacts& facts(Kit kit) noexcept {
   return kits[static_cast<std::size_t>(kit)];

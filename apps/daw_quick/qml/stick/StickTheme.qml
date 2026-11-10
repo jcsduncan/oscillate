@@ -167,7 +167,7 @@ KitTheme {
 
     // The mixer: a strip's least width, its meter's width, the switches'
     // size, and the meter's scale.
-    property real stripMinWidth: 70
+    property real stripMinWidth: 48
     property real meterWidth: 6
     property real stripSwitchSize: 24
     property real meterFloorDb: -60

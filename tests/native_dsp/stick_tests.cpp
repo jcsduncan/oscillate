@@ -49,10 +49,15 @@ constexpr double decibels = 20.0;
 constexpr std::uint8_t kick = 36;
 constexpr std::uint8_t sidestick = 37;
 constexpr std::uint8_t snare = 38;
+constexpr std::uint8_t second_snare = 40;
 constexpr std::uint8_t hat_at_pedal = 42;
 constexpr std::uint8_t hat_pedal = 44;
 constexpr std::uint8_t hat_open = 46;
 constexpr std::uint8_t crash = 49;
+constexpr std::uint8_t splash = 55;
+// D3 and F2: the highest and the lowest of the six tom keys.
+constexpr std::uint8_t high_tom = 50;
+constexpr std::uint8_t low_floor = 41;
 constexpr std::uint8_t loud = 110;
 constexpr std::uint8_t full = 127;
 constexpr std::size_t block = 128;
@@ -81,12 +86,15 @@ std::size_t at(std::string_view id) {
   return static_cast<std::size_t>(&parameter(id) - all.data());
 }
 
-constexpr std::array<std::string_view, 12> pieces{"kick",   "snare", "hihat", "tom1",
-                                                  "tom2",   "tom3",  "tom4",  "crash1",
-                                                  "crash2", "ride",  "ride2", "china"};
+constexpr std::array<std::string_view, stick::piece_count> pieces{
+    "kick", "snare",  "hihat",  "tom1", "tom2",   "tom3", "tom4",
+    "tom5", "crash1", "crash2", "ride", "splash", "china"};
+constexpr std::array<std::string_view, stick::mic_group_count> groups{
+    "kick_in", "kick_out",  "kick_sub", "snare_top", "snare_bottom", "toms",    "hihat",
+    "ride",    "overheads", "room",     "far_room",  "mid_side",     "china_oh"};
 
-// The kit as recorded: every piece natural, nothing humanised, round
-// robins as asked, the master at unity.
+// The kit as recorded: every piece natural and centred, every mic at
+// unity, nothing humanised, round robins as asked, the master at unity.
 std::vector<double> dry(bool robins = false) {
   auto v = default_values(*stick::engine().descriptor);
   v[at("stick.humanise")] = 0.0;
@@ -94,6 +102,10 @@ std::vector<double> dry(bool robins = false) {
   v[at("stick.level")] = 0.0;
   for (const auto piece : pieces) {
     v[at("stick." + std::string(piece) + ".decay")] = 1.0;
+    v[at("stick." + std::string(piece) + ".pan")] = 0.0;
+  }
+  for (const auto group : groups) {
+    v[at("stick.mic." + std::string(group) + ".level")] = 0.0;
   }
   return v;
 }
@@ -188,7 +200,7 @@ void a_missing_kit_is_silent_then_plays_once_installed() {
   const auto nowhere = wren_test::scratch_directory("stick-nothing-here");
   std::filesystem::create_directories(nowhere);
   ::setenv(std::string(library::directory_variable).c_str(), nowhere.c_str(), 1);
-  const auto first = library::status(stick::Kit::drs);
+  const auto first = library::status(stick::Kit::naked);
   REQUIRE_EQ(first.state, library::State::loading, "the first look reads in the background");
   auto runtime = make_runtime(stick::engine(), dry());
   library::wait();
@@ -196,20 +208,21 @@ void a_missing_kit_is_silent_then_plays_once_installed() {
   REQUIRE_EQ(rms(silent, 0, silent.size()), 0.0, "without its kit Stick is silent");
   REQUIRE_EQ(telemetry_of(*runtime)[stick::telemetry::library],
              static_cast<float>(library::State::missing), "and telemetry says it is missing");
-  const auto status = library::status(stick::Kit::drs);
+  const auto status = library::status(stick::Kit::naked);
   REQUIRE_EQ(status.state, library::State::missing, "a missing kit says why");
   REQUIRE_TRUE(!status.message.empty(), "a missing kit says why");
-  REQUIRE_EQ(status.directory, nowhere / library::facts(stick::Kit::drs).folder,
+  REQUIRE_EQ(status.directory, nowhere / library::facts(stick::Kit::naked).folder,
              "and where it looked");
   // Installed where it looked: the next look reads it, and the silent
   // Stick plays.
-  stick_test::write_kit(nowhere / library::facts(stick::Kit::drs).folder, "DRS Studio");
-  (void)library::status(stick::Kit::drs);
+  stick_test::write_kit(nowhere / library::facts(stick::Kit::naked).folder, "Naked Drums");
+  (void)library::status(stick::Kit::naked);
   library::wait();
-  REQUIRE_EQ(library::status(stick::Kit::drs).state, library::State::ready, "installing is seen");
+  REQUIRE_EQ(library::status(stick::Kit::naked).state, library::State::ready, "installing is seen");
   const auto heard = mono(render(*runtime, note(0, frames_of(0.2), kick, 2), frames_of(0.3)));
   REQUIRE_GT(rms(heard, 0, heard.size()), audible, "the silent Stick plays once installed");
-  REQUIRE_EQ(library::contents(stick::Kit::drs).toms, std::size_t{1}, "the kit's toms are counted");
+  REQUIRE_EQ(library::contents(stick::Kit::naked).toms, std::size_t{2},
+             "the kit's toms are counted");
 }
 
 void kits_chosen_load_in_the_background() {
@@ -217,16 +230,16 @@ void kits_chosen_load_in_the_background() {
   stick_test::write_kits(base);
   ::setenv(std::string(library::directory_variable).c_str(), base.c_str(), 1);
   auto v = dry();
-  v[at("stick.kit")] = static_cast<double>(stick::Kit::garage);
+  v[at("stick.kit")] = static_cast<double>(stick::Kit::drs);
   // Creating the runtime fetches the kit its values choose; an offline
   // render waits for it before its first block.
   auto runtime = make_runtime(stick::engine(), v);
   const auto x = mono(render(*runtime, note(0, frames_of(0.2), kick, 1), frames_of(0.3)));
   REQUIRE_GT(rms(x, 0, x.size()), audible, "the chosen kit plays from the first block");
   const auto telemetry = telemetry_of(*runtime);
-  REQUIRE_EQ(telemetry[stick::telemetry::kit], static_cast<float>(stick::Kit::garage),
+  REQUIRE_EQ(telemetry[stick::telemetry::kit], static_cast<float>(stick::Kit::drs),
              "telemetry names the kit");
-  REQUIRE_EQ(library::status(stick::Kit::drs).state, library::State::loading,
+  REQUIRE_EQ(library::status(stick::Kit::naked).state, library::State::loading,
              "a kit nobody chose is read only when looked at");
   library::wait();
 }
@@ -259,6 +272,14 @@ void malformed_kits_are_rejected() {
              "an overhead that hears one piece");
   REQUIRE_EQ(broken(with_line(text, "mic 0 ", "mic 0 kick_in kick left")), invalid,
              "a close mic in a pair");
+  REQUIRE_EQ(broken(with_line(text, "mic 0 ", "mic 0 kick_in kick centre")), invalid,
+             "a close mic in the centre");
+  REQUIRE_EQ(broken(with_line(text, "mic 0 ", "mic 0 kick_in kick+kick mono")), invalid,
+             "a close mic naming its piece twice");
+  REQUIRE_EQ(broken(with_line(text, "mic 0 ", "mic 0 kick_in kick+ mono")), invalid,
+             "a close mic's pieces ending in a separator");
+  REQUIRE_EQ(broken(with_line(text, "mic 0 ", "mic 0 kick_in - mono")), invalid,
+             "a close mic hearing nothing");
   REQUIRE_EQ(broken(with_line(text, "mic 0 ", "")), invalid, "a channel without its mic");
   REQUIRE_EQ(broken(with_line(text, "hit kick hit", "hit kick bell stick 0 10 1e-4 -6")), invalid,
              "a kick's bell");
@@ -277,8 +298,8 @@ void malformed_kits_are_rejected() {
 }
 
 void descriptor_registry_and_presets() {
-  constexpr std::array<std::string_view, 6> presets{"Tight Funk",   "Dry Break",   "Room Kit",
-                                                    "Garage Lo-Fi", "Brushy Soft", "As Recorded"};
+  constexpr std::array<std::string_view, 5> presets{"Natural", "Close Mics", "Rooms", "DRS Studio",
+                                                    "Brushes"};
   const auto& descriptor = *stick::engine().descriptor;
   REQUIRE_EQ(find_engine("stick"), &stick::engine(), "Stick is registered");
   REQUIRE_OK(validate_engine(descriptor), "the table validates");
@@ -287,7 +308,9 @@ void descriptor_registry_and_presets() {
     REQUIRE_EQ(descriptor.presets[i].name, presets[i], "the presets, in order");
     REQUIRE_OK(preset_values(descriptor, descriptor.presets[i]), "every preset resolves");
   }
-  REQUIRE_TRUE(descriptor.presets.front().values.empty(), "Tight Funk is the defaults");
+  REQUIRE_TRUE(descriptor.presets.front().values.empty(), "Natural is the defaults");
+  REQUIRE_EQ(parameter("stick.kit").default_value, static_cast<double>(stick::Kit::naked),
+             "Naked Drums is the default kit");
   require(parameter("stick.perf.pedal").automatable, "the hi-hat pedal is an automation lane");
   require(!parameter("stick.snare.tune").automatable, "Tune is read as a hit starts");
   // The General MIDI map, its toms spread over the kit's.
@@ -303,18 +326,27 @@ void descriptor_registry_and_presets() {
   const bool hat_follows_pedal = mapped(hat_at_pedal, 3).at_pedal;
   REQUIRE_TRUE(hat_follows_pedal, "F#2 plays the hat at the pedal");
   REQUIRE_EQ(mapped(hat_open, 3).articulation, stick::Articulation::open, "A#2 is open");
-  constexpr int high_tom = 50;
-  constexpr int low_floor = 41;
   constexpr int low_mid = 47;
   REQUIRE_EQ(mapped(high_tom, 3).piece, stick::Piece::tom1, "D3 the highest tom");
   REQUIRE_EQ(mapped(low_floor, 3).piece, stick::Piece::tom3, "F2 the lowest of three");
   REQUIRE_EQ(mapped(low_floor, 4).piece, stick::Piece::tom4, "or of four");
+  REQUIRE_EQ(mapped(low_floor, stick::max_toms).piece, stick::Piece::tom5, "or of five");
+  REQUIRE_EQ(mapped(low_mid, stick::max_toms).piece, stick::Piece::tom2,
+             "five toms: B2 the second");
+  const auto second = mapped(second_snare, 3);
+  REQUIRE_TRUE(second.piece == stick::Piece::snare &&
+                   second.articulation == stick::Articulation::alt,
+               "E2 is the second snare");
+  REQUIRE_EQ(mapped(splash, 3).piece, stick::Piece::splash, "G3 is the splash");
   REQUIRE_EQ(mapped(low_mid, 2).piece, stick::Piece::tom1, "two toms split the six keys");
   REQUIRE_FALSE(stick::map_key(low_floor, 0).has_value(), "no toms, no tom keys");
   REQUIRE_FALSE(stick::map_key(stick::last_key + 1, 3).has_value(), "nothing above the map");
   require(stick::plays(stick::Piece::ride, stick::Articulation::bell) &&
               !stick::plays(stick::Piece::kick, stick::Articulation::bell),
-          "only the rides have bells");
+          "only the ride has a bell");
+  require(stick::plays(stick::Piece::snare, stick::Articulation::alt) &&
+              !stick::plays(stick::Piece::tom1, stick::Articulation::alt),
+          "the kick and snare have second drums");
 }
 
 // ---- Playing -----------------------------------------------------------------------------------
@@ -478,6 +510,34 @@ void pans_place_close_mics_and_balance_cymbals() {
   REQUIRE_LT(db(magnitude(r.left, 0, window, left_hz) /
                 magnitude(r.right, 0, window, stick_test::mics[stick_test::overhead_right].hz)),
              absent_db, "a cymbal without its own mic pans by its overheads");
+}
+
+// Naked's toms share one close channel, each tom heard only on its own
+// mic: the channel is each tom's own (no bleed) and follows that tom's pan.
+// A single distant mic sits in the centre.
+void shared_close_mics_and_a_centred_room() {
+  install();
+  const double tom_hz = stick_test::mics[stick_test::tom].hz;
+  const double far_hz = stick_test::mics[stick_test::far_room].hz;
+  auto v = dry();
+  v[at("stick.bleed")] = 0.0;
+  v[at("stick.tom1.pan")] = 1.0;
+  v[at("stick.tom2.pan")] = -1.0;
+  auto runtime = make_runtime(stick::engine(), v);
+  const auto r = render(*runtime, note(0, frames_of(0.2), low_floor, 1), frames_of(0.3));
+  const double tom_left = magnitude(r.left, 0, window, tom_hz);
+  const double tom_right = magnitude(r.right, 0, window, tom_hz);
+  REQUIRE_GT(db(tom_left / magnitude(r.left, 0, window, far_hz)), absent_db,
+             "without Bleed tom 2 still plays the toms' shared mic: it is its own");
+  REQUIRE_LT(db(tom_right / tom_left), absent_db,
+             "the shared mic follows tom 2's pan, not the first tom's");
+  constexpr double centred_db = 0.01;
+  const double far_left = magnitude(r.left, 0, window, far_hz);
+  const double far_right = magnitude(r.right, 0, window, far_hz);
+  REQUIRE_GT(far_left, 0.0, "the far room hears the tom");
+  REQUIRE_LT(std::fabs(db(far_left / far_right)), centred_db, "a single room mic sits centred");
+  const auto levels = mic_levels(hit(v, kick));
+  REQUIRE_LT(levels[stick_test::tom], absent_db, "and the kick does not bleed into it");
 }
 
 void tune_decay_and_brushes() {
@@ -696,6 +756,7 @@ int main(int argc, char** argv) {
            [] { bleed_mutes_solos_and_mixes_route_the_mics(); }},
           {"pans_place_close_mics_and_balance_cymbals",
            [] { pans_place_close_mics_and_balance_cymbals(); }},
+          {"shared_close_mics_and_a_centred_room", [] { shared_close_mics_and_a_centred_room(); }},
           {"tune_decay_and_brushes", [] { tune_decay_and_brushes(); }},
           {"the_stream_joins_the_resident_start", [] { the_stream_joins_the_resident_start(); }},
           {"voices_are_bounded", [] { voices_are_bounded(); }},

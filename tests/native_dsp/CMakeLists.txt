@@ -331,6 +331,7 @@ oscillate_add_case_tests(native_stick_contract oscillate_stick_tests
   the_pedal_opens_the_hat_and_closing_chokes_it
   bleed_mutes_solos_and_mixes_route_the_mics
   pans_place_close_mics_and_balance_cymbals
+  shared_close_mics_and_a_centred_room
   tune_decay_and_brushes
   the_stream_joins_the_resident_start
   voices_are_bounded

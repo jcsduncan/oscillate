@@ -105,7 +105,15 @@ Fret and Bow also need git.
 | Fret | Karoryfer Black and Blue Basses (darkblack) | CC0 1.0 | `python3 -I tools/fret/install_black_and_blue.py` | `OSCILLATE_FRET_LIBRARY` |
 | Wren | University of Iowa Musical Instrument Samples, flute | free use, no formal licence | `python3 -I tools/wren/install_iowa_flute.py` | `OSCILLATE_WREN_LIBRARY` |
 | Bow | VSCO 2 Community Edition strings; University of Iowa Musical Instrument Samples, solo strings | CC0 1.0; free use, no formal licence | `python3 -I tools/bow/install_strings.py` | `OSCILLATE_BOW_LIBRARY` |
-| Stick | DrumGizmo's DRSKit 2.1, MuldjordKit 3 and ShittyKit 1.2 (drum samples provided by DrumGizmo.org) | CC BY 4.0 | `python3 -I tools/stick/install_kits.py` (all three; `--kit drs`, `--kit muldjord` or `--kit garage` for one) | `OSCILLATE_STICK_LIBRARY` |
+| Stick | Naked Drums by Wilkinson Audio (SFZ by kinwie); DrumGizmo's DRSKit 2.1 | CC BY 4.0 | `python3 -I tools/stick/install_kits.py` (both; `--kit naked` or `--kit drs` for one) | `OSCILLATE_STICK_LIBRARY` |
+
+Naked Drums — audio samples from WilkinsonAudio.NakedDrums. Creator: Wilkinson
+Audio. Source: https://github.com/sfzinstruments/WilkinsonAudio.NakedDrums.
+Licence: Creative Commons Attribution 4.0 International (CC BY 4.0),
+https://creativecommons.org/licenses/by/4.0/. The samples are redistributed
+under CC BY 4.0 and may have been modified for use in Stick (trimming, format
+conversion, resampling, level normalisation, processing). They remain under
+their original licence.
 
 Default location: `$XDG_DATA_HOME/oscillate/instruments/`
 (`~/.local/share/oscillate/instruments/` when `XDG_DATA_HOME` is unset). An override must be set for both the installer and the

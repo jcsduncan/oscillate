@@ -18,14 +18,20 @@
 namespace oscillate::native_dsp::synth::stick::detail {
 
 // Where a mic sits in the stereo image: a close mic is placed by its
-// piece's Pan; a pair's channels are its left and right.
-enum class Side : std::uint8_t { mono, left, right };
+// piece's Pan; a pair's channels are its left and right; a single distant
+// mic (Naked's close room) sits in the centre.
+enum class Side : std::uint8_t { mono, left, right, centre };
 
 struct Mic {
   MicGroup group = MicGroup::overheads;
-  bool has_piece = false; // Close mics hear one piece.
+  // The pieces a close mic recorded (a piece_bit each); none for the
+  // overheads and rooms. Naked's toms share one channel, each tom heard
+  // only on its own mic.
+  std::uint32_t pieces = 0;
+  // The piece its bleed pans with: its first.
   Piece piece = Piece::kick;
   Side side = Side::mono;
+  [[nodiscard]] bool hears(Piece p) const noexcept { return (pieces & piece_bit(p)) != 0U; }
 };
 
 struct Hit {
