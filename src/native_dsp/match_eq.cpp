@@ -100,7 +100,7 @@ struct Bounds {
 }
 
 // One band's response at every fine band, as Shape designs it at fit_rate.
-void band_response(const Band& band, FineCurve& out) noexcept {
+void band_response(const Band& band, FineCurve& out) {
   const EqBandSettings settings{band.kind, band.hz, band.shape, band.gain_db};
   auto prepared = prepare_eq(std::span(&settings, 1), static_cast<std::uint32_t>(fit_rate));
   if (!prepared) {
@@ -115,6 +115,7 @@ void band_response(const Band& band, FineCurve& out) noexcept {
 // The Levenberg-Marquardt refinement of every band together.
 class Refiner {
 public:
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the curve, then its weights.
   Refiner(const FineCurve& curve, const FineCurve& weight) : curve_(curve), weight_(weight) {}
 
   // Refines `bands` in place; returns the weighted squared error.
@@ -445,12 +446,16 @@ Fit fit(const FineCurve& curve_db, const Settings& settings) {
         best = trial;
       }
     }
-    const double before = result.rms_db;
-    result = *best;
-    measure(result, curve_db, settings);
-    if (result.rms_db >= before) {
+    if (!best) {
       break;
     }
+    Fit next = *best;
+    measure(next, curve_db, settings);
+    if (next.rms_db >= result.rms_db) {
+      // Another band does not help within the limits: keep the fit before it.
+      break;
+    }
+    result = next;
   }
   // Drop bands that ended up doing nothing, then refine what is left.
   const auto kept = std::ranges::remove_if(

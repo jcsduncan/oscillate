@@ -52,8 +52,8 @@ struct Target {
 };
 
 // The factory targets, measured from references (ADR-0120 lists how).
-[[nodiscard]] std::span<const Target> factory_targets() noexcept;
-[[nodiscard]] const Target* find_factory_target(std::string_view id) noexcept;
+[[nodiscard]] std::span<const Target> factory_targets();
+[[nodiscard]] const Target* find_factory_target(std::string_view id);
 
 // Where a normalised curve sits against a target, per band: below its
 // range, inside it (ends included) or above it.

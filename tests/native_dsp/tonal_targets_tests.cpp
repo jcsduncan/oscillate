@@ -99,7 +99,7 @@ void k_weighting_is_bs1770() {
     require(analyser.append(samples) == oscillate::native_dsp::LoudnessStatus::ok, "analysed");
     const auto result = analyser.finish();
     require(result.integrated_lkfs.has_value(), "a loudness");
-    const double measured = *result.integrated_lkfs - dsp::bs1770::offset_lkfs -
+    const double measured = result.integrated_lkfs.value_or(0.0) - dsp::bs1770::offset_lkfs -
                             10.0 * std::log10(mean_square(test_amplitude));
     require(std::abs(measured - tonal::k_weighting_db(hz)) < k_tolerance_db,
             "K-weighting at " + std::to_string(hz) + " Hz: " + std::to_string(measured) + " vs " +
@@ -208,7 +208,7 @@ void targets_rebuild_deterministically() {
   const auto first = tonal::build_target("t", "Test", curves);
   REQUIRE_OK(first, "a target");
   std::ranges::reverse(curves);
-  std::rotate(curves.begin(), curves.begin() + 2, curves.end());
+  std::ranges::rotate(curves, curves.begin() + 2);
   const auto again = tonal::build_target("t", "Test", curves);
   REQUIRE_OK(again, "a target");
   const auto text = tonal::serialise_target(first.value());
@@ -216,6 +216,7 @@ void targets_rebuild_deterministically() {
           "the same references in any order give the same file");
   // The median and quartiles by hand for one band.
   std::vector<double> column;
+  column.reserve(curves.size());
   for (const auto& c : curves) {
     column.push_back(c[0]);
   }

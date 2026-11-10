@@ -119,11 +119,16 @@ def run(args, work):
     groups = {}
     for path, audio in zip(files, decoded, strict=True):
         groups.setdefault(genre(path), []).append(audio)
+    built = {ALL_ID: ALL_NAME}
     for name in sorted(groups):
-        if name and len(groups[name]) >= args.min_references:
-            build(args.tool, slug(name), name, out_dir / f"{slug(name)}.json", groups[name])
-        else:
+        if not name or len(groups[name]) < args.min_references:
             print(f"skipped {name or '(untagged)'}: {len(groups[name])} references")
+            continue
+        target_id = slug(name)
+        if target_id in built:
+            sys.exit(f"genre tags {built[target_id]!r} and {name!r} would share {target_id}.json")
+        built[target_id] = name
+        build(args.tool, target_id, name, out_dir / f"{target_id}.json", groups[name])
     build(args.tool, ALL_ID, ALL_NAME, out_dir / f"{ALL_ID}.json", decoded)
 
 

@@ -672,7 +672,9 @@ void screenshots_if_requested() {
   const auto& shape_table = *effects::shape::engine().descriptor;
   auto shape_values = oscillate::native_dsp::default_values(shape_table);
   for (const auto& [id, value] : effects::shape::band_values(curve)) {
-    shape_values[oscillate::native_dsp::find_parameter(shape_table, id).value()] = value;
+    const auto at = oscillate::native_dsp::find_parameter(shape_table, id);
+    require(at.has_value(), "Shape has " + std::string(id));
+    shape_values[at.value_or(0)] = value;
   }
   auto shaped =
       effects::NativeEffectRuntime::create(effects::shape::engine(), shape_values, 48'000.0);

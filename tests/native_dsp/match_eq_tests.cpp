@@ -111,7 +111,9 @@ match_eq::FineCurve shape_response(const std::vector<double>& values) {
   REQUIRE_OK(prepared, "Shape's cascade prepares");
   match_eq::FineCurve out{};
   for (std::size_t i = 0; i < tonal::fine_bands; ++i) {
-    out[i] = oscillate::native_dsp::eq_magnitude_db(prepared.value(), tonal::fine_hz(i)).value();
+    const auto db = oscillate::native_dsp::eq_magnitude_db(prepared.value(), tonal::fine_hz(i));
+    require(db.has_value(), "Shape's response at every fine band");
+    out[i] = db.value_or(0.0);
   }
   return out;
 }

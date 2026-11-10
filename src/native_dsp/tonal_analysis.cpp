@@ -75,7 +75,7 @@ void write_array(std::string& out, std::string_view key, std::span<const double>
     }
     write_number(out, values[i]);
   }
-  out += "]";
+  out += ']';
 }
 
 [[nodiscard]] bool read_curve(const nlohmann::json& document, std::string_view key, Curve& out) {
@@ -176,6 +176,7 @@ BandMeter::~BandMeter() = default;
 BandMeter::BandMeter(BandMeter&&) noexcept = default;
 BandMeter& BandMeter::operator=(BandMeter&&) noexcept = default;
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the first signal, then the second.
 void BandMeter::push(double a, double b) noexcept {
   ring_[0][write_] = a;
   ring_[1][write_] = b;

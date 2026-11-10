@@ -63,5 +63,5 @@ Lens compares a mix with a reference in its sidechain, but only shows the differ
   - `quick_lens_panel_contract`: the panel proposes bands and Apply writes them; in and out of range on a user target; saving a target; broken files ignored.
   - `quick_native_synth_session_adapter_contract`: a new Shape after Lens, then the same one, each one undo step.
   - `application_routed_effect_live`: a six-band write goes live with no allocation and no gap or jump.
-- **CPU:** the tonal meter adds about 0.25% of a core to Lens, as one 0.34 ms transform every 0.17 s (i7-10700K, GCC 15.2).
+- **CPU:** the tonal meter adds about 0.25% of a core to Lens, measured over its whole work: buffering every frame, then one 16384-point transform (0.34 ms) and the band sums every 0.17 s (i7-10700K, GCC 15.2).
 - **Panel:** a Match EQ card (the correction dashed, the fitted Shape response with numbered bands, the match settings, Restart and Apply to Shape) and a Tonal Balance card (target picker, range corridor, in-range count, Save as target). The panel is 1058 px tall.

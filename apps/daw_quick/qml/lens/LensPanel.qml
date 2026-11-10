@@ -895,7 +895,9 @@ Rectangle {
         id: matchPlate
         objectName: "lensMatchPlate"
         title: "MATCH EQ"
-        note: panel.matchRevision >= 0 && panel.match && panel.match.ready
+        note: panel.matchRevision >= 0 && panel.match && panel.match.applyMessage !== ""
+            ? panel.match.applyMessage.toUpperCase()
+            : panel.matchRevision >= 0 && panel.match && panel.match.ready
             ? panel.match.bands.length + " SHAPE BANDS · FIT ERROR " + Format.number(panel.match.fitRms, 2)
               + " dB RMS, " + Format.number(panel.match.fitMax, 1) + " dB PEAK"
             : panel.matchToTarget ? "PLAY THE MIX TO MATCH IT TO " + (panel.match ? panel.match.targetName.toUpperCase() : "")

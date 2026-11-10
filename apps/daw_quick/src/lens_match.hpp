@@ -62,7 +62,9 @@ class LensMatch final : public QObject {
   Q_PROPERTY(QVariantList targetHigh READ target_high NOTIFY changed)
   Q_PROPERTY(QVariantList placements READ placements NOTIFY changed)
   Q_PROPERTY(int inRange READ in_range NOTIFY changed)
-  // What the last request did, or why it did nothing.
+  // What the last Apply did, or why it did nothing; and the same for the
+  // last Save as target.
+  Q_PROPERTY(QString applyMessage READ apply_message NOTIFY changed)
   Q_PROPERTY(QString message READ message NOTIFY changed)
 
 public:
@@ -107,6 +109,7 @@ public:
   [[nodiscard]] QVariantList target_high() const;
   [[nodiscard]] QVariantList placements() const;
   [[nodiscard]] int in_range() const;
+  [[nodiscard]] QString apply_message() const { return apply_message_; }
   [[nodiscard]] QString message() const { return message_; }
 
   // Reads Lens's newest telemetry frame (the panel calls it from its poll).
@@ -159,6 +162,11 @@ private:
   bool fitted_ = false;
   std::vector<double> fitted_values_;
   QElapsedTimer since_fit_;
+  // The match settings and source the fit was drawn with: other Lens
+  // values changing do not redraw it.
+  native_dsp::match_eq::Settings fit_settings_{};
+  bool fit_to_target_ = false;
+  QString apply_message_;
   QString message_;
   int revision_ = 0;
 };

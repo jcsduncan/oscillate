@@ -63,7 +63,7 @@ Curve normalised(const Curve& levels) noexcept {
   return out;
 }
 
-const Target* find_factory_target(std::string_view id) noexcept {
+const Target* find_factory_target(std::string_view id) {
   for (const auto& target : factory_targets()) {
     if (target.id == id) {
       return &target;

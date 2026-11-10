@@ -59,6 +59,7 @@ public:
   BandMeter(const BandMeter&) = delete;
   BandMeter& operator=(const BandMeter&) = delete;
 
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the first signal, then the second.
   void push(double a, double b) noexcept;
   void reset() noexcept;
   // Windows analysed since the last reset; the mean band powers over them
@@ -113,7 +114,7 @@ inline constexpr double upper_quartile = 0.75;
 // lives.
 inline constexpr std::string_view file_format = "oscillate-tonal-target";
 inline constexpr int file_version = 1;
-inline constexpr std::size_t max_file_bytes = 64 * 1024;
+inline constexpr std::size_t max_file_bytes = std::size_t{64} * 1024;
 inline constexpr std::size_t max_name_bytes = 64;
 inline constexpr double centre_tolerance = 0.005; // Relative.
 inline constexpr double level_floor_db = -120.0;

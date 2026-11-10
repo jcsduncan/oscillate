@@ -115,8 +115,14 @@ int run_build(const Build& build, const std::vector<std::string>& files) {
     std::cerr << target.error().message << '\n';
     return 1;
   }
+  // What Lens and factory will read: refuse a target they would refuse.
+  const auto text = tonal::serialise_target(target.value());
+  if (auto checked = tonal::parse_target(text, build.id); !checked) {
+    std::cerr << checked.error().message << '\n';
+    return 1;
+  }
   std::ofstream file(build.out, std::ios::binary | std::ios::trunc);
-  file << tonal::serialise_target(target.value());
+  file << text;
   if (!file) {
     std::cerr << "cannot write " << build.out << '\n';
     return 1;
@@ -131,6 +137,23 @@ void write_curve(std::ostream& out, std::string_view field, const tonal::Curve& 
     out << (b == 0 ? "" : ", ") << number(curve[b]);
   }
   out << "},\n";
+}
+
+// `text` as a C++ string literal; false when it holds a control character.
+[[nodiscard]] bool quoted(std::string_view text, std::string& out) {
+  constexpr unsigned char first_printable = 0x20;
+  out = "\"";
+  for (const char c : text) {
+    if (static_cast<unsigned char>(c) < first_printable) {
+      return false;
+    }
+    if (c == '"' || c == '\\') {
+      out += '\\';
+    }
+    out += c;
+  }
+  out += '"';
+  return true;
 }
 
 int run_factory(const std::string& out, const std::vector<std::string>& files) {
@@ -152,21 +175,26 @@ int run_factory(const std::string& out, const std::vector<std::string>& files) {
           "// third-octave spectra; no audio is stored.\n"
           "#include \"oscillate/native_dsp/tonal_targets.hpp\"\n\n"
           "#include <array>\n#include <span>\n\n"
-          "namespace oscillate::native_dsp::tonal {\nnamespace {\n\n"
-          "// NOLINTBEGIN(readability-magic-numbers): measured data.\n"
-          "const std::array<Target, "
+          "namespace oscillate::native_dsp::tonal {\n\n"
+          "std::span<const Target> factory_targets() {\n"
+          "  static const std::array<Target, "
        << targets.size() << "> targets{{\n";
   for (const auto& target : targets) {
-    file << "    Target{.id = \"" << target.id << "\",\n"
-         << "         .name = \"" << target.name << "\",\n"
+    std::string id;
+    std::string name;
+    if (!quoted(target.id, id) || !quoted(target.name, name)) {
+      std::cerr << target.id << ": a control character in the id or name\n";
+      return 1;
+    }
+    file << "    Target{.id = " << id << ",\n"
+         << "         .name = " << name << ",\n"
          << "         .references = " << target.references << ",\n";
     write_curve(file, "median", target.median);
     write_curve(file, "low", target.low);
     write_curve(file, "high", target.high);
     file << "    },\n";
   }
-  file << "}};\n// NOLINTEND(readability-magic-numbers)\n\n} // namespace\n\n"
-          "std::span<const Target> factory_targets() noexcept { return targets; }\n\n"
+  file << "  }};\n  return targets;\n}\n\n"
           "} // namespace oscillate::native_dsp::tonal\n";
   if (!file) {
     std::cerr << "cannot write " << out << '\n';

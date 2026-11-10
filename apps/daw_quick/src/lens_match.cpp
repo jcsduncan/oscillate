@@ -84,8 +84,17 @@ LensMatch::LensMatch(NativeSynthDeviceController& controller, NativeSynthPanelAd
   if (!tonal::factory_targets().empty()) {
     target_id_ = QString::fromStdString(tonal::factory_targets().front().id);
   }
-  // The match settings are Lens's parameters: a change redraws the match.
+  // The match settings are Lens's parameters: a change to them redraws the
+  // match; Lens's other values leave it alone.
   connect(&controller_, &NativeSynthDeviceController::values_changed, this, [this] {
+    const auto settings = lens::match_settings(controller_.current_values());
+    const auto& f = fit_settings_;
+    if (settings.amount == f.amount && settings.smoothing_octaves == f.smoothing_octaves &&
+        settings.low_hz == f.low_hz && settings.high_hz == f.high_hz &&
+        settings.max_boost_db == f.max_boost_db && settings.max_cut_db == f.max_cut_db &&
+        matches_target() == fit_to_target_) {
+      return;
+    }
     refit();
     bump();
   });
@@ -306,6 +315,7 @@ void LensMatch::reset() {
   windows_ = 0;
   chunk_windows_ = 0;
   fitted_ = false;
+  apply_message_.clear();
   message_.clear();
   bump();
 }
@@ -313,6 +323,8 @@ void LensMatch::reset() {
 void LensMatch::refit() {
   since_fit_.restart();
   fitted_ = false;
+  fit_settings_ = lens::match_settings(controller_.current_values());
+  fit_to_target_ = matches_target();
   if (windows_ < ready_windows || !audible(sum_[input])) {
     return;
   }
@@ -330,27 +342,26 @@ void LensMatch::refit() {
     }
     reference = tonal::fine_levels(mean_of(sum_[sidechain], windows_));
   }
-  const auto settings = lens::match_settings(controller_.current_values());
-  correction_ = match_eq::correction(mix, reference, settings);
-  fit_ = match_eq::fit(correction_, settings);
+  correction_ = match_eq::correction(mix, reference, fit_settings_);
+  fit_ = match_eq::fit(correction_, fit_settings_);
   fitted_ = true;
 }
 
 bool LensMatch::apply() {
   if (!fitted_) {
-    message_ = matches_target() || has_sidechain()
-                   ? QStringLiteral("Play a little longer first")
-                   : QStringLiteral("Feed the sidechain a reference, or match to a target");
+    apply_message_ = matches_target() || has_sidechain()
+                         ? QStringLiteral("Play a little longer first")
+                         : QStringLiteral("Feed the sidechain a reference, or match to a target");
     bump();
     return false;
   }
   const auto values = shape::band_values(std::span(fit_.band.data(), fit_.size));
   if (!adapter_.write_next_effect(shape::engine().descriptor->id, values)) {
-    message_ = QString::fromStdString(adapter_.status().message);
+    apply_message_ = QString::fromStdString(adapter_.status().message);
     bump();
     return false;
   }
-  message_ = QStringLiteral("Wrote %1 bands to Shape").arg(fit_.size);
+  apply_message_ = QStringLiteral("Wrote %1 bands to Shape").arg(fit_.size);
   bump();
   return true;
 }
