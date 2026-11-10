@@ -401,7 +401,7 @@ Master formats:
 
 - WAV PCM, 16-bit, 24-bit and 32-bit float.
 - Selectable sample rate.
-- TPDF dither by default when reducing integer bit depth.
+- TPDF dither when reducing integer bit depth, flat or noise-shaped (a psychoacoustic shape by default in the export panel).
 - FLAC.
 - MP3.
 

@@ -47,6 +47,10 @@ namespace oscillate::quick {
 [[nodiscard]] double edge_latency_ms(const native_dsp::EngineDescriptor& engine,
                                      std::span<const double> values, double sample_rate);
 
+// Ceiling's latency in milliseconds at `sample_rate` (0 for other engines).
+[[nodiscard]] double ceiling_latency_ms(const native_dsp::EngineDescriptor& engine,
+                                        std::span<const double> values, double sample_rate);
+
 // Strata (native effect) sketches, empty for other engines:
 //  - strata_transfer: band `band`'s static curve, output dB (makeup
 //    included) at `points` steady levels evenly spaced from `floor_db` to 0;

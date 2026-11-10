@@ -1,8 +1,8 @@
 #pragma once
 
+#include "oscillate/export/dither.hpp"
 #include "oscillate/foundation/error.hpp"
 #include "oscillate/foundation/file_io.hpp"
-#include "oscillate/foundation/split_mix.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -18,6 +18,8 @@ struct WavSpec {
   WavFormat format = WavFormat::float32;
   std::uint64_t expected_frames = 0;
   std::uint64_t dither_seed = 0;
+  // Integer formats only: float32 is written as rendered.
+  DitherShape dither = default_dither_shape;
 };
 
 // A renamed output exists, but its containing directory could not be synced.
@@ -64,7 +66,7 @@ private:
   // The length the header on disk declares.
   std::uint64_t header_frames_ = 0;
   std::uint64_t frames_written_ = 0;
-  foundation::SplitMix64 dither_;
+  DitherQuantizer dither_;
   bool failed_ = false;
   bool published_ = false;
 };

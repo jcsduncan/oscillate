@@ -30,13 +30,10 @@ using foundation::UniqueFd;
   return rate == 44'100 || rate == 48'000 || rate == 88'200 || rate == 96'000;
 }
 
-template <unsigned Bits>
-[[nodiscard]] std::int32_t quantize(float sample, foundation::SplitMix64& dither) noexcept {
-  const auto scale = static_cast<double>(std::uint32_t{1} << (Bits - 1U));
-  const auto noise = dither.unit() - dither.unit();
-  const auto quantized = std::round(static_cast<double>(sample) * scale + noise);
-  return static_cast<std::int32_t>(std::clamp(quantized, -scale, scale - 1.0));
-}
+constexpr unsigned flac16_bits = 16;
+constexpr unsigned flac24_bits = 24;
+// libsndfile takes 24-bit FLAC as the top bytes of an int.
+constexpr int int24_to_int = 256;
 
 [[nodiscard]] int sndfile_format(EncodedMasterFormat format) noexcept {
   switch (format) {
@@ -55,7 +52,9 @@ EncodedWriter::EncodedWriter(OpenFiles files, FileNames names, SNDFILE* handle, 
     : directory_fd_(files.directory), file_fd_(files.file),
       temporary_name_(std::move(names.temporary)), target_name_(std::move(names.target)),
       handle_(handle), format_(spec.format), sample_rate_(spec.sample_rate),
-      expected_frames_(spec.expected_frames), dither_(spec.dither_seed) {}
+      expected_frames_(spec.expected_frames),
+      dither_(spec.format == EncodedMasterFormat::flac16 ? flac16_bits : flac24_bits, spec.dither,
+              spec.sample_rate, spec.dither_seed) {}
 
 EncodedWriter::EncodedWriter(EncodedWriter&& other) noexcept
     : directory_fd_(std::move(other.directory_fd_)), file_fd_(std::move(other.file_fd_)),
@@ -145,8 +144,9 @@ Result<EncodedWriter> EncodedWriter::begin(const EncodedMasterOptions& options,
     (void)::unlinkat(directory_fd.get(), temporary_name.c_str(), 0);
     return Result<EncodedWriter>::failure(error);
   }
-  EncodedWriter writer({directory_fd.release(), file_fd}, {std::move(temporary_name), target_name},
-                       handle, {options.format, sample_rate, expected_frames, options.dither_seed});
+  EncodedWriter writer(
+      {directory_fd.release(), file_fd}, {std::move(temporary_name), target_name}, handle,
+      {options.format, sample_rate, expected_frames, options.dither_seed, options.dither});
   if (options.format == EncodedMasterFormat::mp3) {
     double level = options.compression_level;
     if (::sf_command(handle, SFC_SET_COMPRESSION_LEVEL, &level, sizeof(level)) != SF_TRUE) {
@@ -178,13 +178,13 @@ Result<void> EncodedWriter::write_interleaved_stereo(std::span<const float> samp
     switch (format_) {
     case EncodedMasterFormat::flac16:
       for (std::size_t index = 0; index < count * 2; ++index) {
-        pcm16[index] = static_cast<short>(quantize<16>(samples[first * 2 + index], dither_));
+        pcm16[index] = static_cast<short>(dither_.quantize(samples[first * 2 + index], index % 2));
       }
       written = ::sf_writef_short(handle_, pcm16.data(), static_cast<sf_count_t>(count));
       break;
     case EncodedMasterFormat::flac24:
       for (std::size_t index = 0; index < count * 2; ++index) {
-        pcm24[index] = quantize<24>(samples[first * 2 + index], dither_) * 256;
+        pcm24[index] = dither_.quantize(samples[first * 2 + index], index % 2) * int24_to_int;
       }
       written = ::sf_writef_int(handle_, pcm24.data(), static_cast<sf_count_t>(count));
       break;

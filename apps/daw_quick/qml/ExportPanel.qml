@@ -346,6 +346,56 @@ Item {
         }
     }
 
+    // Dither for integer formats (ADR-0117): flat TPDF or a noise shape.
+    // Float and MP3 are written as rendered, so the choice dims for them.
+    Row {
+        id: ditherRow
+        objectName: "exportDither"
+        x: exportPanel.width - exportPanel.margin - width
+        y: trimTail.y
+        height: Theme.exportCheckRowHeight
+        spacing: Theme.spaceSm
+        opacity: exportPanel.bridge.exports.exportDithers ? 1 : Theme.exportDisabledOpacity
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: exportPanel.bridge.exports.exportDithers ? "Dither" : "No dither"
+            color: exportPanel.textDim
+            font.pixelSize: Theme.typeSmall
+        }
+        Repeater {
+            model: exportPanel.bridge.exports.exportDitherLabels
+            delegate: Rectangle {
+                id: ditherOption
+                required property int index
+                required property string modelData
+                readonly property bool chosen: exportPanel.bridge.exports.exportDitherIndex === index
+                objectName: "exportDither" + index
+                width: ditherText.implicitWidth + 2 * Theme.spaceMd
+                height: parent.height
+                radius: height / 2
+                color: chosen ? exportPanel.accent : exportPanel.panelRaised
+                border.color: activeFocus ? exportPanel.accent : exportPanel.line
+                activeFocusOnTab: exportPanel.bridge.exports.exportDithers && !exportPanel.bridge.exports.exportBusy
+                Accessible.role: Accessible.RadioButton
+                Accessible.name: "Dither: " + modelData
+                Accessible.checked: chosen
+                Keys.onSpacePressed: exportPanel.bridge.exports.exportDitherIndex = index
+                Text {
+                    id: ditherText
+                    anchors.centerIn: parent
+                    text: ditherOption.modelData
+                    color: ditherOption.chosen ? exportPanel.canvas : exportPanel.textMain
+                    font.pixelSize: Theme.typeSmall
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: exportPanel.bridge.exports.exportDithers && !exportPanel.bridge.exports.exportBusy
+                    onClicked: exportPanel.bridge.exports.exportDitherIndex = ditherOption.index
+                }
+            }
+        }
+    }
+
     // Progress while an export runs; the result once it has finished.
     Rectangle {
         id: progressTrack

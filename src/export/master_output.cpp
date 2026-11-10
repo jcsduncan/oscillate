@@ -40,8 +40,8 @@ struct SrcDeleter {
                                                       std::uint32_t sample_rate,
                                                       std::uint64_t expected_frames) {
   if (const auto* wav = std::get_if<MasterRenderOptions>(&options)) {
-    auto started = WavWriter::begin(
-        wav->target, WavSpec{sample_rate, wav->format, expected_frames, wav->dither_seed});
+    auto started = WavWriter::begin(wav->target, WavSpec{sample_rate, wav->format, expected_frames,
+                                                         wav->dither_seed, wav->dither});
     if (!started) {
       return foundation::Result<Writer>::failure(started.error());
     }

@@ -1,5 +1,5 @@
 oscillate_add_library(export
-  SOURCES wav_writer.cpp master_output.cpp offline_master.cpp processed_clip.cpp
+  SOURCES dither.cpp wav_writer.cpp master_output.cpp offline_master.cpp processed_clip.cpp
           realtime_capture.cpp realtime_tail_plan.cpp
   # master_output.hpp is shared with the VST3 exporters.
   # The graph comes from render_graph, whose VST3 stage preparer the API

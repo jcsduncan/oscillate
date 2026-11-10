@@ -9,7 +9,7 @@ effects renders through the native offline master itself
 tail-inclusive project-rate stream to the master output stage
 (`include/oscillate/export/master_output.hpp`, `src/export/master_output.cpp`). That stage:
 
-- writes WAV float32, PCM24 or PCM16, with seeded TPDF dither for integer WAV;
+- writes WAV float32, PCM24 or PCM16, with seeded TPDF dither, flat or noise-shaped ([ADR-0117](../decisions/0117-ceiling-mastering-limiter.md)), for integer WAV;
 - in a codec build, writes FLAC16, FLAC24 or MP3 through the existing in-process
   libsndfile `EncodedWriter`; no external encoder or `ffmpeg` process is used;
 - in a libsamplerate export build, converts to 44.1, 48, 88.2 or 96 kHz with the

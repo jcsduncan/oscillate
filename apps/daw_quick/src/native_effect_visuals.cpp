@@ -3,6 +3,7 @@
 #include "oscillate/engine/graph.hpp"
 #include "oscillate/native_dsp/compressor.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
+#include "oscillate/native_dsp/effects/ceiling.hpp"
 #include "oscillate/native_dsp/effects/contour.hpp"
 #include "oscillate/native_dsp/effects/edge.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
@@ -215,6 +216,17 @@ double edge_latency_ms(const native_dsp::EngineDescriptor& engine, std::span<con
     return 0.0;
   }
   const auto frames = native_dsp::effects::edge::engine().latency_frames(values, sample_rate);
+  return static_cast<double>(frames) / sample_rate * milliseconds_per_second;
+}
+
+double ceiling_latency_ms(const native_dsp::EngineDescriptor& engine,
+                          std::span<const double> values, double sample_rate) {
+  constexpr double milliseconds_per_second = 1'000.0;
+  if (engine.id != native_dsp::effects::ceiling::engine().descriptor->id ||
+      values.size() != engine.parameters.size() || !(sample_rate > 0.0)) {
+    return 0.0;
+  }
+  const auto frames = native_dsp::effects::ceiling::engine().latency_frames(values, sample_rate);
   return static_cast<double>(frames) / sample_rate * milliseconds_per_second;
 }
 

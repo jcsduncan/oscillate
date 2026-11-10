@@ -3,6 +3,14 @@ oscillate_add_test_executable(oscillate_export_tests SOURCES wav_writer_tests.cp
   INCLUDES ${CMAKE_CURRENT_LIST_DIR}/../../src/export
   TEST export_wav_writer)
 
+# Dither and noise shaping for integer output (ADR-0117).
+oscillate_add_test_executable(oscillate_dither_tests SOURCES dither_tests.cpp
+  LIBS oscillate::export)
+oscillate_add_case_tests(export_dither_contract oscillate_dither_tests
+  CASES flat_dither_is_white_at_a_quarter_lsb shaped_noise_follows_its_curve
+        high_rates_push_the_noise_above_the_band feedback_stays_bounded_when_clipping
+        flat_is_the_seeded_tpdf the_writer_applies_the_shape)
+
 oscillate_add_test_executable(oscillate_realtime_capture_tests SOURCES realtime_capture_tests.cpp
   LIBS oscillate::export
   TEST export_realtime_capture)

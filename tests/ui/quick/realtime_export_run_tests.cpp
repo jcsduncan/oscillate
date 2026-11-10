@@ -2,6 +2,7 @@
 
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/export/offline_master.hpp"
+#include "oscillate/native_dsp/effects/ceiling.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/test/allocation_counter.hpp"
 #include "oscillate/test/check.hpp"
@@ -518,7 +519,10 @@ void add_master_tail(app::ProjectSession& session) {
               .has_value(),
           "master reverb insert failed");
   require(session.effects()
-              .add_native_effect(master, 1, project::NativeEffectPatch{"ceiling", 1, {}})
+              .add_native_effect(
+                  master, 1,
+                  project::NativeEffectPatch{
+                      "ceiling", 1, {{"ceiling.transients", 0.0}, {"ceiling.clip", 0.0}}})
               .has_value(),
           "master limiter insert failed");
 }
@@ -567,8 +571,11 @@ void reverb_tail_rings_out_without_later_source() {
   const auto expected_tail =
       take(quick::RealtimeExportRun::bounded_tail_frames(session->snapshot()));
 
-  // 5 ms lookahead at 48 kHz.
-  require(narrow.latency_frames == 240 && broad.latency_frames == 240,
+  // Ceiling's default lookahead at 48 kHz (ADR-0117).
+  constexpr double default_lookahead_ms = 4.0;
+  const auto limiter_latency =
+      oscillate::native_dsp::effects::ceiling::latency_frames(default_lookahead_ms, 48'000.0);
+  require(narrow.latency_frames == limiter_latency && broad.latency_frames == limiter_latency,
           "limiter lookahead is not the prepared output latency");
   require(expected_tail > 4'800 && narrow.tail_frames == expected_tail &&
               broad.tail_frames == expected_tail,

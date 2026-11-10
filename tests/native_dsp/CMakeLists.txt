@@ -553,6 +553,31 @@ oscillate_add_case_tests(native_strata_contract oscillate_strata_tests
   the_callback_never_allocates
   telemetry_feeds_the_panel)
 
+# Ceiling (ADR-0117): the mastering limiter. It checks the classic limiter
+# as the oracle it improves on.
+oscillate_add_test_executable(oscillate_ceiling_tests SOURCES ceiling_tests.cpp
+  LIBS oscillate::native_effects)
+oscillate_add_case_tests(native_ceiling_contract oscillate_ceiling_tests
+  CASES
+  descriptor_registry_and_presets
+  true_peak_never_exceeds_the_ceiling
+  true_peak_holds_while_the_ceiling_glides
+  steady_tones_stay_clean
+  distortion_beats_the_classic_limiter
+  transients_keep_the_onsets
+  the_clipper_does_not_alias
+  stereo_link_shares_the_gain
+  latency_is_reported_and_exact
+  without_room_it_is_an_exact_delay
+  opening_the_room_never_clicks
+  any_block_split_renders_the_same
+  export_equals_live
+  a_seek_starts_clean
+  hostile_input_stays_finite
+  presets_stay_restrained
+  the_callback_never_allocates
+  telemetry_feeds_the_panel)
+
 # Edge (ADR-0108): the clipper.
 oscillate_add_test_executable(oscillate_edge_tests SOURCES edge_tests.cpp
   LIBS oscillate::native_effects)

@@ -50,6 +50,7 @@ private:
     std::uint32_t sample_rate;
     std::uint64_t expected_frames;
     std::uint64_t dither_seed;
+    DitherShape dither;
   };
   EncodedWriter(OpenFiles files, FileNames names, SNDFILE* handle, Spec spec) noexcept;
   void cleanup() noexcept;
@@ -63,7 +64,7 @@ private:
   std::uint32_t sample_rate_ = 0;
   std::uint64_t expected_frames_ = 0;
   std::uint64_t frames_written_ = 0;
-  foundation::SplitMix64 dither_;
+  DitherQuantizer dither_;
   bool failed_ = false;
   bool published_ = false;
 };

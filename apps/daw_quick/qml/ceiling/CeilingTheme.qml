@@ -57,6 +57,12 @@ KitTheme {
     sans: "DejaVu Sans"
     mono: "DejaVu Sans Mono"
 
+    // Telemetry polls while playing (about 30 a second) and while idle.
+    property int pollPlayingMs: 33
+    property int pollIdleMs: 250
+    // A reduction under this reads as none.
+    property real reductionIdleDb: 0.05
+
     // The panel's layout.
     property int panelWidth: 1240
     property int panelHeight: 640
@@ -67,8 +73,6 @@ KitTheme {
     property real cardContentY: 34
     property real noteBottom: 26
     property real captionSpacing: 1.4
-    // A control with nothing to act on.
-    property real idleOpacity: 0.45
 
     // The header (Kit.DeviceHeader): the wordmark over its accent rule and
     // the latency line, the preset browser and, once a control is touched,
@@ -83,7 +87,7 @@ KitTheme {
     subtitleGap: 7
     subtitleSpacing: 1.6
     subtitleInk: inkDim
-    headerBrowserX: 250
+    headerBrowserX: 270
     presetDisplayWidth: 276
     presetDisplayHeight: 42
     presetDisplayRadius: radiusLg
@@ -99,22 +103,21 @@ KitTheme {
     readoutValueY: 17
     readoutSpacing: 1.2
 
-    // Row A: the reduction history and the level meters.
+    // Row A: the reduction history, the level meters and the loudness.
     property real rowAY: 76
     property real rowAHeight: 330
-    property real meterPlateWidth: 250
+    property real meterPlateWidth: 230
+    property real loudnessPlateWidth: 330
     property real historyY: 30
     property real historyBottomTrim: 40
-    property real reductionColumnWidth: 150
-    property real reductionColumnInner: 140
+    property real reductionColumnWidth: 140
+    property real reductionColumnInner: 130
     property real reductionColumnY: 44
     property int reductionNowSize: 44
     property int reductionLargestSize: 22
-    property real reductionSpacer: 26
-    property real clearSpacer: 18
-    property real clearWidth: 110
-    property real clearHeight: 26
-    property real clearSpacing: 1.6
+    property real reductionSpacer: 22
+    property real clearSpacer: 14
+    property real clearWidth: 96
     property real meterHeight: 230
     property real meterPairWidth: 80
     // The peak readouts and caption above a pair of meters.
@@ -125,25 +128,29 @@ KitTheme {
     property real meterBarWidth: 20
     // The PeakMeter's inset from its edge to the scale.
     property real meterInset: 2
+    // The loudness: the integrated reading large, short-term and momentary
+    // under it, the target knob and Learn.
+    property real integratedY: 48
+    property int integratedSize: 40
+    property real loudnessRowsY: 112
+    property real loudnessCaptionWidth: 84
+    property real targetKnobY: 172
+    property int knobDiameterSmall: 48
+    property real learnY: 186
+    property real learnWidth: 132
+    property real learnNoteY: 226
 
-    // Row B: gain, ceiling, lookahead and release.
-    property real gainPlateWidth: 270
-    property real ceilingPlateWidth: 360
-    property real lookaheadPlateWidth: 290
+    // Row B: drive, limit, clip and stereo.
+    property real drivePlateWidth: 290
+    property real limitPlateWidth: 330
+    property real clipPlateWidth: 330
     property real heroKnobX: 18
-    property int heroKnobDiameter: 104
-    property int smallKnobDiameter: 62
-    property real gainValueX: 140
-    property real gainValueY: 66
-    property int gainValueSize: 34
-    property real gainUnitGap: 5
-    property real gainNoteY: 148
-    property real ceilingValueX: 172
-    property real ceilingValueY: 58
-    property int ceilingValueSize: 48
-    property real ceilingNoteY: 128
-    property real sideNoteX: 120
-    property real sideNoteY: 40
+    property int heroKnobDiameter: 92
+    property real heroValueY: 128
+    property int heroValueSize: 28
+    property real heroCaptionY: 166
+    property int knobDiameterLarge: 62
+    property real knobHintGap: 4
 
     // The control last touched, read back in the display.
     lastTouched: ""

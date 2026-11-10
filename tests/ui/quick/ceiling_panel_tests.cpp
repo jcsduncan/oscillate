@@ -34,12 +34,13 @@
 #include <utility>
 #include <vector>
 
-// The Ceiling panel (ADR-0047): every parameter on a table-driven control;
+// The Ceiling panel (ADR-0117): every parameter on a table-driven control;
 // the ceiling readout and its line across the output meters; the latency
 // in the header; the telemetry decode into the reduction now, its history
-// and its largest, and the peak meters; the real Ceiling over a full-scale
-// tone holding the output at the ceiling; presets and status; and
-// screenshots on request.
+// and its largest, the peak meters, the loudness, what the clipper and the
+// guard took; Learn moving Gain to the target; the real Ceiling over a
+// full-scale tone holding the output at the ceiling; presets and status;
+// and screenshots on request.
 namespace {
 using oscillate::quick::InMemoryNativeSynthAdapter;
 using oscillate::quick::NativeSynthDeviceController;
@@ -148,11 +149,23 @@ bool wait_for_text(Panel& panel, const QString& name, const QString& text) {
   return QTest::qWaitFor([&] { return text_of(panel, name) == text; }, 1000);
 }
 
+// The loudness readings a test frame carries unless a test sets its own.
+constexpr float frame_integrated = -9.0F;
+constexpr float frame_short_term = -8.5F;
+constexpr float frame_momentary = -8.0F;
+constexpr float frame_clipped = 1.2F;
+constexpr float frame_guarded = 0.3F;
+
 // The arguments are named at every call.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 std::vector<float> frame_of(float in_l, float in_r, float out_l, float out_r, float reduction) {
   namespace t = ceiling::telemetry;
   std::vector<float> frame(t::size, 0.0F);
+  frame[t::integrated] = frame_integrated;
+  frame[t::short_term] = frame_short_term;
+  frame[t::momentary] = frame_momentary;
+  frame[t::clipped] = frame_clipped;
+  frame[t::guarded] = frame_guarded;
   frame[t::input_peak] = in_l;
   frame[t::input_peak + 1] = in_r;
   frame[t::output_peak] = out_l;
@@ -178,11 +191,14 @@ void panel_covers_every_parameter() {
           "the panel names its preset");
   require(text_of(*panel, QStringLiteral("ceilingValue")) == QStringLiteral("−1.0"),
           "the ceiling reads in large");
+  constexpr double nominal_rate = 48'000.0;
+  const double latency_ms = controller.ceiling_latency_ms(nominal_rate);
+  require(latency_ms > 0.0, "the controller reads Ceiling's latency");
   require(text_of(*panel, QStringLiteral("ceilingLatency")) ==
-              QStringLiteral("LOOKAHEAD LIMITER · ") +
-                  controller.display(QStringLiteral("ceiling.lookahead")) +
-                  QStringLiteral(" LATENCY"),
-          "the header names the latency");
+              QStringLiteral("TRUE-PEAK LIMITER · ") + QString::number(latency_ms, 'f', 1) +
+                  QStringLiteral(" ms LATENCY"),
+          "the header names the latency: " +
+              text_of(*panel, QStringLiteral("ceilingLatency")).toStdString());
   // It ends before the preset browser rather than running under it.
   oscillate::test::panel_fit::require_clear_of(
       *item(*panel, QStringLiteral("ceilingLatency")),
@@ -243,6 +259,16 @@ void telemetry_decodes_into_the_history() {
   require(text_of(*panel, QStringLiteral("ceilingOutPeakL")) == QStringLiteral("−1.0") &&
               text_of(*panel, QStringLiteral("ceilingInPeakR")) == QStringLiteral("−2.0"),
           "the peak meters");
+  require(text_of(*panel, QStringLiteral("ceilingIntegrated")) == QStringLiteral("−9.0") &&
+              text_of(*panel, QStringLiteral("ceilingShortTerm")) == QStringLiteral("−8.5") &&
+              text_of(*panel, QStringLiteral("ceilingMomentary")) == QStringLiteral("−8.0"),
+          "the loudness readings");
+  require(text_of(*panel, QStringLiteral("ceilingToTarget")) == QStringLiteral("+5.0 LU to target"),
+          "the distance to the -14 LUFS target: " +
+              text_of(*panel, QStringLiteral("ceilingToTarget")).toStdString());
+  require(text_of(*panel, QStringLiteral("ceilingClipped")) == QStringLiteral("−1.2 dB") &&
+              text_of(*panel, QStringLiteral("ceilingGuarded")) == QStringLiteral("−0.3 dB"),
+          "what the clipper and the guard took");
 
   adapter.set_telemetry({});
   require(wait_for_text(*panel, QStringLiteral("ceilingReduction"), QStringLiteral("—")),
@@ -298,17 +324,22 @@ std::vector<std::vector<float>> real_telemetry(const std::vector<double>& values
   return frames;
 }
 
-// A full-scale tone under a -1 dB ceiling: about 1 dB of reduction, and
-// the output peak held at the ceiling.
+// A full-scale tone under a -1 dB ceiling: a little over 1 dB of reduction
+// (sustained material sits just under the clipper's knee), and the output's
+// true peak held at the ceiling.
+constexpr float least_reduction_db = 0.8F;
+constexpr float most_reduction_db = 2.2F;
+constexpr float held_at_ceiling_db = -0.95F;
+constexpr float under_ceiling_db = -2.0F;
 void the_real_ceiling_holds_the_output() {
   const auto values = preset("Default");
   const auto frames = real_telemetry(values, sine(1.0, static_cast<std::size_t>(2.0 * rate)));
   const auto& last = frames.back();
   namespace t = ceiling::telemetry;
   require(std::fabs(last[t::input_peak]) < 0.05, "a full-scale input");
-  require(last[t::reduction] > 0.8F && last[t::reduction] < 1.5F,
+  require(last[t::reduction] > least_reduction_db && last[t::reduction] < most_reduction_db,
           "about 1 dB of reduction: " + std::to_string(last[t::reduction]));
-  require(last[t::output_peak] <= -0.95F && last[t::output_peak] > -1.5F,
+  require(last[t::output_peak] <= held_at_ceiling_db && last[t::output_peak] > under_ceiling_db,
           "the output held at the ceiling: " + std::to_string(last[t::output_peak]));
 
   InMemoryNativeSynthAdapter adapter(values);
@@ -336,9 +367,9 @@ void gain_drives_the_mix_into_the_ceiling() {
   namespace t = ceiling::telemetry;
   require(std::fabs(last[t::input_peak] + 12.0F) < 0.1F,
           "IN reads the mix before the gain: " + std::to_string(last[t::input_peak]));
-  require(last[t::output_peak] <= -0.95F && last[t::output_peak] > -1.5F,
+  require(last[t::output_peak] <= held_at_ceiling_db && last[t::output_peak] > under_ceiling_db,
           "the gained tone is held at the ceiling: " + std::to_string(last[t::output_peak]));
-  require(last[t::reduction] > 0.8F && last[t::reduction] < 1.5F,
+  require(last[t::reduction] > least_reduction_db && last[t::reduction] < most_reduction_db,
           "the gain pushes about 1 dB into the limiter: " + std::to_string(last[t::reduction]));
 
   InMemoryNativeSynthAdapter adapter(values);
@@ -346,6 +377,29 @@ void gain_drives_the_mix_into_the_ceiling() {
   auto panel = load_panel(controller);
   require(text_of(*panel, QStringLiteral("gainValue")) == QStringLiteral("+12.0"),
           "the gain reads in large");
+}
+
+// Learn moves Gain by the distance from the integrated loudness to the
+// target; with nothing measured it does nothing.
+void learn_moves_gain_to_the_target() {
+  constexpr float quiet_integrated = -18.0F;
+  constexpr double target = -14.0;
+  constexpr double learned_gain = 4.0;
+  InMemoryNativeSynthAdapter adapter(preset("Default"));
+  NativeSynthDeviceController controller(table(), adapter);
+  auto panel = load_panel(controller);
+  auto* learn = item(*panel, QStringLiteral("ceilingLearn"));
+  click(*panel, centre(learn));
+  require(controller.value(QStringLiteral("ceiling.gain")) == 0.0, "nothing measured, no change");
+  require(controller.value(QStringLiteral("ceiling.target")) == target, "the default target");
+  auto frame = frame_of(-6.0F, -6.0F, -1.0F, -1.0F, 2.0F);
+  frame[ceiling::telemetry::integrated] = quiet_integrated;
+  adapter.set_telemetry(frame);
+  require(QTest::qWaitFor([&] { return learn->property("active").toBool(); }, 1'000),
+          "Learn wakes with a reading");
+  click(*panel, centre(learn));
+  require(std::fabs(controller.value(QStringLiteral("ceiling.gain")) - learned_gain) < 1e-9,
+          "Gain moves 4 dB toward the target");
 }
 
 void presets_and_status() {
@@ -361,10 +415,10 @@ void presets_and_status() {
   require(menu->isVisible(), "the preset menu opens");
   QTest::keyClick(panel->window.get(), Qt::Key_Escape);
   require(!menu->isVisible(), "Escape closes it");
-  controller.apply_preset(preset_index("Safety"));
+  controller.apply_preset(preset_index("Loud Club"));
   QCoreApplication::processEvents();
-  require(text_of(*panel, QStringLiteral("ceilingPresetName")) == QStringLiteral("Safety") &&
-              text_of(*panel, QStringLiteral("ceilingValue")) == QStringLiteral("−0.1"),
+  require(text_of(*panel, QStringLiteral("ceilingPresetName")) == QStringLiteral("Loud Club") &&
+              text_of(*panel, QStringLiteral("ceilingValue")) == QStringLiteral("−0.3"),
           "a preset shows by name and ceiling");
   adapter.set_status({.saved_revision = 9, .audible_revision = 9, .deferred_changes = true});
   controller.refresh();
@@ -386,17 +440,34 @@ void screenshots_if_requested() {
     const char* preset;
     const char* file;
   };
-  // A tone that swells from -12 dBFS to +3 dBFS and back over four seconds.
-  std::vector<engine::StereoFrame> input(static_cast<std::size_t>(4.0 * rate));
+  // Six seconds of a kick on every beat at 124 BPM under a held chord,
+  // swelling from -12 dBFS to +3 dBFS.
+  constexpr double seconds = 6.0;
+  constexpr double bpm = 124.0;
+  constexpr double seconds_per_minute = 60.0;
+  constexpr double kick_hz = 55.0;
+  constexpr double kick_decay = 0.12;
+  constexpr double chord_level = 0.25;
+  constexpr std::array chord_hz{220.0, 277.18, 329.63};
+  constexpr double floor_db = -12.0;
+  constexpr double swell_db = 15.0;
+  constexpr double decibels_per_decade = 20.0;
+  std::vector<engine::StereoFrame> input(static_cast<std::size_t>(seconds * rate));
+  const double beat = seconds_per_minute / bpm;
   for (std::size_t i = 0; i < input.size(); ++i) {
     const double t = static_cast<double>(i) / rate;
-    const double db = -12.0 + 15.0 * std::sin(std::numbers::pi * t / 4.0);
-    const auto s =
-        static_cast<float>(std::pow(10.0, db / 20.0) * std::sin(2 * std::numbers::pi * 220.0 * t));
+    const double since = std::fmod(t, beat);
+    const double db = floor_db + swell_db * std::sin(std::numbers::pi * t / (2.0 * seconds));
+    double x = std::sin(2 * std::numbers::pi * kick_hz * since) * std::exp(-since / kick_decay);
+    for (const double hz : chord_hz) {
+      x += chord_level * std::sin(2 * std::numbers::pi * hz * t) /
+           static_cast<double>(chord_hz.size());
+    }
+    const auto s = static_cast<float>(std::pow(10.0, db / decibels_per_decade) * x);
     input[i] = {s, 0.9F * s};
   }
   for (const Shot& shot :
-       {Shot{"Default", "/ceiling_default.png"}, Shot{"Loud", "/ceiling_loud.png"}}) {
+       {Shot{"Default", "/ceiling_default.png"}, Shot{"Loud Club", "/ceiling_loud.png"}}) {
     const auto values = preset(shot.preset);
     InMemoryNativeSynthAdapter adapter(values);
     NativeSynthDeviceController controller(table(), adapter);
@@ -478,6 +549,7 @@ int main(int argc, char** argv) {
     telemetry_decodes_into_the_history();
     the_real_ceiling_holds_the_output();
     gain_drives_the_mix_into_the_ceiling();
+    learn_moves_gain_to_the_target();
     presets_and_status();
     telemetry_gives_the_strip_the_reduction_and_its_band();
     screenshots_if_requested();

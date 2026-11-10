@@ -51,13 +51,11 @@ void put32(std::uint8_t* output, std::uint32_t value) noexcept {
   return rate == 44'100 || rate == 48'000 || rate == 88'200 || rate == 96'000;
 }
 
-[[nodiscard]] std::int32_t quantize(float sample, WavFormat format,
-                                    foundation::SplitMix64& dither) noexcept {
-  const auto bits = format == WavFormat::pcm16 ? 16U : 24U;
-  const auto scale = static_cast<double>(std::uint32_t{1} << (bits - 1U));
-  const auto noise = dither.unit() - dither.unit();
-  const auto quantized = std::round(static_cast<double>(sample) * scale + noise);
-  return static_cast<std::int32_t>(std::clamp(quantized, -scale, scale - 1.0));
+constexpr unsigned pcm16_bits = 16;
+constexpr unsigned pcm24_bits = 24;
+
+[[nodiscard]] unsigned integer_bits(WavFormat format) noexcept {
+  return format == WavFormat::pcm16 ? pcm16_bits : pcm24_bits;
 }
 
 [[nodiscard]] std::span<const std::uint8_t>
@@ -98,7 +96,8 @@ wav_header(WavSpec spec, std::array<std::uint8_t, 56>& header) noexcept {
 WavWriter::WavWriter(OpenFiles files, FileNames names, WavSpec spec) noexcept
     : directory_fd_(files.directory), file_fd_(files.file),
       temporary_name_(std::move(names.temporary)), target_name_(std::move(names.target)),
-      spec_(spec), header_frames_(spec.expected_frames), dither_(spec.dither_seed) {}
+      spec_(spec), header_frames_(spec.expected_frames),
+      dither_(integer_bits(spec.format), spec.dither, spec.sample_rate, spec.dither_seed) {}
 
 WavWriter::WavWriter(WavWriter&& other) noexcept
     : directory_fd_(std::move(other.directory_fd_)), file_fd_(std::move(other.file_fd_)),
@@ -188,12 +187,13 @@ Result<void> WavWriter::write_interleaved_stereo(std::span<const float> samples)
       auto* output = bytes.data() + index * sample_bytes;
       switch (spec_.format) {
       case WavFormat::pcm16: {
-        const auto value = quantize(sample, WavFormat::pcm16, dither_);
+        const auto value = dither_.quantize(sample, (offset + index) % 2);
         put16(output, static_cast<std::uint16_t>(value));
         break;
       }
       case WavFormat::pcm24: {
-        const auto value = static_cast<std::uint32_t>(quantize(sample, WavFormat::pcm24, dither_));
+        const auto value =
+            static_cast<std::uint32_t>(dither_.quantize(sample, (offset + index) % 2));
         output[0] = static_cast<std::uint8_t>(value);
         output[1] = static_cast<std::uint8_t>(value >> 8U);
         output[2] = static_cast<std::uint8_t>(value >> 16U);
