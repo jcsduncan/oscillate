@@ -26,7 +26,7 @@ jobs:
   tidy:
     name: clang-tidy (shard ${{ matrix.shard }} of 8)
     runs-on: ubuntu-latest
-    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    container: ghcr.io/jcsduncan/oscillate-ci@sha256:84224d169333d62e0966dc70e1d86a1c27502ecbe83b549a549d9681a9195762 # full
     timeout-minutes: 240
     strategy:
       fail-fast: false
@@ -34,19 +34,13 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
-      - name: Install Git for checkout and the VST3 SDK
-        run: |
-          apt-get update -qq
-          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-            ca-certificates git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       # The optional features too, so every configured variant is checked.
-      - name: Install dependencies and the pinned clang-tidy
+      - name: Dependencies from the CI image and the pinned clang-tidy
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          scripts/ci/install-deps.sh libjack-jackd2-dev libsamplerate0-dev libsndfile1-dev libmpg123-dev libx11-dev
+          scripts/ci/ci-image-deps.sh full
           python3 -m venv "$RUNNER_TEMP/qa"
           "$RUNNER_TEMP/qa/bin/pip" install --quiet -r scripts/qa-requirements.txt
           echo "$RUNNER_TEMP/qa/bin" >> "$GITHUB_PATH"

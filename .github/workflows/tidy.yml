@@ -36,22 +36,16 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     name: clang-tidy (changed files)
     runs-on: ubuntu-latest
-    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    container: ghcr.io/jcsduncan/oscillate-ci@sha256:21fcc1dfeb84aeec44c07f0e1716477ade8e701ab433dc274e0226ef80bab7a4 # base
     timeout-minutes: 60
     steps:
-      - name: Install Git for checkout and the diff
-        run: |
-          apt-get update -qq
-          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-            ca-certificates git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Install dependencies and the pinned clang-tidy
+      - name: Dependencies from the CI image and the pinned clang-tidy
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          scripts/ci/install-deps.sh
+          scripts/ci/ci-image-deps.sh base
           python3 -m venv "$RUNNER_TEMP/qa"
           "$RUNNER_TEMP/qa/bin/pip" install --quiet -r scripts/qa-requirements.txt
           echo "$RUNNER_TEMP/qa/bin" >> "$GITHUB_PATH"

@@ -94,7 +94,7 @@ jobs:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     name: Analyze (c-cpp, full build)
     runs-on: ubuntu-latest
-    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    container: ghcr.io/jcsduncan/oscillate-ci@sha256:21fcc1dfeb84aeec44c07f0e1716477ade8e701ab433dc274e0226ef80bab7a4 # base
     timeout-minutes: 240
     permissions:
       security-events: write # upload results to code scanning
@@ -103,19 +103,11 @@ jobs:
     env:
       OSCILLATE_BUILD_JOBS: 4
     steps:
-      - name: Install Git for checkout and CodeQL
-        run: |
-          apt-get update -qq
-          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-            ca-certificates git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # The workspace belongs to the runner user, not the container's root.
-      - name: Trust the workspace
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: Install dependencies (README list)
-        run: scripts/ci/install-deps.sh
+      - name: Dependencies from the CI image
+        run: scripts/ci/ci-image-deps.sh base
       - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: c-cpp
