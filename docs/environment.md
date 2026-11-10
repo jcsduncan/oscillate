@@ -15,7 +15,7 @@ for ordinary use.
 | `OSCILLATE_FRET_LIBRARY` | `src/native_dsp/synth/fret_library.cpp` | Directory of Fret's bass library. |
 | `OSCILLATE_WREN_LIBRARY` | `src/native_dsp/synth/wren_library.cpp` | Directory of Wren's flute library. |
 | `OSCILLATE_BOW_LIBRARY` | `src/native_dsp/synth/bow_library.cpp` | Directory of Bow's strings library. |
-| `OSCILLATE_STICK_LIBRARY` | `src/native_dsp/synth/stick_library.cpp` | Directory holding Stick's kits, each in its own folder (`drs-studio`, `muldjord`, `garage`). |
+| `OSCILLATE_STICK_LIBRARY` | `src/native_dsp/synth/stick_library.cpp` | Directory holding Stick's kits, each in its own folder (`naked-drums`, `drs-studio`). |
 | `XDG_DATA_HOME` | presets, grooves, racks, traces, sample libraries | Base for user data; defaults to `~/.local/share`. |
 | `XDG_CACHE_HOME` | shared source-analysis cache, Nova preset map | Base for disposable caches; defaults to `~/.cache`. |
 | `XDG_STATE_HOME` | log files, crash reports | Base for the log and crash-report directories; defaults to `~/.local/state`. |

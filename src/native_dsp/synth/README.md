@@ -123,11 +123,13 @@ sul tasto to sul ponticello and an ensemble of up to sixteen players.
 
 ## Stick
 
-Sampled acoustic drums: three multi-mic DrumGizmo kits on the General MIDI
-map, velocity choosing each hit by its recorded power with round robins, the
-hi-hat opened by its pedal, a mic mixer with or without bleed, and each
-piece's tune, decay, level, pan and sends.
-[ADR-0114](../../../docs/decisions/0114-stick-sampled-drums.md)
+Sampled acoustic drums: two multi-mic kits (Naked Drums and DrumGizmo's
+DRSKit, the one with brushes) on the General MIDI map, velocity choosing each
+hit by its recorded power with round robins, the hi-hat opened by its pedal, a
+mic mixer with or without bleed, and each piece's tune, decay, level, pan and
+sends.
+[ADR-0114](../../../docs/decisions/0114-stick-sampled-drums.md),
+[ADR-0121](../../../docs/decisions/0121-stick-naked-drums.md)
 
 ![Stick panel](../../../docs/images/instruments/stick.png)
 

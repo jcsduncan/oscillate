@@ -5,7 +5,9 @@
 // - every mic plays its own frequency (mic_hz), so the output's spectrum
 //   says which mics sound;
 // - a hit is heard loudest on its own close mics, as bleed on the others
-//   and on the overhead and room pairs; a cymbal (Crash 1) has no close mic;
+//   and on the overhead and room pairs and the centred far room; a cymbal
+//   (Crash 1) has no close mic, and the two toms share one, as Naked
+//   Drums' do;
 // - each stroke has hits at five recorded powers, two round robins each,
 //   with their own phases, so different hits render differently;
 // - hits decay exponentially and outlast the resident start (unless
@@ -57,16 +59,18 @@ inline constexpr std::size_t overhead_left = 5;
 inline constexpr std::size_t overhead_right = 6;
 inline constexpr std::size_t room_left = 7;
 inline constexpr std::size_t room_right = 8;
-inline constexpr std::array<MicSpec, 9> mics{{
+inline constexpr std::size_t far_room = 9;
+inline constexpr std::array<MicSpec, 10> mics{{
     {"kick_in", "kick", "mono", 110.0},
     {"snare_top", "snare", "mono", 330.0},
     {"snare_bottom", "snare", "mono", 550.0},
-    {"toms", "tom1", "mono", 770.0},
+    {"toms", "tom1+tom2", "mono", 770.0},
     {"hihat", "hihat", "mono", 990.0},
     {"overheads", "", "left", 1'210.0},
     {"overheads", "", "right", 1'430.0},
     {"room", "", "left", 1'650.0},
     {"room", "", "right", 1'870.0},
+    {"far_room", "", "centre", 2'090.0},
 }};
 // How loud each mic hears a hit: its own close mics, the rest of the close
 // mics (bleed), the overheads and the room.
@@ -94,13 +98,15 @@ inline constexpr double open_decay_seconds = 0.4;
 inline constexpr double open_seconds = 1.2;
 inline constexpr double cymbal_decay_seconds = 0.5;
 inline constexpr double cymbal_seconds = 1.5;
-inline constexpr std::array<StrokeSpec, 10> strokes{{
+inline constexpr std::array<StrokeSpec, 12> strokes{{
     {"kick", "hit", "stick", drum_decay_seconds, drum_seconds},
     {"kick", "alt", "stick", drum_decay_seconds, drum_seconds},
     {"snare", "hit", "stick", drum_decay_seconds, drum_seconds},
+    {"snare", "alt", "stick", drum_decay_seconds, drum_seconds},
     {"snare", "sidestick", "stick", closed_decay_seconds, closed_seconds},
     {"snare", "hit", "brush", drum_decay_seconds, drum_seconds},
     {"tom1", "hit", "stick", drum_decay_seconds, drum_seconds},
+    {"tom2", "hit", "stick", drum_decay_seconds, drum_seconds},
     {"hihat", "closed", "stick", closed_decay_seconds, closed_seconds},
     {"hihat", "open", "stick", open_decay_seconds, open_seconds},
     {"hihat", "pedal", "stick", closed_decay_seconds, closed_seconds},
@@ -118,13 +124,26 @@ inline double hz_of(std::size_t mic, std::string_view striker) {
   return mics[mic].hz * (striker == "brush" ? brush_ratio : 1.0);
 }
 
+// Whether a close mic recorded `piece` ("tom1+tom2" records both).
+inline bool hears(const MicSpec& mic, std::string_view piece) {
+  std::string_view rest = mic.piece;
+  while (!rest.empty()) {
+    const auto end = rest.find('+');
+    if (rest.substr(0, end) == piece) {
+      return true;
+    }
+    rest = end == std::string_view::npos ? std::string_view{} : rest.substr(end + 1);
+  }
+  return false;
+}
+
 // How loud mic `m` hears a hit of `piece`.
 inline double mic_level(std::size_t m, std::string_view piece) {
   const auto& mic = mics[m];
   if (mic.piece.empty()) {
-    return mic.group == "room" ? room_level : overhead_level;
+    return mic.group == "overheads" ? overhead_level : room_level;
   }
-  return mic.piece == piece ? own_level : bleed_level;
+  return hears(mic, piece) ? own_level : bleed_level;
 }
 
 // The hit's own value on mic `m` at `frame`: its power's amplitude, a

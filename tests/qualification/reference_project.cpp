@@ -139,9 +139,9 @@ constexpr std::string_view pad_engine = "bow";
 constexpr std::size_t pad_preset = 1;
 constexpr std::size_t pad_parts = 4;
 
-// The drums: Stick's studio kit in two parts, a busy funk groove (sixteenth
-// hats with an open one, ghost notes, a crash every four bars and a tom fill
-// before it) as Tight Funk and Dry Break play it.
+// The drums: Stick's kit in two parts, a busy funk groove (sixteenth hats
+// with an open one, ghost notes, a crash every four bars and a tom fill
+// before it) as Natural and Close Mics play it.
 constexpr std::string_view drums_engine = "stick";
 constexpr std::array<std::size_t, 2> drums_presets{0, 1};
 
@@ -540,7 +540,7 @@ Workload build_project(const fs::path& root, const fs::path& media, const Option
     // Stick plays its synthetic kit, whose hits stream as the installed
     // ones do, unless a run names an installed kit.
     if (options.stick_kit) {
-      const auto status = synth::stick::library::load(synth::stick::Kit::drs, *options.stick_kit);
+      const auto status = synth::stick::library::load(synth::stick::Kit::naked, *options.stick_kit);
       if (status.state != synth::stick::library::State::ready)
         throw std::runtime_error("the Stick kit did not load: " + status.message);
     } else {

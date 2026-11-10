@@ -44,21 +44,22 @@ QString state_name(stick::library::State state) {
 
 // In Piece order: the parameter ids' middle and the panel's names.
 constexpr std::array<std::string_view, stick::piece_count> piece_ids{
-    "kick", "snare",  "hihat",  "tom1", "tom2",  "tom3",
-    "tom4", "crash1", "crash2", "ride", "ride2", "china"};
+    "kick", "snare",  "hihat",  "tom1", "tom2",   "tom3", "tom4",
+    "tom5", "crash1", "crash2", "ride", "splash", "china"};
 constexpr std::array<std::string_view, stick::piece_count> piece_names{
-    "Kick",  "Snare",   "Hi-hat",  "Tom 1", "Tom 2",  "Tom 3",
-    "Tom 4", "Crash 1", "Crash 2", "Ride",  "Ride 2", "China"};
+    "Kick",  "Snare",   "Hi-hat",  "Tom 1", "Tom 2",  "Tom 3", "Tom 4",
+    "Tom 5", "Crash 1", "Crash 2", "Ride",  "Splash", "China"};
 // In MicGroup order.
 constexpr std::array<std::string_view, stick::mic_group_count> group_ids{
-    "kick_in", "kick_out", "snare_top", "snare_bottom", "toms",
-    "hihat",   "ride",     "overheads", "room"};
+    "kick_in", "kick_out",  "kick_sub", "snare_top", "snare_bottom", "toms",    "hihat",
+    "ride",    "overheads", "room",     "far_room",  "mid_side",     "china_oh"};
 constexpr std::array<std::string_view, stick::mic_group_count> group_names{
-    "Kick In", "Kick Out", "Snare Top", "Snare Btm", "Toms", "Hi-hat", "Ride", "Overheads", "Room"};
+    "Kick In", "Kick Out",  "Kick Sub", "Snare Top", "Snare Btm", "Toms",    "Hi-hat",
+    "Ride",    "Overheads", "Room",     "Far Room",  "Mid-Side",  "China OH"};
 // What each articulation adds to a piece's description (the plain stroke
-// nothing); in Articulation order.
+// nothing; the second drum names its piece); in Articulation order.
 constexpr std::array<std::string_view, stick::articulation_count> articulation_names{
-    "", "second kick", "rimshot", "side-stick", "bell", "closed", "half open", "open", "pedal"};
+    "", "second", "side-stick", "bell", "closed", "half open", "open", "pedal"};
 
 // Key names as the piano roll gives them, C-1 at MIDI 0: "C2" for 36.
 constexpr std::array<std::string_view, 12> pitch_names{"C",  "C♯", "D",  "D♯", "E",  "F",
@@ -156,9 +157,13 @@ QVariantMap layout(stick::Kit kit) {
     const auto piece = static_cast<Piece>(p);
     QStringList articulations;
     for (std::size_t a = 0; a < stick::articulation_count; ++a) {
-      if ((contents.articulations[p] & (1U << a)) != 0U && !articulation_names[a].empty()) {
-        articulations.push_back(text(articulation_names[a]));
+      if ((contents.articulations[p] & (1U << a)) == 0U || articulation_names[a].empty()) {
+        continue;
       }
+      articulations.push_back(static_cast<Articulation>(a) == Articulation::alt
+                                  ? text(articulation_names[a]) + QLatin1Char(' ') +
+                                        text(piece_names[p]).toLower()
+                                  : text(articulation_names[a]));
     }
     if (contents.brushes[p]) {
       articulations.push_back(QStringLiteral("brushes"));

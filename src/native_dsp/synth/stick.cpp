@@ -90,7 +90,7 @@ constexpr double shortest_hat_seconds = 0.1;
 // ------------------------------------------------------------------------------ At most this many
 // hits of a piece ring at once; a new one fades the oldest over limit_fade_seconds. Drums are
 // re-struck heads; cymbals ring on together. In stick::Piece order.
-constexpr std::array<std::size_t, piece_count> piece_voices{2, 3, 4, 2, 2, 2, 2, 3, 3, 3, 3, 3};
+constexpr std::array<std::size_t, piece_count> piece_voices{2, 3, 4, 2, 2, 2, 2, 2, 3, 3, 3, 2, 2};
 constexpr double limit_fade_seconds = 0.06;
 static_assert(
     [] {
@@ -108,10 +108,18 @@ static_assert(
 // range is off.
 constexpr double off_db = st::off_db;
 constexpr std::array<std::array<double, mic_group_count>, mix_count> mix_offsets_db{{
-    {0, 0, 0, 0, 0, 0, 0, -6, off_db},  // Dry: close mics, the overheads down, no room.
-    {0, 0, 0, 0, 0, 0, 0, 0, 0},        // Studio: the faders as set.
-    {-6, -6, -6, -6, -6, -6, -6, 0, 6}, // Room: close mics down, the room up.
+    // Dry: close mics, the overheads down, no rooms.
+    {0, 0, 0, 0, 0, 0, 0, 0, -6, off_db, off_db, off_db, -6},
+    // Studio: the faders as set.
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    // Room: close mics down, the rooms up.
+    {-6, -6, -6, -6, -6, -6, -6, -6, 0, 6, 6, 6, 0},
 }};
+// The rooms (fed by a piece's Room send); the overheads and the china
+// overhead pair take its Overheads send.
+[[nodiscard]] constexpr bool ambient(MicGroup group) noexcept {
+  return group == MicGroup::room || group == MicGroup::far_room || group == MicGroup::mid_side;
+}
 // Mutes, solos, mixes and Bleed move over about this long.
 constexpr double switch_seconds = 0.01;
 // Below this a gain is silence.
@@ -414,8 +422,8 @@ private:
     owned_.fill(false);
     if (library_ != nullptr) {
       for (const auto& mic : library_->mics()) {
-        if (mic.has_piece) {
-          owned_[static_cast<std::size_t>(mic.piece)] = true;
+        for (std::size_t piece = 0; piece < piece_count; ++piece) {
+          owned_[piece] = owned_[piece] || mic.hears(static_cast<Piece>(piece));
         }
       }
     }
@@ -471,21 +479,23 @@ private:
         double left = 0.0;
         double right = 0.0;
         if (mic.side == Side::mono) {
-          if (mic.piece != as) {
+          // Its own piece placed by that piece's pan; bleed by its first piece's.
+          const bool own = mic.hears(as);
+          if (!own) {
             gain *= bleed_;
           }
-          const double pan = values_[st::piece_index(mic.piece, st::piece::pan)];
+          const double pan = values_[st::piece_index(own ? as : mic.piece, st::piece::pan)];
           const double theta = (pan + 1.0) * std::numbers::pi / 4.0;
           left = std::cos(theta) * std::numbers::sqrt2;
           right = std::sin(theta) * std::numbers::sqrt2;
         } else {
-          gain *= mic.group == MicGroup::room ? room : overheads;
-          if (mic.group == MicGroup::overheads) {
+          gain *= ambient(mic.group) ? room : overheads;
+          if (!ambient(mic.group) && mic.side != Side::centre) {
             gain *= mic.side == Side::left ? std::min(1.0, 1.0 - balance)
                                            : std::min(1.0, 1.0 + balance);
           }
-          left = mic.side == Side::left ? 1.0 : 0.0;
-          right = mic.side == Side::right ? 1.0 : 0.0;
+          left = mic.side == Side::right ? 0.0 : 1.0;
+          right = mic.side == Side::left ? 0.0 : 1.0;
         }
         w.left[c] = static_cast<float>(gain * left);
         w.right[c] = static_cast<float>(gain * right);
@@ -903,7 +913,7 @@ private:
   std::unique_ptr<sample_stream::Streams> streams_;
   std::array<std::uint32_t, max_voices> generations_{};
   const detail::Library* library_ = nullptr;
-  Kit kit_ = Kit::drs;
+  Kit kit_ = Kit::naked;
   library::State state_ = library::State::missing;
   std::array<bool, piece_count> owned_{};
   std::span<const double> values_{};
@@ -1006,7 +1016,8 @@ constexpr std::array<KeyMap, 15> gm_keys{{
     {36, Piece::kick, Articulation::hit},
     {37, Piece::snare, Articulation::sidestick},
     {38, Piece::snare, Articulation::hit},
-    {40, Piece::snare, Articulation::rimshot},
+    // E2, the electric snare in General MIDI: the kit's second snare.
+    {40, Piece::snare, Articulation::alt},
     {42, Piece::hihat, Articulation::closed, true},
     {44, Piece::hihat, Articulation::pedal},
     {46, Piece::hihat, Articulation::open},
@@ -1014,10 +1025,10 @@ constexpr std::array<KeyMap, 15> gm_keys{{
     {51, Piece::ride, Articulation::hit},
     {52, Piece::china, Articulation::hit},
     {53, Piece::ride, Articulation::bell},
-    // G3, the splash in General MIDI: the second ride's bell, as Muldjord's own map has it.
-    {55, Piece::ride2, Articulation::bell},
+    {55, Piece::splash, Articulation::hit},
     {57, Piece::crash2, Articulation::hit},
-    {59, Piece::ride2, Articulation::hit},
+    // B3, the second ride in General MIDI: the kit's ride.
+    {59, Piece::ride, Articulation::hit},
 }};
 // The six tom keys, high to low: D3, C3, B2, A2, G2, F2 (50 down to 41).
 constexpr std::array<int, 6> tom_keys{50, 48, 47, 45, 43, 41};
@@ -1037,7 +1048,6 @@ std::optional<double> openness_of(Articulation articulation) noexcept {
     return 1.0;
   case Articulation::hit:
   case Articulation::alt:
-  case Articulation::rimshot:
   case Articulation::sidestick:
   case Articulation::bell:
   case Articulation::pedal:
@@ -1051,19 +1061,20 @@ bool plays(Piece piece, Articulation articulation) noexcept {
   case Piece::kick:
     return articulation == Articulation::hit || articulation == Articulation::alt;
   case Piece::snare:
-    return articulation == Articulation::hit || articulation == Articulation::rimshot ||
+    return articulation == Articulation::hit || articulation == Articulation::alt ||
            articulation == Articulation::sidestick;
   case Piece::hihat:
     return openness_of(articulation).has_value() || articulation == Articulation::pedal;
   case Piece::ride:
-  case Piece::ride2:
     return articulation == Articulation::hit || articulation == Articulation::bell;
   case Piece::tom1:
   case Piece::tom2:
   case Piece::tom3:
   case Piece::tom4:
+  case Piece::tom5:
   case Piece::crash1:
   case Piece::crash2:
+  case Piece::splash:
   case Piece::china:
     break;
   }

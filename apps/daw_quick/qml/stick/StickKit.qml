@@ -16,21 +16,22 @@ Item {
     signal picked(int piece)
 
     // Each piece's place in the design box: centre and radius, and whether it
-    // is a cymbal; in Piece order (kick, snare, hi-hat, toms 1-4, crashes,
-    // rides, china).
+    // is a cymbal; in Piece order (kick, snare, hi-hat, toms 1-5, crashes,
+    // ride, splash, china).
     readonly property var spots: [
-        { x: 200, y: 176, r: 44, cymbal: false },
-        { x: 126, y: 206, r: 26, cymbal: false },
-        { x: 62, y: 172, r: 24, cymbal: true },
-        { x: 160, y: 100, r: 22, cymbal: false },
-        { x: 238, y: 100, r: 24, cymbal: false },
-        { x: 296, y: 206, r: 30, cymbal: false },
-        { x: 360, y: 236, r: 26, cymbal: false },
-        { x: 86, y: 74, r: 30, cymbal: true },
-        { x: 272, y: 40, r: 28, cymbal: true },
-        { x: 346, y: 124, r: 32, cymbal: true },
-        { x: 34, y: 112, r: 22, cymbal: true },
-        { x: 352, y: 38, r: 22, cymbal: true }
+        { x: 200, y: 180, r: 44, cymbal: false },
+        { x: 124, y: 210, r: 26, cymbal: false },
+        { x: 60, y: 176, r: 24, cymbal: true },
+        { x: 146, y: 108, r: 20, cymbal: false },
+        { x: 200, y: 96, r: 22, cymbal: false },
+        { x: 256, y: 108, r: 23, cymbal: false },
+        { x: 296, y: 204, r: 27, cymbal: false },
+        { x: 362, y: 242, r: 29, cymbal: false },
+        { x: 84, y: 76, r: 30, cymbal: true },
+        { x: 286, y: 38, r: 28, cymbal: true },
+        { x: 352, y: 132, r: 32, cymbal: true },
+        { x: 30, y: 116, r: 18, cymbal: true },
+        { x: 368, y: 44, r: 22, cymbal: true }
     ]
     readonly property real scale: Math.min(width / theme.drawingWidth, height / theme.drawingHeight)
     readonly property real originX: (width - theme.drawingWidth * scale) / 2

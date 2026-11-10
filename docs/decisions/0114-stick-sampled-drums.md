@@ -1,6 +1,6 @@
 # ADR-0114 — Stick: sampled multi-mic acoustic drums, streamed from disk
 
-**Status:** Accepted
+**Status:** Superseded in part by ADR-0121 (the kits and default kit, pieces, articulations, mic groups, key map, defaults and presets); otherwise implemented.
 **Date:** 9 November 2026.
 **Builds on:** ADR-0071 (Concert: resident starts, streamed rest), ADR-0111 (Bow: background reads, seeded Humanise, the library notice), ADR-0035 (performance lanes), ADR-0103 (the shared panel parts).
 

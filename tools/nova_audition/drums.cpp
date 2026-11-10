@@ -31,11 +31,11 @@ constexpr std::uint32_t render_rate = 48'000;
 constexpr std::string_view engine = "stick";
 constexpr double track_level = 1.0;
 
-// Stick's keys (ADR-0114), General MIDI.
+// Stick's keys (ADR-0114, ADR-0121), General MIDI.
 constexpr std::uint8_t kick = 36;
 constexpr std::uint8_t side_stick = 37;
 constexpr std::uint8_t snare = 38;
-constexpr std::uint8_t rimshot = 40;
+constexpr std::uint8_t second_snare = 40;
 constexpr std::uint8_t floor_tom = 41;
 constexpr std::uint8_t hat = 42;
 constexpr std::uint8_t low_tom = 45;
@@ -146,7 +146,7 @@ std::vector<Note> arrange(const Groove& groove) {
 const std::vector<Groove>& grooves() {
   static const std::vector<Groove> list{
       {"01 funk sixteenths, ghost notes",
-       "Tight Funk",
+       "Natural",
        98.0,
        0.0,
        false,
@@ -162,7 +162,7 @@ const std::vector<Groove>& grooves() {
         {mid_tom, ".............x.."},
         {floor_tom, "..............Xx"}}},
       {"02 dry break",
-       "Dry Break",
+       "Close Mics",
        92.0,
        0.0,
        false,
@@ -173,7 +173,7 @@ const std::vector<Groove>& grooves() {
         {open_hat, "..............o."}},
        {{kick, "X.X.......X....."}, {snare, "....X..g.g..XxXx"}, {hat, "x.x.x.x.x.x....."}}},
       {"03 half time in the room",
-       "Room Kit",
+       "Rooms",
        84.0,
        0.0,
        false,
@@ -192,7 +192,7 @@ const std::vector<Groove>& grooves() {
         {floor_tom, "...............X"},
         {ride, "x.x.x.x.x......."}}},
       {"04 lo-fi, laid back",
-       "Garage Lo-Fi",
+       "DRS Studio",
        86.0,
        0.38,
        false,
@@ -203,7 +203,7 @@ const std::vector<Groove>& grooves() {
         {side_stick, "...........o...."}},
        {{kick, "X......x..X....."}, {snare, "....X.......X.gX"}, {hat, "x.o.x.o.x.o.x..."}}},
       {"05 brushes, swung",
-       "Brushy Soft",
+       "Brushes",
        84.0,
        2.0 / 3.0,
        true,
@@ -220,20 +220,20 @@ const std::vector<Groove>& grooves() {
         {ride, "x...x.o.x......."},
         {hat_pedal, "....x.......x..."}}},
       {"06 the kit as recorded",
-       "As Recorded",
+       "Natural",
        108.0,
        0.0,
        false,
        {{kick, "X.....X...X....."},
         {snare, "....X.......X..."},
-        {rimshot, "................"},
+        {second_snare, "................"},
         {hat, "x.x.x.x.x.x.x.x."}},
        {{kick, "X.....X...X..x.."},
         {snare, "....X.......X..g"},
         {hat, "x.x.x.x.x.x.x..."},
         {open_hat, "..............x."}},
        {{kick, "X.....X........."},
-        {rimshot, "....X..........."},
+        {second_snare, "....X..........."},
         {high_tom, "........xx......"},
         {mid_tom, "..........xx...."},
         {low_tom, "............xx.."},

@@ -19,7 +19,7 @@ using foundation::ErrorCode;
 using foundation::Result;
 using sample_stream::parse_number;
 
-// mic <channel> <group> <piece|-> <mono|left|right>
+// mic <channel> <group> <piece[+piece...]|-> <mono|left|right|centre>
 constexpr std::size_t mic_fields = 4;
 // hit <piece> <articulation> <stick|brush> <offset> <frames> <scale> <power_db>
 constexpr std::size_t hit_fields = 7;
@@ -36,14 +36,15 @@ constexpr sample_stream::ManifestFormat manifest_format{
 constexpr std::uint32_t max_libraries = sample_stream::Registry::max_serials;
 
 constexpr std::array<std::string_view, piece_count> piece_names{
-    "kick", "snare",  "hihat",  "tom1", "tom2",  "tom3",
-    "tom4", "crash1", "crash2", "ride", "ride2", "china"};
+    "kick", "snare",  "hihat",  "tom1", "tom2",   "tom3", "tom4",
+    "tom5", "crash1", "crash2", "ride", "splash", "china"};
 constexpr std::array<std::string_view, articulation_count> articulation_names{
-    "hit", "alt", "rimshot", "sidestick", "bell", "closed", "half", "open", "pedal"};
+    "hit", "alt", "sidestick", "bell", "closed", "half", "open", "pedal"};
 constexpr std::array<std::string_view, mic_group_count> group_names{
-    "kick_in", "kick_out", "snare_top", "snare_bottom", "toms",
-    "hihat",   "ride",     "overheads", "room"};
-constexpr std::array<std::string_view, 3> side_names{"mono", "left", "right"};
+    "kick_in", "kick_out",  "kick_sub", "snare_top", "snare_bottom", "toms",    "hihat",
+    "ride",    "overheads", "room",     "far_room",  "mid_side",     "china_oh"};
+constexpr std::array<std::string_view, 4> side_names{"mono", "left", "right", "centre"};
+constexpr char piece_separator = '+';
 constexpr std::array<std::string_view, striker_count> striker_names{"stick", "brush"};
 
 template <class Value, std::size_t N>
@@ -58,7 +59,29 @@ bool named(std::string_view text, const std::array<std::string_view, N>& names, 
 }
 
 [[nodiscard]] constexpr bool is_tom(Piece piece) noexcept {
-  return piece >= Piece::tom1 && piece <= Piece::tom4;
+  return piece >= Piece::tom1 && piece <= Piece::tom5;
+}
+
+// "tom1+tom2": the pieces a close mic recorded, the first its own.
+bool pieces_of(std::string_view text, Mic& mic) {
+  bool first = true;
+  while (!text.empty()) {
+    const auto end = text.find(piece_separator);
+    Piece piece = Piece::kick;
+    if (!named(text.substr(0, end), piece_names, piece) || mic.hears(piece)) {
+      return false;
+    }
+    mic.pieces |= piece_bit(piece);
+    if (first) {
+      mic.piece = piece;
+      first = false;
+    }
+    if (end == std::string_view::npos) {
+      return true;
+    }
+    text.remove_prefix(end + 1);
+  }
+  return false;
 }
 
 } // namespace
@@ -130,14 +153,14 @@ Result<std::unique_ptr<Library>> Library::open(const std::filesystem::path& dire
         error = "A drum kit mic line is malformed";
         return true;
       }
-      mic.has_piece = f[2] != no_piece;
-      if (mic.has_piece && !named(f[2], piece_names, mic.piece)) {
+      if (f[2] != no_piece && !pieces_of(f[2], mic)) {
         error = "A drum kit mic line is malformed";
         return true;
       }
-      // Close mics hear their piece in mono; the pairs hear the kit.
+      // Close mics hear their pieces in mono; the overheads and rooms hear
+      // the kit, as a pair or a single mic in the centre.
       const bool close = close_group(mic.group);
-      const bool ok = channel < channels && !mic_seen[channel] && close == mic.has_piece &&
+      const bool ok = channel < channels && !mic_seen[channel] && close == (mic.pieces != 0U) &&
                       close == (mic.side == Side::mono);
       if (!ok) {
         error = "A drum kit mic is out of place";

@@ -18,14 +18,20 @@
 namespace oscillate::native_dsp::synth::stick::detail {
 
 // Where a mic sits in the stereo image: a close mic is placed by its
-// piece's Pan; a pair's channels are its left and right.
-enum class Side : std::uint8_t { mono, left, right };
+// piece's Pan; a pair's channels are its left and right; a single distant
+// mic (Naked's close room) sits in the centre.
+enum class Side : std::uint8_t { mono, left, right, centre };
 
 struct Mic {
   MicGroup group = MicGroup::overheads;
-  bool has_piece = false; // Close mics hear one piece.
+  // The pieces a close mic recorded (a piece_bit each); none for the
+  // overheads and rooms. Naked's toms share one channel, each tom heard
+  // only on its own mic.
+  std::uint32_t pieces = 0;
+  // The piece its bleed pans with: its first.
   Piece piece = Piece::kick;
   Side side = Side::mono;
+  [[nodiscard]] bool hears(Piece p) const noexcept { return (pieces & piece_bit(p)) != 0U; }
 };
 
 struct Hit {
@@ -78,12 +84,15 @@ public:
   [[nodiscard]] const std::int16_t* resident(std::uint32_t index) const noexcept {
     return pack_.resident(pack_.sample(index));
   }
-  // A stroke's hits; brushes fall back to sticks where none were recorded.
+  // A stroke's hits; brushes fall back to sticks where none were recorded,
+  // and a second drum (`alt`) the kit did not record to the plain stroke, so
+  // General MIDI's B1 still plays a kick on Naked Drums.
   [[nodiscard]] const Stroke& stroke(Piece piece, Articulation articulation,
                                      Striker striker) const noexcept {
-    const auto& brushed = strokes_[stroke_index(piece, articulation, striker)];
-    return brushed.count > 0 ? brushed
-                             : strokes_[stroke_index(piece, articulation, Striker::stick)];
+    const auto& found = recorded(piece, articulation, striker);
+    return found.count > 0 || articulation != Articulation::alt
+               ? found
+               : recorded(piece, Articulation::hit, striker);
   }
   // Hit indices, each stroke's softest first.
   [[nodiscard]] std::uint32_t order(std::uint32_t at) const noexcept { return order_[at]; }
@@ -93,6 +102,12 @@ public:
 private:
   Library() = default;
   void index();
+  [[nodiscard]] const Stroke& recorded(Piece piece, Articulation articulation,
+                                       Striker striker) const noexcept {
+    const auto& brushed = strokes_[stroke_index(piece, articulation, striker)];
+    return brushed.count > 0 ? brushed
+                             : strokes_[stroke_index(piece, articulation, Striker::stick)];
+  }
 
   std::vector<Mic> mics_;
   std::vector<Hit> hits_;

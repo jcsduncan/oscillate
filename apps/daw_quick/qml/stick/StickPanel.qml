@@ -65,8 +65,9 @@ Rectangle {
 
     function libraryChipText() {
         const kit = controller.revision >= 0 ? controller.parameter("stick.kit").choices[controller.choice("stick.kit")] : ""
+        // Ready: the lamp is lit; the text names the kit, its mics and size.
         if (ready)
-            return "Library ready · " + kit + " · " + library.mics + " mics · "
+            return kit + " · " + library.mics + " mics · "
                 + Format.quantity(library.resident_mb, "MB", 0)
         if (library.state === "loading")
             return "Loading " + kit
@@ -121,7 +122,7 @@ Rectangle {
                 border.color: chip.activeFocus ? panel.theme.focusRing : "transparent"
                 activeFocusOnTab: true
                 Accessible.role: Accessible.Button
-                Accessible.name: panel.libraryChipText()
+                Accessible.name: (panel.ready ? "Library ready: " : "") + panel.libraryChipText()
                 Accessible.description: "Show the library"
                 Keys.onReturnPressed: panel.libraryOpen = !panel.libraryOpen
                 Keys.onSpacePressed: panel.libraryOpen = !panel.libraryOpen

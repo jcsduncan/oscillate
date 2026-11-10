@@ -1878,7 +1878,7 @@ native_dsp::synth::stick::Kit stick_kit(const native_dsp::EngineDescriptor& engi
   namespace stick = native_dsp::synth::stick;
   const auto at = native_dsp::find_parameter(engine, "stick.kit");
   if (!at || *at >= values.size()) {
-    return stick::Kit::drs;
+    return stick::Kit::naked;
   }
   return static_cast<stick::Kit>(
       std::clamp<long>(std::lround(values[*at]), 0, static_cast<long>(stick::kit_count) - 1));
