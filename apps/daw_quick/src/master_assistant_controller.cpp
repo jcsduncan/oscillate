@@ -253,21 +253,25 @@ void MasterAssistantController::set_use_loop(bool on) {
   goals_changed();
 }
 
-// A goal moved: the proposal no longer answers it. Nothing was applied, so
-// it is simply dropped; Analyse plans again on what was measured.
+// A goal moved: the proposal, or the verdict on an accepted one, no longer
+// answers it. Analyse plans again.
 void MasterAssistantController::goals_changed() {
   // A run for the old goals no longer answers them: its result is dropped.
-  if (job_.running() && !accepted_) {
+  if (job_.running()) {
     if (progress_)
       progress_->cancel.store(true, std::memory_order_release);
     ++generation_;
     status_.set(QStringLiteral("The goals changed: Analyse again"));
   }
-  if (!accepted_) {
-    stopAudition();
-    proposed_.reset();
-  }
+  // Nothing proposed or verified for the old goals stands for the new ones.
+  stopAudition();
+  proposed_.reset();
+  accepted_ = false;
+  verification_.clear();
+  verified_on_target_ = false;
   emit changed();
+  // After an accept the mix has changed: the measurement is stale.
+  project_changed();
 }
 
 // ---- Running -------------------------------------------------------------------------

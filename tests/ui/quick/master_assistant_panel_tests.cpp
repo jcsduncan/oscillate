@@ -265,6 +265,11 @@ void accept_is_one_undo_step_and_verifies() {
           "on target: " + song->controller->verification().join(' ').toStdString());
   QCoreApplication::processEvents();
   item(panel->root, QStringLiteral("assistantVerifiedCaption"));
+  // Another target: the verdict for the old one goes.
+  song->controller->set_loudness(QStringLiteral("loud"));
+  require(song->controller->verification().isEmpty() && !song->controller->verified_on_target() &&
+              song->controller->phase() == QStringLiteral("idle"),
+          "a new goal clears the old verdict");
   song->bridge->undo();
   QCoreApplication::processEvents();
   require(session->snapshot().master_effects.empty(), "one undo takes it all off");
@@ -306,11 +311,15 @@ void the_ab_plays_through_the_preview() {
   // controller of its own with a fake one.
   quick::MasterAssistantController::Hooks hooks;
   hooks.session = [&] { return song->session; };
+  // The analyser loses the output the factory makes, which the controller
+  // owns and stops (a false leak report).
+  // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
   hooks.preview = [&]() -> std::optional<quick::MasterAssistantController::Preview> {
     return quick::MasterAssistantController::Preview{
         oscillate::test::fake_output_factory(device), std::nullopt,
         oscillate::test::FakePlaybackDevice::pump_frames};
   };
+  // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
   quick::MasterAssistantController ab(std::move(hooks));
   analyse(ab);
   ab.startAudition();
