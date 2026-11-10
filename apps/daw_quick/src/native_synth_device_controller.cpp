@@ -24,6 +24,7 @@
 #include "oscillate/native_dsp/effects/pump.hpp"
 #include "oscillate/native_dsp/effects/shape.hpp"
 #include "oscillate/native_dsp/effects/strata.hpp"
+#include "oscillate/native_dsp/effects/strike.hpp"
 #include "oscillate/native_dsp/effects/temper.hpp"
 #include "oscillate/native_dsp/synth/anvil.hpp"
 #include "oscillate/native_dsp/synth/bow.hpp"
@@ -1372,6 +1373,30 @@ QVariantMap NativeSynthDeviceController::telemetry() {
     }
     out[QStringLiteral("history_peak")] = peaks;
     out[QStringLiteral("history_gain")] = gains;
+  } else if (id == "strike" && frame.size() >= native_dsp::effects::strike::telemetry::size) {
+    namespace strike = native_dsp::effects::strike;
+    namespace t = strike::telemetry;
+    const auto run = [&](std::size_t from, std::size_t count) {
+      QVariantList values;
+      for (std::size_t i = 0; i < count; ++i) {
+        values.push_back(at(from + i));
+      }
+      return values;
+    };
+    out[QStringLiteral("input_peak")] = run(t::input_peak, 2);
+    out[QStringLiteral("output_peak")] = run(t::output_peak, 2);
+    out[QStringLiteral("clipped")] = at(t::clipped);
+    out[QStringLiteral("latency_ms")] = at(t::latency_ms);
+    out[QStringLiteral("band_count")] = static_cast<int>(at(t::band_count));
+    out[QStringLiteral("crossovers")] = run(t::crossovers, strike::max_crossovers);
+    out[QStringLiteral("band_gain")] = run(t::band_gain, strike::max_bands);
+    out[QStringLiteral("history_input")] = run(t::history_input, strike::history_slices);
+    out[QStringLiteral("history_output")] = run(t::history_output, strike::history_slices);
+    QVariantList gains;
+    for (std::size_t b = 0; b < strike::max_bands; ++b) {
+      gains.push_back(run(t::history_gain + b * strike::history_slices, strike::history_slices));
+    }
+    out[QStringLiteral("history_gain")] = gains;
   } else if (id == "dust" && frame.size() >= native_dsp::effects::dust::telemetry::size) {
     namespace dust = native_dsp::effects::dust;
     namespace t = dust::telemetry;
@@ -2033,6 +2058,10 @@ double NativeSynthDeviceController::edge_latency_ms(double sample_rate) const {
 
 double NativeSynthDeviceController::ceiling_latency_ms(double sample_rate) const {
   return quick::ceiling_latency_ms(engine_, values_, sample_rate);
+}
+
+double NativeSynthDeviceController::effect_latency_ms(double sample_rate) const {
+  return quick::effect_latency_ms(engine_, values_, sample_rate);
 }
 
 double NativeSynthDeviceController::ceiling_learned_gain(double integrated_lufs) const {

@@ -11,8 +11,13 @@
 // raw 48 kHz stereo float32 files on the command line (ffmpeg -f f32le -ac 2
 // -ar 48000), each normalised to -20 LUFS before the limiter.
 //
+// --shaper measures a transient shaper (Strike by default) instead: each
+// preset at the programme's own level, reporting how it changes the
+// loudness, the crest factor, the onset contrast in the three bands and the
+// true peak, with its latency and CPU.
+//
 // Usage: oscillate_limiter_audit [--engine ID] [--preset NAME]... [--set ID=VALUE]...
-//        [--target LUFS] [--classic] [--no-loop] [--per-programme] [FILE.f32]...
+//        [--target LUFS] [--classic] [--shaper] [--no-loop] [--per-programme] [FILE.f32]...
 // --no-loop leaves the synthetic loop out.
 // --target measures at one loudness instead of the three standard ones.
 // --classic measures the classic sample-peak limiter Ceiling replaced, with
@@ -850,16 +855,107 @@ void print_row(std::string_view preset, double target, const Row& r) {
               r.smpte, r.ccif, 100.0 * r.cpu, r.latency_ms);
 }
 
+// ---- The transient shaper audit ------------------------------------------------------------
+
+struct ShaperRow {
+  double lufs_change = 0.0;
+  double crest_change = 0.0;
+  std::array<double, 3> onset{};
+  double peak_change = 0.0;
+  double cpu = 0.0;
+  double latency_ms = 0.0;
+};
+
+void print_shaper_header() {
+  std::printf("| Preset | LUFS change | Crest change | Onset contrast change L/M/H | "
+              "True peak change | CPU | Latency |\n");
+  std::printf("|---|---|---|---|---|---|---|\n");
+}
+
+void print_shaper_row(std::string_view preset, const ShaperRow& r) {
+  std::printf("| %s | %+.2f | %+.2f | %+.2f/%+.2f/%+.2f | %+.2f | %.2f%% | %.2f ms |\n",
+              std::string(preset).c_str(), r.lufs_change, r.crest_change, r.onset[0], r.onset[1],
+              r.onset[2], r.peak_change, 100.0 * r.cpu, r.latency_ms);
+}
+
+// Each preset over each programme at the programme's own level; the mean
+// over the programmes.
+void audit_shaper(const effects::EffectEngine& engine, const std::vector<std::string>& only,
+                  const std::vector<std::pair<std::string, double>>& overrides,
+                  const std::vector<Programme>& programmes, bool per_programme) {
+  const auto& table = *engine.descriptor;
+  for (const auto& name : only) {
+    if (std::ranges::none_of(table.presets, [&](const auto& p) { return p.name == name; })) {
+      std::fprintf(stderr, "no preset %s\n", name.c_str());
+      std::exit(1);
+    }
+  }
+  print_shaper_header();
+  for (const auto& preset : table.presets) {
+    if (!only.empty() && std::ranges::find(only, std::string(preset.name)) == only.end()) {
+      continue;
+    }
+    auto values = dsp::preset_values(table, preset);
+    if (!values) {
+      std::fprintf(stderr, "preset %s does not resolve\n", std::string(preset.name).c_str());
+      std::exit(1);
+    }
+    auto v = std::move(values).value();
+    for (const auto& [id, value] : overrides) {
+      const auto index = dsp::find_parameter(table, id);
+      if (!index) {
+        std::fprintf(stderr, "no parameter %s\n", id.c_str());
+        std::exit(1);
+      }
+      v[*index] = value;
+    }
+    ShaperRow mean;
+    double cpu_seconds = 0.0;
+    double audio_seconds = 0.0;
+    for (const auto& programme : programmes) {
+      const auto rendered = render(engine, v, programme.audio);
+      const auto in_peaks = fine_peaks(programme.audio);
+      const auto out_peaks = fine_peaks(rendered.audio);
+      ShaperRow r;
+      r.lufs_change = lufs(rendered.audio) - lufs(programme.audio);
+      r.crest_change = crest_db(rendered.audio, out_peaks) - programme.crest_db;
+      const auto loss = onset_loss(programme.audio, rendered.audio);
+      for (std::size_t b = 0; b < loss.size(); ++b) {
+        r.onset[b] = -loss[b];
+      }
+      r.peak_change = true_peak_16x(out_peaks) - true_peak_16x(in_peaks);
+      r.latency_ms = milliseconds_per_second * rendered.latency / rate;
+      cpu_seconds += rendered.seconds;
+      audio_seconds += static_cast<double>(programme.audio.size()) / rate;
+      if (per_programme) {
+        print_shaper_row(std::string(preset.name) + " · " + programme.name, r);
+      }
+      const double n = static_cast<double>(programmes.size());
+      mean.lufs_change += r.lufs_change / n;
+      mean.crest_change += r.crest_change / n;
+      for (std::size_t b = 0; b < r.onset.size(); ++b) {
+        mean.onset[b] += r.onset[b] / n;
+      }
+      mean.peak_change += r.peak_change / n;
+      mean.latency_ms = r.latency_ms;
+    }
+    mean.cpu = cpu_seconds / audio_seconds;
+    print_shaper_row(preset.name, mean);
+    std::fflush(stdout);
+  }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
-  std::string engine_id = "ceiling";
+  std::string engine_id;
   std::vector<std::string> only;
   std::vector<std::pair<std::string, double>> overrides;
   std::vector<Programme> programmes;
   bool loop = true;
   bool per_programme = false;
   bool classic = false;
+  bool shaper = false;
   std::optional<double> only_target;
   for (int i = 1; i < argc; ++i) {
     const std::string_view arg = argv[i];
@@ -882,6 +978,8 @@ int main(int argc, char** argv) {
       loop = false;
     } else if (arg == "--classic") {
       classic = true;
+    } else if (arg == "--shaper") {
+      shaper = true;
     } else if (arg == "--per-programme") {
       per_programme = true;
     } else {
@@ -892,6 +990,9 @@ int main(int argc, char** argv) {
       }
       programmes.push_back({std::string(arg), std::move(*audio)});
     }
+  }
+  if (engine_id.empty()) {
+    engine_id = shaper ? "strike" : "ceiling";
   }
   if (loop) {
     programmes.insert(programmes.begin(), {"loop", drum_loop()});
@@ -908,6 +1009,15 @@ int main(int argc, char** argv) {
     }
     scale(programme.audio, from_db(programme_lufs - level));
     programme.crest_db = crest_db(programme.audio, fine_peaks(programme.audio));
+  }
+  if (shaper) {
+    const auto* engine = effects::find_engine(engine_id);
+    if (engine == nullptr) {
+      std::fprintf(stderr, "no engine %s\n", engine_id.c_str());
+      return 1;
+    }
+    audit_shaper(*engine, only, overrides, programmes, per_programme);
+    return 0;
   }
   std::vector<Device> devices;
   if (classic) {

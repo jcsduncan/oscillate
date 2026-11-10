@@ -140,6 +140,16 @@ low-pass or taken from a sidechain, stereo link, listen and flip.
 
 ![Hush panel](../../../docs/images/effects/hush.png)
 
+### Strike
+
+Transient shaper: attack and sustain gains that do not depend on the
+level, single-band or in up to four bands (Linkwitz-Riley or linear phase),
+with attack and sustain times, lookahead, stereo link, mix, solo per band
+and an oversampled clip under a ceiling.
+[ADR-0118](../../../docs/decisions/0118-strike-transient-shaper.md)
+
+![Strike panel](../../../docs/images/effects/strike.png)
+
 ### Temper
 
 Resonance suppressor with dynamic EQ bands and a drawn sensitivity curve.

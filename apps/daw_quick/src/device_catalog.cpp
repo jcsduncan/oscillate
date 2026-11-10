@@ -114,6 +114,11 @@ constexpr std::array looks{
                "Gate and expander: hysteresis, hold, lookahead, a filtered or external key", "",
                "gate noise gate expander bleed drums kick snare tom hum duck gated reverb "
                "sidechain key"},
+    DeviceLook{"strike", "Effects", S::dynamics, "Transient shaper", "Ts", "#d4f55b",
+               "Attack and sustain, single-band or in up to four bands",
+               "Transient shaper: attack and sustain at any level, up to four bands, clip", "",
+               "transient shaper attack sustain punch snap drums kick snare room tighten "
+               "multiband impact master"},
     DeviceLook{"pump", "Effects", S::dynamics, "Sidechain shaper", "Sc", "#ff7a6b",
                "Draw the duck over the kick",
                "Draw the duck over the kick: tempo or kick-triggered", "",

@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/strike">
+    <file>StrikePanel.qml</file>
+    <file>StrikeTheme.qml</file>
+    <file>StrikeView.qml</file>
+  </qresource>
+</RCC>

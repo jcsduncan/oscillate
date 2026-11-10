@@ -286,6 +286,9 @@ public:
   // Ceiling (ADR-0117): its latency in milliseconds at `sample_rate` (0 for
   // other engines).
   Q_INVOKABLE double ceiling_latency_ms(double sample_rate) const;
+  // Any native effect's latency in milliseconds at `sample_rate` for the
+  // values now (0 for an engine that is not an effect).
+  Q_INVOKABLE double effect_latency_ms(double sample_rate) const;
   // Learn: the Gain (dB) that moves the output by the distance from
   // `integrated_lufs` to Target, within Gain's range; the current Gain when
   // there is no reading (NaN); NaN for other engines.

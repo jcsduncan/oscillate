@@ -3,6 +3,7 @@
 #include "dsp/crossover.hpp"
 #include "dsp/fft.hpp"
 #include "effect_dsp.hpp"
+#include "linear_bank.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
 #include "strata_presets.hpp"
 #include "strata_table.hpp"
@@ -46,6 +47,7 @@ constexpr std::size_t learn = index_of("strata.learn");
 } // namespace p
 
 static_assert(t::band_count == max_bands);
+static_assert(max_bands <= dsp::LinearBank::max_bands);
 
 // Crossovers stay a third of an octave apart and below 0.45 of the rate.
 const double crossover_spacing = std::cbrt(2.0);
@@ -102,13 +104,6 @@ constexpr double spectrum_rate_hz = 30.0;
 constexpr double spectrum_fall_db_per_second = 36.0;
 constexpr double display_low_hz = 20.0;
 constexpr double display_span = 1'000.0;
-// The linear-phase bank at 48 kHz (doubled per doubling of the rate): a
-// 2047-tap Blackman-windowed sinc per crossover, run by overlap-save on
-// 512-frame hops in 4096-point FFTs: 1023 + 512 frames of latency (32 ms).
-constexpr double bank_base_rate = 48'000.0;
-constexpr std::size_t bank_base_half = 1'023;
-constexpr std::size_t bank_base_hop = 512;
-constexpr std::size_t bank_base_fft = 4'096;
 // The minimum-phase filters' ring after the input stops.
 constexpr double tail_seconds = 0.05;
 
@@ -134,133 +129,6 @@ constexpr double tail_seconds = 0.05;
                                t::release_min, t::release_max);
   return band;
 }
-
-// ---- The linear-phase bank -----------------------------------------------------------
-
-// Splits stereo into bands whose FIRs (differences of Blackman-windowed sinc
-// low-passes) sum to a pure delay of half_length frames. Left and right run
-// as one complex signal through one FFT per hop, and every band's spectrum
-// is real-symmetric, so each band needs one inverse transform. Output is a
-// further hop late: the bank's latency is half_length + hop.
-class LinearBank {
-public:
-  LinearBank(const Frames& f, double rate)
-      : rate_(rate), half_(f.half_length), hop_(f.hop), size_(f.fft), fft_(f.fft), history_(f.fft),
-        work_(f.fft), lowpass_(f.fft), previous_(f.fft) {
-    for (auto& s : spectra_) {
-      s.assign(size_, {});
-    }
-    for (auto& o : out_) {
-      o.assign(hop_, {});
-    }
-    taps_.assign(2 * half_ + 1, 0.0);
-  }
-
-  void set(const Layout& layout) noexcept {
-    if (layout.bands != layout_.bands ||
-        !std::equal(layout.crossovers.begin(), layout.crossovers.begin() + (layout.bands - 1),
-                    layout_.crossovers.begin())) {
-      layout_ = layout;
-      dirty_ = true;
-    }
-  }
-  void reset() noexcept {
-    std::ranges::fill(history_, std::complex<double>{});
-    for (auto& o : out_) {
-      std::ranges::fill(o, std::complex<double>{});
-    }
-    position_ = 0;
-  }
-  [[nodiscard]] std::size_t bands() const noexcept { return layout_.bands; }
-
-  // Writes bands() pairs (the bank's output now) and takes one input frame.
-  void process(double left, double right, std::span<double> out_left,
-               std::span<double> out_right) noexcept {
-    for (std::size_t k = 0; k < layout_.bands; ++k) {
-      out_left[k] = out_[k][position_].real();
-      out_right[k] = out_[k][position_].imag();
-    }
-    history_[size_ - hop_ + position_] = {left, right};
-    if (++position_ == hop_) {
-      run();
-      position_ = 0;
-    }
-  }
-
-private:
-  void run() noexcept {
-    if (dirty_) {
-      design();
-    }
-    std::ranges::copy(history_, work_.begin());
-    fft_.forward(work_);
-    for (std::size_t k = 0; k < layout_.bands; ++k) {
-      for (std::size_t i = 0; i < size_; ++i) {
-        lowpass_[i] = work_[i] * spectra_[k][i];
-      }
-      fft_.inverse(lowpass_);
-      std::copy(lowpass_.begin() + static_cast<std::ptrdiff_t>(size_ - hop_), lowpass_.end(),
-                out_[k].begin());
-    }
-    std::copy(history_.begin() + static_cast<std::ptrdiff_t>(hop_), history_.end(),
-              history_.begin());
-  }
-
-  // Band k = lowpass(k) - lowpass(k - 1); the first band is lowpass(0) and
-  // the last the delay less lowpass(n - 2), so the bands sum to the delay.
-  void design() noexcept {
-    dirty_ = false;
-    const std::size_t n = layout_.bands;
-    const auto length = static_cast<double>(taps_.size() - 1);
-    for (std::size_t i = 0; i < size_; ++i) {
-      previous_[i] = {};
-    }
-    for (std::size_t k = 0; k + 1 < n; ++k) {
-      const double cutoff = 2.0 * layout_.crossovers[k] / rate_;
-      double sum = 0.0;
-      for (std::size_t m = 0; m < taps_.size(); ++m) {
-        const double x = static_cast<double>(m) - static_cast<double>(half_);
-        const double sinc =
-            x == 0.0 ? 1.0
-                     : std::sin(std::numbers::pi * cutoff * x) / (std::numbers::pi * cutoff * x);
-        const double phase = 2.0 * std::numbers::pi * static_cast<double>(m) / length;
-        const double blackman = 0.42 - 0.5 * std::cos(phase) + 0.08 * std::cos(2.0 * phase);
-        taps_[m] = cutoff * sinc * blackman;
-        sum += taps_[m];
-      }
-      for (std::size_t i = 0; i < size_; ++i) {
-        lowpass_[i] =
-            i < taps_.size() ? std::complex<double>{taps_[i] / sum, 0.0} : std::complex<double>{};
-      }
-      fft_.forward(lowpass_);
-      for (std::size_t i = 0; i < size_; ++i) {
-        spectra_[k][i] = lowpass_[i] - previous_[i];
-        previous_[i] = lowpass_[i];
-      }
-    }
-    for (std::size_t i = 0; i < size_; ++i) {
-      const double angle = -2.0 * std::numbers::pi * static_cast<double>(i) *
-                           static_cast<double>(half_) / static_cast<double>(size_);
-      spectra_[n - 1][i] = std::polar(1.0, angle) - previous_[i];
-    }
-  }
-
-  double rate_;
-  std::size_t half_;
-  std::size_t hop_;
-  std::size_t size_;
-  base::Fft fft_;
-  std::vector<std::complex<double>> history_;
-  std::vector<std::complex<double>> work_;
-  std::vector<std::complex<double>> lowpass_;
-  std::vector<std::complex<double>> previous_;
-  std::vector<double> taps_;
-  std::array<std::vector<std::complex<double>>, max_bands> spectra_{};
-  std::array<std::vector<std::complex<double>>, max_bands> out_{};
-  Layout layout_{};
-  std::size_t position_ = 0;
-  bool dirty_ = true;
-};
 
 // ---- One band's dynamics -------------------------------------------------------------
 
@@ -345,7 +213,7 @@ public:
         fft_(spectrum_size), spectrum_work_(spectrum_size), spectrum_input_(spectrum_size),
         spectrum_output_(spectrum_size), window_(spectrum_size) {
     if (linear_) {
-      bank_ = std::make_unique<LinearBank>(frames_, sample_rate);
+      bank_ = std::make_unique<dsp::LinearBank>(dsp::bank_frames(sample_rate), sample_rate);
     }
     const std::size_t align = linear_ ? frames_.half_length + frames_.hop : 0;
     const double toggle_step = 1.0 / (toggle_seconds * sample_rate);
@@ -404,7 +272,7 @@ public:
       tree.set(designs, layout_.bands - 1);
     }
     if (bank_) {
-      bank_->set(layout_);
+      bank_->set(layout_.bands, layout_.crossovers);
     }
     bool any_solo = false;
     std::array<Band, max_bands> settings{};
@@ -706,7 +574,7 @@ private:
   Layout layout_{};
   std::array<base::CrossoverTree<max_crossovers>, 2> trees_{};
   std::array<base::CrossoverTree<max_crossovers>, 2> sidechain_trees_{};
-  std::unique_ptr<LinearBank> bank_;
+  std::unique_ptr<dsp::LinearBank> bank_;
   std::array<BandState, max_bands> bands_{};
   std::array<dsp::Delay, 2> input_align_{};
   dsp::Ramp input_gain_;
@@ -864,18 +732,15 @@ double band_magnitude(const Layout& layout, std::size_t band, double hz,
 }
 
 Frames frames_for(std::span<const double> v, double sample_rate) noexcept {
-  std::size_t scale = 1;
-  while (static_cast<double>(scale) * bank_base_rate * 1.5 < sample_rate) {
-    scale *= 2;
-  }
+  const auto bank = dsp::bank_frames(sample_rate);
   Frames f;
-  f.half_length = bank_base_half * scale;
-  f.hop = bank_base_hop * scale;
-  f.fft = bank_base_fft * scale;
+  f.half_length = bank.half_length;
+  f.hop = bank.hop;
+  f.fft = bank.fft;
   const double lookahead_ms = std::clamp(v[p::lookahead], 0.0, t::lookahead_max_ms);
   f.lookahead = static_cast<std::uint32_t>(std::lround(lookahead_ms * 1e-3 * sample_rate));
   const bool linear = whole(v[p::phase]) == t::Phase::linear;
-  f.latency = f.lookahead + (linear ? static_cast<std::uint32_t>(f.half_length + f.hop) : 0U);
+  f.latency = f.lookahead + (linear ? bank.latency() : 0U);
   return f;
 }
 

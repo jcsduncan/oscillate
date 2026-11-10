@@ -626,6 +626,36 @@ oscillate_add_case_tests(native_hush_contract oscillate_hush_tests
   the_callback_never_allocates
   telemetry_feeds_the_panel)
 
+# Strike (ADR-0118): the transient shaper.
+oscillate_add_test_executable(oscillate_strike_tests SOURCES strike_tests.cpp
+  LIBS oscillate::native_effects)
+oscillate_add_case_tests(native_strike_contract oscillate_strike_tests
+  CASES
+  descriptor_registry_and_presets
+  zero_settings_pass_untouched
+  bands_sum_flat
+  attack_gain_matches_its_setting_at_any_level
+  sustain_gain_matches_its_setting_at_any_level
+  a_steady_tone_is_left_alone
+  attack_time_sets_the_length_of_the_lift
+  sustain_time_sets_how_much_decay_counts
+  band_settings_stay_in_their_band
+  solo_plays_only_its_band
+  stereo_link_shares_the_gain
+  mix_blends_with_the_dry_bands
+  clip_holds_the_ceiling
+  latency_is_reported_and_exact
+  linear_phase_sums_to_the_input_delayed
+  lookahead_lifts_the_first_cycle
+  any_block_split_renders_the_same
+  export_equals_live
+  hostile_input_stays_finite
+  the_tail_is_bounded
+  presets_stay_restrained
+  a_seek_starts_clean
+  the_callback_never_allocates
+  telemetry_feeds_the_panel)
+
 # Cast (ADR-0115): the convolution reverb.
 oscillate_add_test_executable(oscillate_cast_tests SOURCES cast_tests.cpp
   LIBS oscillate::native_effects)

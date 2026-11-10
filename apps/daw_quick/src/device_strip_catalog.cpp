@@ -151,6 +151,12 @@ constexpr std::array styles{
                      "Gate",
                      "#b49cff",
                      {"hush.threshold", "hush.range", "hush.release", "hush.hysteresis"}},
+    // Lookahead and Clip are the latency: not strip controls.
+    DeviceStripStyle{
+        "strike",
+        "Transient",
+        "#d4f55b",
+        {"strike.band_1.attack", "strike.band_1.sustain", "strike.attack_time", "strike.mix"}},
     // Lookahead is the latency: not a strip control.
     DeviceStripStyle{"ceiling",
                      "Limiter",

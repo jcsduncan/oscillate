@@ -366,6 +366,7 @@ The baseline processors are the Shape (EQ), Press (compressor), Expanse (algorit
 - a resonance suppressor with dynamic EQ bands (Temper, [ADR-0064](decisions/0064-temper-resonance-suppressor.md)) and multiband dynamics (Strata, [ADR-0082](decisions/0082-strata-multiband.md));
 - a clipper for drums and the master whose true peak never passes its ceiling, 0 dBFS or lower (Edge, [ADR-0108](decisions/0108-edge-clipper.md), [ADR-0113](decisions/0113-edge-adjustable-ceiling.md));
 - a gate and downward expander with hysteresis, hold, lookahead and a filtered or external key, for drum bleed and gated reverbs (Hush, [ADR-0116](decisions/0116-hush-gate-expander.md));
+- a transient shaper whose attack and sustain gains do not depend on the level, single-band for drums or in up to four bands for a bus or the master (Strike, [ADR-0118](decisions/0118-strike-transient-shaper.md));
 - a spatial pass-by effect (Flyby, [ADR-0067](decisions/0067-flyby.md)) and background texture and ageing (Dust, [ADR-0069](decisions/0069-dust-texture.md));
 - the utility suite ([ADR-0042](decisions/0042-native-utility-suite.md)): Lens (spectrum analyser), Loudness (EBU R128), Scope (oscilloscope and alignment), Tune (tuner), Trim (gain and stereo utility) and Signal (test generator).
 

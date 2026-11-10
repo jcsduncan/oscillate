@@ -220,6 +220,18 @@ double edge_latency_ms(const native_dsp::EngineDescriptor& engine, std::span<con
   return static_cast<double>(frames) / sample_rate * milliseconds_per_second;
 }
 
+double effect_latency_ms(const native_dsp::EngineDescriptor& engine, std::span<const double> values,
+                         double sample_rate) {
+  constexpr double milliseconds_per_second = 1'000.0;
+  const auto* effect = native_dsp::effects::find_engine(engine.id);
+  if (effect == nullptr || effect->descriptor != &engine ||
+      values.size() != engine.parameters.size() || !(sample_rate > 0.0)) {
+    return 0.0;
+  }
+  const auto frames = effect->latency_frames(values, sample_rate);
+  return static_cast<double>(frames) / sample_rate * milliseconds_per_second;
+}
+
 double ceiling_latency_ms(const native_dsp::EngineDescriptor& engine,
                           std::span<const double> values, double sample_rate) {
   constexpr double milliseconds_per_second = 1'000.0;

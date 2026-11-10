@@ -19,6 +19,7 @@
 | Expanse | 5.1–6.5% | 16 lines with two allpasses and two biquads each; Hadamard mixing; shimmer when on. |
 | Cast | 1.2–1.9% at 64 and 128 frames (`oscillate_cast_bench`, true-stereo bundled IRs of 0.4–9.5 s); 99th-percentile block 2.3–5.2% of its period, longest 3.2–12.3%; process CPU (getrusage) equal to the mean | The 64-tap head per route, then each tier's partition products, spread over its next block. |
 | Hush | 0.45–0.55% (0.46–0.56% in 64-frame blocks) | Eight key-filter biquads, the detector and the state per channel; a `pow` only while the gain moves. |
+| Strike | Measured by `oscillate_strike_bench` on drum hits over noise, not the noise above, with one instance and with sixteen. 0.34–0.38% with one band at 64 and 128 frames; 99th-percentile block 0.5–0.7% of its period. Linear-phase bands with Clip: 4.3–4.4% (Drum Bus Punch, three bands) and 5.3% (Master Impact, four), 99th percentile 10.7–20.5%, longest 18.7–45.7%. Process CPU equal to the mean. Sixteen single-band instances in a chain: 4.7–8.9%, 99th percentile 7.7–12.5% | Per band and channel the quadrature pair (eight allpass sections), the level and two followers, and one `exp` while the gain moves. The linear-phase bank runs one forward and one inverse FFT per band every 512 frames, so its cost lands in one block of each hop; the 4× clip about 0.8%. |
 | Ceiling | 7.0–7.1% at 64 and 128 frames (`oscillate_ceiling_bench`, noise 12 dB over); 99th-percentile block 8.4–10.2% of its period, longest 11.9–17.7%; process CPU equal to the mean. Sixteen in a chain: 110–114% of one core, 99th percentile 118–150%. With no room to clip (Transients and Clip at 0): 2.5% | The 8× linear-phase clipper (about 4.5%), which sleeps with no room; the 8× fine-peak detector, the 4× guard and the output true-peak meter, about 1.9% together; K-weighted loudness. |
 
 Ceiling was measured on an Intel Core i7-10700K with GCC 15.2, Release, pinned with `taskset`.
@@ -70,6 +71,34 @@ Tones 6 dB over the ceiling, dB:
 - **Latency.** At the default lookahead, the classic limiter's was 5.0 ms; Ceiling's is 7.4 ms.
 - **CCIF.** Both limiters are at the numerical floor.
 - **Crest at −14 LUFS.** The 0.02 dB difference on the loop is the gain stage's margin under the ceiling.
+
+## Strike on drums
+
+`oscillate_limiter_audit --shaper` runs each Strike preset at the programme's own level and reports what it changes: integrated loudness, short-term crest factor (16× true peak over RMS), onset contrast in the three bands (positive is more attack against the body) and the 16× true peak. The synthetic drum loop:
+
+| Preset | LUFS change | Crest change | Onset contrast change L/M/H | True peak change | Latency |
+|---|---|---|---|---|---|
+| Kick Snap | +0.07 | +1.51 | +1.14/+2.05/+0.57 | +4.46 | 1.0 ms |
+| Snare Crack | +1.15 | +1.40 | +1.32/+2.00/+0.68 | +5.85 | 1.0 ms |
+| Tighten Room | −3.41 | +1.03 | +0.21/+0.99/−0.43 | −0.80 | 0 |
+| Drum Bus Punch | +0.09 | +0.65 | +0.52/+1.50/+0.49 | +1.83 | 32.8 ms |
+| Master Impact | +0.32 | +0.29 | +0.34/+0.63/+0.29 | +1.09 | 32.8 ms |
+| Soften Attack | +0.44 | −0.03 | −1.52/−1.69/−0.44 | −0.45 | 0 |
+
+The same three bands split at minimum phase with every gain at 0 dB change the onset contrast by −1.09/−0.43/0.00 dB: the crossovers' allpass delays the lows. Linear phase changes nothing at zero settings, so the bus and master presets use it.
+
+The eight mastered tracks (mean):
+
+| Preset | LUFS change | Crest change | Onset contrast change L/M/H | True peak change | Latency |
+|---|---|---|---|---|---|
+| Kick Snap | −0.41 | +1.33 | +0.79/+1.44/+0.32 | +4.07 | 1.0 ms |
+| Snare Crack | +0.52 | +1.23 | +0.91/+1.39/+0.40 | +5.26 | 1.0 ms |
+| Tighten Room | −3.15 | +1.19 | +0.58/+0.84/−0.38 | −0.29 | 0 |
+| Drum Bus Punch | −0.13 | +0.70 | +0.99/+1.71/+0.52 | +2.60 | 32.8 ms |
+| Master Impact | +0.27 | +0.26 | +0.54/+0.65/+0.35 | +1.19 | 32.8 ms |
+| Soften Attack | +0.59 | +0.13 | −1.36/−1.36/−0.26 | +1.51 | 0 |
+
+Strike was measured on an Intel Core i7-10700K with GCC 15.2, Release, pinned with `taskset`.
 
 Quality comes first, so nothing is traded for CPU here. The obvious savings, if they're ever needed:
 - **Forge:** a lower oversampling factor while the drive is low.

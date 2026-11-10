@@ -139,10 +139,14 @@ add_library(oscillate_native_effects effects/runtime.cpp effects/registry.cpp
                                             effects/press.cpp effects/ceiling.cpp
                                             effects/ceiling_dsp.cpp
                                             effects/strata.cpp
+                                            # The linear-phase crossover bank (Strata, Strike).
+                                            effects/linear_bank.cpp
                                             # Edge's oversampler and guard (ADR-0108).
                                             effects/edge.cpp effects/edge_dsp.cpp
                                             # Hush, the gate and expander (ADR-0116).
                                             effects/hush.cpp
+                                            # Strike, the transient shaper (ADR-0118).
+                                            effects/strike.cpp
                                             # Cast, the convolution reverb (ADR-0115).
                                             effects/cast.cpp effects/cast_convolver.cpp
                                             effects/cast_ir.cpp)
