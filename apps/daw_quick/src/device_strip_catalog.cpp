@@ -148,6 +148,12 @@ constexpr std::array styles{
     // Oversampling is the latency: not a strip control.
     DeviceStripStyle{
         "edge", "Clipper", "#f08a5d", {"edge.input", "edge.shape", "edge.output", "edge.link"}},
+    // Oversampling and Phase are the latency: not strip controls.
+    DeviceStripStyle{
+        "gild",
+        "Exciter",
+        "#f5c451",
+        {"gild.band_1.drive", "gild.band_2.drive", "gild.band_3.drive", "gild.band_4.drive"}},
     // Lookahead is the latency: not a strip control.
     DeviceStripStyle{"hush",
                      "Gate",

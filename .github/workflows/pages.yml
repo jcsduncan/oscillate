@@ -73,7 +73,7 @@ jobs:
         with:
           python-version: "3.14"
       - name: Install MkDocs
-        run: python -I -m pip install --quiet -r scripts/ci/docs-requirements.txt
+        run: python -I -m pip install --quiet --require-hashes -r scripts/ci/docs-requirements.txt
       - name: Gather known issues
         env:
           GITHUB_TOKEN: ${{ github.token }}

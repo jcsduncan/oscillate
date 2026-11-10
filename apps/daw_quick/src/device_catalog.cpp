@@ -160,6 +160,13 @@ constexpr std::array looks{
     DeviceLook{"forge", "Effects", S::drive, "Saturation", "Sa", "#ff9d5c",
                "Tape, tube, fuzz, fold and crush", "Tape, tube, fuzz, fold and crush, oversampled",
                "", "distortion drive overdrive fuzz tape tube bitcrush crush warm grit"},
+    DeviceLook{"gild", "Effects", S::drive, "Exciter", "Ex", "#f5c451",
+               "Harmonics in up to four bands, level-matched",
+               "Multiband exciter: tape, tube, transistor and diode harmonics per band, "
+               "oversampled and level-matched",
+               "",
+               "exciter enhancer harmonics saturation air presence warmth bass small speakers "
+               "tape tube multiband master mastering sheen"},
     DeviceLook{"expanse", "Effects", S::space, "Reverb", "Rv", "#7fb8ff",
                "Small rooms to cathedrals, shimmer and freeze",
                "Rooms to vast clouds, shimmer and freeze", "",

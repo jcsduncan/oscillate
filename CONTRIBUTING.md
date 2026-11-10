@@ -142,12 +142,12 @@ a pull request changes none of their inputs; a skipped job counts as passed.
 - **Documentation**: `scripts/check-doc-links.py` and a strict MkDocs build
   of the documentation site.
 
-**CodeQL** (`codeql.yml`) analyses C/C++ without a build (build mode
-`none`), Python and the workflows with the default query suite, using the
-CodeQL CLI in the runner's toolcache. The C/C++ job passes without analysing
-when a pull request changes no C/C++ source (the `cpp` class of
-`scripts/ci/changes.py`). Results appear in the repository's code scanning
-alerts.
+**CodeQL** (`codeql.yml`) analyses Python and the workflows on every pull
+request, and C/C++ without a build (build mode `none`) on each push to main
+that changes C/C++ source (the `cpp` class of `scripts/ci/changes.py`), with
+the default query suite and the CodeQL CLI in the runner's toolcache. On pull
+requests the C/C++ job passes without analysing. Results appear in the
+repository's code scanning alerts.
 
 An advisory **clang-tidy** job, not required for merging, runs the
 `.clang-tidy` checks on the translation units a pull request touches
@@ -190,8 +190,8 @@ These run on `main` every night; none is required for merging.
   ASan/UBSan; the `tsan` preset runs the `engine` area (the audio worker
   pool among it) and the routed playback cases. A failed run uploads the
   sanitizer reports as an artifact.
-- **CodeQL with a build** (`codeql.yml`): C/C++ analysed from a traced
-  build of the Quick preset, for full type information, under its own
+- **CodeQL with a build** (`codeql.yml`, weekly): C/C++ analysed from a
+  traced build of the Quick preset, for full type information, under its own
   category (`/language:c-cpp/build-mode:manual`).
 - **Tidy sweep** (`tidy-sweep.yml`): the `.clang-tidy` checks over every
   configured translation unit, with the VST3 host and the optional
@@ -234,6 +234,29 @@ ASan/UBSan, TSan where concurrency changed, and coverage
 ([AGENTS.md](AGENTS.md#commands)). A release needs evidence for each PRD
 release gate (PRD §23); coverage does not waive a blocker. CodeRabbit reviews each pull request with
 the rules in `.coderabbit.yaml`, which follow [AGENTS.md](AGENTS.md).
+
+## CI container image
+
+`ghcr.io/jcsduncan/oscillate-ci` is the pinned Ubuntu 26.04 image with the
+build dependencies installed (`scripts/ci/Dockerfile`). It comes in two
+variants, whose package lists are in `scripts/ci/ci-image-deps.sh`:
+
+- **base**: the README list (`scripts/ci/install-deps.sh`) and the CI tools
+  (git, ccache, zstd, curl, gnupg), and no other build dependency, so a
+  build in it shows the README list is complete.
+- **full**: base plus the optional features (JACK, libsamplerate,
+  libsndfile, libmpg123, X11), the .deb and AppImage tools and ffmpeg.
+
+`ci-image.yml` builds both when a pull request changes an input of the
+image, and on `main` when an input changes, every Monday (for security
+updates) and on demand it pushes them, tagged `<variant>-<hash of the
+inputs>` and `<variant>-latest`, with build provenance attestations. It then
+opens the pull request `ci/pin-ci-image`, which moves every
+`ghcr.io/jcsduncan/oscillate-ci@sha256:… # <variant>` pin in the workflows
+to the new digests; that pull request runs the checks on the new image
+before it is merged. It acts with `RELEASE_PLEASE_TOKEN`, which needs the
+Workflows permission (read and write) on top of those listed under
+Releases.
 
 ## Releases
 
