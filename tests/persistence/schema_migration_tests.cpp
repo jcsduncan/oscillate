@@ -270,6 +270,16 @@ void convolution_inserts_become_cast() {
   check_cast(migrated["project"]["master_effects"][0], "master", true);
 }
 
+// 1.47 rejected a convolution payload with unknown fields; the step leaves it
+// for the decoder to reject rather than converting it.
+void malformed_convolution_is_not_converted() {
+  auto extra = convolution_insert("track", true);
+  extra["payload"]["unknown"] = true;
+  const auto manifest = manifest_1_47(Json::array({extra}), Json::array());
+  REQUIRE_EQ(detail::migrate_1_47_to_1_48(manifest), manifest,
+             "a convolution payload with unknown fields was converted");
+}
+
 void manifest_without_convolution_is_unchanged() {
   const auto before = Json::parse(current_manifest());
   REQUIRE_EQ(detail::migrate_1_47_to_1_48(before), before,
@@ -429,6 +439,7 @@ int main() {
     newer_schema_is_refused();
     pre_release_schema_is_refused();
     convolution_inserts_become_cast();
+    malformed_convolution_is_not_converted();
     manifest_without_convolution_is_unchanged();
     schema_1_47_opens_through_the_chain();
     chain_applies_steps_in_order();

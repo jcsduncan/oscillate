@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <string_view>
 #include <utility>
@@ -24,6 +25,7 @@ constexpr std::array<MigrationStep, 1> built_in_steps{
 // (ADR-0115). The ids are Cast's saved document format, so they are spelled
 // here rather than taken from native_dsp: a step is frozen once released.
 constexpr std::string_view convolution_kind = "native_convolution";
+constexpr std::size_t convolution_fields = 3; // generation, wet, ir
 constexpr std::string_view native_effect_kind = "native_effect";
 constexpr std::string_view cast_engine = "cast";
 constexpr std::uint32_t cast_engine_version = 1;
@@ -74,9 +76,10 @@ void convert_convolutions(Json& inserts) {
     if (!insert.is_object() || !insert.contains("kind") || insert["kind"] != convolution_kind ||
         !insert.contains("payload"))
       continue;
+    // 1.47 read exactly these fields; anything else stays unconverted.
     const auto& payload = insert["payload"];
-    if (!payload.is_object() || !payload.contains("generation") || !payload.contains("wet") ||
-        !payload.contains("ir"))
+    if (!payload.is_object() || payload.size() != convolution_fields ||
+        !payload.contains("generation") || !payload.contains("wet") || !payload.contains("ir"))
       continue;
     insert["payload"] = cast_from_convolution(insert["payload"]);
     insert["kind"] = native_effect_kind;
