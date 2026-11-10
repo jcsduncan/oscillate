@@ -72,7 +72,7 @@ jobs:
       # v4.39.1 ships 2.27.3, the version in the runner image's toolcache,
       # so no bundle is downloaded. Keep the two matched when bumping. A fixed
       # version also keeps the overlay-base cache key stable.
-      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         if: env.SCAN == 'true'
         with:
           languages: ${{ matrix.language }}
@@ -81,7 +81,7 @@ jobs:
       # Code scanning refuses this workflow's results while the repository's
       # CodeQL default setup is enabled; waiting for processing would fail
       # the job on that. Processing errors show on the tool status page.
-      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         if: env.SCAN == 'true'
         with:
           category: /language:${{ matrix.language }}
@@ -107,7 +107,7 @@ jobs:
           persist-credentials: false
       - name: Dependencies from the CI image
         run: scripts/ci/ci-image-deps.sh base
-      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           languages: c-cpp
           build-mode: manual
@@ -118,7 +118,7 @@ jobs:
         run: scripts/build.sh build/quick --target all
       # A category of its own, so the build analysis and the build-mode none
       # analysis that pull requests compare against keep separate alerts.
-      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           category: /language:c-cpp/build-mode:manual
           wait-for-processing: false
