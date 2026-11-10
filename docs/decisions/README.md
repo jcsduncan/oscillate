@@ -120,3 +120,4 @@ never reused. 0070 was never assigned.
 | 0115 | [Cast: a zero-latency convolution reverb on the native effect platform, with bundled modelled IRs and user IRs](0115-cast-convolution-reverb.md) | Accepted; implemented |
 | 0116 | [Hush: a gate and downward expander with hysteresis, hold, lookahead and a filtered key](0116-hush-gate-expander.md) | Accepted; implemented |
 | 0117 | [Ceiling: a true-peak mastering limiter with transient room, an oversampled soft clipper, stereo links, and noise-shaped dither on export](0117-ceiling-mastering-limiter.md) | Accepted; implemented |
+| 0118 | [Strike: a single-band and multiband transient shaper with level-independent detection](0118-strike-transient-shaper.md) | Accepted; implemented |

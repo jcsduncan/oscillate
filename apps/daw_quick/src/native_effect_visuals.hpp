@@ -47,6 +47,11 @@ namespace oscillate::quick {
 [[nodiscard]] double edge_latency_ms(const native_dsp::EngineDescriptor& engine,
                                      std::span<const double> values, double sample_rate);
 
+// A native effect's latency in milliseconds at `sample_rate` for `values`
+// (0 for an engine that is not an effect, or values that do not fit it).
+[[nodiscard]] double effect_latency_ms(const native_dsp::EngineDescriptor& engine,
+                                       std::span<const double> values, double sample_rate);
+
 // Ceiling's latency in milliseconds at `sample_rate` (0 for other engines).
 [[nodiscard]] double ceiling_latency_ms(const native_dsp::EngineDescriptor& engine,
                                         std::span<const double> values, double sample_rate);
