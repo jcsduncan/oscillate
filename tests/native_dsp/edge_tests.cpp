@@ -1,4 +1,5 @@
 #include "effect_test_support.hpp"
+#include "effects/edge_dsp.hpp"
 
 #include "oscillate/native_dsp/dsp/math.hpp"
 #include "oscillate/native_dsp/effects/edge.hpp"
@@ -18,6 +19,7 @@
 #include <limits>
 #include <numbers>
 #include <set>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -532,6 +534,107 @@ void compare_is_level_matched() {
   }
 }
 
+// ADR-0125: the oversampler a block at a time is each stage's direct
+// convolution, sample by sample in tap order, bit for bit, at every factor
+// and filter and for any block split.
+namespace direct {
+namespace edge_dsp = oscillate::native_dsp::effects::edge_dsp;
+
+// sum over i of taps[i] * x[k - i] with zeros before the start, in tap order.
+double dot(std::span<const double> taps, const std::vector<double>& x, std::size_t k) {
+  double sum = 0.0;
+  for (std::size_t i = 0; i < taps.size(); ++i) {
+    sum += taps[i] * (i <= k ? x[k - i] : 0.0);
+  }
+  return sum;
+}
+
+double back(const std::vector<double>& x, std::size_t k, std::size_t delay) {
+  return delay <= k ? x[k - delay] : 0.0;
+}
+
+std::vector<double> up(const edge_dsp::Design& design, std::vector<double> x) {
+  for (std::size_t s = 0; s < design.stages; ++s) {
+    const auto& halfband = design.halfbands[s];
+    std::vector<double> y(2 * x.size());
+    for (std::size_t k = 0; k < x.size(); ++k) {
+      y[2 * k] = 2.0 * dot(halfband.even, x, k);
+      y[2 * k + 1] = back(x, k, halfband.centre);
+    }
+    x = std::move(y);
+  }
+  return x;
+}
+
+std::vector<double> down(const edge_dsp::Design& design, std::vector<double> x) {
+  std::vector<double> padded(x.size());
+  for (std::size_t k = 0; k < x.size(); ++k) {
+    padded[k] = back(x, k, design.pad);
+  }
+  x = std::move(padded);
+  for (std::size_t s = design.stages; s-- > 0;) {
+    const bool top = s + 1 == design.stages && design.antialiased;
+    const auto& halfband = design.halfbands[s];
+    std::vector<double> firsts(x.size() / 2);
+    std::vector<double> seconds(x.size() / 2);
+    for (std::size_t k = 0; k < firsts.size(); ++k) {
+      firsts[k] = x[2 * k];
+      seconds[k] = x[2 * k + 1];
+    }
+    std::vector<double> y(firsts.size());
+    for (std::size_t k = 0; k < y.size(); ++k) {
+      if (top) {
+        // The even-length low-pass over the plain stream, at each first.
+        y[k] = dot(design.top, x, 2 * k);
+      } else {
+        y[k] = dot(halfband.even, firsts, k) + 0.5 * back(seconds, k, halfband.centre + 1);
+      }
+    }
+    x = std::move(y);
+  }
+  return x;
+}
+} // namespace direct
+
+void the_block_resampler_is_the_direct_filters() {
+  namespace edge_dsp = oscillate::native_dsp::effects::edge_dsp;
+  constexpr std::size_t frames = 1'000;
+  constexpr double level = 0.9;
+  // Block sizes in turn, up to the resampler's largest.
+  constexpr std::array<std::size_t, 5> splits{1, 7, 32, 5, 19};
+  const auto input = noise(level, frames).left;
+  for (std::size_t o = 0; o < factor_count; ++o) {
+    for (std::size_t f = 0; f < filter_count; ++f) {
+      const auto& design = edge_dsp::design(o, f);
+      const std::string name = std::to_string(design.factor) + "x, filter " + std::to_string(f);
+      const auto expected_up = direct::up(design, input);
+      // Down from a top-rate stream of its own: the curve's output.
+      const auto top_input = noise(level, frames * design.factor, false, 99).left;
+      const auto expected_down = direct::down(design, top_input);
+      for (std::size_t first = 0; first < splits.size(); ++first) {
+        edge_dsp::Resampler resampler;
+        resampler.prepare(design);
+        std::vector<double> got_up(frames * design.factor);
+        std::vector<double> got_down(frames);
+        std::array<double, edge_dsp::block_frames * edge_dsp::max_factor> top{};
+        std::size_t done = 0;
+        for (std::size_t block = first; done < frames; ++block) {
+          const std::size_t n = std::min(splits[block % splits.size()], frames - done);
+          resampler.up(std::span(input).subspan(done, n), top.data());
+          std::copy_n(top.begin(), n * design.factor,
+                      got_up.begin() + static_cast<std::ptrdiff_t>(done * design.factor));
+          std::copy_n(top_input.begin() + static_cast<std::ptrdiff_t>(done * design.factor),
+                      n * design.factor, top.begin());
+          resampler.down(top.data(), std::span(got_down).subspan(done, n));
+          done += n;
+        }
+        require(got_up == expected_up, name + ": up is the direct filters, bit for bit");
+        require(got_down == expected_down, name + ": down is the direct filters, bit for bit");
+      }
+    }
+  }
+}
+
 void any_block_split_renders_the_same() {
   constexpr double hot = 2.0;
   const auto input = kit(20'000, hot);
@@ -735,6 +838,8 @@ int main(int argc, char** argv) {
           {"stereo_link_shares_the_gain", [] { stereo_link_shares_the_gain(); }},
           {"compare_is_level_matched", [] { compare_is_level_matched(); }},
           {"any_block_split_renders_the_same", [] { any_block_split_renders_the_same(); }},
+          {"the_block_resampler_is_the_direct_filters",
+           [] { the_block_resampler_is_the_direct_filters(); }},
           {"export_equals_live", [] { export_equals_live(); }},
           {"hostile_input_stays_finite", [] { hostile_input_stays_finite(); }},
           {"presets_stay_restrained", [] { presets_stay_restrained(); }},

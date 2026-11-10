@@ -4,8 +4,10 @@ name: Reference performance
 # at 64 and 128 frames through the paced fake callback: callback p50/p99/max,
 # whole-process CPU and a per-device table from the performance trace. Hosted
 # runners are shared machines, so these numbers track trends; release figures
-# come from the reference machine. Weekly on main, on demand, and on pull
-# requests that change the harness.
+# come from the reference machine. The master gate (ADR-0125) plays a
+# finished master's chain and fails when its serial time or the callback's
+# p99 passes its limit. Weekly on main, on demand, and on pull requests that
+# change the harness, the built-in effects' DSP or the engine.
 on:
   schedule:
     - cron: "0 7 * * 1"
@@ -22,6 +24,9 @@ on:
       - tests/qualification/qualify_reference_projects.py
       - tests/qualification/reference_project.cpp
       - tests/qualification/CMakeLists.txt
+      - src/native_dsp/effects/**
+      - src/native_dsp/dsp/**
+      - src/engine/**
 
 concurrency:
   group: performance-${{ github.ref }}
@@ -89,5 +94,77 @@ jobs:
           path: |
             performance/results.*
             performance/log-*.txt
+          if-no-files-found: ignore
+          retention-days: 90
+
+  master:
+    name: Master chain gate (fake callback)
+    runs-on: ubuntu-latest
+    container: ghcr.io/jcsduncan/oscillate-ci@sha256:21fcc1dfeb84aeec44c07f0e1716477ade8e701ab433dc274e0226ef80bab7a4 # base
+    timeout-minutes: 120
+    env:
+      BUILD_DIR: build/release
+      CCACHE_MAXSIZE: 1G
+      OSCILLATE_BUILD_JOBS: 4
+      SECONDS_PER_RUN: ${{ inputs.seconds || '20' }}
+      # The master's mean serial time and the callback's p99, as shares of
+      # the block period, for the light reference with the heavy master at
+      # 1024 frames: generous over what hosted runners measure, well under
+      # what the 0.5.0 master cost there (ADR-0125).
+      MASTER_LIMIT_PERCENT: 20
+      P99_LIMIT_PERCENT: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install dependencies
+        run: |
+          scripts/ci/ci-image-deps.sh base
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
+      - name: Fetch the pinned VST3 SDK
+        run: scripts/ci/fetch-vst3-sdk.sh "$RUNNER_TEMP/vst3sdk"
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-performance-${{ github.run_id }}
+          restore-keys: ccache-performance-
+      - name: Configure
+        run: >-
+          cmake --preset release
+          -DBUILD_TESTING=OFF
+          -DOSCILLATE_BUILD_QUALIFICATION=ON
+          -DOSCILLATE_BUILD_VST3_SCANNER=ON
+          -DOSCILLATE_VST3_SDK_ROOT="$RUNNER_TEMP/vst3sdk"
+      - name: Build the reference project player
+        run: scripts/build.sh "$BUILD_DIR" --target oscillate_reference_project
+      # The light reference's tracks leave most of each block to the master,
+      # so its serial cost shows plainly; on these four-core runners the
+      # heavy reference alone already fills the period, so it is reported,
+      # not gated.
+      - name: Gate the master
+        run: |
+          python3 -I tests/qualification/qualify_reference_projects.py \
+            --executable "$BUILD_DIR/tests/qualification/oscillate_reference_project" \
+            --output master-gate --references light --master heavy --frames 1024 \
+            --seconds "$SECONDS_PER_RUN" --trace \
+            --gate-master-percent "$MASTER_LIMIT_PERCENT" --gate-p99-percent "$P99_LIMIT_PERCENT"
+          cat master-gate/results.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Measure the heavy master at each buffer
+        if: always()
+        run: |
+          python3 -I tests/qualification/qualify_reference_projects.py \
+            --executable "$BUILD_DIR/tests/qualification/oscillate_reference_project" \
+            --output master-heavy --references light heavy --master heavy \
+            --frames 256 512 1024 --seconds "$SECONDS_PER_RUN" --trace
+          cat master-heavy/results.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: master-gate
+          path: |
+            master-gate/results.*
+            master-gate/log-*.txt
+            master-heavy/results.*
+            master-heavy/log-*.txt
           if-no-files-found: ignore
           retention-days: 90

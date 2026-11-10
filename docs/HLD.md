@@ -156,7 +156,7 @@ Real-time contract:
 - Bow's library ([ADR-0111](decisions/0111-bow-sampled-strings.md)) is read on a background thread at the first look; a kernel is silent until it adopts it while idle, and offline renders wait for the read in `await_content`.
 - An engine whose values choose content to load (Stick's kit; [ADR-0114](decisions/0114-stick-sampled-drums.md)) names it in `SynthEngine::fetch_content`, which the runtime calls on control when it is created and whenever it is offered values. The engine starts the read on a background thread; the kernel adopts the content once read, and offline renders wait for it in `await_content`. Stick's kits stream their hits from disk as Concert's notes do.
 - Automation lanes, stepped lanes ([ADR-0034](decisions/0034-stepped-native-automation.md)) and pedal events ([ADR-0035](decisions/0035-pedals-in-midi-clips.md)) are delivered sample-accurately.
-- Telemetry goes through a bounded lock-free buffer for panels ([ADR-0037](decisions/0037-synth-telemetry.md)).
+- Telemetry goes through a bounded lock-free buffer for panels ([ADR-0037](decisions/0037-synth-telemetry.md)). An effect whose telemetry is a costly analysis (Lens) only captures its input on the callback and analyses it on the thread that reads its telemetry, when it is read ([ADR-0125](decisions/0125-master-chain-cost.md)).
 - Structural parameter changes switch live ([ADR-0038](decisions/0038-live-structural-switching.md)).
 
 ### 8.2 Native effect platform

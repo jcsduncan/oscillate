@@ -14,6 +14,8 @@
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/engine/audio_worker_pool.hpp"
 #include "oscillate/foundation/trace.hpp"
+#include "oscillate/native_dsp/effects/effect.hpp"
+#include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
 #include "oscillate/project/mix_roles.hpp"
 
@@ -68,7 +70,8 @@ using namespace std::chrono_literals;
 constexpr std::uint32_t sample_rate = 48'000;
 constexpr std::size_t source_tracks = 32;
 constexpr std::size_t heavy_audio_tracks = 16;
-constexpr std::size_t max_frames = 128;
+constexpr std::size_t max_frames = 1'024;
+constexpr std::array<std::size_t, 5> block_sizes{64, 128, 256, 512, 1'024};
 constexpr std::size_t max_seconds = 120;
 constexpr std::size_t default_seconds = 20;
 constexpr std::size_t default_warmup_blocks = 100;
@@ -86,8 +89,28 @@ constexpr std::uint64_t bus_queue_frames = 4'096;
 constexpr std::uint64_t graph_limit_bytes = 1ULL << 20;
 constexpr std::uint64_t buffer_limit_bytes = 16ULL << 20;
 
-// The master chain both projects share: EQ, compressor, reverb, limiter.
-constexpr std::array<std::string_view, 4> master_chain{"shape", "press", "expanse", "ceiling"};
+// A master device: an engine at a factory preset, or at its defaults.
+struct MasterDevice {
+  std::string_view engine;
+  std::string_view preset;
+};
+// The master chain every reference shares by default: EQ, compressor,
+// reverb, limiter.
+constexpr std::array<MasterDevice, 4> default_master{
+    {{"shape", {}}, {"press", {}}, {"expanse", {}}, {"ceiling", {}}}};
+// --master heavy (ADR-0125): a finished master's chain, as a user's
+// mastered project runs it: resonance suppression, the limiter with its
+// clipper, the exciter at 4x, the analyser, tonal balance, an EQ and the
+// loudness meter.
+constexpr std::array<MasterDevice, 7> heavy_master{{{"temper", "Default"},
+                                                    {"ceiling", "Loud Club"},
+                                                    {"gild", "Warm Mids"},
+                                                    {"lens", "Mix"},
+                                                    {"keel", "Gentle Polish"},
+                                                    {"shape", "Presence"},
+                                                    {"loudness", "Streaming (Spotify, YouTube)"}}};
+enum class Master : std::uint8_t { standard, heavy };
+constexpr std::array<std::string_view, 2> master_names{"default", "heavy"};
 // Heavy audio tracks each carry an EQ and a compressor; synth tracks a
 // saturator and a delay.
 constexpr std::array<std::string_view, 2> audio_track_chain{"shape", "press"};
@@ -166,6 +189,7 @@ struct Options {
   std::optional<fs::path> stick_kit;
   // Every role of the master rebalance set (ADR-0123).
   bool rebalance = false;
+  Master master = Master::standard;
 };
 
 template <typename T> T take(foundation::Result<T> result, std::string_view what) {
@@ -189,10 +213,11 @@ std::uint64_t number(std::string_view text) {
 
 Options parse(int argc, char** argv) {
   constexpr std::string_view usage =
-      "usage: oscillate_reference_project --reference light|heavy|pad|drums --frames 64|128 "
-      "--scratch DIR [--seconds N] [--warmup BLOCKS] [--pipewire-target SERIAL] "
-      "[--trace FILE] [--vst3-effect BUNDLE] [--vst3-instrument BUNDLE] [--workers N] "
-      "[--stick-kit DIR] [--rebalance on|off]";
+      "usage: oscillate_reference_project --reference light|heavy|pad|drums "
+      "--frames 64|128|256|512|1024 --scratch DIR [--seconds N] [--warmup BLOCKS] "
+      "[--pipewire-target SERIAL] [--trace FILE] [--vst3-effect BUNDLE] "
+      "[--vst3-instrument BUNDLE] [--workers N] [--stick-kit DIR] [--rebalance on|off] "
+      "[--master default|heavy]";
   if (argc % 2 == 0)
     throw std::runtime_error(std::string(usage));
   Options options;
@@ -226,6 +251,11 @@ Options parse(int argc, char** argv) {
       if (value != "on" && value != "off")
         throw std::runtime_error("--rebalance is on or off");
       options.rebalance = value == "on";
+    } else if (key == "--master") {
+      const auto found = std::ranges::find(master_names, value);
+      if (found == master_names.end())
+        throw std::runtime_error("--master is default or heavy");
+      options.master = static_cast<Master>(found - master_names.begin());
     } else if (key == "--workers") {
       std::size_t workers = 0;
       const auto parsed = std::from_chars(value.data(), value.data() + value.size(), workers);
@@ -238,8 +268,8 @@ Options parse(int argc, char** argv) {
       throw std::runtime_error(std::string(usage));
     }
   }
-  if (options.frames != 64 && options.frames != max_frames)
-    throw std::runtime_error("--frames is 64 or 128");
+  if (std::ranges::find(block_sizes, options.frames) == block_sizes.end())
+    throw std::runtime_error("--frames is 64, 128, 256, 512 or 1024");
   if (options.seconds > max_seconds)
     throw std::runtime_error("--seconds is at most 120");
   if (options.scratch.empty() || !fs::is_directory(options.scratch))
@@ -251,6 +281,28 @@ Options parse(int argc, char** argv) {
     throw std::runtime_error("this build has no VST3 host");
 #endif
   return options;
+}
+
+std::span<const MasterDevice> master_chain(Master master) {
+  if (master == Master::heavy)
+    return heavy_master;
+  return default_master;
+}
+
+// The factory preset a master device names (none: the defaults).
+std::optional<std::size_t> preset_index(const MasterDevice& device) {
+  if (device.preset.empty())
+    return std::nullopt;
+  const auto* engine = oscillate::native_dsp::effects::find_engine(device.engine);
+  if (engine == nullptr)
+    throw std::runtime_error("no built-in effect " + std::string(device.engine));
+  const auto presets = engine->descriptor->presets;
+  const auto found =
+      std::ranges::find(presets, device.preset, &oscillate::native_dsp::Preset::name);
+  if (found == presets.end())
+    throw std::runtime_error("no preset " + std::string(device.preset) + " for " +
+                             std::string(device.engine));
+  return static_cast<std::size_t>(found - presets.begin());
 }
 
 // Seconds of generated media: warmup and measured blocks, rounded up, plus one.
@@ -659,10 +711,12 @@ Workload build_project(const fs::path& root, const fs::path& media, const Option
 #else
   (void)vst3;
 #endif
-  for (std::size_t slot = 0; slot < master_chain.size(); ++slot)
-    (void)take(
-        session->effects().add_effect_engine(project::MasterSignalPath{}, slot, master_chain[slot]),
-        "master effect");
+  const auto master = master_chain(options.master);
+  for (std::size_t slot = 0; slot < master.size(); ++slot)
+    (void)take(session->effects().add_effect_engine(project::MasterSignalPath{}, slot,
+                                                    master[slot].engine,
+                                                    preset_index(master[slot])),
+               "master effect");
   check_roles(session->snapshot(), std::array{group_a, group_b});
   if (options.rebalance)
     take(session->tracks().set_master_rebalance(rebalance_all_roles()), "rebalance");
@@ -953,9 +1007,10 @@ void run(const Options& options) {
               << " native_inserts=" << workload.native_inserts
               << " vst3_effects=" << workload.vst3_effects
               << " vst3_instruments=" << workload.vst3_instruments << " notes=" << workload.notes
-              << " master=" << master_chain.size() << " groups=" << bus_count
-              << " returns=" << bus_count << " rebalance=" << (options.rebalance ? "on" : "off")
-              << '\n'
+              << " master=" << master_names[static_cast<std::size_t>(options.master)]
+              << " master_devices=" << master_chain(options.master).size()
+              << " groups=" << bus_count << " returns=" << bus_count
+              << " rebalance=" << (options.rebalance ? "on" : "off") << '\n'
               << std::flush;
     measure(options, root, vst3);
   } catch (...) {

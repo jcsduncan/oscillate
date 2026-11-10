@@ -26,7 +26,12 @@ AUDIO_THREADS = ("audio callback", "audio worker")
 # Spans that frame the work rather than doing it; reported apart from devices.
 FRAME_SPANS = ("audio.render", "graph.node", "graph.source", "pool.wait_for_helpers")
 REFERENCES = ("light", "heavy", "pad", "drums")
-BUFFER_SIZES = (64, 128)
+BUFFER_SIZES = (64, 128, 256, 512, 1024)
+DEFAULT_BUFFER_SIZES = (64, 128)
+MASTERS = ("default", "heavy")
+# The master node's label in the trace (routing's project route plan).
+MASTER_NODE = "Master"
+MASTER_NODE_KIND = "graph.node"
 SAMPLE_RATE = 48_000
 PERCENT = 100
 KIB_PER_MIB = 1024
@@ -103,6 +108,23 @@ def trace_tables(trace: dict) -> dict:
             }
         )
     devices.sort(key=lambda row: -row["core_percent"])
+    # The master runs on the callback after every other node, so its time is
+    # serial in every block (ADR-0125).
+    masters = [
+        span["dur"]
+        for span in by_kind.get(MASTER_NODE_KIND, [])
+        if span["name"] == MASTER_NODE
+    ]
+    master = (
+        {
+            "blocks": len(masters),
+            "mean_us": round(sum(masters) / len(masters), 3),
+            "p99_us": round(percentile(masters, TAIL), 3),
+            "max_us": round(max(masters), 3),
+        }
+        if masters
+        else None
+    )
     renders = [span["dur"] for span in by_kind.get("audio.render", [])]
     callbacks = (
         {
@@ -121,6 +143,7 @@ def trace_tables(trace: dict) -> dict:
     )
     return {
         "devices": devices,
+        "master": master,
         "callbacks": callbacks,
         "xrun_events": xruns,
         "window_us": window_us,
@@ -141,6 +164,13 @@ def summarise(output: str, trace: dict | None) -> dict:
     if "p99_us" in result:
         result["p99_period_percent"] = round(PERCENT * result["p99_us"] / result["period_us"], 2)
     result["max_period_percent"] = round(PERCENT * result["max_us"] / result["period_us"], 2)
+    master = summary.get("trace", {}).get("master")
+    if master:
+        result["master_mean_us"] = master["mean_us"]
+        result["master_p99_us"] = master["p99_us"]
+        result["master_period_percent"] = round(
+            PERCENT * master["mean_us"] / result["period_us"], 2
+        )
     return summary
 
 
@@ -172,6 +202,8 @@ def run_one(args, reference: str, frames: int, repetition: int, serial: int | No
         str(args.seconds),
         "--scratch",
         str(scratch),
+        "--master",
+        args.master,
     ]
     trace_path = args.output / f"trace-{name}.json"
     if args.trace or serial is not None:
@@ -220,21 +252,29 @@ def label(run: dict) -> str:
 def markdown(evidence: dict) -> str:
     lines = [
         f"Host: {evidence['host']}, {evidence['cores']} logical CPUs. "
-        f"Mode: {evidence['mode']}. {evidence['seconds']} s measured per run.",
+        f"Mode: {evidence['mode']}. Master: {evidence['master']}. "
+        f"{evidence['seconds']} s measured per run.",
         "",
         "| Reference | Frames | Run | Helpers | Callback p50 µs | p99 µs | max µs "
-        "| p99 of period | Over period | Process CPU % | CPU p99 % (100 ms) | Peak RSS MiB |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| p99 of period | Over period | Master mean µs | Master of period "
+        "| Process CPU % | CPU p99 % (100 ms) | Peak RSS MiB |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: "
+        "| ---: | ---: | ---: |",
     ]
     for run in evidence["runs"]:
         result = run["result"]
+        share = result.get("master_period_percent")
         lines.append(
             f"| {label(run)} | {run['frames']} | {run['repetition']} | {result['workers']} "
             f"| {result.get('p50_us', '')} | {result.get('p99_us', '')} | {result['max_us']} "
             f"| {result.get('p99_period_percent', '')}% | {result['over_period']} "
+            f"| {result.get('master_mean_us', '')} | {'' if share is None else f'{share}%'} "
             f"| {result['process_cpu_percent']} | {result['cpu_window_p99']} "
             f"| {round(result['max_rss_kib'] / KIB_PER_MIB, 1)} |"
         )
+    if evidence.get("gate"):
+        lines += ["", "Gate:", ""]
+        lines += [f"- {line}" for line in evidence["gate"]]
     for run in evidence["runs"]:
         devices = run.get("trace", {}).get("devices")
         if not devices:
@@ -254,6 +294,31 @@ def markdown(evidence: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def gate(args, runs: list[dict]) -> list[str]:
+    """Each run that breaks a limit given on the command line, as a sentence."""
+    failures = []
+    for run in runs:
+        result = run["result"]
+        name = f"{label(run)} at {run['frames']} frames (run {run['repetition']})"
+        if args.gate_master_percent is not None:
+            share = result.get("master_period_percent")
+            if share is None:
+                failures.append(f"{name}: the trace has no master spans (run with --trace)")
+            elif share > args.gate_master_percent:
+                failures.append(
+                    f"{name}: the master takes {share}% of the period, "
+                    f"over the {args.gate_master_percent}% limit"
+                )
+        if args.gate_p99_percent is not None:
+            load = result.get("p99_period_percent")
+            if load is not None and load > args.gate_p99_percent:
+                failures.append(
+                    f"{name}: the callback's p99 is {load}% of the period, "
+                    f"over the {args.gate_p99_percent}% limit"
+                )
+    return failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--executable", type=Path, required=True)
@@ -265,7 +330,23 @@ def main() -> int:
         help="an installed Stick kit folder the drums reference plays (default: synthetic)",
     )
     parser.add_argument(
-        "--frames", nargs="+", type=int, choices=BUFFER_SIZES, default=list(BUFFER_SIZES)
+        "--frames", nargs="+", type=int, choices=BUFFER_SIZES, default=list(DEFAULT_BUFFER_SIZES)
+    )
+    parser.add_argument(
+        "--master",
+        choices=MASTERS,
+        default="default",
+        help="the master chain: the references' own, or a finished master's (ADR-0125)",
+    )
+    parser.add_argument(
+        "--gate-master-percent",
+        type=float,
+        help="fail when the master's mean serial time exceeds this share of the period",
+    )
+    parser.add_argument(
+        "--gate-p99-percent",
+        type=float,
+        help="fail when the callback's p99 exceeds this share of the period",
     )
     parser.add_argument("--seconds", type=int, default=DEFAULT_SECONDS)
     parser.add_argument("--repetitions", type=int, default=1)
@@ -297,19 +378,24 @@ def main() -> int:
                     flush=True,
                 )
                 runs.append(run)
+    failures = gate(args, runs)
     evidence = {
         "host": platform.platform(),
         "processor": platform.processor(),
         "cores": os.cpu_count(),
         "mode": f"live on {args.target_node}" if serial is not None else "paced fake callback",
+        "master": args.master,
         "seconds": args.seconds,
         "sample_rate": SAMPLE_RATE,
         "executable_sha256": hashlib.sha256(args.executable.read_bytes()).hexdigest(),
         "runs": runs,
+        "gate": failures,
     }
     (args.output / "results.json").write_text(json.dumps(evidence, indent=2) + "\n")
     (args.output / "results.md").write_text(markdown(evidence))
-    return 0
+    for failure in failures:
+        print(f"gate: {failure}", file=sys.stderr)
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":

@@ -592,7 +592,7 @@ oscillate_add_case_tests(native_ceiling_contract oscillate_ceiling_tests
 
 # Edge (ADR-0108): the clipper.
 oscillate_add_test_executable(oscillate_edge_tests SOURCES edge_tests.cpp
-  LIBS oscillate::native_effects)
+  LIBS oscillate::native_effects oscillate::dsp_primitives)
 oscillate_add_case_tests(native_edge_contract oscillate_edge_tests
   CASES
   descriptor_registry_and_presets
@@ -606,6 +606,7 @@ oscillate_add_case_tests(native_edge_contract oscillate_edge_tests
   stereo_link_shares_the_gain
   compare_is_level_matched
   any_block_split_renders_the_same
+  the_block_resampler_is_the_direct_filters
   export_equals_live
   hostile_input_stays_finite
   presets_stay_restrained
@@ -838,7 +839,8 @@ oscillate_add_case_tests(native_lens_contract oscillate_lens_tests
   resonances_are_found
   infinite_average_and_freeze
   telemetry_ignores_block_size
-  tonal_meter_reads_input_and_sidechain)
+  tonal_meter_reads_input_and_sidechain
+  analysis_runs_when_read)
 
 # The master assistant (ADR-0124).
 oscillate_add_test_executable(oscillate_master_assistant_tests SOURCES master_assistant_tests.cpp

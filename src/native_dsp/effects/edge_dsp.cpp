@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <emmintrin.h>
 #include <numbers>
 #include <stdexcept>
 #include <vector>
@@ -154,6 +155,57 @@ Designs build_all() {
   return out;
 }
 
+// Outputs a convolution computes at once, each its own sum in tap order, in
+// SSE2 pairs held in registers. Baseline x86-64 never contracts SSE2
+// double arithmetic, so every output is the plain dot product's, bit for
+// bit.
+constexpr std::size_t pair = 2;
+constexpr std::size_t lanes = 4 * pair;
+
+struct Sums {
+  __m128d a = _mm_setzero_pd();
+  __m128d b = _mm_setzero_pd();
+  __m128d c = _mm_setzero_pd();
+  __m128d d = _mm_setzero_pd();
+  void add(double tap, const double* x) noexcept {
+    const __m128d t = _mm_set1_pd(tap);
+    a = _mm_add_pd(a, _mm_mul_pd(t, _mm_loadu_pd(x)));
+    b = _mm_add_pd(b, _mm_mul_pd(t, _mm_loadu_pd(x + pair)));
+    c = _mm_add_pd(c, _mm_mul_pd(t, _mm_loadu_pd(x + 2 * pair)));
+    d = _mm_add_pd(d, _mm_mul_pd(t, _mm_loadu_pd(x + 3 * pair)));
+  }
+  void store(double* y) const noexcept {
+    _mm_storeu_pd(y, a);
+    _mm_storeu_pd(y + pair, b);
+    _mm_storeu_pd(y + 2 * pair, c);
+    _mm_storeu_pd(y + 3 * pair, d);
+  }
+};
+
+// The even-length top decimator over a stream held in pairs: tap 2j reads
+// firsts[k - j] and tap 2j + 1 seconds[k - j - 1], summed in tap order.
+void convolve_pairs(std::span<const double> taps, const double* firsts, const double* seconds,
+                    std::size_t n, double* y) noexcept {
+  const std::size_t pairs = taps.size() / 2;
+  std::size_t k = 0;
+  for (; k + lanes <= n; k += lanes) {
+    Sums sums;
+    for (std::size_t j = 0; j < pairs; ++j) {
+      sums.add(taps[2 * j], firsts + k - j);
+      sums.add(taps[2 * j + 1], seconds + k - j - 1);
+    }
+    sums.store(y + k);
+  }
+  for (; k < n; ++k) {
+    double sum = 0.0;
+    for (std::size_t j = 0; j < pairs; ++j) {
+      sum += taps[2 * j] * firsts[k - j];
+      sum += taps[2 * j + 1] * seconds[k - j - 1];
+    }
+    y[k] = sum;
+  }
+}
+
 } // namespace
 
 double log_cosh(double u) noexcept {
@@ -187,92 +239,120 @@ const Design& design(std::size_t oversampling, std::size_t filters) {
                 [std::min(filters, filter_specs.size() - 1)];
 }
 
+void convolve(std::span<const double> taps, const double* x, std::size_t n, double* y) noexcept {
+  const std::size_t length = taps.size();
+  std::size_t k = 0;
+  for (; k + lanes <= n; k += lanes) {
+    Sums sums;
+    for (std::size_t i = 0; i < length; ++i) {
+      sums.add(taps[i], x + k - i);
+    }
+    sums.store(y + k);
+  }
+  for (; k < n; ++k) {
+    double sum = 0.0;
+    for (std::size_t i = 0; i < length; ++i) {
+      sum += taps[i] * x[k - i];
+    }
+    y[k] = sum;
+  }
+}
+
+void Line::advance(std::size_t n) noexcept {
+  std::copy_n(data_.begin() + static_cast<std::ptrdiff_t>(n), history_, data_.begin());
+}
+
 void Resampler::prepare(const Design& design) noexcept {
   design_ = &design;
   for (std::size_t s = 0; s < design.stages; ++s) {
     const auto& halfband = design.halfbands[s];
-    ups_[s].history.resize(halfband.even.size());
-    downs_[s].firsts.resize(halfband.even.size());
-    downs_[s].seconds.resize(halfband.centre + 2);
+    ups_[s].resize(halfband.even.size() - 1);
+    downs_[s].firsts.resize(halfband.even.size() - 1);
+    downs_[s].seconds.resize(halfband.centre + 1);
   }
-  top_.resize(design.top.size());
-  pad_.resize(design.pad + 1);
+  // The top decimator's even taps read the firsts back half its length less
+  // one; its odd taps the seconds back half its length.
+  top_firsts_.resize(design.top.empty() ? 0 : design.top.size() / 2 - 1);
+  top_seconds_.resize(design.top.size() / 2);
+  reset();
 }
 
 void Resampler::reset() noexcept {
-  for (auto& stage : ups_) {
-    stage.history.reset();
+  for (auto& line : ups_) {
+    line.reset();
   }
   for (auto& stage : downs_) {
     stage.firsts.reset();
     stage.seconds.reset();
   }
-  top_.reset();
-  pad_.reset();
+  top_firsts_.reset();
+  top_seconds_.reset();
+  pad_.fill(0.0);
 }
 
 // Zero-stuffing by two through the half-band (gain 2): the even output is the
 // filter's even taps over the input, the odd one the input K frames back.
-void Resampler::up(double x, double* out) noexcept {
-  std::array<double, max_factor> in{};
-  out[0] = x;
-  std::size_t count = 1;
+void Resampler::up(std::span<const double> frames, double* top) noexcept {
+  std::copy(frames.begin(), frames.end(), top);
+  std::size_t count = frames.size();
   for (std::size_t s = 0; s < design_->stages; ++s, count *= 2) {
-    std::copy_n(out, count, in.begin());
-    const auto& taps = design_->halfbands[s].even;
-    auto& history = ups_[s].history;
+    const auto& halfband = design_->halfbands[s];
+    auto& line = ups_[s];
+    double* const x = line.fresh();
+    std::copy_n(top, count, x);
+    convolve(halfband.even, x, count, sums_.data());
+    const double* const centre = x - halfband.centre;
     for (std::size_t k = 0; k < count; ++k) {
-      history.push(in[k]);
-      const double* h = history.newest();
-      double even = 0.0;
-      for (std::size_t i = 0; i < taps.size(); ++i) {
-        even += taps[i] * h[i];
-      }
-      out[2 * k] = 2.0 * even;
-      out[2 * k + 1] = h[design_->halfbands[s].centre];
+      top[2 * k] = 2.0 * sums_[k];
+      top[2 * k + 1] = centre[k];
     }
+    line.advance(count);
   }
 }
 
 // Each pair (earlier first) becomes one sample: the even taps over the
 // firsts and the centre's 1/2 on the second K + 1 pairs back. The top stage
-// with antialiasing runs its even-length low-pass over the plain stream.
-double Resampler::down(double* in) noexcept {
-  if (design_->pad > 0) {
-    for (std::size_t i = 0; i < design_->factor; ++i) {
-      pad_.push(in[i]);
-      in[i] = pad_.newest()[design_->pad];
-    }
+// with antialiasing runs its even-length low-pass over the plain stream:
+// its even taps over the firsts, its odd ones over the seconds a pair back.
+void Resampler::down(double* top, std::span<double> out) noexcept {
+  const std::size_t frames = out.size();
+  if (frames == 0) {
+    return;
   }
-  std::size_t count = design_->factor / 2;
+  const std::size_t total = frames * design_->factor;
+  const std::size_t pad = design_->pad;
+  if (pad > 0) {
+    std::array<double, max_factor> newest{};
+    std::copy_n(top + total - pad, pad, newest.begin());
+    std::copy_backward(top, top + total - pad, top + total);
+    std::copy_n(pad_.begin(), pad, top);
+    pad_ = newest;
+  }
+  std::size_t count = total / 2;
   for (std::size_t s = design_->stages; s-- > 0; count /= 2) {
-    const bool top = s + 1 == design_->stages && design_->antialiased;
+    const bool antialiased_top = s + 1 == design_->stages && design_->antialiased;
+    Line& firsts_line = antialiased_top ? top_firsts_ : downs_[s].firsts;
+    Line& seconds_line = antialiased_top ? top_seconds_ : downs_[s].seconds;
+    double* const firsts = firsts_line.fresh();
+    double* const seconds = seconds_line.fresh();
     for (std::size_t k = 0; k < count; ++k) {
-      const double first = in[2 * k];
-      const double second = in[2 * k + 1];
-      double sum = 0.0;
-      if (top) {
-        top_.push(first);
-        const double* h = top_.newest();
-        for (std::size_t i = 0; i < design_->top.size(); ++i) {
-          sum += design_->top[i] * h[i];
-        }
-        top_.push(second);
-      } else {
-        const auto& halfband = design_->halfbands[s];
-        auto& stage = downs_[s];
-        stage.firsts.push(first);
-        stage.seconds.push(second);
-        const double* h = stage.firsts.newest();
-        for (std::size_t i = 0; i < halfband.even.size(); ++i) {
-          sum += halfband.even[i] * h[i];
-        }
-        sum += 0.5 * stage.seconds.newest()[halfband.centre + 1];
-      }
-      in[k] = sum;
+      firsts[k] = top[2 * k];
+      seconds[k] = top[2 * k + 1];
     }
+    if (antialiased_top) {
+      convolve_pairs(design_->top, firsts, seconds, count, top);
+    } else {
+      const auto& halfband = design_->halfbands[s];
+      convolve(halfband.even, firsts, count, top);
+      const double* const centre = seconds - (halfband.centre + 1);
+      for (std::size_t k = 0; k < count; ++k) {
+        top[k] += 0.5 * centre[k];
+      }
+    }
+    firsts_line.advance(count);
+    seconds_line.advance(count);
   }
-  return in[0];
+  std::copy_n(top, frames, out.begin());
 }
 
 std::uint32_t TruePeakGuard::delay_at(double sample_rate) noexcept {

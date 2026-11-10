@@ -56,6 +56,17 @@ public:
     (void)out;
     return 0;
   }
+  // A kernel whose telemetry is an analysis too costly for the callback
+  // (ADR-0125) only captures its input there and analyses it here instead:
+  // on the one control thread that reads the runtime's telemetry, while the
+  // callback runs, so it costs nothing while nobody reads it. Brings the
+  // analysis up to what was captured and writes the telemetry layout;
+  // returns how many values (0 before the first capture).
+  [[nodiscard]] virtual bool analyses_off_callback() const noexcept { return false; }
+  [[nodiscard]] virtual std::size_t analyse_telemetry(std::span<float> out) noexcept {
+    (void)out;
+    return 0;
+  }
   // At a block start (and once on control before the first block): the
   // engine's compiled document, valid until the next adoption. Effects
   // without a document never see this.
@@ -201,7 +212,10 @@ public:
   bool offer_key_notes(std::vector<KeyNote> notes);
   // Control only: the document last offered (or created with).
   [[nodiscard]] const project::NativeSynthDocument& document() const noexcept { return document_; }
-  [[nodiscard]] bool read_telemetry(std::vector<float>& out) { return telemetry_->read(out); }
+  // Control only, from one thread: the newest telemetry, false until the
+  // first. For a kernel that analyses off the callback, this runs its
+  // analysis.
+  [[nodiscard]] bool read_telemetry(std::vector<float>& out);
   [[nodiscard]] const EffectEngine& engine() const noexcept { return engine_; }
   // Fixed at creation (see EffectEngine::latency_frames).
   [[nodiscard]] std::uint32_t latency_frames() const noexcept { return latency_; }

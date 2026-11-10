@@ -1,8 +1,16 @@
 """Evidence contract for the reference-project runner."""
 
+import argparse
 import unittest
 
-from qualify_reference_projects import RunFailed, markdown, percentile, summarise, trace_tables
+from qualify_reference_projects import (
+    RunFailed,
+    gate,
+    markdown,
+    percentile,
+    summarise,
+    trace_tables,
+)
 
 WORKLOAD = (
     "workload reference=heavy frames=64 measured_seconds=20 warmup_blocks=100 audio_tracks=16 "
@@ -95,11 +103,63 @@ class Report(unittest.TestCase):
             "repetition": 1,
             **summarise(WORKLOAD + "\n" + FAKE, TRACE),
         }
-        text = markdown({"host": "h", "cores": 16, "mode": "fake", "seconds": 20, "runs": [run]})
+        text = markdown(
+            {
+                "host": "h",
+                "cores": 16,
+                "mode": "fake",
+                "master": "default",
+                "seconds": 20,
+                "runs": [run],
+            }
+        )
         self.assertIn(
-            "| heavy | 64 | 1 | 3 | 180 | 400 | 900 | 30.0% | 0 | 85.5 | 120 | 400.0 |", text
+            "| heavy | 64 | 1 | 3 | 180 | 400 | 900 | 30.0% | 0 |  |  | 85.5 | 120 | 400.0 |", text
         )
         self.assertIn("| Nova | 2 | 50.0 |", text)
+
+
+# The master node on the callback, once a block (ADR-0125).
+MASTER_TRACE = {
+    "traceEvents": TRACE["traceEvents"]
+    + [
+        span(1, "graph.node", 0, 100, n=7, name="Master"),
+        span(1, "graph.node", 1000, 300, n=7, name="Master"),
+        span(2, "graph.node", 1000, 900, n=3, name="Group A"),
+    ]
+}
+MASTER_MEAN_US = 200
+MASTER_PERIOD_PERCENT = 15.0
+
+
+def run_with(trace) -> dict:
+    summary = summarise(WORKLOAD + "\n" + FAKE, trace)
+    return {"reference": "light", "frames": 64, "repetition": 1, **summary}
+
+
+def limits(master=None, p99=None):
+    return argparse.Namespace(gate_master_percent=master, gate_p99_percent=p99)
+
+
+class Master(unittest.TestCase):
+    def test_the_master_node_is_timed_apart_from_devices(self):
+        tables = trace_tables(MASTER_TRACE)
+        self.assertEqual(tables["master"]["blocks"], 2)
+        self.assertEqual(tables["master"]["mean_us"], MASTER_MEAN_US)
+        self.assertNotIn("graph.node", [row["device"] for row in tables["devices"]])
+        result = run_with(MASTER_TRACE)["result"]
+        self.assertEqual(result["master_period_percent"], MASTER_PERIOD_PERCENT)
+
+    def test_the_gate_names_each_run_over_a_limit(self):
+        run = run_with(MASTER_TRACE)
+        self.assertEqual(gate(limits(master=MASTER_PERIOD_PERCENT, p99=30.0), [run]), [])
+        failures = gate(limits(master=10.0, p99=20.0), [run])
+        self.assertEqual(len(failures), 2)
+        self.assertIn("master takes 15.0% of the period", failures[0])
+        self.assertIn("p99 is 30.0% of the period", failures[1])
+
+    def test_a_master_limit_needs_a_trace(self):
+        self.assertIn("no master spans", gate(limits(master=10.0), [run_with(None)])[0])
 
 
 if __name__ == "__main__":

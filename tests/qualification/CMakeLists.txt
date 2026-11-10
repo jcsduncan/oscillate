@@ -36,7 +36,8 @@ oscillate_add_executable(oscillate_reference_project SOURCES reference_project.c
 # The pad and drums references play Bow and Stick on their synthetic test libraries.
 target_include_directories(oscillate_reference_project PRIVATE
   ${OSCILLATE_SOURCE_DIR}/tests/native_dsp)
-target_link_libraries(oscillate_reference_project PRIVATE oscillate::synth_engines)
+target_link_libraries(oscillate_reference_project PRIVATE oscillate::synth_engines
+  oscillate::native_effects)
 
 if(OSCILLATE_BUILD_QUICK_UI AND TARGET oscillate_jack_realtime_export)
   # Uses the production Quick real-time export object with a named physical

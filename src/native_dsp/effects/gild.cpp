@@ -509,34 +509,55 @@ public:
 
   void process(std::span<engine::StereoFrame> audio,
                std::span<const engine::StereoFrame>) noexcept override {
+    // In the resampler's blocks: the split, each band through its curve over
+    // the block, then the mix.
+    for (std::size_t start = 0; start < audio.size(); start += edge_dsp::block_frames) {
+      process_block(audio.subspan(start, std::min(edge_dsp::block_frames, audio.size() - start)));
+    }
+  }
+
+  void process_block(std::span<engine::StereoFrame> audio) noexcept {
     const std::size_t n = layout_.bands;
     const std::size_t size = delayed_.size();
-    for (auto& frame : audio) {
-      const std::array<double, 2> in{finite_or_zero(frame.left), finite_or_zero(frame.right)};
+    const std::size_t frames = audio.size();
+    // Each band's input now, per channel, and the bands as they were the
+    // oversampler's round trip ago, which meet what comes back down.
+    std::array<std::array<std::array<double, edge_dsp::block_frames>, 2>, max_bands> split{};
+    std::array<Frame, edge_dsp::block_frames> dry{};
+    for (std::size_t i = 0; i < frames; ++i) {
+      const std::array<double, 2> in{finite_or_zero(audio[i].left), finite_or_zero(audio[i].right)};
       for (std::size_t c = 0; c < 2; ++c) {
         input_peak_[c] = std::max(input_peak_[c] * hold_, std::fabs(in[c]));
       }
-      std::array<std::array<double, max_bands>, 2> split{};
+      Frame bands{};
       if (bank_) {
-        bank_->process(in[0], in[1], split[0], split[1]);
+        bank_->process(in[0], in[1], bands[0], bands[1]);
       } else {
-        trees_[0].process(in[0], split[0]);
-        trees_[1].process(in[1], split[1]);
+        trees_[0].process(in[0], bands[0]);
+        trees_[1].process(in[1], bands[1]);
       }
-      // The bands now go up to the curves; the bands the oversampler's
-      // round trip ago meet what comes back down.
-      delayed_[position_] = {split[0], split[1]};
+      for (std::size_t b = 0; b < max_bands; ++b) {
+        split[b][0][i] = bands[0][b];
+        split[b][1][i] = bands[1][b];
+      }
+      delayed_[position_] = bands;
       position_ = (position_ + 1) % size;
-      const Frame& dry = delayed_[position_];
+      dry[i] = delayed_[position_];
+    }
+    std::array<Excited, max_bands> excited{};
+    for (std::size_t b = 0; b < n; ++b) {
+      excite(bands_[b], split[b], frames, excited[b]);
+    }
 
+    for (std::size_t i = 0; i < frames; ++i) {
       const double match = match_.next();
       std::array<double, 2> out{};
       std::array<double, 2> added{};
       std::array<double, 2> heard_dry{};
       for (std::size_t b = 0; b < n; ++b) {
         auto& band = bands_[b];
-        const std::array<double, 2> x{dry[0][b], dry[1][b]};
-        const std::array<double, 2> h = excite(band, split[0][b], split[1][b]);
+        const std::array<double, 2> x{dry[i][0][b], dry[i][1][b]};
+        const std::array<double, 2> h{excited[b][0][i], excited[b][1][i]};
         // Level Match: the excited band's power back to the dry band's.
         const double dry_power = 0.5 * (x[0] * x[0] + x[1] * x[1]);
         const std::array<double, 2> wet{x[0] + h[0], x[1] + h[1]};
@@ -571,8 +592,8 @@ public:
         output_peak_[c] = std::max(output_peak_[c] * hold_, std::fabs(out[c]));
       }
       listen(0.5 * (heard_dry[0] + heard_dry[1]), 0.5 * (added[0] + added[1]));
-      frame.left = static_cast<float>(out[0]);
-      frame.right = static_cast<float>(out[1]);
+      audio[i].left = static_cast<float>(out[0]);
+      audio[i].right = static_cast<float>(out[1]);
     }
   }
 
@@ -638,6 +659,8 @@ public:
 private:
   using Frame = std::array<std::array<double, max_bands>, 2>;
   using Top = std::array<std::array<double, edge_dsp::max_factor>, 2>;
+  // A band's residue for each frame of a block, per channel.
+  using Excited = std::array<std::array<double, edge_dsp::block_frames>, 2>;
 
   [[nodiscard]] std::uint32_t latency() const noexcept { return bank_latency_ + design_.latency; }
 
@@ -655,57 +678,93 @@ private:
     });
   }
 
-  // Band b takes one frame now (left, right) and returns what its curve
-  // adds to the band as it was the round trip ago (the residue, back at the
-  // base rate).
-  std::array<double, 2> excite(Band& band, double left, double right) noexcept {
-    const double drive = band.drive.next();
-    const double bias = band.bias.next();
-    // Dynamic: the band's power against the reference, as more drive.
-    const double power = 0.5 * (left * left + right * right);
-    band.envelope = flushed(band.envelope + envelope_coefficient_ * (power - band.envelope));
-    double lift = 1.0;
-    if (dynamic_ > 0.0) {
-      const double under = (reference_power_ + power_floor) / (band.envelope + power_floor);
-      lift =
-          std::clamp(std::pow(under, 0.5 * dynamic_), 1.0, db_to_gain(dynamic_ * dynamic_range_db));
-    }
-    const double gain = drive_gain(drive) * lift;
-    band.drive_reading = drive > 0.0 ? gain : 0.0;
-    const bool still = band.drive.step == 0.0 && drive == 0.0 && band.fade == 0.0;
-    if (still) {
-      // Asleep once the residue's last echo has left the resampler and the
-      // even part's DC has gone.
-      const bool blocking = band.shapers[0].blocking() || band.shapers[1].blocking();
-      if (!band.asleep && ++band.idle_frames > design_.tail && !blocking) {
-        band.asleep = true;
+  // Band b takes a block now (per channel) and returns, per frame, what its
+  // curve adds to the band as it was the round trip ago (the residue, back
+  // at the base rate). The oversampler runs over each stretch of frames the
+  // band is awake for, a block at a time; the curve goes frame by frame.
+  void excite(Band& band, const std::array<std::array<double, edge_dsp::block_frames>, 2>& in,
+              std::size_t frames, Excited& out) noexcept {
+    std::array<std::array<double, edge_dsp::block_frames * edge_dsp::max_factor>, 2> top{};
+    const std::size_t factor = design_.factor;
+    // The first frame of the stretch being run, or none.
+    std::size_t run = frames;
+    const auto finish = [&](std::size_t end) {
+      for (std::size_t c = 0; c < 2; ++c) {
+        band.resamplers[c].down(top[c].data(), std::span(out[c]).subspan(run, end - run));
       }
-    } else {
-      if (band.asleep) {
-        for (auto& resampler : band.resamplers) {
-          resampler.reset();
-        }
-        for (auto& shaper : band.shapers) {
-          shaper.reset();
-        }
-        band.asleep = false;
+      run = frames;
+    };
+    for (std::size_t i = 0; i < frames; ++i) {
+      const double left = in[0][i];
+      const double right = in[1][i];
+      const double drive = band.drive.next();
+      const double bias = band.bias.next();
+      // Dynamic: the band's power against the reference, as more drive.
+      const double power = 0.5 * (left * left + right * right);
+      band.envelope = flushed(band.envelope + envelope_coefficient_ * (power - band.envelope));
+      double lift = 1.0;
+      if (dynamic_ > 0.0) {
+        const double under = (reference_power_ + power_floor) / (band.envelope + power_floor);
+        lift = std::clamp(std::pow(under, 0.5 * dynamic_), 1.0,
+                          db_to_gain(dynamic_ * dynamic_range_db));
       }
-      band.idle_frames = 0;
-    }
-    std::array<double, 2> h{};
-    if (!band.asleep) {
-      Top top{};
-      band.resamplers[0].up(left, top[0].data());
-      band.resamplers[1].up(right, top[1].data());
-      if (still || gain < least_drive) {
-        at_rest(top, band.shapers, design_.factor, dc_pole_);
+      const double gain = drive_gain(drive) * lift;
+      band.drive_reading = drive > 0.0 ? gain : 0.0;
+      const bool still = band.drive.step == 0.0 && drive == 0.0 && band.fade == 0.0;
+      if (still) {
+        // Asleep once the residue's last echo has left the resampler and the
+        // even part's DC has gone.
+        const bool blocking = band.shapers[0].blocking() || band.shapers[1].blocking();
+        if (!band.asleep && ++band.idle_frames > design_.tail && !blocking) {
+          band.asleep = true;
+        }
       } else {
-        shape(band, top, gain, bias);
+        if (band.asleep) {
+          for (auto& resampler : band.resamplers) {
+            resampler.reset();
+          }
+          for (auto& shaper : band.shapers) {
+            shaper.reset();
+          }
+          band.asleep = false;
+        }
+        band.idle_frames = 0;
       }
-      h = {band.resamplers[0].down(top[0].data()), band.resamplers[1].down(top[1].data())};
+      if (band.asleep) {
+        if (run < frames) {
+          finish(i);
+        }
+        out[0][i] = 0.0;
+        out[1][i] = 0.0;
+      } else {
+        if (run == frames) {
+          // A stretch starts: up-sample the rest of the block at once (what
+          // a stretch that ends early leaves unused is never heard: a band
+          // that wakes again starts from a reset).
+          run = i;
+          for (std::size_t c = 0; c < 2; ++c) {
+            band.resamplers[c].up(std::span(in[c]).subspan(i, frames - i), top[c].data());
+          }
+        }
+        const std::size_t at = (i - run) * factor;
+        Top frame{};
+        for (std::size_t c = 0; c < 2; ++c) {
+          std::copy_n(top[c].begin() + static_cast<std::ptrdiff_t>(at), factor, frame[c].begin());
+        }
+        if (still || gain < least_drive) {
+          at_rest(frame, band.shapers, factor, dc_pole_);
+        } else {
+          shape(band, frame, gain, bias);
+        }
+        for (std::size_t c = 0; c < 2; ++c) {
+          std::copy_n(frame[c].begin(), factor, top[c].begin() + static_cast<std::ptrdiff_t>(at));
+        }
+      }
+      band.fade = std::max(0.0, band.fade - fade_step_);
     }
-    band.fade = std::max(0.0, band.fade - fade_step_);
-    return h;
+    if (run < frames) {
+      finish(frames);
+    }
   }
 
   // The top-rate frame through the band's curve (and, while a curve change
