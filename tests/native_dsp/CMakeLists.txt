@@ -682,6 +682,7 @@ oscillate_add_case_tests(native_keel_contract oscillate_keel_tests
   any_block_split_renders_the_same
   export_equals_live
   hostile_input_stays_finite
+  a_tiny_rate_still_runs
   the_tail_is_bounded
   presets_stay_restrained
   a_seek_starts_clean

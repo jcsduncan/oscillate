@@ -1003,6 +1003,24 @@ void hostile_input_stays_finite() {
   }
 }
 
+// The kernel factory takes any positive rate: under 1 Hz the history's
+// slice is still at least a frame, so a hop ends.
+void a_tiny_rate_still_runs() {
+  constexpr double tiny_rate = 0.5;
+  constexpr std::size_t hops = 3;
+  constexpr float level = 0.25F;
+  const auto values = defaults();
+  auto kernel = engine().create_kernel(values, tiny_rate);
+  REQUIRE_TRUE(kernel != nullptr, "a kernel at half a hertz");
+  constexpr double beats_per_bar = 4.0;
+  kernel->control(values, 0, Transport{0.0, 0.0, 0.0, beats_per_bar});
+  std::vector<engine::StereoFrame> buffer(hop * hops, {level, level});
+  kernel->process(buffer, {});
+  for (const auto& frame : buffer) {
+    require(std::isfinite(frame.left) && std::isfinite(frame.right), "finite output");
+  }
+}
+
 // After the input stops, the output falls silent within the tail reported.
 void the_tail_is_bounded() {
   constexpr double silent = 1e-6; // -120 dBFS
@@ -1167,6 +1185,7 @@ int main(int argc, char** argv) {
           {"any_block_split_renders_the_same", [] { any_block_split_renders_the_same(); }},
           {"export_equals_live", [] { export_equals_live(); }},
           {"hostile_input_stays_finite", [] { hostile_input_stays_finite(); }},
+          {"a_tiny_rate_still_runs", [] { a_tiny_rate_still_runs(); }},
           {"the_tail_is_bounded", [] { the_tail_is_bounded(); }},
           {"presets_stay_restrained", [] { presets_stay_restrained(); }},
           {"a_seek_starts_clean", [] { a_seek_starts_clean(); }},

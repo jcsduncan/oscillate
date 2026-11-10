@@ -23,13 +23,13 @@ Item {
     // where each sits on the view (dB).
     property var curveIds: []
     property var handles: []
+    // The bands' centres (Hz, keel::band_hz) and the 1 kHz band.
+    property var bandHz: []
+    property int referenceBand: 0
     property bool editable: false
     property int chosen: referenceBand
 
-    readonly property int bands: 31
-    readonly property int referenceBand: 17
-    readonly property real bandsPerOctave: 3
-    readonly property real referenceHz: 1000
+    readonly property int bands: bandHz.length
     readonly property real lowestHz: 20
     readonly property real highestHz: 20000
     readonly property real rangeDb: 18
@@ -39,9 +39,6 @@ Item {
     readonly property var dbTicks: [18, 12, 6, 0, -6, -12, -18]
     readonly property var hzTicks: [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]
 
-    function bandHz(band) {
-        return referenceHz * Math.pow(2, (band - referenceBand) / bandsPerOctave)
-    }
     // Where a frequency sits from the left (0) to the right (1).
     function hzAt(hz) {
         return Math.max(0, Math.min(1, Math.log(hz / lowestHz) / Math.log(highestHz / lowestHz)))
@@ -50,10 +47,15 @@ Item {
     function dbAt(db) {
         return Math.max(0, Math.min(1, 0.5 + db / (2 * rangeDb)))
     }
+    // The band whose centre lies nearest x.
     function bandAtX(x) {
-        const hz = lowestHz * Math.pow(highestHz / lowestHz, Math.max(0, Math.min(1, x / width)))
-        const band = Math.round(Math.log(hz / referenceHz) / Math.LN2 * bandsPerOctave) + referenceBand
-        return Math.max(0, Math.min(bands - 1, band))
+        const at = Math.max(0, Math.min(1, x / width))
+        let best = 0
+        for (let b = 1; b < bands; ++b) {
+            if (Math.abs(hzAt(bandHz[b]) - at) < Math.abs(hzAt(bandHz[best]) - at))
+                best = b
+        }
+        return best
     }
 
     onBalanceChanged: canvas.requestPaint()
@@ -97,7 +99,7 @@ Item {
             const t = view.theme
             const w = width
             const h = height
-            const xOf = band => w * view.hzAt(view.bandHz(band))
+            const xOf = band => w * view.hzAt(view.bandHz[band])
             const yOf = db => h * (1 - view.dbAt(db))
             ctx.lineWidth = t.hairline
             ctx.strokeStyle = t.grid

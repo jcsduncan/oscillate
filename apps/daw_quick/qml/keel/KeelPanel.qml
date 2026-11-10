@@ -35,18 +35,18 @@ Rectangle {
     readonly property real barFloorDb: -60
     readonly property real barTopDb: 0
     readonly property real matchFullDb: 6
-    readonly property int bands: 31
-    readonly property int referenceBand: 17
-    readonly property real bandsPerOctave: 3
+    // Keel's target grid and history (keel.hpp), from the controller.
+    readonly property var layout: controller.keel_layout()
+    readonly property var bandHz: layout.band_hz !== undefined ? layout.band_hz : []
+    readonly property int bands: bandHz.length
     readonly property real emptyDb: -150
-    // The history's time ticks: seconds ago (keel::history_slices of
-    // keel::history_seconds).
-    readonly property real historySeconds: 24
+    // The history's span and its time ticks, seconds ago.
+    readonly property real historySeconds: layout.history_slices !== undefined
+        ? layout.history_slices * layout.history_seconds : 0
     readonly property var secondsTicks: [24, 18, 12, 6]
     readonly property var historyHzTicks: [50, 200, 1000, 5000, 20000]
     readonly property var balanceHzTicks: [20, 100, 1000, 10000]
     readonly property real kilo: 1000
-    readonly property int curveIdDigits: 2
     // Target choices (keel_table::targets).
     readonly property int targetTilt: 0
     readonly property int targetCurve: 1
@@ -58,22 +58,10 @@ Rectangle {
     readonly property bool delta: revision >= 0 && controller.choice("keel.delta") === 1
     readonly property bool referenced: playing && live.referenced === true
 
-    readonly property var curveIds: {
-        const ids = []
-        for (let b = 0; b < bands; ++b)
-            ids.push("keel.curve_" + String(b + 1).padStart(curveIdDigits, "0"))
-        return ids
-    }
+    // The drawn curve's parameters, low band to high.
+    readonly property var curveIds: controller.parameter_ids("Curve")
     // The target the values describe, before any reference (dB per band).
-    readonly property var valueTarget: {
-        const out = []
-        for (let b = 0; b < bands; ++b) {
-            const octaves = (b - referenceBand) / bandsPerOctave
-            const drawn = revision >= 0 && targetSource === targetCurve ? controller.value(curveIds[b]) : 0
-            out.push(tilt * octaves + drawn)
-        }
-        return out
-    }
+    readonly property var valueTarget: revision >= 0 ? controller.keel_target() : []
     // Where the values' target sits on the view: on the target Keel reports
     // while it reads, else centred on its own mean.
     readonly property real valueOffset: {
@@ -91,7 +79,7 @@ Rectangle {
         }
         for (let b = 0; b < bands; ++b)
             sum -= valueTarget[b]
-        return sum / bands
+        return bands > 0 ? sum / bands : 0
     }
     readonly property var shownTarget: tracked && (targetSource !== targetReference || referenced)
         ? live.target : valueTarget.map(db => db + valueOffset)
@@ -299,6 +287,8 @@ Rectangle {
                 target: panel.shownTarget
                 correction: panel.tracked ? panel.live.correction : []
                 curveIds: panel.curveIds
+                bandHz: panel.bandHz
+                referenceBand: panel.layout.reference_band !== undefined ? panel.layout.reference_band : 0
                 handles: panel.valueTarget.map(db => db + panel.valueOffset)
                 editable: panel.targetSource === panel.targetCurve && panel.controller.editable
             }

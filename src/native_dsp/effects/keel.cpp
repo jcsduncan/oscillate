@@ -319,7 +319,8 @@ public:
         output_step_(1.0 - std::exp(-1.0 / (output_seconds * rate))),
         glide_step_(1.0 -
                     std::exp(-static_cast<double>(coefficient_frames) / static_cast<double>(hop_))),
-        slice_frames_(static_cast<std::size_t>(std::lround(history_seconds * rate))) {
+        slice_frames_(std::max<std::size_t>(
+            1, static_cast<std::size_t>(std::lround(history_seconds * rate)))) {
     std::ranges::copy(values, values_.begin());
     window_.resize(window_size_);
     double energy = 0.0;

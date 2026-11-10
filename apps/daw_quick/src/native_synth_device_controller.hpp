@@ -293,6 +293,13 @@ public:
   // the target (the curve, with Target on Curve), as one edit. False when
   // nothing has been tracked yet or for other engines.
   Q_INVOKABLE bool keel_learn();
+  // Keel's target grid ({band_hz: the bands' centres, reference_band: the
+  // 1 kHz band, history_slices, history_seconds: one slice's length});
+  // empty for other engines.
+  Q_INVOKABLE QVariantMap keel_layout() const;
+  // Keel's target for the values now, before any reference (dB per band,
+  // keel::target_curve); empty for other engines.
+  Q_INVOKABLE QVariantList keel_target() const;
   // Learn: the Gain (dB) that moves the output by the distance from
   // `integrated_lufs` to Target, within Gain's range; the current Gain when
   // there is no reading (NaN); NaN for other engines.

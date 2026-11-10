@@ -1166,8 +1166,16 @@ void audit_balance(const effects::EffectEngine& engine, const std::vector<std::s
                    const std::vector<std::pair<std::string, double>>& overrides,
                    const std::vector<Programme>& programmes, bool per_programme) {
   const auto& table = *engine.descriptor;
-  print_balance_header();
   const auto settle = static_cast<std::size_t>(balance_settle_seconds * rate);
+  // The judged part needs one analysis window after the settling time.
+  for (const auto& programme : programmes) {
+    if (programme.audio.size() < settle + balance_window) {
+      std::fprintf(stderr, "%s is shorter than the %.1f s the balance audit needs\n",
+                   programme.name.c_str(), static_cast<double>(settle + balance_window) / rate);
+      std::exit(1);
+    }
+  }
+  print_balance_header();
   for (const auto& preset : table.presets) {
     if (!only.empty() && std::ranges::find(only, std::string(preset.name)) == only.end()) {
       continue;
@@ -1298,10 +1306,19 @@ int main(int argc, char** argv) {
     scale(programme.audio, from_db(programme_lufs - level));
     programme.crest_db = crest_db(programme.audio, fine_peaks(programme.audio));
   }
+  if (shaper && balance) {
+    std::fprintf(stderr, "--shaper and --balance measure different devices\n");
+    return 1;
+  }
   if (shaper || balance) {
     const auto* engine = effects::find_engine(engine_id);
     if (engine == nullptr) {
       std::fprintf(stderr, "no engine %s\n", engine_id.c_str());
+      return 1;
+    }
+    // The balance audit reads the preset's target as Keel's.
+    if (balance && engine != &keel::engine()) {
+      std::fprintf(stderr, "--balance measures Keel, not %s\n", engine_id.c_str());
       return 1;
     }
     if (balance) {

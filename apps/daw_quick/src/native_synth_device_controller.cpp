@@ -2090,6 +2090,33 @@ double NativeSynthDeviceController::effect_latency_ms(double sample_rate) const 
   return quick::effect_latency_ms(engine_, values_, sample_rate);
 }
 
+QVariantMap NativeSynthDeviceController::keel_layout() const {
+  namespace keel = native_dsp::effects::keel;
+  if (&engine_ != keel::engine().descriptor) {
+    return {};
+  }
+  QVariantList centres;
+  for (std::size_t b = 0; b < keel::bands; ++b) {
+    centres.push_back(keel::band_hz(b));
+  }
+  return {{QStringLiteral("band_hz"), centres},
+          {QStringLiteral("reference_band"), static_cast<int>(keel::reference_band)},
+          {QStringLiteral("history_slices"), static_cast<int>(keel::history_slices)},
+          {QStringLiteral("history_seconds"), keel::history_seconds}};
+}
+
+QVariantList NativeSynthDeviceController::keel_target() const {
+  namespace keel = native_dsp::effects::keel;
+  if (&engine_ != keel::engine().descriptor) {
+    return {};
+  }
+  QVariantList out;
+  for (const double db : keel::target_curve(values_)) {
+    out.push_back(db);
+  }
+  return out;
+}
+
 bool NativeSynthDeviceController::keel_learn() {
   std::vector<float> frame;
   if (!adapter_.telemetry(frame)) {

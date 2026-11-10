@@ -10,7 +10,7 @@ Item {
     // Per slice, oldest first: the correction per band (dB).
     property var slices: []
 
-    readonly property int bands: 31
+    readonly property int bands: slices.length > 0 ? slices[0].length : 0
 
     onSlicesChanged: canvas.requestPaint()
     onWidthChanged: canvas.requestPaint()
@@ -35,7 +35,7 @@ Item {
             const cellHeight = height / history.bands
             for (let s = 0; s < count; ++s) {
                 const slice = history.slices[s]
-                for (let b = 0; b < Math.min(history.bands, slice.length); ++b) {
+                for (let b = 0; b < slice.length; ++b) {
                     const db = slice[b]
                     const alpha = Math.min(1, Math.abs(db) / t.historyFullDb)
                     if (alpha < t.historyFloorAlpha)

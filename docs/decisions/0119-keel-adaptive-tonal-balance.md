@@ -62,7 +62,7 @@ A master needs its long-term tonal balance (how much low, mid and top it has aga
 
 ## Consequences
 
-- **Tests:** `native_keel_contract` (26 cases):
+- **Tests:** `native_keel_contract` (27 cases):
   - **Convergence.** Pink noise tilted ±3 dB/oct converges to a flat target within 1 dB from 40 Hz to 16 kHz in under 2 s at Speeds of 1, 4 and 15 s. It ends within 0.5 dB, and a Welch analysis of the output agrees within 1.25 dB.
   - **Following.** A reversal from −3 to +3 dB/oct is followed within 1 dB after 6.2–6.6 Speeds (the bands average power).
   - **Passthrough and stillness.** Amount 0 is bit for bit. On steady pink noise the correction wanders 0.25 dB RMS or less (less when slower), and what moves faster than a second stays under 0.05 dB RMS. A periodic multitone holds its correction within 0.05 dB.
@@ -71,7 +71,7 @@ A master needs its long-term tonal balance (how much low, mid and top it has aga
   - **Targets.** The curve, reference and learned targets are reached.
   - **Controls.** Regions, limits, absent bands, the gates (silences move the correction under 0.25 dB; rare bursts move it less than half as far as they move a plain average), Level Match (within 0.5 LU), Delta and Output.
   - **Other rates.** 44.1 and 96 kHz converge alike.
-  - **Platform.** Block splits, export against live, hostile input, a bounded tail, restrained presets, a seek, no allocation and the telemetry.
+  - **Platform.** Block splits, export against live, hostile input, a rate under 1 Hz, a bounded tail, restrained presets, a seek, no allocation and the telemetry.
 
   `quick_keel_panel_contract` covers the panel, Learn and screenshots (`KEEL_PANEL_SCREENSHOT_DIR`). The platform contracts and `effect_export_parity` cover Keel with every engine.
 - **Audit:** `oscillate_limiter_audit --balance` measures each preset's distance from its target before and after, the loudness change, the second-to-second wander of the applied correction and the onset contrast change. On the eight-track corpus the Default preset takes the mean RMS distance from its target from 4.20 to 3.05 dB (largest 9.46 to 8.12 dB), with the loudness within 0.1 LU; Gentle Polish to 3.49 dB, Streaming Balance to 3.19 dB (`docs/performance/native-effects.md`).
