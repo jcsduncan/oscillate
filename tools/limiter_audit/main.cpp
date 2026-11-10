@@ -1167,11 +1167,16 @@ void audit_balance(const effects::EffectEngine& engine, const std::vector<std::s
                    const std::vector<Programme>& programmes, bool per_programme) {
   const auto& table = *engine.descriptor;
   const auto settle = static_cast<std::size_t>(balance_settle_seconds * rate);
-  // The judged part needs one analysis window after the settling time.
+  // The judged part needs an analysis window and two wander frames after
+  // the settling time.
+  constexpr std::size_t wander_frames = 2;
+  const auto needed =
+      settle + std::max(balance_window,
+                        wander_frames * static_cast<std::size_t>(balance_frame_seconds * rate));
   for (const auto& programme : programmes) {
-    if (programme.audio.size() < settle + balance_window) {
+    if (programme.audio.size() < needed) {
       std::fprintf(stderr, "%s is shorter than the %.1f s the balance audit needs\n",
-                   programme.name.c_str(), static_cast<double>(settle + balance_window) / rate);
+                   programme.name.c_str(), static_cast<double>(needed) / rate);
       std::exit(1);
     }
   }
