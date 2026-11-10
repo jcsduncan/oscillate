@@ -43,8 +43,9 @@ Window {
             deviceDock.activeTab === 2 && deviceDock.selectedClip?.kind === "midi" ? Theme.deviceDockMidiHeight : Theme.deviceDockMinHeight),
             height - topBar.height - Theme.deviceDockArrangeReserve))
     // "arrange", "mixer" (the view switch in the top bar), "mixcheck"
-    // (Mix Check: the toolbar button, Ctrl+Shift+M, the command palette) or
-    // "rebalance" (the master section's button, the command palette).
+    // (Mix Check: the toolbar button, Ctrl+Shift+M, the command palette),
+    // "rebalance" or "assistant" (the master section's buttons, the command
+    // palette).
     property string currentView: "arrange"
     property bool developerDetailsOpen: false
     property bool shortcutsOpen: false
@@ -245,6 +246,11 @@ Window {
     function toggleRebalance() {
         if (projectBridge.projectOpen)
             currentView = currentView === "rebalance" ? "mixer" : "rebalance"
+    }
+    // The master assistant (ADR-0124), likewise a full view of the master.
+    function toggleAssistant() {
+        if (projectBridge.projectOpen)
+            currentView = currentView === "assistant" ? "mixer" : "assistant"
     }
     // The selected audio clip's notes in Clay (ADR-0081), in the dock.
     function editClipNotes() {
@@ -526,6 +532,7 @@ Window {
             || (shell.currentView === "mixcheck" && !shell.textFocus)
             || (shell.currentView === "arrangeloop" && !shell.textFocus)
             || (shell.currentView === "rebalance" && !shell.textFocus)
+            || (shell.currentView === "assistant" && !shell.textFocus)
             || (shell.selectedClipId.length > 0 && projectBridge.selectedNoteIds.length === 0
                 && !shell.textFocus)
         onActivated: {
@@ -540,7 +547,7 @@ Window {
                 shell.developerDetailsOpen = false
             } else if (shell.currentView === "mixcheck" || shell.currentView === "arrangeloop") {
                 shell.currentView = "arrange"
-            } else if (shell.currentView === "rebalance") {
+            } else if (shell.currentView === "rebalance" || shell.currentView === "assistant") {
                 shell.currentView = "mixer"
             } else {
                 // Escape lets go of the selected clip.
@@ -810,6 +817,7 @@ Window {
                     shell.openPluginBrowser(true)
                 })
                 item.rebalanceRequested.connect(shell.toggleRebalance)
+                item.assistantRequested.connect(shell.toggleAssistant)
             }
         }
     }
@@ -834,6 +842,27 @@ Window {
                                                      meters: projectBridge.meters })
             }
             onLoaded: item.closeRequested.connect(shell.toggleRebalance)
+        }
+    }
+
+    // The master assistant takes the mixer's place too.
+    Item {
+        id: assistantArea
+        objectName: "assistantArea"
+        visible: projectBridge.projectOpen && shell.currentView === "assistant"
+        x: 0
+        y: topBar.height
+        width: shell.width
+        height: shell.height - topBar.height
+        Reveal { target: assistantArea; duration: Motion.slow }
+        Loader {
+            anchors.fill: parent
+            active: assistantArea.visible
+            onActiveChanged: {
+                if (active)
+                    setSource("MasterAssistantView.qml", { controller: projectBridge.masterAssistant })
+            }
+            onLoaded: item.closeRequested.connect(shell.toggleAssistant)
         }
     }
 

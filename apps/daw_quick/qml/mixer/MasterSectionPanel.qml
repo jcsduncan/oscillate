@@ -13,6 +13,8 @@ Rectangle {
     required property var bridge
     // The Rebalance view (ADR-0123), from the button under the mono check.
     signal rebalanceRequested()
+    // The master assistant (ADR-0124), from the button under Rebalance.
+    signal assistantRequested()
     readonly property var master: bridge.masterSection
     readonly property var reading: master ? master.reading : ({ valid: false })
     // Streaming loudness targets: a tick on the short-term bar.
@@ -55,6 +57,7 @@ Rectangle {
     readonly property int scaleHeight: 10
     readonly property int monoButtonHeight: 26
     readonly property int rebalanceButtonHeight: 26
+    readonly property int assistantButtonHeight: 26
     readonly property color warnColor: Theme.masterSectionWarnColor
     // Level bars ease over this long; spectrum bars a little quicker.
     readonly property int levelEase: 90
@@ -370,6 +373,35 @@ Rectangle {
                 cursorShape: Qt.PointingHandCursor
                 onClicked: section.rebalanceRequested()
                 Tip { text: "Move vocals, drums, bass and music on the master, each through its own tracks" }
+            }
+        }
+
+        // A master chain proposed toward a reference and a loudness target.
+        Rectangle {
+            objectName: "masterAssistant"
+            width: parent.width
+            height: section.assistantButtonHeight
+            radius: Theme.controlRadius
+            color: assistantArea.containsMouse ? Theme.buttonFace : Theme.panelRaised
+            border.color: Theme.lineStrong
+            Accessible.role: Accessible.Button
+            Accessible.name: "Master assistant"
+            Behavior on color { enabled: Motion.enabled; ColorAnimation { duration: Motion.hover } }
+            Text {
+                anchors.centerIn: parent
+                text: "MASTER ASSISTANT"
+                color: Theme.textMain
+                font.pixelSize: Theme.typeCaption
+                font.bold: true
+                font.letterSpacing: Theme.trackingSm
+            }
+            MouseArea {
+                id: assistantArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: section.assistantRequested()
+                Tip { text: "Propose a master chain toward a reference and a loudness target" }
             }
         }
     }

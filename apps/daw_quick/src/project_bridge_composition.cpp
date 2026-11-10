@@ -16,6 +16,7 @@
 #include "jack_playback_output.hpp"
 #include "key_match_controller.hpp"
 #include "loop_transport.hpp"
+#include "master_assistant_controller.hpp"
 #include "master_section.hpp"
 #include "meter_model.hpp"
 #include "mix_check_controller.hpp"
@@ -329,6 +330,35 @@ void ProjectBridge::create_song_controllers() {
   rebalance_ = std::make_unique<RebalanceController>(
       RebalanceController::Hooks{.session = session, .can_edit = guarded, .commit = commit}, this);
   follow_project(rebalance_.get(), &RebalanceController::project_changed);
+  master_assistant_ = std::make_unique<MasterAssistantController>(
+      MasterAssistantController::Hooks{
+          .session = session,
+          .blocked = [this]() -> QString {
+            if (export_busy() || realtime_export_busy())
+              return QStringLiteral("Wait for the export to finish first");
+            if (control_busy() || import_busy())
+              return QStringLiteral("Finish the current project operation first");
+            return {};
+          },
+          .can_edit = guarded,
+          .commit = commit,
+          .loop = [this]() -> std::optional<application::master_assistant::Range> {
+            if (!loop_transport_)
+              return std::nullopt;
+            const auto samples = loop_transport_->loop_samples();
+            if (!samples)
+              return std::nullopt;
+            return application::master_assistant::Range{samples->start, samples->end};
+          },
+          .preview = [this]() -> std::optional<MasterAssistantController::Preview> {
+            MasterAssistantController::Preview preview;
+            if (!audio_output_ || !preview_output(preview.factory, preview.target_serial))
+              return std::nullopt;
+            preview.buffer_frames = audio_output_->buffer_frames();
+            return preview;
+          }},
+      this);
+  follow_project(master_assistant_.get(), &MasterAssistantController::project_changed);
   arrange_ = std::make_unique<ArrangeController>(
       ArrangeController::Hooks{.session = session,
                                .can_edit = guarded,
