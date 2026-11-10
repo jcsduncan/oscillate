@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.5.0](https://github.com/jcsduncan/oscillate/compare/v0.4.0...v0.5.0) (2026-11-10)
+
+
+### Features
+
+* **app:** Master Assistant panel on the master ([#374](https://github.com/jcsduncan/oscillate/issues/374)) ([e98eebb](https://github.com/jcsduncan/oscillate/commit/e98eebbfe24a97c4eb94805f506ed033915eca35))
+* **app:** Rebalance panel on the master ([#372](https://github.com/jcsduncan/oscillate/issues/372)) ([dd873f4](https://github.com/jcsduncan/oscillate/commit/dd873f42128127b01a08226e1738ed37d5adfa50))
+* **native_dsp,app,tools:** Gild multiband exciter on Forge's curves ([#363](https://github.com/jcsduncan/oscillate/issues/363)) ([4a92cc5](https://github.com/jcsduncan/oscillate/commit/4a92cc5b6a187dfb96368ad1a4903670b75e56dc))
+* **native_dsp,app,tools:** Naked Drums as Stick's default kit ([#359](https://github.com/jcsduncan/oscillate/issues/359)) ([872cf51](https://github.com/jcsduncan/oscillate/commit/872cf51d2dea901917832da6ad1a23888311e392))
+* **native_dsp,app,tools:** Stick's production chain and shaped presets ([#371](https://github.com/jcsduncan/oscillate/issues/371)) ([5aedf6a](https://github.com/jcsduncan/oscillate/commit/5aedf6aae24e2d0a414574575de0016b0e2886ec))
+* **native_dsp,application,tools:** master assistant proposes a master chain from a reference and a loudness target ([#373](https://github.com/jcsduncan/oscillate/issues/373)) ([27f1f76](https://github.com/jcsduncan/oscillate/commit/27f1f76742b3378a69b3fb83884364cb889f1fb7))
+* **project,engine,render_graph,application,analysis,persistence:** master rebalance by role from the project's tracks ([#362](https://github.com/jcsduncan/oscillate/issues/362)) ([81503c6](https://github.com/jcsduncan/oscillate/commit/81503c64046ecaa036f0781e487d7c7e3c6bb9b3))
+
+
+### Bug Fixes
+
+* **persistence,app:** open projects from every tagged release (1.47 → 1.48 migration) ([#370](https://github.com/jcsduncan/oscillate/issues/370)) ([499cfdf](https://github.com/jcsduncan/oscillate/commit/499cfdff9caa2031a6d6f01b5bd1d31bb4e35889))
+
 ## [0.4.0](https://github.com/jcsduncan/oscillate/compare/v0.3.0...v0.4.0) (2026-11-10)
 
 
