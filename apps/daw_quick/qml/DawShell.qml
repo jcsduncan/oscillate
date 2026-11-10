@@ -42,8 +42,9 @@ Window {
         Math.min(Math.max(insertChainHeight,
             deviceDock.activeTab === 2 && deviceDock.selectedClip?.kind === "midi" ? Theme.deviceDockMidiHeight : Theme.deviceDockMinHeight),
             height - topBar.height - Theme.deviceDockArrangeReserve))
-    // "arrange", "mixer" (the view switch in the top bar) or "mixcheck"
-    // (Mix Check: the toolbar button, Ctrl+Shift+M, the command palette).
+    // "arrange", "mixer" (the view switch in the top bar), "mixcheck"
+    // (Mix Check: the toolbar button, Ctrl+Shift+M, the command palette) or
+    // "rebalance" (the master section's button, the command palette).
     property string currentView: "arrange"
     property bool developerDetailsOpen: false
     property bool shortcutsOpen: false
@@ -238,6 +239,12 @@ Window {
     function toggleMixCheck() {
         if (projectBridge.projectOpen)
             currentView = currentView === "mixcheck" ? "arrange" : "mixcheck"
+    }
+    // Rebalance (ADR-0123) is a full view of the master; asking again, or
+    // Escape, goes back to the mixer.
+    function toggleRebalance() {
+        if (projectBridge.projectOpen)
+            currentView = currentView === "rebalance" ? "mixer" : "rebalance"
     }
     // The selected audio clip's notes in Clay (ADR-0081), in the dock.
     function editClipNotes() {
@@ -518,6 +525,7 @@ Window {
             || shell.shortcutsOpen || shell.developerDetailsOpen
             || (shell.currentView === "mixcheck" && !shell.textFocus)
             || (shell.currentView === "arrangeloop" && !shell.textFocus)
+            || (shell.currentView === "rebalance" && !shell.textFocus)
             || (shell.selectedClipId.length > 0 && projectBridge.selectedNoteIds.length === 0
                 && !shell.textFocus)
         onActivated: {
@@ -532,6 +540,8 @@ Window {
                 shell.developerDetailsOpen = false
             } else if (shell.currentView === "mixcheck" || shell.currentView === "arrangeloop") {
                 shell.currentView = "arrange"
+            } else if (shell.currentView === "rebalance") {
+                shell.currentView = "mixer"
             } else {
                 // Escape lets go of the selected clip.
                 shell.selectedClipId = ""
@@ -799,7 +809,31 @@ Window {
                     mixerLoader.selectPath(pathId)
                     shell.openPluginBrowser(true)
                 })
+                item.rebalanceRequested.connect(shell.toggleRebalance)
             }
+        }
+    }
+
+    // Rebalance takes the mixer's place.
+    Item {
+        id: rebalanceArea
+        objectName: "rebalanceArea"
+        visible: projectBridge.projectOpen && shell.currentView === "rebalance"
+        x: 0
+        y: topBar.height
+        width: shell.width
+        height: shell.height - topBar.height
+        Reveal { target: rebalanceArea; duration: Motion.slow }
+        Loader {
+            id: rebalanceLoader
+            anchors.fill: parent
+            active: rebalanceArea.visible
+            onActiveChanged: {
+                if (active)
+                    setSource("RebalanceView.qml", { controller: projectBridge.rebalance,
+                                                     meters: projectBridge.meters })
+            }
+            onLoaded: item.closeRequested.connect(shell.toggleRebalance)
         }
     }
 

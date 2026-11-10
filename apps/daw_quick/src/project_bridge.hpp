@@ -66,6 +66,7 @@ class NoteToolsController;
 class NoteEffectsController;
 class FreezeController;
 class MixCheckController;
+class RebalanceController;
 class ArrangeController;
 class HarmonyController;
 class RecordingController;
@@ -184,6 +185,8 @@ class ProjectBridge final : public QObject {
   Q_PROPERTY(QObject* freezeCommands READ freeze_commands CONSTANT)
   // Mix Check (ADR-0074).
   Q_PROPERTY(QObject* mixCheck READ mix_check CONSTANT)
+  // The master rebalance by role (ADR-0123).
+  Q_PROPERTY(QObject* rebalance READ rebalance CONSTANT)
   // Arrange from a loop (ADR-0080).
   Q_PROPERTY(QObject* arrange READ arrange CONSTANT)
   // Harmony Lab and Chord Comp; chords are notes in MIDI clips (ADR-0084).
@@ -354,6 +357,7 @@ public:
   [[nodiscard]] QObject* note_effects() const noexcept;
   [[nodiscard]] QObject* freeze_commands() const noexcept;
   [[nodiscard]] QObject* mix_check() const noexcept;
+  [[nodiscard]] QObject* rebalance() const noexcept;
   [[nodiscard]] QObject* arrange() const noexcept;
   [[nodiscard]] QObject* harmony() const noexcept;
   [[nodiscard]] QObject* recording() const noexcept;
@@ -1034,6 +1038,7 @@ private:
   std::unique_ptr<NoteEffectsController> note_effects_;
   std::unique_ptr<FreezeController> freeze_commands_;
   std::unique_ptr<MixCheckController> mix_check_;
+  std::unique_ptr<RebalanceController> rebalance_;
   std::unique_ptr<ArrangeController> arrange_;
   std::unique_ptr<HarmonyController> harmony_;
   std::unique_ptr<GrooveCaptureController> groove_capture_;

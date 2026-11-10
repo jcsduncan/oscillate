@@ -45,6 +45,11 @@
     <file alias="mixcheck/MixCheckLoudness.qml">qml/mixcheck/MixCheckLoudness.qml</file>
     <file alias="mixcheck/MixCheckGauge.qml">qml/mixcheck/MixCheckGauge.qml</file>
     <file alias="mixcheck/MixCheckEnergy.qml">qml/mixcheck/MixCheckEnergy.qml</file>
+    <file alias="RebalanceView.qml">qml/RebalanceView.qml</file>
+    <file alias="rebalance/RebalanceTheme.qml">qml/rebalance/RebalanceTheme.qml</file>
+    <file alias="rebalance/RebalanceRoleCard.qml">qml/rebalance/RebalanceRoleCard.qml</file>
+    <file alias="rebalance/RebalanceCurve.qml">qml/rebalance/RebalanceCurve.qml</file>
+    <file alias="rebalance/RebalanceTrackRow.qml">qml/rebalance/RebalanceTrackRow.qml</file>
     <file alias="ArrangeLoopView.qml">qml/ArrangeLoopView.qml</file>
     <file alias="clay/ClayTheme.qml">qml/clay/ClayTheme.qml</file>
     <file alias="clay/ClayPicker.qml">qml/clay/ClayPicker.qml</file>

@@ -19,7 +19,7 @@ pipeline and VST3 host; Qt Quick user interface.
 | MIDI recording | QWERTY keyboard input, overdub, metronome, one-bar count-in ([ADR-0086](docs/decisions/0086-midi-recording-and-click.md)) |
 | Instruments | Prism, Ember, Nova, Pulse, Halo, Torque, Drift, Anvil, Knock, Crate; sampled: Concert, Fret, Wren, Bow, Stick |
 | Effects | Contour, Forge, Orbit, Relay, Expanse, Cast, Vista, Deck, Pocket, Pump, Chop, Temper, Strata, Edge, Hush, Strike, Keel, Gild, Flyby, Dust, Shape, Press, Ceiling, Lens, Loudness, Scope, Tune, Trim, Signal |
-| Mixing | Per-track source → inserts → output; buses, sends, returns, sidechains, delay compensation, macros, racks, freeze |
+| Mixing | Per-track source → inserts → output; buses, sends, returns, sidechains, delay compensation, macros, racks, freeze; master rebalance of vocals, drums, bass and music through their own tracks ([ADR-0123](docs/decisions/0123-master-rebalance.md)) |
 | Plugins | Linux VST3 instruments and effects; out-of-process scanning; saved state; X11-embedded editors |
 | Audio editing | Tempo and key analysis, non-destructive warp and pitch, Clay note editing ([ADR-0081](docs/decisions/0081-clay-note-editing.md)), groove extraction, Arrange from loop |
 | Automation | Track, clip, send and device lanes on the arrangement |

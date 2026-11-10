@@ -23,6 +23,7 @@
 #include "note_tools_controller.hpp"
 #include "plugin_automation_controller.hpp"
 #include "project_bridge_projection.hpp"
+#include "rebalance_controller.hpp"
 #include "recording_controller.hpp"
 #include "route_commands.hpp"
 #include "tempo_lane_controller.hpp"
@@ -118,14 +119,21 @@ void ProjectBridge::create_meter_model() {
           return MeterReading{reading->left_peak, reading->right_peak, reading->left_rms,
                               reading->right_rms, reading->clipped};
         }
+        const auto track_meter = [this](project::TrackId track) -> std::optional<MeterReading> {
+          if (!track_meters_live())
+            return std::nullopt;
+          const auto reading = live_run()->track_meter(track);
+          if (!reading || reading->transport_generation == 0)
+            return std::nullopt;
+          return MeterReading{reading->left_peak, reading->right_peak, reading->left_rms,
+                              reading->right_rms, reading->clipped};
+        };
+        // A rebalance role's meter combines its tracks' (ADR-0123).
+        if (rebalance_)
+          if (auto role = rebalance_->role_meter(id, track_meter))
+            return role;
         const auto track = project::TrackId::parse(id.toStdString());
-        if (!track || !track_meters_live())
-          return std::nullopt;
-        const auto reading = live_run()->track_meter(track.value());
-        if (!reading || reading->transport_generation == 0)
-          return std::nullopt;
-        return MeterReading{reading->left_peak, reading->right_peak, reading->left_rms,
-                            reading->right_rms, reading->clipped};
+        return track ? track_meter(track.value()) : std::nullopt;
       },
       this);
 }
@@ -318,6 +326,9 @@ void ProjectBridge::create_song_controllers() {
       this);
   // A new revision may make the check stale; another project resets it.
   follow_project(mix_check_.get(), &MixCheckController::project_changed);
+  rebalance_ = std::make_unique<RebalanceController>(
+      RebalanceController::Hooks{.session = session, .can_edit = guarded, .commit = commit}, this);
+  follow_project(rebalance_.get(), &RebalanceController::project_changed);
   arrange_ = std::make_unique<ArrangeController>(
       ArrangeController::Hooks{.session = session,
                                .can_edit = guarded,

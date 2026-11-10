@@ -610,6 +610,19 @@ target_link_libraries(oscillate_quick_mix_check_view_tests PRIVATE
 oscillate_target_defaults(oscillate_quick_mix_check_view_tests)
 oscillate_add_test(NAME quick_mix_check_view_contract COMMAND oscillate_quick_mix_check_view_tests)
 set_tests_properties(quick_mix_check_view_contract PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${oscillate_quick_qml_import_dir}")
+# Rebalance (ADR-0123): the panel on a real bridge, one case per contract.
+oscillate_add_test_executable(oscillate_quick_rebalance_panel_tests
+  SOURCES rebalance_panel_tests.cpp
+  LIBS oscillate_quick_test_core Qt6::Gui Qt6::Quick Qt6::Test)
+set(oscillate_quick_rebalance_cases
+  the_panel_shows_every_role_and_track_and_fits a_fader_drag_saves_the_role_gain_as_one_step
+  choosing_a_role_saves_it_and_moves_the_track role_meters_combine_the_tracks_each_stage_acts_on
+  screenshot_if_requested)
+oscillate_add_case_tests(quick_rebalance_panel oscillate_quick_rebalance_panel_tests
+  CASES ${oscillate_quick_rebalance_cases})
+foreach(case IN LISTS oscillate_quick_rebalance_cases ITEMS cases)
+  set_tests_properties(quick_rebalance_panel.${case} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${oscillate_quick_qml_import_dir}")
+endforeach()
 oscillate_add_test_executable(oscillate_quick_project_lifecycle_view_tests
   SOURCES project_lifecycle_view_tests.cpp
   LIBS oscillate_quick_test_core Qt6::Gui Qt6::Quick Qt6::Test

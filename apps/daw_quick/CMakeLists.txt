@@ -142,6 +142,8 @@ set(oscillate_quick_core_sources
   src/freeze_controller.hpp
   src/mix_check_controller.cpp
   src/mix_check_controller.hpp
+  src/rebalance_controller.cpp
+  src/rebalance_controller.hpp
   src/arrange_controller.cpp
   src/arrange_controller.hpp
   src/harmony_controller.cpp
@@ -245,6 +247,8 @@ set(oscillate_quick_shared_sources
   src/freeze_controller.hpp
   src/mix_check_controller.cpp
   src/mix_check_controller.hpp
+  src/rebalance_controller.cpp
+  src/rebalance_controller.hpp
   src/arrange_controller.cpp
   src/arrange_controller.hpp
   src/harmony_controller.cpp
