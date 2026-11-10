@@ -2129,7 +2129,8 @@ void saved_native_eq_is_audible_from_quick() {
            std::get<project::NativeEffectPatch>(owner.effects[1].processor).parameters) {
         const auto index =
             oscillate::native_dsp::find_parameter(*ceiling_engine.descriptor, value.id);
-        require(index.has_value(), "the oracle knows every Ceiling parameter");
+        if (!index)
+          throw std::runtime_error("the oracle does not know " + value.id);
         ceiling_values[*index] = value.value;
       }
       auto limiter = take(oscillate::native_dsp::effects::NativeEffectRuntime::create(

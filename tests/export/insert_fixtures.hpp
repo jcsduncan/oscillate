@@ -8,6 +8,7 @@
 #include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_inserts/effect_binding.hpp"
 #include "oscillate/project/model.hpp"
+#include "oscillate/test/audio_constants.hpp"
 
 #include <algorithm>
 #include <array>
@@ -130,8 +131,8 @@ inline project::NativeEffectPatch ceiling(const native_dsp::LimiterSettings& set
 // Ceiling's latency for a lookahead at 48 kHz, as the fixture above sets
 // it.
 inline std::uint32_t ceiling_latency(double lookahead_ms) {
-  constexpr double rate = 48'000.0;
-  return native_dsp::effects::ceiling::latency_frames(lookahead_ms, rate);
+  return native_dsp::effects::ceiling::latency_frames(lookahead_ms,
+                                                      oscillate::test::sample_rate_48k_hz);
 }
 
 // Expanse at a decay (seconds) and mix (0..1).

@@ -63,7 +63,10 @@ std::int32_t DitherQuantizer::quantize(float sample, std::size_t channel) noexce
     feedback += taps_[k] * errors[k];
   }
   const double wanted = static_cast<double>(sample) * scale_ - feedback;
-  const double noise = random_.unit() - random_.unit();
+  // Two draws, in this order: the operands of a subtraction are unsequenced.
+  const double first = random_.unit();
+  const double second = random_.unit();
+  const double noise = first - second;
   const double rounded = std::round(wanted + noise);
   const double clamped = std::clamp(rounded, -scale_, scale_ - 1.0);
   const double error = std::clamp(clamped - wanted, -max_error_lsb, max_error_lsb);

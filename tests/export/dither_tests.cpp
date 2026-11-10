@@ -186,7 +186,9 @@ void flat_is_the_seeded_tpdf() {
   oscillate::foundation::SplitMix64 random(seed);
   for (std::size_t i = 0; i < clipping_samples; ++i) {
     const auto x = static_cast<float>(signal_level * std::sin(static_cast<double>(i)));
-    const double noise = random.unit() - random.unit();
+    const double first = random.unit();
+    const double second = random.unit();
+    const double noise = first - second;
     const auto expected = static_cast<std::int32_t>(std::round(x * pcm16_scale + noise));
     REQUIRE_EQ(quantizer.quantize(x, i % 2), expected, "flat dither is plain seeded TPDF");
   }

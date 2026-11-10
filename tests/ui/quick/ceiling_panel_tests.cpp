@@ -7,6 +7,7 @@
 #include "oscillate/native_dsp/effects/ceiling.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
+#include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QColor>
@@ -191,7 +192,7 @@ void panel_covers_every_parameter() {
           "the panel names its preset");
   require(text_of(*panel, QStringLiteral("ceilingValue")) == QStringLiteral("−1.0"),
           "the ceiling reads in large");
-  constexpr double nominal_rate = 48'000.0;
+  constexpr double nominal_rate = oscillate::test::sample_rate_48k_hz;
   const double latency_ms = controller.ceiling_latency_ms(nominal_rate);
   require(latency_ms > 0.0, "the controller reads Ceiling's latency");
   require(text_of(*panel, QStringLiteral("ceilingLatency")) ==

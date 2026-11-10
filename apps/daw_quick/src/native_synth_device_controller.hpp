@@ -288,7 +288,7 @@ public:
   Q_INVOKABLE double ceiling_latency_ms(double sample_rate) const;
   // Learn: the Gain (dB) that moves the output by the distance from
   // `integrated_lufs` to Target, within Gain's range; the current Gain when
-  // there is no reading (NaN) or for other engines.
+  // there is no reading (NaN); NaN for other engines.
   Q_INVOKABLE double ceiling_learned_gain(double integrated_lufs) const;
   // Cast (ADR-0115): its bundled IRs ({id, name, category}, in browser
   // order).

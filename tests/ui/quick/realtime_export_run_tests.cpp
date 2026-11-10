@@ -5,6 +5,7 @@
 #include "oscillate/native_dsp/effects/ceiling.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/test/allocation_counter.hpp"
+#include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/wait.hpp"
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
@@ -573,8 +574,8 @@ void reverb_tail_rings_out_without_later_source() {
 
   // Ceiling's default lookahead at 48 kHz (ADR-0117).
   constexpr double default_lookahead_ms = 4.0;
-  const auto limiter_latency =
-      oscillate::native_dsp::effects::ceiling::latency_frames(default_lookahead_ms, 48'000.0);
+  const auto limiter_latency = oscillate::native_dsp::effects::ceiling::latency_frames(
+      default_lookahead_ms, oscillate::test::sample_rate_48k_hz);
   require(narrow.latency_frames == limiter_latency && broad.latency_frames == limiter_latency,
           "limiter lookahead is not the prepared output latency");
   require(expected_tail > 4'800 && narrow.tail_frames == expected_tail &&

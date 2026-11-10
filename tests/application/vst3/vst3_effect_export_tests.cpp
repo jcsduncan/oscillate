@@ -818,7 +818,7 @@ void mixed_compressor_vst3_export_checks() {
 // `latency` frames of silence after it: the oracle for a chain holding it.
 std::vector<engine::StereoFrame> ceiling_oracle(const native_dsp::LimiterSettings& settings,
                                                 std::span<const engine::StereoFrame> input) {
-  constexpr double rate = 48'000.0;
+  constexpr double rate = oscillate::test::sample_rate_48k_hz;
   constexpr std::size_t block = 128;
   const auto patch = test_insert::ceiling(settings);
   const auto& limiter = native_dsp::effects::ceiling::engine();
