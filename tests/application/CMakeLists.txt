@@ -57,7 +57,7 @@ oscillate_add_test_executable(oscillate_application_tempo_review_tests SOURCES t
   TEST application_tempo_review)
 
 oscillate_add_test_executable(oscillate_application_project_session_tests SOURCES project_session_tests.cpp
-  LIBS oscillate::application
+  LIBS oscillate::application oscillate::foundation_digest nlohmann_json::nlohmann_json
   DEFINITIONS OSCILLATE_STARTER_PLUCK="${PROJECT_SOURCE_DIR}/assets/starter/pluck.wav"
     OSCILLATE_HAVE_CODEC=$<BOOL:${OSCILLATE_BUILD_CODEC_ADAPTER}>
     OSCILLATE_CODEC_FIXTURE_DIR="${PROJECT_SOURCE_DIR}/tests/codec/assets")
@@ -86,6 +86,8 @@ set(project_session_cases
   session_redo_restores_undone_edit_and_rejects_stale_history
   native_synth_media_import_is_atomic_and_undoable
   native_synth_media_import_runs_on_a_worker
+  project_from_the_oldest_release_opens_and_saves
+  unreadable_schema_says_why
   native_effect_media_import_is_atomic_and_undoable
   crate_sample_import_sets_state_in_one_step
   accepted_media_import_survives_save_failure

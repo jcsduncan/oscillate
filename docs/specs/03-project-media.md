@@ -2,9 +2,9 @@
 
 **Status:** Draft. **Dependencies:** project command model, media identity, storage protocol. **PRD:** §§8, 18, 21.
 
-Before the first public beta, projects may require the current development
-schema. Earlier development schema notes below record implementation history,
-not a compatibility promise. PM-07 applies once a schema has shipped publicly.
+PM-07 applies to every schema a tagged release wrote, from v0.3.0 (1.47) on.
+Notes below on schemas before 1.47 describe development formats that do not
+open.
 
 ## Functional contract
 

@@ -24,10 +24,10 @@ struct SchemaVersion {
 // The one schema this build writes.
 inline constexpr SchemaVersion current_schema{1, 48};
 
-// Every schema a public release wrote, oldest first. Each has a golden manifest
-// in tests/persistence/golden. Empty before the first public beta, so only the
-// current schema opens.
-inline constexpr std::array<SchemaVersion, 0> released_schemas{};
+// Every schema a tagged release wrote (v0.3.0 onwards), oldest first. Each has
+// a golden manifest in tests/persistence/golden.
+inline constexpr std::array<SchemaVersion, 2> released_schemas{SchemaVersion{1, 47},
+                                                               SchemaVersion{1, 48}};
 
 // One forward step: a pure function from a manifest in `from` to one in `to`.
 // The chain rewrites the manifest's own "schema" field after each step.
@@ -40,11 +40,16 @@ struct MigrationStep {
 // The built-in chain, from the oldest released schema to the current one.
 [[nodiscard]] std::span<const MigrationStep> migration_steps() noexcept;
 
+// 1.47 -> 1.48: each `native_convolution` insert becomes a Cast effect
+// (ADR-0115) playing the same impulse response; see migration.cpp.
+[[nodiscard]] nlohmann::json migrate_1_47_to_1_48(nlohmann::json manifest);
+
 [[nodiscard]] std::string schema_text(SchemaVersion version);
 
 // Brings `manifest`, saved in `from`, to `current` through `steps`. The current
 // schema passes through unchanged. A newer schema, or one older than the oldest
-// released schema, fails as unsupported with a message saying which.
+// released schema, fails as unsupported with a message naming the schema and
+// the range this build opens.
 [[nodiscard]] foundation::Result<nlohmann::json>
 migrate_manifest(nlohmann::json manifest, SchemaVersion from, SchemaVersion current,
                  std::span<const SchemaVersion> released, std::span<const MigrationStep> steps);

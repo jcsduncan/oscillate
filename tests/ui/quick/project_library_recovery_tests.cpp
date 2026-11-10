@@ -1,5 +1,6 @@
 #include "../../../apps/daw_quick/src/project_bridge.hpp"
 #include "oscillate/test/check.hpp"
+#include "oscillate/test/saved_manifest.hpp"
 #include "oscillate/test/wait.hpp"
 
 #include <QCoreApplication>
@@ -9,6 +10,7 @@
 #include <QUrl>
 
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -646,6 +648,36 @@ void unsaved_plugin_state_stops_project_changes() {
   require(bridge.project_name() == first && bridge.plugin_state_problem().isEmpty(),
           "a saved plug-in state stopped switching projects");
 }
+// A project this build cannot read says why it does not open (ADR-0095).
+void project_from_a_newer_release_says_why() {
+  // A schema no release has written yet.
+  constexpr std::uint32_t future_major = 1;
+  constexpr std::uint32_t future_minor = 99;
+  Directory directory;
+  QSettings::setDefaultFormat(QSettings::IniFormat);
+  QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                     QString::fromStdString((directory.root() / "settings").string()));
+  const auto root = directory.root() / ".oscillate" / "projects" / "Future song";
+  fs::create_directories(root.parent_path());
+  auto session = app::ProjectSession::create(root);
+  require(session.has_value(), "future project fixture failed");
+  session.value().reset();
+  oscillate::test::rewrite_current_manifest(root, [&](nlohmann::json& manifest) {
+    oscillate::test::set_manifest_schema(manifest, future_major, future_minor);
+  });
+  const auto discover = [] {
+    return foundation::Result<std::vector<oscillate::audio_io::PipeWireSink>>::success({});
+  };
+  quick::ProjectBridge bridge(directory.root(), nullptr, {}, discover);
+  bridge.open_listed(QString::fromStdString(root.string()));
+  const auto schema = QStringLiteral("%1.%2").arg(future_major).arg(future_minor);
+  require(!bridge.project_open() && bridge.recovery_choice().isEmpty() &&
+              bridge.status().startsWith(QStringLiteral("Could not open project")) &&
+              bridge.status().contains(QStringLiteral("newer Oscillate")) &&
+              bridge.status().contains(schema),
+          "a newer project did not say why it does not open: " + bridge.status().toStdString());
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -662,6 +694,7 @@ int main(int argc, char** argv) {
     default_names_and_save_a_copy();
     autosave_worker_preserves_recovery_and_switch_boundary();
     unsaved_plugin_state_stops_project_changes();
+    project_from_a_newer_release_says_why();
   } catch (const std::exception& error) {
     std::fprintf(stderr, "Quick project library recovery: %s\n", error.what());
     return 1;

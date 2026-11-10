@@ -188,16 +188,100 @@ void newer_schema_is_refused() {
 }
 
 void pre_release_schema_is_refused() {
-  if (!detail::released_schemas.empty()) {
-    return;
-  }
-  static_assert(current_schema.minor > 0, "a development schema precedes the current one");
-  constexpr SchemaVersion development{current_schema.major, current_schema.minor - 1};
+  constexpr auto oldest = detail::released_schemas.front();
+  static_assert(oldest.minor > 0, "a development schema precedes the oldest release");
+  constexpr SchemaVersion development{oldest.major, oldest.minor - 1};
   const auto result = detail::decode_manifest(with_schema(development));
   require(!result, "a development schema does not open");
   REQUIRE_EQ(result.error().code, ErrorCode::unsupported, "a development schema is unsupported");
-  require(result.error().message.find("predates") != std::string::npos,
-          "the refusal says the schema predates the first release: " + result.error().message);
+  require(result.error().message.find("predates the oldest supported release (schema " +
+                                      detail::schema_text(oldest) + ")") != std::string::npos,
+          "the refusal says the schema predates the oldest release: " + result.error().message);
+}
+
+// 1.47 -> 1.48. A 1.47 convolution insert: its managed IR, as 1.47 saved it.
+constexpr SchemaVersion schema_1_47{1, 47};
+constexpr std::uint32_t cast_engine_version = 1;
+constexpr std::uint64_t convolution_generation = 7;
+constexpr double convolution_wet = 0.35;
+constexpr std::uint64_t ir_bytes = 4'096;
+constexpr std::uint32_t ir_rate = 48'000;
+constexpr std::uint32_t ir_channels = 2;
+constexpr std::uint64_t ir_frames = 2'000;
+constexpr double cast_normalise_off = 0.0;
+
+Json managed_ir() {
+  return {{"source", "00000000-0000-0000-0000-0000000000aa"},
+          {"sha256", std::string(foundation::sha256_bytes * 2, generation_digit)},
+          {"encoded_bytes", ir_bytes},
+          {"sample_rate", ir_rate},
+          {"channels", ir_channels},
+          {"frames", ir_frames}};
+}
+
+Json convolution_insert(std::string_view id, bool enabled) {
+  return {
+      {"id", id},
+      {"enabled", enabled},
+      {"kind", "native_convolution"},
+      {"payload",
+       {{"generation", convolution_generation}, {"wet", convolution_wet}, {"ir", managed_ir()}}}};
+}
+
+Json manifest_1_47(Json track_effects, Json master_effects) {
+  return {{"schema", {{"major", schema_1_47.major}, {"minor", schema_1_47.minor}}},
+          {"project",
+           {{"tracks", Json::array({{{"name", "A"}, {"effects", std::move(track_effects)}}})},
+            {"master_effects", std::move(master_effects)}}}};
+}
+
+void check_cast(const Json& insert, std::string_view id, bool enabled) {
+  REQUIRE_EQ(insert["id"], Json(id), "the insert keeps its slot id");
+  REQUIRE_EQ(insert["enabled"], Json(enabled), "the insert keeps its bypass state");
+  REQUIRE_EQ(insert["kind"], Json("native_effect"), "a convolution becomes a built-in effect");
+  const auto& payload = insert["payload"];
+  REQUIRE_EQ(payload["engine"], Json("cast"), "a convolution becomes Cast");
+  REQUIRE_EQ(payload["engine_version"], Json(cast_engine_version), "Cast's first engine version");
+  REQUIRE_EQ(payload["generation"], Json(convolution_generation), "the generation carries over");
+  REQUIRE_EQ(payload["link"], Json(""), "a converted Cast is not linked");
+  const Json parameters = Json::array({{{"id", "cast.mix"}, {"value", convolution_wet}},
+                                       {{"id", "cast.normalise"}, {"value", cast_normalise_off}}});
+  REQUIRE_EQ(payload["parameters"], parameters, "wet becomes the mix, at the IR's own level");
+  const Json media = Json::array(
+      {{{"id", "ir"}, {"frame_length", 0}, {"builtin", nullptr}, {"managed", managed_ir()}}});
+  REQUIRE_EQ(payload["document"]["media"], media, "the IR moves to Cast's ir slot");
+  // The decoder reads counts as unsigned integers only.
+  require(payload["document"]["media"][0]["frame_length"].is_number_unsigned() &&
+              payload["engine_version"].is_number_unsigned(),
+          "the step writes counts as unsigned integers");
+  for (const auto* empty : {"routes", "curves", "chains", "sequences", "labels"})
+    REQUIRE_EQ(payload["document"][empty], Json::array(), "Cast's document holds only its IR");
+}
+
+void convolution_inserts_become_cast() {
+  const auto other = Json{{"id", "kept"}, {"kind", "native_effect"}, {"payload", Json::object()}};
+  const auto migrated = detail::migrate_1_47_to_1_48(
+      manifest_1_47(Json::array({other, convolution_insert("track", false)}),
+                    Json::array({convolution_insert("master", true)})));
+  const auto& track_effects = migrated["project"]["tracks"][0]["effects"];
+  REQUIRE_EQ(track_effects.size(), std::size_t{2}, "no insert is dropped");
+  REQUIRE_EQ(track_effects[0], other, "other inserts are untouched");
+  check_cast(track_effects[1], "track", false);
+  check_cast(migrated["project"]["master_effects"][0], "master", true);
+}
+
+void manifest_without_convolution_is_unchanged() {
+  const auto before = Json::parse(current_manifest());
+  REQUIRE_EQ(detail::migrate_1_47_to_1_48(before), before,
+             "a 1.47 manifest without convolution needs no change");
+  const auto empty = manifest_1_47(Json::array(), Json::array());
+  REQUIRE_EQ(detail::migrate_1_47_to_1_48(empty), empty, "empty effect lists stay empty");
+}
+
+// The real chain takes a 1.47 project to the current schema and decodes it.
+void schema_1_47_opens_through_the_chain() {
+  const auto opened = take(detail::decode_manifest(with_schema(schema_1_47)));
+  REQUIRE_EQ(encode(opened), current_manifest(), "a 1.47 manifest opens as the current schema");
 }
 
 // A synthetic chain: each step appends its own mark, so order and coverage show.
@@ -344,6 +428,9 @@ int main() {
     current_schema_opens();
     newer_schema_is_refused();
     pre_release_schema_is_refused();
+    convolution_inserts_become_cast();
+    manifest_without_convolution_is_unchanged();
+    schema_1_47_opens_through_the_chain();
     chain_applies_steps_in_order();
     pre_upgrade_generation_survives_pruning();
     std::cout << "Schema migration contract passed\n";
