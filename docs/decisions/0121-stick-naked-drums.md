@@ -92,7 +92,7 @@ The pack stays little-endian int16. Measured on one hit per stroke and velocity 
 
 - **Pieces:** kick, snare, hi-hat, tom1–tom5, crash1, crash2, ride, splash, china (13). `ride2` is gone with Muldjord.
 - **Articulations:** hit, alt, side-stick, bell, closed, half, open, pedal; `rimshot` is gone (no kit recorded one). `alt` is a second drum or stroke: Naked's second snare, DRS Studio's kick with its beater bouncing.
-- **Keys:** E2 (40) plays the second snare; G3 (55) the splash; B3 (59), the second ride in General MIDI, the ride. The six tom keys split over five toms (D3 and C3 both tom 1).
+- **Keys:** E2 (40) plays the second snare; G3 (55) the splash; B3 (59), the second ride in General MIDI, the ride. The six tom keys split over five toms (D3 and C3 both tom 1). A second drum the kit did not record plays its plain stroke: B1 plays Naked's kick, E2 DRS Studio's snare.
 - **Voices per piece:** kick 2, snare 3, hi-hat 4, each tom 2, crashes and ride 3, splash and china 2: 32.
 - **Mic groups:** `kick_in`, `kick_out`, `kick_sub`, `snare_top`, `snare_bottom`, `toms`, `hihat`, `ride`, `overheads`, `room`, `far_room`, `mid_side`, `china_oh` (13). A piece's Room send feeds the rooms (`room`, `far_room`, `mid_side`); its Overheads send the overheads and the china pair. Dry turns the rooms off and the overheads and china pair down 6 dB; Room turns the close mics down 6 dB and the rooms up 6 dB.
 - **Defaults** ("Natural"): Naked Drums as its SFZ mixes it: every mic at 0 dB but the hi-hat, ride and china mics at −14 dB; the close mics panned as the SFZ pans them (hi-hat −0.3, ride +0.3, toms −0.6 to +0.6); nothing shortened, not humanised. 138 parameters.

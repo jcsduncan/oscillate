@@ -1114,15 +1114,19 @@ def write_kit(kit: Kit, mics: list[Mic], hits: list[Hit], target: Path) -> int:
             f"hit {hit.piece} {hit.articulation} {hit.striker} {hit.offset} {hit.frames} "
             f"{hit.scale:.9e} {hit.power_db:.2f}"
         )
-    (target / MANIFEST).write_text("\n".join(lines) + "\n")
+    # The notice holds non-ASCII text: every file is UTF-8, whatever the locale.
+    (target / MANIFEST).write_text("\n".join(lines) + "\n", encoding="utf-8")
     header = "# offset\tpiece\tarticulation\tstriker\tchannel:source file#file channel ..."
-    (target / SOURCES).write_text("\n".join([header, *map(source_line, hits)]) + "\n")
+    (target / SOURCES).write_text(
+        "\n".join([header, *map(source_line, hits)]) + "\n", encoding="utf-8"
+    )
     (target / ATTRIBUTION_FILE).write_text(
         f"{kit.notice}\n\n{kit.source}\n\n"
         "Converted for Oscillate's Stick on the machine it was installed on: "
         + "; ".join(kit.changes)
         + f". {SOURCES} names the source files of every hit. "
-        "The recordings are otherwise unchanged.\n"
+        "The recordings are otherwise unchanged.\n",
+        encoding="utf-8",
     )
     return offset_bytes
 

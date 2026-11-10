@@ -299,6 +299,30 @@ void malformed_kits_are_rejected() {
   REQUIRE_EQ(library::load(stick::Kit::drs, base).state, invalid, "a truncated pack");
 }
 
+// A kit that recorded no second drum plays its plain stroke on that key:
+// Naked Drums' kick on B1.
+void a_missing_second_drum_plays_the_plain_stroke() {
+  const auto base = wren_test::scratch_directory("stick-no-alt");
+  stick_test::write_kit(base, "no second kick");
+  const auto manifest = base / library::manifest_file;
+  std::string kept;
+  {
+    std::ifstream in(manifest);
+    for (std::string line; std::getline(in, line);) {
+      if (!line.starts_with("hit kick alt ")) {
+        kept += line + '\n';
+      }
+    }
+  }
+  std::ofstream(manifest) << kept;
+  REQUIRE_EQ(library::load(stick::Kit::naked, base).state, library::State::ready,
+             "the kit loads without a second kick");
+  constexpr std::uint8_t second_kick = 35;
+  const auto x = hit(dry(), second_kick);
+  REQUIRE_GT(rms(x, 0, window), audible, "B1 plays the kick");
+  require(x == hit(dry(), kick), "the kick's own stroke");
+}
+
 void descriptor_registry_and_presets() {
   constexpr std::array<std::string_view, 5> presets{"Natural", "Close Mics", "Rooms", "DRS Studio",
                                                     "Brushes"};
@@ -748,6 +772,8 @@ int main(int argc, char** argv) {
            [] { a_missing_kit_is_silent_then_plays_once_installed(); }},
           {"kits_chosen_load_in_the_background", [] { kits_chosen_load_in_the_background(); }},
           {"malformed_kits_are_rejected", [] { malformed_kits_are_rejected(); }},
+          {"a_missing_second_drum_plays_the_plain_stroke",
+           [] { a_missing_second_drum_plays_the_plain_stroke(); }},
           {"descriptor_registry_and_presets", [] { descriptor_registry_and_presets(); }},
           {"velocity_follows_the_recorded_power", [] { velocity_follows_the_recorded_power(); }},
           {"round_robins_are_seeded_and_never_repeat",

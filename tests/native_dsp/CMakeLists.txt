@@ -325,6 +325,7 @@ oscillate_add_case_tests(native_stick_contract oscillate_stick_tests
   a_missing_kit_is_silent_then_plays_once_installed
   kits_chosen_load_in_the_background
   malformed_kits_are_rejected
+  a_missing_second_drum_plays_the_plain_stroke
   descriptor_registry_and_presets
   velocity_follows_the_recorded_power
   round_robins_are_seeded_and_never_repeat

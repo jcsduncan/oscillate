@@ -84,12 +84,15 @@ public:
   [[nodiscard]] const std::int16_t* resident(std::uint32_t index) const noexcept {
     return pack_.resident(pack_.sample(index));
   }
-  // A stroke's hits; brushes fall back to sticks where none were recorded.
+  // A stroke's hits; brushes fall back to sticks where none were recorded,
+  // and a second drum (`alt`) the kit did not record to the plain stroke, so
+  // General MIDI's B1 still plays a kick on Naked Drums.
   [[nodiscard]] const Stroke& stroke(Piece piece, Articulation articulation,
                                      Striker striker) const noexcept {
-    const auto& brushed = strokes_[stroke_index(piece, articulation, striker)];
-    return brushed.count > 0 ? brushed
-                             : strokes_[stroke_index(piece, articulation, Striker::stick)];
+    const auto& found = recorded(piece, articulation, striker);
+    return found.count > 0 || articulation != Articulation::alt
+               ? found
+               : recorded(piece, Articulation::hit, striker);
   }
   // Hit indices, each stroke's softest first.
   [[nodiscard]] std::uint32_t order(std::uint32_t at) const noexcept { return order_[at]; }
@@ -99,6 +102,12 @@ public:
 private:
   Library() = default;
   void index();
+  [[nodiscard]] const Stroke& recorded(Piece piece, Articulation articulation,
+                                       Striker striker) const noexcept {
+    const auto& brushed = strokes_[stroke_index(piece, articulation, striker)];
+    return brushed.count > 0 ? brushed
+                             : strokes_[stroke_index(piece, articulation, Striker::stick)];
+  }
 
   std::vector<Mic> mics_;
   std::vector<Hit> hits_;

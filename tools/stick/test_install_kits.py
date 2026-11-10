@@ -275,7 +275,7 @@ class NakedTests(unittest.TestCase):
         """Install writes the kit, its sources and its credit."""
         destination = self.base / "installed"
         target = kits.install(kits.KITS["naked"], kits.NAKED_MICS, self.hits, destination, 1)
-        manifest = (target / kits.MANIFEST).read_text().splitlines()
+        manifest = (target / kits.MANIFEST).read_text(encoding="utf-8").splitlines()
         self.assertEqual(manifest[0], kits.FORMAT_LINE)
         self.assertIn(f"attribution {kits.NAKED_NOTICE}", manifest)
         self.assertIn(f"channels {len(kits.NAKED_MICS)}", manifest)
@@ -287,7 +287,7 @@ class NakedTests(unittest.TestCase):
         self.assertEqual(len(hit_lines), sum(EXPECTED.values()))
         pack_line = next(line for line in manifest if line.startswith("pack "))
         self.assertEqual(int(pack_line.split()[2]), (target / kits.PACK).stat().st_size)
-        sources = (target / kits.SOURCES).read_text().splitlines()[1:]
+        sources = (target / kits.SOURCES).read_text(encoding="utf-8").splitlines()[1:]
         self.assertEqual(len(sources), len(hit_lines))
         offsets = {line.split()[4] for line in hit_lines}
         self.assertEqual({line.split("\t")[0] for line in sources}, offsets)
@@ -295,7 +295,7 @@ class NakedTests(unittest.TestCase):
             for entry in line.split("\t")[4:]:
                 path = entry.split(":", 1)[1].rsplit("#", 1)[0]
                 self.assertTrue((self.source / path).is_file(), path)
-        credit = (target / kits.ATTRIBUTION_FILE).read_text()
+        credit = (target / kits.ATTRIBUTION_FILE).read_text(encoding="utf-8")
         self.assertTrue(credit.startswith(kits.NAKED_NOTICE))
         for fact in ("kinwie", kits.NAKED_COMMIT, kits.NAKED_LICENCE_COMMIT, kits.LICENCE_URL):
             self.assertIn(fact, credit)
