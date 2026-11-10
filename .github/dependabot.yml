@@ -1,6 +1,6 @@
-# Weekly dependency updates. There is no Dockerfile: the ubuntu:26.04
-# container image named in the workflows is not tracked by the
-# github-actions ecosystem, so bump it by hand.
+# Weekly dependency updates. The github-actions ecosystem does not track the
+# workflows' container images: ci-image.yml pins the CI image, and the clean
+# ubuntu:26.04 of the install smoke tests is bumped by hand.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -26,3 +26,15 @@ updates:
     groups:
       python-tools:
         patterns: ["*"]
+
+  # The CI image's base, scripts/ci/Dockerfile's ubuntu:26.04 digest. The
+  # release stays 26.04 until the project moves.
+  - package-ecosystem: docker
+    directory: /scripts/ci
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: ubuntu
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    commit-message:
+      prefix: ci

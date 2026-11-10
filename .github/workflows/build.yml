@@ -40,7 +40,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     name: Build (Ubuntu 26.04, Qt Quick)
     runs-on: ubuntu-latest
-    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    container: ghcr.io/jcsduncan/oscillate-ci@sha256:21fcc1dfeb84aeec44c07f0e1716477ade8e701ab433dc274e0226ef80bab7a4 # base
     timeout-minutes: 120
     env:
       CCACHE_MAXSIZE: 2G
@@ -49,9 +49,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install dependencies (README list, ccache, zstd)
+      - name: Dependencies from the CI image
         run: |
-          scripts/ci/install-deps.sh ccache zstd
+          scripts/ci/ci-image-deps.sh base
           echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -89,7 +89,7 @@ jobs:
     needs: build
     name: Tests (${{ matrix.shard }})
     runs-on: ubuntu-latest
-    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    container: ghcr.io/jcsduncan/oscillate-ci@sha256:21fcc1dfeb84aeec44c07f0e1716477ade8e701ab433dc274e0226ef80bab7a4 # base
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -102,8 +102,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install dependencies (README list, zstd)
-        run: scripts/ci/install-deps.sh zstd
+      - name: Dependencies from the CI image
+        run: scripts/ci/ci-image-deps.sh base
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: build-tree

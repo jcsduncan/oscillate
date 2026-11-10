@@ -59,7 +59,7 @@ jobs:
       matrix:
         form: [deb, appimage]
     runs-on: ubuntu-latest
-    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    container: ghcr.io/jcsduncan/oscillate-ci@sha256:84224d169333d62e0966dc70e1d86a1c27502ecbe83b549a549d9681a9195762 # full
     timeout-minutes: 150
     env:
       BUILD_DIR: build/package-${{ matrix.form }}
@@ -67,23 +67,16 @@ jobs:
       OSCILLATE_BUILD_JOBS: 4
       QT_QPA_PLATFORM: offscreen
     steps:
-      - name: Install Git for checkout and the VST3 SDK
-        run: |
-          apt-get update -qq
-          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-            ca-certificates git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag }}
           persist-credentials: false
-      # Packaging libraries and tools on top of the README list: the optional
+      # The full CI image holds the packaging libraries and tools: the optional
       # feature libraries, Qt's Wayland platform plugin, dpkg-shlibdeps,
       # desktop-file-validate and file (appimagetool needs it).
       - name: Install dependencies
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          scripts/ci/install-deps.sh ccache dpkg-dev desktop-file-utils file \
-            libjack-jackd2-dev libsamplerate0-dev libsndfile1-dev libmpg123-dev libx11-dev qt6-wayland
+          scripts/ci/ci-image-deps.sh full
           echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
       - name: Fetch the pinned VST3 SDK
         run: scripts/ci/fetch-vst3-sdk.sh "$RUNNER_TEMP/vst3sdk"

@@ -247,9 +247,21 @@ variants, whose package lists are in `scripts/ci/ci-image-deps.sh`:
 - **full**: base plus the optional features (JACK, libsamplerate,
   libsndfile, libmpg123, X11), the .deb and AppImage tools and ffmpeg.
 
-`ci-image.yml` builds both when a pull request changes an input of the
-image, and on `main` when an input changes, every Monday (for security
-updates) and on demand it pushes them, tagged `<variant>-<hash of the
+Every job that builds or runs the project uses one of them, pinned by
+digest, and starts with `scripts/ci/ci-image-deps.sh <variant>`. That step
+does nothing when the image was built from the checkout's
+`Dockerfile`, `install-deps.sh` and `ci-image-deps.sh` (the image records
+their hash); when a pull request changed one, it installs the variant's
+packages on top of the image, so the change is tested before the image is
+rebuilt. The live tier and the VST3 matrix install their servers and
+plug-in runtimes on top. The install smoke tests keep a clean
+`ubuntu:26.04`, and Dependabot (`docker`) keeps the Dockerfile's base
+digest current.
+
+When a pull request changes an input of the image, `ci-image.yml` builds
+both variants and configures the project in each, which catches a removed
+package that CMake looks for. On `main` when an input changes, every Monday (for
+security updates) and on demand, it pushes them, tagged `<variant>-<hash of the
 inputs>` and `<variant>-latest`, with build provenance attestations. It then
 opens the pull request `ci/pin-ci-image`, which moves every
 `ghcr.io/jcsduncan/oscillate-ci@sha256:… # <variant>` pin in the workflows

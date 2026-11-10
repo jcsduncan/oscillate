@@ -38,6 +38,8 @@ class ClassifyTests(unittest.TestCase):
             "packaging/flatpak/patches/libsndfile/ogg-vorbis-error-checking-CVE-2024-50612.patch",
             "third_party/notices/vst3sdk/LICENSE.txt",
             "CMakePresets.json",
+            "scripts/ci/ci-image-deps.sh",
+            "scripts/ci/Dockerfile",
             ".github/workflows/packaging.yml",
         ):
             with self.subTest(path=path):

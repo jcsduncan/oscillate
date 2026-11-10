@@ -12,7 +12,7 @@ jobs:
   slow:
     name: Slow tests (Ubuntu 26.04, Qt Quick)
     runs-on: ubuntu-latest
-    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    container: ghcr.io/jcsduncan/oscillate-ci@sha256:21fcc1dfeb84aeec44c07f0e1716477ade8e701ab433dc274e0226ef80bab7a4 # base
     timeout-minutes: 360
     env:
       CCACHE_MAXSIZE: 2G
@@ -22,9 +22,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install dependencies (README list + ccache)
+      - name: Dependencies from the CI image
         run: |
-          scripts/ci/install-deps.sh ccache
+          scripts/ci/ci-image-deps.sh base
           echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -42,7 +42,7 @@ jobs:
   coverage:
     name: Core line coverage (gcovr, Codecov)
     runs-on: ubuntu-latest
-    container: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c # 26.04
+    container: ghcr.io/jcsduncan/oscillate-ci@sha256:21fcc1dfeb84aeec44c07f0e1716477ade8e701ab433dc274e0226ef80bab7a4 # base
     timeout-minutes: 300
     permissions:
       contents: read
@@ -52,17 +52,12 @@ jobs:
       OSCILLATE_BUILD_JOBS: 4
       QT_QPA_PLATFORM: offscreen
     steps:
-      - name: Install Git for checkout and the Codecov uploader
-        run: |
-          apt-get update -qq
-          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-            ca-certificates curl git gnupg
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install dependencies (README list + ccache) and pinned gcovr
+      - name: Dependencies from the CI image and pinned gcovr
         run: |
-          scripts/ci/install-deps.sh ccache
+          scripts/ci/ci-image-deps.sh base
           echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
           python3 -m venv /opt/qa
           /opt/qa/bin/pip install --quiet --require-hashes -r scripts/ci/coverage-requirements.txt
