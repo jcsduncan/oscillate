@@ -27,16 +27,14 @@ using foundation::Error;
 using foundation::ErrorCode;
 
 constexpr double fine_per_octave = bands_per_octave * static_cast<double>(fine_per_band);
-// The window at 48 kHz; other rates take the nearest power of two that keeps
-// its length in seconds.
-constexpr double window_rate = 48'000.0;
-constexpr std::size_t window_frames_48k = 16'384;
+// Other rates than the design rate take the nearest power of two that keeps
+// the window's length in seconds.
 constexpr std::size_t smallest_window = 1'024;
 // Levels are written to a hundredth of a dB.
 constexpr int written_decimals = 2;
 
 [[nodiscard]] std::size_t window_size(double rate) noexcept {
-  const double wanted = static_cast<double>(window_frames_48k) * rate / window_rate;
+  const double wanted = static_cast<double>(meter_window_frames) * rate / meter_design_rate;
   std::size_t size = smallest_window;
   while (static_cast<double>(size) * std::numbers::sqrt2 < wanted) {
     size *= 2;
@@ -311,8 +309,7 @@ foundation::Result<Target> parse_target(std::string_view text, std::string id) {
   const auto version = document.find("version");
   if (version == document.end() || !version->is_number_integer() ||
       version->get<int>() != file_version) {
-    return R::failure(
-        {ErrorCode::unsupported, "The tonal target file's version is not supported"});
+    return R::failure({ErrorCode::unsupported, "The tonal target file's version is not supported"});
   }
   Target target;
   target.id = std::move(id);
@@ -344,7 +341,7 @@ foundation::Result<Target> parse_target(std::string_view text, std::string id) {
       !read_curve(document, "low_db", target.low) ||
       !read_curve(document, "high_db", target.high)) {
     return R::failure(invalid("Each curve needs " + std::to_string(bands) +
-                               " finite levels within the level range"));
+                              " finite levels within the level range"));
   }
   for (std::size_t b = 0; b < bands; ++b) {
     if (target.low[b] > target.median[b] || target.median[b] > target.high[b]) {

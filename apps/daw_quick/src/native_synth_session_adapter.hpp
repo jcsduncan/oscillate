@@ -95,6 +95,8 @@ public:
   first_clip_window(std::int64_t bars) const override;
   bool replace_midi_clip(std::string_view clip, timeline::TickPosition length,
                          std::vector<project::MidiNote> notes) override;
+  bool write_next_effect(std::string_view engine,
+                         std::span<const std::pair<std::string_view, double>> values) override;
   bool submit_preset(std::size_t preset) override;
   [[nodiscard]] std::optional<std::string> preset_text() const override;
   bool submit_preset_text(std::string_view text) override;
@@ -133,6 +135,8 @@ private:
   [[nodiscard]] foundation::Result<std::vector<double>> saved_values() const;
   [[nodiscard]] foundation::Result<void> write_values(std::span<const double> values,
                                                       std::optional<std::uint64_t> gesture);
+  // The effect slot's chain, or null when its track is gone.
+  [[nodiscard]] const std::vector<project::EffectInsert>* effect_chain() const;
   // Why this track cannot be edited with this engine, or empty when it can.
   [[nodiscard]] std::string unavailable_reason() const;
   void apply(std::span<const double> values, std::optional<std::uint64_t> gesture);

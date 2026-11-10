@@ -3,6 +3,7 @@
 #include "dsp/fft.hpp"
 #include "lens_presets.hpp"
 #include "lens_table.hpp"
+#include "oscillate/native_dsp/tonal_analysis.hpp"
 
 #include <algorithm>
 #include <array>
@@ -31,6 +32,13 @@ constexpr std::size_t hold = index_of("lens.hold");
 constexpr std::size_t hold_decay = index_of("lens.hold_decay");
 constexpr std::size_t overlay = index_of("lens.overlay");
 constexpr std::size_t freeze = index_of("lens.freeze");
+constexpr std::size_t match_source = index_of("lens.match_source");
+constexpr std::size_t match_amount = index_of("lens.match_amount");
+constexpr std::size_t match_smoothing = index_of("lens.match_smoothing");
+constexpr std::size_t match_low = index_of("lens.match_low");
+constexpr std::size_t match_high = index_of("lens.match_high");
+constexpr std::size_t match_boost = index_of("lens.match_boost");
+constexpr std::size_t match_cut = index_of("lens.match_cut");
 } // namespace p
 
 // Window sizes at 48 kHz for each resolution, longest first; other rates
@@ -82,7 +90,7 @@ struct Resolution {
 class LensKernel final : public EffectKernel {
 public:
   explicit LensKernel(double sample_rate)
-      : rate_(sample_rate),
+      : rate_(sample_rate), meter_(sample_rate),
         hop_(std::max<std::size_t>(
             64, static_cast<std::size_t>(std::lround(hop_seconds * sample_rate)))) {
     // Every size any resolution may use at this rate.
@@ -168,6 +176,9 @@ public:
       rings_[2][at] = sidechain.empty()
                           ? 0.0
                           : 0.5 * (static_cast<double>(sidechain[i].left) + sidechain[i].right);
+      // The tonal meter reads the mid of the input and the sidechain, whatever
+      // the view, and runs while frozen.
+      meter_.push(0.5 * (static_cast<double>(audio[i].left) + audio[i].right), rings_[2][at]);
       ++write_;
       if (++since_hop_ == hop_) {
         since_hop_ = 0;
@@ -187,6 +198,7 @@ public:
     hops_ = 0;
     computed_.fill(false);
     clear_averages();
+    meter_.reset();
   }
 
   [[nodiscard]] std::size_t telemetry(std::span<float> out) const noexcept override {
@@ -208,6 +220,11 @@ public:
       out[telemetry::peaks + 2 * k + 1] = static_cast<float>(peaks_[k][1]);
     }
     out[telemetry::hops] = static_cast<float>(hops_);
+    for (std::size_t i = 0; i < tonal::fine_bands; ++i) {
+      out[telemetry::tonal_input + i] = static_cast<float>(meter_.mean_a()[i]);
+      out[telemetry::tonal_sidechain + i] = static_cast<float>(meter_.mean_b()[i]);
+    }
+    out[telemetry::tonal_windows] = static_cast<float>(meter_.windows());
     return telemetry::size;
   }
 
@@ -487,6 +504,7 @@ private:
   }
 
   double rate_;
+  tonal::BandMeter meter_;
   std::size_t hop_;
   std::vector<Resolution> resolutions_;
   std::size_t largest_ = 0;
@@ -536,5 +554,17 @@ double point_hz(std::size_t point) noexcept {
 }
 
 const EffectEngine& engine() { return lens_engine; }
+
+match_eq::Settings match_settings(std::span<const double> v) noexcept {
+  const auto smoothing = std::min(static_cast<std::size_t>(v[p::match_smoothing]),
+                                  lens_table::match_smoothing_octaves.size() - 1);
+  return {v[p::match_amount], lens_table::match_smoothing_octaves[smoothing],
+          v[p::match_low],    v[p::match_high],
+          v[p::match_boost],  v[p::match_cut]};
+}
+
+bool matches_target(std::span<const double> v) noexcept {
+  return as_int(v[p::match_source]) == lens_table::MatchSource::target;
+}
 
 } // namespace oscillate::native_dsp::effects::lens

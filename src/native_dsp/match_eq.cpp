@@ -95,11 +95,8 @@ struct Bounds {
 
 [[nodiscard]] Bounds bounds_for(EqBandKind kind) noexcept {
   const bool shelf = kind != EqBandKind::peaking;
-  return {std::log2(fine_hz(0)),
-          std::log2(fine_hz(fine_bands - 1)),
-          std::log2(shelf ? min_slope : min_q),
-          std::log2(shelf ? max_slope : max_q),
-          max_gain_db};
+  return {std::log2(fine_hz(0)), std::log2(fine_hz(fine_bands - 1)),
+          std::log2(shelf ? min_slope : min_q), std::log2(shelf ? max_slope : max_q), max_gain_db};
 }
 
 // One band's response at every fine band, as Shape designs it at fit_rate.
@@ -210,8 +207,7 @@ public:
 private:
   [[nodiscard]] static Band decode(EqBandKind kind, const std::array<double, max_parameters>& p,
                                    std::size_t k) noexcept {
-    return {kind, std::exp2(p[k * per_band]), std::exp2(p[k * per_band + 1]),
-            p[k * per_band + 2]};
+    return {kind, std::exp2(p[k * per_band]), std::exp2(p[k * per_band + 1]), p[k * per_band + 2]};
   }
 
   static void clamp(std::span<const Band> bands, std::array<double, max_parameters>& p) noexcept {
@@ -290,7 +286,8 @@ private:
   std::vector<Band> out;
   std::optional<std::size_t> worst;
   for (std::size_t i = 0; i < fine_bands; ++i) {
-    if (in_limits(fine_hz(i), s) && (!worst || std::abs(residual[i]) > std::abs(residual[*worst]))) {
+    if (in_limits(fine_hz(i), s) &&
+        (!worst || std::abs(residual[i]) > std::abs(residual[*worst]))) {
       worst = i;
     }
   }
@@ -456,11 +453,9 @@ Fit fit(const FineCurve& curve_db, const Settings& settings) {
     }
   }
   // Drop bands that ended up doing nothing, then refine what is left.
-  const auto kept = std::ranges::remove_if(result.band.begin(), result.band.begin() +
-                                                                    static_cast<std::ptrdiff_t>(result.size),
-                                           [](const Band& b) {
-                                             return std::abs(b.gain_db) < negligible_gain_db;
-                                           });
+  const auto kept = std::ranges::remove_if(
+      result.band.begin(), result.band.begin() + static_cast<std::ptrdiff_t>(result.size),
+      [](const Band& b) { return std::abs(b.gain_db) < negligible_gain_db; });
   const auto dropped = static_cast<std::size_t>(std::distance(kept.begin(), kept.end()));
   if (dropped > 0) {
     result.size -= dropped;

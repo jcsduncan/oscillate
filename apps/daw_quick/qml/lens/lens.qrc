@@ -4,5 +4,7 @@
     <file>LensTheme.qml</file>
     <file>LensSpectrum.qml</file>
     <file>LensSpectrogram.qml</file>
+    <file>LensMatchPlot.qml</file>
+    <file>LensTonalPlot.qml</file>
   </qresource>
 </RCC>

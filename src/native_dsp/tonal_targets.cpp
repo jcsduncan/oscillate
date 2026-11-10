@@ -27,9 +27,8 @@ constexpr double half_band_octaves = 0.5 / bands_per_octave;
 } // namespace
 
 double band_hz(std::size_t band) noexcept {
-  return pivot_hz *
-         std::exp2((static_cast<double>(first_band_step) + static_cast<double>(band)) /
-                   bands_per_octave);
+  return pivot_hz * std::exp2((static_cast<double>(first_band_step) + static_cast<double>(band)) /
+                              bands_per_octave);
 }
 
 double band_low_hz(std::size_t band) noexcept {

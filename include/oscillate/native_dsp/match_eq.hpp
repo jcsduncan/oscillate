@@ -16,13 +16,14 @@ namespace oscillate::native_dsp::match_eq {
 
 using tonal::FineCurve;
 
+// Lens's match parameters give these (lens::match_settings).
 struct Settings {
-  double amount = 1.0; // 0..1 of the correction.
-  double smoothing_octaves = 1.0 / 3.0;
-  double low_hz = 30.0;
-  double high_hz = 16'000.0;
-  double max_boost_db = 6.0;
-  double max_cut_db = 6.0;
+  double amount;            // 0..1 of the correction.
+  double smoothing_octaves; // The smoothing window's half-power width.
+  double low_hz;
+  double high_hz;
+  double max_boost_db;
+  double max_cut_db;
 };
 
 // Outside low..high the correction fades to nothing over this much.

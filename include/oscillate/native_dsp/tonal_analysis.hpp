@@ -45,6 +45,11 @@ using FineCurve = std::array<double, fine_bands>;
 // square. The two signals share one complex transform.
 // Construction allocates (control thread); push, reset and the reads
 // allocate nothing and are safe on the audio callback.
+inline constexpr double meter_design_rate = 48'000.0;
+inline constexpr std::size_t meter_window_frames = 16'384;
+// One window is analysed per hop, half a window: about this long at any rate.
+inline constexpr double meter_hop_seconds =
+    static_cast<double>(meter_window_frames) / 2.0 / meter_design_rate;
 class BandMeter {
 public:
   explicit BandMeter(double sample_rate);
@@ -87,6 +92,7 @@ private:
 // A target from references' normalised curves: per band the median and
 // the 25th and 75th percentiles (linear between order statistics), the
 // same whatever order the curves come in. Needs at least one curve.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the id, then the name shown.
 [[nodiscard]] foundation::Result<Target> build_target(std::string id, std::string name,
                                                       std::span<const Curve> curves);
 // The value at fraction `p` (0..1) of `values`, linear between order

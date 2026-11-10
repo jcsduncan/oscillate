@@ -10,7 +10,7 @@
 | Relay | 1.1–1.5% | Two lines, the diffusion chain (always fed) and three loop characters. |
 | Vista | 0.9–1.0% | Two phase-compensated Linkwitz-Riley trees (mid and side), the decorrelator and meters. |
 | Pocket | 6.4–6.7% | 24 bands of fourth-order analysis for kick and bass, 24 bells, and the active-set bell solve every 32 frames. |
-| Lens | 4.1–8.4% (13.1% with the sidechain overlay) | Three window sizes per hop; long windows update at 87.5% overlap (every 4–8 hops), short ones every 10.7 ms; 400 display points from running bin sums. |
+| Lens | 4.1–8.4% (13.1% with the sidechain overlay), and about 0.25% for the tonal meter | Three window sizes per hop; long windows update at 87.5% overlap (every 4–8 hops), short ones every 10.7 ms; 400 display points from running bin sums. The tonal meter (ADR-0120) runs one 16384-point transform every 8192 frames, 0.34 ms on an i7-10700K. |
 | Loudness | 0.2% | K-weighting biquads, the 4× windowed-sinc true-peak interpolator and exact gating once per 100 ms. |
 | Scope | 0.1% (about 0.8% with a sidechain) | The sweep's min/max columns; with a sidechain, a 16384-point cross-correlation every 85 ms. |
 | Tune | 2.8% (6.1% Bass, under 0.1% Kick) | An NSDF by FFT and two single-bin DFTs about 23 times a second (Instrument and Bass), or a low-pass and zero crossings per sample (Kick). |

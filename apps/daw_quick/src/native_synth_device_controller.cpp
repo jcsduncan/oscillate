@@ -1,6 +1,7 @@
 #include "native_synth_device_controller.hpp"
 #include "crate_controller.hpp"
 #include "device_panels.hpp"
+#include "lens_match.hpp"
 #include "native_effect_visuals.hpp"
 #include "native_synth_document_model.hpp"
 #include "nova_arp.hpp"
@@ -19,6 +20,7 @@
 #include "oscillate/native_dsp/effects/flyby.hpp"
 #include "oscillate/native_dsp/effects/forge.hpp"
 #include "oscillate/native_dsp/effects/hush.hpp"
+#include "oscillate/native_dsp/effects/lens.hpp"
 #include "oscillate/native_dsp/effects/orbit.hpp"
 #include "oscillate/native_dsp/effects/press.hpp"
 #include "oscillate/native_dsp/effects/pump.hpp"
@@ -278,6 +280,8 @@ NativeSynthDeviceController::NativeSynthDeviceController(const native_dsp::Engin
     constellation_ = new NovaConstellation(*this, NovaConstellation::default_cache_file(), this);
     arp_ = new NovaArp(*this, this);
   }
+  if (engine_.id == native_dsp::effects::lens::engine().descriptor->id)
+    match_ = new LensMatch(*this, adapter_, LensMatch::default_targets_directory(), this);
   for (const auto& preset : engine_.presets) {
     auto values = native_dsp::preset_values(engine_, preset);
     preset_values_.push_back(values ? values.value() : native_dsp::default_values(engine_));
@@ -335,6 +339,8 @@ QObject* NativeSynthDeviceController::crate() const { return crate_; }
 QObject* NativeSynthDeviceController::constellation() const { return constellation_; }
 
 QObject* NativeSynthDeviceController::arp() const { return arp_; }
+
+QObject* NativeSynthDeviceController::match() const { return match_; }
 
 std::optional<std::size_t> NativeSynthDeviceController::index_of(const QString& id) const {
   const QByteArray utf8 = id.toUtf8();

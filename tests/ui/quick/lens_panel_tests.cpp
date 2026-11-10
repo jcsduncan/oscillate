@@ -1,36 +1,45 @@
 #include "device_strip_view.hpp"
 #include "in_memory_native_synth_adapter.hpp"
+#include "lens_match.hpp"
 #include "native_synth_device_controller.hpp"
 
 #include "oscillate/engine/graph.hpp"
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/effects/lens.hpp"
+#include "oscillate/native_dsp/effects/shape.hpp"
+#include "oscillate/native_dsp/match_eq.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/ember.hpp"
 #include "oscillate/native_dsp/synth/prism.hpp"
 #include "oscillate/native_dsp/synth/pulse.hpp"
 #include "oscillate/native_dsp/synth/runtime.hpp"
+#include "oscillate/native_dsp/tonal_analysis.hpp"
+#include "oscillate/native_dsp/tonal_targets.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <QColor>
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QGuiApplication>
 #include <QMetaObject>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QTemporaryDir>
 #include <QTest>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -598,6 +607,8 @@ std::vector<std::vector<float>> real_telemetry(const std::vector<double>& values
   return frames;
 }
 
+oscillate::quick::LensMatch& match_of(NativeSynthDeviceController& controller);
+
 void screenshots_if_requested() {
   const char* directory = std::getenv("LENS_PANEL_SCREENSHOT_DIR");
   if (directory == nullptr || *directory == '\0') {
@@ -652,6 +663,42 @@ void screenshots_if_requested() {
     require(panel->window->grabWindow().save(path, "PNG"), "screenshot saved");
     std::cout << "wrote " << path.toStdString() << '\n';
   }
+  // Match EQ (ADR-0120): the loop against its own copy through a Shape
+  // curve in the sidechain, and the mix against a factory target.
+  const std::array curve{oscillate::native_dsp::match_eq::Band{
+                             oscillate::native_dsp::EqBandKind::low_shelf, 180.0, 0.7, -3.0},
+                         oscillate::native_dsp::match_eq::Band{
+                             oscillate::native_dsp::EqBandKind::peaking, 2'800.0, 1.2, 3.5}};
+  const auto& shape_table = *effects::shape::engine().descriptor;
+  auto shape_values = oscillate::native_dsp::default_values(shape_table);
+  for (const auto& [id, value] : effects::shape::band_values(curve)) {
+    shape_values[oscillate::native_dsp::find_parameter(shape_table, id).value()] = value;
+  }
+  auto shaped =
+      effects::NativeEffectRuntime::create(effects::shape::engine(), shape_values, 48'000.0);
+  require(shaped.has_value(), "a Shape runtime");
+  auto copy = loop;
+  for (std::size_t position = 0; position < copy.size(); position += 160) {
+    const std::span block(copy.data() + position,
+                          std::min<std::size_t>(160, copy.size() - position));
+    const oscillate::native_dsp::Transport transport{0.0, 0.0, 0.0, 4.0};
+    require(shaped.value()->process(block, {}, position, 1, transport, {}) ==
+                effects::EffectProcessStatus::rendered,
+            "Shape renders");
+  }
+  auto values = preset("Reference Match");
+  InMemoryNativeSynthAdapter adapter(values);
+  NativeSynthDeviceController controller(table(), adapter);
+  auto panel = load_panel(controller);
+  match_of(controller).set_target_id(QStringLiteral("electronica"));
+  for (const auto& frame : real_telemetry(values, loop, &copy)) {
+    adapter.set_telemetry(frame);
+    QTest::qWait(33);
+  }
+  QTest::qWait(80);
+  const QString path = QString::fromLocal8Bit(directory) + QStringLiteral("/lens_match.png");
+  require(panel->window->grabWindow().save(path, "PNG"), "screenshot saved");
+  std::cout << "wrote " << path.toStdString() << '\n';
 }
 
 // The device-chain strip (device_strip_view.hpp): Lens's first curve at
@@ -685,10 +732,216 @@ void telemetry_gives_the_strip_the_curve() {
               strip.value(QStringLiteral("text")).toString().toStdString());
 }
 
+// ---- Match EQ and tonal balance (ADR-0120) ---------------------------------------
+
+namespace tonal = oscillate::native_dsp::tonal;
+namespace match_eq = oscillate::native_dsp::match_eq;
+using oscillate::quick::LensMatch;
+
+// Per fine band, a mix that falls 1.5 dB an octave (in band power).
+constexpr double mix_tilt_db_per_octave = -1.5;
+constexpr double mix_level_db = -30.0;
+// A known Shape curve the reference carries over the mix.
+constexpr match_eq::Band reference_shelf{oscillate::native_dsp::EqBandKind::low_shelf, 150.0, 0.7,
+                                         4.0};
+// Windows fed: enough for a match, and enough for a saved target.
+constexpr int match_windows = 30;
+constexpr int target_windows = 100;
+// A user target's range about its median, and how far bands are moved
+// out of it.
+constexpr double test_range_db = 1.0;
+constexpr double moved_db = 3.0;
+constexpr std::size_t raised_band = 10;
+constexpr std::size_t lowered_band = 20;
+
+tonal::FineCurve mix_power() {
+  tonal::FineCurve power{};
+  for (std::size_t i = 0; i < tonal::fine_bands; ++i) {
+    const double db =
+        mix_level_db + mix_tilt_db_per_octave * std::log2(tonal::fine_hz(i) / 1'000.0);
+    power[i] = std::pow(10.0, db / 10.0);
+  }
+  return power;
+}
+
+// A Lens frame whose tonal meter holds these means over `windows`.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the input, then the sidechain.
+std::vector<float> tonal_frame(const tonal::FineCurve& input, const tonal::FineCurve& side,
+                               int windows) {
+  namespace t = lens::telemetry;
+  std::vector<float> frame(t::size, -200.0F);
+  for (std::size_t i = 0; i < tonal::fine_bands; ++i) {
+    frame[t::tonal_input + i] = static_cast<float>(input[i]);
+    frame[t::tonal_sidechain + i] = static_cast<float>(side[i]);
+  }
+  frame[t::tonal_windows] = static_cast<float>(windows);
+  frame[t::hops] = static_cast<float>(windows);
+  return frame;
+}
+
+// Plays `windows` windows of the means through the panel's own poll.
+void play(InMemoryNativeSynthAdapter& adapter, LensMatch& match, const tonal::FineCurve& input,
+          const tonal::FineCurve& side, int windows) {
+  for (int w = 1; w <= windows; ++w) {
+    adapter.set_telemetry(tonal_frame(input, side, w));
+    match.poll();
+  }
+  QCoreApplication::processEvents();
+}
+
+LensMatch& match_of(NativeSynthDeviceController& controller) {
+  auto* match = qobject_cast<LensMatch*>(controller.match());
+  require(match != nullptr, "Lens has its match model");
+  return *match;
+}
+
+QString note_of_card(Panel& panel, const QString& name) {
+  return item(panel, name)->property("note").toString();
+}
+
+void match_proposes_bands_and_writes_shape() {
+  InMemoryNativeSynthAdapter adapter(preset("Reference Match"));
+  NativeSynthDeviceController controller(table(), adapter);
+  auto panel = load_panel(controller);
+  auto& match = match_of(controller);
+  require(!match.ready(), "nothing to match before playing");
+  const auto mix = mix_power();
+  const auto shelf = match_eq::response_db(std::span(&reference_shelf, 1));
+  auto side = mix;
+  for (std::size_t i = 0; i < tonal::fine_bands; ++i) {
+    side[i] *= std::pow(10.0, shelf[i] / 10.0);
+  }
+  play(adapter, match, mix, side, match_windows);
+  require(match.ready() && match.has_sidechain(), "a match once the average is long enough");
+  require(match.correction().size() == static_cast<qsizetype>(tonal::fine_bands) &&
+              match.response().size() == static_cast<qsizetype>(tonal::fine_bands),
+          "the correction and response cover every fine band");
+  const auto bands = match.bands();
+  require(!bands.isEmpty() && match.fit_rms() <= match_eq::fit_tolerance_db,
+          "bands that draw the correction within the fit tolerance");
+  QTest::qWait(60);
+  require(note_of_card(*panel, QStringLiteral("lensMatchPlate"))
+              .contains(QStringLiteral("SHAPE BANDS")),
+          "the card reports the fit: " +
+              note_of_card(*panel, QStringLiteral("lensMatchPlate")).toStdString());
+  click(*panel, centre(item(*panel, QStringLiteral("lensMatchApply"))));
+  require(adapter.next_effect_writes().size() == 1, "Apply writes once");
+  const auto& write = adapter.next_effect_writes().front();
+  require(write.engine == "shape", "into Shape");
+  std::vector<match_eq::Band> fitted;
+  for (const auto& band : bands) {
+    const auto map = band.toMap();
+    const auto kind = map.value(QStringLiteral("kind")).toString();
+    fitted.push_back(
+        {kind == QStringLiteral("Low Shelf")    ? oscillate::native_dsp::EqBandKind::low_shelf
+         : kind == QStringLiteral("High Shelf") ? oscillate::native_dsp::EqBandKind::high_shelf
+                                                : oscillate::native_dsp::EqBandKind::peaking,
+         map.value(QStringLiteral("hz")).toDouble(), map.value(QStringLiteral("shape")).toDouble(),
+         map.value(QStringLiteral("gain")).toDouble()});
+  }
+  const auto expected = oscillate::native_dsp::effects::shape::band_values(fitted);
+  require(write.values.size() == expected.size(), "every Shape band is written");
+  for (std::size_t i = 0; i < expected.size(); ++i) {
+    require(write.values[i].first == expected[i].first &&
+                write.values[i].second == expected[i].second,
+            "value " + write.values[i].first + " is the fit's");
+  }
+  // Matching to a target needs no sidechain; Restart empties the average.
+  controller.set_choice(QStringLiteral("lens.match_source"), 1);
+  require(match.matches_target() && match.ready(), "a target is matched at once");
+  click(*panel, centre(item(*panel, QStringLiteral("lensMatchReset"))));
+  require(!match.ready() && match.seconds() == 0.0, "Restart starts the average again");
+}
+
+void tonal_balance_places_the_mix(const QString& directory) {
+  // A user target whose median is the mix, with a narrow range.
+  const auto mix = mix_power();
+  const auto levels = tonal::normalised(tonal::grid_levels(mix));
+  tonal::Target target;
+  target.name = "Test Target";
+  target.references = 1;
+  for (std::size_t b = 0; b < tonal::bands; ++b) {
+    target.median[b] = levels[b];
+    target.low[b] = levels[b] - test_range_db;
+    target.high[b] = levels[b] + test_range_db;
+  }
+  QDir().mkpath(directory);
+  const auto text = tonal::serialise_target(target);
+  QFile file(directory + QStringLiteral("/test.json"));
+  require(file.open(QIODevice::WriteOnly) &&
+              file.write(text.data(), static_cast<qint64>(text.size())) ==
+                  static_cast<qint64>(text.size()),
+          "the target file is written");
+  file.close();
+  QFile broken(directory + QStringLiteral("/broken.json"));
+  require(broken.open(QIODevice::WriteOnly) && broken.write("{\"format\": 1}") > 0,
+          "a broken file");
+  broken.close();
+
+  InMemoryNativeSynthAdapter adapter(preset("Mix"));
+  NativeSynthDeviceController controller(table(), adapter);
+  auto panel = load_panel(controller);
+  auto& match = match_of(controller);
+  QStringList ids;
+  for (const auto& t : match.targets()) {
+    ids.append(t.toMap().value(QStringLiteral("id")).toString());
+  }
+  require(ids.size() == static_cast<qsizetype>(tonal::factory_targets().size()) + 1 &&
+              ids.contains(QStringLiteral("user/test")),
+          "factory targets, then the valid user target; the broken one is left out");
+  match.set_target_id(QStringLiteral("user/test"));
+  play(adapter, match, mix, tonal::FineCurve{}, match_windows);
+  require(match.in_range() == static_cast<int>(tonal::bands), "the mix on its median is inside");
+  QTest::qWait(60);
+  require(note_of_card(*panel, QStringLiteral("lensTonalPlate")) ==
+              QStringLiteral("29 OF 29 BANDS IN RANGE"),
+          "the card counts: " +
+              note_of_card(*panel, QStringLiteral("lensTonalPlate")).toStdString());
+  // Another mix with one band raised and one lowered out of the range.
+  auto moved = mix;
+  for (std::size_t i = 0; i < tonal::fine_per_band; ++i) {
+    moved[raised_band * tonal::fine_per_band + i] *= std::pow(10.0, moved_db / 10.0);
+    moved[lowered_band * tonal::fine_per_band + i] *= std::pow(10.0, -moved_db / 10.0);
+  }
+  match.reset();
+  play(adapter, match, moved, tonal::FineCurve{}, match_windows);
+  const auto placed = match.placements();
+  require(placed.at(static_cast<qsizetype>(raised_band)).toInt() == 1 &&
+              placed.at(static_cast<qsizetype>(lowered_band)).toInt() == -1,
+          "the raised band is above, the lowered one below");
+  require(match.in_range() == static_cast<int>(tonal::bands) - 2, "and the rest inside");
+}
+
+void saving_a_target(const QString& directory) {
+  InMemoryNativeSynthAdapter adapter(preset("Reference Match"));
+  NativeSynthDeviceController controller(table(), adapter);
+  auto panel = load_panel(controller);
+  auto& match = match_of(controller);
+  const auto before = match.targets().size();
+  play(adapter, match, mix_power(), mix_power(), match_windows);
+  require(!match.save_target() && !match.message().isEmpty(), "too short a reference is refused");
+  play(adapter, match, mix_power(), mix_power(), target_windows);
+  click(*panel, centre(item(*panel, QStringLiteral("lensTargetSave"))));
+  require(match.targets().size() == before + 1, "the saved target joins the list");
+  require(match.target_id().startsWith(QStringLiteral("user/reference-")), "and is chosen");
+  const auto stem = match.target_id().mid(static_cast<qsizetype>(std::string_view("user/").size()));
+  QFile saved(directory + QLatin1Char('/') + stem + QStringLiteral(".json"));
+  require(saved.open(QIODevice::ReadOnly), "the file is in the user's targets folder");
+  const auto bytes = saved.readAll();
+  const auto parsed = tonal::parse_target(
+      std::string_view(bytes.constData(), static_cast<std::size_t>(bytes.size())), "x");
+  require(parsed.has_value() && parsed.value().references >= LensMatch::min_chunks,
+          "and holds a valid target from its chunks");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
   QGuiApplication app(argc, argv);
+  // User targets go to a scratch folder, never the user's own.
+  QTemporaryDir data;
+  qputenv("XDG_DATA_HOME", data.path().toLocal8Bit());
+  const QString targets = oscillate::quick::LensMatch::default_targets_directory();
   try {
     panel_covers_every_parameter();
     telemetry_reaches_the_spectrum_and_table();
@@ -697,6 +950,9 @@ int main(int argc, char** argv) {
     the_spectrogram_grows_per_analysis_and_freeze_holds();
     presets_range_and_status();
     telemetry_gives_the_strip_the_curve();
+    match_proposes_bands_and_writes_shape();
+    tonal_balance_places_the_mix(targets);
+    saving_a_target(targets);
     screenshots_if_requested();
   } catch (const std::exception& error) {
     std::cerr << "FAILED: " << error.what() << '\n';
