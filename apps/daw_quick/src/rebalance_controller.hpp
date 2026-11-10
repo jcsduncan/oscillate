@@ -185,7 +185,8 @@ private:
   void finish();
   void set_status(QString text);
   void set_tracks(QVariantList rows);
-  void edit(const std::function<foundation::Result<void>(application::ProjectSession&)>& apply,
+  // False when the edit was refused or failed; the status says why.
+  bool edit(const std::function<foundation::Result<void>(application::ProjectSession&)>& apply,
             const QString& what);
 
   Hooks hooks_;

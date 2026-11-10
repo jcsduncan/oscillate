@@ -89,7 +89,7 @@ double value_at(const Field& field, double position) {
 
 QString signed_number(double value, int decimals) {
   // A typographic minus; a plus on gains over zero.
-  const auto text = QString::number(std::abs(value), 'f', decimals);
+  auto text = QString::number(std::abs(value), 'f', decimals);
   if (value > 0.0)
     return QStringLiteral("+") + text;
   if (value < 0.0 && text != QString::number(0.0, 'f', decimals))
@@ -140,7 +140,8 @@ std::optional<MixRole> parse_role(const QString& id) {
   return std::nullopt;
 }
 
-const QString auto_choice = QStringLiteral("auto");
+// The role menu's Auto, as QML names it.
+QString auto_choice() { return QStringLiteral("auto"); }
 
 QString track_kind(project::TrackKind kind) {
   return kind == project::TrackKind::instrument   ? QStringLiteral("instrument")
@@ -354,7 +355,7 @@ QList<QObject*> RebalanceController::roles() const {
 }
 
 QVariantList RebalanceController::choices() const {
-  QVariantList list{QVariantMap{{QStringLiteral("id"), auto_choice},
+  QVariantList list{QVariantMap{{QStringLiteral("id"), auto_choice()},
                                 {QStringLiteral("name"), QStringLiteral("Auto")}}};
   for (const auto role :
        {MixRole::vocals, MixRole::drums, MixRole::bass, MixRole::music, MixRole::none})
@@ -384,23 +385,26 @@ std::uint64_t RebalanceController::next_gesture() noexcept {
   return gesture;
 }
 
-void RebalanceController::edit(
+bool RebalanceController::edit(
     const std::function<foundation::Result<void>(application::ProjectSession&)>& apply,
     const QString& what) {
   auto* session = hooks_.session ? hooks_.session() : nullptr;
   if (session == nullptr) {
     set_status(QStringLiteral("Open a project first"));
-    return;
+    return false;
   }
-  if (hooks_.can_edit && !hooks_.can_edit())
-    return;
+  if (hooks_.can_edit && !hooks_.can_edit()) {
+    set_status(what + QStringLiteral(": not now, another edit is running"));
+    return false;
+  }
   const auto applied = apply(*session);
   if (!applied) {
     set_status(what + QStringLiteral(": ") + QString::fromStdString(applied.error().message));
-    return;
+    return false;
   }
   if (hooks_.commit)
     hooks_.commit();
+  return true;
 }
 
 void RebalanceController::edit_role(MixRole role, const RoleBalance& balance,
@@ -422,6 +426,8 @@ void RebalanceController::edit_role(MixRole role, const RoleBalance& balance,
       QStringLiteral("Rebalance"));
 }
 
+// QML passes a row's track id and the menu's role key, both strings.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void RebalanceController::setTrackRole(const QString& track_id, const QString& role) {
   const auto track = project::TrackId::parse(track_id.toStdString());
   if (!track) {
@@ -429,7 +435,7 @@ void RebalanceController::setTrackRole(const QString& track_id, const QString& r
     return;
   }
   std::optional<MixRole> chosen;
-  if (role != auto_choice) {
+  if (role != auto_choice()) {
     chosen = parse_role(role);
     if (!chosen) {
       set_status(QStringLiteral("Choose a role"));
@@ -506,7 +512,7 @@ void RebalanceController::project_changed() {
                     {QStringLiteral("chosen"), track.mix_role.has_value()}});
   }
   for (std::size_t index = 0; index < roles_.size(); ++index)
-    roles_[index]->update(std::move(names[index]),
+    roles_[index]->update(names[index],
                           response(snapshot.rebalance.roles[index], snapshot.sample_rate));
   std::ranges::stable_sort(rows, {}, &std::pair<int, QVariantMap>::first);
   QVariantList list;
@@ -602,8 +608,10 @@ void RebalanceController::finish() {
     return;
   }
   auto* session = hooks_.session ? hooks_.session() : nullptr;
-  if (session == nullptr || session->session_generation() != finished->generation || !listened)
+  if (session == nullptr || session->session_generation() != finished->generation || !listened) {
+    set_status(QStringLiteral("Listening stopped: the project changed"));
     return;
+  }
   if (!finished->result) {
     set_status(QStringLiteral("Listening failed: ") +
                QString::fromStdString(finished->result.error().message));
@@ -634,12 +642,12 @@ void RebalanceController::finish() {
     set_status(QStringLiteral("Listened: every role holds"));
     return;
   }
-  edit(
-      [&](application::ProjectSession& current) {
-        return current.tracks().apply_heard_roles(heard);
-      },
-      QStringLiteral("Listen"));
-  set_status(QStringLiteral("Heard ") + described.join(QStringLiteral(", ")));
+  if (edit(
+          [&](application::ProjectSession& current) {
+            return current.tracks().apply_heard_roles(heard);
+          },
+          QStringLiteral("Listen")))
+    set_status(QStringLiteral("Heard ") + described.join(QStringLiteral(", ")));
 }
 
 void RebalanceController::set_status(QString text) {

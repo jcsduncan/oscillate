@@ -18,6 +18,7 @@
 #include <QTest>
 
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -55,20 +56,24 @@ constexpr int vocals_choice = 1;
 // A realistic small song: kick and snare (built-in drum instruments) in a
 // drum group, a bass, two vocal audio tracks, a pad, a track whose role is
 // chosen, and a reverb return.
+// A placeholder for the fixture's ids before the song is written.
+constexpr std::uint64_t unset_serial = 1;
+project::TrackId unset_track() { return project::TrackId::from_bits({0, unset_serial}).value(); }
+
 struct Song {
   QTemporaryDir directory;
   std::filesystem::path root;
   std::unique_ptr<quick::ProjectBridge> bridge;
   quick::RebalanceController* controller = nullptr;
-  // Set once the song is written.
-  std::optional<project::TrackId> kick;
-  std::optional<project::TrackId> snare;
-  std::optional<project::TrackId> drums;
-  std::optional<project::TrackId> bass;
-  std::optional<project::TrackId> lead;
-  std::optional<project::TrackId> double_vox;
-  std::optional<project::TrackId> pad;
-  std::optional<project::TrackId> chops;
+  // Set once the song is written; until then no track's.
+  project::TrackId kick{unset_track()};
+  project::TrackId snare{unset_track()};
+  project::TrackId drums{unset_track()};
+  project::TrackId bass{unset_track()};
+  project::TrackId lead{unset_track()};
+  project::TrackId double_vox{unset_track()};
+  project::TrackId pad{unset_track()};
+  project::TrackId chops{unset_track()};
 };
 
 template <typename T> T take(oscillate::foundation::Result<T> result, const char* what) {
@@ -87,25 +92,25 @@ std::unique_ptr<Song> make_song() {
   auto session = take(application::ProjectSession::create(song->root), "project");
   auto& s = *session;
   song->kick = take(s.instruments().add_native_instrument_track("anvil", std::nullopt), "kick");
-  name(s, *song->kick, "Kick");
+  name(s, song->kick, "Kick");
   song->snare = take(s.instruments().add_native_instrument_track("knock", std::nullopt), "snare");
-  name(s, *song->snare, "Snare");
+  name(s, song->snare, "Snare");
   song->drums = take(s.tracks().add_bus_track(project::TrackKind::group_bus), "drum group");
-  name(s, *song->drums, "Drums");
-  require(s.routing().set_main_output(*song->kick, *song->drums).has_value() &&
-              s.routing().set_main_output(*song->snare, *song->drums).has_value(),
+  name(s, song->drums, "Drums");
+  require(s.routing().set_main_output(song->kick, song->drums).has_value() &&
+              s.routing().set_main_output(song->snare, song->drums).has_value(),
           "drums into their group");
   song->bass = take(s.instruments().add_synth_track(), "bass");
-  name(s, *song->bass, "Sub Bass");
+  name(s, song->bass, "Sub Bass");
   song->lead = take(s.tracks().add_audio_track(), "lead vocal");
-  name(s, *song->lead, "Lead Vox");
+  name(s, song->lead, "Lead Vox");
   song->double_vox = take(s.tracks().add_audio_track(), "double");
-  name(s, *song->double_vox, "Vox Double");
+  name(s, song->double_vox, "Vox Double");
   song->pad = take(s.instruments().add_synth_track(), "pad");
-  name(s, *song->pad, "Pad");
+  name(s, song->pad, "Pad");
   song->chops = take(s.tracks().add_audio_track(), "chops");
-  name(s, *song->chops, "Chops");
-  require(s.tracks().set_track_mix_role(*song->chops, project::MixRole::vocals).has_value(),
+  name(s, song->chops, "Chops");
+  require(s.tracks().set_track_mix_role(song->chops, project::MixRole::vocals).has_value(),
           "a chosen role");
   const auto reverb = take(s.tracks().add_bus_track(project::TrackKind::return_bus), "reverb");
   name(s, reverb, "Reverb");
@@ -209,15 +214,15 @@ void the_panel_shows_every_role_and_track_and_fits() {
     item(panel->root,
          QStringLiteral("rebalanceTrack:") + entry.toMap().value(QStringLiteral("id")).toString());
   // Why each track plays its role.
-  require(row(*song->controller, *song->kick).value(QStringLiteral("reason")) ==
+  require(row(*song->controller, song->kick).value(QStringLiteral("reason")) ==
               QStringLiteral("Anvil"),
           "a drum instrument names itself as the reason");
-  require(row(*song->controller, *song->lead).value(QStringLiteral("role")) ==
+  require(row(*song->controller, song->lead).value(QStringLiteral("role")) ==
                   QStringLiteral("vocals") &&
-              row(*song->controller, *song->lead).value(QStringLiteral("reason")) ==
+              row(*song->controller, song->lead).value(QStringLiteral("reason")) ==
                   QStringLiteral("name"),
           "a vocal track's name says vocals");
-  require(row(*song->controller, *song->chops).value(QStringLiteral("chosen")).toBool(),
+  require(row(*song->controller, song->chops).value(QStringLiteral("chosen")).toBool(),
           "a chosen role shows as chosen");
   panel_fit::require_text_fits(panel->root, "rebalance");
 }
@@ -255,15 +260,15 @@ void a_fader_drag_saves_the_role_gain_as_one_step() {
 void choosing_a_role_saves_it_and_moves_the_track() {
   auto song = make_song();
   auto panel = load(*song, {});
-  require(row(*song->controller, *song->pad).value(QStringLiteral("role")) ==
+  require(row(*song->controller, song->pad).value(QStringLiteral("role")) ==
               QStringLiteral("music"),
           "the pad plays music");
-  click(*panel, item(panel->root, QStringLiteral("rebalanceRolePill:") + text(*song->pad)));
+  click(*panel, item(panel->root, QStringLiteral("rebalanceRolePill:") + text(song->pad)));
   auto* menu = item(panel->root, QStringLiteral("shellMenu"));
   require(menu->isVisible(), "the role pill opens the menu");
   QMetaObject::invokeMethod(menu, "choose", Q_ARG(QVariant, vocals_choice));
   QCoreApplication::processEvents();
-  const auto chosen = row(*song->controller, *song->pad);
+  const auto chosen = row(*song->controller, song->pad);
   require(chosen.value(QStringLiteral("role")) == QStringLiteral("vocals") &&
               chosen.value(QStringLiteral("chosen")).toBool() &&
               chosen.value(QStringLiteral("reason")) == QStringLiteral("chosen"),
@@ -276,12 +281,12 @@ void choosing_a_role_saves_it_and_moves_the_track() {
                    .contains(QStringLiteral("Pad")),
           "the pad moves from the music card to the vocals card");
   // Auto lets the role be inferred again.
-  click(*panel, item(panel->root, QStringLiteral("rebalanceRolePill:") + text(*song->pad)));
+  click(*panel, item(panel->root, QStringLiteral("rebalanceRolePill:") + text(song->pad)));
   QMetaObject::invokeMethod(menu, "choose", Q_ARG(QVariant, auto_choice));
   QCoreApplication::processEvents();
-  require(row(*song->controller, *song->pad).value(QStringLiteral("role")) ==
+  require(row(*song->controller, song->pad).value(QStringLiteral("role")) ==
                   QStringLiteral("music") &&
-              !row(*song->controller, *song->pad).value(QStringLiteral("chosen")).toBool(),
+              !row(*song->controller, song->pad).value(QStringLiteral("chosen")).toBool(),
           "Auto returns the track to its inferred role");
 }
 
@@ -295,11 +300,11 @@ void role_meters_combine_the_tracks_each_stage_acts_on() {
   const quick::MeterReading group{0.8F, 0.75F, 0.45F, 0.4F, false};
   const quick::MeterReading lead{0.5F, 0.4F, 0.3F, 0.2F, false};
   const quick::MeterReading backing{0.3F, 0.6F, 0.4F, 0.1F, true};
-  const Readings readings{{*song->kick, kick},
-                          {*song->snare, snare},
-                          {*song->drums, group},
-                          {*song->lead, lead},
-                          {*song->double_vox, backing}};
+  const Readings readings{{song->kick, kick},
+                          {song->snare, snare},
+                          {song->drums, group},
+                          {song->lead, lead},
+                          {song->double_vox, backing}};
   auto panel = load(*song, readings);
   auto* drums = item(panel->root, QStringLiteral("rebalanceMeterL:drums"));
   require(drums->property("valid").toBool() &&
@@ -351,13 +356,13 @@ void screenshot_if_requested() {
     role(*song->controller, QString::fromLatin1(move.role))
         ->set_value(QString::fromLatin1(move.parameter), move.value);
   const Readings readings{
-      {*song->kick, {0.5F, 0.47F, 0.25F, 0.24F, false}},
-      {*song->snare, {0.36F, 0.4F, 0.14F, 0.16F, false}},
-      {*song->bass, {0.38F, 0.38F, 0.22F, 0.22F, false}},
-      {*song->lead, {0.33F, 0.3F, 0.15F, 0.14F, false}},
-      {*song->double_vox, {0.18F, 0.21F, 0.08F, 0.09F, false}},
-      {*song->chops, {0.14F, 0.12F, 0.05F, 0.05F, false}},
-      {*song->pad, {0.24F, 0.27F, 0.13F, 0.14F, false}},
+      {song->kick, {0.5F, 0.47F, 0.25F, 0.24F, false}},
+      {song->snare, {0.36F, 0.4F, 0.14F, 0.16F, false}},
+      {song->bass, {0.38F, 0.38F, 0.22F, 0.22F, false}},
+      {song->lead, {0.33F, 0.3F, 0.15F, 0.14F, false}},
+      {song->double_vox, {0.18F, 0.21F, 0.08F, 0.09F, false}},
+      {song->chops, {0.14F, 0.12F, 0.05F, 0.05F, false}},
+      {song->pad, {0.24F, 0.27F, 0.13F, 0.14F, false}},
   };
   auto panel = load(*song, readings);
   panel_fit::require_text_fits(panel->root, "rebalance screenshot");
