@@ -22,6 +22,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -50,6 +51,7 @@ constexpr const char* missing_card_pcm = "hw:31,0";
 constexpr int missing_card = 31;
 constexpr const char* first_card_pcm = "hw:0,0";
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a period, then its count.
 AlsaStartConfig config(std::string device, std::uint32_t period, std::uint32_t periods,
                        std::uint32_t device_rate = rate) {
   AlsaStartConfig result;
@@ -182,6 +184,7 @@ void converts_each_format_onto_the_first_two_channels() {
   const auto written = [&device](AlsaSampleFormat format, std::uint32_t channels) {
     std::vector<unsigned> values;
     const auto count = stereo_frames * channels * alsa_sample_bytes(format);
+    values.reserve(count);
     for (std::size_t index = 0; index < count; ++index)
       values.push_back(static_cast<unsigned>(device[index]));
     return values;
@@ -313,6 +316,33 @@ void a_card_that_does_not_open_is_given_back() {
   REQUIRE_EQ(reservation->releases, 1, "and given back");
 }
 
+// The UI reads status while a transport worker starts and stops the output
+// (run under TSan in CI's sanitizer sweep).
+void status_reads_race_nothing_while_starting_and_stopping() {
+  constexpr int restarts = 20;
+  Renderer renderer;
+  TransportCursor cursor(0);
+  AlsaOutput output({&renderer, &Renderer::render}, cursor);
+  std::atomic<bool> done{false};
+  std::atomic<std::uint64_t> reads{0};
+  std::thread reader([&] {
+    while (!done.load(std::memory_order_acquire)) {
+      const auto status = output.status();
+      require(status.periods == 0 || status.periods == alsa_default_periods,
+              "a status shows the whole configuration or none of it");
+      reads.fetch_add(1, std::memory_order_relaxed);
+    }
+  });
+  for (int restart = 0; restart < restarts; ++restart) {
+    REQUIRE_OK(output.start(config(null_pcm, period_128, alsa_default_periods)), "starts");
+    output.stop();
+  }
+  wait_until([&] { return reads.load(std::memory_order_relaxed) > 0; }, "status was read");
+  done.store(true, std::memory_order_release);
+  reader.join();
+  REQUIRE_EQ(output.status().periods, 0U, "a stopped output reports no device");
+}
+
 void names_cards() {
   REQUIRE_EQ(alsa_card_of("hw:2,0"), 2, "hw:N,D");
   REQUIRE_EQ(alsa_card_of("hw:3"), 3, "hw:N");
@@ -342,5 +372,7 @@ int main(int argc, char** argv) {
        {"the_io_thread_never_allocates", the_io_thread_never_allocates},
        {"a_refused_reservation_keeps_the_card_closed", a_refused_reservation_keeps_the_card_closed},
        {"a_card_that_does_not_open_is_given_back", a_card_that_does_not_open_is_given_back},
+       {"status_reads_race_nothing_while_starting_and_stopping",
+        status_reads_race_nothing_while_starting_and_stopping},
        {"names_cards", names_cards}});
 }

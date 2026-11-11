@@ -4,14 +4,14 @@ oscillate_add_test_executable(oscillate_audio_io_tests SOURCES audio_io_tests.cp
 
 # The direct ALSA output against ALSA's null and file PCMs: no sound card needed.
 oscillate_add_test_executable(oscillate_alsa_output_tests SOURCES alsa_output_tests.cpp
-  LIBS oscillate::audio_io)
+  LIBS oscillate::audio_io Threads::Threads)
 oscillate_add_case_tests(alsa_output_contract oscillate_alsa_output_tests
   CASES negotiates_periods_and_shuts_down_cleanly refuses_invalid_configurations
         converts_each_format_onto_the_first_two_channels
         writes_the_device_format_through_a_file_pcm recovers_an_injected_xrun
         a_lost_device_stops_streaming the_io_thread_never_allocates
         a_refused_reservation_keeps_the_card_closed a_card_that_does_not_open_is_given_back
-        names_cards)
+        status_reads_race_nothing_while_starting_and_stopping names_cards)
 
 if(OSCILLATE_AUDIO_IO_LIVE_TESTS)
   oscillate_add_test_executable(oscillate_audio_io_live_smoke SOURCES pipewire_live_smoke.cpp

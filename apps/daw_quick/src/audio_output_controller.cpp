@@ -92,9 +92,11 @@ AudioOutputController::AudioOutputController(Host host,
     if (valid_periods && saved_periods >= static_cast<int>(audio_io::alsa_min_periods) &&
         saved_periods <= static_cast<int>(audio_io::alsa_max_periods))
       alsa_periods_ = saved_periods;
-    if (saved_backend == alsa_backend())
+    if (saved_backend == alsa_backend()) {
       backend_ = alsa_backend();
-    refresh_alsa_devices();
+      refresh_alsa_devices();
+    }
+    publish_alsa_choice();
   }
   selected_audio_device_ =
       settings.value(QStringLiteral("audioOutputSerial"), default_device()).toString();
@@ -206,11 +208,16 @@ QString AudioOutputController::latency_status() const {
       .arg(QString::number(buffer * milliseconds_per_second / rate, 'f', 1));
 }
 
+bool AudioOutputController::alsa_device_listed() const {
+  return std::ranges::any_of(alsa_devices_, [this](const auto& entry) {
+    return entry.toMap().value(QStringLiteral("id")).toString() == selected_alsa_device_;
+  });
+}
+
 bool AudioOutputController::selected_audio_device_available() const {
+  // ALSA playback always starts: on the card, or on PipeWire when it cannot.
   if (alsa())
-    return std::ranges::any_of(alsa_devices_, [this](const auto& entry) {
-      return entry.toMap().value(QStringLiteral("id")).toString() == selected_alsa_device_;
-    });
+    return true;
   if (jack())
     return jack_playback_available() && jack_server_probe_();
   return lists_serial(audio_devices_, selected_audio_device_);
@@ -225,6 +232,8 @@ void AudioOutputController::refresh_alsa_devices() {
   auto listed = alsa_.discovery();
   if (!listed) {
     alsa_devices_.clear();
+    // The saved choice still plays, or falls back, on the next Play.
+    publish_alsa_choice();
     if (alsa())
       audio_device_status_ = QString::fromStdString(listed.error().message);
     emit audioDevicesChanged();
@@ -241,7 +250,7 @@ void AudioOutputController::refresh_alsa_devices() {
   if (alsa())
     audio_device_status_ =
         alsa_devices_.isEmpty() ? QStringLiteral("No ALSA playback devices found.")
-        : !selected_audio_device_available()
+        : !alsa_device_listed()
             ? QStringLiteral("The chosen ALSA device is not connected. Choose another.")
             : QStringLiteral("Play takes %1 from PipeWire for Oscillate alone; Stop gives it "
                              "back.")
@@ -264,9 +273,9 @@ void AudioOutputController::report_fallback() {
   shown_fallback_ = reason;
   if (!alsa())
     return;
+  // The reason has its own wrapped line in the panel (alsaFallback).
   report(reason
-             ? QStringLiteral("Playing through PipeWire instead. %1")
-                   .arg(QString::fromStdString(*reason))
+             ? QStringLiteral("Playing through PipeWire instead.")
              : QStringLiteral("%1 plays for Oscillate alone.").arg(selected_audio_device_name()));
 }
 

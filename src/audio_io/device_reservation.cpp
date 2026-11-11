@@ -103,7 +103,8 @@ struct DbusDeviceReservation::Impl {
                                 : self.device_name.c_str();
         appended = dbus_message_iter_open_container(&iterator, DBUS_TYPE_VARIANT,
                                                     DBUS_TYPE_STRING_AS_STRING, &variant) != 0 &&
-                   dbus_message_iter_append_basic(&variant, DBUS_TYPE_STRING, &value) != 0 &&
+                   dbus_message_iter_append_basic(&variant, DBUS_TYPE_STRING,
+                                                  static_cast<const void*>(&value)) != 0 &&
                    dbus_message_iter_close_container(&iterator, &variant) != 0;
       } else {
         return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;

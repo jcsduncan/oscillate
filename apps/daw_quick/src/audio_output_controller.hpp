@@ -51,6 +51,8 @@ class AudioOutputController final : public QObject {
   Q_PROPERTY(int alsaPeriods READ alsa_periods NOTIFY audioDevicesChanged)
   Q_PROPERTY(QVariantList alsaPeriodChoices READ alsa_period_choices CONSTANT)
   Q_PROPERTY(QString latencyStatus READ latency_status NOTIFY playbackChanged)
+  // Why the last Play fell back to PipeWire; empty when it did not.
+  Q_PROPERTY(QString alsaFallback READ alsa_fallback NOTIFY audioDevicesChanged)
   Q_PROPERTY(
       bool audioDeviceSelectionEnabled READ audio_device_selection_enabled NOTIFY playbackChanged)
   // Render-ahead (ADR-0128): how far ahead playback renders, 0 for off.
@@ -116,6 +118,9 @@ public:
   [[nodiscard]] int alsa_periods() const { return alsa_periods_; }
   [[nodiscard]] static QVariantList alsa_period_choices();
   [[nodiscard]] QString latency_status() const;
+  [[nodiscard]] QString alsa_fallback() const {
+    return alsa() && shown_fallback_ ? QString::fromStdString(*shown_fallback_) : QString{};
+  }
 
   // What playback opens: the backend's factory, the PipeWire sink to target
   // (none for JACK or the system default) and the buffer request.
@@ -164,6 +169,7 @@ private:
   void poll();
   void report(QString status);
   void refresh_alsa_devices();
+  [[nodiscard]] bool alsa_device_listed() const;
   void publish_alsa_choice();
   // Says so when the last start fell back from ALSA to PipeWire.
   void report_fallback();

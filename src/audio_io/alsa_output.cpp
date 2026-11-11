@@ -319,6 +319,11 @@ struct AlsaOutput::Impl {
           return false;
         continue;
       }
+      if (written == -ESTRPIPE) {
+        if (!resume())
+          return false;
+        continue;
+      }
       if (written < 0) {
         if (++attempts > prefill_attempts ||
             snd_pcm_recover(pcm, static_cast<int>(written), 1) < 0) {
@@ -332,20 +337,34 @@ struct AlsaOutput::Impl {
     return true;
   }
 
-  // After a failed wait or write: true when the stream runs again.
-  [[nodiscard]] bool recover(int error) noexcept {
-    if (error == -ESTRPIPE) {
-      // Suspended. snd_pcm_recover would sleep until resume; poll instead.
-      const int resumed = snd_pcm_resume(pcm);
-      if (resumed == -EAGAIN) {
-        (void)snd_pcm_wait(pcm, wait_slice_ms);
-        return true;
-      }
-      if (resumed < 0 && snd_pcm_prepare(pcm) < 0) {
+  // A suspended device: snd_pcm_recover would sleep until it resumes, so
+  // poll instead, one paced attempt a call, within the stall limit. True
+  // while it may still resume; the caller tries again.
+  [[nodiscard]] bool resume() noexcept {
+    const int resumed = snd_pcm_resume(pcm);
+    if (resumed == -EAGAIN) {
+      if (++idle_slices > stall_slices) {
         fail(OutputState::disconnected);
         return false;
       }
-      return prefill();
+      std::this_thread::sleep_for(std::chrono::milliseconds(wait_slice_ms));
+      return true;
+    }
+    if (resumed < 0 && snd_pcm_prepare(pcm) < 0) {
+      fail(OutputState::disconnected);
+      return false;
+    }
+    idle_slices = 0;
+    return true;
+  }
+
+  // After a failed wait or write: true when the stream runs again.
+  [[nodiscard]] bool recover(int error) noexcept {
+    if (error == -ESTRPIPE) {
+      if (!resume())
+        return false;
+      // Still suspended: the next wait or write reports it again.
+      return snd_pcm_state(pcm) == SND_PCM_STATE_PREPARED ? prefill() : true;
     }
     if (error == -EPIPE)
       telemetry.server_xrun();
@@ -440,7 +459,7 @@ struct AlsaOutput::Impl {
     }
     const std::unique_ptr<snd_pcm_hw_params_t, HwParamsDeleter> hw(hw_raw);
     const std::unique_ptr<snd_pcm_sw_params_t, SwParamsDeleter> sw(sw_raw);
-    const auto refuse = [&config](std::string what) {
+    const auto refuse = [&config](const std::string& what) {
       return R::failure({foundation::ErrorCode::unsupported, config.device + " " + what});
     };
     if (snd_pcm_hw_params_any(pcm, hw.get()) < 0 ||
@@ -584,6 +603,10 @@ struct AlsaOutput::Impl {
   std::atomic<std::size_t> realtime_workers{0};
   std::atomic<std::int64_t> delay_frames{-1};
   DeviceTelemetry telemetry;
+  // What status() reports of the open device: set by start(), cleared by
+  // stop(), which may run on another thread than status().
+  mutable std::mutex published_mutex;
+  std::optional<AlsaOutputStatus> published;
 };
 
 AlsaOutput::AlsaOutput(StereoRenderSource source, TransportCursor& transport,
@@ -673,6 +696,20 @@ foundation::Result<void> AlsaOutput::start(AlsaStartConfig config) {
   }
   self.realtime.store(self.threads.acquire_rt(self.io_thread), std::memory_order_release);
   self.start_helpers();
+  {
+    AlsaOutputStatus open;
+    open.device = self.device;
+    open.rate = self.rate;
+    open.period_frames = self.period_frames;
+    open.periods = self.periods;
+    open.buffer_frames = self.buffer_frames;
+    open.render_frames = static_cast<std::uint32_t>(self.render_frames);
+    open.channels = self.channels;
+    open.format = self.format;
+    open.reserved = self.reserved;
+    const std::lock_guard lock(self.published_mutex);
+    self.published = std::move(open);
+  }
   foundation::log::info(
       foundation::DiagnosticCategory::device,
       "ALSA output streaming: {} at {} Hz, {} x {} frames, {} channels {}, {}, {}, {} workers",
@@ -687,6 +724,10 @@ void AlsaOutput::stop() noexcept {
   auto& self = *impl_;
   if (self.pcm == nullptr)
     return;
+  {
+    const std::lock_guard lock(self.published_mutex);
+    self.published.reset();
+  }
   self.stop_requested.store(true, std::memory_order_release);
   self.callback_gate.store(false, std::memory_order_release);
   if (self.io_thread != nullptr) {
@@ -718,16 +759,25 @@ AlsaOutputStatus AlsaOutput::status() const {
   AlsaOutputStatus result;
   const auto device = self.telemetry.snapshot();
   result.state = device.state;
-  if (self.pcm != nullptr) {
-    result.device = self.device;
-    result.rate = self.rate;
-    result.period_frames = self.period_frames;
-    result.periods = self.periods;
-    result.buffer_frames = self.buffer_frames;
-    result.render_frames = static_cast<std::uint32_t>(self.render_frames);
-    result.channels = self.channels;
-    result.format = self.format;
-    result.reserved = self.reserved;
+  bool streaming = false;
+  {
+    // Any thread may ask while another starts or stops the output.
+    const std::lock_guard lock(self.published_mutex);
+    if (self.published) {
+      streaming = true;
+      const auto& open = *self.published;
+      result.device = open.device;
+      result.rate = open.rate;
+      result.period_frames = open.period_frames;
+      result.periods = open.periods;
+      result.buffer_frames = open.buffer_frames;
+      result.render_frames = open.render_frames;
+      result.channels = open.channels;
+      result.format = open.format;
+      result.reserved = open.reserved;
+    }
+  }
+  if (streaming) {
     result.realtime = self.realtime.load(std::memory_order_acquire);
     if (const auto delay = self.delay_frames.load(std::memory_order_relaxed); delay >= 0)
       result.delay_frames = static_cast<std::uint32_t>(delay);

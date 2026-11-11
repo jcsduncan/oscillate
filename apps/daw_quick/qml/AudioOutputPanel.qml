@@ -51,7 +51,8 @@ Rectangle {
     anchors.right: parent.right
     anchors.rightMargin: panelRightMargin
     width: panelWidth
-    height: renderAheadHeight + (backend === "jack" ? jackPanelHeight : Math.min(panelMaxHeight + (alsa ? alsaPeriodsHeight : 0), panelBaseHeight + (alsa ? alsaPeriodsHeight : 0) + devices.length * deviceRowHeight))
+    readonly property int alsaExtraHeight: alsa ? alsaPeriodsHeight + (alsaFallbackReason.visible ? alsaFallbackReason.implicitHeight : 0) : 0
+    height: renderAheadHeight + (backend === "jack" ? jackPanelHeight : Math.min(panelMaxHeight + alsaExtraHeight, panelBaseHeight + alsaExtraHeight + devices.length * deviceRowHeight))
     radius: Theme.panelRadius
     color: host.panelRaised
     border.color: host.line
@@ -292,6 +293,16 @@ Rectangle {
                     }
                 }
             }
+        }
+        Text {
+            id: alsaFallbackReason
+            objectName: "alsaFallbackReason"
+            visible: audioOutputPanel.alsa && text.length > 0
+            width: audioOutputPanel.contentWidth
+            text: bridge.audioOutput.alsaFallback
+            wrapMode: Text.WordWrap
+            color: host.textMain
+            font.pixelSize: Theme.typeCaption
         }
         Text {
             objectName: "alsaLatencyStatus"

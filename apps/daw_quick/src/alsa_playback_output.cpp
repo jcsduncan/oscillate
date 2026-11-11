@@ -26,8 +26,8 @@ public:
       : output_(source, cursor), choice_(std::move(choice)) {}
 
   // PlaybackOutput fixes the adjacent rate and requested-frame argument order.
-  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   [[nodiscard]] foundation::Result<void>
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   start(std::uint32_t rate, std::uint32_t requested_frames,
         std::optional<std::uint64_t> target_serial) override {
     if (target_serial) {

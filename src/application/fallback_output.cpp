@@ -2,6 +2,7 @@
 
 #include "oscillate/foundation/log.hpp"
 
+#include <atomic>
 #include <utility>
 
 namespace oscillate::application {
@@ -43,7 +44,7 @@ public:
     if (primary_) {
       auto started = primary_->start(rate, frames, target_serial);
       if (started) {
-        active_ = primary_.get();
+        active_.store(primary_.get(), std::memory_order_release);
         if (report_)
           report_->clear();
         return started;
@@ -61,7 +62,7 @@ public:
     if (!fallen)
       return foundation::Result<void>::failure(
           {fallen.error().code, failure_ + "; the fallback failed too: " + fallen.error().message});
-    active_ = fallback_.get();
+    active_.store(fallback_.get(), std::memory_order_release);
     foundation::log::warning(foundation::DiagnosticCategory::device,
                              "Playing through the fallback output: {}", failure_);
     if (report_)
@@ -70,15 +71,16 @@ public:
   }
 
   void stop() noexcept override {
-    if (active_ != nullptr)
-      active_->stop();
-    active_ = nullptr;
+    // The output stays alive, so a status() that read it still may call it.
+    if (auto* active = active_.exchange(nullptr, std::memory_order_acq_rel))
+      active->stop();
   }
 
+  // Any thread, also while another starts or stops: only the atomic is
+  // read, and both outputs live as long as this one.
   [[nodiscard]] audio_io::OutputStatus status() const noexcept override {
-    if (active_ != nullptr)
-      return active_->status();
-    return primary_ ? primary_->status() : audio_io::OutputStatus{};
+    auto* active = active_.load(std::memory_order_acquire);
+    return active != nullptr ? active->status() : audio_io::OutputStatus{};
   }
 
 private:
@@ -89,7 +91,7 @@ private:
   std::shared_ptr<OutputFallbackReport> report_;
   std::unique_ptr<PlaybackOutput> primary_;
   std::unique_ptr<PlaybackOutput> fallback_;
-  PlaybackOutput* active_ = nullptr;
+  std::atomic<PlaybackOutput*> active_{nullptr};
   std::string failure_;
 };
 
