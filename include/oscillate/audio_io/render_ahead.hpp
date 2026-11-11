@@ -88,9 +88,11 @@ public:
   void fade_out() noexcept;
   [[nodiscard]] bool fading() const noexcept { return fading_.load(std::memory_order_acquire); }
   [[nodiscard]] bool faded() const noexcept;
-  // Whether a window is set (a nonzero limit).
+  // Whether a window is set (a nonzero limit) and a producer runs to fill
+  // it.
   [[nodiscard]] bool renders_ahead() const noexcept {
-    return limit_frames_.load(std::memory_order_acquire) != 0;
+    return limit_frames_.load(std::memory_order_acquire) != 0 &&
+           producing_.load(std::memory_order_acquire);
   }
   // After the callback and the producer have stopped (pause, a paused seek):
   // drops the window. A pause that resumes keeps it instead.
@@ -157,8 +159,9 @@ private:
   // Bumped by every callback and control change: the producer's wake word.
   std::atomic<std::uint32_t> wake_{0};
   std::atomic<bool> stop_{false};
-  std::atomic<bool> active_{false}; // the device plays and may render
-  std::atomic<bool> held_{false};   // the source holds (a seek primes)
+  std::atomic<bool> producing_{false}; // a producer thread is running
+  std::atomic<bool> active_{false};    // the device plays and may render
+  std::atomic<bool> held_{false};      // the source holds (a seek primes)
   std::atomic<bool> live_input_{false};
   std::atomic<bool> fading_{false};
   std::atomic<bool> faded_{false};

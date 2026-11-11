@@ -161,6 +161,7 @@ void RenderAhead::run_producer() noexcept {
   foundation::trace::name_thread("audio render-ahead");
   const foundation::RealtimeThreadScope realtime;
   const engine::DenormalsFlushed flushed;
+  producing_.store(true, std::memory_order_release);
   while (!stop_.load(std::memory_order_acquire)) {
     const auto seen = wake_.load(std::memory_order_acquire);
     while (wants_block() && produce_one()) {
@@ -170,6 +171,7 @@ void RenderAhead::run_producer() noexcept {
     // Until the next device block or a control change.
     wake_.wait(seen, std::memory_order_acquire);
   }
+  producing_.store(false, std::memory_order_release);
 }
 
 void RenderAhead::request_stop() noexcept {
