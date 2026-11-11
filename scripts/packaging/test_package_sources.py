@@ -38,7 +38,9 @@ class ReachableTests(unittest.TestCase):
         self.addCleanup(sleep.stop)
 
     def check(self, *outcomes):
-        with mock.patch.object(package_sources.urllib.request, "urlopen", side_effect=outcomes) as urlopen:
+        with mock.patch.object(
+            package_sources.urllib.request, "urlopen", side_effect=outcomes
+        ) as urlopen:
             result = reachable(URL)
         return result, urlopen.call_count
 
