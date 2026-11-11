@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.1](https://github.com/jcsduncan/oscillate/compare/v0.5.0...v0.5.1) (2026-11-11)
+
+
+### Performance Improvements
+
+* **audio_io,engine,application,app,tools:** render playback ahead of the device so a slow block cannot click ([#385](https://github.com/jcsduncan/oscillate/issues/385)) ([60f9752](https://github.com/jcsduncan/oscillate/commit/60f9752668dbc9a4977c2a92694cb7f19648de18))
+* **engine,application,track_chain,app,tools:** the master overlaps the tracks within each callback ([#382](https://github.com/jcsduncan/oscillate/issues/382)) ([91cb613](https://github.com/jcsduncan/oscillate/commit/91cb613b96949b24c1937531ae0bcea51b3e9e33))
+* **native_dsp,tools:** cut the master chain's serial cost and gate it in CI ([#376](https://github.com/jcsduncan/oscillate/issues/376)) ([2d0ba59](https://github.com/jcsduncan/oscillate/commit/2d0ba59b58c684ee69193892a01fa990c6936ec7))
+* **native_dsp,warp_dsp:** one realtime float FFT for the audio thread, Temper five times faster ([#381](https://github.com/jcsduncan/oscillate/issues/381)) ([cacbd2c](https://github.com/jcsduncan/oscillate/commit/cacbd2cffdef962b8cfd175e200d6c54e1a80798))
+
 ## [0.5.0](https://github.com/jcsduncan/oscillate/compare/v0.4.0...v0.5.0) (2026-11-10)
 
 
