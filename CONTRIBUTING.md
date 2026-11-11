@@ -162,6 +162,9 @@ CodeRabbit's **CodeRabbit** check run is required. GitHub counts a skipped
 check as passed, so enable auto-merge only once CodeRabbit's review of the
 head commit has completed. If it paused or hit a rate limit, comment
 `@coderabbitai review` and wait for that review before enabling auto-merge.
+Auto-merge stays enabled when you push a new commit, so disable it first
+(`gh pr merge N --disable-auto`) and enable it again once CodeRabbit has
+reviewed the new head.
 
 ## Nightly and on-demand CI runs
 
