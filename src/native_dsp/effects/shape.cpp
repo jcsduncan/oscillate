@@ -1,9 +1,9 @@
 #include "oscillate/native_dsp/effects/shape.hpp"
 
-#include "dsp/fft.hpp"
 #include "effect_dsp.hpp"
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
+#include "oscillate/warp_dsp/real_fft.hpp"
 #include "shape_presets.hpp"
 #include "shape_table.hpp"
 
@@ -11,7 +11,6 @@
 #include <array>
 #include <atomic>
 #include <cmath>
-#include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -96,10 +95,9 @@ using native_dsp::dsp::gain_to_db;
 // the nearest bin. Powers are averaged over about 250 ms. Allocates only on
 // construction.
 //
-// One complex transform carries both signals (input as the real part,
-// output as the imaginary part), and each instance starts its hops at its
-// own point of the window, so the transforms of many EQs started together
-// fall in different blocks instead of all in one.
+// Each signal takes a real transform (ADR-0126), and each instance starts
+// its hops at its own point of the window, so the transforms of many EQs
+// started together fall in different blocks instead of all in one.
 class DisplaySpectra {
 public:
   DisplaySpectra(double rate, std::size_t instance)
@@ -107,7 +105,8 @@ public:
                            : rate > 50'000.0 ? 8'192
                                              : 4'096),
         hop_(size_ / 4), stagger_(staggered(instance, hop_)), fft_(size_), window_(size_),
-        input_ring_(size_, 0.0F), output_ring_(size_, 0.0F), data_(size_) {
+        input_ring_(size_, 0.0F), output_ring_(size_, 0.0F), frame_(size_),
+        spectra_{warp_dsp::AlignedBuffer(size_), warp_dsp::AlignedBuffer(size_)} {
     double sum = 0.0;
     for (std::size_t i = 0; i < size_; ++i) {
       const double x = 2.0 * std::numbers::pi * static_cast<double>(i) / static_cast<double>(size_);
@@ -160,20 +159,21 @@ private:
   }
 
   void analyse() noexcept {
-    for (std::size_t i = 0; i < size_; ++i) {
-      const std::size_t at = (write_ + i) % size_;
-      data_[i] = {input_ring_[at] * window_[i], output_ring_[at] * window_[i]};
+    const std::array<const std::vector<float>*, 2> rings{&input_ring_, &output_ring_};
+    for (std::size_t s = 0; s < rings.size(); ++s) {
+      for (std::size_t i = 0; i < size_; ++i) {
+        const std::size_t at = (write_ + i) % size_;
+        frame_[i] = static_cast<float>((*rings[s])[at] * window_[i]);
+      }
+      fft_.forward(frame_.data(), spectra_[s].data());
     }
-    fft_.forward(data_);
     const double bin_hz = rate_ / static_cast<double>(size_);
-    // Z = X + iY for real x and y: X[k] = (Z[k] + conj Z[-k]) / 2 and
-    // Y[k] = (Z[k] - conj Z[-k]) / 2i.
+    const double power = scale_ * scale_;
     const auto bin_powers = [&](std::size_t k) {
       const std::size_t bin = std::min(k, size_ / 2);
-      const auto z = data_[bin];
-      const auto mirror = std::conj(data_[(size_ - bin) % size_]);
-      const double power = 0.25 * scale_ * scale_;
-      return std::pair{std::norm(z + mirror) * power, std::norm(z - mirror) * power};
+      return std::pair{
+          static_cast<double>(warp_dsp::bin_power(spectra_[0].data(), size_, bin)) * power,
+          static_cast<double>(warp_dsp::bin_power(spectra_[1].data(), size_, bin)) * power};
     };
     for (std::size_t b = 0; b < spectrum_bands; ++b) {
       const auto low = static_cast<std::size_t>(std::ceil(edges_[b] / bin_hz));
@@ -199,11 +199,12 @@ private:
   std::size_t size_;
   std::size_t hop_;
   std::size_t stagger_;
-  native_dsp::dsp::Fft fft_;
+  warp_dsp::RealFft fft_;
   std::vector<double> window_;
   std::vector<float> input_ring_;
   std::vector<float> output_ring_;
-  std::vector<std::complex<double>> data_;
+  warp_dsp::AlignedBuffer frame_;
+  std::array<warp_dsp::AlignedBuffer, 2> spectra_;
   std::array<double, spectrum_bands + 1> edges_{};
   std::array<double, spectrum_bands> input_power_{};
   std::array<double, spectrum_bands> output_power_{};

@@ -1,6 +1,6 @@
 #include "oscillate/native_dsp/spectrum.hpp"
 
-#include "dsp/fft.hpp"
+#include "dsp/offline_fft.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
 
 #include <algorithm>
@@ -38,8 +38,8 @@ using TransformBuffer = std::array<std::complex<double>, window_frames>;
 }
 
 // One shared table set; analyze() runs on a worker, never the callback.
-[[nodiscard]] const dsp::Fft& window_fft() {
-  static const dsp::Fft fft(window_frames);
+[[nodiscard]] const dsp::OfflineFft& window_fft() {
+  static const dsp::OfflineFft fft(window_frames);
   return fft;
 }
 

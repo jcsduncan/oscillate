@@ -1,7 +1,7 @@
 #include "oscillate/analysis/tempo.hpp"
 #include "oscillate/timeline/timing.hpp"
 
-#include "dsp/fft.hpp"
+#include "dsp/offline_fft.hpp"
 
 #include <algorithm>
 #include <array>
@@ -158,7 +158,7 @@ struct Spectra {
                               std::span<const double> weights, double frame_rate) {
   const auto length = curves.front()->size();
   const auto size = next_power_of_two(4 * length);
-  const native_dsp::dsp::Fft transform(size);
+  const native_dsp::dsp::OfflineFft transform(size);
   Spectra result;
   result.bins_per_hz = static_cast<double>(size) / frame_rate;
   std::vector<Complex> buffer(size);
@@ -357,7 +357,7 @@ Result<TempoEstimate> analyze_tempo(media::AudioReader& reader, TempoIdentity id
   curves.rate = static_cast<double>(sample_rate) / static_cast<double>(curves.hop);
   curves.offset = (onset_lead_windows - 0.5) * static_cast<double>(window);
   curves.bass_offset = (bass_lead_windows - 0.5) * static_cast<double>(window);
-  const native_dsp::dsp::Fft transform(window);
+  const native_dsp::dsp::OfflineFft transform(window);
   std::vector<double> hann(window);
   for (std::size_t i = 0; i < window; ++i)
     hann[i] = 0.5 - 0.5 * std::cos(2.0 * std::numbers::pi * static_cast<double>(i) /

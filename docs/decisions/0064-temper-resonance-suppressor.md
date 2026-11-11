@@ -1,6 +1,6 @@
 # ADR-0064 — Temper: a resonance suppressor with dynamic EQ bands
 
-**Status:** Accepted; engine, presets and panel built. **Date:** 29 October 2026.
+**Status:** Accepted; engine, presets and panel built; superseded in part by [ADR-0126](0126-realtime-fft.md): each channel takes its own realtime float transform, and fully linked channels design one filter. **Date:** 29 October 2026.
 **Builds on:** ADR-0040 (native effect platform), ADR-0047 (Shape, Press, Ceiling), ADR-0058 (sidechain keys for effects).
 **Panel design:** [ui/temper-panel-mockup.html](../ui/temper-panel-mockup.html).
 

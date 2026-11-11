@@ -1,6 +1,6 @@
 #include "oscillate/analysis/mix_role.hpp"
 
-#include "dsp/fft.hpp"
+#include "dsp/offline_fft.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -88,7 +88,7 @@ HeardFeatures hear_features(std::span<const float> mono, std::uint32_t sample_ra
   if (sample_rate == 0 || mono.size() < hear_frame)
     return features;
   const double rate = static_cast<double>(sample_rate);
-  const native_dsp::dsp::Fft transform(hear_frame);
+  const native_dsp::dsp::OfflineFft transform(hear_frame);
   std::vector<double> window(hear_frame);
   for (std::size_t i = 0; i < hear_frame; ++i)
     window[i] = 0.5 - 0.5 * std::cos(2.0 * std::numbers::pi * static_cast<double>(i) /

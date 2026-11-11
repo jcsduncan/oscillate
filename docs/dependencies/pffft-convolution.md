@@ -1,16 +1,17 @@
 # PFFFT inventory
 
 **Status:** Vendored at [third_party/pffft](../../third_party/pffft/README.md)
-and linked statically by the warp DSP and the native effects (Cast's
-partitioned convolution, [ADR-0115](../decisions/0115-cast-convolution-reverb.md)), in every build.
+and linked statically by the warp DSP, whose `RealFft` is the realtime FFT
+for every transform on the audio thread
+([ADR-0126](../decisions/0126-realtime-fft.md)), in every build.
 
 | Field | Value |
 | --- | --- |
 | Upstream | [marton78/pffft](https://github.com/marton78/pffft) |
 | Pin | Annotated tag `v1.1.0`, peeled commit `1fdcb508e5082052ab406d560b7c4622b8b4b0dd` |
-| Needed API | `PFFFT` single-precision real transforms and `pffft_zconvolve_accumulate`; `PFFASTCONV` is excluded |
+| Needed API | `PFFFT` single-precision real and complex transforms, `pffft_zconvolve_accumulate` and `pffft_zconvolve_no_accu`; `PFFASTCONV` is excluded |
 | Licence | [BSD-like upstream terms](https://github.com/marton78/pffft/blob/v1.1.0/LICENSE.txt): preserve notices/disclaimer in source or binary materials, no endorsement |
-| Linkage | Static C library target `oscillate_pffft` (`third_party/pffft/CMakeLists.txt`), private to `oscillate_warp_dsp` and `oscillate_native_effects` |
+| Linkage | Static C library target `oscillate_pffft` (`third_party/pffft/CMakeLists.txt`), private to `oscillate_warp_dsp`; other modules use `warp_dsp::RealFft` |
 | External runtime | None beyond the platform C/math runtime |
 | Local change | [`allocation-failure.patch`](../../third_party/pffft/patches/allocation-failure.patch), already applied to the vendored `src/pffft_priv_impl.h` |
 

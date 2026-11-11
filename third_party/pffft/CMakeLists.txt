@@ -14,3 +14,6 @@ if(NOT OSCILLATE_CONVOLUTION_SIMD)
   target_compile_definitions(oscillate_pffft PRIVATE PFFFT_SIMD_DISABLE)
 endif()
 target_link_libraries(oscillate_pffft PUBLIC m)
+# The realtime FFT on the audio thread (ADR-0126): optimised in Debug too,
+# like the DSP that calls it.
+oscillate_optimize_in_debug(oscillate_pffft)

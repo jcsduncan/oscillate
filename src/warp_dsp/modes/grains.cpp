@@ -1,8 +1,8 @@
 #include "../core/bandlimited_kernel.hpp"
 #include "../core/bandlimited_read.hpp"
-#include "../core/real_fft.hpp"
 #include "../core/source_window.hpp"
 #include "oscillate/foundation/stereo_span.hpp"
+#include "oscillate/warp_dsp/real_fft.hpp"
 #include "oscillate/warp_dsp/stream.hpp"
 
 #include <algorithm>
@@ -727,9 +727,9 @@ private:
   std::vector<float> candidate_;
   std::vector<float> model_;
   std::size_t transform_size_;
-  detail::RealFft fft_;
-  detail::AlignedBuffer candidate_spectrum_;
-  detail::AlignedBuffer model_spectrum_;
+  RealFft fft_;
+  AlignedBuffer candidate_spectrum_;
+  AlignedBuffer model_spectrum_;
   const WarpTimeMap* map_ = nullptr;
   SourceView* view_ = nullptr;
   Run run_;
