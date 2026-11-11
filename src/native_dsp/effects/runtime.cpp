@@ -280,12 +280,11 @@ NativeEffectRuntime::~NativeEffectRuntime() {
 }
 
 void NativeEffectRuntime::analyse_now() noexcept {
-  // Never waits: when the worker or the reader holds the lock, it is
-  // draining the capture already.
-  const std::unique_lock lock(analysis_slot_->mutex, std::try_to_lock);
-  if (lock.owns_lock()) {
-    analysis_slot_->analyse();
-  }
+  // Only off a realtime thread, where waiting for the worker or the reader
+  // is allowed: the capture is drained before the next block, whoever
+  // holds the lock now.
+  const std::lock_guard lock(analysis_slot_->mutex);
+  analysis_slot_->analyse();
 }
 
 EffectProcessStatus NativeEffectRuntime::process(std::span<engine::StereoFrame> audio,
