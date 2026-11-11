@@ -1,5 +1,6 @@
 #include "oscillate/native_dsp/effects/shape.hpp"
 
+#include "capture_queue.hpp"
 #include "effect_dsp.hpp"
 #include "oscillate/engine/midi_events.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
@@ -97,7 +98,8 @@ using native_dsp::dsp::gain_to_db;
 //
 // Each signal takes a real transform (ADR-0126), and each instance starts
 // its hops at its own point of the window, so the transforms of many EQs
-// started together fall in different blocks instead of all in one.
+// started together fall apart. The spectra are analysed off the callback,
+// when read (ADR-0129).
 class DisplaySpectra {
 public:
   DisplaySpectra(double rate, std::size_t instance)
@@ -217,6 +219,15 @@ private:
 // Each new kernel's place among the staggered spectra.
 std::atomic<std::size_t> next_spectra_instance{0};
 
+// The spectra's input as the callback captures it: each signal's mono sum.
+struct Captured {
+  float input = 0.0F;
+  float output = 0.0F;
+};
+// The capture waits this long at most for a reader; the spectra average
+// over a quarter of a second, so a reader that falls behind loses little.
+constexpr double capture_seconds = 1.0;
+
 class ShapeKernel final : public EffectKernel {
 public:
   ShapeKernel(double sample_rate, const Bands& initial, PreparedEq prepared)
@@ -224,6 +235,7 @@ public:
         hold_(std::exp(std::log(1e-3) / (peak_hold_seconds * sample_rate))),
         eq_(std::in_place, prepared), cascade_(canonical(initial)), wanted_(initial),
         mono_input_(engine::max_midi_block_frames),
+        queue_(static_cast<std::size_t>(std::ceil(capture_seconds * sample_rate))),
         spectra_(sample_rate, next_spectra_instance.fetch_add(1, std::memory_order_relaxed)) {}
 
   void control(std::span<const double> v, std::uint32_t, const Transport&) noexcept override {
@@ -253,9 +265,9 @@ public:
     // NOLINTNEXTLINE(bugprone-unchecked-optional-access): eq_ is engaged from construction.
     eq_->process(audio, engine::BlockContext{0, generation_});
     meter(output_, audio);
-    for (std::size_t i = 0; i < input.size(); ++i) {
-      spectra_.push(input[i], 0.5F * (audio[i].left + audio[i].right));
-    }
+    (void)queue_.write(input.size(), [&](std::size_t i) {
+      return Captured{input[i], 0.5F * (audio[i].left + audio[i].right)};
+    });
   }
 
   void reset() noexcept override {
@@ -264,7 +276,7 @@ public:
     rebuild();
     input_ = {};
     output_ = {};
-    spectra_.reset();
+    queue_.restart();
   }
 
   [[nodiscard]] std::size_t telemetry(std::span<float> out) const noexcept override {
@@ -274,6 +286,24 @@ public:
     for (std::size_t c = 0; c < 2; ++c) {
       out[telemetry::input_peak + c] = static_cast<float>(gain_to_db(input_[c]));
       out[telemetry::output_peak + c] = static_cast<float>(gain_to_db(output_[c]));
+    }
+    return telemetry::size;
+  }
+
+  // The display spectra are analysed when read.
+  [[nodiscard]] TelemetryAnalysis analysis() const noexcept override {
+    return TelemetryAnalysis::on_read;
+  }
+
+  void analyse() noexcept override {
+    queue_.read([this] { spectra_.reset(); },
+                [this](const Captured& frame) { spectra_.push(frame.input, frame.output); });
+  }
+
+  [[nodiscard]] std::size_t analysed_telemetry(std::span<float> out,
+                                               std::size_t published) noexcept override {
+    if (published < telemetry::size || out.size() < telemetry::size) {
+      return 0;
     }
     for (std::size_t b = 0; b < spectrum_bands; ++b) {
       out[telemetry::input_spectrum + b] = static_cast<float>(spectra_.input_db(b));
@@ -424,6 +454,8 @@ private:
   std::array<double, 2> output_{};
   // The input's mono sum while the EQ overwrites the block.
   std::vector<float> mono_input_;
+  CaptureQueue<Captured> queue_;
+  // The analysis's (off the callback).
   DisplaySpectra spectra_;
 };
 

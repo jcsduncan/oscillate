@@ -1,5 +1,6 @@
 #include "oscillate/native_dsp/effects/edge.hpp"
 
+#include "capture_queue.hpp"
 #include "dsp/bs1770.hpp"
 #include "edge_dsp.hpp"
 #include "edge_presets.hpp"
@@ -51,6 +52,9 @@ constexpr double match_floor_power = 1e-10;
 constexpr double stopped_beats_per_second = 2.0;
 constexpr double milliseconds_per_second = 1'000.0;
 constexpr double reading_floor_db = -120.0;
+// The output meter analyses a copy off the callback (ADR-0129); the copy
+// waits this long at most for the analysis.
+constexpr double capture_seconds = 2.0;
 
 [[nodiscard]] double finite_or_zero(float x) noexcept {
   return std::isfinite(x) ? static_cast<double>(x) : 0.0;
@@ -81,7 +85,8 @@ public:
         hold_(std::exp(std::log(hold_fall) / (hold_seconds * sample_rate))),
         dot_hold_(std::exp(std::log(hold_fall) / (dot_seconds * sample_rate))),
         match_coefficient_(1.0 - std::exp(-1.0 / (match_seconds * sample_rate))),
-        stopped_beats_per_frame_(stopped_beats_per_second / sample_rate) {
+        stopped_beats_per_frame_(stopped_beats_per_second / sample_rate),
+        queue_(static_cast<std::size_t>(std::ceil(capture_seconds * sample_rate))) {
     for (auto& channel : channels_) {
       channel.resampler.prepare(design);
     }
@@ -134,6 +139,7 @@ public:
       // input is scaled by the ceiling on the way in and back on the way out.
       std::array<FrameIn, edge_dsp::block_frames> in{};
       std::array<std::array<double, edge_dsp::block_frames>, 2> y{};
+      std::array<engine::StereoFrame, edge_dsp::block_frames> metered{};
       for (std::size_t i = 0; i < frames; ++i) {
         auto& f = in[i];
         f.raw = {finite_or_zero(chunk[i].left), finite_or_zero(chunk[i].right)};
@@ -162,7 +168,7 @@ public:
 
         const double output_gain = f.output_gain;
         const std::array<double, 2> out{wet[0] * output_gain, wet[1] * output_gain};
-        meter_output(out);
+        metered[i] = {static_cast<float>(out[0]), static_cast<float>(out[1])};
         match(dry, out);
 
         const double delta = delta_.next();
@@ -178,6 +184,8 @@ public:
         chunk[i].left = static_cast<float>(mixed[0]);
         chunk[i].right = static_cast<float>(mixed[1]);
       }
+      // The output meter analyses a copy off the callback.
+      (void)queue_.write(frames, [&](std::size_t i) { return metered[i]; });
     }
     const double frames = static_cast<double>(audio.size());
     const double clipped_db = gain_to_db(block_ratio) - gain_to_db(block_guard);
@@ -190,15 +198,14 @@ public:
     for (auto& channel : channels_) {
       channel.resampler.reset();
       channel.antialiased.reset();
-      channel.out_peak.reset();
     }
+    queue_.restart();
     magnitude_.reset();
     guard_.reset();
     fill_aligned();
     aligned_position_ = 0;
     previous_top_ = {};
     input_peak_ = {};
-    output_peak_ = {};
     dot_ = 0.0;
     clipped_ = 0.0;
   }
@@ -210,9 +217,9 @@ public:
     const auto reading = [](double gain) {
       return static_cast<float>(gain_to_db(gain, reading_floor_db));
     };
+    // The output peak comes from the analysis (analysed_telemetry).
     for (std::size_t c = 0; c < 2; ++c) {
       out[telemetry::input_peak + c] = reading(input_peak_[c]);
-      out[telemetry::output_peak + c] = reading(output_peak_[c]);
     }
     out[telemetry::clipped] = static_cast<float>(clipped_);
     out[telemetry::dot_input] = reading(dot_);
@@ -228,11 +235,35 @@ public:
     return telemetry::size;
   }
 
+  // The output's true-peak meter holds the peak over every frame, so the
+  // analysis worker drains it when no panel reads.
+  [[nodiscard]] TelemetryAnalysis analysis() const noexcept override {
+    return TelemetryAnalysis::continuous;
+  }
+
+  [[nodiscard]] bool analysis_backlogged() const noexcept override { return queue_.backlogged(); }
+
+  void analyse() noexcept override {
+    queue_.read([this] { restart_meter(); },
+                [this](const engine::StereoFrame& frame) { meter_output(frame); });
+  }
+
+  [[nodiscard]] std::size_t analysed_telemetry(std::span<float> out,
+                                               std::size_t published) noexcept override {
+    if (published < telemetry::size || out.size() < telemetry::size) {
+      return 0;
+    }
+    for (std::size_t c = 0; c < 2; ++c) {
+      out[telemetry::output_peak + c] =
+          static_cast<float>(gain_to_db(output_peak_[c], reading_floor_db));
+    }
+    return telemetry::size;
+  }
+
 private:
   struct Channel {
     edge_dsp::Resampler resampler;
     edge_dsp::Antialiased antialiased;
-    native_dsp::dsp::bs1770::TruePeak out_peak;
   };
   struct Aligned {
     std::array<double, 2> raw{};
@@ -345,11 +376,21 @@ private:
     dot_ = std::max(dot_ * dot_hold_, std::max(std::fabs(x[0]), std::fabs(x[1])));
   }
 
-  void meter_output(const std::array<double, 2>& x) noexcept {
+  // The analysis: one captured output frame through the true-peak meter.
+  void meter_output(const engine::StereoFrame& frame) noexcept {
+    const std::array<double, 2> x{frame.left, frame.right};
     for (std::size_t c = 0; c < 2; ++c) {
-      const double peak = std::max(channels_[c].out_peak.push(x[c]), std::fabs(x[c]));
+      const double peak = std::max(out_peaks_[c].push(x[c]), std::fabs(x[c]));
       output_peak_[c] = std::max(output_peak_[c] * hold_, peak);
     }
+  }
+
+  // The analysis: a new run (a seek, or a capture left unread too long).
+  void restart_meter() noexcept {
+    for (auto& peak : out_peaks_) {
+      peak.reset();
+    }
+    output_peak_ = {};
   }
 
   // The output's power against the raw aligned input's.
@@ -401,7 +442,6 @@ private:
   Toggle match_;
   bool primed_ = false;
   std::array<double, 2> input_peak_{};
-  std::array<double, 2> output_peak_{};
   double dot_ = 0.0;
   double clipped_ = 0.0;
   double out_power_ = 0.0;
@@ -413,6 +453,10 @@ private:
   double beat_max_ = 0.0;
   std::array<float, history_beats> history_{};
   std::size_t history_position_ = 0;
+  CaptureQueue<engine::StereoFrame> queue_;
+  // The analysis's (off the callback).
+  std::array<native_dsp::dsp::bs1770::TruePeak, 2> out_peaks_{};
+  std::array<double, 2> output_peak_{};
 };
 
 [[nodiscard]] bool valid_rate(double sample_rate) noexcept {

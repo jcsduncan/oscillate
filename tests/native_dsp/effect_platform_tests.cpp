@@ -1,11 +1,15 @@
 #include "effect_test_support.hpp"
 
+#include "oscillate/foundation/log.hpp"
+#include "oscillate/native_dsp/effects/ceiling.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
+#include "oscillate/native_dsp/effects/loudness.hpp"
 #include "oscillate/test/allocation_counter.hpp"
 #include "oscillate/test/cases.hpp"
 #include "oscillate/test/check.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -19,6 +23,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 using oscillate::test::counted_allocations;
@@ -27,7 +32,8 @@ using oscillate::test::counting_allocations;
 // The effect platform contract (ADR-0040), run over every registered engine
 // and every factory preset: a consistent registry, block-split invariance,
 // lanes and offers, rejection without side effects, seek resets, silence,
-// the tail bound and no allocation on the callback.
+// the tail bound and no allocation on the callback; and the analyses that
+// run off the callback (ADR-0129).
 namespace {
 using namespace effect_test;
 
@@ -332,6 +338,99 @@ void the_callback_never_allocates() {
   });
 }
 
+// Loudness's integrated duration: its 100 ms steps from the first full
+// 400 ms block on.
+constexpr double loudness_step_seconds = 0.1;
+constexpr double momentary_seconds = 0.4;
+constexpr double half_a_step = loudness_step_seconds / 2.0;
+constexpr double meter_hz = 1'000.0;
+constexpr double meter_amplitude = 0.5;
+
+double measured_seconds(double seconds) {
+  return seconds - momentary_seconds + loudness_step_seconds;
+}
+
+// Off a realtime thread (a test, an offline render) a continuous analysis
+// is drained in process() whenever its capture backs up, so ten seconds
+// rendered at once and read once are all measured, though the capture
+// holds about two.
+void continuous_analyses_miss_nothing_off_the_audio_thread() {
+  constexpr double seconds = 10.0;
+  const auto& engine = effects::loudness::engine();
+  auto runtime = make_effect(engine, default_values(*engine.descriptor));
+  (void)process(*runtime,
+                sine(meter_hz, meter_amplitude,
+                     static_cast<std::size_t>(seconds * oscillate::test::sample_rate_48k_hz)));
+  std::vector<float> t;
+  REQUIRE_TRUE(runtime->read_telemetry(t), "telemetry");
+  REQUIRE_NEAR(t[effects::loudness::telemetry::duration], measured_seconds(seconds), half_a_step,
+               "every frame is integrated");
+}
+
+// On a realtime thread nothing is analysed in process(): the analysis
+// worker keeps an unread continuous analysis whole, so integrated loudness
+// spans the programme though no panel read it while it played.
+void the_worker_keeps_unread_analyses_whole() {
+  constexpr double seconds = 6.0;
+  constexpr std::size_t block = 256;
+  // Chunks well inside the capture, with several of the worker's 20 ms
+  // drain intervals between them.
+  constexpr std::size_t blocks_per_chunk = 48;
+  constexpr auto pause = std::chrono::milliseconds{100};
+  const auto& engine = effects::loudness::engine();
+  auto runtime = make_effect(engine, default_values(*engine.descriptor));
+  const auto frames = static_cast<std::size_t>(seconds * oscillate::test::sample_rate_48k_hz);
+  const auto input = sine(meter_hz, meter_amplitude, frames);
+  std::vector<engine::StereoFrame> buffer(block);
+  const Transport transport{};
+  {
+    const oscillate::foundation::RealtimeThreadScope realtime;
+    for (std::size_t start = 0, count = 0; start + block <= frames; start += block, ++count) {
+      for (std::size_t i = 0; i < block; ++i) {
+        buffer[i] = {static_cast<float>(input.left[start + i]),
+                     static_cast<float>(input.right[start + i])};
+      }
+      (void)runtime->process(buffer, {}, start, 1, transport, {});
+      if (count % blocks_per_chunk == blocks_per_chunk - 1) {
+        std::this_thread::sleep_for(pause);
+      }
+    }
+  }
+  std::vector<float> t;
+  REQUIRE_TRUE(runtime->read_telemetry(t), "telemetry");
+  const double rendered =
+      static_cast<double>(frames / block * block) / oscillate::test::sample_rate_48k_hz;
+  REQUIRE_NEAR(t[effects::loudness::telemetry::duration], measured_seconds(rendered), half_a_step,
+               "the worker analysed every frame");
+}
+
+// Runtimes whose analyses the worker drains come and go while it runs:
+// each takes its kernel out of the worker's reach before it goes (run
+// under ThreadSanitizer in CI).
+void analyses_end_with_their_runtime() {
+  constexpr std::size_t rounds = 20;
+  constexpr std::size_t blocks = 40;
+  constexpr std::size_t block = 256;
+  const auto input = programme(block);
+  std::vector<engine::StereoFrame> buffer(block);
+  for (std::size_t i = 0; i < block; ++i) {
+    buffer[i] = {static_cast<float>(input.left[i]), static_cast<float>(input.right[i])};
+  }
+  const Transport transport{};
+  for (std::size_t round = 0; round < rounds; ++round) {
+    for (const auto* engine : {&effects::ceiling::engine(), &effects::loudness::engine()}) {
+      auto runtime = make_effect(*engine, default_values(*engine->descriptor));
+      const oscillate::foundation::RealtimeThreadScope realtime;
+      for (std::size_t b = 0; b < blocks; ++b) {
+        auto audio = buffer;
+        REQUIRE_TRUE(runtime->process(audio, {}, b * block, 1, transport, {}) ==
+                         effects::EffectProcessStatus::rendered,
+                     "rendered");
+      }
+    }
+  }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -350,5 +449,10 @@ int main(int argc, char** argv) {
            [] { live_offers_are_heard_without_a_revision(); }},
           {"creation_rejects_bad_input", [] { creation_rejects_bad_input(); }},
           {"the_callback_never_allocates", [] { the_callback_never_allocates(); }},
+          {"continuous_analyses_miss_nothing_off_the_audio_thread",
+           [] { continuous_analyses_miss_nothing_off_the_audio_thread(); }},
+          {"the_worker_keeps_unread_analyses_whole",
+           [] { the_worker_keeps_unread_analyses_whole(); }},
+          {"analyses_end_with_their_runtime", [] { analyses_end_with_their_runtime(); }},
       });
 }

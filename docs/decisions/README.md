@@ -49,7 +49,7 @@ never reused. 0070 was never assigned.
 | 0039 | [Background publication of routine editor changes](0039-background-editor-publication.md) | Accepted; implemented |
 | 0040 | [A generic native effect platform](0040-native-effect-platform.md) | Accepted; implemented (integration completed under ADR-0043) |
 | 0041 | [Pocket, a kick and bass masking resolver](0041-pocket-kick-bass.md) | Accepted; phase 1 built |
-| 0042 | [A native utility suite](0042-native-utility-suite.md) | Accepted; all six built; superseded in part by ADR-0125 and ADR-0126 |
+| 0042 | [A native utility suite](0042-native-utility-suite.md) | Accepted; all six built; superseded in part by ADR-0125, ADR-0126 and ADR-0129 |
 | 0043 | [One native insert path](0043-one-native-insert-path.md) | Superseded by ADR-0090 for export's link to native_inserts, by ADR-0092 for native_inserts' dependencies and by ADR-0104 for the transport type; otherwise implemented, classic kinds follow in ADR-0047 |
 | 0044 | [Lumen: wavetable synth (third native engine)](0044-lumen-wavetable-synth.md) | Superseded by ADR-0057 |
 | 0045 | [The development build](0045-development-build.md) | Accepted and implemented |
@@ -127,5 +127,6 @@ never reused. 0070 was never assigned.
 | 0122 | [Gild: a multiband exciter on Forge's curves, oversampled and level-matched](0122-gild-multiband-exciter.md) | Accepted; implemented |
 | 0123 | [Master rebalance by role from the project's tracks](0123-master-rebalance.md) | Accepted; implemented |
 | 0124 | [The master assistant: a proposed master chain from a reference and a loudness target](0124-master-assistant.md) | Accepted; implemented |
-| 0125 | [The master chain's serial cost: analysis off the callback, block oversampling, and a gate](0125-master-chain-cost.md) | Accepted; implemented; superseded in part by ADR-0126 |
+| 0125 | [The master chain's serial cost: analysis off the callback, block oversampling, and a gate](0125-master-chain-cost.md) | Accepted; implemented; superseded in part by ADR-0126 and ADR-0129 |
 | 0126 | [One realtime FFT for the audio thread](0126-realtime-fft.md) | Accepted; implemented |
+| 0129 | [Meters and display spectra off the callback; no fused oversampling](0129-analysis-off-the-callback.md) | Accepted; implemented |

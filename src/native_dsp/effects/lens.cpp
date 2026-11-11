@@ -102,7 +102,7 @@ struct Captured {
 };
 
 // The callback only captures its input and the values; the analysis runs
-// when the telemetry is read (EffectKernel::analyse_telemetry), on the control
+// when the telemetry is read (EffectKernel::analyse), on the control
 // thread, and only then.
 class LensKernel final : public EffectKernel {
 public:
@@ -178,17 +178,21 @@ public:
   // Callback only: the reader starts afresh from here.
   void reset() noexcept override { queue_.restart(); }
 
-  [[nodiscard]] bool analyses_off_callback() const noexcept override { return true; }
+  [[nodiscard]] TelemetryAnalysis analysis() const noexcept override {
+    return TelemetryAnalysis::on_read;
+  }
 
-  // Control only: the values the callback last saw, then every captured
-  // frame through the analysis, then the telemetry.
-  [[nodiscard]] std::size_t analyse_telemetry(std::span<float> out) noexcept override {
-    if (out.size() < telemetry::size) {
-      return 0;
-    }
+  // The reader: the values the callback last saw, then every captured
+  // frame through the analysis.
+  void analyse() noexcept override {
     adopt_values();
     queue_.read([this] { restart(); }, [this](const Captured& frame) { take(frame); });
-    if (!captured_) {
+  }
+
+  // The reader: Lens publishes nothing from the callback.
+  [[nodiscard]] std::size_t analysed_telemetry(std::span<float> out,
+                                               std::size_t) noexcept override {
+    if (out.size() < telemetry::size || !captured_) {
       return 0;
     }
     write_telemetry(out);

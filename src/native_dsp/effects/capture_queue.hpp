@@ -5,13 +5,14 @@
 #include <cstdint>
 #include <vector>
 
-// Frames captured on the callback for analysis on the control thread that
-// reads an effect's telemetry (ADR-0125): one producer, one consumer, and
-// neither ever waits. The callback drops a block that does not fit, so an
-// analysis nobody reads costs the callback one comparison a block; the
-// next block that fits starts a new run. A reset on the callback (a seek)
-// starts a new run too. The reader drops whatever came before a new run
-// and starts its analysis afresh there.
+// Frames captured on the callback for analysis off it (ADR-0125, ADR-0129):
+// by the thread that reads an effect's telemetry, or the analysis worker,
+// one at a time. One producer, one consumer, and neither ever waits. The
+// callback drops a block that does not fit, so an analysis nobody reads
+// costs the callback one comparison a block; the next block that fits
+// starts a new run. A reset on the callback (a seek) starts a new run too.
+// The reader drops whatever came before a new run and starts its analysis
+// afresh there.
 namespace oscillate::native_dsp::effects {
 
 template <typename Frame> class CaptureQueue {
@@ -45,6 +46,12 @@ public:
     return true;
   }
 
+  // Callback only: true when more than half the room is waiting for the
+  // reader.
+  [[nodiscard]] bool backlogged() const noexcept {
+    return written_ - taken_.load(std::memory_order_acquire) > frames_.size() / 2;
+  }
+
   // Callback only: what follows starts a new run.
   void restart() noexcept {
     dropping_ = false;
@@ -52,7 +59,7 @@ public:
     run_.fetch_add(1, std::memory_order_release);
   }
 
-  // Control only: every frame published since the last read, in order.
+  // Reader only: every frame published since the last read, in order.
   // `start` runs before the first frame of each new run; `take(frame)` for
   // each frame of the current run.
   template <typename Start, typename Take> void read(Start&& start, Take&& take) {

@@ -1,5 +1,6 @@
 #include "oscillate/native_dsp/effects/ceiling.hpp"
 
+#include "capture_queue.hpp"
 #include "ceiling_dsp.hpp"
 #include "ceiling_presets.hpp"
 #include "ceiling_table.hpp"
@@ -62,6 +63,17 @@ constexpr double minimum_knee = 0.0114;
 constexpr double loudness_step_seconds = 0.1;
 constexpr std::size_t loudness_blocks = 36'000;
 constexpr double reading_floor_db = -200.0;
+// The output the meters analyse off the callback (ADR-0129) waits this long
+// at most for the analysis.
+constexpr double capture_seconds = 2.0;
+
+// One output frame as the callback captures it for the meters, and
+// whether the integrated loudness starts again from it (a Gain change).
+struct Captured {
+  float left = 0.0F;
+  float right = 0.0F;
+  bool fresh_integration = false;
+};
 
 using native_dsp::dsp::gain_to_db;
 
@@ -85,7 +97,8 @@ public:
   // Control only.
   CeilingKernel(std::span<const double> values, double sample_rate)
       : rate_(sample_rate), hold_(std::exp(std::log(hold_fall) / (hold_seconds * sample_rate))),
-        gate_(loudness_blocks) {
+        gate_(loudness_blocks),
+        queue_(static_cast<std::size_t>(std::ceil(capture_seconds * sample_rate))) {
     stage_.prepare(frames_for_ms(values[p::lookahead], sample_rate),
                    frames_for_ms(hold_after_peak_seconds * milliseconds_per_second, sample_rate),
                    sample_rate);
@@ -110,8 +123,7 @@ public:
     // The integrated loudness reads the output since the last Gain change,
     // so a second Learn sees only what the new gain gives.
     if (!jump && v[p::gain] != gain_db_) {
-      gate_.clear();
-      integrated_ = no_loudness;
+      fresh_integration_ = true;
     }
     gain_db_ = v[p::gain];
     ceiling_.settle(dsp::db_to_gain(v[p::ceiling]), steps, jump);
@@ -152,6 +164,7 @@ public:
     double block_gain = 0.0;
     double block_clip = 1.0;
     double block_guard = 1.0;
+
     // In the clipper's blocks: the gain stage, then the clipper over the
     // block, then the guard and the meters.
     for (std::size_t start = 0; start < audio.size(); start += edge_dsp::block_frames) {
@@ -191,9 +204,14 @@ public:
         const double out_ceiling = ceiling_delay_.push({ceilings[i], 0.0})[0];
         left[i] *= out_ceiling;
         right[i] *= out_ceiling;
-        meter_output(left[i], right[i]);
         chunk[i].left = static_cast<float>(left[i]);
         chunk[i].right = static_cast<float>(right[i]);
+      }
+      // The output meters analyse a copy off the callback.
+      if (queue_.write(frames, [&](std::size_t i) {
+            return Captured{chunk[i].left, chunk[i].right, fresh_integration_ && i == 0};
+          })) {
+        fresh_integration_ = false;
       }
     }
     if (detector_count_ > 0) {
@@ -215,17 +233,10 @@ public:
     guard_.reset();
     audio_delay_.reset();
     fill_ceiling();
-    for (auto& peak : out_peaks_) {
-      peak.reset();
-    }
-    for (auto& k : weighting_) {
-      k.reset();
-    }
-    windows_.reset();
-    gate_.clear();
-    integrated_ = no_loudness;
+    // The output meters start afresh with what follows.
+    queue_.restart();
+    fresh_integration_ = false;
     input_peak_ = {};
-    output_peak_ = {};
     reduction_ = 0.0;
     clipped_ = 0.0;
     guarded_ = 0.0;
@@ -237,21 +248,46 @@ public:
     if (out.size() < telemetry::size) {
       return 0;
     }
+    // The output meters' values come from the analysis (analysed_telemetry).
     for (std::size_t c = 0; c < 2; ++c) {
       out[telemetry::input_peak + c] =
           static_cast<float>(gain_to_db(input_peak_[c], reading_floor_db));
-      out[telemetry::output_peak + c] =
-          static_cast<float>(gain_to_db(output_peak_[c], reading_floor_db));
     }
     out[telemetry::reduction] = static_cast<float>(reduction_);
     bands_.write(out.subspan(telemetry::reduction_bands, effects::reduction_bands::count));
     out[telemetry::clipped] = static_cast<float>(clipped_);
     out[telemetry::guarded] = static_cast<float>(guarded_);
+    out[telemetry::latency_ms] =
+        static_cast<float>(static_cast<double>(latency_) / rate_ * milliseconds_per_second);
+    return telemetry::size;
+  }
+
+  // The output's true peak and loudness need every frame (the integrated
+  // reading spans the whole programme), so the analysis worker drains them
+  // when no panel reads.
+  [[nodiscard]] TelemetryAnalysis analysis() const noexcept override {
+    return TelemetryAnalysis::continuous;
+  }
+
+  [[nodiscard]] bool analysis_backlogged() const noexcept override { return queue_.backlogged(); }
+
+  void analyse() noexcept override {
+    queue_.read([this] { restart_meters(); },
+                [this](const Captured& frame) { meter_output(frame); });
+  }
+
+  [[nodiscard]] std::size_t analysed_telemetry(std::span<float> out,
+                                               std::size_t published) noexcept override {
+    if (published < telemetry::size || out.size() < telemetry::size) {
+      return 0;
+    }
+    for (std::size_t c = 0; c < 2; ++c) {
+      out[telemetry::output_peak + c] =
+          static_cast<float>(gain_to_db(output_peak_[c], reading_floor_db));
+    }
     out[telemetry::momentary] = loudness(windows_.momentary());
     out[telemetry::short_term] = loudness(windows_.short_term());
     out[telemetry::integrated] = integrated_;
-    out[telemetry::latency_ms] =
-        static_cast<float>(static_cast<double>(latency_) / rate_ * milliseconds_per_second);
     return telemetry::size;
   }
 
@@ -276,8 +312,27 @@ private:
     }
   }
 
-  void meter_output(double left, double right) noexcept {
-    const std::array<double, 2> y{left, right};
+  // The analysis: a new run (a seek, or a capture the reader fell behind
+  // on) starts the output meters and the loudness afresh.
+  void restart_meters() noexcept {
+    for (auto& peak : out_peaks_) {
+      peak.reset();
+    }
+    for (auto& k : weighting_) {
+      k.reset();
+    }
+    windows_.reset();
+    gate_.clear();
+    integrated_ = no_loudness;
+    output_peak_ = {};
+  }
+
+  void meter_output(const Captured& frame) noexcept {
+    if (frame.fresh_integration) {
+      gate_.clear();
+      integrated_ = no_loudness;
+    }
+    const std::array<double, 2> y{frame.left, frame.right};
     double power = 0.0;
     for (std::size_t c = 0; c < 2; ++c) {
       const double peak = std::max(out_peaks_[c].push(y[c]), std::fabs(y[c]));
@@ -306,14 +361,18 @@ private:
   ceiling_dsp::Clipper clipper_;
   edge_dsp::TruePeakGuard guard_;
   std::uint32_t latency_ = 0;
+  // The analysis's (off the callback).
   std::array<bs1770::TruePeak, 2> out_peaks_{};
   std::array<bs1770::KWeighting, 2> weighting_{};
   bs1770::StepWindows windows_;
   bs1770::Gate gate_;
   float integrated_ = no_loudness;
+  std::array<double, 2> output_peak_{};
+  // The callback's.
+  CaptureQueue<Captured> queue_;
+  bool fresh_integration_ = false;
   double gain_db_ = 0.0;
   std::array<double, 2> input_peak_{};
-  std::array<double, 2> output_peak_{};
   double reduction_ = 0.0;
   double clipped_ = 0.0;
   double guarded_ = 0.0;

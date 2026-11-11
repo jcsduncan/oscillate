@@ -1,5 +1,6 @@
 #include "effect_test_support.hpp"
 
+#include "oscillate/foundation/log.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 
 #include <algorithm>
@@ -80,6 +81,9 @@ double percentile(std::vector<double> times, double at) {
 } // namespace
 
 int main() {
+  // As the audio callback is: analyses that run off the callback (ADR-0129)
+  // are left to their reader and the analysis worker, not drained here.
+  const foundation::RealtimeThreadScope realtime;
   const auto input = mix();
   std::printf("%-10s %6s %10s %10s\n", "device", "block", "mean ms", "p99 ms");
   for (const std::size_t block : blocks) {

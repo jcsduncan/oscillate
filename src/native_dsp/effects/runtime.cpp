@@ -1,13 +1,17 @@
 #include "oscillate/native_dsp/effects/effect.hpp"
 
+#include "analysis_worker.hpp"
 #include "oscillate/engine/denormals.hpp"
 #include "oscillate/engine/midi_events.hpp"
+#include "oscillate/foundation/log.hpp"
 #include "oscillate/foundation/trace.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <mutex>
 #include <new>
 #include <string>
 
@@ -252,7 +256,34 @@ NativeEffectRuntime::NativeEffectRuntime(const EffectEngine& engine,
     : engine_(engine), kernel_(std::move(kernel)),
       control_(*engine.descriptor, values, sample_rate), sample_rate_(sample_rate),
       latency_(engine.latency_frames(values, sample_rate)),
-      trace_instance_(foundation::trace::next_instance()) {}
+      trace_instance_(foundation::trace::next_instance()) {
+  analysis_ = kernel_->analysis();
+  if (analysis_ != TelemetryAnalysis::callback) {
+    analysis_slot_ = std::make_shared<AnalysisSlot>();
+    analysis_slot_->kernel = kernel_.get();
+    if (analysis_ == TelemetryAnalysis::continuous) {
+      analysis_worker::add(analysis_slot_);
+    }
+  }
+}
+
+NativeEffectRuntime::~NativeEffectRuntime() {
+  if (analysis_slot_) {
+    if (analysis_ == TelemetryAnalysis::continuous) {
+      analysis_worker::remove(analysis_slot_.get());
+    }
+    // The worker may hold the slot a little longer; it must not find the
+    // kernel there.
+    const std::lock_guard lock(analysis_slot_->mutex);
+    analysis_slot_->kernel = nullptr;
+  }
+}
+
+void NativeEffectRuntime::analyse_now() noexcept {
+  // Off the callback only, where waiting for the worker is allowed.
+  const std::lock_guard lock(analysis_slot_->mutex);
+  analysis_slot_->analyse();
+}
 
 EffectProcessStatus NativeEffectRuntime::process(std::span<engine::StereoFrame> audio,
                                                  std::span<const engine::StereoFrame> sidechain,
@@ -285,6 +316,11 @@ EffectProcessStatus NativeEffectRuntime::process(std::span<engine::StereoFrame> 
   started_ = true;
   generation_ = transport_generation;
 
+  // Off a realtime thread (an offline render, a test) a continuous
+  // analysis is drained here whenever its capture backs up, so it misses
+  // nothing however fast the blocks come (ADR-0129).
+  const bool drains_here =
+      analysis_ == TelemetryAnalysis::continuous && !foundation::on_realtime_thread();
   std::size_t frame = 0;
   while (frame < audio.size()) {
     const std::uint64_t absolute = project_frame + frame;
@@ -302,6 +338,9 @@ EffectProcessStatus NativeEffectRuntime::process(std::span<engine::StereoFrame> 
     kernel_->locate(absolute);
     kernel_->process(audio.subspan(frame, end - frame),
                      sidechain.empty() ? sidechain : sidechain.subspan(frame, end - frame));
+    if (drains_here && kernel_->analysis_backlogged()) {
+      analyse_now();
+    }
     frame = end;
   }
   telemetry_->publish([this](std::span<float> out) { return kernel_->telemetry(out); });
@@ -309,12 +348,16 @@ EffectProcessStatus NativeEffectRuntime::process(std::span<engine::StereoFrame> 
 }
 
 bool NativeEffectRuntime::read_telemetry(std::vector<float>& out) {
-  if (!kernel_->analyses_off_callback()) {
+  if (analysis_ == TelemetryAnalysis::callback) {
     return telemetry_->read(out);
   }
-  const engine::DenormalsFlushed flushed;
+  // What the callback published, then the analysis completes it.
+  const std::size_t published = telemetry_->read(out) ? out.size() : 0;
   out.resize(max_telemetry_values);
-  out.resize(kernel_->analyse_telemetry(out));
+  const std::lock_guard lock(analysis_slot_->mutex);
+  analysis_slot_->analyse();
+  const engine::DenormalsFlushed flushed;
+  out.resize(kernel_->analysed_telemetry(out, published));
   return !out.empty();
 }
 

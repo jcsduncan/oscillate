@@ -35,13 +35,29 @@ struct KeyNote {
   auto operator<=>(const KeyNote&) const = default;
 };
 
+// Where a kernel's telemetry is computed (ADR-0125, ADR-0129).
+enum class TelemetryAnalysis : std::uint8_t {
+  // On the callback, after each block (EffectKernel::telemetry).
+  callback,
+  // From what the callback captures, analysed off it by the thread that
+  // reads the telemetry, so an analysis nobody reads costs the callback a
+  // copy. A capture left unread for too long is dropped and the analysis
+  // starts afresh: for displays that settle within a second or two
+  // (spectra, held peaks).
+  on_read,
+  // As on_read, and also drained a few times a second by the platform's
+  // analysis worker, so readings that accumulate (integrated loudness, the
+  // highest true peak) see every frame whether or not anyone reads them.
+  continuous,
+};
+
 // Engine-specific DSP. Created and destroyed on control; every other member
 // runs only on the one callback that owns the runtime, except
 // adopt_document's offers (see NativeEffectRuntime) and, for a kernel that
-// analyses off the callback, analyse_telemetry. Such a kernel splits its
-// state: what the callback writes and the reader reads is shared through
-// lock-free structures only (Lens: its values, as atomics, and its
-// CaptureQueue); everything else belongs to one side.
+// analyses off the callback, analyse and analysed_telemetry. Such a kernel
+// splits its state: what the callback writes and the analysis reads is
+// shared through lock-free structures only (its CaptureQueue, and values
+// as atomics); everything else belongs to one side.
 class EffectKernel {
 public:
   virtual ~EffectKernel() = default;
@@ -61,19 +77,29 @@ public:
     (void)out;
     return 0;
   }
-  // True for a kernel whose telemetry is an analysis too costly for the
-  // callback (ADR-0125): it only captures its input there, publishes no
-  // telemetry from it, and analyses in analyse_telemetry instead.
-  [[nodiscard]] virtual bool analyses_off_callback() const noexcept { return false; }
-  // Such a kernel's analysis, on the one control thread that reads the
-  // runtime's telemetry, while the callback runs, so it costs nothing while
-  // nobody reads it. Brings the analysis up to what was captured and writes
-  // the telemetry layout; returns how many values (0 before the first
-  // capture).
-  [[nodiscard]] virtual std::size_t analyse_telemetry(std::span<float> out) noexcept {
-    (void)out;
-    return 0;
+  // Fixed for the kernel's life.
+  [[nodiscard]] virtual TelemetryAnalysis analysis() const noexcept {
+    return TelemetryAnalysis::callback;
   }
+  // A kernel that analyses off the callback: brings the analysis up to
+  // what the callback captured. Runs while the callback does, on the
+  // thread that reads the telemetry or on the analysis worker, never two at
+  // once.
+  virtual void analyse() noexcept {}
+  // The reader, right after analyse(): `out` holds the newest telemetry the
+  // callback published (its first `published` values; 0 before the first),
+  // and the kernel completes it with the analysis's values. Returns the
+  // telemetry's size, 0 while there is none.
+  [[nodiscard]] virtual std::size_t analysed_telemetry(std::span<float> out,
+                                                       std::size_t published) noexcept {
+    (void)out;
+    return published;
+  }
+  // Callback only, for a continuous kernel: true when its capture holds
+  // more than half its room. A host that is not on a realtime thread (an
+  // offline render, a test) then analyses it before going on, so nothing is
+  // dropped however fast it runs.
+  [[nodiscard]] virtual bool analysis_backlogged() const noexcept { return false; }
   // At a block start (and once on control before the first block): the
   // engine's compiled document, valid until the next adoption. Effects
   // without a document never see this.
@@ -157,10 +183,19 @@ enum class EffectProcessStatus : std::uint8_t {
 
 // One serialized control producer, one audio callback consumer: create on
 // control, process on exactly one callback.
+struct AnalysisSlot;
+
 class NativeEffectRuntime {
   struct DocumentOffer;
 
 public:
+  NativeEffectRuntime(const NativeEffectRuntime&) = delete;
+  NativeEffectRuntime& operator=(const NativeEffectRuntime&) = delete;
+  NativeEffectRuntime(NativeEffectRuntime&&) = delete;
+  NativeEffectRuntime& operator=(NativeEffectRuntime&&) = delete;
+  // Control only, after the callback's last block.
+  ~NativeEffectRuntime();
+
   [[nodiscard]] static foundation::Result<std::unique_ptr<NativeEffectRuntime>>
   create(const EffectEngine& engine, std::span<const double> values, double sample_rate);
   // With a document the engine validated and its decoded managed media
@@ -221,7 +256,7 @@ public:
   [[nodiscard]] const project::NativeSynthDocument& document() const noexcept { return document_; }
   // Control only, from one thread: the newest telemetry, false until the
   // first. For a kernel that analyses off the callback, this runs its
-  // analysis.
+  // analysis (EffectKernel::analysis).
   [[nodiscard]] bool read_telemetry(std::vector<float>& out);
   [[nodiscard]] const EffectEngine& engine() const noexcept { return engine_; }
   // Fixed at creation (see EffectEngine::latency_frames).
@@ -249,6 +284,9 @@ private:
                                           std::uint64_t revision) noexcept;
   void publish_document(std::unique_ptr<DocumentOffer> offer) noexcept;
   void adopt_key_notes() noexcept;
+  // Under the analysis lock: brings an off-callback analysis up to its
+  // capture.
+  void analyse_now() noexcept;
 
   // Compiled documents in offer order. Control owns them and retires those
   // published before the one the callback adopted, and any it never took;
@@ -264,6 +302,10 @@ private:
 
   EffectEngine engine_;
   std::unique_ptr<EffectKernel> kernel_;
+  TelemetryAnalysis analysis_ = TelemetryAnalysis::callback;
+  // For a kernel that analyses off the callback: the lock its reader and
+  // the analysis worker share (ADR-0129).
+  std::shared_ptr<AnalysisSlot> analysis_slot_;
   ParameterControl control_;
   std::unique_ptr<TelemetryBuffer> telemetry_ = std::make_unique<TelemetryBuffer>();
   project::NativeSynthDocument document_;                 // Control only.

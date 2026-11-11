@@ -434,6 +434,9 @@ oscillate_add_case_tests(native_effect_platform_contract oscillate_effect_platfo
   live_offers_are_heard_without_a_revision
   creation_rejects_bad_input
   the_callback_never_allocates
+  continuous_analyses_miss_nothing_off_the_audio_thread
+  the_worker_keeps_unread_analyses_whole
+  analyses_end_with_their_runtime
   SLOW
   tails_end_within_their_bound
   block_splits_render_identically)

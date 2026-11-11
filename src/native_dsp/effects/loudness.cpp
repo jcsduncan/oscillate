@@ -1,5 +1,6 @@
 #include "oscillate/native_dsp/effects/loudness.hpp"
 
+#include "capture_queue.hpp"
 #include "dsp/bs1770.hpp"
 #include "loudness_presets.hpp"
 #include "loudness_table.hpp"
@@ -40,6 +41,18 @@ constexpr std::size_t exact_gate_blocks = 72'000;
 // absolute gate up, in 0.01 LU bins with each bin's exact energy sum.
 constexpr double bin_lu = 0.01;
 constexpr std::size_t bin_count = 8'000; // -70 to +10 LUFS.
+// The meter analyses a copy of its input off the callback (ADR-0129); the
+// copy waits this long at most for the analysis.
+constexpr double capture_seconds = 2.0;
+
+// One frame as the callback captures it: the audio, whether Integrate is
+// on, and whether the statistics start afresh from it (Integrate switched).
+struct Captured {
+  float left = 0.0F;
+  float right = 0.0F;
+  bool integrating = true;
+  bool fresh_statistics = false;
+};
 
 [[nodiscard]] double to_lufs(double energy) noexcept {
   return energy > 0.0 ? offset_lufs + 10.0 * std::log10(energy) : silent;
@@ -82,14 +95,18 @@ struct Histogram {
   }
 };
 
+// The callback passes the audio through and captures a copy; the meter
+// analyses it off the callback, on the reader or the analysis worker.
 class LoudnessKernel final : public EffectKernel {
 public:
-  explicit LoudnessKernel(double sample_rate) : rate_(sample_rate), gate_(exact_gate_blocks) {
+  explicit LoudnessKernel(double sample_rate)
+      : rate_(sample_rate), gate_(exact_gate_blocks),
+        queue_(static_cast<std::size_t>(std::ceil(capture_seconds * sample_rate))) {
     for (auto& filter : weighting_) {
       filter.prepare(sample_rate);
     }
     windows_.prepare(static_cast<std::size_t>(std::lround(sample_rate / 10.0)));
-    reset();
+    restart();
     clear_statistics();
   }
 
@@ -97,7 +114,7 @@ public:
     // Switching Integrate either way starts the statistics afresh.
     const bool integrate = v[p::integrate] != 0.0;
     if (primed_ && integrate != integrating_) {
-      clear_statistics();
+      fresh_statistics_ = true;
     }
     integrating_ = integrate;
     primed_ = true;
@@ -105,39 +122,33 @@ public:
 
   void process(std::span<engine::StereoFrame> audio,
                std::span<const engine::StereoFrame>) noexcept override {
-    for (const auto& frame : audio) {
-      const std::array<double, 2> x{frame.left, frame.right};
-      double power = 0.0;
-      for (std::size_t c = 0; c < 2; ++c) {
-        const double k = weighting_[c].process(x[c]);
-        power += 1.0 * k * k;
-        // True peak: the interpolated points around the sample `radius` back.
-        const double top = std::max(std::fabs(x[c]), peak_[c].push(x[c]));
-        block_true_peak_[c] = std::max(block_true_peak_[c], top);
-        sample_peak_ = std::max(sample_peak_, std::fabs(x[c]));
-      }
-      if (windows_.add(power)) {
-        finish_sub_block();
-      }
+    if (queue_.write(audio.size(), [&](std::size_t i) {
+          return Captured{audio[i].left, audio[i].right, integrating_, fresh_statistics_ && i == 0};
+        })) {
+      fresh_statistics_ = false;
     }
   }
 
   // A seek starts the windows and filters afresh; the integrated
   // statistics carry on until Integrate is switched off.
-  void reset() noexcept override {
-    for (std::size_t c = 0; c < 2; ++c) {
-      weighting_[c].reset();
-      peak_[c].reset();
-      block_true_peak_[c] = 0.0;
-    }
-    windows_.reset();
-    recent_peaks_.fill(0.0);
-    momentary_ = silent;
-    short_term_ = silent;
+  void reset() noexcept override { queue_.restart(); }
+
+  // The integrated statistics need every frame, so the analysis worker
+  // drains the capture when no panel reads.
+  [[nodiscard]] TelemetryAnalysis analysis() const noexcept override {
+    return TelemetryAnalysis::continuous;
   }
 
-  [[nodiscard]] std::size_t telemetry(std::span<float> out) const noexcept override {
-    if (out.size() < telemetry::size) {
+  [[nodiscard]] bool analysis_backlogged() const noexcept override { return queue_.backlogged(); }
+
+  void analyse() noexcept override {
+    queue_.read([this] { restart(); }, [this](const Captured& frame) { measure(frame); });
+  }
+
+  // The reader: the meter publishes nothing from the callback.
+  [[nodiscard]] std::size_t analysed_telemetry(std::span<float> out,
+                                               std::size_t) noexcept override {
+    if (out.size() < telemetry::size || !captured_) {
       return 0;
     }
     const auto put = [&](std::size_t at, double value) { out[at] = static_cast<float>(value); };
@@ -170,6 +181,41 @@ public:
   }
 
 private:
+  // One captured frame through the meter.
+  void measure(const Captured& frame) noexcept {
+    captured_ = true;
+    if (frame.fresh_statistics) {
+      clear_statistics();
+    }
+    integrating_now_ = frame.integrating;
+    const std::array<double, 2> x{frame.left, frame.right};
+    double power = 0.0;
+    for (std::size_t c = 0; c < 2; ++c) {
+      const double k = weighting_[c].process(x[c]);
+      power += 1.0 * k * k;
+      // True peak: the interpolated points around the sample `radius` back.
+      const double top = std::max(std::fabs(x[c]), peak_[c].push(x[c]));
+      block_true_peak_[c] = std::max(block_true_peak_[c], top);
+      sample_peak_ = std::max(sample_peak_, std::fabs(x[c]));
+    }
+    if (windows_.add(power)) {
+      finish_sub_block();
+    }
+  }
+
+  // A new run (a seek, or a capture the analysis fell behind on).
+  void restart() noexcept {
+    for (std::size_t c = 0; c < 2; ++c) {
+      weighting_[c].reset();
+      peak_[c].reset();
+      block_true_peak_[c] = 0.0;
+    }
+    windows_.reset();
+    recent_peaks_.fill(0.0);
+    momentary_ = silent;
+    short_term_ = silent;
+  }
+
   void clear_statistics() noexcept {
     gate_.clear();
     blocks_histogram_.clear();
@@ -197,7 +243,7 @@ private:
     if (blocks >= bs1770::momentary_steps) {
       const double block = windows_.momentary();
       momentary_ = to_lufs(block);
-      if (integrating_) {
+      if (integrating_now_) {
         momentary_max_ = std::max(momentary_max_, momentary_);
         blocks_histogram_.add(block);
         ++integrated_blocks_;
@@ -212,7 +258,7 @@ private:
     if (blocks >= short_term_blocks) {
       const double block = windows_.short_term();
       short_term_ = to_lufs(block);
-      if (integrating_) {
+      if (integrating_now_) {
         short_term_max_ = std::max(short_term_max_, short_term_);
         short_term_histogram_.add(block);
         range_ = loudness_range();
@@ -290,7 +336,12 @@ private:
   std::array<float, history> momentary_history_{};
   std::array<float, history> short_term_history_{};
   std::size_t history_write_ = 0;
+  bool integrating_now_ = true;
+  bool captured_ = false;
+  // The callback's.
+  CaptureQueue<Captured> queue_;
   bool integrating_ = true;
+  bool fresh_statistics_ = false;
   bool primed_ = false;
 };
 

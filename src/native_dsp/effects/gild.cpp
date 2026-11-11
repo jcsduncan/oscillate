@@ -1,5 +1,6 @@
 #include "oscillate/native_dsp/effects/gild.hpp"
 
+#include "capture_queue.hpp"
 #include "dsp/crossover.hpp"
 #include "edge_dsp.hpp"
 #include "edge_table.hpp"
@@ -87,6 +88,16 @@ constexpr double reading_floor_db = -120.0;
 // power over 1.5 bins (its equivalent noise bandwidth).
 constexpr double hann_sum_share = 0.5;
 constexpr double hann_noise_bandwidth = 1.5;
+// The spectrum is analysed off the callback, when read (ADR-0129); the
+// capture waits this long at most for a reader.
+constexpr double capture_seconds = 1.0;
+
+// The spectrum's input as the callback captures it: the dry and added mono
+// sums.
+struct Listened {
+  float dry = 0.0F;
+  float added = 0.0F;
+};
 
 [[nodiscard]] double finite_or_zero(float x) noexcept {
   return std::isfinite(x) ? static_cast<double>(x) : 0.0;
@@ -408,7 +419,9 @@ public:
         hold_(std::exp(std::log(hold_fall) / (hold_seconds * sample_rate))),
         spectrum_keep_(
             std::exp(-static_cast<double>(spectrum_hop) / (spectrum_seconds * sample_rate))),
-        fade_step_(1.0 / (base::switch_fade_seconds * sample_rate)), fft_(spectrum_window) {
+        fade_step_(1.0 / (base::switch_fade_seconds * sample_rate)),
+        queue_(static_cast<std::size_t>(std::ceil(capture_seconds * sample_rate))),
+        fft_(spectrum_window) {
     delayed_.assign(static_cast<std::size_t>(design_.latency) + 1, Frame{});
     if (setup.linear) {
       bank_ = std::make_unique<dsp::LinearBank>(dsp::bank_frames(sample_rate), sample_rate);
@@ -548,6 +561,7 @@ public:
     for (std::size_t b = 0; b < n; ++b) {
       excite(bands_[b], split[b], frames, excited[b]);
     }
+    std::array<Listened, edge_dsp::block_frames> listened{};
 
     for (std::size_t i = 0; i < frames; ++i) {
       const double match = match_.next();
@@ -591,10 +605,13 @@ public:
         out[c] = (out[c] - delta * heard_dry[c]) * output;
         output_peak_[c] = std::max(output_peak_[c] * hold_, std::fabs(out[c]));
       }
-      listen(0.5 * (heard_dry[0] + heard_dry[1]), 0.5 * (added[0] + added[1]));
+      listened[i] = {static_cast<float>(0.5 * (heard_dry[0] + heard_dry[1])),
+                     static_cast<float>(0.5 * (added[0] + added[1]))};
       audio[i].left = static_cast<float>(out[0]);
       audio[i].right = static_cast<float>(out[1]);
     }
+    // The spectrum analyses a copy off the callback.
+    (void)queue_.write(frames, [&](std::size_t i) { return listened[i]; });
   }
 
   void reset() noexcept override {
@@ -611,13 +628,32 @@ public:
     position_ = 0;
     input_peak_ = {};
     output_peak_ = {};
-    for (auto& history : history_) {
-      std::ranges::fill(history, 0.0F);
+    queue_.restart();
+  }
+
+  // The spectrum is a display, analysed when read.
+  [[nodiscard]] TelemetryAnalysis analysis() const noexcept override {
+    return TelemetryAnalysis::on_read;
+  }
+
+  void analyse() noexcept override {
+    queue_.read([this] { restart_spectrum(); },
+                [this](const Listened& frame) { listen(frame.dry, frame.added); });
+  }
+
+  [[nodiscard]] std::size_t analysed_telemetry(std::span<float> out,
+                                               std::size_t published) noexcept override {
+    if (published < telemetry::size || out.size() < telemetry::size) {
+      return 0;
     }
-    history_position_ = 0;
-    hop_count_ = 0;
-    input_spectrum_.fill(0.0);
-    added_spectrum_.fill(0.0);
+    const auto reading = [](double power) {
+      return static_cast<float>(base::power_to_db(power, reading_floor_db));
+    };
+    for (std::size_t i = 0; i < spectrum_bins; ++i) {
+      out[telemetry::input_spectrum + i] = reading(input_spectrum_[i]);
+      out[telemetry::added_spectrum + i] = reading(added_spectrum_[i]);
+    }
+    return telemetry::size;
   }
 
   [[nodiscard]] std::size_t telemetry(std::span<float> out) const noexcept override {
@@ -651,10 +687,7 @@ public:
       out[telemetry::band_drive + b] =
           playing ? reading(band.drive_reading) : static_cast<float>(reading_floor_db);
     }
-    for (std::size_t i = 0; i < spectrum_bins; ++i) {
-      out[telemetry::input_spectrum + i] = power_reading(input_spectrum_[i]);
-      out[telemetry::added_spectrum + i] = power_reading(added_spectrum_[i]);
-    }
+    // The spectra come from the analysis (analysed_telemetry).
     return telemetry::size;
   }
 
@@ -824,10 +857,21 @@ private:
     });
   }
 
-  // The spectrum: the dry and added mono sums, every hop.
-  void listen(double dry, double added) noexcept {
-    history_[0][history_position_] = static_cast<float>(dry);
-    history_[1][history_position_] = static_cast<float>(added);
+  // The analysis: a new run (a seek, or a capture left unread too long).
+  void restart_spectrum() noexcept {
+    for (auto& history : history_) {
+      std::ranges::fill(history, 0.0F);
+    }
+    history_position_ = 0;
+    hop_count_ = 0;
+    input_spectrum_.fill(0.0);
+    added_spectrum_.fill(0.0);
+  }
+
+  // The analysis: the dry and added mono sums, a spectrum every hop.
+  void listen(float dry, float added) noexcept {
+    history_[0][history_position_] = dry;
+    history_[1][history_position_] = added;
     history_position_ = (history_position_ + 1) % spectrum_window;
     if (++hop_count_ < spectrum_hop) {
       return;
@@ -882,8 +926,9 @@ private:
   bool primed_ = false;
   std::array<double, 2> input_peak_{};
   std::array<double, 2> output_peak_{};
-  // The dry and added mono sums' last window, a windowed frame and each
-  // one's spectrum.
+  CaptureQueue<Listened> queue_;
+  // The analysis's (off the callback): the dry and added mono sums' last
+  // window, a windowed frame and each one's spectrum.
   warp_dsp::RealFft fft_;
   std::array<std::vector<float>, 2> history_;
   warp_dsp::AlignedBuffer frame_{spectrum_window};

@@ -125,7 +125,8 @@ oscillate_optimize_in_debug(oscillate_note_effects)
 # The native effect platform (ADR-0040): the generic runtime, the registry
 # and the built-in effects. Shape, Press and Ceiling run the classic EQ,
 # compressor and limiter (ADR-0047), so the platform links their DSP.
-add_library(oscillate_native_effects effects/runtime.cpp effects/registry.cpp
+add_library(oscillate_native_effects effects/runtime.cpp effects/analysis_worker.cpp
+                                            effects/registry.cpp
                                             effects/contour.cpp effects/forge.cpp
                                             effects/orbit.cpp effects/relay.cpp
                                             effects/expanse.cpp effects/vista.cpp
