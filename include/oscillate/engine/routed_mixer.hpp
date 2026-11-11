@@ -96,6 +96,7 @@ class SubblockPolicy final {
 public:
   // One block rendered: the deeper levels' serial share of its render time,
   // and its render time per frame.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a share and a time.
   void observe(double serial_share, double ns_per_frame) noexcept;
   [[nodiscard]] bool split() const noexcept { return split_; }
   [[nodiscard]] double serial_share() const noexcept { return serial_share_; }

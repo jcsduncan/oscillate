@@ -424,6 +424,7 @@ bool RoutedPlayback::render(void* context, std::span<engine::StereoFrame> output
          state.used = source;
          return source->prepare_source_bank(fill_block, frames, selected);
        },
+       // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): RoutedSourceFill::fill_node.
        [](void* context, std::size_t node, engine::BlockContext part, std::size_t offset,
           std::size_t frames, engine::AudioWorkerPool* workers) noexcept {
          auto* source = static_cast<FillContext*>(context)->used;

@@ -830,6 +830,7 @@ void RoutedMixer::record_cost(std::size_t level, std::size_t part,
   }
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a part count and a block length.
 void RoutedMixer::update_policy(std::size_t parts, std::size_t frames,
                                 std::chrono::nanoseconds spent) noexcept {
   std::uint64_t serial_ns = 0;
@@ -843,6 +844,7 @@ void RoutedMixer::update_policy(std::size_t parts, std::size_t frames,
                   static_cast<double>(spent.count()) / static_cast<double>(frames));
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a share and a time.
 void SubblockPolicy::observe(double serial_share, double ns_per_frame) noexcept {
   serial_share_ += (serial_share - serial_share_) / share_smoothing_blocks;
   if (serial_share_ < split_leave_share) {

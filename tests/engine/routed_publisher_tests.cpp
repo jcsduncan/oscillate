@@ -1124,31 +1124,32 @@ void staged_fill_renders_inside_the_schedule() {
     std::size_t node_fills = 0;
     std::size_t whole_fills = 0;
   } probe{bank_frames, bank};
-  const RoutedSourceFill fill{&probe, nullptr,
-                              [](void* context, std::uint64_t, BlockContext, std::size_t,
-                                 std::span<const std::span<const StereoFrame>>& selected) noexcept {
-                                auto& state = *static_cast<Probe*>(context);
-                                ++state.whole_fills;
-                                std::ranges::fill(state.frames,
-                                                  StereoFrame{whole_level, whole_level});
-                                selected = state.bank;
-                                return true;
-                              },
-                              [](void* context, std::uint64_t, BlockContext, std::size_t,
-                                 std::span<const std::span<const StereoFrame>>& selected) noexcept {
-                                auto& state = *static_cast<Probe*>(context);
-                                if (state.answer == RoutedPrepareStatus::prepared)
-                                  selected = state.bank;
-                                return state.answer;
-                              },
-                              [](void* context, std::size_t, BlockContext, std::size_t offset,
-                                 std::size_t count, AudioWorkerPool*) noexcept {
-                                auto& state = *static_cast<Probe*>(context);
-                                ++state.node_fills;
-                                std::ranges::fill(state.frames.subspan(offset, count),
-                                                  StereoFrame{staged_level, staged_level});
-                                return !state.fail_node;
-                              }};
+  const RoutedSourceFill fill{
+      &probe, nullptr,
+      [](void* context, std::uint64_t, BlockContext, std::size_t,
+         std::span<const std::span<const StereoFrame>>& selected) noexcept {
+        auto& state = *static_cast<Probe*>(context);
+        ++state.whole_fills;
+        std::ranges::fill(state.frames, StereoFrame{whole_level, whole_level});
+        selected = state.bank;
+        return true;
+      },
+      [](void* context, std::uint64_t, BlockContext, std::size_t,
+         std::span<const std::span<const StereoFrame>>& selected) noexcept {
+        auto& state = *static_cast<Probe*>(context);
+        if (state.answer == RoutedPrepareStatus::prepared)
+          selected = state.bank;
+        return state.answer;
+      },
+      // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): RoutedSourceFill::fill_node.
+      [](void* context, std::size_t, BlockContext, std::size_t offset, std::size_t count,
+         AudioWorkerPool*) noexcept {
+        auto& state = *static_cast<Probe*>(context);
+        ++state.node_fills;
+        std::ranges::fill(state.frames.subspan(offset, count),
+                          StereoFrame{staged_level, staged_level});
+        return !state.fail_node;
+      }};
   std::uint64_t position = 0;
   const auto render = [&] {
     const auto status = publisher.render_block(bank, output, {position, 1}, fill);

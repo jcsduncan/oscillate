@@ -311,6 +311,7 @@ Graph make_graph(Shape shape) {
 }
 
 // A track's tone at an absolute frame; zero for nodes without a source.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a node and a frame.
 StereoFrame tone(RoutingNodeId node, std::uint64_t frame) {
   if (node >= first_group)
     return {};
@@ -344,6 +345,7 @@ struct ScheduledFill {
   std::vector<std::uint64_t> next;
   std::atomic<bool> out_of_order{false};
 
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): RoutedNodeFill::fill.
   static bool fill(void* context, std::size_t node, BlockContext part, std::size_t offset,
                    std::size_t frames, AudioWorkerPool*) noexcept {
     auto& self = *static_cast<ScheduledFill*>(context);

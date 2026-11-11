@@ -575,6 +575,7 @@ bool RoutedAudioSource::render_block(std::span<StereoFrame> output,
          return static_cast<RoutedAudioSource*>(context)->prepare_source_bank(fill_block, frames,
                                                                               selected);
        },
+       // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): RoutedSourceFill::fill_node.
        [](void* context, std::size_t node, engine::BlockContext part, std::size_t offset,
           std::size_t frames, engine::AudioWorkerPool* workers) noexcept {
          return static_cast<RoutedAudioSource*>(context)->fill_node(node, part, offset, frames,
