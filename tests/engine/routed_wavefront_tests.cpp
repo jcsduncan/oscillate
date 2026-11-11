@@ -383,6 +383,9 @@ struct ScheduledFill {
   }
 };
 
+// The parts the last render() cut its last block into.
+std::size_t last_render_parts = 0;
+
 std::vector<StereoFrame> render(const Setup& setup) {
   auto graph = make_graph(setup.shape);
   RoutedMixerLimits limits{
@@ -453,6 +456,7 @@ std::vector<StereoFrame> render(const Setup& setup) {
     rendered.insert(rendered.end(), output.begin(), output.end());
   }
   require(!fill.out_of_order.load(), "a node's parts were filled out of order");
+  last_render_parts = mixer->last_subblocks();
   if (pool)
     pool->stop_owned_threads();
   return rendered;
@@ -500,7 +504,15 @@ void session_parts_match_whole_blocks() { parts_match_whole_blocks(Shape::sessio
 void session_with_automation_matches() { parts_match_whole_blocks(Shape::session, true); }
 void nested_groups_match_whole_blocks() { parts_match_whole_blocks(Shape::nested, true); }
 void flat_mix_matches_whole_blocks() { parts_match_whole_blocks(Shape::flat, false); }
-void plugins_render_whole_in_a_split_block() { parts_match_whole_blocks(Shape::plugin, true); }
+void plugins_render_whole_in_a_split_block() {
+  parts_match_whole_blocks(Shape::plugin, true);
+  // The rest of the graph still runs in parts around the plugins.
+  constexpr std::size_t part = 64;
+  const Setup split{Shape::plugin, largest_block, RoutedSubblocks::fixed, part, some_helpers,
+                    true,          true};
+  (void)render(split);
+  REQUIRE_EQ(last_render_parts, largest_block / part, "a graph with plugins was not split");
+}
 
 void staged_master_matches_whole_blocks() {
   Chain::staged_runs = 0;
