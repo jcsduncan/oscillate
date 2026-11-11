@@ -46,7 +46,7 @@ After ADR-0125 the heavy master chain cost 2.56 ms of serial time per 1024-frame
      - the soft threshold's spread is summed four ways;
      - only Low Latency keeps the previous filters;
      - a fully wet display skips its dB round trip.
-6. **The gate is tightened** to lock the gain in (see Measured).
+6. **The gate is tightened** to lock the gain in. The master fails above 10% of the period (was 20%), and the light reference's p99 at 1024 frames fails above 15% (was 35%).
 
 ## Measured
 
@@ -78,6 +78,46 @@ i7-10700K, GCC 15.2, Release, one core unless stated.
 | **Chain** | **0.641** | **0.491** | **1.274** | **0.975** | **2.703** | **1.936** |
 
 Temper went from 1.095 ms to 0.212 ms per 1024 frames, and the chain's serial time fell by 28%. The remaining serial time is mostly Ceiling and Gild, which are oversampled waveshapers and use no transform.
+
+`oscillate_effects_bench`: one instance's share of a core, every preset, 128-frame blocks, before and after. Unlisted presets of these effects moved by 0.1 points or less.
+
+| Device | Before | After |
+| --- | ---: | ---: |
+| Temper (16 presets) | 3.5–5.3% | 0.8–1.1% |
+| Temper (Live Low Latency) | 3.3% | 1.9% |
+| Keel | 1.0% | 0.8–0.9% |
+| Strata (Master polish, linear phase) | 3.3% | 1.6% |
+| Strike (Master Impact, linear phase) | 4.2% | 2.7% |
+| Tune (Instrument; Bass) | 0.5%; 1.1% | 0.1%; 0.2% |
+| Shape | 0.5–0.7% | 0.4–0.6% |
+| Cast | 1.7–2.1% | 1.5–1.9% |
+
+Gild, Scope and Lens did not change measurably: Gild's cost is its oversampled curves, Scope's transform runs twice a second, and Lens analyses off the callback.
+
+Uneven blocks shrink most where a whole transform once landed in one block. In the 99th-percentile block, as a share of its period (`oscillate_keel_bench`, `oscillate_strike_bench`):
+
+| Case | Before | After |
+| --- | ---: | ---: |
+| Keel Default, 1 instance, 64 frames | 2.3% | 1.4% |
+| Keel Default, 16 instances, 64 frames | 39.2% | 24.2% |
+| Keel Reference (keyed), 16 instances, 64 frames | 70.6% | 40.0% |
+| Strike Master Impact, 1 instance, 64 frames | 16.9% | 5.0% |
+| Strike Master Impact, 16 instances, 128 frames | 149.8% | 53.3% |
+
+The reference player, light and heavy references with the heavy master, fake callback, one helper, pinned to two cores; runs before and after taken back to back on the same machine:
+
+| Reference, frames | Master before | Master after | p99 before | p99 after | Process CPU before | after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| light, 256 | 0.76 ms (14.3%) | 0.47 ms (8.8%) | 30.1% | 17.0% | 22.3% | 16.5% |
+| light, 512 | 1.39 ms (13.0%) | 0.93 ms (8.7%) | 26.4% | 17.9% | 20.0% | 15.9% |
+| light, 1024 | 2.67 ms (12.5%) | 2.06 ms (9.7%) | 18.1% | 15.5% | 19.2% | 16.6% |
+| heavy, 256 | 0.68 ms (12.8%) | 0.51 ms (9.5%) | 100.4% | 106.9% | 152.6% | 155.9% |
+| heavy, 512 | 1.35 ms (12.6%) | 0.93 ms (8.7%) | 95.0% | 92.9% | 150.4% | 147.6% |
+| heavy, 1024 | 2.67 ms (12.5%) | 1.92 ms (9.0%) | 93.6% | 98.3% | 148.9% | 150.6% |
+
+On two cores the heavy reference's tracks fill the period, so its p99 and CPU are set by them, not the master, and vary from run to run by more than the master changed.
+
+On a hosted four-core runner (three helpers), the master's share was 9.2–9.7% under ADR-0125. It is now 6.9–7.7% at every size, light or heavy. The light reference's p99 at 1024 frames went from 11.5% to 9.9%, and the heavy reference had no late blocks. The gate now fails above 10% for the master and 15% for the p99. That is about 30% over what the runners measure, and under what the master cost before.
 
 ## Consequences
 
