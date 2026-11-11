@@ -101,49 +101,59 @@ jobs:
   tsan:
     name: TSan (engine, routed playback, worker pool)
     runs-on: ubuntu-latest
-    container: ghcr.io/jcsduncan/oscillate-ci@sha256:21fcc1dfeb84aeec44c07f0e1716477ade8e701ab433dc274e0226ef80bab7a4 # base
     timeout-minutes: 240
     env:
+      CI_IMAGE: ghcr.io/jcsduncan/oscillate-ci@sha256:21fcc1dfeb84aeec44c07f0e1716477ade8e701ab433dc274e0226ef80bab7a4 # base
       BUILD_DIR: build/tsan
       CCACHE_MAXSIZE: 1G
       OSCILLATE_BUILD_JOBS: 4
+      SANITIZER_LOGS: sanitizer-logs
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Dependencies from the CI image
-        run: |
-          scripts/ci/ci-image-deps.sh base
-          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
-          echo "SANITIZER_LOGS=$GITHUB_WORKSPACE/sanitizer-logs" >> "$GITHUB_ENV"
+      # Hosted runner kernels randomise mmap with more bits than TSan's
+      # memory layout allows. TSan would re-exec itself with ASLR off, which a
+      # container cannot do, so the host lowers the entropy and the job runs
+      # the image with docker run instead of as a job container.
+      - name: Lower mmap randomisation for TSan
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .ccache
           key: ccache-tsan-${{ github.run_id }}
           restore-keys: ccache-tsan-
       # The preset scales budgets by 10; hosted runners need a further 3x.
-      - name: Configure
-        run: cmake --preset tsan -DOSCILLATE_TEST_TIMEOUT_SCALE=30 -DOSCILLATE_WARNINGS_AS_ERRORS=OFF
       # The engine area (graph publication, the audio worker pool, routed
       # mixing and PDC) and the application's routed playback cases.
-      - name: Build the engine and routed playback tests
-        run: scripts/build.sh "$BUILD_DIR" --target tests/engine/all oscillate_application_routed_playback_tests
+      - name: Build and test in the CI image
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/w" -w /w \
+            -e BUILD_DIR -e CCACHE_MAXSIZE -e OSCILLATE_BUILD_JOBS \
+            -e CCACHE_DIR=/w/.ccache -e SANITIZER_LOGS=/w/sanitizer-logs \
+            -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+            "$CI_IMAGE" bash -euo pipefail -c '
+              # The container runs as root; hand the reports, logs and cache
+              # back to the runner user so the host steps can read them.
+              trap "chown -R \"\$HOST_UID:\$HOST_GID\" /w/sanitizer-logs /w/build /w/.ccache 2>/dev/null || true" EXIT
+              git config --global --add safe.directory /w
+              scripts/ci/ci-image-deps.sh base
+              cmake --preset tsan -DOSCILLATE_TEST_TIMEOUT_SCALE=30 -DOSCILLATE_WARNINGS_AS_ERRORS=OFF
+              scripts/build.sh "$BUILD_DIR" --target tests/engine/all oscillate_application_routed_playback_tests
+              ccache --show-stats || true
+              test "$(ctest --test-dir "$BUILD_DIR" -N -L "^engine$" -R "^audio_worker_pool_contract$" | grep -c "^ *Test *#")" -eq 1
+              mkdir -p "$SANITIZER_LOGS"
+              export TSAN_OPTIONS="second_deadlock_stack=1:history_size=4:log_path=$SANITIZER_LOGS/tsan:"
+              status=0
+              ctest --preset tsan -L "^engine$" -j4 || status=1
+              ctest --preset tsan -R "^application_routed_playback\." -j4 || status=1
+              exit "$status"
+            '
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: always()
         with:
           path: .ccache
           key: ccache-tsan-${{ github.run_id }}
-      - name: The worker pool suite is registered
-        run: |
-          test "$(ctest --test-dir "$BUILD_DIR" -N -L '^engine$' -R '^audio_worker_pool_contract$' | grep -c '^ *Test *#')" -eq 1
-      - name: Tests
-        run: |
-          mkdir -p "$SANITIZER_LOGS"
-          export TSAN_OPTIONS="second_deadlock_stack=1:history_size=4:log_path=$SANITIZER_LOGS/tsan:"
-          status=0
-          ctest --preset tsan -L '^engine$' -j4 || status=1
-          ctest --preset tsan -R '^application_routed_playback\.' -j4 || status=1
-          exit "$status"
       - name: Sanitizer reports
         if: failure()
         run: |
