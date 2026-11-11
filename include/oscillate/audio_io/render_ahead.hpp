@@ -179,6 +179,7 @@ private:
   Slot* capturing_ = nullptr;
   bool capture_frozen_ = false;
   std::size_t capture_played_parts_ = 0;
+  std::size_t capture_held_frames_ = 0; // the held part's silence, after the rest
   std::atomic<std::uint64_t> ahead_blocks_{0};
   std::atomic<std::uint64_t> just_in_time_blocks_{0};
   std::atomic<std::uint64_t> empty_window_blocks_{0};

@@ -631,6 +631,9 @@ void ProjectBridge::create_live_input() {
   // Live input plays just in time (ADR-0128).
   live_note_hold_.setSingleShot(true);
   connect(&live_note_hold_, &QTimer::timeout, this, [this] {
+    // A key still down keeps live input on; its release restarts the wait.
+    if (!live_note_tracks_.empty())
+      return;
     live_notes_held_ = false;
     apply_render_ahead();
   });

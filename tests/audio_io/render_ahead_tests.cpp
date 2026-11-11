@@ -16,6 +16,7 @@
 #include <span>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -42,6 +43,13 @@ constexpr std::size_t spike_every = 16;
 // How long a case waits for the producer before it counts as a hang (not a
 // timing claim).
 constexpr auto hang_limit = std::chrono::seconds{10};
+// A loop whose wrap falls inside the fifth block: its first 184 frames play
+// up to the loop end, and the source holds the wrapped 72.
+constexpr std::size_t frames_before_hold = 184;
+constexpr std::size_t held_wrap_block = 4;
+constexpr std::uint64_t held_loop_end = held_wrap_block * block + frames_before_hold;
+// Any nonzero time the device reports a block's first frame heard at.
+constexpr std::int64_t heard_at_ns = 1'000'000'000;
 
 // Writes each frame's own project position, scaled by a gain that stands
 // for any edit (read when the block renders), and can stall like a heavy
@@ -68,6 +76,66 @@ struct Source {
   }
   [[nodiscard]] StereoRenderSource source() noexcept { return {this, &Source::render}; }
 };
+
+// Holds once, as a source priming its clips does, on the first part that
+// starts at the loop start.
+struct HoldingSource {
+  bool hold_pending = false;
+  bool held_once = false;
+
+  static bool render(void* context, std::span<engine::StereoFrame> output,
+                     engine::BlockContext block_context) noexcept {
+    auto& self = *static_cast<HoldingSource*>(context);
+    self.hold_pending = !self.held_once && block_context.project_sample_position == loop_start;
+    self.held_once = self.held_once || self.hold_pending;
+    // A held part is silence.
+    const auto gain = self.hold_pending ? 0.0F : 1.0F;
+    for (std::size_t frame = 0; frame < output.size(); ++frame) {
+      const auto position = static_cast<float>(block_context.project_sample_position + frame);
+      output[frame] = {position * gain, position * gain};
+    }
+    return true;
+  }
+  static bool freeze(void* context) noexcept {
+    auto& self = *static_cast<HoldingSource*>(context);
+    return std::exchange(self.hold_pending, false);
+  }
+  [[nodiscard]] StereoRenderSource source() noexcept {
+    return {this, &HoldingSource::render, &HoldingSource::freeze};
+  }
+};
+
+// Stalls every render while the gate is closed, as a heavy block does.
+struct GatedSource {
+  std::atomic<bool> closed{false};
+  std::atomic<bool> stalled{false};
+
+  static bool render(void* context, std::span<engine::StereoFrame> output,
+                     engine::BlockContext block_context) noexcept {
+    auto& self = *static_cast<GatedSource*>(context);
+    while (self.closed.load(std::memory_order_acquire)) {
+      self.stalled.store(true, std::memory_order_release);
+      std::this_thread::yield();
+    }
+    for (std::size_t frame = 0; frame < output.size(); ++frame) {
+      const auto position = static_cast<float>(block_context.project_sample_position + frame);
+      output[frame] = {position, position};
+    }
+    return true;
+  }
+  [[nodiscard]] StereoRenderSource source() noexcept { return {this, &GatedSource::render}; }
+};
+
+// Waits, at most hang_limit, until `ready` holds.
+template <typename Ready> bool wait_until(Ready ready) {
+  const auto give_up = std::chrono::steady_clock::now() + hang_limit;
+  while (!ready()) {
+    if (std::chrono::steady_clock::now() >= give_up)
+      return false;
+    std::this_thread::yield();
+  }
+  return true;
+}
 
 struct Device {
   std::vector<engine::StereoFrame> scratch = std::vector<engine::StereoFrame>(max_block);
@@ -208,6 +276,67 @@ void a_load_spike_is_absorbed() {
   REQUIRE_EQ(ahead.status().just_in_time_blocks, 1, "a spike reached the callback");
 }
 
+// While the producer cannot render at all, the device plays a stall's worth
+// of blocks straight from the window, without waiting for any block to be
+// replaced.
+void a_stall_plays_from_the_reserve() {
+  GatedSource source;
+  TransportCursor cursor;
+  RenderAhead ahead(source.source(), cursor, max_block);
+  ahead.set_limit(generous_limit_ms, sample_rate);
+  ahead.start_owned_thread();
+  Device device;
+  // The first block tells the producer the device's block size.
+  device.play(ahead, 1, false);
+  const auto stall_frames = static_cast<std::size_t>(spike_periods) * block;
+  require(wait_until([&] { return ahead.status().buffered_frames >= stall_frames; }),
+          "the window never held a stall's worth of audio");
+  source.closed.store(true, std::memory_order_release);
+  for (int index = 0; index < spike_periods; ++index) {
+    // The gate is closed, so these frames were rendered before the stall.
+    REQUIRE_GE(ahead.status().buffered_frames, block, "the reserve ran out during the stall");
+    device.play(ahead, 1, false);
+    if (index == 0)
+      require(wait_until([&] { return source.stalled.load(std::memory_order_acquire); }),
+              "the producer never reached the stall");
+  }
+  source.closed.store(false, std::memory_order_release);
+  ahead.stop_owned_thread();
+  require_continuous(device.left, 0, device.left.size(), 0, "through the stall");
+}
+
+// A block whose loop wrap holds plays the part before the wrap from its
+// first frame, and the device hears it there.
+void a_part_before_a_held_wrap_keeps_its_place() {
+  HoldingSource source;
+  TransportCursor cursor;
+  require(cursor.request_loop_wrap_at(held_loop_end, loop_start), "the loop wrap was not queued");
+  RenderAhead ahead(source.source(), cursor, max_block);
+  ahead.set_limit(generous_limit_ms, sample_rate);
+  ahead.start_owned_thread();
+  Device device;
+  device.play(ahead, 1, false);
+  for (std::size_t index = 1; index <= held_wrap_block; ++index) {
+    require(wait_until([&] { return ahead.status().buffered_frames >= block; }),
+            "the producer never rendered the block");
+    require(ahead.render(true, device.scratch, device.output, {heard_at_ns, sample_rate}) ==
+                BlockResult::rendered,
+            "a block failed to render");
+  }
+  ahead.stop_owned_thread();
+  REQUIRE_EQ(ahead.status().just_in_time_blocks, 1, "the wrap block was not rendered ahead");
+  for (std::size_t frame = 0; frame < frames_before_hold; ++frame)
+    REQUIRE_EQ(device.output[frame * stereo], static_cast<float>(held_wrap_block * block + frame),
+               "the part before the hold");
+  for (std::size_t frame = frames_before_hold; frame < block; ++frame)
+    REQUIRE_EQ(device.output[frame * stereo], 0.0F, "the hold's silence");
+  const auto heard = cursor.audible_point();
+  require(heard.has_value(), "no audible point was published");
+  REQUIRE_EQ(heard->sample, held_wrap_block * block, "the wrong sample was heard first");
+  REQUIRE_EQ(heard->heard_ns, heard_at_ns, "the part before the hold was heard late");
+  REQUIRE_EQ(ahead.audible_position().next_sample, held_loop_end, "the wrong audible position");
+}
+
 void live_input_renders_just_in_time() {
   Source source;
   TransportCursor cursor;
@@ -318,6 +447,8 @@ int main(int argc, char** argv) {
        {"an_edit_is_heard_within_the_window_without_a_gap",
         an_edit_is_heard_within_the_window_without_a_gap},
        {"a_load_spike_is_absorbed", a_load_spike_is_absorbed},
+       {"a_stall_plays_from_the_reserve", a_stall_plays_from_the_reserve},
+       {"a_part_before_a_held_wrap_keeps_its_place", a_part_before_a_held_wrap_keeps_its_place},
        {"live_input_renders_just_in_time", live_input_renders_just_in_time},
        {"stop_fades_and_renders_nothing_more", stop_fades_and_renders_nothing_more},
        {"a_quiesced_seek_clears_the_window", a_quiesced_seek_clears_the_window},

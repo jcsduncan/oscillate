@@ -852,7 +852,8 @@ private:
   // (ADR-0128).
   void apply_render_ahead();
   // A note played live from the piano roll keeps playback just in time
-  // until no note has been played for live_note_hold_ms (ADR-0128).
+  // while any key is down and for live_note_hold_ms after the last one is
+  // let go (ADR-0128).
   static constexpr int live_note_hold_ms = 10'000;
   bool live_notes_held_ = false;
   QTimer live_note_hold_;

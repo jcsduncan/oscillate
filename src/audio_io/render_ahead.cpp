@@ -52,9 +52,10 @@ bool RenderAhead::capture_frozen(void* context) noexcept {
       self.source_.freeze_cursor != nullptr && self.source_.freeze_cursor(self.source_.context);
   if (frozen) {
     self.capture_frozen_ = true;
-    // A held part plays silence and replays later: it is not heard here.
+    // A held part plays silence and replays later: it is not heard here,
+    // but its silence still follows the parts before it.
     if (auto* slot = self.capturing_; slot != nullptr && slot->part_count != 0)
-      --slot->part_count;
+      self.capture_held_frames_ += slot->parts[--slot->part_count].frames;
   } else {
     ++self.capture_played_parts_;
   }
@@ -126,6 +127,7 @@ bool RenderAhead::produce_one() noexcept {
   capturing_ = &slot;
   capture_frozen_ = false;
   capture_played_parts_ = 0;
+  capture_held_frames_ = 0;
   const StereoRenderSource capturing{this, &RenderAhead::capture, &RenderAhead::capture_frozen,
                                      source_.workers, nullptr};
   const auto result = [&] {
@@ -146,8 +148,9 @@ bool RenderAhead::produce_one() noexcept {
       return false;
     }
   }
-  // A count-in plays before the parts; the parts fill the rest in order.
-  std::size_t rendered = 0;
+  // A count-in plays before the parts and a hold's silence after them; the
+  // parts fill the frames between, in order.
+  std::size_t rendered = capture_held_frames_;
   for (std::size_t part = 0; part < slot.part_count; ++part)
     rendered += slot.parts[part].frames;
   auto offset = frames - std::min(frames, rendered);
