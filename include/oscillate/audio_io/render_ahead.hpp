@@ -178,6 +178,7 @@ private:
   // Producer-owned capture of the block being rendered.
   Slot* capturing_ = nullptr;
   bool capture_frozen_ = false;
+  std::size_t capture_played_parts_ = 0;
   std::atomic<std::uint64_t> ahead_blocks_{0};
   std::atomic<std::uint64_t> just_in_time_blocks_{0};
   std::atomic<std::uint64_t> empty_window_blocks_{0};

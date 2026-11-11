@@ -851,6 +851,11 @@ private:
   // time while live input plays: the computer keyboard on or recording armed
   // (ADR-0128).
   void apply_render_ahead();
+  // A note played live from the piano roll keeps playback just in time
+  // until no note has been played for live_note_hold_ms (ADR-0128).
+  static constexpr int live_note_hold_ms = 10'000;
+  bool live_notes_held_ = false;
+  QTimer live_note_hold_;
   void poll_live_audio_edit();
   void submit_playback_edit();
   void audition_edited_note(const QString& clip_id, const QString& note_id, std::uint8_t velocity);

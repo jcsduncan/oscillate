@@ -578,11 +578,12 @@ bool ProjectBridge::request_close() {
 }
 
 void ProjectBridge::apply_render_ahead() {
-  if (!routed_playback_)
+  auto* run = routed_run();
+  if (run == nullptr)
     return;
-  routed_playback_->set_render_ahead(static_cast<std::uint32_t>(audio_output_->render_ahead_ms()));
-  routed_playback_->set_live_input((computer_keyboard_ && computer_keyboard_->enabled()) ||
-                                   (recording_ && recording_->armed()));
+  run->set_render_ahead(static_cast<std::uint32_t>(audio_output_->render_ahead_ms()));
+  run->set_live_input((computer_keyboard_ && computer_keyboard_->enabled()) ||
+                      (recording_ && recording_->armed()) || live_notes_held_);
 }
 
 } // namespace oscillate::quick

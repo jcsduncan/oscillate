@@ -117,8 +117,8 @@ std::optional<RoutedNodeMeterReading> RoutedNodeMeters::latest(std::size_t node)
   return read(slot.windows[(published - 1) % history]);
 }
 
-std::optional<RoutedNodeMeterReading>
-RoutedNodeMeters::heard(std::size_t node, HeardPosition heard) const noexcept {
+std::optional<RoutedNodeMeterReading> RoutedNodeMeters::heard(std::size_t node,
+                                                              HeardPosition heard) const noexcept {
   if (node >= size_)
     return std::nullopt;
   const auto& slot = slots_[node];

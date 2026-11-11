@@ -629,6 +629,11 @@ void ProjectBridge::create_live_input() {
         recording_->note_off(key);
       });
   // Live input plays just in time (ADR-0128).
+  live_note_hold_.setSingleShot(true);
+  connect(&live_note_hold_, &QTimer::timeout, this, [this] {
+    live_notes_held_ = false;
+    apply_render_ahead();
+  });
   connect(computer_keyboard_.get(), &ComputerKeyboard::changed, this,
           [this] { apply_render_ahead(); });
   connect(recording_.get(), &RecordingController::changed, this, [this] { apply_render_ahead(); });

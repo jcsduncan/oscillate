@@ -287,6 +287,7 @@ void AudioOutputController::select_buffer_frames(int frames) {
   QSettings{}.setValue(QStringLiteral("audioBufferFrames"), frames);
   report(QStringLiteral("%1-frame request saved for next playback").arg(frames));
   host_.settings_changed();
+  emit renderAheadChanged();
 }
 
 QVariantList AudioOutputController::render_ahead_choices() {

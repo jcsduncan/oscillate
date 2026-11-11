@@ -39,6 +39,9 @@ constexpr float edited_gain = 0.5F;
 // A load spike: this many periods long, every spike_every-th render.
 constexpr int spike_periods = 3;
 constexpr std::size_t spike_every = 16;
+// How long a case waits for the producer before it counts as a hang (not a
+// timing claim).
+constexpr auto hang_limit = std::chrono::seconds{10};
 
 // Writes each frame's own project position, scaled by a gain that stands
 // for any edit (read when the block renders), and can stall like a heavy
@@ -74,9 +77,16 @@ struct Device {
   std::chrono::steady_clock::duration longest{};
   std::size_t late = 0;
 
-  void play(RenderAhead& ahead, std::size_t blocks, bool paced = true) {
+  void play(RenderAhead& ahead, std::size_t blocks, bool paced = true, bool when_full = false) {
     auto deadline = std::chrono::steady_clock::now();
     for (std::size_t index = 0; index < blocks; ++index) {
+      // Plays each block only once the producer has one ready: the window,
+      // not the scheduler, is what the case checks.
+      if (when_full) {
+        const auto give_up = std::chrono::steady_clock::now() + hang_limit;
+        while (ahead.status().buffered_frames < block && std::chrono::steady_clock::now() < give_up)
+          std::this_thread::yield();
+      }
       const auto started = std::chrono::steady_clock::now();
       require(ahead.render(true, scratch, output, {}) == BlockResult::rendered,
               "a block failed to render");
@@ -188,10 +198,14 @@ void a_load_spike_is_absorbed() {
   ahead.set_limit(generous_limit_ms, sample_rate);
   ahead.start_owned_thread();
   Device device;
-  device.play(ahead, played_blocks);
+  // The first block renders just in time, before the producer knows the
+  // device's block size; every later one, spikes included, comes from the
+  // window.
+  device.play(ahead, 1, false);
+  device.play(ahead, played_blocks - 1, false, true);
   ahead.stop_owned_thread();
   require_continuous(device.left, 0, device.left.size(), 0, "under spikes");
-  REQUIRE_LE(device.late, 1, "the window did not absorb the spikes");
+  REQUIRE_EQ(ahead.status().just_in_time_blocks, 1, "a spike reached the callback");
 }
 
 void live_input_renders_just_in_time() {

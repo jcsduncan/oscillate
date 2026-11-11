@@ -28,6 +28,7 @@ on:
       - src/native_dsp/dsp/**
       - src/engine/**
       - src/audio_io/**
+      - include/oscillate/audio_io/**
       - src/track_chain/**
       - src/application/routed_audio_source.cpp
 

@@ -48,9 +48,17 @@ bool RenderAhead::capture(void* context, std::span<engine::StereoFrame> output,
 
 bool RenderAhead::capture_frozen(void* context) noexcept {
   auto& self = *static_cast<RenderAhead*>(context);
-  self.capture_frozen_ =
+  const bool frozen =
       self.source_.freeze_cursor != nullptr && self.source_.freeze_cursor(self.source_.context);
-  return self.capture_frozen_;
+  if (frozen) {
+    self.capture_frozen_ = true;
+    // A held part plays silence and replays later: it is not heard here.
+    if (auto* slot = self.capturing_; slot != nullptr && slot->part_count != 0)
+      --slot->part_count;
+  } else {
+    ++self.capture_played_parts_;
+  }
+  return frozen;
 }
 
 bool RenderAhead::acquire_render() noexcept {
@@ -102,7 +110,8 @@ bool RenderAhead::produce_one() noexcept {
   const auto write = write_.load(std::memory_order_relaxed);
   // A seek queued since the last block: the window holds the old position.
   const auto discontinuities = transport_.discontinuities();
-  if (discontinuities != seen_discontinuities_) {
+  const bool seen_seek = discontinuities != seen_discontinuities_;
+  if (seen_seek) {
     seen_discontinuities_ = discontinuities;
     discard_before_.store(write, std::memory_order_release);
   }
@@ -116,6 +125,7 @@ bool RenderAhead::produce_one() noexcept {
   slot.part_count = 0;
   capturing_ = &slot;
   capture_frozen_ = false;
+  capture_played_parts_ = 0;
   const StereoRenderSource capturing{this, &RenderAhead::capture, &RenderAhead::capture_frozen,
                                      source_.workers, nullptr};
   const auto result = [&] {
@@ -125,11 +135,16 @@ bool RenderAhead::produce_one() noexcept {
   }();
   capturing_ = nullptr;
   if (capture_frozen_) {
-    // The source holds (a seek primes its clips): the transport did not move,
-    // so nothing is kept; the callback renders the hold until it lets go.
+    // The source holds (a seek primes its clips): the callback renders the
+    // hold until it lets go.
     held_.store(true, std::memory_order_release);
-    release_render();
-    return false;
+    // Held from its first part, the block moved nothing and is not kept. A
+    // part before the hold (a loop's last frames) did play: the block keeps
+    // it, followed by the hold's silence, as the callback would have.
+    if (capture_played_parts_ == 0) {
+      release_render();
+      return false;
+    }
   }
   // A count-in plays before the parts; the parts fill the rest in order.
   std::size_t rendered = 0;
@@ -146,8 +161,13 @@ bool RenderAhead::produce_one() noexcept {
     // A seek applied by this block: the blocks before it are the old
     // position's.
     const auto first = slot.parts[0].context.state_generation();
-    if (last_processing_generation_ != 0 && first != last_processing_generation_)
+    if (last_processing_generation_ != 0 && first != last_processing_generation_) {
       discard_before_.store(write, std::memory_order_release);
+      // A seek queued after the count was read and applied by this block:
+      // counted now, so the next block does not drop this one.
+      if (!seen_seek)
+        seen_discontinuities_ = std::min(transport_.discontinuities(), discontinuities + 1);
+    }
     last_processing_generation_ = slot.parts[slot.part_count - 1].context.state_generation();
   }
   write_.store(write + 1, std::memory_order_release);

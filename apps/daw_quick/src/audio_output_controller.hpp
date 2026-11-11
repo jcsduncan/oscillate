@@ -110,7 +110,11 @@ public:
   // Takes effect at once, also while playing.
   Q_INVOKABLE void select_render_ahead(int milliseconds);
   // Playback started, stopped or changed: the status and gates may differ.
-  void notify_playback() { emit playbackChanged(); }
+  void notify_playback() {
+    emit playbackChanged();
+    // The edit-delay bound follows the buffer the device plays.
+    emit renderAheadChanged();
+  }
 
 signals:
   void audioDevicesChanged();

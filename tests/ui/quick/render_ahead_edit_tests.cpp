@@ -45,6 +45,7 @@ constexpr std::size_t stereo = 2;
 constexpr std::size_t warm_windows = 2;
 constexpr std::uint32_t sample_rate = 48'000;
 constexpr std::size_t microseconds_per_second = 1'000'000;
+constexpr std::size_t milliseconds_per_second = 1'000;
 constexpr auto period = std::chrono::microseconds{block * microseconds_per_second / sample_rate};
 constexpr int render_ahead_ms = 100;
 constexpr std::size_t most_blocks = 1 << 16;
@@ -52,6 +53,15 @@ constexpr int start_wait_ms = 15'000;
 constexpr int edit_wait_ms = 10'000;
 constexpr float silent_peak = 1e-4F;
 constexpr float audible_peak = 1e-3F;
+// The window holds whole blocks up to the limit, at most RenderAhead's
+// most; an edit reaches the device within that and the block playing.
+constexpr std::size_t limit_blocks =
+    std::size_t{render_ahead_ms} * sample_rate / milliseconds_per_second / block;
+constexpr std::size_t expected_edit_blocks =
+    std::min(limit_blocks, audio::RenderAhead::max_window_blocks) + 1;
+// A note's release after its clip is deleted, before the device is silent.
+constexpr std::size_t release_seconds = 2;
+constexpr std::size_t release_blocks = release_seconds * sample_rate / block;
 // A level lowered by the edit: under this share of what played before.
 constexpr float lowered_share = 0.5F;
 // Trim's "Gain -6 dB" preset (trim_presets.hpp), and how far a -6 dB stage
@@ -223,7 +233,7 @@ void edits_are_heard_within_the_window() {
             std::string(what) +
                 " never reached the graph: " + bridge.playback_status().toStdString());
     const auto applied = output.blocks();
-    const auto bound = applied + output.worst_edit_blocks() + settle_blocks;
+    const auto bound = applied + expected_edit_blocks + settle_blocks;
     require(QTest::qWaitFor([&] { return output.blocks() > bound; }, edit_wait_ms),
             std::string(what) + ": the device stopped");
     // A routing or clip edit changes no level it can be told by: it must
@@ -315,6 +325,16 @@ void edits_are_heard_within_the_window() {
   const auto clip_id = QString::fromStdString(clip.to_string());
   heard_within("adding a note", [&] { bridge.add_note(clip_id, 1, note_key); }, {});
   heard_within("deleting the clip", [&] { bridge.delete_midi_clip(clip_id); }, {});
+  // The clip's notes are gone: the device falls silent after their release.
+  const auto deleted_at = output.blocks();
+  require(QTest::qWaitFor(
+              [&] { return output.blocks() > deleted_at + expected_edit_blocks + release_blocks; },
+              edit_wait_ms),
+          "the device stopped after the clip was deleted");
+  bool fell_silent = false;
+  for (auto at = deleted_at; at <= deleted_at + expected_edit_blocks + release_blocks; ++at)
+    fell_silent = fell_silent || output.peak(at) < silent_peak;
+  require(fell_silent, "the deleted clip went on playing");
 
   require(output.ahead_blocks() > output.blocks() / 2,
           "playback did not render ahead: " + output.describe());
