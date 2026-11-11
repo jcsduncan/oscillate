@@ -113,15 +113,27 @@ void ChainRuntime::process_with_sidechain(std::span<engine::StereoFrame> stereo,
 void ChainRuntime::process_from(std::size_t first, std::span<engine::StereoFrame> stereo,
                                 std::span<const engine::StereoFrame> detector,
                                 engine::BlockContext context) noexcept {
-  for (std::size_t index = first; index < stages_.size(); ++index) {
-    boundaries_[index].record(stereo);
-    if (detector_ == index && !detector.empty())
-      static_cast<engine::SidechainProcessorRuntime&>(*stages_[index])
-          .process_with_sidechain(stereo, detector, context);
-    else
-      stages_[index]->process(stereo, context);
-  }
-  boundaries_.back().record(stereo);
+  for (std::size_t index = first; index < stages_.size(); ++index)
+    process_stage(index, stereo, detector, context);
+  // With no stage left to run, the output is the input as it stands.
+  if (first >= stages_.size())
+    boundaries_.back().record(stereo);
+}
+
+void ChainRuntime::process_stage(std::size_t stage, std::span<engine::StereoFrame> stereo,
+                                 std::span<const engine::StereoFrame> detector,
+                                 engine::BlockContext context) noexcept {
+  if (stage >= stages_.size())
+    return;
+  boundaries_[stage].record(stereo);
+  if (detector_ == stage && !detector.empty())
+    static_cast<engine::SidechainProcessorRuntime&>(*stages_[stage])
+        .process_with_sidechain(stereo, detector, context);
+  else
+    stages_[stage]->process(stereo, context);
+  // The chain's output, recorded by its last stage.
+  if (stage + 1 == stages_.size())
+    boundaries_.back().record(stereo);
 }
 
 bool ChainRuntime::contains(const engine::ProcessorRuntime* stage) const noexcept {

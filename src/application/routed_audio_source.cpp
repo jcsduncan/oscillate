@@ -63,6 +63,9 @@ RoutedAudioSource::RoutedAudioSource(RoutedPlaybackControl& control, std::vector
   }
   for (std::size_t index = 0; index < synths_.size(); ++index)
     slot_work_[synths_[index].slot_index].synths.push_back(index);
+  node_slots_.assign(topology_size, no_slot);
+  for (std::size_t index = 0; index < slots_.size(); ++index)
+    node_slots_[slots_[index].index] = index;
 }
 
 RoutedAudioSource::~RoutedAudioSource() {
@@ -566,6 +569,17 @@ bool RoutedAudioSource::render_block(std::span<StereoFrame> output,
           std::span<const std::span<const StereoFrame>>& selected) noexcept {
          auto& self = *static_cast<RoutedAudioSource*>(context);
          return self.fill_source_bank(fill_block, frames, selected, self.render_workers_);
+       },
+       [](void* context, std::uint64_t, engine::BlockContext fill_block, std::size_t frames,
+          std::span<const std::span<const StereoFrame>>& selected) noexcept {
+         return static_cast<RoutedAudioSource*>(context)->prepare_source_bank(fill_block, frames,
+                                                                              selected);
+       },
+       // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): RoutedSourceFill::fill_node.
+       [](void* context, std::size_t node, engine::BlockContext part, std::size_t offset,
+          std::size_t frames, engine::AudioWorkerPool* workers) noexcept {
+         return static_cast<RoutedAudioSource*>(context)->fill_node(node, part, offset, frames,
+                                                                    workers);
        }},
       render_workers_);
   frozen_ = stream_hold_;
@@ -604,6 +618,33 @@ bool RoutedAudioSource::fill_source_bank_impl(
   return true;
 }
 
+engine::RoutedPrepareStatus RoutedAudioSource::prepare_source_bank(
+    engine::BlockContext block, std::size_t frames,
+    std::span<const std::span<const StereoFrame>>& selected) noexcept {
+  if (frames == 0 || frames > max_frames_)
+    return engine::RoutedPrepareStatus::failed;
+  silent_drain_block_ = silent_drain_requested_.load(std::memory_order_acquire);
+  stream_hold_ = false;
+  for (auto& slot : slots_)
+    spans_[slot.index] = std::span(slot.scratch).first(frames);
+  staged_silent_ = silent_drain_block_;
+  if (staged_silent_) {
+    for (auto& slot : slots_)
+      std::ranges::fill(std::span(slot.scratch).first(frames), StereoFrame{});
+  } else if (!admit_block(block, frames)) {
+    return engine::RoutedPrepareStatus::failed;
+  }
+  selected = spans_;
+  return engine::RoutedPrepareStatus::prepared;
+}
+
+bool RoutedAudioSource::fill_node(std::size_t node, engine::BlockContext part, std::size_t offset,
+                                  std::size_t frames, engine::AudioWorkerPool* workers) noexcept {
+  if (staged_silent_ || node >= node_slots_.size() || node_slots_[node] == no_slot)
+    return true;
+  return fill_slot(node_slots_[node], part, frames, false, SlotPart::all, workers, offset);
+}
+
 void RoutedAudioSource::note_rendered_frames(std::size_t frames) noexcept {
   if (silent_drain_block_)
     completed_silent_drain_frames_.fetch_add(frames, std::memory_order_release);
@@ -617,6 +658,46 @@ bool RoutedAudioSource::fill_slots(engine::BlockContext block, std::size_t frame
       std::ranges::fill(std::span(slot.scratch).first(frames), StereoFrame{});
     return true;
   }
+  if (!admit_block(block, frames))
+    return false;
+  // Slots share nothing, so each renders as its own task (ADR-0048).
+  struct SlotJob {
+    RoutedAudioSource& source;
+    engine::BlockContext block;
+    std::size_t frames;
+    bool require_complete;
+    SlotPart part;
+    engine::AudioWorkerPool* workers;
+    std::atomic<bool> failed{false};
+  };
+  const auto task = [](void* context, std::size_t slot, std::size_t) noexcept {
+    auto& slot_job = *static_cast<SlotJob*>(context);
+    if (!slot_job.failed.load(std::memory_order_relaxed) &&
+        !slot_job.source.fill_slot(slot, slot_job.block, slot_job.frames, slot_job.require_complete,
+                                   slot_job.part, slot_job.workers))
+      slot_job.failed.store(true, std::memory_order_relaxed);
+  };
+  const auto run = [&](SlotPart part) {
+    SlotJob job{*this, block, frames, require_complete, part, workers};
+    if (workers != nullptr)
+      workers->run(slots_.size(), task, &job);
+    else
+      for (std::size_t slot = 0; slot < slots_.size(); ++slot)
+        task(&job, slot, 0);
+    return !job.failed.load(std::memory_order_relaxed);
+  };
+  // A complete fill decides on every clip frame before any player renders.
+  if (require_complete) {
+    if (!run(SlotPart::clips))
+      return false;
+    if (!took_over_)
+      take_over(block);
+    return run(SlotPart::synths);
+  }
+  return run(SlotPart::all);
+}
+
+bool RoutedAudioSource::admit_block(engine::BlockContext block, std::size_t frames) noexcept {
   if (block.transport_generation < callback_generation_) {
     return false;
   }
@@ -656,41 +737,7 @@ bool RoutedAudioSource::fill_slots(engine::BlockContext block, std::size_t frame
       block.project_sample_position >
           static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) - frames)
     return false;
-  // Slots share nothing, so each renders as its own task (ADR-0048).
-  struct SlotJob {
-    RoutedAudioSource& source;
-    engine::BlockContext block;
-    std::size_t frames;
-    bool require_complete;
-    SlotPart part;
-    engine::AudioWorkerPool* workers;
-    std::atomic<bool> failed{false};
-  };
-  const auto task = [](void* context, std::size_t slot, std::size_t) noexcept {
-    auto& slot_job = *static_cast<SlotJob*>(context);
-    if (!slot_job.failed.load(std::memory_order_relaxed) &&
-        !slot_job.source.fill_slot(slot, slot_job.block, slot_job.frames, slot_job.require_complete,
-                                   slot_job.part, slot_job.workers))
-      slot_job.failed.store(true, std::memory_order_relaxed);
-  };
-  const auto run = [&](SlotPart part) {
-    SlotJob job{*this, block, frames, require_complete, part, workers};
-    if (workers != nullptr)
-      workers->run(slots_.size(), task, &job);
-    else
-      for (std::size_t slot = 0; slot < slots_.size(); ++slot)
-        task(&job, slot, 0);
-    return !job.failed.load(std::memory_order_relaxed);
-  };
-  // A complete fill decides on every clip frame before any player renders.
-  if (require_complete) {
-    if (!run(SlotPart::clips))
-      return false;
-    if (!took_over_)
-      take_over(block);
-    return run(SlotPart::synths);
-  }
-  return run(SlotPart::all);
+  return true;
 }
 
 // The exact fill that takes over playback: this block is the switch's.
@@ -708,12 +755,12 @@ void RoutedAudioSource::take_over(engine::BlockContext block) noexcept {
 
 bool RoutedAudioSource::fill_slot(std::size_t index, engine::BlockContext block, std::size_t frames,
                                   bool require_complete, SlotPart part,
-                                  engine::AudioWorkerPool* workers) noexcept {
+                                  engine::AudioWorkerPool* workers, std::size_t offset) noexcept {
   auto& slot = slots_[index];
   OSCILLATE_TRACE_SPAN("graph.source", slot.track.bits().low);
   const auto& work = slot_work_[index];
   const auto end = block.project_sample_position + frames;
-  auto buffer = std::span(slot.scratch).first(frames);
+  auto buffer = std::span(slot.scratch).subspan(offset, frames);
   if (part != SlotPart::synths)
     std::ranges::fill(buffer, StereoFrame{});
   for (const auto clip_index :

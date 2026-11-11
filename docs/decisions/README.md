@@ -55,7 +55,7 @@ never reused. 0070 was never assigned.
 | 0045 | [The development build](0045-development-build.md) | Accepted and implemented |
 | 0046 | [The workspace redesign](0046-workspace-redesign.md) | Accepted and implemented |
 | 0047 | [The classic processors become engines](0047-classic-processors-as-engines.md) | Accepted and implemented; convolution became Cast (ADR-0115) |
-| 0048 | [Parallel real-time rendering](0048-parallel-audio-rendering.md) | Superseded in part by ADR-0110 (default worker count); otherwise accepted and implemented |
+| 0048 | [Parallel real-time rendering](0048-parallel-audio-rendering.md) | Superseded in part by ADR-0110 (default worker count) and ADR-0127 (the live graph's schedule); otherwise accepted and implemented |
 | 0049 | [Live graph switching and latency handover](0049-live-graph-switching.md) | Accepted and implemented; every chain switches live (ADR-0050); held path removed (ADR-0094) |
 | 0050 | [One chain per track](0050-one-chain-per-track.md) | Accepted and implemented; export has two VST3 renderers; superseded in part by ADR-0093 for MIDI while playing |
 | 0051 | [Automation drawn on the arrangement](0051-arrangement-automation.md) | Accepted and implemented |
@@ -129,4 +129,5 @@ never reused. 0070 was never assigned.
 | 0124 | [The master assistant: a proposed master chain from a reference and a loudness target](0124-master-assistant.md) | Accepted; implemented |
 | 0125 | [The master chain's serial cost: analysis off the callback, block oversampling, and a gate](0125-master-chain-cost.md) | Accepted; implemented; superseded in part by ADR-0126 and ADR-0129 |
 | 0126 | [One realtime FFT for the audio thread](0126-realtime-fft.md) | Accepted; implemented |
+| 0127 | [The master overlaps the tracks: each callback in parts, as a wavefront](0127-sub-block-wavefront.md) | Accepted; implemented |
 | 0129 | [Meters and display spectra off the callback; no fused oversampling](0129-analysis-off-the-callback.md) | Accepted; implemented |

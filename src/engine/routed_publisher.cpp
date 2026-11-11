@@ -433,12 +433,41 @@ RoutedRenderStatus RoutedMixerPublisher::render_block(
     silence(output);
     return RoutedRenderStatus::invalid_block;
   }
+  // A block that switches nothing renders its sources inside the mixer's
+  // schedule when the source can (ADR-0127).
+  RoutedNodeFill node_fill;
+  if (!filled && source_fill.prepare_selected != nullptr && source_fill.fill_node != nullptr) {
+    // Deciding renders nothing, so it may come before the gains.
+    const auto prepared = source_fill.prepare_selected(
+        source_fill.context, active->control_overlay ? active->source_revision : active->revision,
+        context, output.size(), selected_sources);
+    if (prepared == RoutedPrepareStatus::prepared) {
+      gains = {};
+      if ((active->gains && !active->gains->fill_block(context, output.size(), gains)) ||
+          !valid_inputs(active, selected_sources, output.size())) {
+        silence(output);
+        return RoutedRenderStatus::invalid_block;
+      }
+      node_fill = {source_fill.context, source_fill.fill_node};
+      filled = true;
+    } else if (prepared == RoutedPrepareStatus::failed) {
+      silence(output);
+      return RoutedRenderStatus::invalid_block;
+    }
+  }
   if (!filled && !fill_sources(active))
     return RoutedRenderStatus::invalid_block;
   drain_live(*active);
   if (!active->mixer->mix_block(selected_sources, output, context, gains.edges, gains.nodes,
-                                workers))
-    return RoutedRenderStatus::invalid_block;
+                                workers, node_fill)) {
+    silence(output);
+    // A source that failed part way through the schedule: the mixer has
+    // moved on, so the block is played as silence and the transport moves on
+    // with it; replaying it would never be accepted.
+    if (node_fill.fill == nullptr || active->mixer->accepts_context(context, output.size()))
+      return RoutedRenderStatus::invalid_block;
+  }
+  // A block played, silent or not, that a live candidate let pass.
   if (live_passed)
     live_passed_blocks_.store(live_passed_blocks_.load(std::memory_order_relaxed) + 1,
                               std::memory_order_release);

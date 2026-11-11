@@ -27,6 +27,8 @@ on:
       - src/native_dsp/effects/**
       - src/native_dsp/dsp/**
       - src/engine/**
+      - src/track_chain/**
+      - src/application/routed_audio_source.cpp
 
 concurrency:
   group: performance-${{ github.ref }}
@@ -114,6 +116,12 @@ jobs:
       # its meters left the callback (7.7-8.1%, ADR-0129).
       MASTER_LIMIT_PERCENT: 9.5
       P99_LIMIT_PERCENT: 12
+      # Those two are measured in whole blocks (--subblocks off), so they gate
+      # the master's own cost. In parts (ADR-0127) the master costs more but
+      # mostly overlaps the tracks: its time alone after the other nodes, 3.6
+      # to 3.8% here at 512 and 1024 frames against 6.9-7.7% whole, is gated
+      # with the callback's p99 as playback runs.
+      EXPOSED_LIMIT_PERCENT: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -148,11 +156,25 @@ jobs:
           python3 -I tests/qualification/qualify_reference_projects.py \
             --executable "$BUILD_DIR/tests/qualification/oscillate_reference_project" \
             --output master-gate --references light --master heavy --frames 1024 \
-            --seconds "$SECONDS_PER_RUN" --trace \
+            --seconds "$SECONDS_PER_RUN" --trace --subblocks off \
             --gate-master-percent "$MASTER_LIMIT_PERCENT" --gate-p99-percent "$P99_LIMIT_PERCENT" \
             || status=$?
           if [ -f master-gate/results.md ]; then
             cat master-gate/results.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$status"
+      - name: Gate the master's overlap with the tracks
+        if: always()
+        run: |
+          status=0
+          python3 -I tests/qualification/qualify_reference_projects.py \
+            --executable "$BUILD_DIR/tests/qualification/oscillate_reference_project" \
+            --output master-overlap --references light --master heavy --frames 1024 \
+            --seconds "$SECONDS_PER_RUN" --trace \
+            --gate-exposed-percent "$EXPOSED_LIMIT_PERCENT" --gate-p99-percent "$P99_LIMIT_PERCENT" \
+            || status=$?
+          if [ -f master-overlap/results.md ]; then
+            cat master-overlap/results.md >> "$GITHUB_STEP_SUMMARY"
           fi
           exit "$status"
       # Every buffer, light and heavy: the master's share is gated, the
@@ -164,7 +186,7 @@ jobs:
           python3 -I tests/qualification/qualify_reference_projects.py \
             --executable "$BUILD_DIR/tests/qualification/oscillate_reference_project" \
             --output master-heavy --references light heavy --master heavy \
-            --frames 256 512 1024 --seconds "$SECONDS_PER_RUN" --trace \
+            --frames 256 512 1024 --seconds "$SECONDS_PER_RUN" --trace --subblocks off \
             --gate-master-percent "$MASTER_LIMIT_PERCENT" || status=$?
           if [ -f master-heavy/results.md ]; then
             cat master-heavy/results.md >> "$GITHUB_STEP_SUMMARY"
@@ -177,6 +199,8 @@ jobs:
           path: |
             master-gate/results.*
             master-gate/log-*.txt
+            master-overlap/results.*
+            master-overlap/log-*.txt
             master-heavy/results.*
             master-heavy/log-*.txt
           if-no-files-found: ignore

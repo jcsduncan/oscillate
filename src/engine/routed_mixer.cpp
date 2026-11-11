@@ -3,12 +3,17 @@
 #include "oscillate/foundation/trace.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <new>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+
+#if defined(__x86_64__) || defined(__i386__)
+#include <immintrin.h>
+#endif
 
 namespace oscillate::engine {
 namespace {
@@ -26,6 +31,16 @@ using Result = foundation::Result<std::unique_ptr<RoutedMixer>>;
 [[nodiscard]] StereoFrame finite(StereoFrame frame) noexcept {
   return {std::isfinite(frame.left) ? frame.left : 0.0F,
           std::isfinite(frame.right) ? frame.right : 0.0F};
+}
+
+// A thread of the schedule with no piece ready (ADR-0127) spins this many
+// rounds, a few microseconds, before sleeping until one is queued.
+constexpr int ready_spin = 128;
+
+void relax() noexcept {
+#if defined(__x86_64__) || defined(__i386__)
+  _mm_pause();
+#endif
 }
 
 // Whether any of a node's predecessors is still ringing out.
@@ -691,8 +706,8 @@ bool RoutedMixer::admits_block(std::span<const std::span<const StereoFrame>> sou
 bool RoutedMixer::mix_block(std::span<const std::span<const StereoFrame>> sources,
                             std::span<StereoFrame> output, BlockContext context,
                             std::span<const EdgeGainSpan> gains,
-                            std::span<const NodeGainSpan> node_gains,
-                            AudioWorkerPool* workers) noexcept {
+                            std::span<const NodeGainSpan> node_gains, AudioWorkerPool* workers,
+                            RoutedNodeFill fill) noexcept {
   if (output.size() > 8192) {
     return false;
   }
@@ -706,47 +721,415 @@ bool RoutedMixer::mix_block(std::span<const std::span<const StereoFrame>> source
   generation_ = context.transport_generation;
   next_position_ = context.project_sample_position + output.size();
   const NodeBlock block{sources, output.size(), context, gains, node_gains};
+  bool filled = true;
   if (workers == nullptr || workers->attached_workers() == 0) {
-    for (std::size_t index = 0; index < buffers_.size(); ++index)
-      mix_node(index, block, std::span(scratch_).first(2 * limits_.max_frames));
+    filled = run_serial(block, fill);
   } else {
-    // Every node of a level depends only on earlier levels, so a level's
-    // nodes run in parallel and the next level starts after they finish.
-    struct LevelJob {
-      RoutedMixer& mixer;
-      const NodeBlock& block;
-      std::span<const std::size_t> nodes;
-    };
-    for (std::size_t level = 0; level + 1 < level_offsets_.size(); ++level) {
-      LevelJob job{
-          *this, block,
-          std::span(level_nodes_)
-              .subspan(level_offsets_[level], level_offsets_[level + 1] - level_offsets_[level])};
-      workers->run(
-          job.nodes.size(),
-          // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): AudioWorkerPool::Task.
-          [](void* context, std::size_t task, std::size_t lane) noexcept {
-            auto& level_job = *static_cast<LevelJob*>(context);
-            auto& mixer = level_job.mixer;
-            mixer.mix_node(
-                level_job.nodes[task], level_job.block,
-                std::span(mixer.scratch_)
-                    .subspan(lane * 2 * mixer.limits_.max_frames, 2 * mixer.limits_.max_frames));
-          },
-          &job);
-    }
+    // Whole blocks run level by level: a level of one node, normally the
+    // master, stays on this thread with its state in this core's cache,
+    // which measured faster than any helper taking it (ADR-0127).
+    const auto parts = subblocks_for(output.size(), workers);
+    filled = parts == 1 ? run_levels(block, *workers, fill)
+                        : run_wavefront(block, parts, *workers, fill);
   }
   std::ranges::copy(std::span(buffers_.back()).first(output.size()), output.begin());
-  return true;
+  return filled;
+}
+
+std::size_t RoutedMixer::subblocks_for(std::size_t frames,
+                                       const AudioWorkerPool* workers) const noexcept {
+  // One level has nothing to overlap; without helpers nothing runs at once.
+  if (workers == nullptr || workers->attached_workers() == 0 || level_offsets_.size() <= 2 ||
+      frames == 0)
+    return 1;
+  switch (limits_.subblocks) {
+  case RoutedSubblocks::off:
+    return 1;
+  case RoutedSubblocks::fixed:
+    return limits_.fixed_subblock_frames == 0
+               ? 1
+               : (frames + limits_.fixed_subblock_frames - 1) / limits_.fixed_subblock_frames;
+  case RoutedSubblocks::adaptive:
+    break;
+  }
+  return policy_.parts(frames);
+}
+
+RoutedMixer::NodeBlock RoutedMixer::part_of(const NodeBlock& block, std::size_t part,
+                                            std::size_t parts) const noexcept {
+  // Fixed parts have the fixed length (the last takes the rest); adaptive
+  // parts split the block evenly.
+  const auto start_of = [&](std::size_t which) noexcept {
+    if (which >= parts)
+      return block.frames;
+    return limits_.subblocks == RoutedSubblocks::fixed && parts > 1
+               ? std::min(block.frames, which * limits_.fixed_subblock_frames)
+               : which * block.frames / parts;
+  };
+  const auto first = start_of(part);
+  NodeBlock piece = block;
+  piece.offset = first;
+  piece.frames = start_of(part + 1) - first;
+  piece.context.project_sample_position += first;
+  // A loop wrap starts the block, not its later parts.
+  piece.context.planned_loop_wrap = block.context.planned_loop_wrap && part == 0;
+  return piece;
+}
+
+bool RoutedMixer::mix_part(std::size_t index, const NodeBlock& block, std::size_t part,
+                           std::size_t parts, RoutedNodeFill fill, AudioWorkerPool* workers,
+                           std::span<StereoFrame> scratch) noexcept {
+  const auto piece = part_of(block, part, parts);
+  const bool filled = fill.fill == nullptr || fill.fill(fill.context, index, piece.context,
+                                                        piece.offset, piece.frames, workers);
+  mix_node(index, piece, scratch);
+  return filled;
+}
+
+bool RoutedMixer::mix_stage(std::size_t index, std::size_t stage, const NodeBlock& block,
+                            std::size_t part, std::size_t parts, RoutedNodeFill fill,
+                            AudioWorkerPool* workers, std::span<StereoFrame> scratch) noexcept {
+  OSCILLATE_TRACE_SPAN("graph.node", plan_.nodes[index].id);
+  const auto piece = part_of(block, part, parts);
+  bool filled = true;
+  // A staged node has no tail draining (plan_pieces), so its input leaves
+  // nothing in the lane for its output.
+  if (stage == 0) {
+    filled = fill.fill == nullptr ||
+             fill.fill(fill.context, index, piece.context, piece.offset, piece.frames, workers);
+    (void)mix_input(index, piece, scratch);
+  }
+  auto frames = std::span(node_buffer(index, piece.slot)).subspan(piece.offset, piece.frames);
+  processors_[index]->process_stage(stage, frames, node_sidechain(index, piece), piece.context);
+  if (stage + 1 == sink_stages_)
+    mix_output(index, piece, scratch, 0);
+  return filled;
+}
+
+bool RoutedMixer::run_serial(const NodeBlock& block, RoutedNodeFill fill) noexcept {
+  bool filled = true;
+  for (std::size_t index = 0; index < buffers_.size(); ++index)
+    filled &= mix_part(index, block, 0, 1, fill, nullptr,
+                       std::span(scratch_).first(2 * limits_.max_frames));
+  last_subblocks_.store(1, std::memory_order_relaxed);
+  return filled;
+}
+
+void RoutedMixer::record_cost(std::size_t level, std::size_t part,
+                              std::chrono::nanoseconds spent) noexcept {
+  // The deepest level is the master alone: its pieces add up. Other levels
+  // run their nodes side by side: the longest counts.
+  const auto value = static_cast<std::uint64_t>(spent.count());
+  auto& slot = level_part_ns_[level * max_parts_ + part];
+  if (level + 2 == level_offsets_.size()) {
+    slot.fetch_add(value, std::memory_order_relaxed);
+  } else {
+    auto seen = slot.load(std::memory_order_relaxed);
+    while (value > seen && !slot.compare_exchange_weak(seen, value, std::memory_order_relaxed))
+      ;
+  }
+}
+
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a part count and a block length.
+void RoutedMixer::update_policy(std::size_t parts, std::size_t frames,
+                                std::chrono::nanoseconds spent) noexcept {
+  std::uint64_t serial_ns = 0;
+  const auto depth = level_offsets_.size() - 1;
+  for (std::size_t level = 1; level < depth; ++level)
+    for (std::size_t part = 0; part < parts; ++part)
+      serial_ns += level_part_ns_[level * max_parts_ + part].exchange(0, std::memory_order_relaxed);
+  if (spent.count() <= 0 || frames == 0)
+    return;
+  policy_.observe(static_cast<double>(serial_ns) / static_cast<double>(spent.count()),
+                  static_cast<double>(spent.count()) / static_cast<double>(frames));
+}
+
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a share and a time.
+void SubblockPolicy::observe(double serial_share, double ns_per_frame) noexcept {
+  serial_share_ += (serial_share - serial_share_) / share_smoothing_blocks;
+  if (serial_share_ < split_leave_share) {
+    // Too little after the first level to overlap: whole blocks; a later
+    // rise starts the timing afresh.
+    split_ = false;
+    probing_ = 0;
+    probed_ = false;
+    since_probe_ = 0;
+    current_ns_per_frame_ = ns_per_frame;
+    return;
+  }
+  // The first block timed starts the running mean.
+  if (current_ns_per_frame_ == 0.0)
+    current_ns_per_frame_ = ns_per_frame;
+  if (probing_ != 0) {
+    probe_ns_per_frame_ += ns_per_frame / probe_blocks;
+    if (--probing_ != 0)
+      return;
+    // The probe is over: keep the faster way, splitting only for a clear gain.
+    const auto split_mean = split_ ? probe_ns_per_frame_ : current_ns_per_frame_;
+    const auto whole_mean = split_ ? current_ns_per_frame_ : probe_ns_per_frame_;
+    const bool keep = split_mean <= (1.0 - split_gain) * whole_mean;
+    // Staying with the probed way: its probe is now the current mean.
+    if (keep == split_)
+      current_ns_per_frame_ = probe_ns_per_frame_;
+    split_ = keep;
+    probed_ = true;
+    since_probe_ = 0;
+    return;
+  }
+  current_ns_per_frame_ += (ns_per_frame - current_ns_per_frame_) / share_smoothing_blocks;
+  ++since_probe_;
+  const bool first = !probed_ && serial_share_ >= split_enter_share && since_probe_ >= probe_blocks;
+  if (first || (probed_ && since_probe_ >= reprobe_blocks)) {
+    split_ = !split_;
+    probing_ = probe_blocks;
+    probe_ns_per_frame_ = 0.0;
+  }
+}
+
+std::size_t SubblockPolicy::parts(std::size_t frames) const noexcept {
+  if (!split_)
+    return 1;
+  // Enough parts that the deeper levels' last part, the serial time left
+  // after the first level's last part, is about the target share.
+  const auto wanted = static_cast<std::size_t>(std::ceil(serial_share_ / target_exposed_share));
+  const auto parts = std::clamp<std::size_t>(wanted, 2, max_subblocks);
+  return std::max<std::size_t>(1, std::min(parts, frames / min_subblock_frames));
+}
+
+bool RoutedMixer::run_levels(const NodeBlock& block, AudioWorkerPool& workers,
+                             RoutedNodeFill fill) noexcept {
+  using Clock = std::chrono::steady_clock;
+  const bool measure = limits_.subblocks == RoutedSubblocks::adaptive;
+  const auto started = measure ? Clock::now() : Clock::time_point{};
+  // Every node of a level depends only on earlier levels, so a level's
+  // nodes run in parallel, each filling its own source first, and the next
+  // level starts after they finish.
+  struct LevelJob {
+    RoutedMixer& mixer;
+    const NodeBlock& block;
+    std::span<const std::size_t> nodes;
+    std::size_t level;
+    RoutedNodeFill fill;
+    AudioWorkerPool* workers;
+    bool measure;
+    std::atomic<bool> failed{false};
+  } job{*this, block, {}, 0, fill, &workers, measure};
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): AudioWorkerPool::Task.
+  const auto task = [](void* context, std::size_t task_index, std::size_t lane) noexcept {
+    auto& run = *static_cast<LevelJob*>(context);
+    auto& mixer = run.mixer;
+    const auto lane_frames = 2 * mixer.limits_.max_frames;
+    const bool timed = run.measure && run.level != 0;
+    const auto began = timed ? Clock::now() : Clock::time_point{};
+    if (!mixer.mix_part(run.nodes[task_index], run.block, 0, 1, run.fill, run.workers,
+                        std::span(mixer.scratch_).subspan(lane * lane_frames, lane_frames)))
+      run.failed.store(true, std::memory_order_relaxed);
+    if (timed)
+      mixer.record_cost(run.level, 0, Clock::now() - began);
+  };
+  for (std::size_t level = 0; level + 1 < level_offsets_.size(); ++level) {
+    job.level = level;
+    job.nodes =
+        std::span(level_nodes_)
+            .subspan(level_offsets_[level], level_offsets_[level + 1] - level_offsets_[level]);
+    workers.run(job.nodes.size(), task, &job);
+  }
+  last_subblocks_.store(1, std::memory_order_relaxed);
+  if (measure)
+    update_policy(1, block.frames, Clock::now() - started);
+  return !job.failed.load(std::memory_order_relaxed);
+}
+
+void RoutedMixer::plan_whole_nodes() noexcept {
+  // A node still draining a plugin it replaced runs whole until the drain
+  // ends; one that drains nothing such returns to parts.
+  for (std::size_t index = 0; index < buffers_.size(); ++index) {
+    bool whole = whole_node_[index] != 0;
+    for (const auto& drain : tails_[index])
+      whole = whole || (drain->remaining_frames.load(std::memory_order_relaxed) != 0 &&
+                        drain->drain_processor && !drain->drain_processor->renders_any_split());
+    whole_now_[index] = whole ? 1 : 0;
+  }
+}
+
+bool RoutedMixer::stages_sink(std::size_t parts) const noexcept {
+  // Only the master's serial devices pipeline (ADR-0127): every other node
+  // already runs beside the rest of its level. A node with a tail draining
+  // keeps whole processing, since its drain sums in after the processor.
+  const auto sink = buffers_.size() - 1;
+  return parts > 1 && sink_stages_ > 1 && !limits_.skip_muted_nodes && !draining(tails_[sink]) &&
+         whole_now_[sink] == 0 && processors_[sink] &&
+         processors_[sink]->stage_count() == sink_stages_;
+}
+
+void RoutedMixer::push_ready(ReadyQueue& queue, std::uint32_t item) noexcept {
+  const auto slot = queue.tail.fetch_add(1, std::memory_order_relaxed);
+  queue.items[slot].store(item + 1, std::memory_order_release);
+  // Sequentially consistent with a sleeper's count and read (run_lane), so
+  // either it sees this item or this sees it asleep.
+  ready_sequence_.fetch_add(1);
+  // One piece needs one thread: wake one sleeper, not all of them.
+  if (sleepers_.load() != 0)
+    ready_sequence_.notify_one();
+}
+
+std::optional<std::uint32_t> RoutedMixer::pop_ready(ReadyQueue& queue, std::size_t total) noexcept {
+  auto head = queue.head.load(std::memory_order_acquire);
+  for (;;) {
+    if (head >= total)
+      return std::nullopt;
+    const auto item = queue.items[head].load(std::memory_order_acquire);
+    // Empty, or claimed by a push that has not stored it yet.
+    if (item == 0)
+      return std::nullopt;
+    if (queue.head.compare_exchange_weak(head, head + 1, std::memory_order_acq_rel,
+                                         std::memory_order_acquire))
+      return item - 1;
+  }
+}
+
+void RoutedMixer::release_piece(const PartPlan& plan, std::size_t part,
+                                std::size_t piece) noexcept {
+  const auto item = part * plan.pieces.size() + piece;
+  if (pending_[item].fetch_sub(1, std::memory_order_acq_rel) == 1)
+    push_ready(plan.deep[piece] ? deep_ready_ : shallow_ready_, static_cast<std::uint32_t>(item));
+}
+
+bool RoutedMixer::run_wavefront(const NodeBlock& block, std::size_t parts, AudioWorkerPool& workers,
+                                RoutedNodeFill fill) noexcept {
+  OSCILLATE_TRACE_SPAN("graph.wavefront", parts);
+  using Clock = std::chrono::steady_clock;
+  const bool measure = limits_.subblocks == RoutedSubblocks::adaptive;
+  const auto started = measure ? Clock::now() : Clock::time_point{};
+  // A piece is a node's part, or one stage of the master's part. A piece is
+  // ready once its inputs in its part (its sources, or the stage before it)
+  // and its own previous part have finished; ready pieces queue, the levels
+  // after the first ahead of the tracks, and every thread of the batch takes
+  // whichever is ready. So the master works on part k while the tracks
+  // render part k + 1, with no barrier between levels.
+  plan_whole_nodes();
+  const auto& plan = part_plans_[stages_sink(parts) ? 1 : 0];
+  const auto per_part = plan.pieces.size();
+  const auto total = parts * per_part;
+  for (std::size_t part = 0; part < parts; ++part)
+    for (std::size_t piece = 0; piece < per_part; ++piece)
+      pending_[part * per_part + piece].store(plan.inputs[piece] + (part == 0 ? 0 : 1),
+                                              std::memory_order_relaxed);
+  for (auto* queue : {&deep_ready_, &shallow_ready_}) {
+    for (std::size_t slot = 0; slot < total; ++slot)
+      queue->items[slot].store(0, std::memory_order_relaxed);
+    queue->head.store(0, std::memory_order_relaxed);
+    queue->tail.store(0, std::memory_order_relaxed);
+  }
+  pieces_done_.store(0, std::memory_order_relaxed);
+  for (std::size_t piece = 0; piece < per_part; ++piece)
+    if (plan.inputs[piece] == 0)
+      push_ready(plan.deep[piece] ? deep_ready_ : shallow_ready_,
+                 static_cast<std::uint32_t>(piece));
+  struct Job {
+    RoutedMixer& mixer;
+    const PartPlan& plan;
+    const NodeBlock& block;
+    std::size_t parts;
+    std::size_t total;
+    RoutedNodeFill fill;
+    AudioWorkerPool* workers;
+    bool measure;
+    std::atomic<bool> failed{false};
+  } job{*this, plan, block, parts, total, fill, &workers, measure};
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): AudioWorkerPool::Task.
+  const auto lane_task = [](void* context, std::size_t, std::size_t lane) noexcept {
+    auto& run = *static_cast<Job*>(context);
+    run.mixer.run_lane(run, lane);
+  };
+  const auto lanes = std::min({workers.attached_workers() + 1, scratch_lanes_, total});
+  workers.run(lanes, lane_task, &job);
+  last_subblocks_.store(parts, std::memory_order_relaxed);
+  if (measure)
+    update_policy(parts, block.frames, Clock::now() - started);
+  return !job.failed.load(std::memory_order_relaxed);
+}
+
+template <typename Job> void RoutedMixer::run_lane(Job& run, std::size_t lane) noexcept {
+  using Clock = std::chrono::steady_clock;
+  const auto per_part = run.plan.pieces.size();
+  const auto lane_frames = 2 * limits_.max_frames;
+  const auto scratch = std::span(scratch_).subspan(lane * lane_frames, lane_frames);
+  int idle = 0;
+  for (;;) {
+    auto item = pop_ready(deep_ready_, run.total);
+    if (!item)
+      item = pop_ready(shallow_ready_, run.total);
+    if (!item) {
+      if (pieces_done_.load(std::memory_order_acquire) == run.total)
+        return;
+      // Nothing ready: help a heavy instrument's voices meanwhile, spin a
+      // little, then sleep until a piece is queued or the block is done.
+      run.workers->help_nested();
+      if (++idle < ready_spin) {
+        relax();
+        continue;
+      }
+      sleepers_.fetch_add(1);
+      const auto seen = ready_sequence_.load();
+      if (!has_ready(run.total) && pieces_done_.load() != run.total)
+        ready_sequence_.wait(seen);
+      sleepers_.fetch_sub(1);
+      idle = 0;
+      continue;
+    }
+    idle = 0;
+    const auto part = *item / per_part;
+    const auto index = *item % per_part;
+    const auto piece = run.plan.pieces[index];
+    const auto level = node_level_[piece.node];
+    const bool timed = run.measure && level != 0;
+    const auto began = timed ? Clock::now() : Clock::time_point{};
+    // A whole node does its block in its last part, when every input has
+    // finished; its earlier parts only keep its order.
+    const bool whole = piece.stage == no_stage && whole_now_[piece.node] != 0;
+    const bool last = part + 1 == run.parts;
+    bool filled = true;
+    if (!whole)
+      filled = piece.stage == no_stage ? mix_part(piece.node, run.block, part, run.parts, run.fill,
+                                                  run.workers, scratch)
+                                       : mix_stage(piece.node, piece.stage, run.block, part,
+                                                   run.parts, run.fill, run.workers, scratch);
+    else if (last)
+      filled = mix_part(piece.node, run.block, 0, 1, run.fill, run.workers, scratch);
+    if (!filled)
+      run.failed.store(true, std::memory_order_relaxed);
+    if (timed)
+      record_cost(level, part, Clock::now() - began);
+    // What reads a whole node waits for its last part, in every part.
+    const auto first_released = whole ? (last ? 0 : run.parts) : part;
+    const auto end_released = whole ? run.parts : part + 1;
+    for (auto released = first_released; released < end_released; ++released)
+      for (auto dependent = run.plan.dependent_offsets[index];
+           dependent < run.plan.dependent_offsets[index + 1]; ++dependent)
+        release_piece(run.plan, released, run.plan.dependents[dependent]);
+    if (part + 1 < run.parts)
+      release_piece(run.plan, part + 1, index);
+    if (pieces_done_.fetch_add(1, std::memory_order_acq_rel) + 1 == run.total) {
+      ready_sequence_.fetch_add(1);
+      ready_sequence_.notify_all();
+    }
+  }
+}
+
+bool RoutedMixer::has_ready(std::size_t total) const noexcept {
+  for (const auto* queue : {&deep_ready_, &shallow_ready_}) {
+    const auto head = queue->head.load(std::memory_order_acquire);
+    if (head < total && queue->items[head].load(std::memory_order_acquire) != 0)
+      return true;
+  }
+  return false;
 }
 
 void RoutedMixer::mix_node(std::size_t index, const NodeBlock& block,
                            std::span<StereoFrame> scratch) noexcept {
   OSCILLATE_TRACE_SPAN("graph.node", plan_.nodes[index].id);
-  auto frames = std::span(node_buffer(index, block.slot)).first(block.frames);
-  auto sidechain = std::span(sidechain_buffers_[index]);
-  if (!sidechain.empty())
-    std::ranges::fill(sidechain.first(block.frames), StereoFrame{});
+  auto frames = std::span(node_buffer(index, block.slot)).subspan(block.offset, block.frames);
   if (limits_.skip_muted_nodes && muted_[index] && prefader_buffers_[index].empty() &&
       gain_ramps_[index].elapsed >= gain_ramps_[index].total && tails_[index].empty() &&
       source_histories_[index].frames.empty()) {
@@ -755,11 +1138,39 @@ void RoutedMixer::mix_node(std::size_t index, const NodeBlock& block,
       node_meters_->observe(index, frames, block.context);
     return;
   }
+  const auto tail_count = mix_input(index, block, scratch);
+  const auto sidechain = node_sidechain(index, block);
+  if (!sidechain.empty()) {
+    sidechain_processors_[index]->process_with_sidechain(frames, sidechain, block.context);
+  } else if (processors_[index]) {
+    processors_[index]->process(frames, block.context);
+  }
+  mix_output(index, block, scratch, tail_count);
+}
+
+std::span<const StereoFrame> RoutedMixer::node_sidechain(std::size_t index,
+                                                         const NodeBlock& block) const noexcept {
+  const auto& sidechain = sidechain_buffers_[index];
+  return sidechain.empty() ? std::span<const StereoFrame>{}
+                           : std::span(sidechain).subspan(block.offset, block.frames);
+}
+
+std::size_t RoutedMixer::mix_input(std::size_t index, const NodeBlock& block,
+                                   std::span<StereoFrame> scratch) noexcept {
+  auto frames = std::span(node_buffer(index, block.slot)).subspan(block.offset, block.frames);
+  // Each part keys its own frames of the detector input, so a staged
+  // processor's later stages still read the part they are on.
+  auto sidechain = std::span(sidechain_buffers_[index]);
+  if (!sidechain.empty()) {
+    sidechain = sidechain.subspan(block.offset, block.frames);
+    std::ranges::fill(sidechain, StereoFrame{});
+  }
   if (block.sources[index].empty()) {
     std::ranges::fill(frames, StereoFrame{});
   } else {
+    const auto source = block.sources[index].subspan(block.offset, block.frames);
     for (std::size_t frame = 0; frame < block.frames; ++frame) {
-      frames[frame] = finite(block.sources[index][frame]);
+      frames[frame] = finite(source[frame]);
     }
   }
   if (source_input_delays_[index])
@@ -773,12 +1184,12 @@ void RoutedMixer::mix_node(std::size_t index, const NodeBlock& block,
     const auto& from = edge.kind == RoutingEdgeKind::sidechain
                            ? prefader_buffer(edge.source_index, block.slot)
                            : node_buffer(edge.source_index, block.slot);
-    std::ranges::copy(std::span(from).first(block.frames), delayed.begin());
+    std::ranges::copy(std::span(from).subspan(block.offset, block.frames), delayed.begin());
     edge.delay->process(delayed, block.context);
-    const auto dynamic =
-        block.gains.empty() ? std::span<const float>{} : block.gains[edge_index].values;
-    auto destination =
-        edge.kind == RoutingEdgeKind::sidechain ? sidechain.first(block.frames) : frames;
+    const auto dynamic = block.gains.empty() || block.gains[edge_index].values.empty()
+                             ? std::span<const float>{}
+                             : block.gains[edge_index].values.subspan(block.offset, block.frames);
+    auto destination = edge.kind == RoutingEdgeKind::sidechain ? sidechain : frames;
     for (std::size_t frame = 0; frame < block.frames; ++frame) {
       float gain = dynamic.empty() ? edge.gain : dynamic[frame];
       if (dynamic.empty() && edge.ramp_elapsed < edge.ramp_total) {
@@ -839,12 +1250,12 @@ void RoutedMixer::mix_node(std::size_t index, const NodeBlock& block,
       scratch[frame] = {scratch[frame].left + output[frame].left,
                         scratch[frame].right + output[frame].right};
   }
-  if (!sidechain.empty()) {
-    sidechain_processors_[index]->process_with_sidechain(frames, sidechain.first(block.frames),
-                                                         block.context);
-  } else if (processors_[index]) {
-    processors_[index]->process(frames, block.context);
-  }
+  return tail_count;
+}
+
+void RoutedMixer::mix_output(std::size_t index, const NodeBlock& block,
+                             std::span<StereoFrame> scratch, std::size_t tail_count) noexcept {
+  auto frames = std::span(node_buffer(index, block.slot)).subspan(block.offset, block.frames);
   for (std::size_t frame = 0; frame < frames.size(); ++frame) {
     if (frame < tail_count)
       frames[frame] = finite(
@@ -853,14 +1264,17 @@ void RoutedMixer::mix_node(std::size_t index, const NodeBlock& block,
       frames[frame] = finite(frames[frame]);
   }
   if (!prefader_buffers_[index].empty())
-    std::ranges::copy(frames, prefader_buffer(index, block.slot).begin());
+    std::ranges::copy(
+        frames,
+        std::span(prefader_buffer(index, block.slot)).subspan(block.offset, block.frames).begin());
   auto& ramp = gain_ramps_[index];
   if (muted_[index] && ramp.elapsed >= ramp.total) {
     std::ranges::fill(frames, StereoFrame{});
   } else {
     const auto gain = muted_[index] ? StereoFrame{} : output_gains_[index];
-    const auto dynamic =
-        block.node_gains.empty() ? std::span<const StereoFrame>{} : block.node_gains[index].values;
+    const auto dynamic = block.node_gains.empty() || block.node_gains[index].values.empty()
+                             ? std::span<const StereoFrame>{}
+                             : block.node_gains[index].values.subspan(block.offset, block.frames);
     if (!dynamic.empty()) {
       // Dynamic gains replace the static output gain, not a mute: a mute or
       // unmute fade still runs on top of them, and the ramp advances.
@@ -1027,6 +1441,7 @@ bool RoutedMixer::adopt_live_state(const RoutedMixer& prior, BlockContext contex
   if (live_from_ != &prior)
     return false;
   live_from_ = nullptr;
+  policy_ = prior.policy_;
   // A seek or new generation at the switch starts this graph afresh, as the
   // prior graph itself would have; a planned loop wrap keeps its history.
   const bool continuous =
@@ -1282,20 +1697,70 @@ void RoutedMixer::build_levels() {
   level_offsets_.assign(depth + 1, 0);
   for (const auto value : level)
     ++level_offsets_[value + 1];
-  std::size_t widest = 1;
-  for (std::size_t value = 0; value < depth; ++value) {
-    widest = std::max(widest, level_offsets_[value + 1]);
+  for (std::size_t value = 0; value < depth; ++value)
     level_offsets_[value + 1] += level_offsets_[value];
-  }
   node_level_ = level;
   level_nodes_.assign(buffers_.size(), 0);
   auto cursor = level_offsets_;
   for (std::size_t index = 0; index < buffers_.size(); ++index)
     level_nodes_[cursor[level[index]]++] = index;
-  // One scratch lane per thread that can share a level.
-  const auto lanes = std::min(widest, AudioWorkerPool::max_workers + 1);
-  // Each lane: one block for route delays and summed drains, one for a drain.
-  scratch_.assign(lanes * 2 * limits_.max_frames, StereoFrame{});
+  const auto splits = [](const std::shared_ptr<ProcessorRuntime>& owner) {
+    return !owner || owner->renders_any_split();
+  };
+  whole_node_.assign(buffers_.size(), 0);
+  for (std::size_t index = 0; index < buffers_.size(); ++index)
+    whole_node_[index] =
+        splits(processors_[index]) && splits(output_stages_[index]) ? 0 : std::uint8_t{1};
+  whole_now_ = whole_node_;
+  // The schedule (ADR-0127): one part's pieces and their dependencies, for
+  // whole nodes and, when the master is a chain of stages, for the master
+  // pipelining them.
+  const auto nodes = buffers_.size();
+  sink_stages_ = processors_.empty() || !processors_.back()
+                     ? 1
+                     : std::max<std::size_t>(1, processors_.back()->stage_count());
+  for (std::size_t variant = 0; variant < part_plans_.size(); ++variant) {
+    auto& plan = part_plans_[variant];
+    const bool staged = variant == 1 && sink_stages_ > 1;
+    const auto sink_pieces = staged ? sink_stages_ : 1;
+    const auto count = nodes - 1 + sink_pieces;
+    plan.pieces.assign(count, {});
+    plan.inputs.assign(count, 0);
+    plan.deep.assign(count, false);
+    std::vector<std::vector<std::uint32_t>> dependents(count);
+    for (std::size_t index = 0; index < nodes; ++index) {
+      plan.pieces[index] = {index, staged && index + 1 == nodes ? 0 : no_stage};
+      plan.inputs[index] = static_cast<std::uint32_t>(incoming_[index].size());
+      plan.deep[index] = level[index] != 0;
+      for (const auto edge : incoming_[index])
+        dependents[edges_[edge].source_index].push_back(static_cast<std::uint32_t>(index));
+    }
+    for (std::size_t stage = 1; stage < sink_pieces; ++stage) {
+      const auto piece = nodes - 1 + stage;
+      plan.pieces[piece] = {nodes - 1, stage};
+      plan.inputs[piece] = 1;
+      plan.deep[piece] = true;
+      dependents[piece - 1].push_back(static_cast<std::uint32_t>(piece));
+    }
+    plan.dependent_offsets.assign(1, 0);
+    plan.dependents.clear();
+    for (const auto& list : dependents) {
+      plan.dependents.insert(plan.dependents.end(), list.begin(), list.end());
+      plan.dependent_offsets.push_back(plan.dependents.size());
+    }
+  }
+  max_parts_ = max_subblocks;
+  if (limits_.subblocks == RoutedSubblocks::fixed && limits_.fixed_subblock_frames != 0)
+    max_parts_ = std::max(max_parts_, (limits_.max_frames + limits_.fixed_subblock_frames - 1) /
+                                          limits_.fixed_subblock_frames);
+  const auto most_pieces = max_parts_ * part_plans_[1].pieces.size();
+  pending_ = std::make_unique<std::atomic<std::uint32_t>[]>(most_pieces);
+  deep_ready_.items = std::make_unique<std::atomic<std::uint32_t>[]>(most_pieces);
+  shallow_ready_.items = std::make_unique<std::atomic<std::uint32_t>[]>(most_pieces);
+  level_part_ns_ = std::make_unique<std::atomic<std::uint64_t>[]>(depth * max_parts_);
+  // One scratch lane per thread that can work on a block at once.
+  scratch_lanes_ = std::min(AudioWorkerPool::max_lanes, part_plans_[1].pieces.size());
+  scratch_.assign(scratch_lanes_ * 2 * limits_.max_frames, StereoFrame{});
 }
 
 } // namespace oscillate::engine

@@ -11,6 +11,7 @@ results.json and results.md into --output.
 from __future__ import annotations
 
 import argparse
+import bisect
 import collections
 import hashlib
 import json
@@ -24,7 +25,17 @@ from pathlib import Path
 FIELDS = re.compile(r"(\w+)=(\S+)")
 AUDIO_THREADS = ("audio callback", "audio worker")
 # Spans that frame the work rather than doing it; reported apart from devices.
-FRAME_SPANS = ("audio.render", "graph.node", "graph.source", "pool.wait_for_helpers")
+FRAME_SPANS = (
+    "audio.render",
+    "graph.node",
+    "graph.source",
+    "graph.wavefront",
+    "pool.wait_for_helpers",
+)
+# The spans that render the graph's nodes and sources, on any audio thread.
+NODE_SPANS = ("graph.node", "graph.source")
+# The fake callback marks its first measured block; earlier ones are warm-up.
+MEASURED_MARK = "qualification.measured"
 REFERENCES = ("light", "heavy", "pad", "drums")
 BUFFER_SIZES = (64, 128, 256, 512, 1024)
 DEFAULT_BUFFER_SIZES = (64, 128)
@@ -108,21 +119,14 @@ def trace_tables(trace: dict) -> dict:
             }
         )
     devices.sort(key=lambda row: -row["core_percent"])
-    # The master runs on the callback after every other node, so its time is
-    # serial in every block (ADR-0125).
-    masters = [
-        span["dur"] for span in by_kind.get(MASTER_NODE_KIND, []) if span["name"] == MASTER_NODE
+    # Warm-up blocks, before the fake callback's mark, are left out.
+    marks = [
+        event["ts"]
+        for event in trace["traceEvents"]
+        if event.get("ph") == "i" and event.get("name") == MEASURED_MARK
     ]
-    master = (
-        {
-            "blocks": len(masters),
-            "mean_us": round(sum(masters) / len(masters), 3),
-            "p99_us": round(percentile(masters, TAIL), 3),
-            "max_us": round(max(masters), 3),
-        }
-        if masters
-        else None
-    )
+    measured_from = min(marks) if marks else float("-inf")
+    master = master_table(by_kind, measured_from)
     renders = [span["dur"] for span in by_kind.get("audio.render", [])]
     callbacks = (
         {
@@ -139,12 +143,75 @@ def trace_tables(trace: dict) -> dict:
         for event in trace["traceEvents"]
         if event.get("ph") == "i" and event["name"] in ("audio.xrun", "audio.xrun_recovery")
     )
+    parts = [
+        span["args"]["n"]
+        for span in by_kind.get("graph.wavefront", [])
+        if span["ts"] >= measured_from
+    ]
+    measured_renders = [
+        span for span in by_kind.get("audio.render", []) if span["ts"] >= measured_from
+    ]
+    dropped = trace.get("otherData", {}).get("dropped_events", 0)
     return {
+        "dropped_events": dropped,
         "devices": devices,
         "master": master,
+        # Blocks rendered whole have no wavefront span: they count as one part.
+        "mean_parts": round(
+            (sum(parts) + len(measured_renders) - len(parts)) / len(measured_renders), 2
+        )
+        if measured_renders
+        else 1,
         "callbacks": callbacks,
         "xrun_events": xruns,
         "window_us": window_us,
+    }
+
+
+def master_table(by_kind: dict[str, list[dict]], measured_from: float) -> dict | None:
+    """The master's time in each block, and the part of it nothing else overlaps.
+
+    A block is one audio.render span. The master may run in several parts a
+    block (ADR-0127), so its time is the sum of its spans in the block; its
+    exposed time is how long it runs after every other node and source of the
+    block has finished, the serial tail that adds to the callback.
+    """
+    renders = sorted(
+        (span["ts"], span["ts"] + span["dur"])
+        for span in by_kind.get("audio.render", [])
+        if span["ts"] >= measured_from
+    )
+    if not renders:
+        return None
+    starts = [start for start, _ in renders]
+    master_us = [0.0] * len(renders)
+    master_end = [None] * len(renders)
+    others_end = [None] * len(renders)
+    for kind in NODE_SPANS:
+        for span in by_kind.get(kind, []):
+            block = bisect.bisect_right(starts, span["ts"]) - 1
+            if block < 0 or span["ts"] > renders[block][1]:
+                continue
+            end = span["ts"] + span["dur"]
+            if kind == MASTER_NODE_KIND and span["name"] == MASTER_NODE:
+                master_us[block] += span["dur"]
+                master_end[block] = max(end, master_end[block] or end)
+            else:
+                others_end[block] = max(end, others_end[block] or end)
+    blocks = [index for index, end in enumerate(master_end) if end is not None]
+    if not blocks:
+        return None
+    totals = [master_us[index] for index in blocks]
+    exposed = [
+        max(0.0, master_end[index] - (others_end[index] or renders[index][0])) for index in blocks
+    ]
+    return {
+        "blocks": len(blocks),
+        "mean_us": round(sum(totals) / len(totals), 3),
+        "p99_us": round(percentile(totals, TAIL), 3),
+        "max_us": round(max(totals), 3),
+        "exposed_mean_us": round(sum(exposed) / len(exposed), 3),
+        "exposed_p99_us": round(percentile(exposed, TAIL), 3),
     }
 
 
@@ -168,6 +235,12 @@ def summarise(output: str, trace: dict | None) -> dict:
         result["master_p99_us"] = master["p99_us"]
         result["master_period_percent"] = round(
             PERCENT * master["mean_us"] / result["period_us"], 2
+        )
+        result["mean_parts"] = summary["trace"]["mean_parts"]
+        result["master_exposed_us"] = master["exposed_mean_us"]
+        result["master_exposed_p99_us"] = master["exposed_p99_us"]
+        result["master_exposed_percent"] = round(
+            PERCENT * master["exposed_mean_us"] / result["period_us"], 2
         )
     return summary
 
@@ -210,6 +283,8 @@ def run_one(args, reference: str, frames: int, repetition: int, serial: int | No
         command += ["--pipewire-target", str(serial)]
     if args.workers is not None:
         command += ["--workers", str(args.workers)]
+    if args.subblocks is not None:
+        command += ["--subblocks", args.subblocks]
     if reference == "heavy":
         for flag, value in (
             ("--vst3-effect", args.vst3_effect),
@@ -255,18 +330,22 @@ def markdown(evidence: dict) -> str:
         "",
         "| Reference | Frames | Run | Helpers | Callback p50 µs | p99 µs | max µs "
         "| p99 of period | Over period | Master mean µs | Master of period "
+        "| Parts | Master exposed µs | Exposed of period "
         "| Process CPU % | CPU p99 % (100 ms) | Peak RSS MiB |",
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: "
-        "| ---: | ---: | ---: |",
+        "| ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for run in evidence["runs"]:
         result = run["result"]
         share = result.get("master_period_percent")
+        exposed = result.get("master_exposed_percent")
         lines.append(
             f"| {label(run)} | {run['frames']} | {run['repetition']} | {result['workers']} "
             f"| {result.get('p50_us', '')} | {result.get('p99_us', '')} | {result['max_us']} "
             f"| {result.get('p99_period_percent', '')}% | {result['over_period']} "
             f"| {result.get('master_mean_us', '')} | {'' if share is None else f'{share}%'} "
+            f"| {result.get('mean_parts', '')} | {result.get('master_exposed_us', '')} "
+            f"| {'' if exposed is None else f'{exposed}%'} "
             f"| {result['process_cpu_percent']} | {result['cpu_window_p99']} "
             f"| {round(result['max_rss_kib'] / KIB_PER_MIB, 1)} |"
         )
@@ -307,6 +386,27 @@ def gate(args, runs: list[dict]) -> list[str]:
                     f"{name}: the master takes {share}% of the period, "
                     f"over the {args.gate_master_percent}% limit"
                 )
+        traced = args.gate_master_percent is not None or args.gate_exposed_percent is not None
+        if traced and run.get("trace", {}).get("dropped_events", 0):
+            failures.append(
+                f"{name}: the trace dropped {run['trace']['dropped_events']} events, "
+                "so its master times are incomplete"
+            )
+            continue
+        if args.gate_exposed_percent is not None:
+            exposed = result.get("master_exposed_percent")
+            if exposed is None:
+                failures.append(f"{name}: the trace has no master spans (run with --trace)")
+            elif exposed > args.gate_exposed_percent:
+                failures.append(
+                    f"{name}: the master runs alone for {exposed}% of the period, "
+                    f"over the {args.gate_exposed_percent}% limit"
+                )
+        if args.gate_late_blocks is not None and result["over_period"] > args.gate_late_blocks:
+            failures.append(
+                f"{name}: {result['over_period']} blocks passed the period, "
+                f"over the limit of {args.gate_late_blocks}"
+            )
         if args.gate_p99_percent is not None:
             load = result.get("p99_period_percent")
             if load is None:
@@ -344,6 +444,17 @@ def main() -> int:
         help="fail when the master's mean serial time exceeds this share of the period",
     )
     parser.add_argument(
+        "--gate-exposed-percent",
+        type=float,
+        help="fail when the master's mean time alone after the other nodes (ADR-0127) "
+        "exceeds this share of the period",
+    )
+    parser.add_argument(
+        "--gate-late-blocks",
+        type=int,
+        help="fail when more blocks than this pass the period",
+    )
+    parser.add_argument(
         "--gate-p99-percent",
         type=float,
         help="fail when the callback's p99 exceeds this share of the period",
@@ -357,6 +468,10 @@ def main() -> int:
     parser.add_argument("--vst3-instrument", type=Path, help="heavy: a VST3 instrument bundle")
     parser.add_argument(
         "--workers", type=int, help="audio helpers (default: the live playback default)"
+    )
+    parser.add_argument(
+        "--subblocks",
+        help="how blocks are cut into parts (ADR-0127): adaptive (default), off, or a part length",
     )
     args = parser.parse_args()
     args.executable = args.executable.resolve()
