@@ -28,6 +28,10 @@ const QString& jack_backend() {
   static const QString value = QStringLiteral("jack");
   return value;
 }
+const QString& alsa_backend() {
+  static const QString value = QStringLiteral("alsa");
+  return value;
+}
 const QString& default_device() {
   static const QString value = QStringLiteral("default");
   return value;
@@ -48,12 +52,12 @@ AudioOutputController::AudioOutputController(Host host,
                                              application::PlaybackOutputFactory pipewire_factory,
                                              application::PlaybackOutputFactory jack_factory,
                                              std::function<bool()> jack_server_probe,
-                                             Discovery discovery, QObject* parent)
+                                             Discovery discovery, Alsa alsa, QObject* parent)
     : QObject(parent), host_(std::move(host)), pipewire_factory_(std::move(pipewire_factory)),
       jack_factory_(std::move(jack_factory)), jack_server_probe_(std::move(jack_server_probe)),
       discovery_(discovery ? std::move(discovery)
                            : Discovery{[] { return audio_io::list_pipewire_sinks(); }}),
-      timer_(this), backend_(pipewire_backend()),
+      timer_(this), backend_(pipewire_backend()), alsa_(std::move(alsa)),
       audio_device_status_(QStringLiteral("Discovering audio outputs")) {
   timer_.setInterval(poll_interval_ms);
   connect(&timer_, &QTimer::timeout, this, &AudioOutputController::poll);
@@ -72,11 +76,26 @@ AudioOutputController::AudioOutputController(Host host,
   if (valid_ahead &&
       std::ranges::find(render_ahead_choice_ms, saved_ahead) != render_ahead_choice_ms.end())
     render_ahead_ms_ = saved_ahead;
-  if (jack_playback_available() &&
-      settings.value(QStringLiteral("audioBackend"), pipewire_backend()).toString() ==
-          jack_backend() &&
-      jack_server_probe_())
+  const auto saved_backend =
+      settings.value(QStringLiteral("audioBackend"), pipewire_backend()).toString();
+  if (jack_playback_available() && saved_backend == jack_backend() && jack_server_probe_())
     backend_ = jack_backend();
+  if (alsa_playback_available()) {
+    if (!alsa_.choice)
+      alsa_.choice = std::make_shared<AlsaOutputChoice>();
+    if (!alsa_.discovery)
+      alsa_.discovery = [] { return audio_io::list_alsa_playback_devices(); };
+    selected_alsa_device_ = settings.value(QStringLiteral("alsaDevice")).toString();
+    bool valid_periods = false;
+    const auto saved_periods =
+        settings.value(QStringLiteral("alsaPeriods")).toString().toInt(&valid_periods);
+    if (valid_periods && saved_periods >= static_cast<int>(audio_io::alsa_min_periods) &&
+        saved_periods <= static_cast<int>(audio_io::alsa_max_periods))
+      alsa_periods_ = saved_periods;
+    if (saved_backend == alsa_backend())
+      backend_ = alsa_backend();
+    refresh_alsa_devices();
+  }
   selected_audio_device_ =
       settings.value(QStringLiteral("audioOutputSerial"), default_device()).toString();
   if (selected_audio_device_ != default_device()) {
@@ -97,16 +116,26 @@ QVariantList AudioOutputController::buffer_frame_choices() {
   return choices;
 }
 
+QVariantList AudioOutputController::alsa_period_choices() {
+  QVariantList choices;
+  for (auto periods = audio_io::alsa_min_periods; periods <= audio_io::alsa_max_periods; ++periods)
+    choices.append(static_cast<int>(periods));
+  return choices;
+}
+
 bool AudioOutputController::jack() const { return backend_ == jack_backend(); }
+bool AudioOutputController::alsa() const { return backend_ == alsa_backend(); }
 
 const application::PlaybackOutputFactory& AudioOutputController::factory() const {
+  if (alsa())
+    return alsa_.factory;
   return jack() ? jack_factory_ : pipewire_factory_;
 }
 
 std::optional<std::uint64_t> AudioOutputController::target_serial() const {
   bool valid_serial = false;
   const auto parsed_serial = selected_audio_device_.toULongLong(&valid_serial);
-  if (jack() || selected_audio_device_ == default_device() || !valid_serial)
+  if (jack() || alsa() || selected_audio_device_ == default_device() || !valid_serial)
     return std::nullopt;
   return static_cast<std::uint64_t>(parsed_serial);
 }
@@ -118,6 +147,14 @@ QString AudioOutputController::output_name() const {
 QString AudioOutputController::selected_audio_device_name() const {
   if (jack())
     return QStringLiteral("JACK server");
+  if (alsa()) {
+    const auto found = std::ranges::find_if(alsa_devices_, [this](const auto& entry) {
+      return entry.toMap().value(QStringLiteral("id")).toString() == selected_alsa_device_;
+    });
+    return found == alsa_devices_.end()
+               ? QStringLiteral("Missing ALSA device (%1)").arg(selected_alsa_device_)
+               : found->toMap().value(QStringLiteral("name")).toString();
+  }
   const auto found = std::ranges::find_if(audio_devices_, [this](const auto& entry) {
     return entry.toMap().value(QStringLiteral("serial")).toString() == selected_audio_device_;
   });
@@ -138,6 +175,11 @@ QString AudioOutputController::buffer_size_status() const {
   const double rate = project_rate ? static_cast<double>(*project_rate) : fallback_sample_rate;
   const QString milliseconds =
       QString::number(requested_buffer_frames_ * milliseconds_per_second / rate, 'f', 1);
+  if (alsa())
+    return QStringLiteral("Period %1 frames (%2 ms) × %3 periods. The device may round the period.")
+        .arg(requested_buffer_frames_)
+        .arg(milliseconds)
+        .arg(alsa_periods_);
   return observed ? QStringLiteral("Requested %1 frames (%2 ms) · observed %3 frames. PipeWire may "
                                    "vary its quantum.")
                         .arg(requested_buffer_frames_)
@@ -149,7 +191,26 @@ QString AudioOutputController::buffer_size_status() const {
                         .arg(milliseconds);
 }
 
+QString AudioOutputController::latency_status() const {
+  if (!alsa())
+    return {};
+  const auto project_rate = host_.sample_rate();
+  const double rate = project_rate ? static_cast<double>(*project_rate) : fallback_sample_rate;
+  if (const auto measured = host_.output_latency_frames ? host_.output_latency_frames()
+                                                        : std::optional<std::uint32_t>{})
+    return QStringLiteral("Measured output latency %1 ms (%2 frames queued to the converter).")
+        .arg(QString::number(*measured * milliseconds_per_second / rate, 'f', 1))
+        .arg(*measured);
+  const auto buffer = static_cast<double>(requested_buffer_frames_) * alsa_periods_;
+  return QStringLiteral("Output latency up to %1 ms (the device buffer); measured while playing.")
+      .arg(QString::number(buffer * milliseconds_per_second / rate, 'f', 1));
+}
+
 bool AudioOutputController::selected_audio_device_available() const {
+  if (alsa())
+    return std::ranges::any_of(alsa_devices_, [this](const auto& entry) {
+      return entry.toMap().value(QStringLiteral("id")).toString() == selected_alsa_device_;
+    });
   if (jack())
     return jack_playback_available() && jack_server_probe_();
   return lists_serial(audio_devices_, selected_audio_device_);
@@ -160,7 +221,60 @@ void AudioOutputController::report(QString status) {
   emit audioDevicesChanged();
 }
 
+void AudioOutputController::refresh_alsa_devices() {
+  auto listed = alsa_.discovery();
+  if (!listed) {
+    alsa_devices_.clear();
+    if (alsa())
+      audio_device_status_ = QString::fromStdString(listed.error().message);
+    emit audioDevicesChanged();
+    return;
+  }
+  QVariantList devices;
+  for (const auto& device : listed.value())
+    devices.append(QVariantMap{{"id", QString::fromStdString(device.id)},
+                               {"name", QString::fromStdString(device.name)}});
+  alsa_devices_ = std::move(devices);
+  if (selected_alsa_device_.isEmpty() && !alsa_devices_.isEmpty())
+    selected_alsa_device_ = alsa_devices_.front().toMap().value(QStringLiteral("id")).toString();
+  publish_alsa_choice();
+  if (alsa())
+    audio_device_status_ =
+        alsa_devices_.isEmpty() ? QStringLiteral("No ALSA playback devices found.")
+        : !selected_audio_device_available()
+            ? QStringLiteral("The chosen ALSA device is not connected. Choose another.")
+            : QStringLiteral("Play takes %1 from PipeWire for Oscillate alone; Stop gives it "
+                             "back.")
+                  .arg(selected_audio_device_name());
+  emit audioDevicesChanged();
+}
+
+void AudioOutputController::publish_alsa_choice() {
+  if (alsa_.choice)
+    alsa_.choice->set(
+        {selected_alsa_device_.toStdString(), static_cast<std::uint32_t>(alsa_periods_)});
+}
+
+void AudioOutputController::report_fallback() {
+  if (!alsa_.fallback)
+    return;
+  auto reason = alsa_.fallback->reason();
+  if (reason == shown_fallback_)
+    return;
+  shown_fallback_ = reason;
+  if (!alsa())
+    return;
+  report(reason
+             ? QStringLiteral("Playing through PipeWire instead. %1")
+                   .arg(QString::fromStdString(*reason))
+             : QStringLiteral("%1 plays for Oscillate alone.").arg(selected_audio_device_name()));
+}
+
 void AudioOutputController::refresh_audio_devices() {
+  if (alsa()) {
+    refresh_alsa_devices();
+    return;
+  }
   if (jack()) {
     report(jack_server_probe_()
                ? QStringLiteral("JACK server ready. Playback ports connect on Play.")
@@ -208,7 +322,7 @@ void AudioOutputController::poll() {
   completion_.reset();
   timer_.stop();
   if (!result) {
-    if (!jack())
+    if (!jack() && !alsa())
       audio_device_status_ = QString::fromStdString(result.error().message);
   } else {
     QVariantList devices{default_device_entry()};
@@ -216,7 +330,7 @@ void AudioOutputController::poll() {
       devices.append(QVariantMap{{"serial", QString::number(sink.serial)},
                                  {"name", QString::fromStdString(sink.name)}});
     audio_devices_ = std::move(devices);
-    if (!jack())
+    if (!jack() && !alsa())
       audio_device_status_ =
           !selected_audio_device_available()
               ? QStringLiteral("Selected output is unavailable. Choose another output.")
@@ -244,7 +358,10 @@ void AudioOutputController::select_audio_backend(const QString& backend) {
     report(QStringLiteral("Stop playback before changing audio backend"));
     return;
   }
-  if (backend != pipewire_backend() && (backend != jack_backend() || !jack_playback_available())) {
+  const bool known = backend == pipewire_backend() ||
+                     (backend == jack_backend() && jack_playback_available()) ||
+                     (backend == alsa_backend() && alsa_playback_available());
+  if (!known) {
     report(QStringLiteral("Audio backend is unavailable in this build"));
     return;
   }
@@ -258,11 +375,15 @@ void AudioOutputController::select_audio_backend(const QString& backend) {
   backend_ = backend;
   QSettings{}.setValue(QStringLiteral("audioBackend"), backend);
   host_.backend_changed();
-  report(backend == jack_backend()
-             ? QStringLiteral("JACK selected. Press Play; physical playback ports "
-                              "connect automatically when available.")
-             : QStringLiteral("PipeWire selected. Press Play to use %1.")
-                   .arg(selected_audio_device_name()));
+  if (backend == alsa_backend()) {
+    refresh_alsa_devices();
+  } else {
+    report(backend == jack_backend()
+               ? QStringLiteral("JACK selected. Press Play; physical playback ports "
+                                "connect automatically when available.")
+               : QStringLiteral("PipeWire selected. Press Play to use %1.")
+                     .arg(selected_audio_device_name()));
+  }
   host_.settings_changed();
   if (backend == pipewire_backend())
     refresh_audio_devices();
@@ -288,6 +409,40 @@ void AudioOutputController::select_buffer_frames(int frames) {
   report(QStringLiteral("%1-frame request saved for next playback").arg(frames));
   host_.settings_changed();
   emit renderAheadChanged();
+}
+
+void AudioOutputController::select_alsa_device(const QString& id) {
+  if (!audio_device_selection_enabled()) {
+    report(QStringLiteral("Stop playback before changing the ALSA device"));
+    return;
+  }
+  const bool listed = std::ranges::any_of(alsa_devices_, [&id](const auto& entry) {
+    return entry.toMap().value(QStringLiteral("id")).toString() == id;
+  });
+  if (!listed) {
+    report(QStringLiteral("Refresh the device list and choose a connected ALSA device"));
+    return;
+  }
+  selected_alsa_device_ = id;
+  QSettings{}.setValue(QStringLiteral("alsaDevice"), id);
+  publish_alsa_choice();
+  refresh_alsa_devices();
+  host_.settings_changed();
+}
+
+void AudioOutputController::select_alsa_periods(int periods) {
+  if (periods < static_cast<int>(audio_io::alsa_min_periods) ||
+      periods > static_cast<int>(audio_io::alsa_max_periods))
+    return;
+  if (!audio_device_selection_enabled()) {
+    report(QStringLiteral("Stop playback before changing the period count"));
+    return;
+  }
+  alsa_periods_ = periods;
+  QSettings{}.setValue(QStringLiteral("alsaPeriods"), periods);
+  publish_alsa_choice();
+  report(QStringLiteral("%1 periods saved for next playback").arg(periods));
+  host_.settings_changed();
 }
 
 QVariantList AudioOutputController::render_ahead_choices() {

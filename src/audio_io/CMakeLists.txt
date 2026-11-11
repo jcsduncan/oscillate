@@ -1,8 +1,8 @@
 oscillate_add_library(audio_io
-  SOURCES graph_source.cpp metronome.cpp pipewire_output.cpp pipewire_sinks.cpp
-          render_ahead.cpp stereo_block.cpp telemetry.cpp
+  SOURCES alsa_output.cpp device_reservation.cpp graph_source.cpp metronome.cpp
+          pipewire_output.cpp pipewire_sinks.cpp render_ahead.cpp stereo_block.cpp telemetry.cpp
   PUBLIC oscillate::engine oscillate::foundation
-  PRIVATE PkgConfig::PIPEWIRE)
+  PRIVATE PkgConfig::PIPEWIRE PkgConfig::ALSA PkgConfig::DBUS)
 target_compile_definitions(oscillate_audio_io PUBLIC OSCILLATE_HAVE_JACK=$<BOOL:${JACK_FOUND}>)
 
 if(JACK_FOUND)

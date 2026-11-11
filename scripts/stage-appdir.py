@@ -62,6 +62,8 @@ HOST_INTEGRATION_NAMES = {
     # Copying it would encode a host path in the AppDir and omit that backend.
     "libproxy.so.1",
     "libpxbackend-1.0.so",
+    # libasound reads the host's ALSA configuration and loads its plug-ins.
+    "libasound.so.2",
 }
 READ_CHUNK_BYTES = 1 << 20
 EXECUTABLE_MODE = 0o755

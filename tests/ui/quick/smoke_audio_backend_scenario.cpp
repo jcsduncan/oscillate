@@ -64,7 +64,7 @@ void run_audio_backend(QApplication& app, QQmlApplicationEngine& engine,
               bridge.audio_output()->audio_devices().size() != 3 ||
               visible_count(window->contentItem(), QStringLiteral("audioOutputPanel")) != 1 ||
               visible_count(window->contentItem(), QStringLiteral("audioOutputChoice")) != 3 ||
-              visible_count(window->contentItem(), QStringLiteral("audioBackendChoice")) != 2) {
+              visible_count(window->contentItem(), QStringLiteral("audioBackendChoice")) != 3) {
             std::cerr << "Audio output smoke: discovery or output panel failed\n";
             probe->stop();
             app.exit(1);

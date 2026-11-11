@@ -20,6 +20,8 @@ set(oscillate_quick_core_sources
   src/insert_chain_view.hpp
   src/audio_output_controller.cpp
   src/audio_output_controller.hpp
+  src/alsa_playback_output.cpp
+  src/alsa_playback_output.hpp
   src/jack_playback_output.cpp
   src/jack_playback_output.hpp
   src/arrangement_automation_controller.cpp
@@ -190,6 +192,8 @@ set(oscillate_quick_shared_sources
   src/device_strip_catalog.hpp
   src/device_catalog.cpp
   src/device_catalog.hpp
+  src/alsa_playback_output.cpp
+  src/alsa_playback_output.hpp
   src/jack_playback_output.cpp
   src/jack_playback_output.hpp
   src/key_review_controller.cpp

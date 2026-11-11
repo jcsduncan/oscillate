@@ -143,6 +143,13 @@ std::string playback_buffer_frames_text() {
   return text;
 }
 
+PlaybackOutputFactory pipewire_output_factory() {
+  return [](audio_io::StereoRenderSource source,
+            audio_io::TransportCursor& transport) -> std::unique_ptr<PlaybackOutput> {
+    return std::make_unique<PipeWirePlaybackOutput>(source, transport);
+  };
+}
+
 InstrumentPlayback::InstrumentPlayback(ProjectSession& session,
                                        PlaybackOutputFactory output_factory,
                                        std::uint32_t requested_buffer_frames)
@@ -150,12 +157,8 @@ InstrumentPlayback::InstrumentPlayback(ProjectSession& session,
       requested_buffer_frames_(valid_playback_buffer_frames(requested_buffer_frames)
                                    ? requested_buffer_frames
                                    : default_playback_buffer_frames) {
-  if (!output_factory_) {
-    output_factory_ = [](audio_io::StereoRenderSource source,
-                         audio_io::TransportCursor& transport) {
-      return std::make_unique<PipeWirePlaybackOutput>(source, transport);
-    };
-  }
+  if (!output_factory_)
+    output_factory_ = pipewire_output_factory();
 }
 InstrumentPlayback::~InstrumentPlayback() { stop(); }
 

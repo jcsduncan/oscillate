@@ -114,6 +114,7 @@
       "platform": "Ubuntu 26.04 amd64",
       "preset": "package-appimage",
       "system": [
+        "libasound2t64",
         "libc6",
         "libproxy1v5"
       ]
@@ -124,7 +125,9 @@
       "platform": "Ubuntu 26.04 amd64",
       "preset": "package-deb",
       "system": [
+        "libasound2t64",
         "libc6",
+        "libdbus-1-3",
         "libgcc-s1",
         "libjack-jackd2-0 | libjack-0.125",
         "libmpg123-0t64",

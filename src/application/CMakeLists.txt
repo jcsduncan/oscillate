@@ -7,6 +7,8 @@ add_library(oscillate_application
   control_transport_gate.cpp
   crate_chops.cpp
   device_control.cpp
+  # A backend falling back to PipeWire (ADR-0130).
+  fallback_output.cpp
   graph_control.cpp
   instrument_playback.cpp
   key_cache.cpp

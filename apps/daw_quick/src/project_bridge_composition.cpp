@@ -1,5 +1,6 @@
 #include "project_bridge.hpp"
 
+#include "alsa_playback_output.hpp"
 #include "arrange_controller.hpp"
 #include "arrangement_automation_controller.hpp"
 #include "clay_controller.hpp"
@@ -30,6 +31,8 @@
 #include "tempo_lane_controller.hpp"
 #include "track_commands.hpp"
 #include "waveform_controller.hpp"
+
+#include "oscillate/application/fallback_output.hpp"
 
 #include <cstdint>
 #include <exception>
@@ -67,6 +70,16 @@ void ProjectBridge::create_audio_output(application::PlaybackOutputFactory outpu
                                         application::PlaybackOutputFactory jack_output_factory,
                                         std::function<bool()> jack_server_probe,
                                         AudioDeviceDiscovery discovery) {
+  // Direct ALSA plays through PipeWire whenever it cannot have its card
+  // (ADR-0130); both are metered like the other backends.
+  AudioOutputController::Alsa alsa;
+  alsa.choice = std::make_shared<AlsaOutputChoice>();
+  alsa.fallback = std::make_shared<application::OutputFallbackReport>();
+  alsa.factory = make_metered_output_factory(
+      application::make_fallback_output_factory(
+          make_alsa_playback_output_factory(alsa.choice),
+          output_factory ? output_factory : application::pipewire_output_factory(), alsa.fallback),
+      meter_, spectrum_, true_peak_, mono_listen_);
   audio_output_ = std::make_unique<AudioOutputController>(
       AudioOutputController::Host{
           .selection_allowed =
@@ -99,14 +112,20 @@ void ProjectBridge::create_audio_output(application::PlaybackOutputFactory outpu
             return playback_->set_requested_buffer_frames(frames);
           },
           .settings_changed = [this] { emit playbackChanged(); },
-          .apply_render_ahead = [this] { apply_render_ahead(); }},
-      make_metered_output_factory(std::move(output_factory), meter_, spectrum_, true_peak_,
-                                  mono_listen_),
+          .apply_render_ahead = [this] { apply_render_ahead(); },
+          .output_latency_frames = [this]() -> std::optional<std::uint32_t> {
+            if (routed_playback_ && !routed_stop_completion_)
+              return routed_playback_->output_status().output_latency_frames;
+            if (playback_ && playback_->playing())
+              return playback_->output_status().output_latency_frames;
+            return std::nullopt;
+          }},
+      make_metered_output_factory(output_factory, meter_, spectrum_, true_peak_, mono_listen_),
       metered_jack_factory(std::move(jack_output_factory), meter_, spectrum_, true_peak_,
                            mono_listen_),
       jack_server_probe ? std::move(jack_server_probe)
                         : std::function<bool()>{jack_server_available},
-      std::move(discovery), this);
+      std::move(discovery), std::move(alsa), this);
   connect(this, &ProjectBridge::playbackChanged, audio_output_.get(),
           &AudioOutputController::notify_playback);
 }

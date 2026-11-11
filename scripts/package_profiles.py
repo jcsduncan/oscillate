@@ -75,7 +75,9 @@ class RuntimeDependencies:
 
 
 DEB_DEPENDS = (
+    "libasound2t64",
     "libc6",
+    "libdbus-1-3",
     "libgcc-s1",
     "libjack-jackd2-0 | libjack-0.125",
     "libmpg123-0t64",
@@ -93,10 +95,11 @@ DEB_DEPENDS = (
     "qml6-module-qtquick",
 )
 
-# glibc's base ABI and libproxy (on every Ubuntu desktop through
-# glib-networking) stay on the host; stage-appdir.py copies everything else
-# the app and its Qt plugins load.
-APPIMAGE_HOST = ("libc6", "libproxy1v5")
+# glibc's base ABI, libproxy (on every Ubuntu desktop through
+# glib-networking) and libasound (whose configuration and plug-ins are the
+# host's) stay on the host; stage-appdir.py copies everything else the app
+# and its Qt plugins load.
+APPIMAGE_HOST = ("libasound2t64", "libc6", "libproxy1v5")
 # The .deb gets these through its PipeWire library's own Depends.
 APPIMAGE_CONDITIONAL = {
     "libspa-0.2-modules": "PipeWire output: the bundled PipeWire client loads its SPA "

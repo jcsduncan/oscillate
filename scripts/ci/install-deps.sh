@@ -7,7 +7,7 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq \
-  cmake ninja-build g++ pkgconf libpipewire-0.3-dev \
+  cmake ninja-build g++ pkgconf libpipewire-0.3-dev libasound2-dev libdbus-1-dev \
   libssl-dev nlohmann-json3-dev qt6-base-dev qt6-declarative-dev \
   python3 python3-venv \
   "$@"

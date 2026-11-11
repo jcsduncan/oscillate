@@ -1,0 +1,28 @@
+# ADR-0130 — Direct ALSA backend
+
+**Status:** Accepted and implemented. **Date:** 11 November 2026.
+**Builds on:** ADR-0048 (audio helpers at the callback's priority), ADR-0128 (render-ahead).
+**Contract:** `audio_io::AlsaOutput`, `AlsaStartConfig`, `AlsaOutputStatus`, `AlsaFaults`, `list_alsa_playback_devices`, `alsa_card_of`, `convert_stereo_to_device` (`include/oscillate/audio_io/alsa_output.hpp`); `audio_io::DeviceReservation` and `DbusDeviceReservation` (`include/oscillate/audio_io/device_reservation.hpp`); `OutputStatus::output_latency_frames`; `application::make_fallback_output_factory`, `OutputFallbackReport` and `pipewire_output_factory`; the audio settings' ALSA backend (`audioBackend` = `alsa`, `alsaDevice`, `alsaPeriods` in QSettings). No schema change.
+
+## Context
+
+PipeWire plays every client through its graph: the device runs at the graph's quantum, other clients share it, and the graph's driver decides when Oscillate's callback runs. For the lowest, steadiest latency a user wants the interface to themselves, as Bitwig's and Ardour's ALSA modes give it. The sound server holds the card, so taking it needs the server's agreement, and the server must get it back afterwards.
+
+## Decision
+
+1. **A third output beside PipeWire and JACK.** `AlsaOutput` opens a playback PCM (`hw:CARD=<id>,DEV=<n>` from the picker) in non-blocking mode and configures it with interleaved writes, the project rate exactly (no resampling: a card that cannot run it is refused), the first of S32_LE, S24_3LE and S16_LE the card takes, the fewest channels it takes (at least two, stereo on the first two and silence on the rest), and the requested period and period count (2 to 4, default 2). It reads the period, count and buffer the driver chose. The device picker lists every card's playback PCMs by name from the control interface, which works while the server holds the cards.
+2. **Writes, not mmap.** The output converts from float into its own period buffer anyway, so mmap would save one copy of a period and need a second path that the null and file PCMs used in tests do not exercise. `snd_pcm_writei` serves every PCM type.
+3. **The I/O thread.** It prefills the buffer with silence (the start threshold is the buffer), then loops: wait up to 50 ms for a period of room (`snd_pcm_wait`), sample `snd_pcm_delay`, render the period through `render_device_block` (so render-ahead and the helpers work as with the other outputs; a period longer than requested is rendered in requested-size blocks), convert it and write it. The thread, the render-ahead producer and the helpers are created with the thread utilities PipeWire's module-rt installs in a PipeWire context, the mechanism the PipeWire output uses (RTKit or the realtime portal); a helper that cannot become real-time is not kept. The I/O thread renders under `foundation::RealtimeThreadScope` and never allocates.
+4. **Underruns and loss.** `-EPIPE` is counted as an xrun (`DeviceTelemetry::server_xrun`), recovered with `snd_pcm_recover` and the buffer refilled with silence; the rest of that period is dropped. A suspended device is resumed by polling, not by `snd_pcm_recover`'s sleep. A device that fails to recover, or consumes nothing for one second, puts the output in `disconnected` or `error`, which the transport treats as device loss.
+5. **Card reservation.** Before opening a card the output takes `org.freedesktop.ReserveDevice1.Audio<card>` on the session bus with the highest priority: if the sound server owns it, the output asks it to give the card up (`RequestRelease`) and then replaces it. While held, a thread answers the reservation object's calls and refuses requests to give the card back. Stop closes the PCM first and then drops the name, and the server takes the card again. Without a session bus the card is opened unreserved. A PCM that names no card (null, file, a plug of several cards) is not reserved. The PCM open is retried for up to a second while it reports busy, as the server closes the card.
+6. **Held only while playing.** The card is taken at Play and given back at Stop, so other applications and Oscillate's own previews play through PipeWire while the transport is stopped.
+7. **Never silent.** The audio settings' ALSA choice plays through a fallback output: when the ALSA output cannot start (the reservation is refused, the card does not open, or it refuses the rate, formats or periods), playback starts on PipeWire's default output and the settings say why. Each Play tries the card again.
+8. **Settings, not project data.** The backend, device and period count are application settings beside the existing backend and buffer choices; switching takes effect at the next Play. The settings show the buffer while stopped and the measured latency (`snd_pcm_delay`) while playing.
+
+## Consequences
+
+- **libasound and libdbus are build and run-time dependencies.** Both are on every Ubuntu desktop; the AppImage uses the host's libasound, whose configuration and plug-ins are the host's.
+- **The Flatpak plays through PipeWire.** Its sandbox has no `/dev/snd`, so the ALSA choice falls back there.
+- **Previews are silent while ALSA plays.** The card is out of PipeWire's graph until Stop.
+- **Measured latency is the driver's.** `snd_pcm_delay` counts the frames queued ahead of the converter as the driver reports them; converter and USB transfer delays a driver does not report are not included.
+- **Tested without hardware.** The contract runs on ALSA's null and file PCMs with an injectable write fault and a fake reservation; the D-Bus exchange with a real sound server and real cards needs a manual check on hardware.
