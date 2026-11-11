@@ -295,6 +295,9 @@ using detail::TempoBoundary;
 
 class Vst3GraphRuntime final : public engine::SidechainProcessorRuntime {
 public:
+  // A plugin's calls are qualified per block size, and it need not render
+  // the same under another split (ADR-0127).
+  [[nodiscard]] bool renders_any_split() const noexcept override { return false; }
   explicit Vst3GraphRuntime(Vst3GraphRuntimeInputs inputs)
       : effect_(std::move(inputs.effect)), input_left_(inputs.max_frames),
         input_right_(inputs.max_frames), output_left_(inputs.max_frames),

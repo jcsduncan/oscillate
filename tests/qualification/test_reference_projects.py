@@ -114,7 +114,9 @@ class Report(unittest.TestCase):
             }
         )
         self.assertIn(
-            "| heavy | 64 | 1 | 3 | 180 | 400 | 900 | 30.0% | 0 |  |  | 85.5 | 120 | 400.0 |", text
+            "| heavy | 64 | 1 | 3 | 180 | 400 | 900 | 30.0% | 0 |  |  |  |  |  "
+            "| 85.5 | 120 | 400.0 |",
+            text,
         )
         self.assertIn("| Nova | 2 | 50.0 |", text)
 
@@ -137,8 +139,41 @@ def run_with(trace) -> dict:
     return {"reference": "light", "frames": 64, "repetition": 1, **summary}
 
 
-def limits(master=None, p99=None):
-    return argparse.Namespace(gate_master_percent=master, gate_p99_percent=p99)
+def limits(master=None, p99=None, exposed=None, late=None):
+    return argparse.Namespace(
+        gate_master_percent=master,
+        gate_p99_percent=p99,
+        gate_exposed_percent=exposed,
+        gate_late_blocks=late,
+    )
+
+
+# A block in parts (ADR-0127): the master's two spans add up, and only the
+# part after every other node has finished is exposed.
+PARTS_TRACE = {
+    "traceEvents": [
+        {"ph": "M", "tid": 1, "args": {"name": "audio callback"}},
+        {"ph": "M", "tid": 2, "args": {"name": "audio worker"}},
+        span(1, "audio.render", 0, 1000),
+        span(1, "graph.wavefront", 0, 1000, n=4),
+        span(2, "graph.source", 0, 300, n=1, name="Track 1 (source)"),
+        span(2, "graph.node", 300, 400, n=1, name="Track 1"),
+        span(1, "graph.node", 500, 300, n=7, name="Master"),
+        span(1, "graph.node", 800, 150, n=7, name="Master"),
+        span(1, "audio.render", 2000, 500),
+        span(1, "graph.node", 2000, 100, n=1, name="Track 1"),
+        span(1, "graph.node", 2100, 200, n=7, name="Master"),
+    ]
+}
+PARTS_MASTER_MEAN_US = 325
+# Block one: the master ends at 950, the track at 700; block two: 2300 and 2100.
+PARTS_EXPOSED_MEAN_US = 225
+# 225 µs of the fake run's 1333.333 µs period.
+PARTS_EXPOSED_PERCENT = 16.88
+# One block in four parts, one whole.
+PARTS_MEAN = 2.5
+# The master after the warm-up mark.
+WARMED_MASTER_US = 100
 
 
 class Master(unittest.TestCase):
@@ -165,6 +200,44 @@ class Master(unittest.TestCase):
 
     def test_a_master_limit_needs_a_trace(self):
         self.assertIn("no master spans", gate(limits(master=10.0), [run_with(None)])[0])
+
+    def test_a_master_in_parts_sums_its_spans_and_times_its_exposed_tail(self):
+        tables = trace_tables(PARTS_TRACE)
+        self.assertEqual(tables["master"]["mean_us"], PARTS_MASTER_MEAN_US)
+        self.assertEqual(tables["master"]["exposed_mean_us"], PARTS_EXPOSED_MEAN_US)
+        self.assertEqual(tables["mean_parts"], PARTS_MEAN)
+        self.assertNotIn("graph.wavefront", [row["device"] for row in tables["devices"]])
+
+    def test_warm_up_blocks_are_left_out(self):
+        warmed = {
+            "traceEvents": [
+                {"ph": "M", "tid": 1, "args": {"name": "audio callback"}},
+                span(1, "audio.render", 0, 900),
+                span(1, "graph.node", 0, 800, n=7, name="Master"),
+                {"ph": "i", "tid": 1, "name": "qualification.measured", "ts": 1000, "args": {}},
+                span(1, "audio.render", 1000, 200),
+                span(1, "graph.node", 1000, 100, n=7, name="Master"),
+            ]
+        }
+        tables = trace_tables(warmed)
+        self.assertEqual(tables["master"]["blocks"], 1)
+        self.assertEqual(tables["master"]["mean_us"], WARMED_MASTER_US)
+
+    def test_a_trace_that_dropped_events_fails_the_master_gates(self):
+        dropped = dict(PARTS_TRACE, otherData={"dropped_events": 3})
+        run = run_with(dropped)
+        failures = gate(limits(exposed=PARTS_EXPOSED_PERCENT), [run])
+        self.assertIn("dropped 3 events", failures[0])
+
+    def test_the_exposed_and_late_limits(self):
+        run = run_with(PARTS_TRACE)
+        exposed = run["result"]["master_exposed_percent"]
+        self.assertEqual(exposed, PARTS_EXPOSED_PERCENT)
+        self.assertEqual(gate(limits(exposed=exposed, late=0), [run]), [])
+        failures = gate(limits(exposed=exposed / 2), [run])
+        self.assertIn("runs alone", failures[0])
+        run["result"]["over_period"] = 3
+        self.assertIn("3 blocks passed the period", gate(limits(late=2), [run])[0])
 
 
 if __name__ == "__main__":

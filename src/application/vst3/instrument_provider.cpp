@@ -67,6 +67,9 @@ std::atomic<std::uint64_t> next_manual_instance{1};
 
 class Vst3InstrumentRuntime final : public engine::ProcessorRuntime {
 public:
+  // A plugin's calls are qualified per block size, and it need not render
+  // the same under another split (ADR-0127).
+  [[nodiscard]] bool renders_any_split() const noexcept override { return false; }
   enum class Phase : std::uint8_t { fresh, preparing, prepared, running };
   static_assert(std::atomic<Phase>::is_always_lock_free);
 

@@ -190,6 +190,10 @@ struct Options {
   // Every role of the master rebalance set (ADR-0123).
   bool rebalance = false;
   Master master = Master::standard;
+  // How blocks are cut into parts (ADR-0127): adaptive, off, or fixed parts
+  // of subblock_frames.
+  engine::RoutedSubblocks subblocks = engine::RoutedSubblocks::adaptive;
+  std::size_t subblock_frames = 0;
 };
 
 template <typename T> T take(foundation::Result<T> result, std::string_view what) {
@@ -217,7 +221,7 @@ Options parse(int argc, char** argv) {
       "--frames 64|128|256|512|1024 --scratch DIR [--seconds N] [--warmup BLOCKS] "
       "[--pipewire-target SERIAL] [--trace FILE] [--vst3-effect BUNDLE] "
       "[--vst3-instrument BUNDLE] [--workers N] [--stick-kit DIR] [--rebalance on|off] "
-      "[--master default|heavy]";
+      "[--master default|heavy] [--subblocks adaptive|off|FRAMES]";
   if (argc % 2 == 0)
     throw std::runtime_error(std::string(usage));
   Options options;
@@ -256,6 +260,15 @@ Options parse(int argc, char** argv) {
       if (found == master_names.end())
         throw std::runtime_error("--master is default or heavy");
       options.master = static_cast<Master>(found - master_names.begin());
+    } else if (key == "--subblocks") {
+      if (value == "adaptive") {
+        options.subblocks = engine::RoutedSubblocks::adaptive;
+      } else if (value == "off") {
+        options.subblocks = engine::RoutedSubblocks::off;
+      } else {
+        options.subblocks = engine::RoutedSubblocks::fixed;
+        options.subblock_frames = number(value);
+      }
     } else if (key == "--workers") {
       std::size_t workers = 0;
       const auto parsed = std::from_chars(value.data(), value.data() + value.size(), workers);
@@ -793,8 +806,10 @@ void measure(const Options& options, const fs::path& root, const Vst3Parts& vst3
   const auto& snapshot = session->snapshot();
   Gate gate;
   auto model = take(project::ProjectModel::open(snapshot, gate), "model");
-  const engine::RoutedMixerLimits limits{
+  engine::RoutedMixerLimits limits{
       {bus_queue_frames, bus_queue_frames}, max_frames, graph_limit_bytes, buffer_limit_bytes};
+  limits.subblocks = options.subblocks;
+  limits.fixed_subblock_frames = options.subblock_frames;
 #if defined(OSCILLATE_QUALIFICATION_VST3)
   plugins::Vst3InstrumentTrackProvider instruments;
   plugins::Vst3TrackInsertProvider effects;
@@ -917,14 +932,20 @@ void measure(const Options& options, const fs::path& root, const Vst3Parts& vst3
     auto deadline = std::chrono::steady_clock::now();
     for (std::size_t block = 0; block < total_blocks; ++block) {
       if (block == options.warmup) {
+        // Marks where the measured blocks start, for the trace's summaries.
+        foundation::trace::instant("qualification.measured");
         sampler.emplace();
         cpu_started = process_cpu_seconds();
         wall_started = std::chrono::steady_clock::now();
       }
       const auto started = std::chrono::steady_clock::now();
       begin_allocation_probe();
-      const auto result =
-          audio::render_transport_block(callback, cursor, true, frame_span, sample_span);
+      const auto result = [&] {
+        // As the device outputs frame their render, so the trace's blocks
+        // match a sink's.
+        OSCILLATE_TRACE_SPAN("audio.render", options.frames);
+        return audio::render_transport_block(callback, cursor, true, frame_span, sample_span);
+      }();
       end_allocation_probe();
       const double elapsed =
           std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - started)

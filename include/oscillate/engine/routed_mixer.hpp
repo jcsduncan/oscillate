@@ -4,7 +4,10 @@
 #include "oscillate/engine/delay_compensation.hpp"
 #include "oscillate/engine/routed_node_meters.hpp"
 
+#include <array>
 #include <atomic>
+#include <chrono>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <span>
@@ -61,6 +64,57 @@ struct RoutedNode {
         output_gain(gain), state_handoff_prior(std::move(handoff_prior)) {}
 };
 
+// How a live block is cut into sub-blocks for the wavefront schedule
+// (ADR-0127). `adaptive` splits only while the levels after the first cost a
+// measurable share of the block; `fixed` always splits into
+// RoutedMixerLimits::fixed_subblock_frames (tests, benchmarks); `off` renders
+// whole blocks level by level.
+enum class RoutedSubblocks : std::uint8_t { adaptive, fixed, off };
+
+// The adaptive policy (ADR-0127). Splitting is considered once the levels
+// after the first (the buses and the master) cost split_enter_share of the
+// block's render time, a running mean over about share_smoothing_blocks
+// blocks, and dropped below split_leave_share. Then the two ways are timed
+// against each other: probe_blocks blocks of the other way every
+// reprobe_blocks blocks, and blocks split only while splitting renders them
+// at least split_gain faster. A split block has enough parts, between two
+// and max_subblocks of at least min_subblock_frames each, that the deeper
+// levels' serial time left exposed is about target_exposed_share of it.
+inline constexpr std::size_t min_subblock_frames = 64;
+inline constexpr std::size_t max_subblocks = 8;
+inline constexpr double split_enter_share = 0.10;
+inline constexpr double split_leave_share = 0.05;
+inline constexpr double target_exposed_share = 0.025;
+inline constexpr double share_smoothing_blocks = 16.0;
+inline constexpr std::uint32_t probe_blocks = 16;
+inline constexpr std::uint32_t reprobe_blocks = 1024;
+inline constexpr double split_gain = 0.10;
+
+// The adaptive policy's state and decisions, one per live mixer, carried
+// across live switches. Callback only.
+class SubblockPolicy final {
+public:
+  // One block rendered: the deeper levels' serial share of its render time,
+  // and its render time per frame.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a share and a time.
+  void observe(double serial_share, double ns_per_frame) noexcept;
+  [[nodiscard]] bool split() const noexcept { return split_; }
+  [[nodiscard]] double serial_share() const noexcept { return serial_share_; }
+  // The parts a split block of `frames` takes (1 when not splitting).
+  [[nodiscard]] std::size_t parts(std::size_t frames) const noexcept;
+
+private:
+  double serial_share_ = 0.0;
+  bool split_ = false;
+  // Render time per frame: a running mean for the way in use, and the mean
+  // of the current probe of the other way.
+  double current_ns_per_frame_ = 0.0;
+  double probe_ns_per_frame_ = 0.0;
+  std::uint32_t probing_ = 0; // probe blocks still to render
+  std::uint32_t since_probe_ = 0;
+  bool probed_ = false; // splitting has been timed at least once
+};
+
 struct RoutedMixerLimits {
   RoutingLatencyOptions latency;
   std::size_t max_frames;
@@ -84,6 +138,24 @@ struct RoutedMixerLimits {
   // keys nothing and has finished its mute ramp skips its inputs and processor
   // and outputs silence, exactly what its mute would have left.
   bool skip_muted_nodes = false;
+  // Sub-block scheduling of live blocks with helpers (ADR-0127).
+  RoutedSubblocks subblocks = RoutedSubblocks::adaptive;
+  // The part length under RoutedSubblocks::fixed; the last part of a block
+  // takes the remainder.
+  std::size_t fixed_subblock_frames = 0;
+};
+
+// A node's own source, rendered inside the mixer's schedule (ADR-0127): the
+// mixer calls `fill` for every node of a block's graph, part by part in
+// order, just before mixing that part of the node. It writes frames
+// [offset, offset + frames) of the node's source span (the span mix_block
+// was given) and may hand voices to `workers` (run_nested). A node without a
+// source returns true at once. False marks the block failed: the mixer
+// finishes its schedule and returns false, and the caller silences it.
+struct RoutedNodeFill {
+  void* context = nullptr;
+  bool (*fill)(void* context, std::size_t node, BlockContext part, std::size_t offset,
+               std::size_t frames, AudioWorkerPool* workers) noexcept = nullptr;
 };
 
 // Optional per-sample edge gain, in plan().edges order. An empty values span
@@ -146,11 +218,28 @@ public:
   // is silenced without advancing route history. A larger span is untouched.
   // With workers, the nodes of each dependency level run in parallel; every
   // node sums its inputs in the same order, so the output is bit-identical.
+  // With workers the block may also be cut into sub-blocks scheduled as a
+  // wavefront (ADR-0127): level L mixes part k while level L - 1 mixes part
+  // k + 1, so the master overlaps the tracks. Every node still processes its
+  // frames in order, and the engine's processors render identically under
+  // any split, so the output is the same. With `fill`, each node renders its
+  // own source inside the schedule (sources then hold the spans `fill`
+  // writes, unfilled on entry).
   [[nodiscard]] bool mix_block(std::span<const std::span<const StereoFrame>> sources,
                                std::span<StereoFrame> output, BlockContext context,
                                std::span<const EdgeGainSpan> gains = {},
                                std::span<const NodeGainSpan> node_gains = {},
-                               AudioWorkerPool* workers = nullptr) noexcept;
+                               AudioWorkerPool* workers = nullptr,
+                               RoutedNodeFill fill = {}) noexcept;
+  // The parts the last mix_block cut its block into (1: whole). Any thread;
+  // a telemetry read.
+  [[nodiscard]] std::size_t last_subblocks() const noexcept {
+    return last_subblocks_.load(std::memory_order_relaxed);
+  }
+  // How many parts a block of `frames` would be cut into now, from the
+  // limits and the measured shares (no workers: 1). Callback only.
+  [[nodiscard]] std::size_t subblocks_for(std::size_t frames,
+                                          const AudioWorkerPool* workers) const noexcept;
   // Callback only, at the first block of a live switch (no hold): take over
   // `prior`'s running state (delay lines, histories, gain ramps) and
   // position, prepared for by prepare_routed_mixer_live(). Never allocates.
@@ -256,7 +345,11 @@ private:
     // Which of the pipeline's block slots this block's node buffers use
     // (always 0 outside mix_step).
     std::size_t slot = 0;
+    // The part's first frame within the block's buffers and spans
+    // (ADR-0127); `frames` and `context` are the part's.
+    std::size_t offset = 0;
   };
+
   // One fed block held for the levels still to process it.
   struct StepSlot {
     std::vector<std::vector<StereoFrame>> sources;
@@ -292,6 +385,56 @@ private:
   // Control side, at preparation: dependency levels, scratch lanes and
   // pre-fader taps for sidechain sources.
   void build_levels();
+  // mix_block's schedule: `parts` parts (1: level by level), nodes filling
+  // their sources through `fill` when it has one. False when a fill failed.
+  [[nodiscard]] bool run_wavefront(const NodeBlock& block, std::size_t parts,
+                                   AudioWorkerPool& workers, RoutedNodeFill fill) noexcept;
+  // Whole blocks with helpers: one batch per dependency level.
+  [[nodiscard]] bool run_levels(const NodeBlock& block, AudioWorkerPool& workers,
+                                RoutedNodeFill fill) noexcept;
+  // The adaptive policy (ADR-0127): a piece's cost at its level and part,
+  // and the block's measured shares folded into the running mean.
+  void record_cost(std::size_t level, std::size_t part, std::chrono::nanoseconds spent) noexcept;
+  void update_policy(std::size_t parts, std::size_t frames,
+                     std::chrono::nanoseconds spent) noexcept;
+  // The same schedule on the calling thread alone: every node in
+  // topological order, part by part.
+  [[nodiscard]] bool run_serial(const NodeBlock& block, RoutedNodeFill fill) noexcept;
+  // Part `part` of `parts` of a block.
+  [[nodiscard]] NodeBlock part_of(const NodeBlock& block, std::size_t part,
+                                  std::size_t parts) const noexcept;
+  // One (node, part) task of the schedule.
+  [[nodiscard]] bool mix_part(std::size_t index, const NodeBlock& block, std::size_t part,
+                              std::size_t parts, RoutedNodeFill fill, AudioWorkerPool* workers,
+                              std::span<StereoFrame> scratch) noexcept;
+  // One (node, stage, part) task of a staged node: its input with stage 0,
+  // its output with the last stage.
+  [[nodiscard]] bool mix_stage(std::size_t index, std::size_t stage, const NodeBlock& block,
+                               std::size_t part, std::size_t parts, RoutedNodeFill fill,
+                               AudioWorkerPool* workers, std::span<StereoFrame> scratch) noexcept;
+  // mix_node's halves around the processor: the summed input (returning how
+  // many frames of drained tails it left in the lane) and the output.
+  [[nodiscard]] std::size_t mix_input(std::size_t index, const NodeBlock& block,
+                                      std::span<StereoFrame> scratch) noexcept;
+  void mix_output(std::size_t index, const NodeBlock& block, std::span<StereoFrame> scratch,
+                  std::size_t tail_count) noexcept;
+  // The node's detector input for the block's frames, empty without one.
+  [[nodiscard]] std::span<const StereoFrame> node_sidechain(std::size_t index,
+                                                            const NodeBlock& block) const noexcept;
+  // The schedule's pieces and ready queues (ADR-0127).
+  struct PartPlan;
+  struct ReadyQueue;
+  // Whether the master pipelines its stages over this block's parts.
+  [[nodiscard]] bool stages_sink(std::size_t parts) const noexcept;
+  void push_ready(ReadyQueue& queue, std::uint32_t item) noexcept;
+  [[nodiscard]] std::optional<std::uint32_t> pop_ready(ReadyQueue& queue,
+                                                       std::size_t total) noexcept;
+  [[nodiscard]] bool has_ready(std::size_t total) const noexcept;
+  // One input of `piece` in part `part` finished; queues it when it was the
+  // last.
+  void release_piece(const PartPlan& plan, std::size_t part, std::size_t piece) noexcept;
+  // One thread's share of a block: ready pieces until every piece is done.
+  template <typename Job> void run_lane(Job& run, std::size_t lane) noexcept;
   void ramp_node(std::size_t index, bool muted, StereoFrame gain) noexcept;
   void ramp_edge(std::size_t index, float gain) noexcept;
 
@@ -334,6 +477,59 @@ private:
   // for nodes that key a sidechain.
   std::vector<std::vector<StereoFrame>> prefader_buffers_;
   std::vector<std::size_t> level_offsets_;
+  // A live switch carries it over, so an edit does not restart it.
+  SubblockPolicy policy_;
+  // The schedule (ADR-0127), sized at preparation. A piece is a node's part
+  // of a block, or one stage of the master's part.
+  static constexpr std::size_t no_stage = static_cast<std::size_t>(-1);
+  struct Piece {
+    std::size_t node = 0;
+    std::size_t stage = no_stage; // no_stage: the whole node
+  };
+  // One part's pieces in topological order and, per piece, how many pieces
+  // of its part it waits for, which pieces wait for it, and whether it is
+  // below the first level (queued ahead of the tracks). Plan 0 has whole
+  // nodes; plan 1 the master's stages as pieces of their own.
+  struct PartPlan {
+    std::vector<Piece> pieces;
+    std::vector<std::uint32_t> inputs;
+    std::vector<std::size_t> dependent_offsets;
+    std::vector<std::uint32_t> dependents;
+    std::vector<bool> deep;
+  };
+  // Pieces ready to run, in the order they became ready: a slot is written
+  // once a block (0 = not yet), and head and tail only grow within it.
+  struct ReadyQueue {
+    std::unique_ptr<std::atomic<std::uint32_t>[]> items;
+    std::atomic<std::size_t> head{0};
+    std::atomic<std::size_t> tail{0};
+  };
+  std::array<PartPlan, 2> part_plans_;
+  std::size_t sink_stages_ = 1;
+  // Per node: its processor or output stage may render differently in
+  // parts (a plugin host), so it processes each block whole, after its
+  // inputs' last part (fixed at preparation); and the same for the current
+  // block, which adds a node draining such a processor (callback-owned).
+  std::vector<std::uint8_t> whole_node_;
+  std::vector<std::uint8_t> whole_now_;
+  // Whether the current block's node `index` processes it whole.
+  void plan_whole_nodes() noexcept;
+  // The most parts a block can have, and the lanes of scratch_.
+  std::size_t max_parts_ = max_subblocks;
+  std::size_t scratch_lanes_ = 1;
+  // Per block: each piece's inputs still running (part-major), the ready
+  // queues, the finished count, and the sleep word threads with nothing
+  // ready wait on.
+  std::unique_ptr<std::atomic<std::uint32_t>[]> pending_;
+  ReadyQueue deep_ready_;
+  ReadyQueue shallow_ready_;
+  std::atomic<std::size_t> pieces_done_{0};
+  std::atomic<std::uint32_t> ready_sequence_{0};
+  std::atomic<std::uint32_t> sleepers_{0};
+  // Per (level, part), the level's cost (ns) in the current block, for the
+  // adaptive policy.
+  std::unique_ptr<std::atomic<std::uint64_t>[]> level_part_ns_;
+  std::atomic<std::size_t> last_subblocks_{1};
   std::unique_ptr<RoutedNodeMeters> node_meters_;
   // The offline pipeline (prepare_pipeline): one slot per dependency level;
   // slot 0 is the ordinary buffers, slot k > 0 the k-th extra set.

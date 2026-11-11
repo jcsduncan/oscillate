@@ -15,6 +15,11 @@ namespace oscillate::engine {
 
 enum class RoutedRenderStatus : std::uint8_t { rendered, no_graph, invalid_block };
 
+// RoutedSourceFill::prepare_selected's answer: the spans are selected and
+// will be rendered inside the mixer's schedule; this block needs a whole
+// fill_selected instead; or the block cannot render.
+enum class RoutedPrepareStatus : std::uint8_t { prepared, whole_block, failed };
+
 // The callback fills already-sized source spans only after the publisher has
 // decided that this block will render. A false result must leave source cursors
 // unchanged; the publisher writes silence and does not publish a new graph.
@@ -30,6 +35,19 @@ struct RoutedSourceFill {
   // This callback runs instead of fill when both are supplied.
   bool (*fill_selected)(void*, std::uint64_t, BlockContext, std::size_t,
                         std::span<const std::span<const StereoFrame>>&) noexcept = nullptr;
+  // Optional, with fill_selected: sources rendered inside the mixer's
+  // schedule (ADR-0127). On a block that switches nothing, prepare_selected
+  // decides whether the block renders and selects the spans without
+  // rendering them, then the mixer calls fill_node for each node, part by
+  // part (RoutedNodeFill). A switching block, or one the source answers
+  // whole_block for, fills through fill_selected. A node whose fill fails
+  // after the schedule started leaves its block silent but rendered: the
+  // graph has moved past it.
+  RoutedPrepareStatus (*prepare_selected)(void*, std::uint64_t, BlockContext, std::size_t,
+                                          std::span<const std::span<const StereoFrame>>&) noexcept =
+      nullptr;
+  bool (*fill_node)(void*, std::size_t, BlockContext, std::size_t, std::size_t,
+                    AudioWorkerPool*) noexcept = nullptr;
 };
 
 // One published revision owns preallocated gain spans. Evaluation runs before

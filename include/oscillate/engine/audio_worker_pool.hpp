@@ -95,6 +95,11 @@ public:
   // them; with no free slot or no attached worker they run inline, in
   // order, on lane 0.
   void run_nested(std::size_t count, Task task, void* context) noexcept;
+  // Callback side, from inside a task with nothing of its own to do yet:
+  // works on any nested batch another task has handed out, so a thread
+  // waiting inside a task still helps with voices (ADR-0127). Returns at
+  // once when none has a task left.
+  void help_nested() noexcept { work_nested(); }
 
 private:
   // One published batch: the outer one, or a nested slot's.
