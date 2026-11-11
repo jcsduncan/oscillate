@@ -114,7 +114,8 @@ class Report(unittest.TestCase):
             }
         )
         self.assertIn(
-            "| heavy | 64 | 1 | 3 | 180 | 400 | 900 | 30.0% | 0 |  |  |  |  |  | 85.5 | 120 | 400.0 |",
+            "| heavy | 64 | 1 | 3 | 180 | 400 | 900 | 30.0% | 0 |  |  |  |  |  "
+            "| 85.5 | 120 | 400.0 |",
             text,
         )
         self.assertIn("| Nova | 2 | 50.0 |", text)
