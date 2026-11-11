@@ -1,6 +1,6 @@
 #include "oscillate/native_dsp/synth/nova/tables.hpp"
 
-#include "dsp/fft.hpp"
+#include "dsp/offline_fft.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
 #include "vowels.hpp"
 
@@ -174,8 +174,8 @@ public:
   Spectrum& scratch() noexcept { return scratch_; }
 
 private:
-  static const dsp::Fft& transform() {
-    static const dsp::Fft fft(sample_length);
+  static const dsp::OfflineFft& transform() {
+    static const dsp::OfflineFft fft(sample_length);
     return fft;
   }
   void analyse(Spectrum& s) {

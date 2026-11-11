@@ -1,17 +1,16 @@
 #include "oscillate/native_dsp/effects/strata.hpp"
 
 #include "dsp/crossover.hpp"
-#include "dsp/fft.hpp"
 #include "effect_dsp.hpp"
 #include "linear_bank.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
+#include "oscillate/warp_dsp/real_fft.hpp"
 #include "strata_presets.hpp"
 #include "strata_table.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -210,7 +209,7 @@ public:
         auto_gain_coefficient_(1.0 - std::exp(-1.0 / (auto_gain_seconds * sample_rate))),
         learn_target_(static_cast<std::uint64_t>(std::ceil(learn_seconds * sample_rate))),
         spectrum_interval_(static_cast<std::size_t>(std::lround(sample_rate / spectrum_rate_hz))),
-        fft_(spectrum_size), spectrum_work_(spectrum_size), spectrum_input_(spectrum_size),
+        fft_(spectrum_size), spectrum_frame_(spectrum_size), spectrum_input_(spectrum_size),
         spectrum_output_(spectrum_size), window_(spectrum_size) {
     if (linear_) {
       bank_ = std::make_unique<dsp::LinearBank>(dsp::bank_frames(sample_rate), sample_rate);
@@ -534,14 +533,16 @@ private:
     }
   }
 
-  // The input and output spectrum in one transform: input real, output
-  // imaginary, separated by conjugate symmetry.
+  // The input and output spectra.
   void analyse() noexcept {
-    for (std::size_t i = 0; i < spectrum_size; ++i) {
-      const std::size_t at = (spectrum_write_ + i) % spectrum_size;
-      spectrum_work_[i] = {spectrum_input_[at] * window_[i], spectrum_output_[at] * window_[i]};
+    const std::array<const std::vector<double>*, 2> signals{&spectrum_input_, &spectrum_output_};
+    for (std::size_t s = 0; s < signals.size(); ++s) {
+      for (std::size_t i = 0; i < spectrum_size; ++i) {
+        const std::size_t at = (spectrum_write_ + i) % spectrum_size;
+        spectrum_frame_[i] = static_cast<float>((*signals[s])[at] * window_[i]);
+      }
+      fft_.forward(spectrum_frame_.data(), spectra_[s].data());
     }
-    fft_.forward(spectrum_work_);
     // A full-scale sine reads 0 dB: the Hann window halves the amplitude.
     const double scale = 4.0 / static_cast<double>(spectrum_size);
     const double fall =
@@ -550,11 +551,13 @@ private:
       double in = 0.0;
       double out = 0.0;
       for (std::size_t bin = first_bin_[i]; bin <= last_bin_[i]; ++bin) {
-        const auto z = spectrum_work_[bin];
-        const auto mirror = std::conj(spectrum_work_[(spectrum_size - bin) % spectrum_size]);
-        in = std::max(in, std::abs(0.5 * (z + mirror)));
-        out = std::max(out, std::abs(0.5 * (z - mirror)));
+        in = std::max(
+            in, static_cast<double>(warp_dsp::bin_power(spectra_[0].data(), spectrum_size, bin)));
+        out = std::max(
+            out, static_cast<double>(warp_dsp::bin_power(spectra_[1].data(), spectrum_size, bin)));
       }
+      in = std::sqrt(in);
+      out = std::sqrt(out);
       const auto fresh_in = static_cast<float>(to_db(in * scale));
       const auto fresh_out = static_cast<float>(to_db(out * scale));
       input_spectrum_[i] = std::max(fresh_in, static_cast<float>(input_spectrum_[i] - fall));
@@ -592,8 +595,10 @@ private:
   std::array<float, max_bands> learned_{};
   std::array<double, 2> input_peak_{};
   std::array<double, 2> output_peak_{};
-  base::Fft fft_;
-  std::vector<std::complex<double>> spectrum_work_;
+  warp_dsp::RealFft fft_;
+  warp_dsp::AlignedBuffer spectrum_frame_;
+  std::array<warp_dsp::AlignedBuffer, 2> spectra_{warp_dsp::AlignedBuffer(spectrum_size),
+                                                  warp_dsp::AlignedBuffer(spectrum_size)};
   std::vector<double> spectrum_input_;
   std::vector<double> spectrum_output_;
   std::vector<double> window_;

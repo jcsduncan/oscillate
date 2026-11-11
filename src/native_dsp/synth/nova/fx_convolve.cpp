@@ -1,12 +1,11 @@
 #include "fx_modules.hpp"
 
-#include "dsp/fft.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
+#include "oscillate/warp_dsp/real_fft.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -19,14 +18,13 @@
 // Nova's Convolve module (08a §5): the managed IR (media slot fx.<uid>.ir)
 // resampled to the engine's rate on control, then a zero-latency uniformly
 // partitioned convolution: the first partition runs directly in time, the
-// rest through a frequency-domain delay line, both channels sharing one
-// complex FFT per block. The pinned PFFFT core (native_dsp::Convolution) is
-// an optional build and accepts only four rates and 128-frame calls, so the
-// module carries its own engine on the shared dsp::Fft.
+// rest through a frequency-domain delay line on the realtime transform's
+// unordered spectra (ADR-0126): per channel and block, one forward
+// transform, a product per partition and one inverse.
 namespace oscillate::native_dsp::synth::nova::fx_detail {
 namespace {
 
-using Complex = std::complex<double>;
+using Buffer = warp_dsp::AlignedBuffer;
 
 constexpr double max_ir_seconds = 3.0;
 constexpr double max_predelay_seconds = 0.25;
@@ -79,7 +77,8 @@ public:
     }
     load();
     const std::size_t n = 2 * block_;
-    work_.assign(n, Complex{});
+    time_ = Buffer(n);
+    sum_ = Buffer(n);
     for (std::size_t c = 0; c < 2; ++c) {
       history_[c].assign(block_, 0.0);
       previous_[c].assign(block_, 0.0);
@@ -104,8 +103,9 @@ public:
       low_cut_[c].reset();
       high_cut_[c].reset();
     }
-    std::ranges::fill(spectra_left_, Complex{});
-    std::ranges::fill(spectra_right_, Complex{});
+    for (auto& spectra : spectra_) {
+      spectra.zero();
+    }
     position_ = 0;
     history_position_ = 0;
     newest_ = 0;
@@ -191,22 +191,19 @@ private:
       }
     }
     partitions_ = length_ > block_ ? (length_ - block_ + block_ - 1) / block_ : 0;
-    filter_left_.assign(partitions_ * n, Complex{});
-    filter_right_.assign(partitions_ * n, Complex{});
-    spectra_left_.assign(partitions_ * n, Complex{});
-    spectra_right_.assign(partitions_ * n, Complex{});
-    std::vector<Complex> buffer(n);
-    for (std::size_t p = 0; p < partitions_; ++p) {
-      const std::size_t offset = (p + 1) * block_;
-      std::ranges::fill(buffer, Complex{});
-      for (std::size_t t = 0; t < block_ && offset + t < length_; ++t) {
-        buffer[t] = Complex{ir[0][offset + t] * scale, ir[1][offset + t] * scale};
-      }
-      fft_.forward(buffer);
-      for (std::size_t k = 0; k < n; ++k) {
-        const Complex mirror = std::conj(buffer[(n - k) % n]);
-        filter_left_[p * n + k] = 0.5 * (buffer[k] + mirror);
-        filter_right_[p * n + k] = Complex{0.0, -0.5} * (buffer[k] - mirror);
+    // Each partition's spectrum carries the inverse's 1 / n.
+    const double spectrum_scale = scale / static_cast<double>(n);
+    Buffer padded(n);
+    for (std::size_t c = 0; c < 2; ++c) {
+      filters_[c] = Buffer(std::max<std::size_t>(1, partitions_) * n);
+      spectra_[c] = Buffer(std::max<std::size_t>(1, partitions_) * n);
+      for (std::size_t p = 0; p < partitions_; ++p) {
+        const std::size_t offset = (p + 1) * block_;
+        padded.zero();
+        for (std::size_t t = 0; t < block_ && offset + t < length_; ++t) {
+          padded[t] = static_cast<float>(ir[c][offset + t] * spectrum_scale);
+        }
+        fft_.forward_unordered(padded.data(), filters_[c].data() + p * n);
       }
     }
   }
@@ -271,35 +268,23 @@ private:
       }
       return;
     }
-    for (std::size_t i = 0; i < block_; ++i) {
-      work_[i] = Complex{previous_[0][i], previous_[1][i]};
-      work_[block_ + i] = Complex{current_[0][i], current_[1][i]};
-    }
-    fft_.forward(work_);
     newest_ = (newest_ + partitions_ - 1) % partitions_;
-    Complex* left = &spectra_left_[newest_ * n];
-    Complex* right = &spectra_right_[newest_ * n];
-    for (std::size_t k = 0; k < n; ++k) {
-      const Complex mirror = std::conj(work_[(n - k) % n]);
-      left[k] = 0.5 * (work_[k] + mirror);
-      right[k] = Complex{0.0, -0.5} * (work_[k] - mirror);
-    }
-    std::ranges::fill(work_, Complex{});
-    for (std::size_t p = 0; p < partitions_; ++p) {
-      const std::size_t slot = (newest_ + p) % partitions_;
-      const Complex* xl = &spectra_left_[slot * n];
-      const Complex* xr = &spectra_right_[slot * n];
-      const Complex* hl = &filter_left_[p * n];
-      const Complex* hr = &filter_right_[p * n];
-      for (std::size_t k = 0; k < n; ++k) {
-        // Y = YL + i YR: both outputs are real, so one inverse carries both.
-        work_[k] += xl[k] * hl[k] + Complex{0.0, 1.0} * (xr[k] * hr[k]);
+    for (std::size_t c = 0; c < 2; ++c) {
+      for (std::size_t i = 0; i < block_; ++i) {
+        time_[i] = static_cast<float>(previous_[c][i]);
+        time_[block_ + i] = static_cast<float>(current_[c][i]);
       }
-    }
-    fft_.inverse(work_);
-    for (std::size_t i = 0; i < block_; ++i) {
-      output_[0][i] = work_[block_ + i].real();
-      output_[1][i] = work_[block_ + i].imag();
+      fft_.forward_unordered(time_.data(), spectra_[c].data() + newest_ * n);
+      sum_.zero();
+      for (std::size_t p = 0; p < partitions_; ++p) {
+        const std::size_t slot = (newest_ + p) % partitions_;
+        fft_.multiply_accumulate(spectra_[c].data() + slot * n, filters_[c].data() + p * n,
+                                 sum_.data(), 1.0F);
+      }
+      fft_.inverse_unordered(sum_.data(), sum_.data());
+      for (std::size_t i = 0; i < block_; ++i) {
+        output_[c][i] = sum_[block_ + i];
+      }
     }
     for (std::size_t c = 0; c < 2; ++c) {
       std::copy(current_[c].begin(), current_[c].end(), previous_[c].begin());
@@ -310,7 +295,7 @@ private:
   std::string identity_;
   std::shared_ptr<const SynthMediaAsset> asset_;
   std::size_t block_;
-  native_dsp::dsp::Fft fft_;
+  warp_dsp::RealFft fft_;
   std::size_t length_ = 0;
   std::size_t partitions_ = 0;
   std::array<std::vector<double>, 2> head_;
@@ -318,11 +303,13 @@ private:
   std::array<std::vector<double>, 2> previous_;
   std::array<std::vector<double>, 2> current_;
   std::array<std::vector<double>, 2> output_;
-  std::vector<Complex> filter_left_;
-  std::vector<Complex> filter_right_;
-  std::vector<Complex> spectra_left_;
-  std::vector<Complex> spectra_right_;
-  std::vector<Complex> work_;
+  // Per channel: each partition's spectrum, and the input spectra of the
+  // last `partitions_` blocks (a ring from newest_); a block in time and the
+  // products' sum.
+  std::array<Buffer, 2> filters_;
+  std::array<Buffer, 2> spectra_;
+  Buffer time_;
+  Buffer sum_;
   std::size_t position_ = 0;
   std::size_t history_position_ = 0;
   std::size_t newest_ = 0;

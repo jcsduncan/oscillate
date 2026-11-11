@@ -3,7 +3,7 @@
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/tolerances.hpp"
 
-#include "dsp/fft.hpp"
+#include "dsp/offline_fft.hpp"
 
 #include <algorithm>
 #include <array>
@@ -65,7 +65,7 @@ std::vector<float> raw_saws(std::size_t frames, std::size_t length) {
 
 std::vector<Complex> transform(const float* frame, std::size_t length) {
   std::vector<Complex> bins(frame, frame + length);
-  dsp::Fft(length).forward(bins);
+  dsp::OfflineFft(length).forward(bins);
   return bins;
 }
 

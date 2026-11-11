@@ -1,6 +1,6 @@
 #include "oscillate/native_dsp/synth/nova/tables.hpp"
 
-#include "dsp/fft.hpp"
+#include "dsp/offline_fft.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
 
 #include <algorithm>
@@ -60,8 +60,8 @@ struct Loop {
                   phase);
 }
 
-const dsp::Fft& loop_transform() {
-  static const dsp::Fft transform(loop_frames);
+const dsp::OfflineFft& loop_transform() {
+  static const dsp::OfflineFft transform(loop_frames);
   return transform;
 }
 

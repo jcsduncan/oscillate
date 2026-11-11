@@ -1,13 +1,12 @@
 #include "oscillate/native_dsp/synth/nova/fx.hpp"
 
-#include "dsp/fft.hpp"
 #include "fx_modules.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
+#include "oscillate/warp_dsp/real_fft.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -397,8 +396,8 @@ struct FxRack::State {
   std::array<double, fx_slot_uids> slot_in{};
   std::array<double, fx_slot_uids> slot_out{};
   std::array<Scope, fx_slot_uids> scopes{};
-  std::unique_ptr<dsp::Fft> scope_fft;
-  std::vector<std::complex<double>> scope_buffer;
+  std::unique_ptr<warp_dsp::RealFft> scope_fft;
+  warp_dsp::AlignedBuffer scope_buffer;
   std::vector<double> scope_window;
   double scope_gain = 1.0; // Bin magnitude to a full-scale sine's amplitude.
   std::int64_t scope_interval = 1'600;
@@ -416,8 +415,8 @@ struct FxRack::State {
            static_cast<double>(scope_window_48k) * rate * 0.75) {
       size *= 2;
     }
-    scope_fft = std::make_unique<dsp::Fft>(size);
-    scope_buffer.assign(size, {0.0, 0.0});
+    scope_fft = std::make_unique<warp_dsp::RealFft>(size);
+    scope_buffer = warp_dsp::AlignedBuffer(size);
     scope_window.resize(size);
     double sum = 0.0;
     for (std::size_t i = 0; i < size; ++i) {
@@ -456,11 +455,13 @@ struct FxRack::State {
     const std::size_t size = scope.ring.size();
     for (std::size_t i = 0; i < size; ++i) {
       const float x = scope.ring[(scope.write + i) % size];
-      scope_buffer[i] = {static_cast<double>(x) * scope_window[i], 0.0};
+      scope_buffer[i] = static_cast<float>(static_cast<double>(x) * scope_window[i]);
     }
-    scope_fft->forward(scope_buffer);
+    scope_fft->forward(scope_buffer.data(), scope_buffer.data());
     const auto magnitude = [&](std::size_t k) {
-      return std::abs(scope_buffer[std::min(k, size / 2)]) * scope_gain;
+      return std::sqrt(static_cast<double>(
+                 warp_dsp::bin_power(scope_buffer.data(), size, std::min(k, size / 2)))) *
+             scope_gain;
     };
     for (std::size_t b = 0; b < fx_spectrum_bands; ++b) {
       const auto& bins = band_bins[b];

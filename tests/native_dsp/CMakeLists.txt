@@ -543,7 +543,8 @@ oscillate_add_case_tests(native_temper_contract oscillate_temper_tests
   stereo_modes_leave_the_rest_untouched
   delta_plus_output_is_the_input
   mix_blends_toward_the_input
-  telemetry_feeds_the_panel)
+  telemetry_feeds_the_panel
+  a_channel_dropped_and_restored_starts_clean)
 
 # Strata (ADR-0082): multiband dynamics.
 oscillate_add_test_executable(oscillate_strata_tests SOURCES strata_tests.cpp

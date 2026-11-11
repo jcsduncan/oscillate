@@ -180,12 +180,12 @@ private:
   std::uint32_t rate_;
   std::size_t window_;
   std::size_t size_;
-  warp_dsp::detail::RealFft fft_;
-  warp_dsp::detail::AlignedBuffer a_;
-  warp_dsp::detail::AlignedBuffer b_;
-  warp_dsp::detail::AlignedBuffer spectrum_a_;
-  warp_dsp::detail::AlignedBuffer spectrum_b_;
-  warp_dsp::detail::AlignedBuffer product_;
+  warp_dsp::RealFft fft_;
+  warp_dsp::AlignedBuffer a_;
+  warp_dsp::AlignedBuffer b_;
+  warp_dsp::AlignedBuffer spectrum_a_;
+  warp_dsp::AlignedBuffer spectrum_b_;
+  warp_dsp::AlignedBuffer product_;
   std::vector<double> d_;
   std::vector<double> cmndf_;
   std::vector<double> squares_;

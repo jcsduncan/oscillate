@@ -1,6 +1,6 @@
-#include "../core/real_fft.hpp"
 #include "../core/source_window.hpp"
 #include "oscillate/warp_dsp/analysis.hpp"
+#include "oscillate/warp_dsp/real_fft.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -44,9 +44,9 @@ track_pitch(SourceView& source, const PitchOptions& options, const std::atomic<b
     const std::size_t width = power_of_two_at_least(longest_lag + 2);
     const std::size_t size = 2 * width;
     const std::size_t hop = width / 4;
-    detail::RealFft fft(size);
-    detail::AlignedBuffer head(size);
-    detail::AlignedBuffer whole(size);
+    RealFft fft(size);
+    AlignedBuffer head(size);
+    AlignedBuffer whole(size);
     std::vector<double> squares(size + 1, 0.0);
     std::vector<double> difference(longest_lag + 2, 0.0);
     std::vector<double> normalised(longest_lag + 2, 1.0);

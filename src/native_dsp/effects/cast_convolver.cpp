@@ -1,7 +1,5 @@
 #include "cast_convolver.hpp"
 
-#include <pffft/pffft.h>
-
 #include <algorithm>
 #include <cstring>
 #include <new>
@@ -56,73 +54,6 @@ std::size_t partitions(std::size_t tier, std::size_t taps) noexcept {
   return (end - begin + tiers[tier].block - 1) / tiers[tier].block;
 }
 
-Floats::Floats(std::size_t count) : size_(count) {
-  if (count == 0) {
-    return;
-  }
-  data_ = static_cast<float*>(pffft_aligned_malloc(count * sizeof(float)));
-  if (data_ == nullptr) {
-    throw std::bad_alloc();
-  }
-  zero();
-}
-
-Floats::~Floats() { pffft_aligned_free(data_); }
-
-Floats::Floats(Floats&& other) noexcept
-    : data_(std::exchange(other.data_, nullptr)), size_(std::exchange(other.size_, 0)) {}
-
-Floats& Floats::operator=(Floats&& other) noexcept {
-  if (this != &other) {
-    pffft_aligned_free(data_);
-    data_ = std::exchange(other.data_, nullptr);
-    size_ = std::exchange(other.size_, 0);
-  }
-  return *this;
-}
-
-void Floats::zero() noexcept {
-  if (data_ != nullptr) {
-    std::memset(data_, 0, size_ * sizeof(float));
-  }
-}
-
-Fft::Fft(std::size_t size)
-    : setup_(pffft_new_setup(static_cast<int>(size), PFFFT_REAL)), size_(size) {
-  if (setup_ == nullptr) {
-    throw std::bad_alloc();
-  }
-}
-
-Fft::~Fft() {
-  if (setup_ != nullptr) {
-    pffft_destroy_setup(setup_);
-  }
-}
-
-Fft::Fft(Fft&& other) noexcept
-    : setup_(std::exchange(other.setup_, nullptr)), size_(std::exchange(other.size_, 0)) {}
-
-void Fft::forward(const float* in, float* out, float* work) const noexcept {
-  pffft_transform(setup_, in, out, work, PFFFT_FORWARD);
-}
-
-void Fft::inverse(const float* in, float* out, float* work) const noexcept {
-  pffft_transform(setup_, in, out, work, PFFFT_BACKWARD);
-}
-
-void Fft::forward_ordered(const float* in, float* out, float* work) const noexcept {
-  pffft_transform_ordered(setup_, in, out, work, PFFFT_FORWARD);
-}
-
-void Fft::inverse_ordered(const float* in, float* out, float* work) const noexcept {
-  pffft_transform_ordered(setup_, in, out, work, PFFFT_BACKWARD);
-}
-
-void Fft::multiply_add(const float* a, const float* b, float* out, float scale) const noexcept {
-  pffft_zconvolve_accumulate(setup_, a, b, out, scale);
-}
-
 std::span<const Route> routes(Routing routing) noexcept {
   switch (routing) {
   case Routing::mono:
@@ -168,9 +99,8 @@ std::unique_ptr<CompiledIr> CompiledIr::build(std::span<const std::vector<float>
     if (parts == 0) {
       continue;
     }
-    const Fft fft(size);
+    Fft fft(size);
     Floats time(size);
-    Floats work(size);
     ir->spectra_[tier] = Floats(count * parts * size);
     const std::size_t end = tier_end(tier, ir->length_);
     const float scale = 1.0F / static_cast<float>(size);
@@ -181,8 +111,7 @@ std::unique_ptr<CompiledIr> CompiledIr::build(std::span<const std::vector<float>
         for (std::size_t m = 0; m < block && first + m < end; ++m) {
           time.data()[m] = tap(r, first + m) * scale;
         }
-        fft.forward(time.data(), ir->spectra_[tier].data() + (r * parts + part) * size,
-                    work.data());
+        fft.forward_unordered(time.data(), ir->spectra_[tier].data() + (r * parts + part) * size);
       }
     }
   }
@@ -192,7 +121,7 @@ std::unique_ptr<CompiledIr> CompiledIr::build(std::span<const std::vector<float>
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): named at every call.
 Convolver::Tier::Tier(std::size_t tier, std::size_t partitions)
     : fft(2 * tiers[tier].block), index(tier), block(tiers[tier].block), offset(tiers[tier].offset),
-      capacity(std::max<std::size_t>(1, partitions)), time(2 * block), work(2 * block) {
+      capacity(std::max<std::size_t>(1, partitions)), time(2 * block) {
   for (std::size_t c = 0; c < 2; ++c) {
     collect[c] = Floats(block);
     previous[c] = Floats(block);
@@ -339,7 +268,7 @@ void Convolver::start(Tier& tier) noexcept {
       std::memcpy(tier.time.data(), tier.previous[c].data(), tier.block * sizeof(float));
       std::memcpy(tier.time.data() + tier.block, tier.collect[c].data(),
                   tier.block * sizeof(float));
-      tier.fft.forward(tier.time.data(), spectrum, tier.work.data());
+      tier.fft.forward_unordered(tier.time.data(), spectrum);
     }
     std::memcpy(tier.previous[c].data(), tier.collect[c].data(), tier.block * sizeof(float));
   }
@@ -383,9 +312,9 @@ void Convolver::step(Tier& tier) noexcept {
           continue;
         }
         for (const Route& route : routes(ir->routing())) {
-          tier.fft.multiply_add(tier.history[route.input].data() + slot * size,
-                                ir->spectrum(index, route.response, part),
-                                tier.sums[v][route.output].data(), 1.0F);
+          tier.fft.multiply_accumulate(tier.history[route.input].data() + slot * size,
+                                       ir->spectrum(index, route.response, part),
+                                       tier.sums[v][route.output].data(), 1.0F);
         }
       }
     }
@@ -398,7 +327,7 @@ void Convolver::step(Tier& tier) noexcept {
   const bool fading = tier.latched_old != nullptr;
   for (std::size_t c = 0; c < 2; ++c) {
     float* ring = ring_[c].data();
-    tier.fft.inverse(tier.sums[0][c].data(), tier.time.data(), tier.work.data());
+    tier.fft.inverse_unordered(tier.sums[0][c].data(), tier.time.data());
     const float* now = tier.time.data() + tier.block;
     if (!fading) {
       for (std::size_t n = 0; n < tier.block; ++n) {
@@ -407,7 +336,7 @@ void Convolver::step(Tier& tier) noexcept {
       continue;
     }
     // The old IR's product, transformed in place.
-    tier.fft.inverse(tier.sums[1][c].data(), tier.sums[1][c].data(), tier.work.data());
+    tier.fft.inverse_unordered(tier.sums[1][c].data(), tier.sums[1][c].data());
     const float* old = tier.sums[1][c].data() + tier.block;
     const float span = static_cast<float>(tier.block + 1);
     for (std::size_t n = 0; n < tier.block; ++n) {

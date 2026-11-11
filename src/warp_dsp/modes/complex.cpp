@@ -1,8 +1,8 @@
 #include "../core/bandlimited_kernel.hpp"
 #include "../core/bandlimited_read.hpp"
-#include "../core/real_fft.hpp"
 #include "../core/source_window.hpp"
 #include "oscillate/foundation/stereo_span.hpp"
+#include "oscillate/warp_dsp/real_fft.hpp"
 #include "oscillate/warp_dsp/stream.hpp"
 
 #include <algorithm>
@@ -18,8 +18,6 @@
 namespace oscillate::warp_dsp {
 namespace {
 
-using detail::AlignedBuffer;
-using detail::RealFft;
 using detail::SourceWindow;
 
 constexpr float two_pi = 2.0F * std::numbers::pi_v<float>;

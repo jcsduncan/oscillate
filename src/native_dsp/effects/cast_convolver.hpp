@@ -1,13 +1,13 @@
 #pragma once
 
+#include "oscillate/warp_dsp/real_fft.hpp"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <span>
 #include <vector>
-
-struct PFFFT_Setup;
 
 // Cast's zero-latency partitioned convolution (ADR-0115) on the pinned
 // PFFFT real transform. Taps 0 to head_taps - 1 run directly in time; four
@@ -32,51 +32,9 @@ static_assert(tiers.front().offset == head_taps && tiers.front().block == head_t
 // The partitions tier `tier` holds for an IR of `taps` taps.
 [[nodiscard]] std::size_t partitions(std::size_t tier, std::size_t taps) noexcept;
 
-// A float buffer aligned for PFFFT's SIMD.
-class Floats {
-public:
-  Floats() = default;
-  explicit Floats(std::size_t count);
-  ~Floats();
-  Floats(Floats&& other) noexcept;
-  Floats& operator=(Floats&& other) noexcept;
-  Floats(const Floats&) = delete;
-  Floats& operator=(const Floats&) = delete;
-  [[nodiscard]] float* data() noexcept { return data_; }
-  [[nodiscard]] const float* data() const noexcept { return data_; }
-  [[nodiscard]] std::size_t size() const noexcept { return size_; }
-  void zero() noexcept;
-
-private:
-  float* data_ = nullptr;
-  std::size_t size_ = 0;
-};
-
-// One real transform size's PFFFT setup. Control creates it; transforms run
-// anywhere with their own work buffer.
-class Fft {
-public:
-  explicit Fft(std::size_t size);
-  ~Fft();
-  Fft(Fft&& other) noexcept;
-  Fft& operator=(Fft&& other) = delete;
-  Fft(const Fft&) = delete;
-  Fft& operator=(const Fft&) = delete;
-  [[nodiscard]] std::size_t size() const noexcept { return size_; }
-  // Unordered spectra (PFFFT's internal order), unscaled both ways.
-  void forward(const float* in, float* out, float* work) const noexcept;
-  void inverse(const float* in, float* out, float* work) const noexcept;
-  // Ordered spectra: DC, Nyquist, then the real and imaginary parts of
-  // bins 1 to size / 2 - 1. Unscaled both ways.
-  void forward_ordered(const float* in, float* out, float* work) const noexcept;
-  void inverse_ordered(const float* in, float* out, float* work) const noexcept;
-  // out += a * b * scale.
-  void multiply_add(const float* a, const float* b, float* out, float scale) const noexcept;
-
-private:
-  PFFFT_Setup* setup_ = nullptr;
-  std::size_t size_ = 0;
-};
+// Transform buffers and the realtime transform (ADR-0126).
+using Floats = warp_dsp::AlignedBuffer;
+using Fft = warp_dsp::RealFft;
 
 // How inputs reach outputs: mono (one response on each channel), stereo
 // (one response per channel) or true stereo (left in to left and right out,
@@ -156,7 +114,6 @@ private:
     std::array<Floats, 2> history;             // capacity spectra per input.
     std::array<std::array<Floats, 2>, 2> sums; // [new, old][output]
     Floats time;
-    Floats work;
     std::size_t fill = 0;
     std::uint64_t blocks = 0; // Completed blocks.
     std::size_t zero_run = 0; // Completed blocks of silent input in a row.

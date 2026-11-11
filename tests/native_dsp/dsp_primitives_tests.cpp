@@ -1,10 +1,12 @@
 #include "dsp/biquad.hpp"
-#include "dsp/fft.hpp"
+#include "dsp/offline_fft.hpp"
 #include "dsp/ramp.hpp"
+#include "dsp/vector_math.hpp"
 #include "oscillate/test/check.hpp"
 #include "oscillate/test/tolerances.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <complex>
 #include <cstddef>
@@ -148,7 +150,7 @@ void fft_matches_a_naive_dft() {
     for (auto& value : x) {
       value = {random(), random()};
     }
-    const dsp::Fft fft(n);
+    const dsp::OfflineFft fft(n);
     REQUIRE_EQ(fft.size(), n, "the size is kept");
     auto forward = x;
     fft.forward(forward);
@@ -172,20 +174,6 @@ void fft_matches_a_naive_dft() {
       round_trip = std::max(round_trip, std::abs(back[k] - x[k]));
     }
     REQUIRE_LT(round_trip, 1e-14 * static_cast<double>(n) + 1e-15, "inverse undoes forward");
-    // In steps, the reordering in pieces and each stage in uneven pieces
-    // taken last first: forward's
-    // result bit for bit.
-    constexpr std::size_t piece = 37;
-    auto staged = x;
-    for (std::size_t from = 0; from < n; from += piece) {
-      fft.reorder(staged, from, std::min(n, from + piece));
-    }
-    for (std::size_t stage = 0; stage < fft.stages(); ++stage) {
-      for (std::size_t end = n / 2; end > 0; end -= std::min(end, piece)) {
-        fft.stage(staged, stage, end - std::min(end, piece), end);
-      }
-    }
-    require(staged == forward, "the staged transform is forward's: " + std::to_string(n));
     auto inverse_only = x;
     fft.inverse(inverse_only);
     const auto expected_inverse = naive_dft(x, 1.0);
@@ -199,7 +187,7 @@ void fft_matches_a_naive_dft() {
   const std::size_t n = 65'536;
   std::vector<Complex> impulse(n);
   impulse[3] = 1.0;
-  dsp::Fft(n).forward(impulse);
+  dsp::OfflineFft(n).forward(impulse);
   double worst = 0.0;
   for (std::size_t k = 0; k < n; k += 97) {
     const Complex expected = std::polar(
@@ -207,6 +195,81 @@ void fft_matches_a_naive_dft() {
     worst = std::max(worst, std::abs(impulse[k] - expected));
   }
   REQUIRE_LT(worst, 1e-12, "long transforms stay accurate (direct twiddles)");
+}
+
+// The four-wide exp, log and sincos against the C library's double
+// functions over the ranges Temper's design feeds them, and complex_exp
+// against e^re (cos im, sin im), with any leftover pair.
+void vector_math_matches_the_library() {
+  namespace vm = dsp::vector_math;
+  // A few float ulps, relative to the result (or, for sine and cosine, to
+  // the unit circle).
+  constexpr double relative_tolerance = 4e-7;
+  constexpr std::size_t points = 4'096;
+  // e^x over the log gains (down to the 1e-12 floor, up past +24 dB), ln x
+  // over the gains, sine and cosine over many turns.
+  constexpr double exp_low = -30.0;
+  constexpr double exp_high = 5.0;
+  constexpr double log_low = 1e-12;
+  constexpr double log_high = 100.0;
+  constexpr double angle_span = 200.0;
+  constexpr std::size_t lanes = 4;
+  const auto at = [&](double low, double high, std::size_t i) {
+    return low + (high - low) * static_cast<double>(i) / static_cast<double>(points - 1);
+  };
+  double exp_error = 0.0;
+  double log_error = 0.0;
+  double trig_error = 0.0;
+  for (std::size_t i = 0; i < points; i += lanes) {
+    std::array<float, lanes> x{};
+    std::array<float, lanes> y{};
+    std::array<float, lanes> a{};
+    for (std::size_t l = 0; l < lanes; ++l) {
+      x[l] = static_cast<float>(at(exp_low, exp_high, i + l));
+      y[l] = static_cast<float>(
+          log_low * std::pow(log_high / log_low, static_cast<double>(i + l) / (points - 1)));
+      a[l] = static_cast<float>(at(-angle_span, angle_span, i + l));
+    }
+    std::array<float, lanes> e{};
+    std::array<float, lanes> g{};
+    std::array<float, lanes> s{};
+    std::array<float, lanes> c{};
+    _mm_storeu_ps(e.data(), vm::exp(_mm_loadu_ps(x.data())));
+    _mm_storeu_ps(g.data(), vm::log(_mm_loadu_ps(y.data())));
+    const auto [sine, cosine] = vm::sincos(_mm_loadu_ps(a.data()));
+    _mm_storeu_ps(s.data(), sine);
+    _mm_storeu_ps(c.data(), cosine);
+    for (std::size_t l = 0; l < lanes; ++l) {
+      const double expected_exp = std::exp(static_cast<double>(x[l]));
+      exp_error = std::max(exp_error, std::fabs(e[l] - expected_exp) / expected_exp);
+      const double expected_log = std::log(static_cast<double>(y[l]));
+      log_error = std::max(log_error,
+                           std::fabs(g[l] - expected_log) / std::max(1.0, std::fabs(expected_log)));
+      trig_error = std::max(trig_error, std::fabs(s[l] - std::sin(static_cast<double>(a[l]))));
+      trig_error = std::max(trig_error, std::fabs(c[l] - std::cos(static_cast<double>(a[l]))));
+    }
+  }
+  REQUIRE_LT(exp_error, relative_tolerance, "exp within a few ulps");
+  REQUIRE_LT(log_error, relative_tolerance, "log within a few ulps");
+  REQUIRE_LT(trig_error, relative_tolerance, "sin and cos within a few ulps");
+
+  // Six complex values: one step of four, then the leftover pair.
+  constexpr std::size_t complex_values = 6;
+  std::vector<float> z(2 * complex_values);
+  for (std::size_t k = 0; k < complex_values; ++k) {
+    z[2 * k] = static_cast<float>(at(exp_low, exp_high, k * points / complex_values));
+    z[2 * k + 1] = static_cast<float>(at(-angle_span, angle_span, k * points / complex_values));
+  }
+  auto w = z;
+  vm::complex_exp(w);
+  for (std::size_t k = 0; k < complex_values; ++k) {
+    const double magnitude = std::exp(static_cast<double>(z[2 * k]));
+    const double angle = z[2 * k + 1];
+    REQUIRE_LT(std::fabs(w[2 * k] - magnitude * std::cos(angle)) / magnitude, relative_tolerance,
+               "complex_exp's real part " + std::to_string(k));
+    REQUIRE_LT(std::fabs(w[2 * k + 1] - magnitude * std::sin(angle)) / magnitude,
+               relative_tolerance, "complex_exp's imaginary part " + std::to_string(k));
+  }
 }
 
 } // namespace
@@ -217,6 +280,7 @@ int main() {
     allpass_is_flat();
     shelves_hit_their_end_gains();
     fft_matches_a_naive_dft();
+    vector_math_matches_the_library();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return 1;

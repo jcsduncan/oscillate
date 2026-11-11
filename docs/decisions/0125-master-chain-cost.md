@@ -1,6 +1,6 @@
 # ADR-0125 — The master chain's serial cost: analysis off the callback, block oversampling, and a gate
 
-**Status:** Accepted and implemented. **Date:** 10 November 2026.
+**Status:** Accepted and implemented; superseded in part by [ADR-0126](0126-realtime-fft.md): the double transform is offline only, Temper runs on the realtime float transform, and the gate's limits are tighter. **Date:** 10 November 2026.
 **Builds on:** ADR-0040 (native effect platform), ADR-0042 (Lens), ADR-0048 (audio helpers), ADR-0061 (performance tracing), ADR-0064 (Temper), ADR-0108 (Edge's oversampler), ADR-0110 (heavy projects across the helpers), ADR-0117 (Ceiling), ADR-0119 (Keel), ADR-0120 (Lens's band meter), ADR-0122 (Gild).
 **Contract:** `EffectKernel::analyses_off_callback` and `analyse_telemetry`, `NativeEffectRuntime::read_telemetry` (`include/oscillate/native_dsp/effects/effect.hpp`); `CaptureQueue` (`src/native_dsp/effects/capture_queue.hpp`); `edge_dsp::Resampler`'s block interface and `edge_dsp::block_frames`; the reference player's `--master` and its 256–1024-frame blocks; `qualify_reference_projects.py --master --gate-master-percent --gate-p99-percent`. No schema change.
 

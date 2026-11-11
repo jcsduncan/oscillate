@@ -1,11 +1,11 @@
 #include "oscillate/native_dsp/effects/keel.hpp"
 
 #include "dsp/bs1770.hpp"
-#include "dsp/fft.hpp"
 #include "dsp/sse2_pair.hpp"
 #include "keel_presets.hpp"
 #include "keel_table.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
+#include "oscillate/warp_dsp/real_fft.hpp"
 
 #include <algorithm>
 #include <array>
@@ -70,6 +70,8 @@ constexpr std::size_t base_hop = 2'048;
 // The analysis finishes this many stretches of coefficient_frames before
 // the hop ends.
 constexpr std::size_t stretch_margin = 8;
+// Each source (the input, the sidechain) is analysed per channel.
+constexpr std::size_t channels = 2;
 
 // A third of an octave each way: the band edges are the centre times
 // 2^(-1/6) and 2^(1/6).
@@ -345,11 +347,9 @@ public:
     for (auto& ring : key_ring_) {
       ring.assign(ring_size_, 0.0);
     }
-    for (auto& job : jobs_) {
-      job.data.resize(window_size_);
-    }
-    // Each analysis's units (see advance), spread over the hop's stretches.
-    const std::size_t per_analysis = window_size_ * 2 + fft_.stages() * (window_size_ / 2);
+    spectrum_ = warp_dsp::AlignedBuffer(window_size_);
+    // Each source's units (see advance), spread over the hop's stretches.
+    const std::size_t per_analysis = channels * units_per_transform();
     const std::size_t stretches = hop_ / coefficient_frames - stretch_margin;
     units_per_analysis_ = (per_analysis + stretches - 1) / stretches;
     prepare_bands();
@@ -449,9 +449,8 @@ public:
   }
 
 private:
-  // One window's transform and its band powers.
+  // One source's band powers (both channels' mean).
   struct Analysis {
-    std::vector<Complex> data;
     std::array<double, bands> frame{};
   };
 
@@ -629,88 +628,66 @@ private:
 
   // The analysis of the window that ended at the last hop runs through the
   // hop after it, a share at every stretch of coefficient_frames, so no
-  // callback carries a whole transform: the input's window (and the
-  // sidechain's when keyed) is windowed, transformed stage by stage and
-  // summed into band powers (both channels' mean), ready by the next hop.
+  // callback carries a whole transform: each channel of the input (and of
+  // the sidechain when keyed) is windowed in pieces, transformed step by
+  // step (ADR-0126) and summed into band powers, ready by the next hop.
   void start_analysis() noexcept {
-    job_step_ = 0;
-    job_done_ = 0;
+    job_transform_ = 0;
+    job_unit_ = 0;
     job_start_ = written_ - window_size_;
     job_keyed_ = keyed_;
     job_active_ = true;
+    for (auto& job : jobs_) {
+      job.frame.fill(0.0);
+    }
     units_per_stretch_ = units_per_analysis_ * (job_keyed_ ? jobs_.size() : 1);
   }
 
-  // Runs `units` of the analysis: one unit is one sample windowed, one
-  // index reordered or one butterfly per transform; the band sums run
-  // whole.
+  // A transform's units: its window in as many pieces as it has steps, each
+  // step, and the band sums; each unit about a step's work.
+  [[nodiscard]] std::size_t units_per_transform() const noexcept { return 2 * fft_.steps() + 1; }
+
+  // Runs `units` of the analysis.
   void advance(std::size_t units) noexcept {
-    const std::size_t count = job_keyed_ ? jobs_.size() : 1;
-    const std::size_t n = window_size_;
+    const std::size_t transforms = channels * (job_keyed_ ? jobs_.size() : 1);
+    const std::size_t steps = fft_.steps();
     const std::size_t mask = ring_size_ - 1;
-    const std::size_t stages = fft_.stages();
-    const std::size_t sum_step = stages + 2;
-    while (job_active_ && units > 0) {
-      if (job_step_ == 0) {
-        const std::size_t take = std::min(n - job_done_, std::max<std::size_t>(units / count, 1));
-        for (std::size_t j = 0; j < count; ++j) {
-          const auto& ring = j == 0 ? ring_ : key_ring_;
-          auto& data = jobs_[j].data;
-          for (std::size_t i = job_done_; i < job_done_ + take; ++i) {
-            const std::size_t at = (job_start_ + i) & mask;
-            data[i] = Complex(ring[0][at] * window_[i], ring[1][at] * window_[i]);
-          }
+    for (; job_active_ && units > 0; --units) {
+      const std::size_t source = job_transform_ / channels;
+      const std::size_t channel = job_transform_ % channels;
+      if (job_unit_ < steps) {
+        // A piece of the window.
+        const auto& ring = (source == 0 ? ring_ : key_ring_)[channel];
+        const std::size_t first = job_unit_ * window_size_ / steps;
+        const std::size_t last = (job_unit_ + 1) * window_size_ / steps;
+        const auto input = fft_.input();
+        for (std::size_t i = first; i < last; ++i) {
+          input[i] = static_cast<float>(ring[(job_start_ + i) & mask] * window_[i]);
         }
-        job_done_ += take;
-        units -= std::min(units, take * count);
-      } else if (job_step_ == 1) {
-        const std::size_t take = std::min(n - job_done_, std::max<std::size_t>(units / count, 1));
-        for (std::size_t j = 0; j < count; ++j) {
-          fft_.reorder(jobs_[j].data, job_done_, job_done_ + take);
-        }
-        job_done_ += take;
-        units -= std::min(units, take * count);
-      } else if (job_step_ < sum_step) {
-        const std::size_t butterflies = n / 2;
-        const std::size_t take =
-            std::min(butterflies - job_done_, std::max<std::size_t>(units / count, 1));
-        for (std::size_t j = 0; j < count; ++j) {
-          fft_.stage(jobs_[j].data, job_step_ - 2, job_done_, job_done_ + take);
-        }
-        job_done_ += take;
-        units -= std::min(units, take * count);
-        if (job_done_ == butterflies) {
-          job_done_ = n;
-        }
+      } else if (job_unit_ < 2 * steps) {
+        fft_.step(job_unit_ - steps, spectrum_.span());
       } else {
-        for (std::size_t j = 0; j < count; ++j) {
-          sum_bands(jobs_[j]);
-        }
-        job_active_ = false;
-        job_ready_ = true;
-        units = 0;
+        sum_bands(jobs_[source]);
       }
-      if (job_active_ && job_done_ == n) {
-        ++job_step_;
-        job_done_ = 0;
+      if (++job_unit_ == units_per_transform()) {
+        job_unit_ = 0;
+        if (++job_transform_ == transforms) {
+          job_active_ = false;
+          job_ready_ = true;
+        }
       }
     }
   }
 
-  // A transformed window's band powers.
+  // Adds a transformed channel's half of each band's power.
   void sum_bands(Analysis& job) const noexcept {
     const std::size_t n = window_size_;
-    const auto& z = job.data;
+    const float* const spectrum = spectrum_.data();
     const auto bin_power = [&](std::size_t k) {
-      const Complex zk = z[k];
-      const Complex zm = std::conj(z[n - k]);
-      const Complex a = 0.5 * (zk + zm);
-      const Complex b = Complex(0.0, -0.5) * (zk - zm);
-      return 0.5 * (std::norm(a) + std::norm(b)) * power_scale_;
+      return 0.5 * static_cast<double>(warp_dsp::bin_power(spectrum, n, k)) * power_scale_;
     };
     for (std::size_t b = 0; b < bands; ++b) {
       if (!live_[b]) {
-        job.frame[b] = 0.0;
         continue;
       }
       const auto& range = bins_[b];
@@ -721,7 +698,7 @@ private:
         }
         sum += range.last_weight * bin_power(range.last);
       }
-      job.frame[b] = live_[b] ? sum : 0.0;
+      job.frame[b] += sum;
     }
   }
 
@@ -950,7 +927,7 @@ private:
   std::size_t window_size_;
   std::size_t hop_;
   std::size_t ring_size_;
-  base::Fft fft_;
+  warp_dsp::StagedRealFft fft_;
   double hold_;
   double output_step_;
   double glide_step_;
@@ -961,12 +938,15 @@ private:
   double power_scale_ = 1.0;
   std::array<std::vector<double>, 2> ring_;
   std::array<std::vector<double>, 2> key_ring_;
-  // The input's analysis, then the sidechain's.
+  // The input's analysis, then the sidechain's; the spectrum being
+  // transformed.
   std::array<Analysis, 2> jobs_;
+  warp_dsp::AlignedBuffer spectrum_;
   std::size_t units_per_analysis_ = 0;
   std::size_t units_per_stretch_ = 0;
-  std::size_t job_step_ = 0;
-  std::size_t job_done_ = 0;
+  // The transform in progress (source * channels + channel) and its unit.
+  std::size_t job_transform_ = 0;
+  std::size_t job_unit_ = 0;
   std::size_t job_start_ = 0;
   bool job_keyed_ = false;
   bool job_active_ = false;

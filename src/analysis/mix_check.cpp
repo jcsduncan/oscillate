@@ -2,7 +2,7 @@
 
 #include "dsp/biquad.hpp"
 #include "dsp/bs1770.hpp"
-#include "dsp/fft.hpp"
+#include "dsp/offline_fft.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -107,7 +107,7 @@ public:
 
 private:
   std::size_t size_;
-  native_dsp::dsp::Fft fft_;
+  native_dsp::dsp::OfflineFft fft_;
   std::vector<double> window_;
   std::vector<Complex> data_;
   std::vector<double> left_;

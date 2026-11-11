@@ -2,7 +2,7 @@
 
 #include "oscillate/native_dsp/synth/shaping.hpp"
 
-#include "dsp/fft.hpp"
+#include "dsp/offline_fft.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -376,7 +376,7 @@ Wavetable build_wavetable(std::string_view name,
 }
 
 void fft(std::span<std::complex<double>> data, bool inverse) {
-  const dsp::Fft transform(data.size());
+  const dsp::OfflineFft transform(data.size());
   if (inverse) {
     transform.inverse(data);
   } else {

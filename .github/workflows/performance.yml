@@ -109,10 +109,11 @@ jobs:
       SECONDS_PER_RUN: ${{ inputs.seconds || '20' }}
       # The master's mean serial time and the callback's p99, as shares of
       # the block period, for the light reference with the heavy master at
-      # 1024 frames: generous over what hosted runners measure, well under
-      # what the 0.5.0 master cost there (ADR-0125).
-      MASTER_LIMIT_PERCENT: 20
-      P99_LIMIT_PERCENT: 35
+      # 1024 frames: about 30% over what hosted runners measure (master
+      # 6.9-7.7%, p99 9.9%), under what the master cost before the realtime
+      # FFT (9.5%, ADR-0126).
+      MASTER_LIMIT_PERCENT: 10
+      P99_LIMIT_PERCENT: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -139,7 +140,7 @@ jobs:
         run: scripts/build.sh "$BUILD_DIR" --target oscillate_reference_project
       # The light reference's tracks leave most of each block to the master,
       # so its serial cost shows plainly; on these four-core runners the
-      # heavy reference alone already fills the period, so its p99 is
+      # heavy reference's p99 is set mostly by its tracks, so it is
       # reported, not gated.
       - name: Gate the master
         run: |

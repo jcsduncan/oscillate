@@ -1,6 +1,6 @@
-#include "../core/real_fft.hpp"
 #include "../core/source_window.hpp"
 #include "oscillate/warp_dsp/analysis.hpp"
+#include "oscillate/warp_dsp/real_fft.hpp"
 
 #include <algorithm>
 #include <array>
@@ -194,9 +194,9 @@ foundation::Result<std::vector<Transient>> detect_transients(SourceView& source,
     if (frames < fft_size)
       return Result::success({});
     const auto analysis_frames = static_cast<std::size_t>((frames - fft_size / 2) / hop) + 1;
-    detail::RealFft fft(fft_size);
-    detail::AlignedBuffer input(fft_size);
-    detail::AlignedBuffer spectrum(fft_size);
+    RealFft fft(fft_size);
+    AlignedBuffer input(fft_size);
+    AlignedBuffer spectrum(fft_size);
     std::vector<float> window(fft_size);
     for (std::size_t index = 0; index < fft_size; ++index)
       window[index] = static_cast<float>(
