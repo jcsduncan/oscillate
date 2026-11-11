@@ -27,6 +27,8 @@ on:
       - src/native_dsp/effects/**
       - src/native_dsp/dsp/**
       - src/engine/**
+      - src/track_chain/**
+      - src/application/routed_audio_source.cpp
 
 concurrency:
   group: performance-${{ github.ref }}

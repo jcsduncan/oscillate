@@ -1,6 +1,6 @@
 # ADR-0048 — Parallel real-time rendering
 
-**Status:** Superseded in part by ADR-0110 (default worker count); otherwise accepted and implemented. **Date:** 20 October 2026.
+**Status:** Superseded in part by ADR-0110 (default worker count) and ADR-0127 (the live graph's schedule); otherwise accepted and implemented. **Date:** 20 October 2026.
 
 ## Context
 

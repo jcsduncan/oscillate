@@ -103,6 +103,19 @@ public:
   fill_source_bank_exact(engine::BlockContext block, std::size_t frames,
                          std::span<const std::span<const engine::StereoFrame>>& selected,
                          engine::AudioWorkerPool* workers = nullptr) noexcept;
+  // Callback only, the sub-block form of fill_source_bank (ADR-0127):
+  // decides on the block and selects its spans as fill_source_bank does,
+  // without rendering them. fill_node() then renders each node's part inside
+  // the mixer's schedule (engine::RoutedNodeFill).
+  [[nodiscard]] engine::RoutedPrepareStatus
+  prepare_source_bank(engine::BlockContext block, std::size_t frames,
+                      std::span<const std::span<const engine::StereoFrame>>& selected) noexcept;
+  // Callback side, from the mixer's schedule after prepare_source_bank():
+  // frames [offset, offset + frames) of node `node`'s span (a topological
+  // index), at the part's context. Different nodes may fill at once; one
+  // node's parts come in order.
+  [[nodiscard]] bool fill_node(std::size_t node, engine::BlockContext part, std::size_t offset,
+                               std::size_t frames, engine::AudioWorkerPool* workers) noexcept;
   void note_rendered_frames(std::size_t frames) noexcept;
   [[nodiscard]] bool streaming_hold() const noexcept { return stream_hold_; } // callback only
   // Gapless loop playback over project samples [start, end).
@@ -239,13 +252,19 @@ private:
                              bool require_complete, engine::AudioWorkerPool* workers) noexcept;
   bool fill_slots(engine::BlockContext block, std::size_t frames, bool require_complete,
                   engine::AudioWorkerPool* workers) noexcept;
+  // fill_slots()'s decision, before any slot renders: the transport
+  // generation, a seek's hold until the worker primes it, an accepted loop
+  // wrap. False when the block cannot render.
+  bool admit_block(engine::BlockContext block, std::size_t frames) noexcept;
   // What one fill_slot() pass renders. A complete (exact) fill streams
   // every slot's clips before any synth renders, so a block that fails for
   // a missing clip frame has advanced no player the replaced source shares.
   enum class SlotPart : std::uint8_t { all, clips, synths };
   // One slot's block: may run on any audio worker, never beside itself.
+  // `offset`: where the part starts in the slot's block buffer.
   bool fill_slot(std::size_t index, engine::BlockContext block, std::size_t frames,
-                 bool require_complete, SlotPart part, engine::AudioWorkerPool* workers) noexcept;
+                 bool require_complete, SlotPart part, engine::AudioWorkerPool* workers,
+                 std::size_t offset = 0) noexcept;
   void worker_loop() noexcept;
   [[nodiscard]] bool fill_lead(FillRequest request);
   [[nodiscard]] bool fill_one(Clip& clip, FillRequest request);
@@ -277,6 +296,11 @@ private:
   std::vector<Slot> slots_;
   std::vector<SynthSlot> synths_;
   std::vector<SlotWork> slot_work_;
+  // Per topological node, its slot's index in slots_, or no_slot.
+  static constexpr std::size_t no_slot = static_cast<std::size_t>(-1);
+  std::vector<std::size_t> node_slots_;
+  // The prepared block is a silent drain's: fill_node() leaves the zeros.
+  bool staged_silent_ = false;                        // callback-owned
   engine::AudioWorkerPool* render_workers_ = nullptr; // set before the device starts
   std::vector<std::span<const engine::StereoFrame>> spans_;
   std::thread worker_;

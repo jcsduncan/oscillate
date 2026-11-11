@@ -408,6 +408,26 @@ bool RoutedPlayback::render(void* context, std::span<engine::StereoFrame> output
            return false;
          state.used = source;
          return state.fill.fill(*source, exact, fill_block, frames, selected, state.workers);
+       },
+       // A block that switches nothing renders its sources inside the
+       // mixer's schedule (ADR-0127); a staged candidate fills whole.
+       [](void* context, std::uint64_t revision, engine::BlockContext fill_block,
+          std::size_t frames,
+          std::span<const std::span<const engine::StereoFrame>>& selected) noexcept {
+         auto& state = *static_cast<FillContext*>(context);
+         if (revision == state.exact_revision)
+           return engine::RoutedPrepareStatus::whole_block;
+         auto* source = static_cast<application::RoutedAudioSource*>(
+             state.lease.source_for_graph_revision(revision));
+         if (source == nullptr)
+           return engine::RoutedPrepareStatus::failed;
+         state.used = source;
+         return source->prepare_source_bank(fill_block, frames, selected);
+       },
+       [](void* context, std::size_t node, engine::BlockContext part, std::size_t offset,
+          std::size_t frames, engine::AudioWorkerPool* workers) noexcept {
+         auto* source = static_cast<FillContext*>(context)->used;
+         return source != nullptr && source->fill_node(node, part, offset, frames, workers);
        }},
       run.workers_.get());
   run.callback_frozen_ = result != engine::RoutedRenderStatus::rendered;

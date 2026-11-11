@@ -433,12 +433,37 @@ RoutedRenderStatus RoutedMixerPublisher::render_block(
     silence(output);
     return RoutedRenderStatus::invalid_block;
   }
+  // A block that switches nothing renders its sources inside the mixer's
+  // schedule when the source can (ADR-0127).
+  RoutedNodeFill node_fill;
+  if (!filled && source_fill.prepare_selected != nullptr && source_fill.fill_node != nullptr) {
+    // Deciding renders nothing, so it may come before the gains.
+    const auto prepared = source_fill.prepare_selected(
+        source_fill.context, active->control_overlay ? active->source_revision : active->revision,
+        context, output.size(), selected_sources);
+    if (prepared == RoutedPrepareStatus::prepared) {
+      gains = {};
+      if ((active->gains && !active->gains->fill_block(context, output.size(), gains)) ||
+          !valid_inputs(active, selected_sources, output.size())) {
+        silence(output);
+        return RoutedRenderStatus::invalid_block;
+      }
+      node_fill = {source_fill.context, source_fill.fill_node};
+      filled = true;
+    } else if (prepared == RoutedPrepareStatus::failed) {
+      silence(output);
+      return RoutedRenderStatus::invalid_block;
+    }
+  }
   if (!filled && !fill_sources(active))
     return RoutedRenderStatus::invalid_block;
   drain_live(*active);
   if (!active->mixer->mix_block(selected_sources, output, context, gains.edges, gains.nodes,
-                                workers))
+                                workers, node_fill)) {
+    // A source that failed part way: the block is silent, as a failed fill's.
+    silence(output);
     return RoutedRenderStatus::invalid_block;
+  }
   if (live_passed)
     live_passed_blocks_.store(live_passed_blocks_.load(std::memory_order_relaxed) + 1,
                               std::memory_order_release);

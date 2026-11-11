@@ -33,3 +33,13 @@ oscillate_add_test_executable(oscillate_routed_pdc_transition_probe SOURCES rout
 oscillate_add_test_executable(oscillate_routed_publisher_tests SOURCES routed_publisher_tests.cpp
   LIBS oscillate::engine Threads::Threads
   TEST routed_publisher_contract)
+
+oscillate_add_test_executable(oscillate_routed_wavefront_tests SOURCES routed_wavefront_tests.cpp
+  LIBS oscillate::engine Threads::Threads)
+oscillate_add_case_tests(routed_wavefront_contract oscillate_routed_wavefront_tests
+  CASES session_parts_match_whole_blocks session_with_automation_matches
+        nested_groups_match_whole_blocks flat_mix_matches_whole_blocks
+        staged_master_matches_whole_blocks
+        parts_carry_their_positions a_failed_fill_fails_the_block parts_never_allocate
+        cheap_levels_after_the_tracks_stay_whole
+        the_policy_splits_only_for_a_clear_gain)

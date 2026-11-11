@@ -88,6 +88,11 @@ public:
                               engine::BlockContext context) noexcept override;
 
   [[nodiscard]] bool contains(const engine::ProcessorRuntime* stage) const noexcept override;
+  // Each stage of the chain, one at a time (ADR-0127).
+  [[nodiscard]] std::size_t stage_count() const noexcept override { return stages_.size(); }
+  void process_stage(std::size_t stage, std::span<engine::StereoFrame> stereo,
+                     std::span<const engine::StereoFrame> detector,
+                     engine::BlockContext context) noexcept override;
   void graph_activated(std::uint64_t revision) noexcept override;
   void graph_deactivated(std::uint64_t revision) noexcept override;
   [[nodiscard]] bool control_overlay_revision_independent() const noexcept override;

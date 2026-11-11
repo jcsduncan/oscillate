@@ -89,6 +89,20 @@ public:
   // the path's next dry frames, returning how many. Must not allocate.
   [[nodiscard]] virtual std::uint32_t releasable_latency() const noexcept { return 0; }
   virtual std::size_t release_latency(std::span<StereoFrame> /*flushed*/) noexcept { return 0; }
+
+  // A processor that is a series of stages (a chain) may let the mixer run
+  // them as a pipeline over a block's parts (ADR-0127): stage s of one part
+  // beside stage s + 1 of the part before, on different helpers. Running
+  // process_stage() for every stage in order, part after part, is the same
+  // as process() on each part. Stages own separate state, so different
+  // stages may run at once; one stage's parts come in order. `detector` is
+  // the node's sidechain input for the part (empty without one).
+  [[nodiscard]] virtual std::size_t stage_count() const noexcept { return 1; }
+  virtual void process_stage(std::size_t /*stage*/, std::span<StereoFrame> stereo,
+                             std::span<const StereoFrame> /*detector*/,
+                             BlockContext context) noexcept {
+    process(stereo, context);
+  }
 };
 
 // Optional second input for processors that explicitly support a detector or

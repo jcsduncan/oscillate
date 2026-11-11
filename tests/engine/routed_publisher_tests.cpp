@@ -1102,6 +1102,83 @@ void revision_selects_matching_source_bank() {
              "candidate graph mixed stale inputs or allocated in the callback");
 }
 
+// A block that switches nothing fills inside the mixer's schedule (ADR-0127):
+// the source decides, then each node renders its own part. A source that
+// asks for a whole fill gets fill_selected; one that refuses silences the
+// block; a node that fails part way fails the block.
+void staged_fill_renders_inside_the_schedule() {
+  constexpr float staged_level = 0.5F;
+  constexpr float whole_level = 0.25F;
+  constexpr std::size_t frames = 4;
+  const std::array<RoutedNode, 1> nodes{{{{3, 0}, {}}}};
+  RoutedMixerPublisher publisher;
+  REQUIRE_OK(publisher.prepare_and_publish(1, nodes, {}, limits(1, 0, 0)),
+             "the staged-fill graph did not prepare");
+  std::array<StereoFrame, frames> bank_frames{}, output{};
+  const std::array<std::span<const StereoFrame>, 1> bank{bank_frames};
+  struct Probe {
+    std::span<StereoFrame> frames;
+    std::span<const std::span<const StereoFrame>> bank;
+    RoutedPrepareStatus answer = RoutedPrepareStatus::prepared;
+    bool fail_node = false;
+    std::size_t node_fills = 0;
+    std::size_t whole_fills = 0;
+  } probe{bank_frames, bank};
+  const RoutedSourceFill fill{&probe, nullptr,
+                              [](void* context, std::uint64_t, BlockContext, std::size_t,
+                                 std::span<const std::span<const StereoFrame>>& selected) noexcept {
+                                auto& state = *static_cast<Probe*>(context);
+                                ++state.whole_fills;
+                                std::ranges::fill(state.frames,
+                                                  StereoFrame{whole_level, whole_level});
+                                selected = state.bank;
+                                return true;
+                              },
+                              [](void* context, std::uint64_t, BlockContext, std::size_t,
+                                 std::span<const std::span<const StereoFrame>>& selected) noexcept {
+                                auto& state = *static_cast<Probe*>(context);
+                                if (state.answer == RoutedPrepareStatus::prepared)
+                                  selected = state.bank;
+                                return state.answer;
+                              },
+                              [](void* context, std::size_t, BlockContext, std::size_t offset,
+                                 std::size_t count, AudioWorkerPool*) noexcept {
+                                auto& state = *static_cast<Probe*>(context);
+                                ++state.node_fills;
+                                std::ranges::fill(state.frames.subspan(offset, count),
+                                                  StereoFrame{staged_level, staged_level});
+                                return !state.fail_node;
+                              }};
+  std::uint64_t position = 0;
+  const auto render = [&] {
+    const auto status = publisher.render_block(bank, output, {position, 1}, fill);
+    // A refused block leaves the graph where it was.
+    if (status == RoutedRenderStatus::rendered)
+      position += frames;
+    return status;
+  };
+  // The first block activates the graph, which fills whole.
+  REQUIRE_EQ(render(), RoutedRenderStatus::rendered, "the first block did not render");
+  probe.whole_fills = 0;
+  REQUIRE_EQ(render(), RoutedRenderStatus::rendered, "a staged fill did not render");
+  REQUIRE_EQ(output[0].left, staged_level, "the node did not render its own source");
+  REQUIRE_EQ(probe.node_fills, 1, "the node did not fill inside the schedule");
+  REQUIRE_EQ(probe.whole_fills, 0, "a staged block filled whole as well");
+  probe.answer = RoutedPrepareStatus::whole_block;
+  REQUIRE_EQ(render(), RoutedRenderStatus::rendered, "a whole fill did not render");
+  REQUIRE_EQ(output[0].left, whole_level, "the source's whole fill was not used");
+  REQUIRE_EQ(probe.whole_fills, 1, "the source's whole fill was not used");
+  probe.answer = RoutedPrepareStatus::failed;
+  REQUIRE_EQ(render(), RoutedRenderStatus::invalid_block, "a refused block rendered");
+  REQUIRE_EQ(output[0].left, 0.0F, "a refused block was not silenced");
+  probe.answer = RoutedPrepareStatus::prepared;
+  probe.fail_node = true;
+  const auto fills_before = probe.node_fills;
+  REQUIRE_EQ(render(), RoutedRenderStatus::invalid_block, "a failed node fill rendered");
+  REQUIRE_EQ(probe.node_fills, fills_before + 1, "the failing node was not asked to fill");
+  REQUIRE_EQ(output[0].left, 0.0F, "a failed node fill was not silenced");
+}
+
 void invalid_blocks_never_activate() {
   const std::array<RoutedNode, 1> nodes{{{{3, 0}, {}}}};
   RoutedMixerPublisher publisher;
@@ -1647,6 +1724,7 @@ int main() {
     source_order_and_cursor_rejection();
     source_fill_linearizes_with_live_publication();
     revision_selects_matching_source_bank();
+    staged_fill_renders_inside_the_schedule();
     invalid_blocks_never_activate();
     preparation_allocation_failure();
     concurrent_handoff();
