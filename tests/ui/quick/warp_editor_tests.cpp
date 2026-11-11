@@ -8,6 +8,7 @@
 #include "../../../apps/daw_quick/src/loop_transport.hpp"
 #include "../../../apps/daw_quick/src/project_bridge.hpp"
 
+#include "oscillate/audio_io/render_ahead.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/test/check.hpp"
 
@@ -139,7 +140,7 @@ public:
       std::array<float, 256> samples{};
       while (!stop.stop_requested()) {
         if (gate_->load(std::memory_order_acquire))
-          (void)audio::render_transport_block(source_, cursor_, true, frames, samples);
+          (void)audio::render_device_block(source_, cursor_, true, frames, samples);
         if (const auto pause = pause_us_->load(std::memory_order_acquire); pause > 0)
           std::this_thread::sleep_for(std::chrono::microseconds(pause));
         else

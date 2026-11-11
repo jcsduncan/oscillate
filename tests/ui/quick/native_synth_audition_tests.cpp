@@ -1,5 +1,6 @@
 #include "../../../apps/daw_quick/src/native_synth_audition.hpp"
 
+#include "oscillate/audio_io/render_ahead.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/pulse.hpp"
@@ -113,7 +114,7 @@ void pulse_pad_produces_audio_without_a_real_device() {
     std::array<float, 256> output{};
     bool sounded = false;
     while (!sounded && std::chrono::steady_clock::now() < deadline) {
-      require(audio::render_transport_block(probe->source, *probe->cursor, true, scratch, output) ==
+      require(audio::render_device_block(probe->source, *probe->cursor, true, scratch, output) ==
                   audio::BlockResult::rendered,
               "Pulse preview render failed");
       for (const auto sample : output)
@@ -144,7 +145,7 @@ void audition_uses_velocity_and_releases_the_note() {
 
   std::array<engine::StereoFrame, 128> scratch{};
   std::array<float, 256> output{};
-  require(audio::render_transport_block(probe->source, *probe->cursor, true, scratch, output) ==
+  require(audio::render_device_block(probe->source, *probe->cursor, true, scratch, output) ==
               audio::BlockResult::rendered,
           "pitched preview failed to render");
   require(std::fabs(output[0] - 0.5F * 40.0F / 127.0F) < 0.001F,
@@ -154,7 +155,7 @@ void audition_uses_velocity_and_releases_the_note() {
           "replacement preview request failed");
   bool replaced = false;
   for (int block = 0; block < 192; ++block) {
-    require(audio::render_transport_block(probe->source, *probe->cursor, true, scratch, output) ==
+    require(audio::render_device_block(probe->source, *probe->cursor, true, scratch, output) ==
                 audio::BlockResult::rendered,
             "pitched preview stopped rendering before release");
     if (std::fabs(output[0] - 0.5F * 80.0F / 127.0F) < 0.001F) {
@@ -165,7 +166,7 @@ void audition_uses_velocity_and_releases_the_note() {
   }
   require(replaced, "replacement preview stacked or failed to adopt the new velocity");
   for (int block = 0; block < 192; ++block) {
-    require(audio::render_transport_block(probe->source, *probe->cursor, true, scratch, output) ==
+    require(audio::render_device_block(probe->source, *probe->cursor, true, scratch, output) ==
                 audio::BlockResult::rendered,
             "pitched preview stopped rendering before release");
   }
@@ -194,7 +195,7 @@ void live_notes_hold_until_released() {
   std::array<engine::StereoFrame, 128> scratch{};
   std::array<float, 256> output{};
   const auto render = [&] {
-    require(audio::render_transport_block(probe->source, *probe->cursor, true, scratch, output) ==
+    require(audio::render_device_block(probe->source, *probe->cursor, true, scratch, output) ==
                 audio::BlockResult::rendered,
             "live preview failed to render");
     return output[0];
@@ -281,7 +282,7 @@ void more_held_keys_than_slots_all_release() {
   std::array<engine::StereoFrame, block_frames> scratch{};
   std::array<float, std::size_t{block_frames} * 2> output{};
   const auto render = [&] {
-    require(audio::render_transport_block(probe->source, *probe->cursor, true, scratch, output) ==
+    require(audio::render_device_block(probe->source, *probe->cursor, true, scratch, output) ==
                 audio::BlockResult::rendered,
             "live preview failed to render");
   };
@@ -343,7 +344,7 @@ void phrase_notes_land_on_their_frames() {
   std::array<float, 256> output{};
   std::vector<float> heard;
   while (std::chrono::steady_clock::now() < deadline && heard.size() < 1'024) {
-    require(audio::render_transport_block(probe->source, *probe->cursor, true, scratch, output) ==
+    require(audio::render_device_block(probe->source, *probe->cursor, true, scratch, output) ==
                 audio::BlockResult::rendered,
             "phrase preview failed to render");
     // Wait for the block that took the first note; then keep every frame.

@@ -847,6 +847,10 @@ private:
   enum class RoutedTransportOperation : std::uint8_t { pause, resume, seek };
   void begin_async_routed_transport(RoutedTransportOperation operation, std::uint64_t sample = 0);
   void poll_routed_playback();
+  // The audio settings' render-ahead window for the running playback, just in
+  // time while live input plays: the computer keyboard on or recording armed
+  // (ADR-0128).
+  void apply_render_ahead();
   void poll_live_audio_edit();
   void submit_playback_edit();
   void audition_edited_note(const QString& clip_id, const QString& note_id, std::uint8_t velocity);

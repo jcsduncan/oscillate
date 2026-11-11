@@ -283,6 +283,10 @@ def run_one(args, reference: str, frames: int, repetition: int, serial: int | No
         command += ["--workers", str(args.workers)]
     if args.subblocks is not None:
         command += ["--subblocks", args.subblocks]
+    if args.ahead_ms is not None:
+        command += ["--ahead-ms", str(args.ahead_ms)]
+    if args.spike_every is not None:
+        command += ["--spike-every", str(args.spike_every), "--spike-us", str(args.spike_us)]
     if reference == "heavy":
         for flag, value in (
             ("--vst3-effect", args.vst3_effect),
@@ -460,6 +464,17 @@ def main() -> int:
     parser.add_argument(
         "--workers", type=int, help="audio helpers (default: the live playback default)"
     )
+    parser.add_argument(
+        "--ahead-ms",
+        type=int,
+        help="render ahead of the callback by up to this many milliseconds (ADR-0128)",
+    )
+    parser.add_argument(
+        "--spike-every",
+        type=int,
+        help="make every Nth render slower by --spike-us, to test render-ahead under spikes",
+    )
+    parser.add_argument("--spike-us", type=int, default=0, help="the spike's length")
     parser.add_argument(
         "--subblocks",
         help="how blocks are cut into parts (ADR-0127): adaptive (default), off, or a part length",

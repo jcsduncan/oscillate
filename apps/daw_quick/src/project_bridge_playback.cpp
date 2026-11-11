@@ -1,9 +1,12 @@
 #include "project_bridge.hpp"
 
+#include "audio_output_controller.hpp"
 #include "clip_warp_controller.hpp"
+#include "computer_keyboard.hpp"
 #include "loop_transport.hpp"
 #include "native_synth_device_controller.hpp"
 #include "oscillate/foundation/trace.hpp"
+#include "recording_controller.hpp"
 #include "waveform_controller.hpp"
 
 #include <algorithm>
@@ -234,6 +237,7 @@ void ProjectBridge::poll_routed_playback() {
     }
     const bool stop_requested = completion->stop_requested.load(std::memory_order_acquire);
     routed_playback_ = std::move(completion->result->value());
+    apply_render_ahead();
     emit playbackChanged();
     if (close_after_playback_ || stop_requested) {
       begin_async_routed_stop(stop_requested && !close_after_playback_);
@@ -570,6 +574,14 @@ bool ProjectBridge::request_close() {
   set_playback_status(QStringLiteral("Stopping playback before closing"));
   playback_timer_.start();
   return false;
+}
+
+void ProjectBridge::apply_render_ahead() {
+  if (!routed_playback_)
+    return;
+  routed_playback_->set_render_ahead(audio_output_->render_ahead_ms());
+  routed_playback_->set_live_input((computer_keyboard_ && computer_keyboard_->enabled()) ||
+                                   (recording_ && recording_->armed()));
 }
 
 } // namespace oscillate::quick
