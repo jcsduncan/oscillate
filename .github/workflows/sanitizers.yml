@@ -131,7 +131,11 @@ jobs:
           docker run --rm -v "$GITHUB_WORKSPACE:/w" -w /w \
             -e BUILD_DIR -e CCACHE_MAXSIZE -e OSCILLATE_BUILD_JOBS \
             -e CCACHE_DIR=/w/.ccache -e SANITIZER_LOGS=/w/sanitizer-logs \
+            -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
             "$CI_IMAGE" bash -euo pipefail -c '
+              # The container runs as root; hand the reports, logs and cache
+              # back to the runner user so the host steps can read them.
+              trap "chown -R \"\$HOST_UID:\$HOST_GID\" /w/sanitizer-logs /w/build /w/.ccache 2>/dev/null || true" EXIT
               git config --global --add safe.directory /w
               scripts/ci/ci-image-deps.sh base
               cmake --preset tsan -DOSCILLATE_TEST_TIMEOUT_SCALE=30 -DOSCILLATE_WARNINGS_AS_ERRORS=OFF
