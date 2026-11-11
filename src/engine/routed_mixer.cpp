@@ -738,9 +738,10 @@ bool RoutedMixer::mix_block(std::span<const std::span<const StereoFrame>> source
 
 std::size_t RoutedMixer::subblocks_for(std::size_t frames,
                                        const AudioWorkerPool* workers) const noexcept {
-  // One level has nothing to overlap; without helpers nothing runs at once.
+  // One level has nothing to overlap; without helpers nothing runs at once;
+  // a processor that may render differently in parts keeps blocks whole.
   if (workers == nullptr || workers->attached_workers() == 0 || level_offsets_.size() <= 2 ||
-      frames == 0)
+      frames == 0 || !splittable_)
     return 1;
   switch (limits_.subblocks) {
   case RoutedSubblocks::off:
@@ -1679,6 +1680,15 @@ void RoutedMixer::build_levels() {
   auto cursor = level_offsets_;
   for (std::size_t index = 0; index < buffers_.size(); ++index)
     level_nodes_[cursor[level[index]]++] = index;
+  const auto splits = [](const std::shared_ptr<ProcessorRuntime>& owner) {
+    return !owner || owner->renders_any_split();
+  };
+  splittable_ = std::ranges::all_of(processors_, splits) &&
+                std::ranges::all_of(output_stages_, splits) &&
+                std::ranges::all_of(tails_, [&](const TailDrains& drains) {
+                  return std::ranges::all_of(
+                      drains, [&](const auto& drain) { return splits(drain->drain_processor); });
+                });
   // The schedule (ADR-0127): one part's pieces and their dependencies, for
   // whole nodes and, when the master is a chain of stages, for the master
   // pipelining them.

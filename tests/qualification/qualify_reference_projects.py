@@ -34,6 +34,8 @@ FRAME_SPANS = (
 )
 # The spans that render the graph's nodes and sources, on any audio thread.
 NODE_SPANS = ("graph.node", "graph.source")
+# The fake callback marks its first measured block; earlier ones are warm-up.
+MEASURED_MARK = "qualification.measured"
 REFERENCES = ("light", "heavy", "pad", "drums")
 BUFFER_SIZES = (64, 128, 256, 512, 1024)
 DEFAULT_BUFFER_SIZES = (64, 128)
@@ -117,7 +119,14 @@ def trace_tables(trace: dict) -> dict:
             }
         )
     devices.sort(key=lambda row: -row["core_percent"])
-    master = master_table(by_kind)
+    # Warm-up blocks, before the fake callback's mark, are left out.
+    marks = [
+        event["ts"]
+        for event in trace["traceEvents"]
+        if event.get("ph") == "i" and event.get("name") == MEASURED_MARK
+    ]
+    measured_from = min(marks) if marks else float("-inf")
+    master = master_table(by_kind, measured_from)
     renders = [span["dur"] for span in by_kind.get("audio.render", [])]
     callbacks = (
         {
@@ -134,13 +143,22 @@ def trace_tables(trace: dict) -> dict:
         for event in trace["traceEvents"]
         if event.get("ph") == "i" and event["name"] in ("audio.xrun", "audio.xrun_recovery")
     )
-    parts = [span["args"]["n"] for span in by_kind.get("graph.wavefront", [])]
+    parts = [
+        span["args"]["n"]
+        for span in by_kind.get("graph.wavefront", [])
+        if span["ts"] >= measured_from
+    ]
+    measured_renders = [
+        span for span in by_kind.get("audio.render", []) if span["ts"] >= measured_from
+    ]
     return {
         "devices": devices,
         "master": master,
         # Blocks rendered whole have no wavefront span: they count as one part.
-        "mean_parts": round((sum(parts) + len(renders) - len(parts)) / len(renders), 2)
-        if renders
+        "mean_parts": round(
+            (sum(parts) + len(measured_renders) - len(parts)) / len(measured_renders), 2
+        )
+        if measured_renders
         else 1,
         "callbacks": callbacks,
         "xrun_events": xruns,
@@ -148,7 +166,7 @@ def trace_tables(trace: dict) -> dict:
     }
 
 
-def master_table(by_kind: dict[str, list[dict]]) -> dict | None:
+def master_table(by_kind: dict[str, list[dict]], measured_from: float) -> dict | None:
     """The master's time in each block, and the part of it nothing else overlaps.
 
     A block is one audio.render span. The master may run in several parts a
@@ -157,7 +175,9 @@ def master_table(by_kind: dict[str, list[dict]]) -> dict | None:
     block has finished, the serial tail that adds to the callback.
     """
     renders = sorted(
-        (span["ts"], span["ts"] + span["dur"]) for span in by_kind.get("audio.render", [])
+        (span["ts"], span["ts"] + span["dur"])
+        for span in by_kind.get("audio.render", [])
+        if span["ts"] >= measured_from
     )
     if not renders:
         return None

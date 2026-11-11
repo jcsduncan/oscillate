@@ -519,6 +519,35 @@ void parts_carry_their_positions() {
   }
 }
 
+// A processor that may render differently in parts (a plugin host) keeps
+// every block whole, even with a fixed part length.
+class Unsplittable final : public ProcessorRuntime {
+public:
+  void process(std::span<StereoFrame>, BlockContext) noexcept override {}
+  [[nodiscard]] bool renders_any_split() const noexcept override { return false; }
+};
+
+void a_plugin_keeps_blocks_whole() {
+  constexpr std::size_t block = 256;
+  auto graph = make_graph(Shape::flat);
+  graph.nodes.front().processor = std::make_shared<Unsplittable>();
+  RoutedMixerLimits limits{{master_id, compensation_limit},
+                           block,
+                           (graph.nodes.size() + 1) * block * sizeof(StereoFrame),
+                           graph.edges.size() * (compensation_limit + 1) * sizeof(StereoFrame)};
+  limits.subblocks = RoutedSubblocks::fixed;
+  limits.fixed_subblock_frames = block / quarter_parts;
+  auto mixer = take(prepare_routed_mixer(graph.nodes, graph.edges, limits));
+  AudioWorkerPool pool(some_helpers);
+  pool.start_owned_threads(some_helpers);
+  const std::vector<std::span<const StereoFrame>> silent(graph.nodes.size());
+  std::vector<StereoFrame> output(block);
+  require(mixer->mix_block(silent, output, {0, transport_generation}, {}, {}, &pool),
+          "the block was refused");
+  pool.stop_owned_threads();
+  REQUIRE_EQ(mixer->last_subblocks(), 1, "a block with a plugin was split");
+}
+
 // A source that fails part way fails the block.
 void a_failed_fill_fails_the_block() {
   constexpr std::size_t block = 256;
@@ -657,6 +686,7 @@ int main(int argc, char** argv) {
        {"staged_master_matches_whole_blocks", staged_master_matches_whole_blocks},
        {"parts_carry_their_positions", parts_carry_their_positions},
        {"a_failed_fill_fails_the_block", a_failed_fill_fails_the_block},
+       {"a_plugin_keeps_blocks_whole", a_plugin_keeps_blocks_whole},
        {"parts_never_allocate", parts_never_allocate},
        {"cheap_levels_after_the_tracks_stay_whole", cheap_levels_after_the_tracks_stay_whole},
        {"the_policy_splits_only_for_a_clear_gain", the_policy_splits_only_for_a_clear_gain}});

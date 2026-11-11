@@ -932,6 +932,8 @@ void measure(const Options& options, const fs::path& root, const Vst3Parts& vst3
     auto deadline = std::chrono::steady_clock::now();
     for (std::size_t block = 0; block < total_blocks; ++block) {
       if (block == options.warmup) {
+        // Marks where the measured blocks start, for the trace's summaries.
+        foundation::trace::instant("qualification.measured");
         sampler.emplace();
         cpu_started = process_cpu_seconds();
         wall_started = std::chrono::steady_clock::now();

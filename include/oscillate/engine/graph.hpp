@@ -98,6 +98,11 @@ public:
   // stages may run at once; one stage's parts come in order. `detector` is
   // the node's sidechain input for the part (empty without one).
   [[nodiscard]] virtual std::size_t stage_count() const noexcept { return 1; }
+  // Whether this processor renders the same for any split of a block into
+  // parts (ADR-0127). The engine's own processors do; a plugin host whose
+  // calls are qualified per block size (VST3) does not, and the mixer then
+  // renders every block whole.
+  [[nodiscard]] virtual bool renders_any_split() const noexcept { return true; }
   virtual void process_stage(std::size_t /*stage*/, std::span<StereoFrame> stereo,
                              std::span<const StereoFrame> /*detector*/,
                              BlockContext context) noexcept {

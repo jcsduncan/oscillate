@@ -40,6 +40,7 @@ oscillate_add_case_tests(routed_wavefront_contract oscillate_routed_wavefront_te
   CASES session_parts_match_whole_blocks session_with_automation_matches
         nested_groups_match_whole_blocks flat_mix_matches_whole_blocks
         staged_master_matches_whole_blocks
-        parts_carry_their_positions a_failed_fill_fails_the_block parts_never_allocate
+        parts_carry_their_positions a_failed_fill_fails_the_block a_plugin_keeps_blocks_whole
+        parts_never_allocate
         cheap_levels_after_the_tracks_stay_whole
         the_policy_splits_only_for_a_clear_gain)

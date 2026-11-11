@@ -7,6 +7,7 @@
 #include "oscillate/project/model.hpp"
 #include "oscillate/routing/project_route_plan.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -90,6 +91,10 @@ public:
   [[nodiscard]] bool contains(const engine::ProcessorRuntime* stage) const noexcept override;
   // Each stage of the chain, one at a time (ADR-0127).
   [[nodiscard]] std::size_t stage_count() const noexcept override { return stages_.size(); }
+  [[nodiscard]] bool renders_any_split() const noexcept override {
+    return std::ranges::all_of(stages_,
+                               [](const auto& stage) { return stage->renders_any_split(); });
+  }
   void process_stage(std::size_t stage, std::span<engine::StereoFrame> stereo,
                      std::span<const engine::StereoFrame> detector,
                      engine::BlockContext context) noexcept override;

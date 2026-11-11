@@ -1175,9 +1175,14 @@ void staged_fill_renders_inside_the_schedule() {
   probe.answer = RoutedPrepareStatus::prepared;
   probe.fail_node = true;
   const auto fills_before = probe.node_fills;
-  REQUIRE_EQ(render(), RoutedRenderStatus::invalid_block, "a failed node fill rendered");
+  // The graph moved past the failed block: it plays as silence and the next
+  // block renders.
+  REQUIRE_EQ(render(), RoutedRenderStatus::rendered, "a block failed part way was replayed");
   REQUIRE_EQ(probe.node_fills, fills_before + 1, "the failing node was not asked to fill");
   REQUIRE_EQ(output[0].left, 0.0F, "a failed node fill was not silenced");
+  probe.fail_node = false;
+  REQUIRE_EQ(render(), RoutedRenderStatus::rendered, "playback did not recover after the failure");
+  REQUIRE_EQ(output[0].left, staged_level, "playback did not recover after the failure");
 }
 
 void invalid_blocks_never_activate() {

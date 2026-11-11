@@ -40,7 +40,9 @@ struct RoutedSourceFill {
   // decides whether the block renders and selects the spans without
   // rendering them, then the mixer calls fill_node for each node, part by
   // part (RoutedNodeFill). A switching block, or one the source answers
-  // whole_block for, fills through fill_selected.
+  // whole_block for, fills through fill_selected. A node whose fill fails
+  // after the schedule started leaves its block silent but rendered: the
+  // graph has moved past it.
   RoutedPrepareStatus (*prepare_selected)(void*, std::uint64_t, BlockContext, std::size_t,
                                           std::span<const std::span<const StereoFrame>>&) noexcept =
       nullptr;

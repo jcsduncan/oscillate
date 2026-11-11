@@ -506,6 +506,9 @@ private:
   };
   std::array<PartPlan, 2> part_plans_;
   std::size_t sink_stages_ = 1;
+  // Every processor renders the same under any split; otherwise blocks run
+  // whole.
+  bool splittable_ = true;
   // The most parts a block can have, and the lanes of scratch_.
   std::size_t max_parts_ = max_subblocks;
   std::size_t scratch_lanes_ = 1;

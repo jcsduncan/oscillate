@@ -460,8 +460,12 @@ RoutedRenderStatus RoutedMixerPublisher::render_block(
   drain_live(*active);
   if (!active->mixer->mix_block(selected_sources, output, context, gains.edges, gains.nodes,
                                 workers, node_fill)) {
-    // A source that failed part way: the block is silent, as a failed fill's.
     silence(output);
+    // A source that failed part way through the schedule: the mixer has
+    // moved on, so the block is played as silence and the transport moves on
+    // with it; replaying it would never be accepted.
+    if (node_fill.fill != nullptr && !active->mixer->accepts_context(context, output.size()))
+      return RoutedRenderStatus::rendered;
     return RoutedRenderStatus::invalid_block;
   }
   if (live_passed)

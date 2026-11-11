@@ -170,6 +170,8 @@ PARTS_MASTER_MEAN_US = 325
 PARTS_EXPOSED_MEAN_US = 225
 # One block in four parts, one whole.
 PARTS_MEAN = 2.5
+# The master after the warm-up mark.
+WARMED_MASTER_US = 100
 
 
 class Master(unittest.TestCase):
@@ -203,6 +205,21 @@ class Master(unittest.TestCase):
         self.assertEqual(tables["master"]["exposed_mean_us"], PARTS_EXPOSED_MEAN_US)
         self.assertEqual(tables["mean_parts"], PARTS_MEAN)
         self.assertNotIn("graph.wavefront", [row["device"] for row in tables["devices"]])
+
+    def test_warm_up_blocks_are_left_out(self):
+        warmed = {
+            "traceEvents": [
+                {"ph": "M", "tid": 1, "args": {"name": "audio callback"}},
+                span(1, "audio.render", 0, 900),
+                span(1, "graph.node", 0, 800, n=7, name="Master"),
+                {"ph": "i", "tid": 1, "name": "qualification.measured", "ts": 1000, "args": {}},
+                span(1, "audio.render", 1000, 200),
+                span(1, "graph.node", 1000, 100, n=7, name="Master"),
+            ]
+        }
+        tables = trace_tables(warmed)
+        self.assertEqual(tables["master"]["blocks"], 1)
+        self.assertEqual(tables["master"]["mean_us"], WARMED_MASTER_US)
 
     def test_the_exposed_and_late_limits(self):
         run = run_with(PARTS_TRACE)
