@@ -22,23 +22,23 @@ The user's rule for edits while playing: an edit may be heard after the look-ahe
 
 ## Measured
 
-i7-10700K (8 cores, 16 threads), GCC 15.2, Release, seven helpers, paced fake callback, 48 kHz, 20 s a run, with ADR-0127's wavefront. The heavy reference with the heavy master; callback p99, blocks over their period, whole-process CPU (% of one core):
+i7-10700K (8 cores, 16 threads), GCC 15.2, Release, seven helpers, paced fake callback, 48 kHz, 20 s a run, with ADR-0126's realtime FFT and ADR-0127's wavefront. The heavy reference with the heavy master; callback p99, blocks over their period, whole-process CPU (% of one core):
 
 | Frames | Just in time: p99, late, CPU | 50 ms window: p99, late, CPU |
 | ---: | ---: | ---: |
-| 256 | 2230 µs, 0, 190 | 12 µs, 0, 201 |
-| 512 | 4287 µs, 0, 205 | 14 µs, 0, 202 |
-| 1024 | 7388 µs, 0, 196 | 16 µs, 0, 195 |
+| 256 | 1957 µs, 0, 187 | 11 µs, 0, 187 |
+| 512 | 3616 µs, 0, 189 | 6 µs, 0, 201 |
+| 1024 | 6862 µs, 0, 181 | 8 µs, 0, 192 |
 
 With a load spike, every 200th render 25 ms slower (`--spike-every 200 --spike-us 25000`):
 
 | Frames | Just in time: p99, late | 50 ms window: p99, late |
 | ---: | ---: | ---: |
-| 256 | 2505 µs, 19 | 11 µs, 0 |
-| 512 | 4874 µs, 9 | 4 µs, 0 |
-| 1024 | 8959 µs, 5 | 7 µs, 0 |
+| 256 | 2157 µs, 19 | 13 µs, 0 |
+| 512 | 4064 µs, 9 | 13 µs, 0 |
+| 1024 | 7547 µs, 6 | 8 µs, 0 |
 
-The light reference with the heavy master: p99 821 and 2314 µs at 256 and 1024 frames just in time, 11 and 12 µs with the window, at 36 → 34% and 31 → 30% of a core. The producer does the same rendering the callback did; its waits cost no measurable CPU.
+The light reference with the heavy master: p99 696 and 1596 µs at 256 and 1024 frames just in time, 12 µs with the window. The producer does the rendering the callback did; whole-process CPU moves within the run-to-run spread of this shared machine.
 
 **Edit to hearing.** Just in time, an edit reaches the next block, heard one block later (5 ms at 256 frames, 21 ms at 1024). With the 50 ms window it is heard at most the window plus one block later: the window holds whole blocks, eight at 256 frames (43 ms) and two at 1024 (43 ms), so 48 ms and 64 ms; the setting's text quotes the limit plus one block (55 and 71 ms). Off keeps today's immediacy.
 
