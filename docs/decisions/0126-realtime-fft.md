@@ -18,7 +18,7 @@ After ADR-0125 the heavy master chain cost 2.56 ms of serial time per 1024-frame
    - Warp, Clay and Cast share this wrapper. Cast's own wrapper is gone, and the native effects reach PFFFT only through `warp_dsp`.
 2. **A staged transform for Keel.** `StagedRealFft` runs `RealFft::forward` in steps of about equal cost, so a long transform can be spread over many callbacks.
    - It treats the N/2 complex points as rows by columns (the four-step transform): a short PFFFT complex transform per column, twiddles, a short transform per row, then the real spectrum split off in chunks.
-   - At 16,384 points that is 256 steps; at 65,536 points (192 kHz) it is 512.
+   - At 16,384 points that is 224 steps; at 65,536 points (192 kHz) it is 448.
 3. **The double transform is offline only.** It is renamed `dsp::OfflineFft`, and its staged interface is removed. Its users are:
    - wavetables and Nova's tables;
    - key, tempo, mix role and mix check analysis;

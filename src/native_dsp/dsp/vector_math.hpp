@@ -115,8 +115,14 @@ template <std::size_t N>
   return _mm_add_ps(_mm_add_ps(m, y), _mm_mul_ps(e, _mm_set1_ps(ln2_upper)));
 }
 
+// sin x and cos x of four floats.
+struct SinCos {
+  __m128 sine;
+  __m128 cosine;
+};
+
 // sin x and cos x together, for |x| < 8192.
-inline void sincos(__m128 x, __m128& sine, __m128& cosine) noexcept {
+[[nodiscard]] inline SinCos sincos(__m128 x) noexcept {
   using namespace detail;
   const __m128 sign_mask = _mm_set1_ps(-0.0F);
   __m128 sin_sign = _mm_and_ps(x, sign_mask);
@@ -148,8 +154,7 @@ inline void sincos(__m128 x, __m128& sine, __m128& cosine) noexcept {
   // swap is all ones where sin x = +-sin r and cos x = +-cos r.
   const __m128 sin_part = _mm_or_ps(_mm_and_ps(swap, s), _mm_andnot_ps(swap, c));
   const __m128 cos_part = _mm_or_ps(_mm_and_ps(swap, c), _mm_andnot_ps(swap, s));
-  sine = _mm_xor_ps(sin_part, sin_sign);
-  cosine = _mm_xor_ps(cos_part, cos_sign);
+  return {_mm_xor_ps(sin_part, sin_sign), _mm_xor_ps(cos_part, cos_sign)};
 }
 
 // e^z for each complex value of an interleaved array (real, imaginary, ...)
@@ -164,9 +169,7 @@ inline void complex_exp(std::span<float> interleaved) noexcept {
     const __m128 second = _mm_loadu_ps(interleaved.data() + i + floats_per_step / 2);
     const __m128 re = _mm_shuffle_ps(first, second, pick_even);
     const __m128 im = _mm_shuffle_ps(first, second, pick_odd);
-    __m128 sine;
-    __m128 cosine;
-    sincos(im, sine, cosine);
+    const auto [sine, cosine] = sincos(im);
     const __m128 magnitude = exp(re);
     const __m128 out_re = _mm_mul_ps(magnitude, cosine);
     const __m128 out_im = _mm_mul_ps(magnitude, sine);
@@ -178,9 +181,7 @@ inline void complex_exp(std::span<float> interleaved) noexcept {
     const __m128 pair = _mm_loadu_ps(interleaved.data() + i);
     const __m128 re = _mm_shuffle_ps(pair, pair, pick_even);
     const __m128 im = _mm_shuffle_ps(pair, pair, pick_odd);
-    __m128 sine;
-    __m128 cosine;
-    sincos(im, sine, cosine);
+    const auto [sine, cosine] = sincos(im);
     const __m128 magnitude = exp(re);
     _mm_storeu_ps(interleaved.data() + i,
                   _mm_unpacklo_ps(_mm_mul_ps(magnitude, cosine), _mm_mul_ps(magnitude, sine)));

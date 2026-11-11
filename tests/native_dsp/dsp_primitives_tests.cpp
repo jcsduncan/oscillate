@@ -236,9 +236,7 @@ void vector_math_matches_the_library() {
     std::array<float, lanes> c{};
     _mm_storeu_ps(e.data(), vm::exp(_mm_loadu_ps(x.data())));
     _mm_storeu_ps(g.data(), vm::log(_mm_loadu_ps(y.data())));
-    __m128 sine;
-    __m128 cosine;
-    vm::sincos(_mm_loadu_ps(a.data()), sine, cosine);
+    const auto [sine, cosine] = vm::sincos(_mm_loadu_ps(a.data()));
     _mm_storeu_ps(s.data(), sine);
     _mm_storeu_ps(c.data(), cosine);
     for (std::size_t l = 0; l < lanes; ++l) {

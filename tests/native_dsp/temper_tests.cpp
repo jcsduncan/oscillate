@@ -387,6 +387,48 @@ void telemetry_feeds_the_panel() {
   REQUIRE_EQ(telemetry[temper::telemetry::keyed], 0.0F, "no key, not keyed");
 }
 
+// A channel that stops being processed leaves nothing behind: right
+// alone plays, the mode moves to Left (right passes dry) for four hops as
+// the input stops, then back to Stereo. The right channel is silent once
+// its last filtered block has rung out, where a stale sum from before the
+// switch would play a filter's length late.
+void a_channel_dropped_and_restored_starts_clean() {
+  constexpr std::size_t switch_frame = 24'000;
+  constexpr std::size_t hop = 256;
+  constexpr std::size_t filter = 2'048;
+  constexpr std::size_t single_hops = 4;
+  constexpr std::size_t checked_hops = 4;
+  constexpr double stereo_mode = 0.0;
+  constexpr double left_mode = 3.0;
+  constexpr std::uint64_t first_revision = 1;
+  constexpr double full_depth = 10.0;
+  constexpr double level = 0.3;
+  auto v = defaults();
+  v[at("temper.depth")] = full_depth;
+  v[at("temper.stereo")] = stereo_mode;
+  const std::size_t delay = latency(v);
+  const std::size_t total = switch_frame + delay + filter + (2 + checked_hops) * hop;
+  auto input = noise(level, total);
+  for (std::size_t i = 0; i < total; ++i) {
+    input.left[i] = 0.0;
+    if (i >= switch_frame) {
+      input.right[i] = 0.0;
+    }
+  }
+  auto left = v;
+  left[at("temper.stereo")] = left_mode;
+  auto runtime = make_effect(engine(), v);
+  std::uint64_t revision = first_revision;
+  const auto out = process(
+      *runtime, input,
+      {.at = {switch_frame, switch_frame + single_hops * hop}, .before = [&](std::uint64_t frame) {
+         require(runtime->offer_values(frame == switch_frame ? left : v, revision++), "offered");
+       }});
+  for (std::size_t i = switch_frame + delay + filter + 2 * hop; i < total; ++i) {
+    REQUIRE_EQ(out.right[i], 0.0, "the right channel has rung out at " + std::to_string(i));
+  }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -408,5 +450,7 @@ int main(int argc, char** argv) {
           {"delta_plus_output_is_the_input", [] { delta_plus_output_is_the_input(); }},
           {"mix_blends_toward_the_input", [] { mix_blends_toward_the_input(); }},
           {"telemetry_feeds_the_panel", [] { telemetry_feeds_the_panel(); }},
+          {"a_channel_dropped_and_restored_starts_clean",
+           [] { a_channel_dropped_and_restored_starts_clean(); }},
       });
 }

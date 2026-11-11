@@ -1029,6 +1029,14 @@ private:
     const std::size_t first_back = frames_.lookahead + h - 1;
     // The products carry the inverse's 1 / k.
     const float unscale = 1.0F / static_cast<float>(k);
+    // A second channel's pending sums are dropped when it stops being
+    // processed, so they cannot return when it starts again.
+    if (channels < landed_channels_) {
+      for (auto& landing : landing_) {
+        landing[1].zero();
+      }
+    }
+    landed_channels_ = channels;
     for (std::size_t c = 0; c < channels; ++c) {
       for (std::size_t n = 0; n < h; ++n) {
         const std::size_t back = first_back - n;
@@ -1269,6 +1277,8 @@ private:
   // processed channel.
   std::vector<std::array<Buffer, 2>> landing_;
   std::size_t landed_ = 0;
+  // The processed channels at the last overlap-add.
+  std::size_t landed_channels_ = 0;
   // The second half of the last hop's sum, which overlaps this one.
   std::vector<double> overlap_a_;
   std::vector<double> overlap_b_;
