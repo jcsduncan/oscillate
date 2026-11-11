@@ -835,7 +835,8 @@ oscillate_add_test_executable(oscillate_capture_queue_tests SOURCES capture_queu
 oscillate_add_case_tests(native_capture_queue_contract oscillate_capture_queue_tests
   CASES
   two_threads_keep_order_and_runs
-  a_drop_then_a_fit_starts_one_run)
+  a_drop_then_a_fit_starts_one_run
+  a_seek_starts_a_run_with_nothing_lost)
 
 oscillate_add_test_executable(oscillate_lens_tests SOURCES lens_tests.cpp
   LIBS oscillate::native_effects)

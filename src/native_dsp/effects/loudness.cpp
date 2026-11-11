@@ -130,7 +130,7 @@ public:
   }
 
   // A seek starts the windows and filters afresh; the integrated
-  // statistics carry on until Integrate is switched off.
+  // statistics carry on until Integrate is switched or frames are lost.
   void reset() noexcept override { queue_.restart(); }
 
   // The integrated statistics need every frame, so the analysis worker
@@ -142,7 +142,16 @@ public:
   [[nodiscard]] bool analysis_backlogged() const noexcept override { return queue_.backlogged(); }
 
   void analyse() noexcept override {
-    queue_.read([this] { restart(); }, [this](const Captured& frame) { measure(frame); });
+    queue_.read(
+        [this](bool lost) {
+          restart();
+          // Frames the analysis fell behind on are gone: the integrated
+          // statistics start afresh rather than span the gap.
+          if (lost) {
+            clear_statistics();
+          }
+        },
+        [this](const Captured& frame) { measure(frame); });
   }
 
   // The reader: the meter publishes nothing from the callback.
@@ -203,7 +212,8 @@ private:
     }
   }
 
-  // A new run (a seek, or a capture the analysis fell behind on).
+  // A new run (a seek, or a capture the analysis fell behind on); the
+  // integrated statistics are the caller's.
   void restart() noexcept {
     for (std::size_t c = 0; c < 2; ++c) {
       weighting_[c].reset();

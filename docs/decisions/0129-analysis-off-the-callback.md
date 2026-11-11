@@ -73,6 +73,6 @@ On two cores the heavy reference's tracks fill the period, so its p99 is set by 
 ## Consequences
 
 - Each continuous device keeps one capture of about two seconds (1–1.5 MB at 48 kHz); each `on_read` spectrum one of about a second (0.5 MB).
-- If the worker falls more than two seconds behind, as a stalled machine might, the capture is dropped and the meters start afresh, as after a seek.
+- If the worker falls more than two seconds behind, as a stalled machine might, the capture is dropped and the meters start afresh, as after a seek; Loudness's integrated statistics start afresh too, so they never span the gap.
 - The process has one more thread, which sleeps while no continuous analysis exists.
 - Kernels hosted without a runtime (Stick's Shape) capture, nobody reads, and the capture stops at its length: they no longer compute display spectra nobody sees.

@@ -186,7 +186,7 @@ public:
   // frame through the analysis.
   void analyse() noexcept override {
     adopt_values();
-    queue_.read([this] { restart(); }, [this](const Captured& frame) { take(frame); });
+    queue_.read([this](bool) { restart(); }, [this](const Captured& frame) { take(frame); });
   }
 
   // The reader: Lens publishes nothing from the callback.

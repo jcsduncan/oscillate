@@ -272,7 +272,7 @@ public:
   [[nodiscard]] bool analysis_backlogged() const noexcept override { return queue_.backlogged(); }
 
   void analyse() noexcept override {
-    queue_.read([this] { restart_meters(); },
+    queue_.read([this](bool) { restart_meters(); },
                 [this](const Captured& frame) { meter_output(frame); });
   }
 

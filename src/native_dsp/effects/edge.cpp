@@ -244,7 +244,7 @@ public:
   [[nodiscard]] bool analysis_backlogged() const noexcept override { return queue_.backlogged(); }
 
   void analyse() noexcept override {
-    queue_.read([this] { restart_meter(); },
+    queue_.read([this](bool) { restart_meter(); },
                 [this](const engine::StereoFrame& frame) { meter_output(frame); });
   }
 

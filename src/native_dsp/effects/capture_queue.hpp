@@ -10,9 +10,9 @@
 // one at a time. One producer, one consumer, and neither ever waits. The
 // callback drops a block that does not fit, so an analysis nobody reads
 // costs the callback one comparison a block; the next block that fits
-// starts a new run. A reset on the callback (a seek) starts a new run too.
-// The reader drops whatever came before a new run and starts its analysis
-// afresh there.
+// starts a new run, marked as following lost frames. A reset on the
+// callback (a seek) starts a new run too. The reader drops whatever came
+// before a new run and starts its analysis afresh there.
 namespace oscillate::native_dsp::effects {
 
 template <typename Frame> class CaptureQueue {
@@ -36,7 +36,7 @@ public:
       return false;
     }
     if (dropping_) {
-      restart();
+      begin_run(true);
     }
     for (std::size_t i = 0; i < count; ++i) {
       frames_[(written_ + i) & mask_] = fill(i);
@@ -52,21 +52,21 @@ public:
     return written_ - taken_.load(std::memory_order_acquire) > frames_.size() / 2;
   }
 
-  // Callback only: what follows starts a new run.
-  void restart() noexcept {
-    dropping_ = false;
-    run_start_.store(written_, std::memory_order_relaxed);
-    run_.fetch_add(1, std::memory_order_release);
-  }
+  // Callback only: what follows starts a new run (a seek: no frames lost).
+  void restart() noexcept { begin_run(false); }
 
   // Reader only: every frame published since the last read, in order.
-  // `start` runs before the first frame of each new run; `take(frame)` for
-  // each frame of the current run.
+  // `start(lost)` runs before the first frame of each new run, `lost` true
+  // when frames were dropped since the previous run's last frame read;
+  // `take(frame)` for each frame of the current run.
   template <typename Start, typename Take> void read(Start&& start, Take&& take) {
     const std::uint64_t end = published_.load(std::memory_order_acquire);
     // Loaded after `end`: every run that began at or before it is seen.
     const std::uint64_t run = run_.load(std::memory_order_acquire);
     if (run != run_seen_) {
+      // Loaded after `run`: a run that follows a drop is never missed. A
+      // newer one may be seen early; it is then reported again with its run.
+      lost_pending_ = lost_pending_ || lost_run_.load(std::memory_order_relaxed) > run_seen_;
       run_seen_ = run;
       next_run_ = run_start_.load(std::memory_order_relaxed);
       pending_ = true;
@@ -80,7 +80,9 @@ public:
         }
         read_ = next_run_ > read_ ? next_run_ : read_;
         pending_ = false;
-        start();
+        const bool lost = lost_pending_;
+        lost_pending_ = false;
+        start(lost);
         continue;
       }
       take(frames_[read_ & mask_]);
@@ -92,6 +94,16 @@ public:
   [[nodiscard]] std::size_t capacity() const noexcept { return frames_.size(); }
 
 private:
+  void begin_run(bool lost) noexcept {
+    dropping_ = false;
+    ++runs_;
+    if (lost) {
+      lost_run_.store(runs_, std::memory_order_relaxed);
+    }
+    run_start_.store(written_, std::memory_order_relaxed);
+    run_.store(runs_, std::memory_order_release);
+  }
+
   std::vector<Frame> frames_;
   std::size_t mask_ = 0;
   // Frames written, ever: the callback's count, and the one it publishes.
@@ -99,15 +111,20 @@ private:
   std::atomic<std::uint64_t> published_{0};
   // Frames the reader has finished with.
   std::atomic<std::uint64_t> taken_{0};
-  // Runs started, and where the newest one starts.
+  // Runs started, where the newest one starts, and the newest that follows
+  // a drop.
   std::atomic<std::uint64_t> run_{0};
   std::atomic<std::uint64_t> run_start_{0};
+  std::atomic<std::uint64_t> lost_run_{0};
+  // Callback only.
+  std::uint64_t runs_ = 0;
   bool dropping_ = false;
   // Reader only.
   std::uint64_t read_ = 0;
   std::uint64_t run_seen_ = 0;
   std::uint64_t next_run_ = 0;
   bool pending_ = false;
+  bool lost_pending_ = false;
 };
 
 } // namespace oscillate::native_dsp::effects

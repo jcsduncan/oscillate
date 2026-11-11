@@ -296,7 +296,7 @@ public:
   }
 
   void analyse() noexcept override {
-    queue_.read([this] { spectra_.reset(); },
+    queue_.read([this](bool) { spectra_.reset(); },
                 [this](const Captured& frame) { spectra_.push(frame.input, frame.output); });
   }
 

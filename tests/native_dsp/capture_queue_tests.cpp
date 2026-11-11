@@ -11,7 +11,7 @@
 // CaptureQueue (ADR-0125) with a real producer and consumer thread: frames
 // arrive in order and whole; nothing written before a restart is read
 // after the reader starts the new run; a drop followed by a write that fits
-// starts exactly one run.
+// starts exactly one run, marked lost; a seek's run is not.
 namespace {
 using oscillate::native_dsp::effects::CaptureQueue;
 using oscillate::test::require;
@@ -64,7 +64,7 @@ void two_threads_keep_order_and_runs() {
   std::uint64_t taken = 0;
   const auto read = [&] {
     queue.read(
-        [&] {
+        [&](bool) {
           ++starts;
           started = true;
         },
@@ -104,13 +104,37 @@ void a_drop_then_a_fit_starts_one_run() {
   }
   require(!queue.write(block, fill(1)), "a full queue drops");
   require(!queue.write(block, fill(1)), "and keeps dropping");
-  queue.read([&] { ++starts; }, [&](const Frame& frame) { got.push_back(frame); });
+  queue.read([&](bool) { ++starts; }, [&](const Frame& frame) { got.push_back(frame); });
   require(starts == 0 && got.size() == capacity, "what fitted is read, in one run");
   require(queue.write(block, fill(2)), "room again");
   got.clear();
-  queue.read([&] { ++starts; }, [&](const Frame& frame) { got.push_back(frame); });
+  bool lost = false;
+  queue.read(
+      [&](bool was_lost) {
+        ++starts;
+        lost = was_lost;
+      },
+      [&](const Frame& frame) { got.push_back(frame); });
   require(starts == 1, "the first write after the drop starts one new run");
+  require(lost, "and the reader is told frames were lost before it");
   require(got.size() == block && got.front().run == 2, "and only its frames follow");
+}
+
+void a_seek_starts_a_run_with_nothing_lost() {
+  CaptureQueue<Frame> queue(capacity);
+  const auto fill = [](std::size_t i) { return Frame{0, i}; };
+  require(queue.write(block, fill), "fits");
+  queue.restart();
+  require(queue.write(block, fill), "fits after the seek");
+  std::uint64_t starts = 0;
+  bool lost = true;
+  queue.read(
+      [&](bool was_lost) {
+        ++starts;
+        lost = was_lost;
+      },
+      [](const Frame&) {});
+  require(starts == 1 && !lost, "a seek's run follows no lost frames");
 }
 
 } // namespace
@@ -121,5 +145,7 @@ int main(int argc, char** argv) {
       {
           {"two_threads_keep_order_and_runs", [] { two_threads_keep_order_and_runs(); }},
           {"a_drop_then_a_fit_starts_one_run", [] { a_drop_then_a_fit_starts_one_run(); }},
+          {"a_seek_starts_a_run_with_nothing_lost",
+           [] { a_seek_starts_a_run_with_nothing_lost(); }},
       });
 }
