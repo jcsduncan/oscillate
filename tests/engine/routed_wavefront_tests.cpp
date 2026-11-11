@@ -196,6 +196,22 @@ private:
   std::vector<std::shared_ptr<ProcessorRuntime>> stages_;
 };
 
+// A plugin host's stand-in: its output depends on how the block is cut (a
+// gain from the call's length), so it says it does not render any split
+// alike, and the mixer must give it whole blocks.
+class Blockwise final : public ProcessorRuntime {
+public:
+  void process(std::span<StereoFrame> frames, BlockContext) noexcept override {
+    const auto gain = 1.0F / (1.0F + static_cast<float>(frames.size()) * blockwise_slope);
+    for (auto& frame : frames)
+      frame = {frame.left * gain, frame.right * gain};
+  }
+  [[nodiscard]] bool renders_any_split() const noexcept override { return false; }
+
+private:
+  static constexpr float blockwise_slope = 0.001F;
+};
+
 // Records the contexts it is given, to check the parts' positions and the
 // loop flag.
 class Recorder final : public ProcessorRuntime {
@@ -229,7 +245,7 @@ private:
   std::chrono::microseconds cost_;
 };
 
-enum class Shape : std::uint8_t { session, nested, flat, staged };
+enum class Shape : std::uint8_t { session, nested, flat, staged, plugin };
 
 struct Graph {
   std::vector<RoutedNode> nodes;
@@ -260,6 +276,14 @@ Graph make_graph(Shape shape) {
     graph.nodes.emplace_back(RoutingNode{master_id, latent_frames}, std::make_shared<Chain>());
     graph.nodes.back().output_stage = colour(output_stage_smoothing);
     return graph;
+  }
+  if (shape == Shape::plugin) {
+    // A plugin on a track and one in the master chain: both stay whole while
+    // the rest of the graph runs in parts.
+    auto graph_with_plugins = make_graph(Shape::staged);
+    graph_with_plugins.nodes[1].processor = std::make_shared<Blockwise>();
+    graph_with_plugins.nodes.back().output_stage = std::make_shared<Blockwise>();
+    return graph_with_plugins;
   }
   if (shape == Shape::flat) {
     for (RoutingNodeId track = 1; track <= small_tracks; ++track) {
@@ -476,6 +500,8 @@ void session_parts_match_whole_blocks() { parts_match_whole_blocks(Shape::sessio
 void session_with_automation_matches() { parts_match_whole_blocks(Shape::session, true); }
 void nested_groups_match_whole_blocks() { parts_match_whole_blocks(Shape::nested, true); }
 void flat_mix_matches_whole_blocks() { parts_match_whole_blocks(Shape::flat, false); }
+void plugins_render_whole_in_a_split_block() { parts_match_whole_blocks(Shape::plugin, true); }
+
 void staged_master_matches_whole_blocks() {
   Chain::staged_runs = 0;
   parts_match_whole_blocks(Shape::staged, true);
@@ -517,35 +543,6 @@ void parts_carry_their_positions() {
     require(seen[index].context.planned_loop_wrap == (index == 0),
             "only the first part starts the loop wrap");
   }
-}
-
-// A processor that may render differently in parts (a plugin host) keeps
-// every block whole, even with a fixed part length.
-class Unsplittable final : public ProcessorRuntime {
-public:
-  void process(std::span<StereoFrame>, BlockContext) noexcept override {}
-  [[nodiscard]] bool renders_any_split() const noexcept override { return false; }
-};
-
-void a_plugin_keeps_blocks_whole() {
-  constexpr std::size_t block = 256;
-  auto graph = make_graph(Shape::flat);
-  graph.nodes.front().processor = std::make_shared<Unsplittable>();
-  RoutedMixerLimits limits{{master_id, compensation_limit},
-                           block,
-                           (graph.nodes.size() + 1) * block * sizeof(StereoFrame),
-                           graph.edges.size() * (compensation_limit + 1) * sizeof(StereoFrame)};
-  limits.subblocks = RoutedSubblocks::fixed;
-  limits.fixed_subblock_frames = block / quarter_parts;
-  auto mixer = take(prepare_routed_mixer(graph.nodes, graph.edges, limits));
-  AudioWorkerPool pool(some_helpers);
-  pool.start_owned_threads(some_helpers);
-  const std::vector<std::span<const StereoFrame>> silent(graph.nodes.size());
-  std::vector<StereoFrame> output(block);
-  require(mixer->mix_block(silent, output, {0, transport_generation}, {}, {}, &pool),
-          "the block was refused");
-  pool.stop_owned_threads();
-  REQUIRE_EQ(mixer->last_subblocks(), 1, "a block with a plugin was split");
 }
 
 // A source that fails part way fails the block.
@@ -684,9 +681,9 @@ int main(int argc, char** argv) {
        {"nested_groups_match_whole_blocks", nested_groups_match_whole_blocks},
        {"flat_mix_matches_whole_blocks", flat_mix_matches_whole_blocks},
        {"staged_master_matches_whole_blocks", staged_master_matches_whole_blocks},
+       {"plugins_render_whole_in_a_split_block", plugins_render_whole_in_a_split_block},
        {"parts_carry_their_positions", parts_carry_their_positions},
        {"a_failed_fill_fails_the_block", a_failed_fill_fails_the_block},
-       {"a_plugin_keeps_blocks_whole", a_plugin_keeps_blocks_whole},
        {"parts_never_allocate", parts_never_allocate},
        {"cheap_levels_after_the_tracks_stay_whole", cheap_levels_after_the_tracks_stay_whole},
        {"the_policy_splits_only_for_a_clear_gain", the_policy_splits_only_for_a_clear_gain}});

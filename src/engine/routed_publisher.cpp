@@ -464,10 +464,10 @@ RoutedRenderStatus RoutedMixerPublisher::render_block(
     // A source that failed part way through the schedule: the mixer has
     // moved on, so the block is played as silence and the transport moves on
     // with it; replaying it would never be accepted.
-    if (node_fill.fill != nullptr && !active->mixer->accepts_context(context, output.size()))
-      return RoutedRenderStatus::rendered;
-    return RoutedRenderStatus::invalid_block;
+    if (node_fill.fill == nullptr || active->mixer->accepts_context(context, output.size()))
+      return RoutedRenderStatus::invalid_block;
   }
+  // A block played, silent or not, that a live candidate let pass.
   if (live_passed)
     live_passed_blocks_.store(live_passed_blocks_.load(std::memory_order_relaxed) + 1,
                               std::memory_order_release);

@@ -738,10 +738,9 @@ bool RoutedMixer::mix_block(std::span<const std::span<const StereoFrame>> source
 
 std::size_t RoutedMixer::subblocks_for(std::size_t frames,
                                        const AudioWorkerPool* workers) const noexcept {
-  // One level has nothing to overlap; without helpers nothing runs at once;
-  // a processor that may render differently in parts keeps blocks whole.
+  // One level has nothing to overlap; without helpers nothing runs at once.
   if (workers == nullptr || workers->attached_workers() == 0 || level_offsets_.size() <= 2 ||
-      frames == 0 || !splittable_)
+      frames == 0)
     return 1;
   switch (limits_.subblocks) {
   case RoutedSubblocks::off:
@@ -941,13 +940,26 @@ bool RoutedMixer::run_levels(const NodeBlock& block, AudioWorkerPool& workers,
   return !job.failed.load(std::memory_order_relaxed);
 }
 
+void RoutedMixer::plan_whole_nodes() noexcept {
+  // A node still draining a plugin it replaced runs whole until the drain
+  // ends; one that drains nothing such returns to parts.
+  for (std::size_t index = 0; index < buffers_.size(); ++index) {
+    bool whole = whole_node_[index] != 0;
+    for (const auto& drain : tails_[index])
+      whole = whole || (drain->remaining_frames.load(std::memory_order_relaxed) != 0 &&
+                        drain->drain_processor && !drain->drain_processor->renders_any_split());
+    whole_now_[index] = whole ? 1 : 0;
+  }
+}
+
 bool RoutedMixer::stages_sink(std::size_t parts) const noexcept {
   // Only the master's serial devices pipeline (ADR-0127): every other node
   // already runs beside the rest of its level. A node with a tail draining
   // keeps whole processing, since its drain sums in after the processor.
   const auto sink = buffers_.size() - 1;
   return parts > 1 && sink_stages_ > 1 && !limits_.skip_muted_nodes && !draining(tails_[sink]) &&
-         processors_[sink] && processors_[sink]->stage_count() == sink_stages_;
+         whole_now_[sink] == 0 && processors_[sink] &&
+         processors_[sink]->stage_count() == sink_stages_;
 }
 
 void RoutedMixer::push_ready(ReadyQueue& queue, std::uint32_t item) noexcept {
@@ -995,6 +1007,7 @@ bool RoutedMixer::run_wavefront(const NodeBlock& block, std::size_t parts, Audio
   // after the first ahead of the tracks, and every thread of the batch takes
   // whichever is ready. So the master works on part k while the tracks
   // render part k + 1, with no barrier between levels.
+  plan_whole_nodes();
   const auto& plan = part_plans_[stages_sink(parts) ? 1 : 0];
   const auto per_part = plan.pieces.size();
   const auto total = parts * per_part;
@@ -1072,18 +1085,29 @@ template <typename Job> void RoutedMixer::run_lane(Job& run, std::size_t lane) n
     const auto level = node_level_[piece.node];
     const bool timed = run.measure && level != 0;
     const auto began = timed ? Clock::now() : Clock::time_point{};
-    const bool filled =
-        piece.stage == no_stage
-            ? mix_part(piece.node, run.block, part, run.parts, run.fill, run.workers, scratch)
-            : mix_stage(piece.node, piece.stage, run.block, part, run.parts, run.fill, run.workers,
-                        scratch);
+    // A whole node does its block in its last part, when every input has
+    // finished; its earlier parts only keep its order.
+    const bool whole = piece.stage == no_stage && whole_now_[piece.node] != 0;
+    const bool last = part + 1 == run.parts;
+    bool filled = true;
+    if (!whole)
+      filled = piece.stage == no_stage ? mix_part(piece.node, run.block, part, run.parts, run.fill,
+                                                  run.workers, scratch)
+                                       : mix_stage(piece.node, piece.stage, run.block, part,
+                                                   run.parts, run.fill, run.workers, scratch);
+    else if (last)
+      filled = mix_part(piece.node, run.block, 0, 1, run.fill, run.workers, scratch);
     if (!filled)
       run.failed.store(true, std::memory_order_relaxed);
     if (timed)
       record_cost(level, part, Clock::now() - began);
-    for (auto dependent = run.plan.dependent_offsets[index];
-         dependent < run.plan.dependent_offsets[index + 1]; ++dependent)
-      release_piece(run.plan, part, run.plan.dependents[dependent]);
+    // What reads a whole node waits for its last part, in every part.
+    const auto first_released = whole ? (last ? 0 : run.parts) : part;
+    const auto end_released = whole ? run.parts : part + 1;
+    for (auto released = first_released; released < end_released; ++released)
+      for (auto dependent = run.plan.dependent_offsets[index];
+           dependent < run.plan.dependent_offsets[index + 1]; ++dependent)
+        release_piece(run.plan, released, run.plan.dependents[dependent]);
     if (part + 1 < run.parts)
       release_piece(run.plan, part + 1, index);
     if (pieces_done_.fetch_add(1, std::memory_order_acq_rel) + 1 == run.total) {
@@ -1683,12 +1707,11 @@ void RoutedMixer::build_levels() {
   const auto splits = [](const std::shared_ptr<ProcessorRuntime>& owner) {
     return !owner || owner->renders_any_split();
   };
-  splittable_ = std::ranges::all_of(processors_, splits) &&
-                std::ranges::all_of(output_stages_, splits) &&
-                std::ranges::all_of(tails_, [&](const TailDrains& drains) {
-                  return std::ranges::all_of(
-                      drains, [&](const auto& drain) { return splits(drain->drain_processor); });
-                });
+  whole_node_.assign(buffers_.size(), 0);
+  for (std::size_t index = 0; index < buffers_.size(); ++index)
+    whole_node_[index] =
+        splits(processors_[index]) && splits(output_stages_[index]) ? 0 : std::uint8_t{1};
+  whole_now_ = whole_node_;
   // The schedule (ADR-0127): one part's pieces and their dependencies, for
   // whole nodes and, when the master is a chain of stages, for the master
   // pipelining them.

@@ -506,9 +506,14 @@ private:
   };
   std::array<PartPlan, 2> part_plans_;
   std::size_t sink_stages_ = 1;
-  // Every processor renders the same under any split; otherwise blocks run
-  // whole.
-  bool splittable_ = true;
+  // Per node: its processor or output stage may render differently in
+  // parts (a plugin host), so it processes each block whole, after its
+  // inputs' last part (fixed at preparation); and the same for the current
+  // block, which adds a node draining such a processor (callback-owned).
+  std::vector<std::uint8_t> whole_node_;
+  std::vector<std::uint8_t> whole_now_;
+  // Whether the current block's node `index` processes it whole.
+  void plan_whole_nodes() noexcept;
   // The most parts a block can have, and the lanes of scratch_.
   std::size_t max_parts_ = max_subblocks;
   std::size_t scratch_lanes_ = 1;
