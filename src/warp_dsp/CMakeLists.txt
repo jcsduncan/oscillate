@@ -4,6 +4,4 @@ oscillate_add_library(warp_dsp
           core/source_window.cpp analysis/transients.cpp analysis/pitch.cpp
           modes/repitch.cpp modes/beats.cpp modes/complex.cpp modes/grains.cpp
   PUBLIC oscillate::foundation
-  PRIVATE oscillate_pffft
-  # The realtime FFT (ADR-0126) runs on the audio thread.
-  OPTIMIZE)
+  PRIVATE oscillate_pffft)
