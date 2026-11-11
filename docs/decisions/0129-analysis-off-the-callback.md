@@ -40,7 +40,7 @@ A 4× true peak costs 0.057 ms per 1024 stereo frames, K-weighting and its windo
    - **One analysis shared by several devices at a signal point.** Once off the callback, a second true peak and loudness at the same point (Loudness straight after Ceiling or Edge) costs the worker 0.06 ms per 1024 frames, 0.3% of a core.
    - **Dropping input meters that repeat the previous device's output meter.** Each is a held sample peak: 0.002 ms per 1024 frames.
    - **Ceiling's reduction-band display off the callback.** Under 0.002 ms.
-5. **The gate is tightened** to lock the gain in (below).
+5. **The gate is tightened** to lock the gain in. On a hosted four-core runner (three helpers) the master took 7.7–8.1% of the period at every size under ADR-0126 and takes 7.1–7.4% now; the light reference's p99 at 1024 frames went from 9.5% to 8.9%. The master fails above 9.5% of the period (was 10%) and the p99 above 12% (was 15%), about 30% over what the runners measure.
 
 ## Measured after
 

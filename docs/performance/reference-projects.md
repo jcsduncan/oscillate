@@ -77,10 +77,10 @@ files and the logs. Hosted runners are shared four-core machines, so their
 numbers show trends between runs, not release headroom.
 
 Its master gate plays the light reference with the heavy master at 1024
-frames and fails when the master takes more than 10% of the period or the
-callback's p99 passes 15%. It also plays the light and heavy references
+frames and fails when the master takes more than 9.5% of the period or the
+callback's p99 passes 12%. It also plays the light and heavy references
 with the heavy master at 256, 512 and 1024 frames, failing when the master
-takes more than 10% of the period at any of them (the `master-gate`
+takes more than 9.5% of the period at any of them (the `master-gate`
 artifact). On these runners the heavy reference's p99 is set mostly by its
 tracks, so it is reported, not gated.
 
