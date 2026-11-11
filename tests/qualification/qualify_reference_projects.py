@@ -151,7 +151,9 @@ def trace_tables(trace: dict) -> dict:
     measured_renders = [
         span for span in by_kind.get("audio.render", []) if span["ts"] >= measured_from
     ]
+    dropped = trace.get("otherData", {}).get("dropped_events", 0)
     return {
+        "dropped_events": dropped,
         "devices": devices,
         "master": master,
         # Blocks rendered whole have no wavefront span: they count as one part.
@@ -384,6 +386,13 @@ def gate(args, runs: list[dict]) -> list[str]:
                     f"{name}: the master takes {share}% of the period, "
                     f"over the {args.gate_master_percent}% limit"
                 )
+        traced = args.gate_master_percent is not None or args.gate_exposed_percent is not None
+        if traced and run.get("trace", {}).get("dropped_events", 0):
+            failures.append(
+                f"{name}: the trace dropped {run['trace']['dropped_events']} events, "
+                "so its master times are incomplete"
+            )
+            continue
         if args.gate_exposed_percent is not None:
             exposed = result.get("master_exposed_percent")
             if exposed is None:

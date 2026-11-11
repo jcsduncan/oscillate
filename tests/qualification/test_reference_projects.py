@@ -223,6 +223,12 @@ class Master(unittest.TestCase):
         self.assertEqual(tables["master"]["blocks"], 1)
         self.assertEqual(tables["master"]["mean_us"], WARMED_MASTER_US)
 
+    def test_a_trace_that_dropped_events_fails_the_master_gates(self):
+        dropped = dict(PARTS_TRACE, otherData={"dropped_events": 3})
+        run = run_with(dropped)
+        failures = gate(limits(exposed=PARTS_EXPOSED_PERCENT), [run])
+        self.assertIn("dropped 3 events", failures[0])
+
     def test_the_exposed_and_late_limits(self):
         run = run_with(PARTS_TRACE)
         exposed = run["result"]["master_exposed_percent"]
