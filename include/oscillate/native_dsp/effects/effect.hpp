@@ -284,8 +284,8 @@ private:
                                           std::uint64_t revision) noexcept;
   void publish_document(std::unique_ptr<DocumentOffer> offer) noexcept;
   void adopt_key_notes() noexcept;
-  // Under the analysis lock: brings an off-callback analysis up to its
-  // capture.
+  // Brings an off-callback analysis up to its capture unless the reader or
+  // the worker is already doing so; never waits.
   void analyse_now() noexcept;
 
   // Compiled documents in offer order. Control owns them and retires those

@@ -13,6 +13,7 @@
 #include "oscillate/audio_io/pipewire_output.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/engine/audio_worker_pool.hpp"
+#include "oscillate/foundation/log.hpp"
 #include "oscillate/foundation/trace.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
@@ -911,6 +912,8 @@ void measure(const Options& options, const fs::path& root, const Vst3Parts& vst3
     const auto period = std::chrono::duration<double>(static_cast<double>(options.frames) /
                                                       static_cast<double>(sample_rate));
     foundation::trace::name_thread("audio callback");
+    // Marked as the device callbacks are, so the effects treat it as one.
+    const foundation::RealtimeThreadScope realtime;
     std::optional<CpuSampler> sampler;
     double cpu_started = 0.0;
     auto wall_started = std::chrono::steady_clock::now();
