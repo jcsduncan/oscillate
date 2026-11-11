@@ -637,7 +637,8 @@ public:
   }
 
   void analyse() noexcept override {
-    queue_.read([this](bool) { restart_spectrum(); }, [this](const Listened& frame) { listen(frame); });
+    queue_.read([this](bool) { restart_spectrum(); },
+                [this](const Listened& frame) { listen(frame); });
   }
 
   [[nodiscard]] std::size_t analysed_telemetry(std::span<float> out,
