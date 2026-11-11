@@ -995,7 +995,7 @@ RoutedPlayback::track_meter(project::TrackId track) const noexcept {
   // What is heard, not what is rendered ahead (ADR-0128).
   if (ahead_) {
     const auto heard = ahead_->audible_position();
-    return control_->heard_track_meter(track, heard.next_sample, heard.generation);
+    return control_->heard_track_meter(track, {heard.next_sample, heard.generation});
   }
   return control_->active_track_meter(track);
 }

@@ -10,6 +10,7 @@
 #include "waveform_controller.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <exception>
 #include <memory>
 #include <optional>
@@ -579,7 +580,7 @@ bool ProjectBridge::request_close() {
 void ProjectBridge::apply_render_ahead() {
   if (!routed_playback_)
     return;
-  routed_playback_->set_render_ahead(audio_output_->render_ahead_ms());
+  routed_playback_->set_render_ahead(static_cast<std::uint32_t>(audio_output_->render_ahead_ms()));
   routed_playback_->set_live_input((computer_keyboard_ && computer_keyboard_->enabled()) ||
                                    (recording_ && recording_->armed()));
 }

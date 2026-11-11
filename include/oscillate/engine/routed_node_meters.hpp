@@ -12,6 +12,13 @@
 
 namespace oscillate::engine {
 
+// Where the ear is when playback renders ahead (ADR-0128): the next sample
+// after what the device played, and its transport generation.
+struct HeardPosition {
+  std::uint64_t next_sample = 0;
+  std::uint64_t generation = 0;
+};
+
 // One node's post-fader sample peak and RMS over its most recent complete
 // window. A seek, loop restart or position gap publishes silence at once.
 struct RoutedNodeMeterReading {
@@ -47,12 +54,13 @@ public:
   // node, or when every bounded retry overlapped a callback write.
   [[nodiscard]] std::optional<RoutedNodeMeterReading> latest(std::size_t node) const noexcept;
   // Any control thread, when playback renders ahead of what is heard
-  // (ADR-0128): the newest window of `generation` that ends by `heard_sample`,
+  // (ADR-0128): the newest window of the heard generation that ends by the
+  // heard sample,
   // among the last `history` windows, or the oldest of that generation when
   // none has been heard yet (a graph switched in ahead of the ear). Empty
   // without a window of that generation.
-  [[nodiscard]] std::optional<RoutedNodeMeterReading>
-  heard(std::size_t node, std::uint64_t heard_sample, std::uint64_t generation) const noexcept;
+  [[nodiscard]] std::optional<RoutedNodeMeterReading> heard(std::size_t node,
+                                                            HeardPosition heard) const noexcept;
 
   // Windows kept per node: more than render-ahead's longest window (200 ms
   // at 96 kHz) holds.

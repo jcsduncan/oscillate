@@ -151,11 +151,10 @@ public:
   // cannot outlive the mixer it reads.
   [[nodiscard]] std::optional<RoutedNodeMeterReading>
   active_node_meter(RoutingNodeId node) const noexcept;
-  // The same, for the window heard by `heard_sample` of `generation` while
-  // playback renders ahead (ADR-0128).
+  // The same, for the window the ear has reached while playback renders
+  // ahead (ADR-0128).
   [[nodiscard]] std::optional<RoutedNodeMeterReading>
-  active_node_meter_heard(RoutingNodeId node, std::uint64_t heard_sample,
-                          std::uint64_t generation) const noexcept;
+  active_node_meter_heard(RoutingNodeId node, HeardPosition heard) const noexcept;
 
   // Callback only. Sources use the active plan's topological order. This first
   // contract rejects new plans that change that order. An adapter block

@@ -160,7 +160,7 @@ private:
   std::thread thread_;
 };
 
-QString track_id_of(QVariant track) { return track.toMap().value("id").toString(); }
+QString track_id_of(const QVariant& track) { return track.toMap().value("id").toString(); }
 
 void edits_are_heard_within_the_window() {
   QTemporaryDir directory;
@@ -183,7 +183,8 @@ void edits_are_heard_within_the_window() {
             "note");
   require(session->midi_clips().set_midi_clip_loop(clip, true).has_value(), "loop");
   require(session->midi_clips()
-              .resize_midi_clip(clip, {bars * beats_per_bar * timeline::ticks_per_quarter})
+              .resize_midi_clip(clip,
+                                {std::int64_t{bars} * beats_per_bar * timeline::ticks_per_quarter})
               .has_value(),
           "the clip did not lengthen");
   const auto track_id = QString::fromStdString(track.value().to_string());

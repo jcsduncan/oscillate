@@ -271,11 +271,10 @@ public:
   // Control only, while a plan owning this mixer is retained. Empty without
   // limits.node_meters, for an unknown node, or before the first window.
   [[nodiscard]] std::optional<RoutedNodeMeterReading> node_meter(RoutingNodeId node) const noexcept;
-  // The window heard by `heard_sample` of `generation`, when playback renders
-  // ahead (RoutedNodeMeters::heard).
+  // The window the ear has reached, when playback renders ahead
+  // (RoutedNodeMeters::heard).
   [[nodiscard]] std::optional<RoutedNodeMeterReading>
-  node_meter_heard(RoutingNodeId node, std::uint64_t heard_sample,
-                   std::uint64_t generation) const noexcept;
+  node_meter_heard(RoutingNodeId node, HeardPosition heard) const noexcept;
   // Offline renders only, on the thread that called mix_block, after it
   // returned (never on the live callback path): the first `frames` of node
   // `index`'s (plan().topological_order) output from that block. It is the

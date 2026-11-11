@@ -164,19 +164,19 @@ void the_heard_window_trails_the_rendered_one() {
     feed(meters, 0, block, window * RoutedNodeMeters::window_frames, generation, 1);
   }
   const auto heard_quiet =
-      meters.heard(0, (windows / 2) * RoutedNodeMeters::window_frames, generation);
+      meters.heard(0, {(windows / 2) * RoutedNodeMeters::window_frames, generation});
   REQUIRE_TRUE(heard_quiet && near(heard_quiet->left_peak, quiet),
                "the meter showed a window rendered ahead of the ear");
-  const auto heard_loud = meters.heard(0, windows * RoutedNodeMeters::window_frames, generation);
+  const auto heard_loud = meters.heard(0, {windows * RoutedNodeMeters::window_frames, generation});
   REQUIRE_TRUE(heard_loud && near(heard_loud->left_peak, loud),
                "the meter did not reach the window the ear reached");
   const auto newest = meters.latest(0);
   REQUIRE_TRUE(newest && near(newest->left_peak, loud), "latest is not the newest window");
   // The ear at the start hears the start of the generation (silence);
   // another generation shows nothing.
-  const auto early = meters.heard(0, 0, generation);
+  const auto early = meters.heard(0, {0, generation});
   REQUIRE_TRUE(early && early->left_peak == 0.0F, "the start of playback was not silent");
-  REQUIRE_TRUE(!meters.heard(0, windows * RoutedNodeMeters::window_frames, generation + 1),
+  REQUIRE_TRUE(!meters.heard(0, {windows * RoutedNodeMeters::window_frames, generation + 1}),
                "a window of another generation showed");
 }
 

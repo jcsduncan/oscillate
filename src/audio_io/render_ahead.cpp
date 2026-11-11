@@ -194,6 +194,7 @@ void RenderAhead::stop_owned_thread() noexcept {
   reset_after_join();
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a length and a rate.
 void RenderAhead::set_limit(std::uint32_t milliseconds, std::uint32_t sample_rate) noexcept {
   const auto clamped = std::min(milliseconds, max_limit_ms);
   limit_frames_.store(static_cast<std::size_t>(static_cast<std::uint64_t>(clamped) * sample_rate /
@@ -386,7 +387,10 @@ BlockResult RenderAhead::render(bool format_ready, std::span<engine::StereoFrame
       const auto gain = static_cast<float>(fade_remaining_) / static_cast<float>(stop_fade_frames);
       interleaved_output[frame * channels] *= gain;
       interleaved_output[frame * channels + 1] *= gain;
-      if (fade_remaining_ > 0 && --fade_remaining_ == 0) {
+      if (fade_remaining_ == 0)
+        continue;
+      --fade_remaining_;
+      if (fade_remaining_ == 0) {
         std::ranges::fill(interleaved_output.subspan((frame + 1) * channels), 0.0F);
         faded_.store(true, std::memory_order_release);
         break;

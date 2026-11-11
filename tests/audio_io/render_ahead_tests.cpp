@@ -96,6 +96,7 @@ struct Device {
 };
 
 // The positions played run on from `from` without a gap or repeat.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a range and its start.
 void require_continuous(std::span<const float> played, std::size_t first, std::size_t count,
                         std::uint64_t from, const std::string& what) {
   for (std::size_t frame = 0; frame < count; ++frame)

@@ -118,8 +118,7 @@ std::optional<RoutedNodeMeterReading> RoutedNodeMeters::latest(std::size_t node)
 }
 
 std::optional<RoutedNodeMeterReading>
-RoutedNodeMeters::heard(std::size_t node, std::uint64_t heard_sample,
-                        std::uint64_t generation) const noexcept {
+RoutedNodeMeters::heard(std::size_t node, HeardPosition heard) const noexcept {
   if (node >= size_)
     return std::nullopt;
   const auto& slot = slots_[node];
@@ -130,9 +129,9 @@ RoutedNodeMeters::heard(std::size_t node, std::uint64_t heard_sample,
   std::optional<RoutedNodeMeterReading> nearest;
   for (std::uint64_t back = 1; back <= std::min<std::uint64_t>(published, history); ++back) {
     const auto reading = read(slot.windows[(published - back) % history]);
-    if (!reading || reading->transport_generation != generation)
+    if (!reading || reading->transport_generation != heard.generation)
       continue;
-    if (reading->end_sample <= heard_sample)
+    if (reading->end_sample <= heard.next_sample)
       return reading;
     nearest = reading;
   }
