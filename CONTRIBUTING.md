@@ -159,9 +159,9 @@ Pull requests are squash-merged by auto-merge
 (`gh pr merge N --auto --squash --subject "<title> (#N)" --body ""`), which
 waits for every required check and for every review thread to be resolved.
 CodeRabbit's **CodeRabbit** check run is required. GitHub counts a skipped
-check as passed, so when CodeRabbit pauses or hits a rate limit, comment
-`@coderabbitai review` and merge only after its review of the head commit
-completes.
+check as passed, so enable auto-merge only once CodeRabbit's review of the
+head commit has completed. If it paused or hit a rate limit, comment
+`@coderabbitai review` and wait for that review before enabling auto-merge.
 
 ## Nightly and on-demand CI runs
 
