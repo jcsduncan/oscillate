@@ -5,6 +5,7 @@
 #include "project_bridge.hpp"
 
 #include "oscillate/application/project_session.hpp"
+#include "oscillate/audio_io/render_ahead.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/native_dsp/effects/effect.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
@@ -67,9 +68,8 @@ struct Pump {
     std::array<engine::StereoFrame, app::max_playback_buffer_frames> scratch{};
     std::array<float, 2 * std::size_t{app::max_playback_buffer_frames}> samples{};
     for (int block = 0; block < count; ++block) {
-      require(audio::render_transport_block(*source, *cursor, true,
-                                            std::span(scratch).first(frames),
-                                            std::span(samples).first(std::size_t{frames} * 2)) ==
+      require(audio::render_device_block(*source, *cursor, true, std::span(scratch).first(frames),
+                                         std::span(samples).first(std::size_t{frames} * 2)) ==
                   audio::BlockResult::rendered,
               "a fake device block failed to render");
       for (std::size_t i = 0; i < static_cast<std::size_t>(frames) * 2; ++i)

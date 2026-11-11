@@ -11,6 +11,7 @@
 #include "smoke_waveform_scenario.hpp"
 
 #include "oscillate/application/midi_note_tools.hpp"
+#include "oscillate/audio_io/render_ahead.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 
 #include <QApplication>
@@ -86,15 +87,14 @@ public:
     status_.requested_client_rate = rate;
     std::array<oscillate::engine::StereoFrame, 64> frames{};
     std::array<float, 128> output{};
-    (void)oscillate::audio_io::render_transport_block(source_, transport_, true, frames, output);
+    (void)oscillate::audio_io::render_device_block(source_, transport_, true, frames, output);
     if (device_) {
       device_->first_sample.store(output[0], std::memory_order_release);
       device_->first_completed_sample.store(transport_.completed_snapshot().next_sample,
                                             std::memory_order_release);
       if (device_->meter_full_window) {
         for (int block = 1; block < 16; ++block)
-          (void)oscillate::audio_io::render_transport_block(source_, transport_, true, frames,
-                                                            output);
+          (void)oscillate::audio_io::render_device_block(source_, transport_, true, frames, output);
       }
     }
     return oscillate::foundation::Result<void>::success();

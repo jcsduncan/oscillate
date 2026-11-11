@@ -2,6 +2,7 @@
 
 #include "oscillate/application/instrument_playback.hpp"
 #include "oscillate/audio_io/pipewire_sinks.hpp"
+#include "oscillate/audio_io/render_ahead.hpp"
 #include "oscillate/foundation/error.hpp"
 
 #include <QObject>
@@ -39,6 +40,10 @@ class AudioOutputController final : public QObject {
   Q_PROPERTY(bool jackPlaybackAvailable READ jack_playback_available CONSTANT)
   Q_PROPERTY(
       bool audioDeviceSelectionEnabled READ audio_device_selection_enabled NOTIFY playbackChanged)
+  // Render-ahead (ADR-0128): how far ahead playback renders, 0 for off.
+  Q_PROPERTY(int renderAheadMs READ render_ahead_ms NOTIFY renderAheadChanged)
+  Q_PROPERTY(QVariantList renderAheadChoices READ render_ahead_choices CONSTANT)
+  Q_PROPERTY(QString renderAheadStatus READ render_ahead_status NOTIFY renderAheadChanged)
 
 public:
   using Discovery = std::function<foundation::Result<std::vector<audio_io::PipeWireSink>>()>;
@@ -55,6 +60,8 @@ public:
     std::function<foundation::Result<void>(std::uint32_t)> apply_buffer_frames;
     // The backend or buffer request changed: playback gates and texts re-read.
     std::function<void()> settings_changed;
+    // The render-ahead setting changed: the running playback takes it.
+    std::function<void()> apply_render_ahead;
   };
 
   // The factories arrive wrapped by the metering output. An empty JACK
@@ -87,6 +94,11 @@ public:
   [[nodiscard]] std::uint32_t buffer_frames() const {
     return static_cast<std::uint32_t>(requested_buffer_frames_);
   }
+  [[nodiscard]] int render_ahead_ms() const { return render_ahead_ms_; }
+  [[nodiscard]] static QVariantList render_ahead_choices();
+  // What the setting does, with the longest an edit made while playing can
+  // take to be heard at the current buffer.
+  [[nodiscard]] QString render_ahead_status() const;
   // "JACK server", or the PipeWire sink's name.
   [[nodiscard]] QString output_name() const;
   [[nodiscard]] bool selected_audio_device_available() const;
@@ -95,12 +107,15 @@ public:
   Q_INVOKABLE void select_audio_device(const QString& serial);
   Q_INVOKABLE void select_audio_backend(const QString& backend);
   Q_INVOKABLE void select_buffer_frames(int frames);
+  // Takes effect at once, also while playing.
+  Q_INVOKABLE void select_render_ahead(int milliseconds);
   // Playback started, stopped or changed: the status and gates may differ.
   void notify_playback() { emit playbackChanged(); }
 
 signals:
   void audioDevicesChanged();
   void playbackChanged();
+  void renderAheadChanged();
 
 private:
   struct Completion {
@@ -122,6 +137,7 @@ private:
   QString selected_audio_device_;
   QString backend_;
   int requested_buffer_frames_ = static_cast<int>(application::default_playback_buffer_frames);
+  int render_ahead_ms_ = static_cast<int>(audio_io::RenderAhead::default_limit_ms);
   QString audio_device_status_;
 };
 

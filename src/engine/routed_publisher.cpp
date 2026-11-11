@@ -302,6 +302,14 @@ RoutedMixerPublisher::active_node_meter(RoutingNodeId node) const noexcept {
   return active == nullptr ? std::nullopt : active->mixer->node_meter(node);
 }
 
+std::optional<RoutedNodeMeterReading>
+RoutedMixerPublisher::active_node_meter_heard(RoutingNodeId node, std::uint64_t heard_sample,
+                                              std::uint64_t generation) const noexcept {
+  const auto* active = active_.load(std::memory_order_acquire);
+  return active == nullptr ? std::nullopt
+                           : active->mixer->node_meter_heard(node, heard_sample, generation);
+}
+
 RoutedRenderStatus
 RoutedMixerPublisher::render_block(std::span<const std::span<const StereoFrame>> sources,
                                    std::span<StereoFrame> output, BlockContext context) noexcept {

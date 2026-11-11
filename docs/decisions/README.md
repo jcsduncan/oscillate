@@ -130,3 +130,4 @@ never reused. 0070 was never assigned.
 | 0125 | [The master chain's serial cost: analysis off the callback, block oversampling, and a gate](0125-master-chain-cost.md) | Accepted; implemented; superseded in part by ADR-0126 |
 | 0126 | [One realtime FFT for the audio thread](0126-realtime-fft.md) | Accepted; implemented |
 | 0127 | [The master overlaps the tracks: each callback in parts, as a wavefront](0127-sub-block-wavefront.md) | Accepted; implemented |
+| 0128 | [Render-ahead: playback rendered ahead of the device on a spare core](0128-render-ahead.md) | Accepted; implemented |

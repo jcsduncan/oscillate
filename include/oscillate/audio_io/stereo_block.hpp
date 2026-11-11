@@ -12,6 +12,7 @@
 namespace oscillate::audio_io {
 
 class Metronome;
+class RenderAhead;
 
 // Non-owning callback seam. The function and context outlive the output adapter.
 // Rendering is called only from the device callback and must be real-time safe.
@@ -27,6 +28,10 @@ struct StereoRenderSource {
   // them on run_worker() while it streams; others leave the pool idle, and
   // the renderer then works on the callback thread alone.
   engine::AudioWorkerPool* workers = nullptr;
+  // Optional render-ahead (ADR-0128): the output calls its render() in
+  // place of render_transport_block() and runs its producer on a thread at
+  // the callback's priority while it streams.
+  RenderAhead* ahead = nullptr;
 };
 
 enum class BlockResult : std::uint8_t;
@@ -116,6 +121,12 @@ public:
   };
   [[nodiscard]] std::optional<AudiblePoint> audible_point() const noexcept;
 
+  // How many seeks and in-place restarts have been requested: render-ahead
+  // drops what it rendered before one (ADR-0128). Any thread.
+  [[nodiscard]] std::uint64_t discontinuities() const noexcept {
+    return discontinuities_.load(std::memory_order_acquire);
+  }
+
   // The device-only metronome render_transport_block() mixes in, if any.
   // Set on the control thread before the output starts; it must outlive the
   // stream.
@@ -147,6 +158,8 @@ private:
   friend BlockResult render_transport_block(StereoRenderSource, TransportCursor&, bool,
                                             std::span<engine::StereoFrame>, std::span<float>,
                                             BlockTiming) noexcept;
+  // Publishes the audible point of the blocks it plays from its window.
+  friend class RenderAhead;
 
   // Request slot. Even = empty, odd = one request pending; every transition
   // (queue, apply, withdraw) increments it, so a value is never reused. The
@@ -173,6 +186,7 @@ private:
   std::atomic<std::uint64_t> audible_sample_{0};
   std::atomic<std::int64_t> audible_heard_ns_{0}; // 0: none published
   std::atomic<Metronome*> metronome_{nullptr};
+  std::atomic<std::uint64_t> discontinuities_{0};
   static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
   static_assert(std::atomic<RequestKind>::is_always_lock_free);
 };

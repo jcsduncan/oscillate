@@ -12,6 +12,7 @@
 #include "../../native_dsp/stick_test_library.hpp"
 #include "../../native_dsp/wren_test_library.hpp"
 #include "oscillate/application/project_session.hpp"
+#include "oscillate/audio_io/render_ahead.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/native_dsp/parameters.hpp"
 #include "oscillate/native_dsp/synth/engines.hpp"
@@ -107,8 +108,8 @@ public:
     std::array<float, 2 * std::size_t{app::max_playback_buffer_frames}> samples{};
     float peak = 0.0F;
     for (int block = 0; block < 64; ++block) {
-      if (audio::render_transport_block(source_, cursor_, true, std::span(scratch).first(frames),
-                                        std::span(samples).first(std::size_t{frames} * 2)) !=
+      if (audio::render_device_block(source_, cursor_, true, std::span(scratch).first(frames),
+                                     std::span(samples).first(std::size_t{frames} * 2)) !=
           audio::BlockResult::rendered)
         return oscillate::foundation::Result<void>::failure(
             {oscillate::foundation::ErrorCode::internal, "Concert callback failed"});
@@ -933,8 +934,8 @@ void live_notes_monitor_through_the_graph_while_stopped() {
   const auto pull = [&](int blocks) {
     float peak = 0.0F;
     for (int block = 0; block < blocks; ++block) {
-      require(audio::render_transport_block(probe->source, *probe->cursor, true, scratch,
-                                            samples) == audio::BlockResult::rendered,
+      require(audio::render_device_block(probe->source, *probe->cursor, true, scratch, samples) ==
+                  audio::BlockResult::rendered,
               "the monitor renders");
       for (const float sample : samples)
         peak = std::max(peak, std::fabs(sample));

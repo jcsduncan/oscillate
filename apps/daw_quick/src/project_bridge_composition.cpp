@@ -98,7 +98,8 @@ void ProjectBridge::create_audio_output(application::PlaybackOutputFactory outpu
               return foundation::Result<void>::success();
             return playback_->set_requested_buffer_frames(frames);
           },
-          .settings_changed = [this] { emit playbackChanged(); }},
+          .settings_changed = [this] { emit playbackChanged(); },
+          .apply_render_ahead = [this] { apply_render_ahead(); }},
       make_metered_output_factory(std::move(output_factory), meter_, spectrum_, true_peak_,
                                   mono_listen_),
       metered_jack_factory(std::move(jack_output_factory), meter_, spectrum_, true_peak_,
@@ -627,6 +628,10 @@ void ProjectBridge::create_live_input() {
         release_note(key);
         recording_->note_off(key);
       });
+  // Live input plays just in time (ADR-0128).
+  connect(computer_keyboard_.get(), &ComputerKeyboard::changed, this,
+          [this] { apply_render_ahead(); });
+  connect(recording_.get(), &RecordingController::changed, this, [this] { apply_render_ahead(); });
   // In key follows the project key.
   connect(this, &ProjectBridge::projectKeyChanged, this, [this] {
     std::vector<int> scale;

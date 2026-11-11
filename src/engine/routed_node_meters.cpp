@@ -29,15 +29,18 @@ void RoutedNodeMeters::clear_window(Slot& slot) noexcept {
 }
 
 void RoutedNodeMeters::publish(Slot& slot, const RoutedNodeMeterReading& reading) noexcept {
-  slot.sequence.fetch_add(1);
-  slot.left_peak_bits.store(std::bit_cast<std::uint32_t>(reading.left_peak));
-  slot.right_peak_bits.store(std::bit_cast<std::uint32_t>(reading.right_peak));
-  slot.left_rms_bits.store(std::bit_cast<std::uint32_t>(reading.left_rms));
-  slot.right_rms_bits.store(std::bit_cast<std::uint32_t>(reading.right_rms));
-  slot.end_sample.store(reading.end_sample);
-  slot.published_generation.store(reading.transport_generation);
-  slot.published_clipped.store(reading.clipped);
-  slot.sequence.fetch_add(1);
+  const auto index = slot.published.load(std::memory_order_relaxed);
+  auto& window = slot.windows[index % history];
+  window.sequence.fetch_add(1);
+  window.left_peak_bits.store(std::bit_cast<std::uint32_t>(reading.left_peak));
+  window.right_peak_bits.store(std::bit_cast<std::uint32_t>(reading.right_peak));
+  window.left_rms_bits.store(std::bit_cast<std::uint32_t>(reading.left_rms));
+  window.right_rms_bits.store(std::bit_cast<std::uint32_t>(reading.right_rms));
+  window.end_sample.store(reading.end_sample);
+  window.published_generation.store(reading.transport_generation);
+  window.published_clipped.store(reading.clipped);
+  window.sequence.fetch_add(1);
+  slot.published.store(index + 1);
 }
 
 void RoutedNodeMeters::observe(std::size_t node, std::span<const StereoFrame> frames,
@@ -84,25 +87,56 @@ void RoutedNodeMeters::observe(std::size_t node, std::span<const StereoFrame> fr
   clear_window(slot);
 }
 
+std::optional<RoutedNodeMeterReading> RoutedNodeMeters::read(const Window& window) noexcept {
+  constexpr int attempts = 4;
+  for (int attempt = 0; attempt < attempts; ++attempt) {
+    const auto before = window.sequence.load();
+    if (before == 0 || (before & 1U) != 0)
+      continue;
+    RoutedNodeMeterReading reading{.left_peak = std::bit_cast<float>(window.left_peak_bits.load()),
+                                   .right_peak =
+                                       std::bit_cast<float>(window.right_peak_bits.load()),
+                                   .left_rms = std::bit_cast<float>(window.left_rms_bits.load()),
+                                   .right_rms = std::bit_cast<float>(window.right_rms_bits.load()),
+                                   .end_sample = window.end_sample.load(),
+                                   .transport_generation = window.published_generation.load(),
+                                   .clipped = window.published_clipped.load()};
+    if (before == window.sequence.load())
+      return reading;
+  }
+  return std::nullopt;
+}
+
 std::optional<RoutedNodeMeterReading> RoutedNodeMeters::latest(std::size_t node) const noexcept {
   if (node >= size_)
     return std::nullopt;
   const auto& slot = slots_[node];
-  for (int attempt = 0; attempt < 4; ++attempt) {
-    const auto before = slot.sequence.load();
-    if (before == 0 || (before & 1U) != 0)
+  const auto published = slot.published.load();
+  if (published == 0)
+    return std::nullopt;
+  return read(slot.windows[(published - 1) % history]);
+}
+
+std::optional<RoutedNodeMeterReading>
+RoutedNodeMeters::heard(std::size_t node, std::uint64_t heard_sample,
+                        std::uint64_t generation) const noexcept {
+  if (node >= size_)
+    return std::nullopt;
+  const auto& slot = slots_[node];
+  const auto published = slot.published.load();
+  // Newest first; a window the callback overwrote meanwhile fails its read.
+  // A graph that switched in ahead of the ear has no heard window yet: its
+  // oldest one is the nearest.
+  std::optional<RoutedNodeMeterReading> nearest;
+  for (std::uint64_t back = 1; back <= std::min<std::uint64_t>(published, history); ++back) {
+    const auto reading = read(slot.windows[(published - back) % history]);
+    if (!reading || reading->transport_generation != generation)
       continue;
-    RoutedNodeMeterReading reading{.left_peak = std::bit_cast<float>(slot.left_peak_bits.load()),
-                                   .right_peak = std::bit_cast<float>(slot.right_peak_bits.load()),
-                                   .left_rms = std::bit_cast<float>(slot.left_rms_bits.load()),
-                                   .right_rms = std::bit_cast<float>(slot.right_rms_bits.load()),
-                                   .end_sample = slot.end_sample.load(),
-                                   .transport_generation = slot.published_generation.load(),
-                                   .clipped = slot.published_clipped.load()};
-    if (before == slot.sequence.load())
+    if (reading->end_sample <= heard_sample)
       return reading;
+    nearest = reading;
   }
-  return std::nullopt;
+  return nearest;
 }
 
 } // namespace oscillate::engine

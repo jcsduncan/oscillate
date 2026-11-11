@@ -1,6 +1,7 @@
 #include "metered_output.hpp"
 
 #include "oscillate/audio_io/pipewire_output.hpp"
+#include "oscillate/audio_io/render_ahead.hpp"
 
 #include <algorithm>
 #include <span>
@@ -38,8 +39,14 @@ public:
     auto wrapper = std::unique_ptr<MeteredPlaybackOutput>(
         new MeteredPlaybackOutput(upstream, std::move(meter), std::move(spectrum),
                                   std::move(true_peak), std::move(mono_listen)));
-    const audio_io::StereoRenderSource observed{&wrapper->context_, &render, &freeze_cursor,
-                                                upstream.workers};
+    audio_io::StereoRenderSource observed{&wrapper->context_, &render, &freeze_cursor,
+                                          upstream.workers};
+    // With render-ahead the meters follow what the device plays, not what
+    // is rendered ahead (ADR-0128).
+    if (upstream.ahead != nullptr) {
+      upstream.ahead->set_tap({&wrapper->context_, &played});
+      observed = upstream;
+    }
     wrapper->output_ = downstream ? downstream(observed, cursor)
                                   : std::make_unique<PipeWirePlaybackOutput>(observed, cursor);
     if (!wrapper->output_)
@@ -101,6 +108,15 @@ private:
         context.upstream.render && context.upstream.render(context.upstream.context, frames, block);
     if (!rendered)
       std::ranges::fill(frames, engine::StereoFrame{});
+    played(opaque, frames, block);
+    return rendered;
+  }
+
+  // What the device plays: metered, then folded to mono while the mono
+  // check is on.
+  static void played(void* opaque, std::span<engine::StereoFrame> frames,
+                     engine::BlockContext block) noexcept {
+    auto& context = *static_cast<Context*>(opaque);
     context.meter->observe(frames, block);
     context.spectrum->observe(frames, block);
     context.true_peak->observe(frames, block);
@@ -111,7 +127,6 @@ private:
         frame = {mono, mono};
       }
     }
-    return rendered;
   }
 
   static bool freeze_cursor(void* opaque) noexcept {

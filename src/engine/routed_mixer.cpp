@@ -627,6 +627,18 @@ std::optional<RoutedNodeMeterReading> RoutedMixer::node_meter(RoutingNodeId node
   return node_meters_->latest(static_cast<std::size_t>(found - plan_.topological_order.begin()));
 }
 
+std::optional<RoutedNodeMeterReading>
+RoutedMixer::node_meter_heard(RoutingNodeId node, std::uint64_t heard_sample,
+                              std::uint64_t generation) const noexcept {
+  if (!node_meters_)
+    return std::nullopt;
+  const auto found = std::ranges::find(plan_.topological_order, node);
+  if (found == plan_.topological_order.end())
+    return std::nullopt;
+  return node_meters_->heard(static_cast<std::size_t>(found - plan_.topological_order.begin()),
+                             heard_sample, generation);
+}
+
 std::span<const StereoFrame> RoutedMixer::node_output(std::size_t index,
                                                       std::size_t frames) const noexcept {
   if (index >= buffers_.size() || frames > limits_.max_frames)

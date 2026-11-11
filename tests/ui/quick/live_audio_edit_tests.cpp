@@ -1,6 +1,7 @@
 #include "project_bridge.hpp"
 
 #include "oscillate/application/project_session.hpp"
+#include "oscillate/audio_io/render_ahead.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/test/audio_constants.hpp"
 #include "oscillate/test/check.hpp"
@@ -72,7 +73,7 @@ public:
       std::array<engine::StereoFrame, block_frames> frames{};
       std::array<float, block_frames * test::stereo_channels> samples{};
       while (running_.load(std::memory_order_acquire)) {
-        (void)audio::render_transport_block(source_, cursor_, true, frames, samples);
+        (void)audio::render_device_block(source_, cursor_, true, frames, samples);
         std::this_thread::sleep_for(block_period);
       }
     });
