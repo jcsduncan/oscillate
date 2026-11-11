@@ -32,41 +32,42 @@ The engine's processors render identically under any block split: every device h
 
 ## Measured
 
-i7-10700K (8 cores, 16 threads), GCC 15.2, Release, seven helpers, paced fake callback, 48 kHz, 20 s a run; before is main at 2d0ba59. The heavy master is ADR-0125's (Temper, Ceiling, Gild, Lens, Keel, Shape, Loudness). The master's exposed time is how long, in each block, the master runs after every other node and source has finished: the serial tail that adds to the callback.
+i7-10700K (8 cores, 16 threads), GCC 15.2, Release, seven helpers, paced fake callback, 48 kHz, 20 s a run, on a shared desktop. Before is main at cacbd2c (ADR-0126's realtime FFT), measured back to back with this change. The heavy master is ADR-0125's (Temper, Ceiling, Gild, Lens, Keel, Shape, Loudness); the heavy reference also holds a VST3 effect and a VST3 instrument, which render whole blocks (decision 7).
 
-Callback p99 and whole-process CPU (% of one core), without the trace. The heavy reference holds a VST3 effect and a VST3 instrument, which render whole blocks (decision 7); its rows were measured back to back with main.
+Callback p99 (share of the period) and whole-process CPU (% of one core), without the trace:
 
 | Reference, master, frames | p99 before | p99 after | CPU before | CPU after |
 | --- | ---: | ---: | ---: | ---: |
-| light, heavy, 256 | 971 µs (18.2%) | 821 µs (15.4%) | 25.7 | 35.9 |
-| light, heavy, 512 | 2405 µs (22.5%) | 1428 µs (13.4%) | 23.3 | 34.7 |
-| light, heavy, 1024 | 3210 µs (15.0%) | 2301 µs (10.8%) | 21.4 | 30.6 |
-| heavy, heavy, 256 | 2651 µs (49.7%) | 2249 µs (42.2%) | 180.0 | 179.8 |
-| heavy, heavy, 512 | 5021 µs (47.1%) | 4167 µs (39.1%) | 180.1 | 198.1 |
-| heavy, heavy, 1024 | 9715 µs (45.5%) | 6881 µs (32.3%) | 167.0 | 186.2 |
-| light, default, 128 | 411 µs (15.4%) | 406 µs (15.2%) | 24.0 | 23.2 |
-| light, default, 1024 | 2114 µs (9.9%) | 1679 µs (7.9%) | 16.3 | 21.9 |
-| heavy, default, 128 | 1241 µs (46.5%) | 1211 µs (45.4%) | 184.9 | 197.6 |
-| heavy, default, 1024 | 8518 µs (39.9%) | 6926 µs (32.5%) | 158.5 | 187.2 |
+| light, heavy, 256 | 989 µs (18.5%) | 592 µs (11.1%) | 22.3 | 31.5 |
+| light, heavy, 512 | 1731 µs (16.2%) | 1003 µs (9.4%) | 19.4 | 29.7 |
+| light, heavy, 1024 | 3216 µs (15.1%) | 1580 µs (7.4%) | 18.0 | 24.8 |
+| heavy, heavy, 256 | 2658 µs (49.8%) | 1947 µs (36.5%) | 186.6 | 185.2 |
+| heavy, heavy, 512 | 4611 µs (43.2%) | 3658 µs (34.3%) | 178.3 | 186.5 |
+| heavy, heavy, 1024 | 8941 µs (41.9%) | 6715 µs (31.5%) | 165.8 | 176.7 |
+| light, default, 128 | 529 µs (19.8%) | 522 µs (19.6%) | 24.5 | 23.3 |
+| light, default, 1024 | 3046 µs (14.3%) | 1908 µs (8.9%) | 18.3 | 21.8 |
+| heavy, default, 128 | 1543 µs (57.9%) | 1239 µs (46.5%) | 214.9 | 199.1 |
+| heavy, default, 1024 | 10077 µs (47.2%) | 7199 µs (33.7%) | 190.6 | 189.9 |
 
-No block passed its period in any run, before or after. The master's time a block and its exposed time, with the trace:
+No block passed its period in any run, before or after. The master's time a block and its exposed time (how long it runs after every other node and source of the block has finished: the serial tail that adds to the callback), with the trace. Whole blocks (`--subblocks off`) are the schedule before:
 
-| Reference, frames | Master before | Exposed before | Master after | Exposed after | Mean parts |
+| Reference, frames | Master whole | Exposed whole | Master in parts | Exposed in parts | Mean parts |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| light, 256 | 694 µs | 694 µs (13.0%) | 816 µs | 444 µs (8.3%) | 3.96 |
-| light, 512 | 1357 µs | 1357 µs (12.7%) | 1711 µs | 782 µs (7.3%) | 7.93 |
-| light, 1024 | 2672 µs | 2672 µs (12.5%) | 3460 µs | 1609 µs (7.5%) | 7.89 |
-| heavy, 256 | 706 µs | 706 µs (13.2%) | 827 µs | 430 µs (8.1%) | 3.97 |
-| heavy, 512 | 1391 µs | 1391 µs (13.0%) | 1609 µs | 413 µs (3.9%) | 7.88 |
-| heavy, 1024 | 2720 µs | 2720 µs (12.8%) | 3530 µs | 524 µs (2.5%) | 8.00 |
+| light, 256 | 509 µs | 509 µs (9.5%) | 588 µs | 337 µs (6.3%) | 3.21 |
+| light, 512 | 976 µs | 976 µs (9.2%) | 1253 µs | 455 µs (4.3%) | 7.93 |
+| light, 1024 | 1955 µs | 1955 µs (9.2%) | 2479 µs | 947 µs (4.4%) | 8.00 |
+| heavy, 256 | — | — | 549 µs | 331 µs (6.2%) | 2.65 |
+| heavy, 512 | — | — | 1247 µs | 194 µs (1.8%) | 8.00 |
+| heavy, 1024 | — | — | 2286 µs | 292 µs (1.4%) | 8.00 |
 
-- **The light reference** leaves the master almost alone in each block, so its exposed time falls only by what its stages overlap with one another; the heavy reference hides most of its master behind the tracks.
-- **The master costs more in parts:** 15–30% more in total, from each device's per-call work on shorter blocks. It no longer adds that time to the block.
+- **The light reference** leaves the master almost alone in each block, so its exposed time falls by what its stages overlap with one another; the heavy reference hides most of its master behind the tracks.
+- **The master costs more in parts:** about a quarter more in total here, and nearly twice as much on the four-core hosted runners, from each device's per-call work on shorter blocks and its state moving between cores. Four parts instead of eight cost as much and hide less (at 1024 frames: 2403 µs, 1244 µs exposed, p99 2070 µs).
 - **The small project** (light reference, default master, 128 frames) costs the same CPU and p99.
-- **Steps on the way:** level barriers per part (one batch per step) gained a third as much and cost more CPU in wake-ups; pieces taken in number order, each waiting for its inputs, held helpers idle and made the p99 worse than before. A whole block with the master on a helper, through the queue, was 15% slower than with the master on the callback.
+- **Steps on the way:** level barriers per part (one batch per step) gained a third as much and cost more CPU in wake-ups; pieces taken in number order, each waiting for its inputs, held helpers idle and made the p99 worse than before; a whole block with the master on a helper, through the queue, was 15% slower than with the master on the callback.
 
 ## Consequences
 
-- **More threads are busy for less time.** A split block wakes helpers for pieces that used to run one after another, so whole-process CPU rises where the policy splits (the light reference with the heavy master: from 21–26% to 30–36% of a core). Projects the policy leaves whole pay nothing; it splits only for a measured gain of at least 10%.
-- **The trace has a span per part.** `graph.node` spans repeat for each part and each master stage, and `graph.wavefront` frames a split block with its part count. The qualification script sums the master's spans per block and reports its exposed time. The master gate (light reference, heavy master, 1024 frames) fails when the exposed time passes 8% of the period: on the four-core hosted runners it measured 5.6–6.7% split and about 13% whole. There the heavy reference fills the cores, and the policy keeps its blocks mostly whole (1.05–1.1 parts).
+- **More threads are busy for less time.** A split block wakes helpers for pieces that used to run one after another, so whole-process CPU rises where the policy splits (the light reference with the heavy master: from 18–22% to 25–32% of a core). Projects the policy leaves whole pay nothing; it splits only for a measured gain of at least 10%.
+- **The trace has a span per part.** `graph.node` spans repeat for each part and each master stage, and `graph.wavefront` frames a split block with its part count. The qualification script sums the master's spans per block and reports its exposed time.
+- **The master gate measures two things.** The master's cost and the callback's p99 are gated in whole blocks (`--subblocks off`), as ADR-0126 set them. Played in parts, the light reference's master runs alone for 3.6–3.8% of the period at 512 and 1024 frames on the four-core hosted runners, against 6.9–7.7% whole; that exposed time is gated at 5%, with the same p99 limit. On those runners the heavy reference fills the cores and the policy keeps its blocks whole (1.0–1.05 parts).
 - **Device telemetry** is produced per part, as under any smaller device block.
