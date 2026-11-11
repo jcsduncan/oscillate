@@ -11,6 +11,7 @@
 #include "oscillate/application/project_session.hpp"
 #include "oscillate/application/routed_audio_source.hpp"
 #include "oscillate/audio_io/pipewire_output.hpp"
+#include "oscillate/audio_io/render_ahead.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/engine/audio_worker_pool.hpp"
 #include "oscillate/foundation/log.hpp"
@@ -195,6 +196,39 @@ struct Options {
   // of subblock_frames.
   engine::RoutedSubblocks subblocks = engine::RoutedSubblocks::adaptive;
   std::size_t subblock_frames = 0;
+  // Render-ahead's window in milliseconds (ADR-0128), 0 for just in time.
+  std::uint32_t ahead_ms = 0;
+  // An artificial load spike: every spike_every-th render takes spike_us
+  // longer (0: none).
+  std::size_t spike_every = 0;
+  std::uint64_t spike_us = 0;
+};
+
+// Wraps the render source to add the --spike-every load spikes.
+struct SpikySource {
+  audio::StereoRenderSource inner;
+  std::size_t every = 0;
+  std::chrono::microseconds spike{0};
+  std::size_t renders = 0;
+
+  static bool render(void* context, std::span<engine::StereoFrame> output,
+                     engine::BlockContext block) noexcept {
+    auto& self = *static_cast<SpikySource*>(context);
+    const bool rendered = self.inner.render(self.inner.context, output, block);
+    if (self.every != 0 && ++self.renders % self.every == 0) {
+      const auto until = std::chrono::steady_clock::now() + self.spike;
+      while (std::chrono::steady_clock::now() < until) {
+      }
+    }
+    return rendered;
+  }
+  static bool freeze(void* context) noexcept {
+    auto& self = *static_cast<SpikySource*>(context);
+    return self.inner.freeze_cursor != nullptr && self.inner.freeze_cursor(self.inner.context);
+  }
+  [[nodiscard]] audio::StereoRenderSource source() noexcept {
+    return {this, &SpikySource::render, &SpikySource::freeze, inner.workers};
+  }
 };
 
 template <typename T> T take(foundation::Result<T> result, std::string_view what) {
@@ -222,7 +256,8 @@ Options parse(int argc, char** argv) {
       "--frames 64|128|256|512|1024 --scratch DIR [--seconds N] [--warmup BLOCKS] "
       "[--pipewire-target SERIAL] [--trace FILE] [--vst3-effect BUNDLE] "
       "[--vst3-instrument BUNDLE] [--workers N] [--stick-kit DIR] [--rebalance on|off] "
-      "[--master default|heavy] [--subblocks adaptive|off|FRAMES]";
+      "[--master default|heavy] [--subblocks adaptive|off|FRAMES] [--ahead-ms MS] "
+      "[--spike-every BLOCKS --spike-us MICROSECONDS]";
   if (argc % 2 == 0)
     throw std::runtime_error(std::string(usage));
   Options options;
@@ -261,6 +296,12 @@ Options parse(int argc, char** argv) {
       if (found == master_names.end())
         throw std::runtime_error("--master is default or heavy");
       options.master = static_cast<Master>(found - master_names.begin());
+    } else if (key == "--ahead-ms") {
+      options.ahead_ms = value == "0" ? 0 : static_cast<std::uint32_t>(number(value));
+    } else if (key == "--spike-every") {
+      options.spike_every = number(value);
+    } else if (key == "--spike-us") {
+      options.spike_us = number(value);
     } else if (key == "--subblocks") {
       if (value == "adaptive") {
         options.subblocks = engine::RoutedSubblocks::adaptive;
@@ -840,6 +881,10 @@ void measure(const Options& options, const fs::path& root, const Vst3Parts& vst3
                                                      source_tracks * prefetch_frames_per_track),
                      "source");
   audio::TransportCursor cursor;
+  SpikySource spiky{source->render_source(&workers), options.spike_every,
+                    std::chrono::microseconds{options.spike_us}};
+  audio::RenderAhead ahead(spiky.source(), cursor, max_frames);
+  ahead.set_limit(options.ahead_ms, sample_rate);
   const auto total_blocks = options.warmup + options.seconds * sample_rate / options.frames;
   const auto target_frames = total_blocks * options.frames;
   const double period_us =
@@ -851,7 +896,7 @@ void measure(const Options& options, const fs::path& root, const Vst3Parts& vst3
         &allowed, [](const void* context) noexcept {
           return static_cast<const std::atomic<bool>*>(context)->load(std::memory_order_acquire);
         }};
-    audio::PipeWireOutput output(source->render_source(&workers), cursor, permission);
+    audio::PipeWireOutput output(ahead.device_source(), cursor, permission);
     take(output.start(sample_rate, static_cast<std::uint32_t>(options.frames),
                       *options.pipewire_target),
          "PipeWire start");
@@ -913,8 +958,8 @@ void measure(const Options& options, const fs::path& root, const Vst3Parts& vst3
         source_status.missing_frames != 0 || source_status.worker_failed)
       throw std::runtime_error("live playback failed a correctness check");
   } else {
-    const auto callback = source->render_source(&workers);
     workers.start_owned_threads(workers.wanted_workers());
+    ahead.start_owned_thread();
     std::array<engine::StereoFrame, max_frames> stereo{};
     std::array<float, max_frames * stereo_channels> interleaved{};
     const auto frame_span = std::span(stereo).first(options.frames);
@@ -947,7 +992,7 @@ void measure(const Options& options, const fs::path& root, const Vst3Parts& vst3
         // As the device outputs frame their render, so the trace's blocks
         // match a sink's.
         OSCILLATE_TRACE_SPAN("audio.render", options.frames);
-        return audio::render_transport_block(callback, cursor, true, frame_span, sample_span);
+        return ahead.render(true, frame_span, sample_span, {});
       }();
       end_allocation_probe();
       const double elapsed =
@@ -971,6 +1016,8 @@ void measure(const Options& options, const fs::path& root, const Vst3Parts& vst3
         std::chrono::duration<double>(std::chrono::steady_clock::now() - wall_started).count();
     const auto windows = sampler->finish();
     const auto helpers = workers.attached_workers();
+    ahead.stop_owned_thread();
+    const auto ahead_status = ahead.status();
     workers.stop_owned_threads();
     const auto source_status = source->status();
     std::ranges::sort(blocks);
@@ -986,7 +1033,10 @@ void measure(const Options& options, const fs::path& root, const Vst3Parts& vst3
               << " missing_frames=" << source_status.missing_frames
               << " worker_failed=" << source_status.worker_failed
               << " audible_blocks=" << audible_blocks
-              << " callback_allocations=" << allocation_probe_count();
+              << " callback_allocations=" << allocation_probe_count()
+              << " ahead_ms=" << options.ahead_ms << " ahead_blocks=" << ahead_status.ahead_blocks
+              << " just_in_time_blocks=" << ahead_status.just_in_time_blocks
+              << " empty_window_blocks=" << ahead_status.empty_window_blocks;
     print_cpu(windows, cpu_seconds, wall_seconds);
     std::cout << '\n';
     if (render_failures != 0 || source_status.missing_frames != 0 || source_status.worker_failed ||

@@ -1,6 +1,7 @@
 #include <oscillate/audio_io/jack_output.hpp>
 
 #include <oscillate/audio_io/pipewire_output.hpp>
+#include <oscillate/audio_io/render_ahead.hpp>
 #include <oscillate/foundation/log.hpp>
 #include <oscillate/foundation/trace.hpp>
 
@@ -11,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <new>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -212,8 +214,8 @@ struct JackOutput::Impl {
     self.telemetry.block_frames(frames);
     const auto result = [&] {
       OSCILLATE_TRACE_SPAN("audio.render", frames);
-      return render_transport_block(self.source, self.transport, ready, self.stereo_scratch, output,
-                                    timing);
+      return render_device_block(self.source, self.transport, ready, self.stereo_scratch, output,
+                                 timing);
     }();
     if (result != BlockResult::rendered && ready) {
       self.telemetry.render_failure(
@@ -270,9 +272,17 @@ struct JackOutput::Impl {
 
   // Control side, after activation: workers join only at real-time priority.
   void start_workers() noexcept {
+    if (api.start_realtime_thread == nullptr || api.join_thread == nullptr)
+      return;
+    // Render-ahead's producer at the client's priority (ADR-0128).
+    if (source.ahead != nullptr) {
+      std::uint64_t handle = 0;
+      if (api.start_realtime_thread(api.context, client, &render_ahead_entry, source.ahead,
+                                    &handle))
+        render_ahead_thread = handle;
+    }
     auto* pool = source.workers;
-    if (pool == nullptr || pool->wanted_workers() == 0 || api.start_realtime_thread == nullptr ||
-        api.join_thread == nullptr)
+    if (pool == nullptr || pool->wanted_workers() == 0)
       return;
     try {
       worker_threads.reserve(pool->wanted_workers());
@@ -288,6 +298,12 @@ struct JackOutput::Impl {
     realtime_workers.store(worker_threads.size(), std::memory_order_release);
   }
   void stop_workers() noexcept {
+    if (render_ahead_thread) {
+      source.ahead->request_stop();
+      api.join_thread(api.context, *render_ahead_thread);
+      render_ahead_thread.reset();
+      source.ahead->reset_after_join();
+    }
     if (worker_threads.empty())
       return;
     source.workers->request_stop();
@@ -299,7 +315,8 @@ struct JackOutput::Impl {
   }
 
   StereoRenderSource source;
-  std::vector<std::uint64_t> worker_threads; // control-owned
+  std::vector<std::uint64_t> worker_threads;        // control-owned
+  std::optional<std::uint64_t> render_ahead_thread; // control-owned
   std::atomic<std::size_t> realtime_workers{0};
   TransportCursor& transport;
   TransportPermission permission;

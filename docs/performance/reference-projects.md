@@ -64,6 +64,11 @@ sink. `--workers N` sets another count, 0 for the callback alone.
   `--gate-late-blocks` when more blocks than that pass their period.
 - **Parts:** `--subblocks adaptive` (the default, as live playback),
   `off`, or a part length in frames, passed to the player.
+- **Render-ahead:** `--ahead-ms N` renders up to N ms ahead of the callback
+  ([ADR-0128](../decisions/0128-render-ahead.md)); the callback then mostly
+  copies, and its time is reported as above. `--spike-every N --spike-us U`
+  makes every Nth render U µs slower, to show what a load spike does to the
+  callback with and without the window.
 - **Correctness:** a run fails on any render failure, missing source frame or
   worker failure. Through the fake callback it also fails on a non-finite
   sample or silent output; on a sink, listen or use the live tier's monitored
@@ -91,7 +96,10 @@ plays the light and heavy references in whole blocks
 with the heavy master at 256, 512 and 1024 frames, failing when the master
 takes more than 9.5% of the period at any of them (the `master-gate`
 artifact). On these runners the heavy reference's p99 is set mostly by its
-tracks, so it is reported, not gated.
+tracks, so it is reported, not gated. A last step plays the light reference with the heavy
+master at 256 and 1024 frames through a 50 ms render-ahead window, with a
+render 25 ms slow every 100 blocks, and fails when more than two blocks pass
+their period ([ADR-0128](../decisions/0128-render-ahead.md)).
 
 ## On the reference machine
 

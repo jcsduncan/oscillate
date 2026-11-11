@@ -1,5 +1,6 @@
 #include "../../../apps/daw_quick/src/project_bridge.hpp"
 #include "../../../apps/daw_quick/src/vst3_editor_commit.hpp"
+#include "oscillate/audio_io/render_ahead.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/plugins/vst3_scan.hpp"
@@ -353,8 +354,8 @@ public:
             return;
           --permits_->permits;
         }
-        (void)oscillate::audio_io::render_transport_block(source_, cursor_, true, std::span(frames),
-                                                          std::span(samples));
+        (void)oscillate::audio_io::render_device_block(source_, cursor_, true, std::span(frames),
+                                                       std::span(samples));
       }
     });
     return oscillate::foundation::Result<void>::success();

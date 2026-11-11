@@ -1,5 +1,6 @@
 #include "../../../apps/daw_quick/src/loop_transport.hpp"
 #include "../../../apps/daw_quick/src/project_bridge.hpp"
+#include "oscillate/audio_io/render_ahead.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/persistence/store.hpp"
 #include "oscillate/plugins/vst3_scan.hpp"
@@ -128,7 +129,7 @@ public:
           capture_->parked.store(false, std::memory_order_release);
           continue;
         }
-        (void)audio_io::render_transport_block(
+        (void)audio_io::render_device_block(
             source_, cursor_, true, std::span(render).first(frames),
             std::span(output).first(static_cast<std::size_t>(frames) * 2));
         double absolute_sum = 0.0;

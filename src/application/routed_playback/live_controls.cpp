@@ -339,6 +339,18 @@ RoutedPlaybackControl::active_track_meter(project::TrackId track) const noexcept
   return publisher_.active_node_meter(route->node);
 }
 
+std::optional<engine::RoutedNodeMeterReading>
+RoutedPlaybackControl::heard_track_meter(project::TrackId track,
+                                         engine::HeardPosition heard) const noexcept {
+  if (!published_route_plan_)
+    return std::nullopt;
+  const auto route = std::ranges::find(published_route_plan_->track_nodes, track,
+                                       &routing::ProjectRouteTrackNode::track);
+  if (route == published_route_plan_->track_nodes.end())
+    return std::nullopt;
+  return publisher_.active_node_meter_heard(route->node, heard);
+}
+
 bool RoutedPlaybackControl::set_live_channel(std::optional<project::TrackId> track, double level,
                                              double pan) noexcept {
   if (!published_route_plan_ || !std::isfinite(level) || !std::isfinite(pan))

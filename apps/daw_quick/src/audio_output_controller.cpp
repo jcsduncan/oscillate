@@ -4,6 +4,7 @@
 #include <QVariantMap>
 
 #include <algorithm>
+#include <array>
 #include <exception>
 #include <string>
 #include <utility>
@@ -15,6 +16,9 @@ constexpr int poll_interval_ms = 50;
 // The buffer-size text assumes this rate while no project is open.
 constexpr double fallback_sample_rate = 48'000.0;
 constexpr double milliseconds_per_second = 1'000.0;
+// The render-ahead limits offered: off, and windows up to the engine's most.
+constexpr std::array render_ahead_choice_ms{0, 25, 50, 100,
+                                            static_cast<int>(audio_io::RenderAhead::max_limit_ms)};
 
 const QString& pipewire_backend() {
   static const QString value = QStringLiteral("pipewire");
@@ -62,6 +66,12 @@ AudioOutputController::AudioOutputController(Host host,
               application::valid_playback_buffer_frames(static_cast<std::uint32_t>(saved_buffer))
           ? saved_buffer
           : static_cast<int>(application::default_playback_buffer_frames);
+  bool valid_ahead = false;
+  const auto saved_ahead =
+      settings.value(QStringLiteral("audioRenderAheadMs")).toString().toInt(&valid_ahead);
+  if (valid_ahead &&
+      std::ranges::find(render_ahead_choice_ms, saved_ahead) != render_ahead_choice_ms.end())
+    render_ahead_ms_ = saved_ahead;
   if (jack_playback_available() &&
       settings.value(QStringLiteral("audioBackend"), pipewire_backend()).toString() ==
           jack_backend() &&
@@ -277,6 +287,41 @@ void AudioOutputController::select_buffer_frames(int frames) {
   QSettings{}.setValue(QStringLiteral("audioBufferFrames"), frames);
   report(QStringLiteral("%1-frame request saved for next playback").arg(frames));
   host_.settings_changed();
+  emit renderAheadChanged();
+}
+
+QVariantList AudioOutputController::render_ahead_choices() {
+  QVariantList choices;
+  for (const auto milliseconds : render_ahead_choice_ms)
+    choices.append(milliseconds);
+  return choices;
+}
+
+QString AudioOutputController::render_ahead_status() const {
+  if (render_ahead_ms_ == 0)
+    return QStringLiteral("Off: every block renders just in time, so edits made while playing "
+                          "are heard at once, and a slow moment can click.");
+  const auto project_rate = host_.sample_rate();
+  const double rate = project_rate ? static_cast<double>(*project_rate) : fallback_sample_rate;
+  const auto block = static_cast<double>(
+      host_.observed_block_frames().value_or(static_cast<std::uint32_t>(requested_buffer_frames_)));
+  const QString worst =
+      QString::number(render_ahead_ms_ + block * milliseconds_per_second / rate, 'f', 0);
+  return QStringLiteral("Renders up to %1 ms ahead on spare cores, so a slow moment does not "
+                        "click. An edit made while playing is heard within %2 ms, without "
+                        "stopping. The computer keyboard and recording always play at once.")
+      .arg(render_ahead_ms_)
+      .arg(worst);
+}
+
+void AudioOutputController::select_render_ahead(int milliseconds) {
+  if (std::ranges::find(render_ahead_choice_ms, milliseconds) == render_ahead_choice_ms.end())
+    return;
+  render_ahead_ms_ = milliseconds;
+  QSettings{}.setValue(QStringLiteral("audioRenderAheadMs"), milliseconds);
+  if (host_.apply_render_ahead)
+    host_.apply_render_ahead();
+  emit renderAheadChanged();
 }
 
 } // namespace oscillate::quick

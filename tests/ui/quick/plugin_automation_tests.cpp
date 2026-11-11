@@ -1,6 +1,7 @@
 #include "../../../apps/daw_quick/src/arrangement_automation_controller.hpp"
 #include "../../../apps/daw_quick/src/plugin_automation_controller.hpp"
 #include "../../../apps/daw_quick/src/project_bridge.hpp"
+#include "oscillate/audio_io/render_ahead.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/plugins/vst3_scan.hpp"
 #include "oscillate/test/check.hpp"
@@ -85,7 +86,7 @@ public:
     std::array<oscillate::engine::StereoFrame, app::max_playback_buffer_frames> frames{};
     std::array<float, std::size_t{2} * app::max_playback_buffer_frames> samples{};
     if (requested_frames > frames.size() ||
-        oscillate::audio_io::render_transport_block(
+        oscillate::audio_io::render_device_block(
             source_, cursor_, true, std::span(frames).first(requested_frames),
             std::span(samples).first(static_cast<std::size_t>(requested_frames) * 2)) !=
             oscillate::audio_io::BlockResult::rendered)

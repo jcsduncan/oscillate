@@ -258,7 +258,10 @@ foundation::Result<std::unique_ptr<RoutedPlayback>> RoutedPlayback::prepare_and_
       return std::make_unique<PipeWirePlaybackOutput>(source, cursor);
     };
   }
-  run->output_ = output_factory(run->render_source(), run->cursor_);
+  // Render-ahead starts just in time; set_render_ahead() sets its window.
+  run->ahead_ = std::make_unique<audio_io::RenderAhead>(run->render_source(), run->cursor_,
+                                                        run->prepared_block_limit());
+  run->output_ = output_factory(run->ahead_->device_source(), run->cursor_);
   if (!run->output_)
     return fail({foundation::ErrorCode::internal, "Routed output factory returned no device"});
   auto started = run->output_->start(run->sample_rate(), requested_buffer_frames, target_serial);
@@ -446,6 +449,14 @@ bool RoutedPlayback::freeze_cursor(void* context) noexcept {
 void RoutedPlayback::begin_graceful_stop() noexcept {
   if (!source_ || !control_)
     return;
+  // With render-ahead the device fades what it plays, rather than the graph
+  // draining behind the window (ADR-0128).
+  if (ahead_ && ahead_->renders_ahead()) {
+    graceful_stop_requested_ = true;
+    requested_drain_frames_ = 0;
+    ahead_->fade_out();
+    return;
+  }
   const auto drain = control_->prepared_limiter_drain_frames();
   if (!drain)
     return;
@@ -479,7 +490,11 @@ foundation::Result<void> RoutedPlayback::seek_paused(std::uint64_t first_sample)
   if (!paused_)
     return foundation::Result<void>::failure(
         {foundation::ErrorCode::conflict, "Pause playback before seeking"});
-  return control_->seek_after_quiesce(cursor_, first_sample);
+  auto sought = control_->seek_after_quiesce(cursor_, first_sample);
+  // What was rendered ahead belongs to the old position.
+  if (sought && ahead_)
+    ahead_->clear_after_quiesce();
+  return sought;
 }
 
 foundation::Result<void> RoutedPlayback::resume() {
@@ -500,9 +515,21 @@ foundation::Result<void> RoutedPlayback::resume() {
 RoutedPlayback::StopDrainOutcome RoutedPlayback::stop_and_retire() noexcept {
   auto outcome =
       graceful_stop_requested_ ? StopDrainOutcome::completed : StopDrainOutcome::not_requested;
+  using namespace std::chrono_literals;
+  constexpr auto max_drain_wait = 250ms;
+  if (output_ && ahead_ && ahead_->fading() && !paused_) {
+    const auto deadline = std::chrono::steady_clock::now() + max_drain_wait;
+    while (!ahead_->faded()) {
+      const auto state = output_->status().state;
+      if (state != audio_io::OutputState::streaming ||
+          std::chrono::steady_clock::now() >= deadline) {
+        outcome = StopDrainOutcome::truncated;
+        break;
+      }
+      std::this_thread::sleep_for(1ms); // Worker only; never the audio callback or UI thread.
+    }
+  }
   if (output_ && source_ && requested_drain_frames_ != 0) {
-    using namespace std::chrono_literals;
-    constexpr auto max_drain_wait = 250ms;
     const auto deadline = std::chrono::steady_clock::now() + max_drain_wait;
     while (source_->completed_silent_drain_frames() < requested_drain_frames_) {
       const auto state = output_->status().state;
@@ -963,7 +990,14 @@ bool RoutedPlayback::set_live_effect_values(std::optional<project::TrackId> trac
 
 std::optional<engine::RoutedNodeMeterReading>
 RoutedPlayback::track_meter(project::TrackId track) const noexcept {
-  return control_ ? control_->active_track_meter(track) : std::nullopt;
+  if (!control_)
+    return std::nullopt;
+  // What is heard, not what is rendered ahead (ADR-0128).
+  if (ahead_) {
+    const auto heard = ahead_->audible_position();
+    return control_->heard_track_meter(track, {heard.next_sample, heard.generation});
+  }
+  return control_->active_track_meter(track);
 }
 
 bool RoutedPlayback::effect_telemetry(std::optional<project::TrackId> track,
@@ -1215,7 +1249,21 @@ RoutedPlayback::LoopProgress RoutedPlayback::service_loop() {
 }
 
 std::uint64_t RoutedPlayback::completed_sample() const noexcept {
-  return cursor_.completed_snapshot().next_sample;
+  return ahead_ ? ahead_->audible_position().next_sample : cursor_.completed_snapshot().next_sample;
+}
+
+void RoutedPlayback::set_render_ahead(std::uint32_t milliseconds) noexcept {
+  if (ahead_)
+    ahead_->set_limit(milliseconds, sample_rate());
+}
+
+void RoutedPlayback::set_live_input(bool live) noexcept {
+  if (ahead_)
+    ahead_->set_live_input(live);
+}
+
+audio_io::RenderAhead::Status RoutedPlayback::render_ahead_status() const noexcept {
+  return ahead_ ? ahead_->status() : audio_io::RenderAhead::Status{};
 }
 
 std::uint32_t RoutedPlayback::sample_rate() const noexcept {

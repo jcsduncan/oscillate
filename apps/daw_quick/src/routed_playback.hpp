@@ -6,6 +6,7 @@
 #include "oscillate/application/routed_playback_control.hpp"
 #include "oscillate/application/routed_source_selection.hpp"
 #include "oscillate/audio_io/metronome.hpp"
+#include "oscillate/audio_io/render_ahead.hpp"
 #include "oscillate/engine/midi_events.hpp"
 #if defined(OSCILLATE_HAVE_VST3) && OSCILLATE_HAVE_VST3
 #include "oscillate/application/vst3/instrument_provider.hpp"
@@ -263,7 +264,15 @@ public:
   // Latest gesture status, as of the last status() observation.
   [[nodiscard]] std::optional<Vst3ManualGestureStatus> vst3_manual_edit_status() const;
 #endif
+  // The playhead: the next sample after what the device played, which
+  // trails the rendered position by render-ahead's window.
   [[nodiscard]] std::uint64_t completed_sample() const noexcept;
+  // Render-ahead (ADR-0128): renders up to `milliseconds` ahead of the
+  // device, 0 for just in time. Live input (the computer keyboard on, a
+  // recording armed) renders just in time whatever the setting.
+  void set_render_ahead(std::uint32_t milliseconds) noexcept;
+  void set_live_input(bool live) noexcept;
+  [[nodiscard]] audio_io::RenderAhead::Status render_ahead_status() const noexcept;
   [[nodiscard]] std::uint32_t sample_rate() const noexcept;
   [[nodiscard]] std::size_t prepared_block_limit() const noexcept;
 
@@ -333,6 +342,9 @@ private:
   // The device-only click (ADR-0086); it outlives the cursor and output.
   std::shared_ptr<audio_io::Metronome> metronome_;
   audio_io::TransportCursor cursor_;
+  // Render-ahead (ADR-0128): after the cursor it renders and before the
+  // output, which joins its producer first.
+  std::unique_ptr<audio_io::RenderAhead> ahead_;
   std::unique_ptr<application::PlaybackOutput> output_;
   std::optional<std::uint64_t> target_serial_;
   std::uint32_t requested_buffer_frames_ = 128;

@@ -2,6 +2,7 @@
 
 #include "oscillate/engine/graph.hpp"
 
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -10,6 +11,13 @@
 #include <span>
 
 namespace oscillate::engine {
+
+// Where the ear is when playback renders ahead (ADR-0128): the next sample
+// after what the device played, and its transport generation.
+struct HeardPosition {
+  std::uint64_t next_sample = 0;
+  std::uint64_t generation = 0;
+};
 
 // One node's post-fader sample peak and RMS over its most recent complete
 // window. A seek, loop restart or position gap publishes silence at once.
@@ -45,8 +53,31 @@ public:
   // Any control thread. Empty before the first publication, for an unknown
   // node, or when every bounded retry overlapped a callback write.
   [[nodiscard]] std::optional<RoutedNodeMeterReading> latest(std::size_t node) const noexcept;
+  // Any control thread, when playback renders ahead of what is heard
+  // (ADR-0128): the newest window of the heard generation that ends by the
+  // heard sample,
+  // among the last `history` windows, or the oldest of that generation when
+  // none has been heard yet (a graph switched in ahead of the ear). Empty
+  // without a window of that generation.
+  [[nodiscard]] std::optional<RoutedNodeMeterReading> heard(std::size_t node,
+                                                            HeardPosition heard) const noexcept;
+
+  // Windows kept per node: more than render-ahead's longest window (200 ms
+  // at 96 kHz) holds.
+  static constexpr std::size_t history = 32;
 
 private:
+  // One published window, read through its own seqlock.
+  struct Window {
+    std::atomic<std::uint64_t> sequence{0};
+    std::atomic<std::uint32_t> left_peak_bits{0};
+    std::atomic<std::uint32_t> right_peak_bits{0};
+    std::atomic<std::uint32_t> left_rms_bits{0};
+    std::atomic<std::uint32_t> right_rms_bits{0};
+    std::atomic<std::uint64_t> end_sample{0};
+    std::atomic<std::uint64_t> published_generation{0};
+    std::atomic<bool> published_clipped{false};
+  };
   struct Slot {
     // Callback-owned window state.
     std::uint64_t expected_sample = 0;
@@ -58,18 +89,16 @@ private:
     float right_peak = 0.0F;
     bool clipped = false;
 
-    std::atomic<std::uint64_t> sequence{0};
-    std::atomic<std::uint32_t> left_peak_bits{0};
-    std::atomic<std::uint32_t> right_peak_bits{0};
-    std::atomic<std::uint32_t> left_rms_bits{0};
-    std::atomic<std::uint32_t> right_rms_bits{0};
-    std::atomic<std::uint64_t> end_sample{0};
-    std::atomic<std::uint64_t> published_generation{0};
-    std::atomic<bool> published_clipped{false};
+    // The last `history` windows, oldest overwritten first; `published`
+    // counts every window, so the newest is at (published - 1) % history.
+    std::array<Window, history> windows{};
+    std::atomic<std::uint64_t> published{0};
   };
 
   static void clear_window(Slot& slot) noexcept;
   static void publish(Slot& slot, const RoutedNodeMeterReading& reading) noexcept;
+  // One bounded seqlock read of a window; empty when every retry overlapped a write.
+  [[nodiscard]] static std::optional<RoutedNodeMeterReading> read(const Window& window) noexcept;
 
   std::unique_ptr<Slot[]> slots_;
   std::size_t size_;
