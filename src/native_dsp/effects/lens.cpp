@@ -1,7 +1,7 @@
 #include "oscillate/native_dsp/effects/lens.hpp"
 
 #include "capture_queue.hpp"
-#include "dsp/fft.hpp"
+#include "dsp/offline_fft.hpp"
 #include "lens_presets.hpp"
 #include "lens_table.hpp"
 #include "oscillate/native_dsp/tonal_analysis.hpp"
@@ -82,7 +82,7 @@ constexpr double peak_reach_octaves = 1.0 / 3.0;
 // and their running sums over bin edges.
 struct Resolution {
   std::size_t size = 0;
-  std::unique_ptr<native_dsp::dsp::Fft> fft;
+  std::unique_ptr<native_dsp::dsp::OfflineFft> fft;
   std::vector<double> window;
   double enbw = 1.0;  // Equivalent noise bandwidth, in bins.
   double scale = 1.0; // (2 / sum(w))^2: a bin-centred sine's peak bin = A^2.
@@ -123,7 +123,7 @@ public:
     for (const auto size : all) {
       auto& r = resolutions_.emplace_back();
       r.size = size;
-      r.fft = std::make_unique<native_dsp::dsp::Fft>(size);
+      r.fft = std::make_unique<native_dsp::dsp::OfflineFft>(size);
       r.window.resize(size);
       double sum = 0.0;
       double squares = 0.0;

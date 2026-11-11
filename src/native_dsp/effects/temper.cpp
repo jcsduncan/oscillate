@@ -1,14 +1,14 @@
 #include "oscillate/native_dsp/effects/temper.hpp"
 
-#include "dsp/fft.hpp"
+#include "dsp/vector_math.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
+#include "oscillate/warp_dsp/real_fft.hpp"
 #include "temper_presets.hpp"
 #include "temper_table.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -22,7 +22,7 @@ namespace {
 
 namespace t = temper_table;
 using t::index_of;
-using Complex = std::complex<double>;
+using Buffer = warp_dsp::AlignedBuffer;
 
 namespace p {
 constexpr std::size_t depth = index_of("temper.depth");
@@ -125,6 +125,10 @@ constexpr double trim_seconds = 0.01;
 constexpr double gain_floor = 1e-12;
 const double log_floor = std::log(gain_floor);
 constexpr double db_to_log = std::numbers::ln10 / 20.0;
+// An ordered real spectrum keeps DC and Nyquist, both real, in its first
+// two floats.
+constexpr std::size_t dc_slot = 0;
+constexpr std::size_t nyquist_slot = 1;
 
 [[nodiscard]] std::size_t scale_for(double rate) noexcept {
   std::size_t scale = 1;
@@ -138,10 +142,19 @@ constexpr double db_to_log = std::numbers::ln10 / 20.0;
   return static_cast<t::Phase>(std::lround(v[p::phase]));
 }
 
+// Powers at or below this read as silence.
+constexpr double silent_power = 1e-16;
+// 10 log10(x) = ln x times this.
+constexpr double ln_to_db = 10.0 / std::numbers::ln10;
 [[nodiscard]] double to_db(double power) noexcept {
-  return power > 1e-16 ? 10.0 * std::log10(power) : silence_db;
+  return power > silent_power ? 10.0 * std::log10(power) : silence_db;
 }
 [[nodiscard]] double lerp(double a, double b, double u) noexcept { return a + (b - a) * u; }
+// Link's blend toward the louder channel: fully linked is exactly the
+// louder, so linked channels design one filter.
+[[nodiscard]] double linked(double own, double most, double link) noexcept {
+  return link >= 1.0 ? most : lerp(own, most, link);
+}
 // Grid band b spans [grid_hz(b), grid_hz(b + 1)]; centre_hz(b) is its
 // middle in log frequency.
 [[nodiscard]] double grid_hz(double edge) noexcept {
@@ -178,39 +191,13 @@ constexpr double db_to_log = std::numbers::ln10 / 20.0;
   return 10.0 * std::log10(num / den);
 }
 
-// Complex products in real arithmetic: a std::complex product compiles to
-// a NaN-checking library call. For finite values they are the same.
-[[nodiscard]] inline Complex times(Complex x, Complex y) noexcept {
-  return {x.real() * y.real() - x.imag() * y.imag(), x.real() * y.imag() + x.imag() * y.real()};
-}
-[[nodiscard]] inline Complex times_i(Complex x) noexcept { return {-x.imag(), x.real()}; }
-// e^z as the C library's complex exponential takes it for finite z (the
-// real part's exponential times the imaginary part's cosine and sine),
-// without its checks for infinities.
-[[nodiscard]] inline Complex exp_of(Complex z) noexcept {
-  const double magnitude = std::exp(z.real());
-  return {magnitude * std::cos(z.imag()), magnitude * std::sin(z.imag())};
-}
-
-// Packs two real sequences' spectra into one transform: Z = FFT(a + i b);
-// returns A[k] and B[k].
-inline void unpack(std::span<const Complex> z, std::size_t k, Complex& a, Complex& b) noexcept {
-  const std::size_t n = z.size();
-  const Complex zk = z[k];
-  const Complex zm = std::conj(z[k == 0 ? 0 : n - k]);
-  a = 0.5 * (zk + zm);
-  // -i / 2 times their difference.
-  const Complex difference = zk - zm;
-  b = {0.5 * difference.imag(), -0.5 * difference.real()};
-}
-
 class TemperKernel final : public EffectKernel {
 public:
   TemperKernel(std::span<const double> values, double rate)
       : rate_(rate), frames_(frames_for(values, rate)), phase_(phase_of(values)),
         hold_(std::exp(std::log(1e-3) / (hold_seconds * rate))),
         trim_step_(1.0 - std::exp(-1.0 / (trim_seconds * rate))), analysis_(frames_.window),
-        design_(frames_.filter * 2), block_(phase_ == t::Phase::low_latency ? 1 : frames_.hop * 2) {
+        design_(frames_.filter * 2), block_(frames_.hop * 2) {
     std::ranges::copy(values, values_.begin());
     const std::size_t w = frames_.window;
     const std::size_t d = design_.size();
@@ -232,21 +219,33 @@ public:
     }
     // A full-scale sine reads 0 dB at its peak bin.
     power_scale_ = (2.0 / sum) * (2.0 / sum);
-    scratch_.resize(std::max(w, d));
-    key_scratch_.resize(w);
+    for (auto& frame : frame_) {
+      frame = Buffer(w);
+    }
+    analysis_spectrum_ = Buffer(w);
     for (auto& power : power_) {
       power.resize(w / 2 + 1);
     }
     key_power_.resize(w / 2 + 1);
     prepare_grid(w);
     // Design bins: where each falls on the grid.
-    design_band_.resize(d / 2 + 1);
+    design_at_.resize(d / 2 + 1);
     design_hz_.resize(d / 2 + 1);
     for (std::size_t k = 0; k <= d / 2; ++k) {
       const double hz = static_cast<double>(k) * rate / static_cast<double>(d);
       design_hz_[k] = hz;
-      // Fractional grid band, measured between band centres.
-      design_band_[k] = hz > 0.0 ? std::log2(hz / grid_low_hz) * grid_per_octave - 0.5 : -1.0;
+      // Fractional grid band, measured between band centres: below the
+      // first centre the first band's cut, above the last none.
+      const double u = hz > 0.0 ? std::log2(hz / grid_low_hz) * grid_per_octave - 0.5 : -1.0;
+      auto& at = design_at_[k];
+      if (u <= 0.0) {
+        at = {0, 0.0, 1.0};
+      } else if (u < static_cast<double>(grid - 1)) {
+        const auto b = static_cast<std::size_t>(u);
+        at = {b, u - static_cast<double>(b), 1.0};
+      } else {
+        at = {0, 0.0, 0.0};
+      }
     }
     for (auto& shape : band_shape_) {
       shape.assign(d / 2 + 1, 0.0);
@@ -257,14 +256,21 @@ public:
     for (auto& gains : design_gain_) {
       gains.resize(d / 2 + 1);
     }
-    spectrum_.resize(d);
-    filter_spectrum_.resize(block_.size());
-    block_a_.resize(frames_.hop + 1);
-    block_b_.resize(frames_.hop + 1);
+    design_values_ = Buffer(d / 2 + 1);
+    design_work_ = Buffer(d);
+    const std::size_t k = block_.size();
+    block_time_ = Buffer(k);
+    filter_time_ = Buffer(k);
+    filter_spectrum_ = Buffer(k);
+    for (std::size_t c = 0; c < 2; ++c) {
+      block_spectrum_[c] = Buffer(k);
+      product_[c] = Buffer(k);
+    }
     landing_.resize(frames_.filter / frames_.hop);
     for (auto& landing : landing_) {
-      landing.a.assign(frames_.hop + 1, Complex(0.0));
-      landing.b.assign(frames_.hop + 1, Complex(0.0));
+      for (auto& channel : landing) {
+        channel = Buffer(k);
+      }
     }
     overlap_a_.assign(frames_.hop, 0.0);
     overlap_b_.assign(frames_.hop, 0.0);
@@ -456,8 +462,9 @@ private:
     }
     std::ranges::fill(key_ring_, 0.0);
     for (auto& landing : landing_) {
-      std::ranges::fill(landing.a, Complex(0.0));
-      std::ranges::fill(landing.b, Complex(0.0));
+      for (auto& channel : landing) {
+        channel.zero();
+      }
     }
     landed_ = 0;
     std::ranges::fill(overlap_a_, 0.0);
@@ -498,36 +505,38 @@ private:
     for (std::size_t i = 0; i < w; ++i) {
       const std::size_t back = w - 1 - i;
       const auto s = split(mode_, past(ring_[0], back), past(ring_[1], back));
-      scratch_[i] = Complex(s.a * window_[i], channels == 2 ? s.b * window_[i] : 0.0);
-    }
-    analysis_.forward(std::span(scratch_).first(w));
-    for (std::size_t k = 0; k <= w / 2; ++k) {
-      Complex a;
-      Complex b;
-      unpack(std::span<const Complex>(scratch_).first(w), k, a, b);
-      power_[0][k] = std::norm(a) * power_scale_;
-      power_[1][k] = std::norm(b) * power_scale_;
+      frame_[0][i] = static_cast<float>(s.a * window_[i]);
+      frame_[1][i] = static_cast<float>(s.b * window_[i]);
     }
     for (std::size_t c = 0; c < channels; ++c) {
+      spectrum_power(frame_[c], power_[c]);
       levels(power_[c], level_[c]);
     }
     if (keyed_) {
       for (std::size_t i = 0; i < w; ++i) {
-        key_scratch_[i] = Complex(past(key_ring_, w - 1 - i) * window_[i], 0.0);
+        frame_[0][i] = static_cast<float>(past(key_ring_, w - 1 - i) * window_[i]);
       }
-      analysis_.forward(key_scratch_);
-      for (std::size_t k = 0; k <= w / 2; ++k) {
-        key_power_[k] = std::norm(key_scratch_[k]) * power_scale_;
-      }
+      spectrum_power(frame_[0], key_power_);
       levels(key_power_, key_level_);
     } else {
       key_level_.fill(silence_db);
     }
   }
 
+  // A windowed frame's power per bin, a full-scale sine 0 dB at its peak.
+  void spectrum_power(const Buffer& frame, std::vector<double>& power) noexcept {
+    const std::size_t w = frames_.window;
+    analysis_.forward(frame.data(), analysis_spectrum_.data());
+    for (std::size_t k = 0; k <= w / 2; ++k) {
+      power[k] =
+          static_cast<double>(warp_dsp::bin_power(analysis_spectrum_.data(), w, k)) * power_scale_;
+    }
+  }
+
   // The mean power of the bins inside each grid band, or the power read
   // between the two bins around its centre when it holds none.
-  void levels(const std::vector<double>& power, std::array<double, grid>& out) const noexcept {
+  // The logarithms run four at a time.
+  void levels(const std::vector<double>& power, std::array<double, grid>& out) noexcept {
     for (std::size_t b = 0; b < grid; ++b) {
       const auto& g = grid_[b];
       double mean = 0.0;
@@ -539,7 +548,12 @@ private:
       } else {
         mean = lerp(power[g.bin], power[g.bin + 1], g.frac);
       }
-      out[b] = to_db(mean);
+      out[b] = mean;
+      level_log_[b] = static_cast<float>(std::max(mean, silent_power));
+    }
+    native_dsp::dsp::vector_math::log_all(level_log_);
+    for (std::size_t b = 0; b < grid; ++b) {
+      out[b] = out[b] > silent_power ? static_cast<double>(level_log_[b]) * ln_to_db : silence_db;
     }
   }
 
@@ -583,6 +597,23 @@ private:
     return static_cast<double>(b) / static_cast<double>(grid - 1) - 0.5;
   }
 
+  // The summed distance of `values` from `centre`, in four running sums
+  // (one chain of additions would wait on each in turn).
+  [[nodiscard]] static double deviation(std::span<const double> values, double centre) noexcept {
+    constexpr std::size_t lanes = 4;
+    std::array<double, lanes> sums{};
+    std::size_t j = 0;
+    for (; j + lanes <= values.size(); j += lanes) {
+      for (std::size_t l = 0; l < lanes; ++l) {
+        sums[l] += std::fabs(values[j + l] - centre);
+      }
+    }
+    for (; j < values.size(); ++j) {
+      sums[0] += std::fabs(values[j] - centre);
+    }
+    return (sums[0] + sums[1]) + (sums[2] + sums[3]);
+  }
+
   // The suppressor's wanted cut per channel on the grid (dB, positive).
   void suppress() noexcept {
     const std::size_t channels = processed();
@@ -608,14 +639,28 @@ private:
     const auto& sensitivity = sensitivity_;
     double transient_sum = 0.0;
     std::size_t transient_count = 0;
+    // Each band's Detail and the widths it sets, the same for every channel,
+    // again only when Detail or Tilt move.
+    const Widths widths{values_[p::detail], tilt};
+    if (!(widths == widths_)) {
+      for (std::size_t b = 0; b < grid; ++b) {
+        const double detail =
+            std::clamp(widths.detail + tilt * tilt_detail_span * position_of(b) * 2.0, 0.0, 1.0);
+        envelope_reach_[b] =
+            static_cast<std::size_t>(std::lround(lerp(envelope_wide, envelope_narrow, detail)));
+        reference_half_[b] =
+            static_cast<std::size_t>(std::lround(lerp(reference_wide, reference_narrow, detail)));
+        smooth_half_[b] = lerp(cut_wide, cut_narrow, detail);
+        smooth_reach_[b] = static_cast<std::size_t>(std::ceil(smooth_half_[b]));
+      }
+      smooth_reach_most_ = std::ranges::max(smooth_reach_);
+      widths_ = widths;
+    }
     for (std::size_t c = 0; c < channels; ++c) {
       const auto& level = level_[c];
       auto& envelope = envelope_[c];
       for (std::size_t b = 0; b < grid; ++b) {
-        detail_[b] = std::clamp(values_[p::detail] + tilt * tilt_detail_span * position_of(b) * 2.0,
-                                0.0, 1.0);
-        const auto reach =
-            static_cast<std::size_t>(std::lround(lerp(envelope_wide, envelope_narrow, detail_[b])));
+        const std::size_t reach = envelope_reach_[b];
         double most = silence_db;
         for (std::size_t j = b > reach ? b - reach : 0; j < std::min(grid, b + reach + 1); ++j) {
           most = std::max(most, level[j]);
@@ -628,9 +673,7 @@ private:
       }
       auto& over = want_[c];
       for (std::size_t b = 0; b < grid; ++b) {
-        const double detail = detail_[b];
-        const auto half =
-            static_cast<std::size_t>(std::lround(lerp(reference_wide, reference_narrow, detail)));
+        const std::size_t half = reference_half_[b];
         const std::size_t lo = b > half ? b - half : 0;
         const std::size_t hi = std::min(grid, b + half + 1);
         const double n = static_cast<double>(hi - lo);
@@ -643,10 +686,7 @@ private:
           if (hard) {
             cut = std::max(0.0, excess - hard_threshold_db) * hard_weight;
           } else {
-            double spread = 0.0;
-            for (std::size_t j = lo; j < hi; ++j) {
-              spread += std::fabs(envelope[j] - reference);
-            }
+            const double spread = deviation(std::span(envelope).subspan(lo, hi - lo), reference);
             const double above = std::max(0.0, excess - soft_spread * spread / n);
             cut = above * above / (above + soft_knee_db);
           }
@@ -660,21 +700,31 @@ private:
           ++transient_count;
         }
         over[b] = cut * depth * sensitivity[b] * lerp(sustains, attacks, transient);
-        smooth_half_[b] = lerp(cut_wide, cut_narrow, detail);
       }
       // Widen the cut across frequency (by Detail) with tapered skirts: each
       // band keeps the deepest of its neighbours' cuts, scaled down with
-      // distance, so a one-band resonance keeps its full depth.
+      // distance, so a one-band resonance keeps its full depth. Only bands
+      // with a cut reach their neighbours.
       auto& smoothed = smoothed_[c];
-      for (std::size_t b = 0; b < grid; ++b) {
-        const double half = smooth_half_[b];
-        const auto reach = static_cast<std::size_t>(std::ceil(half));
-        double deepest = 0.0;
-        for (std::size_t j = b > reach ? b - reach : 0; j < std::min(grid, b + reach + 1); ++j) {
-          const double d = std::fabs(static_cast<double>(j) - static_cast<double>(b));
-          deepest = std::max(deepest, over[j] * std::max(0.0, 1.0 - d / (half + 1.0)));
+      smoothed.fill(0.0);
+      for (std::size_t j = 0; j < grid; ++j) {
+        if (!(over[j] > 0.0)) {
+          continue;
         }
-        smoothed[b] = std::min(max_cut, deepest);
+        const std::size_t from = j > smooth_reach_most_ ? j - smooth_reach_most_ : 0;
+        const std::size_t to = std::min(grid, j + smooth_reach_most_ + 1);
+        for (std::size_t b = from; b < to; ++b) {
+          const std::size_t distance = b > j ? b - j : j - b;
+          if (distance > smooth_reach_[b]) {
+            continue;
+          }
+          const double d = static_cast<double>(distance);
+          smoothed[b] =
+              std::max(smoothed[b], over[j] * std::max(0.0, 1.0 - d / (smooth_half_[b] + 1.0)));
+        }
+      }
+      for (double& cut : smoothed) {
+        cut = std::min(max_cut, cut);
       }
     }
     transient_now_ =
@@ -684,8 +734,8 @@ private:
       const double link = values_[p::link];
       for (std::size_t b = 0; b < grid; ++b) {
         const double most = std::max(smoothed_[0][b], smoothed_[1][b]);
-        smoothed_[0][b] = lerp(smoothed_[0][b], most, link);
-        smoothed_[1][b] = lerp(smoothed_[1][b], most, link);
+        smoothed_[0][b] = linked(smoothed_[0][b], most, link);
+        smoothed_[1][b] = linked(smoothed_[1][b], most, link);
       }
     }
     // Unmask: cut where the key lives and is not drowned out.
@@ -791,8 +841,8 @@ private:
       }
       if (channels == 2) {
         const double most = std::max(level[0], level[1]);
-        level[0] = lerp(level[0], most, link);
-        level[1] = lerp(level[1], most, link);
+        level[0] = linked(level[0], most, link);
+        level[1] = linked(level[1], most, link);
       }
       band_level_[j] = std::max(level[0], channels == 2 ? level[1] : silence_db);
       for (std::size_t c = 0; c < channels; ++c) {
@@ -810,99 +860,115 @@ private:
   // The gain (dB, unmixed) per design bin for channel c.
   void gains_db(std::size_t c) noexcept {
     auto& out = design_gain_[c];
+    const auto& cut = cut_[c];
     for (std::size_t k = 0; k < out.size(); ++k) {
-      const double u = design_band_[k];
-      double cut = 0.0;
-      if (u <= 0.0) {
-        cut = cut_[c][0];
-      } else if (u < static_cast<double>(grid - 1)) {
-        const auto b = static_cast<std::size_t>(u);
-        cut = lerp(cut_[c][b], cut_[c][b + 1], u - static_cast<double>(b));
+      const auto& at = design_at_[k];
+      out[k] = -at.weight * lerp(cut[at.band], cut[at.band + 1], at.frac);
+    }
+    for (std::size_t j = 0; j < bands; ++j) {
+      const auto& band = band_settings_[j];
+      if (!band.on || band.range == 0.0) {
+        continue;
       }
-      double gain_db = -cut;
-      for (std::size_t j = 0; j < bands; ++j) {
-        const auto& band = band_settings_[j];
-        if (band.on && band.range != 0.0) {
-          gain_db += band_shape_[j][k] * (band_now_[c][j] / band.range);
-        }
+      const double share = band_now_[c][j] / band.range;
+      const auto& shape = band_shape_[j];
+      for (std::size_t k = 0; k < out.size(); ++k) {
+        out[k] += shape[k] * share;
       }
-      out[k] = gain_db;
     }
   }
 
-  // The applied gain per design bin, linear and mixed.
-  [[nodiscard]] double mixed(double gain_db) const noexcept {
+  // Each design bin's applied gain for channel c into design_values_:
+  // linear and mixed, or (`as_log`) its natural log, floored. Fully wet, the
+  // log comes straight from the dB.
+  void applied_gains(std::size_t c, bool as_log) noexcept {
+    const auto& gain_db = design_gain_[c];
+    const auto values = design_values_.span();
     const double mix = values_[p::mix];
-    return (1.0 - mix) + mix * oscillate::native_dsp::dsp::db_to_gain(gain_db);
-  }
-
-  // Its natural log, floored: fully wet, straight from the dB.
-  [[nodiscard]] double log_mixed(double gain_db) const noexcept {
-    if (values_[p::mix] == 1.0) {
-      return std::max(gain_db * db_to_log, log_floor);
-    }
-    return std::log(std::max(mixed(gain_db), gain_floor));
-  }
-
-  // Designs both channels' filters into fir_ (two real designs packed in
-  // each complex transform).
-  void design() noexcept {
-    const std::size_t channels = processed();
-    for (std::size_t c = 0; c < channels; ++c) {
-      gains_db(c);
-    }
-    const std::size_t d = design_.size();
-    const std::size_t m = frames_.filter;
-    auto& z = spectrum_;
-    const auto& ga = design_gain_[0];
-    const auto& gb = design_gain_[channels == 2 ? 1 : 0];
-    // Each bin from 0 to d / 2, then mirrored above it.
-    const auto fill = [&](const auto& of) {
-      for (std::size_t k = 0; k <= d / 2; ++k) {
-        z[k] = Complex(of(ga[k]), of(gb[k]));
-      }
-      for (std::size_t k = d / 2 + 1; k < d; ++k) {
-        z[k] = z[d - k];
-      }
-    };
-    if (phase_ == t::Phase::linear) {
-      fill([this](double db) { return mixed(db); });
-      design_.inverse(z);
-      for (std::size_t n = 0; n < m; ++n) {
-        const Complex h = z[(n + d - m / 2) % d] * taper_[n];
-        fir_[0][n] = h.real();
-        fir_[1][n] = h.imag();
+    if (as_log && mix == 1.0) {
+      for (std::size_t k = 0; k < gain_db.size(); ++k) {
+        values[k] = static_cast<float>(std::max(gain_db[k] * db_to_log, log_floor));
       }
       return;
     }
-    // Minimum phase by the folded cepstrum.
-    fill([this](double db) { return log_mixed(db); });
-    design_.inverse(z);
-    for (std::size_t n = 1; n < d / 2; ++n) {
-      z[n] *= 2.0;
+    for (std::size_t k = 0; k < gain_db.size(); ++k) {
+      values[k] = static_cast<float>(gain_db[k] * db_to_log);
     }
-    for (std::size_t n = d / 2 + 1; n < d; ++n) {
-      z[n] = 0.0;
-    }
-    design_.forward(z);
-    // Separate the two folded spectra, exponentiate each, pack them again.
-    for (std::size_t k = 0; k <= d / 2; ++k) {
-      Complex a;
-      Complex b;
-      unpack(z, k, a, b);
-      const Complex ea = exp_of(a);
-      // One processed channel designs one filter.
-      const Complex eb = channels == 2 ? exp_of(b) : Complex(0.0);
-      scratch_[k] = ea + times_i(eb);
-      if (k != 0 && k != d / 2) {
-        scratch_[d - k] = std::conj(ea) + times_i(std::conj(eb));
+    native_dsp::dsp::vector_math::exp_all(values);
+    const auto dry = static_cast<float>(1.0 - mix);
+    const auto wet = static_cast<float>(mix);
+    const auto floor = static_cast<float>(gain_floor);
+    for (float& value : values) {
+      value = dry + wet * value;
+      if (as_log) {
+        value = std::max(value, floor);
       }
     }
-    std::copy(scratch_.begin(), scratch_.begin() + static_cast<std::ptrdiff_t>(d), z.begin());
-    design_.inverse(z);
-    for (std::size_t n = 0; n < m; ++n) {
-      fir_[0][n] = z[n].real() * taper_[n];
-      fir_[1][n] = z[n].imag() * taper_[n];
+    if (as_log) {
+      native_dsp::dsp::vector_math::log_all(values);
+    }
+  }
+
+  // An ordered spectrum of real, even values from design_values_ (bins 0
+  // to d / 2) in design_work_.
+  void even_spectrum() noexcept {
+    const std::size_t d = design_.size();
+    float* const z = design_work_.data();
+    z[dc_slot] = design_values_[0];
+    z[nyquist_slot] = design_values_[d / 2];
+    for (std::size_t k = 1; k < d / 2; ++k) {
+      z[2 * k] = design_values_[k];
+      z[2 * k + 1] = 0.0F;
+    }
+  }
+
+  // Designs each processed channel's filter into fir_; linked channels
+  // with the same cuts share one.
+  void design() noexcept {
+    const std::size_t channels = shared_ ? 1 : processed();
+    const std::size_t d = design_.size();
+    const std::size_t m = frames_.filter;
+    const double unscale = 1.0 / static_cast<double>(d);
+    float* const z = design_work_.data();
+    for (std::size_t c = 0; c < channels; ++c) {
+      gains_db(c);
+      auto& fir = fir_[c];
+      if (phase_ == t::Phase::linear) {
+        applied_gains(c, false);
+        even_spectrum();
+        design_.inverse(z, z);
+        for (std::size_t n = 0; n < m; ++n) {
+          fir[n] = static_cast<double>(z[(n + d - m / 2) % d]) * unscale * taper_[n];
+        }
+        continue;
+      }
+      // Minimum phase by the folded cepstrum: the log gains' cepstrum, its
+      // negative times folded onto the positive, back to a log spectrum,
+      // exponentiated, and back to time.
+      applied_gains(c, true);
+      even_spectrum();
+      design_.inverse(z, z);
+      const auto once = static_cast<float>(unscale);
+      const auto twice = static_cast<float>(2.0 * unscale);
+      z[0] *= once;
+      for (std::size_t n = 1; n < d / 2; ++n) {
+        z[n] *= twice;
+      }
+      z[d / 2] *= once;
+      std::fill(z + d / 2 + 1, z + d, 0.0F);
+      design_.forward(z, z);
+      const float dc = std::exp(z[dc_slot]);
+      const float nyquist = std::exp(z[nyquist_slot]);
+      native_dsp::dsp::vector_math::complex_exp(design_work_.span());
+      z[dc_slot] = dc;
+      z[nyquist_slot] = nyquist;
+      design_.inverse(z, z);
+      for (std::size_t n = 0; n < m; ++n) {
+        fir[n] = static_cast<double>(z[n]) * unscale * taper_[n];
+      }
+    }
+    if (shared_) {
+      fir_[1] = fir_[0];
     }
   }
 
@@ -952,7 +1018,7 @@ private:
   // the block's spectrum times each partition's goes into the spectrum of
   // the hop its product lands in, and each hop's sum comes back to time
   // once. That is the block's whole convolution with this hop's filter, as
-  // one transform of the filter's length would give it, for a third of the
+  // one transform of the filter's length would give it, in a third of the
   // transforms' work.
   void overlap_add() noexcept {
     const std::size_t k = block_.size();
@@ -961,49 +1027,40 @@ private:
     const std::size_t channels = processed();
     // The block's newest sample is `lookahead` behind the newest input.
     const std::size_t first_back = frames_.lookahead + h - 1;
-    for (std::size_t n = 0; n < k; ++n) {
-      if (n < h) {
+    // The products carry the inverse's 1 / k.
+    const float unscale = 1.0F / static_cast<float>(k);
+    for (std::size_t c = 0; c < channels; ++c) {
+      for (std::size_t n = 0; n < h; ++n) {
         const std::size_t back = first_back - n;
         const auto s = split(mode_, past(ring_[0], back), past(ring_[1], back));
-        block_in_[n] = Complex(s.a, channels == 2 ? s.b : 0.0);
-      } else {
-        block_in_[n] = 0.0;
+        block_time_[n] = static_cast<float>(c == 0 ? s.a : s.b);
       }
+      std::fill(block_time_.data() + h, block_time_.data() + k, 0.0F);
+      block_.forward_unordered(block_time_.data(), block_spectrum_[c].data());
     }
-    block_.forward(block_in_);
-    for (std::size_t bin = 0; bin <= h; ++bin) {
-      unpack(block_in_, bin, block_a_[bin], block_b_[bin]);
-    }
+    const std::size_t filters = shared_ ? 1 : channels;
     for (std::size_t part = 0; part < parts; ++part) {
-      for (std::size_t n = 0; n < k; ++n) {
-        filter_spectrum_[n] =
-            n < h ? Complex(fir_[0][part * h + n], channels == 2 ? fir_[1][part * h + n] : 0.0)
-                  : Complex(0.0);
-      }
-      block_.forward(filter_spectrum_);
       // The hop this part's product lands in, from the hop now.
       const std::size_t lands = landed_ + part < parts ? landed_ + part : landed_ + part - parts;
-      auto& landing = landing_[lands];
-      for (std::size_t bin = 0; bin <= h; ++bin) {
-        Complex ha;
-        Complex hb;
-        unpack(filter_spectrum_, bin, ha, hb);
-        landing.a[bin] += times(block_a_[bin], ha);
-        landing.b[bin] += times(block_b_[bin], hb);
+      for (std::size_t f = 0; f < filters; ++f) {
+        for (std::size_t n = 0; n < h; ++n) {
+          filter_time_[n] = static_cast<float>(fir_[f][part * h + n]);
+        }
+        std::fill(filter_time_.data() + h, filter_time_.data() + k, 0.0F);
+        block_.forward_unordered(filter_time_.data(), filter_spectrum_.data());
+        for (std::size_t c = f; c < (shared_ ? channels : f + 1); ++c) {
+          block_.multiply_accumulate(block_spectrum_[c].data(), filter_spectrum_.data(),
+                                     landing_[lands][c].data(), unscale);
+        }
       }
     }
     // This hop's sum back to time: its first hop is out now, its second
     // overlaps the next.
-    auto& now = landing_[landed_];
-    for (std::size_t bin = 0; bin <= h; ++bin) {
-      product_[bin] = now.a[bin] + times_i(now.b[bin]);
-      if (bin != 0 && bin != h) {
-        product_[k - bin] = std::conj(now.a[bin]) + times_i(std::conj(now.b[bin]));
-      }
+    for (std::size_t c = 0; c < channels; ++c) {
+      auto& now = landing_[landed_][c];
+      block_.inverse_unordered(now.data(), product_[c].data());
+      now.zero();
     }
-    block_.inverse(product_);
-    std::ranges::fill(now.a, Complex(0.0));
-    std::ranges::fill(now.b, Complex(0.0));
     if (++landed_ == parts) {
       landed_ = 0;
     }
@@ -1013,11 +1070,11 @@ private:
     for (std::size_t n = 0; n < h; ++n) {
       const std::size_t back = latency - 1 - n;
       const auto dry = split(mode_, past(ring_[0], back), past(ring_[1], back));
-      const double a = product_[n].real() + overlap_a_[n];
-      const double b = channels == 2 ? product_[n].imag() + overlap_b_[n] : dry.b;
+      const double a = static_cast<double>(product_[0][n]) + overlap_a_[n];
+      const double b = channels == 2 ? static_cast<double>(product_[1][n]) + overlap_b_[n] : dry.b;
       out_[n] = finish(dry, a, b);
-      overlap_a_[n] = product_[h + n].real();
-      overlap_b_[n] = product_[h + n].imag();
+      overlap_a_[n] = product_[0][h + n];
+      overlap_b_[n] = channels == 2 ? product_[1][h + n] : 0.0F;
     }
   }
 
@@ -1033,7 +1090,11 @@ private:
       cut_[1] = cut_[0];
       band_now_[1] = band_now_[0];
     }
-    fir_previous_ = fir_;
+    // Low Latency crossfades from the last hop's filters.
+    if (phase_ == t::Phase::low_latency) {
+      fir_previous_ = fir_;
+    }
+    shared_ = processed() == 2 && cut_[0] == cut_[1] && band_now_[0] == band_now_[1];
     design();
     if (phase_ != t::Phase::low_latency) {
       overlap_add();
@@ -1087,9 +1148,11 @@ private:
                   (band_now_[0][j] / band.range);
         }
       }
-      // As heard: Mix blends the gain.
-      const double applied = native_dsp::dsp::gain_to_db(
-          (1.0 - mix) + mix * oscillate::native_dsp::dsp::db_to_gain(gain));
+      // As heard: Mix blends the gain (fully wet, the gain itself).
+      const double applied =
+          mix == 1.0 ? gain
+                     : native_dsp::dsp::gain_to_db(
+                           (1.0 - mix) + mix * oscillate::native_dsp::dsp::db_to_gain(gain));
       display_in_[i] += (in - display_in_[i]) * step;
       display_key_[i] += (key - display_key_[i]) * step;
       display_out_[i] += (in + applied - display_out_[i]) * step;
@@ -1121,26 +1184,32 @@ private:
   Values values_{};
   t::StereoMode mode_ = t::StereoMode::stereo;
 
-  dsp::Fft analysis_;
-  dsp::Fft design_;
-  dsp::Fft block_;
+  warp_dsp::RealFft analysis_;
+  warp_dsp::RealFft design_;
+  warp_dsp::RealFft block_;
   std::size_t history_ = 0;
   std::array<std::vector<double>, 2> ring_;
   std::vector<double> key_ring_;
   std::vector<double> window_;
   double power_scale_ = 1.0;
-  std::vector<Complex> scratch_;
-  std::vector<Complex> key_scratch_;
+  // The processed pair's windowed frames (the key's in the first), and a
+  // frame's spectrum.
+  std::array<Buffer, 2> frame_;
+  Buffer analysis_spectrum_;
   std::array<std::vector<double>, 2> power_;
   std::vector<double> key_power_;
   std::array<GridBand, grid> grid_{};
   std::array<std::array<double, grid>, 2> level_{};
+  std::array<float, grid> level_log_{};
   std::array<double, grid> key_level_{};
   std::array<std::array<double, grid>, 2> slow_{};
   std::array<std::array<double, grid>, 2> want_{};
   std::array<std::array<double, grid>, 2> smoothed_{};
   std::array<double, grid> smooth_half_{};
-  std::array<double, grid> detail_{};
+  std::array<std::size_t, grid> envelope_reach_{};
+  std::array<std::size_t, grid> smooth_reach_{};
+  std::size_t smooth_reach_most_ = 0;
+  std::array<std::size_t, grid> reference_half_{};
   std::array<std::array<double, grid>, 2> envelope_{};
   std::array<std::array<double, grid>, 2> cut_{};
 
@@ -1152,6 +1221,12 @@ private:
     bool operator==(const Ballistics&) const = default;
   };
   Ballistics ballistics_{};
+  struct Widths {
+    double detail = -1.0;
+    double tilt = 0.0;
+    bool operator==(const Widths&) const = default;
+  };
+  Widths widths_{};
   std::array<double, grid> attack_coefficient_{};
   std::array<double, grid> release_coefficient_{};
   Nodes sensitivity_nodes_{};
@@ -1164,26 +1239,35 @@ private:
   std::array<std::array<double, bands>, 2> band_now_{};
   std::array<double, bands> band_level_{};
 
-  std::vector<double> design_band_;
+  // Where each design bin reads the grid's cut: between two bands, each
+  // weighted; the weight is 0 above the grid.
+  struct GridPoint {
+    std::size_t band = 0;
+    double frac = 0.0;
+    double weight = 0.0;
+  };
+  std::vector<GridPoint> design_at_;
   std::vector<double> design_hz_;
   std::array<std::vector<double>, 2> design_gain_;
-  std::vector<Complex> spectrum_;
+  // One channel's gains or logs per design bin, and the design's transform.
+  Buffer design_values_;
+  Buffer design_work_;
   std::vector<double> taper_;
   std::array<std::vector<double>, 2> fir_;
   std::array<std::vector<double>, 2> fir_previous_;
+  // Both processed channels have this hop's one filter.
+  bool shared_ = false;
 
-  std::vector<Complex> block_in_ = std::vector<Complex>(block_.size());
-  std::vector<Complex> filter_spectrum_;
-  std::vector<Complex> product_ = std::vector<Complex>(block_.size());
-  // The block's two spectra, and each coming hop's sum of products (a ring
-  // from the hop now), per processed channel.
-  std::vector<Complex> block_a_;
-  std::vector<Complex> block_b_;
-  struct Landing {
-    std::vector<Complex> a;
-    std::vector<Complex> b;
-  };
-  std::vector<Landing> landing_;
+  // The block and a filter partition in time, padded to two hops; each
+  // channel's block spectrum and hop of output (unordered spectra).
+  Buffer block_time_;
+  Buffer filter_time_;
+  Buffer filter_spectrum_;
+  std::array<Buffer, 2> block_spectrum_;
+  std::array<Buffer, 2> product_;
+  // Each coming hop's sum of products (a ring from the hop now), per
+  // processed channel.
+  std::vector<std::array<Buffer, 2>> landing_;
   std::size_t landed_ = 0;
   // The second half of the last hop's sum, which overlaps this one.
   std::vector<double> overlap_a_;

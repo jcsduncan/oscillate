@@ -1,7 +1,6 @@
 #include "oscillate/native_dsp/effects/gild.hpp"
 
 #include "dsp/crossover.hpp"
-#include "dsp/fft.hpp"
 #include "edge_dsp.hpp"
 #include "edge_table.hpp"
 #include "effect_dsp.hpp"
@@ -10,11 +9,11 @@
 #include "gild_table.hpp"
 #include "linear_bank.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
+#include "oscillate/warp_dsp/real_fft.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -423,8 +422,9 @@ public:
     }
     delta_.step = fade_step_;
     match_.step = fade_step_;
-    history_.assign(spectrum_window, {});
-    work_.assign(spectrum_window, {});
+    for (auto& history : history_) {
+      history.assign(spectrum_window, 0.0F);
+    }
     window_.resize(spectrum_window);
     for (std::size_t i = 0; i < spectrum_window; ++i) {
       window_[i] = base::hann(static_cast<double>(i), static_cast<double>(spectrum_window));
@@ -611,7 +611,9 @@ public:
     position_ = 0;
     input_peak_ = {};
     output_peak_ = {};
-    std::ranges::fill(history_, std::complex<double>{});
+    for (auto& history : history_) {
+      std::ranges::fill(history, 0.0F);
+    }
     history_position_ = 0;
     hop_count_ = 0;
     input_spectrum_.fill(0.0);
@@ -824,29 +826,29 @@ private:
 
   // The spectrum: the dry and added mono sums, every hop.
   void listen(double dry, double added) noexcept {
-    history_[history_position_] = {dry, added};
+    history_[0][history_position_] = static_cast<float>(dry);
+    history_[1][history_position_] = static_cast<float>(added);
     history_position_ = (history_position_ + 1) % spectrum_window;
     if (++hop_count_ < spectrum_hop) {
       return;
     }
     hop_count_ = 0;
-    for (std::size_t i = 0; i < spectrum_window; ++i) {
-      work_[i] = history_[(history_position_ + i) % spectrum_window] * window_[i];
+    for (std::size_t s = 0; s < 2; ++s) {
+      for (std::size_t i = 0; i < spectrum_window; ++i) {
+        frame_[i] =
+            static_cast<float>(history_[s][(history_position_ + i) % spectrum_window] * window_[i]);
+      }
+      fft_.forward(frame_.data(), spectra_[s].data());
     }
-    fft_.forward(work_);
-    // Two real signals in one transform: the dry as the real part, the
-    // added as the imaginary.
+    // A full-scale sine's bin reads its power.
     const double scale = 2.0 / (hann_sum_share * static_cast<double>(spectrum_window));
+    const double power_scale = scale * scale;
     for (std::size_t b = 0; b < spectrum_bins; ++b) {
       double dry_sum = 0.0;
       double added_sum = 0.0;
       for (std::size_t k = bin_first_[b]; k < bin_last_[b]; ++k) {
-        const auto z = work_[k];
-        const auto mirror = std::conj(work_[spectrum_window - k]);
-        const auto d = 0.5 * (z + mirror) * scale;
-        const auto a = std::complex<double>{0.0, -0.5} * (z - mirror) * scale;
-        dry_sum += std::norm(d);
-        added_sum += std::norm(a);
+        dry_sum += warp_dsp::bin_power(spectra_[0].data(), spectrum_window, k) * power_scale;
+        added_sum += warp_dsp::bin_power(spectra_[1].data(), spectrum_window, k) * power_scale;
       }
       dry_sum /= hann_noise_bandwidth;
       added_sum /= hann_noise_bandwidth;
@@ -880,9 +882,13 @@ private:
   bool primed_ = false;
   std::array<double, 2> input_peak_{};
   std::array<double, 2> output_peak_{};
-  base::Fft fft_;
-  std::vector<std::complex<double>> history_;
-  std::vector<std::complex<double>> work_;
+  // The dry and added mono sums' last window, a windowed frame and each
+  // one's spectrum.
+  warp_dsp::RealFft fft_;
+  std::array<std::vector<float>, 2> history_;
+  warp_dsp::AlignedBuffer frame_{spectrum_window};
+  std::array<warp_dsp::AlignedBuffer, 2> spectra_{warp_dsp::AlignedBuffer(spectrum_window),
+                                                  warp_dsp::AlignedBuffer(spectrum_window)};
   std::vector<double> window_;
   std::size_t history_position_ = 0;
   std::size_t hop_count_ = 0;

@@ -1,5 +1,6 @@
 # Private, header-only DSP primitives shared by the native DSP, synths,
-# effects and analysis: one ramp, one biquad, one FFT (src/native_dsp/dsp).
+# effects and analysis: one ramp, one biquad and the offline FFT
+# (src/native_dsp/dsp). The offline FFT asserts it is off the audio thread.
 add_library(oscillate_dsp_primitives INTERFACE)
 add_library(oscillate::dsp_primitives ALIAS oscillate_dsp_primitives)
 target_include_directories(oscillate_dsp_primitives INTERFACE
@@ -7,6 +8,7 @@ target_include_directories(oscillate_dsp_primitives INTERFACE
   # The shared numeric helpers (oscillate/native_dsp/dsp/math.hpp).
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../../include>
 )
+target_link_libraries(oscillate_dsp_primitives INTERFACE oscillate::foundation)
 
 add_library(oscillate_native_dsp eq.cpp rebalance.cpp compressor.cpp limiter.cpp meter.cpp loudness.cpp spectrum.cpp true_peak.cpp
   correlation.cpp
@@ -164,7 +166,7 @@ target_include_directories(oscillate_native_effects PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../../include>
 )
 target_link_libraries(oscillate_native_effects PUBLIC oscillate::native_control oscillate::native_synth
-  oscillate::engine oscillate::native_dsp PRIVATE oscillate::dsp_primitives oscillate_pffft)
+  oscillate::engine oscillate::native_dsp oscillate::warp_dsp PRIVATE oscillate::dsp_primitives)
 oscillate_target_defaults(oscillate_native_effects)
 oscillate_optimize_in_debug(oscillate_native_effects)
 

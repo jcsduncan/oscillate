@@ -1,7 +1,7 @@
 #include "cast_ir.hpp"
 
 #include "cast_convolver.hpp"
-#include "dsp/fft.hpp"
+#include "dsp/offline_fft.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
 
 #include <algorithm>
@@ -141,10 +141,9 @@ struct TailModel {
 // band's RT60. Writes `frames` frames of the four responses, added to them.
 void add_tail(Responses& out, std::size_t frames, const TailModel& model) {
   constexpr std::size_t bins = tail_frame / 2;
-  const cast_dsp::Fft fft(tail_frame);
+  cast_dsp::Fft fft(tail_frame);
   cast_dsp::Floats spectrum(tail_frame);
   cast_dsp::Floats time(tail_frame);
-  cast_dsp::Floats work(tail_frame);
   std::vector<double> window(tail_frame);
   for (std::size_t n = 0; n < tail_frame; ++n) {
     window[n] = native_dsp::dsp::hann(static_cast<double>(n), static_cast<double>(tail_frame));
@@ -210,7 +209,7 @@ void add_tail(Responses& out, std::size_t frames, const TailModel& model) {
         bins_out[2 * k] = static_cast<float>(value.real() * amplitude);
         bins_out[2 * k + 1] = static_cast<float>(value.imag() * amplitude);
       }
-      fft.inverse_ordered(spectrum.data(), time.data(), work.data());
+      fft.inverse(spectrum.data(), time.data());
       const std::size_t start = hop * tail_hop;
       for (std::size_t n = 0; n < tail_frame; ++n) {
         // Frames start half a frame early so the first is centred at 0.
@@ -258,7 +257,7 @@ constexpr double cardioid_diffuse_power = 1.0 / 3.0;
 
 // The reflection filter for `order` wall hits over `distance` metres.
 std::vector<double> reflection_kernel(const Room& room, std::size_t order, double distance) {
-  const native_dsp::dsp::Fft fft(reflection_taps);
+  const native_dsp::dsp::OfflineFft fft(reflection_taps);
   std::vector<std::complex<double>> spectrum(reflection_taps);
   Bands gains{};
   for (std::size_t b = 0; b < band_count; ++b) {
@@ -615,10 +614,9 @@ void fade_end(std::vector<float>& response, std::size_t frames) {
 std::vector<float> stretch_response(const std::vector<float>& in, double factor,
                                     std::size_t max_frames, double rate) {
   constexpr std::size_t bins = stretch_frame / 2;
-  const cast_dsp::Fft fft(stretch_frame);
+  cast_dsp::Fft fft(stretch_frame);
   cast_dsp::Floats frame(stretch_frame);
   cast_dsp::Floats spectrum(stretch_frame);
-  cast_dsp::Floats work(stretch_frame);
   std::vector<double> window(stretch_frame);
   for (std::size_t n = 0; n < stretch_frame; ++n) {
     window[n] = native_dsp::dsp::hann(static_cast<double>(n), static_cast<double>(stretch_frame));
@@ -647,7 +645,7 @@ std::vector<float> stretch_response(const std::vector<float>& in, double factor,
                            : 0.0;
       frame.data()[n] = static_cast<float>(x * window[n]);
     }
-    fft.forward_ordered(frame.data(), spectrum.data(), work.data());
+    fft.forward(frame.data(), spectrum.data());
     float* bins_data = spectrum.data();
     const auto advance = static_cast<double>(start - previous_start);
     for (std::size_t k = 1; k < bins; ++k) {
@@ -668,7 +666,7 @@ std::vector<float> stretch_response(const std::vector<float>& in, double factor,
       bins_data[2 * k + 1] = static_cast<float>(magnitude * std::sin(synthesis_phase[k]));
     }
     previous_start = start;
-    fft.inverse_ordered(spectrum.data(), frame.data(), work.data());
+    fft.inverse(spectrum.data(), frame.data());
     const std::size_t at = m * stretch_hop;
     for (std::size_t n = 0; n < stretch_frame && at + n < out.size(); ++n) {
       out[at + n] += static_cast<double>(frame.data()[n]) * window[n] * scale;

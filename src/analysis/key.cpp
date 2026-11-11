@@ -1,7 +1,7 @@
 #include "oscillate/analysis/key.hpp"
 #include "oscillate/foundation/midi.hpp"
 
-#include "dsp/fft.hpp"
+#include "dsp/offline_fft.hpp"
 
 #include <algorithm>
 #include <array>
@@ -37,7 +37,7 @@ constexpr double confident_margin = 0.25;
 
 // One shared table set for every analysis window (worker threads only).
 void fft(std::array<Complex, window_frames>& values) {
-  static const native_dsp::dsp::Fft transform(window_frames);
+  static const native_dsp::dsp::OfflineFft transform(window_frames);
   transform.forward(values);
 }
 

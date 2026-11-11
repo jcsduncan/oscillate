@@ -1,6 +1,8 @@
 #pragma once
 
-#include <algorithm>
+#include "oscillate/foundation/log.hpp"
+
+#include <cassert>
 #include <complex>
 #include <cstddef>
 #include <emmintrin.h>
@@ -9,25 +11,28 @@
 #include <utility>
 #include <vector>
 
-// The one complex FFT of the native DSP and analysis code. Double precision
-// throughout: wavetables, analysers and key detection all want it. (Warp
-// and Cast keep the pinned PFFFT for their float real transforms.)
+// The double-precision complex FFT for offline and control-thread work:
+// wavetable building, key and tempo detection, analysis tables, impulse
+// response design and analysers that run off the callback. Never on the
+// audio thread: there, warp_dsp::RealFft (ADR-0126) transforms real float
+// signals several times faster. Debug builds assert that no thread marked
+// realtime (foundation::RealtimeThreadScope) runs it.
 namespace oscillate::native_dsp::dsp {
 
 // An in-place radix-2 transform of one power-of-two size. Its tables are
-// built on construction (control only); forward() and inverse() allocate
-// nothing and are safe on the callback. Each stage's twiddles are computed
-// directly, not by recurrence, so long transforms stay accurate.
+// built on construction; forward() and inverse() allocate nothing. Each
+// stage's twiddles are computed directly, not by recurrence, so long
+// transforms stay accurate.
 //
 // The butterflies are written out in SSE2 arithmetic: a std::complex product
 // compiles to a NaN-checking library call, which made this transform about
 // four times slower. A whole transform runs the stages two at a time, each
 // group of four values through both before the next (the same butterflies
 // on the same values, in half the passes), and reorders by a list of its
-// swaps. The operations are the same, so the results are too.
-class Fft {
+// swaps.
+class OfflineFft {
 public:
-  explicit Fft(std::size_t size)
+  explicit OfflineFft(std::size_t size)
       : size_(size), cos_(size > 1 ? size - 1 : 0), sin_(size > 1 ? size - 1 : 0) {
     std::size_t at = 0;
     for (std::size_t length = 2; length <= size; length <<= 1U) {
@@ -53,10 +58,14 @@ public:
   [[nodiscard]] std::size_t size() const noexcept { return size_; }
 
   // X[k] = sum x[n] e^(-2 pi i k n / N), unscaled.
-  void forward(std::span<std::complex<double>> data) const noexcept { run(data, 1.0); }
+  void forward(std::span<std::complex<double>> data) const noexcept {
+    assert(!foundation::on_realtime_thread() && "OfflineFft on the audio thread: use RealFft");
+    run(data, 1.0);
+  }
   // The exact inverse: e^(+2 pi i k n / N), scaled by 1 / N. N is a power
   // of two, so multiplying by its reciprocal is the division, bit for bit.
   void inverse(std::span<std::complex<double>> data) const noexcept {
+    assert(!foundation::on_realtime_thread() && "OfflineFft on the audio thread: use RealFft");
     run(data, -1.0);
     const __m128d scale = _mm_set1_pd(1.0 / static_cast<double>(size_));
     double* const x = reinterpret_cast<double*>(data.data());
@@ -65,10 +74,9 @@ public:
     }
   }
 
-  // The forward transform in steps, so one transform can be spread over
-  // many callbacks: reorder(), then every stage in order, each whole or in
-  // pieces of its size / 2 butterflies in any order. The result is
-  // forward()'s, bit for bit. reorder() too may run in pieces.
+private:
+  using Swap = std::pair<std::size_t, std::size_t>;
+
   [[nodiscard]] std::size_t stages() const noexcept {
     std::size_t count = 0;
     for (std::size_t length = 2; length <= size_; length <<= 1U) {
@@ -76,25 +84,11 @@ public:
     }
     return count;
   }
-  void reorder(std::span<std::complex<double>> data) const noexcept { reorder(data, 0, size_); }
-  // The reordering of indices [first, last) only (each swap is made from
-  // its lower index).
-  void reorder(std::span<std::complex<double>> data, std::size_t first,
-               std::size_t last) const noexcept {
-    // The swaps are in order of their lower index.
-    auto swap = std::ranges::lower_bound(swaps_, first, {}, &Swap::first);
-    for (; swap != swaps_.end() && swap->first < last; ++swap) {
-      std::swap(data[swap->first], data[swap->second]);
+  void reorder(std::span<std::complex<double>> data) const noexcept {
+    for (const auto& [low, high] : swaps_) {
+      std::swap(data[low], data[high]);
     }
   }
-  // Butterflies [first, last) of stage `stage` (0 pairs neighbours).
-  void stage(std::span<std::complex<double>> data, std::size_t stage, std::size_t first,
-             std::size_t last) const noexcept {
-    butterflies(data, stage, first, last, 1.0);
-  }
-
-private:
-  using Swap = std::pair<std::size_t, std::size_t>;
 
   // The odd value of a butterfly times its twiddle, one complex value per
   // SSE2 register: (o_r w_r - o_i w_i, o_i w_r + o_r w_i), the scalar
@@ -125,7 +119,7 @@ private:
       stage_pair(data, s, sign);
     }
     if (s < count) {
-      butterflies(data, s, 0, size_ / 2, sign);
+      butterflies(data, s, sign);
     }
   }
 
@@ -169,29 +163,21 @@ private:
     }
   }
 
-  void butterflies(std::span<std::complex<double>> data, std::size_t stage, std::size_t first,
-                   std::size_t last, double sign) const noexcept {
+  // One whole stage (the last of an odd count).
+  void butterflies(std::span<std::complex<double>> data, std::size_t stage,
+                   double sign) const noexcept {
     const std::size_t half = std::size_t{1} << stage;
-    const std::size_t length = 2 * half;
     // The twiddles of stage s follow those of the stages before it.
-    const std::size_t at = half - 1;
+    const double* const cos = cos_.data() + half - 1;
+    const double* const sin = sin_.data() + half - 1;
     // std::complex<double> is an array of its real and imaginary parts.
     double* const x = reinterpret_cast<double*>(data.data());
-    const double* const cos = cos_.data() + at;
-    const double* const sin = sin_.data() + at;
-    std::size_t block = first / half;
-    std::size_t k_first = first - block * half;
-    std::size_t remaining = last > first ? last - first : 0;
-    while (remaining > 0) {
-      const std::size_t k_last = std::min(half, k_first + remaining);
-      double* const even = x + 2 * block * length;
+    for (std::size_t base = 0; base < size_; base += 2 * half) {
+      double* const even = x + 2 * base;
       double* const odd = even + 2 * half;
-      for (std::size_t k = k_first; k < k_last; ++k) {
+      for (std::size_t k = 0; k < half; ++k) {
         butterfly(even + 2 * k, odd + 2 * k, cos[k], sign * sin[k]);
       }
-      remaining -= k_last - k_first;
-      ++block;
-      k_first = 0;
     }
   }
 

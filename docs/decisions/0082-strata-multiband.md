@@ -1,6 +1,6 @@
 # ADR-0082 — Strata: multiband dynamics
 
-**Status:** Accepted; implemented. **Date:** 1 November 2026.
+**Status:** Accepted; implemented; superseded in part by [ADR-0126](0126-realtime-fft.md): the linear bank runs each channel through the realtime float transform, and its last band is the delayed input less the others. **Date:** 1 November 2026.
 **Builds on:** ADR-0040 (native effect platform), ADR-0043 (one native insert path), ADR-0047 (Press), ADR-0062 (denormals flushed), ADR-0065 (Nova's Multiband module), ADR-0072 (Kick & Bass Lock).
 **Panel design:** [ui/strata-mockup.html](../ui/strata-mockup.html).
 **Contract:** `include/oscillate/native_dsp/effects/strata.hpp`, the table `src/native_dsp/effects/strata_table.hpp`, the shared crossovers `src/native_dsp/dsp/crossover.hpp`.

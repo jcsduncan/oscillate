@@ -1,9 +1,8 @@
 #pragma once
 
-#include "dsp/fft.hpp"
+#include "oscillate/warp_dsp/real_fft.hpp"
 
 #include <array>
-#include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -28,10 +27,12 @@ struct BankFrames {
 [[nodiscard]] BankFrames bank_frames(double sample_rate) noexcept;
 
 // Splits stereo into bands whose FIRs (differences of Blackman-windowed sinc
-// low-passes) sum to a pure delay of half_length frames. Left and right run
-// as one complex signal through one FFT per hop, and every band's spectrum
-// is real-symmetric, so each band needs one inverse transform. Output is a
-// further hop late: the bank's latency is half_length + hop.
+// low-passes) sum to a pure delay of half_length frames. Each channel takes
+// one forward real transform per hop and each band but the last one product
+// and inverse, on the realtime transform's unordered spectra (ADR-0126).
+// The last band is the delayed input less the others, so the bands sum to
+// the delayed input to double rounding. Output is a further hop late: the
+// bank's latency is half_length + hop.
 class LinearBank {
 public:
   static constexpr std::size_t max_bands = 6;
@@ -53,18 +54,25 @@ private:
   void run() noexcept;
   void design() noexcept;
 
+  using Buffer = warp_dsp::AlignedBuffer;
+
   double rate_;
   std::size_t half_;
   std::size_t hop_;
   std::size_t size_;
-  native_dsp::dsp::Fft fft_;
-  std::vector<std::complex<double>> history_;
-  std::vector<std::complex<double>> work_;
-  std::vector<std::complex<double>> lowpass_;
-  std::vector<std::complex<double>> previous_;
+  warp_dsp::RealFft fft_;
+  // Each channel's last size_ frames, its spectrum, and a product.
+  std::array<Buffer, 2> history_;
+  std::array<Buffer, 2> spectrum_;
+  Buffer product_;
+  // The low-pass being designed and the one before it (unordered spectra).
+  Buffer lowpass_;
+  Buffer previous_;
   std::vector<double> taps_;
-  std::array<std::vector<std::complex<double>>, max_bands> spectra_{};
-  std::array<std::vector<std::complex<double>>, max_bands> out_{};
+  // Each band's spectrum but the last's (unordered, scaled by 1 / size_)
+  // and every band's output for the hop, per channel.
+  std::array<Buffer, max_bands - 1> spectra_{};
+  std::array<std::array<std::vector<double>, 2>, max_bands> out_{};
   std::size_t bands_ = 1;
   std::array<double, max_bands - 1> crossovers_{};
   std::size_t position_ = 0;

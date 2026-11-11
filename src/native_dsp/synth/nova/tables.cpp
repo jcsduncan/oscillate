@@ -1,6 +1,6 @@
 #include "oscillate/native_dsp/synth/nova/tables.hpp"
 
-#include "dsp/fft.hpp"
+#include "dsp/offline_fft.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -57,7 +57,7 @@ constexpr double min_shift_correlation = 0.5;
 }
 
 // The inverse transforms of every level length (256..2048), shared by every
-// build. dsp::Fft is immutable after construction, so concurrent builds may
+// build. dsp::OfflineFft is immutable after construction, so concurrent builds may
 // use it.
 class LevelTransforms {
 public:
@@ -66,12 +66,12 @@ public:
       transforms_.emplace_back(length);
     }
   }
-  [[nodiscard]] const dsp::Fft& of(std::uint32_t length) const noexcept {
+  [[nodiscard]] const dsp::OfflineFft& of(std::uint32_t length) const noexcept {
     return transforms_[static_cast<std::size_t>(std::countr_zero(length)) - 8];
   }
 
 private:
-  std::vector<dsp::Fft> transforms_;
+  std::vector<dsp::OfflineFft> transforms_;
 };
 
 const LevelTransforms& level_transforms() {
@@ -79,8 +79,8 @@ const LevelTransforms& level_transforms() {
   return transforms;
 }
 
-const dsp::Fft& frame_transform() {
-  static const dsp::Fft transform(table_frame_size);
+const dsp::OfflineFft& frame_transform() {
+  static const dsp::OfflineFft transform(table_frame_size);
   return transform;
 }
 
@@ -358,7 +358,7 @@ public:
 private:
   std::size_t length_;
   bool direct_;
-  dsp::Fft transform_;
+  dsp::OfflineFft transform_;
   std::vector<Complex> work_;
   std::vector<Complex> chirp_;
   std::vector<Complex> kernel_;

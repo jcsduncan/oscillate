@@ -49,7 +49,7 @@ never reused. 0070 was never assigned.
 | 0039 | [Background publication of routine editor changes](0039-background-editor-publication.md) | Accepted; implemented |
 | 0040 | [A generic native effect platform](0040-native-effect-platform.md) | Accepted; implemented (integration completed under ADR-0043) |
 | 0041 | [Pocket, a kick and bass masking resolver](0041-pocket-kick-bass.md) | Accepted; phase 1 built |
-| 0042 | [A native utility suite](0042-native-utility-suite.md) | Accepted; all six built; superseded in part by ADR-0125 |
+| 0042 | [A native utility suite](0042-native-utility-suite.md) | Accepted; all six built; superseded in part by ADR-0125 and ADR-0126 |
 | 0043 | [One native insert path](0043-one-native-insert-path.md) | Superseded by ADR-0090 for export's link to native_inserts, by ADR-0092 for native_inserts' dependencies and by ADR-0104 for the transport type; otherwise implemented, classic kinds follow in ADR-0047 |
 | 0044 | [Lumen: wavetable synth (third native engine)](0044-lumen-wavetable-synth.md) | Superseded by ADR-0057 |
 | 0045 | [The development build](0045-development-build.md) | Accepted and implemented |
@@ -71,7 +71,7 @@ never reused. 0070 was never assigned.
 | 0061 | [Performance tracing](0061-performance-tracing.md) | Accepted; implemented |
 | 0062 | [Denormals flushed at every render entry](0062-denormals-flushed.md) | Accepted; implemented |
 | 0063 | [Crate: a chop sampler (replaces the sampler)](0063-crate-chop-sampler.md) | Accepted; implemented |
-| 0064 | [Temper: a resonance suppressor with dynamic EQ bands](0064-temper-resonance-suppressor.md) | Accepted; engine, presets and panel built |
+| 0064 | [Temper: a resonance suppressor with dynamic EQ bands](0064-temper-resonance-suppressor.md) | Accepted; engine, presets and panel built; superseded in part by ADR-0126 |
 | 0065 | [Nova FX rack: a signal-flow FX page, a parametric EQ and a shifter](0065-nova-fx-rack.md) | Accepted; implemented |
 | 0066 | [Ember's circuit model: a vintage poly that misbehaves like one](0066-ember-circuit-model.md) | Accepted; implemented |
 | 0067 | [Flyby: a sound passing the listener, properly](0067-flyby.md) | Accepted; implemented |
@@ -88,7 +88,7 @@ never reused. 0070 was never assigned.
 | 0079 | [Groove from a record: one band's feel from a record or clip, for the groove pool](0079-groove-from-a-record.md) | Accepted; implemented |
 | 0080 | [Arrange from a loop: a whole track proposed from 8 or 16 bars, kept or binned in one step](0080-arrange-from-a-loop.md) | Accepted; implemented |
 | 0081 | [Clay: note editing of audio — notes of partials plus the rest, edits rendered as original − old + new](0081-clay-note-editing.md) | Accepted; implemented |
-| 0082 | [Strata: multiband dynamics — one curve per band, up and down, Linkwitz-Riley or linear-phase bands, OTT](0082-strata-multiband.md) | Accepted; implemented |
+| 0082 | [Strata: multiband dynamics — one curve per band, up and down, Linkwitz-Riley or linear-phase bands, OTT](0082-strata-multiband.md) | Accepted; implemented; superseded in part by ADR-0126 |
 | 0083 | [Harmony: the Chord track, the Progression Lab and Comp](0083-harmony-chord-track-and-comp.md) | Superseded in part by ADR-0084 |
 | 0084 | [Chords are notes in MIDI clips: the chord strip, held-note Comp with pushes seen ahead, Rhythm Apply](0084-chord-clips.md) | Accepted; implemented |
 | 0085 | [One heavy synth's voices on the free audio helpers: nested worker batches, Nova voices rendered apart and summed in order](0085-nested-voice-rendering.md) | Accepted; implemented |
@@ -121,10 +121,11 @@ never reused. 0070 was never assigned.
 | 0116 | [Hush: a gate and downward expander with hysteresis, hold, lookahead and a filtered key](0116-hush-gate-expander.md) | Accepted; implemented |
 | 0117 | [Ceiling: a true-peak mastering limiter with transient room, an oversampled soft clipper, stereo links, and noise-shaped dither on export](0117-ceiling-mastering-limiter.md) | Accepted; implemented |
 | 0118 | [Strike: a single-band and multiband transient shaper with level-independent detection](0118-strike-transient-shaper.md) | Accepted; implemented |
-| 0119 | [Keel: adaptive tonal balance toward a target curve](0119-keel-adaptive-tonal-balance.md) | Accepted; implemented |
+| 0119 | [Keel: adaptive tonal balance toward a target curve](0119-keel-adaptive-tonal-balance.md) | Accepted; implemented; superseded in part by ADR-0126 |
 | 0120 | [Match EQ and tonal balance targets in Lens](0120-match-eq-and-tonal-targets.md) | Accepted; implemented; superseded in part by ADR-0125 |
 | 0121 | [Stick: Naked Drums and a production chain per mic group](0121-stick-naked-drums.md) | Accepted; implemented |
 | 0122 | [Gild: a multiband exciter on Forge's curves, oversampled and level-matched](0122-gild-multiband-exciter.md) | Accepted; implemented |
 | 0123 | [Master rebalance by role from the project's tracks](0123-master-rebalance.md) | Accepted; implemented |
 | 0124 | [The master assistant: a proposed master chain from a reference and a loudness target](0124-master-assistant.md) | Accepted; implemented |
-| 0125 | [The master chain's serial cost: analysis off the callback, block oversampling, and a gate](0125-master-chain-cost.md) | Accepted; implemented |
+| 0125 | [The master chain's serial cost: analysis off the callback, block oversampling, and a gate](0125-master-chain-cost.md) | Accepted; implemented; superseded in part by ADR-0126 |
+| 0126 | [One realtime FFT for the audio thread](0126-realtime-fft.md) | Accepted; implemented |

@@ -1,8 +1,8 @@
 #include "oscillate/native_dsp/effects/tune.hpp"
 
-#include "dsp/fft.hpp"
 #include "oscillate/native_dsp/dsp/math.hpp"
 #include "oscillate/native_dsp/synth/filter.hpp"
+#include "oscillate/warp_dsp/real_fft.hpp"
 #include "tune_presets.hpp"
 #include "tune_table.hpp"
 
@@ -69,7 +69,7 @@ public:
         hop_(static_cast<std::size_t>(std::lround(hop_48k * sample_rate / 48'000.0))) {
     for (const std::size_t w :
          {scaled(instrument_window_48k, sample_rate), scaled(bass_window_48k, sample_rate)}) {
-      ffts_.push_back(std::make_unique<native_dsp::dsp::Fft>(2 * w));
+      ffts_.emplace_back(2 * w);
       windows_.push_back(w);
     }
     ring_size_ = 1;
@@ -77,7 +77,7 @@ public:
       ring_size_ *= 2;
     }
     ring_.assign(ring_size_, 0.0);
-    work_.resize(2 * windows_[1]);
+    work_ = warp_dsp::AlignedBuffer(2 * windows_[1]);
     frame_.resize(windows_[1]);
     hann_.resize(windows_[1]);
     nsdf_.assign(windows_[1] + 2, 0.0);
@@ -193,20 +193,27 @@ private:
       clarity_ = 0.0;
       return;
     }
-    std::span<std::complex<double>> data(work_.data(), n);
+    float* const data = work_.data();
     for (std::size_t i = 0; i < n; ++i) {
-      data[i] = i < w ? frame_[i] : 0.0;
+      data[i] = i < w ? static_cast<float>(frame_[i]) : 0.0F;
     }
-    ffts_[which]->forward(data);
+    auto& fft = ffts_[which];
+    fft.forward(data, data);
     // Keep the spectrum's magnitudes: they choose the harmonic to refine.
     spectrum_bins_ = n;
     for (std::size_t k = 0; k <= n / 2; ++k) {
-      magnitudes_[k] = std::abs(data[k]);
+      magnitudes_[k] = std::sqrt(static_cast<double>(warp_dsp::bin_power(data, n, k)));
     }
-    for (auto& value : data) {
-      value = std::norm(value);
+    // The power spectrum (real and even) back to time: the autocorrelation,
+    // n times over.
+    const float nyquist = data[1] * data[1];
+    data[0] *= data[0];
+    data[1] = nyquist;
+    for (std::size_t k = 1; k < n / 2; ++k) {
+      data[2 * k] = warp_dsp::bin_power(data, n, k);
+      data[2 * k + 1] = 0.0F;
     }
-    ffts_[which]->forward(data); // Real and even: forward equals inverse up to scale.
+    fft.inverse(data, data);
     const double scale = 1.0 / static_cast<double>(n);
     const auto [low_hz, high_hz] = ranges[which];
     const auto min_lag = static_cast<std::size_t>(std::floor(rate_ / high_hz));
@@ -217,7 +224,7 @@ private:
       if (tau > 0) {
         m -= frame_[tau - 1] * frame_[tau - 1] + frame_[w - tau] * frame_[w - tau];
       }
-      nsdf_[tau] = m > 0.0 ? 2.0 * data[tau].real() * scale / m : 0.0;
+      nsdf_[tau] = m > 0.0 ? 2.0 * static_cast<double>(data[tau]) * scale / m : 0.0;
     }
     // Key maxima between positive-going and negative-going zero crossings.
     double highest = 0.0;
@@ -400,11 +407,11 @@ private:
 
   double rate_;
   std::size_t hop_;
-  std::vector<std::unique_ptr<native_dsp::dsp::Fft>> ffts_;
+  std::vector<warp_dsp::RealFft> ffts_;
   std::vector<std::size_t> windows_;
   std::vector<double> ring_;
   std::size_t ring_size_ = 0;
-  std::vector<std::complex<double>> work_;
+  warp_dsp::AlignedBuffer work_;
   std::vector<double> frame_;
   std::vector<double> hann_;
   std::size_t hann_size_ = 0;

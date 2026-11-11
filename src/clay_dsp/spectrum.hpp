@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../warp_dsp/core/real_fft.hpp"
+#include "oscillate/warp_dsp/real_fft.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -46,10 +46,10 @@ private:
   [[nodiscard]] double lobe(double bins) const noexcept;
 
   std::size_t size_;
-  warp_dsp::detail::RealFft fft_;
-  warp_dsp::detail::AlignedBuffer buffer_;
-  warp_dsp::detail::AlignedBuffer spectrum_;
-  warp_dsp::detail::AlignedBuffer derivative_;
+  warp_dsp::RealFft fft_;
+  warp_dsp::AlignedBuffer buffer_;
+  warp_dsp::AlignedBuffer spectrum_;
+  warp_dsp::AlignedBuffer derivative_;
   std::vector<float> window_;     // zero-phase order
   std::vector<float> d_window_;   // derivative, zero-phase order
   std::vector<float> magnitude_;  // sinusoid amplitude per bin
@@ -70,9 +70,9 @@ private:
   void smooth(std::size_t order) noexcept;
 
   std::size_t size_;
-  warp_dsp::detail::RealFft fft_;
-  warp_dsp::detail::AlignedBuffer even_;
-  warp_dsp::detail::AlignedBuffer cepstrum_;
+  warp_dsp::RealFft fft_;
+  warp_dsp::AlignedBuffer even_;
+  warp_dsp::AlignedBuffer cepstrum_;
   std::vector<double> target_;
   std::vector<double> smoothed_;
 };

@@ -1,14 +1,13 @@
 #include "oscillate/native_dsp/effects/scope.hpp"
 
-#include "dsp/fft.hpp"
 #include "oscillate/native_dsp/synth/filter.hpp"
+#include "oscillate/warp_dsp/real_fft.hpp"
 #include "scope_presets.hpp"
 #include "scope_table.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -51,8 +50,10 @@ public:
     while (static_cast<double>(window_) < align_seconds * sample_rate) {
       window_ *= 2;
     }
-    fft_ = std::make_unique<native_dsp::dsp::Fft>(2 * window_);
-    work_.resize(2 * window_);
+    fft_ = std::make_unique<warp_dsp::RealFft>(2 * window_);
+    for (auto& buffer : work_) {
+      buffer = warp_dsp::AlignedBuffer(2 * window_);
+    }
     for (auto& ring : rings_) {
       ring.assign(window_, 0.0);
     }
@@ -199,55 +200,41 @@ private:
     high_ = {-1e9, -1e9};
   }
 
-  // Cross-correlation by FFT: the two windows packed as a + jb, split,
-  // multiplied (a times conj b) and transformed back; the peak within
-  // +-max_lag gives the delay (refined by a parabola), its sign the
-  // polarity, its size over the energies the correlation.
+  // Cross-correlation by FFT: a's spectrum times b's conjugate (the
+  // spectrum of b reversed in time) and back; the peak within +-max_lag
+  // gives the delay (refined by a parabola), its sign the polarity, its
+  // size over the energies the correlation.
   void estimate() noexcept {
     const std::size_t n = 2 * window_;
-    std::span<std::complex<double>> data(work_.data(), n);
+    float* const a = work_[0].data();
+    float* const b = work_[1].data();
+    work_[0].zero();
+    work_[1].zero();
     double energy_a = 0.0;
     double energy_b = 0.0;
-    for (std::size_t i = 0; i < n; ++i) {
-      if (i < window_) {
-        const std::size_t at = (write_ + i) % window_; // Oldest first.
-        const double a = rings_[0][at];
-        const double b = rings_[1][at];
-        data[i] = {a, b};
-        energy_a += a * a;
-        energy_b += b * b;
-      } else {
-        data[i] = 0.0;
-      }
+    for (std::size_t i = 0; i < window_; ++i) {
+      const std::size_t at = (write_ + i) % window_; // Oldest first.
+      const double x = rings_[0][at];
+      const double y = rings_[1][at];
+      a[i] = static_cast<float>(x);
+      // b[-i], circularly.
+      b[(n - i) % n] = static_cast<float>(y);
+      energy_a += x * x;
+      energy_b += y * y;
     }
     if (energy_a < 1e-12 || energy_b < 1e-12) {
       return;
     }
-    fft_->forward(data);
-    // a's and b's spectra from the packed transform, then a conj(b).
-    for (std::size_t k = 0; k <= n / 2; ++k) {
-      // NOLINTNEXTLINE(clang-analyzer-core.DivideZero): the transform size is never zero.
-      const std::size_t m = (n - k) % n;
-      const auto x = data[k];
-      const auto y = std::conj(data[m]);
-      const auto spectrum_a = 0.5 * (x + y);
-      const auto spectrum_b = std::complex<double>(0.0, -0.5) * (x - y);
-      const auto cross = spectrum_a * std::conj(spectrum_b);
-      data[k] = cross;
-      if (m != k) {
-        data[m] = std::conj(cross);
-      }
-    }
-    // Inverse by conjugation; r[k] = sum a[i + k] b[i].
-    for (auto& value : data) {
-      value = std::conj(value);
-    }
-    fft_->forward(data);
+    fft_->forward_unordered(a, a);
+    fft_->forward_unordered(b, b);
+    // r[k] = sum a[i + k] b[i], with the inverse's 1 / n.
+    fft_->multiply(a, b, a, 1.0F / static_cast<float>(n));
+    fft_->inverse_unordered(a, a);
     const auto r = [&](std::ptrdiff_t lag) {
       const auto index = static_cast<std::size_t>(
           (lag % static_cast<std::ptrdiff_t>(n) + static_cast<std::ptrdiff_t>(n)) %
           static_cast<std::ptrdiff_t>(n));
-      return data[index].real() / static_cast<double>(n);
+      return static_cast<double>(a[index]);
     };
     const auto reach = static_cast<std::ptrdiff_t>(max_lag_);
     const double k = averaged_ ? correlation_smoothing : 1.0;
@@ -281,8 +268,9 @@ private:
 
   double rate_;
   std::size_t window_ = 0;
-  std::unique_ptr<native_dsp::dsp::Fft> fft_;
-  std::vector<std::complex<double>> work_;
+  std::unique_ptr<warp_dsp::RealFft> fft_;
+  // Each window, padded to twice its length, then its spectrum.
+  std::array<warp_dsp::AlignedBuffer, 2> work_;
   std::array<std::vector<double>, 2> rings_;
   std::size_t write_ = 0;
   std::size_t max_lag_ = 0;

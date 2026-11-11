@@ -1,6 +1,6 @@
 #include "oscillate/native_dsp/tonal_analysis.hpp"
 
-#include "dsp/fft.hpp"
+#include "dsp/offline_fft.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -145,7 +145,7 @@ double fine_loudness_db(const FineCurve& levels) noexcept {
 
 struct BandMeter::Plan {
   explicit Plan(std::size_t size) : fft(size) {}
-  dsp::Fft fft;
+  dsp::OfflineFft fft;
 };
 
 BandMeter::BandMeter(double sample_rate)

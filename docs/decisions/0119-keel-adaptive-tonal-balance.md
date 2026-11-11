@@ -1,6 +1,6 @@
 # ADR-0119 — Keel: adaptive tonal balance toward a target curve
 
-**Status:** Accepted and implemented. **Date:** 10 November 2026.
+**Status:** Accepted and implemented; superseded in part by [ADR-0126](0126-realtime-fft.md): the analysis runs each channel through the staged realtime float transform. **Date:** 10 November 2026.
 **Builds on:** ADR-0040 (native effect platform), ADR-0042 (Lens's band powers, where pink noise reads flat), ADR-0064 (Temper's dynamic EQ), ADR-0120 (tonal balance targets), ADR-0103 (shared device panel parts), ADR-0117 (the limiter audit).
 **Contract:** `include/oscillate/native_dsp/effects/keel.hpp`, the table `src/native_dsp/effects/keel_table.hpp`. No schema change.
 
