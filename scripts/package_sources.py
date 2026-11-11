@@ -18,6 +18,7 @@ third-party/sources.json:
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import re
 import sys
@@ -243,7 +244,7 @@ def reachable(url: str) -> bool:
         except urllib.error.HTTPError as error:
             if error.code < HTTP_SERVER_ERROR:
                 return False
-        except (urllib.error.URLError, TimeoutError):
+        except (OSError, http.client.HTTPException):
             pass
         if attempt + 1 < URL_ATTEMPTS:
             time.sleep(URL_RETRY_SECONDS * (attempt + 1))
