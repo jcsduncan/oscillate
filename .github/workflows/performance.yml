@@ -115,6 +115,9 @@ jobs:
       # what the 0.5.0 master cost there (ADR-0125).
       MASTER_LIMIT_PERCENT: 20
       P99_LIMIT_PERCENT: 35
+      # The master's time alone after the other nodes (ADR-0127): split into
+      # parts it runs 5.6-6.7% of the period here, whole about 13%.
+      EXPOSED_LIMIT_PERCENT: 8
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -151,6 +154,7 @@ jobs:
             --output master-gate --references light --master heavy --frames 1024 \
             --seconds "$SECONDS_PER_RUN" --trace \
             --gate-master-percent "$MASTER_LIMIT_PERCENT" --gate-p99-percent "$P99_LIMIT_PERCENT" \
+            --gate-exposed-percent "$EXPOSED_LIMIT_PERCENT" \
             || status=$?
           if [ -f master-gate/results.md ]; then
             cat master-gate/results.md >> "$GITHUB_STEP_SUMMARY"

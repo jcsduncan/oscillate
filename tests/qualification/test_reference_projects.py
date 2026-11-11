@@ -168,6 +168,8 @@ PARTS_TRACE = {
 PARTS_MASTER_MEAN_US = 325
 # Block one: the master ends at 950, the track at 700; block two: 2300 and 2100.
 PARTS_EXPOSED_MEAN_US = 225
+# 225 µs of the fake run's 1333.333 µs period.
+PARTS_EXPOSED_PERCENT = 16.88
 # One block in four parts, one whole.
 PARTS_MEAN = 2.5
 # The master after the warm-up mark.
@@ -224,6 +226,7 @@ class Master(unittest.TestCase):
     def test_the_exposed_and_late_limits(self):
         run = run_with(PARTS_TRACE)
         exposed = run["result"]["master_exposed_percent"]
+        self.assertEqual(exposed, PARTS_EXPOSED_PERCENT)
         self.assertEqual(gate(limits(exposed=exposed, late=0), [run]), [])
         failures = gate(limits(exposed=exposed / 2), [run])
         self.assertIn("runs alone", failures[0])
