@@ -398,8 +398,9 @@ void the_worker_keeps_unread_analyses_whole() {
   }
   std::vector<float> t;
   REQUIRE_TRUE(runtime->read_telemetry(t), "telemetry");
+  const std::size_t whole_blocks = frames / block;
   const double rendered =
-      static_cast<double>(frames / block * block) / oscillate::test::sample_rate_48k_hz;
+      static_cast<double>(whole_blocks * block) / oscillate::test::sample_rate_48k_hz;
   REQUIRE_NEAR(t[effects::loudness::telemetry::duration], measured_seconds(rendered), half_a_step,
                "the worker analysed every frame");
 }

@@ -637,8 +637,7 @@ public:
   }
 
   void analyse() noexcept override {
-    queue_.read([this] { restart_spectrum(); },
-                [this](const Listened& frame) { listen(frame.dry, frame.added); });
+    queue_.read([this] { restart_spectrum(); }, [this](const Listened& frame) { listen(frame); });
   }
 
   [[nodiscard]] std::size_t analysed_telemetry(std::span<float> out,
@@ -869,9 +868,9 @@ private:
   }
 
   // The analysis: the dry and added mono sums, a spectrum every hop.
-  void listen(float dry, float added) noexcept {
-    history_[0][history_position_] = dry;
-    history_[1][history_position_] = added;
+  void listen(const Listened& frame) noexcept {
+    history_[0][history_position_] = frame.dry;
+    history_[1][history_position_] = frame.added;
     history_position_ = (history_position_ + 1) % spectrum_window;
     if (++hop_count_ < spectrum_hop) {
       return;
