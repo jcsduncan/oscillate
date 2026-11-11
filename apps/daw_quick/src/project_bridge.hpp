@@ -847,6 +847,16 @@ private:
   enum class RoutedTransportOperation : std::uint8_t { pause, resume, seek };
   void begin_async_routed_transport(RoutedTransportOperation operation, std::uint64_t sample = 0);
   void poll_routed_playback();
+  // The audio settings' render-ahead window for the running playback, just in
+  // time while live input plays: the computer keyboard on or recording armed
+  // (ADR-0128).
+  void apply_render_ahead();
+  // A note played live from the piano roll keeps playback just in time
+  // while any key is down and for live_note_hold_ms after the last one is
+  // let go (ADR-0128).
+  static constexpr int live_note_hold_ms = 10'000;
+  bool live_notes_held_ = false;
+  QTimer live_note_hold_;
   void poll_live_audio_edit();
   void submit_playback_edit();
   void audition_edited_note(const QString& clip_id, const QString& note_id, std::uint8_t velocity);

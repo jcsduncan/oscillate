@@ -1,6 +1,7 @@
 #include "../../../apps/daw_quick/src/routed_playback.hpp"
 
 #include "oscillate/application/project_session.hpp"
+#include "oscillate/audio_io/render_ahead.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/native_dsp/compressor.hpp"
 #include "oscillate/native_dsp/effects/ceiling.hpp"
@@ -275,7 +276,7 @@ public:
     std::array<float, 256> samples{};
     counted_allocations = 0;
     counting_allocations = evidence_.count_allocations;
-    const auto rendered = audio::render_transport_block(
+    const auto rendered = audio::render_device_block(
         source_, cursor_, true, std::span(frames).first(requested_frames),
         std::span(samples).first(static_cast<std::size_t>(requested_frames) * 2));
     counting_allocations = false;
@@ -371,7 +372,7 @@ public:
         counted_allocations = 0;
         counting_allocations = evidence_->count_allocations;
         const auto before = cursor_.completed_snapshot();
-        const auto result = audio::render_transport_block(
+        const auto result = audio::render_device_block(
             source_, cursor_, true, std::span(frames).first(block_frames), block);
         const auto after = cursor_.completed_snapshot();
         counting_allocations = false;

@@ -104,6 +104,10 @@ bool TransportCursor::queue_request(RequestKind kind, std::uint64_t boundary,
   requested_boundary_.store(boundary, std::memory_order_relaxed);
   requested_sample_.store(first_sample, std::memory_order_relaxed);
   request_state_.store(state + 1, std::memory_order_release);
+  // A seek or restart moves away from what has been rendered ahead
+  // (ADR-0128); a planned loop wrap continues it.
+  if (kind != RequestKind::loop_wrap)
+    discontinuities_.fetch_add(1, std::memory_order_release);
   return true;
 }
 

@@ -2,6 +2,7 @@
 #include "../../../apps/daw_quick/src/project_bridge.hpp"
 #include "../../../apps/daw_quick/src/recording_controller.hpp"
 
+#include "oscillate/audio_io/render_ahead.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/test/check.hpp"
 
@@ -281,7 +282,7 @@ public:
           {foundation::ErrorCode::invalid_argument, "fake output needs a playback buffer size"});
     std::array<engine::StereoFrame, app::max_playback_buffer_frames> frames{};
     std::array<float, std::size_t{2} * app::max_playback_buffer_frames> samples{};
-    if (audio::render_transport_block(
+    if (audio::render_device_block(
             source_, cursor_, true, std::span(frames).first(requested_frames),
             std::span(samples).first(static_cast<std::size_t>(requested_frames) * 2)) !=
         audio::BlockResult::rendered) {
@@ -316,7 +317,7 @@ public:
   [[nodiscard]] bool pump() noexcept {
     std::array<engine::StereoFrame, app::max_playback_buffer_frames> frames{};
     std::array<float, std::size_t{2} * app::max_playback_buffer_frames> samples{};
-    const auto result = audio::render_transport_block(
+    const auto result = audio::render_device_block(
         source_, cursor_, true, std::span(frames).first(block_frames_),
         std::span(samples).first(static_cast<std::size_t>(block_frames_) * 2));
     return result == audio::BlockResult::rendered;
@@ -327,9 +328,9 @@ public:
     std::array<engine::StereoFrame, app::max_playback_buffer_frames> frames{};
     std::array<float, std::size_t{2} * app::max_playback_buffer_frames> samples{};
     const auto interleaved = static_cast<std::size_t>(block_frames_) * 2;
-    if (audio::render_transport_block(
-            source_, cursor_, true, std::span(frames).first(block_frames_),
-            std::span(samples).first(interleaved)) != audio::BlockResult::rendered)
+    if (audio::render_device_block(source_, cursor_, true, std::span(frames).first(block_frames_),
+                                   std::span(samples).first(interleaved)) !=
+        audio::BlockResult::rendered)
       return std::nullopt;
     return samples[interleaved - 2];
   }
@@ -596,10 +597,9 @@ private:
     std::array<engine::StereoFrame, app::max_playback_buffer_frames> frames{};
     std::array<float, std::size_t{2} * app::max_playback_buffer_frames> samples{};
     while (running_.load(std::memory_order_acquire)) {
-      if (audio::render_transport_block(
-              source_, cursor_, true, std::span(frames).first(frames_),
-              std::span(samples).first(static_cast<std::size_t>(frames_) * 2)) !=
-          audio::BlockResult::rendered)
+      if (audio::render_device_block(source_, cursor_, true, std::span(frames).first(frames_),
+                                     std::span(samples).first(static_cast<std::size_t>(frames_) *
+                                                              2)) != audio::BlockResult::rendered)
         failures_->fetch_add(1, std::memory_order_acq_rel);
       next += period;
       std::this_thread::sleep_until(next);

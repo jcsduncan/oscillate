@@ -149,6 +149,37 @@ RoutedMixerLimits metered_limits(bool node_meters) {
   return limits;
 }
 
+// Render-ahead (ADR-0128): the meter shows the window the ear has reached,
+// not the newest one rendered.
+void the_heard_window_trails_the_rendered_one() {
+  constexpr std::size_t windows = 6;
+  constexpr std::uint64_t generation = 1;
+  constexpr float quiet = 0.25F;
+  constexpr float loud = 0.75F;
+  RoutedNodeMeters meters(1);
+  std::array<StereoFrame, RoutedNodeMeters::window_frames> block{};
+  // Quiet windows, then loud ones: rendered ahead of the ear.
+  for (std::size_t window = 0; window < windows; ++window) {
+    block.fill(window < windows / 2 ? StereoFrame{quiet, quiet} : StereoFrame{loud, loud});
+    feed(meters, 0, block, window * RoutedNodeMeters::window_frames, generation, 1);
+  }
+  const auto heard_quiet =
+      meters.heard(0, {(windows / 2) * RoutedNodeMeters::window_frames, generation});
+  REQUIRE_TRUE(heard_quiet && near(heard_quiet->left_peak, quiet),
+               "the meter showed a window rendered ahead of the ear");
+  const auto heard_loud = meters.heard(0, {windows * RoutedNodeMeters::window_frames, generation});
+  REQUIRE_TRUE(heard_loud && near(heard_loud->left_peak, loud),
+               "the meter did not reach the window the ear reached");
+  const auto newest = meters.latest(0);
+  REQUIRE_TRUE(newest && near(newest->left_peak, loud), "latest is not the newest window");
+  // The ear at the start hears the start of the generation (silence);
+  // another generation shows nothing.
+  const auto early = meters.heard(0, {0, generation});
+  REQUIRE_TRUE(early && early->left_peak == 0.0F, "the start of playback was not silent");
+  REQUIRE_TRUE(!meters.heard(0, {windows * RoutedNodeMeters::window_frames, generation + 1}),
+               "a window of another generation showed");
+}
+
 void publisher_reports_post_fader_node_levels() {
   // Node 1 plays at (0.5, 0.25) gain; node 2 is muted; both reach master 3.
   std::array<RoutedNode, 3> nodes{{{{1, 0}, {}, std::nullopt, false, {0.5F, 0.25F}},
@@ -202,6 +233,7 @@ int main() {
     blocks_larger_than_a_window_publish_each_block();
     seek_discards_the_window_and_loop_wrap_continues_it();
     publisher_reports_post_fader_node_levels();
+    the_heard_window_trails_the_rendered_one();
   } catch (const std::exception& error) {
     std::fprintf(stderr, "routed node meters test: %s\n", error.what());
     return 1;

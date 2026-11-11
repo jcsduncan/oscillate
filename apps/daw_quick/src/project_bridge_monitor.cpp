@@ -152,6 +152,12 @@ void ProjectBridge::send_live_note(const QString& track_id, int key, int velocit
   if (!track || key < 0 || key > 127)
     return;
   monitor_idle_.start();
+  // Live notes play just in time from now on (ADR-0128).
+  live_note_hold_.start(live_note_hold_ms);
+  if (!live_notes_held_) {
+    live_notes_held_ = true;
+    apply_render_ahead();
+  }
   const auto k = static_cast<std::uint8_t>(key);
   const auto v = static_cast<std::uint8_t>(std::clamp(velocity, 1, 127));
   if (auto* run = live_run(); run && run->live_note(track.value(), k, v, on))

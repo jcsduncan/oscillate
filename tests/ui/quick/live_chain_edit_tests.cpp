@@ -1,6 +1,7 @@
 #include "project_bridge.hpp"
 
 #include "oscillate/application/project_session.hpp"
+#include "oscillate/audio_io/render_ahead.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/test/check.hpp"
 
@@ -50,7 +51,7 @@ public:
       std::array<engine::StereoFrame, 128> frames{};
       std::array<float, 256> samples{};
       while (running_.load(std::memory_order_acquire)) {
-        if (audio::render_transport_block(source_, cursor_, true, frames, samples) ==
+        if (audio::render_device_block(source_, cursor_, true, frames, samples) ==
             audio::BlockResult::rendered) {
           float peak = 0.0F;
           for (const float sample : samples)

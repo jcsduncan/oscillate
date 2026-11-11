@@ -1,4 +1,5 @@
 #include <oscillate/audio_io/pipewire_output.hpp>
+#include <oscillate/audio_io/render_ahead.hpp>
 
 #include <oscillate/foundation/log.hpp>
 #include <oscillate/foundation/trace.hpp>
@@ -247,8 +248,8 @@ struct PipeWireOutput::Impl {
       self.telemetry.state(OutputState::error);
     const auto outcome = [&] {
       OSCILLATE_TRACE_SPAN("audio.render", frames);
-      return render_transport_block(self.source, self.transport, permitted && format_ready,
-                                    self.stereo_scratch, output, timing);
+      return render_device_block(self.source, self.transport, permitted && format_ready,
+                                 self.stereo_scratch, output, timing);
     }();
     if (outcome != BlockResult::rendered && permitted && format_ready) {
       self.telemetry.render_failure(
@@ -279,7 +280,7 @@ struct PipeWireOutput::Impl {
   // on a thread the desktop can preempt (ADR-0048).
   void start_workers() noexcept {
     auto* pool = source.workers;
-    if (pool == nullptr || pool->wanted_workers() == 0)
+    if ((pool == nullptr || pool->wanted_workers() == 0) && source.ahead == nullptr)
       return;
     auto* core = pw_stream_get_core(stream);
     auto* context = core == nullptr ? nullptr : pw_core_get_context(core);
@@ -289,6 +290,9 @@ struct PipeWireOutput::Impl {
     if (thread_utils == nullptr)
       thread_utils = pw_thread_utils_get();
     if (thread_utils == nullptr)
+      return;
+    start_render_ahead();
+    if (pool == nullptr || pool->wanted_workers() == 0)
       return;
     try {
       worker_threads.reserve(pool->wanted_workers());
@@ -309,9 +313,32 @@ struct PipeWireOutput::Impl {
     realtime_workers.store(worker_threads.size(), std::memory_order_release);
   }
 
+  // Control side: render-ahead's producer at the callback's priority
+  // (ADR-0128). Without it the callback renders every block itself.
+  void start_render_ahead() noexcept {
+    if (source.ahead == nullptr || thread_utils == nullptr)
+      return;
+    auto* thread =
+        spa_thread_utils_create(thread_utils, nullptr, &render_ahead_entry, source.ahead);
+    if (thread == nullptr)
+      return;
+    render_ahead_thread = thread;
+    if (spa_thread_utils_acquire_rt(thread_utils, thread, -1) < 0)
+      stop_render_ahead();
+  }
+  void stop_render_ahead() noexcept {
+    if (render_ahead_thread == nullptr)
+      return;
+    source.ahead->request_stop();
+    (void)spa_thread_utils_join(thread_utils, render_ahead_thread, nullptr);
+    render_ahead_thread = nullptr;
+    source.ahead->reset_after_join();
+  }
+
   // Control side. Callbacks may still run: the pool finishes any batch
   // inline once its workers have left.
   void stop_workers() noexcept {
+    stop_render_ahead();
     if (worker_threads.empty())
       return;
     source.workers->request_stop();
@@ -348,8 +375,9 @@ struct PipeWireOutput::Impl {
   std::atomic<bool> was_connected{false};
   std::atomic<bool> target_present{true};
   std::atomic<bool> target_lost{false};
-  spa_thread_utils* thread_utils = nullptr; // control-owned
-  std::vector<spa_thread*> worker_threads;  // control-owned
+  spa_thread_utils* thread_utils = nullptr;  // control-owned
+  spa_thread* render_ahead_thread = nullptr; // control-owned
+  std::vector<spa_thread*> worker_threads;   // control-owned
   std::atomic<std::size_t> realtime_workers{0};
 };
 

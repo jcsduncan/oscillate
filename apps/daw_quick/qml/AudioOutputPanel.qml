@@ -29,11 +29,13 @@ Rectangle {
     readonly property int bufferSpacing: 5
     readonly property int bufferChoiceHeight: 28
     readonly property int refreshHeight: 32
+    // The render-ahead setting below the buffer (ADR-0128).
+    readonly property int renderAheadHeight: 124
     z: 5
     anchors.right: parent.right
     anchors.rightMargin: panelRightMargin
     width: panelWidth
-    height: bridge.audioOutput.audioBackend === "jack" ? jackPanelHeight : Math.min(panelMaxHeight, panelBaseHeight + bridge.audioOutput.audioDevices.length * deviceRowHeight)
+    height: renderAheadHeight + (bridge.audioOutput.audioBackend === "jack" ? jackPanelHeight : Math.min(panelMaxHeight, panelBaseHeight + bridge.audioOutput.audioDevices.length * deviceRowHeight))
     radius: Theme.panelRadius
     color: host.panelRaised
     border.color: host.line
@@ -233,6 +235,57 @@ Rectangle {
         Text {
             width: audioOutputPanel.contentWidth
             text: bridge.audioOutput.bufferSizeStatus
+            wrapMode: Text.WordWrap
+            color: host.textDim
+            font.pixelSize: Theme.typeCaption
+        }
+        Text {
+            topPadding: Theme.spaceMd
+            text: "RENDER AHEAD"
+            color: host.textMain
+            font.pixelSize: Theme.typeSmall
+            font.bold: true
+        }
+        Row {
+            id: renderAheadChoices
+            width: parent.width
+            spacing: Theme.spaceSm
+            Repeater {
+                model: bridge.audioOutput.renderAheadChoices
+                delegate: Rectangle {
+                    required property int modelData
+                    readonly property bool selected: modelData === bridge.audioOutput.renderAheadMs
+                    readonly property string label: modelData === 0 ? "Off" : modelData + " ms"
+                    objectName: "renderAheadChoice"
+                    width: (renderAheadChoices.width - renderAheadChoices.spacing * (bridge.audioOutput.renderAheadChoices.length - 1))
+                           / bridge.audioOutput.renderAheadChoices.length
+                    height: audioOutputPanel.bufferChoiceHeight
+                    radius: Theme.controlRadius
+                    color: selected ? Theme.choiceSelectedFill : host.panel
+                    border.color: activeFocus ? host.accent : host.line
+                    activeFocusOnTab: true
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Render ahead " + label + (selected ? ", selected" : "")
+                    Keys.onReturnPressed: bridge.audioOutput.select_render_ahead(modelData)
+                    Keys.onSpacePressed: bridge.audioOutput.select_render_ahead(modelData)
+                    Text {
+                        anchors.centerIn: parent
+                        text: parent.label
+                        color: parent.selected ? host.accent : host.textMain
+                        font.pixelSize: Theme.typeSmall
+                    }
+                    MouseArea {
+                        Tip {}
+                        anchors.fill: parent
+                        onClicked: bridge.audioOutput.select_render_ahead(modelData)
+                    }
+                }
+            }
+        }
+        Text {
+            objectName: "renderAheadStatus"
+            width: audioOutputPanel.contentWidth
+            text: bridge.audioOutput.renderAheadStatus
             wrapMode: Text.WordWrap
             color: host.textDim
             font.pixelSize: Theme.typeCaption

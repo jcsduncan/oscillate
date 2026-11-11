@@ -27,6 +27,8 @@ on:
       - src/native_dsp/effects/**
       - src/native_dsp/dsp/**
       - src/engine/**
+      - src/audio_io/**
+      - include/oscillate/audio_io/**
       - src/track_chain/**
       - src/application/routed_audio_source.cpp
 
@@ -122,6 +124,12 @@ jobs:
       # to 3.8% here at 512 and 1024 frames against 6.9-7.7% whole, is gated
       # with the callback's p99 as playback runs.
       EXPOSED_LIMIT_PERCENT: 5
+      # Render-ahead's spike gate: the window, the spike and how often it
+      # comes, and the late blocks allowed for a shared runner's preemption.
+      AHEAD_MS: 50
+      SPIKE_US: 25000
+      SPIKE_EVERY_BLOCKS: 100
+      LATE_BLOCK_LIMIT: 2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -192,6 +200,22 @@ jobs:
             cat master-heavy/results.md >> "$GITHUB_STEP_SUMMARY"
           fi
           exit "$status"
+      # Render-ahead (ADR-0128): with a 50 ms window, a render 25 ms slow
+      # every 100 blocks reaches the callback only if the window fails.
+      - name: Gate render-ahead under load spikes
+        if: always()
+        run: |
+          status=0
+          python3 -I tests/qualification/qualify_reference_projects.py \
+            --executable "$BUILD_DIR/tests/qualification/oscillate_reference_project" \
+            --output render-ahead --references light --master heavy --frames 256 1024 \
+            --seconds "$SECONDS_PER_RUN" --ahead-ms "$AHEAD_MS" \
+            --spike-every "$SPIKE_EVERY_BLOCKS" --spike-us "$SPIKE_US" \
+            --gate-late-blocks "$LATE_BLOCK_LIMIT" || status=$?
+          if [ -f render-ahead/results.md ]; then
+            cat render-ahead/results.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$status"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -203,5 +227,7 @@ jobs:
             master-overlap/log-*.txt
             master-heavy/results.*
             master-heavy/log-*.txt
+            render-ahead/results.*
+            render-ahead/log-*.txt
           if-no-files-found: ignore
           retention-days: 90

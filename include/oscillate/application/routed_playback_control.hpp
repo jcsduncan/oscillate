@@ -327,6 +327,10 @@ public:
   // window, has no reading. Node IDs are stable per track for this control.
   [[nodiscard]] std::optional<engine::RoutedNodeMeterReading>
   active_track_meter(project::TrackId track) const noexcept;
+  // The window the ear has reached, while playback renders ahead
+  // (ADR-0128).
+  [[nodiscard]] std::optional<engine::RoutedNodeMeterReading>
+  heard_track_meter(project::TrackId track, engine::HeardPosition heard) const noexcept;
   // A channel's level and pan (the master's when `track` is empty), or a
   // send's gain, mid-gesture: heard from the next block, without a saved
   // revision. The gesture's release saves the value as an ordinary edit,

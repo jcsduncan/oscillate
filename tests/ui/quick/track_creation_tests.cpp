@@ -1,4 +1,5 @@
 #include "arrangement_automation_controller.hpp"
+#include "oscillate/audio_io/render_ahead.hpp"
 #include "oscillate/audio_io/stereo_block.hpp"
 #include "oscillate/plugins/vst3_scan.hpp"
 #include "oscillate/test/check.hpp"
@@ -86,7 +87,7 @@ public:
             break;
           --permits_->count;
         }
-        (void)oscillate::audio_io::render_transport_block(
+        (void)oscillate::audio_io::render_device_block(
             source_, cursor_, true, std::span(rendered).first(frames),
             std::span(interleaved).first(static_cast<std::size_t>(frames) * 2));
       }
