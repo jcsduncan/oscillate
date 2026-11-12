@@ -34,7 +34,7 @@ Rectangle {
     // ALSA direct (ADR-0130): the period count and the measured latency.
     readonly property int alsaPeriodsHeight: 92
     // The gap kept between the panel and the window's bottom edge.
-    readonly property int windowBottomMargin: 8
+    readonly property int windowBottomMargin: Theme.spaceMd
     readonly property string backend: bridge.audioOutput.audioBackend
     readonly property bool alsa: backend === "alsa"
     readonly property bool listsDevices: backend === "pipewire" || alsa
@@ -62,6 +62,30 @@ Rectangle {
     color: host.panelRaised
     border.color: host.line
     function close() { host.audioMenuOpen = false }
+    // Scrolls a Flickable so a focused control inside it is in view.
+    function reveal(flickable, item) {
+        let inside = false
+        for (let ancestor = item; ancestor; ancestor = ancestor.parent)
+            inside = inside || ancestor === flickable.contentItem
+        if (!inside)
+            return
+        const top = item.mapToItem(flickable.contentItem, 0, 0).y
+        const bottom = top + item.height
+        if (top < flickable.contentY)
+            flickable.contentY = top
+        else if (bottom > flickable.contentY + flickable.height)
+            flickable.contentY = bottom - flickable.height
+    }
+    Connections {
+        target: audioOutputPanel.Window.window
+        function onActiveFocusItemChanged() {
+            const item = audioOutputPanel.Window.activeFocusItem
+            if (!audioOutputPanel.visible || !item)
+                return
+            audioOutputPanel.reveal(deviceList, item)
+            audioOutputPanel.reveal(panelBody, item)
+        }
+    }
     // Escape, a click anywhere else, or × closes it.
     onVisibleChanged: if (visible) forceActiveFocus()
     Keys.onEscapePressed: close()
@@ -105,6 +129,8 @@ Rectangle {
         interactive: contentHeight > height
         boundsBehavior: Flickable.StopAtBounds
         clip: true
+        // A taller window shows more; keep the content within bounds.
+        onHeightChanged: contentY = Math.max(0, Math.min(contentY, contentHeight - height))
         Text {
             x: audioOutputPanel.titleX
             y: audioOutputPanel.titleY
@@ -241,7 +267,8 @@ Rectangle {
                         border.color: activeFocus ? host.accent : host.line
                         activeFocusOnTab: bridge.audioOutput.audioDeviceSelectionEnabled
                         Accessible.role: Accessible.Button
-                        Accessible.name: modelData + " frame buffer request" + (selected ? ", selected" : "")
+                        Accessible.name: modelData + (audioOutputPanel.alsa ? " frame period" : " frame buffer request")
+                                         + (selected ? ", selected" : "")
                         Keys.onReturnPressed: bridge.audioOutput.select_buffer_frames(modelData)
                         Keys.onSpacePressed: bridge.audioOutput.select_buffer_frames(modelData)
                         Text {
