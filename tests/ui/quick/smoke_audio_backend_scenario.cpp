@@ -19,6 +19,30 @@ namespace quick_smoke {
 
 namespace app = oscillate::application;
 
+namespace {
+
+// A window shorter than the audio output panel's natural height.
+constexpr int short_window_height = 360;
+
+// Whether the audio output panel ends inside a window this short, so its
+// refresh control, anchored to the panel's bottom, stays reachable.
+bool panel_fits_short_window(QQuickWindow& window) {
+  const int minimum = window.minimumHeight();
+  const int height = window.height();
+  window.setMinimumHeight(short_window_height);
+  window.setHeight(short_window_height);
+  QCoreApplication::processEvents();
+  const auto* panel = window.findChild<QQuickItem*>(QStringLiteral("audioOutputPanel"));
+  const bool fits = panel != nullptr && window.contentItem()->height() == short_window_height &&
+                    panel->y() + panel->height() <= short_window_height;
+  window.setMinimumHeight(minimum);
+  window.setHeight(height);
+  QCoreApplication::processEvents();
+  return fits;
+}
+
+} // namespace
+
 void run_audio_backend(QApplication& app, QQmlApplicationEngine& engine,
                        oscillate::quick::ProjectBridge& bridge,
                        const std::shared_ptr<SmokeDeviceState>& device_state,
@@ -66,6 +90,12 @@ void run_audio_backend(QApplication& app, QQmlApplicationEngine& engine,
               visible_count(window->contentItem(), QStringLiteral("audioOutputChoice")) != 3 ||
               visible_count(window->contentItem(), QStringLiteral("audioBackendChoice")) != 3) {
             std::cerr << "Audio output smoke: discovery or output panel failed\n";
+            probe->stop();
+            app.exit(1);
+            return;
+          }
+          if (!panel_fits_short_window(*window)) {
+            std::cerr << "Audio output smoke: output panel overflows a short window\n";
             probe->stop();
             app.exit(1);
             return;

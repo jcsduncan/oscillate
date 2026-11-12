@@ -95,17 +95,19 @@ DEB_DEPENDS = (
     "qml6-module-qtquick",
 )
 
-# glibc's base ABI, libproxy (on every Ubuntu desktop through
-# glib-networking) and libasound (whose configuration and plug-ins are the
-# host's) stay on the host; stage-appdir.py copies everything else the app
-# and its Qt plugins load.
-APPIMAGE_HOST = ("libasound2t64", "libc6", "libproxy1v5")
-# The .deb gets these through its PipeWire library's own Depends.
+# glibc's base ABI and libproxy (on every Ubuntu desktop through
+# glib-networking) stay on the host; stage-appdir.py copies everything else
+# the app and its Qt plugins load.
+APPIMAGE_HOST = ("libc6", "libproxy1v5")
+# The .deb gets these through its PipeWire and ALSA libraries' own Depends.
 APPIMAGE_CONDITIONAL = {
+    "libasound2-data": "ALSA direct output: the bundled libasound reads the host's ALSA "
+    "configuration and loads its plug-ins; without them that backend is unavailable",
     "libspa-0.2-modules": "PipeWire output: the bundled PipeWire client loads its SPA "
     "support plugins from the host's PipeWire installation",
 }
 APPIMAGE_BUNDLED = (
+    "libasound2t64",
     "libatomic1",
     "libb2-1",
     "libblkid1",

@@ -59,6 +59,10 @@ cannot be made from a build configured differently.
   the PipeWire output.
 - **PipeWire.** The AppImage bundles the PipeWire client library, which loads
   its SPA support plugins from the host's PipeWire installation.
+- **ALSA.** The `.deb` depends on Ubuntu's `libasound2t64`. The AppImage
+  bundles that library, with its notice and source offer; it reads the host's
+  ALSA configuration and plug-ins (`libasound2-data`), and without them the
+  ALSA output is unavailable while the others work.
 
 Each package's `README` lists the same features and exclusions.
 

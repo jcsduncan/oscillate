@@ -33,6 +33,8 @@ Rectangle {
     readonly property int renderAheadHeight: 124
     // ALSA direct (ADR-0130): the period count and the measured latency.
     readonly property int alsaPeriodsHeight: 92
+    // The gap kept between the panel and the window's bottom edge.
+    readonly property int windowBottomMargin: 8
     readonly property string backend: bridge.audioOutput.audioBackend
     readonly property bool alsa: backend === "alsa"
     readonly property bool listsDevices: backend === "pipewire" || alsa
@@ -52,7 +54,10 @@ Rectangle {
     anchors.rightMargin: panelRightMargin
     width: panelWidth
     readonly property int alsaExtraHeight: alsa ? alsaPeriodsHeight + (alsaFallbackReason.visible ? alsaFallbackReason.implicitHeight : 0) : 0
-    height: renderAheadHeight + (backend === "jack" ? jackPanelHeight : Math.min(panelMaxHeight + alsaExtraHeight, panelBaseHeight + alsaExtraHeight + devices.length * deviceRowHeight))
+    readonly property int naturalHeight: renderAheadHeight + (backend === "jack" ? jackPanelHeight : Math.min(panelMaxHeight + alsaExtraHeight, panelBaseHeight + alsaExtraHeight + devices.length * deviceRowHeight))
+    // A short window scrolls the settings; the refresh control stays at the bottom.
+    height: Math.min(naturalHeight, parent.height - y - windowBottomMargin)
+    readonly property int refreshReserve: listsDevices ? refreshHeight + 2 * contentX : 0
     radius: Theme.panelRadius
     color: host.panelRaised
     border.color: host.line
@@ -69,6 +74,8 @@ Rectangle {
     }
     MouseArea { anchors.fill: parent }
     Text {
+        // Above the scrolling body, which would otherwise take its clicks.
+        z: 1
         anchors.right: parent.right
         anchors.rightMargin: Theme.spaceLg
         y: Theme.dialogCloseY
@@ -88,281 +95,292 @@ Rectangle {
             onClicked: audioOutputPanel.close()
         }
     }
-    Text {
-        x: audioOutputPanel.titleX
-        y: audioOutputPanel.titleY
-        text: "AUDIO OUTPUT · " + bridge.audioOutput.audioBackend.toUpperCase()
-        color: host.textMain
-        font.pixelSize: Theme.typeSmall
-        font.bold: true
-        font.letterSpacing: Theme.trackingLg
-    }
-    Text {
-        x: audioOutputPanel.titleX
-        y: audioOutputPanel.statusY
-        width: parent.width - 2 * audioOutputPanel.titleX
-        height: audioOutputPanel.statusHeight
-        text: bridge.audioOutput.audioDeviceStatus
-        color: host.textDim
-        font.pixelSize: Theme.typeSmall
-        wrapMode: Text.WordWrap
-        elide: Text.ElideRight
-    }
-    Row {
-        id: backendChoices
-        x: audioOutputPanel.contentX
-        y: audioOutputPanel.backendY
-        spacing: Theme.spaceSm
-        Repeater {
-            model: audioOutputPanel.backends
-            delegate: Rectangle {
-                required property string modelData
-                readonly property bool selected: modelData === bridge.audioOutput.audioBackend
-                objectName: "audioBackendChoice"
-                width: (audioOutputPanel.contentWidth - backendChoices.spacing * (audioOutputPanel.backends.length - 1)) / audioOutputPanel.backends.length
-                height: audioOutputPanel.backendHeight
-                radius: Theme.controlRadius
-                color: selected ? Theme.choiceSelectedFill : host.panel
-                border.color: activeFocus ? host.accent : host.line
-                activeFocusOnTab: bridge.audioOutput.audioDeviceSelectionEnabled
-                Accessible.role: Accessible.Button
-                Accessible.name: modelData.toUpperCase() + " audio backend" + (selected ? ", selected" : "")
-                Keys.onReturnPressed: bridge.audioOutput.select_audio_backend(modelData)
-                Keys.onSpacePressed: bridge.audioOutput.select_audio_backend(modelData)
-                Text {
-                    anchors.centerIn: parent
-                    text: parent.modelData.toUpperCase()
-                    color: parent.selected ? host.accent : host.textMain
-                    font.pixelSize: Theme.typeSmall
-                    font.bold: true
-                }
-                MouseArea {
-                    Tip {}
-                    anchors.fill: parent
-                    enabled: bridge.audioOutput.audioDeviceSelectionEnabled
-                    onClicked: bridge.audioOutput.select_audio_backend(modelData)
-                }
-            }
-        }
-    }
     Flickable {
-        id: deviceList
-        x: audioOutputPanel.contentX
-        y: backendChoices.y + backendChoices.height + audioOutputPanel.deviceListGap
-        width: parent.width - 2 * audioOutputPanel.contentX
-        height: audioOutputPanel.listsDevices ? Math.min(audioOutputPanel.deviceListMaxHeight, audioOutputPanel.devices.length * audioOutputPanel.deviceRowHeight) : 0
-        visible: audioOutputPanel.listsDevices
+        id: panelBody
+        objectName: "audioOutputPanelBody"
+        anchors.fill: parent
+        anchors.bottomMargin: audioOutputPanel.refreshReserve
         contentWidth: width
-        contentHeight: deviceColumn.height
+        contentHeight: audioOutputPanel.naturalHeight - audioOutputPanel.refreshReserve
+        interactive: contentHeight > height
+        boundsBehavior: Flickable.StopAtBounds
         clip: true
+        Text {
+            x: audioOutputPanel.titleX
+            y: audioOutputPanel.titleY
+            text: "AUDIO OUTPUT · " + bridge.audioOutput.audioBackend.toUpperCase()
+            color: host.textMain
+            font.pixelSize: Theme.typeSmall
+            font.bold: true
+            font.letterSpacing: Theme.trackingLg
+        }
+        Text {
+            x: audioOutputPanel.titleX
+            y: audioOutputPanel.statusY
+            width: parent.width - 2 * audioOutputPanel.titleX
+            height: audioOutputPanel.statusHeight
+            text: bridge.audioOutput.audioDeviceStatus
+            color: host.textDim
+            font.pixelSize: Theme.typeSmall
+            wrapMode: Text.WordWrap
+            elide: Text.ElideRight
+        }
+        Row {
+            id: backendChoices
+            x: audioOutputPanel.contentX
+            y: audioOutputPanel.backendY
+            spacing: Theme.spaceSm
+            Repeater {
+                model: audioOutputPanel.backends
+                delegate: Rectangle {
+                    required property string modelData
+                    readonly property bool selected: modelData === bridge.audioOutput.audioBackend
+                    objectName: "audioBackendChoice"
+                    width: (audioOutputPanel.contentWidth - backendChoices.spacing * (audioOutputPanel.backends.length - 1)) / audioOutputPanel.backends.length
+                    height: audioOutputPanel.backendHeight
+                    radius: Theme.controlRadius
+                    color: selected ? Theme.choiceSelectedFill : host.panel
+                    border.color: activeFocus ? host.accent : host.line
+                    activeFocusOnTab: bridge.audioOutput.audioDeviceSelectionEnabled
+                    Accessible.role: Accessible.Button
+                    Accessible.name: modelData.toUpperCase() + " audio backend" + (selected ? ", selected" : "")
+                    Keys.onReturnPressed: bridge.audioOutput.select_audio_backend(modelData)
+                    Keys.onSpacePressed: bridge.audioOutput.select_audio_backend(modelData)
+                    Text {
+                        anchors.centerIn: parent
+                        text: parent.modelData.toUpperCase()
+                        color: parent.selected ? host.accent : host.textMain
+                        font.pixelSize: Theme.typeSmall
+                        font.bold: true
+                    }
+                    MouseArea {
+                        Tip {}
+                        anchors.fill: parent
+                        enabled: bridge.audioOutput.audioDeviceSelectionEnabled
+                        onClicked: bridge.audioOutput.select_audio_backend(modelData)
+                    }
+                }
+            }
+        }
+        Flickable {
+            id: deviceList
+            x: audioOutputPanel.contentX
+            y: backendChoices.y + backendChoices.height + audioOutputPanel.deviceListGap
+            width: parent.width - 2 * audioOutputPanel.contentX
+            height: audioOutputPanel.listsDevices ? Math.min(audioOutputPanel.deviceListMaxHeight, audioOutputPanel.devices.length * audioOutputPanel.deviceRowHeight) : 0
+            visible: audioOutputPanel.listsDevices
+            contentWidth: width
+            contentHeight: deviceColumn.height
+            clip: true
+            Column {
+                id: deviceColumn
+                width: parent.width
+                Repeater {
+                    model: audioOutputPanel.devices
+                    delegate: Rectangle {
+                        required property var modelData
+                        readonly property bool selected: audioOutputPanel.deviceKey(modelData)
+                                                         === (audioOutputPanel.alsa ? bridge.audioOutput.selectedAlsaDevice : bridge.audioOutput.selectedAudioDevice)
+                        objectName: "audioOutputChoice"
+                        width: deviceColumn.width
+                        height: audioOutputPanel.deviceRowHeight
+                        radius: Theme.controlRadius
+                        color: selected ? Theme.choiceSelectedFill : host.panelRaised
+                        border.color: activeFocus ? host.accent : "transparent"
+                        activeFocusOnTab: bridge.audioOutput.audioDeviceSelectionEnabled
+                        Accessible.role: Accessible.Button
+                        Accessible.name: modelData.name + (selected ? ", selected" : "")
+                        Keys.onReturnPressed: audioOutputPanel.selectDevice(modelData)
+                        Keys.onSpacePressed: audioOutputPanel.selectDevice(modelData)
+                        Text {
+                            x: audioOutputPanel.contentX
+                            width: parent.width - 2 * audioOutputPanel.contentX
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: (parent.selected ? "✓  " : "     ") + parent.modelData.name
+                            color: parent.selected ? host.accent : host.textMain
+                            font.pixelSize: Theme.typeBody
+                            elide: Text.ElideRight
+                        }
+                        MouseArea {
+                            Tip {}
+                            anchors.fill: parent
+                            enabled: bridge.audioOutput.audioDeviceSelectionEnabled
+                            onClicked: audioOutputPanel.selectDevice(modelData)
+                        }
+                    }
+                }
+            }
+        }
         Column {
-            id: deviceColumn
-            width: parent.width
-            Repeater {
-                model: audioOutputPanel.devices
-                delegate: Rectangle {
-                    required property var modelData
-                    readonly property bool selected: audioOutputPanel.deviceKey(modelData)
-                                                     === (audioOutputPanel.alsa ? bridge.audioOutput.selectedAlsaDevice : bridge.audioOutput.selectedAudioDevice)
-                    objectName: "audioOutputChoice"
-                    width: deviceColumn.width
-                    height: audioOutputPanel.deviceRowHeight
-                    radius: Theme.controlRadius
-                    color: selected ? Theme.choiceSelectedFill : host.panelRaised
-                    border.color: activeFocus ? host.accent : "transparent"
-                    activeFocusOnTab: bridge.audioOutput.audioDeviceSelectionEnabled
-                    Accessible.role: Accessible.Button
-                    Accessible.name: modelData.name + (selected ? ", selected" : "")
-                    Keys.onReturnPressed: audioOutputPanel.selectDevice(modelData)
-                    Keys.onSpacePressed: audioOutputPanel.selectDevice(modelData)
-                    Text {
-                        x: audioOutputPanel.contentX
-                        width: parent.width - 2 * audioOutputPanel.contentX
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: (parent.selected ? "✓  " : "     ") + parent.modelData.name
-                        color: parent.selected ? host.accent : host.textMain
-                        font.pixelSize: Theme.typeBody
-                        elide: Text.ElideRight
-                    }
-                    MouseArea {
-                        Tip {}
-                        anchors.fill: parent
-                        enabled: bridge.audioOutput.audioDeviceSelectionEnabled
-                        onClicked: audioOutputPanel.selectDevice(modelData)
+            x: audioOutputPanel.contentX
+            y: deviceList.y + deviceList.height + Theme.spaceMd
+            width: parent.width - 2 * audioOutputPanel.contentX
+            spacing: audioOutputPanel.bufferSpacing
+            Text {
+                text: audioOutputPanel.backend === "jack" ? "GRAPH PREPARATION (FRAMES)"
+                    : audioOutputPanel.alsa ? "PERIOD (FRAMES)" : "REQUESTED BUFFER (FRAMES)"
+                color: host.textMain
+                font.pixelSize: Theme.typeSmall
+                font.bold: true
+            }
+            Row {
+                id: bufferChoices
+                width: parent.width
+                spacing: Theme.spaceSm
+                Repeater {
+                    model: bridge.audioOutput.bufferFrameChoices
+                    delegate: Rectangle {
+                        required property int modelData
+                        readonly property bool selected: modelData === bridge.audioOutput.requestedBufferFrames
+                        objectName: "audioBufferChoice"
+                        width: (bufferChoices.width - bufferChoices.spacing * (bridge.audioOutput.bufferFrameChoices.length - 1))
+                               / bridge.audioOutput.bufferFrameChoices.length
+                        height: audioOutputPanel.bufferChoiceHeight
+                        radius: Theme.controlRadius
+                        color: selected ? Theme.choiceSelectedFill : host.panel
+                        border.color: activeFocus ? host.accent : host.line
+                        activeFocusOnTab: bridge.audioOutput.audioDeviceSelectionEnabled
+                        Accessible.role: Accessible.Button
+                        Accessible.name: modelData + " frame buffer request" + (selected ? ", selected" : "")
+                        Keys.onReturnPressed: bridge.audioOutput.select_buffer_frames(modelData)
+                        Keys.onSpacePressed: bridge.audioOutput.select_buffer_frames(modelData)
+                        Text {
+                            anchors.centerIn: parent
+                            text: parent.modelData
+                            color: parent.selected ? host.accent : host.textMain
+                            font.pixelSize: Theme.typeSmall
+                        }
+                        MouseArea {
+                            Tip {}
+                            anchors.fill: parent
+                            enabled: bridge.audioOutput.audioDeviceSelectionEnabled
+                            onClicked: bridge.audioOutput.select_buffer_frames(modelData)
+                        }
                     }
                 }
             }
-        }
-    }
-    Column {
-        x: audioOutputPanel.contentX
-        y: deviceList.y + deviceList.height + Theme.spaceMd
-        width: parent.width - 2 * audioOutputPanel.contentX
-        spacing: audioOutputPanel.bufferSpacing
-        Text {
-            text: audioOutputPanel.backend === "jack" ? "GRAPH PREPARATION (FRAMES)"
-                : audioOutputPanel.alsa ? "PERIOD (FRAMES)" : "REQUESTED BUFFER (FRAMES)"
-            color: host.textMain
-            font.pixelSize: Theme.typeSmall
-            font.bold: true
-        }
-        Row {
-            id: bufferChoices
-            width: parent.width
-            spacing: Theme.spaceSm
-            Repeater {
-                model: bridge.audioOutput.bufferFrameChoices
-                delegate: Rectangle {
-                    required property int modelData
-                    readonly property bool selected: modelData === bridge.audioOutput.requestedBufferFrames
-                    objectName: "audioBufferChoice"
-                    width: (bufferChoices.width - bufferChoices.spacing * (bridge.audioOutput.bufferFrameChoices.length - 1))
-                           / bridge.audioOutput.bufferFrameChoices.length
-                    height: audioOutputPanel.bufferChoiceHeight
-                    radius: Theme.controlRadius
-                    color: selected ? Theme.choiceSelectedFill : host.panel
-                    border.color: activeFocus ? host.accent : host.line
-                    activeFocusOnTab: bridge.audioOutput.audioDeviceSelectionEnabled
-                    Accessible.role: Accessible.Button
-                    Accessible.name: modelData + " frame buffer request" + (selected ? ", selected" : "")
-                    Keys.onReturnPressed: bridge.audioOutput.select_buffer_frames(modelData)
-                    Keys.onSpacePressed: bridge.audioOutput.select_buffer_frames(modelData)
-                    Text {
-                        anchors.centerIn: parent
-                        text: parent.modelData
-                        color: parent.selected ? host.accent : host.textMain
-                        font.pixelSize: Theme.typeSmall
-                    }
-                    MouseArea {
-                        Tip {}
-                        anchors.fill: parent
-                        enabled: bridge.audioOutput.audioDeviceSelectionEnabled
-                        onClicked: bridge.audioOutput.select_buffer_frames(modelData)
+            Text {
+                width: audioOutputPanel.contentWidth
+                text: bridge.audioOutput.bufferSizeStatus
+                wrapMode: Text.WordWrap
+                color: host.textDim
+                font.pixelSize: Theme.typeCaption
+            }
+            Text {
+                visible: audioOutputPanel.alsa
+                topPadding: Theme.spaceMd
+                text: "PERIODS"
+                color: host.textMain
+                font.pixelSize: Theme.typeSmall
+                font.bold: true
+            }
+            Row {
+                id: periodChoices
+                visible: audioOutputPanel.alsa
+                width: parent.width
+                spacing: Theme.spaceSm
+                Repeater {
+                    model: bridge.audioOutput.alsaPeriodChoices
+                    delegate: Rectangle {
+                        required property int modelData
+                        readonly property bool selected: modelData === bridge.audioOutput.alsaPeriods
+                        objectName: "alsaPeriodChoice"
+                        width: (periodChoices.width - periodChoices.spacing * (bridge.audioOutput.alsaPeriodChoices.length - 1))
+                               / bridge.audioOutput.alsaPeriodChoices.length
+                        height: audioOutputPanel.bufferChoiceHeight
+                        radius: Theme.controlRadius
+                        color: selected ? Theme.choiceSelectedFill : host.panel
+                        border.color: activeFocus ? host.accent : host.line
+                        activeFocusOnTab: bridge.audioOutput.audioDeviceSelectionEnabled
+                        Accessible.role: Accessible.Button
+                        Accessible.name: modelData + " periods" + (selected ? ", selected" : "")
+                        Keys.onReturnPressed: bridge.audioOutput.select_alsa_periods(modelData)
+                        Keys.onSpacePressed: bridge.audioOutput.select_alsa_periods(modelData)
+                        Text {
+                            anchors.centerIn: parent
+                            text: parent.modelData
+                            color: parent.selected ? host.accent : host.textMain
+                            font.pixelSize: Theme.typeSmall
+                        }
+                        MouseArea {
+                            Tip {}
+                            anchors.fill: parent
+                            enabled: bridge.audioOutput.audioDeviceSelectionEnabled
+                            onClicked: bridge.audioOutput.select_alsa_periods(modelData)
+                        }
                     }
                 }
             }
-        }
-        Text {
-            width: audioOutputPanel.contentWidth
-            text: bridge.audioOutput.bufferSizeStatus
-            wrapMode: Text.WordWrap
-            color: host.textDim
-            font.pixelSize: Theme.typeCaption
-        }
-        Text {
-            visible: audioOutputPanel.alsa
-            topPadding: Theme.spaceMd
-            text: "PERIODS"
-            color: host.textMain
-            font.pixelSize: Theme.typeSmall
-            font.bold: true
-        }
-        Row {
-            id: periodChoices
-            visible: audioOutputPanel.alsa
-            width: parent.width
-            spacing: Theme.spaceSm
-            Repeater {
-                model: bridge.audioOutput.alsaPeriodChoices
-                delegate: Rectangle {
-                    required property int modelData
-                    readonly property bool selected: modelData === bridge.audioOutput.alsaPeriods
-                    objectName: "alsaPeriodChoice"
-                    width: (periodChoices.width - periodChoices.spacing * (bridge.audioOutput.alsaPeriodChoices.length - 1))
-                           / bridge.audioOutput.alsaPeriodChoices.length
-                    height: audioOutputPanel.bufferChoiceHeight
-                    radius: Theme.controlRadius
-                    color: selected ? Theme.choiceSelectedFill : host.panel
-                    border.color: activeFocus ? host.accent : host.line
-                    activeFocusOnTab: bridge.audioOutput.audioDeviceSelectionEnabled
-                    Accessible.role: Accessible.Button
-                    Accessible.name: modelData + " periods" + (selected ? ", selected" : "")
-                    Keys.onReturnPressed: bridge.audioOutput.select_alsa_periods(modelData)
-                    Keys.onSpacePressed: bridge.audioOutput.select_alsa_periods(modelData)
-                    Text {
-                        anchors.centerIn: parent
-                        text: parent.modelData
-                        color: parent.selected ? host.accent : host.textMain
-                        font.pixelSize: Theme.typeSmall
-                    }
-                    MouseArea {
-                        Tip {}
-                        anchors.fill: parent
-                        enabled: bridge.audioOutput.audioDeviceSelectionEnabled
-                        onClicked: bridge.audioOutput.select_alsa_periods(modelData)
+            Text {
+                id: alsaFallbackReason
+                objectName: "alsaFallbackReason"
+                visible: audioOutputPanel.alsa && text.length > 0
+                width: audioOutputPanel.contentWidth
+                text: bridge.audioOutput.alsaFallback
+                wrapMode: Text.WordWrap
+                color: host.textMain
+                font.pixelSize: Theme.typeCaption
+            }
+            Text {
+                objectName: "alsaLatencyStatus"
+                visible: audioOutputPanel.alsa
+                width: audioOutputPanel.contentWidth
+                text: bridge.audioOutput.latencyStatus
+                wrapMode: Text.WordWrap
+                color: host.textDim
+                font.pixelSize: Theme.typeCaption
+            }
+            Text {
+                topPadding: Theme.spaceMd
+                text: "RENDER AHEAD"
+                color: host.textMain
+                font.pixelSize: Theme.typeSmall
+                font.bold: true
+            }
+            Row {
+                id: renderAheadChoices
+                width: parent.width
+                spacing: Theme.spaceSm
+                Repeater {
+                    model: bridge.audioOutput.renderAheadChoices
+                    delegate: Rectangle {
+                        required property int modelData
+                        readonly property bool selected: modelData === bridge.audioOutput.renderAheadMs
+                        readonly property string label: modelData === 0 ? "Off" : modelData + " ms"
+                        objectName: "renderAheadChoice"
+                        width: (renderAheadChoices.width - renderAheadChoices.spacing * (bridge.audioOutput.renderAheadChoices.length - 1))
+                               / bridge.audioOutput.renderAheadChoices.length
+                        height: audioOutputPanel.bufferChoiceHeight
+                        radius: Theme.controlRadius
+                        color: selected ? Theme.choiceSelectedFill : host.panel
+                        border.color: activeFocus ? host.accent : host.line
+                        activeFocusOnTab: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Render ahead " + label + (selected ? ", selected" : "")
+                        Keys.onReturnPressed: bridge.audioOutput.select_render_ahead(modelData)
+                        Keys.onSpacePressed: bridge.audioOutput.select_render_ahead(modelData)
+                        Text {
+                            anchors.centerIn: parent
+                            text: parent.label
+                            color: parent.selected ? host.accent : host.textMain
+                            font.pixelSize: Theme.typeSmall
+                        }
+                        MouseArea {
+                            Tip {}
+                            anchors.fill: parent
+                            onClicked: bridge.audioOutput.select_render_ahead(modelData)
+                        }
                     }
                 }
             }
-        }
-        Text {
-            id: alsaFallbackReason
-            objectName: "alsaFallbackReason"
-            visible: audioOutputPanel.alsa && text.length > 0
-            width: audioOutputPanel.contentWidth
-            text: bridge.audioOutput.alsaFallback
-            wrapMode: Text.WordWrap
-            color: host.textMain
-            font.pixelSize: Theme.typeCaption
-        }
-        Text {
-            objectName: "alsaLatencyStatus"
-            visible: audioOutputPanel.alsa
-            width: audioOutputPanel.contentWidth
-            text: bridge.audioOutput.latencyStatus
-            wrapMode: Text.WordWrap
-            color: host.textDim
-            font.pixelSize: Theme.typeCaption
-        }
-        Text {
-            topPadding: Theme.spaceMd
-            text: "RENDER AHEAD"
-            color: host.textMain
-            font.pixelSize: Theme.typeSmall
-            font.bold: true
-        }
-        Row {
-            id: renderAheadChoices
-            width: parent.width
-            spacing: Theme.spaceSm
-            Repeater {
-                model: bridge.audioOutput.renderAheadChoices
-                delegate: Rectangle {
-                    required property int modelData
-                    readonly property bool selected: modelData === bridge.audioOutput.renderAheadMs
-                    readonly property string label: modelData === 0 ? "Off" : modelData + " ms"
-                    objectName: "renderAheadChoice"
-                    width: (renderAheadChoices.width - renderAheadChoices.spacing * (bridge.audioOutput.renderAheadChoices.length - 1))
-                           / bridge.audioOutput.renderAheadChoices.length
-                    height: audioOutputPanel.bufferChoiceHeight
-                    radius: Theme.controlRadius
-                    color: selected ? Theme.choiceSelectedFill : host.panel
-                    border.color: activeFocus ? host.accent : host.line
-                    activeFocusOnTab: true
-                    Accessible.role: Accessible.Button
-                    Accessible.name: "Render ahead " + label + (selected ? ", selected" : "")
-                    Keys.onReturnPressed: bridge.audioOutput.select_render_ahead(modelData)
-                    Keys.onSpacePressed: bridge.audioOutput.select_render_ahead(modelData)
-                    Text {
-                        anchors.centerIn: parent
-                        text: parent.label
-                        color: parent.selected ? host.accent : host.textMain
-                        font.pixelSize: Theme.typeSmall
-                    }
-                    MouseArea {
-                        Tip {}
-                        anchors.fill: parent
-                        onClicked: bridge.audioOutput.select_render_ahead(modelData)
-                    }
-                }
+            Text {
+                objectName: "renderAheadStatus"
+                width: audioOutputPanel.contentWidth
+                text: bridge.audioOutput.renderAheadStatus
+                wrapMode: Text.WordWrap
+                color: host.textDim
+                font.pixelSize: Theme.typeCaption
             }
-        }
-        Text {
-            objectName: "renderAheadStatus"
-            width: audioOutputPanel.contentWidth
-            text: bridge.audioOutput.renderAheadStatus
-            wrapMode: Text.WordWrap
-            color: host.textDim
-            font.pixelSize: Theme.typeCaption
         }
     }
     Rectangle {

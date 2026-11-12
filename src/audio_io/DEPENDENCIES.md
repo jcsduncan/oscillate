@@ -98,7 +98,8 @@ The direct ALSA output ([ADR-0130](../../docs/decisions/0130-direct-alsa-backend
 dynamically links the Ubuntu 26.04 `libasound2t64` library (alsa-lib,
 LGPL-2.1-or-later), found through `pkg-config` (`alsa`, from
 `libasound2-dev`). PipeWire's client library does not link it, so it is a new
-dependency. The I/O thread uses `snd_pcm_wait`, `snd_pcm_avail_update`,
+dependency. The `.deb` depends on it and the AppImage bundles it, like the
+PipeWire and JACK client libraries. The I/O thread uses `snd_pcm_wait`, `snd_pcm_avail_update`,
 `snd_pcm_delay`, `snd_pcm_writei` and `snd_pcm_recover`; on a hardware PCM
 these are system calls on preallocated buffers. Device enumeration reads the
 control interface only (`snd_ctl_pcm_info`), never opening a PCM.

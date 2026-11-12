@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """The package build check: profile switches, source tree, version and inputs."""
 
+import re
 import sys
 import tempfile
 import unittest
@@ -20,6 +21,11 @@ from package_profiles import (
 PROJECT_VERSION = "0.4.2"
 RELEASE_TAG = f"v{PROJECT_VERSION}"
 SUFFIX = "ci.17.gabc1234"
+# The clean-container install check, and the packages of the bare ubuntu:26.04
+# image the AppImage may rely on.
+INSTALL_SMOKE = SOURCE_ROOT / "tests/packaging/install-smoke.sh"
+CLEAN_IMAGE_PACKAGES = ("libc6",)
+SMOKE_INSTALL = re.compile(r"apt-get install .*--no-install-recommends (.+)$", re.MULTILINE)
 
 
 class PackageBuildCheckTests(unittest.TestCase):
@@ -72,6 +78,16 @@ class PackageBuildCheckTests(unittest.TestCase):
         for package in ("libsndfile1", "libmp3lame0", "libmpg123-0t64", "libflac14"):
             with self.subTest(package=package):
                 self.assertIn(package, bundled)
+
+    def test_the_appimage_needs_only_what_a_clean_ubuntu_install_has(self):
+        smoke = INSTALL_SMOKE.read_text()
+        appimage_branch = smoke[smoke.index("appimage)") :]
+        installed = SMOKE_INSTALL.search(appimage_branch)
+        self.assertIsNotNone(installed)
+        available = set(CLEAN_IMAGE_PACKAGES) | set(installed.group(1).split())
+        for package in PROFILES["appimage"].runtime.system:
+            with self.subTest(package=package):
+                self.assertIn(package, available)
 
     def test_foreign_source_tree_or_missing_helper_is_rejected(self):
         profile = PROFILES["deb"]
