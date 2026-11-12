@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/jcsduncan/oscillate/compare/v0.5.1...v0.6.0) (2026-11-12)
+
+
+### Features
+
+* **audio_io,application,app:** direct ALSA backend with device reservation ([#388](https://github.com/jcsduncan/oscillate/issues/388)) ([e9a2b57](https://github.com/jcsduncan/oscillate/commit/e9a2b5787b6dc32a84420e5bae505a0f60b4a92e))
+
+
+### Bug Fixes
+
+* **tools:** retry dropped connections in the source-link check ([#389](https://github.com/jcsduncan/oscillate/issues/389)) ([03323a8](https://github.com/jcsduncan/oscillate/commit/03323a8dadc1c91bfb53d43c99793be90caf14b3))
+
 ## [0.5.1](https://github.com/jcsduncan/oscillate/compare/v0.5.0...v0.5.1) (2026-11-11)
 
 
