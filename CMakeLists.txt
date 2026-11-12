@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(oscillate VERSION 0.5.1 LANGUAGES CXX) # x-release-please-version
+project(oscillate VERSION 0.6.0 LANGUAGES CXX) # x-release-please-version
 
 # This project uses headers; avoid C++20 module scanning in compile_commands.json.
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
