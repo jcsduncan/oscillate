@@ -499,3 +499,11 @@ endforeach()
 oscillate_add_test_executable(oscillate_application_clip_copy_drag_tests SOURCES clip_copy_drag_tests.cpp
   LIBS oscillate::application
   TEST application_clip_copy_drag)
+
+# Direct ALSA falling back to PipeWire (ADR-0130).
+oscillate_add_test_executable(oscillate_application_fallback_output_tests
+  SOURCES fallback_output_tests.cpp
+  LIBS oscillate::application)
+oscillate_add_case_tests(application_fallback_output oscillate_application_fallback_output_tests
+  CASES a_refused_card_plays_through_the_fallback both_failing_reports_both
+        the_fallback_plays_to_its_default_device)

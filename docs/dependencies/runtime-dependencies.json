@@ -3,6 +3,7 @@
   "profiles": {
     "appimage": {
       "bundled": [
+        "libasound2t64",
         "libatomic1",
         "libb2-1",
         "libblkid1",
@@ -109,6 +110,7 @@
         "zlib1g"
       ],
       "conditional": {
+        "libasound2-data": "ALSA direct output: the bundled libasound reads the host's ALSA configuration and loads its plug-ins; without them that backend is unavailable",
         "libspa-0.2-modules": "PipeWire output: the bundled PipeWire client loads its SPA support plugins from the host's PipeWire installation"
       },
       "platform": "Ubuntu 26.04 amd64",
@@ -124,7 +126,9 @@
       "platform": "Ubuntu 26.04 amd64",
       "preset": "package-deb",
       "system": [
+        "libasound2t64",
         "libc6",
+        "libdbus-1-3",
         "libgcc-s1",
         "libjack-jackd2-0 | libjack-0.125",
         "libmpg123-0t64",

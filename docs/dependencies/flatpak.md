@@ -33,7 +33,7 @@ The Flatpak has the same features as the `.deb`.
 | `--socket=fallback-x11` | The window on an X11 desktop; unused when Wayland is available. |
 | `--device=dri` | GPU rendering for Qt Quick. |
 | `--socket=pulseaudio` | Flatpak's standard audio permission, which desktops show as the app's sound access. It covers PulseAudio-compatible servers, PipeWire's among them. |
-| `--filesystem=xdg-run/pipewire-0` | The PipeWire socket. The PipeWire output, and JACK through PipeWire's JACK library, connect to it. |
+| `--filesystem=xdg-run/pipewire-0` | The PipeWire socket. The PipeWire output, and JACK through PipeWire's JACK library, connect to it. The sandbox has no `/dev/snd`, so ALSA direct cannot open a card there and plays through PipeWire instead. |
 | `--filesystem=xdg-music` | Import from and export to the Music folder, which the export dialog opens by default. |
 | `--filesystem=~/.oscillate:create` | Oscillate's project folder, `~/.oscillate/projects`, shared with the `.deb` and the AppImage. |
 | `--filesystem=~/.vst3:ro` | The per-user VST3 plug-in folder the plug-in scanner reads. |

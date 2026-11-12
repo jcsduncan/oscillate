@@ -25,6 +25,9 @@ find_package(OpenSSL 3 REQUIRED COMPONENTS Crypto)
 find_package(nlohmann_json 3.11.3 REQUIRED CONFIG)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PIPEWIRE REQUIRED IMPORTED_TARGET GLOBAL libpipewire-0.3)
+# Direct ALSA output and its card reservation on the session bus (ADR-0130).
+pkg_check_modules(ALSA REQUIRED IMPORTED_TARGET GLOBAL alsa)
+pkg_check_modules(DBUS REQUIRED IMPORTED_TARGET GLOBAL dbus-1)
 
 # JACK is optional unless OSCILLATE_REQUIRE_JACK; JACK_FOUND selects the
 # JACK output and real-time export adapters.

@@ -67,7 +67,7 @@ The AppImage, the Flatpak, the archive key's fingerprint and removal are in
 ## Build
 
 ~~~sh
-sudo apt-get install cmake ninja-build g++ pkgconf libpipewire-0.3-dev \
+sudo apt-get install cmake ninja-build g++ pkgconf libpipewire-0.3-dev libasound2-dev libdbus-1-dev \
   libssl-dev nlohmann-json3-dev qt6-base-dev qt6-declarative-dev \
   python3 python3-venv
 cmake --preset quick

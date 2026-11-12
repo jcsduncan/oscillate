@@ -91,3 +91,26 @@ watchdog escalation policy. Ordinary CTest uses a fake renderer to verify that
 a requested stop suppresses subsequent work and holds the transport boundary;
 the opt-in live smoke checks a clean join under normal server conditions. These
 tests do not prove a worst-case stop time.
+
+## Direct ALSA and card reservation
+
+The direct ALSA output ([ADR-0130](../../docs/decisions/0130-direct-alsa-backend.md))
+dynamically links the Ubuntu 26.04 `libasound2t64` library (alsa-lib,
+LGPL-2.1-or-later), found through `pkg-config` (`alsa`, from
+`libasound2-dev`). PipeWire's client library does not link it, so it is a new
+dependency. The `.deb` depends on it and the AppImage bundles it, like the
+PipeWire and JACK client libraries. The I/O thread uses `snd_pcm_wait`, `snd_pcm_avail_update`,
+`snd_pcm_delay`, `snd_pcm_writei` and `snd_pcm_recover`; on a hardware PCM
+these are system calls on preallocated buffers. Device enumeration reads the
+control interface only (`snd_ctl_pcm_info`), never opening a PCM.
+
+Card reservation speaks the freedesktop device reservation protocol
+(`org.freedesktop.ReserveDevice1`) through `libdbus-1-3` (AFL-2.1 or
+GPL-2.0-or-later), found through `pkg-config` (`dbus-1`, from
+`libdbus-1-dev`). The library is already loaded by PipeWire's client; the
+development package is new. Reservation runs on control threads only.
+
+The `alsa_output_contract` cases drive the output against ALSA's `null` and
+`file` PCMs, which need only `libasound2-data`'s `alsa.conf`, so they run in
+CI without a sound card. A real card, the sound server's release and
+reacquisition of it, and the real-time grant need a manual check on hardware.

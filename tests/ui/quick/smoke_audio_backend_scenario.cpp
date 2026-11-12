@@ -8,6 +8,7 @@
 #include <QQmlApplicationEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QRectF>
 #include <QSettings>
 #include <QTimer>
 
@@ -18,6 +19,63 @@
 namespace quick_smoke {
 
 namespace app = oscillate::application;
+
+namespace {
+
+// A window shorter than the audio output panel's natural height.
+constexpr int short_window_height = 360;
+
+// The last visual descendant of root named name, or nothing. Repeater
+// delegates are visual children only, so findChild cannot reach them.
+QQuickItem* last_named(QQuickItem* root, const QString& name) {
+  QQuickItem* found = nullptr;
+  for (QQuickItem* child : root->childItems()) {
+    if (child->objectName() == name) {
+      found = child;
+    }
+    if (QQuickItem* nested = last_named(child, name)) {
+      found = nested;
+    }
+  }
+  return found;
+}
+
+// Whether a control focused below the scrolled panel body's view is
+// scrolled into it.
+bool focus_scrolls_into_view(QQuickWindow& window) {
+  auto* body = window.findChild<QQuickItem*>(QStringLiteral("audioOutputPanelBody"));
+  QQuickItem* last =
+      body == nullptr ? nullptr : last_named(body, QStringLiteral("renderAheadChoice"));
+  if (last == nullptr) {
+    return false;
+  }
+  last->forceActiveFocus(Qt::TabFocusReason);
+  QCoreApplication::processEvents();
+  const QRectF shown = body->mapRectToScene(QRectF(0, 0, body->width(), body->height()));
+  const QRectF focused = last->mapRectToScene(QRectF(0, 0, last->width(), last->height()));
+  return last->hasActiveFocus() && shown.contains(focused);
+}
+
+// Whether the audio output panel ends inside a window this short, so its
+// refresh control, anchored to the panel's bottom, stays reachable, and
+// whether a focused control below the fold scrolls into view.
+bool panel_fits_short_window(QQuickWindow& window) {
+  const int minimum = window.minimumHeight();
+  const int height = window.height();
+  window.setMinimumHeight(short_window_height);
+  window.setHeight(short_window_height);
+  QCoreApplication::processEvents();
+  const auto* panel = window.findChild<QQuickItem*>(QStringLiteral("audioOutputPanel"));
+  const bool fits = panel != nullptr && window.contentItem()->height() == short_window_height &&
+                    panel->y() + panel->height() <= short_window_height &&
+                    focus_scrolls_into_view(window);
+  window.setMinimumHeight(minimum);
+  window.setHeight(height);
+  QCoreApplication::processEvents();
+  return fits;
+}
+
+} // namespace
 
 void run_audio_backend(QApplication& app, QQmlApplicationEngine& engine,
                        oscillate::quick::ProjectBridge& bridge,
@@ -64,8 +122,14 @@ void run_audio_backend(QApplication& app, QQmlApplicationEngine& engine,
               bridge.audio_output()->audio_devices().size() != 3 ||
               visible_count(window->contentItem(), QStringLiteral("audioOutputPanel")) != 1 ||
               visible_count(window->contentItem(), QStringLiteral("audioOutputChoice")) != 3 ||
-              visible_count(window->contentItem(), QStringLiteral("audioBackendChoice")) != 2) {
+              visible_count(window->contentItem(), QStringLiteral("audioBackendChoice")) != 3) {
             std::cerr << "Audio output smoke: discovery or output panel failed\n";
+            probe->stop();
+            app.exit(1);
+            return;
+          }
+          if (!panel_fits_short_window(*window)) {
+            std::cerr << "Audio output smoke: output panel overflows a short window\n";
             probe->stop();
             app.exit(1);
             return;

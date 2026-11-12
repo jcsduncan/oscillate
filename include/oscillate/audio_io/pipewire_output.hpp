@@ -49,6 +49,9 @@ struct OutputStatus {
   // Unknown for PipeWire, whose stream API exposes no trustworthy per-stream
   // count; its graph recoveries are graph_xrun_recovery_events.
   std::optional<std::uint64_t> xruns;
+  // Frames between the next frame written and the DAC, as the device driver
+  // reports it. Only the direct ALSA output measures it (ADR-0130).
+  std::optional<std::uint32_t> output_latency_frames;
 };
 
 // Event-loop-owned matching of a selected object serial to its current

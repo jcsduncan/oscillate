@@ -50,6 +50,8 @@ public:
 
 using PlaybackOutputFactory = std::function<std::unique_ptr<PlaybackOutput>(
     audio_io::StereoRenderSource, audio_io::TransportCursor&)>;
+// The PipeWire output, which playback uses when given no factory.
+[[nodiscard]] PlaybackOutputFactory pipewire_output_factory();
 
 struct PreparedAudioClip {
   project::ClipId clip;
