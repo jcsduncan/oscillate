@@ -228,6 +228,9 @@ void render_operators(Routing& routing, const Waves& waves, const AmpBlock& amp,
     std::array<std::array<std::array<double, ops>, Count>, 2> in{};
     std::array<std::array<double, Count>, 2> sum{};
     const auto evaluate_half = [&]<std::size_t N>(std::size_t half) {
+      // Keep routing constants local to this template instantiation: GCC 16
+      // can ICE when substituting a captured constexpr from the outer template.
+      constexpr FmAlgorithm algorithm = fm_algorithm_data[Algorithm];
       constexpr std::uint8_t targets = algorithm.modulates[N];
       constexpr bool heard = ((algorithm.carriers >> N) & 1U) != 0U;
       const std::size_t s = 2 * i + half;
