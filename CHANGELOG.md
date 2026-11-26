@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/jcsduncan/oscillate/compare/v0.6.0...v0.6.1) (2026-11-26)
+
+
+### Bug Fixes
+
+* **native_dsp:** Fix Halo GCC16 compiler crash ([#394](https://github.com/jcsduncan/oscillate/issues/394)) ([0ed4e88](https://github.com/jcsduncan/oscillate/commit/0ed4e88a84a65a70036659454deb69402c3671a0))
+
 ## [0.6.0](https://github.com/jcsduncan/oscillate/compare/v0.5.1...v0.6.0) (2026-11-12)
 
 
